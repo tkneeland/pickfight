@@ -232,11 +232,16 @@ const CLASH_TICKS: int = 120
 ## rather than asking for all of it at once brings them together at a rate
 ## the contact can catch -- 13 px a tick at its quickest, measured, against
 ## the 16 px at which two heads touch -- instead of the 23 px a tick a
-## straight command produces, which is the difference between two heads
-## meeting and two heads stepping through each other -- see
-## `heads_do_not_interpenetrate`, which is where that is measured. Anything
-## that wants to measure a contest first has to have a contact.
+## straight command produces, which arrives faster than an ordinary contact
+## catches and is left to `WeaponHead`'s pair correction to seat. Both are
+## asserted in `heads_do_not_interpenetrate`; a contest is measured off the
+## walked one so that what it reports is the drives contesting and not a
+## correction settling.
 const CLASH_APPROACH_TICKS: int = 90
+## Ticks the same two heads are then sent at each other over, full reach
+## commanded outright rather than ramped. Long enough for both weapons to
+## cross the 180 px between them at rest and hold wherever they end up.
+const SEND_TICKS: int = 60
 ## Solver penetration allowed between two touching heads before they count as
 ## having gone into each other rather than met.
 const HEAD_OVERLAP_ALLOWANCE: float = 4.0
@@ -1178,21 +1183,28 @@ func _scenario_ringout_kills_at_full_health() -> Array[String]:
 
 ## AC-11: two heads meeting stop each other.
 ##
-## Walked into each other, they do, and cleanly: they meet, they hold at the
-## 16 px at which they touch with 0.3 px of solver give, they never cross,
-## and they stay there for as long as both drives keep pushing. No jitter,
-## no creep.
+## Two ways of meeting, because they are not the same event.
 ##
-## **What this does not cover, and why it is not covered here.** Sent at each
-## other the way a player sends them -- both commanding full reach at once,
-## which the extension drive delivers at 700 px/s each -- the heads close at
-## 23 px a tick against the 16 px at which they touch, and whether the
-## contact is caught comes down to where in the step they happen to be when
-## they arrive. Measured both ways from the same code: blocking at 10.5 px,
-## and stepping clean through to the far side. That cannot be asserted in
-## either direction without the suite flapping, so it is not asserted here.
-## `heads_do_not_tunnel_head` drives the same defect hard enough to fail
-## every time, and is where the evidence for it lives.
+## **Walked together.** The commanded reach is ramped, so the heads arrive at
+## a rate an ordinary contact catches. They meet, they hold at the 16 px at
+## which they touch with 0.3 px of solver give, they never cross, and they
+## stay there for as long as both drives keep pushing. No jitter, no creep.
+##
+## **Sent at each other**, which is what a player's thumb actually does: both
+## commanding full reach at once, which the extension drive delivers at
+## 700 px/s each, closing the heads at about 23 px a tick against the 16 px
+## at which they touch. This used to be described here and not asserted --
+## the pair resolved both ways from identical code depending only on where in
+## the step the heads landed, blocking at 10.5 px one run and stepping clean
+## through to the far side the next, and a coin flip is not something a suite
+## can assert. `WeaponHead`'s pair correction is what made it deterministic:
+## the encounter is now resolved once, by one of the two heads, on the step
+## the pair crosses. So it is asserted here, on the same terms as the walked
+## case.
+##
+## And in neither case does anybody get hurt. Two heads meeting is a block,
+## not a strike -- CONTEXT.md's Clash -- so the one thing a clash must never
+## produce is damage, whichever path stopped the heads.
 func _scenario_heads_do_not_interpenetrate() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -1226,6 +1238,33 @@ func _scenario_heads_do_not_interpenetrate() -> Array[String]:
 	# against each other.
 	if held["closest"] > contact + CLASH_CONTACT_SLACK:
 		failures.append("the heads did not stay together: %.1f px apart while both are still pushing" % held["closest"])
+
+	# Now the same block, sent rather than walked. Both weapons are eased all
+	# the way back to rest first, so the send starts from a real distance and
+	# reaches full closing speed before the heads meet.
+	left.set_input_vector(Vector2.ZERO)
+	right.set_input_vector(Vector2.ZERO)
+	await _await_ticks(RELEASE_TICKS)
+	var sent: Dictionary = await _send_heads(left, right, SEND_TICKS)
+	print("      sent at each other at up to %.1f px a tick: met at %.1f px, still %.1f px apart at the end" % [
+		sent["speed"], sent["closest"], (right.weapon_head_position() - left.weapon_head_position()).length()])
+	if sent["closest"] > contact + CLASH_CONTACT_SLACK:
+		failures.append("sent at each other, the heads never met: closest %.1f px, touching is %.1f px" % [
+			sent["closest"], contact])
+	if sent["closest"] < contact - HEAD_OVERLAP_ALLOWANCE:
+		failures.append("sent at each other, the heads got %.1f px inside each other" % (contact - sent["closest"]))
+	if sent["crossings"] > 0:
+		failures.append("sent at each other, the left head got to the right of the right head on %d ticks" % sent["crossings"])
+	if sent["tunnels"] > 0:
+		failures.append("sent at each other, %d steps jumped the heads through each other" % sent["tunnels"])
+
+	# A clash is a block. Neither of these two ever swung at a body -- each
+	# one's head is 80 px short of the other's body at full reach -- so any
+	# damage at all here would mean a head meeting a head was scored as a
+	# strike.
+	if left.damage > 0.0 or right.damage > 0.0:
+		failures.append("a clash hurt somebody: left took %.1f, right took %.1f -- two heads meeting is a block, not a strike" % [
+			left.damage, right.damage])
 
 	await _teardown(stage)
 	return failures
@@ -1283,15 +1322,17 @@ func _scenario_clash_higher_drive_force_wins() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
-## The gap `WeaponHead` knowingly leaves open: a head tunnelling through
-## another head.
+## AC-11 at the speed a fight actually reaches: a head must not tunnel
+## through another head.
 ##
-## The head's own sweep correction runs against LAYER_WORLD only, deliberately
-## -- two heads each snapping the other out of a contact would fight rather
-## than resolve -- so head-versus-head has nothing behind the solver and
-## Godot's continuous detection but the contact itself. Blocking is one of the
-## three jobs the weapon exists for, so a head that goes through a block is a
-## real failure, and it had never been driven hard enough to find out.
+## Blocking is one of the three jobs the weapon exists for (CONTEXT.md), and
+## this used to breach: three of these twelve charges put a head clean through
+## another head, both ends of the step outside the 16 px at which they touch
+## and no contact ever generated. The head's world sweep cannot be pointed at
+## it -- two heads each snapping the other out of a contact would fight rather
+## than resolve, which is why `WeaponHead.sweep_mask` leaves the head layer
+## out -- so `WeaponHead` corrects the pair instead, once, from the far side
+## of the step.
 ##
 ## Both players hold their heads out at each other from a distance neither can
 ## reach across, and are then thrown at each other: closing speed is twice the
@@ -1512,8 +1553,10 @@ func _clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2) -> Dictionar
 	left.teleport_to(centre - half)
 	right.teleport_to(centre + half)
 	# Walked together rather than sent: a contest can only be measured once
-	# there is a contact, and sent at each other these two step through one
-	# another (`heads_do_not_interpenetrate`). Once they are touching, the
+	# there is a contact, and sent at each other these two arrive faster than
+	# the contact catches and are seated by `WeaponHead`'s pair correction
+	# instead (`heads_do_not_interpenetrate`), which is a correction settling
+	# and not the two drives contesting. Once they are touching, the
 	# drives are pushing at everything they have -- both are commanded 60 px
 	# past where they can get to -- so what is measured afterwards is the
 	# contest at full force and not a gentler version of it.
@@ -1536,6 +1579,19 @@ func _close_heads(left: RigidBody2D, right: RigidBody2D, ticks: int) -> Dictiona
 		var reach: float = float(i + 1) / float(ticks)
 		left.set_input_vector(Vector2.RIGHT * reach)
 		right.set_input_vector(Vector2.LEFT * reach)
+		await physics_frame
+		_watch_heads_tick(left, right, watch)
+	return watch
+
+## Send two braced players' heads at each other the way a player does it:
+## full reach commanded outright, both at once, and then left alone. The
+## drive delivers that at `WeaponStats.extend_speed` a side, which is what
+## makes this the fast arrival the walked approach deliberately is not.
+func _send_heads(left: RigidBody2D, right: RigidBody2D, ticks: int) -> Dictionary:
+	var watch: Dictionary = _new_head_watch(left, right)
+	left.set_input_vector(Vector2.RIGHT)
+	right.set_input_vector(Vector2.LEFT)
+	for _i in ticks:
 		await physics_frame
 		_watch_heads_tick(left, right, watch)
 	return watch

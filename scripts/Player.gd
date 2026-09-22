@@ -340,9 +340,15 @@ func _build_rig() -> void:
 	# The sweep is against the world -- terrain and other players' bodies --
 	# and never against this player's own body, which the head passes through.
 	# Other heads are left out on purpose: a clash is two driven heads
-	# contesting, and it is the solver's to settle.
+	# contesting, and two heads each correcting themselves against the other
+	# would fight rather than resolve. The head handles that pair itself, with
+	# one correction between the two of them.
 	_head.sweep_mask = LAYER_WORLD
 	_head.sweep_exclude = [get_rid()]
+	# Which of two heads does that one correction is settled by the same
+	# number that settles the clash itself, so the two agree instead of
+	# competing. The head does not drive with it.
+	_head.drive_force = _stats.max_drive_force
 	# The head has to report what it hits: a strike is head-to-player contact
 	# and this is where it is noticed. Four is plenty for a nub that can only
 	# be touching so many things at once.
@@ -569,7 +575,8 @@ func _score_swept_strike() -> void:
 ## The head is on its own collision layer and holds an explicit exception for
 ## its own player, so what arrives here is terrain, other players' bodies and
 ## other players' heads. Only a player is a strike; a head meeting a head is
-## a clash, which is the solver's business and nobody's damage.
+## a clash, which is `WeaponHead`'s pair correction and the solver's business
+## between them, and nobody's damage.
 func _on_head_hit(body: Node) -> void:
 	if body == self or not body.is_in_group("players") or _head == null:
 		return
