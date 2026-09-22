@@ -13,7 +13,7 @@ invoked skill.
 | Classification | Trigger | Required consideration |
 |---|---|---|
 | Atlas recommendation | Ticket lacks a clear problem, outcome, or bounded decision | Return to /grill-with-docs, Wayfinder, /to-spec, or /to-tickets as appropriate. |
-| discovered repository fact | Change touches local multiplayer input handling | The gamepad-vs-keyboard input scheme is an open, unresolved design question (see README). Flag it rather than silently picking one. |
+| discovered repository fact | Change touches the weapon, movement, damage, or the round lifecycle | The weapon is a single object serving movement, damage and blocking, and the session is endless. Read `CONTEXT.md` and ADR-0004 through ADR-0007 before designing against these. |
 
 Classifications have distinct authority: confirmed team policy is mandatory;
 Atlas recommendations are proposals; discovered repository facts are evidence;
