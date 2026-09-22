@@ -99,9 +99,12 @@ resolved and no longer applies.
 
 ```
 scenes/      .tscn scene files (Main, Arena, Player)
-scripts/     GDScript sources (Player, ControllerServer, KillZone)
+scripts/     GDScript sources (Player, WeaponHead, WeaponStats,
+             ControllerServer, KillZone)
+resources/   weapon stat resources (pickaxe.tres)
 controller/  the single-file controller web page served to phones
-tools/       headless test fixtures
+tools/       headless test fixtures (scenario_runner, ws_probe_client,
+             capture_damage_screenshots)
 ```
 
 <!-- atlas-v3:readme:start -->

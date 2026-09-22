@@ -381,10 +381,11 @@ func _undo_any_head_crossing(state: PhysicsDirectBodyState2D) -> void:
 	var partner_velocity: Vector2 = Vector2.ZERO
 
 	for node: Node in tree.get_nodes_in_group(HEAD_GROUP):
-		# Deliberately untyped: giving the other head a type would mean
-		# naming this script's own `class_name`, and the global class cache
-		# that resolves one lives in the gitignored `.godot/`, so a fresh
-		# clone could not parse it. Same reason as `Player`'s preloads.
+		# Deliberately untyped. Declaring a `class_name` is harmless;
+		# *resolving* one needs Godot's global class cache, which lives in
+		# the gitignored `.godot/` and is only built by an editor run, so a
+		# fresh clone cannot parse a reference to it. Same reason as
+		# `Player`'s preloads.
 		var other: Variant = node
 		if node == self or node.is_queued_for_deletion() or not node.is_inside_tree():
 			continue

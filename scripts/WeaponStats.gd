@@ -43,7 +43,8 @@ extends Resource
 @export var max_drive_force: float = 6000.0
 
 ## Damage a strike with this head deals, scaled at contact by head speed.
-## Carried here from the start; nothing applies it yet.
+## Applied by `Player._strike_damage`, from both the sweep path and the
+## solver path.
 @export var damage: float = 34.0
 
 ## The head's collision region -- per weapon, and not a point: a pickaxe's is
