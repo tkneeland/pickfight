@@ -1,0 +1,9 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+PROBE direction connecting to ws://127.0.0.1:8081 (4 frames)
+PROBE direction bound slot=0
+PROBE direction frame=0 v=(1.0000, 0.0000)
+PROBE direction frame=1 v=(0.0000, -1.0000)
+PROBE direction frame=2 v=(-1.0000, 0.0000)
+PROBE direction frame=3 v=(0.0000, 1.0000)
+PROBE direction done frames=4 slot=0 close_code=1000 reason='probe complete'
