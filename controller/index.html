@@ -77,14 +77,22 @@
   // host restart -- just reload the page.
   var DRAG_RADIUS_FRACTION = 0.35;
   var RECONNECT_DELAY_MS = 1000;
+  // Must stay in sync with the player Body colours in scenes/Main.tscn:
+  // slot 0 = Player1 blue, slot 1 = Player2 orange. The phone showing "P1"
+  // tinted to match the body it drives is how a player knows which one is
+  // theirs, so changing a body colour means changing the matching entry here.
   var SLOT_COLORS = ["#2666ff", "#ff8c1a"];
   var NEUTRAL_COLOR = "#59606e";
+  // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
+  // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
+  // on the wire is poison for the host's rigid body.
+  var MIN_DRAG_RADIUS_PX = 1;
 
   var WS_PORT = __WS_PORT__;
 
   // ---- state --------------------------------------------------------------
-  var dragRadiusPx = DRAG_RADIUS_FRACTION * Math.min(window.innerWidth, window.innerHeight);
-  var anchor = null;    // CSS px, captured on pointerdown -- the drag is relative to this
+  var dragRadiusPx = computeDragRadius();
+  var anchor = null;   // CSS px, captured on pointerdown -- the drag is relative to this
   var point = null;     // CSS px, latest sample
   var vx = 0, vy = 0;   // unit-disc input vector, (0,0) means "not touching"
   var slot = -1;
@@ -97,12 +105,21 @@
   var statusEl = document.getElementById("status");
 
   // ---- geometry -----------------------------------------------------------
+  function computeDragRadius() {
+    var edge = Math.min(window.innerWidth, window.innerHeight);
+    var radius = DRAG_RADIUS_FRACTION * edge;
+    // A hidden/zero-sized viewport (background tab, some in-app browsers)
+    // reports 0 here, which would divide the drag by zero.
+    if (!isFinite(radius) || radius < MIN_DRAG_RADIUS_PX) { return MIN_DRAG_RADIUS_PX; }
+    return radius;
+  }
+
   function resize() {
     var dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(window.innerWidth * dpr);
     canvas.height = Math.round(window.innerHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    dragRadiusPx = DRAG_RADIUS_FRACTION * Math.min(window.innerWidth, window.innerHeight);
+    dragRadiusPx = computeDragRadius();
   }
   window.addEventListener("resize", resize);
   window.addEventListener("orientationchange", resize);
@@ -188,9 +205,18 @@
         if (typeof msg.slot === "number") { setSlot(msg.slot); }
       } catch (err) { /* ignore anything that is not the slot message */ }
     };
-    ws.onclose = function () {
-      setStatus("reconnecting");
+    // The host drops us for reasons a player needs to be told about: every
+    // slot is taken (a third phone, or a stray second tab), or our input went
+    // quiet long enough to look like a locked screen. Show the server's
+    // reason, then keep retrying -- a dropped controller must be able to
+    // rejoin by itself once a slot frees up or the phone wakes.
+    ws.onclose = function (ev) {
+      var reason = (ev && ev.reason) ? String(ev.reason) : "";
+      setStatus(reason ? (reason + " — retrying") : "reconnecting");
       setSlot(-1);
+      // Forget any drag that was in progress: the host has already zeroed this
+      // player, and on reconnect the first frame should be "not touching".
+      release();
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
     ws.onerror = function () { /* onclose does the reconnecting */ };
@@ -235,7 +261,15 @@
   // host always has the newest value and a dropped move event costs nothing.
   function frame() {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(new Float32Array([vx, vy]).buffer);
+      // Explicit little-endian, because that is what the wire format promises
+      // and what the host's decode_float expects. A Float32Array would use
+      // platform endianness, which happens to agree on every phone shipping
+      // today but is not the contract.
+      var buf = new ArrayBuffer(8);
+      var view = new DataView(buf);
+      view.setFloat32(0, vx, true);
+      view.setFloat32(4, vy, true);
+      ws.send(buf);
     }
     draw();
     window.requestAnimationFrame(frame);
