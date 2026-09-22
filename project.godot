@@ -1,0 +1,20 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are meant to be edited.
+;
+; Format:
+;   [section] ; section goes to [section] in-engine
+;   param=value ; specify this to be a member of [section]
+
+config_version=5
+
+[application]
+
+config/name="Pickfight"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

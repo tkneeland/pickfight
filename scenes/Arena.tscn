@@ -1,0 +1,51 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="1"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
+size = Vector2(1200, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_platform"]
+size = Vector2(240, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(1400, 40)
+
+[node name="Arena" type="Node2D"]
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="GroundShape" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="GroundVisual" type="Polygon2D" parent="Ground"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-600, -20, 600, -20, 600, 20, -600, 20)
+
+[node name="PlatformLeft" type="StaticBody2D" parent="."]
+position = Vector2(-320, 120)
+
+[node name="PlatformLeftShape" type="CollisionShape2D" parent="PlatformLeft"]
+shape = SubResource("RectangleShape2D_platform")
+
+[node name="PlatformLeftVisual" type="Polygon2D" parent="PlatformLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
+
+[node name="PlatformRight" type="StaticBody2D" parent="."]
+position = Vector2(320, 60)
+
+[node name="PlatformRightShape" type="CollisionShape2D" parent="PlatformRight"]
+shape = SubResource("RectangleShape2D_platform")
+
+[node name="PlatformRightVisual" type="Polygon2D" parent="PlatformRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("1")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
