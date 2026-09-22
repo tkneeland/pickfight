@@ -10,7 +10,9 @@ extends RigidBody2D
 ##
 ## The haft is invisible to physics and carries the assembly's rotational
 ## inertia; the head is the only part with a collision shape, so only the head
-## strikes, blocks and plants. Both joints are passive constraints with no
+## strikes, blocks and plants. The head also checks its own work each tick and
+## undoes any tunnelling through thin geometry, which is its own script's job
+## to explain. Both joints are passive constraints with no
 ## motor: on Godot 4.6.2 `PinJoint2D`'s motor has no force or torque cap and
 ## `GrooveJoint2D` has no actuation at all, so the drive is hand-written here
 ## and clamped at `WeaponStats.max_drive_force` -- the cap is what lets a
@@ -27,6 +29,15 @@ extends RigidBody2D
 ## are ignored entirely while a controller is bound. The mouse source only
 ## reports a vector while a mouse button is held, so like a phone it asserts
 ## nothing when nobody is touching it.
+
+## Preloaded rather than referenced by their `class_name`. A `class_name` is
+## resolved through Godot's global script class cache, which lives in the
+## gitignored `.godot/` directory and is only built by an editor run -- so on a
+## fresh clone every one of these types is undeclared and this script fails to
+## parse. `godot --headless --quit` still exits 0 in that state, so the failure
+## is silent. A preload is resolved from the path and needs no cache.
+const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
+const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
 
 enum DebugSource { NONE, MOUSE, KEYBOARD }
 
@@ -50,7 +61,7 @@ const MIN_HAFT_MASS: float = 0.05
 
 ## Which weapon this player is holding. Swappable at runtime through
 ## `set_weapon_stats()`; the pickaxe is the only instance today.
-@export var weapon_stats: WeaponStats
+@export var weapon_stats: WeaponStatsType
 @export var rotate_speed: float = 3.0
 @export var reach_speed: float = 220.0
 @export var knockback_threshold: float = 300.0
@@ -74,10 +85,10 @@ var _keyboard_t: float = 0.5
 # NAN means "no button held"; set on press, the drag is measured from here.
 var _mouse_anchor: Vector2 = Vector2(NAN, NAN)
 
-var _stats: WeaponStats
+var _stats: WeaponStatsType
 var _rig: Node2D
 var _haft: RigidBody2D
-var _head: RigidBody2D
+var _head: WeaponHeadType
 var _head_shape: CollisionShape2D
 var _pin: PinJoint2D
 var _groove: GrooveJoint2D
@@ -94,7 +105,7 @@ func _ready() -> void:
 	collision_mask = LAYER_WORLD
 	add_to_group("players")
 	body_entered.connect(_on_body_entered)
-	set_weapon_stats(weapon_stats if weapon_stats != null else WeaponStats.new())
+	set_weapon_stats(weapon_stats if weapon_stats != null else WeaponStatsType.new())
 
 ## The rig lives beside the player rather than under it, so it is not freed
 ## with the player the way a child would be. Left alone it outlives its owner
@@ -158,7 +169,7 @@ func weapon_head_position() -> Vector2:
 
 ## Swap the weapon. Rebuilds the rig from the new stats, so reach, weight,
 ## responsiveness, force ceiling and head shape all change together.
-func set_weapon_stats(stats: WeaponStats) -> void:
+func set_weapon_stats(stats: WeaponStatsType) -> void:
 	weapon_stats = stats
 	_stats = stats
 	weapon_min_length = stats.min_reach
@@ -187,6 +198,11 @@ func teleport_to(pos: Vector2) -> void:
 		body.global_position += offset
 		body.linear_velocity = Vector2.ZERO
 		body.angular_velocity = 0.0
+	# A teleport is not motion, so the head must not sweep along it: left to
+	# it, the next sweep would find the arena in the way and put the head back
+	# where it was moved away from.
+	if _head != null:
+		_head.forget_previous_position()
 
 # --- Weapon rig -------------------------------------------------------------
 
@@ -220,7 +236,7 @@ func _build_rig() -> void:
 	_haft.global_position = global_position
 	_haft.rotation = weapon_angle
 
-	_head = RigidBody2D.new()
+	_head = WeaponHeadType.new()
 	_head.name = "Head"
 	_head.mass = _stats.mass
 	_head.gravity_scale = gravity_scale
@@ -233,11 +249,22 @@ func _build_rig() -> void:
 	_head.collision_layer = LAYER_HEAD
 	_head.collision_mask = LAYER_WORLD | LAYER_HEAD
 	# The head is small and can be swung fast; without continuous detection it
-	# is exactly the shape that tunnels through a thin platform.
+	# is exactly the shape that tunnels through a thin platform. Continuous
+	# detection is necessary here but not sufficient -- it works from the
+	# velocity the head has going into a step, and the joints add to that
+	# during the solve -- so WeaponHead sweeps the motion that actually
+	# happened afterwards as well. See WeaponHead for the measurements.
 	_head.continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE
 	_head_shape = CollisionShape2D.new()
 	_head_shape.shape = _stats.head_shape
 	_head.add_child(_head_shape)
+	_head.sweep_shape = _head_shape
+	# The sweep is against the world -- terrain and other players' bodies --
+	# and never against this player's own body, which the head passes through.
+	# Other heads are left out on purpose: a clash is two driven heads
+	# contesting, and it is the solver's to settle.
+	_head.sweep_mask = LAYER_WORLD
+	_head.sweep_exclude = [get_rid()]
 	var head_visual := Polygon2D.new()
 	var r: float = _stats.head_draw_radius()
 	head_visual.polygon = PackedVector2Array([

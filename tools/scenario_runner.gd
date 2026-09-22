@@ -27,6 +27,10 @@ extends SceneTree
 
 const ArenaScene: PackedScene = preload("res://scenes/Arena.tscn")
 const PlayerScene: PackedScene = preload("res://scenes/Player.tscn")
+## Preloaded, not referenced by `class_name`: the global class cache lives in
+## the gitignored `.godot/` and only an editor run builds it, so a fresh clone
+## cannot resolve the name.
+const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
 
 const SCENARIO_NAMES: PackedStringArray = [
 	"aim_angle",
@@ -39,6 +43,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_stats_are_swappable",
 	"haft_is_non_colliding",
 	"rig_freed_with_player",
+	"head_does_not_tunnel_thin_platform",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -103,6 +108,29 @@ const BAR_OFFSET: float = 70.0
 const BAR_SIZE: Vector2 = Vector2(80.0, 8.0)
 const LANDING_TICKS: int = 90
 const COLLISION_TICKS: int = 60
+## The thinner of the arena's two slabs (PlatformRight), written down here
+## rather than read back out of the scene: 240x24 centred at (320, 60), so its
+## top surface is y=48 and its underside y=72. This is the geometry the
+## operator's boost move put the head through, and 24 px is thin enough that a
+## head moving at swing speed crosses the whole slab inside one 60 Hz tick.
+const THIN_PLATFORM_CENTRE: Vector2 = Vector2(320.0, 60.0)
+const THIN_PLATFORM_HALF_WIDTH: float = 120.0
+const THIN_PLATFORM_HALF_HEIGHT: float = 12.0
+## The boost move the defect was reported against, as a parameter sweep:
+## start this far above the slab, hold the weapon wound in for this many
+## ticks, then slam it to full reach straight down, either already falling or
+## from rest. 8 x 3 x 2 = 48 trials.
+const BOOST_START_HEIGHTS: PackedFloat32Array = [
+	30.0, 50.0, 70.0, 90.0, 110.0, 130.0, 150.0, 170.0]
+const BOOST_WINDUP_TICKS: PackedInt32Array = [1, 3, 5]
+const BOOST_FALLING_FLAGS: PackedInt32Array = [1, 0]
+const BOOST_FALL_SPEED: float = 450.0
+## Long enough for the head to reach the slab and the boost to play out from
+## the highest start height sampled.
+const BOOST_TICKS: int = 60
+## Ticks between trials, long enough for the freed player's weapon rig to
+## leave the physics world before the next trial's is built.
+const BOOST_RESET_TICKS: int = 4
 ## Cap how many per-tick failures a single scenario records, so a totally
 ## broken lock doesn't spam hundreds of near-identical lines.
 const MAX_FAILURES_PER_SCENARIO: int = 5
@@ -187,6 +215,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_haft_is_non_colliding()
 		"rig_freed_with_player":
 			return await _scenario_rig_freed_with_player()
+		"head_does_not_tunnel_thin_platform":
+			return await _scenario_head_does_not_tunnel_thin_platform()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -372,6 +402,85 @@ func _scenario_head_plants_terrain() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
+## HG-2: the head does not tunnel through a thin platform.
+##
+## The operator hit this in real play doing the boost move -- swing the
+## pickaxe hard straight down to fling the body upward -- over the arena's
+## 24 px slabs: the head occasionally ended up under the platform instead of
+## planted on it, which loses both the plant and the boost and drops the
+## player off the stage.
+##
+## Swept rather than replayed. The breach rate is roughly 1 in 48, so a
+## scenario that replayed only the one combination known to break would go
+## green on a fix that merely moved the flake to a neighbouring start height.
+## The sweep is the parameter space around the reported move: eight start
+## heights, three wind-up lengths, falling and from rest.
+##
+## A breach is the head ending up entirely below the slab's underside while
+## still horizontally inside it -- through the slab, not round its edge. The
+## bar is zero: "shallower" is not a pass, because a head that has crossed
+## the surface at all has lost the plant the player aimed for.
+func _scenario_head_does_not_tunnel_thin_platform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	var platform_top: float = THIN_PLATFORM_CENTRE.y - THIN_PLATFORM_HALF_HEIGHT
+	var platform_bottom: float = THIN_PLATFORM_CENTRE.y + THIN_PLATFORM_HALF_HEIGHT
+	var trials: int = 0
+	var breaches: int = 0
+
+	for height: float in BOOST_START_HEIGHTS:
+		for windup: int in BOOST_WINDUP_TICKS:
+			for falling_flag: int in BOOST_FALLING_FLAGS:
+				var falling: bool = falling_flag == 1
+				trials += 1
+
+				# A player per trial, freed at the end of it. Every trial then
+				# starts from the pose a player actually enters play in --
+				# weapon wound in and sideways, everything at rest -- and no
+				# trial can inherit momentum or a half-settled weapon from the
+				# one before it. It also makes the wind-up below a real whip
+				# from sideways to straight down, which is where the head
+				# picks up the speed that does the damage here.
+				var start := Vector2(THIN_PLATFORM_CENTRE.x, platform_top - height)
+				var player: RigidBody2D = _spawn_player(stage, start)
+				await physics_frame
+				if falling:
+					player.linear_velocity = Vector2(0.0, BOOST_FALL_SPEED)
+
+				for _w in windup:
+					player.set_input_vector(Vector2.DOWN * 0.05)
+					await physics_frame
+
+				player.set_input_vector(Vector2.DOWN)
+				var deepest: float = -INF
+				for _t in BOOST_TICKS:
+					await physics_frame
+					var head: Vector2 = player.weapon_head_position()
+					# Only counted while the head is well inside the slab's
+					# span: round the edge and down is legitimate travel, not
+					# a breach.
+					if absf(head.x - THIN_PLATFORM_CENTRE.x) > THIN_PLATFORM_HALF_WIDTH - HEAD_RADIUS:
+						continue
+					if head.y - HEAD_RADIUS > platform_bottom:
+						deepest = maxf(deepest, head.y - platform_top)
+
+				if deepest > -INF:
+					breaches += 1
+					if failures.size() < MAX_FAILURES_PER_SCENARIO:
+						failures.append(
+							"start %.0f px above the slab, %d-tick wind-up, %s: head ended %.1f px past the top of a 24 px platform" % [
+								height, windup, "falling" if falling else "from rest", deepest])
+
+				player.queue_free()
+				await _await_ticks(BOOST_RESET_TICKS)
+
+	if breaches > 0:
+		failures.append("%d of %d boost trials put the head through the platform" % [breaches, trials])
+
+	await _teardown(stage)
+	return failures
+
 ## AC-6: another player's body is terrain too. Same shape as
 ## head_plants_terrain, with an opponent standing in for the floor: one
 ## player settles standing on its head on top of another, its own body clear
@@ -485,7 +594,7 @@ func _scenario_weapon_stats_are_swappable() -> Array[String]:
 		failures.append("before the swap, full drag reached %.1f px, expected %.1f px" % [
 			pickaxe_reach, MAX_REACH])
 
-	var stub := WeaponStats.new()
+	var stub := WeaponStatsType.new()
 	stub.min_reach = STUB_MIN_REACH
 	stub.max_reach = STUB_MAX_REACH
 	player.set_weapon_stats(stub)

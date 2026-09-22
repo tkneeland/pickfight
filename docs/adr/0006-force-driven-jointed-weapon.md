@@ -93,6 +93,15 @@ and honest weight, and both then need explicit rules.
   touch the input frame can be added later.
 - This is the largest and riskiest piece of work in the plan, and it gates the
   rest of the combat package.
+- The tunnelling this ADR flagged as the spike's main risk did happen, on the
+  arena's 24 px platforms, and is closed without taking the fallback. It is not
+  a CCD gap: the head's motion is partly produced by the joints inside the
+  constraint solve, after Godot's 2D continuous detection has taken its
+  motion estimate from the body's velocity, so no CCD setting can see it.
+  `WeaponHead` instead sweeps the head's shape along the displacement each step
+  actually produced and puts the head back at the contact point when that path
+  crossed something solid. The jointed rig stands; nothing here changes the
+  decision above.
 
 ## Alternatives considered
 
