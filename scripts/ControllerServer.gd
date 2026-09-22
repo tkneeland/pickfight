@@ -25,14 +25,14 @@ extends Node
 ##     eventually detected by the socket layer.
 ##   * A per-slot input deadline (`controller_timeout_sec`): no well-formed
 ##     packet for that long and the controller is treated as gone — the
-##     player's vector is zeroed so the arm eases to rest, and the slot frees.
+##     player's vector is zeroed so the weapon eases to rest, and the slot frees.
 ##
 ## Sockets that connect and never finish a request (speculative preconnect,
 ## port scanners, stalled handshakes) are dropped after
 ## `connection_timeout_sec` rather than being polled forever.
 ##
 ## Run the host with `-- --log-input` to print every decoded packet, every
-## bind/unbind/timeout, and a periodic "arm steady" line while a bound arm is
+## bind/unbind/timeout, and a periodic "weapon steady" line while a bound weapon is
 ## unchanged; the automated checks assert on those lines.
 
 const PAGE_PATH: String = "res://controller/index.html"
@@ -41,7 +41,7 @@ const MAX_HEADER_BYTES: int = 8192
 const PACKET_SIZE: int = 8
 const ANGLE_LOG_EPSILON: float = 0.0005
 const LENGTH_LOG_EPSILON: float = 0.05
-## Physics frames between "arm steady" lines. Steadiness has to be provable
+## Physics frames between "weapon steady" lines. Steadiness has to be provable
 ## from a line that is present, not from the absence of change lines.
 const STEADY_LOG_FRAMES: int = 30
 
@@ -92,10 +92,10 @@ var _pending: Array[PendingConn] = []
 var _players: Array = []
 var _slot_peers: Array[WebSocketPeer] = []
 var _slot_last_packet_msec: PackedInt64Array = PackedInt64Array()
-var _last_arm: PackedVector2Array = PackedVector2Array()
+var _last_weapon: PackedVector2Array = PackedVector2Array()
 var _steady_frames: PackedInt32Array = PackedInt32Array()
 # 1 once a slot has ever held a controller: keeps the startup settle of an
-# untouched arm out of the diagnostics.
+# untouched weapon out of the diagnostics.
 var _bound_once: PackedByteArray = PackedByteArray()
 
 func _ready() -> void:
@@ -105,11 +105,11 @@ func _ready() -> void:
 		_players.append(get_node_or_null(path))
 	_slot_peers.resize(_players.size())
 	_slot_last_packet_msec.resize(_players.size())
-	_last_arm.resize(_players.size())
+	_last_weapon.resize(_players.size())
 	_steady_frames.resize(_players.size())
 	_bound_once.resize(_players.size())
-	for i in _last_arm.size():
-		_last_arm[i] = Vector2(NAN, NAN)
+	for i in _last_weapon.size():
+		_last_weapon[i] = Vector2(NAN, NAN)
 
 	var http_err: int = _http_server.listen(http_port)
 	if http_err != OK:
@@ -132,31 +132,31 @@ func _process(_delta: float) -> void:
 	_process_http()
 	_process_websocket()
 
-## Arm diagnostics run on the physics tick because that is the rate the arm is
+## Weapon diagnostics run on the physics tick because that is the rate the weapon is
 ## actually integrated at, which makes "held steady for N frames" meaningful.
 ##
-## A slot is reported while a controller is bound, and afterwards until its arm
+## A slot is reported while a controller is bound, and afterwards until its weapon
 ## has settled back to rest -- otherwise the easing that follows a disconnect
 ## would happen entirely off the record.
 func _physics_process(_delta: float) -> void:
 	for slot in _slot_peers.size():
-		if _slot_peers[slot] == null and not _arm_away_from_rest(slot):
+		if _slot_peers[slot] == null and not _weapon_away_from_rest(slot):
 			continue
-		_log_arm(slot)
+		_log_weapon(slot)
 
 ## True while an unbound slot still owes the log an easing line. The last
-## reported length counts too, so the frame the arm actually reaches rest is
+## reported length counts too, so the frame the weapon actually reaches rest is
 ## reported before logging stops.
-func _arm_away_from_rest(slot: int) -> bool:
+func _weapon_away_from_rest(slot: int) -> bool:
 	if _bound_once[slot] == 0:
 		return false
 	var player: Variant = _players[slot]
 	if player == null:
 		return false
-	var rest: float = player.arm_min_length + LENGTH_LOG_EPSILON
-	if player.arm_length > rest:
+	var rest: float = player.weapon_min_length + LENGTH_LOG_EPSILON
+	if player.weapon_length > rest:
 		return true
-	return is_finite(_last_arm[slot].y) and _last_arm[slot].y > rest
+	return is_finite(_last_weapon[slot].y) and _last_weapon[slot].y > rest
 
 # --- HTTP -------------------------------------------------------------------
 
@@ -314,7 +314,7 @@ func _bind(peer: WebSocketPeer) -> void:
 			continue
 		_slot_peers[slot] = peer
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
-		_last_arm[slot] = Vector2(NAN, NAN)
+		_last_weapon[slot] = Vector2(NAN, NAN)
 		_steady_frames[slot] = 0
 		_bound_once[slot] = 1
 		_players[slot].bind_controller()
@@ -326,12 +326,12 @@ func _bind(peer: WebSocketPeer) -> void:
 	if _log_input:
 		print("controller refused: no free player slot")
 
-## Free the slot and park its player: zeroing the vector first means the arm
+## Free the slot and park its player: zeroing the vector first means the weapon
 ## eases back to rest over several frames instead of holding the controller's
 ## last angle forever (or snapping to whatever a debug source would say).
 func _unbind(slot: int) -> void:
 	_slot_peers[slot] = null
-	_last_arm[slot] = Vector2(NAN, NAN)
+	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
@@ -358,26 +358,29 @@ func _drain(slot: int, peer: WebSocketPeer) -> void:
 	if _log_input:
 		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])
 
-## Report the arm the host actually produced, reading only Player's public
-## `arm_angle` / `arm_length`, so direction/reach/release can be observed the
-## way a player sees them rather than by re-deriving them from the input.
+## Report the weapon the host actually commanded, reading only Player's
+## public `weapon_angle` / `weapon_length`, so direction/reach/release can be
+## observed the way the input pipeline produced them rather than by
+## re-deriving them from the packet. These are the setpoints, not the driven
+## body's live geometry: a physical weapon under contact jitters, and a
+## steadiness log has to be able to say "nothing changed".
 ##
-## Changes print as they happen; an unchanged arm prints a positive "steady"
+## Changes print as they happen; an unchanged weapon prints a positive "steady"
 ## line every `STEADY_LOG_FRAMES` frames, so "it held at rest" is provable from
 ## a line that exists rather than from silence.
-func _log_arm(slot: int) -> void:
+func _log_weapon(slot: int) -> void:
 	if not _log_input:
 		return
 	var player: Variant = _players[slot]
 	if player == null:
 		return
-	var current: Vector2 = Vector2(player.arm_angle, player.arm_length)
-	var previous: Vector2 = _last_arm[slot]
+	var current: Vector2 = Vector2(player.weapon_angle, player.weapon_length)
+	var previous: Vector2 = _last_weapon[slot]
 	if is_finite(previous.x) and absf(current.x - previous.x) < ANGLE_LOG_EPSILON and absf(current.y - previous.y) < LENGTH_LOG_EPSILON:
 		_steady_frames[slot] += 1
 		if _steady_frames[slot] % STEADY_LOG_FRAMES == 0:
-			print("slot=%d arm steady angle=%.4f len=%.1f frames=%d" % [slot, previous.x, previous.y, _steady_frames[slot]])
+			print("slot=%d weapon steady angle=%.4f len=%.1f frames=%d" % [slot, previous.x, previous.y, _steady_frames[slot]])
 		return
-	_last_arm[slot] = current
+	_last_weapon[slot] = current
 	_steady_frames[slot] = 0
-	print("slot=%d arm angle=%.4f len=%.1f" % [slot, current.x, current.y])
+	print("slot=%d weapon angle=%.4f len=%.1f" % [slot, current.x, current.y])
