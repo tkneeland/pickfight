@@ -1,10 +1,11 @@
 extends SceneTree
 
 ## Headless assertion seam for combat scenarios (issue #2, AC-1/AC-2 and their
-## share of DoD-1/DoD-2), extended in D2 to the weapon rig. Drives players through the same public interface the
+## share of DoD-1/DoD-2), extended in D2 to the weapon rig and in D3 to
+## damage, death and clash. Drives players through the same public interface the
 ## phone controller transport uses -- Player.set_input_vector() -- and asserts
 ## only on observable state (weapon world angle and reach, body rotation, position,
-## velocity, and later damage/alive/weapon-held). Never asserts on the rig
+## velocity, accumulated damage, deaths, which weapon is held). Never asserts on the rig
 ## underneath -- not on joints, drive torque or gains: ADR-0006 names a
 ## fallback rig that would change all of those, and this suite has to survive
 ## it. See the "Testing Decisions" section of issue #2.
@@ -44,6 +45,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"haft_is_non_colliding",
 	"rig_freed_with_player",
 	"head_does_not_tunnel_thin_platform",
+	"head_strike_damage_scales",
+	"body_collision_knockback_no_damage",
+	"damage_kills",
+	"ringout_kills_at_full_health",
+	"heads_do_not_interpenetrate",
+	"clash_higher_drive_force_wins",
+	"heads_do_not_tunnel_head",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -135,6 +143,128 @@ const BOOST_RESET_TICKS: int = 4
 ## broken lock doesn't spam hundreds of near-identical lines.
 const MAX_FAILURES_PER_SCENARIO: int = 5
 
+## --- Damage, death and clash ------------------------------------------------
+
+## The damage a player dies at, written down here rather than read off the
+## player: a test that asked the player what its own threshold was would pass
+## whatever the player decided.
+const DEATH_DAMAGE: float = 100.0
+## Where a dead player comes back, matching the arena's kill zone. Also
+## written down rather than read back.
+const RESPAWN_POSITION: Vector2 = Vector2(0, -200)
+## Slack on a respawn position: measured a tick or two after the death, by
+## which time the respawned body has begun to fall again.
+const RESPAWN_TOLERANCE: float = 20.0
+
+## Half-sweeps for the swing spread. The attacker starts this far short of the
+## victim and is commanded this far past them, so the head crosses the victim
+## in the middle of its travel -- at speed, rather than decelerating onto
+## them. A longer sweep is a faster head, which is the independent variable
+## these trials turn. It stops at 1.3 because the swing saturates there --
+## measured, a 1.8 rad half-sweep arrives at 2472 px/s against 1.3's 2476,
+## so a longer wind-up buys no more speed and the pair would say nothing.
+const SWING_HALF_ANGLES: PackedFloat32Array = [0.5, 0.9, 1.3]
+## Two trials' head speeds have to differ by at least this much before the
+## pair is allowed to say anything about damage scaling with speed.
+const MIN_SPEED_STEP: float = 150.0
+## The wind-up, in two parts. The weapon is first turned to the wind-up angle
+## wound all the way in, where the head stays inside 26 px of its own player
+## and so cannot touch anything, and only then pushed out to full reach. Done
+## the other way round -- turning a fully extended weapon -- the head ploughs
+## through wherever the victim is standing on its way to the wind-up pose,
+## which both hits them before the trial starts and leaves the weapon jammed
+## against them instead of wound up. Starting every wind-up from wound in
+## also means every swing starts from the same pose, which is what makes a
+## rehearsal worth replaying.
+const RETRACT_TICKS: int = 20
+const EXTEND_TICKS: int = 15
+## Ticks a swing is watched for.
+const SWING_TICKS: int = 40
+## Ticks watched after a hit lands, enough to read the damage and stop.
+const POST_HIT_TICKS: int = 2
+## The slow-contact anchor: the attacker holds its weapon out and walks the
+## head into the victim at this speed. Well under a swing, and the point of
+## the trial is that it hurts nobody.
+const CREEP_SPEED: float = 250.0
+const CREEP_TICKS: int = 25
+## Where the victim stands for the creep: a little beyond a fully extended
+## head, and far enough out that the two bodies never meet inside
+## CREEP_TICKS.
+const CREEP_DISTANCE: float = 185.0
+## How far inside the rehearsed arc a victim is planted. The replay of a
+## swing is not identical to the rehearsal of it to the last pixel -- the
+## weapon starts each one from wherever the last left it -- and a target
+## sitting exactly on the rehearsed path can be missed by a few pixels.
+## Planting it slightly inside the arc costs a little of the head's speed at
+## contact and buys the trial back.
+const ARC_INSET: float = 10.0
+## How many swings a victim is given to die under. Three clean strikes should
+## do it; this is the runaway guard, not the expectation.
+const MAX_KILL_SWINGS: int = 8
+## Ticks a ring-out is waited for: the fall from the respawn height to the
+## kill zone, with room to spare.
+const RINGOUT_TICKS: int = 240
+## Off the end of the ground (which spans -600..600) but still over the kill
+## zone (-700..700), and clear of both platforms.
+const RINGOUT_START: Vector2 = Vector2(650, -200)
+
+## Body-collision knockback: one player run into the other this fast from
+## 160 px away, which linear damping brings down to about 430 px/s by the
+## time they meet -- still well over Player.knockback_threshold. The player
+## who was standing still has to come out of it moving at least
+## MIN_REBOUND_SPEED. A plain rigid collision has no bounce, so anything the
+## standing player gains is the knockback and nothing else.
+const BUMP_SPEED: float = 600.0
+const MIN_REBOUND_SPEED: float = 100.0
+## And has to be carried somewhere by it, not merely twitch.
+const MIN_SHOVE_DISTANCE: float = 40.0
+const BUMP_TICKS: int = 60
+
+## Clash: two players this far apart, each commanding full reach at the other.
+## 220 px leaves each head 60 px short of where it is being told to go, so
+## both drives stay pushing for the whole measurement instead of arriving.
+## CLASH_TICKS is then long enough that holding is a state and not a moment
+## passed through: two seconds of contact under full push.
+const CLASH_SEPARATION: float = 220.0
+const CLASH_TICKS: int = 120
+## Ticks over which the two heads are walked into each other when a clash
+## needs to be established rather than tested. Ramping the commanded reach
+## rather than asking for all of it at once brings them together at a rate
+## the contact can catch -- 13 px a tick at its quickest, measured, against
+## the 16 px at which two heads touch -- instead of the 23 px a tick a
+## straight command produces, which is the difference between two heads
+## meeting and two heads stepping through each other -- see
+## `heads_do_not_interpenetrate`, which is where that is measured. Anything
+## that wants to measure a contest first has to have a contact.
+const CLASH_APPROACH_TICKS: int = 90
+## Solver penetration allowed between two touching heads before they count as
+## having gone into each other rather than met.
+const HEAD_OVERLAP_ALLOWANCE: float = 4.0
+## How close the heads have to get before a clash trial counts as having
+## happened at all, so a scenario cannot pass by the two never meeting.
+const CLASH_CONTACT_SLACK: float = 8.0
+## What a stronger weapon is given in the clash, and the ground it then has to
+## win: the meeting point has to sit at least this far onto the weaker
+## player's side of the midline between the two bodies. With equal weapons
+## symmetry puts it on the midline, so this margin is the whole difference.
+const STRONG_FORCE_MULTIPLIER: float = 4.0
+const MIN_GROUND_WON: float = 20.0
+## How far off the midline the meeting point of two identical weapons may sit
+## before the clash is not symmetric after all.
+const SYMMETRIC_CLASH_TOLERANCE: float = 8.0
+
+## Head-versus-head tunnelling sweep: approach directions, and the speed each
+## player is thrown at the other with. Both hold their heads out at each
+## other, so closing speed is twice the charge speed -- up to 3600 px/s, or
+## 60 px in a 60 Hz tick against a 16 px head.
+const CHARGE_ANGLES: PackedFloat32Array = [0.0, 45.0, 90.0, 135.0]
+const CHARGE_SPEEDS: PackedFloat32Array = [600.0, 1200.0, 1800.0]
+## Far enough apart that both weapons settle fully extended without touching
+## (2 x 140 px of reach inside 340 px), so every trial starts from a real
+## block pose and the whole closing speed is spent on the contact.
+const CHARGE_SEPARATION: float = 340.0
+const CHARGE_TICKS: int = 45
+
 ## Set by `_teardown()`, which every scenario ends with. A GDScript runtime
 ## error inside a scenario abandons it and still resumes the caller with an
 ## empty failure list, which would otherwise be indistinguishable from a
@@ -217,6 +347,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_rig_freed_with_player()
 		"head_does_not_tunnel_thin_platform":
 			return await _scenario_head_does_not_tunnel_thin_platform()
+		"head_strike_damage_scales":
+			return await _scenario_head_strike_damage_scales()
+		"body_collision_knockback_no_damage":
+			return await _scenario_body_collision_knockback_no_damage()
+		"damage_kills":
+			return await _scenario_damage_kills()
+		"ringout_kills_at_full_health":
+			return await _scenario_ringout_kills_at_full_health()
+		"heads_do_not_interpenetrate":
+			return await _scenario_heads_do_not_interpenetrate()
+		"clash_higher_drive_force_wins":
+			return await _scenario_clash_higher_drive_force_wins()
+		"heads_do_not_tunnel_head":
+			return await _scenario_heads_do_not_tunnel_head()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -797,3 +941,676 @@ func _count_rigs(node: Node) -> int:
 			count += 1
 		count += _count_rigs(child)
 	return count
+
+# --- Damage, death and clash ------------------------------------------------
+
+## AC-7: a head striking a player damages them, and the faster the head is
+## moving the more it takes off.
+##
+## Each trial is one swing at a fresh victim, so every strike is measured
+## against a player who has taken nothing yet and no trial inherits the one
+## before it. Speed is the independent variable and is turned by sweeping the
+## head through a longer arc, not by asking the weapon to go faster: the
+## attacker winds up short of the victim and is told to finish past them, so
+## the head crosses them mid-sweep. Both sides of the claim are then measured
+## from outside the player -- damage off the victim's own accumulated total,
+## speed off how far the head visibly moved in the tick before it landed --
+## so nothing here recomputes what the strike rule computes.
+##
+## The anchors at each end are what make it a scaling law rather than a list:
+## walking an extended head into someone at CREEP_SPEED has to take nothing
+## off them at all, and the hardest swing in the spread has to sit inside the
+## pacing the design asks for -- more than one strike to kill, no more than
+## three.
+func _scenario_head_strike_damage_scales() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	await physics_frame
+	_brace(attacker)
+
+	var results: Array[Dictionary] = []
+	for half_angle: float in SWING_HALF_ANGLES:
+		var aim: Dictionary = await _rehearse_swing(attacker, centre, half_angle)
+		var victim: RigidBody2D = _spawn_player(stage, aim["point"])
+		await physics_frame
+		_brace(victim)
+		var hit: Dictionary = await _swing_at(attacker, victim, centre, half_angle, aim["point"])
+		results.append(hit)
+		print("      swing %.2f rad: head %.0f px/s, damage %.1f, closest %.1f px" % [
+			half_angle, hit["speed"], hit["damage"], hit["closest"]])
+		if not hit["landed"]:
+			failures.append("a %.2f rad swing never reached the victim at all" % half_angle)
+		elif hit["damage"] <= 0.0:
+			failures.append("a %.2f rad swing landed at %.0f px/s and took nothing off the victim" % [
+				half_angle, hit["speed"]])
+		victim.queue_free()
+		await _await_ticks(BOOST_RESET_TICKS)
+
+	for i in range(1, results.size()):
+		var slower: Dictionary = results[i - 1]
+		var faster: Dictionary = results[i]
+		if faster["speed"] < slower["speed"] + MIN_SPEED_STEP:
+			failures.append("the sweep did not produce a faster head: %.0f px/s after %.0f px/s" % [
+				faster["speed"], slower["speed"]])
+		elif faster["damage"] <= slower["damage"]:
+			failures.append("a head at %.0f px/s dealt %.1f, no more than the %.1f dealt at %.0f px/s" % [
+				faster["speed"], faster["damage"], slower["damage"], slower["speed"]])
+
+	# The slow anchor: an extended head walked into someone is not a strike.
+	# Its own attacker, because the creep is the body carrying the head in
+	# and the swinger above is braced.
+	var walker: RigidBody2D = _spawn_player(stage, centre + Vector2.DOWN * CREEP_DISTANCE)
+	var bystander: RigidBody2D = _spawn_player(stage, centre + Vector2.DOWN * CREEP_DISTANCE + Vector2.RIGHT * CREEP_DISTANCE)
+	await physics_frame
+	var creep: Dictionary = await _creep_into(walker, bystander, centre + Vector2.DOWN * CREEP_DISTANCE)
+	print("      creep: head %.0f px/s, damage %.1f, closest %.1f px" % [
+		creep["speed"], creep["damage"], creep["closest"]])
+	if not creep["landed"]:
+		failures.append("the creep never reached the bystander, so it proves nothing")
+	elif creep["damage"] > 0.0:
+		failures.append("walking a head into someone at %.0f px/s took %.1f off them; only a swing should hurt" % [
+			creep["speed"], creep["damage"]])
+	if results.size() > 0 and creep["speed"] >= float(results[0]["speed"]):
+		failures.append("the creep moved the head at %.0f px/s, no slower than the gentlest swing (%.0f px/s)" % [
+			creep["speed"], results[0]["speed"]])
+
+	# The pacing the design asks for: a strike is a commitment, not a
+	# one-shot, and an exchange is over in a handful of them.
+	if results.size() > 0:
+		var hardest: float = float(results[results.size() - 1]["damage"])
+		if hardest >= DEATH_DAMAGE:
+			failures.append("the hardest strike deals %.1f and kills outright from full health (%.1f)" % [
+				hardest, DEATH_DAMAGE])
+		if hardest * 3.0 < DEATH_DAMAGE:
+			failures.append("the hardest strike deals %.1f, so killing takes more than 3 of them (%.1f to kill)" % [
+				hardest, DEATH_DAMAGE])
+
+	await _teardown(stage)
+	return failures
+
+## AC-8: bumping into someone shoves them and takes nothing off them.
+##
+## The load-bearing half of ADR-0005's split. Two players are driven into each
+## other well above Player.knockback_threshold with their weapons pointed
+## straight up and out of the way, so body contact is the only thing that
+## happens. The shove is asserted as well as the absence of damage, because
+## "no damage" on its own also describes a collision that never happened --
+## and nothing here bounces on its own: rigid bodies default to no
+## restitution, so a rebound is the knockback and nothing else.
+func _scenario_body_collision_knockback_no_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	# In clear air, not on the floor: ground friction stops a shove inside
+	# 35 px, which is less than it takes to cross the gap, so two players
+	# slid at each other along the ground never actually meet. Both fall
+	# equally while this runs, so the closing is the horizontal drive alone.
+	#
+	# One player charges and the other stands still, rather than both
+	# charging: head-on and symmetric, each shoves the other by exactly half
+	# the closing speed and the two cancel to a dead stop, which is a real
+	# outcome but shows nothing. Someone standing still who ends up moving
+	# has unambiguously been shoved.
+	var charger: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION - Vector2(80, 0))
+	var bumped: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(80, 0))
+	# Weapons wound in and pointed up, so neither head can touch the other
+	# player and body contact is the only thing under test.
+	charger.set_input_vector(Vector2.UP * 0.05)
+	bumped.set_input_vector(Vector2.UP * 0.05)
+	await _await_ticks(SETTLE_TICKS)
+
+	var started_at: float = bumped.global_position.x
+	charger.linear_velocity = Vector2(BUMP_SPEED, charger.linear_velocity.y)
+
+	var closest: float = INF
+	var shoved_speed: float = 0.0
+	for _i in BUMP_TICKS:
+		await physics_frame
+		closest = minf(closest, (bumped.global_position - charger.global_position).length())
+		shoved_speed = maxf(shoved_speed, bumped.linear_velocity.x)
+
+	var shoved_by: float = bumped.global_position.x - started_at
+	if closest > 2.0 * PLAYER_RADIUS + PLANT_CLEARANCE:
+		failures.append("the two bodies never touched (closest %.1f px), so nothing was tested" % closest)
+	if shoved_speed < MIN_REBOUND_SPEED:
+		failures.append("the bump shoved nobody: the standing player reached %.0f px/s" % shoved_speed)
+	if shoved_by < MIN_SHOVE_DISTANCE:
+		failures.append("the standing player was moved %.1f px by being run into" % shoved_by)
+	if charger.damage > 0.0 or bumped.damage > 0.0:
+		failures.append("body contact dealt damage (%.1f and %.1f); only a head strike may" % [
+			charger.damage, bumped.damage])
+	if charger.deaths > 0 or bumped.deaths > 0:
+		failures.append("body contact killed someone (%d and %d deaths)" % [
+			charger.deaths, bumped.deaths])
+
+	await _teardown(stage)
+	return failures
+
+## AC-9: enough accumulated damage kills, and the death is the same one a
+## ring-out produces -- back at the respawn point with health reset.
+##
+## Struck repeatedly with the hardest swing in the spread until the victim
+## dies. That it survives at least one of them is asserted too: damage that
+## accumulates is the claim, and a one-shot kill would satisfy "it died"
+## without it.
+func _scenario_damage_kills() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	await physics_frame
+	_brace(attacker)
+
+	var half_angle: float = SWING_HALF_ANGLES[SWING_HALF_ANGLES.size() - 1]
+	var aim: Dictionary = await _rehearse_swing(attacker, centre, half_angle)
+	var victim: RigidBody2D = _spawn_player(stage, aim["point"])
+	await physics_frame
+	_brace(victim)
+
+	var swings: int = 0
+	var survived_a_strike: bool = false
+	var hurt_before_death: float = 0.0
+	while swings < MAX_KILL_SWINGS and victim.deaths == 0:
+		var before: float = victim.damage
+		await _swing_at(attacker, victim, centre, half_angle, aim["point"])
+		swings += 1
+		if victim.deaths == 0:
+			if victim.damage > before:
+				survived_a_strike = true
+			hurt_before_death = victim.damage
+
+	if victim.deaths != 1:
+		failures.append("%d strikes left the victim on %.1f damage without killing them (%.1f kills)" % [
+			swings, victim.damage, DEATH_DAMAGE])
+	else:
+		if not survived_a_strike:
+			failures.append("the victim died on the first strike; damage is supposed to accumulate")
+		if hurt_before_death >= DEATH_DAMAGE:
+			failures.append("the victim was carrying %.1f damage and had not died yet (%.1f kills)" % [
+				hurt_before_death, DEATH_DAMAGE])
+		if victim.damage > 0.0:
+			failures.append("respawned still carrying %.1f damage; health should reset" % victim.damage)
+		var home: float = (victim.global_position - RESPAWN_POSITION).length()
+		if home > RESPAWN_TOLERANCE:
+			failures.append("died %.1f px from the respawn point %s, at %s" % [
+				home, RESPAWN_POSITION, victim.global_position])
+
+	await _teardown(stage)
+	return failures
+
+## AC-10: a ring-out kills a player who has taken no damage at all.
+##
+## Dropped off the end of the ground and past the kill zone with full health,
+## which is the point: stage geometry is the sharpest threat and does not
+## care how healthy anyone is.
+func _scenario_ringout_kills_at_full_health() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, RINGOUT_START)
+	await physics_frame
+
+	if player.damage > 0.0:
+		failures.append("the player started on %.1f damage, so this is not a full-health ring-out" % player.damage)
+
+	var fell: bool = false
+	for _i in RINGOUT_TICKS:
+		await physics_frame
+		if player.deaths > 0:
+			fell = true
+			break
+
+	if not fell:
+		failures.append("fell for %d ticks to %s without dying" % [RINGOUT_TICKS, player.global_position])
+	else:
+		if player.deaths != 1:
+			failures.append("one ring-out counted as %d deaths" % player.deaths)
+		if player.damage > 0.0:
+			failures.append("respawned carrying %.1f damage" % player.damage)
+		var home: float = (player.global_position - RESPAWN_POSITION).length()
+		if home > RESPAWN_TOLERANCE:
+			failures.append("respawned %.1f px from %s, at %s" % [
+				home, RESPAWN_POSITION, player.global_position])
+
+	await _teardown(stage)
+	return failures
+
+## AC-11: two heads meeting stop each other.
+##
+## Walked into each other, they do, and cleanly: they meet, they hold at the
+## 16 px at which they touch with 0.3 px of solver give, they never cross,
+## and they stay there for as long as both drives keep pushing. No jitter,
+## no creep.
+##
+## **What this does not cover, and why it is not covered here.** Sent at each
+## other the way a player sends them -- both commanding full reach at once,
+## which the extension drive delivers at 700 px/s each -- the heads close at
+## 23 px a tick against the 16 px at which they touch, and whether the
+## contact is caught comes down to where in the step they happen to be when
+## they arrive. Measured both ways from the same code: blocking at 10.5 px,
+## and stepping clean through to the far side. That cannot be asserted in
+## either direction without the suite flapping, so it is not asserted here.
+## `heads_do_not_tunnel_head` drives the same defect hard enough to fail
+## every time, and is where the evidence for it lives.
+func _scenario_heads_do_not_interpenetrate() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var half: Vector2 = Vector2.RIGHT * CLASH_SEPARATION * 0.5
+	var left: RigidBody2D = _spawn_player(stage, centre - half)
+	var right: RigidBody2D = _spawn_player(stage, centre + half)
+	await physics_frame
+	# Braced, or there is nothing to watch: each weapon's push comes back
+	# through its own body, so two free players shove themselves apart before
+	# their heads settle against each other.
+	_brace(left)
+	_brace(right)
+
+	var contact: float = 2.0 * HEAD_RADIUS
+	var walked: Dictionary = await _close_heads(left, right, CLASH_APPROACH_TICKS)
+	var held: Dictionary = await _watch_heads(left, right, CLASH_TICKS)
+	print("      walked together at up to %.1f px a tick: met at %.1f px, still %.1f px apart under full push" % [
+		walked["speed"], walked["closest"], held["closest"]])
+	if walked["closest"] > contact + CLASH_CONTACT_SLACK:
+		failures.append("walked together, the heads never met: closest %.1f px, touching is %.1f px" % [
+			walked["closest"], contact])
+	if held["closest"] < contact - HEAD_OVERLAP_ALLOWANCE:
+		failures.append("the heads came to rest %.1f px inside each other" % (contact - held["closest"]))
+	if walked["crossings"] + held["crossings"] > 0:
+		failures.append("walked together, the left head still got to the right of the right head")
+	if walked["tunnels"] + held["tunnels"] > 0:
+		failures.append("walked together, a step still jumped the heads through each other")
+	# Both drives are commanded 60 px past where they can get to, so this is
+	# two weapons at full push, not two weapons that happen to be resting
+	# against each other.
+	if held["closest"] > contact + CLASH_CONTACT_SLACK:
+		failures.append("the heads did not stay together: %.1f px apart while both are still pushing" % held["closest"])
+
+	await _teardown(stage)
+	return failures
+
+## AC-12: in a clash the head with the higher max drive force wins ground.
+##
+## Measured as where the two heads meet relative to the line midway between
+## the two bodies. With identical weapons that meeting point has to sit on the
+## midline -- the situation is symmetric, so anywhere else would be a bias in
+## the rig rather than a property of the weapons. The right-hand player is
+## then handed a weapon identical in every way but its force ceiling, and the
+## meeting point has to move onto the weaker player's side. Nothing here
+## reaches for the clamp itself; ADR-0006 says the outcome should fall out of
+## it, and this is the observation that says whether it does.
+func _scenario_clash_higher_drive_force_wins() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var half: Vector2 = Vector2.RIGHT * CLASH_SEPARATION * 0.5
+	var left: RigidBody2D = _spawn_player(stage, centre - half)
+	var right: RigidBody2D = _spawn_player(stage, centre + half)
+	await physics_frame
+	# Braced, or there is no contest to measure: each weapon's push comes
+	# back through its own body, so two free players shove themselves apart
+	# and their heads never stay in contact. Bracing is a player planted
+	# against the ground, which is the situation a clash actually happens in.
+	_brace(left)
+	_brace(right)
+
+	var even: Dictionary = await _clash(left, right, centre)
+	print("      equal weapons: meeting point %.1f px off the midline, heads %.1f px apart" % [
+		even["offset"], even["gap"]])
+	if even["gap"] > 2.0 * HEAD_RADIUS + CLASH_CONTACT_SLACK:
+		failures.append("the heads never met with equal weapons: %.1f px apart" % even["gap"])
+	if absf(even["offset"]) > SYMMETRIC_CLASH_TOLERANCE:
+		failures.append("two identical weapons met %.1f px off the midline between them" % even["offset"])
+
+	var strong := WeaponStatsType.new()
+	strong.max_drive_force = strong.max_drive_force * STRONG_FORCE_MULTIPLIER
+	right.set_weapon_stats(strong)
+	await _await_ticks(SETTLE_TICKS)
+
+	var uneven: Dictionary = await _clash(left, right, centre)
+	print("      stronger right: meeting point %.1f px off the midline, heads %.1f px apart" % [
+		uneven["offset"], uneven["gap"]])
+	if uneven["gap"] > 2.0 * HEAD_RADIUS + CLASH_CONTACT_SLACK:
+		failures.append("the heads never met with unequal weapons: %.1f px apart" % uneven["gap"])
+	var ground_won: float = even["offset"] - uneven["offset"]
+	if ground_won < MIN_GROUND_WON:
+		failures.append("a %.0fx stronger weapon drove the clash only %.1f px onto the weaker player's side (wanted %.1f px)" % [
+			STRONG_FORCE_MULTIPLIER, ground_won, MIN_GROUND_WON])
+	if uneven["offset"] > -MIN_GROUND_WON:
+		failures.append("the clash settled %.1f px off the midline; the stronger weapon should hold the middle and then some" % uneven["offset"])
+
+	await _teardown(stage)
+	return failures
+
+## The gap `WeaponHead` knowingly leaves open: a head tunnelling through
+## another head.
+##
+## The head's own sweep correction runs against LAYER_WORLD only, deliberately
+## -- two heads each snapping the other out of a contact would fight rather
+## than resolve -- so head-versus-head has nothing behind the solver and
+## Godot's continuous detection but the contact itself. Blocking is one of the
+## three jobs the weapon exists for, so a head that goes through a block is a
+## real failure, and it had never been driven hard enough to find out.
+##
+## Both players hold their heads out at each other from a distance neither can
+## reach across, and are then thrown at each other: closing speed is twice the
+## charge speed, up to 3600 px/s, or 60 px in a tick against a 16 px head.
+## Swept over four approach directions so that gravity, which helps a vertical
+## charge and not a horizontal one, cannot hide it.
+func _scenario_heads_do_not_tunnel_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	var blocker: RigidBody2D = _spawn_player(stage, centre)
+	await physics_frame
+
+	var contact: float = 2.0 * HEAD_RADIUS
+	var trials: int = 0
+	var met: int = 0
+	var breaches: int = 0
+
+	for degrees: float in CHARGE_ANGLES:
+		for speed: float in CHARGE_SPEEDS:
+			trials += 1
+			var axis: Vector2 = Vector2.RIGHT.rotated(deg_to_rad(degrees))
+			var half: Vector2 = axis * CHARGE_SEPARATION * 0.5
+			attacker.teleport_to(centre - half)
+			blocker.teleport_to(centre + half)
+			attacker.set_input_vector(axis)
+			blocker.set_input_vector(-axis)
+			await _await_ticks(SETTLE_TICKS)
+
+			var deaths: int = attacker.deaths + blocker.deaths
+			var previous: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
+			var closest: float = previous.length()
+			var went_through: bool = false
+			var crossed_from: Vector2 = Vector2.ZERO
+			var crossed_to: Vector2 = Vector2.ZERO
+			for _t in CHARGE_TICKS:
+				attacker.linear_velocity = axis * speed
+				blocker.linear_velocity = -axis * speed
+				await physics_frame
+				var relative: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
+				var still_alive: bool = attacker.deaths + blocker.deaths == deaths
+				# A death teleports a player and its weapon across the arena,
+				# which is not a step the heads took; it is not evidence
+				# either way and the trial stops being meaningful there.
+				if not still_alive:
+					break
+				closest = minf(closest, relative.length())
+				if not went_through and _stepped_through(previous, relative):
+					went_through = true
+					crossed_from = previous
+					crossed_to = relative
+				previous = relative
+
+			if closest <= contact + CLASH_CONTACT_SLACK:
+				met += 1
+			print("      %3.0f deg at %.0f px/s each: closest %6.1f px%s" % [
+				degrees, speed, closest, "  THROUGH" if went_through else ""])
+			if went_through:
+				breaches += 1
+				if failures.size() < MAX_FAILURES_PER_SCENARIO:
+					failures.append(
+						"%.0f deg approach at %.0f px/s each: one step took the heads from %s apart to %s apart, straight through the %.0f px at which they touch" % [
+							degrees, speed, crossed_from, crossed_to, contact])
+
+	if met < trials / 2:
+		failures.append("only %d of %d charges brought the heads together at all" % [met, trials])
+	if breaches > 0:
+		failures.append("%d of %d charges put a head through another head" % [breaches, trials])
+
+	await _teardown(stage)
+	return failures
+
+# --- Damage, death and clash helpers ----------------------------------------
+
+## The same swing with nobody in the way, to find out where the head goes and
+## how fast it is going when it gets there.
+##
+## Aiming a swing needs this. Where the head passes is not the circle the
+## commanded reach describes: a hard sweep drags the head in along its own
+## haft, so the faster the swing the tighter the arc, and a victim planted at
+## nominal full reach is missed by a wider margin the harder the swing is --
+## which would turn the whole spread upside down. Rehearsing puts the victim
+## on the path the head actually takes, at the fastest point of it.
+##
+## Physics here is deterministic and the attacker is braced, so the swing
+## measured is the swing that gets repeated: same start pose, same command,
+## same arc, and the victim is not touching anything until the head arrives.
+func _rehearse_swing(attacker: RigidBody2D, centre: Vector2, half_angle: float) -> Dictionary:
+	await _wind_up(attacker, centre, -half_angle)
+
+	var previous: Vector2 = attacker.weapon_head_position()
+	var fastest: float = 0.0
+	var point: Vector2 = previous
+	attacker.set_input_vector(Vector2.RIGHT.rotated(half_angle))
+	for _t in SWING_TICKS:
+		await physics_frame
+		var head: Vector2 = attacker.weapon_head_position()
+		var speed: float = (head - previous).length() / _tick_seconds()
+		if speed > fastest:
+			fastest = speed
+			point = head
+		previous = head
+	# Pulled a little inside the arc: see ARC_INSET. The attacker is braced,
+	# so `centre` is exactly where it still is and the radius is honest.
+	var arm: Vector2 = point - centre
+	return {"point": centre + arm.normalized() * maxf(0.0, arm.length() - ARC_INSET), "speed": fastest}
+
+## One swing at a victim standing on the head's path, and what it did.
+##
+## The attacker winds the weapon up `half_angle` short of the victim at full
+## reach and is then told to finish `half_angle` past them, so the head
+## crosses the victim in the middle of its sweep, moving, rather than
+## arriving decelerating onto the angle it was pointed at. A longer
+## half-sweep is a faster head at the moment of contact, which is how these
+## trials turn speed without ever telling the weapon what speed to have.
+##
+## Both bodies are braced (`_brace`) for the duration. Unbraced, a full-reach
+## sweep flings its own player -- that is the moveset working -- and the arc
+## walks off the victim by up to 200 px, so the trials would measure whether
+## the head arrived rather than what it did on arrival. Bracing is a fixture,
+## not a claim: it is the engine's own `freeze`, it touches nothing in the
+## rig, and what it produces is a player swinging from a firm stance.
+##
+## Speed is reported from the tick before the hit registered -- the last step
+## the head took before anything stopped it -- and damage from the victim's
+## own total, both of them things a player can watch happen.
+func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half_angle: float, target: Vector2) -> Dictionary:
+	victim.teleport_to(target)
+	victim.set_input_vector(Vector2.ZERO)
+	await _wind_up(attacker, centre, -half_angle)
+
+	var before_damage: float = victim.damage
+	var before_deaths: int = victim.deaths
+	var previous_head: Vector2 = attacker.weapon_head_position()
+	# The fastest the head was seen moving on its way in. The swing
+	# accelerates into the target and is stopped dead by it, so the fastest
+	# step before the hit is the speed it arrived with -- and the damage
+	# lands a tick after the head has already been stopped, so the step it
+	# lands on is no use for reading a speed off.
+	var approach_speed: float = 0.0
+	var dealt: float = 0.0
+	var registered: bool = false
+	var closest: float = INF
+	var after_hit: int = 0
+
+	attacker.set_input_vector(Vector2.RIGHT.rotated(half_angle))
+	for _t in SWING_TICKS:
+		await physics_frame
+		var head: Vector2 = attacker.weapon_head_position()
+		var speed: float = (head - previous_head).length() / _tick_seconds()
+		previous_head = head
+		closest = minf(closest, (head - victim.global_position).length())
+		if not registered:
+			approach_speed = maxf(approach_speed, speed)
+			if victim.damage != before_damage or victim.deaths != before_deaths:
+				registered = true
+				dealt = victim.damage - before_damage if victim.deaths == before_deaths \
+					else DEATH_DAMAGE - before_damage
+		else:
+			after_hit += 1
+			if after_hit >= POST_HIT_TICKS:
+				break
+
+	# The head may have arrived and done nothing, which is a different
+	# failure from never arriving -- so whether it got there is geometry,
+	# measured at its closest approach, not whether damage appeared.
+	return {
+		"damage": dealt,
+		"speed": approach_speed,
+		"landed": closest <= PLAYER_RADIUS + HEAD_RADIUS + PLANT_CLEARANCE,
+		"closest": closest,
+	}
+
+## The slow-contact anchor: the head held fully out while the body walks it
+## into someone. Same measurements as `_swing_at`, so the two are comparable.
+func _creep_into(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2) -> Dictionary:
+	victim.teleport_to(centre + Vector2.RIGHT * CREEP_DISTANCE)
+	victim.set_input_vector(Vector2.ZERO)
+	await _wind_up(attacker, centre, 0.0)
+
+	var before_damage: float = victim.damage
+	var previous_head: Vector2 = attacker.weapon_head_position()
+	var approach_speed: float = 0.0
+	var speed_at_hit: float = 0.0
+	var landed: bool = false
+	var closest: float = INF
+
+	for _t in CREEP_TICKS:
+		attacker.linear_velocity = Vector2(CREEP_SPEED, attacker.linear_velocity.y)
+		await physics_frame
+		var head: Vector2 = attacker.weapon_head_position()
+		var speed: float = (head - previous_head).length() / _tick_seconds()
+		previous_head = head
+		var reach: float = (head - victim.global_position).length()
+		closest = minf(closest, reach)
+		if not landed and reach <= PLAYER_RADIUS + HEAD_RADIUS + PLANT_CLEARANCE:
+			landed = true
+			speed_at_hit = approach_speed
+		approach_speed = speed
+
+	if not landed:
+		speed_at_hit = approach_speed
+	return {
+		"damage": victim.damage - before_damage,
+		"speed": speed_at_hit,
+		"landed": landed,
+		"closest": closest,
+	}
+
+## Drives two players' heads into each other and reports where they met: how
+## far the midpoint between the two heads sits from the midpoint between the
+## two bodies, positive being to the right. Both bodies are taken live,
+## because the drive shoves them apart as it pushes -- the midline is not
+## where they started.
+func _clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2) -> Dictionary:
+	var half: Vector2 = Vector2.RIGHT * CLASH_SEPARATION * 0.5
+	left.teleport_to(centre - half)
+	right.teleport_to(centre + half)
+	# Walked together rather than sent: a contest can only be measured once
+	# there is a contact, and sent at each other these two step through one
+	# another (`heads_do_not_interpenetrate`). Once they are touching, the
+	# drives are pushing at everything they have -- both are commanded 60 px
+	# past where they can get to -- so what is measured afterwards is the
+	# contest at full force and not a gentler version of it.
+	await _close_heads(left, right, CLASH_APPROACH_TICKS)
+	await _await_ticks(SETTLE_TICKS)
+
+	var left_head: Vector2 = left.weapon_head_position()
+	var right_head: Vector2 = right.weapon_head_position()
+	var meeting: float = (left_head.x + right_head.x) * 0.5
+	var midline: float = (left.global_position.x + right.global_position.x) * 0.5
+	return {"offset": meeting - midline, "gap": (right_head - left_head).length()}
+
+## Walk two braced players' heads into each other, by ramping the reach they
+## are asked for instead of asking for all of it at once. See
+## CLASH_APPROACH_TICKS. Ends with both commanded to full reach, so whatever
+## follows is watching two drives at full push.
+func _close_heads(left: RigidBody2D, right: RigidBody2D, ticks: int) -> Dictionary:
+	var watch: Dictionary = _new_head_watch(left, right)
+	for i in ticks:
+		var reach: float = float(i + 1) / float(ticks)
+		left.set_input_vector(Vector2.RIGHT * reach)
+		right.set_input_vector(Vector2.LEFT * reach)
+		await physics_frame
+		_watch_heads_tick(left, right, watch)
+	return watch
+
+## Watch two heads for a while without touching what either player is doing.
+func _watch_heads(left: RigidBody2D, right: RigidBody2D, ticks: int) -> Dictionary:
+	var watch: Dictionary = _new_head_watch(left, right)
+	for _i in ticks:
+		await physics_frame
+		_watch_heads_tick(left, right, watch)
+	return watch
+
+## What a watch collects: how close the two heads got, how fast they were
+## closing at the quickest (in pixels per tick, which is the unit that
+## matters against a 16 px contact), how many ticks the left head spent on
+## the wrong side of the right one, and how many single steps took them
+## through each other without ever touching.
+func _new_head_watch(left: RigidBody2D, right: RigidBody2D) -> Dictionary:
+	var relative: Vector2 = right.weapon_head_position() - left.weapon_head_position()
+	return {
+		"closest": relative.length(),
+		"crossings": 0,
+		"tunnels": 0,
+		"speed": 0.0,
+		"previous": relative,
+	}
+
+func _watch_heads_tick(left: RigidBody2D, right: RigidBody2D, watch: Dictionary) -> void:
+	var relative: Vector2 = right.weapon_head_position() - left.weapon_head_position()
+	var previous: Vector2 = watch["previous"]
+	watch["closest"] = minf(watch["closest"], relative.length())
+	watch["speed"] = maxf(watch["speed"], previous.length() - relative.length())
+	if relative.x <= 0.0:
+		watch["crossings"] += 1
+	if _stepped_through(previous, relative):
+		watch["tunnels"] += 1
+	watch["previous"] = relative
+
+## Did these two heads swap places without ever being close enough to touch?
+##
+## Both arguments are the second head's position relative to the first, a tick
+## apart. If the straight line between them passes inside the distance at
+## which the two heads are touching, while both ends of it are outside that
+## distance, then the pair went through each other between one tick and the
+## next: there is no tick at which they were in contact, and yet they came out
+## the other side. Ordinary contact does not look like this -- it leaves an
+## endpoint inside -- and neither does a miss.
+func _stepped_through(previous_relative: Vector2, current_relative: Vector2) -> bool:
+	var contact: float = 2.0 * HEAD_RADIUS
+	if previous_relative.length() <= contact or current_relative.length() <= contact:
+		return false
+	var step: Vector2 = current_relative - previous_relative
+	var step_length_squared: float = step.length_squared()
+	if step_length_squared == 0.0:
+		return false
+	var along: float = clampf(-previous_relative.dot(step) / step_length_squared, 0.0, 1.0)
+	return (previous_relative + step * along).length() < contact
+
+func _tick_seconds() -> float:
+	return 1.0 / float(Engine.physics_ticks_per_second)
+
+## Put an attacker at `centre` with its weapon wound up at `angle`: turned
+## first while wound in, where the head can reach nobody, then pushed out to
+## full reach. See RETRACT_TICKS.
+func _wind_up(attacker: RigidBody2D, centre: Vector2, angle: float) -> void:
+	attacker.teleport_to(centre)
+	attacker.set_input_vector(Vector2.RIGHT.rotated(angle) * 0.05)
+	await _await_ticks(RETRACT_TICKS)
+	attacker.set_input_vector(Vector2.RIGHT.rotated(angle))
+	await _await_ticks(EXTEND_TICKS)
+
+## Hold a player still without touching its weapon: the engine's own freeze,
+## which pins the body and leaves the rig hanging off it free to be driven.
+## A strike trial needs the arc to arrive where it was aimed, and an unbraced
+## swing throws its own player across the screen.
+func _brace(player: RigidBody2D) -> void:
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true

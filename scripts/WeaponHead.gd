@@ -65,6 +65,20 @@ var sweep_shape: CollisionShape2D
 var sweep_mask: int = 1
 var sweep_exclude: Array[RID] = []
 
+## What the last sweep correction stopped the head against, and how fast the
+## head was heading into it when it did. Read and cleared by `Player`.
+##
+## The sweep turns out not to be only a safety net. A head arriving at swing
+## speed is stopped *here* rather than by the solver: the sweep runs first,
+## puts the head at the surface and takes the closing velocity out of it, so
+## the step that follows generates no contact worth the name. Measured on a
+## 2468 px/s strike, the only `body_entered` the owner ever saw carried 18
+## px/s -- everything that made it a strike had already been resolved. So
+## anything that wants to know a hard hit happened has to be told from in
+## here; there is nowhere else it is visible.
+var swept_into: Object = null
+var swept_speed: float = 0.0
+
 var _previous_position: Vector2 = Vector2.ZERO
 var _has_previous: bool = false
 var _gate_shape: Shape2D
@@ -144,25 +158,33 @@ func _undo_any_tunnelling(state: PhysicsDirectBodyState2D) -> void:
 	state.transform = Transform2D(state.transform.get_rotation(), contact)
 
 	var travel: Vector2 = motion / distance
-	var normal: Vector2 = _surface_normal(space, params, contact, travel)
+	var rest: Dictionary = _contact_rest_info(space, params, contact, travel)
+	var normal: Vector2 = _surface_normal(rest, travel)
 	var into: float = state.linear_velocity.dot(normal)
 	if into < 0.0:
 		state.linear_velocity -= normal * into
+		swept_into = instance_from_id(rest["collider_id"]) if rest.has("collider_id") else null
+		swept_speed = -into
 
-## The normal of whatever the sweep stopped against, so that what is taken out
-## of the velocity is the part driving the head through the surface and not
-## the part sliding it along. Oriented against the direction of travel rather
-## than trusted to arrive that way, and falling back to the direction of
-## travel itself, which can be over-eager but can never be the wrong sign.
-func _surface_normal(
+## Whatever the sweep stopped against: its normal, and which body it was.
+## Probed just past the contact point, the shallowest overlap that still
+## gets an answer.
+func _contact_rest_info(
 		space: PhysicsDirectSpaceState2D,
 		params: PhysicsShapeQueryParameters2D,
 		contact: Vector2,
-		travel: Vector2) -> Vector2:
+		travel: Vector2) -> Dictionary:
 	params.motion = Vector2.ZERO
 	params.transform = params.transform.translated(
 		contact - _previous_position + travel * NORMAL_PROBE_DEPTH)
-	var rest: Dictionary = space.get_rest_info(params)
+	return space.get_rest_info(params)
+
+## The surface's normal, so that what is taken out of the velocity is the part
+## driving the head through the surface and not the part sliding it along.
+## Oriented against the direction of travel rather than trusted to arrive that
+## way, and falling back to the direction of travel itself, which can be
+## over-eager but can never be the wrong sign.
+func _surface_normal(rest: Dictionary, travel: Vector2) -> Vector2:
 	if rest.has("normal"):
 		var normal: Vector2 = rest["normal"]
 		if normal.length_squared() > 0.0:

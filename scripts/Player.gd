@@ -18,9 +18,18 @@ extends RigidBody2D
 ## and clamped at `WeaponStats.max_drive_force` -- the cap is what lets a
 ## weaker weapon lose a contest instead of deadlocking.
 ##
-## Combat: colliding into another player fast enough knocks them back,
-## approximating Stick Fight's scrappy melee. Damage is carried as a weapon
-## stat but is not applied by anything yet.
+## Combat is split in two, and the split is the point (ADR-0005). A head
+## striking a player deals damage, scaled by how fast the head is moving:
+## that is the swing, and it is the only thing that hurts anyone. Colliding
+## body-to-body knocks players around and deals nothing: that is movement.
+## Rewarding players for flailing their mass into opponents would undercut
+## the one thing the game is about, which is that better swinging wins.
+##
+## Damage accumulates within a life and kills at DEATH_DAMAGE. Death is the
+## respawn a ring-out already produced -- `die()` is the one path, and the
+## kill zone calls it too. That is explicitly interim: when the Round lands,
+## death becomes elimination and damage resets at the round boundary instead
+## of on respawn.
 ##
 ## Per ADR-0003, the weapon is driven by a relative unit-disc input vector
 ## (Vector2.ZERO means "not touching") rather than an absolute cursor
@@ -59,6 +68,32 @@ const LAYER_HEAD: int = 2
 const HAFT_MASS_FRACTION: float = 0.2
 const MIN_HAFT_MASS: float = 0.05
 
+## Damage a player dies at. A scale, not a health bar -- there is no health
+## bar, and how hurt a player is shows on their body -- but the number has to
+## be something, and 100 is the one every per-hit figure below is read
+## against.
+const DEATH_DAMAGE: float = 100.0
+
+## What counts as a strike, in head speed.
+##
+## Below MIN_STRIKE_SPEED a contact is not a swing and takes nothing off
+## anyone. The floor is set by what the rig does when nobody is attacking:
+## landing a plant on another player bounces the head at 240-660 px/s while
+## it settles, and a body walking an extended head into someone moves it at
+## whatever the body is doing. None of that is a strike, and if it were, a
+## player could kill by leaning on someone.
+##
+## At FULL_STRIKE_SPEED a strike deals exactly `WeaponStats.damage`, and it
+## scales linearly from the floor to there and on past it. 2200 px/s is a
+## committed full-reach sweep; the fastest the moveset produces in clear air
+## is about 2700, and a head carried by a flying body can beat that, so the
+## scale is capped -- at MAX_STRIKE_SCALE the pickaxe deals 68, which keeps a
+## single strike from killing anyone outright from full health however fast
+## it arrives.
+const MIN_STRIKE_SPEED: float = 700.0
+const FULL_STRIKE_SPEED: float = 2200.0
+const MAX_STRIKE_SCALE: float = 2.0
+
 ## Which weapon this player is holding. Swappable at runtime through
 ## `set_weapon_stats()`; the pickaxe is the only instance today.
 @export var weapon_stats: WeaponStatsType
@@ -68,9 +103,20 @@ const MIN_HAFT_MASS: float = 0.05
 @export var knockback_scale: float = 0.5
 @export var debug_source: DebugSource = DebugSource.NONE
 @export var mouse_drag_radius: float = 140.0
+## Where this player comes back after a death, by either route. It lives here
+## rather than on the kill zone because a player can now die without touching
+## one. When the Stage contract arrives it declares spawn points and this
+## moves onto it.
+@export var respawn_position: Vector2 = Vector2(0, -200)
 
 var input_vector: Vector2 = Vector2.ZERO
 var has_controller: bool = false
+
+## Damage taken so far in this life, and how many lives that has cost. Both
+## are observable state a scenario or a display can read; nothing else about
+## being hurt is stored.
+var damage: float = 0.0
+var deaths: int = 0
 
 ## The weapon setpoints the input vector asks for: a world angle in radians
 ## and a reach in pixels. These are what the host commands, not what the
@@ -93,6 +139,12 @@ var _head_shape: CollisionShape2D
 var _pin: PinJoint2D
 var _groove: GrooveJoint2D
 var _haft_inertia: float = 1.0
+## The head's velocity going into this tick's physics step, kept because the
+## strike is scored on the speed the head arrived with. By the time a contact
+## is reported the step has already been solved and the head has given most
+## of that up to the body it hit, so reading the velocity there would score
+## every strike as a tap.
+var _head_velocity: Vector2 = Vector2.ZERO
 
 @onready var weapon_line: Line2D = $Weapon
 
@@ -128,6 +180,8 @@ func _physics_process(delta: float) -> void:
 	_update_weapon_input(delta)
 	if not _rig_is_live():
 		return
+	_score_swept_strike()
+	_head_velocity = _head.linear_velocity
 	_drive_angle(delta)
 	_drive_extension(delta)
 	_update_weapon_visual()
@@ -204,6 +258,30 @@ func teleport_to(pos: Vector2) -> void:
 	if _head != null:
 		_head.forget_previous_position()
 
+## Take a hit. Damage accumulates within a life; enough of it kills.
+##
+## Public because whoever landed the strike is the one who knows how hard it
+## was -- the attacking player scores its own head's speed against its own
+## weapon's damage and hands over the result.
+func take_damage(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	damage += amount
+	if damage >= DEATH_DAMAGE:
+		die()
+
+## Die, by whatever route. Both routes there -- damage and the kill zone --
+## end here, so there is one description of what dying does rather than two
+## that can drift apart.
+##
+## Interim, and knowingly so: respawning with health reset is what the game
+## does until the Round exists, at which point death becomes elimination and
+## damage resets at the round boundary instead.
+func die() -> void:
+	deaths += 1
+	damage = 0.0
+	teleport_to(respawn_position)
+
 # --- Weapon rig -------------------------------------------------------------
 
 func _build_rig() -> void:
@@ -265,6 +343,12 @@ func _build_rig() -> void:
 	# contesting, and it is the solver's to settle.
 	_head.sweep_mask = LAYER_WORLD
 	_head.sweep_exclude = [get_rid()]
+	# The head has to report what it hits: a strike is head-to-player contact
+	# and this is where it is noticed. Four is plenty for a nub that can only
+	# be touching so many things at once.
+	_head.contact_monitor = true
+	_head.max_contacts_reported = 4
+	_head.body_entered.connect(_on_head_hit)
 	var head_visual := Polygon2D.new()
 	var r: float = _stats.head_draw_radius()
 	head_visual.polygon = PackedVector2Array([
@@ -437,8 +521,14 @@ func _update_keyboard_vector(delta: float) -> Vector2:
 	_keyboard_t = clamp(_keyboard_t + extend_dir * t_speed * delta, KEYBOARD_MIN_T, 1.0)
 	return Vector2.RIGHT.rotated(_keyboard_angle) * _keyboard_t
 
-# --- Knockback --------------------------------------------------------------
+# --- Knockback and damage ---------------------------------------------------
 
+## Body-to-body contact: a shove, and nothing else.
+##
+## Deliberately no damage here, and this is the load-bearing half of
+## ADR-0005's split rather than an omission. Knockback is a movement effect:
+## it moves people, and that is the whole of it. Damage comes from the swing,
+## so that winning is about swinging well rather than about having momentum.
 func _on_body_entered(body: Node) -> void:
 	if body == self or not body.is_in_group("players"):
 		return
@@ -446,3 +536,64 @@ func _on_body_entered(body: Node) -> void:
 	if rel_vel.length() > knockback_threshold:
 		var dir: Vector2 = (body.global_position - global_position).normalized()
 		body.apply_central_impulse(dir * rel_vel.length() * knockback_scale)
+
+## A strike the head's own sweep caught, which is where every hard one shows
+## up.
+##
+## The head stops a fast strike itself, before the solver has generated a
+## contact for it (see `WeaponHead.swept_into`), so `_on_head_hit` below only
+## ever sees the aftermath: measured on a 2468 px/s swing, the contact the
+## engine reported carried 18 px/s. Scoring strikes off that alone would call
+## every committed swing a tap and leave only slow contacts hurting anyone,
+## which is the design exactly backwards.
+##
+## The speed used is the one the sweep took out of the head -- the component
+## heading into what it hit -- so a head skimming along a surface is not
+## scored as having swung into it. Read here rather than in the head so that
+## a death, which relocates two bodies, happens between physics steps rather
+## than inside one.
+func _score_swept_strike() -> void:
+	var hit: Object = _head.swept_into
+	var speed: float = _head.swept_speed
+	_head.swept_into = null
+	_head.swept_speed = 0.0
+	var struck: Node = hit as Node
+	if struck == null or struck == self or not struck.is_in_group("players"):
+		return
+	struck.take_damage(_strike_damage(speed))
+
+## This weapon's head touched something slowly enough for the solver to be
+## the one that noticed. If it was another player, that is a strike too --
+## a gentle one, and usually worth nothing once scored.
+##
+## The head is on its own collision layer and holds an explicit exception for
+## its own player, so what arrives here is terrain, other players' bodies and
+## other players' heads. Only a player is a strike; a head meeting a head is
+## a clash, which is the solver's business and nobody's damage.
+func _on_head_hit(body: Node) -> void:
+	if body == self or not body.is_in_group("players") or _head == null:
+		return
+	var to_body: Vector2 = body.global_position - _head.global_position
+	if to_body.length_squared() == 0.0:
+		return
+	# Only the part of the head's motion heading into the player counts, so
+	# that a head skimming past somebody at speed is not scored as if it had
+	# swung into them.
+	body.take_damage(_strike_damage(_head_velocity.dot(to_body.normalized())))
+
+## What a strike at this head speed takes off, scaled per ADR-0005: the
+## weapon's `damage` is what a full-speed committed swing does, a slow
+## contact does nothing, and everything between is proportional.
+##
+## Tuned high on purpose. The swing is the only damage source in the game --
+## there are no ranged weapons -- so a hit has to carry the pace of a whole
+## exchange. Measured across the swing the moveset actually produces, the
+## pickaxe's 34 comes out at 14 for a flick and 44 for a committed full-reach
+## sweep: three clean strikes to kill, and two if the head is carried in by a
+## body already moving. Stick Fight's punch weight would be ten or more and
+## rounds would drag, which ADR-0005 warns about by name.
+func _strike_damage(speed: float) -> float:
+	var over: float = speed - MIN_STRIKE_SPEED
+	if over <= 0.0:
+		return 0.0
+	return _stats.damage * minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
