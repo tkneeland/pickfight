@@ -1,4 +1,4 @@
-# 6. The weapon is a motor-driven jointed body
+# 6. The weapon is a force-driven jointed body
 
 - Status: Accepted
 - Date: 2026-09-22
@@ -35,11 +35,32 @@ Only the head collides. The haft passes through everything.
 Per-weapon tuning is expressed as physical quantities — mass, motor speed, max
 motor force, reach, head shape — rather than as feel fudges.
 
-Clash is left emergent: two heads meet and the motors contest. **Max motor
+Clash is left emergent: two heads meet and the drives contest. **Max drive
 force** is what resolves it, so that a weaker weapon loses ground rather than
 jittering in a deadlock.
 
 The player body is hard rotation-locked.
+
+### Engine support, verified against Godot 4.6.2
+
+The drives are hand-written, not the engine's joint motors.
+
+`PinJoint2D` does expose `motor_enabled` and `motor_target_velocity` in 4.6.2,
+but the complete pin-joint parameter set is softness, the two angular limits and
+the target velocity — there is **no force or torque cap**. An engine motor
+therefore has unlimited authority: it reaches its target velocity regardless of
+what resists it, which is precisely the property the clash rule needs to be
+able to lose. `GrooveJoint2D` has no actuation at all (`length` and
+`initial_offset` only), so the slider half of Foddy's rig has no engine
+equivalent either.
+
+So: use `PinJoint2D` as the constraint with its motor left disabled, and drive
+the weapon with `RigidBody2D.apply_torque` for angle and `apply_force` along the
+haft for extension, each clamped per weapon. Max drive force is then the clamp
+rather than a missing engine property, which is the stat the weapon roster is
+built on anyway. `DampedSpringJoint2D` is the fallback for extension if a direct
+force proves unstable: driving its `rest_length` gives a moving setpoint, and
+its `stiffness` supplies the force ceiling.
 
 ### Spike before committing
 
@@ -56,6 +77,10 @@ and honest weight, and both then need explicit rules.
 
 - Clash, blocking, weapon weight and force transfer all come out of the physics
   engine instead of being special-cased.
+- Because the drives are hand-written, the per-frame controller is ours to get
+  right: the input vector gives a target angle, and a target *angle* has to be
+  converted into torque through a proportional-derivative term. Expect that
+  controller, not the joint, to be where the feel lives.
 - Weapon identity reduces to two numbers. High force with low motor speed is
   the heavy hammer: unstoppable once moving, hopeless at reacting. The inverse
   is the short sword: loses every head-on clash, wins every race to reposition.
