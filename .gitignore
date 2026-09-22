@@ -10,3 +10,15 @@ data_*/
 
 # System/tool-specific ignores
 .DS_Store
+
+# atlas-v3:gitignore:start
+.claude/worktrees/
+.claude/atlas-state/
+# Test evidence stays committable even where a team rule would ignore it.
+# Both lines are needed: the first re-includes the directory (git will not
+# descend into an ignored one), the second re-includes what is inside it.
+# Neither can help if an ANCESTOR directory is ignored; git cannot
+# re-include anything under an excluded parent.
+!test-results/
+!test-results/**
+# atlas-v3:gitignore:end

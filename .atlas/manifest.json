@@ -1,0 +1,58 @@
+{
+  "atlas_version": "0.1.0",
+  "cloud_tools": [],
+  "customized_files": {},
+  "guardrails_mode": "off",
+  "guardrails_off_authorization": null,
+  "hook_activation": {
+    "decision": "standard",
+    "hook_managers": [],
+    "preexisting_hooks_path": ""
+  },
+  "human_only_state_ids": [],
+  "human_only_states": [
+    "ready-for-human",
+    "closed"
+  ],
+  "managed_files": {},
+  "managed_sections": {
+    ".gitattributes": "gitattributes",
+    ".gitignore": "gitignore",
+    "CLAUDE.md": "guidance",
+    "README.md": "readme",
+    "docs/agents/issue-tracker.md": "tracker",
+    "docs/agents/planning.md": "planning",
+    "docs/agents/testing.md": "testing",
+    "docs/agents/tooling.md": "tooling",
+    "docs/atlas-operators-guide.md": "operators-guide"
+  },
+  "mattpocock_skills_marketplace": "claude-plugins-official",
+  "mattpocock_skills_tested": "1.2.0",
+  "repositories": [
+    {
+      "id": "pickfight",
+      "path": ".",
+      "protected_branches": [
+        "main"
+      ]
+    }
+  ],
+  "section_provenance": {
+    ".gitattributes": "ee2483103e4535a08218c30d2d183f93e748055fe4e49383b9b1696c0ab92c41",
+    ".gitignore": "51662d61f56fc55514c50fbc54f5990fb61140503f2ea54d143c848559e2e6f8",
+    "CLAUDE.md": "2429339e87ee6efe36ba261d52feedbd3fa882d1e7fe013e0dbf61a625b4cef7",
+    "README.md": "825f176fb86a5ec73077dbedfffa8a91cd728dc7cdf3f7d7c51055e981da0f48",
+    "docs/agents/issue-tracker.md": "fe3dbe885e886b00b1c069dc1d30c4e1b5295530386219922ef24d619dfcaaa4",
+    "docs/agents/planning.md": "11f8428ffbb57da423d30f2bd25710dcc846a2c0192f8b4721e87a822810f3b7",
+    "docs/agents/testing.md": "5ccdd6bdbcc403b81127600eeeb2fd457160b03fc0f0e4c38a38cfddf1aa9fe8",
+    "docs/agents/tooling.md": "5c2ef236311c0ce724124172ef7390e92a077e5070985300df364acaea6403a8",
+    "docs/atlas-operators-guide.md": "4bbbd48abf1c25dcc6e862ee80f9e548bf0fb35180fa56fd399abaea91721442"
+  },
+  "settings_provenance": {
+    "hooks": {},
+    "permissions": {
+      "ask": [],
+      "deny": []
+    }
+  }
+}

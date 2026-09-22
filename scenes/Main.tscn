@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Arena.tscn" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
 
 [node name="Main" type="Node2D"]
 
@@ -12,7 +13,32 @@ current = true
 
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
+debug_source = 1
+
+; Body colours are paired with SLOT_COLORS in controller/index.html: slot 0
+; must match Player1 (blue) and slot 1 must match Player2 (orange). The phone
+; tints its "P1"/"P2" badge from that list, which is how a player identifies
+; the body they are driving, so the two lists have to stay in sync.
+[node name="Body" parent="Player1" index="1"]
+color = Color(0.15, 0.4, 1, 1)
 
 [node name="Player2" parent="." instance=ExtResource("2")]
 position = Vector2(100, 0)
-use_mouse = false
+debug_source = 0
+
+[node name="Body" parent="Player2" index="1"]
+color = Color(1, 0.55, 0.1, 1)
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="JoinLabel" type="Label" parent="UI"]
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 620.0
+offset_bottom = 70.0
+text = "Join on your phone: starting server..."
+
+[node name="ControllerServer" type="Node" parent="."]
+script = ExtResource("3")
+player_paths = [NodePath("../Player1"), NodePath("../Player2")]
+join_label_path = NodePath("../UI/JoinLabel")

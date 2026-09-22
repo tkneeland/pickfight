@@ -1,0 +1,52 @@
+slot=0 arm angle=0.0000 len=20.0
+slot=0 v=(1.0000, 0.0000)
+slot=0 arm angle=0.0000 len=140.0
+slot=0 v=(0.0000, -1.0000)
+slot=0 arm angle=-1.5708 len=140.0
+slot=0 v=(-1.0000, 0.0000)
+slot=0 arm angle=3.1416 len=140.0
+slot=0 v=(0.0000, 1.0000)
+slot=0 arm angle=1.5708 len=140.0
+slot=0 arm angle=1.5708 len=133.3
+slot=0 arm angle=1.5708 len=126.7
+slot=0 arm angle=1.5708 len=120.0
+slot=0 arm angle=1.5708 len=113.3
+slot=0 arm angle=1.5708 len=106.7
+slot=0 arm angle=1.5708 len=100.0
+slot=0 arm angle=1.5708 len=93.3
+slot=0 arm angle=1.5708 len=86.7
+slot=0 arm angle=1.5708 len=80.0
+slot=0 arm angle=1.5708 len=73.3
+slot=0 arm angle=1.5708 len=66.7
+slot=0 arm angle=1.5708 len=60.0
+slot=0 arm angle=1.5708 len=53.3
+slot=0 arm angle=1.5708 len=46.7
+slot=0 arm angle=1.5708 len=40.0
+slot=0 arm angle=1.5708 len=33.3
+slot=0 arm angle=1.5708 len=26.7
+slot=0 arm angle=1.5708 len=20.0
+slot=0 arm angle=1.5708 len=20.0
+slot=0 v=(0.0000, 0.2500)
+slot=0 arm angle=1.5708 len=50.0
+slot=0 v=(0.0000, 0.5000)
+slot=0 arm angle=1.5708 len=80.0
+slot=0 v=(0.0000, 1.0000)
+slot=0 arm angle=1.5708 len=140.0
+slot=0 arm angle=1.5708 len=133.3
+slot=0 arm angle=1.5708 len=126.7
+slot=0 arm angle=1.5708 len=120.0
+slot=0 arm angle=1.5708 len=113.3
+slot=0 arm angle=1.5708 len=106.7
+slot=0 arm angle=1.5708 len=100.0
+slot=0 arm angle=1.5708 len=93.3
+slot=0 arm angle=1.5708 len=86.7
+slot=0 arm angle=1.5708 len=80.0
+slot=0 arm angle=1.5708 len=73.3
+slot=0 arm angle=1.5708 len=66.7
+slot=0 arm angle=1.5708 len=60.0
+slot=0 arm angle=1.5708 len=53.3
+slot=0 arm angle=1.5708 len=46.7
+slot=0 arm angle=1.5708 len=40.0
+slot=0 arm angle=1.5708 len=33.3
+slot=0 arm angle=1.5708 len=26.7
+slot=0 arm angle=1.5708 len=20.0

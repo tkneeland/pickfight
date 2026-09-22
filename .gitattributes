@@ -1,0 +1,4 @@
+# atlas-v3:gitattributes:start
+.githooks/** text eol=lf
+.claude/hooks/** text eol=lf
+# atlas-v3:gitattributes:end

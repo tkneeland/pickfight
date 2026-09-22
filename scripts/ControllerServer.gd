@@ -1,0 +1,383 @@
+extends Node
+
+## Host-side input transport for phone controllers (ADR-0001, ADR-0002).
+##
+## Runs two TCP listeners, polled from `_process`:
+##
+##   * `http_port` (8080) serves `res://controller/index.html` — the controller
+##     page a player opens on their phone.
+##   * `ws_port` (8081) accepts WebSocket connections from that page and binds
+##     each one to a player slot in join order.
+##
+## Two ports rather than one because `StreamPeerTCP` cannot peek: once bytes
+## are read to route an HTTP request they are consumed, and
+## `WebSocketPeer.accept_stream` has to read the handshake itself.
+##
+## Wire format phone -> host: one binary frame per controller frame, exactly
+## 8 bytes, `float32 x` then `float32 y`, little-endian, unit-disc normalised.
+## Wire format host -> phone: one text frame `{"slot":<i>}` sent on bind.
+##
+## Liveness: a phone that screen-locks or leaves Wi-Fi mid-drag stops sending
+## without ever closing the socket, and the last frame it sent was non-zero.
+## Two defences, because neither alone is enough:
+##
+##   * WebSocket heartbeat (ping/pong) so a half-open TCP connection is
+##     eventually detected by the socket layer.
+##   * A per-slot input deadline (`controller_timeout_sec`): no well-formed
+##     packet for that long and the controller is treated as gone — the
+##     player's vector is zeroed so the arm eases to rest, and the slot frees.
+##
+## Sockets that connect and never finish a request (speculative preconnect,
+## port scanners, stalled handshakes) are dropped after
+## `connection_timeout_sec` rather than being polled forever.
+##
+## Run the host with `-- --log-input` to print every decoded packet, every
+## bind/unbind/timeout, and a periodic "arm steady" line while a bound arm is
+## unchanged; the automated checks assert on those lines.
+
+const PAGE_PATH: String = "res://controller/index.html"
+const WS_PORT_TOKEN: String = "__WS_PORT__"
+const MAX_HEADER_BYTES: int = 8192
+const PACKET_SIZE: int = 8
+const ANGLE_LOG_EPSILON: float = 0.0005
+const LENGTH_LOG_EPSILON: float = 0.05
+## Physics frames between "arm steady" lines. Steadiness has to be provable
+## from a line that is present, not from the absence of change lines.
+const STEADY_LOG_FRAMES: int = 30
+
+@export var http_port: int = 8080
+@export var ws_port: int = 8081
+@export var player_paths: Array[NodePath] = []
+@export var join_label_path: NodePath
+## No well-formed packet for this long and the bound controller is considered
+## gone. Sized above a few dropped frames but well below "a player noticed".
+@export var controller_timeout_sec: float = 2.0
+## How long a socket may sit without completing an HTTP request or a WebSocket
+## handshake before it is dropped.
+@export var connection_timeout_sec: float = 5.0
+## WebSocket ping interval. `WebSocketPeer` defaults this to 0.0 (no ping/pong
+## at all), which is what lets a half-open connection look open forever.
+@export var heartbeat_interval_sec: float = 1.0
+
+## One pending HTTP request: the socket, the bytes read so far, and the point
+## in time after which an unfinished request is abandoned.
+class HttpConn extends RefCounted:
+	var tcp: StreamPeerTCP
+	var buf: PackedByteArray = PackedByteArray()
+	var deadline_msec: int
+
+	func _init(p_tcp: StreamPeerTCP, p_deadline_msec: int) -> void:
+		tcp = p_tcp
+		deadline_msec = p_deadline_msec
+
+## One WebSocket connection between `accept_stream` and `STATE_OPEN`, with the
+## point in time after which an unfinished handshake is abandoned.
+class PendingConn extends RefCounted:
+	var peer: WebSocketPeer
+	var deadline_msec: int
+
+	func _init(p_peer: WebSocketPeer, p_deadline_msec: int) -> void:
+		peer = p_peer
+		deadline_msec = p_deadline_msec
+
+var _log_input: bool = false
+
+var _http_server: TCPServer = TCPServer.new()
+var _ws_server: TCPServer = TCPServer.new()
+var _http_clients: Array[HttpConn] = []
+var _pending: Array[PendingConn] = []
+
+# Untyped on purpose: elements are `Player` nodes and GDScript's analyser
+# would reject `set_input_vector` on a statically typed `Node`.
+var _players: Array = []
+var _slot_peers: Array[WebSocketPeer] = []
+var _slot_last_packet_msec: PackedInt64Array = PackedInt64Array()
+var _last_arm: PackedVector2Array = PackedVector2Array()
+var _steady_frames: PackedInt32Array = PackedInt32Array()
+# 1 once a slot has ever held a controller: keeps the startup settle of an
+# untouched arm out of the diagnostics.
+var _bound_once: PackedByteArray = PackedByteArray()
+
+func _ready() -> void:
+	_log_input = OS.get_cmdline_user_args().has("--log-input")
+
+	for path in player_paths:
+		_players.append(get_node_or_null(path))
+	_slot_peers.resize(_players.size())
+	_slot_last_packet_msec.resize(_players.size())
+	_last_arm.resize(_players.size())
+	_steady_frames.resize(_players.size())
+	_bound_once.resize(_players.size())
+	for i in _last_arm.size():
+		_last_arm[i] = Vector2(NAN, NAN)
+
+	var http_err: int = _http_server.listen(http_port)
+	if http_err != OK:
+		push_error("ControllerServer: cannot listen on HTTP port %d (error %d)" % [http_port, http_err])
+	var ws_err: int = _ws_server.listen(ws_port)
+	if ws_err != OK:
+		push_error("ControllerServer: cannot listen on WebSocket port %d (error %d)" % [ws_port, ws_err])
+
+	var urls: PackedStringArray = _join_urls()
+	if urls.is_empty():
+		print("ControllerServer: no non-loopback IPv4 address found; try http://127.0.0.1:%d/" % http_port)
+	for url in urls:
+		print("Controller page: %s" % url)
+
+	var label: Label = get_node_or_null(join_label_path) as Label
+	if label != null:
+		label.text = "Join on your phone:\n" + ("\n".join(urls) if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
+
+func _process(_delta: float) -> void:
+	_process_http()
+	_process_websocket()
+
+## Arm diagnostics run on the physics tick because that is the rate the arm is
+## actually integrated at, which makes "held steady for N frames" meaningful.
+##
+## A slot is reported while a controller is bound, and afterwards until its arm
+## has settled back to rest -- otherwise the easing that follows a disconnect
+## would happen entirely off the record.
+func _physics_process(_delta: float) -> void:
+	for slot in _slot_peers.size():
+		if _slot_peers[slot] == null and not _arm_away_from_rest(slot):
+			continue
+		_log_arm(slot)
+
+## True while an unbound slot still owes the log an easing line. The last
+## reported length counts too, so the frame the arm actually reaches rest is
+## reported before logging stops.
+func _arm_away_from_rest(slot: int) -> bool:
+	if _bound_once[slot] == 0:
+		return false
+	var player: Variant = _players[slot]
+	if player == null:
+		return false
+	var rest: float = player.arm_min_length + LENGTH_LOG_EPSILON
+	if player.arm_length > rest:
+		return true
+	return is_finite(_last_arm[slot].y) and _last_arm[slot].y > rest
+
+# --- HTTP -------------------------------------------------------------------
+
+func _join_urls() -> PackedStringArray:
+	var urls: PackedStringArray = PackedStringArray()
+	for addr: String in IP.get_local_addresses():
+		if addr.contains(":"):
+			continue # IPv6
+		if addr.begins_with("127."):
+			continue # loopback
+		urls.append("http://%s:%d/" % [addr, http_port])
+	return urls
+
+func _process_http() -> void:
+	var now: int = Time.get_ticks_msec()
+	var idle_deadline: int = now + int(connection_timeout_sec * 1000.0)
+
+	while _http_server.is_connection_available():
+		var tcp: StreamPeerTCP = _http_server.take_connection()
+		if tcp == null:
+			continue
+		tcp.set_no_delay(true)
+		_http_clients.append(HttpConn.new(tcp, idle_deadline))
+
+	# `Array[T].duplicate()` returns an untyped Array, so the loop variable has
+	# to be typed explicitly or type inference inside the body fails to parse.
+	for conn: HttpConn in _http_clients.duplicate():
+		conn.tcp.poll()
+		if conn.tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+			_http_clients.erase(conn)
+			continue
+
+		var available: int = conn.tcp.get_available_bytes()
+		if available > 0:
+			var chunk: Array = conn.tcp.get_data(available)
+			if chunk[0] == OK:
+				conn.buf.append_array(chunk[1])
+
+		if conn.buf.size() > MAX_HEADER_BYTES:
+			conn.tcp.disconnect_from_host()
+			_http_clients.erase(conn)
+			continue
+
+		var text: String = conn.buf.get_string_from_ascii()
+		if not text.contains("\r\n\r\n"):
+			# A socket that connects and never finishes a request would
+			# otherwise be polled for the rest of the session.
+			if now > conn.deadline_msec:
+				if _log_input:
+					print("http connection dropped: idle %.1fs without a complete request" % connection_timeout_sec)
+				conn.tcp.disconnect_from_host()
+				_http_clients.erase(conn)
+			continue
+
+		_answer_http(conn, text.get_slice("\r\n", 0))
+		conn.tcp.disconnect_from_host()
+		_http_clients.erase(conn)
+
+func _answer_http(conn: HttpConn, request_line: String) -> void:
+	var parts: PackedStringArray = request_line.split(" ", false)
+	var method: String = parts[0] if parts.size() > 0 else ""
+	var target: String = parts[1] if parts.size() > 1 else ""
+	var path: String = target.get_slice("?", 0)
+
+	if method == "GET" and (path == "/" or path == "/index.html"):
+		var page: String = _load_page()
+		if page.is_empty():
+			_send_http(conn, 500, "Internal Server Error", "text/plain; charset=utf-8", "controller page missing".to_utf8_buffer())
+			return
+		_send_http(conn, 200, "OK", "text/html; charset=utf-8", page.to_utf8_buffer())
+		return
+
+	_send_http(conn, 404, "Not Found", "text/plain; charset=utf-8", "404 Not Found".to_utf8_buffer())
+
+## Read from disk on every request, so the page can be tuned (drag radius, feel)
+## without restarting the host.
+func _load_page() -> String:
+	var file: FileAccess = FileAccess.open(PAGE_PATH, FileAccess.READ)
+	if file == null:
+		push_error("ControllerServer: cannot open %s" % PAGE_PATH)
+		return ""
+	var html: String = file.get_as_text()
+	file.close()
+	return html.replace(WS_PORT_TOKEN, str(ws_port))
+
+func _send_http(conn: HttpConn, code: int, reason: String, content_type: String, body: PackedByteArray) -> void:
+	var header: String = "HTTP/1.1 %d %s\r\n" % [code, reason]
+	header += "Content-Type: %s\r\n" % content_type
+	header += "Content-Length: %d\r\n" % body.size()
+	header += "Cache-Control: no-store\r\n"
+	header += "Connection: close\r\n\r\n"
+	var out: PackedByteArray = header.to_utf8_buffer()
+	out.append_array(body)
+	conn.tcp.put_data(out)
+
+# --- WebSocket --------------------------------------------------------------
+
+func _process_websocket() -> void:
+	var now: int = Time.get_ticks_msec()
+
+	while _ws_server.is_connection_available():
+		var tcp: StreamPeerTCP = _ws_server.take_connection()
+		if tcp == null:
+			continue
+		tcp.set_no_delay(true)
+		var peer: WebSocketPeer = WebSocketPeer.new()
+		# Defaults to 0.0, i.e. no ping/pong, which is exactly how a dead phone
+		# stays STATE_OPEN forever.
+		peer.heartbeat_interval = heartbeat_interval_sec
+		if peer.accept_stream(tcp) == OK:
+			_pending.append(PendingConn.new(peer, now + int(connection_timeout_sec * 1000.0)))
+
+	for conn: PendingConn in _pending.duplicate():
+		conn.peer.poll()
+		var state: int = conn.peer.get_ready_state()
+		if state == WebSocketPeer.STATE_OPEN:
+			_pending.erase(conn)
+			_bind(conn.peer)
+		elif state == WebSocketPeer.STATE_CLOSED:
+			_pending.erase(conn)
+		elif now > conn.deadline_msec:
+			if _log_input:
+				print("websocket connection dropped: handshake idle %.1fs" % connection_timeout_sec)
+			conn.peer.close(1002, "handshake timeout")
+			_pending.erase(conn)
+
+	var timeout_msec: int = int(controller_timeout_sec * 1000.0)
+	for slot in _slot_peers.size():
+		var peer: WebSocketPeer = _slot_peers[slot]
+		if peer == null:
+			continue
+		peer.poll()
+		var state: int = peer.get_ready_state()
+		if state == WebSocketPeer.STATE_OPEN:
+			_drain(slot, peer)
+			var silent_for: int = now - _slot_last_packet_msec[slot]
+			if silent_for > timeout_msec:
+				# The decisive case: the phone screen-locked or left Wi-Fi
+				# mid-drag, so the (0,0) release frame never arrived and the
+				# socket still looks open. Treat it as gone.
+				if _log_input:
+					print("slot %d controller timed out after %d ms without input" % [slot, silent_for])
+				peer.close(1001, "input timeout")
+				_unbind(slot)
+		elif state == WebSocketPeer.STATE_CLOSED:
+			_unbind(slot)
+
+## Bind to the lowest free slot; refuse the connection when every player is
+## already driven by a controller.
+func _bind(peer: WebSocketPeer) -> void:
+	for slot in _slot_peers.size():
+		if _slot_peers[slot] != null:
+			continue
+		if _players[slot] == null:
+			continue
+		_slot_peers[slot] = peer
+		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
+		_last_arm[slot] = Vector2(NAN, NAN)
+		_steady_frames[slot] = 0
+		_bound_once[slot] = 1
+		_players[slot].bind_controller()
+		peer.send_text(JSON.stringify({"slot": slot}))
+		if _log_input:
+			print("slot %d bound" % slot)
+		return
+	peer.close(1000, "no free player slot")
+	if _log_input:
+		print("controller refused: no free player slot")
+
+## Free the slot and park its player: zeroing the vector first means the arm
+## eases back to rest over several frames instead of holding the controller's
+## last angle forever (or snapping to whatever a debug source would say).
+func _unbind(slot: int) -> void:
+	_slot_peers[slot] = null
+	_last_arm[slot] = Vector2(NAN, NAN)
+	_steady_frames[slot] = 0
+	if _players[slot] != null:
+		_players[slot].set_input_vector(Vector2.ZERO)
+		_players[slot].unbind_controller()
+	if _log_input:
+		print("slot %d unbound" % slot)
+
+## Latest value wins: drain everything queued this frame and keep only the last
+## well-formed packet, so a burst never replays stale input.
+func _drain(slot: int, peer: WebSocketPeer) -> void:
+	var latest: PackedByteArray = PackedByteArray()
+	var got: bool = false
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if pkt.size() != PACKET_SIZE:
+			continue
+		latest = pkt
+		got = true
+	if not got:
+		return
+	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
+	var v: Vector2 = Vector2(latest.decode_float(0), latest.decode_float(4))
+	_players[slot].set_input_vector(v)
+	if _log_input:
+		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])
+
+## Report the arm the host actually produced, reading only Player's public
+## `arm_angle` / `arm_length`, so direction/reach/release can be observed the
+## way a player sees them rather than by re-deriving them from the input.
+##
+## Changes print as they happen; an unchanged arm prints a positive "steady"
+## line every `STEADY_LOG_FRAMES` frames, so "it held at rest" is provable from
+## a line that exists rather than from silence.
+func _log_arm(slot: int) -> void:
+	if not _log_input:
+		return
+	var player: Variant = _players[slot]
+	if player == null:
+		return
+	var current: Vector2 = Vector2(player.arm_angle, player.arm_length)
+	var previous: Vector2 = _last_arm[slot]
+	if is_finite(previous.x) and absf(current.x - previous.x) < ANGLE_LOG_EPSILON and absf(current.y - previous.y) < LENGTH_LOG_EPSILON:
+		_steady_frames[slot] += 1
+		if _steady_frames[slot] % STEADY_LOG_FRAMES == 0:
+			print("slot=%d arm steady angle=%.4f len=%.1f frames=%d" % [slot, previous.x, previous.y, _steady_frames[slot]])
+		return
+	_last_arm[slot] = current
+	_steady_frames[slot] = 0
+	print("slot=%d arm angle=%.4f len=%.1f" % [slot, current.x, current.y])
