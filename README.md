@@ -34,8 +34,49 @@ network — players join by opening a URL, no install.
 Input is a **drag vector**: direction sets the arm's angle, distance sets
 how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
 
-> The code currently in this repo still uses the old mouse/keyboard
-> prototype scheme and predates these decisions. It is being replaced.
+## Running it
+
+1. **Start the host.** `godot --path .` from the repo root, or open the
+   project in the editor and press play. The host also starts a small HTTP
+   server on `:8080` and a WebSocket input server on `:8081`.
+2. **Read the join URL.** It is printed to the console and shown in the
+   top-left of the game window, e.g. `http://192.168.1.42:8080/`.
+3. **Open it on a phone** on the same network. Prefer a 5 GHz band or the
+   host machine's own hotspot — congested 2.4 GHz is the biggest threat to
+   input feel ([ADR-0002](docs/adr/0002-phone-browser-controllers.md)).
+   The page shows `P1` or `P2` once it is bound to a player.
+4. **Drag anywhere on the phone screen to swing.** The drag is relative to
+   wherever your thumb lands, so you never need to look at the phone.
+
+Phones bind to players in join order; the first free slot wins, and
+disconnecting frees it again.
+
+### Debugging
+
+Run the host with `--log-input` to print every decoded input packet and
+every controller bind/unbind:
+
+```
+godot --path . -- --log-input
+```
+
+`tools/ws_probe_client.gd` is a headless controller stand-in that replays a
+fixed input sequence over the real WebSocket transport, useful for checking
+the host without a phone in hand:
+
+```
+godot --headless --path . -s tools/ws_probe_client.gd -- --sequence=direction
+```
+
+Sequences are `direction`, `reach` and `release`. Two probes run at once
+bind two separate players.
+
+### Known limitation
+
+The controller page is served over plain HTTP, and the Screen Wake Lock API
+is restricted to secure contexts — so the phone screen can still dim or lock
+mid-match. Raise your phone's auto-lock timeout while playing. Adding HTTPS
+is deliberately deferred.
 
 ## Decisions
 
@@ -49,8 +90,10 @@ resolved and no longer applies.
 ## Project layout
 
 ```
-scenes/   .tscn scene files (Main, Arena, Player)
-scripts/  GDScript sources
+scenes/      .tscn scene files (Main, Arena, Player)
+scripts/     GDScript sources (Player, ControllerServer, KillZone)
+controller/  the single-file controller web page served to phones
+tools/       headless test fixtures
 ```
 
 <!-- atlas-v3:readme:start -->
