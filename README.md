@@ -18,25 +18,33 @@ the pole-swing movement and the knockback-on-collision combat can be felt
 out before anything else (art, levels, weapons, win conditions) gets built
 on top.
 
-## Controls (prototype only, not final)
+## How it plays
 
-- **Player 1** — mouse. The arm points at and reaches for your cursor;
-  moving the cursor away plants the tip and pulls/pushes your body toward
-  or past it, like the hammer in Getting Over It.
-- **Player 2** — keyboard (A/D rotate the arm, W/S extend/retract). This
-  is a temporary stand-in for testing collisions locally, not a real
-  control scheme.
+A match is a rapid run of rounds on rotating stages. A round ends when one
+player is left alive; that player scores; first to the score target wins
+the match. No health bars — you die by being knocked into a hazard or off
+the stage.
 
-## Open design question: local multiplayer input
+## Controls
 
-Getting Over It's movement is precise and analog, and naturally maps to a
-single mouse or a single analog stick — it doesn't work with two players
-sharing one mouse. Stick Fight, on the other hand, is built around
-multiple players on one keyboard. To combine them for real local
-multiplayer, each player likely needs their own **gamepad** (stick angle +
-magnitude standing in for the mouse vector), rather than keyboard-only
-input. That decision — gamepad-only vs. keyboard-with-some-tradeoff — is
-still open and should be settled before building out full multiplayer.
+Everyone plays from their **phone**. One host machine runs the game and
+renders the shared screen, and serves a controller web page over the local
+network — players join by opening a URL, no install.
+
+Input is a **drag vector**: direction sets the arm's angle, distance sets
+how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
+
+> The code currently in this repo still uses the old mouse/keyboard
+> prototype scheme and predates these decisions. It is being replaced.
+
+## Decisions
+
+See [`CONTEXT.md`](./CONTEXT.md) for the glossary and shape of the game,
+and [`docs/adr/`](./docs/adr/) for the architecture decisions — notably
+that this is same-room, host-rendered play rather than networked
+multiplayer ([ADR-0001](docs/adr/0001-same-room-host-rendered-multiplayer.md)).
+The earlier open question about gamepad-vs-keyboard local input is
+resolved and no longer applies.
 
 ## Project layout
 
@@ -44,3 +52,11 @@ still open and should be settled before building out full multiplayer.
 scenes/   .tscn scene files (Main, Arena, Player)
 scripts/  GDScript sources
 ```
+
+<!-- atlas-v3:readme:start -->
+## Atlas
+
+This repo uses Atlas, a Claude Code plugin that acts as a shared path for AI-assisted development — generated, customizable policies, guidelines, and guardrails that keep agent-driven work safe and consistent without locking teams into one rigid workflow. Read [`docs/atlas-operators-guide.md`](./docs/atlas-operators-guide.md) for how to work in this repo, in plain language, and the **Atlas** section in [`CLAUDE.md`](./CLAUDE.md) for the policy the agents follow.
+
+Everything Atlas generated here — hooks, the `CLAUDE.md` section, `docs/agents/` — is a **base recommendation**, not fixed policy. Adapt it to this project's actual needs and processes.
+<!-- atlas-v3:readme:end -->
