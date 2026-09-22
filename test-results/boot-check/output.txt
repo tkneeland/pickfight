@@ -1,3 +1,39 @@
+# Boot check + fresh-clone parse check
+
+commit: 03ae52ce13cc900401d3a7eafe0a91a71ac92ad8
+date:   2026-09-22T19:54:35Z
+
+$ godot --headless --path . --quit
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
-Controller page: http://172.19.7.3:8080/
+Controller page: http://172.19.9.117:8080/
+exit: 0
+
+## Fresh-clone simulation (.godot/ moved aside -- no global class cache)
+## Proves the preload-by-path convention holds: a clone with no editor run
+## still parses every script. See the class_name rule in CLAUDE.md.
+$ mv .godot .godot.bak && godot --headless --path . -s tools/scenario_runner.gd -- --all
+PASS  aim_angle
+PASS  body_no_rotation
+PASS  extension_tracks_drag
+PASS  release_eases_to_rest
+PASS  head_plants_terrain
+PASS  head_plants_player
+PASS  non_finite_input_rejected
+PASS  weapon_stats_are_swappable
+PASS  haft_is_non_colliding
+PASS  rig_freed_with_player
+PASS  head_does_not_tunnel_thin_platform
+PASS  head_strike_damage_scales
+PASS  body_collision_knockback_no_damage
+PASS  damage_kills
+PASS  ringout_kills_at_full_health
+PASS  heads_do_not_interpenetrate
+PASS  clash_higher_drive_force_wins
+PASS  heads_do_not_tunnel_head
+PASS  damage_reddens_fill_identity_persists
+PASS  identity_colours_match_controller_page
+PASS  weapon_silhouette_matches_head_shape
+21 passed, 0 failed, 21 total
+exit: 0
+(.godot restored)

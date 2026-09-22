@@ -102,6 +102,15 @@ and honest weight, and both then need explicit rules.
   actually produced and puts the head back at the contact point when that path
   crossed something solid. The jointed rig stands; nothing here changes the
   decision above.
+- The aim is *near*-1:1, not exactly 1:1. Playtesting the built rig, the
+  operator reported the head "slightly lags behind finger, but not by too
+  much", and asked to keep that residual lag rather than tune it out: it is
+  what a heavy weapon and a light weapon will differ by. Foddy's rig tracks
+  the cursor exactly; ours deliberately does not. The lag is the visible
+  consequence of `max_drive_force` and `drive_speed` being real physical caps
+  (`WeaponStats`), so the same numbers that decide who wins a clash also
+  decide how far behind the finger a weapon sits. That coupling is the point,
+  and it is why a weapon's feel is not a separate tuning surface.
 
 ## Alternatives considered
 
