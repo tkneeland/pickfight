@@ -12,7 +12,14 @@ current = true
 
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
+debug_source = 1
+
+[node name="Body" parent="Player1" index="1"]
+color = Color(0.15, 0.4, 1, 1)
 
 [node name="Player2" parent="." instance=ExtResource("2")]
 position = Vector2(100, 0)
-use_mouse = false
+debug_source = 0
+
+[node name="Body" parent="Player2" index="1"]
+color = Color(1, 0.55, 0.1, 1)
