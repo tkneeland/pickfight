@@ -28,19 +28,22 @@ repository keeps its own base SHA, branch, verification result, and pull request
 
 ## Repository framing
 
-**pickfight** — A local-multiplayer platform fighter combining Stick Fight's scrappy physics combat with Getting Over It's pole/hammer movement scheme. Early prototype: one arena, two test players, proving out pole-swing movement and knockback-on-collision combat before further features (art, levels, weapons, win conditions) get built.
+**pickfight** — A same-room multiplayer platform fighter combining Stick Fight's scrappy physics combat with Getting Over It's pole/hammer movement scheme. One host machine simulates and renders the shared screen; each player drives their arm from their own phone browser over the LAN. Early prototype: one arena, two test players, proving out pole-swing movement and knockback-on-collision combat before further features (art, levels, weapons, win conditions) get built.
 
 ### Structure
 
 - `scenes/` — .tscn scene files (Main, Arena, Player)
 - `scripts/` — GDScript sources
+- `controller/` — the single-file controller web page served to phones
+- `tools/` — headless test fixtures
+- `docs/adr/` — Architecture decision records
 - `docs/agents/` — Agent-facing tracker/domain/guardrail guidance
 
 ### Repository-specific rules
 
 - Personal hackathon prototype, single repo, low risk - not a client engagement.
 - GDScript has no standard lint/format tool; do not invent one without team approval.
-- Open design question (see README): gamepad-per-player vs keyboard-only input scheme for real local multiplayer is unresolved.
+- Input scheme is **settled**: relative vector input from phone browsers, per [ADR-0003](docs/adr/0003-relative-vector-input.md). The former open question (gamepad-per-player vs keyboard-only) is void — it assumed a shared screen and shared input devices, and [ADR-0001](docs/adr/0001-same-room-host-rendered-multiplayer.md) removed both assumptions. Do not reopen it as though it were live.
 
 ## Atlas repository workflow
 

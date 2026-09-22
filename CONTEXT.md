@@ -22,6 +22,7 @@ the stage.
 | **Arm** | The rigid pole extending from a player's body. The only means of movement — it plants against geometry and pushes or pulls the body. |
 | **Swing** | The movement verb: planting the arm and using it to fling, climb, or launch the body. |
 | **Input vector** | The 2D vector a controller sends, giving the arm's target angle and extension. Relative — never an absolute screen position. |
+| **Player slot** | Implementation-level: the index a controller is bound to in join order, identifying which player it drives. Appears in the host→controller `{"slot":n}` frame and in host diagnostics. A slot is *how* a controller reaches a player; the participant itself is still a **player**. |
 | **Knockback** | The impulse applied when players collide above a relative-velocity threshold. The only damage model. |
 | **Round** | One stage, played until one player remains. Awards a point. |
 | **Match** | A sequence of rounds on rotating stages, ending when a player reaches the score target. |
