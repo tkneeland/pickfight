@@ -52,6 +52,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"heads_do_not_interpenetrate",
 	"clash_higher_drive_force_wins",
 	"heads_do_not_tunnel_head",
+	"damage_reddens_fill_identity_persists",
+	"identity_colours_match_controller_page",
+	"weapon_silhouette_matches_head_shape",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -270,6 +273,32 @@ const CHARGE_SPEEDS: PackedFloat32Array = [600.0, 1200.0, 1800.0]
 const CHARGE_SEPARATION: float = 340.0
 const CHARGE_TICKS: int = 45
 
+## Damage display and identity (AC-16, AC-17, and the D4 scope change).
+## Two arbitrary, clearly distinct identity colours -- not the real
+## SLOT_COLORS pairing, which `identity_colours_match_controller_page` checks
+## on its own terms by parsing both source files.
+const IDENTITY_A_COLOR: Color = Color(0.15, 0.4, 1.0, 1.0)
+const IDENTITY_B_COLOR: Color = Color(0.15, 0.8, 0.3, 1.0)
+## Damage levels sampled: roughly 0%, 50% and 95% of DEATH_DAMAGE, as the
+## deliverable asks for -- 95 rather than 100 so the victim does not die and
+## get teleported to the respawn point mid-measurement.
+const DAMAGE_SAMPLES: PackedFloat32Array = [0.0, 50.0, 95.0]
+## How far apart (per RGB channel, root-sum-square) two colours must be to
+## count as "distinguishable" for the identity check.
+const DISTINCT_COLOR_MIN_DISTANCE: float = 0.2
+## How far a colour that is supposed to be constant may drift and still count
+## as unchanged.
+const COLOR_MATCH_TOLERANCE: float = 0.001
+const CONTROLLER_PAGE_PATH: String = "res://controller/index.html"
+const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
+## Slack for comparing a colour parsed from a CSS hex triplet (8-bit channels)
+## against one parsed from a Godot float literal -- a hair over 1/255.
+const SLOT_COLOR_TOLERANCE: float = 0.01
+## A rectangular head visibly different from a square in both dimensions, so
+## a hardcoded square could not pass this by accident.
+const RECT_HEAD_SIZE: Vector2 = Vector2(40.0, 12.0)
+const HEAD_SHAPE_TOLERANCE: float = 0.5
+
 ## Set by `_teardown()`, which every scenario ends with. A GDScript runtime
 ## error inside a scenario abandons it and still resumes the caller with an
 ## empty failure list, which would otherwise be indistinguishable from a
@@ -366,6 +395,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_clash_higher_drive_force_wins()
 		"heads_do_not_tunnel_head":
 			return await _scenario_heads_do_not_tunnel_head()
+		"damage_reddens_fill_identity_persists":
+			return await _scenario_damage_reddens_fill_identity_persists()
+		"identity_colours_match_controller_page":
+			return await _scenario_identity_colours_match_controller_page()
+		"weapon_silhouette_matches_head_shape":
+			return await _scenario_weapon_silhouette_matches_head_shape()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -1670,3 +1705,211 @@ func _wind_up(attacker: RigidBody2D, centre: Vector2, angle: float) -> void:
 func _brace(player: RigidBody2D) -> void:
 	player.linear_velocity = Vector2.ZERO
 	player.freeze = true
+
+# --- Damage display and identity (AC-16, AC-17, D4 scope change) -----------
+
+func _color_distance(a: Color, b: Color) -> float:
+	var dr: float = a.r - b.r
+	var dg: float = a.g - b.g
+	var db: float = a.b - b.b
+	return sqrt(dr * dr + dg * dg + db * db)
+
+func _color_close(a: Color, b: Color, tolerance: float) -> bool:
+	return _color_distance(a, b) <= tolerance
+
+## AC-16: the body fill reddens as `damage` climbs (0%, 50%, 95% of
+## DEATH_DAMAGE), while the persistent identity outline and the weapon head's
+## colour -- where ADR-0005 moves identity once the fill can no longer carry
+## it -- stay exactly where they started, and stay distinguishable between
+## two players throughout.
+func _scenario_damage_reddens_fill_identity_persists() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	var a: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	a.identity_color = IDENTITY_A_COLOR
+	stage.add_child(a)
+	a.global_position = DEEP_PARK_POSITION
+	a.bind_controller()
+
+	var b: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	b.identity_color = IDENTITY_B_COLOR
+	stage.add_child(b)
+	b.global_position = DEEP_PARK_POSITION + Vector2(200.0, 0.0)
+	b.bind_controller()
+
+	await physics_frame
+	_brace(a)
+	_brace(b)
+
+	var outline_a0: Color = a.identity_outline_color()
+	var weapon_a0: Color = a.weapon_head_color()
+	var outline_b0: Color = b.identity_outline_color()
+	var weapon_b0: Color = b.weapon_head_color()
+
+	if _color_distance(outline_a0, outline_b0) < DISTINCT_COLOR_MIN_DISTANCE:
+		failures.append("player identity outlines are not distinguishable: %s vs %s" % [outline_a0, outline_b0])
+	if _color_distance(weapon_a0, weapon_b0) < DISTINCT_COLOR_MIN_DISTANCE:
+		failures.append("player weapon colours are not distinguishable: %s vs %s" % [weapon_a0, weapon_b0])
+
+	var pure_red := Color(1.0, 0.0, 0.0, 1.0)
+	var previous_fill_distance: float = _color_distance(a.body_fill_color(), pure_red)
+	for sample: float in DAMAGE_SAMPLES:
+		if sample > 0.0:
+			a.take_damage(sample - a.damage)
+			await physics_frame
+
+		if absf(a.damage - sample) > 0.01:
+			failures.append("could not drive damage to %.1f (sat at %.1f)" % [sample, a.damage])
+
+		var fill: Color = a.body_fill_color()
+		var fill_distance: float = _color_distance(fill, pure_red)
+		if sample > 0.0 and fill_distance >= previous_fill_distance:
+			failures.append("at %.0f%% of DEATH_DAMAGE the fill did not redden further (distance to red %.3f, was %.3f)" % [
+				sample, fill_distance, previous_fill_distance])
+		previous_fill_distance = fill_distance
+
+		if not _color_close(a.identity_outline_color(), outline_a0, COLOR_MATCH_TOLERANCE):
+			failures.append("at %.0f%% of DEATH_DAMAGE the identity outline changed: %s, expected %s" % [
+				sample, a.identity_outline_color(), outline_a0])
+		if not _color_close(a.weapon_head_color(), weapon_a0, COLOR_MATCH_TOLERANCE):
+			failures.append("at %.0f%% of DEATH_DAMAGE the weapon colour changed: %s, expected %s" % [
+				sample, a.weapon_head_color(), weapon_a0])
+
+	if _color_close(a.body_fill_color(), outline_a0, COLOR_MATCH_TOLERANCE):
+		failures.append("at 95%% of DEATH_DAMAGE the body fill still matches the identity colour; it should have reddened well past it")
+
+	await _teardown(stage)
+	return failures
+
+## AC-17: the controller page's SLOT_COLORS and the host's per-player
+## identity_color values agree, slot for slot. Parses both source files
+## rather than keeping a third copy of either list here -- a hardcoded copy
+## would pass even if the two drifted apart, which is exactly the failure
+## this scenario exists to catch.
+func _scenario_identity_colours_match_controller_page() -> Array[String]:
+	var failures: Array[String] = []
+	var slot_colors: Array[Color] = _parse_slot_colors()
+	var main_colors: Array[Color] = _parse_main_identity_colors()
+
+	if slot_colors.size() < 2:
+		failures.append("could not parse SLOT_COLORS from %s (found %d entries)" % [CONTROLLER_PAGE_PATH, slot_colors.size()])
+	if main_colors.size() < 2:
+		failures.append("could not parse identity_color for Player1/Player2 from %s (found %d entries)" % [MAIN_SCENE_PATH, main_colors.size()])
+
+	if failures.is_empty():
+		for i in 2:
+			if not _color_close(slot_colors[i], main_colors[i], SLOT_COLOR_TOLERANCE):
+				failures.append("slot %d: controller SLOT_COLORS has %s, Main.tscn identity_color has %s" % [
+					i, slot_colors[i], main_colors[i]])
+
+	# Nothing here builds a scene tree -- both sides of the check are files on
+	# disk -- so there is no stage for `_teardown()` to free.
+	_scenario_completed = true
+	return failures
+
+func _parse_slot_colors() -> Array[Color]:
+	var colors: Array[Color] = []
+	var text: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var list_re := RegEx.new()
+	list_re.compile("SLOT_COLORS\\s*=\\s*\\[([^\\]]*)\\]")
+	var list_match: RegExMatch = list_re.search(text)
+	if list_match == null:
+		return colors
+	var hex_re := RegEx.new()
+	hex_re.compile("#[0-9a-fA-F]{6}")
+	for m: RegExMatch in hex_re.search_all(list_match.get_string(1)):
+		colors.append(Color(m.get_string(0)))
+	return colors
+
+func _parse_main_identity_colors() -> Array[Color]:
+	var colors: Array[Color] = []
+	var text: String = FileAccess.get_file_as_string(MAIN_SCENE_PATH)
+	for slot_name: String in ["Player1", "Player2"]:
+		var node_re := RegEx.new()
+		node_re.compile("\\[node name=\"%s\"[\\s\\S]*?(?=\\n\\[node|\\z)" % slot_name)
+		var node_match: RegExMatch = node_re.search(text)
+		if node_match == null:
+			continue
+		var color_re := RegEx.new()
+		color_re.compile("identity_color\\s*=\\s*Color\\(([^)]*)\\)")
+		var color_match: RegExMatch = color_re.search(node_match.get_string(0))
+		if color_match == null:
+			continue
+		var comps: PackedStringArray = color_match.get_string(1).split(",")
+		if comps.size() < 3:
+			continue
+		colors.append(Color(
+			float(comps[0].strip_edges()),
+			float(comps[1].strip_edges()),
+			float(comps[2].strip_edges()),
+			float(comps[3].strip_edges()) if comps.size() > 3 else 1.0))
+	return colors
+
+## D4 scope change: the drawn head derives from `WeaponStats.head_shape`
+## rather than a parallel "draw radius" number, for both shapes the roster
+## understands (a circle -- the pickaxe -- and a rectangle), and visibly
+## refuses to guess for a shape it does not.
+func _scenario_weapon_silhouette_matches_head_shape() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	await _await_ticks(2)
+
+	var circle_shape: CircleShape2D = player.weapon_stats.head_shape as CircleShape2D
+	if circle_shape == null:
+		failures.append("default weapon stats do not carry a CircleShape2D head; cannot check the circle case")
+	else:
+		var polygon: PackedVector2Array = player.weapon_head_visual_polygon()
+		var max_reach_from_centre: float = 0.0
+		for p: Vector2 in polygon:
+			max_reach_from_centre = maxf(max_reach_from_centre, p.length())
+		# The pre-fix drawing was a square of half-width equal to the
+		# radius, whose corners reach radius * sqrt(2) from centre -- this
+		# check fails against that shape and only that shape passes here.
+		if absf(max_reach_from_centre - circle_shape.radius) > HEAD_SHAPE_TOLERANCE:
+			failures.append("circle head: drawn silhouette reaches %.2f px from centre, collision shape radius is %.2f px" % [
+				max_reach_from_centre, circle_shape.radius])
+		if player.weapon_head_visual_is_fallback():
+			failures.append("circle head: fell back, but CircleShape2D is understood directly")
+
+	var rect_stats := WeaponStatsType.new()
+	var rect_shape := RectangleShape2D.new()
+	rect_shape.size = RECT_HEAD_SIZE
+	rect_stats.head_shape = rect_shape
+	player.set_weapon_stats(rect_stats)
+	await _await_ticks(2)
+
+	var rect_polygon: PackedVector2Array = player.weapon_head_visual_polygon()
+	if rect_polygon.is_empty():
+		failures.append("rectangle head: no silhouette was drawn")
+	else:
+		var min_pt: Vector2 = rect_polygon[0]
+		var max_pt: Vector2 = rect_polygon[0]
+		for p: Vector2 in rect_polygon:
+			min_pt.x = minf(min_pt.x, p.x)
+			min_pt.y = minf(min_pt.y, p.y)
+			max_pt.x = maxf(max_pt.x, p.x)
+			max_pt.y = maxf(max_pt.y, p.y)
+		var drawn_size: Vector2 = max_pt - min_pt
+		if (drawn_size - RECT_HEAD_SIZE).length() > HEAD_SHAPE_TOLERANCE:
+			failures.append("rectangle head: drawn silhouette is %s, collision shape size is %s" % [
+				drawn_size, RECT_HEAD_SIZE])
+	if player.weapon_head_visual_is_fallback():
+		failures.append("rectangle head: fell back, but RectangleShape2D is understood directly")
+
+	var capsule_stats := WeaponStatsType.new()
+	var capsule_shape := CapsuleShape2D.new()
+	capsule_shape.radius = 6.0
+	capsule_shape.height = 24.0
+	capsule_stats.head_shape = capsule_shape
+	player.set_weapon_stats(capsule_stats)
+	await _await_ticks(2)
+
+	if not player.weapon_head_visual_is_fallback():
+		failures.append("capsule head: expected the bounding-box fallback, got a shape-specific silhouette")
+	if _color_close(player.weapon_head_color(), player.identity_outline_color(), COLOR_MATCH_TOLERANCE):
+		failures.append("capsule head: fallback silhouette is drawn in the identity colour, so it does not read as a fallback")
+
+	await _teardown(stage)
+	return failures

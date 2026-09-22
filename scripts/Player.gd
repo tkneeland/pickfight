@@ -94,6 +94,30 @@ const MIN_STRIKE_SPEED: float = 700.0
 const FULL_STRIKE_SPEED: float = 2200.0
 const MAX_STRIKE_SCALE: float = 2.0
 
+## Colour the body fill lerps toward as `damage` climbs to `DEATH_DAMAGE`.
+## Identity does not live here any more (ADR-0005) -- see `identity_color` --
+## so the fill is free to just tell the damage story, including converging
+## with every other player's fill at high damage. That convergence is fine
+## precisely because identity has already moved off this node.
+const DAMAGE_FILL_COLOR: Color = Color(0.85, 0.1, 0.08, 1.0)
+
+## Marks a weapon head silhouette drawn from a shape this script does not
+## understand. Deliberately not a plausible weapon colour: a fallback that
+## quietly looked like a normal head would hide the exact bug this deliverable
+## closes -- the drawn head and the real hitbox parting ways again -- so it is
+## wrong in a way a player would notice instead of a way they would trust.
+const FALLBACK_HEAD_COLOR: Color = Color(1.0, 0.0, 1.0, 1.0)
+const HEAD_CIRCLE_SEGMENTS: int = 16
+
+## The haft's line width near the body and near the head. Tapered rather than
+## constant so it reads as a haft -- a handle with a working end -- instead of
+## a bar of uniform thickness. Purely presentational: the haft has no
+## collision shape of its own to derive a width from (CONTEXT.md: it collides
+## with nothing).
+const HAFT_BASE_WIDTH: float = 10.0
+const HAFT_TIP_WIDTH: float = 4.0
+const HAFT_COLOR: Color = Color(0.42, 0.3, 0.2, 1.0)
+
 ## Which weapon this player is holding. Swappable at runtime through
 ## `set_weapon_stats()`; the pickaxe is the only instance today.
 @export var weapon_stats: WeaponStatsType
@@ -108,6 +132,14 @@ const MAX_STRIKE_SCALE: float = 2.0
 ## one. When the Stage contract arrives it declares spawn points and this
 ## moves onto it.
 @export var respawn_position: Vector2 = Vector2(0, -200)
+
+## The colour that identifies this player: a persistent outline traced around
+## the body, and the fill of the weapon's head. Both stay constant at any
+## damage level (ADR-0005) -- unlike the body fill, which reddens with
+## `damage` and so cannot carry identity once someone is hurt. Paired with
+## `SLOT_COLORS` in controller/index.html the same way the body fill used to
+## be; see scenes/Main.tscn for the pairing and its comment.
+@export var identity_color: Color = Color(0.9, 0.9, 0.95, 1.0)
 
 var input_vector: Vector2 = Vector2.ZERO
 var has_controller: bool = false
@@ -146,7 +178,19 @@ var _haft_inertia: float = 1.0
 ## every strike as a tap.
 var _head_velocity: Vector2 = Vector2.ZERO
 
+## The weapon head's drawn silhouette, and whether it is the bounding-box
+## fallback rather than a real reading of `head_shape`. Rebuilt whenever the
+## rig is (`_build_head_visual`), which is also the only place either is
+## written.
+var _head_visual: Polygon2D
+var _head_visual_is_fallback: bool = false
+
+## The persistent ring drawn around the body in `identity_color`. Built once
+## in `_ready()` and never touched again -- see `_build_identity_outline`.
+var _identity_outline: Line2D
+
 @onready var weapon_line: Line2D = $Weapon
+@onready var body_visual: Polygon2D = $Body
 
 func _ready() -> void:
 	linear_damp = 1.5
@@ -157,6 +201,9 @@ func _ready() -> void:
 	collision_mask = LAYER_WORLD
 	add_to_group("players")
 	body_entered.connect(_on_body_entered)
+	_style_haft()
+	_build_identity_outline()
+	_update_damage_visual()
 	set_weapon_stats(weapon_stats if weapon_stats != null else WeaponStatsType.new())
 
 ## The rig lives beside the player rather than under it, so it is not freed
@@ -178,6 +225,7 @@ func _enter_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_update_weapon_input(delta)
+	_update_damage_visual()
 	if not _rig_is_live():
 		return
 	_score_swept_strike()
@@ -355,12 +403,8 @@ func _build_rig() -> void:
 	_head.contact_monitor = true
 	_head.max_contacts_reported = 4
 	_head.body_entered.connect(_on_head_hit)
-	var head_visual := Polygon2D.new()
-	var r: float = _stats.head_draw_radius()
-	head_visual.polygon = PackedVector2Array([
-		Vector2(-r, -r), Vector2(r, -r), Vector2(r, r), Vector2(-r, r)])
-	head_visual.color = _stats.head_color
-	_head.add_child(head_visual)
+	_head_visual = _build_head_visual(_stats.head_shape)
+	_head.add_child(_head_visual)
 	_rig.add_child(_head)
 	_head.global_position = global_position + axis * _stats.min_reach
 	# Layers alone cannot express "every player's body except my own", so the
@@ -415,6 +459,8 @@ func _clear_rig() -> void:
 	_head_shape = null
 	_pin = null
 	_groove = null
+	_head_visual = null
+	_head_visual_is_fallback = false
 
 func _head_distance() -> float:
 	return (_head.global_position - global_position).length()
@@ -476,6 +522,132 @@ func _update_weapon_visual() -> void:
 	pts[1] = to_local(_head.global_position)
 	weapon_line.points = pts
 	_head_shape.global_rotation = _haft.rotation
+
+# --- Presentation: identity and damage --------------------------------------
+#
+# AC-16/AC-17 and the D4 scope change. Three rules, all in this block:
+#
+#   * The body fill is the only thing damage is allowed to touch, and it is
+#     free to converge toward DAMAGE_FILL_COLOR for every player alike --
+#     that is what "how hurt someone is shows on their body" means.
+#   * `identity_color` is what a player is found by. It never changes after
+#     `_ready()`, and it is drawn in exactly two places: the outline traced
+#     once around the body, and the weapon head's fill.
+#   * The weapon head's drawn silhouette derives from `WeaponStats.head_shape`
+#     -- the same shape the physics engine collides -- rather than from a
+#     parallel number, so the two cannot drift the way they had (a circular
+#     hitbox drawn as a square) before this deliverable.
+
+## Traces the body's own polygon once, in `identity_color`, and never touches
+## it again. This is what stays legible once the fill has reddened past the
+## point of being recognisable as anyone in particular.
+func _build_identity_outline() -> void:
+	var outline := Line2D.new()
+	outline.name = "IdentityOutline"
+	var pts: PackedVector2Array = body_visual.polygon.duplicate()
+	if pts.size() > 0:
+		pts.append(pts[0])
+	outline.points = pts
+	outline.width = 4.0
+	outline.default_color = identity_color
+	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
+	add_child(outline)
+	_identity_outline = outline
+
+## Gives the haft a taper and a haft-like colour instead of a bar of uniform
+## width and stock white, so it reads as a handle rather than a floating line.
+## Purely presentational -- the haft has no collision shape to derive a width
+## from (it collides with nothing, per CONTEXT.md).
+func _style_haft() -> void:
+	weapon_line.default_color = HAFT_COLOR
+	weapon_line.width = HAFT_BASE_WIDTH
+	weapon_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	weapon_line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	var taper := Curve.new()
+	taper.add_point(Vector2(0.0, 1.0))
+	taper.add_point(Vector2(1.0, HAFT_TIP_WIDTH / HAFT_BASE_WIDTH))
+	weapon_line.width_curve = taper
+
+## Repaints the body fill from `identity_color` (at zero damage) toward
+## `DAMAGE_FILL_COLOR` (at `DEATH_DAMAGE`). Runs every physics tick rather
+## than only from `take_damage()`, so the fill stays true to `damage` however
+## it changed -- a strike, a respawn's reset, or a scenario setting it
+## directly, which is how this suite's own scenarios read and drive it.
+func _update_damage_visual() -> void:
+	var t: float = clampf(damage / DEATH_DAMAGE, 0.0, 1.0)
+	body_visual.color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
+
+## Builds the weapon head's drawn silhouette from its actual collision shape,
+## so the drawing and the hitbox cannot drift apart the way they had: the
+## head collided as an 8px-radius `CircleShape2D` and drew as a 16px-wide
+## square from a parallel `head_draw_radius()` number. `CircleShape2D` and
+## `RectangleShape2D` are understood directly; anything else falls back to
+## the shape's own bounding box in `FALLBACK_HEAD_COLOR`, a colour that
+## belongs to no player, so an unhandled head shape is visibly wrong rather
+## than quietly guessed at. See `weapon_head_visual_is_fallback()`.
+func _build_head_visual(shape: Shape2D) -> Polygon2D:
+	var visual := Polygon2D.new()
+	visual.name = "HeadVisual"
+	if shape is CircleShape2D:
+		visual.polygon = _circle_silhouette((shape as CircleShape2D).radius)
+		visual.color = identity_color
+		_head_visual_is_fallback = false
+	elif shape is RectangleShape2D:
+		visual.polygon = _rect_silhouette((shape as RectangleShape2D).size)
+		visual.color = identity_color
+		_head_visual_is_fallback = false
+	else:
+		visual.polygon = _rect_from_bounds(shape.get_rect())
+		visual.color = FALLBACK_HEAD_COLOR
+		_head_visual_is_fallback = true
+		push_warning("Player: no drawn silhouette for head shape %s; falling back to its bounding box" % shape.get_class())
+	return visual
+
+func _circle_silhouette(radius: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in HEAD_CIRCLE_SEGMENTS:
+		var a: float = TAU * float(i) / float(HEAD_CIRCLE_SEGMENTS)
+		pts.append(Vector2(cos(a), sin(a)) * radius)
+	return pts
+
+func _rect_silhouette(size: Vector2) -> PackedVector2Array:
+	var half: Vector2 = size * 0.5
+	return PackedVector2Array([
+		Vector2(-half.x, -half.y), Vector2(half.x, -half.y),
+		Vector2(half.x, half.y), Vector2(-half.x, half.y)])
+
+func _rect_from_bounds(rect: Rect2) -> PackedVector2Array:
+	return PackedVector2Array([
+		rect.position, Vector2(rect.end.x, rect.position.y),
+		rect.end, Vector2(rect.position.x, rect.end.y)])
+
+## The colour of the persistent identity outline as actually drawn, rather
+## than the `identity_color` setting a caller trusts to have produced it.
+func identity_outline_color() -> Color:
+	return _identity_outline.default_color if _identity_outline != null else identity_color
+
+## The colour the weapon's head is actually drawn in. Constant at any damage
+## level (ADR-0005) for a known head shape; see `weapon_head_visual_is_fallback()`
+## for the one case where it is deliberately not `identity_color`.
+func weapon_head_color() -> Color:
+	return _head_visual.color if _head_visual != null else identity_color
+
+## The body's own fill colour -- the one visual here that `damage` is allowed
+## to change.
+func body_fill_color() -> Color:
+	return body_visual.color
+
+## The drawn silhouette of the weapon's head, in the head's local space.
+## Exposed so a scenario can check it derives from `WeaponStats.head_shape`
+## without reaching into the rig's internals.
+func weapon_head_visual_polygon() -> PackedVector2Array:
+	return _head_visual.polygon if _head_visual != null else PackedVector2Array()
+
+## Whether the currently drawn head silhouette is the bounding-box fallback
+## rather than a real reading of `head_shape`.
+func weapon_head_visual_is_fallback() -> bool:
+	return _head_visual_is_fallback
 
 # --- Input ------------------------------------------------------------------
 

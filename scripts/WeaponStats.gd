@@ -47,20 +47,14 @@ extends Resource
 @export var damage: float = 34.0
 
 ## The head's collision region -- per weapon, and not a point: a pickaxe's is
-## a nub at the tip, a sword's would be most of the blade.
+## a nub at the tip, a sword's would be most of the blade. `Player` draws the
+## head's silhouette straight from this shape (see
+## `Player._build_head_visual`) rather than from a parallel size number, so
+## the drawing and the hitbox cannot drift apart.
 @export var head_shape: Shape2D
-
-@export var head_color: Color = Color(0.9, 0.9, 0.95)
 
 func _init() -> void:
 	if head_shape == null:
 		var nub := CircleShape2D.new()
 		nub.radius = 8.0
 		head_shape = nub
-
-## Radius used to draw the head. Collision always uses `head_shape`; this is
-## only the visual, and only understands the shapes the roster actually uses.
-func head_draw_radius() -> float:
-	if head_shape is CircleShape2D:
-		return (head_shape as CircleShape2D).radius
-	return 8.0
