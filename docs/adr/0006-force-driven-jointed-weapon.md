@@ -93,6 +93,24 @@ and honest weight, and both then need explicit rules.
   touch the input frame can be added later.
 - This is the largest and riskiest piece of work in the plan, and it gates the
   rest of the combat package.
+- The tunnelling this ADR flagged as the spike's main risk did happen, on the
+  arena's 24 px platforms, and is closed without taking the fallback. It is not
+  a CCD gap: the head's motion is partly produced by the joints inside the
+  constraint solve, after Godot's 2D continuous detection has taken its
+  motion estimate from the body's velocity, so no CCD setting can see it.
+  `WeaponHead` instead sweeps the head's shape along the displacement each step
+  actually produced and puts the head back at the contact point when that path
+  crossed something solid. The jointed rig stands; nothing here changes the
+  decision above.
+- The aim is *near*-1:1, not exactly 1:1. Playtesting the built rig, the
+  operator reported the head "slightly lags behind finger, but not by too
+  much", and asked to keep that residual lag rather than tune it out: it is
+  what a heavy weapon and a light weapon will differ by. Foddy's rig tracks
+  the cursor exactly; ours deliberately does not. The lag is the visible
+  consequence of `max_drive_force` and `drive_speed` being real physical caps
+  (`WeaponStats`), so the same numbers that decide who wins a clash also
+  decide how far behind the finger a weapon sits. That coupling is the point,
+  and it is why a weapon's feel is not a separate tuning surface.
 
 ## Alternatives considered
 

@@ -65,7 +65,7 @@
   <div id="slot">--</div>
   <div id="status">connecting</div>
 </div>
-<div id="hint">Drag anywhere. Direction aims the arm, distance sets its reach.</div>
+<div id="hint">Drag anywhere. Direction aims the weapon, distance sets its reach.</div>
 <script>
 (function () {
   "use strict";
@@ -77,10 +77,11 @@
   // host restart -- just reload the page.
   var DRAG_RADIUS_FRACTION = 0.35;
   var RECONNECT_DELAY_MS = 1000;
-  // Must stay in sync with the player Body colours in scenes/Main.tscn:
-  // slot 0 = Player1 blue, slot 1 = Player2 orange. The phone showing "P1"
-  // tinted to match the body it drives is how a player knows which one is
-  // theirs, so changing a body colour means changing the matching entry here.
+  // Must stay in sync with each Player's identity_color in scenes/Main.tscn:
+  // slot 0 = Player1 blue, slot 1 = Player2 orange. The host paints that same
+  // colour on Player1/Player2's persistent outline and weapon head (ADR-0005)
+  // -- not the body fill, which reddens with damage -- so changing a colour
+  // here means changing the matching identity_color there.
   var SLOT_COLORS = ["#2666ff", "#ff8c1a"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the

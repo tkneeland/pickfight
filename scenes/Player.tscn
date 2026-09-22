@@ -1,13 +1,16 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/Player.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/pickaxe.tres" id="2"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
 radius = 24.0
 
 [node name="Player" type="RigidBody2D"]
 gravity_scale = 1.5
+lock_rotation = true
 script = ExtResource("1")
+weapon_stats = ExtResource("2")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_1")
@@ -16,11 +19,10 @@ shape = SubResource("CircleShape2D_1")
 color = Color(0.2, 0.7, 1, 1)
 polygon = PackedVector2Array(-24, -24, 24, -24, 24, 24, -24, 24)
 
-[node name="Arm" type="Line2D" parent="."]
-points = PackedVector2Array(0, 0, 80, 0)
+; Haft: visuals only. The weapon's physics live in the rig Player.gd builds
+; beside the player (haft body + head body + joints); this line is redrawn
+; each tick from the player to wherever the head actually is.
+[node name="Weapon" type="Line2D" parent="."]
+points = PackedVector2Array(0, 0, 20, 0)
 width = 6.0
 default_color = Color(1, 1, 1, 1)
-
-[node name="TipRay" type="RayCast2D" parent="Arm"]
-target_position = Vector2(80, 0)
-collision_mask = 1

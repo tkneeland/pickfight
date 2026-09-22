@@ -43,6 +43,14 @@ repository keeps its own base SHA, branch, verification result, and pull request
 
 - Personal hackathon prototype, single repo, low risk - not a client engagement.
 - GDScript has no standard lint/format tool; do not invent one without team approval.
+- **Never reference a GDScript type by its `class_name`.** Godot resolves those
+  through a global class cache that lives in the gitignored `.godot/` and is
+  only built by an editor run, so on a fresh clone the reference fails to parse
+  and the script does not load. Worse, `godot --headless --quit` still exits 0
+  in that state, so the boot check passes over a broken build. Consumers
+  `preload()` the script by path instead — see `WeaponStatsType` /
+  `WeaponHeadType` in `scripts/Player.gd`. Check with `mv .godot .godot.bak`,
+  run, restore.
 - Input scheme is **settled**: relative vector input from phone browsers, per [ADR-0003](docs/adr/0003-relative-vector-input.md). The former open question (gamepad-per-player vs keyboard-only) is void — it assumed a shared screen and shared input devices, and [ADR-0001](docs/adr/0001-same-room-host-rendered-multiplayer.md) removed both assumptions. Do not reopen it as though it were live.
 
 ## Atlas repository workflow

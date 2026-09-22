@@ -11,23 +11,21 @@ current = true
 
 [node name="Arena" parent="." instance=ExtResource("1")]
 
+; identity_color is paired with SLOT_COLORS in controller/index.html: slot 0
+; must match Player1 (blue) and slot 1 must match Player2 (orange). The phone
+; tints its "P1"/"P2" badge from that list, which is how a player finds the
+; outline and weapon that are theirs on the shared screen (ADR-0005) -- the
+; body fill itself is no longer identity, since it reddens with damage -- so
+; the two lists have to stay in sync.
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
 debug_source = 1
-
-; Body colours are paired with SLOT_COLORS in controller/index.html: slot 0
-; must match Player1 (blue) and slot 1 must match Player2 (orange). The phone
-; tints its "P1"/"P2" badge from that list, which is how a player identifies
-; the body they are driving, so the two lists have to stay in sync.
-[node name="Body" parent="Player1" index="1"]
-color = Color(0.15, 0.4, 1, 1)
+identity_color = Color(0.15, 0.4, 1, 1)
 
 [node name="Player2" parent="." instance=ExtResource("2")]
 position = Vector2(100, 0)
 debug_source = 0
-
-[node name="Body" parent="Player2" index="1"]
-color = Color(1, 0.55, 0.1, 1)
+identity_color = Color(1, 0.55, 0.1, 1)
 
 [node name="UI" type="CanvasLayer" parent="."]
 

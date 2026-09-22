@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_head"]
+radius = 8.0
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 140.0
+mass = 0.25
+drive_speed = 24.0
+extend_speed = 700.0
+rest_return_speed = 400.0
+max_drive_force = 6000.0
+damage = 34.0
+head_shape = SubResource("CircleShape2D_head")
