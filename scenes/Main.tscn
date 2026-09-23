@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Arena.tscn" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/RoundManager.gd" id="4"]
 
 [node name="Main" type="Node2D"]
 
@@ -17,15 +18,20 @@ current = true
 ; outline and weapon that are theirs on the shared screen (ADR-0005) -- the
 ; body fill itself is no longer identity, since it reddens with damage -- so
 ; the two lists have to stay in sync.
+; start_in_round = false: these two are owned by RoundManager now, which
+; brings each into play with start_round() once the roster below it is
+; ready, rather than either building a live rig at boot with nobody bound.
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
 debug_source = 1
 identity_color = Color(0.15, 0.4, 1, 1)
+start_in_round = false
 
 [node name="Player2" parent="." instance=ExtResource("2")]
 position = Vector2(100, 0)
 debug_source = 0
 identity_color = Color(1, 0.55, 0.1, 1)
+start_in_round = false
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -36,7 +42,21 @@ offset_right = 620.0
 offset_bottom = 70.0
 text = "Join on your phone: starting server..."
 
+[node name="ScoreLabel" type="Label" parent="UI"]
+offset_left = 12.0
+offset_top = 74.0
+offset_right = 620.0
+offset_bottom = 110.0
+text = "P1: 0  P2: 0"
+
 [node name="ControllerServer" type="Node" parent="."]
 script = ExtResource("3")
 player_paths = [NodePath("../Player1"), NodePath("../Player2")]
 join_label_path = NodePath("../UI/JoinLabel")
+
+[node name="RoundManager" type="Node" parent="."]
+script = ExtResource("4")
+player_paths = [NodePath("../Player1"), NodePath("../Player2")]
+spawn_points = [Vector2(-100, 0), Vector2(100, 0)]
+controller_server_path = NodePath("../ControllerServer")
+score_label_path = NodePath("../UI/ScoreLabel")

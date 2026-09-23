@@ -2,6 +2,16 @@
 
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
+; A ConvexPolygonShape2D pickaxe head (a wedge with a real point, instead of
+; a circular nub) was tried here and reverted: several combat scenarios
+; tuned around the circle's uniform radius -- head-on interpenetration and
+; the head-vs-head tunnelling sweep in particular -- started failing against
+; an asymmetric or pointed shape, and fixing that honestly means reworking
+; WeaponHead.gd's shape-dependent correction math, not just swapping a
+; resource. Player._build_head_visual() and _update_weapon_visual() already
+; support a ConvexPolygonShape2D head correctly (see the polygon case in
+; tools/scenario_runner.gd's weapon_silhouette_matches_head_shape), so a
+; future weapon can use one once that physics work is done deliberately.
 [sub_resource type="CircleShape2D" id="CircleShape2D_head"]
 radius = 8.0
 

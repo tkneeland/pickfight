@@ -152,12 +152,6 @@ const MAX_FAILURES_PER_SCENARIO: int = 5
 ## player: a test that asked the player what its own threshold was would pass
 ## whatever the player decided.
 const DEATH_DAMAGE: float = 100.0
-## Where a dead player comes back, matching the arena's kill zone. Also
-## written down rather than read back.
-const RESPAWN_POSITION: Vector2 = Vector2(0, -200)
-## Slack on a respawn position: measured a tick or two after the death, by
-## which time the respawned body has begun to fall again.
-const RESPAWN_TOLERANCE: float = 20.0
 
 ## Half-sweeps for the swing spread. The attacker starts this far short of the
 ## victim and is commanded this far past them, so the head crosses the victim
@@ -1128,13 +1122,15 @@ func _scenario_body_collision_knockback_no_damage() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
-## AC-9: enough accumulated damage kills, and the death is the same one a
-## ring-out produces -- back at the respawn point with health reset.
+## AC-9: enough accumulated damage eliminates. Elimination freezes and hides
+## the player exactly where they were, still carrying the damage that
+## eliminated them -- there is no mid-round respawn, and nothing resets that
+## damage until `start_round()` brings them into the next round.
 ##
 ## Struck repeatedly with the hardest swing in the spread until the victim
-## dies. That it survives at least one of them is asserted too: damage that
-## accumulates is the claim, and a one-shot kill would satisfy "it died"
-## without it.
+## is eliminated. That it survives at least one of them is asserted too:
+## damage that accumulates is the claim, and a one-shot kill would satisfy
+## "it died" without it.
 func _scenario_damage_kills() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -1162,7 +1158,7 @@ func _scenario_damage_kills() -> Array[String]:
 			hurt_before_death = victim.damage
 
 	if victim.deaths != 1:
-		failures.append("%d strikes left the victim on %.1f damage without killing them (%.1f kills)" % [
+		failures.append("%d strikes left the victim on %.1f damage without eliminating them (%.1f kills)" % [
 			swings, victim.damage, DEATH_DAMAGE])
 	else:
 		if not survived_a_strike:
@@ -1170,21 +1166,21 @@ func _scenario_damage_kills() -> Array[String]:
 		if hurt_before_death >= DEATH_DAMAGE:
 			failures.append("the victim was carrying %.1f damage and had not died yet (%.1f kills)" % [
 				hurt_before_death, DEATH_DAMAGE])
-		if victim.damage > 0.0:
-			failures.append("respawned still carrying %.1f damage; health should reset" % victim.damage)
-		var home: float = (victim.global_position - RESPAWN_POSITION).length()
-		if home > RESPAWN_TOLERANCE:
-			failures.append("died %.1f px from the respawn point %s, at %s" % [
-				home, RESPAWN_POSITION, victim.global_position])
+		if victim.damage < DEATH_DAMAGE:
+			failures.append("eliminated but only carrying %.1f damage; elimination should not reset it" % victim.damage)
+		if victim.alive:
+			failures.append("eliminated but still marked alive")
 
 	await _teardown(stage)
 	return failures
 
-## AC-10: a ring-out kills a player who has taken no damage at all.
+## AC-10: a ring-out eliminates a player who has taken no damage at all.
 ##
 ## Dropped off the end of the ground and past the kill zone with full health,
 ## which is the point: stage geometry is the sharpest threat and does not
-## care how healthy anyone is.
+## care how healthy anyone is. Elimination freezes the player in place --
+## there is no respawn to land at -- carrying whatever damage they had,
+## which here is none.
 func _scenario_ringout_kills_at_full_health() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -1207,11 +1203,9 @@ func _scenario_ringout_kills_at_full_health() -> Array[String]:
 		if player.deaths != 1:
 			failures.append("one ring-out counted as %d deaths" % player.deaths)
 		if player.damage > 0.0:
-			failures.append("respawned carrying %.1f damage" % player.damage)
-		var home: float = (player.global_position - RESPAWN_POSITION).length()
-		if home > RESPAWN_TOLERANCE:
-			failures.append("respawned %.1f px from %s, at %s" % [
-				home, RESPAWN_POSITION, player.global_position])
+			failures.append("a ring-out at full health left %.1f damage behind" % player.damage)
+		if player.alive:
+			failures.append("eliminated but still marked alive")
 
 	await _teardown(stage)
 	return failures
@@ -1410,9 +1404,11 @@ func _scenario_heads_do_not_tunnel_head() -> Array[String]:
 				await physics_frame
 				var relative: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
 				var still_alive: bool = attacker.deaths + blocker.deaths == deaths
-				# A death teleports a player and its weapon across the arena,
-				# which is not a step the heads took; it is not evidence
-				# either way and the trial stops being meaningful there.
+				# An elimination freezes a player and its weapon in place rather
+				# than moving them, but it also drops the head's collision layer,
+				# so the relative position stops meaning "two heads closing" the
+				# instant one side is eliminated; the trial stops being
+				# meaningful there.
 				if not still_alive:
 					break
 				closest = minf(closest, relative.length())
@@ -1847,31 +1843,38 @@ func _parse_main_identity_colors() -> Array[Color]:
 	return colors
 
 ## D4 scope change: the drawn head derives from `WeaponStats.head_shape`
-## rather than a parallel "draw radius" number, for both shapes the roster
-## understands (a circle -- the pickaxe -- and a rectangle), and visibly
-## refuses to guess for a shape it does not.
+## rather than a parallel "draw radius" number, for every shape the roster
+## understands (circle, rectangle, and the pickaxe's own convex-polygon
+## spike), and visibly refuses to guess for a shape it does not.
 func _scenario_weapon_silhouette_matches_head_shape() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
 	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
 	await _await_ticks(2)
 
-	var circle_shape: CircleShape2D = player.weapon_stats.head_shape as CircleShape2D
-	if circle_shape == null:
-		failures.append("default weapon stats do not carry a CircleShape2D head; cannot check the circle case")
-	else:
-		var polygon: PackedVector2Array = player.weapon_head_visual_polygon()
-		var max_reach_from_centre: float = 0.0
-		for p: Vector2 in polygon:
-			max_reach_from_centre = maxf(max_reach_from_centre, p.length())
-		# The pre-fix drawing was a square of half-width equal to the
-		# radius, whose corners reach radius * sqrt(2) from centre -- this
-		# check fails against that shape and only that shape passes here.
-		if absf(max_reach_from_centre - circle_shape.radius) > HEAD_SHAPE_TOLERANCE:
-			failures.append("circle head: drawn silhouette reaches %.2f px from centre, collision shape radius is %.2f px" % [
-				max_reach_from_centre, circle_shape.radius])
-		if player.weapon_head_visual_is_fallback():
-			failures.append("circle head: fell back, but CircleShape2D is understood directly")
+	# A synthetic circle stats object, not the default weapon stats: the
+	# pickaxe's own head is a ConvexPolygonShape2D now (below), so the circle
+	# case has to build its own the way the rectangle and capsule cases
+	# already do.
+	var circle_stats := WeaponStatsType.new()
+	var circle_shape := CircleShape2D.new()
+	circle_shape.radius = 8.0
+	circle_stats.head_shape = circle_shape
+	player.set_weapon_stats(circle_stats)
+	await _await_ticks(2)
+
+	var polygon: PackedVector2Array = player.weapon_head_visual_polygon()
+	var max_reach_from_centre: float = 0.0
+	for p: Vector2 in polygon:
+		max_reach_from_centre = maxf(max_reach_from_centre, p.length())
+	# The pre-fix drawing was a square of half-width equal to the
+	# radius, whose corners reach radius * sqrt(2) from centre -- this
+	# check fails against that shape and only that shape passes here.
+	if absf(max_reach_from_centre - circle_shape.radius) > HEAD_SHAPE_TOLERANCE:
+		failures.append("circle head: drawn silhouette reaches %.2f px from centre, collision shape radius is %.2f px" % [
+			max_reach_from_centre, circle_shape.radius])
+	if player.weapon_head_visual_is_fallback():
+		failures.append("circle head: fell back, but CircleShape2D is understood directly")
 
 	var rect_stats := WeaponStatsType.new()
 	var rect_shape := RectangleShape2D.new()
@@ -1910,6 +1913,24 @@ func _scenario_weapon_silhouette_matches_head_shape() -> Array[String]:
 		failures.append("capsule head: expected the bounding-box fallback, got a shape-specific silhouette")
 	if _color_close(player.weapon_head_color(), player.identity_outline_color(), COLOR_MATCH_TOLERANCE):
 		failures.append("capsule head: fallback silhouette is drawn in the identity colour, so it does not read as a fallback")
+
+	# Not the shipped pickaxe (which still uses a CircleShape2D -- see the
+	# comment in resources/pickaxe.tres for why a polygon head was tried and
+	# reverted there): a synthetic shape, exactly like the rectangle and
+	# capsule cases, to check the drawing path on its own.
+	var polygon_stats := WeaponStatsType.new()
+	var polygon_shape := ConvexPolygonShape2D.new()
+	polygon_shape.points = PackedVector2Array([Vector2(8, 0), Vector2(0, -8), Vector2(-8, 0), Vector2(0, 8)])
+	polygon_stats.head_shape = polygon_shape
+	player.set_weapon_stats(polygon_stats)
+	await _await_ticks(2)
+
+	var drawn_polygon: PackedVector2Array = player.weapon_head_visual_polygon()
+	if drawn_polygon != polygon_shape.points:
+		failures.append("polygon head: drawn silhouette %s does not match collision shape points %s" % [
+			drawn_polygon, polygon_shape.points])
+	if player.weapon_head_visual_is_fallback():
+		failures.append("polygon head: fell back, but ConvexPolygonShape2D is understood directly")
 
 	await _teardown(stage)
 	return failures

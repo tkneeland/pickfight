@@ -86,6 +86,10 @@ var _http_server: TCPServer = TCPServer.new()
 var _ws_server: TCPServer = TCPServer.new()
 var _http_clients: Array[HttpConn] = []
 var _pending: Array[PendingConn] = []
+## A socket that has finished the WebSocket handshake but has not yet sent
+## its identifying first frame -- see `_process_websocket`'s second stage.
+## Reuses `PendingConn`: the shape (peer, deadline) is the same.
+var _awaiting_id: Array[PendingConn] = []
 
 # Untyped on purpose: elements are `Player` nodes and GDScript's analyser
 # would reject `set_input_vector` on a statically typed `Node`.
@@ -97,6 +101,16 @@ var _steady_frames: PackedInt32Array = PackedInt32Array()
 # 1 once a slot has ever held a controller: keeps the startup settle of an
 # untouched weapon out of the diagnostics.
 var _bound_once: PackedByteArray = PackedByteArray()
+## Whether a slot has an open roster entry (ADR-0007): set on first bind,
+## cleared only by `expire_disconnected_claims()` at a round boundary --
+## never by an ordinary disconnect, which is the whole point. A round loop
+## reads `claimed_slots()` to know who is in the roster and calls
+## `expire_disconnected_claims()` right before starting a new round.
+var _slot_claimed: PackedByteArray = PackedByteArray()
+## The id that claimed each slot, so a reconnecting phone can be matched back
+## to the same slot instead of taking whatever is free. Empty for an
+## unclaimed slot.
+var _slot_client_id: PackedStringArray = PackedStringArray()
 
 func _ready() -> void:
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
@@ -108,6 +122,8 @@ func _ready() -> void:
 	_last_weapon.resize(_players.size())
 	_steady_frames.resize(_players.size())
 	_bound_once.resize(_players.size())
+	_slot_claimed.resize(_players.size())
+	_slot_client_id.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 
@@ -274,7 +290,7 @@ func _process_websocket() -> void:
 		var state: int = conn.peer.get_ready_state()
 		if state == WebSocketPeer.STATE_OPEN:
 			_pending.erase(conn)
-			_bind(conn.peer)
+			_awaiting_id.append(PendingConn.new(conn.peer, now + int(connection_timeout_sec * 1000.0)))
 		elif state == WebSocketPeer.STATE_CLOSED:
 			_pending.erase(conn)
 		elif now > conn.deadline_msec:
@@ -282,6 +298,27 @@ func _process_websocket() -> void:
 				print("websocket connection dropped: handshake idle %.1fs" % connection_timeout_sec)
 			conn.peer.close(1002, "handshake timeout")
 			_pending.erase(conn)
+
+	# Second stage: the socket is open, but a slot is not handed out until the
+	# controller page has said who it is (ADR-0007's reclaim needs an id to
+	# match against). A page that never sends one -- an old cached copy, a
+	# stray client -- is not punished for it; it just binds as a new,
+	# unmatched roster entry once its own deadline passes.
+	for conn: PendingConn in _awaiting_id.duplicate():
+		conn.peer.poll()
+		var state: int = conn.peer.get_ready_state()
+		if state == WebSocketPeer.STATE_CLOSED:
+			_awaiting_id.erase(conn)
+			continue
+		if state != WebSocketPeer.STATE_OPEN:
+			continue
+		var id: Variant = _read_client_id(conn.peer)
+		if id != null:
+			_awaiting_id.erase(conn)
+			_bind_with_id(conn.peer, id)
+		elif now > conn.deadline_msec:
+			_awaiting_id.erase(conn)
+			_bind_with_id(conn.peer, "")
 
 	var timeout_msec: int = int(controller_timeout_sec * 1000.0)
 	for slot in _slot_peers.size():
@@ -304,31 +341,66 @@ func _process_websocket() -> void:
 		elif state == WebSocketPeer.STATE_CLOSED:
 			_unbind(slot)
 
-## Bind to the lowest free slot; refuse the connection when every player is
-## already driven by a controller.
-func _bind(peer: WebSocketPeer) -> void:
+## Read the id a controller page sends as its first (and only) text frame --
+## `{"id":"<string>"}`. Returns null while nothing usable has arrived yet, so
+## the caller can keep waiting up to its own deadline; a stray non-JSON or
+## binary packet is skipped rather than treated as a failure, since a client
+## that only ever sends binary frames (an old cached page) should still bind.
+func _read_client_id(peer: WebSocketPeer) -> Variant:
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if not peer.was_string_packet():
+			continue
+		var parsed: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		if parsed is Dictionary and typeof(parsed.get("id")) == TYPE_STRING:
+			return parsed["id"]
+	return null
+
+## Bind a newly-identified controller (ADR-0007). A non-empty id that matches
+## a claimed slot whose controller is currently disconnected reclaims that
+## exact slot -- this is the whole reconnect path. Otherwise the lowest
+## unclaimed slot is claimed fresh, under this id (which may be empty, for a
+## client that never sent one). Refuses the connection once every slot is
+## claimed, exactly as before id-matching existed.
+func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
+	if not id.is_empty():
+		for slot in _slot_peers.size():
+			if _slot_claimed[slot] == 1 and _slot_peers[slot] == null and _slot_client_id[slot] == id:
+				_attach(slot, peer)
+				if _log_input:
+					print("slot %d reclaimed" % slot)
+				return
 	for slot in _slot_peers.size():
-		if _slot_peers[slot] != null:
+		if _slot_claimed[slot] == 1:
 			continue
 		if _players[slot] == null:
 			continue
-		_slot_peers[slot] = peer
-		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
-		_last_weapon[slot] = Vector2(NAN, NAN)
-		_steady_frames[slot] = 0
-		_bound_once[slot] = 1
-		_players[slot].bind_controller()
-		peer.send_text(JSON.stringify({"slot": slot}))
+		_slot_claimed[slot] = 1
+		_slot_client_id[slot] = id
+		_attach(slot, peer)
 		if _log_input:
-			print("slot %d bound" % slot)
+			print("slot %d claimed" % slot)
 		return
 	peer.close(1000, "no free player slot")
 	if _log_input:
 		print("controller refused: no free player slot")
 
+func _attach(slot: int, peer: WebSocketPeer) -> void:
+	_slot_peers[slot] = peer
+	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
+	_last_weapon[slot] = Vector2(NAN, NAN)
+	_steady_frames[slot] = 0
+	_bound_once[slot] = 1
+	_players[slot].bind_controller()
+	peer.send_text(JSON.stringify({"slot": slot}))
+
 ## Free the slot and park its player: zeroing the vector first means the weapon
 ## eases back to rest over several frames instead of holding the controller's
 ## last angle forever (or snapping to whatever a debug source would say).
+##
+## Does not touch `_slot_claimed` / `_slot_client_id`: an ordinary disconnect
+## keeps the roster entry open for the rest of the round (ADR-0007). Only
+## `expire_disconnected_claims()` clears those, at a round boundary.
 func _unbind(slot: int) -> void:
 	_slot_peers[slot] = null
 	_last_weapon[slot] = Vector2(NAN, NAN)
@@ -338,6 +410,26 @@ func _unbind(slot: int) -> void:
 		_players[slot].unbind_controller()
 	if _log_input:
 		print("slot %d unbound" % slot)
+
+## The slots with an open roster entry right now, in slot order -- what a
+## round loop treats as "in the roster" regardless of whether each one's
+## controller is currently connected.
+func claimed_slots() -> Array[int]:
+	var result: Array[int] = []
+	for slot in _slot_claimed.size():
+		if _slot_claimed[slot] == 1:
+			result.append(slot)
+	return result
+
+## Drop every claimed slot that has no live controller right now. Called by
+## the round loop right before a new round starts: a roster entry survives a
+## disconnect only until the end of the round it disconnected in (ADR-0007) --
+## an entry not reclaimed by then does not carry into the next round.
+func expire_disconnected_claims() -> void:
+	for slot in _slot_claimed.size():
+		if _slot_claimed[slot] == 1 and _slot_peers[slot] == null:
+			_slot_claimed[slot] = 0
+			_slot_client_id[slot] = ""
 
 ## Latest value wins: drain everything queued this frame and keep only the last
 ## well-formed packet, so a burst never replays stale input.

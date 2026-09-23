@@ -90,6 +90,32 @@
   var MIN_DRAG_RADIUS_PX = 1;
 
   var WS_PORT = __WS_PORT__;
+  var CLIENT_ID_KEY = "pickfight-client-id";
+
+  // ---- identity -------------------------------------------------------------
+  // Persisted across reloads (and the reconnect that follows a screen lock or
+  // a dropped socket) so the host can tell "this phone again" from "a new
+  // phone" and hand back the same roster slot instead of whatever is free
+  // (ADR-0007). localStorage survives a page reload; it does not survive the
+  // user clearing site data or a different browser/tab claiming a fresh id,
+  // both of which just look like a new phone to the host.
+  function getClientId() {
+    try {
+      var id = localStorage.getItem(CLIENT_ID_KEY);
+      if (!id) {
+        id = (crypto && crypto.randomUUID) ? crypto.randomUUID() :
+          "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+        localStorage.setItem(CLIENT_ID_KEY, id);
+      }
+      return id;
+    } catch (err) {
+      // Private browsing / storage disabled: fall back to a per-load id. It
+      // will not survive a reconnect, so this phone always binds as a fresh
+      // roster entry instead of reclaiming -- a worse but working fallback.
+      return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    }
+  }
+  var CLIENT_ID = getClientId();
 
   // ---- state --------------------------------------------------------------
   var dragRadiusPx = computeDragRadius();
@@ -198,7 +224,13 @@
     setStatus("connecting");
     ws = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
     ws.binaryType = "arraybuffer";
-    ws.onopen = function () { setStatus("connected"); };
+    ws.onopen = function () {
+      // Identify ourselves before any binary input frame, so the host's
+      // id-await stage (ControllerServer._process_websocket) has our id to
+      // match before it ever needs to fall back to binding us as new.
+      ws.send(JSON.stringify({ id: CLIENT_ID }));
+      setStatus("connected");
+    };
     ws.onmessage = function (ev) {
       if (typeof ev.data !== "string") { return; }
       try {

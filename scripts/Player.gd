@@ -25,11 +25,11 @@ extends RigidBody2D
 ## Rewarding players for flailing their mass into opponents would undercut
 ## the one thing the game is about, which is that better swinging wins.
 ##
-## Damage accumulates within a life and kills at DEATH_DAMAGE. Death is the
-## respawn a ring-out already produced -- `die()` is the one path, and the
-## kill zone calls it too. That is explicitly interim: when the Round lands,
-## death becomes elimination and damage resets at the round boundary instead
-## of on respawn.
+## Damage accumulates within a round and eliminates at DEATH_DAMAGE
+## (ADR-0004). `eliminate()` is the one path both a ring-out and accumulated
+## damage take; it freezes and hides the player where they were, carrying
+## whatever damage they had, until `start_round()` brings them back with it
+## reset. There is no mid-round respawn.
 ##
 ## Per ADR-0003, the weapon is driven by a relative unit-disc input vector
 ## (Vector2.ZERO means "not touching") rather than an absolute cursor
@@ -127,11 +127,11 @@ const HAFT_COLOR: Color = Color(0.42, 0.3, 0.2, 1.0)
 @export var knockback_scale: float = 0.5
 @export var debug_source: DebugSource = DebugSource.NONE
 @export var mouse_drag_radius: float = 140.0
-## Where this player comes back after a death, by either route. It lives here
-## rather than on the kill zone because a player can now die without touching
-## one. When the Stage contract arrives it declares spawn points and this
-## moves onto it.
-@export var respawn_position: Vector2 = Vector2(0, -200)
+## Whether this player starts active on its own, the way every scenario in
+## `tools/scenario_runner.gd` expects. A round loop that owns this player
+## sets this false in the scene and drives entry through `start_round()`
+## instead -- see `_ready()`.
+@export var start_in_round: bool = true
 
 ## The colour that identifies this player: a persistent outline traced around
 ## the body, and the fill of the weapon's head. Both stay constant at any
@@ -144,11 +144,17 @@ const HAFT_COLOR: Color = Color(0.42, 0.3, 0.2, 1.0)
 var input_vector: Vector2 = Vector2.ZERO
 var has_controller: bool = false
 
-## Damage taken so far in this life, and how many lives that has cost. Both
-## are observable state a scenario or a display can read; nothing else about
-## being hurt is stored.
+## Damage taken so far this round, and how many times this player has been
+## eliminated. Both are observable state a scenario or a display can read;
+## nothing else about being hurt is stored.
 var damage: float = 0.0
 var deaths: int = 0
+
+## Whether this player is in play. False from elimination (damage or a
+## ring-out) until `start_round()` brings them back for the next round --
+## there is no mid-round respawn (ADR-0004): a round is over the same body
+## every player entered it with.
+var alive: bool = true
 
 ## The weapon setpoints the input vector asks for: a world angle in radians
 ## and a reach in pixels. These are what the host commands, not what the
@@ -202,15 +208,25 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	_style_haft()
 	_build_identity_outline()
+	if not start_in_round:
+		# A round loop owns this player: stay out of play, inert and
+		# unbuilt, until it calls start_round(). _build_rig() below checks
+		# `alive` before it builds anything, so the deferred call
+		# set_weapon_stats() schedules is a safe no-op until then.
+		alive = false
+		freeze = true
+		visible = false
+		collision_layer = 0
+		collision_mask = 0
 	_update_damage_visual()
 	set_weapon_stats(weapon_stats if weapon_stats != null else WeaponStatsType.new())
 
 ## The rig lives beside the player rather than under it, so it is not freed
 ## with the player the way a child would be. Left alone it outlives its owner
 ## as a headless weapon: joints pointing at a freed body, and a head still on
-## the head layer, still able to hit people. Nothing frees a player yet, but
-## death lands in the next deliverable and the round loop will free every
-## player every round.
+## the head layer, still able to hit people. `eliminate()` is what frees it
+## every round now; this is the same cleanup for the path where the player
+## node itself goes away (a scenario tearing down its stage).
 ##
 ## Rebuilt on re-entry so this stays a cleanup path rather than a one-way
 ## teardown; `_build_rig` clears before it builds, so the duplicate call on a
@@ -223,6 +239,8 @@ func _enter_tree() -> void:
 		_build_rig.call_deferred()
 
 func _physics_process(delta: float) -> void:
+	if not alive:
+		return
 	_update_weapon_input(delta)
 	_update_damage_visual()
 	if not _rig_is_live():
@@ -304,33 +322,92 @@ func teleport_to(pos: Vector2) -> void:
 	if _head != null:
 		_head.forget_previous_position()
 
-## Take a hit. Damage accumulates within a life; enough of it kills.
+## Take a hit. Damage accumulates within a round; enough of it eliminates.
 ##
 ## Public because whoever landed the strike is the one who knows how hard it
 ## was -- the attacking player scores its own head's speed against its own
-## weapon's damage and hands over the result.
+## weapon's damage and hands over the result. A no-op once eliminated: an
+## eliminated player's head has no collision layer to be struck through, but
+## nothing here should rely on that alone.
 func take_damage(amount: float) -> void:
-	if amount <= 0.0:
+	if amount <= 0.0 or not alive:
 		return
 	damage += amount
 	if damage >= DEATH_DAMAGE:
-		die()
+		eliminate()
 
-## Die, by whatever route. Both routes there -- damage and the kill zone --
-## end here, so there is one description of what dying does rather than two
-## that can drift apart.
+## Eliminate this player, by whatever route. Both routes there -- accumulated
+## damage and the kill zone -- end here, so there is one description of what
+## being eliminated does rather than two that can drift apart.
 ##
-## Interim, and knowingly so: respawning with health reset is what the game
-## does until the Round exists, at which point death becomes elimination and
-## damage resets at the round boundary instead.
-func die() -> void:
+## A round is elimination-based (ADR-0004): this is not a respawn, so the
+## body freezes and hides exactly where it was, carrying whatever damage it
+## had. It stays out of the round until `start_round()` brings every
+## surviving and newly-joined player back for the next one, which is also
+## where damage resets -- at the round boundary, not here.
+func eliminate() -> void:
+	if not alive:
+		return
 	deaths += 1
+	_go_inert()
+
+## Take this player out of play without it counting as an elimination.
+##
+## The round loop's use: once a round is decided, every player who is still
+## `alive` -- the winner included -- has to go back to the same inert state
+## `eliminate()` leaves a loser in, so that `start_round()` is the one path
+## everyone re-enters the next round through. Scoring reads `alive` and
+## `deaths` before calling this, so it never sees the winner as having died.
+func leave_round() -> void:
+	if not alive:
+		return
+	_go_inert()
+
+## The state an out-of-play player sits in: no rig, no collision, invisible,
+## frozen in place. Shared by `eliminate()` (which also counts a death) and
+## `leave_round()` (which does not) so there is exactly one description of
+## what "out of the round" looks like.
+func _go_inert() -> void:
+	alive = false
+	_clear_rig()
+	# Deferred: eliminate() can run from KillZone's body_entered, which fires
+	# mid-physics-step while the physics server is still flushing queries --
+	# changing a RigidBody2D's mode synchronously from there is refused
+	# ("Can't change this state while flushing queries"). Deferring is
+	# harmless from leave_round()'s ordinary call sites too.
+	set_deferred("freeze", true)
+	linear_velocity = Vector2.ZERO
+	visible = false
+	collision_layer = 0
+	collision_mask = 0
+
+## Bring this player into a fresh round at `spawn_pos`: alive, full health,
+## visible, collidable, and with the weapon rig it entered the round holding
+## (ADR-0005's carry-over is automatic here, since nothing resets
+## `weapon_stats`). Used both for a player who survived the last round and
+## for one whose roster entry is only now being spawned in for the first
+## time.
+func start_round(spawn_pos: Vector2) -> void:
+	alive = true
 	damage = 0.0
-	teleport_to(respawn_position)
+	freeze = false
+	visible = true
+	collision_layer = LAYER_WORLD
+	collision_mask = LAYER_WORLD
+	global_position = spawn_pos
+	linear_velocity = Vector2.ZERO
+	_build_rig.call_deferred()
 
 # --- Weapon rig -------------------------------------------------------------
 
 func _build_rig() -> void:
+	# Deferred callers (set_weapon_stats(), _enter_tree()) can land here
+	# after the player has since gone inert -- a round ending, an
+	# elimination landing in the same frame. Nothing should be built for a
+	# player that is not in play; start_round() is what flips `alive` back
+	# and asks again.
+	if not alive:
+		return
 	_clear_rig()
 	var host: Node = get_parent()
 	if host == null:
@@ -520,6 +597,13 @@ func _update_weapon_visual() -> void:
 	pts[1] = to_local(_head.global_position)
 	weapon_line.points = pts
 	_head_shape.global_rotation = _haft.rotation
+	# The head body is rotation-locked (its shape is turned to face the haft
+	# instead, above), so its drawn silhouette needs the same turn or it
+	# would sit still while the collision shape it is supposed to depict
+	# swings around it. Invisible for a circle -- today's pickaxe -- which is
+	# why this was never needed before RectangleShape2D/ConvexPolygonShape2D
+	# heads (both asymmetric) were understood.
+	_head_visual.rotation = _haft.rotation
 
 # --- Presentation: identity and damage --------------------------------------
 #
@@ -579,11 +663,12 @@ func _update_damage_visual() -> void:
 ## Builds the weapon head's drawn silhouette from its actual collision shape,
 ## so the drawing and the hitbox cannot drift apart the way they had: the
 ## head collided as an 8px-radius `CircleShape2D` and drew as a 16px-wide
-## square from a parallel `head_draw_radius()` number. `CircleShape2D` and
-## `RectangleShape2D` are understood directly; anything else falls back to
-## the shape's own bounding box in `FALLBACK_HEAD_COLOR`, a colour that
-## belongs to no player, so an unhandled head shape is visibly wrong rather
-## than quietly guessed at. See `weapon_head_visual_is_fallback()`.
+## square from a parallel `head_draw_radius()` number. `CircleShape2D`,
+## `RectangleShape2D` and `ConvexPolygonShape2D` are understood directly;
+## anything else falls back to the shape's own bounding box in
+## `FALLBACK_HEAD_COLOR`, a colour that belongs to no player, so an unhandled
+## head shape is visibly wrong rather than quietly guessed at. See
+## `weapon_head_visual_is_fallback()`.
 func _build_head_visual(shape: Shape2D) -> Polygon2D:
 	var visual := Polygon2D.new()
 	visual.name = "HeadVisual"
@@ -593,6 +678,10 @@ func _build_head_visual(shape: Shape2D) -> Polygon2D:
 		_head_visual_is_fallback = false
 	elif shape is RectangleShape2D:
 		visual.polygon = _rect_silhouette((shape as RectangleShape2D).size)
+		visual.color = identity_color
+		_head_visual_is_fallback = false
+	elif shape is ConvexPolygonShape2D:
+		visual.polygon = (shape as ConvexPolygonShape2D).points
 		visual.color = identity_color
 		_head_visual_is_fallback = false
 	else:
