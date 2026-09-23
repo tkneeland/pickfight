@@ -49,6 +49,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"body_collision_knockback_no_damage",
 	"damage_kills",
 	"ringout_kills_at_full_health",
+	"ringout_then_next_round_survives",
 	"heads_do_not_interpenetrate",
 	"clash_higher_drive_force_wins",
 	"heads_do_not_tunnel_head",
@@ -204,6 +205,23 @@ const RINGOUT_TICKS: int = 240
 ## Off the end of the ground (which spans -600..600) but still over the kill
 ## zone (-700..700), and clear of both platforms.
 const RINGOUT_START: Vector2 = Vector2(650, -200)
+## Where a ring-out victim is brought back for the next round: standing on
+## the middle of the ground, nowhere near an edge or the kill zone.
+const NEXT_ROUND_SPAWN: Vector2 = Vector2(0, GROUND_TOP - PLAYER_RADIUS)
+## How long a player brought back into a round is watched for. The reported
+## re-elimination landed two ticks in; this is a full second of play.
+const NEXT_ROUND_WATCH_TICKS: int = 60
+## How far a player standing at NEXT_ROUND_SPAWN may have drifted by the end
+## of the watch. Settling onto the ground moves it a few pixels; being put
+## back where it died moves it hundreds.
+const NEXT_ROUND_DRIFT: float = 40.0
+## Ticks between a ring-out and the next round, standing in for
+## RoundManager's round-end pause: long enough for the elimination's deferred
+## freeze to land, as it always has by the time a real round starts.
+const NEXT_ROUND_PAUSE_TICKS: int = 30
+## Ring-out-then-next-round cycles run back to back: the live bug repeated
+## every round, so one cycle passing is not enough.
+const NEXT_ROUND_CYCLES: int = 3
 
 ## Body-collision knockback: one player run into the other this fast from
 ## 160 px away, which linear damping brings down to about 430 px/s by the
@@ -383,6 +401,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_damage_kills()
 		"ringout_kills_at_full_health":
 			return await _scenario_ringout_kills_at_full_health()
+		"ringout_then_next_round_survives":
+			return await _scenario_ringout_then_next_round_survives()
 		"heads_do_not_interpenetrate":
 			return await _scenario_heads_do_not_interpenetrate()
 		"clash_higher_drive_force_wins":
@@ -1206,6 +1226,74 @@ func _scenario_ringout_kills_at_full_health() -> Array[String]:
 			failures.append("a ring-out at full health left %.1f damage behind" % player.damage)
 		if player.alive:
 			failures.append("eliminated but still marked alive")
+
+	await _teardown(stage)
+	return failures
+
+## Issue #5: a player eliminated by ring-out is brought into the next round
+## by `start_round()` and stays in it.
+##
+## In live play the respawned player died again the instant the next round
+## began, every round. The cause was the spawn never reaching the physics
+## server: the kill zone froze the body with its node transform freshly
+## written by the physics sync, and assigning `global_position` over that
+## does not queue the transform notification that pushes a body's position
+## to the server. Unfrozen, the body was simulated where it died, dragged
+## back there on the next sync, and eliminated again by the kill zone.
+##
+## That makes the watch below sensitive to reading the player's position:
+## reading it between the ring-out and `start_round()` refreshes the node's
+## transform and hides the bug, the same way nothing reads it in play. So
+## nothing here touches the player's position until the respawn has been
+## given its ticks.
+##
+## Each cycle also re-proves the ring-out itself -- the previously fixed
+## "falling offscreen doesn't kill" case -- on a player who has already been
+## through a respawn, which is where it has to keep working.
+func _scenario_ringout_then_next_round_survives() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, RINGOUT_START)
+	await physics_frame
+
+	for cycle in NEXT_ROUND_CYCLES:
+		if cycle > 0:
+			# The round loop's own sequence: the survivor leaves the round
+			# it won, and after the pause everyone re-enters through
+			# start_round() -- here, straight into the next ring-out.
+			player.leave_round()
+			await _await_ticks(NEXT_ROUND_PAUSE_TICKS)
+			player.start_round(RINGOUT_START)
+		var fell: bool = false
+		for _i in RINGOUT_TICKS:
+			await physics_frame
+			if player.deaths > cycle:
+				fell = true
+				break
+		if not fell:
+			failures.append("cycle %d: sent off the edge from %s and fell for %d ticks to %s without a ring-out" % [
+				cycle, RINGOUT_START, RINGOUT_TICKS, player.global_position.round()])
+			break
+		if player.deaths != cycle + 1:
+			failures.append("cycle %d: one ring-out counted as %d deaths" % [cycle, player.deaths - cycle])
+
+		await _await_ticks(NEXT_ROUND_PAUSE_TICKS)
+		player.start_round(NEXT_ROUND_SPAWN)
+		var died_on_tick: int = -1
+		for tick in NEXT_ROUND_WATCH_TICKS:
+			await physics_frame
+			if not player.alive or player.deaths != cycle + 1:
+				died_on_tick = tick + 1
+				break
+		if died_on_tick >= 0:
+			failures.append("cycle %d: eliminated again %d tick(s) into the next round, at %s (spawned at %s)" % [
+				cycle, died_on_tick, player.global_position.round(), NEXT_ROUND_SPAWN])
+			break
+		var drift: float = player.global_position.distance_to(NEXT_ROUND_SPAWN)
+		if drift > NEXT_ROUND_DRIFT:
+			failures.append("cycle %d: brought back at %s but %d ticks later was at %s" % [
+				cycle, NEXT_ROUND_SPAWN, NEXT_ROUND_WATCH_TICKS, player.global_position.round()])
+			break
 
 	await _teardown(stage)
 	return failures
