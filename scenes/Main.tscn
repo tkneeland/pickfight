@@ -15,7 +15,8 @@ current = true
 ; identity_color is paired with SLOT_COLORS in controller/index.html: slot 0
 ; must match Player1 (blue) and slot 1 must match Player2 (orange). The phone
 ; tints its "P1"/"P2" badge from that list, which is how a player finds the
-; outline and weapon that are theirs on the shared screen (ADR-0005) -- the
+; outline, weapon and scoreboard icon that are theirs on the shared screen
+; (ADR-0005) -- the
 ; body fill itself is no longer identity, since it reddens with damage -- so
 ; the two lists have to stay in sync.
 ; start_in_round = false: these two are owned by RoundManager now, which
@@ -57,14 +58,42 @@ horizontal_alignment = 1
 vertical_alignment = 1
 text = "Waiting for players..."
 
-[node name="RoundEndLabel" type="Label" parent="UI"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_font_sizes/font_size = 32
-horizontal_alignment = 1
-vertical_alignment = 1
+; Round-end scoreboard: one entry per player slot (Slot0 = Player1, Slot1 =
+; Player2, matching player_paths order below), each an icon tinted with that
+; slot's Player.identity_color next to its score number. Large and centred
+; so the result reads from across the room on the shared screen.
+[node name="Scoreboard" type="HBoxContainer" parent="UI"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 64
+alignment = 1
 visible = false
-text = ""
+
+[node name="Slot0" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot0"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot0"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
+[node name="Slot1" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot1"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot1"]
+theme_override_font_sizes/font_size = 48
+text = "0"
 
 [node name="JoinQrCode" type="TextureRect" parent="UI"]
 anchor_left = 1.0
@@ -91,4 +120,4 @@ spawn_points = [Vector2(-100, 0), Vector2(100, 0)]
 controller_server_path = NodePath("../ControllerServer")
 score_label_path = NodePath("../UI/ScoreLabel")
 waiting_label_path = NodePath("../UI/WaitingLabel")
-round_end_label_path = NodePath("../UI/RoundEndLabel")
+scoreboard_path = NodePath("../UI/Scoreboard")

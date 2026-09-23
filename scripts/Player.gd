@@ -401,6 +401,14 @@ func start_round(spawn_pos: Vector2) -> void:
 	collision_layer = LAYER_WORLD
 	collision_mask = LAYER_WORLD
 	global_position = spawn_pos
+	# Hand the spawn to the physics server directly; the assignment above
+	# cannot be trusted to. A body's node transform reaches the server through
+	# a queued transform notification, and assigning over a transform the
+	# physics sync last wrote (which marks it stale without notifying) skips
+	# queuing one. That is exactly the state a ring-out leaves the body in, so
+	# without this the unfrozen body was simulated where it died -- inside the
+	# kill zone -- and eliminated again two ticks into every round (issue #5).
+	PhysicsServer2D.body_set_state(get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, global_transform)
 	linear_velocity = Vector2.ZERO
 	_build_rig.call_deferred()
 

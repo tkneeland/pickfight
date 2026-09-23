@@ -24,8 +24,10 @@ extends Node
 ## Shown for round_end_pause_sec once a round resolves. Without this, the
 ## winner is put through leave_round() the same tick the loser is put through
 ## eliminate() -- both go inert via the same _go_inert(), so every player
-## vanishes at once and the shared screen shows nothing happened.
-@export var round_end_label_path: NodePath
+## vanishes at once and the shared screen shows nothing happened. Holds one
+## icon+score entry per player slot (see scenes/Main.tscn), refreshed from
+## each Player's identity_color and this node's own _scores.
+@export var scoreboard_path: NodePath
 ## A round will not start with fewer roster entries than this -- one player
 ## cannot be "eliminated down to one survivor".
 @export var min_players_to_start: int = 2
@@ -41,7 +43,7 @@ var _players: Array = []
 var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
 var _waiting_label: Label
-var _round_end_label: Label
+var _scoreboard: Control
 
 func _ready() -> void:
 	for path in player_paths:
@@ -49,9 +51,9 @@ func _ready() -> void:
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
-	_round_end_label = get_node_or_null(round_end_label_path) as Label
-	if _round_end_label != null:
-		_round_end_label.visible = false
+	_scoreboard = get_node_or_null(scoreboard_path) as Control
+	if _scoreboard != null:
+		_scoreboard.visible = false
 	_update_score_label()
 	_set_waiting_text(0)
 
@@ -76,12 +78,16 @@ func _try_start_round() -> void:
 		return
 	var roster: Array[int] = _controller_server.claimed_slots()
 	if roster.size() < min_players_to_start:
+		# Drop the last round's scoreboard too, so it can't sit over the
+		# centred waiting text when a player left during the round.
+		if _scoreboard != null:
+			_scoreboard.visible = false
 		_set_waiting_text(roster.size())
 		return
 	if _waiting_label != null:
 		_waiting_label.visible = false
-	if _round_end_label != null:
-		_round_end_label.visible = false
+	if _scoreboard != null:
+		_scoreboard.visible = false
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
@@ -113,17 +119,30 @@ func _check_round_end() -> void:
 		_scores[winner_slot] += 1
 		_players[winner_slot].leave_round()
 		_update_score_label()
-		_set_round_end_text("P%d wins the round!" % (winner_slot + 1))
-	else:
-		_set_round_end_text("No survivors -- round over!")
+	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
 
-func _set_round_end_text(text: String) -> void:
-	if _round_end_label == null:
+## Refreshes and reveals the round-end scoreboard: one icon+score entry per
+## player slot, read from that slot's Scoreboard/SlotN child (Icon then
+## Score, per scenes/Main.tscn) and this node's own _players/_scores.
+func _show_scoreboard() -> void:
+	if _scoreboard == null:
 		return
-	_round_end_label.visible = true
-	_round_end_label.text = text
+	for slot in _players.size():
+		if slot >= _scoreboard.get_child_count():
+			continue
+		var entry: Node = _scoreboard.get_child(slot)
+		if entry.get_child_count() < 2:
+			continue
+		var icon: ColorRect = entry.get_child(0) as ColorRect
+		var score_label: Label = entry.get_child(1) as Label
+		var player: Variant = _players[slot]
+		if icon != null and player != null:
+			icon.color = player.identity_outline_color()
+		if score_label != null:
+			score_label.text = str(_scores[slot]) if slot < _scores.size() else "0"
+	_scoreboard.visible = true
 
 func _update_score_label() -> void:
 	var label: Label = get_node_or_null(score_label_path) as Label
