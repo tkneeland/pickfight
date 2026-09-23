@@ -18,6 +18,9 @@ config/features=PackedStringArray("4.6", "GL Compatibility")
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+window/size/mode=2
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
 
 [rendering]
 
