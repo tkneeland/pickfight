@@ -78,6 +78,10 @@ func _try_start_round() -> void:
 		return
 	var roster: Array[int] = _controller_server.claimed_slots()
 	if roster.size() < min_players_to_start:
+		# Drop the last round's scoreboard too, so it can't sit over the
+		# centred waiting text when a player left during the round.
+		if _scoreboard != null:
+			_scoreboard.visible = false
 		_set_waiting_text(roster.size())
 		return
 	if _waiting_label != null:
@@ -135,7 +139,7 @@ func _show_scoreboard() -> void:
 		var score_label: Label = entry.get_child(1) as Label
 		var player: Variant = _players[slot]
 		if icon != null and player != null:
-			icon.color = player.identity_color
+			icon.color = player.identity_outline_color()
 		if score_label != null:
 			score_label.text = str(_scores[slot]) if slot < _scores.size() else "0"
 	_scoreboard.visible = true
