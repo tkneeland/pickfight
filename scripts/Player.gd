@@ -47,6 +47,10 @@ extends RigidBody2D
 ## is silent. A preload is resolved from the path and needs no cache.
 const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
 const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+## The weapon a player holds unless it won the previous round (ADR-0005): the
+## one and only place the pickaxe's path is named. `start_round()` resets to
+## this whenever `keeps_weapon` is false; `_ready()` falls back to it too.
+const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 
 enum DebugSource { NONE, MOUSE, KEYBOARD }
 
@@ -225,7 +229,7 @@ func _ready() -> void:
 		collision_layer = 0
 		collision_mask = 0
 	_update_damage_visual()
-	set_weapon_stats(weapon_stats if weapon_stats != null else WeaponStatsType.new())
+	set_weapon_stats(weapon_stats if weapon_stats != null else DEFAULT_WEAPON_STATS)
 
 ## The rig lives beside the player rather than under it, so it is not freed
 ## with the player the way a child would be. Left alone it outlives its owner
@@ -292,13 +296,20 @@ func unbind_controller() -> void:
 func weapon_head_position() -> Vector2:
 	return _head.global_position if _head != null else global_position
 
-## Swap the weapon. Rebuilds the rig from the new stats, so reach, weight,
-## responsiveness, force ceiling and head shape all change together.
-func set_weapon_stats(stats: WeaponStatsType) -> void:
+## The non-deferred half of a weapon swap: just the bookkeeping, no rig
+## rebuild. Split out so `start_round()` can reset `weapon_stats` and still
+## only rebuild the rig once (in its own trailing deferred call), rather than
+## once here and once more there.
+func _assign_weapon_stats(stats: WeaponStatsType) -> void:
 	weapon_stats = stats
 	_stats = stats
 	weapon_min_length = stats.min_reach
 	weapon_length = clampf(weapon_length, stats.min_reach, stats.max_reach)
+
+## Swap the weapon. Rebuilds the rig from the new stats, so reach, weight,
+## responsiveness, force ceiling and head shape all change together.
+func set_weapon_stats(stats: WeaponStatsType) -> void:
+	_assign_weapon_stats(stats)
 	# Deferred because a player is usually given its weapon while its own
 	# parent is still adding it to the tree, and the rig has to be added to
 	# that same parent: the weapon's bodies cannot live under the player's,
@@ -388,14 +399,16 @@ func _go_inert() -> void:
 	collision_mask = 0
 
 ## Bring this player into a fresh round at `spawn_pos`: alive, full health,
-## visible, collidable, and with the weapon rig it entered the round holding
-## (ADR-0005's carry-over is automatic here, since nothing resets
-## `weapon_stats`). Used both for a player who survived the last round and
-## for one whose roster entry is only now being spawned in for the first
-## time.
-func start_round(spawn_pos: Vector2) -> void:
+## visible, collidable, and holding either the weapon it enters with
+## (`keeps_weapon = true`, per ADR-0005 the previous round's winner only) or
+## the default pickaxe (`keeps_weapon = false`, everyone else -- including a
+## no-survivors round, and a roster entry only now being spawned in for the
+## first time).
+func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	alive = true
 	damage = 0.0
+	if not keeps_weapon:
+		_assign_weapon_stats(DEFAULT_WEAPON_STATS)
 	freeze = false
 	visible = true
 	collision_layer = LAYER_WORLD

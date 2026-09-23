@@ -62,6 +62,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_spawns_are_safe",
 	"waiting_expires_disconnected_claims",
 	"abandoned_round_ends_without_winner",
+	"round_winner_keeps_weapon",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -429,6 +430,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_waiting_expires_disconnected_claims()
 		"abandoned_round_ends_without_winner":
 			return await _scenario_abandoned_round_ends_without_winner()
+		"round_winner_keeps_weapon":
+			return await _scenario_round_winner_keeps_weapon()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2359,4 +2362,166 @@ func _scenario_abandoned_round_ends_without_winner() -> Array[String]:
 		failures.append("abandoned round ended but its claims were still held: %s" % [roster.slots])
 
 	await _teardown(loop["stage"])
+	return failures
+## --- Round winner keeps their weapon (issue #6) -----------------------------
+
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md): the
+## global class cache lives in the gitignored `.godot/` and only an editor
+## run builds it, so a fresh clone would fail to resolve the name.
+const RoundManagerScript := preload("res://scripts/RoundManager.gd")
+const StubRosterScript := preload("res://tools/stub_roster.gd")
+
+## Clear air above the arena, well apart, so a full-reach weapon never
+## touches terrain or the other player while this scenario runs.
+const ROUND_WINNER_SPAWN_A: Vector2 = Vector2(-100.0, -600.0)
+const ROUND_WINNER_SPAWN_B: Vector2 = Vector2(100.0, -600.0)
+## `round_end_pause_sec` is 0 for this scenario, so a round transition is a
+## couple of `_process` ticks away rather than a real-time pause; bounded so
+## a broken loop fails the scenario instead of hanging it.
+const ROUND_TRANSITION_TICKS: int = 20
+## Ticks given for RoundManager's ROUND_END -> WAITING transition to run
+## after the stub roster is edited to simulate a claim dropping, before
+## asserting the round is stuck waiting on it.
+const CLAIM_DROP_SETTLE_TICKS: int = 5
+
+## D1-D3 (issue #6): at round start, the previous round's winner keeps
+## whatever `weapon_stats` it held; every other rostered player (and, in a
+## no-survivors round, everyone) resets to the default (the pickaxe). A
+## winner claim that later expires does not pass the weapon to whoever
+## claims the freed slot (D3). Drives the real `RoundManager` and
+## `Player.tscn` end to end; only `ControllerServer`'s roster seam is
+## stubbed (`tools/stub_roster.gd`), since the real one opens LAN sockets
+## and this runner is headless.
+func _scenario_round_winner_keeps_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	# Since #8 a round's spawn points come from the active stage, not from an
+	# export on RoundManager, so this scenario hands it a one-stage rotation
+	# holding the two clear-air spawns it needs rather than setting them
+	# directly. Named explicitly, since the NodePaths below are literal.
+	var container := Node2D.new()
+	container.name = "RoundWinnerContainer"
+	stage.add_child(container)
+
+	var p1: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_A)
+	p1.name = "RoundWinnerP1"
+	var p2: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_B)
+	p2.name = "RoundWinnerP2"
+
+	var roster := StubRosterScript.new()
+	roster.name = "RoundWinnerRoster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "RoundWinnerRoundManager"
+	round_manager.player_paths = [NodePath("../RoundWinnerP1"), NodePath("../RoundWinnerP2")]
+	round_manager.stage_scenes = [
+		_make_stub_stage("RoundWinnerStage", [ROUND_WINNER_SPAWN_A, ROUND_WINNER_SPAWN_B])]
+	round_manager.arena_container_path = NodePath("../RoundWinnerContainer")
+	round_manager.controller_server_path = NodePath("../RoundWinnerRoster")
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.min_players_to_start = 2
+	stage.add_child(round_manager)
+
+	# Round 1 starts on its own -- both slots are already claimed. Only once
+	# it is running do we hand out the test weapons: doing it earlier would
+	# be undone by round 1's own reset.
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+
+	var stub_p1 := WeaponStatsType.new()
+	stub_p1.min_reach = STUB_MIN_REACH
+	stub_p1.max_reach = STUB_MAX_REACH
+	p1.set_weapon_stats(stub_p1)
+
+	var stub_p2 := WeaponStatsType.new()
+	stub_p2.min_reach = STUB_MIN_REACH
+	stub_p2.max_reach = STUB_MAX_REACH
+	p2.set_weapon_stats(stub_p2)
+	await _await_ticks(2)
+
+	# --- Phase A: the winner keeps the weapon, the loser resets ------------
+	p2.eliminate()
+	var phase_a_restarted: bool = false
+	for i in ROUND_TRANSITION_TICKS:
+		await physics_frame
+		if p1.alive and p2.alive:
+			phase_a_restarted = true
+			break
+	if not phase_a_restarted:
+		failures.append("phase A: round did not restart after p2 was eliminated")
+		await _teardown(stage)
+		return failures
+
+	p1.set_input_vector(Vector2.RIGHT)
+	p2.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+
+	if p1.weapon_stats != stub_p1:
+		failures.append("phase A: winner p1 did not keep its weapon_stats instance")
+	if p2.weapon_stats == null or p2.weapon_stats.resource_path != "res://resources/pickaxe.tres":
+		failures.append("phase A: loser p2 did not reset to the pickaxe")
+	var p1_reach: float = _reach_of(p1)
+	if absf(p1_reach - STUB_MAX_REACH) > REACH_TOLERANCE:
+		failures.append("phase A: winner p1 reached %.1f px at full drag, expected the stub's %.1f px" % [
+			p1_reach, STUB_MAX_REACH])
+	var p2_reach: float = _reach_of(p2)
+	if absf(p2_reach - MAX_REACH) > REACH_TOLERANCE:
+		failures.append("phase A: loser p2 reached %.1f px at full drag, expected the pickaxe's %.1f px" % [
+			p2_reach, MAX_REACH])
+
+	# --- Phase B: no survivors, so everyone resets --------------------------
+	p1.eliminate()
+	p2.eliminate()
+	var phase_b_restarted: bool = false
+	for i in ROUND_TRANSITION_TICKS:
+		await physics_frame
+		if p1.alive and p2.alive:
+			phase_b_restarted = true
+			break
+	if not phase_b_restarted:
+		failures.append("phase B: round did not restart after a no-survivors round")
+		await _teardown(stage)
+		return failures
+
+	if p1.weapon_stats == null or p1.weapon_stats.resource_path != "res://resources/pickaxe.tres":
+		failures.append("phase B: p1 did not reset to the pickaxe after a no-survivors round")
+	if p2.weapon_stats == null or p2.weapon_stats.resource_path != "res://resources/pickaxe.tres":
+		failures.append("phase B: p2 did not reset to the pickaxe after a no-survivors round")
+
+	# --- Phase C: an expired winner claim does not pass the weapon on (D3) -
+	var stub_p1c := WeaponStatsType.new()
+	stub_p1c.min_reach = STUB_MIN_REACH
+	stub_p1c.max_reach = STUB_MAX_REACH
+	p1.set_weapon_stats(stub_p1c)
+	await _await_ticks(2)
+
+	p2.eliminate()
+	# Simulate the claim dropping before the (zero-length) pause expires: the
+	# freed slot 0 can no longer be found in claimed_slots() by the time
+	# RoundManager reaches the ROUND_END -> WAITING transition.
+	roster.slots = [1]
+	await _await_ticks(CLAIM_DROP_SETTLE_TICKS)
+
+	if p1.alive:
+		failures.append("phase C: round restarted with only one claimed slot, expected it to wait")
+
+	# A newcomer claims the freed slot 0.
+	roster.slots = [0, 1]
+	var phase_c_restarted: bool = false
+	for i in ROUND_TRANSITION_TICKS:
+		await physics_frame
+		if p1.alive and p2.alive:
+			phase_c_restarted = true
+			break
+	if not phase_c_restarted:
+		failures.append("phase C: round did not restart once slot 0 was reclaimed")
+		await _teardown(stage)
+		return failures
+
+	if p1.weapon_stats == null or p1.weapon_stats.resource_path != "res://resources/pickaxe.tres":
+		failures.append("phase C: the expired winner's claim passed the weapon on to the newcomer in its slot")
+
+	await _teardown(stage)
 	return failures

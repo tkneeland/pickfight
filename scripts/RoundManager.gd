@@ -63,6 +63,13 @@ var _stage_spawn_points: Array[Vector2] = []
 ## When the current round was first seen with no connected controller among
 ## its surviving players, or -1 while at least one is connected.
 var _abandoned_since_msec: int = -1
+## The previous round's winner slot, or -1 (no winner: a no-survivors round,
+## or no round has ended yet). Consumed by the next `_try_start_round()` --
+## which clears it back to -1, since it applies to one round only -- and
+## dropped early if that slot's claim expires first (issue #6, D3): a claim
+## only ever lapses at the round boundary (ADR-0007), and a newcomer who
+## later takes the freed slot must not inherit the old winner's weapon.
+var _last_winner_slot: int = -1
 
 func _ready() -> void:
 	for path in player_paths:
@@ -84,6 +91,14 @@ func _process(_delta: float) -> void:
 			_check_round_end()
 		State.ROUND_END:
 			if Time.get_ticks_msec() >= _pause_until_msec:
+				# Expire first, then test: a winner whose claim lapsed must not
+				# pass its weapon to whoever claims the freed slot (issue #6 D3).
+				# `_try_start_round()` expires again on the way in; it is idempotent,
+				# and the check below is only meaningful once expiry has run.
+				if _controller_server != null:
+					_controller_server.expire_disconnected_claims()
+					if _last_winner_slot != -1 and not _controller_server.claimed_slots().has(_last_winner_slot):
+						_last_winner_slot = -1
 				_state = State.WAITING
 				_try_start_round()
 
@@ -121,8 +136,10 @@ func _try_start_round() -> void:
 			spawn = _stage_spawn_points[slot]
 		else:
 			push_warning("RoundManager: stage has %d spawn point(s), none for slot %d; spawning at the origin" % [_stage_spawn_points.size(), slot])
-		_players[slot].start_round(spawn)
+		_players[slot].start_round(spawn, slot == _last_winner_slot)
 	_abandoned_since_msec = -1
+	# One round only: consumed here whether or not the winner is still rostered.
+	_last_winner_slot = -1
 	_state = State.ROUND_ACTIVE
 
 ## Rotates to the next stage (ADR-0008): frees the outgoing instance, wraps
@@ -174,6 +191,9 @@ func _check_round_end() -> void:
 		_scores[winner_slot] += 1
 		_players[winner_slot].leave_round()
 		_update_score_label()
+		_last_winner_slot = winner_slot
+	else:
+		_last_winner_slot = -1
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
