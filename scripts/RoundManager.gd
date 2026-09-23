@@ -17,6 +17,10 @@ extends Node
 @export var spawn_points: Array[Vector2] = []
 @export var controller_server_path: NodePath
 @export var score_label_path: NodePath
+## Shown while waiting on roster size, since a WAITING round leaves every
+## Player invisible (Player._ready()) -- without this the shared screen looks
+## broken (blank arena, no players) instead of "needs one more phone".
+@export var waiting_label_path: NodePath
 ## A round will not start with fewer roster entries than this -- one player
 ## cannot be "eliminated down to one survivor".
 @export var min_players_to_start: int = 2
@@ -31,13 +35,16 @@ var _pause_until_msec: int = 0
 var _players: Array = []
 var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
+var _waiting_label: Label
 
 func _ready() -> void:
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
+	_waiting_label = get_node_or_null(waiting_label_path) as Label
 	_update_score_label()
+	_set_waiting_text(0)
 
 func _process(_delta: float) -> void:
 	match _state:
@@ -60,13 +67,22 @@ func _try_start_round() -> void:
 		return
 	var roster: Array[int] = _controller_server.claimed_slots()
 	if roster.size() < min_players_to_start:
+		_set_waiting_text(roster.size())
 		return
+	if _waiting_label != null:
+		_waiting_label.visible = false
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
 		var spawn: Vector2 = spawn_points[slot] if slot < spawn_points.size() else Vector2.ZERO
 		_players[slot].start_round(spawn)
 	_state = State.ROUND_ACTIVE
+
+func _set_waiting_text(connected: int) -> void:
+	if _waiting_label == null:
+		return
+	_waiting_label.visible = true
+	_waiting_label.text = "Waiting for players: %d / %d connected" % [connected, min_players_to_start]
 
 ## A round ends the instant one or zero players are still standing --
 ## whichever came from a ring-out or the last hit that crossed DEATH_DAMAGE.

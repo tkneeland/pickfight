@@ -49,6 +49,14 @@ offset_right = 620.0
 offset_bottom = 110.0
 text = "P1: 0  P2: 0"
 
+[node name="WaitingLabel" type="Label" parent="UI"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_font_sizes/font_size = 32
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "Waiting for players..."
+
 [node name="JoinQrCode" type="TextureRect" parent="UI"]
 anchor_left = 1.0
 anchor_right = 1.0
@@ -73,3 +81,4 @@ player_paths = [NodePath("../Player1"), NodePath("../Player2")]
 spawn_points = [Vector2(-100, 0), Vector2(100, 0)]
 controller_server_path = NodePath("../ControllerServer")
 score_label_path = NodePath("../UI/ScoreLabel")
+waiting_label_path = NodePath("../UI/WaitingLabel")
