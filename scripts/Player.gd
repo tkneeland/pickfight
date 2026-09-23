@@ -125,6 +125,12 @@ const HAFT_COLOR: Color = Color(0.42, 0.3, 0.2, 1.0)
 @export var reach_speed: float = 220.0
 @export var knockback_threshold: float = 300.0
 @export var knockback_scale: float = 0.5
+## Impulse scales with closing speed with no natural ceiling; a hard fall or a
+## full-power swing can produce a relative velocity far past anything the
+## knockback feel was tuned around, launching the other player at an
+## explosive, uncontrollable speed. Clamped here so the shove stays punchy
+## without ever becoming a teleport.
+@export var max_knockback_speed: float = 1600.0
 @export var debug_source: DebugSource = DebugSource.NONE
 @export var mouse_drag_radius: float = 140.0
 ## Whether this player starts active on its own, the way every scenario in
@@ -800,7 +806,8 @@ func _on_body_entered(body: Node) -> void:
 	var rel_vel: Vector2 = linear_velocity - body.linear_velocity
 	if rel_vel.length() > knockback_threshold:
 		var dir: Vector2 = (body.global_position - global_position).normalized()
-		body.apply_central_impulse(dir * rel_vel.length() * knockback_scale)
+		var speed: float = minf(rel_vel.length(), max_knockback_speed)
+		body.apply_central_impulse(dir * speed * knockback_scale)
 
 ## A strike the head's own sweep caught, which is where every hard one shows
 ## up.

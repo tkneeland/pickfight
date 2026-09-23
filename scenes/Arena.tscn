@@ -9,7 +9,7 @@ size = Vector2(1200, 40)
 size = Vector2(240, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(1400, 40)
+size = Vector2(8000, 40)
 
 [node name="Arena" type="Node2D"]
 

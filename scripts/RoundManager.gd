@@ -21,6 +21,11 @@ extends Node
 ## Player invisible (Player._ready()) -- without this the shared screen looks
 ## broken (blank arena, no players) instead of "needs one more phone".
 @export var waiting_label_path: NodePath
+## Shown for round_end_pause_sec once a round resolves. Without this, the
+## winner is put through leave_round() the same tick the loser is put through
+## eliminate() -- both go inert via the same _go_inert(), so every player
+## vanishes at once and the shared screen shows nothing happened.
+@export var round_end_label_path: NodePath
 ## A round will not start with fewer roster entries than this -- one player
 ## cannot be "eliminated down to one survivor".
 @export var min_players_to_start: int = 2
@@ -36,6 +41,7 @@ var _players: Array = []
 var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
 var _waiting_label: Label
+var _round_end_label: Label
 
 func _ready() -> void:
 	for path in player_paths:
@@ -43,6 +49,9 @@ func _ready() -> void:
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
+	_round_end_label = get_node_or_null(round_end_label_path) as Label
+	if _round_end_label != null:
+		_round_end_label.visible = false
 	_update_score_label()
 	_set_waiting_text(0)
 
@@ -71,6 +80,8 @@ func _try_start_round() -> void:
 		return
 	if _waiting_label != null:
 		_waiting_label.visible = false
+	if _round_end_label != null:
+		_round_end_label.visible = false
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
@@ -102,8 +113,17 @@ func _check_round_end() -> void:
 		_scores[winner_slot] += 1
 		_players[winner_slot].leave_round()
 		_update_score_label()
+		_set_round_end_text("P%d wins the round!" % (winner_slot + 1))
+	else:
+		_set_round_end_text("No survivors -- round over!")
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
+
+func _set_round_end_text(text: String) -> void:
+	if _round_end_label == null:
+		return
+	_round_end_label.visible = true
+	_round_end_label.text = text
 
 func _update_score_label() -> void:
 	var label: Label = get_node_or_null(score_label_path) as Label
