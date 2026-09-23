@@ -14,6 +14,11 @@ config/name="Pickfight"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

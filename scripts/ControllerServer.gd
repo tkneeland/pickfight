@@ -49,6 +49,7 @@ const STEADY_LOG_FRAMES: int = 30
 @export var ws_port: int = 8081
 @export var player_paths: Array[NodePath] = []
 @export var join_label_path: NodePath
+@export var qr_texture_path: NodePath
 ## No well-formed packet for this long and the bound controller is considered
 ## gone. Sized above a few dropped frames but well below "a player noticed".
 @export var controller_timeout_sec: float = 2.0
@@ -144,6 +145,16 @@ func _ready() -> void:
 	if label != null:
 		label.text = "Join on your phone:\n" + ("\n".join(urls) if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
 
+	var qr_rect: TextureRect = get_node_or_null(qr_texture_path) as TextureRect
+	if qr_rect != null:
+		if urls.is_empty():
+			qr_rect.visible = false
+		else:
+			var qr_texture: ImageTexture = _generate_qr_texture(urls[0])
+			qr_rect.visible = qr_texture != null
+			if qr_texture != null:
+				qr_rect.texture = qr_texture
+
 func _process(_delta: float) -> void:
 	_process_http()
 	_process_websocket()
@@ -185,6 +196,25 @@ func _join_urls() -> PackedStringArray:
 			continue # loopback
 		urls.append("http://%s:%d/" % [addr, http_port])
 	return urls
+
+## Shells out to `qrencode` rather than generating QR modules in GDScript:
+## the ISO 18004 module-placement/masking rules are easy to get subtly wrong
+## in a way that still looks like a QR code but does not scan, and this
+## engine's install has no QR library. `null` on any failure (tool missing,
+## nonzero exit, unreadable output) -- the join label's text URL already
+## covers that case, so a phone can still join by typing it.
+func _generate_qr_texture(text: String) -> ImageTexture:
+	var out_path: String = OS.get_user_data_dir() + "/join_qr.png"
+	var output: Array = []
+	var exit_code: int = OS.execute("qrencode", ["-o", out_path, "-s", "8", "-m", "2", text], output, true)
+	if exit_code != 0:
+		push_warning("ControllerServer: qrencode unavailable or failed (exit %d) -- install with `brew install qrencode` to show a join QR code" % exit_code)
+		return null
+	var image: Image = Image.new()
+	if image.load(out_path) != OK:
+		push_warning("ControllerServer: failed to load generated QR image at %s" % out_path)
+		return null
+	return ImageTexture.create_from_image(image)
 
 func _process_http() -> void:
 	var now: int = Time.get_ticks_msec()

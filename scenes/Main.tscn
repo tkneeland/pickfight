@@ -49,10 +49,23 @@ offset_right = 620.0
 offset_bottom = 110.0
 text = "P1: 0  P2: 0"
 
+[node name="JoinQrCode" type="TextureRect" parent="UI"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -196.0
+offset_top = 8.0
+offset_right = -12.0
+offset_bottom = 192.0
+texture_filter = 1
+expand_mode = 1
+stretch_mode = 5
+visible = false
+
 [node name="ControllerServer" type="Node" parent="."]
 script = ExtResource("3")
 player_paths = [NodePath("../Player1"), NodePath("../Player2")]
 join_label_path = NodePath("../UI/JoinLabel")
+qr_texture_path = NodePath("../UI/JoinQrCode")
 
 [node name="RoundManager" type="Node" parent="."]
 script = ExtResource("4")
