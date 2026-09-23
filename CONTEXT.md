@@ -56,5 +56,6 @@ interesting.
 
 - The weapon roster beyond the pickaxe. The direction is melee variants
   distinguished by weight and responsiveness; the specific roster is open.
-- Stage authoring format, and the roster of stages.
+- The full roster of stages beyond the three that exist (ADR-0008 settled the
+  authoring format: one `.tscn` per stage under `scenes/stages/`).
 - Art direction.

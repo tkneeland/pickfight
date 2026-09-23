@@ -1,8 +1,0 @@
-# Pre-fix run: HEAD 8fedf3c with the body_set_state line removed from Player.start_round()
-Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
-
-FAIL  ringout_then_next_round_survives
-      - cycle 0: eliminated again 2 tick(s) into the next round, at (648.0, 451.0) (spawned at (0.0, 276.0))
----
-0 passed, 1 failed, 1 total
-exit=1

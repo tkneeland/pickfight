@@ -13,8 +13,12 @@ extends Node
 ## `expire_disconnected_claims()` runs.
 
 @export var player_paths: Array[NodePath] = []
-## Spawn position for each slot, in `player_paths` order.
-@export var spawn_points: Array[Vector2] = []
+## Stages to rotate through, in order (ADR-0008). Swapped once per round, in
+## `_swap_stage()`. Spawn points come from the active stage's
+## `get_spawn_points()`, not from an export here.
+@export var stage_scenes: Array[PackedScene] = []
+## Node the active stage instance is added to and removed from.
+@export var arena_container_path: NodePath
 @export var controller_server_path: NodePath
 @export var score_label_path: NodePath
 ## Shown while waiting on roster size, since a WAITING round leaves every
@@ -44,6 +48,11 @@ var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
 var _waiting_label: Label
 var _scoreboard: Control
+## Stage rotation state (ADR-0008). `_stage_index` starts at -1 so the first
+## `_swap_stage()` call lands on index 0 rather than 1.
+var _stage_index: int = -1
+var _current_stage: Node2D
+var _stage_spawn_points: Array[Vector2] = []
 
 func _ready() -> void:
 	for path in player_paths:
@@ -88,12 +97,30 @@ func _try_start_round() -> void:
 		_waiting_label.visible = false
 	if _scoreboard != null:
 		_scoreboard.visible = false
+	_swap_stage()
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
-		var spawn: Vector2 = spawn_points[slot] if slot < spawn_points.size() else Vector2.ZERO
+		var spawn: Vector2 = _stage_spawn_points[slot] if slot < _stage_spawn_points.size() else Vector2.ZERO
 		_players[slot].start_round(spawn)
 	_state = State.ROUND_ACTIVE
+
+## Rotates to the next stage (ADR-0008): frees the outgoing instance, wraps
+## `_stage_index` through `stage_scenes`, and caches the new stage's spawn
+## points so `_try_start_round()`'s loop above can read them per slot. A no-op
+## with an empty `stage_scenes`, leaving `_stage_spawn_points` as it was.
+func _swap_stage() -> void:
+	if stage_scenes.is_empty():
+		return
+	var container: Node = get_node_or_null(arena_container_path)
+	if container == null:
+		return
+	if _current_stage != null:
+		_current_stage.queue_free()
+	_stage_index = (_stage_index + 1) % stage_scenes.size()
+	_current_stage = stage_scenes[_stage_index].instantiate()
+	container.add_child(_current_stage)
+	_stage_spawn_points = _current_stage.get_spawn_points()
 
 func _set_waiting_text(connected: int) -> void:
 	if _waiting_label == null:
