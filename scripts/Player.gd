@@ -48,7 +48,8 @@ extends RigidBody2D
 const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
 const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
 ## The weapon a player holds unless it won the previous round (ADR-0005): the
-## one and only place the pickaxe's path is named. `start_round()` resets to
+## one place game code names the pickaxe's path (the scenario runner spells it
+## out independently, on purpose, to check against). `start_round()` resets to
 ## this whenever `keeps_weapon` is false; `_ready()` falls back to it too.
 const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 
