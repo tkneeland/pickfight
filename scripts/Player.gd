@@ -189,12 +189,11 @@ var _head_visual_is_fallback: bool = false
 ## in `_ready()` and never touched again -- see `_build_identity_outline`.
 var _identity_outline: Line2D
 
-@onready var weapon_line: Line2D = $Weapon
+@onready var weapon_line: Line2D = $Haft
 @onready var body_visual: Polygon2D = $Body
 
 func _ready() -> void:
 	linear_damp = 1.5
-	angular_damp = 3.0
 	contact_monitor = true
 	max_contacts_reported = 8
 	collision_layer = LAYER_WORLD
@@ -293,7 +292,6 @@ func teleport_to(pos: Vector2) -> void:
 	var offset: Vector2 = pos - global_position
 	global_position = pos
 	linear_velocity = Vector2.ZERO
-	angular_velocity = 0.0
 	for body: RigidBody2D in [_haft, _head]:
 		if body == null:
 			continue
