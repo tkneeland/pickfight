@@ -8,6 +8,12 @@ Issues live as GitHub Issues in `tkneeland/pickfight`. See `docs/agents/issue-tr
 
 Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
+### Collaboration
+
+Two devs work in parallel, each with their own agent. Before claiming an issue,
+starting work, or editing a file another open issue lists under **Touches**,
+read and follow `docs/agents/collaboration.md`.
+
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
