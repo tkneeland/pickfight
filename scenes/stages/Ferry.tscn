@@ -1,0 +1,79 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_pad"]
+size = Vector2(300, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Two fixed pads separated by open water, with a single moving platform
+; ferrying between them -- the only crossing in the stage (issue #19: the
+; Ferry stage). It is a waiting game: whoever is on the dock when the barge
+; arrives gets to cross, so both players want to be there.
+;
+; The gap is what makes this stage what it is, so the numbers that hold it
+; open have to be stated, not implied. PadLeft's right edge sits at x=-300
+; and PadRight's left edge sits at x=300: 600 px of open water between them.
+; The longest reach in the weapon roster is the staff's max_reach = 200
+; (resources/staff.tres), measured from the player's own centre, so a
+; player standing at a pad's very edge and fully extending that weapon
+; reaches out to only 200 px past the edge -- 400 px short of the far pad.
+; 600 px is a 3x margin over that 200 px reach, not a near thing, and there
+; is nothing solid out over the water to plant a swing on in the first
+; place unless the barge happens to be under it.
+;
+; The barge (MovingPlatform, issue #18) is 160 px wide, authored at
+; x=-220 and travelling 440 px right to x=220, both at the pads' shared
+; y=380. At the near end its left edge (-220-80=-300) sits exactly on
+; PadLeft's right edge; at the far end its right edge (220+80=300) sits
+; exactly on PadRight's left edge. Flush both ways, so docking is a step,
+; not a jump, at either end. 4 s a leg (110 px/s) is slow enough that
+; reaching the dock before it arrives is a real wait rather than a
+; formality, and fast enough that a round is not spent mostly standing
+; still.
+
+[node name="Ferry" type="Node2D"]
+script = ExtResource("1")
+
+[node name="PadLeft" type="StaticBody2D" parent="."]
+position = Vector2(-450, 380)
+
+[node name="PadLeftShape" type="CollisionShape2D" parent="PadLeft"]
+shape = SubResource("RectangleShape2D_pad")
+
+[node name="PadLeftVisual" type="Polygon2D" parent="PadLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
+
+[node name="PadRight" type="StaticBody2D" parent="."]
+position = Vector2(450, 380)
+
+[node name="PadRightShape" type="CollisionShape2D" parent="PadRight"]
+shape = SubResource("RectangleShape2D_pad")
+
+[node name="PadRightVisual" type="Polygon2D" parent="PadRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
+
+[node name="Barge" parent="." instance=ExtResource("3")]
+position = Vector2(-220, 380)
+size = Vector2(160, 24)
+travel = Vector2(440, 0)
+one_way_sec = 4.0
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-450, 300)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(450, 300)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 560)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
