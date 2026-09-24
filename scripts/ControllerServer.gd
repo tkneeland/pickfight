@@ -15,7 +15,9 @@ extends Node
 ##
 ## Wire format phone -> host: one binary frame per controller frame, exactly
 ## 8 bytes, `float32 x` then `float32 y`, little-endian, unit-disc normalised.
-## Wire format host -> phone: one text frame `{"slot":<i>}` sent on bind.
+## Wire format host -> phone: one text frame `{"slot":<i>}` sent on bind, and
+## a `{"t":"buzz","kind":<kind>}` text frame per `send_buzz()` (issue #34,
+## ADR-0013).
 ##
 ## Liveness: a phone that screen-locks or leaves Wi-Fi mid-drag stops sending
 ## without ever closing the socket, and the last frame it sent was non-zero.
@@ -39,6 +41,9 @@ const PAGE_PATH: String = "res://controller/index.html"
 const WS_PORT_TOKEN: String = "__WS_PORT__"
 const MAX_HEADER_BYTES: int = 8192
 const PACKET_SIZE: int = 8
+## Every `kind` `send_buzz()` is sent with, strongest first; the controller
+## page has a vibration pattern and a flash for each.
+const BUZZ_KINDS: PackedStringArray = ["win", "eliminated", "struck", "hit"]
 const ANGLE_LOG_EPSILON: float = 0.0005
 const LENGTH_LOG_EPSILON: float = 0.05
 ## Physics frames between "weapon steady" lines. Steadiness has to be provable
@@ -482,6 +487,21 @@ func claimed_slots() -> Array[int]:
 		if _slot_claimed[slot] == 1:
 			result.append(slot)
 	return result
+
+## Buzz the phone bound to `slot` (issue #34, ADR-0013): one
+## `{"t":"buzz","kind":<kind>}` text frame, which the page turns into a
+## vibration and a flash in the slot's colour. `kind` is one of `BUZZ_KINDS`.
+## A no-op when the slot has no connected controller -- a buzz is feedback,
+## not state, so one missed while a phone is away is not replayed.
+func send_buzz(slot: int, kind: String) -> void:
+	if not slot_has_controller(slot):
+		return
+	var peer: WebSocketPeer = _slot_peers[slot]
+	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
+	if _log_input:
+		print("slot %d buzz %s" % [slot, kind])
 
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round

@@ -42,6 +42,7 @@ round is the exception: they keep whatever they were holding.
 | **Rotation** | The run of stages a session cycles through, one per round: a fixed opener (`stage_scenes[0]`), then shuffled bags covering the whole roster with no stage playing twice in a row (ADR-0011). |
 | **Ring-out** | Leaving the stage into its death boundary. Kills whatever damage a player had taken — stage geometry does not care how healthy anyone is. The other route out of a round is accumulated damage. |
 | **Rise** | The stage's death boundary climbing up through it once a round's grace period is over, so a round cannot stall with everyone holding out somewhere safe. Only the floor rises; hazards stay put. Starts afresh with every round. |
+| **Buzz** | A short piece of feedback a player's own phone gives them: a vibration, plus a flash of the phone's screen in their colour (the only kind iOS can give). Sent by the host for four things only, each to the one phone it concerns: a round **win**, being **eliminated**, being **struck** for damage, and landing a **hit** that dealt damage (ADR-0013). |
 
 ## Design intent
 
