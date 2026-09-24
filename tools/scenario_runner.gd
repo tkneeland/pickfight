@@ -71,6 +71,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_zone_kills_at_full_health",
 	"moving_platform_carries_player",
 	"head_plants_moving_platform",
+	"crumbling_ledge_three_phases",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -483,6 +484,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_moving_platform_carries_player()
 		"head_plants_moving_platform":
 			return await _scenario_head_plants_moving_platform()
+		"crumbling_ledge_three_phases":
+			return await _scenario_crumbling_ledge_three_phases()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3418,6 +3421,123 @@ func _scenario_head_plants_moving_platform() -> Array[String]:
 	if risen < MIN_PUSH_RISE:
 		failures.append("pushing against the plant raised the body %.1f px, expected more than %.1f px" % [
 			risen, MIN_PUSH_RISE])
+# --- Crumbling ledge (issue #18) --------------------------------------------
+
+## Preloaded by path, not referenced by `class_name` -- see CLAUDE.md's
+## `class_name` rule.
+const CrumblingLedgeScene: PackedScene = preload("res://scenes/parts/CrumblingLedge.tscn")
+
+## Independent literals matching the resolved defaults (issue #18), not read
+## back off the instantiated ledge: reading them back would make this
+## scenario pass even if the shipped defaults drifted from what the issue
+## asked for.
+const LEDGE_WARN_SEC: float = 0.8
+const LEDGE_AWAY_SEC: float = 3.0
+## Spawn the player already 1 px into the detector band rather than dropped
+## from height: contact then happens on (about) the very first physics tick,
+## so "ticks since spawn" and "ticks since contact" are close enough that the
+## margins below cover the gap, without this scenario having to guess how
+## many ticks a longer fall would take to land and settle.
+const LEDGE_LANDING_OVERLAP: float = 1.0
+## Ticks given to let the small landing overlap above resolve into a settled
+## rest before phase 1 starts watching. Short next to LEDGE_WARN_SEC's tick
+## count so most of the warning delay is still ahead of it.
+const LEDGE_SETTLE_TICKS: int = 10
+## Ticks of slack subtracted from the phase 1 watch window and added after
+## the warning delay before phase 2 checks for a fall, on both sides of the
+## contact-vs-settle tick estimate above.
+const LEDGE_MARGIN_TICKS: int = 6
+## Ticks given, once past the warning delay, for the ledge to actually fall
+## away and gravity to carry the player clearly out of PLANT_CLEARANCE.
+const LEDGE_FALL_CONFIRM_TICKS: int = 16
+
+## US-3/US-4: a crumbling ledge holds a player through its full warning
+## delay, stops holding once it falls away, and holds again once its away
+## delay elapses. All three phases are asserted in one run on purpose --
+## checking only the fall would also pass a ledge that never comes back,
+## which is exactly the mistake this scenario exists to catch.
+##
+## The weapon is aimed straight up throughout and never touches the ledge:
+## this scenario is about the ledge holding a player's own body (the
+## `players`-group contact `CrumblingLedge` detects), not about the plant
+## mechanic `head_plants_terrain` already covers. US-7 (a weapon head
+## interacting with a crumbling ledge the same way it does with static
+## ground) needs no extra code or scenario of its own here -- the ledge's
+## `CollisionShape2D` sits on the same default world layer every terrain
+## `StaticBody2D` in this game already uses, so a head plants on it exactly
+## as it does on Flatlands' ground.
+func _scenario_crumbling_ledge_three_phases() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	var ledge_position: Vector2 = Vector2(0, -300)
+	var ledge_size: Vector2 = Vector2(200, 24)
+	var ledge: StaticBody2D = CrumblingLedgeScene.instantiate() as StaticBody2D
+	ledge.position = ledge_position
+	stage.add_child(ledge)
+
+	var ledge_top: float = ledge_position.y - ledge_size.y / 2.0
+	var spawn_pos: Vector2 = Vector2(ledge_position.x, ledge_top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+	var player: RigidBody2D = _spawn_player(stage, spawn_pos)
+	# Straight up: keeps the weapon head clear of the ledge for the whole
+	# scenario, so only the player's own body is ever in contact with it.
+	player.set_input_vector(Vector2.UP)
+
+	var ticks_per_second: float = float(Engine.physics_ticks_per_second)
+	var warn_ticks: int = int(round(LEDGE_WARN_SEC * ticks_per_second))
+	var away_ticks: int = int(round(LEDGE_AWAY_SEC * ticks_per_second))
+	var hold_check_ticks: int = warn_ticks - LEDGE_SETTLE_TICKS - LEDGE_MARGIN_TICKS
+
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+	var settled_y: float = player.global_position.y
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on the ledge: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if settled_y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+		failures.append("player settled at %.1f, expected resting on the ledge top at %.1f" % [
+			settled_y, ledge_top])
+
+	print("      phase 1: holding through the %.2fs warning delay" % LEDGE_WARN_SEC)
+	for tick in hold_check_ticks:
+		await physics_frame
+		if player.global_position.y > settled_y + PLANT_CLEARANCE:
+			failures.append(
+				"ledge stopped holding %d ticks into its %.2fs warning delay -- gave way too soon" % [
+					LEDGE_SETTLE_TICKS + tick, LEDGE_WARN_SEC])
+			break
+
+	print("      phase 2: falling away once the warning delay is over")
+	var fell: bool = false
+	for _i in LEDGE_FALL_CONFIRM_TICKS:
+		await physics_frame
+		if player.global_position.y > settled_y + PLANT_CLEARANCE:
+			fell = true
+	if not fell:
+		failures.append(
+			"ledge still held the player %d ticks after its %.2fs warning delay elapsed -- it never fell away" % [
+				LEDGE_FALL_CONFIRM_TICKS, LEDGE_WARN_SEC])
+
+	# Out of the fall cleanly rather than left to plunge toward the arena's
+	# own ground and kill zone for the rest of the away delay -- none of
+	# that belongs to this scenario, only the two edges either side of it.
+	player.leave_round()
+	var elapsed_since_contact: int = LEDGE_SETTLE_TICKS + hold_check_ticks + LEDGE_FALL_CONFIRM_TICKS
+	# The ledge is not back to SOLID until warn_ticks (SOLID -> WARNING ->
+	# AWAY) plus away_ticks (AWAY -> SOLID) have passed since contact, not
+	# away_ticks alone -- the AWAY state itself only starts at warn_ticks.
+	var remaining_away_ticks: int = warn_ticks + away_ticks - elapsed_since_contact + LEDGE_MARGIN_TICKS
+	await _await_ticks(remaining_away_ticks)
+
+	print("      phase 3: holding again after the %.2fs away delay" % LEDGE_AWAY_SEC)
+	player.start_round(spawn_pos)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+
+	var returned_y: float = player.global_position.y
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never re-settled on the returned ledge: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if returned_y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+		failures.append("ledge did not hold again after its away delay: player at %.1f, expected resting at %.1f" % [
+			returned_y, ledge_top])
 
 	await _teardown(stage)
 	return failures
