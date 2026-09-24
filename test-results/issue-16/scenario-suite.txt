@@ -63,10 +63,9 @@ PASS  weapon_reach_matches_roster
       pickaxe: head arrived at 2206 px/s and took 34.2 off, its own damage is 34.0 (closest 33.1 px)
       staff: head arrived at 2208 px/s and took 20.0 off, its own damage is 20.0 (closest 29.1 px)
       sword: head arrived at 2212 px/s and took 33.9 off, its own damage is 34.0 (closest 33.0 px)
-      axe: head arrived at 2190 px/s and took 51.7 off, its own damage is 55.0 (closest 34.5 px)
+      axe: head arrived at 2194 px/s and took 54.3 off, its own damage is 55.0 (closest 35.3 px)
       dagger: head arrived at 2208 px/s and took 34.1 off, its own damage is 34.0 (closest 30.0 px)
-FAIL  weapon_damage_matches_roster
-      - axe: a full-speed strike took 51.7 off, not the 55.0 of damage it carries
+PASS  weapon_damage_matches_roster
       pickaxe: answered a drag from 20.0 px out to 90.0 px in 7 ticks
       staff: answered a drag from 20.0 px out to 90.0 px in 5 ticks
       sword: answered a drag from 20.0 px out to 90.0 px in 7 ticks
@@ -305,4 +304,4 @@ PASS  axe_head_mirrors_with_aim
 PASS  symmetric_head_ignores_aim_side
 PASS  axe_head_holds_side_near_vertical
 ---
-58 passed, 2 failed, 60 total
+59 passed, 1 failed, 60 total
