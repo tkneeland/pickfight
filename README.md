@@ -15,8 +15,9 @@ Built with Godot 4.6.
 ## Status
 
 Early prototype, ready for playtesting. `scenes/Main.tscn` runs the endless
-round loop for two phone-controlled players across 11 rotating stages, some
-built around moving platforms, crumbling ledges and hazard walls. Five
+round loop for up to four phone-controlled players across 11 rotating
+stages, some built around moving platforms, crumbling ledges and hazard
+walls. Five
 weapons exist (pickaxe, staff, sword, axe, dagger); everything but the
 pickaxe is found as a pickup on the stage. Art is still flat placeholder
 shapes.
@@ -71,7 +72,8 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
 4. **Open it on a phone** on the same network. Prefer a 5 GHz band or the
    host machine's own hotspot — congested 2.4 GHz is the biggest threat to
    input feel ([ADR-0002](docs/adr/0002-phone-browser-controllers.md)).
-   The page shows `P1` or `P2` once it is bound to a player.
+   The page shows `P1` to `P4` once it is bound to a player; two are
+   needed to start a round, and a fifth phone is turned away.
 5. **Drag anywhere on the phone screen to swing.** The drag is relative to
    wherever your thumb lands, so you never need to look at the phone. One
    finger drives: a second finger touching down is ignored until the first

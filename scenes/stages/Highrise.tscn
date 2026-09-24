@@ -107,6 +107,13 @@ position = Vector2(-300, 340)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(300, 340)
 
+; Spawns 2 and 3 (issue #36). On the ground between the first two, clear of every ledge overhead.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-100, 340)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(100, 340)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
 script = ExtResource("2")

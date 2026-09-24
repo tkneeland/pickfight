@@ -43,3 +43,12 @@ to get a weapon other than the pickaxe.
   playtesting shows it dominating.
 - Body-only collection means a player must physically reach a pickup, which
   makes reach and movement matter for acquisition, not just combat.
+
+## Amendment (2026-09-24, issue #36)
+
+With up to four players, "at most two on the stage at once" becomes **at most
+one fewer than the players on the roster, and never fewer than two**:
+`max(2, players - 1)`, so two for two or three players and three for four.
+`RoundManager.max_pickups` stays as the floor. This is an agent default the
+owner can override. A stage that declares only two `PickupSpawn*` markers
+still holds at most two, since a pickup never shares a spot.

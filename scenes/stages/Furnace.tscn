@@ -118,6 +118,13 @@ position = Vector2(-120, 100)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(120, 100)
 
+; Spawns 2 and 3 (issue #36). Inboard of the first two, either side of the ground pickup.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-60, 100)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(60, 100)
+
 ; Just below the ground (underside y=340) and the hazard columns (bottom
 ; y=392), like every other stage. At y=700 a body thrown over a column fell
 ; for about a second off-screen before the round ended (issue #29).

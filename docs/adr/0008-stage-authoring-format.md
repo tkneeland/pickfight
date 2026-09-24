@@ -76,6 +76,20 @@ stage scenes are authored instead.
   Not a concern at 3 stages; revisit if the roster grows and predictability
   becomes noticeable.
 
+## Amendment (2026-09-24, issue #36)
+
+Spawn count is now **4 per stage** (`Spawn0` to `Spawn3`), matching the
+four-player roster ADR-0007 set and `Main.tscn`'s `player_paths` now holds.
+`Spawn0` and `Spawn1` stay exactly where they were, so a two-player round
+plays as before; `Spawn2` and `Spawn3` are the extra players' spots. Each new
+spawn sits on solid ground, inside the fixed camera, and settles with all four
+bodies landing at once (`stage_four_spawns_settle_together`). The camera is
+still fixed.
+
+The one stage that needed more than new markers is Erosion: its permanent
+island was room for two, and four spawns do not fit on 140 px without putting
+someone on a crumbling ledge, so it was widened to 216 px.
+
 ## Alternatives considered
 
 **A single data-driven `Stage` resource (`.tres`) describing spawn points and

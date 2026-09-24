@@ -102,6 +102,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"rising_kill_zone_eliminates_holdout",
 	"hazard_never_rises",
 	"rising_kill_zone_resets_each_round",
+	"four_phones_claim_four_slots",
+	"four_player_round_ends_on_last_survivor",
+	"four_player_winner_keeps_weapon",
+	"stage_four_spawns_settle_together",
+	"pickup_cap_scales_with_roster",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -591,6 +596,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hazard_never_rises()
 		"rising_kill_zone_resets_each_round":
 			return await _scenario_rising_kill_zone_resets_each_round()
+		"four_phones_claim_four_slots":
+			return await _scenario_four_phones_claim_four_slots()
+		"four_player_round_ends_on_last_survivor":
+			return await _scenario_four_player_round_ends_on_last_survivor()
+		"four_player_winner_keeps_weapon":
+			return await _scenario_four_player_winner_keeps_weapon()
+		"stage_four_spawns_settle_together":
+			return await _scenario_stage_four_spawns_settle_together()
+		"pickup_cap_scales_with_roster":
+			return await _scenario_pickup_cap_scales_with_roster()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2079,21 +2094,32 @@ func _scenario_damage_reddens_fill_identity_persists() -> Array[String]:
 ## rather than keeping a third copy of either list here -- a hardcoded copy
 ## would pass even if the two drifted apart, which is exactly the failure
 ## this scenario exists to catch.
+##
+## Every slot, not just the first two (#36): the slots are the players
+## Main.tscn's ControllerServer lists in `player_paths`, and each one's colour
+## has to be told apart from every other's as well as match the page.
 func _scenario_identity_colours_match_controller_page() -> Array[String]:
 	var failures: Array[String] = []
+	var slot_names: PackedStringArray = _parse_main_slot_names()
 	var slot_colors: Array[Color] = _parse_slot_colors()
-	var main_colors: Array[Color] = _parse_main_identity_colors()
+	var main_colors: Array[Color] = _parse_main_identity_colors(slot_names)
 
-	if slot_colors.size() < 2:
-		failures.append("could not parse SLOT_COLORS from %s (found %d entries)" % [CONTROLLER_PAGE_PATH, slot_colors.size()])
-	if main_colors.size() < 2:
-		failures.append("could not parse identity_color for Player1/Player2 from %s (found %d entries)" % [MAIN_SCENE_PATH, main_colors.size()])
+	if slot_names.size() < 2:
+		failures.append("could not parse ControllerServer's player_paths from %s (found %d slots)" % [MAIN_SCENE_PATH, slot_names.size()])
+	if slot_colors.size() != slot_names.size():
+		failures.append("could not parse SLOT_COLORS from %s: found %d entries for %d slots" % [CONTROLLER_PAGE_PATH, slot_colors.size(), slot_names.size()])
+	if main_colors.size() != slot_names.size():
+		failures.append("could not parse identity_color for each of %s from %s (found %d entries)" % [", ".join(slot_names), MAIN_SCENE_PATH, main_colors.size()])
 
 	if failures.is_empty():
-		for i in 2:
+		for i in slot_names.size():
 			if not _color_close(slot_colors[i], main_colors[i], SLOT_COLOR_TOLERANCE):
 				failures.append("slot %d: controller SLOT_COLORS has %s, Main.tscn identity_color has %s" % [
 					i, slot_colors[i], main_colors[i]])
+			for j in range(i + 1, slot_names.size()):
+				if _color_distance(main_colors[i], main_colors[j]) < DISTINCT_COLOR_MIN_DISTANCE:
+					failures.append("slots %d and %d: identity colours %s and %s are too alike to tell apart" % [
+						i, j, main_colors[i], main_colors[j]])
 
 	# Nothing here builds a scene tree -- both sides of the check are files on
 	# disk -- so there is no stage for `_teardown()` to free.
@@ -2114,10 +2140,27 @@ func _parse_slot_colors() -> Array[Color]:
 		colors.append(Color(m.get_string(0)))
 	return colors
 
-func _parse_main_identity_colors() -> Array[Color]:
+## The player node behind each slot, in slot order, from the `player_paths`
+## Main.tscn gives its ControllerServer -- the list that sets how many slots
+## there are.
+func _parse_main_slot_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	var text: String = FileAccess.get_file_as_string(MAIN_SCENE_PATH)
+	var node_re := RegEx.new()
+	node_re.compile("\\[node name=\"ControllerServer\"[\\s\\S]*?player_paths\\s*=\\s*\\[([^\\]]*)\\]")
+	var node_match: RegExMatch = node_re.search(text)
+	if node_match == null:
+		return names
+	var path_re := RegEx.new()
+	path_re.compile("NodePath\\(\"\\.\\./([^\"]+)\"\\)")
+	for m: RegExMatch in path_re.search_all(node_match.get_string(1)):
+		names.append(m.get_string(1))
+	return names
+
+func _parse_main_identity_colors(slot_names: PackedStringArray) -> Array[Color]:
 	var colors: Array[Color] = []
 	var text: String = FileAccess.get_file_as_string(MAIN_SCENE_PATH)
-	for slot_name: String in ["Player1", "Player2"]:
+	for slot_name: String in slot_names:
 		var node_re := RegEx.new()
 		node_re.compile("\\[node name=\"%s\"[\\s\\S]*?(?=\\n\\[node|\\z)" % slot_name)
 		var node_match: RegExMatch = node_re.search(text)
@@ -2239,8 +2282,8 @@ func _circle_outside_polygon(centre: Vector2, radius: float, polygon: PackedVect
 # --- Stage rotation (ADR-0008) -----------------------------------------------
 
 ## Spawn points every real stage must declare: one per player slot in
-## scenes/Main.tscn (ADR-0008). Grows with the roster (ADR-0007).
-const STAGE_MIN_SPAWNS: int = 2
+## scenes/Main.tscn (ADR-0008). Grows with the roster (ADR-0007): four since #36.
+const STAGE_MIN_SPAWNS: int = 4
 
 ## A private test double for ControllerServer's roster seam
 ## (claimed_slots / expire_disconnected_claims), scoped to this file only so
@@ -5853,4 +5896,423 @@ func _scenario_rising_kill_zone_resets_each_round() -> Array[String]:
 		failures.append("%s: the new round's kill zone never started rising" % paths[1])
 
 	await _teardown(loop["stage"])
+	return failures
+
+# --- Four-player capacity (issue #36) ---------------------------------------
+#
+# ADR-0007 set the roster cap at four; until #36 only `player_paths` in
+# scenes/Main.tscn held it at two. These drive the real ControllerServer,
+# RoundManager and stages with four players, through the same seams the
+# two-player scenarios above use.
+
+const ControllerServerScript := preload("res://scripts/ControllerServer.gd")
+
+## Four clearly distinct identity colours for round-loop players, so a
+## scoreboard entry showing the wrong player's colour cannot pass. Arbitrary,
+## not the real SLOT_COLORS -- `identity_colours_match_controller_page` owns
+## those.
+const FOUR_PLAYER_COLORS: Array[Color] = [
+	Color(0.15, 0.4, 1.0, 1.0),
+	Color(1.0, 0.55, 0.1, 1.0),
+	Color(0.1, 0.8, 0.3, 1.0),
+	Color(0.9, 0.2, 0.8, 1.0),
+]
+## Clear sky, 400 px apart: four full-reach weapons never touch each other,
+## and the far-off PICKUP_STUB_POINTS are nowhere near where anyone falls.
+const FOUR_PLAYER_SKY_SPAWNS: PackedVector2Array = [
+	Vector2(-600.0, -1400.0), Vector2(-200.0, -1400.0),
+	Vector2(200.0, -1400.0), Vector2(600.0, -1400.0)]
+## Long enough to read the scoreboard while it is up.
+const FOUR_PLAYER_END_PAUSE_SEC: float = 1.0
+## Ticks an elimination is given to (wrongly) end the round before the
+## scenario checks that it did not.
+const FOUR_PLAYER_ELIMINATION_TICKS: int = 10
+
+## Ports for the in-process ControllerServer. Off the 8080/8081 defaults, so a
+## host running on the same machine does not collide with the suite.
+const FOUR_PHONE_HTTP_PORT: int = 18480
+const FOUR_PHONE_WS_PORT: int = 18481
+## How long one phone gets to connect, identify, and be answered.
+const FOUR_PHONE_CONNECT_MSEC: int = 3000
+## The reason ControllerServer closes a refused phone with, which the page
+## shows the player; written down here, not read off the server.
+const NO_FREE_SLOT_REASON: String = "no free player slot"
+
+## Where the fixed Camera2D in scenes/Main.tscn looks: centred on the origin,
+## the project's 1600x900 viewport, no zoom. A spawn has to be inside it,
+## with the whole body on screen.
+const CAMERA_VIEW: Rect2 = Rect2(-800.0, -450.0, 1600.0, 900.0)
+## Ticks four bodies are given to land and come to rest together.
+const FOUR_SPAWN_SETTLE_TICKS: int = 90
+## How far a settled body may sit sideways from its spawn marker and still be
+## where it was put, rather than shoved along by a neighbour.
+const FOUR_SPAWN_DRIFT_TOLERANCE: float = 16.0
+## Solver penetration allowed between two resting bodies before they count
+## as overlapping rather than touching.
+const FOUR_SPAWN_OVERLAP_ALLOWANCE: float = 2.0
+
+## Four pickup spots for the cap scenario, all far from the sky spawns: one
+## more than the largest cap it expects, so a full cap is never held back by
+## the stage running out of free spots.
+const PICKUP_CAP_STUB_POINTS: PackedVector2Array = [
+	Vector2(-1500.0, -2000.0), Vector2(1500.0, -2000.0),
+	Vector2(0.0, -2600.0), Vector2(-1500.0, -2600.0)]
+## Roster size -> the cap issue #36 asks for, `max(2, players - 1)`, written
+## out by hand rather than computed.
+const PICKUP_CAP_BY_ROSTER: Dictionary = {2: 2, 3: 2, 4: 3}
+
+## A real RoundManager running `count` round-owned players on a one-stage
+## rotation with a spawn for each, against the stub roster with every slot
+## claimed -- `_new_pickup_round` generalised past two. Each player carries its
+## FOUR_PLAYER_COLORS entry. `max_pickups` is left at RoundManager's own
+## default, so the cap under test is the one that ships. `scoreboard`, when
+## given, is parented under the stage and wired in.
+func _new_roster_round(count: int, interval_sec: float, pause_sec: float,
+		pickup_points: PackedVector2Array, scoreboard: Control = null) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "RosterContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	var spawns := PackedVector2Array()
+	var slots: Array[int] = []
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "RosterP%d" % i
+		player.start_in_round = false
+		player.identity_color = FOUR_PLAYER_COLORS[i]
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../RosterP%d" % i))
+		spawns.append(FOUR_PLAYER_SKY_SPAWNS[i])
+		slots.append(i)
+	var roster := StubRosterScript.new()
+	roster.name = "RosterRoster"
+	roster.slots = slots
+	stage.add_child(roster)
+	if scoreboard != null:
+		scoreboard.name = "RosterScoreboard"
+		stage.add_child(scoreboard)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "RosterRoundManager"
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = [_make_pickup_stub_stage("RosterStage", spawns, pickup_points)]
+	round_manager.arena_container_path = NodePath("../RosterContainer")
+	round_manager.controller_server_path = NodePath("../RosterRoster")
+	if scoreboard != null:
+		round_manager.scoreboard_path = NodePath("../RosterScoreboard")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = pause_sec
+	round_manager.pickup_spawn_interval_sec = interval_sec
+	round_manager.pickup_weapons = [
+		_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH),
+		_make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)] as Array[Resource]
+	stage.add_child(round_manager)
+	return {
+		"stage": stage, "container": container, "players": players,
+		"roster": roster, "round_manager": round_manager}
+
+func _all_alive(players: Array[RigidBody2D]) -> bool:
+	for player: RigidBody2D in players:
+		if not player.alive:
+			return false
+	return true
+
+## The real round-end scoreboard out of scenes/Main.tscn, detached from the
+## rest of the scene so no ControllerServer opens sockets and no Player ever
+## enters the tree: whatever slots Main.tscn declares are what gets checked.
+func _main_scoreboard() -> Control:
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var scoreboard: Control = main.get_node("UI/Scoreboard") as Control
+	_clear_owner(scoreboard)
+	scoreboard.get_parent().remove_child(scoreboard)
+	main.free()
+	return scoreboard
+
+func _clear_owner(node: Node) -> void:
+	node.owner = null
+	for child: Node in node.get_children():
+		_clear_owner(child)
+
+## One phone joining a ControllerServer over its real WebSocket seam, the way
+## the controller page does: connect, send `{"id": ...}`, then wait for the
+## host's `{"slot": n}` or for it to hang up. Every earlier phone in `keep`
+## is polled meanwhile so their heartbeats are answered and they stay joined.
+## Returns {"slot": n or -1, "closed": bool, "reason": String}.
+func _join_phone(peer: WebSocketPeer, id: String, keep: Array[WebSocketPeer]) -> Dictionary:
+	var result: Dictionary = {"slot": -1, "closed": false, "reason": ""}
+	if peer.connect_to_url("ws://127.0.0.1:%d" % FOUR_PHONE_WS_PORT) != OK:
+		result["closed"] = true
+		result["reason"] = "connect_to_url failed"
+		return result
+	var sent_id: bool = false
+	var deadline: int = Time.get_ticks_msec() + FOUR_PHONE_CONNECT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		for other: WebSocketPeer in keep:
+			other.poll()
+		peer.poll()
+		var state: int = peer.get_ready_state()
+		if state == WebSocketPeer.STATE_CLOSED:
+			result["closed"] = true
+			result["reason"] = peer.get_close_reason()
+			return result
+		if state != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent_id:
+			peer.send_text(JSON.stringify({"id": id}))
+			sent_id = true
+		while peer.get_available_packet_count() > 0:
+			var pkt: PackedByteArray = peer.get_packet()
+			if not peer.was_string_packet():
+				continue
+			var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+			if msg is Dictionary and msg.has("slot"):
+				result["slot"] = int(msg["slot"])
+				return result
+	return result
+
+## Issue #36: four phones join and each claims its own slot, 0 to 3 in join
+## order; a fifth is refused with the reason the page shows. Drives a real
+## ControllerServer over its real WebSocket seam, holding the player slots
+## scenes/Main.tscn gives its ControllerServer -- that list is the runtime cap,
+## so it is read off the shipped scene rather than written down again here.
+func _scenario_four_phones_claim_four_slots() -> Array[String]:
+	var failures: Array[String] = []
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var main_paths: Array[NodePath] = main.get_node("ControllerServer").player_paths
+	main.free()
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	for path: NodePath in main_paths:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = path.get_name(path.get_name_count() - 1)
+		player.start_in_round = false
+		stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "PhoneServer"
+	server.http_port = FOUR_PHONE_HTTP_PORT
+	server.ws_port = FOUR_PHONE_WS_PORT
+	server.player_paths = main_paths
+	# No phone here sends input; it must not be timed out for that while the
+	# rest join.
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	# A few ticks for the listeners to come up: a phone connecting on the very
+	# first one was hung up on before the handshake.
+	await _await_ticks(5)
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 4:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "four-phones-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d (closed=%s '%s'), expected slot %d" % [
+				i + 1, result["slot"], result["closed"], result["reason"], i])
+		joined.append(peer)
+
+	var fifth := WebSocketPeer.new()
+	var refused: Dictionary = await _join_phone(fifth, "four-phones-4", joined)
+	if refused["slot"] >= 0:
+		failures.append("a fifth phone was given slot %d; four is the cap" % refused["slot"])
+	elif not refused["closed"]:
+		failures.append("a fifth phone was neither given a slot nor refused")
+	elif refused["reason"] != NO_FREE_SLOT_REASON:
+		failures.append("a fifth phone was refused with '%s', expected '%s'" % [refused["reason"], NO_FREE_SLOT_REASON])
+
+	var claimed: Array[int] = server.claimed_slots()
+	if claimed != [0, 1, 2, 3]:
+		failures.append("claimed slots were %s after four phones joined, expected [0, 1, 2, 3]" % [claimed])
+
+	for peer: WebSocketPeer in joined:
+		peer.close(1000, "scenario done")
+	for _i in 5:
+		await process_frame
+		for peer: WebSocketPeer in joined:
+			peer.poll()
+	await _teardown(stage)
+	return failures
+
+## Issue #36: in a four-player round the first and second eliminations leave
+## the round running; only the third ends it, and only the last survivor
+## scores. The round-end scoreboard -- the real one from scenes/Main.tscn --
+## then shows all four entries, each in its own player's colour.
+func _scenario_four_player_round_ends_on_last_survivor() -> Array[String]:
+	var failures: Array[String] = []
+	var scoreboard: Control = _main_scoreboard()
+	var loop: Dictionary = _new_roster_round(
+		4, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS, scoreboard)
+	var players: Array[RigidBody2D] = loop["players"]
+
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a round never started with four claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	for eliminated in 2:
+		players[eliminated].eliminate()
+		await _await_ticks(FOUR_PLAYER_ELIMINATION_TICKS)
+		for slot in range(eliminated + 1, 4):
+			if not players[slot].alive:
+				failures.append("elimination %d ended the round: P%d is out of play with %d still standing" % [
+					eliminated + 1, slot + 1, 4 - eliminated - 1])
+		if scoreboard.visible:
+			failures.append("elimination %d put the round-end scoreboard up" % (eliminated + 1))
+
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return scoreboard.visible, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the third elimination, leaving one player, did not end the round")
+		await _teardown(loop["stage"])
+		return failures
+
+	if players[3].deaths != 0:
+		failures.append("the last survivor was counted as dying (%d)" % players[3].deaths)
+	var expected_scores: PackedStringArray = ["0", "0", "0", "1"]
+	if scoreboard.get_child_count() < 4:
+		failures.append("the scoreboard has %d entries, expected one for each of four players" % scoreboard.get_child_count())
+	else:
+		for slot in 4:
+			var entry: Node = scoreboard.get_child(slot)
+			var icon: ColorRect = entry.get_child(0) as ColorRect if entry.get_child_count() > 0 else null
+			var score: Label = entry.get_child(1) as Label if entry.get_child_count() > 1 else null
+			if icon == null or score == null:
+				failures.append("scoreboard entry %d is not an icon and a score" % slot)
+				continue
+			if not _color_close(icon.color, FOUR_PLAYER_COLORS[slot], COLOR_MATCH_TOLERANCE):
+				failures.append("scoreboard entry %d shows %s, expected P%d's colour %s" % [
+					slot, icon.color, slot + 1, FOUR_PLAYER_COLORS[slot]])
+			if score.text != expected_scores[slot]:
+				failures.append("scoreboard entry %d reads '%s', expected '%s'" % [slot, score.text, expected_scores[slot]])
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #36, ADR-0005's winner-keeps rule with four players: the one player
+## left standing starts the next round with the weapon it held, and all three
+## who were eliminated go back to the pickaxe.
+func _scenario_four_player_winner_keeps_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_roster_round(4, PICKUP_LONG_INTERVAL_SEC, 0.0, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a round never started with four claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	# Handed out once the round is running: earlier, its own reset undoes it.
+	var held: Array[Resource] = []
+	for player: RigidBody2D in players:
+		var stats := WeaponStatsType.new()
+		stats.min_reach = STUB_MIN_REACH
+		stats.max_reach = STUB_MAX_REACH
+		player.set_weapon_stats(stats)
+		held.append(stats)
+	await _await_ticks(2)
+
+	# Slot 2 survives: neither the first slot nor the last, so a winner check
+	# that only looked at either end of the roster would miss it.
+	const WINNER: int = 2
+	for slot in [0, 1, 3]:
+		players[slot].eliminate()
+		await _await_ticks(2)
+	var restarted: bool = await _await_condition(
+		func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC)
+	if not restarted:
+		failures.append("the next round never started after P%d won" % (WINNER + 1))
+		await _teardown(loop["stage"])
+		return failures
+
+	for slot in 4:
+		if slot == WINNER:
+			if players[slot].weapon_stats != held[slot]:
+				failures.append("the winner P%d did not keep the weapon it held" % (slot + 1))
+		elif players[slot].weapon_stats == null or players[slot].weapon_stats.resource_path != PICKUP_PICKAXE_PATH:
+			failures.append("P%d lost the round but did not go back to the pickaxe" % (slot + 1))
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #36: on every stage, four players dropped onto Spawn0-3 on the same
+## tick all land and come to rest where they were put -- alive, not falling,
+## not shoved sideways off their spot by a neighbour, and not inside one
+## another -- and every spawn is on screen under the fixed camera.
+## `stage_spawns_are_safe` checks each spawn alone; this is the crowd.
+func _scenario_stage_four_spawns_settle_together() -> Array[String]:
+	var failures: Array[String] = []
+	var inside: Rect2 = CAMERA_VIEW.grow(-PLAYER_RADIUS)
+
+	for path: String in STAGE_PATHS:
+		# As in stage_spawns_are_safe: each stage's _teardown() sets the
+		# completion flag, so clear it before the next stage runs.
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+		if spawns.size() < 4:
+			failures.append("%s: declared %d spawn point(s), four players need 4" % [path, spawns.size()])
+			await _teardown(stage)
+			continue
+
+		var players: Array[RigidBody2D] = []
+		for i in 4:
+			if not inside.has_point(spawns[i]):
+				failures.append("%s spawn %d at %s: not wholly inside the fixed camera's view %s" % [
+					path, i, spawns[i], CAMERA_VIEW])
+			players.append(_spawn_player(stage, spawns[i]))
+		await _await_ticks(FOUR_SPAWN_SETTLE_TICKS)
+
+		for i in 4:
+			var player: RigidBody2D = players[i]
+			if not player.alive:
+				failures.append("%s spawn %d: died with four players spawned together" % [path, i])
+				continue
+			if player.linear_velocity.length() > SETTLED_SPEED:
+				failures.append("%s spawn %d: never settled, speed %.1f px/s" % [
+					path, i, player.linear_velocity.length()])
+			var drift: float = absf(player.global_position.x - spawns[i].x)
+			if drift > FOUR_SPAWN_DRIFT_TOLERANCE:
+				failures.append("%s spawn %d: came to rest %.1f px sideways of its spawn" % [path, i, drift])
+			for j in range(i + 1, 4):
+				if not players[j].alive:
+					continue
+				var gap: float = player.global_position.distance_to(players[j].global_position)
+				if gap < 2.0 * PLAYER_RADIUS - FOUR_SPAWN_OVERLAP_ALLOWANCE:
+					failures.append("%s spawns %d and %d: bodies overlap, centres %.1f px apart" % [path, i, j, gap])
+
+		await _teardown(stage)
+
+	return failures
+
+## Issue #36 (amending ADR-0009): the stage holds at most one pickup fewer
+## than the roster, and never fewer than two at once -- two for two or three
+## players, three for four. Watches the stage fill across several intervals
+## for each roster size and asserts the peak is exactly the cap: reaching it
+## as well as not passing it.
+func _scenario_pickup_cap_scales_with_roster() -> Array[String]:
+	var failures: Array[String] = []
+	for count: int in PICKUP_CAP_BY_ROSTER.keys():
+		_scenario_completed = false
+		var loop: Dictionary = _new_roster_round(count, PICKUP_SHORT_INTERVAL_SEC, 0.0, PICKUP_CAP_STUB_POINTS)
+		var container: Node2D = loop["container"]
+		var players: Array[RigidBody2D] = loop["players"]
+		if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("%d players: a round never started" % count)
+			await _teardown(loop["stage"])
+			continue
+
+		var deadline: int = Time.get_ticks_msec() + int(PICKUP_SHORT_INTERVAL_SEC * 1000.0) * PICKUP_INTERVAL_WINDOW
+		var peak: int = 0
+		while Time.get_ticks_msec() < deadline:
+			await physics_frame
+			peak = maxi(peak, _pickups_under(container).size())
+		var expected: int = PICKUP_CAP_BY_ROSTER[count]
+		if peak != expected:
+			failures.append("%d players: the stage held at most %d pickups at once, the cap should be %d" % [
+				count, peak, expected])
+		await _teardown(loop["stage"])
 	return failures

@@ -26,15 +26,16 @@ current = true
 [node name="Arena" type="Node2D" parent="."]
 
 ; identity_color is paired with SLOT_COLORS in controller/index.html: slot 0
-; must match Player1 (blue) and slot 1 must match Player2 (orange). The phone
-; tints its "P1"/"P2" badge from that list, which is how a player finds the
+; must match Player1 (blue), slot 1 Player2 (orange), slot 2 Player3 (green)
+; and slot 3 Player4 (magenta). The phone tints its "P1"-"P4" badge from that
+; list, which is how a player finds the
 ; outline, weapon and scoreboard icon that are theirs on the shared screen
 ; (ADR-0005) -- the
 ; body fill itself is no longer identity, since it reddens with damage -- so
 ; the two lists have to stay in sync.
-; start_in_round = false: these two are owned by RoundManager now, which
+; start_in_round = false: all four are owned by RoundManager now, which
 ; brings each into play with start_round() once the roster below it is
-; ready, rather than either building a live rig at boot with nobody bound.
+; ready, rather than any building a live rig at boot with nobody bound.
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
 debug_source = 0
@@ -45,6 +46,21 @@ start_in_round = false
 position = Vector2(100, 0)
 debug_source = 0
 identity_color = Color(1, 0.55, 0.1, 1)
+start_in_round = false
+
+; Players 3 and 4 (issue #36; ADR-0007's four-player roster). Green and
+; magenta picked to stay apart from blue and orange, and from each other,
+; under the common colour-blindnesses, and to read on the grey stages.
+[node name="Player3" parent="." instance=ExtResource("2")]
+position = Vector2(-300, 0)
+debug_source = 0
+identity_color = Color(0.12, 0.85, 0.55, 1)
+start_in_round = false
+
+[node name="Player4" parent="." instance=ExtResource("2")]
+position = Vector2(300, 0)
+debug_source = 0
+identity_color = Color(1, 0.32, 0.82, 1)
 start_in_round = false
 
 ; Hitmarkers and debug damage numbers (issue #33), drawn in world space
@@ -66,7 +82,7 @@ offset_left = 12.0
 offset_top = 74.0
 offset_right = 620.0
 offset_bottom = 110.0
-text = "P1: 0  P2: 0"
+text = "P1: 0  P2: 0  P3: 0  P4: 0"
 
 [node name="WaitingLabel" type="Label" parent="UI"]
 anchor_right = 1.0
@@ -76,10 +92,11 @@ horizontal_alignment = 1
 vertical_alignment = 1
 text = "Waiting for players..."
 
-; Round-end scoreboard: one entry per player slot (Slot0 = Player1, Slot1 =
-; Player2, matching player_paths order below), each an icon tinted with that
-; slot's Player.identity_color next to its score number. Large and centred
-; so the result reads from across the room on the shared screen.
+; Round-end scoreboard: one entry per player slot (Slot0 = Player1 through
+; Slot3 = Player4, matching player_paths order below), each an icon tinted
+; with that slot's Player.identity_color next to its score number. Large and
+; centred so the result reads from across the room on the shared screen; a
+; row of four is under 600 px wide, well inside the 1600 px screen.
 [node name="Scoreboard" type="HBoxContainer" parent="UI"]
 anchor_left = 0.5
 anchor_top = 0.5
@@ -113,6 +130,28 @@ color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 48
 text = "0"
 
+[node name="Slot2" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot2"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot2"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
+[node name="Slot3" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot3"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot3"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
 [node name="JoinQrCode" type="TextureRect" parent="UI"]
 anchor_left = 1.0
 anchor_right = 1.0
@@ -127,7 +166,7 @@ visible = false
 
 [node name="ControllerServer" type="Node" parent="."]
 script = ExtResource("3")
-player_paths = [NodePath("../Player1"), NodePath("../Player2")]
+player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4")]
 join_label_path = NodePath("../UI/JoinLabel")
 qr_texture_path = NodePath("../UI/JoinQrCode")
 
@@ -140,7 +179,7 @@ qr_texture_path = NodePath("../UI/JoinQrCode")
 ; eleven in this same order, and the two are meant to stay that way.
 [node name="RoundManager" type="Node" parent="."]
 script = ExtResource("4")
-player_paths = [NodePath("../Player1"), NodePath("../Player2")]
+player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4")]
 stage_scenes = [ExtResource("5"), ExtResource("8"), ExtResource("12"), ExtResource("6"), ExtResource("13"), ExtResource("9"), ExtResource("14"), ExtResource("7"), ExtResource("15"), ExtResource("10"), ExtResource("11")]
 arena_container_path = NodePath("../Arena")
 controller_server_path = NodePath("../ControllerServer")

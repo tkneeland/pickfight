@@ -91,6 +91,13 @@ position = Vector2(-500, 200)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(500, 200)
 
+; Spawns 2 and 3 (issue #36). On the inner ends of the two side grounds, 100 px in from the first two.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-400, 200)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(400, 200)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
 script = ExtResource("2")

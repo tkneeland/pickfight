@@ -257,7 +257,8 @@ func _set_waiting_text(connected: int) -> void:
 	if _waiting_label == null:
 		return
 	_waiting_label.visible = true
-	_waiting_label.text = "Waiting for players: %d / %d connected" % [connected, min_players_to_start]
+	# Not "x / 2": two is the minimum to start, not the most who can play (#36).
+	_waiting_label.text = "Waiting for players: %d connected (need %d)" % [connected, min_players_to_start]
 
 ## A round ends the instant one or zero players are still standing --
 ## whichever came from a ring-out or the last hit that crossed DEATH_DAMAGE.
@@ -351,7 +352,9 @@ func _update_score_label() -> void:
 @export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
 ## Seconds between pickup arrivals once a round is running (user story 20).
 @export var pickup_spawn_interval_sec: float = 10.0
-## Most pickups the stage holds at once (user stories 3 and 20).
+## Fewest pickups the stage is allowed to hold at once (user stories 3 and
+## 20). The live cap is `_pickup_cap()`: one fewer than the roster, never
+## below this (#36, amending ADR-0009).
 @export var max_pickups: int = 2
 ## Weapons a pickup may hold. Empty means the roster's own list
 ## (`PickupWeapons.available_weapons()`); scenarios fill it with test weapons.
@@ -382,8 +385,15 @@ func _tick_pickups() -> void:
 	if now < _next_pickup_msec:
 		return
 	_next_pickup_msec = now + int(pickup_spawn_interval_sec * 1000.0)
-	if _live_pickups().size() < max_pickups:
+	if _live_pickups().size() < _pickup_cap():
 		_spawn_pickup()
+
+## Most pickups the stage holds at once right now: one fewer than the players
+## on the roster, and never under `max_pickups` -- 2 for two or three players,
+## 3 for four (#36, amending ADR-0009's "at most two").
+func _pickup_cap() -> int:
+	var roster: int = _controller_server.claimed_slots().size() if _controller_server != null else 0
+	return maxi(max_pickups, roster - 1)
 
 func _clear_pickups() -> void:
 	for pickup: Node2D in _live_pickups():
@@ -401,7 +411,7 @@ func _live_pickups() -> Array[Node2D]:
 	return live
 
 func _spawn_pickup() -> void:
-	if pickup_scene == null or _live_pickups().size() >= max_pickups:
+	if pickup_scene == null or _live_pickups().size() >= _pickup_cap():
 		return
 	var parent: Node = _current_stage if _current_stage != null else get_node_or_null(arena_container_path)
 	if parent == null:

@@ -54,6 +54,13 @@ position = Vector2(-360, 60)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(360, 60)
 
+; Spawns 2 and 3 (issue #36). Side by side on the middle pillar, the only top with room for two; they flank PickupSpawn0, so one of them can take it at round start.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-30, 60)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(30, 60)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
 script = ExtResource("2")

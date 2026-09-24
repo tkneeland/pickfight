@@ -125,6 +125,13 @@ position = Vector2(-90, -352)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(90, -352)
 
+; Spawns 2 and 3 (issue #36). Between the first two on the static TopPlatform, for the same reason they are on it.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-30, -352)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(30, -352)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
 script = ExtResource("2")

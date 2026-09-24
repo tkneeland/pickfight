@@ -39,6 +39,13 @@ position = Vector2(-460, 300)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(430, 100)
 
+; Spawns 2 and 3 (issue #36). On the two flats' inner ends, short of where the slope starts, so neither rolls.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-385, 300)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(350, 100)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
 script = ExtResource("2")
