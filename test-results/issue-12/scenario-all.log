@@ -49,5 +49,7 @@ WARNING: Player: no drawn silhouette for head shape CapsuleShape2D; falling back
 PASS  weapon_silhouette_matches_head_shape
 PASS  stage_rotates_each_round
 PASS  stage_spawns_are_safe
+PASS  waiting_expires_disconnected_claims
+PASS  abandoned_round_ends_without_winner
 ---
-24 passed, 0 failed, 24 total
+26 passed, 0 failed, 26 total

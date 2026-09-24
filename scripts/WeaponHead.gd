@@ -156,7 +156,8 @@ func _exit_tree() -> void:
 	remove_from_group(HEAD_GROUP)
 
 ## Called by `Player` whenever the head is moved by something other than the
-## simulation -- a respawn, a scenario placing a player. Without it the next
+## simulation -- a scenario placing a player via `Player.teleport_to()`. (A
+## new round's spawn builds a fresh head instead.) Without it the next
 ## sweep would run along the teleport itself and snap the head back to the
 ## place it was teleported away from.
 func forget_previous_position() -> void:

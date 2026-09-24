@@ -38,7 +38,8 @@ repository keeps its own base SHA, branch, verification result, and pull request
 
 ### Structure
 
-- `scenes/` — .tscn scene files (Main, Arena, Player)
+- `scenes/` — .tscn scene files (Main, Player; Arena is the scenario suite's physics fixture); `scenes/stages/` holds the rotating stages (ADR-0008)
+- `scripts/` includes `RoundManager.gd`, the endless round loop over `ControllerServer`'s roster (ADR-0004, ADR-0007)
 - `scripts/` — GDScript sources
 - `controller/` — the single-file controller web page served to phones
 - `tools/` — headless test fixtures

@@ -1,0 +1,10 @@
+# Run against origin/main's RoundManager.gd (2e97d23), with only the abandoned_round_grace_sec export added so the scenarios can configure it.
+FAIL  waiting_expires_disconnected_claims
+      - a claim that disconnected while waiting was still held: [0]
+      - P0 was brought into a round that only one connected player could have started
+      - P1 was brought into a round that only one connected player could have started
+0 passed, 1 failed, 1 total
+FAIL  abandoned_round_ends_without_winner
+      - round with no connected controller never ended
+      - abandoned round ended but its claims were still held: [0, 1]
+0 passed, 1 failed, 1 total

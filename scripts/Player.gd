@@ -309,9 +309,9 @@ func set_weapon_stats(stats: WeaponStatsType) -> void:
 
 ## Move the player and its weapon together. The rig lives beside the player in
 ## the tree rather than under it (a RigidBody2D cannot drive another one
-## through the scene transform), so anything that relocates a player -- the
-## kill zone's respawn, a scenario's setup -- has to relocate the weapon too
-## or the joints get torn across the arena.
+## through the scene transform), so anything that relocates a live player --
+## a scenario's setup, today -- has to relocate the weapon too or the joints
+## get torn across the arena.
 func teleport_to(pos: Vector2) -> void:
 	var offset: Vector2 = pos - global_position
 	global_position = pos
@@ -668,7 +668,7 @@ func _style_haft() -> void:
 ## Repaints the body fill from `identity_color` (at zero damage) toward
 ## `DAMAGE_FILL_COLOR` (at `DEATH_DAMAGE`). Runs every physics tick rather
 ## than only from `take_damage()`, so the fill stays true to `damage` however
-## it changed -- a strike, a respawn's reset, or a scenario setting it
+## it changed -- a strike, `start_round()`'s reset, or a scenario setting it
 ## directly, which is how this suite's own scenarios read and drive it.
 func _update_damage_visual() -> void:
 	var t: float = clampf(damage / DEATH_DAMAGE, 0.0, 1.0)

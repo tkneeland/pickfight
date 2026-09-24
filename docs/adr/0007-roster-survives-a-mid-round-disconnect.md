@@ -47,6 +47,23 @@ the start of the next round. The cap is four.
 - Four spawn points per stage becomes part of the stage contract, and the
   player-count bound stops being an open question.
 
+## Amendment (2026-09-23, issue #12)
+
+Two gaps in how the hold is bounded, found in review:
+
+- **No round, no hold.** An entry whose controller drops while no round is
+  running is released right away. "Until the end of the current round" has
+  nothing to hold it for, and holding it anyway let a dropped phone be
+  counted as present and spawned as a limp body.
+- **A round nobody can finish ends.** If no player still alive in a round has
+  a connected controller, the round ends with no winner after a grace period
+  (`RoundManager.abandoned_round_grace_sec`, 10 s). A controller reconnecting
+  inside the grace period cancels it. Without this, a round everyone walked
+  away from could never end, its entries never expired, and every new phone
+  was refused until the host restarted. The grace period keeps the original
+  promise: a Wi-Fi blip that hits the whole room still costs momentum, not
+  the round.
+
 ## Alternatives considered
 
 **Disconnect eliminates immediately.** Makes flaky Wi-Fi indistinguishable from
