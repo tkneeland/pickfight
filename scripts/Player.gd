@@ -510,7 +510,21 @@ func _build_rig() -> void:
 		_head_shapes.append(node)
 	if _head_shapes.is_empty():
 		push_warning("Player: weapon stats carry no head circles, so this head collides with nothing")
-	_head.sweep_shapes = _head_shapes
+	# Copied, not handed over. GDScript Arrays are reference types, so
+	# assigning `_head_shapes` itself would leave the head reading the very
+	# array this player goes on mutating -- and the mutation is not
+	# hypothetical: `set_weapon_stats()` defers the rebuild, `_clear_rig()`
+	# clears `_head_shapes` and `_build_rig()` refills it with the *new*
+	# head's circles, all while the old head is still inside the tree, still
+	# not queued for deletion, and so still answering the group scan in
+	# `WeaponHead._undo_any_head_crossing` for the rest of the frame. Aliased,
+	# that dying head would offer circles parented to a different body, and
+	# another player's head could be corrected onto a position derived from a
+	# cluster that is nowhere near it. The nodes are shared on purpose -- they
+	# are the head's own children and the per-tick facing turn in
+	# `_update_weapon_visual()` has to reach them -- it is the array itself
+	# that each side must own.
+	_head.sweep_shapes = _head_shapes.duplicate()
 	# The sweep is against the world -- terrain and other players' bodies --
 	# and never against this player's own body, which the head passes through.
 	# Other heads are left out on purpose: a clash is two driven heads

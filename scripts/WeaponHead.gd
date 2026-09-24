@@ -57,6 +57,13 @@ extends RigidBody2D
 
 ## Floor under the sweep gate, so a degenerate head shape cannot make the
 ## sweep run against every tick of ordinary contact.
+##
+## It can bind on an ordinary weapon and not only a degenerate one, and
+## wherever it does, the argument `_sweep_gate()` makes -- a step shorter than
+## the cluster is wide cannot have left the cluster -- no longer covers the
+## difference. On the roster as it stands the dagger is that case: 3.84 px
+## across, so it is gated at this 4.00 and the last 0.16 px goes uncovered.
+## Keeping a plant's settle out of a limit cycle is worth that much.
 const SWEEP_GATE_FLOOR: float = 4.0
 ## Directions the head's width is measured along to find its narrowest, half
 ## a turn's worth. A head is a cluster of circles (ADR-0010) whose facing
@@ -182,20 +189,27 @@ func _exit_tree() -> void:
 func forget_previous_position() -> void:
 	_has_previous = false
 
-## The shortest step worth sweeping: the head's own narrowest width.
+## The shortest step worth sweeping: the head's own narrowest width, or
+## SWEEP_GATE_FLOOR where that is larger.
 ##
-## Below that, a step cannot have carried the head deeper into something than
-## the head is wide, so the end-of-step contact check sees the overlap and
-## pushes it out of the side it came in. Above it, the head can finish a step
-## past the middle of thin geometry, and the shortest way out is then through
-## the far side -- which is the failure this class exists for. The arena's
-## thinnest platform is 24 px, comfortably above the pickaxe's 16 px head.
+## Below that width, a step cannot have carried the head deeper into something
+## than the head is wide, so the end-of-step contact check sees the overlap
+## and pushes it out of the side it came in. Above it, the head can finish a
+## step past the middle of thin geometry, and the shortest way out is then
+## through the far side -- which is the failure this class exists for. The
+## arena's thinnest platform is 24 px, above every head the rig carries:
+## measured on the roster as it stands, narrowest widths run from the dagger's
+## 3.84 px to the axe's 19.29 px, with the pickaxe at 15.36, the sword at 6.66
+## and the staff at 5.86.
 ##
 ## This gate is load-bearing in the other direction too. Sweeping on every
-## step instead cost a plant its settle: landing on another player bounces the
-## head 4-11 px a tick for a while, and correcting each of those turned an
-## ordinary settle into a limit cycle the player never came to rest out of.
-## Small overlaps are the solver's, and it resolves them correctly.
+## step instead cost a plant its settle: landing on another player was
+## measured bouncing the head 4-11 px a tick for a while, and correcting each
+## of those turned an ordinary settle into a limit cycle the player never came
+## to rest out of. Small overlaps are the solver's, and it resolves them
+## correctly. That 4-11 px is what one plant was measured doing, not a bound
+## on anything: no head width and no forward extent is constrained anywhere in
+## this project, and no scenario checks either.
 ##
 ## For a cluster it is the **whole head's** narrowest width, not its smallest
 ## circle's. The head is one rigid body: a step shorter than the cluster is
@@ -203,10 +217,21 @@ func forget_previous_position() -> void:
 ## circle is deepest, because the rest of the cluster is still on the side it
 ## came in from and the solver pushes the body out that way. Gating on the
 ## smallest circle instead would fire the sweep on steps the solver settles
-## perfectly well -- the pickaxe's horn circles are 7.4 px across, inside the
-## 4-11 px a plant bounces through -- and buy back the limit cycle. A single
-## circle, which is what every weapon was until ADR-0010, measures the same
-## 16 px it always did.
+## perfectly well -- the pickaxe's horn circles are 7.4 px across, well inside
+## the range that plant was measured bouncing through -- and buy back the
+## limit cycle.
+##
+## That argument is about the cluster's width, though, and not about the
+## number this function returns. Where SWEEP_GATE_FLOOR is the larger of the
+## two it is the floor that gates, and over the difference the invariant does
+## not hold: the head sweeps a hair later than its own geometry would ask. On
+## the roster as it stands the dagger is that case, 3.84 px wide and gated at
+## 4.00. See SWEEP_GATE_FLOOR for why the trade is taken.
+##
+## Being a single circle settles nothing about the width either way: the staff
+## is a single circle and measures 5.86 px. (The 16 px this comment used to
+## quote was the diameter of the 8 px nub every weapon carried before
+## ADR-0010, not something that followed from having one circle.)
 func _sweep_gate() -> float:
 	_refresh_cluster_metrics()
 	return _gate_distance
@@ -524,7 +549,27 @@ func _undo_any_head_crossing(state: PhysicsDirectBodyState2D) -> void:
 		partner_origin = theirs["to"]
 		partner_velocity = theirs["velocity"]
 
-	if soonest > 1.0 or normal.length_squared() == 0.0:
+	# Three separate ways there is nothing to do, and with clustered heads no
+	# one of them implies the others:
+	#
+	#   * `soonest > 1.0` -- no pair of circles met inside the step at all.
+	#   * a zero `normal` -- nothing to take the closing speed out along, so
+	#     the velocity correction below would be a no-op at best and the
+	#     contact was not resolvable anyway.
+	#   * a zero `offset` -- the two heads' *anchors* coincided at the contact
+	#     fraction. Seating this head at `partner_origin + offset` would then
+	#     put its anchor exactly on the partner's and stack the two bodies,
+	#     which is worse than the crossing being corrected.
+	#
+	# The last two used to be interchangeable and only one guard was needed:
+	# when a head was a single circle centred on its anchor, the normal was
+	# the line between the anchors, so it vanished exactly when the offset
+	# did. Since ADR-0010 it is the line of centres between the two circles
+	# that actually met (see `_first_circle_contact`), and those sit off their
+	# heads' anchors -- so two anchors can coincide while the circles meeting
+	# off to one side hand back a perfectly good non-zero normal. Both
+	# conditions are load-bearing now.
+	if soonest > 1.0 or normal.length_squared() == 0.0 or offset.length_squared() == 0.0:
 		return
 
 	state.transform = Transform2D(state.transform.get_rotation(), partner_origin + offset)
