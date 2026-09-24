@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The staff: a long pole with a small knob at the tip
+; (docs/art/weapons-whiteboard.jpg, top left). Only the knob is the head --
+; issue #13's roster calls it "tip knob only" -- so what is drawn here is one
+; round 6.2 x 6.2 px knob and nothing else, against a 48 x 48 px player body,
+; which is the drawing's proportion against its "Reference Player" box. One
+; circle fills 91.9% of it; a knob is the one head shape a single circle is
+; already the right answer for.
+;
+; Head-local space is the same as the pickaxe's: +X points outward along the
+; haft away from the player, origin at the groove anchor the haft holds the
+; head by. The knob sits just past that anchor and reaches 5 px along the
+; haft, the shortest forward extent on the roster and comfortably inside the
+; 4-12 px the plant and clash scenarios are tuned around.
+;
+; Stats against the pickaxe's M/M/M baseline: the staff is the roster's best
+; mover and its worst hitter. Reach L (200 px against 140) makes it the
+; weapon that gets to a ledge first. Weight light -- mass 0.15 against 0.25,
+; force ceiling 4000 against 6000 -- so it loses clashes to everything, and
+; its drive is a half again quicker than the pickaxe's (36 rad/s, 1200 px/s,
+; 600 px/s return) so it answers a thumb immediately. Damage S (20 against
+; 34) is the price, and it is paid twice: the tiny head is also the hardest
+; on the roster to actually land.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 200.0
+mass = 0.15
+drive_speed = 36.0
+extend_speed = 1200.0
+rest_return_speed = 600.0
+max_drive_force = 4000.0
+damage = 20.0
+head_circle_offsets = PackedVector2Array(2.07, 0.1)
+head_circle_radii = PackedFloat32Array(2.93)
+art_outline = PackedVector2Array(5.08, 0, 4.93, 0.96, 4.48, 1.83, 3.8, 2.51, 2.93, 2.95, 1.97, 3.1, 1.01, 2.95, 0.15, 2.51, -0.54, 1.83, -0.98, 0.96, -1.13, 0, -0.98, -0.96, -0.54, -1.83, 0.15, -2.51, 1.01, -2.95, 1.97, -3.1, 2.93, -2.95, 3.8, -2.51, 4.48, -1.83, 4.93, -0.96)
