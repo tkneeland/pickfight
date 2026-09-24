@@ -11,7 +11,7 @@ size = Vector2(300, 40)
 size = Vector2(200, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ceiling"]
-size = Vector2(1200, 40)
+size = Vector2(700, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -34,6 +34,19 @@ size = Vector2(8000, 40)
 ; one place in the stage you land after a committed swing would become a
 ; coin flip. A hazard belongs in the space you cross, not the space you
 ; land on.
+;
+; Reworked after the first playtest (#45), where players could not get off
+; the side grounds: the ceiling ran to x=+-600, roofing over almost all of
+; them, so there was nowhere to climb to -- and with the rising kill zone
+; that trapped everyone. It now spans only the two gaps and the middle
+; (x=+-350), leaving open sky over the outer ends of the side grounds to
+; climb out onto its top. Its underside was lowered 30 px to 210 px above
+; the ground so that crossing *under* it has a route that suits one weapon:
+; a staff (240 px reach) standing at a gap's edge can hook the underside
+; and swing across hand over hand, while the pickaxe (150) and everything
+; shorter cannot reach it from the ground and has to fling across the gap
+; instead. Crossing low is possible for everyone and easy for the staff;
+; the ceiling's top is the other way round.
 
 [node name="Gauntlet" type="Node2D"]
 script = ExtResource("1")
@@ -69,21 +82,21 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
 
 [node name="Ceiling" type="StaticBody2D" parent="."]
-position = Vector2(0, 40)
+position = Vector2(0, 70)
 
 [node name="CeilingShape" type="CollisionShape2D" parent="Ceiling"]
 shape = SubResource("RectangleShape2D_ceiling")
 
 [node name="CeilingVisual" type="Polygon2D" parent="Ceiling"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-600, -20, 600, -20, 600, 20, -600, 20)
+polygon = PackedVector2Array(-350, -20, 350, -20, 350, 20, -350, 20)
 
-; Ceiling bottom is y=60 (the ceiling body sits at y=40 with a 40 px shape),
-; so a 48 px hazard centred at y=84 hangs flush beneath it and leaves about
-; 190 px of headroom over the ground at y=300 -- enough for a compact swing
+; Ceiling bottom is y=90 (the ceiling body sits at y=70 with a 40 px shape),
+; so a 48 px hazard centred at y=114 hangs flush beneath it and leaves about
+; 160 px of headroom over the ground at y=300 -- enough for a compact swing
 ; to pass under, not enough for the wide flat arc the hazard exists to deny.
 [node name="CeilingHazard" parent="." instance=ExtResource("3")]
-position = Vector2(0, 84)
+position = Vector2(0, 114)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-500, 200)
