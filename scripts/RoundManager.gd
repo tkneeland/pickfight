@@ -50,6 +50,15 @@ extends Node
 ## the rotation randomized every run; any other value seeds it so a scenario
 ## can assert an exact bag order.
 @export var rotation_seed: int = -1
+## Rising kill zone (issue #22, ADR-0012): how long the active stage's floor
+## `KillZone` holds still at round start before it begins to climb.
+@export var kill_zone_grace_sec: float = 40.0
+## Seconds the rise then takes to reach the stage's highest spawn. A
+## deadline, not a speed: stages range from under 500 px to over 900 px
+## between floor and top spawn, and a fixed speed would give Cascade's
+## holdouts twice as long as Flatlands'. The speed is derived per stage in
+## `_start_kill_zone_rise()`, and the zone keeps climbing past that spawn.
+@export var kill_zone_rise_sec: float = 28.0
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END }
 
@@ -185,6 +194,7 @@ func _try_start_round() -> void:
 	_last_winner_slot = -1
 	_state = State.ROUND_ACTIVE
 	_start_pickups()
+	_start_kill_zone_rise()
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next `_stage_index` into `stage_scenes` via `_next_stage_index()`, and
@@ -279,6 +289,7 @@ func _check_round_end() -> void:
 	else:
 		_last_winner_slot = -1
 	_clear_pickups()
+	_stop_kill_zone_rise()
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
@@ -430,3 +441,39 @@ func _free_pickup_spot() -> Variant:
 	if free.is_empty():
 		return null
 	return free[randi() % free.size()]
+
+# --- Rising kill zone (issue #22, ADR-0012) ----------------------------------
+#
+# Only the node named `KillZone` directly under the stage root rises. Hazard
+# parts share KillZone.gd but sit elsewhere in the tree under other names, so
+# they are never found here and never rise. Each round instances a fresh
+# stage, so the zone resets to its authored height by construction.
+
+## The active stage's floor kill zone, or null on a stage without one.
+func _floor_kill_zone() -> Node2D:
+	if _current_stage == null:
+		return null
+	var zone: Node2D = _current_stage.get_node_or_null("KillZone") as Node2D
+	if zone == null or not zone.has_method("start_rising"):
+		return null
+	return zone
+
+## Round start: arm the rise so it reaches the highest spawn
+## `kill_zone_rise_sec` after the grace period ends.
+func _start_kill_zone_rise() -> void:
+	var zone: Node2D = _floor_kill_zone()
+	if zone == null or _stage_spawn_points.is_empty():
+		return
+	var highest_y: float = INF
+	for spawn: Vector2 in _stage_spawn_points:
+		highest_y = minf(highest_y, spawn.y)
+	var distance: float = zone.global_position.y - highest_y
+	if distance <= 0.0 or kill_zone_rise_sec <= 0.0:
+		push_warning("RoundManager: floor kill zone is not below the highest spawn; not rising")
+		return
+	zone.start_rising(kill_zone_grace_sec, distance / kill_zone_rise_sec)
+
+func _stop_kill_zone_rise() -> void:
+	var zone: Node2D = _floor_kill_zone()
+	if zone != null:
+		zone.stop_rising()

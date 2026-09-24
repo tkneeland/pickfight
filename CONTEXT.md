@@ -41,6 +41,7 @@ round is the exception: they keep whatever they were holding.
 | **Stage** | One arena layout. Rotates every round. Declares where players spawn, where the death boundary lies, and how the camera frames it. |
 | **Rotation** | The run of stages a session cycles through, one per round: a fixed opener (`stage_scenes[0]`), then shuffled bags covering the whole roster with no stage playing twice in a row (ADR-0011). |
 | **Ring-out** | Leaving the stage into its death boundary. Kills whatever damage a player had taken — stage geometry does not care how healthy anyone is. The other route out of a round is accumulated damage. |
+| **Rise** | The stage's death boundary climbing up through it once a round's grace period is over, so a round cannot stall with everyone holding out somewhere safe. Only the floor rises; hazards stay put. Starts afresh with every round. |
 
 ## Design intent
 
