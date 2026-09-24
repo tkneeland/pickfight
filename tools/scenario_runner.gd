@@ -32,6 +32,8 @@ const PlayerScene: PackedScene = preload("res://scenes/Player.tscn")
 ## the gitignored `.godot/` and only an editor run builds it, so a fresh clone
 ## cannot resolve the name.
 const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
+const StageType := preload("res://scripts/Stage.gd")
+const RoundManagerType := preload("res://scripts/RoundManager.gd")
 
 const SCENARIO_NAMES: PackedStringArray = [
 	"aim_angle",
@@ -56,6 +58,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"damage_reddens_fill_identity_persists",
 	"identity_colours_match_controller_page",
 	"weapon_silhouette_matches_head_shape",
+	"stage_rotates_each_round",
+	"stage_spawns_are_safe",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -415,6 +419,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_identity_colours_match_controller_page()
 		"weapon_silhouette_matches_head_shape":
 			return await _scenario_weapon_silhouette_matches_head_shape()
+		"stage_rotates_each_round":
+			return await _scenario_stage_rotates_each_round()
+		"stage_spawns_are_safe":
+			return await _scenario_stage_spawns_are_safe()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2021,4 +2029,166 @@ func _scenario_weapon_silhouette_matches_head_shape() -> Array[String]:
 		failures.append("polygon head: fell back, but ConvexPolygonShape2D is understood directly")
 
 	await _teardown(stage)
+	return failures
+
+# --- Stage rotation (ADR-0008) -----------------------------------------------
+
+## Spawn points every real stage must declare: one per player slot in
+## scenes/Main.tscn (ADR-0008). Grows with the roster (ADR-0007).
+const STAGE_MIN_SPAWNS: int = 2
+
+## A private test double for ControllerServer's roster seam
+## (claimed_slots / expire_disconnected_claims), scoped to this file only so
+## it can't collide with issue #6's separate tools/stub_roster.gd -- both
+## land in the same PR window and this scenario has no need of anything else
+## that stub exposes.
+class _FakeRoster extends Node:
+	var slots: Array[int] = []
+	func claimed_slots() -> Array[int]:
+		return slots
+	func expire_disconnected_claims() -> void:
+		pass
+
+## Packs a bare Node2D + Stage.gd + Spawn* markers into a PackedScene at
+## runtime, so the rotation scenario below doesn't need throwaway fixture
+## .tscn files under scenes/stages/ alongside the three real stages.
+func _make_stub_stage(stage_name: String, spawns: Array[Vector2]) -> PackedScene:
+	var root := Node2D.new()
+	root.name = stage_name
+	root.set_script(StageType)
+	for i in spawns.size():
+		var marker := Marker2D.new()
+		marker.name = "Spawn%d" % i
+		marker.position = spawns[i]
+		root.add_child(marker)
+		marker.owner = root
+	var packed := PackedScene.new()
+	packed.pack(root)
+	root.queue_free()
+	return packed
+
+## Issue #8: the active stage advances by one every round and wraps back to
+## the first after the last. Drives a real RoundManager (script preloaded by
+## path, no class_name) through several rounds against three in-memory stub
+## stages -- no ground is needed, since only the active stage's identity is
+## asserted here, not spawn safety (see stage_spawns_are_safe for that) --
+## and the private _FakeRoster above standing in for ControllerServer.
+func _scenario_stage_rotates_each_round() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = Node2D.new()
+	get_root().add_child(stage)
+
+	# Named explicitly and referenced via literal relative NodePaths below,
+	# rather than each node's own get_path(): this scenario can be the very
+	# first thing run (e.g. `--scenario=stage_rotates_each_round` on its own),
+	# before the root has completed its first tick, and get_path() fails with
+	# "not in a scene tree" that early even though add_child() itself is fine.
+	var container := Node2D.new()
+	container.name = "Container"
+	stage.add_child(container)
+
+	var stage_names: PackedStringArray = ["Stub0", "Stub1", "Stub2"]
+	var stub_scenes: Array[PackedScene] = []
+	for stage_name: String in stage_names:
+		stub_scenes.append(_make_stub_stage(stage_name, [Vector2.ZERO, Vector2(50, 0)]))
+
+	var p1: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	p1.name = "P1"
+	stage.add_child(p1)
+	p1.global_position = DEEP_PARK_POSITION
+	p1.bind_controller()
+	var p2: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	p2.name = "P2"
+	stage.add_child(p2)
+	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)
+	p2.bind_controller()
+
+	var roster := _FakeRoster.new()
+	roster.name = "Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+
+	var paths: Array[NodePath] = [NodePath("../P1"), NodePath("../P2")]
+	var round_manager := Node.new()
+	round_manager.set_script(RoundManagerType)
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = stub_scenes
+	round_manager.arena_container_path = NodePath("../Container")
+	round_manager.controller_server_path = NodePath("../Roster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	stage.add_child(round_manager)
+
+	# Enough rounds to wrap the 3-stage roster around twice, so "wraps back
+	# to the first stage" is actually exercised rather than merely "advances".
+	var rounds: int = stage_names.size() * 2 + 1
+	for round_index in rounds:
+		var active_name: String = ""
+		for _i in 120:
+			await physics_frame
+			if p1.alive and p2.alive and container.get_child_count() > 0:
+				active_name = container.get_child(container.get_child_count() - 1).name
+				break
+		if active_name.is_empty():
+			failures.append("round %d: never saw a live round with a stage instanced" % round_index)
+			break
+		var expected: String = stage_names[round_index % stage_names.size()]
+		if active_name != expected:
+			failures.append("round %d: active stage was %s, expected %s" % [round_index, active_name, expected])
+
+		# End this round (alternating who is eliminated, so scoring exercises
+		# both slots) so the next one gets a chance to start.
+		if round_index % 2 == 0:
+			p1.eliminate()
+		else:
+			p2.eliminate()
+		await _await_ticks(4)
+
+	await _teardown(stage)
+	return failures
+
+## Issue #8 outcome: each real stage's declared spawn points land on solid
+## ground and the player idles there safely for 60 ticks -- not falling
+## through a gap, not clipped into geometry, not still falling.
+##
+## Also holds each stage to ADR-0008's contract of one spawn per player slot
+## (STAGE_MIN_SPAWNS), so a stage missing a marker fails here instead of
+## spawning someone at the origin in live play.
+func _scenario_stage_spawns_are_safe() -> Array[String]:
+	var failures: Array[String] = []
+	var stage_paths: PackedStringArray = [
+		"res://scenes/stages/Flatlands.tscn",
+		"res://scenes/stages/Highrise.tscn",
+		"res://scenes/stages/Gauntlet.tscn",
+	]
+
+	for path: String in stage_paths:
+		# Each stage's _teardown() marks the scenario complete, so reset it
+		# here: a script error on a later stage must not inherit the earlier
+		# stage's "completed" and pass silently.
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var stage_scene: PackedScene = load(path)
+		var instance: Node2D = stage_scene.instantiate()
+		stage.add_child(instance)
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+
+		if spawns.size() < STAGE_MIN_SPAWNS:
+			failures.append("%s: declared %d spawn point(s), needs at least %d" % [
+				path, spawns.size(), STAGE_MIN_SPAWNS])
+
+		for i in spawns.size():
+			var player: RigidBody2D = _spawn_player(stage, spawns[i])
+			await _await_ticks(60)
+			if not player.alive:
+				failures.append("%s spawn %d: player died within 60 idle ticks" % [path, i])
+			elif absf(player.linear_velocity.y) > SETTLED_SPEED:
+				failures.append("%s spawn %d: never settled, vertical speed %.1f px/s" % [
+					path, i, player.linear_velocity.y])
+			player.queue_free()
+			await _await_ticks(BOOST_RESET_TICKS)
+
+		await _teardown(stage)
+
 	return failures

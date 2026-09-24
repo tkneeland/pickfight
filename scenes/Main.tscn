@@ -1,16 +1,20 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
-[ext_resource type="PackedScene" path="res://scenes/Arena.tscn" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/RoundManager.gd" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Flatlands.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Highrise.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Gauntlet.tscn" id="7"]
 
 [node name="Main" type="Node2D"]
 
 [node name="Camera2D" type="Camera2D" parent="."]
 current = true
 
-[node name="Arena" parent="." instance=ExtResource("1")]
+; Empty container: RoundManager instances the active rotating stage here
+; (ADR-0008) rather than a single scene being instanced statically.
+[node name="Arena" type="Node2D" parent="."]
 
 ; identity_color is paired with SLOT_COLORS in controller/index.html: slot 0
 ; must match Player1 (blue) and slot 1 must match Player2 (orange). The phone
@@ -116,7 +120,8 @@ qr_texture_path = NodePath("../UI/JoinQrCode")
 [node name="RoundManager" type="Node" parent="."]
 script = ExtResource("4")
 player_paths = [NodePath("../Player1"), NodePath("../Player2")]
-spawn_points = [Vector2(-100, 0), Vector2(100, 0)]
+stage_scenes = [ExtResource("5"), ExtResource("6"), ExtResource("7")]
+arena_container_path = NodePath("../Arena")
 controller_server_path = NodePath("../ControllerServer")
 score_label_path = NodePath("../UI/ScoreLabel")
 waiting_label_path = NodePath("../UI/WaitingLabel")
