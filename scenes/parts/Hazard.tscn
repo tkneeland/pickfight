@@ -12,11 +12,11 @@ size = Vector2(160, 48)
 ; 0.4, 1) every other stage part draws its terrain in, so a hazard can never
 ; be mistaken for ordinary ground.
 ;
-; Fixed size rather than an exported one: a stage author who needs a
-; different footprint places another instance, and nothing here needed a
-; script of its own to make that decision -- CLAUDE.md's class_name rule
-; means any script added just to expose one export has to be preloaded by
-; path anyway, which is no lighter than authoring a second scene.
+; Fixed size rather than an exported one. A stage author who needs a different
+; footprint places another instance, or overrides this one's shape in the
+; stage scene the way every stage already authors its own RectangleShape2D.
+; Adding a script whose whole job is to rebuild the shape from an export
+; would be a script where a number in a .tscn already does it.
 
 [node name="Hazard" type="Area2D"]
 script = ExtResource("1")
