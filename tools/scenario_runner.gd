@@ -367,6 +367,12 @@ const CHARGE_SPEEDS: PackedFloat32Array = [600.0, 1200.0, 1800.0]
 ## block pose and the whole closing speed is spent on the contact.
 const CHARGE_SEPARATION: float = 340.0
 const CHARGE_TICKS: int = 45
+## How long a pair is left to point its heads down a new charge axis before
+## being thrown together. SETTLE_TICKS is enough for the pickaxe, but the #45
+## axe (drive 12, extend 380) is still swinging round when 30 ticks are up,
+## so at 90 and 135 degrees its heads passed each other 30-120 px apart --
+## the fixture charging before the weapon was aimed, not the heads missing.
+const CHARGE_SETTLE_TICKS: int = 90
 
 ## Damage display and identity (AC-16, AC-17, and the D4 scope change).
 ## Two arbitrary, clearly distinct identity colours -- not the real
@@ -3613,7 +3619,7 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			# reads the fill.
 			attacker.damage = 0.0
 			blocker.damage = 0.0
-			await _await_ticks(SETTLE_TICKS)
+			await _await_ticks(CHARGE_SETTLE_TICKS)
 
 			var deaths: int = attacker.deaths + blocker.deaths
 			var previous_a: Array[Dictionary] = _head_circles_world(attacker)
