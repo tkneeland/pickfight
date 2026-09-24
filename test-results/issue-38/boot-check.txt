@@ -1,3 +1,0 @@
-Fresh-clone boot check, fix/issue-38-tunnel-graze rebased onto main 844725e
-$ git clone -q . <scratch>/pf38 && godot --headless --path <scratch>/pf38 --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
-(no output -- clean)

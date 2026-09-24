@@ -2,26 +2,31 @@
 
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
-; The axe: a broad crescent blade on a heavy haft
-; (docs/art/weapons-whiteboard.jpg, top right). Same shape of head as the
-; pickaxe's and far bigger -- 23.1 x 31.7 px against a 48 x 48 px player
-; body, the drawing's proportion against its "Reference Player" box -- filled
-; by seven circles, biggest at the belly and tapering toward the horns
-; (ADR-0010). They cover 88.4% of it. As with the pickaxe the circles do not
-; reach into the horn tips: nothing of a useful size fits where a crescent
-; tapers to a point, and the guarantee that matters is the one-directional
-; one -- no circle reaches outside the art, so nobody is hit by something they
-; cannot see. The axe's widest circle stands 0.011 px proud of the traced
-; outline, which weapon_head_circles_within_art accepts on its 0.5 px
-; tolerance; that is rounding, not visible geometry.
+; The axe: a single broad bit on a heavy haft
+; (docs/art/weapons-whiteboard.jpg, middle right). It is drawn one-sided, so it
+; is authored one-sided (#16): a wide fan broader along the haft than across
+; it, the haft meeting it near one corner, a scalloped back edge -- two humps
+; with a notch between -- and a smooth convex belly sweeping round the leading
+; corner. 31.1 x 22.2 px against a 48 x 48 px player body, the drawing's
+; proportion against its "Reference Player" box, at 1.05 of the roster's
+; whiteboard-to-pixel scale. Sixteen circles fill it (ADR-0010), two big ones
+; through the body of the fan and fourteen small ones feeling into the humps
+; and the corners; they cover 95.2% of it, and the worst of them stands +0.00
+; px outside the traced outline -- inside it, on the geometry rather than on
+; weapon_head_circles_within_art's 0.5 px tolerance.
 ;
 ; Head-local space is the pickaxe's: +X outward along the haft, origin at the
-; groove anchor, so the belly bulges away from the player with the horns
-; curving back. The belly reaches 11 px past the anchor against the pickaxe's
-; 9, the most on the roster. Nothing enforces a bound on that number; see
-; staff.tres. Across the haft it is nearly 32 px
-; tall, and that costs those scenarios nothing -- only the reach along the
-; haft is measured.
+; groove anchor. The bit is all on +Y, which with the haft pointing right is
+; below it on screen. `flips_with_aim` has Player mirror it to -Y whenever the
+; aim crosses the vertical, circles and outline together, so aimed left it is
+; still below the haft -- the axe is the same axe on both sides of the stage.
+;
+; The belly reaches 11.00 px past the anchor -- the most on the roster, and
+; exactly what the symmetric crescent it replaces reached, because that is
+; the forward extent the plant and clash scenarios are measured against. The
+; fan trails 19.69 px back down the haft instead; only the reach forward
+; along the haft is budgeted, which is the same trick the sword's blade uses.
+; Nothing enforces a bound on the forward number; see staff.tres.
 ;
 ; Stats against the pickaxe's M/M/M baseline: the axe is power bought with
 ; time. Weight heavy -- mass 0.45 against 0.25, force ceiling 9000 against
@@ -43,6 +48,7 @@ extend_speed = 470.0
 rest_return_speed = 240.0
 max_drive_force = 9000.0
 damage = 55.0
-head_circle_offsets = PackedVector2Array(4.98, 1.14, 3.98, -5.06, 2.78, 7.14, 0.38, -9.66, -1.22, 10.94, -3.82, -12.06, -5.42, 12.14)
-head_circle_radii = PackedFloat32Array(6.02, 5.72, 5.43, 4.76, 4.36, 3.72, 2.87)
-art_outline = PackedVector2Array(-5.29, -15.86, -3.47, -15.82, -1.67, -15.56, 0.08, -15.1, 1.77, -14.45, 3.38, -13.61, 4.88, -12.58, 6.26, -11.4, 7.48, -10.06, 8.55, -8.59, 9.45, -7.01, 10.16, -5.34, 10.67, -3.6, 10.98, -1.81, 11.08, 0, 10.98, 1.81, 10.67, 3.6, 10.16, 5.34, 9.45, 7.01, 8.55, 8.59, 7.48, 10.06, 6.26, 11.4, 4.88, 12.58, 3.38, 13.61, 1.77, 14.45, 0.08, 15.1, -1.67, 15.56, -3.47, 15.82, -5.29, 15.86, -12.02, 10.69, -10.8, 10.66, -9.59, 10.49, -8.41, 10.18, -7.27, 9.74, -6.18, 9.17, -5.17, 8.48, -4.25, 7.68, -3.42, 6.78, -2.7, 5.79, -2.09, 4.73, -1.62, 3.6, -1.27, 2.43, -1.06, 1.22, -0.99, 0, -1.06, -1.22, -1.27, -2.43, -1.62, -3.6, -2.09, -4.73, -2.7, -5.79, -3.42, -6.78, -4.25, -7.68, -5.17, -8.48, -6.18, -9.17, -7.27, -9.74, -8.41, -10.18, -9.59, -10.49, -10.8, -10.66, -12.02, -10.69)
+head_circle_offsets = PackedVector2Array(1.09, 4.91, -8.91, 5.71, -6.11, -2.09, -17.31, 5.91, -10.31, 13.91, -16.91, 3.51, 1.29, 14.91, -16.71, 8.51, 3.29, 14.71, -12.71, 13.11, -3.91, -3.69, 4.89, 14.11, -15.91, 10.11, -0.71, 14.71, -8.71, -2.69, -14.51, 11.91)
+head_circle_radii = PackedFloat32Array(9.91, 8.25, 2.56, 2.38, 2.27, 2.02, 1.96, 1.7, 1.6, 1.51, 1.4, 1.32, 1.32, 1.2, 1.14, 1.12)
+art_outline = PackedVector2Array(-18.55, 2.1, -18.72, 2.6, -19.01, 3.29, -19.34, 4.1, -19.6, 5, -19.71, 5.92, -19.6, 6.83, -19.21, 7.75, -18.63, 8.75, -17.89, 9.78, -17.07, 10.79, -16.22, 11.75, -15.4, 12.6, -14.58, 13.41, -13.73, 14.23, -12.84, 15, -11.94, 15.63, -11.03, 16.08, -10.15, 16.28, -9.27, 16.07, -8.4, 15.48, -7.52, 14.7, -6.65, 13.92, -5.77, 13.33, -4.9, 13.12, -4.02, 13.4, -3.15, 14.04, -2.27, 14.86, -1.4, 15.71, -0.52, 16.41, 0.35, 16.8, 1.24, 16.88, 2.14, 16.78, 3.04, 16.54, 3.93, 16.18, 4.79, 15.73, 5.6, 15.23, 6.41, 14.57, 7.24, 13.71, 8.03, 12.76, 8.75, 11.84, 9.36, 11.05, 9.8, 10.5, 10.03, 9.76, 10.39, 8.73, 10.79, 7.51, 11.14, 6.2, 11.37, 4.89, 11.38, 3.68, 11.18, 2.48, 10.85, 1.23, 10.39, -0.03, 9.8, -1.22, 9.08, -2.29, 8.23, -3.15, 7.19, -3.81, 5.97, -4.32, 4.62, -4.69, 3.19, -4.96, 1.75, -5.14, 0.35, -5.25, -1.03, -5.29, -2.45, -5.25, -3.88, -5.12, -5.31, -4.9, -6.7, -4.59, -8.05, -4.2, -9.38, -3.66, -10.73, -2.96, -12.05, -2.17, -13.3, -1.36, -14.43, -0.61, -15.4, 0, -16.2, 0.5, -16.88, 0.93, -17.43, 1.31, -17.89, 1.63, -18.25, 1.9, -18.55, 2.1)
+flips_with_aim = true

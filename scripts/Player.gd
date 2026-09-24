@@ -73,6 +73,12 @@ const LAYER_HEAD: int = 2
 const HAFT_MASS_FRACTION: float = 0.2
 const MIN_HAFT_MASS: float = 0.05
 
+## How far past straight up or straight down the aim has to go before a
+## one-sided head (`WeaponStats.flips_with_aim`) changes sides: ten degrees.
+## Inside that band the head keeps the side it had, so holding the weapon
+## vertical does not make it flicker. See `_update_head_mirror()`.
+const HEAD_FLIP_DEADBAND: float = PI / 18.0
+
 ## Damage a player dies at. A scale, not a health bar -- there is no health
 ## bar, and how hurt a player is shows on their body -- but the number has to
 ## be something, and 100 is the one every per-hit figure below is read
@@ -211,6 +217,11 @@ var _head: WeaponHeadType
 ## stops it accumulating drift.
 var _head_shapes: Array[CollisionShape2D] = []
 var _head_circle_offsets: PackedVector2Array = PackedVector2Array()
+## A one-sided head (`WeaponStats.flips_with_aim`) and which side of the haft
+## it is on right now: mirrored is every offset's and outline point's Y
+## negated. The flag is copied at build for the same reason the offsets are.
+var _head_flips_with_aim: bool = false
+var _head_mirrored: bool = false
 var _pin: PinJoint2D
 var _groove: GrooveJoint2D
 var _haft_inertia: float = 1.0
@@ -516,6 +527,8 @@ func _build_rig() -> void:
 	# becoming a traced polygon.
 	_head_shapes.clear()
 	_head_circle_offsets = _stats.head_circle_offsets.slice(0, _stats.head_circle_count())
+	_head_flips_with_aim = _stats.flips_with_aim
+	_head_mirrored = false
 	for i in _stats.head_circle_count():
 		var circle := CircleShape2D.new()
 		circle.radius = _stats.head_circle_radii[i]
@@ -620,6 +633,8 @@ func _clear_rig() -> void:
 	_head = null
 	_head_shapes.clear()
 	_head_circle_offsets = PackedVector2Array()
+	_head_flips_with_aim = false
+	_head_mirrored = false
 	_pin = null
 	_groove = null
 	_head_visual = null
@@ -691,11 +706,41 @@ func _update_weapon_visual() -> void:
 	# a circle off the head's centre has to orbit the anchor, not spin in
 	# place, and re-deriving it cannot accumulate drift.
 	var facing: float = _haft.rotation - _head.rotation
+	_update_head_mirror()
+	var mirror := Vector2(1.0, -1.0) if _head_mirrored else Vector2.ONE
 	for i in _head_shapes.size():
 		var node: CollisionShape2D = _head_shapes[i]
-		node.position = _head_circle_offsets[i].rotated(facing)
+		node.position = (_head_circle_offsets[i] * mirror).rotated(facing)
 		node.rotation = facing
 	_head_visual.rotation = facing
+
+## Puts a one-sided head on the side of the haft that keeps it the same way up
+## on screen: as authored while the aim points right, mirrored across the haft
+## while it points left. Near straight up or down it holds whichever side it
+## had until the aim is HEAD_FLIP_DEADBAND past the vertical, so a thumb
+## wobbling on the vertical does not flip it every tick.
+##
+## The outline is rewritten point for point rather than the visual being
+## scaled by -1: `weapon_head_visual_polygon()` and `weapon_head_circles()`
+## both report head-local space with only the facing turn taken out, so the
+## drawn polygon and the circles have to be mirrored the same way -- in the
+## data -- or the art and the hitbox would part on one side only.
+func _update_head_mirror() -> void:
+	if not _head_flips_with_aim:
+		return
+	var across: float = cos(weapon_angle)
+	var mirrored: bool = _head_mirrored
+	if across < -sin(HEAD_FLIP_DEADBAND):
+		mirrored = true
+	elif across > sin(HEAD_FLIP_DEADBAND):
+		mirrored = false
+	if mirrored == _head_mirrored:
+		return
+	_head_mirrored = mirrored
+	var outline: PackedVector2Array = _head_visual.polygon
+	for i in outline.size():
+		outline[i].y = -outline[i].y
+	_head_visual.polygon = outline
 
 # --- Presentation: identity and damage --------------------------------------
 #
