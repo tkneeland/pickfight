@@ -1,0 +1,7 @@
+# Issue #38: both roster tunnel scenarios standalone, 3 runs each, on fix/issue-38-tunnel-graze @ 80bd086. macOS 15.7.7, 4.6.2.stable.official.71f334935
+run 1 roster_heads_do_not_tunnel_head: PASS  roster_heads_do_not_tunnel_head 1 passed, 0 failed, 1 total  exit 0
+run 1 roster_heads_do_not_tunnel_head_reversed: PASS  roster_heads_do_not_tunnel_head_reversed 1 passed, 0 failed, 1 total  exit 0
+run 2 roster_heads_do_not_tunnel_head: PASS  roster_heads_do_not_tunnel_head 1 passed, 0 failed, 1 total  exit 0
+run 2 roster_heads_do_not_tunnel_head_reversed: PASS  roster_heads_do_not_tunnel_head_reversed 1 passed, 0 failed, 1 total  exit 0
+run 3 roster_heads_do_not_tunnel_head: PASS  roster_heads_do_not_tunnel_head 1 passed, 0 failed, 1 total  exit 0
+run 3 roster_heads_do_not_tunnel_head_reversed: PASS  roster_heads_do_not_tunnel_head_reversed 1 passed, 0 failed, 1 total  exit 0

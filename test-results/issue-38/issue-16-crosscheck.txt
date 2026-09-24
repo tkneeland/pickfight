@@ -1,0 +1,37 @@
+# Issue #38 cross-check against #16's one-sided axe: origin/feat/issue-16-axe-flip @ 4156b8f, with 3ef5ffd and 80bd086 cherry-picked (clean) in a scratch worktree. macOS 15.7.7, 4.6.2.stable.official.71f334935
+
+## #16 tip WITHOUT the #38 commits
+$ --scenario=roster_heads_do_not_tunnel_head
+      pickaxe   0 deg at 1200 px/s each: crossed, then the correction put it back
+      pickaxe  45 deg at 600 px/s each: crossed 13.8 px apart -- a miss, not a breach
+      axe   0 deg at 600 px/s each: crossed 2.6 px apart -- a miss, not a breach
+      axe   0 deg at 1800 px/s each: crossed 18.2 px apart -- a miss, not a breach
+      axe  45 deg at 600 px/s each: crossed 41.6 px apart -- a miss, not a breach
+      axe 135 deg at 600 px/s each: crossed 35.7 px apart -- a miss, not a breach
+PASS  roster_heads_do_not_tunnel_head
+$ --scenario=roster_heads_do_not_tunnel_head_reversed
+      axe   0 deg at 600 px/s each: heads closed to   -0.0 px of each other  THROUGH
+      axe  90 deg at 600 px/s each: crossed 10.1 px apart -- a miss, not a breach
+FAIL  roster_heads_do_not_tunnel_head_reversed
+      - dagger, 45 deg approach at 1800 px/s each: one step took the heads from (15.88652, 16.07336) apart to (-5.120296, -4.461426) apart -- through each other and out the far side -- without the two of them ever once being in contact
+      - dagger: 1 of 12 completed charges put a head through another head
+      - axe, 0 deg approach at 600 px/s each: one step took the heads from (4.464634, 24.45068) apart to (-10.46644, 20.91528) apart -- through each other and out the far side -- without the two of them ever once being in contact
+      - axe: 1 of 12 completed charges put a head through another head
+
+## #16 tip WITH the #38 commits, standalone x3
+run 1: PASS  roster_heads_do_not_tunnel_head
+run 1: PASS  roster_heads_do_not_tunnel_head_reversed
+run 2: PASS  roster_heads_do_not_tunnel_head
+run 2: PASS  roster_heads_do_not_tunnel_head_reversed
+run 3: PASS  roster_heads_do_not_tunnel_head
+run 3: PASS  roster_heads_do_not_tunnel_head_reversed
+axe lines, run 1:
+      axe   0 deg at 600 px/s each: crossed -0.0 px apart -- a miss, not a breach
+      axe  90 deg at 600 px/s each: crossed 10.1 px apart -- a miss, not a breach
+      pickaxe   0 deg at 1200 px/s each: crossed, then the correction put it back
+      pickaxe 135 deg at 600 px/s each: crossed 13.8 px apart -- a miss, not a breach
+      axe   0 deg at 600 px/s each: crossed 2.6 px apart -- a miss, not a breach
+      axe  90 deg at 600 px/s each: crossed 33.3 px apart -- a miss, not a breach
+
+## #16 tip WITH the #38 commits, --all
+60 passed, 0 failed, 60 total

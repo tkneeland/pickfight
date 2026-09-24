@@ -324,13 +324,38 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	# why the tunnelling only showed at the highest charge speeds. Both sweeps
 	# measure the same step as a fraction of it, so the earlier one is simply
 	# the smaller fraction.
+	#
+	# **Except that a world contact changes the step the head check measured
+	# (issue #38).** The head sweep assumes this head travelled its whole
+	# step, but a world contact stops it partway and holds it there -- while
+	# the other head keeps going. So a pair that the full-step sweep saw meet
+	# *after* the world contact, and so rightly deferred to it, can still end
+	# the step with the other head straight through this one: this head is
+	# seated back at the world contact, and the other runs on through the
+	# place it now holds. Measured on the dagger's 45 deg charge at 1800 px/s:
+	# the attacker's head touched the blocker's body 0.7% of the way into the
+	# step, the heads would have met at 14.8%, the attacker was seated at
+	# 0.7%, and the blocker's head -- which sits almost on its own body and
+	# passes through it freely -- went 29 px on and out the far side of the
+	# attacker's. Nothing ever caught it, because the one correction the tick
+	# had was spent. Which charge lands that close to a body is set by
+	# sub-pixel timing, which is why it came and went with test history and
+	# platform. So after a world contact the pair is asked again, over the
+	# rest of the step, with this head held where the world stopped it.
 	if _has_previous:
 		var world: Dictionary = _find_world_contact(state)
 		var head: Dictionary = _find_head_crossing()
 		if not head.is_empty() and (world.is_empty() or head["fraction"] <= world["fraction"]):
 			_apply_head_crossing(state, head)
 		elif not world.is_empty():
+			# Applied first, and kept: the head did reach the world, and a
+			# strike on a body is recorded here or nowhere (see `swept_into`).
+			# The head correction then only re-seats it against the head that
+			# arrived on it afterwards.
 			_apply_world_contact(state, world)
+			var onto: Dictionary = _find_head_crossing(world["fraction"])
+			if not onto.is_empty():
+				_apply_head_crossing(state, onto)
 	_previous_position = state.transform.origin
 	_previous_rotation = state.transform.get_rotation()
 	_previous_shape_xforms.clear()
@@ -559,15 +584,28 @@ func _owns_pair(other: Variant) -> bool:
 ## Finds only, returning `{fraction, origin, normal, partner_velocity}` or
 ## empty; `_apply_head_crossing` moves the head. The caller weighs it against
 ## a world contact earlier in the same step (issue #27).
-func _find_head_crossing() -> Dictionary:
+##
+## `held_from`, when given, is the fraction of the step at which a world
+## contact stopped this head (issue #38). Only the rest of the step is swept
+## then, with this head standing still at the point it was stopped and the
+## other head carrying on along its own path -- which is what actually
+## happened, and not what the full-step sweep assumed. The fraction returned
+## is still a fraction of the whole step.
+func _find_head_crossing(held_from: float = -1.0) -> Dictionary:
 	if sweep_shapes.is_empty() or not _step_usable:
 		return {}
 	var tree: SceneTree = get_tree()
 	if tree == null or is_queued_for_deletion():
 		return {}
 
+	var my_from: Vector2 = _step_from
 	var my_motion: Vector2 = _step_to - _step_from
-	var mine := Transform2D(_step_rotation, _step_from)
+	var window: float = 0.0
+	if held_from >= 0.0:
+		window = held_from
+		my_from = _step_from + my_motion * held_from
+		my_motion = Vector2.ZERO
+	var mine := Transform2D(_step_rotation, my_from)
 
 	var soonest: float = INF
 	var normal: Vector2 = Vector2.ZERO
@@ -597,15 +635,17 @@ func _find_head_crossing() -> Dictionary:
 		if not theirs["usable"]:
 			continue
 
-		var their_from: Vector2 = theirs["from"]
-		var their_motion: Vector2 = Vector2(theirs["to"]) - their_from
+		var their_start: Vector2 = theirs["from"]
+		var their_step: Vector2 = Vector2(theirs["to"]) - their_start
+		var their_from: Vector2 = their_start + their_step * window
+		var their_motion: Vector2 = their_step * (1.0 - window)
 		var closed: float = (my_motion - their_motion).length()
 		if closed <= 0.0:
 			continue
 		# Nowhere near each other at any point in the step: no pair of circles
 		# can have met, and saying so from the two heads' own reach costs one
 		# test instead of a pass over the whole of both clusters.
-		if _closest_approach(_step_from - their_from, my_motion - their_motion) \
+		if _closest_approach(my_from - their_from, my_motion - their_motion) \
 				> _head_reach() + other._head_reach():
 			continue
 		var theirs_at_start := Transform2D(theirs["rotation"], their_from)
@@ -628,7 +668,7 @@ func _find_head_crossing() -> Dictionary:
 		# first touched. Carried over to wherever the other head actually
 		# ended the step, so the correction leaves the pair in contact rather
 		# than in contact with where the other head used to be.
-		offset = (_step_from + my_motion * fraction) - (their_from + their_motion * fraction)
+		offset = (my_from + my_motion * fraction) - (their_from + their_motion * fraction)
 		partner_origin = theirs["to"]
 		partner_velocity = theirs["velocity"]
 
@@ -655,7 +695,7 @@ func _find_head_crossing() -> Dictionary:
 	if soonest > 1.0 or normal.length_squared() == 0.0 or offset.length_squared() == 0.0:
 		return {}
 	return {
-		"fraction": soonest,
+		"fraction": window + soonest * (1.0 - window),
 		"origin": partner_origin + offset,
 		"normal": normal,
 		"partner_velocity": partner_velocity,
