@@ -13,5 +13,5 @@ Branch `feat/issue-16-axe-flip`, macOS, local Godot 4.6.2.
 | US4: no flicker near vertical (a ±4° wobble gives 0 flips; 25° past vertical flips within 2 ticks) | `axe_head_holds_side_near_vertical` | `issue-16/scenario-suite.txt` | PASS |
 | US6: symmetric heads are unaffected | `symmetric_head_ignores_aim_side` | `issue-16/scenario-suite.txt` | PASS |
 | The axe's stats stand: a full-speed strike deals 54.3 of 55 | `weapon_damage_matches_roster` (victim now levelled with the leading circle) | `issue-16/scenario-suite.txt` | PASS |
-| Nothing else regressed | full suite: 59 of 60 | `issue-16/scenario-suite.txt` | FAIL: axe graze in `roster_heads_do_not_tunnel_head`, #38 |
+| Nothing else regressed | full suite on top of #38 and all of main: 78 of 78 | `issue-16/scenario-suite.txt` | PASS |
 | Boots on a fresh clone | `git clone` of the branch, `godot --headless --path <clone> --quit`, grep for `SCRIPT ERROR` / `Failed to load script` | `issue-16/boot-check.txt` | PASS |

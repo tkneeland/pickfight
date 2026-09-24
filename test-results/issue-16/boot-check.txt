@@ -1,5 +1,2 @@
-ls: .godot: No such file or directory
-Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
-
-Controller page: http://172.19.9.117:8080/
-exit: 0
+Fresh-clone boot check, feat/issue-16-axe-flip rebased onto main 92b485a
+(no output -- clean)
