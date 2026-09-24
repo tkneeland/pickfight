@@ -35,6 +35,7 @@ const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
 const StageType := preload("res://scripts/Stage.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
 const HitFeedbackType := preload("res://scripts/HitFeedback.gd")
+const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
 
 const SCENARIO_NAMES: PackedStringArray = [
 	"aim_angle",
@@ -3608,6 +3609,18 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			## the geometry saying no circle could have touched. A breach has
 			## to be a crossing the physics owed us and did not deliver, and
 			## only overlap says that without argument.
+			##
+			## Overlap past `WeaponHead.PAIR_OVERLAP_ALLOWANCE`, though, not
+			## any overlap at all (issue #38). That allowance is how far the
+			## pair correction lets a step carry one head into another before
+			## it steps in, leaving the rest to the solver, so a crossing that
+			## overlapped by less is contact the physics was never asked to
+			## stop: #16's one-sided axes slide past each other with the
+			## surfaces grazing by 0.03 px on the crossing step, which is two
+			## heads touching, not one going through the other. A real breach
+			## goes past it, though not by much -- the dagger's, with the #38
+			## fix reverted, crosses at -2.3 to -2.6 px -- so this is the
+			## allowance and not anything looser.
 			var crossed_gap: float = INF
 			var cut_short: bool = false
 			var crossed_from: Vector2 = Vector2.ZERO
@@ -3686,7 +3699,7 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 				print("      %s %3.0f deg at %.0f px/s each: crossed, then the correction put it back" % [
 					label, degrees, speed])
 				went_through = false
-			if went_through and crossed_gap >= 0.0:
+			if went_through and crossed_gap >= -WeaponHeadType.PAIR_OVERLAP_ALLOWANCE:
 				print("      %s %3.0f deg at %.0f px/s each: crossed %.1f px apart -- a miss, not a breach" % [
 					label, degrees, speed, crossed_gap])
 				went_through = false
