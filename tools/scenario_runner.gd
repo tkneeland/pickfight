@@ -69,6 +69,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"heavy_weapon_wins_clash",
 	"every_stage_can_ring_out",
 	"hazard_zone_kills_at_full_health",
+	"moving_platform_carries_player",
+	"head_plants_moving_platform",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -477,6 +479,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_can_ring_out()
 		"hazard_zone_kills_at_full_health":
 			return await _scenario_hazard_zone_kills_at_full_health()
+		"moving_platform_carries_player":
+			return await _scenario_moving_platform_carries_player()
+		"head_plants_moving_platform":
+			return await _scenario_head_plants_moving_platform()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3291,6 +3297,127 @@ func _scenario_hazard_zone_kills_at_full_health() -> Array[String]:
 			failures.append("a hazard kill at full health left %.1f damage behind" % player.damage)
 		if player.alive:
 			failures.append("eliminated but still marked alive")
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md): the
+## global class cache lives in the gitignored `.godot/` and only an editor
+## run builds it, so a fresh clone cannot resolve the name.
+const MovingPlatformScene: PackedScene = preload("res://scenes/parts/MovingPlatform.tscn")
+
+## Slack allowed between a player's horizontal displacement and the
+## platform's over one patrol leg (moving_platform_carries_player). Loose
+## next to a full leg's few-hundred-pixel travel, but far tighter than the
+## gap a player left behind entirely would show.
+const MOVING_PLATFORM_CARRY_TOLERANCE: float = 20.0
+
+## US-2 / issue #18: a player resting on a moving platform is carried along
+## with it, rather than sliding out from under it. Asserting only that the
+## platform moved would pass even with the player left completely behind --
+## nothing else here makes the player move on its own -- so this measures
+## the player's own horizontal displacement across one full patrol leg and
+## compares it directly against the platform's displacement over the same
+## ticks.
+##
+## The platform is authored with `starts_moving = false` and only started
+## with `start()` once the player has already landed and settled on it.
+## Spawning a player onto a platform already mid-patrol would have it miss
+## the moving target on the way down -- a hazard of dropping a player from
+## above a moving target, not something this scenario is about.
+func _scenario_moving_platform_carries_player() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+
+	var platform: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	platform.starts_moving = false
+	# Positioned before add_child(): _ready() reads global_position once, at
+	# the moment the node enters the tree, to fix the patrol's near end.
+	# Setting it any later would fix the patrol to wherever the node
+	# happened to be instantiated (the origin) instead.
+	platform.position = Vector2(0, 300)
+	stage.add_child(platform)
+
+	# Short weapon, straight down, same setup as head_plants_terrain: land
+	# and plant on the platform's surface rather than drift toward its edge.
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on the stationary platform: vertical speed %.1f px/s" % player.linear_velocity.y)
+
+	platform.start()
+	await physics_frame
+	var player_x0: float = player.global_position.x
+	var platform_x0: float = platform.global_position.x
+
+	var leg_ticks: int = int(round(platform.one_way_sec * Engine.physics_ticks_per_second))
+	await _await_ticks(leg_ticks)
+
+	var player_dx: float = player.global_position.x - player_x0
+	var platform_dx: float = platform.global_position.x - platform_x0
+	print("      platform moved %.1f px, player moved %.1f px over one patrol leg" % [platform_dx, player_dx])
+	if absf(player_dx - platform_dx) > MOVING_PLATFORM_CARRY_TOLERANCE:
+		failures.append(
+			"player displacement %.1f px did not track platform displacement %.1f px over one patrol leg (tolerance %.1f px)" % [
+				player_dx, platform_dx, MOVING_PLATFORM_CARRY_TOLERANCE])
+
+	await _teardown(stage)
+	return failures
+
+## US-7 / issue #18: a weapon head plants on a moving platform exactly as it
+## does on static terrain -- `head_plants_terrain` is the prior art, and the
+## assertion shape below is copied from it unchanged. The platform is
+## genuinely translating throughout this scenario, not merely standing in
+## for the arena floor with a different node type: `travel` and
+## `one_way_sec` are tuned small enough that the platform's footprint stays
+## under the player for the whole test, since carrying a player across a
+## full patrol leg is already covered by moving_platform_carries_player.
+##
+## The platform's top surface is placed at GROUND_TOP, the same height
+## head_plants_terrain stands its player on, so every constant in the copied
+## assertions -- GROUND_TOP, PLAYER_RADIUS, HEAD_RADIUS, PLANT_CLEARANCE --
+## reads exactly as it does there.
+func _scenario_head_plants_moving_platform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+
+	var platform: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	platform.travel = Vector2(60, 0)
+	platform.one_way_sec = 3.0
+	platform.starts_moving = true
+	# Positioned before add_child(), for the same reason as in
+	# moving_platform_carries_player: _ready() fixes the patrol's near end
+	# to global_position at the moment the node enters the tree.
+	platform.position = Vector2(0, GROUND_TOP + platform.size.y / 2.0)
+	stage.add_child(platform)
+
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+
+	# Short weapon, straight down: land on the head.
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+
+	var planted_y: float = player.global_position.y
+	var head_y: float = player.weapon_head_position().y
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on its head: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if planted_y + PLAYER_RADIUS > GROUND_TOP - PLANT_CLEARANCE:
+		failures.append("player body reached the platform (y %.1f); it should be standing on the head, not on itself" % planted_y)
+	if head_y + HEAD_RADIUS > GROUND_TOP + PLANT_CLEARANCE:
+		failures.append("head sank %.1f px into the platform; it should be planted on top of it" % (
+			head_y + HEAD_RADIUS - GROUND_TOP))
+
+	# Full reach against the plant: push off.
+	player.set_input_vector(Vector2.DOWN)
+	var highest: float = planted_y
+	for _i in PUSH_TICKS:
+		await physics_frame
+		highest = minf(highest, player.global_position.y)
+
+	var risen: float = planted_y - highest
+	if risen < MIN_PUSH_RISE:
+		failures.append("pushing against the plant raised the body %.1f px, expected more than %.1f px" % [
+			risen, MIN_PUSH_RISE])
 
 	await _teardown(stage)
 	return failures
