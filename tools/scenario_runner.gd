@@ -2288,14 +2288,15 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Flatlands.tscn",
 	"res://scenes/stages/Pillars.tscn",
+	"res://scenes/stages/Ferry.tscn",
 	"res://scenes/stages/Highrise.tscn",
+	"res://scenes/stages/Erosion.tscn",
 	"res://scenes/stages/Islands.tscn",
+	"res://scenes/stages/Furnace.tscn",
 	"res://scenes/stages/Gauntlet.tscn",
+	"res://scenes/stages/Cascade.tscn",
 	"res://scenes/stages/Slant.tscn",
 	"res://scenes/stages/Bowl.tscn",
-	"res://scenes/stages/Furnace.tscn",
-	"res://scenes/stages/Erosion.tscn",
-	"res://scenes/stages/Ferry.tscn",
 ]
 
 func _scenario_stage_spawns_are_safe() -> Array[String]:

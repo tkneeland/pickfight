@@ -1,0 +1,121 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_top"]
+size = Vector2(260, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
+size = Vector2(800, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A descending run: a static start platform up high, three moving platforms
+; carrying a rider down in a staircase, and a static floor at the bottom
+; (issue #19: US-5, US-8). Height here is not a permanent advantage the way
+; it is on Highrise -- the platforms that got you up are also the
+; platforms that will carry the next rider back down, so holding the top
+; is something you have to keep doing, not something you did once.
+;
+; Descent shape: TopPlatform sits at y=-260; Floor sits at y=400. Three
+; MovingPlatform instances (#18) bridge the 660 px drop in three
+; ~180-220 px legs, staggered left/right (x=-160, 150, -150) so the run
+; reads as a staircase rather than a single elevator, and so a rider
+; changes horizontal lane on the way down instead of falling in a
+; straight line.
+;
+; Patrol legs and phasing: each platform's authored position is one end of
+; its leg and `travel` carries it to the other end. P1 and P3 are authored
+; at the TOP of their legs (travel points down, so they head down the
+; instant the stage loads); P2 is authored at the BOTTOM of its leg
+; (travel points up, so it heads up first). There is no `start()` call
+; anywhere in the round loop -- MovingPlatform.gd's own doc says nothing
+; calls it yet -- so `starts_moving=false` would just park a platform
+; forever. The only way to stagger this run is to choose which end of the
+; leg each platform is authored at, which is what P1/P2/P3 do here. The
+; three also run at slightly different one_way_sec (2.4 / 2.2 / 2.0), so
+; even legs that start in the same phase drift apart rather than staying
+; locked together.
+;
+; What makes the climb back up reachable: every leg is a ping-pong, not a
+; one-way drop -- the platform that carried a player down always cycles
+; back to the top of its own leg on its own, with no player action or
+; script call needed. Consecutive tiers' vertical ranges overlap by
+; roughly 10-20 px at the hand-off height (P1's low point meets P2's high
+; point, P2's low point meets P3's high point, P3's low point all but
+; touches the floor), so a climber only ever has to wait out one
+; platform's own return leg at a time rather than solve the whole stack's
+; timing at once. Both spawns sit on the static TopPlatform, so nobody
+; spawns stranded and the route down is always there to be re-climbed.
+
+[node name="Cascade" type="Node2D"]
+script = ExtResource("1")
+
+[node name="TopPlatform" type="StaticBody2D" parent="."]
+position = Vector2(0, -260)
+
+[node name="TopPlatformShape" type="CollisionShape2D" parent="TopPlatform"]
+shape = SubResource("RectangleShape2D_top")
+
+[node name="TopPlatformVisual" type="Polygon2D" parent="TopPlatform"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
+
+; Authored at the top of its leg (travel points down), so it starts the
+; instant the stage loads already at the boarding point directly beneath
+; TopPlatform -- the first descent is always available to whoever gets
+; there first.
+[node name="Platform1" parent="." instance=ExtResource("3")]
+position = Vector2(-160, -160)
+size = Vector2(200, 24)
+travel = Vector2(0, 200)
+one_way_sec = 2.4
+
+; Authored at the bottom of its leg (travel points up), so it heads
+; upward first -- opposite phase from Platform1, so the two tiers are
+; never doing the same thing at the same moment.
+[node name="Platform2" parent="." instance=ExtResource("3")]
+position = Vector2(150, 220)
+size = Vector2(200, 24)
+travel = Vector2(0, -200)
+one_way_sec = 2.2
+
+; Authored at the top of its leg, like Platform1, but at a different
+; period, so the pair drift out of sync over a session rather than
+; re-aligning on a fixed beat.
+[node name="Platform3" parent="." instance=ExtResource("3")]
+position = Vector2(-150, 210)
+size = Vector2(200, 24)
+travel = Vector2(0, 160)
+one_way_sec = 2.0
+
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(0, 400)
+
+[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("RectangleShape2D_floor")
+
+[node name="FloorVisual" type="Polygon2D" parent="Floor"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-400, -20, 400, -20, 400, 20, -400, 20)
+
+; Both spawns sit on the static TopPlatform, not on any moving platform --
+; a spawn point that lands on a platform mid-patrol can still be carrying
+; vertical speed when stage_spawns_are_safe checks it 60 ticks later, and
+; would fail to settle. TopPlatform never moves, so a dropped player
+; always comes to rest here.
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-90, -352)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(90, -352)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 560)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
