@@ -97,6 +97,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_rotation_seeded_is_deterministic",
 	"stage_rotation_opener_is_first_stage",
 	"stage_rotation_never_repeats_back_to_back",
+	"kill_zone_rises_after_grace",
+	"kill_zone_holds_during_grace",
+	"rising_kill_zone_eliminates_holdout",
+	"hazard_never_rises",
+	"rising_kill_zone_resets_each_round",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -576,6 +581,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_rotation_opener_is_first_stage()
 		"stage_rotation_never_repeats_back_to_back":
 			return await _scenario_stage_rotation_never_repeats_back_to_back()
+		"kill_zone_rises_after_grace":
+			return await _scenario_kill_zone_rises_after_grace()
+		"kill_zone_holds_during_grace":
+			return await _scenario_kill_zone_holds_during_grace()
+		"rising_kill_zone_eliminates_holdout":
+			return await _scenario_rising_kill_zone_eliminates_holdout()
+		"hazard_never_rises":
+			return await _scenario_hazard_never_rises()
+		"rising_kill_zone_resets_each_round":
+			return await _scenario_rising_kill_zone_resets_each_round()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -5546,4 +5561,296 @@ func _scenario_stage_rotation_never_repeats_back_to_back() -> Array[String]:
 		if two_names[i] == two_names[i - 1]:
 			failures.append("2-stage roster round %d repeated round %d's stage %s" % [i, i - 1, two_names[i]])
 
+	return failures
+
+# --- Rising kill zone (issue #22, ADR-0012) ---------------------------------
+
+## Short stand-ins for RoundManager's 40 s grace and 28 s rise, so a scenario
+## watches the whole mechanic in a couple of seconds. The rise is a deadline
+## rather than a fixed speed, so shrinking both keeps its shape: the zone
+## still arrives at the highest spawn `RISE_TEST_RISE_SEC` after it sets off.
+const RISE_TEST_GRACE_SEC: float = 0.5
+const RISE_TEST_RISE_SEC: float = 2.0
+## Pixels a zone that is meant to be holding may be seen to have moved.
+const RISE_HOLD_TOLERANCE: float = 0.01
+## Fraction by which the measured rise speed may miss the one the deadline
+## asks for.
+const RISE_RATE_TOLERANCE: float = 0.03
+## Ticks the rise speed is measured over.
+const RISE_SAMPLE_TICKS: int = 30
+
+## A real RoundManager (preloaded by path) running a rotation of real stages,
+## with the rise's grace and deadline shortened, two round-owned players and
+## the never-abandoning _FakeRoster. Literal relative NodePaths for the same
+## reason as `_new_round_loop()`.
+func _new_rising_round(stage_paths: PackedStringArray, grace_sec: float, rise_sec: float) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "Container"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	for i in 2:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "P%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		players.append(player)
+	var roster := _FakeRoster.new()
+	roster.name = "Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := Node.new()
+	round_manager.set_script(RoundManagerType)
+	var paths: Array[NodePath] = [NodePath("../P0"), NodePath("../P1")]
+	round_manager.player_paths = paths
+	var scenes: Array[PackedScene] = []
+	for path: String in stage_paths:
+		scenes.append(load(path) as PackedScene)
+	round_manager.stage_scenes = scenes
+	round_manager.arena_container_path = NodePath("../Container")
+	round_manager.controller_server_path = NodePath("../Roster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.kill_zone_grace_sec = grace_sec
+	round_manager.kill_zone_rise_sec = rise_sec
+	stage.add_child(round_manager)
+	return {"stage": stage, "container": container, "players": players}
+
+## The stage instance a rising round is currently playing, or null.
+func _active_stage(container: Node) -> Node2D:
+	for i in range(container.get_child_count() - 1, -1, -1):
+		var child: Node = container.get_child(i)
+		if not child.is_queued_for_deletion():
+			return child as Node2D
+	return null
+
+## Where a stage's floor kill zone was authored, read off a fresh instance
+## of the scene rather than the live one, which may already be moving.
+func _authored_kill_zone_y(path: String) -> float:
+	var instance: Node2D = (load(path) as PackedScene).instantiate()
+	var y: float = (instance.get_node("KillZone") as Node2D).position.y
+	instance.free()
+	return y
+
+## The highest (smallest y) of a stage's spawn points: where the rise is
+## meant to arrive `kill_zone_rise_sec` after it sets off.
+func _highest_spawn_y(stage_instance: Node2D) -> float:
+	var highest: float = INF
+	for spawn: Vector2 in stage_instance.get_spawn_points():
+		highest = minf(highest, spawn.y)
+	return highest
+
+## Waits for a round to be live on a stage instance other than `previous`;
+## returns that instance, or null on timeout.
+func _await_live_stage(loop: Dictionary, previous: Node2D = null) -> Node2D:
+	var players: Array[RigidBody2D] = loop["players"]
+	var container: Node = loop["container"]
+	var live: bool = await _await_condition(func() -> bool:
+		var active: Node2D = _active_stage(container)
+		return players[0].alive and players[1].alive and active != null and active != previous,
+		ROUND_LOOP_TIMEOUT_MSEC)
+	return _active_stage(container) if live else null
+
+## Issue #22: once the grace period is over, the floor kill zone climbs
+## steadily -- every tick higher than the last, at the speed that brings it
+## to the stage's highest spawn by the round's deadline.
+func _scenario_kill_zone_rises_after_grace() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "res://scenes/stages/Flatlands.tscn"
+	var loop: Dictionary = _new_rising_round(PackedStringArray([path]), RISE_TEST_GRACE_SEC, RISE_TEST_RISE_SEC)
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("round never started on %s" % path)
+		await _teardown(loop["stage"])
+		return failures
+	var zone: Node2D = instance.get_node("KillZone")
+	var authored_y: float = _authored_kill_zone_y(path)
+	var set_off: bool = await _await_condition(
+		func() -> bool: return zone.position.y < authored_y - RISE_HOLD_TOLERANCE, ROUND_LOOP_TIMEOUT_MSEC)
+	if not set_off:
+		failures.append("%s: the floor kill zone never rose after its %.2f s grace" % [path, RISE_TEST_GRACE_SEC])
+		await _teardown(loop["stage"])
+		return failures
+
+	var start_y: float = zone.position.y
+	var previous_y: float = start_y
+	for tick in RISE_SAMPLE_TICKS:
+		await physics_frame
+		if zone.position.y >= previous_y:
+			failures.append("%s: tick %d, the kill zone did not rise (y %.2f after %.2f)" % [
+				path, tick, zone.position.y, previous_y])
+			break
+		previous_y = zone.position.y
+	var measured: float = (start_y - zone.position.y) * Engine.physics_ticks_per_second / RISE_SAMPLE_TICKS
+	var expected: float = (authored_y - _highest_spawn_y(instance)) / RISE_TEST_RISE_SEC
+	if absf(measured - expected) > expected * RISE_RATE_TOLERANCE:
+		failures.append("%s: kill zone rose at %.1f px/s, expected %.1f px/s to reach the highest spawn in %.1f s" % [
+			path, measured, expected, RISE_TEST_RISE_SEC])
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Grace the hold scenario runs with, and the ticks it watches for inside
+## it: 50 ticks is 0.83 s, comfortably short of 1 s even allowing for the
+## frame or two between the round starting and the scenario seeing it live.
+const RISE_HOLD_GRACE_SEC: float = 1.0
+const RISE_HOLD_WATCH_TICKS: int = 50
+
+## Issue #22: for the whole grace period the floor kill zone stays exactly
+## where the stage authored it.
+func _scenario_kill_zone_holds_during_grace() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "res://scenes/stages/Flatlands.tscn"
+	var loop: Dictionary = _new_rising_round(PackedStringArray([path]), RISE_HOLD_GRACE_SEC, RISE_TEST_RISE_SEC)
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("round never started on %s" % path)
+		await _teardown(loop["stage"])
+		return failures
+	var zone: Node2D = instance.get_node("KillZone")
+	var authored_y: float = _authored_kill_zone_y(path)
+	for tick in RISE_HOLD_WATCH_TICKS:
+		if absf(zone.position.y - authored_y) > RISE_HOLD_TOLERANCE:
+			failures.append("%s: tick %d of a %.1f s grace, the kill zone was at y %.2f, authored at %.2f" % [
+				path, tick, RISE_HOLD_GRACE_SEC, zone.position.y, authored_y])
+			break
+		await physics_frame
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Stages the holdout scenario runs on: the lowest top spawn in the rotation
+## and the tallest climb (Cascade's spawns sit at y=-352, over 900 px above
+## its floor), so a speed that only suited one height would fail the other.
+const HOLDOUT_STAGE_PATHS: PackedStringArray = [
+	"res://scenes/stages/Flatlands.tscn",
+	"res://scenes/stages/Cascade.tscn",
+]
+## How far into the rise a holdout may be caught at the earliest. Spawns are
+## drop points: Flatlands' sit 276 px above its floor, so a player idling
+## there stands well below its spawn and the zone reaches them about a
+## third of the way to the deadline (Cascade's, standing almost on their
+## spawns, about nine tenths). Anything under a quarter would mean the zone
+## did not wait out its grace or rose far faster than it should.
+const HOLDOUT_EARLIEST_RISE_FRACTION: float = 0.25
+## Ticks past the deadline a holdout may survive: the zone reaches the spawn
+## point on time, and a body standing there is already inside it by then.
+const HOLDOUT_LATE_TICKS: int = 15
+
+## Issue #22's whole point: a player who parks on the stage's highest spawn
+## and never moves is still eliminated, by the rising zone, and not before
+## the grace period plus most of the rise. Idle players cannot ring out or
+## take damage any other way, so the first death is the zone's.
+func _scenario_rising_kill_zone_eliminates_holdout() -> Array[String]:
+	var failures: Array[String] = []
+	var tps: float = Engine.physics_ticks_per_second
+	var earliest: int = int((RISE_TEST_GRACE_SEC + HOLDOUT_EARLIEST_RISE_FRACTION * RISE_TEST_RISE_SEC) * tps)
+	var deadline: int = int((RISE_TEST_GRACE_SEC + RISE_TEST_RISE_SEC) * tps) + HOLDOUT_LATE_TICKS
+	for path: String in HOLDOUT_STAGE_PATHS:
+		_scenario_completed = false
+		var loop: Dictionary = _new_rising_round(PackedStringArray([path]), RISE_TEST_GRACE_SEC, RISE_TEST_RISE_SEC)
+		var players: Array[RigidBody2D] = loop["players"]
+		var instance: Node2D = await _await_live_stage(loop)
+		if instance == null:
+			failures.append("round never started on %s" % path)
+			await _teardown(loop["stage"])
+			continue
+		var ticks: int = 0
+		while ticks <= deadline and players[0].alive and players[1].alive:
+			await physics_frame
+			ticks += 1
+		print("      %s: first holdout eliminated %.2f s into the round" % [path, ticks / tps])
+		if players[0].alive and players[1].alive:
+			failures.append("%s: holdouts on the highest spawn were still alive %.2f s in, past the %.2f s deadline" % [
+				path, ticks / tps, RISE_TEST_GRACE_SEC + RISE_TEST_RISE_SEC])
+		elif ticks < earliest:
+			failures.append("%s: a holdout died %.2f s in, before the rise could have reached it (%.2f s)" % [
+				path, ticks / tps, earliest / tps])
+		await _teardown(loop["stage"])
+	return failures
+
+## Ticks the hazard scenario lets the floor rise for: well past its short
+## grace, far enough that a hazard carried along would be obvious, and short
+## of the zone reaching the players -- a round that ended would free the
+## stage under the scenario.
+const HAZARD_RISE_WATCH_TICKS: int = 40
+
+## Hazards share KillZone.gd with the floor, and must never rise with it.
+## Furnace's walls and Gauntlet's ceiling are every hazard in the rotation.
+func _scenario_hazard_never_rises() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in ["res://scenes/stages/Furnace.tscn", "res://scenes/stages/Gauntlet.tscn"]:
+		_scenario_completed = false
+		var loop: Dictionary = _new_rising_round(PackedStringArray([path]), 0.2, RISE_TEST_RISE_SEC)
+		var instance: Node2D = await _await_live_stage(loop)
+		if instance == null:
+			failures.append("round never started on %s" % path)
+			await _teardown(loop["stage"])
+			continue
+		var floor_zone: Node2D = instance.get_node("KillZone")
+		var hazards: Array[Node2D] = []
+		var authored: Array[Vector2] = []
+		for child in instance.get_children():
+			if child is Area2D and child != floor_zone and child.get_script() == floor_zone.get_script():
+				hazards.append(child)
+				authored.append(child.global_position)
+		if hazards.is_empty():
+			failures.append("%s: found no hazard to watch" % path)
+		var floor_y: float = floor_zone.position.y
+		await _await_ticks(HAZARD_RISE_WATCH_TICKS)
+		if floor_zone.position.y >= floor_y:
+			failures.append("%s: the floor kill zone never rose, so the hazards were never put to the test" % path)
+		for i in hazards.size():
+			if hazards[i].global_position != authored[i]:
+				failures.append("%s: hazard %s moved from %s to %s" % [
+					path, hazards[i].name, authored[i], hazards[i].global_position])
+		await _teardown(loop["stage"])
+	return failures
+
+## Each round's stage is instanced fresh, so its kill zone starts from the
+## height its own scene authored and waits out a whole new grace period --
+## nothing of the last round's rise carries over. Two stages with different
+## floor heights, so "reset" cannot pass by the new zone landing on the old
+## zone's starting height.
+func _scenario_rising_kill_zone_resets_each_round() -> Array[String]:
+	var failures: Array[String] = []
+	var paths: PackedStringArray = ["res://scenes/stages/Cascade.tscn", "res://scenes/stages/Flatlands.tscn"]
+	var loop: Dictionary = _new_rising_round(paths, RISE_TEST_GRACE_SEC, RISE_TEST_RISE_SEC)
+	var players: Array[RigidBody2D] = loop["players"]
+	var first: Node2D = await _await_live_stage(loop)
+	if first == null:
+		failures.append("first round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var first_zone: Node2D = first.get_node("KillZone")
+	var first_authored: float = _authored_kill_zone_y(paths[0])
+	var rose: bool = await _await_condition(
+		func() -> bool: return first_zone.position.y < first_authored - 50.0, ROUND_LOOP_TIMEOUT_MSEC)
+	if not rose:
+		failures.append("%s: first round's kill zone never rose" % paths[0])
+		await _teardown(loop["stage"])
+		return failures
+	players[0].eliminate()
+
+	var second: Node2D = await _await_live_stage(loop, first)
+	if second == null:
+		failures.append("second round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var zone: Node2D = second.get_node("KillZone")
+	var authored_y: float = _authored_kill_zone_y(paths[1])
+	# 20 ticks is a third of a second, well inside the fresh 0.5 s grace.
+	for tick in 20:
+		if absf(zone.position.y - authored_y) > RISE_HOLD_TOLERANCE:
+			failures.append("%s: tick %d of the new round, the kill zone was at y %.2f, authored at %.2f" % [
+				paths[1], tick, zone.position.y, authored_y])
+			break
+		await physics_frame
+	var rises_again: bool = await _await_condition(
+		func() -> bool: return zone.position.y < authored_y - RISE_HOLD_TOLERANCE, ROUND_LOOP_TIMEOUT_MSEC)
+	if not rises_again:
+		failures.append("%s: the new round's kill zone never started rising" % paths[1])
+
+	await _teardown(loop["stage"])
 	return failures
