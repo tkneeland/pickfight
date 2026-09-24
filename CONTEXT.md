@@ -59,7 +59,7 @@ interesting.
 
 ## Deliberately not decided
 
-- The full roster of stages beyond the seven that exist (ADR-0008 settled the
+- The full roster of stages beyond the eleven that exist (ADR-0008 settled the
   authoring format: one `.tscn` per stage under `scenes/stages/`).
 - Whether the rotation stays sequential now that it is past a handful of
   stages, or becomes a shuffle that never repeats back to back (#20).

@@ -1,0 +1,45 @@
+# Windowed smoke run: real Main.tscn launched with -- --random-weapons, two WebSocket clients
+# sending ids and live drag vectors, HTTP GET of the controller page, 12 rounds (11 stages + wrap).
+# Harness ends each round after ~3 s by eliminating one player; 'ended on its own' = a real in-play death.
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:8080/
+RoundManager: --random-weapons on; non-winners start each round with a random weapon
+SMOKE http GET / -> result=0 code=200 bytes=12824 ws_port_injected=true
+SMOKE client 0 got {"slot":1}
+SMOKE client 1 got {"slot":0}
+SMOKE round 1: stage=Flatlands p1=(-100.0, 0.0) p2=(100.0, 0.0) alive=true/true weapons=dagger.tres/pickaxe.tres
+SMOKE   shot 01-Flatlands.png  p1=(-41.0, 244.0) p2=(106.0, 276.0) dmg=0/0
+SMOKE   ended round 1 by eliminating Player2
+SMOKE round 2: stage=Pillars p1=(-360.0, 60.0) p2=(360.0, 60.0) alive=true/true weapons=dagger.tres/pickaxe.tres
+SMOKE   shot 02-Pillars.png  p1=(-309.0, 96.0) p2=(361.0, 96.0) dmg=0/0
+SMOKE round 2 on Pillars ended on its own after 2.2s (scores [2, 0])
+SMOKE round 3: stage=Ferry p1=(-450.0, 300.0) p2=(450.0, 300.0) alive=true/true weapons=dagger.tres/pickaxe.tres
+SMOKE   shot 03-Ferry.png  p1=(-410.0, 344.0) p2=(562.0, 344.0) dmg=0/0
+SMOKE   ended round 3 by eliminating Player2
+SMOKE round 4: stage=Highrise p1=(-300.0, 340.0) p2=(300.0, 340.0) alive=true/true weapons=dagger.tres/pickaxe.tres
+SMOKE   shot 04-Highrise.png  p1=(-290.0, 315.0) p2=(252.0, 332.0) dmg=0/0
+SMOKE   ended round 4 by eliminating Player1
+SMOKE round 5: stage=Erosion p1=(-40.0, 220.0) p2=(40.0, 220.0) alive=true/true weapons=pickaxe.tres/pickaxe.tres
+SMOKE   shot 05-Erosion.png  p1=(142.0, 264.0) p2=(13.0, 398.0) dmg=0/0
+SMOKE round 5 on Erosion ended on its own after 2.0s (scores [3, 2])
+SMOKE round 6: stage=Islands p1=(-420.0, 220.0) p2=(420.0, 220.0) alive=true/true weapons=sword.tres/pickaxe.tres
+SMOKE   shot 06-Islands.png  p1=(-306.0, 288.0) p2=(428.0, 264.0) dmg=0/0
+SMOKE round 6 on Islands ended on its own after 2.0s (scores [3, 3])
+SMOKE round 7: stage=Furnace p1=(-120.0, 100.0) p2=(120.0, 100.0) alive=true/true weapons=axe.tres/pickaxe.tres
+SMOKE   shot 07-Furnace.png  p1=(29.0, 171.0) p2=(163.0, 162.0) dmg=0/0
+SMOKE round 7 on Furnace ended on its own after 1.3s (scores [4, 3])
+SMOKE round 8: stage=Gauntlet p1=(-500.0, 200.0) p2=(500.0, 200.0) alive=true/true weapons=axe.tres/staff.tres
+SMOKE   shot 08-Gauntlet.png  p1=(-496.0, 276.0) p2=(583.0, 192.0) dmg=0/0
+SMOKE   ended round 8 by eliminating Player1
+SMOKE round 9: stage=Cascade p1=(-90.0, -352.0) p2=(90.0, -352.0) alive=true/true weapons=axe.tres/staff.tres
+SMOKE   shot 09-Cascade.png  p1=(15.0, -310.0) p2=(103.0, -296.0) dmg=0/0
+SMOKE   ended round 9 by eliminating Player2
+SMOKE round 10: stage=Slant p1=(-460.0, 300.0) p2=(430.0, 100.0) alive=true/true weapons=axe.tres/axe.tres
+SMOKE   shot 10-Slant.png  p1=(-445.0, 356.0) p2=(380.0, 156.0) dmg=0/0
+SMOKE   ended round 10 by eliminating Player1
+SMOKE round 11: stage=Bowl p1=(-400.0, 140.0) p2=(400.0, 140.0) alive=true/true weapons=sword.tres/axe.tres
+SMOKE   shot 11-Bowl.png  p1=(-342.0, 167.0) p2=(376.0, 123.0) dmg=0/0
+SMOKE   ended round 11 by eliminating Player2
+SMOKE round 12: stage=Flatlands p1=(-100.0, 0.0) p2=(100.0, 0.0) alive=true/true weapons=sword.tres/axe.tres
+SMOKE   shot 12-Flatlands.png  p1=(-91.0, 276.0) p2=(105.0, 276.0) dmg=0/0
+SMOKE   ended round 12 by eliminating Player1
+SMOKE done: 12 rounds, scores [6, 6]

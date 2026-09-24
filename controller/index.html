@@ -169,14 +169,20 @@
   }
 
   // ---- pointer input ------------------------------------------------------
+  // The one finger driving the drag. A second finger landing (a resting
+  // thumb, a palm) is ignored until this one lifts, rather than re-anchoring
+  // the drag or releasing it when the stray finger comes up.
+  var activePointer = null;
+
   function begin(e) {
+    activePointer = e.pointerId;
     anchor = { x: e.clientX, y: e.clientY };
     point = { x: e.clientX, y: e.clientY };
     recompute();
   }
 
   function move(e) {
-    if (!anchor) { return; }
+    if (!anchor || e.pointerId !== activePointer) { return; }
     // Coalesced events carry samples taken above display rate (ADR-0002); the
     // last one is the newest position, which is all the host cares about.
     var samples = (typeof e.getCoalescedEvents === "function") ? e.getCoalescedEvents() : null;
@@ -186,19 +192,25 @@
   }
 
   function release() {
+    activePointer = null;
     anchor = null;
     point = null;
     vx = 0;
     vy = 0;
   }
 
+  function releaseIfActive(e) {
+    if (e.pointerId === activePointer) { release(); }
+  }
+
   canvas.addEventListener("pointerdown", function (e) {
+    if (activePointer !== null) { return; }
     canvas.setPointerCapture(e.pointerId);
     begin(e);
   });
   canvas.addEventListener("pointermove", move);
-  canvas.addEventListener("pointerup", release);
-  canvas.addEventListener("pointercancel", release);
+  canvas.addEventListener("pointerup", releaseIfActive);
+  canvas.addEventListener("pointercancel", releaseIfActive);
   window.addEventListener("blur", release);
 
   // Touch listeners exist only to stop scroll, pull-to-refresh and pinch-zoom

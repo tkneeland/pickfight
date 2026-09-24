@@ -44,6 +44,13 @@ const LENGTH_LOG_EPSILON: float = 0.05
 ## Physics frames between "weapon steady" lines. Steadiness has to be provable
 ## from a line that is present, not from the absence of change lines.
 const STEADY_LOG_FRAMES: int = 30
+## Lower-cased substrings of an adapter's name that mark it as virtual, so its
+## address is listed after real ones (see `_join_urls`).
+const VIRTUAL_ADAPTER_HINTS: PackedStringArray = [
+	"vethernet", "wsl", "hyper-v", "docker", "virtualbox", "vmware", "vbox",
+	"tailscale", "zerotier", "wireguard", "openvpn", "tap-", "tun", "utun",
+	"bridge", "virbr", "loopback",
+]
 
 @export var http_port: int = 8080
 @export var ws_port: int = 8081
@@ -143,7 +150,10 @@ func _ready() -> void:
 
 	var label: Label = get_node_or_null(join_label_path) as Label
 	if label != null:
-		label.text = "Join on your phone:\n" + ("\n".join(urls) if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
+		# One URL only: the label sits directly above the score line, and every
+		# address is already printed to the console for the rare case the
+		# first one isn't the room's network.
+		label.text = "Join on your phone:\n" + (urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
 
 	var qr_rect: TextureRect = get_node_or_null(qr_texture_path) as TextureRect
 	if qr_rect != null:
@@ -187,15 +197,37 @@ func _weapon_away_from_rest(slot: int) -> bool:
 
 # --- HTTP -------------------------------------------------------------------
 
+## Join URLs, best first: the QR code and the on-screen label only show the
+## first one, so it has to be the address a phone on the room's Wi-Fi can
+## actually reach.
+##
+## Link-local `169.254.*` addresses are dropped outright -- a disconnected or
+## unconfigured adapter self-assigns one, and no phone can reach it. Adapters
+## whose names mark them as virtual (WSL, Hyper-V, Docker, VPNs) are kept but
+## sorted last. Deliberately not ranked by address range: a real Wi-Fi network
+## can hand out 172.16/12 or 10/8 just as happily as 192.168/16.
 func _join_urls() -> PackedStringArray:
-	var urls: PackedStringArray = PackedStringArray()
-	for addr: String in IP.get_local_addresses():
-		if addr.contains(":"):
-			continue # IPv6
-		if addr.begins_with("127."):
-			continue # loopback
-		urls.append("http://%s:%d/" % [addr, http_port])
-	return urls
+	var preferred: PackedStringArray = PackedStringArray()
+	var virtual: PackedStringArray = PackedStringArray()
+	for iface: Dictionary in IP.get_local_interfaces():
+		var adapter: String = (str(iface.get("friendly", "")) + " " + str(iface.get("name", ""))).to_lower()
+		var is_virtual: bool = false
+		for hint: String in VIRTUAL_ADAPTER_HINTS:
+			if adapter.contains(hint):
+				is_virtual = true
+				break
+		for addr: String in iface.get("addresses", []):
+			if addr.contains(":") or addr.begins_with("127.") or addr.begins_with("169.254."):
+				continue # IPv6, loopback, link-local
+			var url: String = "http://%s:%d/" % [addr, http_port]
+			if url in preferred or url in virtual:
+				continue
+			if is_virtual:
+				virtual.append(url)
+			else:
+				preferred.append(url)
+	preferred.append_array(virtual)
+	return preferred
 
 ## Shells out to `qrencode` rather than generating QR modules in GDScript:
 ## the ISO 18004 module-placement/masking rules are easy to get subtly wrong

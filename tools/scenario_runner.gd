@@ -75,6 +75,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"head_plants_moving_platform",
 	"crumbling_ledge_three_phases",
 	"erosion_island_survives_full_erosion",
+	"no_single_strike_kills",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -512,6 +513,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_crumbling_ledge_three_phases()
 		"erosion_island_survives_full_erosion":
 			return await _scenario_erosion_island_survives_full_erosion()
+		"no_single_strike_kills":
+			return await _scenario_no_single_strike_kills()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -4340,5 +4343,38 @@ func _scenario_erosion_island_survives_full_erosion() -> Array[String]:
 		failures.append("island: player settled at y=%.1f, expected resting on the island top at %.1f" % [
 			island_player.global_position.y, island_top])
 
+	await _teardown(stage)
+	return failures
+
+# --- Playtest readiness (issue #29) -----------------------------------------
+
+## Issue #29: however fast a strike arrives, it leaves a full-health victim
+## standing, for every weapon in the roster. The per-weapon scale cap alone
+## let the axe's 55 reach 110 against a DEATH_DAMAGE of 100.
+##
+## Reads the attacker's own strike rule at an absurd head speed rather than
+## staging a 3400 px/s strike, which the rig only reaches with a flying body
+## carrying the head -- the property is "no strike can", so it is asserted at
+## the ceiling, and then handed to a real full-health victim through the
+## public take_damage().
+func _scenario_no_single_strike_kills() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	for path: String in WEAPON_RESOURCE_PATHS:
+		attacker.set_weapon_stats(load(path))
+		await _await_ticks(2)
+		var worst: float = attacker._strike_damage(1.0e6)
+		print("      %s: hardest possible strike deals %.1f" % [path.get_file(), worst])
+		if worst >= DEATH_DAMAGE:
+			failures.append("%s: a single strike can deal %.1f, at or past DEATH_DAMAGE %.1f" % [
+				path.get_file(), worst, DEATH_DAMAGE])
+		victim.damage = 0.0
+		victim.take_damage(worst)
+		if not victim.alive:
+			failures.append("%s: a full-health victim died to one strike" % path.get_file())
+			break
 	await _teardown(stage)
 	return failures
