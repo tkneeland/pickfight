@@ -67,6 +67,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_damage_matches_roster",
 	"weapon_responsiveness_matches_roster",
 	"heavy_weapon_wins_clash",
+	"every_stage_can_ring_out",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -471,6 +472,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_weapon_responsiveness_matches_roster()
 		"heavy_weapon_wins_clash":
 			return await _scenario_heavy_weapon_wins_clash()
+		"every_stage_can_ring_out":
+			return await _scenario_every_stage_can_ring_out()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2220,13 +2223,24 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 ## Also holds each stage to ADR-0008's contract of one spawn per player slot
 ## (STAGE_MIN_SPAWNS), so a stage missing a marker fails here instead of
 ## spawning someone at the origin in live play.
+##
+## STAGE_PATHS is the rotation itself, listed in the order scenes/Main.tscn
+## rotates through it. Keeping the list here rather than inline means a stage
+## added to the rotation is swept by this scenario the moment the one list is
+## updated.
+const STAGE_PATHS: PackedStringArray = [
+	"res://scenes/stages/Flatlands.tscn",
+	"res://scenes/stages/Pillars.tscn",
+	"res://scenes/stages/Highrise.tscn",
+	"res://scenes/stages/Islands.tscn",
+	"res://scenes/stages/Gauntlet.tscn",
+	"res://scenes/stages/Slant.tscn",
+	"res://scenes/stages/Bowl.tscn",
+]
+
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	var failures: Array[String] = []
-	var stage_paths: PackedStringArray = [
-		"res://scenes/stages/Flatlands.tscn",
-		"res://scenes/stages/Highrise.tscn",
-		"res://scenes/stages/Gauntlet.tscn",
-	]
+	var stage_paths: PackedStringArray = STAGE_PATHS
 
 	for path: String in stage_paths:
 		# Each stage's _teardown() marks the scenario complete, so reset it
@@ -3152,3 +3166,76 @@ func _charge_strike(attacker: RigidBody2D, victim: RigidBody2D) -> Dictionary:
 		"landed": landed,
 		"closest": closest,
 	}
+
+
+# --- Stage rotation reachability (issue #17) --------------------------------
+
+## Horizontal speed the probe is launched from a spawn point at. Far above
+## anything a swing produces, deliberately: the question is whether the stage
+## has an exit at all, not whether a particular hit is strong enough to use it.
+const RINGOUT_SHOVE_SPEED: float = 1800.0
+## Long enough for a shoved body to cross the widest stage and fall the height
+## of the tallest one.
+const RINGOUT_SHOVE_TICKS: int = 300
+
+## A stage nobody can be knocked out of is a stage the round can only end on
+## damage, and ADR-0008 rotates stages on the premise that the ring-out is the
+## sharpest threat in the game. This shoves a body off each of a stage's own
+## spawn points, left and right in turn, and requires at least one of those
+## shoves to end in the kill zone.
+##
+## Starting from the declared spawn points rather than from a grid of
+## positions is what makes the check mean something: air beside a stage that
+## no player can be driven into proves nothing, and an early cut of this
+## scenario passed every stage by dropping a body at x = -760, clear of all
+## the geometry. Beginning where players actually begin, and moving the way a
+## knockback moves them, asks the real question.
+##
+## It asserts existence, not a count: Bowl is meant to have exactly one narrow
+## drain and Islands is meant to be almost all air, and demanding a particular
+## amount of open floor would be a balance opinion rather than a correctness
+## check. What it catches is the real mistake -- a stage whose walls, floor or
+## kill zone were drawn or placed so that nobody can leave it.
+func _scenario_every_stage_can_ring_out() -> Array[String]:
+	var failures: Array[String] = []
+
+	for path: String in STAGE_PATHS:
+		# As in stage_spawns_are_safe: each stage's _teardown() sets the
+		# completion flag, so clear it before the next stage runs.
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+
+		var escape: String = ""
+		for i in spawns.size():
+			for direction: float in [-1.0, 1.0]:
+				var player: RigidBody2D = _spawn_player(stage, spawns[i])
+				await physics_frame
+				player.linear_velocity = Vector2(direction * RINGOUT_SHOVE_SPEED, 0.0)
+				var ticks: int = 0
+				while ticks < RINGOUT_SHOVE_TICKS and player.alive:
+					await physics_frame
+					ticks += 1
+				var died: bool = not player.alive
+				player.queue_free()
+				await _await_ticks(BOOST_RESET_TICKS)
+				if died:
+					escape = "spawn %d shoved %s, out after %d ticks" % [
+						i, "left" if direction < 0.0 else "right", ticks]
+					break
+			if escape != "":
+				break
+
+		if escape == "":
+			failures.append(
+				"%s: no spawn point shoved at %.0f px/s in either direction reached the kill zone in %d ticks" % [
+					path, RINGOUT_SHOVE_SPEED, RINGOUT_SHOVE_TICKS])
+		else:
+			print("      %s: %s" % [path, escape])
+
+		await _teardown(stage)
+
+	return failures
