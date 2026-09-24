@@ -88,6 +88,14 @@ extends Resource
 ## is what a player sees, so it is what the circles are fitted to.
 @export var art_outline: PackedVector2Array = PackedVector2Array()
 
+## Whether the head is one-sided and mirrors across the haft to follow the
+## aim. Every head is authored facing +X with one side of it on +Y; a
+## symmetric head leaves that alone, and one with `flips_with_aim` has
+## `Player` flip every circle's and outline point's Y whenever the aim crosses
+## the vertical, so the side it is drawn on stays the same side of the screen
+## whichever way the player faces. The axe is the only one (#16).
+@export var flips_with_aim: bool = false
+
 ## The head a bare `WeaponStats.new()` gets: the round nub the pickaxe used
 ## to be, drawn as itself. Scenarios build stub stats that way to vary reach
 ## or force without authoring a head, so the default has to be a working
