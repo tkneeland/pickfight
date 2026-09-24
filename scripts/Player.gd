@@ -521,7 +521,7 @@ func _build_rig() -> void:
 	# clears `_head_shapes` and `_build_rig()` refills it with the *new*
 	# head's circles, all while the old head is still inside the tree, still
 	# not queued for deletion, and so still answering the group scan in
-	# `WeaponHead._undo_any_head_crossing` for the rest of the frame. Aliased,
+	# `WeaponHead._find_head_crossing` for the rest of the frame. Aliased,
 	# that dying head would offer circles parented to a different body, and
 	# another player's head could be corrected onto a position derived from a
 	# cluster that is nowhere near it. The nodes are shared on purpose -- they

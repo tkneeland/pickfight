@@ -50,7 +50,7 @@ extends RigidBody2D
 ## `sweep_mask` for why each head correcting itself against the other is the
 ## wrong shape -- and neither can either head's own motion, because at 1200
 ## px/s each it is the *relative* motion that crosses the gap and either
-## head's share of it is only half. `_undo_any_head_crossing` handles the
+## head's share of it is only half. `_find_head_crossing` handles the
 ## pair instead: one correction, by one of the two heads, computed from both
 ## heads' motion over the step. See `_owns_pair` for which one, and why that
 ## has to be answerable the same way from either side.
@@ -114,7 +114,7 @@ var sweep_shapes: Array[CollisionShape2D] = []
 ## Deliberately not the head's own `collision_mask`, which also contains other
 ## weapon heads: a clash is two driven heads contesting, and two heads each
 ## snapping the other back out of the contact would fight rather than resolve.
-## Head against head is handled by `_undo_any_head_crossing` instead, which
+## Head against head is handled by `_find_head_crossing` instead, which
 ## corrects the pair once rather than each head separately.
 ## The exclusion list carries the head's own player, whose body the head is
 ## allowed to pass through.
@@ -311,11 +311,26 @@ func _furthest_reach() -> float:
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_snapshot_step(state.transform, state.linear_velocity)
-	# At most one correction a tick, and the world goes first: terrain is not
-	# negotiable, and a head the world sweep has already stopped and taken the
-	# closing velocity out of is not still arriving anywhere.
-	if _has_previous and not _undo_any_tunnelling(state):
-		_undo_any_head_crossing(state)
+	# At most one correction a tick, and it is whichever contact came *first*
+	# in the step: the world (terrain, other bodies) or another head.
+	#
+	# Not "the world first, heads only if the world found nothing", which is
+	# what this used to do (issue #27). The world sweep's mask deliberately
+	# leaves heads out, so a fast head that crossed a blocking head and then
+	# reached the blocker's body -- or anything else -- later in the same step
+	# was stopped at that later contact, on the far side of the head it had
+	# already gone through, and the head check never ran. A blocking head sits
+	# right in front of its own body, so that was the common case, and it is
+	# why the tunnelling only showed at the highest charge speeds. Both sweeps
+	# measure the same step as a fraction of it, so the earlier one is simply
+	# the smaller fraction.
+	if _has_previous:
+		var world: Dictionary = _find_world_contact(state)
+		var head: Dictionary = _find_head_crossing()
+		if not head.is_empty() and (world.is_empty() or head["fraction"] <= world["fraction"]):
+			_apply_head_crossing(state, head)
+		elif not world.is_empty():
+			_apply_world_contact(state, world)
 	_previous_position = state.transform.origin
 	_previous_rotation = state.transform.get_rotation()
 	_previous_shape_xforms.clear()
@@ -323,15 +338,18 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		_previous_shape_xforms.append(node.transform)
 	_has_previous = true
 
-## Returns whether it moved the head.
-func _undo_any_tunnelling(state: PhysicsDirectBodyState2D) -> bool:
+## Whether the step carried the head through something in the world, and if
+## so where it first touched: `{fraction, contact, normal, collider}`, or
+## empty. Finds only; `_apply_world_contact` moves the head, so the caller can
+## weigh this against a head crossing earlier in the same step.
+func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 	if sweep_shapes.is_empty():
-		return false
+		return {}
 
 	var motion: Vector2 = state.transform.origin - _previous_position
 	var distance: float = motion.length()
 	if distance < _sweep_gate():
-		return false
+		return {}
 
 	# Each circle is swept where it actually sits, not at the body's origin:
 	# the body is rotation-locked, so the cluster carries its facing on the
@@ -341,7 +359,7 @@ func _undo_any_tunnelling(state: PhysicsDirectBodyState2D) -> bool:
 	# them stand for the whole head.
 	#
 	# The *live* offsets, deliberately, and not the step-start snapshot that
-	# `_undo_any_head_crossing` uses. Neither is exact for a head that swung
+	# `_find_head_crossing` uses. Neither is exact for a head that swung
 	# during the step, because `cast_motion` translates and cannot rotate, so
 	# the choice is which end of the step to get right. Here it is the end:
 	# the question this asks is whether the step carried the head past
@@ -383,22 +401,30 @@ func _undo_any_tunnelling(state: PhysicsDirectBodyState2D) -> bool:
 		safe = fractions[0]
 		stopped_by = node
 	if stopped_by == null:
-		return false
+		return {}
 
 	var contact: Vector2 = _previous_position + motion * safe
-	state.transform = Transform2D(state.transform.get_rotation(), contact)
-
 	var travel: Vector2 = motion / distance
 	params.shape = stopped_by.shape
 	params.transform = start * stopped_by.transform
 	var rest: Dictionary = _contact_rest_info(space, params, contact, travel)
-	var normal: Vector2 = _surface_normal(rest, travel)
+	return {
+		"fraction": safe,
+		"contact": contact,
+		"normal": _surface_normal(rest, travel),
+		"collider": instance_from_id(rest["collider_id"]) if rest.has("collider_id") else null,
+	}
+
+## Seat the head where the world sweep found it first touched, and take out
+## the part of its velocity heading into the surface.
+func _apply_world_contact(state: PhysicsDirectBodyState2D, hit: Dictionary) -> void:
+	state.transform = Transform2D(state.transform.get_rotation(), hit["contact"])
+	var normal: Vector2 = hit["normal"]
 	var into: float = state.linear_velocity.dot(normal)
 	if into < 0.0:
 		state.linear_velocity -= normal * into
-		swept_into = instance_from_id(rest["collider_id"]) if rest.has("collider_id") else null
+		swept_into = hit["collider"]
 		swept_speed = -into
-	return true
 
 ## Whatever the sweep stopped against: its normal, and which body it was.
 ## Probed just past the contact point, the shallowest overlap that still
@@ -529,12 +555,16 @@ func _owns_pair(other: Variant) -> bool:
 ## starts the step touching is passed over as the solver's, and a settled
 ## clash is nothing but those. Two heads that are nowhere near each other are
 ## cheaper still -- they never reach the circles at all, see `_head_reach()`.
-func _undo_any_head_crossing(state: PhysicsDirectBodyState2D) -> void:
+##
+## Finds only, returning `{fraction, origin, normal, partner_velocity}` or
+## empty; `_apply_head_crossing` moves the head. The caller weighs it against
+## a world contact earlier in the same step (issue #27).
+func _find_head_crossing() -> Dictionary:
 	if sweep_shapes.is_empty() or not _step_usable:
-		return
+		return {}
 	var tree: SceneTree = get_tree()
 	if tree == null or is_queued_for_deletion():
-		return
+		return {}
 
 	var my_motion: Vector2 = _step_to - _step_from
 	var mine := Transform2D(_step_rotation, _step_from)
@@ -623,14 +653,25 @@ func _undo_any_head_crossing(state: PhysicsDirectBodyState2D) -> void:
 	# off to one side hand back a perfectly good non-zero normal. Both
 	# conditions are load-bearing now.
 	if soonest > 1.0 or normal.length_squared() == 0.0 or offset.length_squared() == 0.0:
-		return
+		return {}
+	return {
+		"fraction": soonest,
+		"origin": partner_origin + offset,
+		"normal": normal,
+		"partner_velocity": partner_velocity,
+	}
 
-	state.transform = Transform2D(state.transform.get_rotation(), partner_origin + offset)
+## Seat the head back where it first met the other head, carried to wherever
+## that head actually ended the step, and take out the closing speed between
+## the two.
+func _apply_head_crossing(state: PhysicsDirectBodyState2D, hit: Dictionary) -> void:
+	state.transform = Transform2D(state.transform.get_rotation(), hit["origin"])
 	# The other head is moving too, so what is taken out is the part of the
 	# closing speed *between the two of them* -- a head being carried along by
 	# the head it is braced against is not still driving into it. Deliberately
 	# not recorded in `swept_into`: this is a block, not a strike.
-	var closing: float = (state.linear_velocity - partner_velocity).dot(normal)
+	var normal: Vector2 = hit["normal"]
+	var closing: float = (state.linear_velocity - Vector2(hit["partner_velocity"])).dot(normal)
 	if closing < 0.0:
 		state.linear_velocity -= normal * closing
 
@@ -688,9 +729,22 @@ func _first_circle_contact(
 			if their_node == null or their_node.shape == null:
 				continue
 			var their_at_start: Transform2D = theirs * their_locals[their_index]
-			# These two were already touching when the step began: they
-			# crossed nothing, and their contact belongs to the solver.
+			# Already touching when the step began. Ordinarily that is a
+			# settled clash and the solver's -- except when the step then
+			# carried the two clean through each other, which the solver
+			# cannot stop for circles a few pixels wide closing tens of pixels
+			# a tick: it is exactly what happens the tick after a correction
+			# seats this head against one whose body is still driving in
+			# (issue #27). Told apart by the line of centres: a settled clash
+			# jitters a fraction of a pixel and keeps its side, while a pair
+			# driven through ends the step on the other side of it. That
+			# counts as crossing at the very start of the step.
 			if my_node.shape.collide(my_at_start, their_node.shape, their_at_start):
+				var start_line: Vector2 = my_at_start.origin - their_at_start.origin
+				var end_line: Vector2 = (my_at_start.origin + my_motion) - (their_at_start.origin + their_motion)
+				if start_line.length_squared() > 0.0 and end_line.dot(start_line) < 0.0 and 0.0 < soonest:
+					soonest = 0.0
+					normal = start_line.normalized()
 				continue
 			if not my_node.shape.collide_with_motion(
 					my_at_start, my_motion, their_node.shape, their_at_start, their_motion):

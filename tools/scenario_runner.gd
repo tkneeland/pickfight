@@ -87,6 +87,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_pickup_spawns_are_safe",
 	"pickup_weapon_carries_to_winner_next_round",
 	"pickup_drawn_with_weapon_art",
+	"roster_heads_do_not_tunnel_head_reversed",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -548,6 +549,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_weapon_carries_to_winner_next_round()
 		"pickup_drawn_with_weapon_art":
 			return await _scenario_pickup_drawn_with_weapon_art()
+		"roster_heads_do_not_tunnel_head_reversed":
+			return await _scenario_roster_heads_do_not_tunnel_head_reversed()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3521,7 +3524,7 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 					crossed_gap = minf(gap, _head_surface_gap(previous_a, previous_b))
 					crossed_from = previous_rel
 					crossed_to = relative
-				# `_undo_any_head_crossing` corrects a crossing on the step
+				# `_find_head_crossing` corrects a crossing on the step
 				# *after* the one that made it -- it works from the motion
 				# that actually happened, which it can only read once the
 				# step is over. So a head found on the far side is not yet a
@@ -5071,6 +5074,48 @@ func _scenario_pickup_drawn_with_weapon_art() -> Array[String]:
 		failures.append("a pickup with no art to draw did not report itself as the fallback")
 	if drawn.trigger_radius() <= 0.0 or bare.trigger_radius() <= 0.0:
 		failures.append("a pickup had no trigger for a player to touch")
+
+	await _teardown(stage)
+	return failures
+
+# --- Head tunnelling across histories (issue #27) ---------------------------
+
+## Issue #27: `roster_heads_do_not_tunnel_head` again, with the roster in
+## reverse order.
+##
+## Whether a marginal charge breaches depended on everything the process had
+## simulated before it -- object creation order feeds the physics server's
+## body and solver order, which nudges sub-pixel timing -- so the same weapon
+## passed after one history and failed after another. One ordering passing
+## proves little about a fix; two independent histories in every suite run
+## make a fragile one far more likely to show. The fix itself is in
+## `WeaponHead._integrate_forces` (world and head checks weighed by which came
+## first) and `_first_circle_contact` (a touching pair driven through the line
+## of centres still counts).
+func _scenario_roster_heads_do_not_tunnel_head_reversed() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var paths: PackedStringArray = WEAPON_RESOURCE_PATHS.duplicate()
+	paths.reverse()
+
+	for path: String in paths:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var attacker: RigidBody2D = _spawn_player(stage, centre)
+		var blocker: RigidBody2D = _spawn_player(stage, centre)
+		attacker.set_weapon_stats(stats)
+		blocker.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		var separation: float = maxf(CHARGE_SEPARATION,
+			2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
+		failures.append_array(await _charge_sweep(weapon, attacker, blocker, centre, separation))
+		attacker.queue_free()
+		blocker.queue_free()
+		await _await_ticks(2)
 
 	await _teardown(stage)
 	return failures

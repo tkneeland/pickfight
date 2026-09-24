@@ -1,0 +1,24 @@
+final=pickaxe pre=[] -> LOOP GREEN 
+final=pickaxe pre=[staff,sword,axe] -> LOOP GREEN 
+final=pickaxe pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=pickaxe pre=[axe,sword] -> LOOP GREEN 
+final=staff pre=[] -> LOOP GREEN 
+final=staff pre=[staff,sword,axe] -> LOOP GREEN 
+final=staff pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=staff pre=[axe,sword] -> LOOP GREEN 
+final=sword pre=[] -> LOOP GREEN 
+final=sword pre=[staff,sword,axe] -> LOOP GREEN 
+final=sword pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=sword pre=[axe,sword] -> LOOP GREEN 
+final=axe pre=[] -> LOOP GREEN 
+final=axe pre=[staff,sword,axe] -> LOOP GREEN 
+final=axe pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=axe pre=[axe,sword] -> LOOP GREEN 
+final=dagger pre=[] -> LOOP GREEN 
+final=dagger pre=[staff,sword,axe] -> LOOP GREEN 
+final=dagger pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=dagger pre=[axe,sword] -> LOOP GREEN 
+RED histories: 0 / 20
+52 passed, 0 failed, 52 total
+
+[exited with code 0]
