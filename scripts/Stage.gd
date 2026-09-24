@@ -25,3 +25,7 @@ func get_spawn_points() -> Array[Vector2]:
 	for marker in markers:
 		points.append(marker.global_position if marker.is_inside_tree() else marker.position)
 	return points
+
+func get_pickup_spawn_points() -> Array[Vector2]:
+	var none: Array[Vector2] = []
+	return none

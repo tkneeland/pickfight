@@ -243,3 +243,8 @@ func _update_score_label() -> void:
 	for slot in _scores.size():
 		parts.append("P%d: %d" % [slot + 1, _scores[slot]])
 	label.text = "  ".join(parts)
+
+@export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
+@export var pickup_spawn_interval_sec: float = 10.0
+@export var max_pickups: int = 2
+@export var pickup_weapons: Array[Resource] = []

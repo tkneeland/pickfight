@@ -63,6 +63,17 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"waiting_expires_disconnected_claims",
 	"abandoned_round_ends_without_winner",
 	"round_winner_keeps_weapon",
+	"pickup_appears_at_round_start",
+	"pickups_arrive_on_interval_and_cap",
+	"pickup_weapon_is_random_never_pickaxe",
+	"body_touch_swaps_weapon",
+	"weapon_head_does_not_collect_pickup",
+	"eliminated_player_cannot_collect",
+	"pickups_cleared_at_round_end",
+	"pickup_spawn_points_and_fallback",
+	"stage_pickup_spawns_are_safe",
+	"pickup_weapon_carries_to_winner_next_round",
+	"pickup_drawn_with_weapon_art",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -432,6 +443,28 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_abandoned_round_ends_without_winner()
 		"round_winner_keeps_weapon":
 			return await _scenario_round_winner_keeps_weapon()
+		"pickup_appears_at_round_start":
+			return await _scenario_pickup_appears_at_round_start()
+		"pickups_arrive_on_interval_and_cap":
+			return await _scenario_pickups_arrive_on_interval_and_cap()
+		"pickup_weapon_is_random_never_pickaxe":
+			return await _scenario_pickup_weapon_is_random_never_pickaxe()
+		"body_touch_swaps_weapon":
+			return await _scenario_body_touch_swaps_weapon()
+		"weapon_head_does_not_collect_pickup":
+			return await _scenario_weapon_head_does_not_collect_pickup()
+		"eliminated_player_cannot_collect":
+			return await _scenario_eliminated_player_cannot_collect()
+		"pickups_cleared_at_round_end":
+			return await _scenario_pickups_cleared_at_round_end()
+		"pickup_spawn_points_and_fallback":
+			return await _scenario_pickup_spawn_points_and_fallback()
+		"stage_pickup_spawns_are_safe":
+			return await _scenario_stage_pickup_spawns_are_safe()
+		"pickup_weapon_carries_to_winner_next_round":
+			return await _scenario_pickup_weapon_carries_to_winner_next_round()
+		"pickup_drawn_with_weapon_art":
+			return await _scenario_pickup_drawn_with_weapon_art()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2522,6 +2555,647 @@ func _scenario_round_winner_keeps_weapon() -> Array[String]:
 
 	if p1.weapon_stats == null or p1.weapon_stats.resource_path != "res://resources/pickaxe.tres":
 		failures.append("phase C: the expired winner's claim passed the weapon on to the newcomer in its slot")
+
+	await _teardown(stage)
+	return failures
+
+# --- Weapon pickups (issue #14, ADR-0009) ------------------------------------
+
+## The pickup itself, and the one list of weapons a pickup may hand out.
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md): the global
+## class cache lives in the gitignored `.godot/` and only an editor run builds
+## it, so a fresh clone could not resolve the name.
+const PickupScene: PackedScene = preload("res://scenes/Pickup.tscn")
+const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+## Spelled out here rather than read off Player.DEFAULT_WEAPON_STATS, on
+## purpose and for the same reason the winner-keeps scenario above spells it
+## out: a test that asked the game which weapon the pickaxe was would agree
+## with whatever the game said.
+const PICKUP_PICKAXE_PATH: String = "res://resources/pickaxe.tres"
+
+## Two weapons unlike the pickaxe and unlike each other, built at runtime
+## because issue #13 authors the real roster on its own branch and this one
+## has no non-pickaxe resource to load. Reach is what a swap is measured by,
+## so reach is what differs.
+const PICKUP_WEAPON_A_MAX_REACH: float = 60.0
+const PICKUP_WEAPON_B_MAX_REACH: float = 90.0
+
+## Long enough that no second pickup arrives while a scenario is looking at
+## the first one.
+const PICKUP_LONG_INTERVAL_SEC: float = 30.0
+## Short enough to watch several intervals go by inside a scenario, long
+## enough that a handful of physics ticks fit inside one, so "it waited for
+## the interval" is distinguishable from "it spawned immediately".
+const PICKUP_SHORT_INTERVAL_SEC: float = 0.15
+## Intervals the cap is watched across.
+const PICKUP_INTERVAL_WINDOW: int = 8
+## The cap the issue asks for, written down here rather than read back off
+## RoundManager's export.
+const PICKUP_CAP: int = 2
+## Draws taken from the roster when checking that the choice is random and
+## never the pickaxe. With two eligible weapons, "only ever saw one of them"
+## across this many draws is a 1-in-2^199 coincidence.
+const PICKUP_DRAWS: int = 200
+
+## Clear sky spawns for the pickup round loop, and pickup spots far off to
+## either side and above them, so a player falling out of its spawn never
+## blunders into a pickup the scenario did not send it to.
+const PICKUP_ROUND_SPAWN_A: Vector2 = Vector2(-400.0, -1400.0)
+const PICKUP_ROUND_SPAWN_B: Vector2 = Vector2(400.0, -1400.0)
+const PICKUP_STUB_POINTS: PackedVector2Array = [
+	Vector2(-1500.0, -2000.0), Vector2(1500.0, -2000.0), Vector2(0.0, -2600.0)]
+## Two positions count as the same pickup spot within this.
+const PICKUP_SAME_POINT_EPSILON: float = 1.0
+## How close the head has to get to a pickup before "the head touched it and
+## nothing happened" is a claim worth making.
+const PICKUP_HEAD_TOUCH_SLACK: float = 10.0
+## Pickup spots a real stage has to declare: enough that a stage can hold a
+## full cap at once without two pickups sharing a spot.
+const PICKUP_MIN_SPAWN_POINTS: int = 2
+## How far above a stage's death boundary its pickup spots have to sit. A
+## pickup nobody can collect without dying for it is not a pickup.
+const PICKUP_KILLZONE_CLEARANCE: float = 100.0
+## A known-good outline, written down here rather than derived from anything
+## the pickup does: a stubby arrow a reader can check by eye.
+const PICKUP_ART_OUTLINE: PackedVector2Array = [
+	Vector2(-14.0, -6.0), Vector2(30.0, 0.0), Vector2(-14.0, 6.0)]
+
+## A weapon resource carrying nothing but the art a pickup draws itself with.
+## Issue #13 adds `art_outline` to WeaponStats on its own branch; until it
+## lands there is no resource here with an outline on it, and a scenario that
+## waited for one would be testing nothing at all in the meantime.
+class _ArtWeapon extends Resource:
+	var art_outline: PackedVector2Array = PackedVector2Array()
+
+## A weapon that is plainly not the pickaxe, distinguishable from the next one
+## by the reach a player gets when they pick it up.
+func _make_pickup_weapon(max_reach: float) -> Resource:
+	var stats := WeaponStatsType.new()
+	stats.max_reach = max_reach
+	return stats
+
+## Every pickup lying anywhere under `node`, which is how a scenario counts
+## what is on the stage: by looking at the stage, not by asking RoundManager
+## what it thinks it put there. Nodes already queued for deletion are gone as
+## far as a player is concerned, so they do not count.
+func _pickups_under(node: Node) -> Array[Node2D]:
+	var found: Array[Node2D] = []
+	for child: Node in node.get_children():
+		if child.is_in_group("pickups") and not child.is_queued_for_deletion():
+			found.append(child as Node2D)
+		found.append_array(_pickups_under(child))
+	return found
+
+## A real pickup holding `weapon`, placed at `pos`. The same two calls
+## RoundManager makes, so a scenario that places its own pickup is exercising
+## the same object a round does.
+func _place_pickup(parent: Node, pos: Vector2, weapon: Resource) -> Node2D:
+	var pickup: Node2D = PickupScene.instantiate() as Node2D
+	pickup.set_weapon(weapon)
+	parent.add_child(pickup)
+	pickup.global_position = pos
+	return pickup
+
+## `_make_stub_stage` above, plus the `PickupSpawn*` markers issue #14 reads.
+## Kept separate rather than folded into that one: it belongs to issue #8's
+## lane and both land in the same PR window.
+func _make_pickup_stub_stage(stage_name: String, spawns: PackedVector2Array, pickup_spawns: PackedVector2Array) -> PackedScene:
+	var root := Node2D.new()
+	root.name = stage_name
+	root.set_script(StageType)
+	for i in spawns.size():
+		var marker := Marker2D.new()
+		marker.name = "Spawn%d" % i
+		marker.position = spawns[i]
+		root.add_child(marker)
+		marker.owner = root
+	for i in pickup_spawns.size():
+		var marker := Marker2D.new()
+		marker.name = "PickupSpawn%d" % i
+		marker.position = pickup_spawns[i]
+		root.add_child(marker)
+		marker.owner = root
+	var packed := PackedScene.new()
+	packed.pack(root)
+	root.queue_free()
+	return packed
+
+## A real RoundManager running real pickups on a stub stage with no geometry:
+## both players spawn in clear sky and simply fall, alive, for as long as the
+## scenario needs, and the pickup spots are nowhere near where they fall. Only
+## ControllerServer's roster seam is stubbed (`tools/stub_roster.gd`), since
+## the real one opens LAN sockets.
+##
+## `pickup_weapons` is filled with runtime-built weapons: the roster's real
+## resources arrive with issue #13, and a scenario that waited for them could
+## not watch a pickup spawn at all on this branch.
+func _new_pickup_round(interval_sec: float, cap: int, pickup_points: PackedVector2Array) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "PickupContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	for i in 2:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "PickupP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		players.append(player)
+	var roster := StubRosterScript.new()
+	roster.name = "PickupRoster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var weapons: Array[Resource] = [
+		_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH),
+		_make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)]
+	var stages: Array[PackedScene] = [_make_pickup_stub_stage(
+		"PickupStage", PackedVector2Array([PICKUP_ROUND_SPAWN_A, PICKUP_ROUND_SPAWN_B]), pickup_points)]
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "PickupRoundManager"
+	round_manager.player_paths = [NodePath("../PickupP0"), NodePath("../PickupP1")]
+	round_manager.stage_scenes = stages
+	round_manager.arena_container_path = NodePath("../PickupContainer")
+	round_manager.controller_server_path = NodePath("../PickupRoster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.pickup_spawn_interval_sec = interval_sec
+	round_manager.max_pickups = cap
+	round_manager.pickup_weapons = weapons
+	stage.add_child(round_manager)
+	return {
+		"stage": stage, "container": container, "players": players,
+		"roster": roster, "round_manager": round_manager}
+
+## Steps until both players are in a round, or gives up. Returns whether the
+## round started, so a scenario can say "the round never started" instead of
+## reporting whatever nonsense follows from that.
+func _await_pickup_round_start(players: Array[RigidBody2D]) -> bool:
+	return await _await_condition(
+		func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC)
+
+## User stories 1 and 4: a round starts with exactly one weapon already lying
+## on the stage, and it is never the pickaxe -- the weapon everyone is holding
+## already, which would make grabbing it pointless.
+func _scenario_pickup_appears_at_round_start() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var container: Node2D = loop["container"]
+	var players: Array[RigidBody2D] = loop["players"]
+
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	var appeared: bool = await _await_condition(
+		func() -> bool: return not _pickups_under(container).is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not appeared:
+		failures.append("the round started with nothing on the stage to race for")
+		await _teardown(loop["stage"])
+		return failures
+
+	var pickups: Array[Node2D] = _pickups_under(container)
+	if pickups.size() != 1:
+		failures.append("round start put %d pickups on the stage, expected exactly 1" % pickups.size())
+	for pickup: Node2D in pickups:
+		if pickup.weapon_stats == null:
+			failures.append("a pickup appeared holding no weapon at all")
+		elif pickup.weapon_stats.resource_path == PICKUP_PICKAXE_PATH:
+			failures.append("a pickup was the pickaxe, which is what every player already holds")
+
+	await _teardown(loop["stage"])
+	return failures
+
+## User stories 2, 3 and 20: more weapons keep arriving while the round runs,
+## one per interval rather than all at once, and the stage never holds more
+## than the cap. Both are exported settings, so this drives them at a pace a
+## scenario can watch rather than the ten seconds real play uses.
+func _scenario_pickups_arrive_on_interval_and_cap() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(PICKUP_SHORT_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var container: Node2D = loop["container"]
+	var players: Array[RigidBody2D] = loop["players"]
+
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	var interval_msec: int = int(PICKUP_SHORT_INTERVAL_SEC * 1000.0)
+	var deadline: int = Time.get_ticks_msec() + interval_msec * PICKUP_INTERVAL_WINDOW
+	var first_msec: int = -1
+	var second_msec: int = -1
+	var peak: int = 0
+	while Time.get_ticks_msec() < deadline:
+		await physics_frame
+		var count: int = _pickups_under(container).size()
+		peak = maxi(peak, count)
+		if count >= 1 and first_msec < 0:
+			first_msec = Time.get_ticks_msec()
+		if count >= 2 and second_msec < 0:
+			second_msec = Time.get_ticks_msec()
+
+	if first_msec < 0:
+		failures.append("no pickup was ever on the stage")
+	elif second_msec < 0:
+		failures.append("a second pickup never arrived across %d intervals" % PICKUP_INTERVAL_WINDOW)
+	elif second_msec - first_msec < interval_msec / 2:
+		failures.append("the second pickup arrived %d ms after the first, well inside the %d ms interval" % [
+			second_msec - first_msec, interval_msec])
+	if peak > PICKUP_CAP:
+		failures.append("the stage held %d pickups at once, the cap is %d" % [peak, PICKUP_CAP])
+
+	await _teardown(loop["stage"])
+	return failures
+
+## User stories 4 and 5, at the roster seam: which weapon a pickup holds is
+## drawn uniformly at random from what the roster offers, and the pickaxe is
+## never one of them however it got into the list.
+func _scenario_pickup_weapon_is_random_never_pickaxe() -> Array[String]:
+	var failures: Array[String] = []
+	var pickaxe: Resource = load(PICKUP_PICKAXE_PATH)
+	var weapon_a: Resource = _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH)
+	var weapon_b: Resource = _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)
+	var offered: Array[Resource] = [pickaxe, weapon_a, weapon_b]
+
+	var seen_a: int = 0
+	var seen_b: int = 0
+	for draw in PICKUP_DRAWS:
+		var picked: Resource = PickupWeaponsScript.choose(offered)
+		if picked == pickaxe:
+			failures.append("draw %d handed out the pickaxe" % draw)
+			break
+		elif picked == weapon_a:
+			seen_a += 1
+		elif picked == weapon_b:
+			seen_b += 1
+		else:
+			failures.append("draw %d handed out something that was never offered" % draw)
+			break
+	if failures.is_empty() and (seen_a == 0 or seen_b == 0):
+		failures.append("%d draws only ever produced one of the two eligible weapons (a=%d, b=%d)" % [
+			PICKUP_DRAWS, seen_a, seen_b])
+
+	# And an empty offer is answered honestly rather than by inventing a
+	# weapon: that is this branch's own state until issue #13 lands.
+	var nothing: Array[Resource] = []
+	if PickupWeaponsScript.choose(nothing) != null:
+		failures.append("the roster handed out a weapon when it was offered none")
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		if stats.resource_path == PICKUP_PICKAXE_PATH:
+			failures.append("the pickup roster itself offers the pickaxe")
+
+	_scenario_completed = true
+	return failures
+
+## User stories 6, 8, 9 and 12: touching a pickup with the body hands its
+## weapon over immediately, the old weapon is gone rather than dropped, and
+## the pickup leaves the stage the moment it is claimed -- including when two
+## players reach it on the same tick.
+func _scenario_body_touch_swaps_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	await _await_ticks(5)
+
+	var started_with: Resource = player.weapon_stats
+	var weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH)
+	var pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(120.0, 0.0), weapon)
+	await _await_ticks(2)
+	player.teleport_to(pickup.global_position)
+	await _await_ticks(SETTLE_TICKS)
+
+	if player.weapon_stats != weapon:
+		failures.append("walking into a pickup did not hand its weapon over")
+	if player.weapon_stats == started_with:
+		failures.append("the player is still holding the weapon it walked in with")
+	if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+		failures.append("the pickup was still lying on the stage after it was collected")
+	var rigs: int = _count_rigs(stage)
+	if rigs != 1:
+		failures.append("collecting left %d weapon rigs in the tree, expected 1 -- the old weapon should be gone" % rigs)
+
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var reach: float = _reach_of(player)
+	if absf(reach - PICKUP_WEAPON_A_MAX_REACH) > REACH_TOLERANCE:
+		failures.append("after collecting, the weapon reached %.1f px at full drag, expected the pickup's %.1f px" % [
+			reach, PICKUP_WEAPON_A_MAX_REACH])
+
+	# Two players on the same pickup on the same tick: exactly one of them
+	# walks away with it.
+	var racer_a: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(0.0, 400.0))
+	var racer_b: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(80.0, 400.0))
+	await _await_ticks(5)
+	var contested: Resource = _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)
+	var shared: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(40.0, 400.0), contested)
+	await _await_ticks(2)
+	racer_a.teleport_to(shared.global_position)
+	racer_b.teleport_to(shared.global_position)
+	await _await_ticks(SETTLE_TICKS)
+
+	var winners: int = 0
+	if racer_a.weapon_stats == contested:
+		winners += 1
+	if racer_b.weapon_stats == contested:
+		winners += 1
+	if winners != 1:
+		failures.append("%d of the two players racing for one pickup ended up holding it, expected exactly 1" % winners)
+
+	await _teardown(stage)
+	return failures
+
+## User story 7: a weapon head resting on a pickup does nothing at all, so a
+## pickup cannot be sniped from a weapon's length away. The head is checked to
+## have actually arrived on the pickup first -- otherwise "nothing happened"
+## would be true of a swing that never got there.
+func _scenario_weapon_head_does_not_collect_pickup() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	await _await_ticks(5)
+	# Pinned in clear air: the pickup has to be reachable by the head and out
+	# of the body's way, and a player left to fall would take its body past
+	# the pickup on the way down.
+	player.freeze = true
+
+	var started_with: Resource = player.weapon_stats
+	var weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH)
+	var target: Vector2 = PARK_POSITION + Vector2(MAX_REACH, 0.0)
+	var pickup: Node2D = _place_pickup(stage, target, weapon)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS * 2)
+
+	var gap: float = player.weapon_head_position().distance_to(target)
+	if gap > PICKUP_HEAD_TOUCH_SLACK:
+		failures.append("the head stopped %.1f px short of the pickup, so this proves nothing about head touches" % gap)
+	if player.weapon_stats != started_with:
+		failures.append("a weapon head touching a pickup swapped the player's weapon")
+	if not is_instance_valid(pickup) or pickup.is_queued_for_deletion():
+		failures.append("a weapon head touching a pickup took it off the stage")
+
+	await _teardown(stage)
+	return failures
+
+## User story 19: an eliminated player cannot collect. The live player beside
+## it is the control -- same pickup arrangement, same ticks -- so a scenario
+## where nothing at all could be collected cannot pass this.
+func _scenario_eliminated_player_cannot_collect() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var dead: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(300.0, 0.0))
+	await _await_ticks(5)
+
+	var dead_weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH)
+	var live_weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)
+	var dead_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(0.0, 60.0), dead_weapon)
+	var live_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(300.0, 60.0), live_weapon)
+	dead.eliminate()
+	await _await_ticks(2)
+	dead.teleport_to(dead_pickup.global_position)
+	live.teleport_to(live_pickup.global_position)
+	await _await_ticks(SETTLE_TICKS)
+
+	if dead.weapon_stats == dead_weapon:
+		failures.append("an eliminated player collected a pickup")
+	if not is_instance_valid(dead_pickup) or dead_pickup.is_queued_for_deletion():
+		failures.append("a pickup an eliminated player was sitting on was taken off the stage")
+	if live.weapon_stats != live_weapon:
+		failures.append("control: the live player did not collect the pickup it was sitting on, so this scenario proves nothing")
+
+	await _teardown(stage)
+	return failures
+
+## User story 13: whatever nobody reached is cleared when the round ends, so
+## the next round starts from a clean stage. A claim is dropped first so no
+## new round starts and restocks it before the check runs.
+func _scenario_pickups_cleared_at_round_end() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(PICKUP_SHORT_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var container: Node2D = loop["container"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Variant = loop["roster"]
+
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+	var stocked: bool = await _await_condition(
+		func() -> bool: return _pickups_under(container).size() >= PICKUP_CAP, ROUND_LOOP_TIMEOUT_MSEC)
+	if not stocked:
+		failures.append("the stage never reached the pickup cap, so there is nothing to clear")
+		await _teardown(loop["stage"])
+		return failures
+
+	roster.slots = [1]
+	players[1].eliminate()
+	var cleared: bool = await _await_condition(
+		func() -> bool: return _pickups_under(container).is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not cleared:
+		failures.append("%d pickup(s) were still on the stage after the round ended" % _pickups_under(container).size())
+	if container.get_child_count() == 0:
+		failures.append("the stage itself was gone, so an empty stage proves nothing about clearing pickups")
+
+	await _teardown(loop["stage"])
+	return failures
+
+## User stories 16 and 17: a stage's `PickupSpawn*` markers are where pickups
+## land, a spot already holding one is passed over, and a stage that declares
+## no markers still gets pickups rather than none.
+func _scenario_pickup_spawn_points_and_fallback() -> Array[String]:
+	var failures: Array[String] = []
+
+	var loop: Dictionary = _new_pickup_round(PICKUP_SHORT_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var container: Node2D = loop["container"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not await _await_pickup_round_start(players):
+		failures.append("marked stage: round never started with two claimed slots")
+	else:
+		var stocked: bool = await _await_condition(
+			func() -> bool: return _pickups_under(container).size() >= PICKUP_CAP, ROUND_LOOP_TIMEOUT_MSEC)
+		if not stocked:
+			failures.append("marked stage: the stage never reached the pickup cap")
+		var placed: Array[Node2D] = _pickups_under(container)
+		for pickup: Node2D in placed:
+			var on_marker: bool = false
+			for point: Vector2 in PICKUP_STUB_POINTS:
+				if pickup.global_position.distance_to(point) < PICKUP_SAME_POINT_EPSILON:
+					on_marker = true
+			if not on_marker:
+				failures.append("marked stage: a pickup landed at %s, which is no declared marker" % pickup.global_position)
+		if placed.size() >= 2 and placed[0].global_position.distance_to(placed[1].global_position) < PICKUP_SAME_POINT_EPSILON:
+			failures.append("marked stage: two pickups landed on the same marker")
+	await _teardown(loop["stage"])
+
+	# A stage that declares nothing still gets pickups: the stage author is
+	# not forced to mark spots.
+	_scenario_completed = false
+	var bare: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PackedVector2Array())
+	var bare_container: Node2D = bare["container"]
+	var bare_players: Array[RigidBody2D] = bare["players"]
+	if not await _await_pickup_round_start(bare_players):
+		failures.append("unmarked stage: round never started with two claimed slots")
+	else:
+		var fell_back: bool = await _await_condition(
+			func() -> bool: return not _pickups_under(bare_container).is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
+		if not fell_back:
+			failures.append("unmarked stage: a stage declaring no pickup markers got no pickups at all")
+	await _teardown(bare["stage"])
+
+	return failures
+
+## User story 18: every real stage declares enough pickup spots, and each one
+## is somewhere a pickup can actually be collected -- not buried in geometry,
+## not down in the death boundary. The check is run against a real pickup's
+## own trigger circle, so when issue #13's weapon art makes pickups bigger
+## this tightens by itself instead of going stale.
+func _scenario_stage_pickup_spawns_are_safe() -> Array[String]:
+	var failures: Array[String] = []
+	var stage_paths: PackedStringArray = [
+		"res://scenes/stages/Flatlands.tscn",
+		"res://scenes/stages/Highrise.tscn",
+		"res://scenes/stages/Gauntlet.tscn",
+	]
+
+	for path: String in stage_paths:
+		# Each stage's own _teardown() marks the scenario complete; reset it
+		# so a script error on a later stage cannot inherit an earlier one's.
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		await _await_ticks(2)
+
+		var points: Array[Vector2] = instance.get_pickup_spawn_points()
+		if points.size() < PICKUP_MIN_SPAWN_POINTS:
+			failures.append("%s: declared %d pickup spawn point(s), needs at least %d to hold a full cap" % [
+				path, points.size(), PICKUP_MIN_SPAWN_POINTS])
+		var kill_zone: Node2D = instance.get_node_or_null("KillZone") as Node2D
+
+		for i in points.size():
+			var pickup: Node2D = _place_pickup(stage, points[i], WeaponStatsType.new())
+			await _await_ticks(2)
+			var radius: float = pickup.trigger_radius()
+			if radius <= 0.0:
+				failures.append("%s pickup spawn %d: the pickup had no trigger to touch" % [path, i])
+			else:
+				var blockers: int = _overlapping_stage_bodies(points[i], radius)
+				if blockers > 0:
+					failures.append("%s pickup spawn %d: %d piece(s) of geometry or death boundary overlap it" % [
+						path, i, blockers])
+			if kill_zone != null and points[i].y > kill_zone.global_position.y - PICKUP_KILLZONE_CLEARANCE:
+				failures.append("%s pickup spawn %d: only %.0f px above the death boundary, needs %.0f" % [
+					path, i, kill_zone.global_position.y - points[i].y, PICKUP_KILLZONE_CLEARANCE])
+			pickup.queue_free()
+			await _await_ticks(2)
+
+		await _teardown(stage)
+
+	return failures
+
+## How much of the world a circle of this size at this spot runs into: stage
+## geometry and the kill zone both sit on the world layer, so one query
+## answers "inside geometry" and "inside the death boundary" together.
+func _overlapping_stage_bodies(centre: Vector2, radius: float) -> int:
+	var circle := CircleShape2D.new()
+	circle.radius = radius
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = circle
+	query.transform = Transform2D(0.0, centre)
+	query.collision_mask = 1
+	query.collide_with_bodies = true
+	query.collide_with_areas = true
+	var space: PhysicsDirectSpaceState2D = get_root().get_world_2d().direct_space_state
+	return space.intersect_shape(query, 8).size()
+
+## User stories 14 and 15, which are ADR-0005's winner-keeps rule (#6) meeting
+## pickups: the round's winner carries the weapon it picked up into the next
+## round, and the player who lost goes back to the pickaxe however good the
+## weapon it had found was.
+func _scenario_pickup_weapon_carries_to_winner_next_round() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var stage: Node2D = loop["stage"]
+	var container: Node2D = loop["container"]
+	var players: Array[RigidBody2D] = loop["players"]
+
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(stage)
+		return failures
+	var stocked: bool = await _await_condition(
+		func() -> bool: return not _pickups_under(container).is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not stocked:
+		failures.append("the round started with no pickup to win")
+		await _teardown(stage)
+		return failures
+
+	var winner_pickup: Node2D = _pickups_under(container)[0]
+	var winner_weapon: Resource = winner_pickup.weapon_stats
+	players[0].teleport_to(winner_pickup.global_position)
+	var winner_took_it: bool = await _await_condition(
+		func() -> bool: return players[0].weapon_stats == winner_weapon, ROUND_LOOP_TIMEOUT_MSEC)
+	if not winner_took_it:
+		failures.append("the player sent to the pickup never picked it up")
+		await _teardown(stage)
+		return failures
+
+	# The loser picks one up too, so its reset is a real reset rather than a
+	# player that never had anything but the pickaxe.
+	var loser_weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)
+	var loser_pickup: Node2D = _place_pickup(stage, players[1].global_position, loser_weapon)
+	players[1].teleport_to(loser_pickup.global_position)
+	var loser_took_it: bool = await _await_condition(
+		func() -> bool: return players[1].weapon_stats == loser_weapon, ROUND_LOOP_TIMEOUT_MSEC)
+	if not loser_took_it:
+		failures.append("the player who is about to lose never picked up its weapon")
+		await _teardown(stage)
+		return failures
+
+	players[1].eliminate()
+	var next_round: bool = await _await_condition(
+		func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC)
+	if not next_round:
+		failures.append("the next round never started after the round was won")
+		await _teardown(stage)
+		return failures
+
+	if players[0].weapon_stats != winner_weapon:
+		failures.append("the round's winner did not carry the weapon it picked up into the next round")
+	if players[1].weapon_stats == null or players[1].weapon_stats.resource_path != PICKUP_PICKAXE_PATH:
+		failures.append("the player who lost kept the weapon it had picked up instead of going back to the pickaxe")
+
+	await _teardown(stage)
+	return failures
+
+## User story 10: a pickup is drawn with its own weapon's art, so a player can
+## see what they are going for. A weapon with no art to draw still draws
+## something, and says so, rather than being invisible on the stage.
+func _scenario_pickup_drawn_with_weapon_art() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	var art_weapon := _ArtWeapon.new()
+	art_weapon.art_outline = PICKUP_ART_OUTLINE
+	var drawn: Node2D = _place_pickup(stage, PARK_POSITION, art_weapon)
+	await _await_ticks(2)
+	if drawn.art_polygon() != PICKUP_ART_OUTLINE:
+		failures.append("a pickup drew %s, expected its weapon's own outline %s" % [
+			drawn.art_polygon(), PICKUP_ART_OUTLINE])
+	if drawn.art_is_fallback():
+		failures.append("a pickup with real art to draw reported itself as the no-art fallback")
+
+	var bare: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(200.0, 0.0), WeaponStatsType.new())
+	await _await_ticks(2)
+	if bare.art_polygon().size() < 3:
+		failures.append("a pickup for a weapon with no art drew nothing at all")
+	if not bare.art_is_fallback():
+		failures.append("a pickup with no art to draw did not report itself as the fallback")
+	if drawn.trigger_radius() <= 0.0 or bare.trigger_radius() <= 0.0:
+		failures.append("a pickup had no trigger for a player to touch")
 
 	await _teardown(stage)
 	return failures
