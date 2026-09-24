@@ -63,6 +63,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"waiting_expires_disconnected_claims",
 	"abandoned_round_ends_without_winner",
 	"round_winner_keeps_weapon",
+	"weapon_reach_matches_roster",
+	"weapon_damage_matches_roster",
+	"weapon_responsiveness_matches_roster",
+	"heavy_weapon_wins_clash",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -325,6 +329,10 @@ const SLOT_COLOR_TOLERANCE: float = 0.01
 ## entry today; the roster's other four weapons append here.
 const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/pickaxe.tres",
+	"res://resources/staff.tres",
+	"res://resources/sword.tres",
+	"res://resources/axe.tres",
+	"res://resources/dagger.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -455,6 +463,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_abandoned_round_ends_without_winner()
 		"round_winner_keeps_weapon":
 			return await _scenario_round_winner_keeps_weapon()
+		"weapon_reach_matches_roster":
+			return await _scenario_weapon_reach_matches_roster()
+		"weapon_damage_matches_roster":
+			return await _scenario_weapon_damage_matches_roster()
+		"weapon_responsiveness_matches_roster":
+			return await _scenario_weapon_responsiveness_matches_roster()
+		"heavy_weapon_wins_clash":
+			return await _scenario_heavy_weapon_wins_clash()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2566,3 +2582,573 @@ func _scenario_round_winner_keeps_weapon() -> Array[String]:
 
 	await _teardown(stage)
 	return failures
+
+# --- The weapon roster (issue #13) -------------------------------------------
+#
+# Five weapons that differ in weight, reach and damage (CONTEXT.md, ADR-0005),
+# so that picking one is a commitment rather than a skin. The scenarios below
+# hand a real player each real resource and assert on what a player would see
+# happen: how far the head got, what a strike took off, how quickly the weapon
+# answered a new drag, and who gave way when two heads met.
+#
+# Each weapon's own numbers are read off the resource it is holding, because
+# the starting table is explicitly a baseline to be tuned by playtesting
+# (issue #13) and a suite that wrote those numbers down a second time would
+# have to be edited every time somebody turned a dial. What keeps that from
+# passing whatever the resources happen to say is the **tier ordering**, which
+# is the design claim rather than a number: the roster is only worth having if
+# L really does out-reach M and M really does out-reach S, and those orderings
+# are asserted on what was measured, never on what was declared.
+
+## Which tier each weapon sits in for each quantity, per issue #13's
+## starting-numbers table. Keyed by the resource file's basename.
+##
+## Reach:  S 90 / M 140 / L 200 px.
+## Damage: S 20 / M 34 / L 55 per full-speed hit.
+## Answer: how many ticks the weapon takes to come out onto a newly commanded
+##         reach, so S is the light, quick end of the roster and L the heavy,
+##         slow one -- the tiers still read smallest-to-largest in the
+##         measured quantity, which is what `_roster_tier_failures()` checks.
+const ROSTER_REACH_TIERS: Dictionary = {
+	"staff": "L",
+	"pickaxe": "M",
+	"axe": "M",
+	"sword": "S",
+	"dagger": "S",
+}
+const ROSTER_DAMAGE_TIERS: Dictionary = {
+	"axe": "L",
+	"pickaxe": "M",
+	"sword": "M",
+	"dagger": "M",
+	"staff": "S",
+}
+const ROSTER_ANSWER_TIERS: Dictionary = {
+	"staff": "S",
+	"dagger": "S",
+	"pickaxe": "M",
+	"sword": "M",
+	"axe": "L",
+}
+## Smallest measured quantity first, which is the order the tiers have to come
+## out in.
+const ROSTER_TIER_ORDER: PackedStringArray = ["S", "M", "L"]
+
+## Ticks given to a `set_weapon_stats()` swap before the new rig is driven.
+## The rebuild is deferred (see `Player.set_weapon_stats`), so the rig a
+## scenario measures is not the one it asked for until a frame has passed.
+const ROSTER_SWAP_TICKS: int = 4
+## Ticks a weapon is given to arrive at a commanded reach. Longer than
+## SETTLE_TICKS because the roster's slowest weapon extends at 470 px/s
+## against the pickaxe's 700, and its 120 px of travel alone is 15 ticks.
+const ROSTER_SETTLE_TICKS: int = 45
+## How much further an L weapon has to reach than every M one, and M than
+## every S, before the roster's reach ordering counts as real. The table's own
+## steps are 60 px and 50 px, so this is a wide margin over measurement noise
+## and a long way under a step.
+const ROSTER_REACH_TIER_MARGIN: float = 20.0
+
+## The head speed a strike deals exactly the weapon's own `damage` at,
+## written down here rather than read off `Player`: a test that asked the
+## player what full speed meant would pass whatever the player decided. It is
+## ADR-0005's committed full-reach sweep, and `Player`'s documented scaling
+## puts the weapon's whole `damage` on a hit landing at it.
+const FULL_STRIKE_HEAD_SPEED: float = 2200.0
+## What the charging body is actually commanded, which is not the same thing.
+## A `RigidBody2D` carries linear damping, so a body told to run at a speed
+## settles a little under it; this is the command that lands the **head** on
+## FULL_STRIKE_HEAD_SPEED, and the trial measures the head to check that it
+## did rather than assuming it.
+const FULL_STRIKE_COMMAND: float = 2280.0
+## How far off full speed the head may actually have been going when it
+## landed. The strike rule is linear in speed, so a band this wide moves the
+## axe's 55 by under 2 -- which is what ROSTER_DAMAGE_TOLERANCE has to cover,
+## and it sits a long way under the 14 and 21 the roster's damage tiers are
+## apart.
+const FULL_STRIKE_SPEED_BAND: float = 50.0
+const ROSTER_DAMAGE_TOLERANCE: float = 3.0
+## Room for two weapons that should deal the same damage to disagree, and the
+## margin by which a higher tier has to beat a lower one. The table's steps
+## are 21 and 14, so both sit clear of the tolerance above and well under a
+## step.
+const ROSTER_DAMAGE_SPREAD: float = 6.0
+const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
+## How far the victim is planted from where the charge starts, and how long
+## the charge is watched for. The run-up has to be long enough that the head
+## has stopped ringing on the end of its own haft and is being carried along
+## at the body's speed: a body yanked to full speed from rest swings its head
+## out past that speed and back for about 15 ticks, and at 36 px a tick this
+## leaves twice that before anything is in the way.
+const FULL_STRIKE_RUN_UP: float = 1600.0
+const FULL_STRIKE_TICKS: int = 80
+
+## The reach the responsiveness trial drags every weapon out to, and how close
+## the head has to get to it to count as having answered. 90 px is the
+## shortest full reach on the roster, so every weapon can be asked for it, and
+## every weapon rests at the same 20 px -- which makes the five comparable:
+## the same 70 px of travel, commanded the same way, timed the same way.
+const ROSTER_ANSWER_REACH: float = 90.0
+const ROSTER_ANSWER_TOLERANCE: float = 2.0
+const ROSTER_ANSWER_TICKS: int = 120
+## Ticks two weapons of the same tier may disagree by, and ticks a slower tier
+## has to lag a quicker one by. Deliberately asserted as an ordering in ticks
+## rather than against any absolute count: the drive speeds are a starting
+## table to be tuned, and tuning them must not turn this red.
+const ROSTER_ANSWER_SPREAD: float = 3.0
+const ROSTER_ANSWER_TIER_MARGIN: float = 1.0
+
+## Two players this far apart for the roster clash. Close enough that two
+## daggers (90 px of reach each) still meet with both drives pushing at their
+## force ceiling rather than arriving and stopping, which is what makes the
+## like-for-like control a contest and not two weapons resting on each other.
+const ROSTER_CLASH_SEPARATION: float = 150.0
+## Ticks the two heads are held against each other before the contest is read.
+const ROSTER_CLASH_HOLD_TICKS: int = 60
+## How much more of its own commanded reach the lighter weapon has to have
+## surrendered. "Gave way" is the observation the clash is really about, and
+## unlike where the heads met it owes nothing to either weapon's reach: it is
+## each weapon measured against the reach it was itself asking for.
+const MIN_GIVE_MARGIN: float = 20.0
+## How far apart two identical weapons' surrenders may be before the control
+## is not symmetric after all.
+const SYMMETRIC_GIVE_TOLERANCE: float = 8.0
+const AXE_PATH: String = "res://resources/axe.tres"
+const DAGGER_PATH: String = "res://resources/dagger.tres"
+
+## US-4/7/12/14/20: a full drag puts each weapon's head at that weapon's own
+## full reach, and the five weapons come out in the tiers the roster asked
+## for.
+##
+## Two claims, and the second is the one that makes the first worth asserting.
+## Per weapon, the head has to settle where that resource says it reaches --
+## the weapon delivering its own data. Across weapons, the measured reaches
+## have to sort into S below M below L by a clear margin, which is the roster
+## being a roster: five weapons that all reached 140 px would satisfy every
+## per-weapon check above and would still be one weapon five times.
+func _scenario_weapon_reach_matches_roster() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+
+	var observed: Dictionary = {}
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		player.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		# Re-parked for each weapon for the same reason `extension_tracks_drag`
+		# re-parks between samples: the head has to be measured in clear air,
+		# not planted on the arena.
+		player.teleport_to(PARK_POSITION)
+		player.set_input_vector(Vector2.RIGHT)
+		await _await_ticks(ROSTER_SETTLE_TICKS)
+
+		var reach: float = _reach_of(player)
+		observed[weapon] = reach
+		print("      %s: full drag settled at %.1f px, its own max reach is %.1f px" % [
+			weapon, reach, stats.max_reach])
+		if absf(reach - stats.max_reach) > REACH_TOLERANCE:
+			failures.append("%s: full drag settled at %.1f px, not at the %.1f px of reach it carries" % [
+				weapon, reach, stats.max_reach])
+
+	failures.append_array(_roster_tier_failures(
+		"reach", "px", observed, ROSTER_REACH_TIERS, REACH_TOLERANCE, ROSTER_REACH_TIER_MARGIN))
+
+	await _teardown(stage)
+	return failures
+
+## US-9/16/20: a full-speed strike with each weapon takes that weapon's own
+## damage off, and the five sort into the roster's damage tiers.
+##
+## Speed is the thing that has to be controlled here, because the strike rule
+## scales damage by it (ADR-0005) and the five weapons swing at wildly
+## different rates -- comparing a staff's swing against an axe's would measure
+## the drive speeds, not the damage. So the head is not swung at all: the
+## attacker holds it out and is carried into the victim at a commanded speed,
+## which is the same speed whatever weapon it is holding. The speed the head
+## was actually seen moving at is then measured from its own positions and
+## checked to be full speed, so the trial says what it claims to say rather
+## than assuming the body dragged the head along perfectly.
+##
+## Two things the charge has to get right, both learned the hard way from a
+## version of this that did neither. It has to be **long**, because a head
+## yanked to speed from rest rings in and out on its haft for a dozen ticks
+## and arrives at anything from half speed to a third over it. And it has to
+## be **level**: only the part of the head's motion heading into the victim is
+## scored (`Player._on_head_hit`), so a head that has sagged even 20 px by the
+## time it arrives is scored well under the speed it is travelling at, by a
+## different amount for every weapon.
+func _scenario_weapon_damage_matches_roster() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+
+	var observed: Dictionary = {}
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		attacker.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		# A fresh victim per weapon, so every strike lands on somebody who has
+		# taken nothing yet.
+		var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * FULL_STRIKE_RUN_UP)
+		await physics_frame
+		_brace(victim)
+
+		var hit: Dictionary = await _charge_strike(attacker, victim)
+		print("      %s: head arrived at %.0f px/s and took %.1f off, its own damage is %.1f (closest %.1f px)" % [
+			weapon, hit["speed"], hit["damage"], stats.damage, hit["closest"]])
+		if not hit["landed"]:
+			failures.append("%s: the charge never reached the victim, so it proves nothing" % weapon)
+		elif absf(float(hit["speed"]) - FULL_STRIKE_HEAD_SPEED) > FULL_STRIKE_SPEED_BAND:
+			failures.append("%s: the head landed at %.0f px/s, not the %.0f px/s a full-speed strike is measured at" % [
+				weapon, hit["speed"], FULL_STRIKE_HEAD_SPEED])
+		else:
+			observed[weapon] = hit["damage"]
+			if absf(float(hit["damage"]) - stats.damage) > ROSTER_DAMAGE_TOLERANCE:
+				failures.append("%s: a full-speed strike took %.1f off, not the %.1f of damage it carries" % [
+					weapon, hit["damage"], stats.damage])
+
+		victim.queue_free()
+		await _await_ticks(BOOST_RESET_TICKS)
+
+	failures.append_array(_roster_tier_failures(
+		"damage", "", observed, ROSTER_DAMAGE_TIERS, ROSTER_DAMAGE_SPREAD, ROSTER_DAMAGE_TIER_MARGIN))
+
+	await _teardown(stage)
+	return failures
+
+## US-10/11/17: a light weapon answers a newly commanded drag quicker than a
+## medium one, which answers quicker than the heavy one.
+##
+## Asserted as an ordering in ticks and never against a tick count, because
+## the drive speeds are a starting table the design expects to be tuned
+## (issue #13) and tuning them must not turn this red. What it does pin down
+## is the one thing tuning must not break: the axe's power costs it time, the
+## dagger and staff buy their speed with damage or nothing to hit with, and if
+## all five answered alike the roster would not feel like five weapons.
+##
+## The drag measured is a **reach** drag: every weapon is let go to the 20 px
+## of rest reach they all share, then asked for 90 px, the shortest full reach
+## on the roster. Same travel, same command, same clock for all five, and what
+## separates them is the one thing meant to -- how fast the weapon is allowed
+## to answer.
+##
+## Not measured as a turn, which is the other half of a drag: a turn is made
+## against the weapon's own lever arm and the head's inertia out on the end of
+## it, so what a turn times is mostly the weapon's length and its force
+## ceiling. Timed that way the staff -- the lightest, quickest-slewing weapon
+## on the roster -- comes out the most sluggish of the five, purely for being
+## long, which is reach being measured and called responsiveness.
+func _scenario_weapon_responsiveness_matches_roster() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(player)
+
+	var observed: Dictionary = {}
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		player.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		player.set_input_vector(Vector2.ZERO)
+		await _await_ticks(ROSTER_SETTLE_TICKS)
+
+		var rest: float = _reach_of(player)
+		var magnitude: float = (ROSTER_ANSWER_REACH - stats.min_reach) / (stats.max_reach - stats.min_reach)
+		player.set_input_vector(Vector2.RIGHT * magnitude)
+		var answered: int = -1
+		for i in ROSTER_ANSWER_TICKS:
+			await physics_frame
+			if absf(_reach_of(player) - ROSTER_ANSWER_REACH) <= ROSTER_ANSWER_TOLERANCE:
+				answered = i + 1
+				break
+		print("      %s: answered a drag from %.1f px out to %.1f px in %d ticks" % [
+			weapon, rest, ROSTER_ANSWER_REACH, answered])
+		if answered < 0:
+			failures.append("%s: never came out to %.1f px within %d ticks of being asked for it" % [
+				weapon, ROSTER_ANSWER_REACH, ROSTER_ANSWER_TICKS])
+		else:
+			observed[weapon] = float(answered)
+
+	failures.append_array(_roster_tier_failures(
+		"ticks to answer a new drag", "ticks", observed, ROSTER_ANSWER_TIERS,
+		ROSTER_ANSWER_SPREAD, ROSTER_ANSWER_TIER_MARGIN))
+
+	await _teardown(stage)
+	return failures
+
+## US-8/15: the heavy weapon wins the clash. An axe head and a dagger head are
+## driven into each other and the axe gives way less.
+##
+## `clash_higher_drive_force_wins` already says a bigger force ceiling wins
+## ground, using a stub weapon built in this file. This says the roster's own
+## weight tiers are that difference: nothing here is synthesised, both sides
+## are the shipped resources, and the axe's advantage is the 0.45 kg and
+## 9000 N it actually carries against the dagger's 0.15 and 4000.
+##
+## Two measurements, because where the heads met is not the whole story. How
+## far off the midline they met is the ground won, which is what a player
+## sees. How much of its own commanded reach each weapon surrendered is who
+## gave way, and that one owes nothing at all to either weapon's reach -- each
+## side is measured against the reach it was itself asking for -- so it
+## survives the axe being the longer weapon of the two.
+##
+## Both are read against a like-for-like control first: two daggers, where the
+## situation is symmetric and so anything but a dead heat would be a bias in
+## the rig rather than a property of the weapons. And the axe is then run from
+## both sides, because an advantage that lives on the left-hand side of the
+## arena is not an advantage the axe has.
+func _scenario_heavy_weapon_wins_clash() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var half: Vector2 = Vector2.RIGHT * ROSTER_CLASH_SEPARATION * 0.5
+	var left: RigidBody2D = _spawn_player(stage, centre - half)
+	var right: RigidBody2D = _spawn_player(stage, centre + half)
+	await physics_frame
+
+	var axe: WeaponStatsType = load(AXE_PATH)
+	var dagger: WeaponStatsType = load(DAGGER_PATH)
+	if axe == null or dagger == null:
+		failures.append("the axe or the dagger could not be loaded, so there is no clash to run")
+		await _teardown(stage)
+		return failures
+
+	# Braced, for the same reason `clash_higher_drive_force_wins` braces: each
+	# weapon's push comes back through its own body, so two free players shove
+	# themselves apart and their heads never stay in contact.
+	_brace(left)
+	_brace(right)
+
+	var even: Dictionary = await _roster_clash(left, right, centre, dagger, dagger)
+	print("      dagger against dagger: met %.1f px off the midline, %.1f px apart; gave way %.1f px and %.1f px" % [
+		even["offset"], even["gap"], even["left_give"], even["right_give"]])
+	failures.append_array(_clash_met_failures("dagger against dagger", even))
+	if absf(float(even["offset"])) > SYMMETRIC_CLASH_TOLERANCE:
+		failures.append("two daggers met %.1f px off the midline between them" % even["offset"])
+	if absf(float(even["left_give"]) - float(even["right_give"])) > SYMMETRIC_GIVE_TOLERANCE:
+		failures.append("two daggers gave way by %.1f px and %.1f px; neither should out-push the other" % [
+			even["left_give"], even["right_give"]])
+
+	var axe_left: Dictionary = await _roster_clash(left, right, centre, axe, dagger)
+	print("      axe on the left: met %.1f px off the midline, %.1f px apart; axe gave way %.1f px, dagger %.1f px" % [
+		axe_left["offset"], axe_left["gap"], axe_left["left_give"], axe_left["right_give"]])
+	failures.append_array(_clash_met_failures("the axe on the left", axe_left))
+	failures.append_array(_heavy_won_failures(
+		"the axe on the left", axe_left["left_give"], axe_left["right_give"],
+		float(axe_left["offset"]) - float(even["offset"])))
+
+	var axe_right: Dictionary = await _roster_clash(left, right, centre, dagger, axe)
+	print("      axe on the right: met %.1f px off the midline, %.1f px apart; dagger gave way %.1f px, axe %.1f px" % [
+		axe_right["offset"], axe_right["gap"], axe_right["left_give"], axe_right["right_give"]])
+	failures.append_array(_clash_met_failures("the axe on the right", axe_right))
+	failures.append_array(_heavy_won_failures(
+		"the axe on the right", axe_right["right_give"], axe_right["left_give"],
+		float(even["offset"]) - float(axe_right["offset"])))
+
+	await _teardown(stage)
+	return failures
+
+## Every way a set of per-weapon measurements fails the roster's own ordering:
+## a weapon that was never measured at all, two weapons of one tier that came
+## out unlike each other, or a tier that failed to beat the one below it.
+##
+## The tiers are the design claim (issue #13's starting-numbers table) and the
+## values are what the run measured, so nothing here is the resources marking
+## their own homework.
+func _roster_tier_failures(quantity: String, unit: String, observed: Dictionary, tiers: Dictionary, spread: float, margin: float) -> Array[String]:
+	var failures: Array[String] = []
+	var buckets: Dictionary = {}
+	for tier: String in ROSTER_TIER_ORDER:
+		buckets[tier] = []
+
+	for weapon: String in tiers:
+		if not observed.has(weapon):
+			failures.append("%s: %s was never measured, so the roster's ordering is untested" % [
+				quantity, weapon])
+			continue
+		var bucket: Array = buckets[tiers[weapon]]
+		bucket.append(float(observed[weapon]))
+
+	for tier: String in ROSTER_TIER_ORDER:
+		var values: Array = buckets[tier]
+		if values.size() < 2:
+			continue
+		var low: float = float(values.min())
+		var high: float = float(values.max())
+		if high - low > spread:
+			failures.append("%s: the %s tier came out spread over %.1f %s, from %.1f to %.1f -- one tier is meant to be one number" % [
+				quantity, tier, high - low, unit, low, high])
+
+	for i in range(1, ROSTER_TIER_ORDER.size()):
+		var lower: Array = buckets[ROSTER_TIER_ORDER[i - 1]]
+		var upper: Array = buckets[ROSTER_TIER_ORDER[i]]
+		if lower.is_empty() or upper.is_empty():
+			continue
+		var step: float = float(upper.min()) - float(lower.max())
+		if step < margin:
+			failures.append("%s: the %s tier beat the %s tier by %.1f %s, which is not the roster's ordering (wanted %.1f)" % [
+				quantity, ROSTER_TIER_ORDER[i], ROSTER_TIER_ORDER[i - 1], step, unit, margin])
+
+	return failures
+
+## One clash between two named weapons, from a standing start.
+##
+## Modelled on `_clash`, which it cannot reuse: that one is written around
+## CLASH_SEPARATION, which is set for two pickaxes and leaves two daggers
+## 40 px short of ever touching. Walked together rather than sent, for the
+## reason `_clash` gives -- a contest can only be measured once there is a
+## contact, and two heads sent at each other arrive faster than the contact
+## catches and are seated by `WeaponHead`'s pair correction instead.
+##
+## Reports where the two heads met relative to the midline between the bodies,
+## how far apart they ended up, and how much of its own commanded reach each
+## side surrendered.
+func _roster_clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2, left_stats: WeaponStatsType, right_stats: WeaponStatsType) -> Dictionary:
+	left.set_weapon_stats(left_stats)
+	right.set_weapon_stats(right_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+
+	var half: Vector2 = Vector2.RIGHT * ROSTER_CLASH_SEPARATION * 0.5
+	left.teleport_to(centre - half)
+	right.teleport_to(centre + half)
+	await _close_heads(left, right, CLASH_APPROACH_TICKS)
+	await _await_ticks(ROSTER_CLASH_HOLD_TICKS)
+
+	var left_head: Vector2 = left.weapon_head_position()
+	var right_head: Vector2 = right.weapon_head_position()
+	var meeting: float = (left_head.x + right_head.x) * 0.5
+	var midline: float = (left.global_position.x + right.global_position.x) * 0.5
+	return {
+		"offset": meeting - midline,
+		"gap": (right_head - left_head).length(),
+		# How close these two particular heads can get before they are
+		# touching: a head is a cluster of circles fitted to drawn art
+		# (ADR-0010), so this is each head's own furthest circle rather than
+		# one radius shared by every weapon.
+		"contact": _head_extent(left) + _head_extent(right),
+		"left_give": left_stats.max_reach - _reach_of(left),
+		"right_give": right_stats.max_reach - _reach_of(right),
+	}
+
+## Did these two heads actually meet? A clash nobody turned up to would
+## otherwise report a dead heat and pass.
+func _clash_met_failures(label: String, clash: Dictionary) -> Array[String]:
+	var reachable: float = float(clash["contact"]) + CLASH_CONTACT_SLACK
+	if float(clash["gap"]) > reachable:
+		return ["%s: the heads never met, ending %.1f px apart when they touch at %.1f px" % [
+			label, clash["gap"], reachable]]
+	return []
+
+## The heavy weapon's side of a roster clash: it surrendered less of its own
+## commanded reach than the light one did, and the meeting point moved onto
+## the light weapon's side of the midline by comparison with the like-for-like
+## control.
+func _heavy_won_failures(label: String, heavy_give: float, light_give: float, ground_won: float) -> Array[String]:
+	var failures: Array[String] = []
+	if light_give - heavy_give < MIN_GIVE_MARGIN:
+		failures.append("%s: the heavy weapon gave up %.1f px of its own reach against the light one's %.1f px, so nothing gave way (wanted %.1f px between them)" % [
+			label, heavy_give, light_give, MIN_GIVE_MARGIN])
+	if ground_won < MIN_GROUND_WON:
+		failures.append("%s: the clash moved only %.1f px onto the light weapon's side of the midline (wanted %.1f px)" % [
+			label, ground_won, MIN_GROUND_WON])
+	return failures
+
+## How far the head a player is holding reaches past the point it is held by,
+## in any direction: its furthest circle. Read off the built rig rather than
+## the resource, so it is the head that is really there.
+func _head_extent(player: RigidBody2D) -> float:
+	var extent: float = 0.0
+	for circle: Dictionary in player.weapon_head_circles():
+		var offset: Vector2 = circle["offset"]
+		extent = maxf(extent, offset.length() + float(circle["radius"]))
+	return extent
+
+## A head held out and carried into a victim at a commanded speed, and what it
+## did on arrival.
+##
+## The strike the roster's damage numbers are defined at is a full-speed one,
+## and a swing cannot be asked for a speed -- it arrives at whatever its own
+## weapon produces, which differs across the roster by more than the damage
+## does. So the weapon is held still and the body brings it in, which is the
+## same commanded speed whatever is being held.
+##
+## Both ends are then read from outside the player: damage off the victim's
+## own accumulated total, and speed off how far the head visibly moved in the
+## last whole tick before anything stopped it.
+func _charge_strike(attacker: RigidBody2D, victim: RigidBody2D) -> Dictionary:
+	var centre: Vector2 = DEEP_PARK_POSITION
+	await _wind_up(attacker, centre, 0.0)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	# Put back where the run-up is measured from: the wind-up leaves the
+	# attacker wherever gravity took it, and the victim is braced and so is
+	# not falling with it.
+	attacker.teleport_to(centre)
+	victim.teleport_to(centre + Vector2.RIGHT * FULL_STRIKE_RUN_UP)
+
+	var before_damage: float = victim.damage
+	var before_deaths: int = victim.deaths
+	var previous_head: Vector2 = attacker.weapon_head_position()
+	var last_speed: float = 0.0
+	var speed_at_hit: float = 0.0
+	var dealt: float = 0.0
+	var landed: bool = false
+	var closest: float = INF
+
+	var contact: float = PLAYER_RADIUS + _head_extent(attacker) + PLANT_CLEARANCE
+	var touched: bool = false
+	for _t in FULL_STRIKE_TICKS:
+		# Commanded flat, so the charge arrives at the height it started at
+		# rather than on the way down.
+		attacker.linear_velocity = Vector2.RIGHT * FULL_STRIKE_COMMAND
+		await physics_frame
+		var head: Vector2 = attacker.weapon_head_position()
+		var speed: float = (head - previous_head).length() / _tick_seconds()
+		previous_head = head
+		var gap: float = (head - victim.global_position).length()
+		closest = minf(closest, gap)
+		if gap <= contact:
+			touched = true
+		elif not touched:
+			last_speed = speed
+			# Kept level with the head while the charge is still well out.
+			# The charge falls a little as it runs -- gravity is integrated
+			# inside each step, after the tick's velocity is commanded -- and
+			# a head arriving even 20 px high strikes off-centre, where only
+			# the part of its motion heading into the victim counts
+			# (`Player._on_head_hit`). That would score the same swing
+			# differently for every weapon, which would be the rig deciding
+			# the answer rather than the weapon.
+			if gap > contact * 3.0:
+				victim.teleport_to(Vector2(victim.global_position.x, head.y))
+		if victim.damage != before_damage or victim.deaths != before_deaths:
+			# The tick the damage shows up on is a tick the head has already
+			# been stopped part-way through, so the speed it arrived with is
+			# the last whole step it took while still clear of the victim.
+			speed_at_hit = last_speed
+			dealt = victim.damage - before_damage if victim.deaths == before_deaths \
+				else DEATH_DAMAGE - before_damage
+			landed = true
+			break
+
+	return {
+		"damage": dealt,
+		"speed": speed_at_hit,
+		"landed": landed,
+		"closest": closest,
+	}
