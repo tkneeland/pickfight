@@ -39,6 +39,8 @@ round is the exception: they keep whatever they were holding.
 | **Round** | One stage, played until one player remains. Awards a point. |
 | **Session** | The endless run of rounds, from launch to quit. Holds the roster and the score tally. |
 | **Stage** | One arena layout. Rotates every round. Declares where players spawn, where the death boundary lies, and how the camera frames it. |
+| **Rotation** | The ordered run of stages a session cycles through, one per round, wrapping at the end. |
+| **Ring-out** | Leaving the stage into its death boundary. Kills whatever damage a player had taken — stage geometry does not care how healthy anyone is. The other route out of a round is accumulated damage. |
 
 ## Design intent
 
@@ -57,6 +59,8 @@ interesting.
 
 ## Deliberately not decided
 
-- The full roster of stages beyond the three that exist (ADR-0008 settled the
+- The full roster of stages beyond the seven that exist (ADR-0008 settled the
   authoring format: one `.tscn` per stage under `scenes/stages/`).
+- Whether the rotation stays sequential now that it is past a handful of
+  stages, or becomes a shuffle that never repeats back to back (#20).
 - Art direction.
