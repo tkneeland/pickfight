@@ -596,6 +596,11 @@ func _clear_rig() -> void:
 	if _head != null:
 		_head.collision_layer = 0
 		_head.collision_mask = 0
+	# Renamed on the way out: a mid-round swap (a pickup, issue #14) builds the
+	# new rig this same frame, and while this one waits for end-of-frame
+	# deletion it would hold the "<name>WeaponRig" name, so Godot would
+	# silently rename the live rig instead.
+	_rig.name = "%sRetiredRig" % name
 	_rig.queue_free()
 	_rig = null
 	_haft = null

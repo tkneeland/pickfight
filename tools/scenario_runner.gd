@@ -4738,8 +4738,10 @@ func _scenario_body_touch_swaps_weapon() -> Array[String]:
 
 	# Two players on the same pickup on the same tick: exactly one of them
 	# walks away with it.
-	var racer_a: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(0.0, 400.0))
-	var racer_b: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(80.0, 400.0))
+	# Both racers start well clear of the pickup (a body reaches 24 px plus
+	# the trigger's radius), so neither collects it before the race begins.
+	var racer_a: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(-60.0, 400.0))
+	var racer_b: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(140.0, 400.0))
 	await _await_ticks(5)
 	var contested: Resource = _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)
 	var shared: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(40.0, 400.0), contested)
@@ -4842,7 +4844,8 @@ func _scenario_pickups_cleared_at_round_end() -> Array[String]:
 		await _teardown(loop["stage"])
 		return failures
 
-	roster.slots = [1]
+	var remaining: Array[int] = [1]
+	roster.slots = remaining
 	players[1].eliminate()
 	var cleared: bool = await _await_condition(
 		func() -> bool: return _pickups_under(container).is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
@@ -4904,15 +4907,32 @@ func _scenario_pickup_spawn_points_and_fallback() -> Array[String]:
 ## not down in the death boundary. The check is run against a real pickup's
 ## own trigger circle, so when issue #13's weapon art makes pickups bigger
 ## this tightens by itself instead of going stale.
+##
+## Sweeps STAGE_PATHS, the one rotation list, so a stage added to the rotation
+## is held to this without editing this scenario. Measured against the
+## largest pickup the roster can produce: a spot clear for a small pickup can
+## still bury the axe's.
 func _scenario_stage_pickup_spawns_are_safe() -> Array[String]:
 	var failures: Array[String] = []
-	var stage_paths: PackedStringArray = [
-		"res://scenes/stages/Flatlands.tscn",
-		"res://scenes/stages/Highrise.tscn",
-		"res://scenes/stages/Gauntlet.tscn",
-	]
+	var largest: Resource = WeaponStatsType.new()
+	var largest_radius: float = -1.0
+	var probe_parent := Node2D.new()
+	get_root().add_child(probe_parent)
+	var probes: Array[Node2D] = []
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		probes.append(_place_pickup(probe_parent, DEEP_PARK_POSITION, stats))
+	# A pickup builds its trigger in _ready, which has not run yet if this
+	# scenario is the first thing the process does.
+	await _await_ticks(1)
+	for probe: Node2D in probes:
+		var stats: Resource = probe.weapon_stats
+		if probe.trigger_radius() > largest_radius:
+			largest_radius = probe.trigger_radius()
+			largest = stats
+	probe_parent.queue_free()
+	print("      largest pickup: %s, trigger radius %.1f px" % [largest.resource_path.get_file(), largest_radius])
 
-	for path: String in stage_paths:
+	for path: String in STAGE_PATHS:
 		# Each stage's own _teardown() marks the scenario complete; reset it
 		# so a script error on a later stage cannot inherit an earlier one's.
 		_scenario_completed = false
@@ -4929,7 +4949,7 @@ func _scenario_stage_pickup_spawns_are_safe() -> Array[String]:
 		var kill_zone: Node2D = instance.get_node_or_null("KillZone") as Node2D
 
 		for i in points.size():
-			var pickup: Node2D = _place_pickup(stage, points[i], WeaponStatsType.new())
+			var pickup: Node2D = _place_pickup(stage, points[i], largest)
 			await _await_ticks(2)
 			var radius: float = pickup.trigger_radius()
 			if radius <= 0.0:
@@ -5041,7 +5061,9 @@ func _scenario_pickup_drawn_with_weapon_art() -> Array[String]:
 	if drawn.art_is_fallback():
 		failures.append("a pickup with real art to draw reported itself as the no-art fallback")
 
-	var bare: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(200.0, 0.0), WeaponStatsType.new())
+	# An _ArtWeapon with an empty outline, not a bare WeaponStats: since #13 a
+	# blank WeaponStats draws its default circle head, so it has art.
+	var bare: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(200.0, 0.0), _ArtWeapon.new())
 	await _await_ticks(2)
 	if bare.art_polygon().size() < 3:
 		failures.append("a pickup for a weapon with no art drew nothing at all")

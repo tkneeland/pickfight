@@ -77,3 +77,11 @@ script = ExtResource("2")
 
 [node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
 shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). Floating over the water, only reachable by riding the barge or a committed swing: the ferry becomes worth fighting for twice over.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 300)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(0, 170)
+

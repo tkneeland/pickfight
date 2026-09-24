@@ -89,3 +89,11 @@ script = ExtResource("2")
 
 [node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
 shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). On the middle island and over the ferry's route.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-140, 252)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(240, 220)
+
