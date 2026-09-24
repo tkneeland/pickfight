@@ -304,13 +304,19 @@ const MIN_SHOVE_DISTANCE: float = 40.0
 const BUMP_TICKS: int = 60
 
 ## Clash: two players this far apart, each commanding full reach at the other.
-## Each head is left 60 px short of where it is being told to go, so both
-## drives stay pushing for the whole measurement instead of arriving. Derived
-## from MAX_REACH (220 px at the old 140 px reach) so a reach retune keeps the
-## same overlap (#45).
+## Each head is left short of where it is being told to go, so both drives
+## stay pushing for the whole measurement instead of arriving.
 ## CLASH_TICKS is then long enough that holding is a state and not a moment
 ## passed through: two seconds of contact under full push.
-const CLASH_SEPARATION: float = 2.0 * MAX_REACH - 60.0
+##
+## **The outcome is sensitive to this exact number (#45).** At the 150 px
+## pickaxe, two equal weapons meet on the midline at 230 and 250 px but 36-45
+## px off it at 220 and 240: dead-on heads sometimes glance sideways,
+## depending on where they first touch. That is a property of the head
+## physics, and a spacing that sat on a lucky value at 140 px. Retuning the
+## pickaxe's reach can move it again. A sturdier test would sweep several
+## separations; until then, re-probe this value after any pickaxe reach change.
+const CLASH_SEPARATION: float = 230.0
 const CLASH_TICKS: int = 120
 ## Ticks over which the two heads are walked into each other when a clash
 ## needs to be established rather than tested. Ramping the commanded reach
@@ -908,7 +914,9 @@ func _scenario_head_plants_player() -> Array[String]:
 	var under: RigidBody2D = _spawn_player(stage, Vector2(0, 200))
 	await _await_ticks(LANDING_TICKS)
 
-	var over: RigidBody2D = _spawn_player(stage, Vector2(0, -100))
+	# Dropped from the same height above its own head at any reach: -100 at
+	# the old 140 px pickaxe, which is what LANDING_TICKS was sized for (#45).
+	var over: RigidBody2D = _spawn_player(stage, Vector2(0, -100.0 + (MAX_REACH - 140.0)))
 	over.set_input_vector(Vector2.DOWN * 0.25)
 	await _await_ticks(LANDING_TICKS)
 
