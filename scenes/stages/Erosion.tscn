@@ -1,0 +1,76 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
+size = Vector2(140, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A wide floor built almost entirely out of #18's crumbling ledge, all at the
+; same height so no side of it is the "high ground" -- four 200x24 ledges
+; strung out with 40-70 px gaps between them, wide enough to cross with an
+; ordinary swing but wide enough to fall through if nobody is moving.
+; Standing still is the mistake: whichever ledge a player parks on starts its
+; warning the moment they land on it, and 0.8 s later it is gone for three
+; seconds. With two players loose on the same floor, that clock is always
+; running on somebody.
+;
+; Island is the one permanent piece, centred and deliberately small -- 140 px
+; against each ledge's 200, room to stand and not much more. It is not a
+; balance choice: it is what keeps this stage from being able to erode to
+; nothing under both players at once and deadlock the round with no floor
+; left anywhere. Both spawns sit on top of it rather than on a ledge, so a
+; round never opens with a countdown already ticking on the ground a player
+; was just placed on (US-7) -- the erosion starts only once a player leaves
+; home and stands on the wide floor built to fall out from under them.
+;
+; Ledge timings are left at CrumblingLedge's defaults (0.8 s warning, 3 s
+; away), same as Highrise's Ledge3: one swing's worth of warning to commit to
+; the next foothold or fall back, and long enough away that a ledge someone
+; just lost is not simply waiting to be walked straight back onto.
+
+[node name="Erosion" type="Node2D"]
+script = ExtResource("1")
+
+[node name="LedgeA" parent="." instance=ExtResource("3")]
+position = Vector2(-480, 300)
+size = Vector2(200, 24)
+
+[node name="LedgeB" parent="." instance=ExtResource("3")]
+position = Vector2(-240, 300)
+size = Vector2(200, 24)
+
+[node name="Island" type="StaticBody2D" parent="."]
+position = Vector2(0, 300)
+
+[node name="IslandShape" type="CollisionShape2D" parent="Island"]
+shape = SubResource("RectangleShape2D_island")
+
+[node name="IslandVisual" type="Polygon2D" parent="Island"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-70, -12, 70, -12, 70, 12, -70, 12)
+
+[node name="LedgeC" parent="." instance=ExtResource("3")]
+position = Vector2(240, 300)
+size = Vector2(200, 24)
+
+[node name="LedgeD" parent="." instance=ExtResource("3")]
+position = Vector2(480, 300)
+size = Vector2(200, 24)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-40, 220)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(40, 220)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")

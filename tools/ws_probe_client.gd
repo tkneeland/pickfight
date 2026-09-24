@@ -58,6 +58,7 @@ var _sequence: String = DEFAULT_SEQUENCE
 var _after: AfterFrames = AfterFrames.CLOSE
 var _slot: int = -1
 var _expect_slot: int = -1
+var _sent_id: bool = false
 
 func _initialize() -> void:
 	Engine.max_fps = PROBE_FPS
@@ -99,8 +100,24 @@ func _process(delta: float) -> bool:
 		return false
 
 	if state == WebSocketPeer.STATE_OPEN:
+		# Identify first, exactly as the controller page does: the host holds
+		# an unidentified socket (and drops its binary frames) for up to
+		# `connection_timeout_sec` before binding it anonymously, which is
+		# longer than the short sequences run. Unique per process so two
+		# probes bind two slots rather than one reclaiming the other's.
+		if not _sent_id:
+			_peer.send_text(JSON.stringify({"id": "probe-%s-%d" % [_sequence, OS.get_process_id()]}))
+			_sent_id = true
 		if not _read_host_frames():
 			return true
+		# Frames sent before the bind would be discarded host-side.
+		if _slot < 0:
+			_waited += delta
+			if _waited > CONNECT_TIMEOUT_SEC:
+				printerr("PROBE: connected but the host never bound a slot")
+				quit(5)
+				return true
+			return false
 		return _send_next(delta)
 
 	if state == WebSocketPeer.STATE_CLOSING:

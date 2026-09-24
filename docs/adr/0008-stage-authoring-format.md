@@ -49,6 +49,14 @@ stage scenes are authored instead.
 
 - Adding a stage is adding one `.tscn` file and one line to `RoundManager`'s
   exported array — no code changes.
+- Since #17 there is a second line to add: `STAGE_PATHS` in
+  `tools/scenario_runner.gd`, which both sweeping stage scenarios
+  (`stage_spawns_are_safe` and `every_stage_can_ring_out`) iterate. That is a
+  deliberate coupling and a narrow one — the list names stage scenes, it does
+  not assert their geometry — so it does not reopen the Arena-fixture
+  decoupling below. A stage left out of it still rotates in play but is never
+  swept, which is the failure mode the single shared list exists to make
+  obvious.
 - `Stage.gd` is duck-typed (no `class_name`), consistent with every other
   cross-scene reference in this codebase, so a fresh clone with no editor-built
   class cache still parses and boots.

@@ -92,12 +92,16 @@ const DEATH_DAMAGE: float = 100.0
 ## scales linearly from the floor to there and on past it. 2200 px/s is a
 ## committed full-reach sweep; the fastest the moveset produces in clear air
 ## is about 2700, and a head carried by a flying body can beat that, so the
-## scale is capped -- at MAX_STRIKE_SCALE the pickaxe deals 68, which keeps a
-## single strike from killing anyone outright from full health however fast
-## it arrives.
+## scale is capped -- at MAX_STRIKE_SCALE the pickaxe deals 68.
+##
+## The scale cap alone does not keep a single strike from killing from full
+## health once weapons differ: the axe's 55 would reach 110. MAX_STRIKE_DAMAGE
+## is the rule itself, applied to every weapon -- however fast a strike
+## arrives, it leaves a full-health victim standing.
 const MIN_STRIKE_SPEED: float = 700.0
 const FULL_STRIKE_SPEED: float = 2200.0
 const MAX_STRIKE_SCALE: float = 2.0
+const MAX_STRIKE_DAMAGE: float = 90.0
 
 ## Colour the body fill lerps toward as `damage` climbs to `DEATH_DAMAGE`.
 ## Identity does not live here any more (ADR-0005) -- see `identity_color` --
@@ -106,13 +110,13 @@ const MAX_STRIKE_SCALE: float = 2.0
 ## precisely because identity has already moved off this node.
 const DAMAGE_FILL_COLOR: Color = Color(0.85, 0.1, 0.08, 1.0)
 
-## Marks a weapon head silhouette drawn from a shape this script does not
-## understand. Deliberately not a plausible weapon colour: a fallback that
-## quietly looked like a normal head would hide the exact bug this deliverable
-## closes -- the drawn head and the real hitbox parting ways again -- so it is
-## wrong in a way a player would notice instead of a way they would trust.
+## Marks a weapon head drawn without art of its own -- a stats resource whose
+## `art_outline` is not a polygon. Deliberately not a plausible weapon colour:
+## a fallback that quietly looked like a normal head would hide the exact bug
+## this closes -- the drawn head and the real hitbox parting ways again -- so
+## it is wrong in a way a player would notice instead of a way they would
+## trust.
 const FALLBACK_HEAD_COLOR: Color = Color(1.0, 0.0, 1.0, 1.0)
-const HEAD_CIRCLE_SEGMENTS: int = 16
 
 ## The haft's line width near the body and near the head. Tapered rather than
 ## constant so it reads as a haft -- a handle with a working end -- instead of
@@ -184,7 +188,17 @@ var _stats: WeaponStatsType
 var _rig: Node2D
 var _haft: RigidBody2D
 var _head: WeaponHeadType
-var _head_shape: CollisionShape2D
+## One CollisionShape2D per circle in `WeaponStats.head_circle_offsets`, all
+## on the single head body (ADR-0010), and the offsets they were built from.
+##
+## The offsets are copied rather than read back off `_stats` each tick,
+## because the two are not in step: `set_weapon_stats()` swaps the stats and
+## defers the rebuild, so there are ticks that run the old rig under the new
+## weapon's numbers. Copying also keeps the per-tick facing turn applied to
+## the authored offset rather than to the last turn's output, which is what
+## stops it accumulating drift.
+var _head_shapes: Array[CollisionShape2D] = []
+var _head_circle_offsets: PackedVector2Array = PackedVector2Array()
 var _pin: PinJoint2D
 var _groove: GrooveJoint2D
 var _haft_inertia: float = 1.0
@@ -195,10 +209,9 @@ var _haft_inertia: float = 1.0
 ## every strike as a tap.
 var _head_velocity: Vector2 = Vector2.ZERO
 
-## The weapon head's drawn silhouette, and whether it is the bounding-box
-## fallback rather than a real reading of `head_shape`. Rebuilt whenever the
-## rig is (`_build_head_visual`), which is also the only place either is
-## written.
+## The weapon head's drawn art, and whether it is the bounding-box fallback
+## rather than the weapon's own `art_outline`. Rebuilt whenever the rig is
+## (`_build_head_visual`), which is also the only place either is written.
 var _head_visual: Polygon2D
 var _head_visual_is_fallback: bool = false
 
@@ -484,10 +497,38 @@ func _build_rig() -> void:
 	# during the solve -- so WeaponHead sweeps the motion that actually
 	# happened afterwards as well. See WeaponHead for the measurements.
 	_head.continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE
-	_head_shape = CollisionShape2D.new()
-	_head_shape.shape = _stats.head_shape
-	_head.add_child(_head_shape)
-	_head.sweep_shape = _head_shape
+	# The head is one body with a circle on it per circle the weapon was
+	# fitted with (ADR-0010): a cluster is how a drawn head -- a crescent, a
+	# blade -- gets a hitbox that follows the art without collision ever
+	# becoming a traced polygon.
+	_head_shapes.clear()
+	_head_circle_offsets = _stats.head_circle_offsets.slice(0, _stats.head_circle_count())
+	for i in _stats.head_circle_count():
+		var circle := CircleShape2D.new()
+		circle.radius = _stats.head_circle_radii[i]
+		var node := CollisionShape2D.new()
+		node.name = "HeadCircle%d" % i
+		node.shape = circle
+		node.position = _head_circle_offsets[i]
+		_head.add_child(node)
+		_head_shapes.append(node)
+	if _head_shapes.is_empty():
+		push_warning("Player: weapon stats carry no head circles, so this head collides with nothing")
+	# Copied, not handed over. GDScript Arrays are reference types, so
+	# assigning `_head_shapes` itself would leave the head reading the very
+	# array this player goes on mutating -- and the mutation is not
+	# hypothetical: `set_weapon_stats()` defers the rebuild, `_clear_rig()`
+	# clears `_head_shapes` and `_build_rig()` refills it with the *new*
+	# head's circles, all while the old head is still inside the tree, still
+	# not queued for deletion, and so still answering the group scan in
+	# `WeaponHead._undo_any_head_crossing` for the rest of the frame. Aliased,
+	# that dying head would offer circles parented to a different body, and
+	# another player's head could be corrected onto a position derived from a
+	# cluster that is nowhere near it. The nodes are shared on purpose -- they
+	# are the head's own children and the per-tick facing turn in
+	# `_update_weapon_visual()` has to reach them -- it is the array itself
+	# that each side must own.
+	_head.sweep_shapes = _head_shapes.duplicate()
 	# The sweep is against the world -- terrain and other players' bodies --
 	# and never against this player's own body, which the head passes through.
 	# Other heads are left out on purpose: a clash is two driven heads
@@ -506,7 +547,7 @@ func _build_rig() -> void:
 	_head.contact_monitor = true
 	_head.max_contacts_reported = 4
 	_head.body_entered.connect(_on_head_hit)
-	_head_visual = _build_head_visual(_stats.head_shape)
+	_head_visual = _build_head_visual(_stats)
 	_head.add_child(_head_visual)
 	_rig.add_child(_head)
 	_head.global_position = global_position + axis * _stats.min_reach
@@ -559,7 +600,8 @@ func _clear_rig() -> void:
 	_rig = null
 	_haft = null
 	_head = null
-	_head_shape = null
+	_head_shapes.clear()
+	_head_circle_offsets = PackedVector2Array()
 	_pin = null
 	_groove = null
 	_head_visual = null
@@ -624,14 +666,18 @@ func _update_weapon_visual() -> void:
 	var pts := weapon_line.points
 	pts[1] = to_local(_head.global_position)
 	weapon_line.points = pts
-	_head_shape.global_rotation = _haft.rotation
-	# The head body is rotation-locked (its shape is turned to face the haft
-	# instead, above), so its drawn silhouette needs the same turn or it
-	# would sit still while the collision shape it is supposed to depict
-	# swings around it. Invisible for a circle -- today's pickaxe -- which is
-	# why this was never needed before RectangleShape2D/ConvexPolygonShape2D
-	# heads (both asymmetric) were understood.
-	_head_visual.rotation = _haft.rotation
+	# The head body is rotation-locked, so the head's facing lives on what
+	# hangs off it: every collision circle and the drawn art are turned to
+	# point along the haft here. The circles are placed from the authored
+	# offset each tick rather than turned from wherever they sat last tick --
+	# a circle off the head's centre has to orbit the anchor, not spin in
+	# place, and re-deriving it cannot accumulate drift.
+	var facing: float = _haft.rotation - _head.rotation
+	for i in _head_shapes.size():
+		var node: CollisionShape2D = _head_shapes[i]
+		node.position = _head_circle_offsets[i].rotated(facing)
+		node.rotation = facing
+	_head_visual.rotation = facing
 
 # --- Presentation: identity and damage --------------------------------------
 #
@@ -643,10 +689,12 @@ func _update_weapon_visual() -> void:
 #   * `identity_color` is what a player is found by. It never changes after
 #     `_ready()`, and it is drawn in exactly two places: the outline traced
 #     once around the body, and the weapon head's fill.
-#   * The weapon head's drawn silhouette derives from `WeaponStats.head_shape`
-#     -- the same shape the physics engine collides -- rather than from a
-#     parallel number, so the two cannot drift the way they had (a circular
-#     hitbox drawn as a square) before this deliverable.
+#   * The weapon head is drawn as `WeaponStats.art_outline` and collides as
+#     the circles fitted inside it (ADR-0010), so a hit lands where the art
+#     is. The two cannot drift the way they had (a circular hitbox drawn as a
+#     square): `weapon_head_circles_within_art` in the scenario runner reads
+#     both back off a built rig and checks every circle against the drawn
+#     polygon.
 
 ## Traces the body's own polygon once, in `identity_color`, and never touches
 ## it again. This is what stays legible once the fill has reddened past the
@@ -688,49 +736,41 @@ func _update_damage_visual() -> void:
 	var t: float = clampf(damage / DEATH_DAMAGE, 0.0, 1.0)
 	body_visual.color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
 
-## Builds the weapon head's drawn silhouette from its actual collision shape,
-## so the drawing and the hitbox cannot drift apart the way they had: the
-## head collided as an 8px-radius `CircleShape2D` and drew as a 16px-wide
-## square from a parallel `head_draw_radius()` number. `CircleShape2D`,
-## `RectangleShape2D` and `ConvexPolygonShape2D` are understood directly;
-## anything else falls back to the shape's own bounding box in
-## `FALLBACK_HEAD_COLOR`, a colour that belongs to no player, so an unhandled
-## head shape is visibly wrong rather than quietly guessed at. See
-## `weapon_head_visual_is_fallback()`.
-func _build_head_visual(shape: Shape2D) -> Polygon2D:
+## Draws the weapon head as the art it was fitted to (ADR-0010): the weapon's
+## own `art_outline`, in `identity_color`.
+##
+## A stats resource without a usable outline -- fewer than three points --
+## falls back to the bounding box of its collision circles in
+## `FALLBACK_HEAD_COLOR`, a colour that belongs to no player, so a weapon
+## authored without art is visibly wrong rather than quietly guessed at. That
+## is the same stance the shape-derived silhouette this replaces took, and
+## for the same reason: the failure being guarded is the drawing and the
+## hitbox parting ways. See `weapon_head_visual_is_fallback()`.
+func _build_head_visual(stats: WeaponStatsType) -> Polygon2D:
 	var visual := Polygon2D.new()
 	visual.name = "HeadVisual"
-	if shape is CircleShape2D:
-		visual.polygon = _circle_silhouette((shape as CircleShape2D).radius)
-		visual.color = identity_color
-		_head_visual_is_fallback = false
-	elif shape is RectangleShape2D:
-		visual.polygon = _rect_silhouette((shape as RectangleShape2D).size)
-		visual.color = identity_color
-		_head_visual_is_fallback = false
-	elif shape is ConvexPolygonShape2D:
-		visual.polygon = (shape as ConvexPolygonShape2D).points
+	if stats.art_outline.size() >= 3:
+		visual.polygon = stats.art_outline
 		visual.color = identity_color
 		_head_visual_is_fallback = false
 	else:
-		visual.polygon = _rect_from_bounds(shape.get_rect())
+		visual.polygon = _rect_from_bounds(_head_circle_bounds(stats))
 		visual.color = FALLBACK_HEAD_COLOR
 		_head_visual_is_fallback = true
-		push_warning("Player: no drawn silhouette for head shape %s; falling back to its bounding box" % shape.get_class())
+		push_warning("Player: weapon stats carry no art outline (%d points); falling back to the head circles' bounding box" % stats.art_outline.size())
 	return visual
 
-func _circle_silhouette(radius: float) -> PackedVector2Array:
-	var pts := PackedVector2Array()
-	for i in HEAD_CIRCLE_SEGMENTS:
-		var a: float = TAU * float(i) / float(HEAD_CIRCLE_SEGMENTS)
-		pts.append(Vector2(cos(a), sin(a)) * radius)
-	return pts
-
-func _rect_silhouette(size: Vector2) -> PackedVector2Array:
-	var half: Vector2 = size * 0.5
-	return PackedVector2Array([
-		Vector2(-half.x, -half.y), Vector2(half.x, -half.y),
-		Vector2(half.x, half.y), Vector2(-half.x, half.y)])
+## The box the head's collision circles occupy, in head-local space. Only the
+## fallback needs it: a head with no art still has to be drawn as something,
+## and the circles are the only statement of where the head is.
+func _head_circle_bounds(stats: WeaponStatsType) -> Rect2:
+	var bounds := Rect2()
+	for i in stats.head_circle_count():
+		var centre: Vector2 = stats.head_circle_offsets[i]
+		var radius: float = stats.head_circle_radii[i]
+		var circle := Rect2(centre - Vector2(radius, radius), Vector2(radius, radius) * 2.0)
+		bounds = circle if i == 0 else bounds.merge(circle)
+	return bounds
 
 func _rect_from_bounds(rect: Rect2) -> PackedVector2Array:
 	return PackedVector2Array([
@@ -753,14 +793,32 @@ func weapon_head_color() -> Color:
 func body_fill_color() -> Color:
 	return body_visual.color
 
-## The drawn silhouette of the weapon's head, in the head's local space.
-## Exposed so a scenario can check it derives from `WeaponStats.head_shape`
+## The polygon the weapon's head is drawn as, in the head's local space.
+## Exposed so a scenario can check the head's art against the head's hitbox
 ## without reaching into the rig's internals.
 func weapon_head_visual_polygon() -> PackedVector2Array:
 	return _head_visual.polygon if _head_visual != null else PackedVector2Array()
 
-## Whether the currently drawn head silhouette is the bounding-box fallback
-## rather than a real reading of `head_shape`.
+## The head's collision circles as the rig actually built them -- each an
+## `offset` and a `radius` -- with the haft-facing turn taken back out, so
+## they are in the same head-local space as `weapon_head_visual_polygon()`
+## and the two can be compared directly. The pair is what ADR-0010's
+## guarantee is about, and reading both off a live rig is how a scenario
+## checks it without being told by the resource they both came from.
+func weapon_head_circles() -> Array[Dictionary]:
+	var circles: Array[Dictionary] = []
+	if _head_visual == null:
+		return circles
+	var facing: float = _head_visual.rotation
+	for node: CollisionShape2D in _head_shapes:
+		var circle := node.shape as CircleShape2D
+		if circle == null:
+			continue
+		circles.append({"offset": node.position.rotated(-facing), "radius": circle.radius})
+	return circles
+
+## Whether the head is drawn as the bounding box of its circles -- the
+## fallback for a weapon with no art -- rather than as its own `art_outline`.
 func weapon_head_visual_is_fallback() -> bool:
 	return _head_visual_is_fallback
 
@@ -891,4 +949,5 @@ func _strike_damage(speed: float) -> float:
 	var over: float = speed - MIN_STRIKE_SPEED
 	if over <= 0.0:
 		return 0.0
-	return _stats.damage * minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
+	var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
+	return minf(_stats.damage * strike_scale, MAX_STRIKE_DAMAGE)

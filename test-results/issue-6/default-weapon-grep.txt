@@ -1,1 +1,0 @@
-scripts/Player.gd:54:const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")

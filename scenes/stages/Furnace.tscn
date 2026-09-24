@@ -1,0 +1,129 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Hazard.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
+size = Vector2(400, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A short, narrow floor (400 px, well under Flatlands' 1200 or even Bowl's
+; ~1040 including its walls) flanked on both sides by a nine-high column of
+; #18's hazard zone, flush against the floor's own edge. There is no gap
+; between "safe ground" and "the wall" and no gap between the floor and open
+; air beyond it -- the hazard IS the wall. Reaching the stage's edge is the
+; mistake; there is nothing past it to fall into, only something to touch.
+;
+; The column is built by placing nine Hazard.tscn instances stacked with no
+; vertical gap (each is 48 px tall, so nine cover 432 px running from well
+; above spawn height down to well below the floor's top surface) rather than
+; by overriding Hazard's shape to one tall RectangleShape2D. Hazard.tscn's
+; own comment offers both routes; stacking wins here because overriding a
+; property on a node *inside* an already-instanced sub-scene only takes
+; effect through Godot's editable-children mechanism (an `[editable
+; path=...]` scene-file directive), which is easy to get subtly wrong by
+; hand outside the editor and would parse clean without anything here to
+; catch it being wrong. Stacking only places top-level instances the same
+; way Gauntlet's hazard already does, so it carries no format risk.
+;
+; A single 1800 px/s horizontal shove from either spawn (x = +-120) covers
+; the 80 px to the nearest wall's inner face (x = +-200) in about three
+; physics ticks, well before gravity has pulled the body more than a couple
+; of pixels off spawn height -- so the column's 432 px of coverage, centred
+; on spawn height with generous margin both ways, is never actually probed
+; at its own edges by the ring-out sweep, but is sized to hold even if a
+; future weapon change adds vertical knockback to the shove.
+;
+; A KillZone still sits well below the floor, matching every other stage's
+; shape, even though this stage's sealed wall-to-wall-hazard construction
+; means nothing should ever reach it under the knockback the stage was
+; designed for: it is a safety net against a body somehow launched clear
+; over the top of a hazard column by a future high-arc knockback, not a
+; second death rule -- it is the same KillZone.gd every other stage already
+; uses, so reaching it still eliminates through the one path (US-6).
+
+[node name="Furnace" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="GroundShape" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="GroundVisual" type="Polygon2D" parent="Ground"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)
+
+[node name="WallHazardLeft0" parent="." instance=ExtResource("3")]
+position = Vector2(-280, -16)
+
+[node name="WallHazardLeft1" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 32)
+
+[node name="WallHazardLeft2" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 80)
+
+[node name="WallHazardLeft3" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 128)
+
+[node name="WallHazardLeft4" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 176)
+
+[node name="WallHazardLeft5" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 224)
+
+[node name="WallHazardLeft6" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 272)
+
+[node name="WallHazardLeft7" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 320)
+
+[node name="WallHazardLeft8" parent="." instance=ExtResource("3")]
+position = Vector2(-280, 368)
+
+[node name="WallHazardRight0" parent="." instance=ExtResource("3")]
+position = Vector2(280, -16)
+
+[node name="WallHazardRight1" parent="." instance=ExtResource("3")]
+position = Vector2(280, 32)
+
+[node name="WallHazardRight2" parent="." instance=ExtResource("3")]
+position = Vector2(280, 80)
+
+[node name="WallHazardRight3" parent="." instance=ExtResource("3")]
+position = Vector2(280, 128)
+
+[node name="WallHazardRight4" parent="." instance=ExtResource("3")]
+position = Vector2(280, 176)
+
+[node name="WallHazardRight5" parent="." instance=ExtResource("3")]
+position = Vector2(280, 224)
+
+[node name="WallHazardRight6" parent="." instance=ExtResource("3")]
+position = Vector2(280, 272)
+
+[node name="WallHazardRight7" parent="." instance=ExtResource("3")]
+position = Vector2(280, 320)
+
+[node name="WallHazardRight8" parent="." instance=ExtResource("3")]
+position = Vector2(280, 368)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-120, 100)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(120, 100)
+
+; Just below the ground (underside y=340) and the hazard columns (bottom
+; y=392), like every other stage. At y=700 a body thrown over a column fell
+; for about a second off-screen before the round ended (issue #29).
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")

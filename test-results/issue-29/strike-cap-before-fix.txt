@@ -1,0 +1,8 @@
+# no_single_strike_kills with the MAX_STRIKE_DAMAGE cap disabled (pre-fix behaviour)
+      pickaxe.tres: hardest possible strike deals 68.0
+      staff.tres: hardest possible strike deals 40.0
+      sword.tres: hardest possible strike deals 68.0
+      axe.tres: hardest possible strike deals 110.0
+FAIL  no_single_strike_kills
+      - axe.tres: a single strike can deal 110.0, at or past DEATH_DAMAGE 100.0
+      - axe.tres: a full-health victim died to one strike
