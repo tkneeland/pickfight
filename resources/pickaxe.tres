@@ -12,12 +12,12 @@
 ; its "Reference Player" box.
 ;
 ; The owner called the first crescent too fat. This pass cuts deeper into the
-; concave face and shortens the horns (span 1.15pi -> 0.95pi), taking the belly
+; concave face and shortens the horns (span 1.25pi -> 0.95pi), taking the belly
 ; from over 12 px thick to 10.0 px and the whole head from 19 x 28 px to
 ; 17.6 x 26.1 px, while the circles go from five to seven and cover 87.3% of
 ; the outline. Each radius is set a further 0.05 px below its exact fit, so
 ; that rounding the outline and the circles independently to two decimals
-; cannot push one outside; the worst fit is 0.05 px inside the art.
+; cannot push one outside; the worst fit is 0.043 px inside the art.
 ;
 ; How thin the arc can get is bounded by physics, not by looks, and the bound
 ; is tight enough to be worth recording. An earlier cut of this revision
@@ -41,8 +41,9 @@
 ;
 ; The circles do not reach into the horn tips: nothing of a useful size fits
 ; where a crescent tapers to a point. The guarantee is one-directional -- every
-; circle lies inside the art (tools/scenario_runner.gd's
-; weapon_head_circles_within_art) -- so a player is never hit by something they
+; circle here lies inside the art (tools/scenario_runner.gd's
+; weapon_head_circles_within_art, which allows 0.5 px of slack -- the staff
+; and the axe use a little of it, this head none) -- so a player is never hit by something they
 ; cannot see, which is the half of it that matters.
 ;
 ; The belly reaches 9 px past the anchor, against the 8 px the round nub

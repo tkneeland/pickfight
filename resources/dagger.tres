@@ -6,7 +6,7 @@
 ; (docs/art/weapons-whiteboard.jpg, bottom right). The head is the blade,
 ; per issue #13's roster -- 12.4 x 4.1 px against a 48 x 48 px player body,
 ; the drawing's proportion against its "Reference Player" box -- filled by
-; five circles tapering to the point (ADR-0010). They cover 80.3% of it,
+; five circles tapering to the point (ADR-0010). They cover 80.0% of it,
 ; each sized with a small clearance margin below its exact fit so that
 ; independent rounding of the outline and the circles to two decimals
 ; cannot push one outside: a blade this small is mostly edge, and an edge
@@ -21,8 +21,8 @@
 ; groove anchor. Like the sword the blade lies across that anchor rather than
 ; out in front of it, from -5.4 px behind to 7.0 px past, with the circles
 ; stopping at 6 px forward, unchanged from before the lengthening -- the
-; second shortest forward extent on the roster, and inside the 4-12 px the
-; plant and clash scenarios are tuned around.
+; second shortest forward extent on the roster. That spread is a convention
+; the roster was drawn to rather than a checked bound; see staff.tres.
 ;
 ; Stats against the pickaxe's M/M/M baseline: the dagger is the close-range
 ; brawler. Weight light -- mass 0.15 against 0.25, force ceiling 4000 against

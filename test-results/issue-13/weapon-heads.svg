@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="1020" viewBox="0 0 1020 1020">
+<rect width="1020" height="1020" fill="#14161a"/>
+<text x="170.0" y="40" fill="#eef2f6" font-family="Helvetica" font-size="25" text-anchor="middle">pickaxe</text>
+<text x="170.0" y="66" fill="#8d96a3" font-family="Helvetica" font-size="15" text-anchor="middle">7 circles &#183; reach 140 &#183; dmg 34 &#183; mass 0.25</text>
+<g transform="translate(170.0,285.0)">
+<rect x="-144.0" y="-144.0" width="288.0" height="288.0" fill="none" stroke="#3a4048" stroke-width="2" stroke-dasharray="7 6"/>
+<line x1="-240.0" y1="0" x2="0" y2="0" stroke="#5b636e" stroke-width="3"/>
+<circle cx="0" cy="0" r="3" fill="#ffd166"/>
+<polygon points="-17.82,-78.42 1.32,-74.46000000000001 18.84,-65.94 33.78,-53.400000000000006 45.18,-37.56 52.260000000000005,-19.38 54.66,0.0 52.260000000000005,19.38 45.18,37.56 33.78,53.400000000000006 18.84,65.94 1.32,74.46000000000001 -17.82,78.42 -51.12,49.5 -39.06,47.04 -27.96,41.64 -18.54,33.72 -11.34,23.700000000000003 -6.8999999999999995,12.24 -5.34,-0.0 -6.8999999999999995,-12.24 -11.34,-23.700000000000003 -18.54,-33.72 -27.96,-41.64 -39.06,-47.04 -51.12,-49.5" fill="#c8ced6" stroke="#eef2f6" stroke-width="2"/>
+<circle cx="24.48" cy="0.78" r="29.52" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="16.080000000000002" cy="-30.42" r="27.48" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="16.080000000000002" cy="29.58" r="27.42" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-3.12" cy="-50.82000000000001" r="22.740000000000002" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-3.12" cy="51.17999999999999" r="22.62" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-25.92" cy="54.78" r="12.24" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-25.92" cy="-54.42" r="12.059999999999999" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+</g>
+<text x="510.0" y="40" fill="#eef2f6" font-family="Helvetica" font-size="25" text-anchor="middle">staff</text>
+<text x="510.0" y="66" fill="#8d96a3" font-family="Helvetica" font-size="15" text-anchor="middle">1 circles &#183; reach 200 &#183; dmg 20 &#183; mass 0.15</text>
+<g transform="translate(510.0,285.0)">
+<rect x="-144.0" y="-144.0" width="288.0" height="288.0" fill="none" stroke="#3a4048" stroke-width="2" stroke-dasharray="7 6"/>
+<line x1="-240.0" y1="0" x2="0" y2="0" stroke="#5b636e" stroke-width="3"/>
+<circle cx="0" cy="0" r="3" fill="#ffd166"/>
+<polygon points="30.48,0.0 29.58,5.76 26.880000000000003,10.98 22.799999999999997,15.059999999999999 17.580000000000002,17.700000000000003 11.82,18.6 6.0600000000000005,17.700000000000003 0.8999999999999999,15.059999999999999 -3.24,10.98 -5.88,5.76 -6.779999999999999,0.0 -5.88,-5.76 -3.24,-10.98 0.8999999999999999,-15.059999999999999 6.0600000000000005,-17.700000000000003 11.82,-18.6 17.580000000000002,-17.700000000000003 22.799999999999997,-15.059999999999999 26.880000000000003,-10.98 29.58,-5.76" fill="#c8ced6" stroke="#eef2f6" stroke-width="2"/>
+<circle cx="12.419999999999998" cy="0.6000000000000001" r="17.580000000000002" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+</g>
+<text x="850.0" y="40" fill="#eef2f6" font-family="Helvetica" font-size="25" text-anchor="middle">sword</text>
+<text x="850.0" y="66" fill="#8d96a3" font-family="Helvetica" font-size="15" text-anchor="middle">10 circles &#183; reach 90 &#183; dmg 34 &#183; mass 0.25</text>
+<g transform="translate(850.0,285.0)">
+<rect x="-144.0" y="-144.0" width="288.0" height="288.0" fill="none" stroke="#3a4048" stroke-width="2" stroke-dasharray="7 6"/>
+<line x1="-240.0" y1="0" x2="0" y2="0" stroke="#5b636e" stroke-width="3"/>
+<circle cx="0" cy="0" r="3" fill="#ffd166"/>
+<polygon points="-145.98,-11.399999999999999 -104.28,-20.700000000000003 34.86,-14.879999999999999 85.86,0.0 34.86,14.879999999999999 -104.28,20.700000000000003 -145.98,11.399999999999999" fill="#c8ced6" stroke="#eef2f6" stroke-width="2"/>
+<circle cx="-101.58" cy="-0.30000000000000004" r="19.98" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-81.17999999999999" cy="-0.30000000000000004" r="19.14" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-60.78" cy="-0.30000000000000004" r="18.299999999999997" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-41.58" cy="-0.30000000000000004" r="17.46" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-23.580000000000002" cy="-0.30000000000000004" r="16.740000000000002" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-5.58" cy="-0.30000000000000004" r="15.96" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-121.97999999999999" cy="-0.30000000000000004" r="15.72" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="11.22" cy="-0.30000000000000004" r="15.299999999999999" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="26.82" cy="-0.30000000000000004" r="14.64" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="42.42" cy="-0.30000000000000004" r="11.58" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+</g>
+<text x="170.0" y="550" fill="#eef2f6" font-family="Helvetica" font-size="25" text-anchor="middle">axe</text>
+<text x="170.0" y="576" fill="#8d96a3" font-family="Helvetica" font-size="15" text-anchor="middle">7 circles &#183; reach 140 &#183; dmg 55 &#183; mass 0.45</text>
+<g transform="translate(170.0,795.0)">
+<rect x="-144.0" y="-144.0" width="288.0" height="288.0" fill="none" stroke="#3a4048" stroke-width="2" stroke-dasharray="7 6"/>
+<line x1="-240.0" y1="0" x2="0" y2="0" stroke="#5b636e" stroke-width="3"/>
+<circle cx="0" cy="0" r="3" fill="#ffd166"/>
+<polygon points="-31.740000000000002,-95.16 -20.82,-94.92 -10.02,-93.36 0.48,-90.6 10.620000000000001,-86.69999999999999 20.28,-81.66 29.28,-75.48 37.56,-68.4 44.88,-60.36 51.300000000000004,-51.54 56.699999999999996,-42.06 60.96,-32.04 64.02,-21.6 65.88,-10.86 66.48,0.0 65.88,10.86 64.02,21.6 60.96,32.04 56.699999999999996,42.06 51.300000000000004,51.54 44.88,60.36 37.56,68.4 29.28,75.48 20.28,81.66 10.620000000000001,86.69999999999999 0.48,90.6 -10.02,93.36 -20.82,94.92 -31.740000000000002,95.16 -72.12,64.14 -64.80000000000001,63.96 -57.54,62.94 -50.46,61.08 -43.62,58.44 -37.08,55.019999999999996 -31.02,50.88 -25.5,46.08 -20.52,40.68 -16.200000000000003,34.74 -12.54,28.380000000000003 -9.72,21.6 -7.62,14.580000000000002 -6.36,7.32 -5.9399999999999995,0.0 -6.36,-7.32 -7.62,-14.580000000000002 -9.72,-21.6 -12.54,-28.380000000000003 -16.200000000000003,-34.74 -20.52,-40.68 -25.5,-46.08 -31.02,-50.88 -37.08,-55.019999999999996 -43.62,-58.44 -50.46,-61.08 -57.54,-62.94 -64.80000000000001,-63.96 -72.12,-64.14" fill="#c8ced6" stroke="#eef2f6" stroke-width="2"/>
+<circle cx="29.880000000000003" cy="6.84" r="36.12" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="23.88" cy="-30.36" r="34.32" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="16.68" cy="42.839999999999996" r="32.58" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="2.2800000000000002" cy="-57.96" r="28.56" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-7.32" cy="65.64" r="26.160000000000004" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-22.919999999999998" cy="-72.36" r="22.32" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-32.519999999999996" cy="72.84" r="17.22" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+</g>
+<text x="510.0" y="550" fill="#eef2f6" font-family="Helvetica" font-size="25" text-anchor="middle">dagger</text>
+<text x="510.0" y="576" fill="#8d96a3" font-family="Helvetica" font-size="15" text-anchor="middle">5 circles &#183; reach 90 &#183; dmg 34 &#183; mass 0.15</text>
+<g transform="translate(510.0,795.0)">
+<rect x="-144.0" y="-144.0" width="288.0" height="288.0" fill="none" stroke="#3a4048" stroke-width="2" stroke-dasharray="7 6"/>
+<line x1="-240.0" y1="0" x2="0" y2="0" stroke="#5b636e" stroke-width="3"/>
+<circle cx="0" cy="0" r="3" fill="#ffd166"/>
+<polygon points="-32.64,-6.84 -19.259999999999998,-12.419999999999998 34.38,-8.94 41.88,0.0 34.38,8.94 -19.259999999999998,12.419999999999998 -32.64,6.84" fill="#c8ced6" stroke="#eef2f6" stroke-width="2"/>
+<circle cx="-17.04" cy="-0.42000000000000004" r="11.52" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="-5.04" cy="-0.42000000000000004" r="10.74" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="6.959999999999999" cy="-0.42000000000000004" r="9.959999999999999" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="17.759999999999998" cy="-0.42000000000000004" r="9.3" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+<circle cx="27.36" cy="-0.42000000000000004" r="8.64" fill="#ff5a5a" fill-opacity="0.2" stroke="#ff5a5a" stroke-width="1.5"/>
+</g>
+<text x="18" y="1006" fill="#8d96a3" font-family="Helvetica" font-size="15">dashed = 48px player body &#183; yellow dot = haft anchor, grey line = haft (player is off to the left) &#183; red = collision</text>
+</svg>

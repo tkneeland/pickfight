@@ -67,6 +67,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_damage_matches_roster",
 	"weapon_responsiveness_matches_roster",
 	"heavy_weapon_wins_clash",
+	"roster_heads_do_not_tunnel_head",
+	"roster_hafts_are_non_colliding",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -325,8 +327,10 @@ const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Slack for comparing a colour parsed from a CSS hex triplet (8-bit channels)
 ## against one parsed from a Godot float literal -- a hair over 1/255.
 const SLOT_COLOR_TOLERANCE: float = 0.01
-## Every weapon resource the game ships, checked hitbox-against-art. One
-## entry today; the roster's other four weapons append here.
+## Every weapon resource the game ships. All five of the roster are here now.
+## Read by the art-containment check and by every roster scenario that has to
+## be true of the whole roster rather than of whichever weapon `Player.tscn`
+## happens to ship with, so a sixth weapon is covered by adding it here.
 const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/pickaxe.tres",
 	"res://resources/staff.tres",
@@ -340,9 +344,24 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 ## It is there for the two ways a hand-fitted head misses by less than anyone
 ## can see -- the flat sides of a polygon cutting the corner of a curve it
 ## traces, and coordinates written down to two decimals -- and it is far
-## under the smallest gap that reads as art and hitbox disagreeing. The
-## pickaxe's own worst-fitted circle clears its outline by 0.86 px, so the
-## shipped weapon passes this on its geometry and not on the tolerance.
+## under the smallest gap that reads as art and hitbox disagreeing.
+##
+## **Three of the six heads this suite checks pass on the tolerance and not on
+## their geometry.** Worst circle against its own outline, negative meaning
+## inside: pickaxe -0.043, sword -0.043, dagger -0.046, staff **+0.003**, axe
+## **+0.011**, and the default round head exactly **+0.000** -- tangent, by
+## construction (`WeaponStats._circle_outline` draws a polygon that contains
+## the circle, so the flats land on the radius). The staff and the axe are
+## outside their art, by a hundredth of a pixel.
+##
+## So the margin this constant is really carrying is about **0.05 px, not
+## 0.86**: hardening it toward zero -- or even to 0.01 -- turns the staff, the
+## axe and every stub built on the default head red without a single head
+## having changed. An earlier version of this comment claimed the pickaxe
+## cleared its outline by 0.86 px and concluded the shipped weapons passed on
+## geometry; that was true of the five-circle pickaxe and has not been true
+## since it was refitted to seven. Tighten this only against a recomputed set
+## of all six numbers.
 const ART_CONTAINMENT_TOLERANCE: float = 0.5
 ## How far a head circle is shoved out of its art to check that the
 ## containment check can actually fail. Well clear of the default head, so
@@ -471,6 +490,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_weapon_responsiveness_matches_roster()
 		"heavy_weapon_wins_clash":
 			return await _scenario_heavy_weapon_wins_clash()
+		"roster_heads_do_not_tunnel_head":
+			return await _scenario_roster_heads_do_not_tunnel_head()
+		"roster_hafts_are_non_colliding":
+			return await _scenario_roster_hafts_are_non_colliding()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -1534,17 +1557,36 @@ func _scenario_heads_do_not_tunnel_head() -> Array[String]:
 			blocker.teleport_to(centre + half)
 			attacker.set_input_vector(axis)
 			blocker.set_input_vector(-axis)
-			# Each charge starts on a clean pair. A charge is a fixture for
-			# the sweep, not a fight: two bodies driven into each other at up
-			# to 1800 px/s each batter one another through the weapons
-			# trapped between them, and the damage that leaves behind used to
-			# carry into the next charge. Twelve charges of it eliminated a
-			# player partway down the sweep -- an eliminated player is frozen
-			# and its head leaves the collision layer -- and every remaining
-			# charge then measured two heads that could no longer meet,
-			# quietly voiding the rest of the sweep while it still reported
-			# no breach. Nothing here is about damage; this just stops one
-			# trial's wear deciding what the next one is allowed to test.
+			# DISCLOSURE: these two lines are a **repair of a pre-existing
+			# scenario**, edited in place, in a file whose convention is that
+			# new work is appended. They are not part of the weapon roster;
+			# `heads_do_not_tunnel_head` had this hole before the roster
+			# existed and the roster's own sweep would have inherited it.
+			# Recorded here rather than left to be found because an in-place
+			# edit to a shared append-only file is exactly the change a
+			# reviewer of an appended diff would never look for.
+			#
+			# What was wrong. Each charge starts on a clean pair. A charge is
+			# a fixture for the sweep, not a fight: two bodies driven into
+			# each other at up to 1800 px/s each batter one another through
+			# the weapons trapped between them, and the damage that left
+			# behind used to carry into the next charge. Twelve charges of it
+			# eliminated a player partway down the sweep -- an eliminated
+			# player is frozen and its head leaves the collision layer -- and
+			# every remaining charge then measured two heads that could no
+			# longer meet, quietly voiding the rest of the sweep while it
+			# still reported no breach. Nothing here is about damage; this
+			# just stops one trial's wear deciding what the next one is
+			# allowed to test.
+			#
+			# And what it costs. Writing `damage` straight onto the player
+			# goes round the player's own damage path, so
+			# `_update_damage_visual()` never re-runs and the body keeps the
+			# fill colour it had reddened to. Nothing in this scenario looks
+			# at the fill -- `damage_reddens_fill_identity_persists` is where
+			# that is asserted, and it drives damage the proper way -- so the
+			# shortcut is safe here and would not be anywhere the visual is
+			# read.
 			attacker.damage = 0.0
 			blocker.damage = 0.0
 			await _await_ticks(SETTLE_TICKS)
@@ -3070,8 +3112,45 @@ func _heavy_won_failures(label: String, heavy_give: float, light_give: float, gr
 	return failures
 
 ## How far the head a player is holding reaches past the point it is held by,
-## in any direction: its furthest circle. Read off the built rig rather than
-## the resource, so it is the head that is really there.
+## **in any direction**: its furthest circle, measured as offset-plus-radius
+## without regard to which way the offset points. Read off the built rig
+## rather than the resource, so it is the head that is really there.
+##
+## This is a **loose upper bound on forward reach, and both of its callers use
+## it as one.** They want how far the head gets along the haft, away from the
+## player -- the direction a head meets another head in, and the direction a
+## head overtakes a body in -- and on the roster's blades, which lie back
+## across their anchor rather than out in front of it, the two are nothing
+## like each other. Omnidirectional against true forward reach: pickaxe 12.32
+## vs 9.00, sword **22.95 vs 9.00**, axe **16.37 vs 11.00**, dagger 6.00 vs
+## 6.00, staff 5.00 vs 5.00.
+##
+## Kept omnidirectional deliberately, because both callers are loose in the
+## safe direction and tightening them would move measured physics in a
+## scenario with very little room. What that costs, written down so nobody has
+## to rediscover it:
+##
+##   * `_roster_clash()`'s `"contact"`, which feeds `_clash_met_failures()`.
+##     The axe against the dagger is allowed 16.37 + 6.00 = 22.4 px between
+##     head anchors (30.4 px once CLASH_CONTACT_SLACK is added) when the two
+##     heads physically touch at 11.00 + 6.00 = 17.0 px. The "did the heads
+##     actually turn up?" guard is some 13 px looser than it reads. It only
+##     ever passes a clash it should have failed -- never the reverse -- and
+##     the clash's real assertions are about who gave way, which this does not
+##     touch.
+##   * `_charge_strike()`'s `contact`, which is
+##     PLAYER_RADIUS + this + PLANT_CLEARANCE: 50.95 px for the sword against
+##     roughly 33 px of real contact. The `touched` latch therefore fires
+##     early, and the anti-sag levelling behind `if gap > contact * 3.0` stops
+##     about 54 px early for the sword and the axe. Those are the measured
+##     arrival speeds in `weapon_damage_matches_roster`, and the axe already
+##     lands at 2190 px/s inside a 2200 +/- 50 band -- 10 px/s of margin. A
+##     tighter extent here moves that number, so anyone who swaps this for
+##     `_head_forward_extent()` has to re-measure that scenario's speeds and
+##     re-tune FULL_STRIKE_COMMAND, not just watch the suite go green once.
+##
+## `_head_forward_extent()` and `_head_rear_extent()`, at the end of this
+## file, are the directional answers. New work should prefer them.
 func _head_extent(player: RigidBody2D) -> float:
 	var extent: float = 0.0
 	for circle: Dictionary in player.weapon_head_circles():
@@ -3152,3 +3231,609 @@ func _charge_strike(attacker: RigidBody2D, victim: RigidBody2D) -> Dictionary:
 		"landed": landed,
 		"closest": closest,
 	}
+
+# --- The roster's heads, driven through the head-physics guarantees ---------
+#
+# Every scenario above that guards head behaviour -- `head_plants_terrain`,
+# `head_plants_player`, `haft_is_non_colliding`, `heads_do_not_tunnel_head` --
+# drives whatever weapon `Player.tscn` ships with, which is the pickaxe. Four
+# of the roster's five heads had never been put through a plant, a haft
+# pass-through or a tunnelling charge at all.
+#
+# The gap has a measured floor under it, recorded in `resources/pickaxe.tres`:
+# a cut of the crescent refilled with 1.0-2.3 px circles broke exactly three of
+# those scenarios -- the head would not come to rest on a body, it sank 5.4 px
+# through the bar its own haft passes through, and 1 charge in 12 drove a head
+# clean through another -- because circles that small cross a contact inside a
+# single physics step. The pickaxe was redrawn back above that floor. The
+# dagger (smallest circle 1.44 px) and the sword (tip circle 1.93 px) were then
+# authored into it and never run against it.
+#
+# The two scenarios below run **every** weapon in WEAPON_RESOURCE_PATHS through
+# the guarantees that floor is defined by, so a head fitted under it goes red
+# on its own account rather than on the pickaxe's. Neither names a weapon:
+# both read the head's geometry off the live rig and size their own fixture
+# from it, so a weapon refitted tomorrow is measured as it is tomorrow.
+
+## Clearance kept on each side when a fixture -- a bystander, a bar -- is put
+## into the stretch of a weapon that is bare haft, and so also the narrowest
+## such stretch worth using. A band under twice this is not somewhere a
+## fixture can be placed without where it was placed deciding the answer.
+const HAFT_BAND_MARGIN: float = 3.0
+## The sweep across a bystander, taken in steps instead of in one command.
+## A hard sweep drags the head in along its own haft (see `_rehearse_swing`),
+## and on the roster's short weapons the bare-haft band is only a few pixels
+## wider than the bystander -- a head dragged inward would touch them, and the
+## shove it left would be read as the haft's. Stepped, the weapon is at full
+## reach the whole way round and the only thing crossing the bystander is haft.
+const HAFT_SWEEP_STEPS: int = 6
+const HAFT_SWEEP_STEP_TICKS: int = 12
+## Clear air left between two heads at the start of a charge, on top of the
+## two full reaches. CHARGE_SEPARATION cannot be reused across the roster: it
+## is sized for the pickaxe and says so ("2 x 140 px of reach inside 340 px"),
+## and the staff reaches 200, so two of them would start the trial already
+## touching -- which is a clash being measured, not a charge. Each weapon gets
+## its two reaches plus this instead.
+const ROSTER_CHARGE_CLEARANCE: float = 60.0
+## How far out a weapon is left while it turns, as a fraction of its own reach
+## range. `_wind_up()`'s 0.05, written down here because the haft sweep needs
+## the same trick and does not want `_wind_up()`'s teleport with it.
+const WOUND_IN_MAGNITUDE: float = 0.05
+
+## US-4/7/12/14/20, the head half: **no weapon on the roster puts its head
+## through another head.**
+##
+## `heads_do_not_tunnel_head` above makes this claim for the pickaxe and has
+## always been read as making it for the game. It is not: it runs the default
+## `Player.tscn` weapon, and the four heads added since are between a third
+## and a fifth of the pickaxe's smallest circle. This runs the same twelve
+## charges -- four approach directions so gravity cannot hide it, three closing
+## speeds up to 3600 px/s between them -- once per weapon, both players holding
+## the same weapon, sixty charges in all.
+##
+## Three things it does that the original cannot, all of them forced by heads
+## that are no longer one round nub.
+##
+## Contact is measured **surface to surface between the two clusters** rather
+## than as a fixed 2 x HEAD_RADIUS around the anchor. A single radius is
+## isotropic and a fitted cluster is not: two staffs whose anchors pass 6 px
+## apart have missed each other entirely, two axes whose anchors pass 20 px
+## apart across the crescents have not, and the same 16 px is wrong for both.
+## A breach is then the plain thing the scenario is named for -- the blocker's
+## head ended up behind the attacker's, down the line they charged, having
+## never been in contact with it -- rather than a distance test tuned per
+## weapon.
+##
+## The charge starts from each weapon's own separation, because
+## CHARGE_SEPARATION is sized for the pickaxe's 140 px and the staff reaches
+## 200. And each weapon gets a fresh pair of players, so an elimination under
+## one weapon cannot freeze a body and quietly void the four sweeps after it.
+func _scenario_roster_heads_do_not_tunnel_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+
+		# A fresh pair per weapon. Damage is cleared per charge below, but an
+		# elimination inside a single charge still freezes a body for good,
+		# and a frozen body would carry into every weapon after this one.
+		var attacker: RigidBody2D = _spawn_player(stage, centre)
+		var blocker: RigidBody2D = _spawn_player(stage, centre)
+		attacker.set_weapon_stats(stats)
+		blocker.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+
+		var separation: float = maxf(CHARGE_SEPARATION,
+			2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
+		failures.append_array(await _charge_sweep(weapon, attacker, blocker, centre, separation))
+
+		attacker.queue_free()
+		blocker.queue_free()
+		await _await_ticks(2)
+
+	await _teardown(stage)
+	return failures
+
+## One weapon's worth of `heads_do_not_tunnel_head`: both players hold it,
+## hold their heads out at each other from a distance neither can reach
+## across, and are thrown together over four directions and three speeds.
+##
+## Written against the pair passed in rather than against the scene, so the
+## caller owns how long a pair lives and what weapon is on it.
+func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, centre: Vector2, separation: float) -> Array[String]:
+	var failures: Array[String] = []
+	var trials: int = 0
+	var met: int = 0
+	var breaches: int = 0
+	## Charges cut short by an elimination. Such a charge measured two heads
+	## for part of a step and then a frozen body with its head off the
+	## collision layer, so it is void rather than passing -- counted, reported,
+	## and kept out of `met` and `breaches` entirely.
+	var voided: int = 0
+
+	for degrees: float in CHARGE_ANGLES:
+		for speed: float in CHARGE_SPEEDS:
+			trials += 1
+			var axis: Vector2 = Vector2.RIGHT.rotated(deg_to_rad(degrees))
+			var half: Vector2 = axis * separation * 0.5
+			attacker.teleport_to(centre - half)
+			blocker.teleport_to(centre + half)
+			attacker.set_input_vector(axis)
+			blocker.set_input_vector(-axis)
+			# Cleared for the reason the disclosure on
+			# `_scenario_heads_do_not_tunnel_head` gives: one charge's wear
+			# must not decide what the next one is allowed to test. Same
+			# shortcut and the same caveat -- this goes round the player's own
+			# damage path, so `_update_damage_visual()` does not re-run and
+			# the body keeps whatever fill it had reddened to. Nothing here
+			# reads the fill.
+			attacker.damage = 0.0
+			blocker.damage = 0.0
+			await _await_ticks(SETTLE_TICKS)
+
+			var deaths: int = attacker.deaths + blocker.deaths
+			var previous_a: Array[Dictionary] = _head_circles_world(attacker)
+			var previous_b: Array[Dictionary] = _head_circles_world(blocker)
+			var previous_rel: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
+			# Surface to surface between the two clusters: zero is touching,
+			# negative is overlapping. Not a distance between anchors, which
+			# is a different number for every weapon and none of them the one
+			# that decides whether two heads met.
+			var closest: float = _head_surface_gap(previous_a, previous_b)
+			var previous_along: float = previous_rel.dot(axis)
+			var touched: bool = closest <= 0.0
+			var went_through: bool = false
+			## Surface gap on the step a crossing happened. A crossing on its
+			## own is not a breach: two heads can cross the line they charged
+			## down while comfortably clear of each other, having simply
+			## missed -- which is what four approach directions are for. The
+			## breach is a crossing where the two clusters were *overlapping*
+			## on the step that crossed -- surfaces interpenetrating, so the
+			## step should have resolved as a collision and instead resolved
+			## as one head being on the far side.
+			##
+			## Nothing looser works. CLASH_CONTACT_SLACK (8 px) was tried and
+			## is the wrong instrument: it is the slack for "did these two
+			## meet", and two heads crossing 8 px apart have plainly not met.
+			## The head-crossing correction agrees -- it rejects such a pair
+			## outright, because the sum of the two clusters' radii is less
+			## than their anchors' closest approach, which is not a bug but
+			## the geometry saying no circle could have touched. A breach has
+			## to be a crossing the physics owed us and did not deliver, and
+			## only overlap says that without argument.
+			var crossed_gap: float = INF
+			var cut_short: bool = false
+			var crossed_from: Vector2 = Vector2.ZERO
+			var crossed_to: Vector2 = Vector2.ZERO
+			for _t in CHARGE_TICKS:
+				attacker.linear_velocity = axis * speed
+				blocker.linear_velocity = -axis * speed
+				await physics_frame
+				# An elimination freezes a player and drops its head's
+				# collision layer, so from that tick on nothing measured here
+				# means "two heads closing" any more.
+				if attacker.deaths + blocker.deaths != deaths:
+					cut_short = true
+					break
+				var current_a: Array[Dictionary] = _head_circles_world(attacker)
+				var current_b: Array[Dictionary] = _head_circles_world(blocker)
+				var relative: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
+				var gap: float = _head_surface_gap(current_a, current_b)
+				closest = minf(closest, gap)
+				# A breach is the blocker's head ending up **behind** the
+				# attacker's, along the line they charged down, when no tick
+				# up to that moment ever saw the two of them so much as
+				# touch. Read in that order, and with `touched` carrying
+				# ticks that have already happened: the tick after a head has
+				# gone through shows the two clusters overlapping, so folding
+				# this tick's contact in first would let every real breach
+				# hide behind the overlap it had just created.
+				#
+				# Deliberately not asked per circle pair. Two clusters leant
+				# against each other have plenty of pairs that are not
+				# touching, and any one of them jittering past its own contact
+				# reads as a crossing -- that version called two pickaxes
+				# "through" on a 1 px step while the heads were solidly in
+				# contact, which is the pre-existing scenario's own weapon
+				# passing its own charge. Whether the heads met at all is a
+				# question about the heads, not about a pair of circles.
+				var along: float = relative.dot(axis)
+				if not went_through and not touched and along < 0.0 and previous_along > 0.0:
+					went_through = true
+					crossed_gap = minf(gap, _head_surface_gap(previous_a, previous_b))
+					crossed_from = previous_rel
+					crossed_to = relative
+				if gap <= 0.0:
+					touched = true
+				previous_a = current_a
+				previous_b = current_b
+				previous_rel = relative
+				previous_along = along
+
+			if cut_short:
+				voided += 1
+				print("      %s %3.0f deg at %.0f px/s each: VOID, an elimination cut the charge short" % [
+					label, degrees, speed])
+				# Revived rather than replaced. `start_round` is the one path
+				# back into play (see `leave_round`), and with `keeps_weapon`
+				# it restores `alive`, the collision layers and the transform
+				# while leaving the weapon this sweep is measuring on the
+				# body. Spawning a fresh pair instead would mean re-running
+				# the weapon swap and its settle, sixty times over, for a
+				# state this already reaches in two ticks.
+				attacker.start_round(centre, true)
+				blocker.start_round(centre, true)
+				await _await_ticks(SETTLE_TICKS)
+				continue
+
+			if went_through and crossed_gap >= 0.0:
+				print("      %s %3.0f deg at %.0f px/s each: crossed %.1f px apart -- a miss, not a breach" % [
+					label, degrees, speed, crossed_gap])
+				went_through = false
+
+			if closest <= CLASH_CONTACT_SLACK:
+				met += 1
+			print("      %s %3.0f deg at %.0f px/s each: heads closed to %6.1f px of each other%s" % [
+				label, degrees, speed, closest, "  THROUGH" if went_through else ""])
+			if went_through:
+				breaches += 1
+				if failures.size() < MAX_FAILURES_PER_SCENARIO:
+					failures.append(
+						"%s, %.0f deg approach at %.0f px/s each: one step took the heads from %s apart to %s apart -- through each other and out the far side -- without the two of them ever once being in contact" % [
+							label, degrees, speed, crossed_from, crossed_to])
+
+	var measured: int = trials - voided
+	if voided > 0:
+		print("      %s: %d of %d charges were void (elimination mid-charge); %d measured" % [
+			label, voided, trials, measured])
+	# A sweep that voided most of its charges has not made the claim this
+	# scenario is named for, whatever the surviving charges said.
+	if measured < trials / 2:
+		failures.append("%s: only %d of %d charges ran to completion; the rest were cut short by an elimination, so this weapon was not really swept" % [
+			label, measured, trials])
+	elif met < measured / 2:
+		failures.append("%s: only %d of %d completed charges brought the heads together at all" % [
+			label, met, measured])
+	if breaches > 0:
+		failures.append("%s: %d of %d completed charges put a head through another head" % [
+			label, breaches, measured])
+
+	return failures
+
+## US-4/7/12/14/20, the haft half: **every weapon's haft passes through what
+## its own head is stopped by.**
+##
+## `haft_is_non_colliding` above makes this claim for the pickaxe only, and it
+## is the claim that keeps anybody from shoving a player off a ledge by slowly
+## extending a weapon sideways -- so it has to hold for all five. Per weapon,
+## the two halves the original uses, both sized from that weapon's own head
+## rather than from the pickaxe's:
+##
+##   * A bystander standing in the weapon's **bare-haft band**: far enough out
+##     that the two bodies never touch, near enough in that the head passes
+##     well beyond them. The weapon sweeps over them at full reach and they
+##     are not moved.
+##   * A bar slid into the same band, crossing the haft and touching nothing
+##     else. The weapon holds full reach straight through it, and on release
+##     the head cannot come back down past it.
+##
+## The bar half runs for every weapon. The bystander half runs only where the
+## weapon's own geometry leaves room for a whole player body between the two
+## bodies, and says so out loud where it does not -- see `_roster_haft_trial`.
+func _scenario_roster_hafts_are_non_colliding() -> Array[String]:
+	var failures: Array[String] = []
+	var bystander_halves: int = 0
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var trial: Dictionary = await _roster_haft_trial(weapon, stats)
+		failures.append_array(trial["failures"])
+		if bool(trial["bystander"]):
+			bystander_halves += 1
+
+	# The bystander half is the half that says "through a **player**", and a
+	# roster where no weapon could run it would have passed everything above
+	# on bars alone.
+	if bystander_halves == 0:
+		failures.append("not one weapon on the roster left room for a bystander in its own bare-haft band, so nothing here was tested against a player at all")
+
+	return failures
+
+## One weapon's worth of `haft_is_non_colliding`, on its own stage.
+##
+## Everything the fixture needs is measured off the built rig: how far the
+## head reaches forward past its anchor, how far it reaches back down the haft
+## toward the player, and so which stretch of the weapon is bare haft. That
+## stretch is the **band**: from the far side of a bystander standing clear of
+## the player's own body, out to where the head begins.
+##
+## For two of the roster that band will not take a whole player. The sword's
+## blade lies 22.95 px back across its anchor on a 90 px weapon, so at full
+## reach its head occupies everything from 67 px out to 99 px, and a body of
+## radius 24 would have to stand with its centre inside 43 px -- closer than
+## two players can stand. That is geometry, not a fixture that needs more
+## thought: there is no reach at which the sword has both a bare haft and room
+## for somebody on it. The bar, which is thin, fits every weapon's band, so
+## the haft claim is still made for the sword -- against terrain rather than
+## against a player -- and the shortfall is printed rather than skipped.
+func _roster_haft_trial(weapon: String, stats: WeaponStatsType) -> Dictionary:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 200))
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+
+	# The head's own reach, in both directions along the haft, off the live
+	# rig. `extent` is the omnidirectional one and is what a bystander has to
+	# be kept clear of, since the head turns past them side-on as well as
+	# end-on.
+	var forward: float = _head_forward_extent(player)
+	var rear: float = _head_rear_extent(player)
+	var extent: float = _head_extent(player)
+	var band_inner: float = 2.0 * PLAYER_RADIUS + PLANT_CLEARANCE
+	var band_outer: float = stats.max_reach - extent - PLAYER_RADIUS
+	var ran_bystander: bool = band_outer - band_inner >= 2.0 * HAFT_BAND_MARGIN
+	print("      %s: head reaches %.2f px forward and %.2f px back on %.0f px of weapon; bare haft runs %.1f to %.1f px" % [
+		weapon, forward, rear, stats.max_reach, band_inner, band_outer])
+
+	if ran_bystander:
+		var offset: float = BYSTANDER_OFFSET
+		if offset < band_inner + HAFT_BAND_MARGIN or offset > band_outer - HAFT_BAND_MARGIN:
+			offset = (band_inner + band_outer) * 0.5
+		failures.append_array(await _haft_bystander_half(weapon, stage, player, stats, offset, extent, band_inner))
+	else:
+		print("      %s: no bystander half -- its head leaves %.1f px of bare haft, and two players cannot stand closer than %.1f px" % [
+			weapon, band_outer, band_inner])
+
+	failures.append_array(await _haft_bar_half(weapon, stage, player, stats, rear))
+
+	await _teardown(stage)
+	return {"failures": failures, "bystander": ran_bystander}
+
+## The haft against a player: a bystander is stood in the weapon's bare-haft
+## band and the weapon is swept over them at full reach, from straight up
+## round to horizontal. The head travels round outside them the whole way, so
+## the only thing that ever crosses them is haft, and they are not moved.
+##
+## Five things have to be true together, because "they were not shoved" on its
+## own is what a weapon that never reached them would also report: the weapon
+## really was at full reach, the haft really did lie across the bystander, the
+## two bodies never touched, no circle of the head ever got inside the
+## bystander's body, and they did not move.
+##
+## The swinging player is braced and the bystander is not, which is the whole
+## point of bracing exactly one of them: the band between a bystander's body
+## and the head sweeping past it is a few pixels wide on the short weapons,
+## and an unbraced player is thrown far enough by its own swing to close it.
+## Unbraced, the pickaxe ends the sweep 39 px from where it started and takes
+## its head within half a pixel of the bystander -- which would make the head,
+## not the haft, the thing that had been near them. The bystander stays free,
+## because being free is what makes "it did not move" worth measuring.
+func _haft_bystander_half(weapon: String, stage: Node2D, player: RigidBody2D, stats: WeaponStatsType, offset: float, extent: float, band_inner: float) -> Array[String]:
+	var failures: Array[String] = []
+	var bystander: RigidBody2D = _spawn_player(stage, Vector2(offset, 200))
+	await _await_ticks(LANDING_TICKS)
+	_brace(player)
+
+	# Turned up wound in before it is let out, the way `_wind_up()` does it,
+	# and for the same reason: a weapon commanded straight to full reach from
+	# rest extends along the angle it has not finished leaving. Rest points
+	# +X, which is at the bystander, and the two quickest weapons on the
+	# roster extend faster than they turn -- the staff and the dagger both put
+	# a head circle flat against the bystander's body on the way out, 24.0 px
+	# from their centre, before the sweep being measured had begun. Wound in,
+	# the head cannot reach anybody while it comes round.
+	player.set_input_vector(Vector2.UP * WOUND_IN_MAGNITUDE)
+	await _await_ticks(RETRACT_TICKS)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(EXTEND_TICKS + SETTLE_TICKS)
+	var bystander_start: Vector2 = bystander.global_position
+
+	# Stepped from straight up round to horizontal, so the weapon is at full
+	# reach throughout rather than being dragged in by its own swing.
+	# Watched every tick, not just at the end. `head_clearance` is the gap
+	# from the bystander's body to the nearest surface of the head -- circle
+	# by circle, turned to face along the haft the way the rig turns it --
+	# rather than to the anchor, because the anchor is not what collides. The
+	# omnidirectional `extent` that sized the band is a loose bound on this
+	# (see `_head_extent()`) and is fine for placing a fixture; it is far too
+	# blunt to decide whether a head touched somebody.
+	var head_clearance: float = INF
+	for i in HAFT_SWEEP_STEPS + 1:
+		var degrees: float = -90.0 + 90.0 * float(i) / float(HAFT_SWEEP_STEPS)
+		player.set_input_vector(Vector2.RIGHT.rotated(deg_to_rad(degrees)))
+		for _t in HAFT_SWEEP_STEP_TICKS:
+			await physics_frame
+			head_clearance = minf(head_clearance,
+				_head_circle_clearance(player, bystander.global_position))
+	await _await_ticks(SETTLE_TICKS)
+	head_clearance = minf(head_clearance,
+		_head_circle_clearance(player, bystander.global_position))
+
+	var swept_reach: float = _reach_of(player)
+	if absf(swept_reach - stats.max_reach) > REACH_TOLERANCE:
+		failures.append("%s: sweeping across the bystander left the weapon at %.1f px instead of its own full reach %.1f px" % [
+			weapon, swept_reach, stats.max_reach])
+	var body_gap: float = (bystander.global_position - player.global_position).length()
+	if body_gap < band_inner:
+		failures.append("%s: the two bodies closed to %.1f px, so anything the bystander did was body contact, not the haft" % [
+			weapon, body_gap])
+	# The haft has to actually lie across them. A swing that finished short of
+	# the bystander, or a player shoved so far back by its own swing that the
+	# weapon no longer reaches, would report a perfectly still bystander and
+	# mean nothing by it.
+	var haft_depth: float = PLAYER_RADIUS - _point_segment_distance(
+		bystander.global_position, player.global_position, player.weapon_head_position())
+	if haft_depth <= 0.0:
+		failures.append("%s: the haft ended %.1f px clear of the bystander's body, so it never passed through them at all" % [
+			weapon, -haft_depth])
+	# And the head has to have stayed outside them throughout -- otherwise a
+	# shove would be the head's doing and the haft would be off the hook.
+	if head_clearance < PLAYER_RADIUS:
+		failures.append("%s: a head circle came within %.1f px of the bystander's centre, inside their own %.1f px body, so this sweep cannot tell the haft from the head" % [
+			weapon, head_clearance, PLAYER_RADIUS])
+	var shoved: float = (bystander.global_position - bystander_start).length()
+	print("      %s: bystander at %.1f px, bodies %.1f px apart, haft through %.1f px of them, head surface no closer than %.1f px, shoved %.2f px" % [
+		weapon, offset, body_gap, haft_depth, head_clearance, shoved])
+	if shoved > HAFT_SHOVE_TOLERANCE:
+		failures.append("%s: the haft shoved the bystander %.1f px; it should pass straight through them" % [
+			weapon, shoved])
+
+	# Handed back the way it was received. The bar half needs this player free:
+	# what closes when the head is blocked is the player, hauled up its own
+	# weapon to the underside of the bar.
+	player.freeze = false
+	bystander.queue_free()
+	await _await_ticks(2)
+	return failures
+
+## The haft against terrain, and the head against the same terrain: a bar is
+## slid into the gap between the player and its own head, where it crosses the
+## haft and touches nothing else. The weapon holds full reach through it, and
+## on release the head cannot come back down past it.
+##
+## The bar goes at the middle of the weapon's bare haft, not at a fixed
+## height: at the pickaxe's 70 px it would be buried inside the sword's blade.
+## Where the head ends up is read in world coordinates against the bar's own
+## top surface, because what closes on release is the player -- hauled up its
+## own weapon to the underside of the bar -- rather than the head coming down.
+func _haft_bar_half(weapon: String, stage: Node2D, player: RigidBody2D, stats: WeaponStatsType, rear: float) -> Array[String]:
+	var failures: Array[String] = []
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(SETTLE_TICKS * 2)
+
+	var bar_inner: float = PLAYER_RADIUS + BAR_SIZE.y * 0.5 + HAFT_BAND_MARGIN
+	var bar_outer: float = stats.max_reach - rear - BAR_SIZE.y * 0.5 - HAFT_BAND_MARGIN
+	if bar_outer <= bar_inner:
+		failures.append("%s: its head leaves no stretch of bare haft a bar can be put across at all (%.1f px to %.1f px)" % [
+			weapon, bar_inner, bar_outer])
+		return failures
+	var bar_offset: float = clampf(BAR_OFFSET, bar_inner, bar_outer)
+	var bar_centre: Vector2 = player.global_position - Vector2(0, bar_offset)
+	_add_bar(stage, bar_centre, BAR_SIZE)
+	await _await_ticks(SETTLE_TICKS * 2)
+
+	var through_reach: float = _reach_of(player)
+	if absf(through_reach - stats.max_reach) > REACH_TOLERANCE:
+		failures.append("%s: the bar disturbed the haft: reach %.1f px instead of its own full reach %.1f px" % [
+			weapon, through_reach, stats.max_reach])
+
+	var bar_top: float = bar_centre.y - BAR_SIZE.y * 0.5
+	player.set_input_vector(Vector2.ZERO)
+	await _await_ticks(SETTLE_TICKS * 2)
+	# Measured at the anchor the haft holds the head by, not at the head's
+	# outline: every weapon holds its head at a different place along it, and
+	# the anchor is the one point all five have in common. Blocked, the head
+	# sits on the bar and the anchor stays above its top surface; through, the
+	# weapon is most of the way home and the anchor is far below it.
+	var sunk: float = player.weapon_head_position().y - bar_top
+	var rest_reach: float = _reach_of(player)
+	print("      %s: bar at %.1f px, held %.1f px through it, ended %.1f px past its top surface at %.1f px of reach" % [
+		weapon, bar_offset, through_reach, sunk, rest_reach])
+	if sunk > PLANT_CLEARANCE:
+		failures.append("%s: the head came back %.1f px down through the bar its own haft passes through" % [
+			weapon, sunk])
+	if rest_reach <= player.weapon_min_length + REACH_TOLERANCE:
+		failures.append("%s: the weapon returned the whole way to rest, so the bar stopped nothing" % weapon)
+
+	return failures
+
+## How far a head reaches **forward along its own haft**, past the anchor the
+## haft holds it by: the furthest any of its circles gets in head-local +X.
+##
+## This is the direction two heads meet in and the direction a head overtakes
+## a body in, so it is what a contact distance is actually made of.
+## `_head_extent()` answers a different question -- the furthest circle in any
+## direction -- and on the roster's blades, which lie back across their anchor,
+## it overstates this by up to 14 px. Read off the built rig, so it is the
+## head that is really there.
+func _head_forward_extent(player: RigidBody2D) -> float:
+	var extent: float = 0.0
+	for circle: Dictionary in player.weapon_head_circles():
+		var offset: Vector2 = circle["offset"]
+		extent = maxf(extent, offset.x + float(circle["radius"]))
+	return extent
+
+## How far a head reaches **back down its own haft**, toward the player. The
+## roster's blades lie across their anchor rather than out in front of it --
+## the sword's reaches 22.95 px back on a 90 px weapon -- so this is what
+## decides how much of a weapon's length is bare haft and how much is solid
+## head, and therefore where a fixture can be put without the head being what
+## it meets.
+func _head_rear_extent(player: RigidBody2D) -> float:
+	var extent: float = 0.0
+	for circle: Dictionary in player.weapon_head_circles():
+		var offset: Vector2 = circle["offset"]
+		extent = maxf(extent, float(circle["radius"]) - offset.x)
+	return extent
+
+## The gap between a world point and the nearest **surface** of the head a
+## player is holding: negative once the point is inside one of its circles.
+##
+## Built from the two things a player will tell anyone -- where the head is
+## and what circles it is made of -- plus the one rule the rig turns it by:
+## head-local +X points outward along the haft. So the facing is read back out
+## of the weapon's own geometry, from the player to the head, rather than off
+## any node in the rig, and this stays true through the rig swap ADR-0006
+## reserves the right to make.
+func _head_circle_clearance(player: RigidBody2D, point: Vector2) -> float:
+	var clearance: float = INF
+	for circle: Dictionary in _head_circles_world(player):
+		var centre: Vector2 = circle["centre"]
+		clearance = minf(clearance, centre.distance_to(point) - float(circle["radius"]))
+	return clearance
+
+## The head a player is holding, circle by circle, **in world coordinates**.
+##
+## Built from the two things a player will tell anyone -- where its head is and
+## what circles it is made of -- plus the one rule the rig turns the cluster
+## by: head-local +X points outward along the haft. So the facing is recovered
+## from the weapon's own geometry, player to head, rather than read off a node
+## inside the rig, and this survives the rig swap ADR-0006 reserves the right
+## to make.
+func _head_circles_world(player: RigidBody2D) -> Array[Dictionary]:
+	var anchor: Vector2 = player.weapon_head_position()
+	var facing: float = (anchor - player.global_position).angle()
+	var circles: Array[Dictionary] = []
+	for circle: Dictionary in player.weapon_head_circles():
+		var offset: Vector2 = circle["offset"]
+		circles.append({
+			"centre": anchor + offset.rotated(facing),
+			"radius": float(circle["radius"]),
+		})
+	return circles
+
+## The gap between two heads, surface to surface: the closest any circle of
+## one gets to any circle of the other. Zero is touching and negative is
+## overlapping, for any two heads on the roster, which is what makes "did
+## these two meet?" one question rather than fifteen.
+func _head_surface_gap(one: Array[Dictionary], other: Array[Dictionary]) -> float:
+	var gap: float = INF
+	for a: Dictionary in one:
+		var a_centre: Vector2 = a["centre"]
+		var a_radius: float = a["radius"]
+		for b: Dictionary in other:
+			var b_centre: Vector2 = b["centre"]
+			gap = minf(gap, a_centre.distance_to(b_centre) - a_radius - float(b["radius"]))
+	return gap
+
+
+## Distance from a point to a line segment: how far a bystander's centre is
+## from the haft, which is the segment from the player to its head.
+func _point_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab: Vector2 = b - a
+	var length_squared: float = ab.length_squared()
+	if length_squared == 0.0:
+		return point.distance_to(a)
+	var along: float = clampf((point - a).dot(ab) / length_squared, 0.0, 1.0)
+	return point.distance_to(a + ab * along)

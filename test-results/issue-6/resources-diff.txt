@@ -1,2 +1,0 @@
-$ git diff --stat 70c5e0f -- resources/
-(empty = no resources/ changes)

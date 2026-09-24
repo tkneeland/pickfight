@@ -1,0 +1,31 @@
+$ grep -rn 'WeaponStats\|WeaponHead' scripts/ tools/ --include='*.gd' | grep -v '^\S*:[0-9]*:\s*[#;]'
+# Declarations are fine; what the rule forbids is *referencing* a type by its
+# class_name. Every consumer below goes through a preload()'d const instead.
+
+scripts/WeaponStats.gd:1:class_name WeaponStats
+scripts/Player.gd:48:const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
+scripts/Player.gd:49:const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+scripts/Player.gd:128:@export var weapon_stats: WeaponStatsType
+scripts/Player.gd:183:var _stats: WeaponStatsType
+scripts/Player.gd:186:var _head: WeaponHeadType
+scripts/Player.gd:313:func _assign_weapon_stats(stats: WeaponStatsType) -> void:
+scripts/Player.gd:321:func set_weapon_stats(stats: WeaponStatsType) -> void:
+scripts/Player.gd:477:	_head = WeaponHeadType.new()
+scripts/Player.gd:731:func _build_head_visual(stats: WeaponStatsType) -> Polygon2D:
+scripts/Player.gd:748:func _head_circle_bounds(stats: WeaponStatsType) -> Rect2:
+scripts/WeaponHead.gd:1:class_name WeaponHead
+tools/scenario_runner.gd:34:const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
+tools/scenario_runner.gd:851:	var stub := WeaponStatsType.new()
+tools/scenario_runner.gd:1478:	var strong := WeaponStatsType.new()
+tools/scenario_runner.gd:2037:	player.set_weapon_stats(WeaponStatsType.new())
+tools/scenario_runner.gd:2044:	var misfit := WeaponStatsType.new()
+tools/scenario_runner.gd:2046:	misfit.head_circle_radii = PackedFloat32Array([WeaponStatsType.DEFAULT_HEAD_RADIUS])
+tools/scenario_runner.gd:2490:	var stub_p1 := WeaponStatsType.new()
+tools/scenario_runner.gd:2495:	var stub_p2 := WeaponStatsType.new()
+tools/scenario_runner.gd:2551:	var stub_p1c := WeaponStatsType.new()
+tools/scenario_runner.gd:2737:		var stats: WeaponStatsType = load(path)
+tools/scenario_runner.gd:2795:		var stats: WeaponStatsType = load(path)
+tools/scenario_runner.gd:2862:		var stats: WeaponStatsType = load(path)
+tools/scenario_runner.gd:2925:	var axe: WeaponStatsType = load(AXE_PATH)
+tools/scenario_runner.gd:2926:	var dagger: WeaponStatsType = load(DAGGER_PATH)
+tools/scenario_runner.gd:3022:func _roster_clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2, left_stats: WeaponStatsType, right_stats: WeaponStatsType) -> Dictionary:
