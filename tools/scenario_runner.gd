@@ -68,6 +68,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_responsiveness_matches_roster",
 	"heavy_weapon_wins_clash",
 	"every_stage_can_ring_out",
+	"hazard_zone_kills_at_full_health",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -474,6 +475,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_heavy_weapon_wins_clash()
 		"every_stage_can_ring_out":
 			return await _scenario_every_stage_can_ring_out()
+		"hazard_zone_kills_at_full_health":
+			return await _scenario_hazard_zone_kills_at_full_health()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3238,4 +3241,56 @@ func _scenario_every_stage_can_ring_out() -> Array[String]:
 
 		await _teardown(stage)
 
+	return failures
+
+# --- Stage parts (issue #18) -------------------------------------------------
+
+## Parked well clear of the Arena fixture other scenarios build, in clear air,
+## so a hazard instance dropped here is never touching any other geometry.
+const HAZARD_TEST_POSITION: Vector2 = Vector2(0, -800)
+## A hazard kill should be near-instant, not something waited for -- this is
+## generous next to the couple of physics ticks a body_entered contact and
+## the elimination it triggers actually take.
+const HAZARD_TICKS: int = 10
+
+## Issue #18 hazard zone, US-5/US-6: `scenes/parts/Hazard.tscn` reuses
+## KillZone.gd verbatim (see that script's docstring for why it is not a
+## second script), so this is deliberately the same assertion as
+## `ringout_kills_at_full_health` run against the other placement -- a
+## hazard sitting inside the playable area instead of beneath it. A player
+## at full health who touches it is eliminated by the touch alone, which is
+## the whole point of US-6: a player has to learn only one rule about stage
+## death, not a different one for each placement.
+func _scenario_hazard_zone_kills_at_full_health() -> Array[String]:
+	var failures: Array[String] = []
+	var hazard_scene: PackedScene = preload("res://scenes/parts/Hazard.tscn")
+	var stage: Node2D = _new_stage()
+	var hazard: Area2D = hazard_scene.instantiate()
+	stage.add_child(hazard)
+	hazard.global_position = HAZARD_TEST_POSITION
+
+	var player: RigidBody2D = _spawn_player(stage, HAZARD_TEST_POSITION)
+	await physics_frame
+
+	if player.damage > 0.0:
+		failures.append("the player started on %.1f damage, so this is not a full-health hazard test" % player.damage)
+
+	var killed: bool = false
+	for _i in HAZARD_TICKS:
+		await physics_frame
+		if player.deaths > 0:
+			killed = true
+			break
+
+	if not killed:
+		failures.append("sat in the hazard for %d ticks without dying" % HAZARD_TICKS)
+	else:
+		if player.deaths != 1:
+			failures.append("one hazard contact counted as %d deaths" % player.deaths)
+		if player.damage > 0.0:
+			failures.append("a hazard kill at full health left %.1f damage behind" % player.damage)
+		if player.alive:
+			failures.append("eliminated but still marked alive")
+
+	await _teardown(stage)
 	return failures
