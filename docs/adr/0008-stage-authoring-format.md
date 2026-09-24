@@ -3,6 +3,12 @@
 - Status: Accepted
 - Date: 2026-09-23
 
+> **Superseded in part**: the rotation clause below (sequential, wrapping
+> through `stage_scenes`) is superseded by
+> [ADR-0011](0011-shuffled-stage-rotation.md). Everything else here --
+> the stage authoring format, spawn markers, kill zone, and the
+> Arena/stage-roster decoupling -- still stands.
+
 ## Context
 
 CONTEXT.md's design intent calls rapid stage rotation a feature, not

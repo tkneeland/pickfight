@@ -13,9 +13,10 @@ extends Node
 ## `expire_disconnected_claims()` runs.
 
 @export var player_paths: Array[NodePath] = []
-## Stages to rotate through, in order (ADR-0008). Swapped once per round, in
-## `_swap_stage()`. Spawn points come from the active stage's
-## `get_spawn_points()`, not from an export here.
+## Stages to rotate through: `stage_scenes[0]` opens every session, then
+## shuffled bags cover the rest with no repeat back-to-back (ADR-0011).
+## Swapped once per round, in `_swap_stage()`. Spawn points come from the
+## active stage's `get_spawn_points()`, not from an export here.
 @export var stage_scenes: Array[PackedScene] = []
 ## Node the active stage instance is added to and removed from.
 @export var arena_container_path: NodePath
@@ -45,6 +46,10 @@ extends Node
 ## refused. Long enough that a Wi-Fi blip hitting the whole room at once
 ## costs nobody the round.
 @export var abandoned_round_grace_sec: float = 10.0
+## Determinism seam for stage rotation (ADR-0011): -1 (the default) leaves
+## the rotation randomized every run; any other value seeds it so a scenario
+## can assert an exact bag order.
+@export var rotation_seed: int = -1
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END }
 
@@ -55,11 +60,21 @@ var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
 var _waiting_label: Label
 var _scoreboard: Control
-## Stage rotation state (ADR-0008). `_stage_index` starts at -1 so the first
-## `_swap_stage()` call lands on index 0 rather than 1.
+## Stage rotation state (ADR-0011): shuffled bags over `stage_scenes` with no
+## stage playing twice in a row, opening every session on `stage_scenes[0]`.
+## `_stage_index` starts at -1 so the first `_swap_stage()` call is recognized
+## as the opener rather than the seam between two bags.
 var _stage_index: int = -1
 var _current_stage: Node2D
 var _stage_spawn_points: Array[Vector2] = []
+## Remaining stage indices for the current bag, next-to-play at the front
+## (`pop_front()`). Refilled by `_refill_bag()` once emptied.
+var _bag: Array[int] = []
+## Seeded from `rotation_seed` in `_ready()`; never the global RNG, so two
+## RoundManagers can be given the same seed and produce the same sequence
+## (ADR-0011) -- `Array.shuffle()` can't do that, since it always draws from
+## the global RNG.
+var _rng: RandomNumberGenerator
 ## When the current round was first seen with no connected controller among
 ## its surviving players, or -1 while at least one is connected.
 var _abandoned_since_msec: int = -1
@@ -90,6 +105,11 @@ func _ready() -> void:
 	_random_weapons = OS.get_cmdline_user_args().has("--random-weapons")
 	if _random_weapons:
 		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
+	_rng = RandomNumberGenerator.new()
+	if rotation_seed == -1:
+		_rng.randomize()
+	else:
+		_rng.seed = rotation_seed
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_scores.resize(_players.size())
@@ -166,10 +186,11 @@ func _try_start_round() -> void:
 	_state = State.ROUND_ACTIVE
 	_start_pickups()
 
-## Rotates to the next stage (ADR-0008): frees the outgoing instance, wraps
-## `_stage_index` through `stage_scenes`, and caches the new stage's spawn
-## points so `_try_start_round()`'s loop above can read them per slot. A no-op
-## with an empty `stage_scenes`, leaving `_stage_spawn_points` as it was.
+## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
+## the next `_stage_index` into `stage_scenes` via `_next_stage_index()`, and
+## caches the new stage's spawn points so `_try_start_round()`'s loop above
+## can read them per slot. A no-op with an empty `stage_scenes`, leaving
+## `_stage_spawn_points` as it was.
 func _swap_stage() -> void:
 	if stage_scenes.is_empty():
 		return
@@ -178,10 +199,49 @@ func _swap_stage() -> void:
 		return
 	if _current_stage != null:
 		_current_stage.queue_free()
-	_stage_index = (_stage_index + 1) % stage_scenes.size()
+	_stage_index = _next_stage_index()
 	_current_stage = stage_scenes[_stage_index].instantiate()
 	container.add_child(_current_stage)
 	_stage_spawn_points = _current_stage.get_spawn_points()
+
+## Picks the next stage index (ADR-0011): `stage_scenes[0]` opens every
+## session (`_stage_index` still at -1), then shuffled bags cover the whole
+## roster, refilling once the current bag is empty. `_stage_index` still
+## holds the previously-played index at this point, so it doubles as the
+## "just played" value the fresh bag must not start with.
+func _next_stage_index() -> int:
+	if _stage_index == -1:
+		return 0
+	if _bag.is_empty():
+		_refill_bag(_stage_index)
+	return _bag.pop_front()
+
+## Builds a fresh shuffled bag (one Fisher-Yates pass over `_rng`, never the
+## global RNG or `Array.shuffle()`, which draws from it) covering every index
+## into `stage_scenes`, then fixes up a bag that would repeat `avoid` back to
+## back by swapping its first entry with another position -- every index
+## plays exactly once regardless of where in the bag it lands, so this cannot
+## skip or duplicate a stage. Left alone when the roster has only one stage,
+## since no swap can avoid a repeat there (the opener's own repeat case).
+func _refill_bag(avoid: int) -> void:
+	_bag = _shuffled_indices()
+	if _bag.size() > 1 and _bag[0] == avoid:
+		var swap_with: int = 1 + _rng.randi() % (_bag.size() - 1)
+		var tmp: int = _bag[0]
+		_bag[0] = _bag[swap_with]
+		_bag[swap_with] = tmp
+
+## A Fisher-Yates shuffle of `range(stage_scenes.size())` over `_rng`.
+func _shuffled_indices() -> Array[int]:
+	var indices: Array[int] = []
+	for i in stage_scenes.size():
+		indices.append(i)
+	for i in range(indices.size() - 1, 0, -1):
+		var j: int = _rng.randi_range(0, i)
+		var tmp: int = indices[i]
+		indices[i] = indices[j]
+		indices[j] = tmp
+	return indices
 
 func _set_waiting_text(connected: int) -> void:
 	if _waiting_label == null:
