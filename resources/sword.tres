@@ -25,14 +25,15 @@
 ; blocking area rather than as extra reach -- exactly the trade issue #13
 ; asks of it.
 ;
-; Stats against the pickaxe's M/M/M baseline: the sword is the pickaxe with
-; its reach traded for blade. Weight M and damage M are the baseline
-; unchanged (mass 0.25, force 6000, drive 24 rad/s / 700 px/s / 400 px/s,
-; damage 34). Reach S -- 90 px against 140 -- is the whole difference: the
-; big blade is balanced by the small swing lever, which is both less reach
-; and less head speed for the same slew.
-; Playtest retune (#45): blade stretched 2.5x along its length (circles refitted at the same spacing, same width), per the owner. Every circle is still clamped
-; inside the art.
+; Stats against the pickaxe's M/M/M baseline (retuned after the first
+; playtest, #45): the sword is the pickaxe with its reach traded for blade.
+; Weight M is the baseline (mass 0.25, force 6000, drive 24 rad/s). Reach S,
+; 70 px against 150, is balanced by a blade 2.5x as long as it first was --
+; the blocking area and the reach are the trade. A quicker extension than the
+; pickaxe (900 px/s out, 600 px/s back, against 700 / 400) and damage a
+; little over the baseline (40 against 34) keep a short lever worth swinging.
+; The blade was stretched along its length only, circles refitted at the
+; same spacing and width, every one still clamped inside the art.
 
 [resource]
 script = ExtResource("1")

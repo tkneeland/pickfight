@@ -28,17 +28,16 @@
 ; along the haft is budgeted, which is the same trick the sword's blade uses.
 ; Nothing enforces a bound on the forward number; see staff.tres.
 ;
-; Stats against the pickaxe's M/M/M baseline: the axe is power bought with
-; time. Weight heavy -- mass 0.45 against 0.25, force ceiling 9000 against
-; 6000 -- so it wins clashes against everything and flings its own body
-; hardest off a plant. Damage L, 55 against 34, so a clean full-speed hit is
-; the most devastating thing on the roster. The cost is responsiveness: the
-; drive is two thirds of the pickaxe's -- 16 rad/s against 24, 470 px/s
-; against 700, 240 px/s of return against 400 -- so it is the slowest weapon
-; on the roster to answer a thumb, and the slowest to reach full extension.
-; Reach stays M at 140 px, so weight and damage are the only things traded.
-; Playtest retune (#45): whole head scaled 1.75x, circles and art together, per the owner. Every circle is still clamped
-; inside the art.
+; Stats against the pickaxe's M/M/M baseline (retuned after the first
+; playtest, #45): the axe is power bought with time. Weight heavy -- mass
+; 0.55 against 0.25, force ceiling 9000 against 6000 -- so it wins clashes
+; against everything and flings its own body hardest off a plant. Damage L,
+; 70 against 34, so a clean full-speed hit is by far the most devastating
+; thing on the roster. The cost is responsiveness, and the owner asked for
+; it to feel sluggish: 12 rad/s against 24, 380 px/s out against 700, 200 px/s
+; of return against 400 -- the slowest weapon on the roster to answer a thumb
+; and to reach full extension. Reach M at 140 px. The whole head was scaled
+; 1.75x, circles and art together, every circle still inside the art.
 
 [resource]
 script = ExtResource("1")

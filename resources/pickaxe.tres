@@ -52,8 +52,10 @@
 ; player and against another
 ; head, and a head that reached much further would be a different weapon
 ; rather than the same one redrawn.
-; Playtest retune (#45): head stretched 1.25x tip to tip (head-local y) and no thicker; circles re-placed along the crescent with midpoints added, per the owner. Every circle is still clamped
-; inside the art.
+; Playtest retune (#45), per the owner: reach 140 -> 150 px, and the head
+; stretched 1.25x tip to tip (head-local y) and no thicker. The circles were
+; re-placed along the crescent with midpoints added, 7 -> 13, every one still
+; clamped inside the art.
 
 [resource]
 script = ExtResource("1")

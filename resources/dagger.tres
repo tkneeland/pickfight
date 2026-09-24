@@ -24,16 +24,17 @@
 ; second shortest forward extent on the roster. That spread is a convention
 ; the roster was drawn to rather than a checked bound; see staff.tres.
 ;
-; Stats against the pickaxe's M/M/M baseline: the dagger is the close-range
-; brawler. Weight light -- mass 0.15 against 0.25, force ceiling 4000 against
-; 6000 -- so it loses every clash, and its drive is a half again quicker than
-; the pickaxe's (36 rad/s, 1200 px/s, 600 px/s return), which over its short
-; 70 px of travel makes it the quickest weapon on the roster to reach full
-; extension. Reach S, 90 px against 140, keeps it a brawler and makes
-; climbing hard with it. Damage stays M at 34: the dagger is not a weak
-; weapon, it is a weapon you have to be next to someone to use.
-; Playtest retune (#45): blade stretched 1.5x along its length (circles refitted at the same spacing, same width), per the owner. Every circle is still clamped
-; inside the art.
+; Stats against the pickaxe's M/M/M baseline (retuned after the first
+; playtest, #45): the dagger is the close-range brawler, and the owner asked
+; for it significantly faster. Weight light -- mass 0.15 against 0.25 -- but a
+; force ceiling of 5000 against 6000: fast, yet it wins a clash of heads only
+; against the staff's 4000. Force also caps how hard the drive can pull, and
+; at 5000 the dagger answers a drag in 3 ticks. Its drive is the quickest on
+; the roster (50 rad/s, 1800 px/s out, 900 px/s back). Reach S, 80 px against
+; 150, keeps it a brawler and makes climbing hard with it. Damage 45 against
+; 34: a weapon you have to be next to someone to use should hurt when it
+; lands. The blade was stretched 1.5x along its length only, circles
+; refitted at the same spacing and width, every one still inside the art.
 
 [resource]
 script = ExtResource("1")
