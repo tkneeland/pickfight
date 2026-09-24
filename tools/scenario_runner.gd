@@ -2899,6 +2899,10 @@ const ROSTER_SETTLE_TICKS: int = 45
 ## steps are 60 px and 50 px, so this is a wide margin over measurement noise
 ## and a long way under a step.
 const ROSTER_REACH_TIER_MARGIN: float = 20.0
+## Playtest 1 (#45) tuned each weapon on its own, so a tier is now a band and
+## not one number: sword 70 / dagger 80, axe 140 / pickaxe 150. The ordering
+## between tiers is still the roster's rule. 10 px of band plus REACH_TOLERANCE.
+const ROSTER_REACH_SPREAD: float = 16.0
 
 ## The head speed a strike deals exactly the weapon's own `damage` at,
 ## written down here rather than read off `Player`: a test that asked the
@@ -2923,7 +2927,8 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## margin by which a higher tier has to beat a lower one. The table's steps
 ## are 21 and 14, so both sit clear of the tolerance above and well under a
 ## step.
-const ROSTER_DAMAGE_SPREAD: float = 6.0
+## A band since #45: the M tier is pickaxe 34, sword 40, dagger 45.
+const ROSTER_DAMAGE_SPREAD: float = 13.0
 const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
 ## How far the victim is planted from where the charge starts, and how long
 ## the charge is watched for. The run-up has to be long enough that the head
@@ -2935,11 +2940,11 @@ const FULL_STRIKE_RUN_UP: float = 1600.0
 const FULL_STRIKE_TICKS: int = 80
 
 ## The reach the responsiveness trial drags every weapon out to, and how close
-## the head has to get to it to count as having answered. 90 px is the
-## shortest full reach on the roster, so every weapon can be asked for it, and
+## the head has to get to it to count as having answered. 70 px (the sword,
+## since #45; it was 90) is the shortest full reach on the roster, so every weapon can be asked for it, and
 ## every weapon rests at the same 20 px -- which makes the five comparable:
-## the same 70 px of travel, commanded the same way, timed the same way.
-const ROSTER_ANSWER_REACH: float = 90.0
+## the same 50 px of travel, commanded the same way, timed the same way.
+const ROSTER_ANSWER_REACH: float = 70.0
 const ROSTER_ANSWER_TOLERANCE: float = 2.0
 const ROSTER_ANSWER_TICKS: int = 120
 ## Ticks two weapons of the same tier may disagree by, and ticks a slower tier
@@ -3008,7 +3013,7 @@ func _scenario_weapon_reach_matches_roster() -> Array[String]:
 				weapon, reach, stats.max_reach])
 
 	failures.append_array(_roster_tier_failures(
-		"reach", "px", observed, ROSTER_REACH_TIERS, REACH_TOLERANCE, ROSTER_REACH_TIER_MARGIN))
+		"reach", "px", observed, ROSTER_REACH_TIERS, ROSTER_REACH_SPREAD, ROSTER_REACH_TIER_MARGIN))
 
 	await _teardown(stage)
 	return failures
