@@ -107,6 +107,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"four_player_winner_keeps_weapon",
 	"stage_four_spawns_settle_together",
 	"pickup_cap_scales_with_roster",
+	"round_win_buzzes_only_winner",
+	"damaging_strike_buzzes_victim_and_attacker",
+	"zero_damage_strike_buzzes_no_one",
+	"elimination_buzzes_eliminated_player",
+	"buzz_reaches_only_its_phone",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -606,6 +611,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_four_spawns_settle_together()
 		"pickup_cap_scales_with_roster":
 			return await _scenario_pickup_cap_scales_with_roster()
+		"round_win_buzzes_only_winner":
+			return await _scenario_round_win_buzzes_only_winner()
+		"damaging_strike_buzzes_victim_and_attacker":
+			return await _scenario_damaging_strike_buzzes_victim_and_attacker()
+		"zero_damage_strike_buzzes_no_one":
+			return await _scenario_zero_damage_strike_buzzes_no_one()
+		"elimination_buzzes_eliminated_player":
+			return await _scenario_elimination_buzzes_eliminated_player()
+		"buzz_reaches_only_its_phone":
+			return await _scenario_buzz_reaches_only_its_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -6315,4 +6330,202 @@ func _scenario_pickup_cap_scales_with_roster() -> Array[String]:
 			failures.append("%d players: the stage held at most %d pickups at once, the cap should be %d" % [
 				count, peak, expected])
 		await _teardown(loop["stage"])
+	return failures
+
+# --- Issue #34: phone buzz feedback (ADR-0013) ------------------------------
+
+## How long a phone waits for a buzz frame it should get, and how long the
+## other phone is watched for one it should not.
+const BUZZ_WAIT_MSEC: int = 1000
+
+## The `[slot, kind]` pairs of `buzzes` whose kind is `kind`, as slots.
+func _buzzed_slots(buzzes: Array, kind: String) -> Array[int]:
+	var slots: Array[int] = []
+	for b: Array in buzzes:
+		if b[1] == kind:
+			slots.append(int(b[0]))
+	return slots
+
+## Issue #34: the round winner's phone, and only theirs, gets `win`. The two
+## losers get `eliminated`; the winner, put through leave_round() when the
+## round ends, does not. Three players, winner in the middle slot, so a buzz
+## sent to "everyone left" or to either end of the roster would show.
+func _scenario_round_win_buzzes_only_winner() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_roster_round(3, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a round never started with three claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	const WINNER: int = 1
+	roster.buzzes.clear()
+	players[0].eliminate()
+	await _await_ticks(2)
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return not players[WINNER].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the last survivor was never taken out of play: the round did not end")
+		await _teardown(loop["stage"])
+		return failures
+
+	print("      buzzes: %s" % [roster.buzzes])
+	var wins: Array[int] = _buzzed_slots(roster.buzzes, "win")
+	if wins != [WINNER]:
+		failures.append("win was sent to slot(s) %s, expected only the winner's slot %d" % [wins, WINNER])
+	var outs: Array[int] = _buzzed_slots(roster.buzzes, "eliminated")
+	if outs != [0, 2]:
+		failures.append("eliminated was sent to slot(s) %s, expected [0, 2]" % [outs])
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #34: a strike that deals damage buzzes `struck` to the victim's phone
+## and `hit` to the attacker's, and nothing to a bystander's.
+func _scenario_damaging_strike_buzzes_victim_and_attacker() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_roster_round(3, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a round never started with three claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	# Slot 2 strikes slot 0; slot 1 is the bystander. Checked straight after
+	# the call: the signal is synchronous, and nothing else can land between.
+	roster.buzzes.clear()
+	players[2]._land_strike(players[0], HIT_CLEAN_SPEED)
+	var buzzes: Array = roster.buzzes.duplicate()
+	print("      victim on %.1f damage, buzzes: %s" % [players[0].damage, buzzes])
+	if players[0].damage <= 0.0:
+		failures.append("the clean strike dealt no damage, so it proves nothing")
+	if _buzzed_slots(buzzes, "struck") != [0]:
+		failures.append("struck was sent to slot(s) %s, expected the victim's slot 0" % [_buzzed_slots(buzzes, "struck")])
+	if _buzzed_slots(buzzes, "hit") != [2]:
+		failures.append("hit was sent to slot(s) %s, expected the attacker's slot 2" % [_buzzed_slots(buzzes, "hit")])
+	if buzzes.size() != 2:
+		failures.append("a survivable strike sent %d buzz(es), expected exactly 2" % buzzes.size())
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #34: a real swing too slow to count (reported, but for 0 damage)
+## buzzes no one.
+func _scenario_zero_damage_strike_buzzes_no_one() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_roster_round(2, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	var reported: Array[float] = []
+	players[0].strike_landed.connect(func(_v: Node, amount: float, _p: Vector2, _l: bool) -> void:
+		reported.append(amount))
+	roster.buzzes.clear()
+	players[0]._land_strike(players[1], HIT_TOO_SLOW_SPEED)
+	var buzzes: Array = roster.buzzes.duplicate()
+	print("      strikes reported: %s, buzzes: %s" % [reported, buzzes])
+	if reported != [0.0]:
+		failures.append("the too-slow swing reported %s, expected one 0-damage strike" % [reported])
+	if not buzzes.is_empty():
+		failures.append("a 0-damage strike sent %s; it should send nothing" % [buzzes])
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #34: an elimination buzzes `eliminated` to that player's phone alone,
+## the moment it happens, while the round carries on for the others.
+func _scenario_elimination_buzzes_eliminated_player() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_roster_round(3, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a round never started with three claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	roster.buzzes.clear()
+	players[1].eliminate()
+	if roster.buzzes != [[1, "eliminated"]]:
+		failures.append("eliminating slot 1 sent %s, expected [[1, \"eliminated\"]]" % [roster.buzzes])
+	# Elimination by damage takes the same route and buzzes the same way.
+	roster.buzzes.clear()
+	var swings: int = 0
+	while players[2].alive and swings < MAX_KILL_SWINGS:
+		players[0]._land_strike(players[2], HIT_CLEAN_SPEED)
+		swings += 1
+		await physics_frame
+	print("      %d strike(s) to eliminate slot 2, buzzes: %s" % [swings, roster.buzzes])
+	if players[2].alive:
+		failures.append("%d clean strikes never eliminated slot 2" % swings)
+	elif _buzzed_slots(roster.buzzes, "eliminated") != [2]:
+		failures.append("eliminating slot 2 by damage sent eliminated to %s, expected [2]" % [
+			_buzzed_slots(roster.buzzes, "eliminated")])
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #34, the wire: a real ControllerServer's `send_buzz()` reaches only
+## the phone bound to that slot, as `{"t":"buzz","kind":<kind>}`, and a slot
+## with no phone is a quiet no-op.
+func _scenario_buzz_reaches_only_its_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var paths: Array[NodePath] = []
+	for i in 3:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "BuzzP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		paths.append(NodePath("../BuzzP%d" % i))
+	var server: Node = ControllerServerScript.new()
+	server.name = "BuzzServer"
+	server.http_port = FOUR_PHONE_HTTP_PORT
+	server.ws_port = FOUR_PHONE_WS_PORT
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "buzz-phone-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d, expected %d" % [i + 1, result["slot"], i])
+		joined.append(peer)
+
+	if failures.is_empty():
+		server.send_buzz(1, "struck")
+		server.send_buzz(2, "win")  # no phone on slot 2: must be a no-op
+		var got: Array = [[], []]
+		var deadline: int = Time.get_ticks_msec() + BUZZ_WAIT_MSEC
+		while Time.get_ticks_msec() < deadline:
+			await process_frame
+			for i in joined.size():
+				joined[i].poll()
+				while joined[i].get_available_packet_count() > 0:
+					var pkt: PackedByteArray = joined[i].get_packet()
+					if joined[i].was_string_packet():
+						got[i].append(JSON.parse_string(pkt.get_string_from_utf8()))
+		print("      phone 1 got %s, phone 2 got %s" % [got[0], got[1]])
+		if got[1] != [{"t": "buzz", "kind": "struck"}]:
+			failures.append("slot 1's phone got %s, expected one {\"t\":\"buzz\",\"kind\":\"struck\"}" % [got[1]])
+		if not got[0].is_empty():
+			failures.append("slot 0's phone got %s from a buzz meant for slot 1" % [got[0]])
+
+	for peer: WebSocketPeer in joined:
+		peer.close(1000, "scenario done")
+	for _i in 5:
+		await process_frame
+		for peer: WebSocketPeer in joined:
+			peer.poll()
+	await _teardown(stage)
 	return failures

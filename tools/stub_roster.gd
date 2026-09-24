@@ -1,9 +1,9 @@
 extends Node
 
 ## Test double for `ControllerServer`'s roster seam (issue #6). `RoundManager`
-## reaches its `controller_server_path` only through `claimed_slots()` and
-## `expire_disconnected_claims()` -- duck-typed, never by `class_name` -- and
-## this implements exactly those two, so a scenario can drive the roster
+## reaches its `controller_server_path` only through `claimed_slots()`,
+## `expire_disconnected_claims()` and `send_buzz()` -- duck-typed, never by
+## `class_name` -- and this implements exactly those, so a scenario can drive the roster
 ## (who is claimed, and when a claim drops) without opening the real
 ## `ControllerServer`'s LAN sockets in a headless run.
 ##
@@ -24,3 +24,10 @@ func claimed_slots() -> Array[int]:
 ## no-op that exists only to satisfy the interface `RoundManager` calls.
 func expire_disconnected_claims() -> void:
 	pass
+
+## Every `send_buzz()` call, in order, as `[slot, kind]` (issue #34), so a
+## scenario can assert which phone was buzzed with what without a socket.
+var buzzes: Array = []
+
+func send_buzz(slot: int, kind: String) -> void:
+	buzzes.append([slot, kind])

@@ -121,6 +121,7 @@ func _ready() -> void:
 		_rng.seed = rotation_seed
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
+	_watch_for_buzzes()
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
@@ -284,6 +285,7 @@ func _check_round_end() -> void:
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
+		_buzz(winner_slot, "win")
 		_players[winner_slot].leave_round()
 		_update_score_label()
 		_last_winner_slot = winner_slot
@@ -294,6 +296,38 @@ func _check_round_end() -> void:
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
+
+## Phone buzzes (issue #34, ADR-0013): each slot's player is watched here, so
+## `Player` never learns about phones and `ControllerServer` never learns
+## about rounds. Every buzz goes only to the phone whose player it is about.
+## - `eliminated` for the player just eliminated -- not for survivors put
+##   through `leave_round()` at round end, which emits nothing.
+## - `struck` for the victim of a strike that dealt damage, and `hit` for the
+##   attacker who landed it. A 0-damage swing buzzes no one.
+## - `win` is sent from `_check_round_end()` where the winner scores.
+func _watch_for_buzzes() -> void:
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player == null:
+			continue
+		if player.has_signal("eliminated"):
+			player.connect("eliminated", _buzz.bind(slot, "eliminated"))
+		if player.has_signal("strike_landed"):
+			player.connect("strike_landed", _on_strike_landed.bind(slot))
+
+## `attacker_slot` comes last because that is where the signal's bind puts it.
+func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
+	if amount <= 0.0:
+		return
+	var victim_slot: int = _players.find(victim)
+	if victim_slot != -1:
+		_buzz(victim_slot, "struck")
+	_buzz(attacker_slot, "hit")
+
+## A roster that cannot buzz (a test stub without `send_buzz`) is skipped.
+func _buzz(slot: int, kind: String) -> void:
+	if _controller_server != null and _controller_server.has_method("send_buzz"):
+		_controller_server.send_buzz(slot, kind)
 
 ## Whether the round has run for `abandoned_round_grace_sec` with none of
 ## `alive_slots` holding a connected controller. Any one reconnecting resets

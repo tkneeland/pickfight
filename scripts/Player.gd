@@ -172,6 +172,11 @@ var deaths: int = 0
 ## `point` is the head's leading edge; `lethal` is whether it eliminated.
 signal strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool)
 
+## This player was just eliminated, by either route (issue #34) -- for
+## whatever tells the player so; `RoundManager` buzzes their phone. Not
+## emitted by `leave_round()`: finishing a round alive is not an elimination.
+signal eliminated
+
 ## Whether this player is in play. False from elimination (damage or a
 ## ring-out) until `start_round()` brings them back for the next round --
 ## there is no mid-round respawn (ADR-0004): a round is over the same body
@@ -388,6 +393,7 @@ func eliminate() -> void:
 		return
 	deaths += 1
 	_go_inert()
+	eliminated.emit()
 
 ## Take this player out of play without it counting as an elimination.
 ##

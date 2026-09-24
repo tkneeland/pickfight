@@ -57,10 +57,19 @@
     opacity: 0.5;
     pointer-events: none;
   }
+  /* The buzz flash (issue #34, ADR-0013): a full-screen wash in the slot's
+     colour, faded out by buzz(). Behind the HUD, never in the way of a touch. */
+  #flash {
+    position: fixed;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <canvas id="pad"></canvas>
+<div id="flash"></div>
 <div id="hud">
   <div id="slot">--</div>
   <div id="status">connecting</div>
@@ -89,6 +98,16 @@
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
   // on the wire is poison for the host's rigid body.
   var MIN_DRAG_RADIUS_PX = 1;
+  // Buzzes the host sends (issue #34, ADR-0013), strongest first. `vibrate` is
+  // a navigator.vibrate() pattern; `alpha` and `ms` are the flash's peak
+  // opacity and fade length. The flash plays everywhere, not just where
+  // vibrate is missing: it is the only buzz iOS Safari can give.
+  var BUZZ = {
+    win:        { rank: 4, vibrate: 400,           alpha: 0.85, ms: 700 },
+    eliminated: { rank: 3, vibrate: [120, 80, 120], alpha: 0.6,  ms: 450 },
+    struck:     { rank: 2, vibrate: 60,            alpha: 0.4,  ms: 220 },
+    hit:        { rank: 1, vibrate: 25,            alpha: 0.18, ms: 120 }
+  };
 
   var WS_PORT = __WS_PORT__;
   var CLIENT_ID_KEY = "pickfight-client-id";
@@ -131,6 +150,11 @@
   var ctx = canvas.getContext("2d");
   var slotEl = document.getElementById("slot");
   var statusEl = document.getElementById("status");
+  var flashEl = document.getElementById("flash");
+  // The buzz still playing, so a weaker one arriving on its heels (the
+  // `struck` right behind an `eliminated`, a `hit` right behind a `struck`)
+  // does not cut it short -- vibrate() cancels whatever pattern was running.
+  var buzzRank = 0, buzzUntil = 0;
 
   // ---- geometry -----------------------------------------------------------
   function computeDragRadius() {
@@ -233,6 +257,24 @@
     }
   }
 
+  function buzz(kind) {
+    var b = BUZZ[kind];
+    if (!b || slot < 0) { return; }
+    var now = Date.now();
+    if (now < buzzUntil && b.rank < buzzRank) { return; }
+    buzzRank = b.rank;
+    buzzUntil = now + b.ms;
+    if (typeof navigator.vibrate === "function") {
+      try { navigator.vibrate(b.vibrate); } catch (err) { /* flash still plays */ }
+    }
+    flashEl.style.background = SLOT_COLORS[slot % SLOT_COLORS.length];
+    flashEl.style.transition = "none";
+    flashEl.style.opacity = String(b.alpha);
+    void flashEl.offsetWidth; // commit the peak before fading from it
+    flashEl.style.transition = "opacity " + b.ms + "ms ease-out";
+    flashEl.style.opacity = "0";
+  }
+
   function connect() {
     setStatus("connecting");
     ws = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
@@ -249,7 +291,8 @@
       try {
         var msg = JSON.parse(ev.data);
         if (typeof msg.slot === "number") { setSlot(msg.slot); }
-      } catch (err) { /* ignore anything that is not the slot message */ }
+        else if (msg.t === "buzz") { buzz(msg.kind); }
+      } catch (err) { /* ignore anything that is not a known message */ }
     };
     // The host drops us for reasons a player needs to be told about: every
     // slot is taken (a fifth phone, or a stray extra tab), or our input went
