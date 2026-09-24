@@ -45,8 +45,8 @@ size = Vector2(8000, 40)
 ; back to the top of its own leg on its own, with no player action or
 ; script call needed. Consecutive tiers' vertical ranges overlap by
 ; roughly 10-20 px at the hand-off height (P1's low point meets P2's high
-; point, P2's low point meets P3's high point, P3's low point all but
-; touches the floor), so a climber only ever has to wait out one
+; point, P2's low point meets P3's high point, and P3's low point stops
+; clear of the floor -- see the note on Platform3), so a climber only ever has to wait out one
 ; platform's own return leg at a time rather than solve the whole stack's
 ; timing at once. Both spawns sit on the static TopPlatform, so nobody
 ; spawns stranded and the route down is always there to be re-climbed.
@@ -86,10 +86,22 @@ one_way_sec = 2.2
 ; Authored at the top of its leg, like Platform1, but at a different
 ; period, so the pair drift out of sync over a session rather than
 ; re-aligning on a fixed beat.
+;
+; travel is 90, not the ~160-200 the other two legs get, because this is
+; the leg that ends over the floor. A MovingPlatform is an
+; AnimatableBody2D with sync_to_physics, so it does not stop for a player
+; -- it drives them. A player standing on the floor fills y=332..380
+; (PLAYER_RADIUS is 24 and the floor's top is y=380), so a platform whose
+; underside dips below y=332 closes on a standing body with nowhere left
+; to give, and squeezes it against static ground. Ending the leg at
+; y=300 puts the underside at y=312, twenty px clear of the top of a
+; player's head. The tier overlap this leg exists for is unaffected:
+; Platform2 runs y=20..220 and this one y=210..300, so they still share
+; the 10 px at 210..220 where a climber changes platforms.
 [node name="Platform3" parent="." instance=ExtResource("3")]
 position = Vector2(-150, 210)
 size = Vector2(200, 24)
-travel = Vector2(0, 160)
+travel = Vector2(0, 90)
 one_way_sec = 2.0
 
 [node name="Floor" type="StaticBody2D" parent="."]
