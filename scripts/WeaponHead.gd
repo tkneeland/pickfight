@@ -147,6 +147,33 @@ var swept_into: Object = null
 var swept_speed: float = 0.0
 
 var _previous_position: Vector2 = Vector2.ZERO
+## The facing that goes with `_previous_position`. Both sweeps reconstruct the
+## pose the head held when the step began, and a pose is a position *and* a
+## facing: taking the position from the step's start and the facing from its
+## end describes an instant that never happened. Harmless while a head was one
+## circle centred on its anchor, because that circle sits at the anchor at
+## every facing. Since ADR-0010 a cluster's circles sit well off it -- the axe
+## crescent reaches about 50 px -- so a head that turned during the step has
+## its starting circles reconstructed wherever the facing it ended on puts
+## them, and the sweep then looks for a crossing along a path the head did not
+## take.
+var _previous_rotation: float = 0.0
+## Where each swept circle sat, in this head's own frame, when the step began.
+##
+## The body is `lock_rotation = true`, so the facing does not live in its
+## transform at all -- `Player._update_weapon_visual` rewrites every circle's
+## local `position` and `rotation` from the aim once a tick. Reading those
+## nodes during `_integrate_forces` therefore gets *this* tick's facing, and
+## pairing it with last tick's anchor describes a pose the head never held.
+##
+## Under one circle centred on the anchor that was invisible: the circle sits
+## in the same place at every facing. Since ADR-0010 the axe's crescent reaches
+## about 50 px off its anchor, so a head that swung 0.4 rad during the step had
+## those circles some 20 px from where this reconstructs them -- comparable to
+## the whole 16 px at which two heads touch. The sweep then looks for a
+## crossing along a path the head did not take, and a genuine crossing can fall
+## outside it entirely.
+var _previous_shape_xforms: Array[Transform2D] = []
 var _has_previous: bool = false
 ## Cached per cluster: the sweep gate, and how far the cluster reaches from
 ## the head's own origin. Both are fixed by the weapon, so they are recomputed
@@ -172,6 +199,7 @@ var _step_frame: int = -1
 var _step_from: Vector2 = Vector2.ZERO
 var _step_to: Vector2 = Vector2.ZERO
 var _step_rotation: float = 0.0
+var _step_shape_xforms: Array[Transform2D] = []
 var _step_velocity: Vector2 = Vector2.ZERO
 var _step_usable: bool = false
 
@@ -289,6 +317,10 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if _has_previous and not _undo_any_tunnelling(state):
 		_undo_any_head_crossing(state)
 	_previous_position = state.transform.origin
+	_previous_rotation = state.transform.get_rotation()
+	_previous_shape_xforms.clear()
+	for node: CollisionShape2D in sweep_shapes:
+		_previous_shape_xforms.append(node.transform)
 	_has_previous = true
 
 ## Returns whether it moved the head.
@@ -307,7 +339,22 @@ func _undo_any_tunnelling(state: PhysicsDirectBodyState2D) -> bool:
 	# pure translation, so a safe fraction found for a circle is the same safe
 	# fraction for the body's origin -- which is what lets the earliest of
 	# them stand for the whole head.
-	var start := Transform2D(state.transform.get_rotation(), _previous_position)
+	#
+	# The *live* offsets, deliberately, and not the step-start snapshot that
+	# `_undo_any_head_crossing` uses. Neither is exact for a head that swung
+	# during the step, because `cast_motion` translates and cannot rotate, so
+	# the choice is which end of the step to get right. Here it is the end:
+	# the question this asks is whether the step carried the head past
+	# something, and casting from the live offsets lands on the pose the head
+	# actually holds now, which is the pose the answer reseats it from.
+	# Casting from the snapshot instead ends on a pose the head never reached
+	# and stops swings short of targets they did in fact reach -- measured, it
+	# cost `head_strike_damage_scales` its 0.90 rad swing outright.
+	#
+	# The pair sweep is the other way round for the opposite reason: there the
+	# question is where two heads first *met*, so the start is what has to be
+	# right. See `_previous_shape_xforms`.
+	var start := Transform2D(_previous_rotation, _previous_position)
 	var params := PhysicsShapeQueryParameters2D.new()
 	params.motion = motion
 	params.collision_mask = sweep_mask
@@ -318,7 +365,7 @@ func _undo_any_tunnelling(state: PhysicsDirectBodyState2D) -> bool:
 	var safe: float = 1.0
 	var stopped_by: CollisionShape2D = null
 	for node: CollisionShape2D in sweep_shapes:
-		if node.shape == null:
+		if node == null or node.shape == null:
 			continue
 		params.shape = node.shape
 		params.transform = start * node.transform
@@ -393,9 +440,13 @@ func _snapshot_step(xform: Transform2D, velocity: Vector2) -> void:
 	_step_frame = frame
 	_step_from = _previous_position
 	_step_to = xform.origin
-	_step_rotation = xform.get_rotation()
+	_step_rotation = _previous_rotation
 	_step_velocity = velocity
-	_step_usable = _has_previous
+	_step_shape_xforms = _previous_shape_xforms.duplicate()
+	# A weapon swapped mid-step leaves a snapshot that no longer describes the
+	# cluster now on the head. Nothing to sweep from, so the step is skipped
+	# rather than swept against the wrong shapes; the next one is whole.
+	_step_usable = _has_previous and _step_shape_xforms.size() == sweep_shapes.size()
 
 ## This head's snapshot of the step that just finished, taken now if this
 ## tick's has not been taken yet.
@@ -416,6 +467,7 @@ func pair_step_snapshot() -> Dictionary:
 		"to": _step_to,
 		"rotation": _step_rotation,
 		"velocity": _step_velocity,
+		"shapes": _step_shape_xforms,
 	}
 
 ## Which of two heads does the pair's one correction.
@@ -529,7 +581,8 @@ func _undo_any_head_crossing(state: PhysicsDirectBodyState2D) -> void:
 		var theirs_at_start := Transform2D(theirs["rotation"], their_from)
 
 		var met: Dictionary = _first_circle_contact(
-			mine, my_motion, their_shapes, theirs_at_start, their_motion)
+			mine, my_motion, _step_shape_xforms,
+			their_shapes, theirs_at_start, their_motion, theirs["shapes"])
 		if met.is_empty():
 			continue
 		var fraction: float = met["fraction"]
@@ -611,19 +664,30 @@ func _undo_any_head_crossing(state: PhysicsDirectBodyState2D) -> void:
 func _first_circle_contact(
 		mine: Transform2D,
 		my_motion: Vector2,
+		my_locals: Array[Transform2D],
 		their_shapes: Array[CollisionShape2D],
 		theirs: Transform2D,
-		their_motion: Vector2) -> Dictionary:
+		their_motion: Vector2,
+		their_locals: Array[Transform2D]) -> Dictionary:
+	# Both callers gate on their snapshot matching their cluster, so a
+	# mismatched length here is a head whose weapon changed between the two
+	# checks. Sweeping it against stale offsets is worse than not sweeping it.
+	if my_locals.size() != sweep_shapes.size() \
+			or their_locals.size() != their_shapes.size():
+		return {}
 	var soonest: float = INF
 	var normal: Vector2 = Vector2.ZERO
-	for my_node: CollisionShape2D in sweep_shapes:
-		if my_node.shape == null:
+	for my_index: int in sweep_shapes.size():
+		var my_node: CollisionShape2D = sweep_shapes[my_index]
+		if my_node == null or my_node.shape == null:
 			continue
-		var my_at_start: Transform2D = mine * my_node.transform
-		for their_node: CollisionShape2D in their_shapes:
+		# The snapshot, not `my_node.transform`: see `_previous_shape_xforms`.
+		var my_at_start: Transform2D = mine * my_locals[my_index]
+		for their_index: int in their_shapes.size():
+			var their_node: CollisionShape2D = their_shapes[their_index]
 			if their_node == null or their_node.shape == null:
 				continue
-			var their_at_start: Transform2D = theirs * their_node.transform
+			var their_at_start: Transform2D = theirs * their_locals[their_index]
 			# These two were already touching when the step began: they
 			# crossed nothing, and their contact belongs to the solver.
 			if my_node.shape.collide(my_at_start, their_node.shape, their_at_start):

@@ -3389,6 +3389,9 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			var previous_along: float = previous_rel.dot(axis)
 			var touched: bool = closest <= 0.0
 			var went_through: bool = false
+			## Set when the along-axis ordering comes back after a crossing,
+			## which is the head-crossing correction having done its job.
+			var restored: bool = false
 			## Surface gap on the step a crossing happened. A crossing on its
 			## own is not a breach: two heads can cross the line they charged
 			## down while comfortably clear of each other, having simply
@@ -3449,6 +3452,15 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 					crossed_gap = minf(gap, _head_surface_gap(previous_a, previous_b))
 					crossed_from = previous_rel
 					crossed_to = relative
+				# `_undo_any_head_crossing` corrects a crossing on the step
+				# *after* the one that made it -- it works from the motion
+				# that actually happened, which it can only read once the
+				# step is over. So a head found on the far side is not yet a
+				# breach: it is either a breach or a crossing about to be
+				# undone, and the two are told apart by whether the ordering
+				# comes back.
+				if went_through and along > 0.0:
+					restored = true
 				if gap <= 0.0:
 					touched = true
 				previous_a = current_a
@@ -3472,6 +3484,10 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 				await _await_ticks(SETTLE_TICKS)
 				continue
 
+			if went_through and restored:
+				print("      %s %3.0f deg at %.0f px/s each: crossed, then the correction put it back" % [
+					label, degrees, speed])
+				went_through = false
 			if went_through and crossed_gap >= 0.0:
 				print("      %s %3.0f deg at %.0f px/s each: crossed %.1f px apart -- a miss, not a breach" % [
 					label, degrees, speed, crossed_gap])
