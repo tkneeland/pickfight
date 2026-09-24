@@ -1,0 +1,175 @@
+# Issue #38 reproduction on clean main @ 136061d (before any change), macOS 15.7.7, 4.6.2.stable.official.71f334935
+
+$ godot --headless --path . -s tools/scenario_runner.gd -- --scenario=roster_heads_do_not_tunnel_head
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      pickaxe   0 deg at 600 px/s each: heads closed to   -0.5 px of each other
+      pickaxe   0 deg at 1200 px/s each: crossed, then the correction put it back
+      pickaxe   0 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      pickaxe   0 deg at 1800 px/s each: heads closed to   -1.8 px of each other
+      pickaxe  45 deg at 600 px/s each: crossed 13.8 px apart -- a miss, not a breach
+      pickaxe  45 deg at 600 px/s each: heads closed to   13.8 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -1.4 px of each other
+      pickaxe  90 deg at 600 px/s each: heads closed to   -1.6 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -1.0 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.6 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -0.3 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -3.5 px of each other
+      staff   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff  45 deg at 600 px/s each: crossed 29.8 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   29.8 px of each other
+      staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 600 px/s each: crossed 14.4 px apart -- a miss, not a breach
+      staff  90 deg at 600 px/s each: heads closed to   14.4 px of each other
+      staff  90 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      sword   0 deg at 600 px/s each: crossed, then the correction put it back
+      sword   0 deg at 600 px/s each: heads closed to    0.2 px of each other
+      sword   0 deg at 1200 px/s each: crossed 21.6 px apart -- a miss, not a breach
+      sword   0 deg at 1200 px/s each: heads closed to    0.1 px of each other
+      sword   0 deg at 1800 px/s each: crossed 24.5 px apart -- a miss, not a breach
+      sword   0 deg at 1800 px/s each: heads closed to    4.8 px of each other
+      sword  45 deg at 600 px/s each: crossed, then the correction put it back
+      sword  45 deg at 600 px/s each: heads closed to    7.7 px of each other
+      sword  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword  45 deg at 1800 px/s each: heads closed to   -5.6 px of each other
+      sword  90 deg at 600 px/s each: crossed, then the correction put it back
+      sword  90 deg at 600 px/s each: heads closed to    6.5 px of each other
+      sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword  90 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      sword 135 deg at 600 px/s each: crossed, then the correction put it back
+      sword 135 deg at 600 px/s each: heads closed to    0.0 px of each other
+      sword 135 deg at 1200 px/s each: crossed, then the correction put it back
+      sword 135 deg at 1200 px/s each: heads closed to    1.0 px of each other
+      sword 135 deg at 1800 px/s each: heads closed to   -5.0 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -0.5 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -2.8 px of each other
+      axe   0 deg at 1800 px/s each: heads closed to   -0.6 px of each other
+      axe  45 deg at 600 px/s each: crossed 28.4 px apart -- a miss, not a breach
+      axe  45 deg at 600 px/s each: heads closed to   28.4 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -5.6 px of each other
+      axe  45 deg at 1800 px/s each: VOID, an elimination cut the charge short
+      axe  90 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -2.7 px of each other
+      axe  90 deg at 1800 px/s each: VOID, an elimination cut the charge short
+      axe 135 deg at 600 px/s each: crossed 26.6 px apart -- a miss, not a breach
+      axe 135 deg at 600 px/s each: heads closed to   26.6 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -2.4 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -1.1 px of each other
+      axe: 2 of 12 charges were void (elimination mid-charge); 10 measured
+      dagger   0 deg at 600 px/s each: crossed, then the correction put it back
+      dagger   0 deg at 600 px/s each: heads closed to    3.9 px of each other
+      dagger   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger   0 deg at 1800 px/s each: crossed 24.7 px apart -- a miss, not a breach
+      dagger   0 deg at 1800 px/s each: heads closed to    7.4 px of each other
+      dagger  45 deg at 600 px/s each: heads closed to   -0.6 px of each other
+      dagger  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger  45 deg at 1800 px/s each: heads closed to   -2.3 px of each other  THROUGH
+      dagger  90 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      dagger  90 deg at 600 px/s each: heads closed to   12.3 px of each other
+      dagger  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      dagger 135 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      dagger 135 deg at 600 px/s each: heads closed to   12.3 px of each other
+      dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger 135 deg at 1800 px/s each: heads closed to   -2.6 px of each other
+FAIL  roster_heads_do_not_tunnel_head
+      - dagger, 45 deg approach at 1800 px/s each: one step took the heads from (15.38701, 16.19299) apart to (-5.444643, -4.169434) apart -- through each other and out the far side -- without the two of them ever once being in contact
+      - dagger: 1 of 12 completed charges put a head through another head
+---
+0 passed, 1 failed, 1 total
+[exit 1]
+
+$ godot --headless --path . -s tools/scenario_runner.gd -- --scenario=roster_heads_do_not_tunnel_head_reversed
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      dagger   0 deg at 600 px/s each: crossed, then the correction put it back
+      dagger   0 deg at 600 px/s each: heads closed to    3.6 px of each other
+      dagger   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger   0 deg at 1800 px/s each: crossed 24.6 px apart -- a miss, not a breach
+      dagger   0 deg at 1800 px/s each: heads closed to    7.5 px of each other
+      dagger  45 deg at 600 px/s each: heads closed to   -0.6 px of each other
+      dagger  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger  45 deg at 1800 px/s each: heads closed to   -2.6 px of each other  THROUGH
+      dagger  90 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      dagger  90 deg at 600 px/s each: heads closed to   12.3 px of each other
+      dagger  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      dagger 135 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      dagger 135 deg at 600 px/s each: heads closed to   12.3 px of each other
+      dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger 135 deg at 1800 px/s each: heads closed to   -2.5 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -1.4 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      axe   0 deg at 1800 px/s each: VOID, an elimination cut the charge short
+      axe  45 deg at 600 px/s each: crossed 28.0 px apart -- a miss, not a breach
+      axe  45 deg at 600 px/s each: heads closed to   28.0 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -2.1 px of each other
+      axe  45 deg at 1800 px/s each: heads closed to   -8.4 px of each other
+      axe  90 deg at 600 px/s each: crossed 22.6 px apart -- a miss, not a breach
+      axe  90 deg at 600 px/s each: heads closed to   22.6 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -1.4 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -1.0 px of each other
+      axe 135 deg at 600 px/s each: crossed 26.8 px apart -- a miss, not a breach
+      axe 135 deg at 600 px/s each: heads closed to   26.8 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -2.8 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -4.7 px of each other
+      axe: 1 of 12 charges were void (elimination mid-charge); 11 measured
+      sword   0 deg at 600 px/s each: crossed, then the correction put it back
+      sword   0 deg at 600 px/s each: heads closed to    0.2 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword   0 deg at 1800 px/s each: heads closed to   -1.0 px of each other
+      sword  45 deg at 600 px/s each: crossed 19.0 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to   17.7 px of each other
+      sword  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword  45 deg at 1800 px/s each: heads closed to   -5.1 px of each other
+      sword  90 deg at 600 px/s each: crossed, then the correction put it back
+      sword  90 deg at 600 px/s each: heads closed to    3.0 px of each other
+      sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword  90 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      sword 135 deg at 600 px/s each: crossed, then the correction put it back
+      sword 135 deg at 600 px/s each: heads closed to    0.0 px of each other
+      sword 135 deg at 1200 px/s each: crossed, then the correction put it back
+      sword 135 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      sword 135 deg at 1800 px/s each: heads closed to   -6.3 px of each other
+      staff   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff  45 deg at 600 px/s each: crossed 29.8 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   29.8 px of each other
+      staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 600 px/s each: crossed 14.4 px apart -- a miss, not a breach
+      staff  90 deg at 600 px/s each: heads closed to   14.4 px of each other
+      staff  90 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      pickaxe   0 deg at 600 px/s each: heads closed to   -0.3 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -0.4 px of each other
+      pickaxe   0 deg at 1800 px/s each: heads closed to   -0.3 px of each other
+      pickaxe  45 deg at 600 px/s each: heads closed to   -2.0 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -1.5 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  90 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -7.7 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -5.3 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -1.0 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -2.1 px of each other
+FAIL  roster_heads_do_not_tunnel_head_reversed
+      - dagger, 45 deg approach at 1800 px/s each: one step took the heads from (15.88652, 16.07336) apart to (-5.120296, -4.461426) apart -- through each other and out the far side -- without the two of them ever once being in contact
+      - dagger: 1 of 12 completed charges put a head through another head
+---
+0 passed, 1 failed, 1 total
+godot --headless --path . -s tools/scenario_runner.gd --   5.48s user 7.50s system 16% cpu 1:16.69 total
+[exit 1]

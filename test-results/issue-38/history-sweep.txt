@@ -1,0 +1,36 @@
+# Issue #38 history sweep on fix/issue-38-tunnel-graze @ 80bd086, macOS 15.7.7, 4.6.2.stable.official.71f334935
+# Tool: be5ed60:test-results/issue-27/tunnel_loop.gd.txt, run as tools/_tunnel_loop.gd (untracked, not committed).
+# Each line: the 12-charge sweep for 'final' is the verdict, run after the 'pre' weapons' sweeps as history.
+final=pickaxe pre=[] -> LOOP GREEN 
+final=pickaxe pre=[staff,sword,axe] -> LOOP GREEN 
+final=pickaxe pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=pickaxe pre=[axe,sword] -> LOOP GREEN 
+final=pickaxe pre=[sword,dagger,pickaxe] -> LOOP GREEN 
+final=staff pre=[] -> LOOP GREEN 
+final=staff pre=[staff,sword,axe] -> LOOP GREEN 
+final=staff pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=staff pre=[axe,sword] -> LOOP GREEN 
+final=staff pre=[sword,dagger,pickaxe] -> LOOP GREEN 
+final=sword pre=[] -> LOOP GREEN 
+final=sword pre=[staff,sword,axe] -> LOOP GREEN 
+final=sword pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=sword pre=[axe,sword] -> LOOP GREEN 
+final=sword pre=[sword,dagger,pickaxe] -> LOOP GREEN 
+final=axe pre=[] -> LOOP GREEN 
+final=axe pre=[staff,sword,axe] -> LOOP GREEN 
+final=axe pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=axe pre=[axe,sword] -> LOOP GREEN 
+final=axe pre=[sword,dagger,pickaxe] -> LOOP GREEN 
+final=dagger pre=[] -> LOOP GREEN 
+final=dagger pre=[staff,sword,axe] -> LOOP GREEN 
+final=dagger pre=[pickaxe,staff,sword,axe] -> LOOP GREEN 
+final=dagger pre=[axe,sword] -> LOOP GREEN 
+final=dagger pre=[sword,dagger,pickaxe] -> LOOP GREEN 
+RED histories: 0 / 25
+
+# For contrast, the same tool on clean main @ 136061d before the fix (dagger as verdict):
+#   final=dagger pre=[]                               -> GREEN
+#   final=dagger pre=[staff,sword,axe]                -> RED (dagger 45 deg at 1800: through, (15.53185, 16.16882) -> (-5.343656, -4.236572))
+#   final=dagger pre=[pickaxe,staff,sword,axe]        -> GREEN
+#   final=dagger pre=[axe,sword]                      -> GREEN
+#   final=dagger pre=[axe,sword,staff,pickaxe]        -> GREEN
