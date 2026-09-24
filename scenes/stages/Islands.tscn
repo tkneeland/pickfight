@@ -1,7 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
 size = Vector2(180, 24)
@@ -15,6 +16,22 @@ size = Vector2(8000, 40)
 ; spacing alone: which island you are on, and whether you can reach the next
 ; one before someone swings at you over the gap. The most ring-out-prone stage
 ; in the rotation, and the shortest rounds.
+;
+; The third island is a ferry rather than an island (issue #18). This stage
+; was already the one about spacing -- which island you are on, and whether
+; you can reach the next before someone swings at you over the gap -- so
+; making one of the four move is not a new idea bolted on, it is this
+; stage's own idea with the answer changing while you decide. It patrols
+; horizontally and never leaves y=300, because the thing worth protecting
+; here is that nothing is higher than anything else; a platform that rose
+; and fell would quietly hand back the height advantage the stage exists
+; to withhold.
+;
+; The patrol is authored so the ferry docks at each end. At its near end
+; its left edge sits 10 px off IslandB's right edge; at its far end its
+; right edge meets IslandD's left edge exactly. So it is a crossing that
+; opens and closes rather than a moving obstacle: at either end there is a
+; step you can take, and in between there is not.
 
 [node name="Islands" type="Node2D"]
 script = ExtResource("1")
@@ -39,15 +56,16 @@ shape = SubResource("RectangleShape2D_island")
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
 
-[node name="IslandC" type="StaticBody2D" parent="."]
-position = Vector2(140, 300)
-
-[node name="IslandCShape" type="CollisionShape2D" parent="IslandC"]
-shape = SubResource("RectangleShape2D_island")
-
-[node name="IslandCVisual" type="Polygon2D" parent="IslandC"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
+; Was IslandC, a static platform at x=140. As a ferry it is authored at
+; x=50 and travels 190 px right, so its 180 px body spans -40..140 at the
+; near end (IslandB ends at -50) and 150..330 at the far end (IslandD begins
+; at 330). 2.5 s a leg is slow enough to be a thing you wait for rather than
+; a thing you react to.
+[node name="Ferry" parent="." instance=ExtResource("3")]
+position = Vector2(50, 300)
+size = Vector2(180, 24)
+travel = Vector2(190, 0)
+one_way_sec = 2.5
 
 [node name="IslandD" type="StaticBody2D" parent="."]
 position = Vector2(420, 300)

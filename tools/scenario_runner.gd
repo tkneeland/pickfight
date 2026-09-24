@@ -68,6 +68,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_responsiveness_matches_roster",
 	"heavy_weapon_wins_clash",
 	"every_stage_can_ring_out",
+	"hazard_zone_kills_at_full_health",
+	"moving_platform_carries_player",
+	"head_plants_moving_platform",
+	"crumbling_ledge_three_phases",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -474,6 +478,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_heavy_weapon_wins_clash()
 		"every_stage_can_ring_out":
 			return await _scenario_every_stage_can_ring_out()
+		"hazard_zone_kills_at_full_health":
+			return await _scenario_hazard_zone_kills_at_full_health()
+		"moving_platform_carries_player":
+			return await _scenario_moving_platform_carries_player()
+		"head_plants_moving_platform":
+			return await _scenario_head_plants_moving_platform()
+		"crumbling_ledge_three_phases":
+			return await _scenario_crumbling_ledge_three_phases()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3238,4 +3250,302 @@ func _scenario_every_stage_can_ring_out() -> Array[String]:
 
 		await _teardown(stage)
 
+	return failures
+
+# --- Stage parts (issue #18) -------------------------------------------------
+
+## Parked well clear of the Arena fixture other scenarios build, in clear air,
+## so a hazard instance dropped here is never touching any other geometry.
+const HAZARD_TEST_POSITION: Vector2 = Vector2(0, -800)
+## A hazard kill should be near-instant, not something waited for -- this is
+## generous next to the couple of physics ticks a body_entered contact and
+## the elimination it triggers actually take.
+const HAZARD_TICKS: int = 10
+
+## Issue #18 hazard zone, US-5/US-6: `scenes/parts/Hazard.tscn` reuses
+## KillZone.gd verbatim (see that script's docstring for why it is not a
+## second script), so this is deliberately the same assertion as
+## `ringout_kills_at_full_health` run against the other placement -- a
+## hazard sitting inside the playable area instead of beneath it. A player
+## at full health who touches it is eliminated by the touch alone, which is
+## the whole point of US-6: a player has to learn only one rule about stage
+## death, not a different one for each placement.
+func _scenario_hazard_zone_kills_at_full_health() -> Array[String]:
+	var failures: Array[String] = []
+	var hazard_scene: PackedScene = preload("res://scenes/parts/Hazard.tscn")
+	var stage: Node2D = _new_stage()
+	var hazard: Area2D = hazard_scene.instantiate()
+	stage.add_child(hazard)
+	hazard.global_position = HAZARD_TEST_POSITION
+
+	var player: RigidBody2D = _spawn_player(stage, HAZARD_TEST_POSITION)
+	await physics_frame
+
+	if player.damage > 0.0:
+		failures.append("the player started on %.1f damage, so this is not a full-health hazard test" % player.damage)
+
+	var killed: bool = false
+	for _i in HAZARD_TICKS:
+		await physics_frame
+		if player.deaths > 0:
+			killed = true
+			break
+
+	if not killed:
+		failures.append("sat in the hazard for %d ticks without dying" % HAZARD_TICKS)
+	else:
+		if player.deaths != 1:
+			failures.append("one hazard contact counted as %d deaths" % player.deaths)
+		if player.damage > 0.0:
+			failures.append("a hazard kill at full health left %.1f damage behind" % player.damage)
+		if player.alive:
+			failures.append("eliminated but still marked alive")
+
+	await _teardown(stage)
+	return failures
+
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md): the
+## global class cache lives in the gitignored `.godot/` and only an editor
+## run builds it, so a fresh clone cannot resolve the name.
+const MovingPlatformScene: PackedScene = preload("res://scenes/parts/MovingPlatform.tscn")
+
+## Slack allowed between a player's horizontal displacement and the
+## platform's over one patrol leg (moving_platform_carries_player). Loose
+## next to a full leg's few-hundred-pixel travel, but far tighter than the
+## gap a player left behind entirely would show.
+const MOVING_PLATFORM_CARRY_TOLERANCE: float = 20.0
+
+## US-2 / issue #18: a player resting on a moving platform is carried along
+## with it, rather than sliding out from under it. Asserting only that the
+## platform moved would pass even with the player left completely behind --
+## nothing else here makes the player move on its own -- so this measures
+## the player's own horizontal displacement across one full patrol leg and
+## compares it directly against the platform's displacement over the same
+## ticks.
+##
+## The platform is authored with `starts_moving = false` and only started
+## with `start()` once the player has already landed and settled on it.
+## Spawning a player onto a platform already mid-patrol would have it miss
+## the moving target on the way down -- a hazard of dropping a player from
+## above a moving target, not something this scenario is about.
+func _scenario_moving_platform_carries_player() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+
+	var platform: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	platform.starts_moving = false
+	# Positioned before add_child(): _ready() reads global_position once, at
+	# the moment the node enters the tree, to fix the patrol's near end.
+	# Setting it any later would fix the patrol to wherever the node
+	# happened to be instantiated (the origin) instead.
+	platform.position = Vector2(0, 300)
+	stage.add_child(platform)
+
+	# Short weapon, straight down, same setup as head_plants_terrain: land
+	# and plant on the platform's surface rather than drift toward its edge.
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on the stationary platform: vertical speed %.1f px/s" % player.linear_velocity.y)
+
+	platform.start()
+	await physics_frame
+	var player_x0: float = player.global_position.x
+	var platform_x0: float = platform.global_position.x
+
+	var leg_ticks: int = int(round(platform.one_way_sec * Engine.physics_ticks_per_second))
+	await _await_ticks(leg_ticks)
+
+	var player_dx: float = player.global_position.x - player_x0
+	var platform_dx: float = platform.global_position.x - platform_x0
+	print("      platform moved %.1f px, player moved %.1f px over one patrol leg" % [platform_dx, player_dx])
+	if absf(player_dx - platform_dx) > MOVING_PLATFORM_CARRY_TOLERANCE:
+		failures.append(
+			"player displacement %.1f px did not track platform displacement %.1f px over one patrol leg (tolerance %.1f px)" % [
+				player_dx, platform_dx, MOVING_PLATFORM_CARRY_TOLERANCE])
+
+	await _teardown(stage)
+	return failures
+
+## US-7 / issue #18: a weapon head plants on a moving platform exactly as it
+## does on static terrain -- `head_plants_terrain` is the prior art, and the
+## assertion shape below is copied from it unchanged. The platform is
+## genuinely translating throughout this scenario, not merely standing in
+## for the arena floor with a different node type: `travel` and
+## `one_way_sec` are tuned small enough that the platform's footprint stays
+## under the player for the whole test, since carrying a player across a
+## full patrol leg is already covered by moving_platform_carries_player.
+##
+## The platform's top surface is placed at GROUND_TOP, the same height
+## head_plants_terrain stands its player on, so every constant in the copied
+## assertions -- GROUND_TOP, PLAYER_RADIUS, HEAD_RADIUS, PLANT_CLEARANCE --
+## reads exactly as it does there.
+func _scenario_head_plants_moving_platform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+
+	var platform: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	platform.travel = Vector2(60, 0)
+	platform.one_way_sec = 3.0
+	platform.starts_moving = true
+	# Positioned before add_child(), for the same reason as in
+	# moving_platform_carries_player: _ready() fixes the patrol's near end
+	# to global_position at the moment the node enters the tree.
+	platform.position = Vector2(0, GROUND_TOP + platform.size.y / 2.0)
+	stage.add_child(platform)
+
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+
+	# Short weapon, straight down: land on the head.
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+
+	var planted_y: float = player.global_position.y
+	var head_y: float = player.weapon_head_position().y
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on its head: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if planted_y + PLAYER_RADIUS > GROUND_TOP - PLANT_CLEARANCE:
+		failures.append("player body reached the platform (y %.1f); it should be standing on the head, not on itself" % planted_y)
+	if head_y + HEAD_RADIUS > GROUND_TOP + PLANT_CLEARANCE:
+		failures.append("head sank %.1f px into the platform; it should be planted on top of it" % (
+			head_y + HEAD_RADIUS - GROUND_TOP))
+
+	# Full reach against the plant: push off.
+	player.set_input_vector(Vector2.DOWN)
+	var highest: float = planted_y
+	for _i in PUSH_TICKS:
+		await physics_frame
+		highest = minf(highest, player.global_position.y)
+
+	var risen: float = planted_y - highest
+	if risen < MIN_PUSH_RISE:
+		failures.append("pushing against the plant raised the body %.1f px, expected more than %.1f px" % [
+			risen, MIN_PUSH_RISE])
+
+	await _teardown(stage)
+	return failures
+
+# --- Crumbling ledge (issue #18) --------------------------------------------
+
+## Preloaded by path, not referenced by `class_name` -- see CLAUDE.md's
+## `class_name` rule.
+const CrumblingLedgeScene: PackedScene = preload("res://scenes/parts/CrumblingLedge.tscn")
+
+## Independent literals matching the resolved defaults (issue #18), not read
+## back off the instantiated ledge: reading them back would make this
+## scenario pass even if the shipped defaults drifted from what the issue
+## asked for.
+const LEDGE_WARN_SEC: float = 0.8
+const LEDGE_AWAY_SEC: float = 3.0
+## Spawn the player already 1 px into the detector band rather than dropped
+## from height: contact then happens on (about) the very first physics tick,
+## so "ticks since spawn" and "ticks since contact" are close enough that the
+## margins below cover the gap, without this scenario having to guess how
+## many ticks a longer fall would take to land and settle.
+const LEDGE_LANDING_OVERLAP: float = 1.0
+## Ticks given to let the small landing overlap above resolve into a settled
+## rest before phase 1 starts watching. Short next to LEDGE_WARN_SEC's tick
+## count so most of the warning delay is still ahead of it.
+const LEDGE_SETTLE_TICKS: int = 10
+## Ticks of slack subtracted from the phase 1 watch window and added after
+## the warning delay before phase 2 checks for a fall, on both sides of the
+## contact-vs-settle tick estimate above.
+const LEDGE_MARGIN_TICKS: int = 6
+## Ticks given, once past the warning delay, for the ledge to actually fall
+## away and gravity to carry the player clearly out of PLANT_CLEARANCE.
+const LEDGE_FALL_CONFIRM_TICKS: int = 16
+
+## US-3/US-4: a crumbling ledge holds a player through its full warning
+## delay, stops holding once it falls away, and holds again once its away
+## delay elapses. All three phases are asserted in one run on purpose --
+## checking only the fall would also pass a ledge that never comes back,
+## which is exactly the mistake this scenario exists to catch.
+##
+## The weapon is aimed straight up throughout and never touches the ledge:
+## this scenario is about the ledge holding a player's own body (the
+## `players`-group contact `CrumblingLedge` detects), not about the plant
+## mechanic `head_plants_terrain` already covers. US-7 (a weapon head
+## interacting with a crumbling ledge the same way it does with static
+## ground) needs no extra code or scenario of its own here -- the ledge's
+## `CollisionShape2D` sits on the same default world layer every terrain
+## `StaticBody2D` in this game already uses, so a head plants on it exactly
+## as it does on Flatlands' ground.
+func _scenario_crumbling_ledge_three_phases() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	var ledge_position: Vector2 = Vector2(0, -300)
+	var ledge_size: Vector2 = Vector2(200, 24)
+	var ledge: StaticBody2D = CrumblingLedgeScene.instantiate() as StaticBody2D
+	ledge.position = ledge_position
+	stage.add_child(ledge)
+
+	var ledge_top: float = ledge_position.y - ledge_size.y / 2.0
+	var spawn_pos: Vector2 = Vector2(ledge_position.x, ledge_top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+	var player: RigidBody2D = _spawn_player(stage, spawn_pos)
+	# Straight up: keeps the weapon head clear of the ledge for the whole
+	# scenario, so only the player's own body is ever in contact with it.
+	player.set_input_vector(Vector2.UP)
+
+	var ticks_per_second: float = float(Engine.physics_ticks_per_second)
+	var warn_ticks: int = int(round(LEDGE_WARN_SEC * ticks_per_second))
+	var away_ticks: int = int(round(LEDGE_AWAY_SEC * ticks_per_second))
+	var hold_check_ticks: int = warn_ticks - LEDGE_SETTLE_TICKS - LEDGE_MARGIN_TICKS
+
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+	var settled_y: float = player.global_position.y
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on the ledge: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if settled_y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+		failures.append("player settled at %.1f, expected resting on the ledge top at %.1f" % [
+			settled_y, ledge_top])
+
+	print("      phase 1: holding through the %.2fs warning delay" % LEDGE_WARN_SEC)
+	for tick in hold_check_ticks:
+		await physics_frame
+		if player.global_position.y > settled_y + PLANT_CLEARANCE:
+			failures.append(
+				"ledge stopped holding %d ticks into its %.2fs warning delay -- gave way too soon" % [
+					LEDGE_SETTLE_TICKS + tick, LEDGE_WARN_SEC])
+			break
+
+	print("      phase 2: falling away once the warning delay is over")
+	var fell: bool = false
+	for _i in LEDGE_FALL_CONFIRM_TICKS:
+		await physics_frame
+		if player.global_position.y > settled_y + PLANT_CLEARANCE:
+			fell = true
+	if not fell:
+		failures.append(
+			"ledge still held the player %d ticks after its %.2fs warning delay elapsed -- it never fell away" % [
+				LEDGE_FALL_CONFIRM_TICKS, LEDGE_WARN_SEC])
+
+	# Out of the fall cleanly rather than left to plunge toward the arena's
+	# own ground and kill zone for the rest of the away delay -- none of
+	# that belongs to this scenario, only the two edges either side of it.
+	player.leave_round()
+	var elapsed_since_contact: int = LEDGE_SETTLE_TICKS + hold_check_ticks + LEDGE_FALL_CONFIRM_TICKS
+	# The ledge is not back to SOLID until warn_ticks (SOLID -> WARNING ->
+	# AWAY) plus away_ticks (AWAY -> SOLID) have passed since contact, not
+	# away_ticks alone -- the AWAY state itself only starts at warn_ticks.
+	var remaining_away_ticks: int = warn_ticks + away_ticks - elapsed_since_contact + LEDGE_MARGIN_TICKS
+	await _await_ticks(remaining_away_ticks)
+
+	print("      phase 3: holding again after the %.2fs away delay" % LEDGE_AWAY_SEC)
+	player.start_round(spawn_pos)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+
+	var returned_y: float = player.global_position.y
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never re-settled on the returned ledge: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if returned_y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+		failures.append("ledge did not hold again after its away delay: player at %.1f, expected resting at %.1f" % [
+			returned_y, ledge_top])
+
+	await _teardown(stage)
 	return failures
