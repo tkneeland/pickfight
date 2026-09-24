@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
@@ -14,6 +14,7 @@
 [ext_resource type="PackedScene" path="res://scenes/stages/Erosion.tscn" id="13"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Furnace.tscn" id="14"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Cascade.tscn" id="15"]
+[ext_resource type="Script" path="res://scripts/HitFeedback.gd" id="16"]
 
 [node name="Main" type="Node2D"]
 
@@ -45,6 +46,11 @@ position = Vector2(100, 0)
 debug_source = 0
 identity_color = Color(1, 0.55, 0.1, 1)
 start_in_round = false
+
+; Hitmarkers and debug damage numbers (issue #33), drawn in world space
+; where each strike landed. Listens to every player's strike_landed.
+[node name="HitFeedback" type="Node2D" parent="."]
+script = ExtResource("16")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
