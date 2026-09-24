@@ -1872,6 +1872,8 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 	var dealt: float = 0.0
 	var registered: bool = false
 	var closest: float = INF
+	## Nearest any head circle's surface came to the victim's centre.
+	var surface: float = INF
 	var after_hit: int = 0
 
 	attacker.set_input_vector(Vector2.RIGHT.rotated(half_angle))
@@ -1881,6 +1883,7 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 		var speed: float = (head - previous_head).length() / _tick_seconds()
 		previous_head = head
 		closest = minf(closest, (head - victim.global_position).length())
+		surface = minf(surface, _head_circle_clearance(attacker, victim.global_position))
 		if not registered:
 			approach_speed = maxf(approach_speed, speed)
 			if victim.damage != before_damage or victim.deaths != before_deaths:
@@ -1894,11 +1897,14 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 
 	# The head may have arrived and done nothing, which is a different
 	# failure from never arriving -- so whether it got there is geometry,
-	# measured at its closest approach, not whether damage appeared.
+	# measured at its closest approach, not whether damage appeared. Off the
+	# head's own circles rather than its anchor plus HEAD_RADIUS: a swing
+	# strikes side-on, and since #45 the pickaxe's points sit 16 px out from
+	# the anchor, twice the round nub HEAD_RADIUS describes.
 	return {
 		"damage": dealt,
 		"speed": approach_speed,
-		"landed": closest <= PLAYER_RADIUS + HEAD_RADIUS + PLANT_CLEARANCE,
+		"landed": surface <= PLAYER_RADIUS + PLANT_CLEARANCE,
 		"closest": closest,
 	}
 
@@ -2019,7 +2025,15 @@ func _watch_heads_tick(left: RigidBody2D, right: RigidBody2D, watch: Dictionary)
 	var previous: Vector2 = watch["previous"]
 	watch["closest"] = minf(watch["closest"], relative.length())
 	watch["speed"] = maxf(watch["speed"], previous.length() - relative.length())
-	if relative.x <= 0.0:
+	# On the wrong side *and* overlapping past the pair correction's
+	# allowance, the #38 rule the roster sweep uses. The anchors' order alone
+	# is not a crossing any more: since #45 the pickaxe's head stands 32 px
+	# tall, and two of them that glance and end up stacked, one riding the
+	# other's point, sit with their anchors a few px the wrong way round and
+	# their surfaces merely touching (-0.1 to +0.3 px, measured) -- two heads
+	# in contact, not one through the other.
+	if relative.x <= 0.0 and _head_surface_gap(_head_circles_world(left), _head_circles_world(right)) \
+			< -WeaponHeadType.PAIR_OVERLAP_ALLOWANCE:
 		watch["crossings"] += 1
 	if _stepped_through(previous, relative):
 		watch["tunnels"] += 1
