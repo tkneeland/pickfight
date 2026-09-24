@@ -118,8 +118,11 @@ position = Vector2(-120, 100)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(120, 100)
 
+; Just below the ground (underside y=340) and the hazard columns (bottom
+; y=392), like every other stage. At y=700 a body thrown over a column fell
+; for about a second off-screen before the round ended (issue #29).
 [node name="KillZone" type="Area2D" parent="."]
-position = Vector2(0, 700)
+position = Vector2(0, 480)
 script = ExtResource("2")
 
 [node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]

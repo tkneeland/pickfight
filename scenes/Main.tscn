@@ -36,7 +36,7 @@ current = true
 ; ready, rather than either building a live rig at boot with nobody bound.
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
-debug_source = 1
+debug_source = 0
 identity_color = Color(0.15, 0.4, 1, 1)
 start_in_round = false
 

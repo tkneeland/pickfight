@@ -71,7 +71,25 @@ var _abandoned_since_msec: int = -1
 ## later takes the freed slot must not inherit the old winner's weapon.
 var _last_winner_slot: int = -1
 
+## Playtest stand-in for pickups (issue #29): with `-- --random-weapons` on the
+## host's command line, every player who did not win the last round starts
+## the next one holding a random weapon from this list rather than the
+## pickaxe, so the whole roster can be played before pickups (#14, ADR-0009)
+## exist. The winner still keeps what they held (ADR-0005). Off by default: a
+## normal launch plays exactly as designed.
+const PLAYTEST_WEAPON_PATHS: PackedStringArray = [
+	"res://resources/pickaxe.tres",
+	"res://resources/staff.tres",
+	"res://resources/sword.tres",
+	"res://resources/axe.tres",
+	"res://resources/dagger.tres",
+]
+var _random_weapons: bool = false
+
 func _ready() -> void:
+	_random_weapons = OS.get_cmdline_user_args().has("--random-weapons")
+	if _random_weapons:
+		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_scores.resize(_players.size())
@@ -136,7 +154,10 @@ func _try_start_round() -> void:
 			spawn = _stage_spawn_points[slot]
 		else:
 			push_warning("RoundManager: stage has %d spawn point(s), none for slot %d; spawning at the origin" % [_stage_spawn_points.size(), slot])
-		_players[slot].start_round(spawn, slot == _last_winner_slot)
+		var keeps_weapon: bool = slot == _last_winner_slot
+		_players[slot].start_round(spawn, keeps_weapon)
+		if _random_weapons and not keeps_weapon:
+			_players[slot].set_weapon_stats(load(PLAYTEST_WEAPON_PATHS[randi() % PLAYTEST_WEAPON_PATHS.size()]))
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1

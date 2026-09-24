@@ -14,10 +14,13 @@ Built with Godot 4.6.
 
 ## Status
 
-Early prototype. `scenes/Main.tscn` runs the endless round loop for two
-phone-controlled players, so the pole-swing movement and swing-based combat
-can be felt out before anything else (art, more stages, more weapons) gets
-built on top.
+Early prototype, ready for playtesting. `scenes/Main.tscn` runs the endless
+round loop for two phone-controlled players across 11 rotating stages, some
+built around moving platforms, crumbling ledges and hazard walls. Five
+weapons exist (pickaxe, staff, sword, axe, dagger), but pickups (#14) aren't
+built yet, so a normal launch only ever hands out the pickaxe. Use
+`--random-weapons` (below) to play the rest. Art is still flat placeholder
+shapes.
 
 ## How it plays
 
@@ -40,17 +43,47 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
 
 ## Running it
 
-1. **Start the host.** `godot --path .` from the repo root, or open the
-   project in the editor and press play. The host also starts a small HTTP
-   server on `:8080` and a WebSocket input server on `:8081`.
-2. **Read the join URL.** It is printed to the console and shown in the
-   top-left of the game window, e.g. `http://192.168.1.42:8080/`.
-3. **Open it on a phone** on the same network. Prefer a 5 GHz band or the
+1. **Start the host.** Open the project in the Godot 4.6 editor and press
+   play, or run it from the repo root. `godot` below stands for your Godot
+   binary: it's `Godot_v4.6.2-stable_win64.exe` on Windows (use the
+   `_console.exe` build to see the log) and
+   `Godot.app/Contents/MacOS/Godot` on macOS, unless you've put it on your
+   PATH as `godot`.
+
+   ```
+   godot --path .
+   ```
+
+   The host also starts a small HTTP server on `:8080` and a WebSocket input
+   server on `:8081`.
+2. **Let it through the firewall.** The first launch triggers Windows
+   Defender Firewall, or macOS's "accept incoming connections?" prompt if its
+   firewall is on. Allow it, and on Windows tick the network type you're
+   actually on. Wi-Fi is often set to *Public*, and allowing only *Private*
+   silently blocks every phone.
+3. **Read the join URL.** It's shown in the top-left of the game window,
+   e.g. `http://192.168.1.42:8080/`, and as a QR code at the top right if
+   [`qrencode`](https://fukuchi.org/works/qrencode/) is on your PATH. If you
+   type it in instead, every address is printed to the console; the one shown
+   on screen is the best guess for your Wi-Fi.
+4. **Open it on a phone** on the same network. Prefer a 5 GHz band or the
    host machine's own hotspot — congested 2.4 GHz is the biggest threat to
    input feel ([ADR-0002](docs/adr/0002-phone-browser-controllers.md)).
    The page shows `P1` or `P2` once it is bound to a player.
-4. **Drag anywhere on the phone screen to swing.** The drag is relative to
-   wherever your thumb lands, so you never need to look at the phone.
+5. **Drag anywhere on the phone screen to swing.** The drag is relative to
+   wherever your thumb lands, so you never need to look at the phone. One
+   finger drives: a second finger touching down is ignored until the first
+   lifts.
+
+### Playtesting every weapon
+
+Until pickups land, launch with `--random-weapons` and everyone except the
+last round's winner starts each round holding a random weapon from the
+roster. The winner still keeps what they had.
+
+```
+godot --path . -- --random-weapons
+```
 
 A new phone takes the first free player slot and enters play at the start of
 the next round. A phone that drops mid-round keeps its slot until that round
@@ -76,8 +109,9 @@ the host without a phone in hand:
 godot --headless --path . -s tools/ws_probe_client.gd -- --sequence=direction
 ```
 
-Sequences are `direction`, `reach` and `release`. Two probes run at once
-bind two separate players.
+Sequences are `direction`, `reach`, `release`, `hold` and `stall`. Two
+probes run at once bind two separate players, which is enough to start a
+round with no phones at all.
 
 ### Known limitation
 
@@ -104,10 +138,12 @@ resolved and no longer applies.
 ```
 scenes/      .tscn scene files (Main, Player; Arena is the scenario
              suite's physics fixture)
-scenes/stages/  the rotating stages, one .tscn each (ADR-0008)
+scenes/stages/  the 11 rotating stages, one .tscn each (ADR-0008)
+scenes/parts/   reusable stage parts: MovingPlatform, CrumblingLedge, Hazard
 scripts/     GDScript sources (Player, WeaponHead, WeaponStats,
-             ControllerServer, RoundManager, Stage, KillZone)
-resources/   weapon stat resources (pickaxe.tres)
+             ControllerServer, RoundManager, Stage, KillZone,
+             MovingPlatform, CrumblingLedge)
+resources/   weapon stat resources (pickaxe, staff, sword, axe, dagger)
 controller/  the single-file controller web page served to phones
 tools/       headless test fixtures (scenario_runner, ws_probe_client,
              capture_damage_screenshots)

@@ -92,12 +92,16 @@ const DEATH_DAMAGE: float = 100.0
 ## scales linearly from the floor to there and on past it. 2200 px/s is a
 ## committed full-reach sweep; the fastest the moveset produces in clear air
 ## is about 2700, and a head carried by a flying body can beat that, so the
-## scale is capped -- at MAX_STRIKE_SCALE the pickaxe deals 68, which keeps a
-## single strike from killing anyone outright from full health however fast
-## it arrives.
+## scale is capped -- at MAX_STRIKE_SCALE the pickaxe deals 68.
+##
+## The scale cap alone does not keep a single strike from killing from full
+## health once weapons differ: the axe's 55 would reach 110. MAX_STRIKE_DAMAGE
+## is the rule itself, applied to every weapon -- however fast a strike
+## arrives, it leaves a full-health victim standing.
 const MIN_STRIKE_SPEED: float = 700.0
 const FULL_STRIKE_SPEED: float = 2200.0
 const MAX_STRIKE_SCALE: float = 2.0
+const MAX_STRIKE_DAMAGE: float = 90.0
 
 ## Colour the body fill lerps toward as `damage` climbs to `DEATH_DAMAGE`.
 ## Identity does not live here any more (ADR-0005) -- see `identity_color` --
@@ -945,4 +949,5 @@ func _strike_damage(speed: float) -> float:
 	var over: float = speed - MIN_STRIKE_SPEED
 	if over <= 0.0:
 		return 0.0
-	return _stats.damage * minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
+	var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
+	return minf(_stats.damage * strike_scale, MAX_STRIKE_DAMAGE)

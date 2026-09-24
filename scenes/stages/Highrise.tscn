@@ -97,11 +97,15 @@ shape = SubResource("RectangleShape2D_summit")
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
+; Both spawns on the ground, level with each other. They used to sit at y=100,
+; which dropped Spawn0 onto Ledge1 (top y=268) and Spawn1 onto Ledge2 (top
+; y=148) -- P2 started every round a full rung up a stage the comment above
+; says goes to whoever climbs first (issue #29).
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-300, 100)
+position = Vector2(-300, 340)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(300, 100)
+position = Vector2(300, 340)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
