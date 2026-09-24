@@ -1,0 +1,48 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The dagger: a short leaf blade on a stub grip
+; (docs/art/weapons-whiteboard.jpg, bottom right). The head is the blade,
+; per issue #13's roster -- 12.4 x 4.1 px against a 48 x 48 px player body,
+; the drawing's proportion against its "Reference Player" box -- filled by
+; five circles tapering to the point (ADR-0010). They cover 80.3% of it,
+; each sized with a small clearance margin below its exact fit so that
+; independent rounding of the outline and the circles to two decimals
+; cannot push one outside: a blade this small is mostly edge, and an edge
+; is where a circle fits worst. What that costs is the part of the art
+; nothing collides with, never the other way round -- every circle is
+; inside the drawing. The owner asked for it slightly longer, so the blade
+; is a fifth longer than before (15 px -> 18 px before scale) at the same
+; width, with its tip taper blunted a touch to buy back the coverage the
+; clearance margin costs.
+;
+; Head-local space is the pickaxe's: +X outward along the haft, origin at the
+; groove anchor. Like the sword the blade lies across that anchor rather than
+; out in front of it, from -5.4 px behind to 7.0 px past, with the circles
+; stopping at 6 px forward, unchanged from before the lengthening -- the
+; second shortest forward extent on the roster, and inside the 4-12 px the
+; plant and clash scenarios are tuned around.
+;
+; Stats against the pickaxe's M/M/M baseline: the dagger is the close-range
+; brawler. Weight light -- mass 0.15 against 0.25, force ceiling 4000 against
+; 6000 -- so it loses every clash, and its drive is a half again quicker than
+; the pickaxe's (36 rad/s, 1200 px/s, 600 px/s return), which over its short
+; 70 px of travel makes it the quickest weapon on the roster to reach full
+; extension. Reach S, 90 px against 140, keeps it a brawler and makes
+; climbing hard with it. Damage stays M at 34: the dagger is not a weak
+; weapon, it is a weapon you have to be next to someone to use.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 90.0
+mass = 0.15
+drive_speed = 36.0
+extend_speed = 1200.0
+rest_return_speed = 600.0
+max_drive_force = 4000.0
+damage = 34.0
+head_circle_offsets = PackedVector2Array(-2.84, -0.07, -0.84, -0.07, 1.16, -0.07, 2.96, -0.07, 4.56, -0.07)
+head_circle_radii = PackedFloat32Array(1.92, 1.79, 1.66, 1.55, 1.44)
+art_outline = PackedVector2Array(-5.44, -1.14, -3.21, -2.07, 5.73, -1.49, 6.98, 0, 5.73, 1.49, -3.21, 2.07, -5.44, 1.14)

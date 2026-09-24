@@ -1,0 +1,46 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The axe: a broad crescent blade on a heavy haft
+; (docs/art/weapons-whiteboard.jpg, top right). Same shape of head as the
+; pickaxe's and far bigger -- 23.1 x 31.7 px against a 48 x 48 px player
+; body, the drawing's proportion against its "Reference Player" box -- filled
+; by seven circles, biggest at the belly and tapering toward the horns
+; (ADR-0010). They cover 88.7% of it. As with the pickaxe the circles do not
+; reach into the horn tips: nothing of a useful size fits where a crescent
+; tapers to a point, and the guarantee that matters is the one-directional
+; one -- every circle lies inside the art, so nobody is hit by something they
+; cannot see.
+;
+; Head-local space is the pickaxe's: +X outward along the haft, origin at the
+; groove anchor, so the belly bulges away from the player with the horns
+; curving back. The belly reaches 11 px past the anchor against the pickaxe's
+; 9, which is the most on the roster and still inside the 4-12 px the plant
+; and clash scenarios are tuned around. Across the haft it is nearly 32 px
+; tall, and that costs those scenarios nothing -- only the reach along the
+; haft is measured.
+;
+; Stats against the pickaxe's M/M/M baseline: the axe is power bought with
+; time. Weight heavy -- mass 0.45 against 0.25, force ceiling 9000 against
+; 6000 -- so it wins clashes against everything and flings its own body
+; hardest off a plant. Damage L, 55 against 34, so a clean full-speed hit is
+; the most devastating thing on the roster. The cost is responsiveness: the
+; drive is two thirds of the pickaxe's -- 16 rad/s against 24, 470 px/s
+; against 700, 240 px/s of return against 400 -- so it is the slowest weapon
+; on the roster to answer a thumb, and the slowest to reach full extension.
+; Reach stays M at 140 px, so weight and damage are the only things traded.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 140.0
+mass = 0.45
+drive_speed = 16.0
+extend_speed = 470.0
+rest_return_speed = 240.0
+max_drive_force = 9000.0
+damage = 55.0
+head_circle_offsets = PackedVector2Array(4.98, 1.14, 3.98, -5.06, 2.78, 7.14, 0.38, -9.66, -1.22, 10.94, -3.82, -12.06, -5.42, 12.14)
+head_circle_radii = PackedFloat32Array(6.02, 5.72, 5.43, 4.76, 4.36, 3.72, 2.87)
+art_outline = PackedVector2Array(-5.29, -15.86, -3.47, -15.82, -1.67, -15.56, 0.08, -15.1, 1.77, -14.45, 3.38, -13.61, 4.88, -12.58, 6.26, -11.4, 7.48, -10.06, 8.55, -8.59, 9.45, -7.01, 10.16, -5.34, 10.67, -3.6, 10.98, -1.81, 11.08, 0, 10.98, 1.81, 10.67, 3.6, 10.16, 5.34, 9.45, 7.01, 8.55, 8.59, 7.48, 10.06, 6.26, 11.4, 4.88, 12.58, 3.38, 13.61, 1.77, 14.45, 0.08, 15.1, -1.67, 15.56, -3.47, 15.82, -5.29, 15.86, -12.02, 10.69, -10.8, 10.66, -9.59, 10.49, -8.41, 10.18, -7.27, 9.74, -6.18, 9.17, -5.17, 8.48, -4.25, 7.68, -3.42, 6.78, -2.7, 5.79, -2.09, 4.73, -1.62, 3.6, -1.27, 2.43, -1.06, 1.22, -0.99, 0, -1.06, -1.22, -1.27, -2.43, -1.62, -3.6, -2.09, -4.73, -2.7, -5.79, -3.42, -6.78, -4.25, -7.68, -5.17, -8.48, -6.18, -9.17, -7.27, -9.74, -8.41, -10.18, -9.59, -10.49, -10.8, -10.66, -12.02, -10.69)

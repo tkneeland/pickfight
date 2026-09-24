@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
@@ -6,6 +6,10 @@
 [ext_resource type="PackedScene" path="res://scenes/stages/Flatlands.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Highrise.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Gauntlet.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Pillars.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Islands.tscn" id="9"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Slant.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Bowl.tscn" id="11"]
 
 [node name="Main" type="Node2D"]
 
@@ -120,7 +124,7 @@ qr_texture_path = NodePath("../UI/JoinQrCode")
 [node name="RoundManager" type="Node" parent="."]
 script = ExtResource("4")
 player_paths = [NodePath("../Player1"), NodePath("../Player2")]
-stage_scenes = [ExtResource("5"), ExtResource("6"), ExtResource("7")]
+stage_scenes = [ExtResource("5"), ExtResource("8"), ExtResource("6"), ExtResource("9"), ExtResource("7"), ExtResource("10"), ExtResource("11")]
 arena_container_path = NodePath("../Arena")
 controller_server_path = NodePath("../ControllerServer")
 score_label_path = NodePath("../UI/ScoreLabel")

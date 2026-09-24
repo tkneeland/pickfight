@@ -1,0 +1,47 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; One long ramp from a low pad on the left to a high landing on the right, with
+; open air off both outer edges. It is the only stage in the rotation that is
+; not left-right symmetric, so the two slots are not playing the same stage as
+; each other: the low player has the whole slope above them to swing up into,
+; and the high player has gravity on their side and a shorter fall to survive.
+;
+; Because the rotation swaps stage every round and spawn order follows slot
+; order, the same pair trades ends only when the rotation comes back around --
+; which is the point. The asymmetry is meant to be noticed and complained
+; about, not balanced away.
+;
+; The landmass is a single collision polygon rather than a stack of boxes: a
+; stepped approximation of a slope catches a swung head on every riser, and
+; the whole idea here is one clean surface to slide and swing along.
+
+[node name="Slant" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Landmass" type="StaticBody2D" parent="."]
+
+[node name="LandmassShape" type="CollisionPolygon2D" parent="Landmass"]
+polygon = PackedVector2Array(-560, 380, -360, 380, 300, 180, 560, 180, 560, 440, -560, 440)
+
+[node name="LandmassVisual" type="Polygon2D" parent="Landmass"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-560, 380, -360, 380, 300, 180, 560, 180, 560, 440, -560, 440)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-460, 300)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(430, 100)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 560)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")

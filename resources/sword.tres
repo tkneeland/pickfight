@@ -1,0 +1,47 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The sword: a long tapering blade on a short grip
+; (docs/art/weapons-whiteboard.jpg, bottom left). The head is the whole blade
+; and not the hilt, per issue #13's roster, so the outline traced here is the
+; blade alone -- 38.6 x 6.9 px against a 48 x 48 px player body, the drawing's
+; proportion against its "Reference Player" box -- filled by ten circles,
+; biggest at the shoulder and tapering to the point (ADR-0010). They cover
+; 84.0% of it, each sized with a small clearance margin below its exact fit
+; so that independent rounding of the outline and the circles to two
+; decimals cannot push one outside. The owner asked for a decent bit more
+; blade at the same width, so the blade is a third longer than the first
+; pass (40 px -> 56 px before scale) with its 5 px half-width unchanged.
+;
+; Head-local space is the pickaxe's: +X outward along the haft, origin at the
+; groove anchor. The blade lies mostly **behind** that anchor, from -24.3 px
+; back along the haft to +14.3 px past it, with the circles stopping at 9 px
+; forward, same as before the lengthening. That is what lets a longer blade
+; keep the proportion it is drawn at and still reach no further past the
+; anchor than the pickaxe's crescent does: the plant and clash scenarios
+; measure along the haft, and anything across it or behind it costs them
+; nothing. It is also why the blade reads as a big close-in hitting and
+; blocking area rather than as extra reach -- exactly the trade issue #13
+; asks of it.
+;
+; Stats against the pickaxe's M/M/M baseline: the sword is the pickaxe with
+; its reach traded for blade. Weight M and damage M are the baseline
+; unchanged (mass 0.25, force 6000, drive 24 rad/s / 700 px/s / 400 px/s,
+; damage 34). Reach S -- 90 px against 140 -- is the whole difference: the
+; big blade is balanced by the small swing lever, which is both less reach
+; and less head speed for the same slew.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 90.0
+mass = 0.25
+drive_speed = 24.0
+extend_speed = 700.0
+rest_return_speed = 400.0
+max_drive_force = 6000.0
+damage = 34.0
+head_circle_offsets = PackedVector2Array(-16.93, -0.05, -13.53, -0.05, -10.13, -0.05, -6.93, -0.05, -3.93, -0.05, -0.93, -0.05, -20.33, -0.05, 1.87, -0.05, 4.47, -0.05, 7.07, -0.05)
+head_circle_radii = PackedFloat32Array(3.33, 3.19, 3.05, 2.91, 2.79, 2.66, 2.62, 2.55, 2.44, 1.93)
+art_outline = PackedVector2Array(-24.33, -1.9, -17.38, -3.45, 5.81, -2.48, 14.31, 0, 5.81, 2.48, -17.38, 3.45, -24.33, 1.9)
