@@ -1,0 +1,5 @@
+ls: .godot: No such file or directory
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+Controller page: http://172.19.9.117:8080/
+exit: 0
