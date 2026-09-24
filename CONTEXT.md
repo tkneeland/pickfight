@@ -26,6 +26,9 @@ round is the exception: they keep whatever they were holding.
 | **Player** | One participant, represented in-game by a body and its weapon. Bound 1:1 to a controller. |
 | **Weapon** | The pole a player holds. It is their only appendage: their only means of movement, their only means of dealing damage, and their only means of blocking. Reach, weight and responsiveness differ per weapon, so a weapon changes how a player moves as much as how they fight. |
 | **Head** | The weapon's solid region — the part that strikes, blocks, and plants against geometry. Its shape and extent are per weapon: a pickaxe's is a nub at the tip, a sword's is most of the blade. |
+| **Weight** | How heavy a weapon is. Heavy weapons swing slower but win clashes and fling the body harder; light ones answer the input faster. The one stat that sets a weapon's feel. |
+| **Reach** | How far a weapon's head can extend from the body. Also the lever a swing has for movement: short reach makes climbing hard. |
+| **Pickup** | A weapon lying on the stage during a round. Touching it with the body swaps it for what the player holds; the old weapon is gone. The only way to get a weapon other than the pickaxe. |
 | **Haft** | The rest of the weapon. Collides with nothing. |
 | **Swing** | The movement verb: planting the head and using the weapon to fling, climb, or launch the body. |
 | **Input vector** | The 2D vector a controller sends, giving the weapon's target angle and extension. Relative — never an absolute screen position. |
@@ -54,8 +57,6 @@ interesting.
 
 ## Deliberately not decided
 
-- The weapon roster beyond the pickaxe. The direction is melee variants
-  distinguished by weight and responsiveness; the specific roster is open.
 - The full roster of stages beyond the three that exist (ADR-0008 settled the
   authoring format: one `.tscn` per stage under `scenes/stages/`).
 - Art direction.
