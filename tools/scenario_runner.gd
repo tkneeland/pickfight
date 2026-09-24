@@ -3300,6 +3300,10 @@ func _scenario_hazard_zone_kills_at_full_health() -> Array[String]:
 			failures.append("a hazard kill at full health left %.1f damage behind" % player.damage)
 		if player.alive:
 			failures.append("eliminated but still marked alive")
+
+	await _teardown(stage)
+	return failures
+
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md): the
 ## global class cache lives in the gitignored `.godot/` and only an editor
 ## run builds it, so a fresh clone cannot resolve the name.
@@ -3421,6 +3425,10 @@ func _scenario_head_plants_moving_platform() -> Array[String]:
 	if risen < MIN_PUSH_RISE:
 		failures.append("pushing against the plant raised the body %.1f px, expected more than %.1f px" % [
 			risen, MIN_PUSH_RISE])
+
+	await _teardown(stage)
+	return failures
+
 # --- Crumbling ledge (issue #18) --------------------------------------------
 
 ## Preloaded by path, not referenced by `class_name` -- see CLAUDE.md's
