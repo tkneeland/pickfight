@@ -3330,7 +3330,7 @@ func _heavy_won_failures(label: String, heavy_give: float, light_give: float, gr
 ## head overtakes a body in -- and on the roster's blades, which lie back
 ## across their anchor rather than out in front of it, the two are nothing
 ## like each other. Omnidirectional against true forward reach: pickaxe 12.32
-## vs 9.00, sword **22.95 vs 9.00**, axe **16.37 vs 11.00**, dagger 6.00 vs
+## vs 9.00, sword **22.95 vs 9.00**, axe **20.67 vs 11.00**, dagger 6.00 vs
 ## 6.00, staff 5.00 vs 5.00.
 ##
 ## Kept omnidirectional deliberately, because both callers are loose in the
@@ -3339,10 +3339,10 @@ func _heavy_won_failures(label: String, heavy_give: float, light_give: float, gr
 ## to rediscover it:
 ##
 ##   * `_roster_clash()`'s `"contact"`, which feeds `_clash_met_failures()`.
-##     The axe against the dagger is allowed 16.37 + 6.00 = 22.4 px between
-##     head anchors (30.4 px once CLASH_CONTACT_SLACK is added) when the two
+##     The axe against the dagger is allowed 20.67 + 6.00 = 26.7 px between
+##     head anchors (34.7 px once CLASH_CONTACT_SLACK is added) when the two
 ##     heads physically touch at 11.00 + 6.00 = 17.0 px. The "did the heads
-##     actually turn up?" guard is some 13 px looser than it reads. It only
+##     actually turn up?" guard is some 18 px looser than it reads. It only
 ##     ever passes a clash it should have failed -- never the reverse -- and
 ##     the clash's real assertions are about who gave way, which this does not
 ##     touch.
@@ -3421,8 +3421,9 @@ func _charge_strike(attacker: RigidBody2D, victim: RigidBody2D) -> Dictionary:
 			# (`Player._on_head_hit`). That would score the same swing
 			# differently for every weapon, which would be the rig deciding
 			# the answer rather than the weapon.
+			# Level with the leading circle, not the anchor: #16's one-sided axe bit hangs below its haft.
 			if gap > contact * 3.0:
-				victim.teleport_to(Vector2(victim.global_position.x, head.y))
+				victim.teleport_to(Vector2(victim.global_position.x, _leading_circle_world(attacker).y))
 		if victim.damage != before_damage or victim.deaths != before_deaths:
 			# The tick the damage shows up on is a tick the head has already
 			# been stopped part-way through, so the speed it arrived with is
@@ -6757,3 +6758,20 @@ func _scenario_axe_head_holds_side_near_vertical() -> Array[String]:
 
 	await _teardown(stage)
 	return failures
+
+## Where the circle that reaches furthest forward along the haft sits, in
+## world coordinates: the part of the head a straight charge arrives with.
+## On a symmetric head it is on the haft line; on the axe's one-sided bit it
+## is not, which is why `_charge_strike` levels the victim with this rather
+## than with the anchor (#16).
+func _leading_circle_world(player: RigidBody2D) -> Vector2:
+	var local: Array[Dictionary] = player.weapon_head_circles()
+	var world: Array[Dictionary] = _head_circles_world(player)
+	var best: float = -INF
+	var leading: Vector2 = player.weapon_head_position()
+	for i in mini(local.size(), world.size()):
+		var forward: float = Vector2(local[i]["offset"]).x + float(local[i]["radius"])
+		if forward > best:
+			best = forward
+			leading = world[i]["centre"]
+	return leading
