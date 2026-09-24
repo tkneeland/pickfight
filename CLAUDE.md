@@ -56,8 +56,13 @@ repository keeps its own base SHA, branch, verification result, and pull request
   and the script does not load. Worse, `godot --headless --quit` still exits 0
   in that state, so the boot check passes over a broken build. Consumers
   `preload()` the script by path instead — see `WeaponStatsType` /
-  `WeaponHeadType` in `scripts/Player.gd`. Check with `mv .godot .godot.bak`,
-  run, restore.
+  `WeaponHeadType` in `scripts/Player.gd`. Check it in a throwaway clone of
+  your committed branch, which never has a `.godot/`: Godot 4.6.2 headless
+  does not create one, only an editor run does. So never touch the editor's
+  own cache:
+  `rm -rf /tmp/pf-fresh && git clone -q . /tmp/pf-fresh && godot --headless --path /tmp/pf-fresh --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"`.
+  **Any output means the check failed**, whatever the exit code. The exit code
+  is 0 either way (#21).
 - Input scheme is **settled**: relative vector input from phone browsers, per [ADR-0003](docs/adr/0003-relative-vector-input.md). The former open question (gamepad-per-player vs keyboard-only) is void — it assumed a shared screen and shared input devices, and [ADR-0001](docs/adr/0001-same-room-host-rendered-multiplayer.md) removed both assumptions. Do not reopen it as though it were live.
 
 ## Atlas repository workflow
