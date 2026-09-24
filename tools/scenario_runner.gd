@@ -57,7 +57,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"heads_do_not_tunnel_head",
 	"damage_reddens_fill_identity_persists",
 	"identity_colours_match_controller_page",
-	"weapon_silhouette_matches_head_shape",
+	"weapon_head_circles_within_art",
 	"stage_rotates_each_round",
 	"stage_spawns_are_safe",
 	"waiting_expires_disconnected_claims",
@@ -100,6 +100,14 @@ const MIN_RELEASE_TICKS: int = 8
 ## things that rest on it.
 const GROUND_TOP: float = 300.0
 const PLAYER_RADIUS: float = 24.0
+## How far a head reaches past its anchor, which is what the plant and clash
+## checks below are measured against. A head is a cluster of circles fitted to
+## drawn art now (ADR-0010) rather than one round nub, so this is no longer
+## literally a radius: the pickaxe's crescent reaches 9 px along the haft and
+## further across it. It stays written down as the nub's 8 px because that is
+## the distance those checks were tuned at, and PLANT_CLEARANCE is the slack
+## they allow -- a weapon whose head reached far enough past this to matter
+## would be a different weapon, not the same one redrawn.
 const HEAD_RADIUS: float = 8.0
 ## Slack allowed when deciding what is resting on what.
 const PLANT_CLEARANCE: float = 4.0
@@ -313,10 +321,25 @@ const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Slack for comparing a colour parsed from a CSS hex triplet (8-bit channels)
 ## against one parsed from a Godot float literal -- a hair over 1/255.
 const SLOT_COLOR_TOLERANCE: float = 0.01
-## A rectangular head visibly different from a square in both dimensions, so
-## a hardcoded square could not pass this by accident.
-const RECT_HEAD_SIZE: Vector2 = Vector2(40.0, 12.0)
-const HEAD_SHAPE_TOLERANCE: float = 0.5
+## Every weapon resource the game ships, checked hitbox-against-art. One
+## entry today; the roster's other four weapons append here.
+const WEAPON_RESOURCE_PATHS: PackedStringArray = [
+	"res://resources/pickaxe.tres",
+]
+## How far a head circle may stick out of its weapon's drawn art and still
+## count as inside it: half a pixel.
+##
+## It is there for the two ways a hand-fitted head misses by less than anyone
+## can see -- the flat sides of a polygon cutting the corner of a curve it
+## traces, and coordinates written down to two decimals -- and it is far
+## under the smallest gap that reads as art and hitbox disagreeing. The
+## pickaxe's own worst-fitted circle clears its outline by 0.86 px, so the
+## shipped weapon passes this on its geometry and not on the tolerance.
+const ART_CONTAINMENT_TOLERANCE: float = 0.5
+## How far a head circle is shoved out of its art to check that the
+## containment check can actually fail. Well clear of the default head, so
+## the only way this passes is by the check not looking.
+const MISFIT_CIRCLE_OFFSET: float = 24.0
 
 ## Set by `_teardown()`, which every scenario ends with. A GDScript runtime
 ## error inside a scenario abandons it and still resumes the caller with an
@@ -420,8 +443,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_damage_reddens_fill_identity_persists()
 		"identity_colours_match_controller_page":
 			return await _scenario_identity_colours_match_controller_page()
-		"weapon_silhouette_matches_head_shape":
-			return await _scenario_weapon_silhouette_matches_head_shape()
+		"weapon_head_circles_within_art":
+			return await _scenario_weapon_head_circles_within_art()
 		"stage_rotates_each_round":
 			return await _scenario_stage_rotates_each_round()
 		"stage_spawns_are_safe":
@@ -1495,6 +1518,19 @@ func _scenario_heads_do_not_tunnel_head() -> Array[String]:
 			blocker.teleport_to(centre + half)
 			attacker.set_input_vector(axis)
 			blocker.set_input_vector(-axis)
+			# Each charge starts on a clean pair. A charge is a fixture for
+			# the sweep, not a fight: two bodies driven into each other at up
+			# to 1800 px/s each batter one another through the weapons
+			# trapped between them, and the damage that leaves behind used to
+			# carry into the next charge. Twelve charges of it eliminated a
+			# player partway down the sweep -- an eliminated player is frozen
+			# and its head leaves the collision layer -- and every remaining
+			# charge then measured two heads that could no longer meet,
+			# quietly voiding the rest of the sweep while it still reported
+			# no breach. Nothing here is about damage; this just stops one
+			# trial's wear deciding what the next one is allowed to test.
+			attacker.damage = 0.0
+			blocker.damage = 0.0
 			await _await_ticks(SETTLE_TICKS)
 
 			var deaths: int = attacker.deaths + blocker.deaths
@@ -1947,98 +1983,103 @@ func _parse_main_identity_colors() -> Array[Color]:
 			float(comps[3].strip_edges()) if comps.size() > 3 else 1.0))
 	return colors
 
-## D4 scope change: the drawn head derives from `WeaponStats.head_shape`
-## rather than a parallel "draw radius" number, for every shape the roster
-## understands (circle, rectangle, and the pickaxe's own convex-polygon
-## spike), and visibly refuses to guess for a shape it does not.
-func _scenario_weapon_silhouette_matches_head_shape() -> Array[String]:
+## ADR-0010: a weapon head is a cluster of circles fitted to the weapon's
+## drawn art, so what has to be true of every weapon is that **every head
+## circle lies inside the art outline**, within ART_CONTAINMENT_TOLERANCE.
+##
+## This replaces `weapon_silhouette_matches_head_shape`, which checked the
+## older and now impossible promise that the drawing *equals* the hitbox. The
+## promise that survived the change is the one a player can feel: nothing hits
+## them from outside what they can see. It does not run the other way -- a
+## crescent's horns taper past where any circle fits, and that is the
+## approximation ADR-0010 chose.
+##
+## Read off a built rig rather than out of the resource: the circles are the
+## ones `Player` gave the head body and the outline is the polygon it gave the
+## head's `Polygon2D`, both in head-local space, so this fails if the rig
+## stops honouring either. Checking the resource against itself would pass
+## whatever the rig did with it.
+func _scenario_weapon_head_circles_within_art() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
 	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
 	await _await_ticks(2)
 
-	# A synthetic circle stats object, not the default weapon stats: the
-	# pickaxe's own head is a ConvexPolygonShape2D now (below), so the circle
-	# case has to build its own the way the rectangle and capsule cases
-	# already do.
-	var circle_stats := WeaponStatsType.new()
-	var circle_shape := CircleShape2D.new()
-	circle_shape.radius = 8.0
-	circle_stats.head_shape = circle_shape
-	player.set_weapon_stats(circle_stats)
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stats: Resource = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		player.set_weapon_stats(stats)
+		await _await_ticks(2)
+		failures.append_array(_art_containment_failures(path.get_file(), player))
+
+	# The head a bare `WeaponStats.new()` carries, which is what every stub
+	# in this suite is built from: it has to be a real weapon, drawn as what
+	# it hits with, or the scenarios that swap one in are driving a head that
+	# could not exist in a fight.
+	player.set_weapon_stats(WeaponStatsType.new())
 	await _await_ticks(2)
+	failures.append_array(_art_containment_failures("the default head", player))
 
-	var polygon: PackedVector2Array = player.weapon_head_visual_polygon()
-	var max_reach_from_centre: float = 0.0
-	for p: Vector2 in polygon:
-		max_reach_from_centre = maxf(max_reach_from_centre, p.length())
-	# The pre-fix drawing was a square of half-width equal to the
-	# radius, whose corners reach radius * sqrt(2) from centre -- this
-	# check fails against that shape and only that shape passes here.
-	if absf(max_reach_from_centre - circle_shape.radius) > HEAD_SHAPE_TOLERANCE:
-		failures.append("circle head: drawn silhouette reaches %.2f px from centre, collision shape radius is %.2f px" % [
-			max_reach_from_centre, circle_shape.radius])
-	if player.weapon_head_visual_is_fallback():
-		failures.append("circle head: fell back, but CircleShape2D is understood directly")
-
-	var rect_stats := WeaponStatsType.new()
-	var rect_shape := RectangleShape2D.new()
-	rect_shape.size = RECT_HEAD_SIZE
-	rect_stats.head_shape = rect_shape
-	player.set_weapon_stats(rect_stats)
+	# And the check has to be able to fail, or a head built with no circles
+	# at all would sail through everything above. Same default art, one
+	# circle moved well outside it.
+	var misfit := WeaponStatsType.new()
+	misfit.head_circle_offsets = PackedVector2Array([Vector2(MISFIT_CIRCLE_OFFSET, 0.0)])
+	misfit.head_circle_radii = PackedFloat32Array([WeaponStatsType.DEFAULT_HEAD_RADIUS])
+	player.set_weapon_stats(misfit)
 	await _await_ticks(2)
-
-	var rect_polygon: PackedVector2Array = player.weapon_head_visual_polygon()
-	if rect_polygon.is_empty():
-		failures.append("rectangle head: no silhouette was drawn")
-	else:
-		var min_pt: Vector2 = rect_polygon[0]
-		var max_pt: Vector2 = rect_polygon[0]
-		for p: Vector2 in rect_polygon:
-			min_pt.x = minf(min_pt.x, p.x)
-			min_pt.y = minf(min_pt.y, p.y)
-			max_pt.x = maxf(max_pt.x, p.x)
-			max_pt.y = maxf(max_pt.y, p.y)
-		var drawn_size: Vector2 = max_pt - min_pt
-		if (drawn_size - RECT_HEAD_SIZE).length() > HEAD_SHAPE_TOLERANCE:
-			failures.append("rectangle head: drawn silhouette is %s, collision shape size is %s" % [
-				drawn_size, RECT_HEAD_SIZE])
-	if player.weapon_head_visual_is_fallback():
-		failures.append("rectangle head: fell back, but RectangleShape2D is understood directly")
-
-	var capsule_stats := WeaponStatsType.new()
-	var capsule_shape := CapsuleShape2D.new()
-	capsule_shape.radius = 6.0
-	capsule_shape.height = 24.0
-	capsule_stats.head_shape = capsule_shape
-	player.set_weapon_stats(capsule_stats)
-	await _await_ticks(2)
-
-	if not player.weapon_head_visual_is_fallback():
-		failures.append("capsule head: expected the bounding-box fallback, got a shape-specific silhouette")
-	if _color_close(player.weapon_head_color(), player.identity_outline_color(), COLOR_MATCH_TOLERANCE):
-		failures.append("capsule head: fallback silhouette is drawn in the identity colour, so it does not read as a fallback")
-
-	# Not the shipped pickaxe (which still uses a CircleShape2D -- see the
-	# comment in resources/pickaxe.tres for why a polygon head was tried and
-	# reverted there): a synthetic shape, exactly like the rectangle and
-	# capsule cases, to check the drawing path on its own.
-	var polygon_stats := WeaponStatsType.new()
-	var polygon_shape := ConvexPolygonShape2D.new()
-	polygon_shape.points = PackedVector2Array([Vector2(8, 0), Vector2(0, -8), Vector2(-8, 0), Vector2(0, 8)])
-	polygon_stats.head_shape = polygon_shape
-	player.set_weapon_stats(polygon_stats)
-	await _await_ticks(2)
-
-	var drawn_polygon: PackedVector2Array = player.weapon_head_visual_polygon()
-	if drawn_polygon != polygon_shape.points:
-		failures.append("polygon head: drawn silhouette %s does not match collision shape points %s" % [
-			drawn_polygon, polygon_shape.points])
-	if player.weapon_head_visual_is_fallback():
-		failures.append("polygon head: fell back, but ConvexPolygonShape2D is understood directly")
+	if _art_containment_failures("misfitted head", player).is_empty():
+		failures.append("a head circle moved %.1f px clear of its art passed the containment check" % MISFIT_CIRCLE_OFFSET)
 
 	await _teardown(stage)
 	return failures
+
+## Every way the head a player is currently holding fails ADR-0010's
+## guarantee: no art of its own, no art worth the name, nothing to hit with,
+## or a circle reaching outside what is drawn.
+func _art_containment_failures(label: String, player: RigidBody2D) -> Array[String]:
+	var failures: Array[String] = []
+	var outline: PackedVector2Array = player.weapon_head_visual_polygon()
+	var circles: Array[Dictionary] = player.weapon_head_circles()
+	if player.weapon_head_visual_is_fallback():
+		failures.append("%s: drawn as the fallback box, so it carries no art for its circles to sit inside" % label)
+	if outline.size() < 3:
+		failures.append("%s: the drawn art has %d points, which is not a polygon" % [label, outline.size()])
+		return failures
+	if circles.is_empty():
+		failures.append("%s: the head was built with no collision circles, so it hits nothing" % label)
+	var worst: float = -INF
+	for circle: Dictionary in circles:
+		var centre: Vector2 = circle["offset"]
+		var radius: float = circle["radius"]
+		var outside: float = _circle_outside_polygon(centre, radius, outline)
+		worst = maxf(worst, outside)
+		if outside > ART_CONTAINMENT_TOLERANCE:
+			failures.append("%s: a head circle (centre %.2f,%.2f radius %.2f) reaches %.2f px outside the drawn art" % [
+				label, centre.x, centre.y, radius, outside])
+	if not circles.is_empty():
+		print("      %s: %d circles against %d points of art, worst fit %+.2f px outside it (negative is inside, clear)" % [
+			label, circles.size(), outline.size(), worst])
+	return failures
+
+## How far a circle reaches outside a polygon, in pixels: negative -- how much
+## room it has to spare -- when it is inside with clearance.
+##
+## The polygon is the drawn art and is not necessarily convex (a crescent is
+## not), so this is distance to the nearest edge rather than anything that
+## assumes a side to be on, with the centre's own containment deciding the
+## sign.
+func _circle_outside_polygon(centre: Vector2, radius: float, polygon: PackedVector2Array) -> float:
+	var nearest_edge: float = INF
+	for i in polygon.size():
+		var a: Vector2 = polygon[i]
+		var b: Vector2 = polygon[(i + 1) % polygon.size()]
+		nearest_edge = minf(nearest_edge, centre.distance_to(Geometry2D.get_closest_point_to_segment(centre, a, b)))
+	if not Geometry2D.is_point_in_polygon(centre, polygon):
+		return nearest_edge + radius
+	return radius - nearest_edge
 
 # --- Stage rotation (ADR-0008) -----------------------------------------------
 

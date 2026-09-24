@@ -1,19 +1,35 @@
-[gd_resource type="Resource" script_class="WeaponStats" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
-; A ConvexPolygonShape2D pickaxe head (a wedge with a real point, instead of
-; a circular nub) was tried here and reverted: several combat scenarios
-; tuned around the circle's uniform radius -- head-on interpenetration and
-; the head-vs-head tunnelling sweep in particular -- started failing against
-; an asymmetric or pointed shape, and fixing that honestly means reworking
-; WeaponHead.gd's shape-dependent correction math, not just swapping a
-; resource. Player._build_head_visual() and _update_weapon_visual() already
-; support a ConvexPolygonShape2D head correctly (see the polygon case in
-; tools/scenario_runner.gd's weapon_silhouette_matches_head_shape), so a
-; future weapon can use one once that physics work is done deliberately.
-[sub_resource type="CircleShape2D" id="CircleShape2D_head"]
-radius = 8.0
+; The pickaxe's head is the crescent it is drawn as (docs/art/weapons-whiteboard.jpg,
+; top middle), filled with a cluster of circles -- five of them, biggest at the
+; belly and tapering toward the horns (ADR-0010). Head-local space has +X
+; pointing outward along the haft from the anchor the haft holds the head by,
+; so the crescent bulges away from the player with its horns curving back and
+; its concave face meeting the haft tip, as in the drawing. It is 19 x 28 px
+; against a 48 x 48 px player body, which is the drawing's proportion against
+; its "Reference Player" box.
+;
+; A single ConvexPolygonShape2D head -- one wedge with a real point -- was
+; tried here earlier and reverted, because the combat scenarios were tuned
+; around one uniform radius and WeaponHead.gd's correction maths assumed it.
+; That maths is now written per circle, so a drawn head no longer needs a
+; polygon to collide as: the circles follow the art and each one is still the
+; round shape the sweep and the pair correction were measured on. Collision
+; stays circles only, per ADR-0010.
+;
+; The circles do not reach into the horn tips: nothing of a useful size fits
+; where a crescent tapers to a point. The guarantee is one-directional -- every
+; circle lies inside the art (tools/scenario_runner.gd's
+; weapon_head_circles_within_art) -- so a player is never hit by something they
+; cannot see, which is the half of it that matters.
+;
+; The belly reaches 9 px past the anchor, against the 8 px the round nub
+; reached. That is deliberate: the plant and clash scenarios measure where a
+; head comes to rest against terrain, against a player and against another
+; head, and a head that reached much further would be a different weapon
+; rather than the same one redrawn.
 
 [resource]
 script = ExtResource("1")
@@ -25,4 +41,6 @@ extend_speed = 700.0
 rest_return_speed = 400.0
 max_drive_force = 6000.0
 damage = 34.0
-head_shape = SubResource("CircleShape2D_head")
+head_circle_offsets = PackedVector2Array(3, 0, 1.91, 4.62, 1.91, -4.62, -0.85, 8.65, -0.85, -8.65)
+head_circle_radii = PackedFloat32Array(6, 5.5, 5.5, 3.7, 3.7)
+art_outline = PackedVector2Array(-9.44, -12.9, -6.14, -13.84, -2.7, -13.94, 0.66, -13.2, 3.74, -11.67, 6.35, -9.43, 8.34, -6.62, 9.58, -3.41, 10, 0, 9.58, 3.41, 8.34, 6.62, 6.35, 9.43, 3.74, 11.67, 0.66, 13.2, -2.7, 13.94, -6.14, 13.84, -9.44, 12.9, -7.14, 10.15, -5.42, 7, -4.36, 3.57, -4, 0, -4.36, -3.57, -5.42, -7, -7.14, -10.15)
