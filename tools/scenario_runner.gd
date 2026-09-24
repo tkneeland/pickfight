@@ -113,6 +113,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"zero_damage_strike_buzzes_no_one",
 	"elimination_buzzes_eliminated_player",
 	"buzz_reaches_only_its_phone",
+	"axe_head_mirrors_with_aim",
+	"symmetric_head_ignores_aim_side",
+	"axe_head_holds_side_near_vertical",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -622,6 +625,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_elimination_buzzes_eliminated_player()
 		"buzz_reaches_only_its_phone":
 			return await _scenario_buzz_reaches_only_its_phone()
+		"axe_head_mirrors_with_aim":
+			return await _scenario_axe_head_mirrors_with_aim()
+		"symmetric_head_ignores_aim_side":
+			return await _scenario_symmetric_head_ignores_aim_side()
+		"axe_head_holds_side_near_vertical":
+			return await _scenario_axe_head_holds_side_near_vertical()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -6540,5 +6549,211 @@ func _scenario_buzz_reaches_only_its_phone() -> Array[String]:
 		await process_frame
 		for peer: WebSocketPeer in joined:
 			peer.poll()
+	await _teardown(stage)
+	return failures
+
+# --- A one-sided head that follows the aim (#16) -----------------------------
+#
+# The axe is drawn with a single bit, and mirrors it across the haft when the
+# player's aim crosses the vertical, so the bit is on the same side of the
+# screen whichever way the player faces. Every other head is symmetric and
+# must not care. All three scenarios read the head back through the same pair
+# of accessors `weapon_head_circles_within_art` does -- the circles and the
+# drawn outline, both in head-local space -- so a mirror applied to one and not
+# the other shows up here as a containment failure on one side only.
+
+## How far an offset may sit from where the authored head, or its mirror
+## image, puts it. The rig turns each circle out and back by the same facing,
+## so this is float round-off, not geometry.
+const HEAD_SIDE_TOLERANCE: float = 0.01
+## Aim directions either side of the vertical, well clear of it: 45 degrees
+## off straight up and straight down, on the right and on the left.
+const AIM_RIGHT_ANGLES: Array[float] = [-PI * 0.25, 0.0, PI * 0.25]
+const AIM_LEFT_ANGLES: Array[float] = [-PI * 0.75, PI, PI * 0.75]
+## Half the swing a thumb makes when it is trying to hold a weapon straight up
+## and cannot quite: four degrees each way across the vertical. Written down
+## here rather than read out of Player, and deliberately inside the ten
+## degrees Player's own deadband is set to, so this is a thumb wobbling
+## rather than a thumb changing sides.
+const VERTICAL_JITTER: float = PI / 45.0
+## How long each wobble is held, and how many there are. Long enough that a
+## flip-per-crossing head would flip dozens of times over the run.
+const VERTICAL_JITTER_HOLD_TICKS: int = 3
+const VERTICAL_JITTER_CYCLES: int = 20
+## Far enough past the vertical that it is a decision to aim the other way,
+## not a wobble: twenty-five degrees.
+const VERTICAL_CROSSING: float = PI * 25.0 / 180.0
+
+## Which side of the haft the head a player is holding is on, read back off
+## the live rig: +1 as authored, -1 mirrored across the haft (every offset's
+## Y negated), 0 for neither -- which is a failure in its own right, because
+## the head is then somewhere the weapon was never drawn.
+func _head_side(player: RigidBody2D, stats: WeaponStatsType) -> int:
+	var circles: Array[Dictionary] = player.weapon_head_circles()
+	if circles.size() != stats.head_circle_count():
+		return 0
+	var authored: bool = true
+	var mirrored: bool = true
+	for i in circles.size():
+		var offset: Vector2 = circles[i]["offset"]
+		var expected: Vector2 = stats.head_circle_offsets[i]
+		authored = authored and offset.distance_to(expected) <= HEAD_SIDE_TOLERANCE
+		mirrored = mirrored and offset.distance_to(Vector2(expected.x, -expected.y)) <= HEAD_SIDE_TOLERANCE
+	if authored and not mirrored:
+		return 1
+	if mirrored and not authored:
+		return -1
+	# A head that is its own mirror image cannot say which side it is on; a
+	# symmetric weapon's is, so call that the authored side.
+	return 1 if authored else 0
+
+## Whether the drawn outline is the authored one, or the authored one mirrored
+## across the haft, point for point.
+func _outline_matches(outline: PackedVector2Array, authored: PackedVector2Array, mirrored: bool) -> bool:
+	if outline.size() != authored.size():
+		return false
+	for i in outline.size():
+		var expected: Vector2 = authored[i]
+		if mirrored:
+			expected.y = -expected.y
+		if outline[i].distance_to(expected) > HEAD_SIDE_TOLERANCE:
+			return false
+	return true
+
+func _aim(player: RigidBody2D, angle: float) -> void:
+	player.set_input_vector(Vector2.from_angle(angle) * 0.5)
+
+## User stories 2, 3 and 5: aimed right the axe's bit is as authored, aimed
+## left it is mirrored across the haft -- and on both sides the circles are
+## inside the art as drawn *on that side*, which is the containment check
+## `weapon_head_circles_within_art` makes, now made in both orientations.
+## Also that the flip is the one that keeps the bit on the same side of the
+## screen: aimed straight out either way, the bit hangs below the haft.
+func _scenario_axe_head_mirrors_with_aim() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var axe: WeaponStatsType = load(AXE_PATH)
+	player.set_weapon_stats(axe)
+	await _await_ticks(2)
+
+	if not axe.flips_with_aim:
+		failures.append("the axe does not opt in to flipping with the aim")
+
+	for pass_angles: Array in [AIM_RIGHT_ANGLES, AIM_LEFT_ANGLES, AIM_RIGHT_ANGLES]:
+		var mirrored: bool = pass_angles == AIM_LEFT_ANGLES
+		for angle: float in pass_angles:
+			_aim(player, angle)
+			await _await_ticks(SETTLE_TICKS)
+			var label: String = "the axe aimed at %.0f deg" % rad_to_deg(angle)
+			var side: int = _head_side(player, axe)
+			if side != (-1 if mirrored else 1):
+				failures.append("%s: head circles are %s, expected %s" % [
+					label, ["on neither side", "as authored", "mirrored"][[0, 1, -1].find(side)],
+					"mirrored" if mirrored else "as authored"])
+			if not _outline_matches(player.weapon_head_visual_polygon(), axe.art_outline, mirrored):
+				failures.append("%s: the drawn outline is not the authored bit%s" % [
+					label, " mirrored across the haft" if mirrored else ""])
+			failures.append_array(_art_containment_failures(label, player))
+
+	# Straight out to either side, the bit is below the haft on screen. The
+	# circles' world positions are what a strike is made of, so this is the
+	# side the blade actually hits on.
+	for angle: float in [0.0, PI]:
+		_aim(player, angle)
+		await _await_ticks(SETTLE_TICKS)
+		var anchor: Vector2 = player.weapon_head_position()
+		var below: float = 0.0
+		for circle: Dictionary in _head_circles_world(player):
+			var centre: Vector2 = circle["centre"]
+			below += (centre.y - anchor.y) * float(circle["radius"])
+		if below <= 0.0:
+			failures.append("aimed at %.0f deg, the axe's bit is above the haft; it should hang below it on both sides" % rad_to_deg(angle))
+
+	await _teardown(stage)
+	return failures
+
+## User story 6: mirroring is the axe's alone. The same sweep across the
+## vertical leaves every symmetric head exactly as authored -- circles and
+## drawn outline -- on both sides.
+func _scenario_symmetric_head_ignores_aim_side() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		if path == AXE_PATH:
+			continue
+		var stats: WeaponStatsType = load(path)
+		if stats.flips_with_aim:
+			failures.append("%s: opts in to flipping with the aim, and only the axe should" % path.get_file())
+		player.set_weapon_stats(stats)
+		await _await_ticks(2)
+		for angle: float in AIM_RIGHT_ANGLES + AIM_LEFT_ANGLES:
+			_aim(player, angle)
+			await _await_ticks(SETTLE_TICKS)
+			var label: String = "%s aimed at %.0f deg" % [path.get_file(), rad_to_deg(angle)]
+			var offsets_as_authored: bool = true
+			var circles: Array[Dictionary] = player.weapon_head_circles()
+			if circles.size() != stats.head_circle_count():
+				offsets_as_authored = false
+			else:
+				for i in circles.size():
+					var offset: Vector2 = circles[i]["offset"]
+					offsets_as_authored = offsets_as_authored and offset.distance_to(stats.head_circle_offsets[i]) <= HEAD_SIDE_TOLERANCE
+			if not offsets_as_authored:
+				failures.append("%s: head circles moved off their authored offsets" % label)
+			if not _outline_matches(player.weapon_head_visual_polygon(), stats.art_outline, false):
+				failures.append("%s: the drawn outline is no longer the authored one" % label)
+
+	await _teardown(stage)
+	return failures
+
+## User story 4: a thumb held on the vertical wobbles across it, and the head
+## must not follow every wobble. Held near straight up and then near straight
+## down, jittering a few degrees either side, the axe keeps the side it had;
+## aimed decisively past the vertical, it flips once and at once.
+func _scenario_axe_head_holds_side_near_vertical() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var axe: WeaponStatsType = load(AXE_PATH)
+	player.set_weapon_stats(axe)
+	await _await_ticks(2)
+
+	# Straight up is -PI/2 and straight down +PI/2. At each, come in from the
+	# right (as authored), wobble, cross decisively to the left (mirrored),
+	# wobble, and cross back.
+	for vertical: float in [-PI * 0.5, PI * 0.5]:
+		var toward_left: float = -1.0 if vertical < 0.0 else 1.0
+		var name_of: String = "straight up" if vertical < 0.0 else "straight down"
+		_aim(player, 0.0)
+		await _await_ticks(SETTLE_TICKS)
+		for expected_side: int in [1, -1, 1]:
+			var flips: int = 0
+			var side: int = _head_side(player, axe)
+			for cycle in VERTICAL_JITTER_CYCLES:
+				for wobble: float in [VERTICAL_JITTER, -VERTICAL_JITTER]:
+					_aim(player, vertical + wobble)
+					for tick in VERTICAL_JITTER_HOLD_TICKS:
+						await physics_frame
+						var now: int = _head_side(player, axe)
+						if now != side:
+							flips += 1
+							side = now
+			if flips != 0:
+				failures.append("held %s with the head %s, a %.0f deg wobble flipped it %d times" % [
+					name_of, "as authored" if expected_side == 1 else "mirrored", rad_to_deg(VERTICAL_JITTER), flips])
+			if side != expected_side:
+				failures.append("held %s, the head ended the wobble on the wrong side" % name_of)
+			# Now decide: past the vertical onto the other side. A head that
+			# came in from the right crosses toward the left, and back.
+			var crossing: float = VERTICAL_CROSSING * (toward_left if expected_side == 1 else -toward_left)
+			_aim(player, vertical + crossing)
+			await _await_ticks(2)
+			if _head_side(player, axe) != -expected_side:
+				failures.append("aimed %.0f deg past %s, the head did not flip within two ticks" % [
+					rad_to_deg(VERTICAL_CROSSING), name_of])
+
 	await _teardown(stage)
 	return failures
