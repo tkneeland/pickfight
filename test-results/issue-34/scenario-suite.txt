@@ -302,7 +302,7 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2559)
+       [0] _await_condition (res://tools/scenario_runner.gd:2574)
 PASS  rising_kill_zone_resets_each_round
 Controller page: http://172.19.9.117:18480/
 PASS  four_phones_claim_four_slots
@@ -310,5 +310,16 @@ PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
 PASS  stage_four_spawns_settle_together
 PASS  pickup_cap_scales_with_roster
+      buzzes: [[0, "eliminated"], [2, "eliminated"], [1, "win"]]
+PASS  round_win_buzzes_only_winner
+      victim on 24.9 damage, buzzes: [[0, "struck"], [2, "hit"]]
+PASS  damaging_strike_buzzes_victim_and_attacker
+      strikes reported: [0.0], buzzes: []
+PASS  zero_damage_strike_buzzes_no_one
+      5 strike(s) to eliminate slot 2, buzzes: [[2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "eliminated"], [2, "struck"], [0, "hit"], [0, "win"]]
+PASS  elimination_buzzes_eliminated_player
+Controller page: http://172.19.9.117:18480/
+      phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
+PASS  buzz_reaches_only_its_phone
 ---
-69 passed, 1 failed, 70 total
+74 passed, 1 failed, 75 total
