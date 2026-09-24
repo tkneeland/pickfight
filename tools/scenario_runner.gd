@@ -304,11 +304,13 @@ const MIN_SHOVE_DISTANCE: float = 40.0
 const BUMP_TICKS: int = 60
 
 ## Clash: two players this far apart, each commanding full reach at the other.
-## 220 px leaves each head 60 px short of where it is being told to go, so
-## both drives stay pushing for the whole measurement instead of arriving.
+## Each head is left 60 px short of where it is being told to go, so both
+## drives stay pushing for the whole measurement instead of arriving. Derived
+## from MAX_REACH (220 px at the old 140 px reach) so a reach retune keeps the
+## same overlap (#45).
 ## CLASH_TICKS is then long enough that holding is a state and not a moment
 ## passed through: two seconds of contact under full push.
-const CLASH_SEPARATION: float = 220.0
+const CLASH_SEPARATION: float = 2.0 * MAX_REACH - 60.0
 const CLASH_TICKS: int = 120
 ## Ticks over which the two heads are walked into each other when a clash
 ## needs to be established rather than tested. Ramping the commanded reach
