@@ -1,34 +1,21 @@
-# Proof of work -- issue #33, hitmarkers and debug damage numbers
+# Proof of work -- issue #20, shuffled stage rotation with a fixed opener
 
 Cleared and recaptured per the evidence policy in `docs/agents/testing.md`:
-this root holds only the latest work package's evidence. #27's evidence is in
-history at `be5ed60:test-results/issue-27/`.
+this root holds only the latest work package's evidence. #33's evidence is in
+history at `136061d:test-results/issue-33/`.
 
-Branch `feat/issue-33-hitmarkers`, Windows, local Godot 4.6.2.
+Branch `feat/issue-20-shuffled-rotation`, macOS, local Godot 4.6.2.
 
-| Criterion (issue #33) | Proven by | Evidence | Verdict |
+| Criterion (issue #20 decision) | Proven by | Evidence | Verdict |
 | --- | --- | --- | --- |
-| A damaging strike draws a hitmarker at the contact point in the attacker's colour, and its number reads the damage dealt | `strike_shows_hitmarker_and_number` (a real swing) | `issue-33/scenario-suite.txt` | PASS |
-| A lethal strike's marker is the red, bigger variant, and only that one | `lethal_strike_marker_is_distinct` | `issue-33/scenario-suite.txt` | PASS |
-| A too-slow swing (300 to 700 px/s) shows a `0` and no marker; a slower graze shows nothing | `slow_contact_shows_zero_not_marker` | `issue-33/scenario-suite.txt` | PASS |
-| With numbers off, markers still show and no numbers appear | `damage_numbers_switch_off` | `issue-33/scenario-suite.txt` | PASS |
-| Repeated `0`s within the cooldown draw once; damage is never rate-limited | `zero_numbers_rate_limited` | `issue-33/scenario-suite.txt` | PASS |
-| Works in the real game | windowed smoke run of `Main.tscn` with two WebSocket phones: natural `0`s during play, then a clean, too-slow and lethal strike, each screenshotted | `issue-33/smoke.txt`, `issue-33/*.png` | PASS |
-| Nothing else regressed | full suite, 57 scenarios | `issue-33/scenario-suite.txt` | PASS |
-| Boots on a fresh clone | `godot --headless --path . --quit`, no `.godot` present | `issue-33/boot-check.txt` | PASS |
+| Every session opens on `stage_scenes[0]` (Flatlands), under any seed | `stage_rotation_opener_is_first_stage` (5 seeds), `stage_rotates_each_round` | `issue-20/scenario-suite.txt` | PASS |
+| Shuffled bags: every stage exactly once per bag | `stage_rotates_each_round` (3 bags) | `issue-20/scenario-suite.txt` | PASS |
+| No stage twice in a row, across bag boundaries and out of the opener; 1-stage repeats, 2-stage alternates | `stage_rotation_never_repeats_back_to_back` | `issue-20/scenario-suite.txt` | PASS |
+| Seedable for tests: same seed gives the same order, a different seed gives a different one | `stage_rotation_seeded_is_deterministic` | `issue-20/scenario-suite.txt` | PASS |
+| Nothing else regressed | full suite: 59 of 60 | `issue-20/scenario-suite.txt` | PASS, except the known failure below |
+| Boots on a fresh clone | `git clone` of the branch, `godot --headless --path <clone> --quit`, grep for `SCRIPT ERROR` / `Failed to load script` | `issue-20/boot-check.txt` | PASS |
 
-## Notes
+## Known failure, not from this work
 
-- The signal is named `strike_landed`, not the `struck` in the issue. A
-  local variable in `_score_swept_strike` is already called `struck`, and
-  renaming it would edit a file shared with #16 more than needed.
-- The switch is `const SHOW_DAMAGE_NUMBERS` in `scripts/HitFeedback.gd`, as
-  agreed. An instance variable starts from it, so a scenario can prove the
-  off state without editing the file.
-- Four scenarios drive `Player._land_strike` directly at a chosen head speed.
-  That is the one function both hit paths go through, and physics cannot
-  reliably produce a swing in the 300 to 700 px/s band. The real-swing
-  scenario and the smoke run cover the physics end.
-- Strikes on consecutive frames stack their numbers on top of each other
-  (see `3-lethal.png`, where the smoke script fired two in a row). This is
-  rare in real play; spreading them out is left for later if it shows up.
+`roster_heads_do_not_tunnel_head_reversed` fails deterministically on macOS on
+clean `main` too (dagger 1/12). Tracked in #38.

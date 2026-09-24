@@ -94,6 +94,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"slow_contact_shows_zero_not_marker",
 	"damage_numbers_switch_off",
 	"zero_numbers_rate_limited",
+	"stage_rotation_seeded_is_deterministic",
+	"stage_rotation_opener_is_first_stage",
+	"stage_rotation_never_repeats_back_to_back",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -567,6 +570,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_damage_numbers_switch_off()
 		"zero_numbers_rate_limited":
 			return await _scenario_zero_numbers_rate_limited()
+		"stage_rotation_seeded_is_deterministic":
+			return await _scenario_stage_rotation_seeded_is_deterministic()
+		"stage_rotation_opener_is_first_stage":
+			return await _scenario_stage_rotation_opener_is_first_stage()
+		"stage_rotation_never_repeats_back_to_back":
+			return await _scenario_stage_rotation_never_repeats_back_to_back()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2236,6 +2245,12 @@ class _FakeRoster extends Node:
 func _make_stub_stage(stage_name: String, spawns: Array[Vector2]) -> PackedScene:
 	var root := Node2D.new()
 	root.name = stage_name
+	# Also stamped as metadata, not just the node name: `add_child()` silently
+	# uniquifies a name that collides with a same-named sibling still pending
+	# `queue_free()` (ADR-0011's back-to-back repeat, e.g. a 1-stage roster),
+	# so a scenario identifying the active stage needs a label `add_child()`
+	# never rewrites.
+	root.set_meta("stub_stage_name", stage_name)
 	root.set_script(StageType)
 	for i in spawns.size():
 		var marker := Marker2D.new()
@@ -2248,12 +2263,17 @@ func _make_stub_stage(stage_name: String, spawns: Array[Vector2]) -> PackedScene
 	root.queue_free()
 	return packed
 
-## Issue #8: the active stage advances by one every round and wraps back to
-## the first after the last. Drives a real RoundManager (script preloaded by
-## path, no class_name) through several rounds against three in-memory stub
-## stages -- no ground is needed, since only the active stage's identity is
-## asserted here, not spawn safety (see stage_spawns_are_safe for that) --
-## and the private _FakeRoster above standing in for ControllerServer.
+## Issue #20 (ADR-0011): round 1 is always the opener (`stage_names[0]`), no
+## stage plays twice in a row -- not round to round, and not across a bag
+## boundary either -- and each bag of `stage_names.size()` post-opener rounds
+## plays every stage exactly once. Drives a real RoundManager (script
+## preloaded by path, no class_name) through enough rounds to cross three bag
+## boundaries, against three in-memory stub stages -- no ground is needed,
+## since only the active stage's identity is asserted here, not spawn safety
+## (see stage_spawns_are_safe for that) -- and the private _FakeRoster above
+## standing in for ControllerServer. Left unseeded (`rotation_seed` at its
+## randomized default): every assertion here is a property of the algorithm,
+## true for any seed, so this scenario also acts as a smoke test across runs.
 func _scenario_stage_rotates_each_round() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = Node2D.new()
@@ -2300,9 +2320,11 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 	round_manager.round_end_pause_sec = 0.0
 	stage.add_child(round_manager)
 
-	# Enough rounds to wrap the 3-stage roster around twice, so "wraps back
-	# to the first stage" is actually exercised rather than merely "advances".
-	var rounds: int = stage_names.size() * 2 + 1
+	# 3 full post-opener bags: enough to cross three bag boundaries (the
+	# opener-to-bag-1 seam plus two bag-to-bag seams).
+	var rounds: int = stage_names.size() * 3 + 1
+	var previous_name: String = ""
+	var post_opener_names: Array[String] = []
 	for round_index in rounds:
 		var active_name: String = ""
 		for _i in 120:
@@ -2313,9 +2335,14 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 		if active_name.is_empty():
 			failures.append("round %d: never saw a live round with a stage instanced" % round_index)
 			break
-		var expected: String = stage_names[round_index % stage_names.size()]
-		if active_name != expected:
-			failures.append("round %d: active stage was %s, expected %s" % [round_index, active_name, expected])
+		if round_index == 0:
+			if active_name != stage_names[0]:
+				failures.append("round 0 (the opener): active stage was %s, expected %s" % [active_name, stage_names[0]])
+		else:
+			post_opener_names.append(active_name)
+		if not previous_name.is_empty() and active_name == previous_name:
+			failures.append("round %d: active stage %s repeated the previous round's stage" % [round_index, active_name])
+		previous_name = active_name
 
 		# End this round (alternating who is eliminated, so scoring exercises
 		# both slots) so the next one gets a chance to start.
@@ -2324,6 +2351,16 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 		else:
 			p2.eliminate()
 		await _await_ticks(4)
+
+	var bag_size: int = stage_names.size()
+	var bag_count: int = post_opener_names.size() / bag_size
+	for bag_index in bag_count:
+		var bag_slice: Array[String] = post_opener_names.slice(bag_index * bag_size, (bag_index + 1) * bag_size)
+		var seen: Dictionary = {}
+		for name: String in bag_slice:
+			seen[name] = true
+		if seen.size() != bag_size:
+			failures.append("bag %d (%s): did not play each stage exactly once" % [bag_index, bag_slice])
 
 	await _teardown(stage)
 	return failures
@@ -5351,4 +5388,162 @@ func _scenario_zero_numbers_rate_limited() -> Array[String]:
 		failures.append("a damaging strike right after a '0' drew no number")
 
 	await _teardown(stage)
+	return failures
+
+# --- Stage rotation determinism (issue #20, ADR-0011) ------------------------
+
+## Drives a real RoundManager (script preloaded by path, no class_name)
+## through `rounds` rounds against `stage_names`' worth of in-memory stub
+## stages, seeded with `seed_value` (`rotation_seed`, -1 leaves it
+## randomized), and returns the active stage name seen each round in order.
+## Shared by the ADR-0011 rotation scenarios below, so each one only states
+## what it is asserting rather than repeating this setup. No ground is
+## needed: only the active stage's identity is asserted here, never spawn
+## safety (see stage_spawns_are_safe for that).
+func _collect_stage_rotation(stage_names: PackedStringArray, seed_value: int, rounds: int) -> Dictionary:
+	var failures: Array[String] = []
+	var names: Array[String] = []
+	var stage: Node2D = Node2D.new()
+	get_root().add_child(stage)
+
+	# Named explicitly and referenced via literal relative NodePaths below,
+	# rather than each node's own get_path() -- see
+	# _scenario_stage_rotates_each_round for why.
+	var container := Node2D.new()
+	container.name = "Container"
+	stage.add_child(container)
+
+	var stub_scenes: Array[PackedScene] = []
+	for stage_name: String in stage_names:
+		stub_scenes.append(_make_stub_stage(stage_name, [Vector2.ZERO, Vector2(50, 0)]))
+
+	var p1: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	p1.name = "P1"
+	stage.add_child(p1)
+	p1.global_position = DEEP_PARK_POSITION
+	p1.bind_controller()
+	var p2: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	p2.name = "P2"
+	stage.add_child(p2)
+	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)
+	p2.bind_controller()
+
+	var roster := _FakeRoster.new()
+	roster.name = "Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+
+	var paths: Array[NodePath] = [NodePath("../P1"), NodePath("../P2")]
+	var round_manager := Node.new()
+	round_manager.set_script(RoundManagerType)
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = stub_scenes
+	round_manager.arena_container_path = NodePath("../Container")
+	round_manager.controller_server_path = NodePath("../Roster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.rotation_seed = seed_value
+	stage.add_child(round_manager)
+
+	for round_index in rounds:
+		var active_name: String = ""
+		for _i in 120:
+			await physics_frame
+			if p1.alive and p2.alive and container.get_child_count() > 0:
+				var active_stage: Node = container.get_child(container.get_child_count() - 1)
+				# The stub's `stub_stage_name` metadata, not its node name --
+				# see _make_stub_stage for why a repeat back-to-back (a
+				# 1-stage roster) makes the node name unreliable here.
+				active_name = active_stage.get_meta("stub_stage_name")
+				break
+		if active_name.is_empty():
+			failures.append("round %d: never saw a live round with a stage instanced" % round_index)
+			break
+		names.append(active_name)
+
+		# End this round (alternating who is eliminated, so scoring exercises
+		# both slots) so the next one gets a chance to start.
+		if round_index % 2 == 0:
+			p1.eliminate()
+		else:
+			p2.eliminate()
+		await _await_ticks(4)
+
+	await _teardown(stage)
+	return {"names": names, "failures": failures}
+
+## ADR-0011: the same seed fed to two separate RoundManagers produces the
+## same sequence of stages, and a different seed produces a different one --
+## the determinism seam scenarios need to assert exact bag order elsewhere.
+func _scenario_stage_rotation_seeded_is_deterministic() -> Array[String]:
+	var failures: Array[String] = []
+	var stage_names: PackedStringArray = ["Stub0", "Stub1", "Stub2", "Stub3", "Stub4"]
+	var rounds: int = stage_names.size() * 3 + 1
+
+	var run_a: Dictionary = await _collect_stage_rotation(stage_names, 1, rounds)
+	var run_b: Dictionary = await _collect_stage_rotation(stage_names, 1, rounds)
+	var run_c: Dictionary = await _collect_stage_rotation(stage_names, 2, rounds)
+	failures.append_array(run_a["failures"])
+	failures.append_array(run_b["failures"])
+	failures.append_array(run_c["failures"])
+	if not failures.is_empty():
+		return failures
+
+	if run_a["names"] != run_b["names"]:
+		failures.append("seed 1 run twice produced different sequences: %s vs %s" % [run_a["names"], run_b["names"]])
+	if run_a["names"] == run_c["names"]:
+		failures.append("seed 1 and seed 2 produced the same sequence: %s" % [run_a["names"]])
+	return failures
+
+## ADR-0011: round 1 is always the opener (`stage_scenes[0]`), regardless of
+## seed -- checked across several seeds rather than one, since the opener
+## rule is a special case ahead of the seeded shuffle, not a product of it.
+func _scenario_stage_rotation_opener_is_first_stage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage_names: PackedStringArray = ["Stub0", "Stub1", "Stub2"]
+	var seeds: PackedInt32Array = [1, 2, 3, 4, 5]
+	for seed_value in seeds:
+		var run: Dictionary = await _collect_stage_rotation(stage_names, seed_value, 1)
+		failures.append_array(run["failures"])
+		var names: Array[String] = run["names"]
+		if names.size() > 0 and names[0] != stage_names[0]:
+			failures.append("seed %d: round 1 was %s, expected the opener %s" % [seed_value, names[0], stage_names[0]])
+	return failures
+
+## ADR-0011: no stage ever plays twice in a row -- exercised over 6 bags (well
+## past the "at least two bag boundaries" of stage_rotates_each_round) on a
+## 3-stage roster -- plus both edge cases the algorithm cannot avoid a repeat
+## in: a 1-stage roster repeats the same stage every round, and a 2-stage
+## roster strictly alternates.
+func _scenario_stage_rotation_never_repeats_back_to_back() -> Array[String]:
+	var failures: Array[String] = []
+
+	var stage_names: PackedStringArray = ["Stub0", "Stub1", "Stub2"]
+	var rounds: int = stage_names.size() * 6 + 1
+	var run: Dictionary = await _collect_stage_rotation(stage_names, 42, rounds)
+	failures.append_array(run["failures"])
+	var names: Array[String] = run["names"]
+	for i in range(1, names.size()):
+		if names[i] == names[i - 1]:
+			failures.append("round %d repeated round %d's stage %s" % [i, i - 1, names[i]])
+
+	# Edge case: a 1-stage roster has no way to avoid a repeat, so it just
+	# repeats the same stage every round (ADR-0011) rather than crashing.
+	var one_stage_names: PackedStringArray = ["OnlyStub"]
+	var one_run: Dictionary = await _collect_stage_rotation(one_stage_names, 7, 5)
+	failures.append_array(one_run["failures"])
+	for name: String in one_run["names"]:
+		if name != one_stage_names[0]:
+			failures.append("1-stage roster played %s, expected the only stage %s every round" % [name, one_stage_names[0]])
+
+	# Edge case: a 2-stage roster has exactly one no-repeat order, so it
+	# strictly alternates.
+	var two_stage_names: PackedStringArray = ["StubA", "StubB"]
+	var two_run: Dictionary = await _collect_stage_rotation(two_stage_names, 9, 7)
+	failures.append_array(two_run["failures"])
+	var two_names: Array[String] = two_run["names"]
+	for i in range(1, two_names.size()):
+		if two_names[i] == two_names[i - 1]:
+			failures.append("2-stage roster round %d repeated round %d's stage %s" % [i, i - 1, two_names[i]])
+
 	return failures
