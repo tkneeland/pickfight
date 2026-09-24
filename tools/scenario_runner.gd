@@ -2295,6 +2295,7 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Bowl.tscn",
 	"res://scenes/stages/Furnace.tscn",
 	"res://scenes/stages/Erosion.tscn",
+	"res://scenes/stages/Ferry.tscn",
 ]
 
 func _scenario_stage_spawns_are_safe() -> Array[String]:
