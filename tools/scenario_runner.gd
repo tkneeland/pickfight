@@ -134,7 +134,7 @@ const SETTLE_TICKS: int = 30
 ## The pickaxe's full reach, as an independently written-down number rather
 ## than one read back out of the weapon the player is holding: a test that
 ## asked the weapon what its reach was would pass whatever the weapon did.
-const MAX_REACH: float = 140.0
+const MAX_REACH: float = 150.0
 ## Clear air: high enough above the arena that a full-reach weapon in any
 ## direction touches nothing.
 const PARK_POSITION: Vector2 = Vector2(0, -600)
