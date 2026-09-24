@@ -127,3 +127,11 @@ script = ExtResource("2")
 
 [node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
 shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). Centre of the floor and floating high in the middle, between the hazard walls.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 264)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(0, 100)
+

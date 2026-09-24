@@ -14,9 +14,19 @@ extends Node2D
 ## adding the stage to the tree; outside the tree each marker's local
 ## position is the best answer there is.
 func get_spawn_points() -> Array[Vector2]:
+	return _marker_points("Spawn")
+
+## Where pickups may appear (issue #14, ADR-0009): `Marker2D` children named
+## `PickupSpawn0`, `PickupSpawn1`, ..., collected the same way as player
+## spawns. A stage may declare none; `RoundManager` then falls back to a point
+## above the stage's centre, so a stage author is never forced to add them.
+func get_pickup_spawn_points() -> Array[Vector2]:
+	return _marker_points("PickupSpawn")
+
+func _marker_points(prefix: String) -> Array[Vector2]:
 	var markers: Array[Marker2D] = []
 	for child in get_children():
-		if child is Marker2D and child.name.begins_with("Spawn"):
+		if child is Marker2D and child.name.begins_with(prefix):
 			markers.append(child)
 	markers.sort_custom(func(a: Marker2D, b: Marker2D) -> bool:
 		return String(a.name).naturalnocasecmp_to(String(b.name)) < 0)

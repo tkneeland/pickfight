@@ -17,9 +17,8 @@ Built with Godot 4.6.
 Early prototype, ready for playtesting. `scenes/Main.tscn` runs the endless
 round loop for two phone-controlled players across 11 rotating stages, some
 built around moving platforms, crumbling ledges and hazard walls. Five
-weapons exist (pickaxe, staff, sword, axe, dagger), but pickups (#14) aren't
-built yet, so a normal launch only ever hands out the pickaxe. Use
-`--random-weapons` (below) to play the rest. Art is still flat placeholder
+weapons exist (pickaxe, staff, sword, axe, dagger); everything but the
+pickaxe is found as a pickup on the stage. Art is still flat placeholder
 shapes.
 
 ## How it plays
@@ -30,7 +29,10 @@ until everyone stops playing. No health bars — you die by taking enough
 damage, or by being knocked into a hazard or off the stage.
 
 Everyone starts a round with a pickaxe, except whoever won the last one:
-they keep what they were holding.
+they keep what they were holding. Other weapons lie on the stage as
+**pickups**: one is there when the round starts, another arrives every 10
+seconds (two at most), and walking into one with your body swaps your weapon
+for it. Your weapon's head can't grab them, so you have to get there.
 
 ## Controls
 
@@ -75,11 +77,12 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
    finger drives: a second finger touching down is ignored until the first
    lifts.
 
-### Playtesting every weapon
+### Starting with random weapons
 
-Until pickups land, launch with `--random-weapons` and everyone except the
-last round's winner starts each round holding a random weapon from the
-roster. The winner still keeps what they had.
+Optional, for playtesting weapons without chasing pickups: launch with
+`--random-weapons` and everyone except the last round's winner starts each
+round holding a random weapon from the roster. The winner still keeps what
+they had, and pickups still spawn.
 
 ```
 godot --path . -- --random-weapons
@@ -142,7 +145,7 @@ scenes/stages/  the 11 rotating stages, one .tscn each (ADR-0008)
 scenes/parts/   reusable stage parts: MovingPlatform, CrumblingLedge, Hazard
 scripts/     GDScript sources (Player, WeaponHead, WeaponStats,
              ControllerServer, RoundManager, Stage, KillZone,
-             MovingPlatform, CrumblingLedge)
+             MovingPlatform, CrumblingLedge, Pickup, PickupWeapons)
 resources/   weapon stat resources (pickaxe, staff, sword, axe, dagger)
 controller/  the single-file controller web page served to phones
 tools/       headless test fixtures (scenario_runner, ws_probe_client,

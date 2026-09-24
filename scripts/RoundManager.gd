@@ -71,12 +71,12 @@ var _abandoned_since_msec: int = -1
 ## later takes the freed slot must not inherit the old winner's weapon.
 var _last_winner_slot: int = -1
 
-## Playtest stand-in for pickups (issue #29): with `-- --random-weapons` on the
-## host's command line, every player who did not win the last round starts
-## the next one holding a random weapon from this list rather than the
-## pickaxe, so the whole roster can be played before pickups (#14, ADR-0009)
-## exist. The winner still keeps what they held (ADR-0005). Off by default: a
-## normal launch plays exactly as designed.
+## Playtest option (issue #29): with `-- --random-weapons` on the host's
+## command line, every player who did not win the last round starts the next
+## one holding a random weapon from this list rather than the pickaxe, for
+## trying weapons without chasing pickups (#14). The winner still keeps what
+## they held (ADR-0005), and pickups still spawn. Off by default: a normal
+## launch plays exactly as designed.
 const PLAYTEST_WEAPON_PATHS: PackedStringArray = [
 	"res://resources/pickaxe.tres",
 	"res://resources/staff.tres",
@@ -107,6 +107,8 @@ func _process(_delta: float) -> void:
 			_try_start_round()
 		State.ROUND_ACTIVE:
 			_check_round_end()
+			if _state == State.ROUND_ACTIVE:
+				_tick_pickups()
 		State.ROUND_END:
 			if Time.get_ticks_msec() >= _pause_until_msec:
 				# Expire first, then test: a winner whose claim lapsed must not
@@ -162,6 +164,7 @@ func _try_start_round() -> void:
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1
 	_state = State.ROUND_ACTIVE
+	_start_pickups()
 
 ## Rotates to the next stage (ADR-0008): frees the outgoing instance, wraps
 ## `_stage_index` through `stage_scenes`, and caches the new stage's spawn
@@ -215,6 +218,7 @@ func _check_round_end() -> void:
 		_last_winner_slot = winner_slot
 	else:
 		_last_winner_slot = -1
+	_clear_pickups()
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
@@ -264,3 +268,105 @@ func _update_score_label() -> void:
 	for slot in _scores.size():
 		parts.append("P%d: %d" % [slot + 1, _scores[slot]])
 	label.text = "  ".join(parts)
+
+# --- Weapon pickups (issue #14, ADR-0009) ------------------------------------
+#
+# One pickup lies on the stage when a round starts; another arrives every
+# `pickup_spawn_interval_sec` while fewer than `max_pickups` are on it; any
+# left when the round ends are cleared. Pickups are parented to the active
+# stage instance, so a stage swap can never strand one either.
+
+## The pickup scene instanced per spawn (scenes/Pickup.tscn).
+@export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
+## Seconds between pickup arrivals once a round is running (user story 20).
+@export var pickup_spawn_interval_sec: float = 10.0
+## Most pickups the stage holds at once (user stories 3 and 20).
+@export var max_pickups: int = 2
+## Weapons a pickup may hold. Empty means the roster's own list
+## (`PickupWeapons.available_weapons()`); scenarios fill it with test weapons.
+## The pickaxe is filtered out either way.
+@export var pickup_weapons: Array[Resource] = []
+
+const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+## Where a pickup lands on a stage that declares no `PickupSpawn*` markers,
+## relative to the stage's origin: above its centre (user story 17).
+const FALLBACK_PICKUP_OFFSET: Vector2 = Vector2(0.0, -200.0)
+## Two pickups within this of each other are on the same spot.
+const PICKUP_SPOT_EPSILON: float = 8.0
+
+var _pickups: Array[Node2D] = []
+var _next_pickup_msec: int = 0
+
+## Round start: clear anything left over, put the first pickup down, and
+## start the interval from now.
+func _start_pickups() -> void:
+	_clear_pickups()
+	_spawn_pickup()
+	_next_pickup_msec = Time.get_ticks_msec() + int(pickup_spawn_interval_sec * 1000.0)
+
+## Each tick of an active round: once the interval is up, add one if the
+## stage is below the cap, and start the next interval either way.
+func _tick_pickups() -> void:
+	var now: int = Time.get_ticks_msec()
+	if now < _next_pickup_msec:
+		return
+	_next_pickup_msec = now + int(pickup_spawn_interval_sec * 1000.0)
+	if _live_pickups().size() < max_pickups:
+		_spawn_pickup()
+
+func _clear_pickups() -> void:
+	for pickup: Node2D in _live_pickups():
+		pickup.queue_free()
+	_pickups.clear()
+
+## Pickups still on the stage: collected ones free themselves, so anything
+## freed or on its way out is dropped from the list here.
+func _live_pickups() -> Array[Node2D]:
+	var live: Array[Node2D] = []
+	for pickup: Node2D in _pickups:
+		if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+			live.append(pickup)
+	_pickups = live
+	return live
+
+func _spawn_pickup() -> void:
+	if pickup_scene == null or _live_pickups().size() >= max_pickups:
+		return
+	var parent: Node = _current_stage if _current_stage != null else get_node_or_null(arena_container_path)
+	if parent == null:
+		return
+	var spot: Variant = _free_pickup_spot()
+	if spot == null:
+		return
+	var offered: Array[Resource] = pickup_weapons if not pickup_weapons.is_empty() else PickupWeaponsScript.available_weapons()
+	var weapon: Resource = PickupWeaponsScript.choose(offered)
+	if weapon == null:
+		return
+	var pickup: Node2D = pickup_scene.instantiate() as Node2D
+	pickup.set_weapon(weapon)
+	parent.add_child(pickup)
+	pickup.global_position = spot
+	_pickups.append(pickup)
+
+## A random declared spot with no pickup already on it, or the fallback above
+## the stage's centre when the stage declares none. Null when every spot is
+## taken.
+func _free_pickup_spot() -> Variant:
+	var spots: Array[Vector2] = []
+	if _current_stage != null and _current_stage.has_method("get_pickup_spawn_points"):
+		spots = _current_stage.get_pickup_spawn_points()
+	if spots.is_empty():
+		var origin: Vector2 = _current_stage.global_position if _current_stage != null else Vector2.ZERO
+		spots = [origin + FALLBACK_PICKUP_OFFSET]
+	var free: Array[Vector2] = []
+	for spot: Vector2 in spots:
+		var taken: bool = false
+		for pickup: Node2D in _live_pickups():
+			if pickup.global_position.distance_to(spot) < PICKUP_SPOT_EPSILON:
+				taken = true
+				break
+		if not taken:
+			free.append(spot)
+	if free.is_empty():
+		return null
+	return free[randi() % free.size()]
