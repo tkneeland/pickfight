@@ -1,21 +1,21 @@
-# Proof of work -- issue #20, shuffled stage rotation with a fixed opener
+# Proof of work -- issue #22, rising kill zone
 
 Cleared and recaptured per the evidence policy in `docs/agents/testing.md`:
-this root holds only the latest work package's evidence. #33's evidence is in
-history at `136061d:test-results/issue-33/`.
+this root holds only the latest work package's evidence. #20's evidence is in
+history at `2d1a18e:test-results/issue-20/`.
 
-Branch `feat/issue-20-shuffled-rotation`, macOS, local Godot 4.6.2.
+Branch `feat/issue-22-rising-kill-zone`, macOS, local Godot 4.6.2.
 
-| Criterion (issue #20 decision) | Proven by | Evidence | Verdict |
+| Criterion (issue #22 decision) | Proven by | Evidence | Verdict |
 | --- | --- | --- | --- |
-| Every session opens on `stage_scenes[0]` (Flatlands), under any seed | `stage_rotation_opener_is_first_stage` (5 seeds), `stage_rotates_each_round` | `issue-20/scenario-suite.txt` | PASS |
-| Shuffled bags: every stage exactly once per bag | `stage_rotates_each_round` (3 bags) | `issue-20/scenario-suite.txt` | PASS |
-| No stage twice in a row, across bag boundaries and out of the opener; 1-stage repeats, 2-stage alternates | `stage_rotation_never_repeats_back_to_back` | `issue-20/scenario-suite.txt` | PASS |
-| Seedable for tests: same seed gives the same order, a different seed gives a different one | `stage_rotation_seeded_is_deterministic` | `issue-20/scenario-suite.txt` | PASS |
-| Nothing else regressed | full suite: 59 of 60 | `issue-20/scenario-suite.txt` | PASS, except the known failure below |
-| Boots on a fresh clone | `git clone` of the branch, `godot --headless --path <clone> --quit`, grep for `SCRIPT ERROR` / `Failed to load script` | `issue-20/boot-check.txt` | PASS |
+| The floor kill zone holds still through the grace period | `kill_zone_holds_during_grace` | `issue-22/scenario-suite.txt` | PASS |
+| Then rises steadily at the derived per-stage rate | `kill_zone_rises_after_grace` | `issue-22/scenario-suite.txt` | PASS |
+| A holdout on the highest spawn is eventually eliminated (Flatlands and Cascade, short test timings) | `rising_kill_zone_eliminates_holdout` | `issue-22/scenario-suite.txt` | PASS |
+| Hazard parts never rise (Furnace and Gauntlet) | `hazard_never_rises` | `issue-22/scenario-suite.txt` | PASS |
+| Every round starts fresh | `rising_kill_zone_resets_each_round` | `issue-22/scenario-suite.txt` | PASS |
+| Ring-out still means "before the mechanic": the rise never starts outside a round | `every_stage_can_ring_out` unchanged | `issue-22/scenario-suite.txt` | PASS |
+| Nothing else regressed | full suite, 64 of 65 after the rebase onto #20 | `issue-22/scenario-suite.txt` | PASS, except the one pre-existing macOS failure `roster_heads_do_not_tunnel_head_reversed`, which also fails on clean main (#38) |
+| Boots on a fresh clone | `git clone` of the branch, `godot --headless --path <clone> --quit`, grep for `SCRIPT ERROR` / `Failed to load script` | `issue-22/boot-check.txt` | PASS |
 
-## Known failure, not from this work
-
-`roster_heads_do_not_tunnel_head_reversed` fails deterministically on macOS on
-clean `main` too (dagger 1/12). Tracked in #38.
+The visible surface and its pulsing warning have no screenshot yet. A
+windowed playtest is the check for those.
