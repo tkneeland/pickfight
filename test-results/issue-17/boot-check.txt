@@ -1,9 +1,8 @@
+$ ls -d .godot   # fresh-clone condition: no class cache exists in this worktree
+ls: .godot: No such file or directory
+
 $ godot --headless --path . --quit
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
 Controller page: http://172.20.1.170:8080/
-exit=0
-
-$ ls -d .godot  # the global class cache Godot builds only in an editor run
-ls: .godot: No such file or directory
-(absent -- this worktree has never had one)
+exit: 0
