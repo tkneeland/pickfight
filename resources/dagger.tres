@@ -36,13 +36,13 @@
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 90.0
+max_reach = 80.0
 mass = 0.15
-drive_speed = 36.0
-extend_speed = 1200.0
-rest_return_speed = 600.0
+drive_speed = 50.0
+extend_speed = 1800.0
+rest_return_speed = 900.0
 max_drive_force = 4000.0
-damage = 34.0
+damage = 45.0
 head_circle_offsets = PackedVector2Array(-2.84, -0.07, -0.84, -0.07, 1.16, -0.07, 2.96, -0.07, 4.56, -0.07)
 head_circle_radii = PackedFloat32Array(1.92, 1.79, 1.66, 1.55, 1.44)
 art_outline = PackedVector2Array(-5.44, -1.14, -3.21, -2.07, 5.73, -1.49, 6.98, 0, 5.73, 1.49, -3.21, 2.07, -5.44, 1.14)

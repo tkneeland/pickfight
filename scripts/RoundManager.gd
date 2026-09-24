@@ -52,13 +52,13 @@ extends Node
 @export var rotation_seed: int = -1
 ## Rising kill zone (issue #22, ADR-0012): how long the active stage's floor
 ## `KillZone` holds still at round start before it begins to climb.
-@export var kill_zone_grace_sec: float = 40.0
+@export var kill_zone_grace_sec: float = 50.0
 ## Seconds the rise then takes to reach the stage's highest spawn. A
 ## deadline, not a speed: stages range from under 500 px to over 900 px
 ## between floor and top spawn, and a fixed speed would give Cascade's
 ## holdouts twice as long as Flatlands'. The speed is derived per stage in
 ## `_start_kill_zone_rise()`, and the zone keeps climbing past that spawn.
-@export var kill_zone_rise_sec: float = 28.0
+@export var kill_zone_rise_sec: float = 80.0
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END }
 

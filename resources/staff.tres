@@ -30,11 +30,11 @@
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 200.0
+max_reach = 240.0
 mass = 0.15
 drive_speed = 36.0
-extend_speed = 1200.0
-rest_return_speed = 600.0
+extend_speed = 1500.0
+rest_return_speed = 700.0
 max_drive_force = 4000.0
 damage = 20.0
 head_circle_offsets = PackedVector2Array(2.07, 0.1)

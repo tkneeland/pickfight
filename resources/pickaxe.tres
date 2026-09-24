@@ -56,7 +56,7 @@
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 140.0
+max_reach = 150.0
 mass = 0.25
 drive_speed = 24.0
 extend_speed = 700.0
