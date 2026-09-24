@@ -1,7 +1,8 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Hazard.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground_side"]
 size = Vector2(300, 40)
@@ -18,6 +19,21 @@ size = Vector2(8000, 40)
 ; Two gaps in the ground (players ring out through them) under a low
 ; ceiling that pins swing height well below open sky. Rewards a compact,
 ; controlled swing over the wide, open arcs a tall stage rewards.
+;
+; A hazard hangs from the centre of that ceiling (issue #18). The ceiling
+; was already the thing that made this stage what it is -- it is what stops
+; you swinging over the gaps in a single wide arc -- but it was only a
+; limit, something you bumped into. The hazard makes the middle of it
+; hostile, so the highest, fastest line across the stage is now the one
+; that kills you, and a crossing has to be either low and slow over a gap
+; or wide around the centre.
+;
+; Hung from the ceiling rather than laid on GroundMid, which was the other
+; obvious placement. GroundMid is only 200 px wide and the hazard is 160,
+; so laying it there would leave two 20 px slivers of safe ledge -- the
+; one place in the stage you land after a committed swing would become a
+; coin flip. A hazard belongs in the space you cross, not the space you
+; land on.
 
 [node name="Gauntlet" type="Node2D"]
 script = ExtResource("1")
@@ -61,6 +77,13 @@ shape = SubResource("RectangleShape2D_ceiling")
 [node name="CeilingVisual" type="Polygon2D" parent="Ceiling"]
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-600, -20, 600, -20, 600, 20, -600, 20)
+
+; Ceiling bottom is y=60 (the ceiling body sits at y=40 with a 40 px shape),
+; so a 48 px hazard centred at y=84 hangs flush beneath it and leaves about
+; 190 px of headroom over the ground at y=300 -- enough for a compact swing
+; to pass under, not enough for the wide flat arc the hazard exists to deny.
+[node name="CeilingHazard" parent="." instance=ExtResource("3")]
+position = Vector2(0, 84)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-500, 200)

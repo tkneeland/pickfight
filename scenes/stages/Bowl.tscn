@@ -1,0 +1,83 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
+size = Vector2(40, 560)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A stepped bowl with high walls on both sides: each half is a staircase
+; descending toward the middle, and the walls run from well above head height
+; down past the lowest step, so there is no way out sideways at any height a
+; fight happens at. The only ring-out is the 120 px drain at the bottom centre
+; -- two and a half player widths, so it is a gap you are driven into rather
+; than one you wander over.
+;
+; This is the one stage in the rotation where damage, not geometry, usually
+; decides the round -- every other stage rewards putting someone over an edge,
+; and there is barely an edge here. It exists so the rotation is not entirely a
+; ring-out game, and so a player who is losing on health cannot simply run out
+; of reach.
+;
+; Each half is one CollisionPolygon2D rather than a stack of separate step
+; bodies, for the same reason Slant is: an earlier cut built the steps as four
+; floating slabs and left 40 px of open air between each tier and the next, so
+; the stage had three more ways out than its own description claimed. A single
+; staircase polygon per side cannot develop a gap it was not drawn with.
+
+[node name="Bowl" type="Node2D"]
+script = ExtResource("1")
+
+[node name="LandLeft" type="StaticBody2D" parent="."]
+
+[node name="LandLeftShape" type="CollisionPolygon2D" parent="LandLeft"]
+polygon = PackedVector2Array(-500, 208, -300, 208, -300, 288, -60, 288, -60, 440, -500, 440)
+
+[node name="LandLeftVisual" type="Polygon2D" parent="LandLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-500, 208, -300, 208, -300, 288, -60, 288, -60, 440, -500, 440)
+
+[node name="LandRight" type="StaticBody2D" parent="."]
+
+[node name="LandRightShape" type="CollisionPolygon2D" parent="LandRight"]
+polygon = PackedVector2Array(500, 208, 300, 208, 300, 288, 60, 288, 60, 440, 500, 440)
+
+[node name="LandRightVisual" type="Polygon2D" parent="LandRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(500, 208, 300, 208, 300, 288, 60, 288, 60, 440, 500, 440)
+
+[node name="WallLeft" type="StaticBody2D" parent="."]
+position = Vector2(-520, 100)
+
+[node name="WallLeftShape" type="CollisionShape2D" parent="WallLeft"]
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="WallLeftVisual" type="Polygon2D" parent="WallLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-20, -280, 20, -280, 20, 280, -20, 280)
+
+[node name="WallRight" type="StaticBody2D" parent="."]
+position = Vector2(520, 100)
+
+[node name="WallRightShape" type="CollisionShape2D" parent="WallRight"]
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="WallRightVisual" type="Polygon2D" parent="WallRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-20, -280, 20, -280, 20, 280, -20, 280)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-400, 140)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(400, 140)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 560)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
