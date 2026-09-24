@@ -1,8 +1,0 @@
-# roster_heads_do_not_tunnel_head run standalone, 3x on untouched origin/main (b5dcc80, clean worktree) and 3x on this branch, back to back on one Windows machine.
-# Identical failures on both: not a regression from #14. Tracked as #27.
-main-worktree run1: FAIL  roster_heads_do_not_tunnel_head       - axe: 1 of 11 completed charges put a head through another head       - dagger: 2 of 12 completed charges put a head through another head 
-main-worktree run2: FAIL  roster_heads_do_not_tunnel_head       - axe: 1 of 11 completed charges put a head through another head       - dagger: 2 of 12 completed charges put a head through another head 
-main-worktree run3: FAIL  roster_heads_do_not_tunnel_head       - axe: 1 of 11 completed charges put a head through another head       - dagger: 2 of 12 completed charges put a head through another head 
-branch run1: FAIL  roster_heads_do_not_tunnel_head       - axe: 1 of 11 completed charges put a head through another head       - dagger: 2 of 12 completed charges put a head through another head 
-branch run2: FAIL  roster_heads_do_not_tunnel_head       - axe: 1 of 11 completed charges put a head through another head       - dagger: 2 of 12 completed charges put a head through another head 
-branch run3: FAIL  roster_heads_do_not_tunnel_head       - axe: 1 of 11 completed charges put a head through another head       - dagger: 2 of 12 completed charges put a head through another head 

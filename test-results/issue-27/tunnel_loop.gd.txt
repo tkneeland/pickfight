@@ -1,0 +1,96 @@
+extends "res://tools/scenario_runner.gd"
+
+## Tight loop for #27. Reuses the scenario runner's own charge sweep and
+## breach detector, but for one weapon (default dagger) instead of all five.
+##   -- --weapon=dagger            the 12-charge sweep for one weapon
+##   -- --weapon=dagger --single=45,1800   one charge on a fresh pair
+
+func _initialize() -> void:
+	var weapon: String = "dagger"
+	var single: String = ""
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--weapon="):
+			weapon = arg.trim_prefix("--weapon=")
+		elif arg.begins_with("--single="):
+			single = arg.trim_prefix("--single=")
+	_loop(weapon, single)
+
+func _loop(weapons: String, single: String) -> void:
+	await physics_frame
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var failures: Array[String] = []
+	# Same shape as _scenario_roster_heads_do_not_tunnel_head: a fresh pair
+	# per weapon, the previous pair freed. Only the LAST weapon's result is
+	# the verdict; earlier ones are history.
+	var names: PackedStringArray = weapons.split(",")
+	for idx in names.size():
+		var weapon: String = names[idx]
+		var stats: Resource = load("res://resources/%s.tres" % weapon)
+		var attacker: RigidBody2D = _spawn_player(stage, centre)
+		var blocker: RigidBody2D = _spawn_player(stage, centre)
+		attacker.set_weapon_stats(stats)
+		blocker.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		print("LOOP ids %s: attacker head %d, blocker head %d, attacker owns pair: %s" % [
+			weapon, attacker._head.get_instance_id(), blocker._head.get_instance_id(),
+			attacker._head._owns_pair(blocker._head)])
+		var separation: float = maxf(CHARGE_SEPARATION, 2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
+		var last: bool = idx == names.size() - 1
+		var result: Array[String] = []
+		if single != "" and last:
+			var parts: PackedStringArray = single.split(",")
+			result = await _single_charge(weapon, attacker, blocker, centre, separation, float(parts[0]), float(parts[1]))
+		else:
+			result = await _charge_sweep(weapon, attacker, blocker, centre, separation)
+		if last:
+			failures = result
+		attacker.queue_free()
+		blocker.queue_free()
+		await _await_ticks(2)
+	for f in failures:
+		print("LOOP FAIL %s" % f)
+	print("LOOP %s" % ("RED" if not failures.is_empty() else "GREEN"))
+	quit(1 if not failures.is_empty() else 0)
+
+## One charge, with the same setup and the same breach rule as _charge_sweep.
+func _single_charge(label: String, attacker: RigidBody2D, blocker: RigidBody2D, centre: Vector2, separation: float, degrees: float, speed: float) -> Array[String]:
+	var axis: Vector2 = Vector2.RIGHT.rotated(deg_to_rad(degrees))
+	var half: Vector2 = axis * separation * 0.5
+	attacker.teleport_to(centre - half)
+	blocker.teleport_to(centre + half)
+	attacker.set_input_vector(axis)
+	blocker.set_input_vector(-axis)
+	await _await_ticks(SETTLE_TICKS)
+	var prev_a: Array[Dictionary] = _head_circles_world(attacker)
+	var prev_b: Array[Dictionary] = _head_circles_world(blocker)
+	var prev_rel: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
+	var touched: bool = _head_surface_gap(prev_a, prev_b) <= 0.0
+	var prev_along: float = prev_rel.dot(axis)
+	var went: bool = false
+	var restored: bool = false
+	var crossed_gap: float = INF
+	for t in CHARGE_TICKS:
+		attacker.linear_velocity = axis * speed
+		blocker.linear_velocity = -axis * speed
+		await physics_frame
+		var a: Array[Dictionary] = _head_circles_world(attacker)
+		var b: Array[Dictionary] = _head_circles_world(blocker)
+		var rel: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
+		var gap: float = _head_surface_gap(a, b)
+		var along: float = rel.dot(axis)
+		if not went and not touched and along < 0.0 and prev_along > 0.0:
+			went = true
+			crossed_gap = minf(gap, _head_surface_gap(prev_a, prev_b))
+			print("LOOP tick %d crossed: rel %s -> %s gap %.2f" % [t, prev_rel, rel, crossed_gap])
+		if went and along > 0.0:
+			restored = true
+		if gap <= 0.0:
+			touched = true
+		prev_a = a
+		prev_b = b
+		prev_rel = rel
+		prev_along = along
+	if went and not restored and crossed_gap <= 0.0:
+		return ["%s %.0f deg at %.0f: breach (gap on crossing %.2f)" % [label, degrees, speed, crossed_gap]]
+	return []

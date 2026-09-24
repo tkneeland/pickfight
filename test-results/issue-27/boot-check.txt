@@ -1,7 +1,4 @@
-$ ls -d .godot
-ls: cannot access '.godot': No such file or directory
-(absent: fresh-clone condition)
-$ godot --headless --path . --quit
+$ godot --headless --path . --quit   (no .godot present)
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
 Controller page: http://172.19.6.46:8080/
