@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
-size = Vector2(140, 24)
+size = Vector2(216, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -19,11 +19,13 @@ size = Vector2(8000, 40)
 ; seconds. With two players loose on the same floor, that clock is always
 ; running on somebody.
 ;
-; Island is the one permanent piece, centred and deliberately small -- 140 px
-; against each ledge's 200, room to stand and not much more. It is not a
-; balance choice: it is what keeps this stage from being able to erode to
-; nothing under both players at once and deadlock the round with no floor
-; left anywhere. Both spawns sit on top of it rather than on a ledge, so a
+; Island is the one permanent piece, centred and deliberately small -- room
+; for four to stand and not much more. It was 140 px, room for two; #36
+; widened it to 216 so all four spawns fit on it, which narrows its gaps to
+; the inner ledges to 32 px -- still too narrow for a body to drop through.
+; It is not a balance choice: it is what keeps this stage from being able to
+; erode to nothing under every player at once and deadlock the round with no
+; floor left anywhere. Every spawn sits on top of it rather than on a ledge, so a
 ; round never opens with a countdown already ticking on the ground a player
 ; was just placed on (US-7) -- the erosion starts only once a player leaves
 ; home and stands on the wide floor built to fall out from under them.
@@ -52,7 +54,7 @@ shape = SubResource("RectangleShape2D_island")
 
 [node name="IslandVisual" type="Polygon2D" parent="Island"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -12, 70, -12, 70, 12, -70, 12)
+polygon = PackedVector2Array(-108, -12, 108, -12, 108, 12, -108, 12)
 
 [node name="LedgeC" parent="." instance=ExtResource("3")]
 position = Vector2(240, 300)
@@ -67,6 +69,13 @@ position = Vector2(-40, 220)
 
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(40, 220)
+
+; Spawns 2 and 3 (issue #36). On the widened island, outboard of the first two: four bodies, and still none on a crumbling ledge.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-96, 220)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(96, 220)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

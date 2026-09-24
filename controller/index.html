@@ -78,11 +78,12 @@
   var DRAG_RADIUS_FRACTION = 0.35;
   var RECONNECT_DELAY_MS = 1000;
   // Must stay in sync with each Player's identity_color in scenes/Main.tscn:
-  // slot 0 = Player1 blue, slot 1 = Player2 orange. The host paints that same
-  // colour on Player1/Player2's persistent outline and weapon head (ADR-0005)
+  // slot 0 = Player1 blue, slot 1 = Player2 orange, slot 2 = Player3 green,
+  // slot 3 = Player4 magenta. The host paints that same colour on each
+  // player's persistent outline and weapon head (ADR-0005)
   // -- not the body fill, which reddens with damage -- so changing a colour
   // here means changing the matching identity_color there.
-  var SLOT_COLORS = ["#2666ff", "#ff8c1a"];
+  var SLOT_COLORS = ["#2666ff", "#ff8c1a", "#1fd98c", "#ff52d1"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
@@ -251,7 +252,7 @@
       } catch (err) { /* ignore anything that is not the slot message */ }
     };
     // The host drops us for reasons a player needs to be told about: every
-    // slot is taken (a third phone, or a stray second tab), or our input went
+    // slot is taken (a fifth phone, or a stray extra tab), or our input went
     // quiet long enough to look like a locked screen. Show the server's
     // reason, then keep retrying -- a dropped controller must be able to
     // rejoin by itself once a slot frees up or the phone wakes.

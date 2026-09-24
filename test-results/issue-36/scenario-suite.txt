@@ -302,7 +302,13 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2516)
+       [0] _await_condition (res://tools/scenario_runner.gd:2559)
 PASS  rising_kill_zone_resets_each_round
+Controller page: http://172.19.9.117:18480/
+PASS  four_phones_claim_four_slots
+PASS  four_player_round_ends_on_last_survivor
+PASS  four_player_winner_keeps_weapon
+PASS  stage_four_spawns_settle_together
+PASS  pickup_cap_scales_with_roster
 ---
-64 passed, 1 failed, 65 total
+69 passed, 1 failed, 70 total

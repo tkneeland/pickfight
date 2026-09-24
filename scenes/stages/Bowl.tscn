@@ -75,6 +75,13 @@ position = Vector2(-400, 140)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(400, 140)
 
+; Spawns 2 and 3 (issue #36). On the lower steps, inboard of the risers and clear of their pickups.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-250, 220)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(250, 220)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
 script = ExtResource("2")

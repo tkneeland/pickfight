@@ -83,6 +83,13 @@ position = Vector2(-420, 220)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(420, 220)
 
+; Spawns 2 and 3 (issue #36). Either side of IslandB's pickup, 60 px clear of it; the only other static island.
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-200, 220)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(-80, 220)
+
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
 script = ExtResource("2")
