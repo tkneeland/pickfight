@@ -7,14 +7,16 @@
 ; issue #13's roster calls it "tip knob only" -- so what is drawn here is one
 ; round 6.2 x 6.2 px knob and nothing else, against a 48 x 48 px player body,
 ; which is the drawing's proportion against its "Reference Player" box. One
-; circle fills 91.9% of it; a knob is the one head shape a single circle is
+; circle fills 90.6% of it; a knob is the one head shape a single circle is
 ; already the right answer for.
 ;
 ; Head-local space is the same as the pickaxe's: +X points outward along the
 ; haft away from the player, origin at the groove anchor the haft holds the
 ; head by. The knob sits just past that anchor and reaches 5 px along the
-; haft, the shortest forward extent on the roster and comfortably inside the
-; 4-12 px the plant and clash scenarios are tuned around.
+; haft, the shortest forward extent on the roster. Nothing enforces a bound
+; on that number -- the plant and clash scenarios measure where a head comes
+; to rest, they do not check its extent -- so the roster's 5-11 px spread is
+; a convention the weapons were drawn to, not a checked constraint.
 ;
 ; Stats against the pickaxe's M/M/M baseline: the staff is the roster's best
 ; mover and its worst hitter. Reach L (200 px against 140) makes it the

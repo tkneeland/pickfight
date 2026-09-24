@@ -1,0 +1,16 @@
+$ mv .godot .godot.bak   # hide the global class cache, i.e. simulate a fresh clone
+ok
+
+$ godot --headless --path . --quit    # boot with no class cache
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+Controller page: http://172.20.1.170:8080/
+exit=0
+
+$ godot --headless --path . -s tools/scenario_runner.gd -- --all
+      dagger against dagger: met -1.2 px off the midline, 11.7 px apart; gave way 22.1 px and 19.6 px
+      axe on the left: met 46.7 px off the midline, 16.6 px apart; axe gave way 26.6 px, dagger 70.0 px
+      axe on the right: met -46.7 px off the midline, 16.6 px apart; dagger gave way 70.0 px, axe 26.6 px
+PASS  heavy_weapon_wins_clash
+---
+31 passed, 0 failed, 31 total

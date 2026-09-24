@@ -8,7 +8,7 @@
 ; blade alone -- 38.6 x 6.9 px against a 48 x 48 px player body, the drawing's
 ; proportion against its "Reference Player" box -- filled by ten circles,
 ; biggest at the shoulder and tapering to the point (ADR-0010). They cover
-; 84.0% of it, each sized with a small clearance margin below its exact fit
+; 83.9% of it, each sized with a small clearance margin below its exact fit
 ; so that independent rounding of the outline and the circles to two
 ; decimals cannot push one outside. The owner asked for a decent bit more
 ; blade at the same width, so the blade is a third longer than the first

@@ -7,17 +7,19 @@
 ; pickaxe's and far bigger -- 23.1 x 31.7 px against a 48 x 48 px player
 ; body, the drawing's proportion against its "Reference Player" box -- filled
 ; by seven circles, biggest at the belly and tapering toward the horns
-; (ADR-0010). They cover 88.7% of it. As with the pickaxe the circles do not
+; (ADR-0010). They cover 88.4% of it. As with the pickaxe the circles do not
 ; reach into the horn tips: nothing of a useful size fits where a crescent
 ; tapers to a point, and the guarantee that matters is the one-directional
-; one -- every circle lies inside the art, so nobody is hit by something they
-; cannot see.
+; one -- no circle reaches outside the art, so nobody is hit by something they
+; cannot see. The axe's widest circle stands 0.011 px proud of the traced
+; outline, which weapon_head_circles_within_art accepts on its 0.5 px
+; tolerance; that is rounding, not visible geometry.
 ;
 ; Head-local space is the pickaxe's: +X outward along the haft, origin at the
 ; groove anchor, so the belly bulges away from the player with the horns
 ; curving back. The belly reaches 11 px past the anchor against the pickaxe's
-; 9, which is the most on the roster and still inside the 4-12 px the plant
-; and clash scenarios are tuned around. Across the haft it is nearly 32 px
+; 9, the most on the roster. Nothing enforces a bound on that number; see
+; staff.tres. Across the haft it is nearly 32 px
 ; tall, and that costs those scenarios nothing -- only the reach along the
 ; haft is measured.
 ;
