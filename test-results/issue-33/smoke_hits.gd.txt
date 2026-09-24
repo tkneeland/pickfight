@@ -1,0 +1,108 @@
+extends SceneTree
+
+## Throwaway smoke for #33: boots the real Main.tscn, joins two WebSocket
+## phones that wiggle, logs every natural strike_landed during play, then
+## lands a clean strike, a too-slow one and a lethal run from P1 onto P2 and
+## screenshots each while the marker and number are on screen.
+
+const OUT_DIR: String = "C:/Users/agage/AppData/Local/Temp/claude/C--Users-agage-Documents-GitHub-pickfight/f9ae922f-bfda-4e53-b40e-a0d9188a225a/scratchpad/smoke33"
+const PLAY_SEC: float = 6.0
+
+var main: Node
+var rm: Node
+var clients: Array[WebSocketPeer] = []
+var sent_id: Array[bool] = [false, false]
+var t: float = 0.0
+var round_started_at: float = -1.0
+var staged: bool = false
+var natural: int = 0
+
+func _initialize() -> void:
+	DirAccess.make_dir_recursive_absolute(OUT_DIR)
+	main = load("res://scenes/Main.tscn").instantiate()
+	root.add_child(main)
+	rm = main.get_node("RoundManager")
+	print("SMOKE HitFeedback present: %s" % str(main.has_node("HitFeedback")))
+	for p in [main.get_node("Player1"), main.get_node("Player2")]:
+		p.strike_landed.connect(func(victim: Node, amount: float, point: Vector2, lethal: bool) -> void:
+			natural += 1
+			print("SMOKE strike %s -> %s amount=%.1f point=%s lethal=%s" % [p.name, victim.name, amount, point.round(), lethal]))
+	for i in 2:
+		var ws := WebSocketPeer.new()
+		ws.connect_to_url("ws://127.0.0.1:8081")
+		clients.append(ws)
+
+func _process(delta: float) -> bool:
+	t += delta
+	if t > 60.0:
+		print("SMOKE TIMEOUT")
+		quit(3)
+		return true
+	for i in clients.size():
+		var ws := clients[i]
+		ws.poll()
+		if ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent_id[i]:
+			ws.send_text(JSON.stringify({"id": "smoke-%d" % i}))
+			sent_id[i] = true
+		while ws.get_available_packet_count() > 0:
+			ws.get_packet()
+		var phase: float = t * (4.0 + 2.0 * i) + i * PI
+		var v := Vector2(cos(phase), sin(phase)) * (0.6 + 0.4 * sin(t * 5.1 + i))
+		var buf := PackedByteArray()
+		buf.resize(8)
+		buf.encode_float(0, v.x)
+		buf.encode_float(4, v.y)
+		ws.send(buf)
+	if rm._state == 1 and round_started_at < 0.0:
+		round_started_at = t
+		# Walk them together so the wiggling heads meet.
+		var p0: Node = main.get_node("Player1")
+		var p1: Node = main.get_node("Player2")
+		p1.teleport_to(p0.global_position + Vector2(70, 0))
+	if round_started_at >= 0.0 and not staged and t - round_started_at > PLAY_SEC:
+		staged = true
+		_staged.call_deferred()
+	return false
+
+func _shot(name: String) -> void:
+	await process_frame
+	await process_frame
+	root.get_texture().get_image().save_png("%s/%s.png" % [OUT_DIR, name])
+	var fb: Node = main.get_node("HitFeedback")
+	var kinds: PackedStringArray = []
+	for c in fb.get_children():
+		kinds.append("%s(%s)" % ["number" if c is Label else "marker", c.text if c is Label else str(c.colour)])
+	print("SMOKE shot %s: on screen %s" % [name, ", ".join(kinds)])
+
+func _staged() -> void:
+	print("SMOKE natural strikes during %.0fs of play: %d" % [PLAY_SEC, natural])
+	var p0: Node = main.get_node("Player1")
+	var p1: Node = main.get_node("Player2")
+	if not p1.alive or not p0.alive:
+		print("SMOKE someone died in natural play; staged strikes skipped")
+		quit(0)
+		return
+	p1.teleport_to(p0.weapon_head_position() + Vector2(30, 0))
+	await physics_frame
+	await physics_frame
+	await _clear()
+	p0._land_strike(p1, 1800.0)
+	await _shot("1-clean-strike")
+	await _clear()
+	p0._land_strike(p1, 500.0)
+	await _shot("2-too-slow-zero")
+	await _clear()
+	while p1.alive:
+		p0._land_strike(p1, 2400.0)
+		if p1.alive:
+			await physics_frame
+	await _shot("3-lethal")
+	print("SMOKE done")
+	quit(0)
+
+func _clear() -> void:
+	# Let earlier markers and numbers fade so each shot shows one strike.
+	for i in 60:
+		await process_frame

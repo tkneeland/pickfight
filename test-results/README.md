@@ -1,41 +1,34 @@
-# Proof of work -- issue #27, heads tunnelling through heads
+# Proof of work -- issue #33, hitmarkers and debug damage numbers
 
 Cleared and recaptured per the evidence policy in `docs/agents/testing.md`:
-this root holds only the latest work package's evidence. #14's evidence is in
-history at `a753c65:test-results/issue-14/`.
+this root holds only the latest work package's evidence. #27's evidence is in
+history at `be5ed60:test-results/issue-27/`.
 
-Branch `fix/issue-27-head-tunnelling`, Windows, local Godot 4.6.2.
+Branch `feat/issue-33-hitmarkers`, Windows, local Godot 4.6.2.
 
-| Criterion (issue #27) | Proven by | Evidence | Verdict |
+| Criterion (issue #33) | Proven by | Evidence | Verdict |
 | --- | --- | --- | --- |
-| No roster head passes through another head in one step | `roster_heads_do_not_tunnel_head` | `issue-27/scenario-suite.txt` | PASS |
-| Same, under a different history (roster reversed) | `roster_heads_do_not_tunnel_head_reversed` (new) | `issue-27/scenario-suite.txt` | PASS |
-| Both scenarios catch the bug | the same two scenarios against `main`'s `WeaponHead.gd` | `issue-27/red-on-main.txt` | FAIL on main, as expected |
-| Holds across histories, not just the suite's one | 20 histories: every weapon as the verdict after 4 different prefixes | `issue-27/history-sweep.txt` | 0 / 20 red |
-| Nothing else regressed | full suite, 52 scenarios | `issue-27/scenario-suite.txt` | PASS |
-| Boots on a fresh clone | `godot --headless --path . --quit`, no `.godot` present | `issue-27/boot-check.txt` | PASS |
+| A damaging strike draws a hitmarker at the contact point in the attacker's colour, and its number reads the damage dealt | `strike_shows_hitmarker_and_number` (a real swing) | `issue-33/scenario-suite.txt` | PASS |
+| A lethal strike's marker is the red, bigger variant, and only that one | `lethal_strike_marker_is_distinct` | `issue-33/scenario-suite.txt` | PASS |
+| A too-slow swing (300 to 700 px/s) shows a `0` and no marker; a slower graze shows nothing | `slow_contact_shows_zero_not_marker` | `issue-33/scenario-suite.txt` | PASS |
+| With numbers off, markers still show and no numbers appear | `damage_numbers_switch_off` | `issue-33/scenario-suite.txt` | PASS |
+| Repeated `0`s within the cooldown draw once; damage is never rate-limited | `zero_numbers_rate_limited` | `issue-33/scenario-suite.txt` | PASS |
+| Works in the real game | windowed smoke run of `Main.tscn` with two WebSocket phones: natural `0`s during play, then a clean, too-slow and lethal strike, each screenshotted | `issue-33/smoke.txt`, `issue-33/*.png` | PASS |
+| Nothing else regressed | full suite, 57 scenarios | `issue-33/scenario-suite.txt` | PASS |
+| Boots on a fresh clone | `godot --headless --path . --quit`, no `.godot` present | `issue-33/boot-check.txt` | PASS |
 
-`issue-27/tunnel_loop.gd.txt` is the harness behind the history sweep. It
-extends the scenario runner, so it has to sit in the scratchpad to run:
-`-s <path>/tunnel_loop.gd -- --weapon=staff,sword,axe,dagger`.
+## Notes
 
-## Cause
-
-The breach was chaotic rather than a state leak. Earlier pairs change the
-physics server's solver order, which moves sub-pixel timing. The same dagger
-charge was green on a fresh pair and red after `staff,sword,axe`. Two defects
-let a head through:
-
-1. **The world sweep pre-empted the pair check.** `_integrate_forces` ran the
-   head-vs-head check only when the world sweep found nothing. On the breach
-   tick the world sweep fired against the other player's body, so the pair
-   check was skipped with the other head 22 px away. Now both contacts are
-   found and the earlier one is applied.
-2. **Pairs that start a step touching were never checked.** After a
-   correction, the next step starts with the heads in contact, and
-   `_first_circle_contact` skipped any such pair. Being driven through the
-   line of centres went unseen. A touching pair whose centre line flips
-   during the step is now a contact at fraction 0.
-
-Fixing only (1) moved the breach from dagger 135 deg to dagger 45 deg. It
-took both fixes.
+- The signal is named `strike_landed`, not the `struck` in the issue. A
+  local variable in `_score_swept_strike` is already called `struck`, and
+  renaming it would edit a file shared with #16 more than needed.
+- The switch is `const SHOW_DAMAGE_NUMBERS` in `scripts/HitFeedback.gd`, as
+  agreed. An instance variable starts from it, so a scenario can prove the
+  off state without editing the file.
+- Four scenarios drive `Player._land_strike` directly at a chosen head speed.
+  That is the one function both hit paths go through, and physics cannot
+  reliably produce a swing in the 300 to 700 px/s band. The real-swing
+  scenario and the smoke run cover the physics end.
+- Strikes on consecutive frames stack their numbers on top of each other
+  (see `3-lethal.png`, where the smoke script fired two in a row). This is
+  rare in real play; spreading them out is left for later if it shows up.

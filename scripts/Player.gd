@@ -165,6 +165,13 @@ var has_controller: bool = false
 var damage: float = 0.0
 var deaths: int = 0
 
+## A strike this player's head landed on `victim` (issue #33), for whatever
+## shows it -- `HitFeedback` draws the hitmarker and damage number. `amount`
+## is what `victim` took, and 0 for a real swing (head faster than
+## `knockback_threshold`) too slow to count; slower contacts report nothing.
+## `point` is the head's leading edge; `lethal` is whether it eliminated.
+signal strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool)
+
 ## Whether this player is in play. False from elimination (damage or a
 ## ring-out) until `start_round()` brings them back for the next round --
 ## there is no mid-round respawn (ADR-0004): a round is over the same body
@@ -917,7 +924,7 @@ func _score_swept_strike() -> void:
 	var struck: Node = hit as Node
 	if struck == null or struck == self or not struck.is_in_group("players"):
 		return
-	struck.take_damage(_strike_damage(speed))
+	_land_strike(struck, speed)
 
 ## This weapon's head touched something slowly enough for the solver to be
 ## the one that noticed. If it was another player, that is a strike too --
@@ -937,7 +944,36 @@ func _on_head_hit(body: Node) -> void:
 	# Only the part of the head's motion heading into the player counts, so
 	# that a head skimming past somebody at speed is not scored as if it had
 	# swung into them.
-	body.take_damage(_strike_damage(_head_velocity.dot(to_body.normalized())))
+	_land_strike(body, _head_velocity.dot(to_body.normalized()))
+
+## Both strike paths end here: score the speed, hand the damage over, and
+## report the strike for `strike_landed`. Nothing is reported for a victim
+## already out of play, or a contact too slow to have been a swing at all.
+func _land_strike(victim: Node, speed: float) -> void:
+	if not victim.alive:
+		return
+	var amount: float = _strike_damage(speed)
+	if amount <= 0.0 and speed <= knockback_threshold:
+		return
+	var point: Vector2 = _strike_point(victim)
+	victim.take_damage(amount)
+	strike_landed.emit(victim, amount, point, not victim.alive)
+
+## Where the head met `victim`: the leading edge of whichever head circle is
+## nearest them.
+func _strike_point(victim: Node2D) -> Vector2:
+	var best: Vector2 = _head.global_position
+	var best_distance: float = INF
+	var radius: float = 0.0
+	for node: CollisionShape2D in _head_shapes:
+		if node == null or not node.is_inside_tree() or not (node.shape is CircleShape2D):
+			continue
+		var distance: float = node.global_position.distance_squared_to(victim.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = node.global_position
+			radius = (node.shape as CircleShape2D).radius
+	return best + (victim.global_position - best).normalized() * radius
 
 ## What a strike at this head speed takes off, scaled per ADR-0005: the
 ## weapon's `damage` is what a full-speed committed swing does, a slow

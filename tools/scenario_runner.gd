@@ -34,6 +34,7 @@ const PlayerScene: PackedScene = preload("res://scenes/Player.tscn")
 const WeaponStatsType := preload("res://scripts/WeaponStats.gd")
 const StageType := preload("res://scripts/Stage.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
+const HitFeedbackType := preload("res://scripts/HitFeedback.gd")
 
 const SCENARIO_NAMES: PackedStringArray = [
 	"aim_angle",
@@ -88,6 +89,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_weapon_carries_to_winner_next_round",
 	"pickup_drawn_with_weapon_art",
 	"roster_heads_do_not_tunnel_head_reversed",
+	"strike_shows_hitmarker_and_number",
+	"lethal_strike_marker_is_distinct",
+	"slow_contact_shows_zero_not_marker",
+	"damage_numbers_switch_off",
+	"zero_numbers_rate_limited",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -551,6 +557,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_drawn_with_weapon_art()
 		"roster_heads_do_not_tunnel_head_reversed":
 			return await _scenario_roster_heads_do_not_tunnel_head_reversed()
+		"strike_shows_hitmarker_and_number":
+			return await _scenario_strike_shows_hitmarker_and_number()
+		"lethal_strike_marker_is_distinct":
+			return await _scenario_lethal_strike_marker_is_distinct()
+		"slow_contact_shows_zero_not_marker":
+			return await _scenario_slow_contact_shows_zero_not_marker()
+		"damage_numbers_switch_off":
+			return await _scenario_damage_numbers_switch_off()
+		"zero_numbers_rate_limited":
+			return await _scenario_zero_numbers_rate_limited()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -5116,6 +5132,223 @@ func _scenario_roster_heads_do_not_tunnel_head_reversed() -> Array[String]:
 		attacker.queue_free()
 		blocker.queue_free()
 		await _await_ticks(2)
+
+	await _teardown(stage)
+	return failures
+
+# --- Hitmarkers and damage numbers (issue #33) -------------------------------
+
+## A strike's attacker colour, distinct from every default so a marker drawn
+## in it can only have come from `identity_color`.
+const HIT_ATTACKER_COLOR: Color = Color(0.2, 0.9, 0.4, 1.0)
+## How far from the victim's centre a reported strike point may be: the body's
+## radius plus a little, since the head's leading edge is on its surface.
+const HIT_POINT_TOLERANCE: float = PLAYER_RADIUS + 12.0
+## Head speeds for driving `_land_strike` directly: a real swing too slow to
+## count (between Player.knockback_threshold and MIN_STRIKE_SPEED), a contact
+## too slow to be a swing, and a clean strike.
+const HIT_TOO_SLOW_SPEED: float = 500.0
+const HIT_GRAZE_SPEED: float = 200.0
+const HIT_CLEAN_SPEED: float = 1800.0
+
+## A feedback node on `stage`, and a log of everything it spawns, captured as
+## each child enters so a marker that has already faded still counts. Also
+## logs every `strike_landed` from `attacker`.
+func _hit_feedback_fixture(stage: Node2D, attacker: RigidBody2D) -> Dictionary:
+	var log: Dictionary = {"markers": [], "numbers": [], "strikes": []}
+	var feedback: Node2D = HitFeedbackType.new()
+	feedback.child_entered_tree.connect(func(child: Node) -> void:
+		if child is Label:
+			log["numbers"].append({"text": child.text, "amount": child.amount, "at": child.position})
+		else:
+			log["markers"].append({"colour": child.colour, "lethal": child.lethal,
+				"amount": child.amount, "arm": child.arm, "at": child.position}))
+	stage.add_child(feedback)
+	attacker.strike_landed.connect(func(victim: Node, amount: float, point: Vector2, lethal: bool) -> void:
+		log["strikes"].append({"victim": victim, "amount": amount, "point": point, "lethal": lethal}))
+	log["feedback"] = feedback
+	return log
+
+## Two players a head's length apart, rigs built, for driving `_land_strike`.
+func _hit_pair(stage: Node2D) -> Array[RigidBody2D]:
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(90, 0))
+	attacker.identity_color = HIT_ATTACKER_COLOR
+	await _await_ticks(3)
+	_brace(attacker)
+	_brace(victim)
+	return [attacker, victim]
+
+## A real swing lands: a hitmarker in the attacker's colour at the point of
+## impact, and a number reading the damage the victim actually took.
+func _scenario_strike_shows_hitmarker_and_number() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	attacker.identity_color = HIT_ATTACKER_COLOR
+	await physics_frame
+	_brace(attacker)
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+
+	var half_angle: float = SWING_HALF_ANGLES[SWING_HALF_ANGLES.size() - 1]
+	var aim: Dictionary = await _rehearse_swing(attacker, centre, half_angle)
+	var victim: RigidBody2D = _spawn_player(stage, aim["point"])
+	await physics_frame
+	_brace(victim)
+	await _swing_at(attacker, victim, centre, half_angle, aim["point"])
+
+	var damaging: Array = log["strikes"].filter(func(s: Dictionary) -> bool: return s["amount"] > 0.0)
+	print("      %d strike(s) reported, victim on %.1f damage, %d marker(s), %d number(s)" % [
+		log["strikes"].size(), victim.damage, log["markers"].size(), log["numbers"].size()])
+	if damaging.is_empty():
+		failures.append("the swing dealt %.1f damage but reported no damaging strike" % victim.damage)
+	else:
+		var total: float = 0.0
+		for s: Dictionary in damaging:
+			total += s["amount"]
+			var off: float = (s["point"] - victim.global_position).length()
+			if off > HIT_POINT_TOLERANCE:
+				failures.append("a strike was reported %.1f px from the victim's centre" % off)
+		if absf(total - victim.damage) > 0.01:
+			failures.append("strikes reported %.1f damage, the victim took %.1f" % [total, victim.damage])
+	if log["markers"].size() != damaging.size():
+		failures.append("%d damaging strike(s) drew %d hitmarker(s)" % [damaging.size(), log["markers"].size()])
+	for m: Dictionary in log["markers"]:
+		if not m["lethal"] and m["colour"] != HIT_ATTACKER_COLOR:
+			failures.append("a hitmarker was drawn in %s, not the attacker's %s" % [m["colour"], HIT_ATTACKER_COLOR])
+	var damage_numbers: Array = log["numbers"].filter(func(n: Dictionary) -> bool: return n["amount"] > 0.0)
+	if damage_numbers.size() != damaging.size():
+		failures.append("%d damaging strike(s) drew %d damage number(s)" % [damaging.size(), damage_numbers.size()])
+	for i in mini(damaging.size(), damage_numbers.size()):
+		var expected: String = str(roundi(damaging[i]["amount"]))
+		if damage_numbers[i]["text"] != expected:
+			failures.append("a %.1f strike's number reads '%s', not '%s'" % [
+				damaging[i]["amount"], damage_numbers[i]["text"], expected])
+
+	await _teardown(stage)
+	return failures
+
+## Struck until eliminated: exactly the eliminating strike is reported lethal,
+## and its marker is the red, bigger variant.
+func _scenario_lethal_strike_marker_is_distinct() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+
+	var swings: int = 0
+	while victim.alive and swings < MAX_KILL_SWINGS:
+		attacker._land_strike(victim, HIT_CLEAN_SPEED)
+		swings += 1
+		await physics_frame
+
+	var markers: Array = log["markers"]
+	print("      %d strike(s) to eliminate, %d marker(s)" % [swings, markers.size()])
+	if victim.alive:
+		failures.append("%d clean strikes never eliminated the victim" % swings)
+	elif markers.size() < 2:
+		failures.append("only %d marker(s); need a survivable strike to compare against" % markers.size())
+	else:
+		var last: Dictionary = markers[markers.size() - 1]
+		if not last["lethal"]:
+			failures.append("the eliminating strike's marker is not the lethal variant")
+		if last["colour"] != HitFeedbackType.LETHAL_COLOR:
+			failures.append("the lethal marker is %s, not red" % last["colour"])
+		for m: Dictionary in markers.slice(0, markers.size() - 1):
+			if m["lethal"]:
+				failures.append("a strike the victim survived was drawn as lethal")
+			if m["arm"] >= last["arm"]:
+				failures.append("the lethal marker (arm %.1f) is no bigger than a survivable one (%.1f)" % [
+					last["arm"], m["arm"]])
+		if not log["strikes"].back()["lethal"]:
+			failures.append("the eliminating strike was reported with lethal = false")
+
+	await _teardown(stage)
+	return failures
+
+## A real swing too slow to count reports a 0: a `0` number, no hitmarker, no
+## damage. A contact slower than a swing reports nothing at all.
+func _scenario_slow_contact_shows_zero_not_marker() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+
+	attacker._land_strike(victim, HIT_GRAZE_SPEED)
+	await physics_frame
+	if not log["strikes"].is_empty() or not log["numbers"].is_empty():
+		failures.append("a %.0f px/s graze reported a strike; only swings over %.0f px/s should" % [
+			HIT_GRAZE_SPEED, attacker.knockback_threshold])
+
+	attacker._land_strike(victim, HIT_TOO_SLOW_SPEED)
+	await physics_frame
+	if log["strikes"].size() != 1 or log["strikes"][0]["amount"] != 0.0:
+		failures.append("a %.0f px/s swing did not report one 0-damage strike (%d reported)" % [
+			HIT_TOO_SLOW_SPEED, log["strikes"].size()])
+	if log["numbers"].size() != 1 or log["numbers"][0]["text"] != "0":
+		failures.append("a too-slow swing drew %d number(s), not one '0'" % log["numbers"].size())
+	if not log["markers"].is_empty():
+		failures.append("a 0-damage swing drew a hitmarker")
+	if victim.damage != 0.0:
+		failures.append("a too-slow swing dealt %.1f damage" % victim.damage)
+
+	await _teardown(stage)
+	return failures
+
+## With damage numbers switched off, a damaging strike still draws its
+## hitmarker, and no strike draws a number -- a 0 then shows nothing at all.
+func _scenario_damage_numbers_switch_off() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+	if not HitFeedbackType.SHOW_DAMAGE_NUMBERS:
+		failures.append("SHOW_DAMAGE_NUMBERS is off; issue #33 develops with it on")
+	log["feedback"].show_damage_numbers = false
+
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	attacker._land_strike(victim, HIT_TOO_SLOW_SPEED)
+	await physics_frame
+	if log["markers"].size() != 1:
+		failures.append("a damaging strike with numbers off drew %d hitmarker(s), not 1" % log["markers"].size())
+	if not log["numbers"].is_empty():
+		failures.append("numbers are off but %d were drawn" % log["numbers"].size())
+
+	await _teardown(stage)
+	return failures
+
+## A head dragged along someone reports a 0 every contact; only one per
+## attacker/victim pair per cooldown is drawn.
+func _scenario_zero_numbers_rate_limited() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+
+	for i in 5:
+		attacker._land_strike(victim, HIT_TOO_SLOW_SPEED)
+		await physics_frame
+	if log["numbers"].size() != 1:
+		failures.append("5 too-slow contacts on consecutive ticks drew %d '0's, not 1" % log["numbers"].size())
+	await _await_ticks(HitFeedbackType.ZERO_COOLDOWN_FRAMES)
+	attacker._land_strike(victim, HIT_TOO_SLOW_SPEED)
+	await physics_frame
+	if log["numbers"].size() != 2:
+		failures.append("a too-slow contact after the cooldown drew no new '0' (%d total)" % log["numbers"].size())
+	# A damaging strike is never rate-limited.
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	await physics_frame
+	if log["numbers"].size() != 3:
+		failures.append("a damaging strike right after a '0' drew no number")
 
 	await _teardown(stage)
 	return failures
