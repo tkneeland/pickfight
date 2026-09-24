@@ -74,6 +74,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"moving_platform_carries_player",
 	"head_plants_moving_platform",
 	"crumbling_ledge_three_phases",
+	"erosion_island_survives_full_erosion",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -509,6 +510,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_head_plants_moving_platform()
 		"crumbling_ledge_three_phases":
 			return await _scenario_crumbling_ledge_three_phases()
+		"erosion_island_survives_full_erosion":
+			return await _scenario_erosion_island_survives_full_erosion()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2290,6 +2293,7 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Gauntlet.tscn",
 	"res://scenes/stages/Slant.tscn",
 	"res://scenes/stages/Bowl.tscn",
+	"res://scenes/stages/Erosion.tscn",
 ]
 
 func _scenario_stage_spawns_are_safe() -> Array[String]:
@@ -4246,6 +4250,92 @@ func _scenario_crumbling_ledge_three_phases() -> Array[String]:
 	if returned_y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
 		failures.append("ledge did not hold again after its away delay: player at %.1f, expected resting at %.1f" % [
 			returned_y, ledge_top])
+
+	await _teardown(stage)
+	return failures
+
+## Erosion (issue #19 Solution item 2; US-3, US-6, US-7, US-8): after every
+## crumbling ledge on the stage has gone away at least once, a player is
+## still able to stand somewhere. The permanent island is a correctness
+## requirement, not a balance choice -- it exists so the stage cannot erode
+## to nothing and deadlock the round, and this is the one property neither
+## stage_spawns_are_safe nor every_stage_can_ring_out can express, because
+## neither drives a crumbling ledge through its cycle.
+##
+## Same assertion shape as crumbling_ledge_three_phases: a player dropped
+## onto a ledge is held through its warning delay, and the fall away from it
+## is read off the player's own position rather than off the ledge's
+## internal state. Run once per ledge, in turn -- freeing and resetting the
+## player between trials so no ledge inherits another's fall -- and only then
+## is a fresh player dropped onto the permanent island and checked the same
+## way head_plants_terrain checks any other floor: settled, not falling,
+## resting on its surface.
+##
+## Ledge names and geometry are written down here rather than discovered by
+## walking the instantiated scene, matching crumbling_ledge_three_phases:
+## Erosion.tscn's own four ledges, all 200x24 at y=300, and its island, 140
+## wide centred at y=300.
+func _scenario_erosion_island_survives_full_erosion() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var erosion: Node2D = (load("res://scenes/stages/Erosion.tscn") as PackedScene).instantiate()
+	stage.add_child(erosion)
+
+	var ledge_names: PackedStringArray = ["LedgeA", "LedgeB", "LedgeC", "LedgeD"]
+	var ledge_size := Vector2(200, 24)
+	# Independently written down, not read off CrumblingLedge.gd: the same
+	# solid-terrain grey this suite and every stage already builds with.
+	var solid_color := Color(0.35, 0.35, 0.4, 1)
+	var ticks_per_second: float = float(Engine.physics_ticks_per_second)
+	var warn_ticks: int = int(round(LEDGE_WARN_SEC * ticks_per_second))
+
+	for ledge_name: String in ledge_names:
+		var ledge: StaticBody2D = erosion.get_node(ledge_name) as StaticBody2D
+		var ledge_top: float = ledge.position.y - ledge_size.y / 2.0
+		var spawn_pos: Vector2 = Vector2(
+			ledge.position.x, ledge_top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+		var player: RigidBody2D = _spawn_player(stage, spawn_pos)
+		# Straight up, as in crumbling_ledge_three_phases: keeps the weapon
+		# head clear of the ledge, so only the player's own body triggers it.
+		player.set_input_vector(Vector2.UP)
+
+		await _await_ticks(LEDGE_SETTLE_TICKS)
+		var settled_y: float = player.global_position.y
+		if settled_y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+			failures.append("%s: player never settled on the ledge before its cycle was driven" % ledge_name)
+
+		var fell: bool = false
+		for _i in (warn_ticks + LEDGE_FALL_CONFIRM_TICKS):
+			await physics_frame
+			if player.global_position.y > settled_y + PLANT_CLEARANCE:
+				fell = true
+				break
+
+		if not fell:
+			failures.append("%s: never went away within its %.2fs warning delay plus margin" % [
+				ledge_name, LEDGE_WARN_SEC])
+		elif ledge.visual_color() == solid_color:
+			failures.append("%s: player fell off it but it still reads as solid" % ledge_name)
+
+		player.queue_free()
+		await _await_ticks(BOOST_RESET_TICKS)
+
+	# Every ledge on the stage has now gone away at least once. The permanent
+	# island's job is to still be standable regardless -- checked the same
+	# way head_plants_terrain checks any other floor.
+	var island_top: float = 300.0 - 24.0 / 2.0
+	var island_player: RigidBody2D = _spawn_player(stage, Vector2(0, island_top - 200.0))
+	island_player.set_input_vector(Vector2.ZERO)
+	await _await_ticks(LANDING_TICKS)
+
+	if not island_player.alive:
+		failures.append("island: player died instead of standing on it")
+	elif absf(island_player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("island: player never settled, vertical speed %.1f px/s" % island_player.linear_velocity.y)
+	elif island_player.global_position.y + PLAYER_RADIUS > island_top + PLANT_CLEARANCE:
+		failures.append("island: player settled at y=%.1f, expected resting on the island top at %.1f" % [
+			island_player.global_position.y, island_top])
 
 	await _teardown(stage)
 	return failures
