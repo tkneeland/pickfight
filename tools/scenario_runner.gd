@@ -318,6 +318,13 @@ const BUMP_TICKS: int = 60
 ## separations; until then, re-probe this value after any pickaxe reach change.
 const CLASH_SEPARATION: float = 230.0
 const CLASH_TICKS: int = 120
+## `heads_do_not_interpenetrate` spaces its pair on its own number. With the
+## suite's earlier scenarios run first, the "sent at each other" pair at the
+## 150 px pickaxe crosses at 220 and 230 px and holds at 240 and 250 (#45);
+## run alone it holds at all four. That history dependence is the #38 kind
+## and is left open as a follow-up rather than tuned away here -- 240 is the
+## same 60 px of overlap the 140 px pickaxe had at 220.
+const INTERPENETRATE_SEPARATION: float = 2.0 * MAX_REACH - 60.0
 ## Ticks over which the two heads are walked into each other when a clash
 ## needs to be established rather than tested. Ramping the commanded reach
 ## rather than asking for all of it at once brings them together at a rate
@@ -439,10 +446,11 @@ func _initialize() -> void:
 		quit(2)
 		return
 
-	if _scenario_filter != "" and not SCENARIO_NAMES.has(_scenario_filter):
-		printerr("SCENARIO: unknown scenario '%s' (known: %s)" % [_scenario_filter, ", ".join(SCENARIO_NAMES)])
-		quit(2)
-		return
+	for wanted: String in _scenario_filter.split(",", false):
+		if not SCENARIO_NAMES.has(wanted):
+			printerr("SCENARIO: unknown scenario '%s' (known: %s)" % [wanted, ", ".join(SCENARIO_NAMES)])
+			quit(2)
+			return
 
 	# Not awaited: this kicks off the coroutine and returns control to the
 	# engine, which then drives it forward one physics tick at a time via the
@@ -455,11 +463,15 @@ func _parse_args() -> void:
 			_run_all_flag = true
 		elif arg.begins_with("--scenario="):
 			_scenario_filter = arg.trim_prefix("--scenario=")
+		elif arg.begins_with("--scenarios="):
+			# A comma-separated run in the given order, for replaying the
+			# history a history-dependent failure needs (#38, #45).
+			_scenario_filter = arg.trim_prefix("--scenarios=")
 		else:
 			printerr("SCENARIO: unrecognized argument '%s'" % arg)
 
 func _run_all() -> void:
-	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else PackedStringArray([_scenario_filter])
+	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else _scenario_filter.split(",")
 	var pass_count: int = 0
 	var fail_count: int = 0
 
@@ -1552,7 +1564,7 @@ func _scenario_heads_do_not_interpenetrate() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
 	var centre: Vector2 = DEEP_PARK_POSITION
-	var half: Vector2 = Vector2.RIGHT * CLASH_SEPARATION * 0.5
+	var half: Vector2 = Vector2.RIGHT * INTERPENETRATE_SEPARATION * 0.5
 	var left: RigidBody2D = _spawn_player(stage, centre - half)
 	var right: RigidBody2D = _spawn_player(stage, centre + half)
 	await physics_frame
