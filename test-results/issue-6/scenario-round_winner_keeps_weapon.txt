@@ -1,6 +1,6 @@
+$ godot --headless --path . -s tools/scenario_runner.gd -- --scenario=round_winner_keeps_weapon
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
 PASS  round_winner_keeps_weapon
 ---
 1 passed, 0 failed, 1 total
-exit=0
