@@ -2875,8 +2875,10 @@ const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"dagger": "M",
 	"staff": "S",
 }
+## Since playtest 1 (#45) the dagger alone is the quick one: the staff is the
+## long reach weapon and answers with the sword and pickaxe.
 const ROSTER_ANSWER_TIERS: Dictionary = {
-	"staff": "S",
+	"staff": "M",
 	"dagger": "S",
 	"pickaxe": "M",
 	"sword": "M",
