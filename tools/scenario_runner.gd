@@ -60,6 +60,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_silhouette_matches_head_shape",
 	"stage_rotates_each_round",
 	"stage_spawns_are_safe",
+	"waiting_expires_disconnected_claims",
+	"abandoned_round_ends_without_winner",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -423,6 +425,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_rotates_each_round()
 		"stage_spawns_are_safe":
 			return await _scenario_stage_spawns_are_safe()
+		"waiting_expires_disconnected_claims":
+			return await _scenario_waiting_expires_disconnected_claims()
+		"abandoned_round_ends_without_winner":
+			return await _scenario_abandoned_round_ends_without_winner()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2191,4 +2197,166 @@ func _scenario_stage_spawns_are_safe() -> Array[String]:
 
 		await _teardown(stage)
 
+	return failures
+
+# --- Roster and round loop (issue #12) --------------------------------------
+
+## Grace period the abandoned-round scenario runs RoundManager with: short
+## enough to wait out, long enough that the reconnect inside it is clearly
+## inside it.
+const ABANDON_GRACE_SEC: float = 0.5
+## How long a round-loop scenario waits for something that should happen
+## within a few frames before calling it a failure.
+const ROUND_LOOP_TIMEOUT_MSEC: int = 3000
+
+## A test double for ControllerServer's roster seam that models liveness:
+## `slots` are claimed, `live` are the ones with a connected controller, and
+## `expire_disconnected_claims()` behaves like the real one -- it drops every
+## claimed slot that is not live.
+class _LiveRoster extends Node:
+	var slots: Array[int] = []
+	var live: Array[int] = []
+	func claimed_slots() -> Array[int]:
+		return slots
+	func slot_has_controller(slot: int) -> bool:
+		return live.has(slot)
+	func expire_disconnected_claims() -> void:
+		var kept: Array[int] = []
+		for slot in slots:
+			if live.has(slot):
+				kept.append(slot)
+		slots = kept
+
+## A real RoundManager (preloaded by path) driving two round-owned players
+## against a _LiveRoster, on a stub stage with spawns and no geometry at all:
+## players spawn far above everything and simply fall, alive, for as long as
+## a scenario needs. Referenced through literal relative NodePaths rather than
+## get_path(), which fails before the root's first tick when a scenario runs
+## on its own.
+func _new_round_loop(grace_sec: float) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "Container"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	for i in 2:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "P%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		players.append(player)
+	var roster := _LiveRoster.new()
+	roster.name = "Roster"
+	stage.add_child(roster)
+	var round_manager := Node.new()
+	round_manager.set_script(RoundManagerType)
+	var paths: Array[NodePath] = [NodePath("../P0"), NodePath("../P1")]
+	round_manager.player_paths = paths
+	var stub_stages: Array[PackedScene] = [
+		_make_stub_stage("Sky", [DEEP_PARK_POSITION, DEEP_PARK_POSITION + Vector2(300, 0)])]
+	round_manager.stage_scenes = stub_stages
+	round_manager.arena_container_path = NodePath("../Container")
+	round_manager.controller_server_path = NodePath("../Roster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.abandoned_round_grace_sec = grace_sec
+	stage.add_child(round_manager)
+	return {"stage": stage, "players": players, "roster": roster, "round_manager": round_manager}
+
+## Steps physics until `condition` holds or `timeout_msec` of wall-clock time
+## passes; returns whether it held. Wall-clock rather than ticks because
+## RoundManager's grace and pause timers are wall-clock.
+func _await_condition(condition: Callable, timeout_msec: int) -> bool:
+	var deadline: int = Time.get_ticks_msec() + timeout_msec
+	while Time.get_ticks_msec() < deadline:
+		await physics_frame
+		if condition.call():
+			return true
+	return false
+
+func _await_msec(msec: int) -> void:
+	var deadline: int = Time.get_ticks_msec() + msec
+	while Time.get_ticks_msec() < deadline:
+		await physics_frame
+
+## Issue #12: a claim whose controller dropped while no round was running is
+## released right away, not held until a round that has not started yet ends.
+## Before the fix it was held forever, counted towards min_players_to_start,
+## and the next phone to join started a round against a controller-less body.
+func _scenario_waiting_expires_disconnected_claims() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_round_loop(ABANDON_GRACE_SEC)
+	var roster: _LiveRoster = loop["roster"]
+	var players: Array[RigidBody2D] = loop["players"]
+
+	# Slot 0 was claimed, then its phone dropped, all before any round.
+	roster.slots = [0]
+	roster.live = []
+	var released: bool = await _await_condition(func() -> bool: return roster.slots.is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not released:
+		failures.append("a claim that disconnected while waiting was still held: %s" % [roster.slots])
+
+	# A second phone joins. Only one controller is actually connected, so no
+	# round may start.
+	roster.slots.append(1)
+	roster.live = [1]
+	await _await_ticks(SETTLE_TICKS)
+	for i in players.size():
+		if players[i].alive:
+			failures.append("P%d was brought into a round that only one connected player could have started" % i)
+
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #12 / ADR-0007 amendment: a round in which no surviving player has a
+## connected controller ends with no winner once the grace period passes, and
+## a controller reconnecting inside the grace period keeps the round going.
+## Before the fix such a round could never end, so its claims never expired
+## and every new phone was refused.
+func _scenario_abandoned_round_ends_without_winner() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_round_loop(ABANDON_GRACE_SEC)
+	var roster: _LiveRoster = loop["roster"]
+	var round_manager: Variant = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var grace_msec: int = int(ABANDON_GRACE_SEC * 1000.0)
+
+	roster.slots = [0, 1]
+	roster.live = [0, 1]
+	var started: bool = await _await_condition(
+		func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC)
+	if not started:
+		failures.append("round never started with two connected players")
+		await _teardown(loop["stage"])
+		return failures
+
+	# Everyone drops, but one controller is back well inside the grace period:
+	# the round carries on, and keeps carrying on well past the grace period.
+	roster.live = []
+	await _await_msec(grace_msec / 3)
+	roster.live = [0]
+	await _await_msec(grace_msec * 2)
+	if not (players[0].alive and players[1].alive):
+		failures.append("round ended although a controller reconnected inside the grace period")
+
+	# Everyone drops for good: the round ends with nobody scoring or dying.
+	roster.live = []
+	var ended: bool = await _await_condition(
+		func() -> bool: return not players[0].alive and not players[1].alive,
+		grace_msec + ROUND_LOOP_TIMEOUT_MSEC)
+	if not ended:
+		failures.append("round with no connected controller never ended")
+	for i in players.size():
+		if round_manager._scores[i] != 0:
+			failures.append("P%d scored %d from an abandoned round" % [i, round_manager._scores[i]])
+		if players[i].deaths != 0:
+			failures.append("P%d was counted as dying (%d) in an abandoned round" % [i, players[i].deaths])
+
+	# And the round boundary releases the claims, so new phones can join.
+	var released: bool = await _await_condition(func() -> bool: return roster.slots.is_empty(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not released:
+		failures.append("abandoned round ended but its claims were still held: %s" % [roster.slots])
+
+	await _teardown(loop["stage"])
 	return failures

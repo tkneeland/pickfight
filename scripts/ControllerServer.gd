@@ -106,7 +106,7 @@ var _bound_once: PackedByteArray = PackedByteArray()
 ## cleared only by `expire_disconnected_claims()` at a round boundary --
 ## never by an ordinary disconnect, which is the whole point. A round loop
 ## reads `claimed_slots()` to know who is in the roster and calls
-## `expire_disconnected_claims()` right before starting a new round.
+## `expire_disconnected_claims()` before every attempt to start a round.
 var _slot_claimed: PackedByteArray = PackedByteArray()
 ## The id that claimed each slot, so a reconnecting phone can be matched back
 ## to the same slot instead of taking whatever is free. Empty for an
@@ -208,7 +208,7 @@ func _generate_qr_texture(text: String) -> ImageTexture:
 	var output: Array = []
 	var exit_code: int = OS.execute("qrencode", ["-o", out_path, "-s", "8", "-m", "2", text], output, true)
 	if exit_code != 0:
-		push_warning("ControllerServer: qrencode unavailable or failed (exit %d) -- install with `brew install qrencode` to show a join QR code" % exit_code)
+		push_warning("ControllerServer: qrencode unavailable or failed (exit %d) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code" % exit_code)
 		return null
 	var image: Image = Image.new()
 	if image.load(out_path) != OK:
@@ -451,10 +451,17 @@ func claimed_slots() -> Array[int]:
 			result.append(slot)
 	return result
 
+## Whether `slot` has a connected controller right now. A claimed slot can be
+## without one mid-round (ADR-0007); the round loop uses this to spot a round
+## that no one still in it can finish.
+func slot_has_controller(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] != null
+
 ## Drop every claimed slot that has no live controller right now. Called by
-## the round loop right before a new round starts: a roster entry survives a
-## disconnect only until the end of the round it disconnected in (ADR-0007) --
-## an entry not reclaimed by then does not carry into the next round.
+## the round loop before every attempt to start a round: a roster entry
+## survives a disconnect only until the end of the round it disconnected in
+## (ADR-0007) -- an entry not reclaimed by then does not carry into the next
+## round, and one that dropped while no round was running is not held at all.
 func expire_disconnected_claims() -> void:
 	for slot in _slot_claimed.size():
 		if _slot_claimed[slot] == 1 and _slot_peers[slot] == null:

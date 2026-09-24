@@ -38,6 +38,13 @@ extends Node
 ## Pause after a round resolves, so the shared screen has a moment where a
 ## win is visible before the next round's players pop back in.
 @export var round_end_pause_sec: float = 2.0
+## How long a round may run with no player still in it holding a connected
+## controller before it ends with no winner (ADR-0007 amendment). Without
+## this, a round everyone walked away from can never end -- nobody is left to
+## ring anyone out -- so its claims never expire and every new phone is
+## refused. Long enough that a Wi-Fi blip hitting the whole room at once
+## costs nobody the round.
+@export var abandoned_round_grace_sec: float = 10.0
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END }
 
@@ -53,6 +60,9 @@ var _scoreboard: Control
 var _stage_index: int = -1
 var _current_stage: Node2D
 var _stage_spawn_points: Array[Vector2] = []
+## When the current round was first seen with no connected controller among
+## its surviving players, or -1 while at least one is connected.
+var _abandoned_since_msec: int = -1
 
 func _ready() -> void:
 	for path in player_paths:
@@ -74,17 +84,22 @@ func _process(_delta: float) -> void:
 			_check_round_end()
 		State.ROUND_END:
 			if Time.get_ticks_msec() >= _pause_until_msec:
-				if _controller_server != null:
-					_controller_server.expire_disconnected_claims()
 				_state = State.WAITING
 				_try_start_round()
 
 ## Enough of the roster present and idle: bring every claimed player into
 ## the arena. Slots nobody has claimed stay exactly as `Player._ready()`
 ## (or the previous round's `leave_round()`) left them -- inert and hidden.
+##
+## Disconnected claims are expired first, on every attempt rather than only
+## after a round ends: ADR-0007 holds an entry "until the end of the current
+## round", and while waiting there is no round to hold it for. Otherwise a
+## phone that joined and dropped before any round started keeps its slot
+## forever, is counted as present, and gets spawned as a limp body.
 func _try_start_round() -> void:
 	if _controller_server == null:
 		return
+	_controller_server.expire_disconnected_claims()
 	var roster: Array[int] = _controller_server.claimed_slots()
 	if roster.size() < min_players_to_start:
 		# Drop the last round's scoreboard too, so it can't sit over the
@@ -107,6 +122,7 @@ func _try_start_round() -> void:
 		else:
 			push_warning("RoundManager: stage has %d spawn point(s), none for slot %d; spawning at the origin" % [_stage_spawn_points.size(), slot])
 		_players[slot].start_round(spawn)
+	_abandoned_since_msec = -1
 	_state = State.ROUND_ACTIVE
 
 ## Rotates to the next stage (ADR-0008): frees the outgoing instance, wraps
@@ -137,6 +153,10 @@ func _set_waiting_text(connected: int) -> void:
 ## The lone survivor (if any) scores the round and is returned to the same
 ## inert state a loser ends up in, via `leave_round()` rather than
 ## `eliminate()`, since finishing a round alive is not a death.
+##
+## A round nobody can finish -- no survivor has a connected controller -- is
+## ended with no winner once `abandoned_round_grace_sec` has passed; every
+## survivor leaves the round the same way a winner does.
 func _check_round_end() -> void:
 	var alive_slots: Array[int] = []
 	for slot in _players.size():
@@ -144,7 +164,11 @@ func _check_round_end() -> void:
 		if player != null and player.alive:
 			alive_slots.append(slot)
 	if alive_slots.size() > 1:
-		return
+		if not _round_abandoned(alive_slots):
+			return
+		for slot in alive_slots:
+			_players[slot].leave_round()
+		alive_slots.clear()
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
@@ -153,6 +177,22 @@ func _check_round_end() -> void:
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
+
+## Whether the round has run for `abandoned_round_grace_sec` with none of
+## `alive_slots` holding a connected controller. Any one reconnecting resets
+## the countdown. A roster that cannot report liveness (a test stub without
+## `slot_has_controller()`) never abandons a round.
+func _round_abandoned(alive_slots: Array[int]) -> bool:
+	if not _controller_server.has_method("slot_has_controller"):
+		return false
+	for slot in alive_slots:
+		if _controller_server.slot_has_controller(slot):
+			_abandoned_since_msec = -1
+			return false
+	var now: int = Time.get_ticks_msec()
+	if _abandoned_since_msec < 0:
+		_abandoned_since_msec = now
+	return now - _abandoned_since_msec >= int(abandoned_round_grace_sec * 1000.0)
 
 ## Refreshes and reveals the round-end scoreboard: one icon+score entry per
 ## player slot, read from that slot's Scoreboard/SlotN child (Icon then

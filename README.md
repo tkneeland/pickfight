@@ -14,10 +14,10 @@ Built with Godot 4.6.
 
 ## Status
 
-Early prototype. `scenes/Main.tscn` has one arena and two test players so
-the pole-swing movement and the knockback-on-collision combat can be felt
-out before anything else (art, levels, weapons, win conditions) gets built
-on top.
+Early prototype. `scenes/Main.tscn` runs the endless round loop for two
+phone-controlled players, so the pole-swing movement and swing-based combat
+can be felt out before anything else (art, more stages, more weapons) gets
+built on top.
 
 ## How it plays
 
@@ -52,8 +52,12 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
 4. **Drag anywhere on the phone screen to swing.** The drag is relative to
    wherever your thumb lands, so you never need to look at the phone.
 
-Phones bind to players in join order; the first free slot wins, and
-disconnecting frees it again.
+A new phone takes the first free player slot and enters play at the start of
+the next round. A phone that drops mid-round keeps its slot until that round
+ends, and reconnecting gets the same player back
+([ADR-0007](docs/adr/0007-roster-survives-a-mid-round-disconnect.md)). A
+round nobody still in it can finish, because every survivor's phone is gone,
+ends with no winner after 10 seconds.
 
 ### Debugging
 
@@ -98,9 +102,11 @@ resolved and no longer applies.
 ## Project layout
 
 ```
-scenes/      .tscn scene files (Main, Arena, Player)
+scenes/      .tscn scene files (Main, Player; Arena is the scenario
+             suite's physics fixture)
+scenes/stages/  the rotating stages, one .tscn each (ADR-0008)
 scripts/     GDScript sources (Player, WeaponHead, WeaponStats,
-             ControllerServer, KillZone)
+             ControllerServer, RoundManager, Stage, KillZone)
 resources/   weapon stat resources (pickaxe.tres)
 controller/  the single-file controller web page served to phones
 tools/       headless test fixtures (scenario_runner, ws_probe_client,

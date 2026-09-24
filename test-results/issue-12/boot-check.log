@@ -9,8 +9,9 @@ ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roamin
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:209)
        [1] _ready (res://scripts/ControllerServer.gd:153)
-WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- install with `brew install qrencode` to show a join QR code
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:211)
        [1] _ready (res://scripts/ControllerServer.gd:153)
+boot exit 0
