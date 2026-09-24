@@ -1,7 +1,0 @@
-Fresh-clone boot check, issue #34 (branch feat/issue-34-phone-buzz, commit 01da9b2)
-
-$ git clone -q . <scratchpad>/pf34
-$ godot --headless --path <scratchpad>/pf34 --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
-(no output; grep exit 1)
-
-Result: PASS -- the clone has no .godot/ cache and boots with no script errors.
