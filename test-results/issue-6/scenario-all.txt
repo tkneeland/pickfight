@@ -1,0 +1,28 @@
+# Re-captured after rebasing onto main @ c24f002
+# (Austin's #8 stage rotation and #12 round loop landed; #6 was re-verified on the merged code)
+$ godot --headless --path . -s tools/scenario_runner.gd -- --all
+PASS  release_eases_to_rest
+PASS  head_plants_terrain
+PASS  head_plants_player
+PASS  non_finite_input_rejected
+PASS  weapon_stats_are_swappable
+PASS  haft_is_non_colliding
+PASS  rig_freed_with_player
+PASS  head_does_not_tunnel_thin_platform
+PASS  head_strike_damage_scales
+PASS  body_collision_knockback_no_damage
+PASS  damage_kills
+PASS  ringout_kills_at_full_health
+PASS  ringout_then_next_round_survives
+PASS  heads_do_not_interpenetrate
+PASS  clash_higher_drive_force_wins
+PASS  heads_do_not_tunnel_head
+PASS  damage_reddens_fill_identity_persists
+PASS  identity_colours_match_controller_page
+PASS  weapon_silhouette_matches_head_shape
+PASS  stage_rotates_each_round
+PASS  stage_spawns_are_safe
+PASS  waiting_expires_disconnected_claims
+PASS  abandoned_round_ends_without_winner
+PASS  round_winner_keeps_weapon
+27 passed, 0 failed, 27 total
