@@ -348,6 +348,8 @@ func _round_abandoned(alive_slots: Array[int]) -> bool:
 ## Refreshes and reveals the round-end scoreboard: one icon+score entry per
 ## player slot, read from that slot's Scoreboard/SlotN child (Icon then
 ## Score, per scenes/Main.tscn) and this node's own _players/_scores.
+## Only slots in play get an entry (#45): an empty or disconnected slot's
+## entry is hidden, so two players see two scores, not four.
 func _show_scoreboard() -> void:
 	if _scoreboard == null:
 		return
@@ -355,6 +357,8 @@ func _show_scoreboard() -> void:
 		if slot >= _scoreboard.get_child_count():
 			continue
 		var entry: Node = _scoreboard.get_child(slot)
+		if entry is CanvasItem:
+			entry.visible = _slot_in_play(slot)
 		if entry.get_child_count() < 2:
 			continue
 		var icon: ColorRect = entry.get_child(0) as ColorRect
@@ -366,13 +370,26 @@ func _show_scoreboard() -> void:
 			score_label.text = str(_scores[slot]) if slot < _scores.size() else "0"
 	_scoreboard.visible = true
 
+## Whether `slot` is claimed and, where the roster can say, has a phone
+## connected right now (#45). Without a roster every slot counts, so a
+## scenario with no ControllerServer still sees its whole scoreboard.
+func _slot_in_play(slot: int) -> bool:
+	if _controller_server == null:
+		return true
+	if not _controller_server.claimed_slots().has(slot):
+		return false
+	if _controller_server.has_method("slot_has_controller"):
+		return _controller_server.slot_has_controller(slot)
+	return true
+
 func _update_score_label() -> void:
 	var label: Label = get_node_or_null(score_label_path) as Label
 	if label == null:
 		return
 	var parts: PackedStringArray = PackedStringArray()
 	for slot in _scores.size():
-		parts.append("P%d: %d" % [slot + 1, _scores[slot]])
+		if _slot_in_play(slot):
+			parts.append("P%d: %d" % [slot + 1, _scores[slot]])
 	label.text = "  ".join(parts)
 
 # --- Weapon pickups (issue #14, ADR-0009) ------------------------------------
