@@ -32,8 +32,8 @@ Issue #22 set out three options:
   the round ends, so a surface never climbs over the scoreboard or the waiting
   text.
 - **The rise is a deadline, not a speed.** `RoundManager.kill_zone_grace_sec`
-  (default 40 s) is how long the zone holds still. `kill_zone_rise_sec`
-  (default 28 s) is how long it then takes to reach the stage's highest spawn.
+  (default 50 s) is how long the zone holds still. `kill_zone_rise_sec`
+  (default 80 s) is how long it then takes to reach the stage's highest spawn.
   The speed is derived per stage as the distance from the kill zone to the
   highest spawn divided by `kill_zone_rise_sec`. Stages differ a lot in height:
   Flatlands climbs 480 px, and Cascade climbs 912 px to spawns at y=-352. A
@@ -58,8 +58,11 @@ Issue #22 set out three options:
 - The deadline measures to the highest spawn *point*, and spawns are drop
   points. A player idling on Flatlands' floor stands 276 px below its spawns,
   so the zone reaches them about a third of the way into the rise, roughly
-  50 s into the round. On Cascade it takes about nine tenths of the rise.
-  Retune the two exports if playtests want flat stages to last longer.
+  75 s into the round. On Cascade it takes about nine tenths of the rise.
+  Retuned once already: the first playtest (#45) found the rise too quick
+  and too easy to miss, so the grace went from 40 s to 50 s, the rise from
+  28 s to 80 s, and the band was made more opaque with a bright edge line.
+  The band is drawn from the start of the round, not only once it moves.
 - A stage with no floor `KillZone`, no spawns, or a kill zone above its highest
   spawn does not rise, and pushes a warning in the last case.
 - A future stage that wants a different pace can only change it through the

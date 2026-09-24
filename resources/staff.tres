@@ -18,23 +18,24 @@
 ; to rest, they do not check its extent -- so the roster's 5-11 px spread is
 ; a convention the weapons were drawn to, not a checked constraint.
 ;
-; Stats against the pickaxe's M/M/M baseline: the staff is the roster's best
-; mover and its worst hitter. Reach L (200 px against 140) makes it the
-; weapon that gets to a ledge first. Weight light -- mass 0.15 against 0.25,
-; force ceiling 4000 against 6000 -- so it loses clashes to everything, and
-; its drive is a half again quicker than the pickaxe's (36 rad/s, 1200 px/s,
-; 600 px/s return) so it answers a thumb immediately. Damage S (20 against
+; Stats against the pickaxe's M/M/M baseline (retuned after the first
+; playtest, #45): the staff is the roster's best mover and its worst hitter.
+; Reach L (240 px against 150) makes it the weapon that gets to a ledge first,
+; and the one that can hang from Gauntlet's ceiling. Weight light -- mass 0.15
+; against 0.25, force ceiling 4000 against 6000 -- so it loses clashes to
+; everything, the dagger included, and its drive is quick (36 rad/s, 1500 px/s
+; out, 700 px/s back) so it answers a thumb immediately. Damage S (20 against
 ; 34) is the price, and it is paid twice: the tiny head is also the hardest
 ; on the roster to actually land.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 200.0
+max_reach = 240.0
 mass = 0.15
 drive_speed = 36.0
-extend_speed = 1200.0
-rest_return_speed = 600.0
+extend_speed = 1500.0
+rest_return_speed = 700.0
 max_drive_force = 4000.0
 damage = 20.0
 head_circle_offsets = PackedVector2Array(2.07, 0.1)

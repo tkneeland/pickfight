@@ -25,23 +25,30 @@
 ; blocking area rather than as extra reach -- exactly the trade issue #13
 ; asks of it.
 ;
-; Stats against the pickaxe's M/M/M baseline: the sword is the pickaxe with
-; its reach traded for blade. Weight M and damage M are the baseline
-; unchanged (mass 0.25, force 6000, drive 24 rad/s / 700 px/s / 400 px/s,
-; damage 34). Reach S -- 90 px against 140 -- is the whole difference: the
-; big blade is balanced by the small swing lever, which is both less reach
-; and less head speed for the same slew.
+; Stats against the pickaxe's M/M/M baseline (retuned after the first
+; playtest, #45): the sword is the pickaxe with its reach traded for blade.
+; Weight M is the baseline (mass 0.25, force 6000, drive 24 rad/s). Reach S,
+; 70 px against 150, is balanced by a blade 2.5x as long as it first was --
+; the blocking area and the reach are the trade. A quicker extension than the
+; pickaxe (900 px/s out, 600 px/s back, against 700 / 400) and damage a
+; little over the baseline (40 against 34) keep a short lever worth swinging.
+; The blade was stretched 2.5x along its length only, forward: its back end
+; stays 24 px behind the anchor, because stretched about the anchor it
+; would have reached 61 px back down a 70 px haft and into the wielder's own
+; body. So the tip now reaches about 72 px past the anchor, 142 px from the
+; body. Circles refitted at the same spacing and width, every one still
+; clamped inside the art.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 90.0
+max_reach = 70.0
 mass = 0.25
 drive_speed = 24.0
-extend_speed = 700.0
-rest_return_speed = 400.0
+extend_speed = 900.0
+rest_return_speed = 600.0
 max_drive_force = 6000.0
-damage = 34.0
-head_circle_offsets = PackedVector2Array(-16.93, -0.05, -13.53, -0.05, -10.13, -0.05, -6.93, -0.05, -3.93, -0.05, -0.93, -0.05, -20.33, -0.05, 1.87, -0.05, 4.47, -0.05, 7.07, -0.05)
-head_circle_radii = PackedFloat32Array(3.33, 3.19, 3.05, 2.91, 2.79, 2.66, 2.62, 2.55, 2.44, 1.93)
-art_outline = PackedVector2Array(-24.33, -1.9, -17.38, -3.45, 5.81, -2.48, 14.31, 0, 5.81, 2.48, -17.38, 3.45, -24.33, 1.9)
+damage = 40.0
+head_circle_offsets = PackedVector2Array(-14.33, -0.05, -11.22, -0.05, -8.1, -0.05, -4.99, -0.05, -1.88, -0.05, 1.24, -0.05, 4.35, -0.05, 7.47, -0.05, 10.58, -0.05, 13.69, -0.05, 16.81, -0.05, 19.92, -0.05, 23.03, -0.05, 26.15, -0.05, 29.26, -0.05, 32.37, -0.05, 35.49, -0.05, 38.6, -0.05, 41.72, -0.05, 44.83, -0.05, 47.94, -0.05, 51.06, -0.05, 54.17, -0.05)
+head_circle_radii = PackedFloat32Array(2.62, 2.87, 3.14, 3.31, 3.26, 3.21, 3.16, 3.1, 3.05, 3, 2.95, 2.89, 2.84, 2.79, 2.74, 2.69, 2.63, 2.58, 2.53, 2.48, 2.41, 2.17, 1.93)
+art_outline = PackedVector2Array(-24.33, -1.9, -6.95, -3.45, 51.02, -2.48, 72.27, 0, 51.02, 2.48, -6.95, 3.45, -24.33, 1.9)

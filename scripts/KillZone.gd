@@ -32,10 +32,15 @@ extends Area2D
 
 ## The surface's colour once it is moving: the hazard red-orange of
 ## `scenes/parts/Hazard.tscn`, translucent so the stage stays readable
-## through it.
-const SURFACE_COLOR: Color = Color(0.85, 0.15, 0.05, 0.45)
+## through it. Playtest 1 (#45) found 0.45 too easy to miss, so it is now
+## mostly opaque and topped with a bright molten edge.
+const SURFACE_COLOR: Color = Color(0.9, 0.2, 0.05, 0.7)
+## The bright line along the surface's top, so its height reads at a glance
+## even where the lava is behind stage geometry.
+const EDGE_COLOR: Color = Color(1.0, 0.75, 0.2, 1.0)
+const EDGE_WIDTH: float = 10.0
 ## Brightest the surface flashes to during the warning, and how fast.
-const WARNING_ALPHA: float = 0.85
+const WARNING_ALPHA: float = 1.0
 const WARNING_PULSES_PER_SEC: float = 2.0
 ## Used when the zone has no rectangle shape to size the surface from.
 const FALLBACK_SIZE: Vector2 = Vector2(8000.0, 40.0)
@@ -119,6 +124,13 @@ func _ensure_surface() -> void:
 		Vector2(left, top), Vector2(right, top),
 		Vector2(right, top + surface_depth), Vector2(left, top + surface_depth)])
 	add_child(_surface)
+	# A child of the surface, so it rides up with it.
+	var edge := Line2D.new()
+	edge.name = "SurfaceEdge"
+	edge.width = EDGE_WIDTH
+	edge.default_color = EDGE_COLOR
+	edge.points = PackedVector2Array([Vector2(left, top), Vector2(right, top)])
+	_surface.add_child(edge)
 
 func _on_body_entered(body: Node) -> void:
 	if body.is_in_group("players"):

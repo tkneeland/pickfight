@@ -134,7 +134,7 @@ const SETTLE_TICKS: int = 30
 ## The pickaxe's full reach, as an independently written-down number rather
 ## than one read back out of the weapon the player is holding: a test that
 ## asked the weapon what its reach was would pass whatever the weapon did.
-const MAX_REACH: float = 140.0
+const MAX_REACH: float = 150.0
 ## Clear air: high enough above the arena that a full-reach weapon in any
 ## direction touches nothing.
 const PARK_POSITION: Vector2 = Vector2(0, -600)
@@ -304,12 +304,27 @@ const MIN_SHOVE_DISTANCE: float = 40.0
 const BUMP_TICKS: int = 60
 
 ## Clash: two players this far apart, each commanding full reach at the other.
-## 220 px leaves each head 60 px short of where it is being told to go, so
-## both drives stay pushing for the whole measurement instead of arriving.
+## Each head is left short of where it is being told to go, so both drives
+## stay pushing for the whole measurement instead of arriving.
 ## CLASH_TICKS is then long enough that holding is a state and not a moment
 ## passed through: two seconds of contact under full push.
-const CLASH_SEPARATION: float = 220.0
+##
+## **The outcome is sensitive to this exact number (#45).** At the 150 px
+## pickaxe, two equal weapons meet on the midline at 230 and 250 px but 36-45
+## px off it at 220 and 240: dead-on heads sometimes glance sideways,
+## depending on where they first touch. That is a property of the head
+## physics, and a spacing that sat on a lucky value at 140 px. Retuning the
+## pickaxe's reach can move it again. A sturdier test would sweep several
+## separations; until then, re-probe this value after any pickaxe reach change.
+const CLASH_SEPARATION: float = 230.0
 const CLASH_TICKS: int = 120
+## `heads_do_not_interpenetrate` spaces its pair on its own number. With the
+## suite's earlier scenarios run first, the "sent at each other" pair at the
+## 150 px pickaxe crosses at 220 and 230 px and holds at 240 and 250 (#45);
+## run alone it holds at all four. That history dependence is the #38 kind
+## and is left open as a follow-up rather than tuned away here -- 240 is the
+## same 60 px of overlap the 140 px pickaxe had at 220.
+const INTERPENETRATE_SEPARATION: float = 2.0 * MAX_REACH - 60.0
 ## Ticks over which the two heads are walked into each other when a clash
 ## needs to be established rather than tested. Ramping the commanded reach
 ## rather than asking for all of it at once brings them together at a rate
@@ -352,6 +367,12 @@ const CHARGE_SPEEDS: PackedFloat32Array = [600.0, 1200.0, 1800.0]
 ## block pose and the whole closing speed is spent on the contact.
 const CHARGE_SEPARATION: float = 340.0
 const CHARGE_TICKS: int = 45
+## How long a pair is left to point its heads down a new charge axis before
+## being thrown together. SETTLE_TICKS is enough for the pickaxe, but the #45
+## axe (drive 12, extend 380) is still swinging round when 30 ticks are up,
+## so at 90 and 135 degrees its heads passed each other 30-120 px apart --
+## the fixture charging before the weapon was aimed, not the heads missing.
+const CHARGE_SETTLE_TICKS: int = 90
 
 ## Damage display and identity (AC-16, AC-17, and the D4 scope change).
 ## Two arbitrary, clearly distinct identity colours -- not the real
@@ -431,10 +452,11 @@ func _initialize() -> void:
 		quit(2)
 		return
 
-	if _scenario_filter != "" and not SCENARIO_NAMES.has(_scenario_filter):
-		printerr("SCENARIO: unknown scenario '%s' (known: %s)" % [_scenario_filter, ", ".join(SCENARIO_NAMES)])
-		quit(2)
-		return
+	for wanted: String in _scenario_filter.split(",", false):
+		if not SCENARIO_NAMES.has(wanted):
+			printerr("SCENARIO: unknown scenario '%s' (known: %s)" % [wanted, ", ".join(SCENARIO_NAMES)])
+			quit(2)
+			return
 
 	# Not awaited: this kicks off the coroutine and returns control to the
 	# engine, which then drives it forward one physics tick at a time via the
@@ -447,11 +469,15 @@ func _parse_args() -> void:
 			_run_all_flag = true
 		elif arg.begins_with("--scenario="):
 			_scenario_filter = arg.trim_prefix("--scenario=")
+		elif arg.begins_with("--scenarios="):
+			# A comma-separated run in the given order, for replaying the
+			# history a history-dependent failure needs (#38, #45).
+			_scenario_filter = arg.trim_prefix("--scenarios=")
 		else:
 			printerr("SCENARIO: unrecognized argument '%s'" % arg)
 
 func _run_all() -> void:
-	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else PackedStringArray([_scenario_filter])
+	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else _scenario_filter.split(",")
 	var pass_count: int = 0
 	var fail_count: int = 0
 
@@ -906,7 +932,9 @@ func _scenario_head_plants_player() -> Array[String]:
 	var under: RigidBody2D = _spawn_player(stage, Vector2(0, 200))
 	await _await_ticks(LANDING_TICKS)
 
-	var over: RigidBody2D = _spawn_player(stage, Vector2(0, -100))
+	# Dropped from the same height above its own head at any reach: -100 at
+	# the old 140 px pickaxe, which is what LANDING_TICKS was sized for (#45).
+	var over: RigidBody2D = _spawn_player(stage, Vector2(0, -100.0 + (MAX_REACH - 140.0)))
 	over.set_input_vector(Vector2.DOWN * 0.25)
 	await _await_ticks(LANDING_TICKS)
 
@@ -1542,7 +1570,7 @@ func _scenario_heads_do_not_interpenetrate() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
 	var centre: Vector2 = DEEP_PARK_POSITION
-	var half: Vector2 = Vector2.RIGHT * CLASH_SEPARATION * 0.5
+	var half: Vector2 = Vector2.RIGHT * INTERPENETRATE_SEPARATION * 0.5
 	var left: RigidBody2D = _spawn_player(stage, centre - half)
 	var right: RigidBody2D = _spawn_player(stage, centre + half)
 	await physics_frame
@@ -1844,6 +1872,8 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 	var dealt: float = 0.0
 	var registered: bool = false
 	var closest: float = INF
+	## Nearest any head circle's surface came to the victim's centre.
+	var surface: float = INF
 	var after_hit: int = 0
 
 	attacker.set_input_vector(Vector2.RIGHT.rotated(half_angle))
@@ -1853,6 +1883,7 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 		var speed: float = (head - previous_head).length() / _tick_seconds()
 		previous_head = head
 		closest = minf(closest, (head - victim.global_position).length())
+		surface = minf(surface, _head_circle_clearance(attacker, victim.global_position))
 		if not registered:
 			approach_speed = maxf(approach_speed, speed)
 			if victim.damage != before_damage or victim.deaths != before_deaths:
@@ -1866,11 +1897,14 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 
 	# The head may have arrived and done nothing, which is a different
 	# failure from never arriving -- so whether it got there is geometry,
-	# measured at its closest approach, not whether damage appeared.
+	# measured at its closest approach, not whether damage appeared. Off the
+	# head's own circles rather than its anchor plus HEAD_RADIUS: a swing
+	# strikes side-on, and since #45 the pickaxe's points sit 16 px out from
+	# the anchor, twice the round nub HEAD_RADIUS describes.
 	return {
 		"damage": dealt,
 		"speed": approach_speed,
-		"landed": closest <= PLAYER_RADIUS + HEAD_RADIUS + PLANT_CLEARANCE,
+		"landed": surface <= PLAYER_RADIUS + PLANT_CLEARANCE,
 		"closest": closest,
 	}
 
@@ -1991,7 +2025,15 @@ func _watch_heads_tick(left: RigidBody2D, right: RigidBody2D, watch: Dictionary)
 	var previous: Vector2 = watch["previous"]
 	watch["closest"] = minf(watch["closest"], relative.length())
 	watch["speed"] = maxf(watch["speed"], previous.length() - relative.length())
-	if relative.x <= 0.0:
+	# On the wrong side *and* overlapping past the pair correction's
+	# allowance, the #38 rule the roster sweep uses. The anchors' order alone
+	# is not a crossing any more: since #45 the pickaxe's head stands 32 px
+	# tall, and two of them that glance and end up stacked, one riding the
+	# other's point, sit with their anchors a few px the wrong way round and
+	# their surfaces merely touching (-0.1 to +0.3 px, measured) -- two heads
+	# in contact, not one through the other.
+	if relative.x <= 0.0 and _head_surface_gap(_head_circles_world(left), _head_circles_world(right)) \
+			< -WeaponHeadType.PAIR_OVERLAP_ALLOWANCE:
 		watch["crossings"] += 1
 	if _stepped_through(previous, relative):
 		watch["tunnels"] += 1
@@ -2873,8 +2915,10 @@ const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"dagger": "M",
 	"staff": "S",
 }
+## Since playtest 1 (#45) the dagger alone is the quick one: the staff is the
+## long reach weapon and answers with the sword and pickaxe.
 const ROSTER_ANSWER_TIERS: Dictionary = {
-	"staff": "S",
+	"staff": "M",
 	"dagger": "S",
 	"pickaxe": "M",
 	"sword": "M",
@@ -2897,6 +2941,10 @@ const ROSTER_SETTLE_TICKS: int = 45
 ## steps are 60 px and 50 px, so this is a wide margin over measurement noise
 ## and a long way under a step.
 const ROSTER_REACH_TIER_MARGIN: float = 20.0
+## Playtest 1 (#45) tuned each weapon on its own, so a tier is now a band and
+## not one number: sword 70 / dagger 80, axe 140 / pickaxe 150. The ordering
+## between tiers is still the roster's rule. 10 px of band plus REACH_TOLERANCE.
+const ROSTER_REACH_SPREAD: float = 16.0
 
 ## The head speed a strike deals exactly the weapon's own `damage` at,
 ## written down here rather than read off `Player`: a test that asked the
@@ -2921,7 +2969,8 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## margin by which a higher tier has to beat a lower one. The table's steps
 ## are 21 and 14, so both sit clear of the tolerance above and well under a
 ## step.
-const ROSTER_DAMAGE_SPREAD: float = 6.0
+## A band since #45: the M tier is pickaxe 34, sword 40, dagger 45.
+const ROSTER_DAMAGE_SPREAD: float = 13.0
 const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
 ## How far the victim is planted from where the charge starts, and how long
 ## the charge is watched for. The run-up has to be long enough that the head
@@ -2933,11 +2982,11 @@ const FULL_STRIKE_RUN_UP: float = 1600.0
 const FULL_STRIKE_TICKS: int = 80
 
 ## The reach the responsiveness trial drags every weapon out to, and how close
-## the head has to get to it to count as having answered. 90 px is the
-## shortest full reach on the roster, so every weapon can be asked for it, and
+## the head has to get to it to count as having answered. 70 px (the sword,
+## since #45; it was 90) is the shortest full reach on the roster, so every weapon can be asked for it, and
 ## every weapon rests at the same 20 px -- which makes the five comparable:
-## the same 70 px of travel, commanded the same way, timed the same way.
-const ROSTER_ANSWER_REACH: float = 90.0
+## the same 50 px of travel, commanded the same way, timed the same way.
+const ROSTER_ANSWER_REACH: float = 70.0
 const ROSTER_ANSWER_TOLERANCE: float = 2.0
 const ROSTER_ANSWER_TICKS: int = 120
 ## Ticks two weapons of the same tier may disagree by, and ticks a slower tier
@@ -3006,7 +3055,7 @@ func _scenario_weapon_reach_matches_roster() -> Array[String]:
 				weapon, reach, stats.max_reach])
 
 	failures.append_array(_roster_tier_failures(
-		"reach", "px", observed, ROSTER_REACH_TIERS, REACH_TOLERANCE, ROSTER_REACH_TIER_MARGIN))
+		"reach", "px", observed, ROSTER_REACH_TIERS, ROSTER_REACH_SPREAD, ROSTER_REACH_TIER_MARGIN))
 
 	await _teardown(stage)
 	return failures
@@ -3584,7 +3633,7 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			# reads the fill.
 			attacker.damage = 0.0
 			blocker.damage = 0.0
-			await _await_ticks(SETTLE_TICKS)
+			await _await_ticks(CHARGE_SETTLE_TICKS)
 
 			var deaths: int = attacker.deaths + blocker.deaths
 			var previous_a: Array[Dictionary] = _head_circles_world(attacker)

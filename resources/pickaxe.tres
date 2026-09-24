@@ -52,17 +52,21 @@
 ; player and against another
 ; head, and a head that reached much further would be a different weapon
 ; rather than the same one redrawn.
+; Playtest retune (#45), per the owner: reach 140 -> 150 px, and the head
+; stretched 1.25x tip to tip (head-local y) and no thicker. The circles were
+; re-placed along the crescent with midpoints added, 7 -> 13, every one still
+; clamped inside the art.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 140.0
+max_reach = 150.0
 mass = 0.25
 drive_speed = 24.0
 extend_speed = 700.0
 rest_return_speed = 400.0
 max_drive_force = 6000.0
 damage = 34.0
-head_circle_offsets = PackedVector2Array(4.08, 0.13, 2.68, -5.07, 2.68, 4.93, -0.52, -8.47, -0.52, 8.53, -4.32, 9.13, -4.32, -9.07)
-head_circle_radii = PackedFloat32Array(4.92, 4.58, 4.57, 3.79, 3.77, 2.04, 2.01)
-art_outline = PackedVector2Array(-2.97, -13.07, 0.22, -12.41, 3.14, -10.99, 5.63, -8.9, 7.53, -6.26, 8.71, -3.23, 9.11, 0, 8.71, 3.23, 7.53, 6.26, 5.63, 8.9, 3.14, 10.99, 0.22, 12.41, -2.97, 13.07, -8.52, 8.25, -6.51, 7.84, -4.66, 6.94, -3.09, 5.62, -1.89, 3.95, -1.15, 2.04, -0.89, -0, -1.15, -2.04, -1.89, -3.95, -3.09, -5.62, -4.66, -6.94, -6.51, -7.84, -8.52, -8.25)
+head_circle_offsets = PackedVector2Array(-4.32, -11.34, -2.42, -10.96, -0.52, -10.59, 1.08, -8.46, 2.68, -6.34, 3.38, -3.09, 4.08, 0.16, 3.38, 3.16, 2.68, 6.16, 1.08, 8.41, -0.52, 10.66, -2.42, 11.04, -4.32, 11.41)
+head_circle_radii = PackedFloat32Array(2, 2.9, 3.79, 4.18, 4.58, 4.51, 4.92, 4.52, 4.57, 4.17, 3.77, 2.9, 2.04)
+art_outline = PackedVector2Array(-2.97, -16.34, 0.22, -15.51, 3.14, -13.74, 5.63, -11.12, 7.53, -7.82, 8.71, -4.04, 9.11, 0, 8.71, 4.04, 7.53, 7.82, 5.63, 11.12, 3.14, 13.74, 0.22, 15.51, -2.97, 16.34, -8.52, 10.31, -6.51, 9.8, -4.66, 8.68, -3.09, 7.03, -1.89, 4.94, -1.15, 2.55, -0.89, 0, -1.15, -2.55, -1.89, -4.94, -3.09, -7.03, -4.66, -8.68, -6.51, -9.8, -8.52, -10.31)

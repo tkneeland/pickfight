@@ -31,6 +31,13 @@ const HAFT_WIDTH: float = 4.0
 const HAFT_COLOR: Color = Color(0.42, 0.3, 0.2, 1.0)
 ## Weapons lie on a diagonal, head up and to the right.
 const DRAW_AXIS: Vector2 = Vector2(0.70710678, -0.70710678)
+## The furthest a drawn weapon may reach from the pickup's centre. A weapon
+## whose art at full size would go further -- since #45 the sword's blade is
+## 97 px long and the axe's head is 1.75x -- is drawn smaller as a whole,
+## haft and head together, so a pickup never outgrows the spots stages were
+## laid out for. 25 px is what the largest pickup measured before #45 (the
+## staff, 24.5 px), which every stage's pickup spots already clear.
+const MAX_ART_RADIUS: float = 25.0
 ## The trigger reaches at least this far from the pickup's centre however
 ## small the weapon's art is, so every pickup is equally easy to touch.
 const MIN_TRIGGER_RADIUS: float = 20.0
@@ -110,6 +117,19 @@ func _build() -> void:
 	_art.position = anchor
 	_art.rotation = DRAW_AXIS.angle()
 
+	# The drawn weapon's furthest point from the centre, butt or head.
+	var art_radius: float = butt.length() + HAFT_WIDTH * 0.5
+	for point: Vector2 in outline:
+		art_radius = maxf(art_radius, (anchor + (point * ART_SCALE).rotated(_art.rotation)).length())
+
+	if art_radius > MAX_ART_RADIUS:
+		var fit: float = MAX_ART_RADIUS / art_radius
+		butt *= fit
+		anchor *= fit
+		_art.position = anchor
+		_art.scale = Vector2.ONE * ART_SCALE * fit
+		art_radius = MAX_ART_RADIUS
+
 	var haft := Line2D.new()
 	haft.name = "Haft"
 	haft.points = PackedVector2Array([butt, anchor])
@@ -118,11 +138,6 @@ func _build() -> void:
 	haft.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	add_child(haft)
 	move_child(haft, _art.get_index())
-
-	# The drawn weapon's furthest point from the centre, butt or head.
-	var art_radius: float = butt.length() + HAFT_WIDTH * 0.5
-	for point: Vector2 in outline:
-		art_radius = maxf(art_radius, (anchor + (point * ART_SCALE).rotated(_art.rotation)).length())
 
 	_trigger_radius = maxf(MIN_TRIGGER_RADIUS, art_radius)
 	var circle := CircleShape2D.new()
