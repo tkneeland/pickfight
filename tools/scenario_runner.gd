@@ -2033,6 +2033,10 @@ func _scenario_weapon_silhouette_matches_head_shape() -> Array[String]:
 
 # --- Stage rotation (ADR-0008) -----------------------------------------------
 
+## Spawn points every real stage must declare: one per player slot in
+## scenes/Main.tscn (ADR-0008). Grows with the roster (ADR-0007).
+const STAGE_MIN_SPAWNS: int = 2
+
 ## A private test double for ControllerServer's roster seam
 ## (claimed_slots / expire_disconnected_claims), scoped to this file only so
 ## it can't collide with issue #6's separate tools/stub_roster.gd -- both
@@ -2146,6 +2150,10 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 ## Issue #8 outcome: each real stage's declared spawn points land on solid
 ## ground and the player idles there safely for 60 ticks -- not falling
 ## through a gap, not clipped into geometry, not still falling.
+##
+## Also holds each stage to ADR-0008's contract of one spawn per player slot
+## (STAGE_MIN_SPAWNS), so a stage missing a marker fails here instead of
+## spawning someone at the origin in live play.
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	var failures: Array[String] = []
 	var stage_paths: PackedStringArray = [
@@ -2155,6 +2163,10 @@ func _scenario_stage_spawns_are_safe() -> Array[String]:
 	]
 
 	for path: String in stage_paths:
+		# Each stage's _teardown() marks the scenario complete, so reset it
+		# here: a script error on a later stage must not inherit the earlier
+		# stage's "completed" and pass silently.
+		_scenario_completed = false
 		var stage: Node2D = Node2D.new()
 		get_root().add_child(stage)
 		var stage_scene: PackedScene = load(path)
@@ -2162,8 +2174,9 @@ func _scenario_stage_spawns_are_safe() -> Array[String]:
 		stage.add_child(instance)
 		var spawns: Array[Vector2] = instance.get_spawn_points()
 
-		if spawns.is_empty():
-			failures.append("%s: declared no spawn points" % path)
+		if spawns.size() < STAGE_MIN_SPAWNS:
+			failures.append("%s: declared %d spawn point(s), needs at least %d" % [
+				path, spawns.size(), STAGE_MIN_SPAWNS])
 
 		for i in spawns.size():
 			var player: RigidBody2D = _spawn_player(stage, spawns[i])

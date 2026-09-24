@@ -51,4 +51,3 @@ PASS  stage_rotates_each_round
 PASS  stage_spawns_are_safe
 ---
 24 passed, 0 failed, 24 total
-scenario-all exit=0

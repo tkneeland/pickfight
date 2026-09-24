@@ -101,7 +101,11 @@ func _try_start_round() -> void:
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
-		var spawn: Vector2 = _stage_spawn_points[slot] if slot < _stage_spawn_points.size() else Vector2.ZERO
+		var spawn: Vector2 = Vector2.ZERO
+		if slot < _stage_spawn_points.size():
+			spawn = _stage_spawn_points[slot]
+		else:
+			push_warning("RoundManager: stage has %d spawn point(s), none for slot %d; spawning at the origin" % [_stage_spawn_points.size(), slot])
 		_players[slot].start_round(spawn)
 	_state = State.ROUND_ACTIVE
 

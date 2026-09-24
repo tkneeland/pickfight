@@ -14,4 +14,3 @@ WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- install w
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:211)
        [1] _ready (res://scripts/ControllerServer.gd:153)
-boot-check exit=0
