@@ -132,6 +132,8 @@ const PITCH_JITTER: float = 0.04
 const MAX_DISTANCE: float = 6000.0
 const ATTENUATION: float = 0.5
 const FADE_SEC: float = 0.15
+## How long `release()` waits for the audio server to free stopped playbacks.
+const RELEASE_SEC: float = 1.0
 
 ## The master volume, 0..1, and whether everything is muted. Set through
 ## `set_master_volume()` / `set_muted()` so they reach the bus.
@@ -168,6 +170,19 @@ func _ready() -> void:
 	# The game's own scene is only current once autoloads have all readied.
 	# The scenario runner never has one, so it never builds the overlay.
 	_build_settings_ui_if_in_game.call_deferred()
+
+## Stop everything and wait until the audio server has let go of it. The
+## server frees a stopped playback on its own mix thread, a moment later, so
+## a script that quits straight after a sound -- the scenario runner -- gets
+## "ObjectDB instances leaked at exit" unless it awaits this first.
+func release() -> void:
+	for key: String in _voices:
+		for voice: Node in _voices[key]:
+			voice.stop()
+			voice.stream = null
+	_streams.clear()
+	_last_variant.clear()
+	await get_tree().create_timer(RELEASE_SEC, true, false, true).timeout
 
 # --- Playing ----------------------------------------------------------------
 

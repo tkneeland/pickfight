@@ -106,7 +106,11 @@ Several constraints shaped the design:
   - A missing file warns once and plays nothing.
 - **Headless is safe.** Godot's dummy audio driver accepts every call. Before
   `Sfx` is in the tree (the first frame of a `-s` script), `play()` only
-  records the request.
+  records the request. The audio server frees a stopped playback a moment
+  later, on its own thread. So a script that quits straight after a sound
+  would report "ObjectDB instances leaked at exit". To prevent that, the
+  scenario runner awaits `Sfx.release()` (stop everything, wait 1 s) before
+  it quits.
 - **Test hook.** `start_recording()` / `recorded()` log every `play()`
   request (name, position, strength, volume, pitch). The `sfx_*` scenarios
   spy on those requests, not on the speakers.

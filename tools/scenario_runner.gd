@@ -563,6 +563,11 @@ func _run_all() -> void:
 
 	print("---")
 	print("%d passed, %d failed, %d total" % [pass_count, fail_count, to_run.size()])
+	# Let the audio server let go of every sound first, or quitting reports
+	# their playbacks as leaked (#75, ADR-0016).
+	var sfx: Node = get_root().get_node_or_null(^"Sfx")
+	if sfx != null:
+		await sfx.release()
 	quit(1 if fail_count > 0 else 0)
 
 func _run_scenario(name: String) -> Array[String]:
