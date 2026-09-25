@@ -722,13 +722,16 @@ func _update_weapon_visual() -> void:
 	# a circle off the head's centre has to orbit the anchor, not spin in
 	# place, and re-deriving it cannot accumulate drift.
 	var facing: float = _haft.rotation - _head.rotation
-	_update_head_mirror()
-	var mirror := Vector2(1.0, -1.0) if _head_mirrored else Vector2.ONE
-	for i in _head_shapes.size():
-		var node: CollisionShape2D = _head_shapes[i]
-		node.position = (_head_circle_offsets[i] * mirror).rotated(facing)
-		node.rotation = facing
+	var before := PackedVector2Array()
+	for node: CollisionShape2D in _head_shapes:
+		before.append(node.position)
+	_place_head_circles(_head_circle_layout(_head_mirrored, facing), facing)
 	_head_visual.rotation = facing
+	# The turn just made is a teleport the engine never sees as motion; on a
+	# long blade it can carry the tip through a thin slab. The head guards
+	# it before the step runs (issue #48).
+	_head.guard_turn(before)
+	_update_head_mirror(facing)
 
 ## Puts a one-sided head on the side of the haft that keeps it the same way up
 ## on screen: as authored while the aim points right, mirrored across the haft
@@ -741,7 +744,12 @@ func _update_weapon_visual() -> void:
 ## both report head-local space with only the facing turn taken out, so the
 ## drawn polygon and the circles have to be mirrored the same way -- in the
 ## data -- or the art and the hitbox would part on one side only.
-func _update_head_mirror() -> void:
+##
+## A flip also waits while the bit would cross terrain to make it (issue
+## #48): hooked under a slab and swung over, the bit would otherwise jump
+## through the slab. It runs after this tick's turn is placed and guarded, and
+## `facing` is that turn; `WeaponHead` has the rest.
+func _update_head_mirror(facing: float) -> void:
 	if not _head_flips_with_aim:
 		return
 	var across: float = cos(weapon_angle)
@@ -752,11 +760,31 @@ func _update_head_mirror() -> void:
 		mirrored = false
 	if mirrored == _head_mirrored:
 		return
+	var flipped: PackedVector2Array = _head_circle_layout(mirrored, facing)
+	if not _head.turn_is_clear(_head_circle_layout(_head_mirrored, facing), flipped):
+		return
 	_head_mirrored = mirrored
+	_place_head_circles(flipped, facing)
 	var outline: PackedVector2Array = _head_visual.polygon
 	for i in outline.size():
 		outline[i].y = -outline[i].y
 	_head_visual.polygon = outline
+
+## Where each head circle sits relative to the anchor at `facing`, mirrored
+## across the haft or not.
+func _head_circle_layout(mirrored: bool, facing: float) -> PackedVector2Array:
+	var mirror := Vector2(1.0, -1.0) if mirrored else Vector2.ONE
+	var layout := PackedVector2Array()
+	for i in _head_shapes.size():
+		layout.append((_head_circle_offsets[i] * mirror).rotated(facing))
+	return layout
+
+## Puts each head circle at `layout`, turned to `facing`.
+func _place_head_circles(layout: PackedVector2Array, facing: float) -> void:
+	for i in _head_shapes.size():
+		var node: CollisionShape2D = _head_shapes[i]
+		node.position = layout[i]
+		node.rotation = facing
 
 # --- Presentation: identity and damage --------------------------------------
 #

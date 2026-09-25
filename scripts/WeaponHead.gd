@@ -216,6 +216,198 @@ func _exit_tree() -> void:
 ## place it was teleported away from.
 func forget_previous_position() -> void:
 	_has_previous = false
+	_turn_ready = false
+
+# --- The turn ----------------------------------------------------------------
+
+## Issue #48. Everything above sweeps the head's *body*, and the body only
+## translates: it is rotation-locked, and the facing lives on the circles,
+## which `Player._update_weapon_visual` re-places around the anchor once a
+## tick. That re-placement is a teleport. Nothing in the engine sees it as
+## motion -- not the solver, which only finds the circles already wherever
+## they were put, not continuous detection, which works from the body's
+## velocity, and not `_find_world_contact`, which casts a translation.
+##
+## While every head was compact that was a few pixels a tick and harmless.
+## The sword's blade (since #45) lies along the haft and reaches 56 px past
+## the anchor, and at its 24 rad/s drive the facing turns 0.4 rad a tick, so
+## its tip circles -- 3.9 px across -- were teleported about 22 px a tick
+## through a 24 px slab. Put past the slab's middle, a circle is pushed out
+## of the far side by the solver, which is the "clips thru platforms" the
+## owner saw: measured, 50 of 720 slam variants over the arena's thin slab
+## left the sword's tip under it, and every one was one of the blade's last
+## three circles.
+##
+## `guard_turn` is called by `Player` right after the circles are turned and
+## before the step runs. It traces each circle's *centre* along the arc the
+## turn carried it through, and if a centre would have entered terrain, it
+## moves the head back along that circle's path until the centre sits just
+## outside the surface. A circle whose centre is outside terrain can overlap
+## it by at most its own radius, which on the roster is under half of the
+## thinnest slab, so the solver then resolves it out of the side it came in
+## -- the same outcome as the head having hit the surface, from a correction
+## that is never larger than the tip's own travel.
+##
+## The centre, not the whole circle, because a blade pressed on a platform
+## starts the next turn already touching it, and a whole-circle cast ignores
+## whatever it starts out touching. The centre is still a radius clear of the
+## surface, so the next turn is guarded as well as the first -- which is what
+## keeps a blade the player keeps driving into the floor on top of it.
+##
+## Terrain only, not other players' bodies. A body is a 48 px disc that no
+## one tick of turn crosses the middle of, and a head meeting a body is a
+## strike, which `Player` scores from the contact the solver reports. Guarding
+## it here would move where strikes land for no tunnelling it closes.
+##
+## **A one-sided head's flip is not guarded this way; it is held.** When the
+## axe changes sides its bit jumps across the haft, every circle by twice its
+## own distance from it, and moving the head back far enough to stop the bit
+## that meets a slab first jams the circles nearer the haft into that slab.
+## Measured: the axe standing on the slab with its bit hooked under the end
+## and swung over, which the move above put straight through. So `Player`
+## guards the turn on the side the head already has, then asks
+## `turn_is_clear` about the flip and simply keeps that side while the bit
+## would cross terrain to change it. Nothing is lost: which side the bit is on
+## is presentation (see `Player._update_head_mirror`), and it changes as soon
+## as the way is clear.
+##
+## A flip is a jump across the haft, not a swing, so it is traced as the
+## straight line each circle jumps along, not as an arc about the anchor. The
+## arc would run out along the haft, which with the axe pointed at the floor
+## is into the floor, and would hold a flip that crosses nothing.
+
+## Most of a turn one straight ray stands in for. The circle actually moves
+## along an arc about the anchor; tracing it as chords of at most this angle
+## keeps the chord within 0.5 px of the arc for the sword's furthest circle.
+const TURN_ARC_STEP: float = 0.25
+## How far short of the surface a guarded centre is left, along its own path,
+## so that the next trace starts outside the terrain rather than on it.
+const TURN_SEAT_BACKOFF: float = 0.5
+## Colliders a single trace steps past before giving up: other players'
+## bodies share the terrain layer and are not what this guards against.
+const TURN_MAX_SKIPS: int = 4
+
+## Whether the circles have been turned from a facing this head actually held.
+## The first turn after the rig is built is from the circles' authored,
+## unturned offsets, which is not a pose the head was ever in.
+var _turn_ready: bool = false
+
+## See the block comment above. `previous_offsets` is where each circle of
+## `sweep_shapes` sat relative to the anchor before this tick's turn; the
+## circles themselves already hold the new facing.
+func guard_turn(previous_offsets: PackedVector2Array) -> void:
+	if not _turn_ready:
+		_turn_ready = true
+		return
+	var now := PackedVector2Array()
+	for node: CollisionShape2D in sweep_shapes:
+		now.append(node.position if node != null else Vector2.ZERO)
+	var hit: Dictionary = _first_turn_contact(previous_offsets, now, true)
+	if hit.is_empty():
+		return
+	global_position = hit["anchor"] + hit["shift"]
+	# The anchor's own velocity into the surface is taken out, as for a world
+	# contact; the turn itself is the haft's and is resisted through the
+	# groove joint once the circle is resting on the surface.
+	var normal: Vector2 = hit["normal"]
+	var into: float = linear_velocity.dot(normal)
+	if into < 0.0:
+		linear_velocity -= normal * into
+
+## Whether jumping the circles straight from `from_offsets` to `to_offsets`
+## would carry no circle's centre into terrain. Asked by `Player` before a
+## flip (see the block comment above).
+func turn_is_clear(from_offsets: PackedVector2Array, to_offsets: PackedVector2Array) -> bool:
+	if not _turn_ready:
+		return true
+	return _first_turn_contact(from_offsets, to_offsets, false).is_empty()
+
+## The earliest point in a re-placement of the circles at which a centre
+## enters terrain: `{anchor, shift, normal}`, where `shift` moves the head to
+## leave that centre just short of the surface, or empty. With `along_arc`,
+## each circle is traced along the arc about the anchor from where it was to
+## where it is going, in chords of at most TURN_ARC_STEP (a circle whose
+## distance from the anchor changed is traced straight). Without it, every
+## circle is traced straight: a flip.
+func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVector2Array,
+		along_arc: bool) -> Dictionary:
+	if from_offsets.size() != sweep_shapes.size() or to_offsets.size() != sweep_shapes.size():
+		return {}
+	if not is_inside_tree():
+		return {}
+	var anchor: Vector2 = PhysicsServer2D.body_get_state(
+		get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM).origin
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.new()
+	query.collision_mask = sweep_mask
+	query.collide_with_areas = false
+	query.hit_from_inside = false
+
+	var soonest: float = INF
+	var shift: Vector2 = Vector2.ZERO
+	var normal: Vector2 = Vector2.ZERO
+	for i in sweep_shapes.size():
+		var from_offset: Vector2 = from_offsets[i]
+		var to_offset: Vector2 = to_offsets[i]
+		if from_offset.is_equal_approx(to_offset):
+			continue
+		var turn: float = 0.0
+		var steps: int = 1
+		if along_arc and absf(from_offset.length() - to_offset.length()) < 0.01:
+			turn = from_offset.angle_to(to_offset)
+			steps = maxi(1, ceili(absf(turn) / TURN_ARC_STEP))
+		var previous: Vector2 = anchor + from_offset
+		for step in steps:
+			var next: Vector2 = anchor + to_offset
+			if step < steps - 1:
+				next = anchor + from_offset.rotated(turn * float(step + 1) / float(steps))
+			var hit: Dictionary = _trace_terrain(space, query, previous, next)
+			if not hit.is_empty():
+				var chord: Vector2 = next - previous
+				var reached: float = (Vector2(hit["position"]) - previous).length()
+				var fraction: float = (float(step) + reached / chord.length()) / float(steps)
+				if fraction < soonest:
+					soonest = fraction
+					var seat: Vector2 = Vector2(hit["position"]) \
+						- chord.normalized() * minf(TURN_SEAT_BACKOFF, reached)
+					shift = seat - (anchor + to_offset)
+					normal = hit["normal"]
+				break
+			previous = next
+	if soonest == INF:
+		return {}
+	return {"anchor": anchor, "shift": shift, "normal": normal}
+
+
+## The first thing on `sweep_mask` the straight line `from` -> `to` enters, or
+## empty: what the world sweep asks of a circle's centre. Unlike
+## `_trace_terrain` it counts players' bodies, as the world sweep always has.
+func _trace_centre(space: PhysicsDirectSpaceState2D, from: Vector2, to: Vector2) -> Dictionary:
+	var query := PhysicsRayQueryParameters2D.create(from, to, sweep_mask, sweep_exclude)
+	query.collide_with_areas = false
+	query.hit_from_inside = false
+	return space.intersect_ray(query)
+
+## The first terrain the straight line `from` -> `to` enters, or empty. Steps
+## past other players' bodies, which share the layer (see the block comment).
+func _trace_terrain(
+		space: PhysicsDirectSpaceState2D,
+		query: PhysicsRayQueryParameters2D,
+		from: Vector2,
+		to: Vector2) -> Dictionary:
+	var exclude: Array[RID] = sweep_exclude.duplicate()
+	query.from = from
+	query.to = to
+	for _i in TURN_MAX_SKIPS:
+		query.exclude = exclude
+		var hit: Dictionary = space.intersect_ray(query)
+		if hit.is_empty():
+			return {}
+		if hit["collider"] is RigidBody2D:
+			exclude.append(hit["rid"])
+			continue
+		return hit
+	return {}
 
 ## The shortest step worth sweeping: the head's own narrowest width, or
 ## SWEEP_GATE_FLOOR where that is larger.
@@ -407,6 +599,7 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 	var space: PhysicsDirectSpaceState2D = state.get_space_state()
 	var safe: float = 1.0
 	var stopped_by: CollisionShape2D = null
+	var centre_hit: Dictionary = {}
 	for node: CollisionShape2D in sweep_shapes:
 		if node == null or node.shape == null:
 			continue
@@ -415,18 +608,48 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 		var fractions: PackedFloat32Array = space.cast_motion(params)
 		if fractions.size() < 2:
 			continue
-		# 1.0 means this circle's path was clear. 0.0 means it could not move
-		# at all from where the step began -- it was already touching -- so it
-		# crossed nothing this step and the contact is the solver's to
-		# resolve. Snapping a head that is skimming along a surface back to
-		# where it started would pin it to that surface, which would cost the
-		# moveset far more than the tunnelling does.
-		if fractions[0] <= 0.0 or fractions[0] >= safe:
-			continue
-		safe = fractions[0]
-		stopped_by = node
+		# 1.0 means this circle's path was clear -- or that it began the step
+		# already touching whatever is there: `cast_motion` ignores anything
+		# a shape starts out overlapping. That is how a head skimming along a
+		# surface or pressed on it is left to the solver, which is right for
+		# those: snapping it back to where it started would pin it to that
+		# surface, which would cost the moveset far more than the tunnelling
+		# does. 0.0 means it could not move at all, and is the solver's too.
+		if fractions[0] > 0.0 and fractions[0] < safe:
+			safe = fractions[0]
+			stopped_by = node
+			centre_hit = {}
+		# **But a head that began the step touching can still be carried
+		# through (issue #48).** A head resting on a slab is still pulled by
+		# the joints, and measured on the staff's slam, one step dragged a
+		# head that began it resting on the arena's thin slab 40 px down and
+		# out of the far side, where the cast above saw nothing at all. The
+		# circle's centre is a radius clear of the surface even while the
+		# circle rests on it, so its path is asked as well. Skimming and
+		# pressing leave the centre outside and pass untouched; only a centre
+		# carried into the terrain is stopped, and it is stopped at the
+		# surface, from where the solver pushes the circle back out of the
+		# side it came in. For a circle that began clear, the cast above has
+		# already found the same surface earlier, so this changes nothing.
+		var origin: Vector2 = params.transform.origin
+		var hit: Dictionary = _trace_centre(space, origin, origin + motion)
+		if not hit.is_empty():
+			var reached: float = maxf(0.0,
+				(Vector2(hit["position"]) - origin).length() - TURN_SEAT_BACKOFF)
+			if reached / distance < safe:
+				safe = reached / distance
+				stopped_by = node
+				centre_hit = hit
 	if stopped_by == null:
 		return {}
+	if not centre_hit.is_empty():
+		var along: Vector2 = motion / distance
+		return {
+			"fraction": safe,
+			"contact": _previous_position + motion * safe,
+			"normal": _surface_normal(centre_hit, along),
+			"collider": centre_hit["collider"],
+		}
 
 	var contact: Vector2 = _previous_position + motion * safe
 	var travel: Vector2 = motion / distance
