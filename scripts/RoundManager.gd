@@ -107,6 +107,7 @@ const PLAYTEST_WEAPON_PATHS: PackedStringArray = [
 	"res://resources/sword.tres",
 	"res://resources/axe.tres",
 	"res://resources/dagger.tres",
+	"res://resources/boomstick.tres",
 ]
 var _random_weapons: bool = false
 

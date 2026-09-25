@@ -47,6 +47,30 @@ extends Resource
 ## solver path.
 @export var damage: float = 34.0
 
+# --- Firing: a weapon that shoots as well as swings (issue #55, ADR-0014) ----
+#
+# Every default here means "does not fire", so a weapon that sets none of them
+# -- every weapon but the boomstick, and every stub a scenario builds -- is
+# exactly the melee weapon it always was. `Player` reads `fire_interval` alone
+# to decide whether a weapon fires at all.
+
+## Seconds between shots, fired automatically straight down the barrel (the
+## haft's direction). The countdown starts when the weapon is put in the
+## player's hands -- a pickup, a round start -- so the first shot comes one
+## whole interval later, never at once. 0 means the weapon never fires.
+@export var fire_interval: float = 0.0
+## Damage one bullet deals when it hits a player. Flat: a bullet's speed is
+## fixed, so there is no strike speed to scale it by.
+@export var projectile_damage: float = 0.0
+## How fast a bullet flies, in px/s. Straight, with no gravity.
+@export var projectile_speed: float = 0.0
+## Impulse a bullet gives the player it hits, along its line of flight.
+@export var projectile_knockback: float = 0.0
+## The bullet's radius: what it is drawn as and what it is swept as.
+@export var projectile_radius: float = 3.0
+## Impulse each shot gives the shooter's body, back along the barrel.
+@export var recoil_impulse: float = 0.0
+
 # --- The head: what it hits with, and what it is drawn as --------------------
 #
 # ADR-0010. A weapon head is a **cluster of circles fitted to the drawn art**,

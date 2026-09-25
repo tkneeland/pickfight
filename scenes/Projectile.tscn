@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Projectile.gd" id="1"]
+
+; A bullet (issue #55, ADR-0014). Deliberately just a Node2D: it sweeps its
+; own circle along each tick's motion (see Projectile.gd) rather than being a
+; physics body the engine moves and collides discretely, and it draws itself.
+[node name="Projectile" type="Node2D"]
+script = ExtResource("1")
