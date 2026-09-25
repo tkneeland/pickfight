@@ -251,6 +251,11 @@ var _identity_outline: Line2D
 var _fire_clock: float = 0.0
 var _projectiles: Array[Node] = []
 
+## The haft line's far end as it stood at the start of this physics tick, in
+## the body's frame: where the head was last tick. See `_process`. NaN until a
+## tick has recorded it for the rig now built.
+var _haft_tip_before: Vector2 = Vector2(NAN, NAN)
+
 @onready var weapon_line: Line2D = $Haft
 @onready var body_visual: Polygon2D = $Body
 
@@ -298,6 +303,8 @@ func _enter_tree() -> void:
 func _physics_process(delta: float) -> void:
 	if not alive:
 		return
+	if _rig_is_live():
+		_haft_tip_before = to_local(_head.global_position)
 	_update_weapon_input(delta)
 	_update_damage_visual()
 	if not _rig_is_live():
@@ -314,6 +321,31 @@ func _physics_process(delta: float) -> void:
 	_drive_extension(delta)
 	_update_weapon_visual()
 	_tick_fire(delta)
+
+## The haft line's far end, redrawn every rendered frame (issue #108).
+##
+## The line is the one part of the weapon that is not a body of its own: it
+## hangs off the player and reaches out to the head, and its far end is a
+## point written by script. Set only from `_physics_process`, it was a tick
+## behind the head -- written before the step, drawn after it -- so a fast
+## swing drew the haft ending tens of pixels short of the head it holds. And
+## with physics interpolation on, the body and the head are each drawn
+## between their last two ticks while a point is not, so the gap would come
+## back between ticks.
+##
+## So here, each frame: the head's offset from the body at the last two ticks,
+## blended by how far the frame is between them -- which is exactly how the
+## body and the head are themselves being drawn, so the line meets the head.
+## Presentation only: nothing reads the line back, and physics never sees it.
+func _process(_delta: float) -> void:
+	if not alive or not _rig_is_live():
+		return
+	var tip: Vector2 = to_local(_head.global_position)
+	if is_physics_interpolated_and_enabled() and is_finite(_haft_tip_before.x):
+		tip = _haft_tip_before.lerp(tip, Engine.get_physics_interpolation_fraction())
+	var pts := weapon_line.points
+	pts[1] = tip
+	weapon_line.points = pts
 
 func _rig_is_live() -> bool:
 	return _head != null and _head.is_inside_tree()
@@ -411,6 +443,12 @@ func teleport_to(pos: Vector2) -> void:
 	# where it was moved away from.
 	if _head != null:
 		_head.forget_previous_position()
+	# Nor is it something to draw as motion (issue #108): with physics
+	# interpolation on, the body and the rig would otherwise be drawn sliding
+	# across the arena from where they were for a tick.
+	reset_physics_interpolation()
+	if _rig != null:
+		_rig.reset_physics_interpolation()
 
 ## Take a hit. Damage accumulates within a round; enough of it eliminates.
 ##
@@ -510,6 +548,9 @@ func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	# kill zone -- and eliminated again two ticks into every round (issue #5).
 	PhysicsServer2D.body_set_state(get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, global_transform)
 	linear_velocity = Vector2.ZERO
+	# A spawn, not a move: drawn at the spawn from the first frame rather than
+	# interpolated in from wherever the player was eliminated (issue #108).
+	reset_physics_interpolation()
 	_build_rig.call_deferred()
 
 # --- Weapon rig -------------------------------------------------------------
@@ -657,6 +698,10 @@ func _build_rig() -> void:
 	_groove.initial_offset = 0.0
 	_groove.node_a = _groove.get_path_to(_haft)
 	_groove.node_b = _groove.get_path_to(_head)
+	# The rig's bodies were placed after entering the tree, so without this the
+	# first frame would draw them sliding in from the origin (issue #108).
+	_rig.reset_physics_interpolation()
+	_haft_tip_before = Vector2(NAN, NAN)
 
 func _clear_rig() -> void:
 	if _rig == null:

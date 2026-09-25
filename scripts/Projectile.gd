@@ -94,6 +94,8 @@ func _ready() -> void:
 	add_to_group(GROUP)
 	z_index = 50
 	global_position = _origin
+	# Placed after entering the tree: a spawn, not motion (issue #108).
+	reset_physics_interpolation()
 	_shape = CircleShape2D.new()
 	_shape.radius = radius
 

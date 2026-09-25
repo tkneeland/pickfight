@@ -25,6 +25,7 @@
 [node name="Main" type="Node2D"]
 
 [node name="Camera2D" type="Camera2D" parent="."]
+process_callback = 0
 current = true
 
 ; Empty container: RoundManager instances the active rotating stage here

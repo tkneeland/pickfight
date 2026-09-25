@@ -507,6 +507,8 @@ func _spawn_pickup() -> void:
 	pickup.set_weapon(weapon)
 	parent.add_child(pickup)
 	pickup.global_position = spot
+	# Placed after entering the tree: a spawn, not motion (issue #108).
+	pickup.reset_physics_interpolation()
 	_pickups.append(pickup)
 
 ## A random declared spot with no pickup already on it, or the fallback above
