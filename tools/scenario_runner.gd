@@ -152,6 +152,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"collapsing_floor_stood_on_gives_way_for_good",
 	"breakable_wall_breaks_on_weapon_hits",
 	"breakable_wall_ignores_bodies",
+	"boomstick_bullet_damages_breakable_wall",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -772,6 +773,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_breakable_wall_breaks_on_weapon_hits()
 		"breakable_wall_ignores_bodies":
 			return await _scenario_breakable_wall_ignores_bodies()
+		"boomstick_bullet_damages_breakable_wall":
+			return await _scenario_boomstick_bullet_damages_breakable_wall()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -9186,6 +9189,7 @@ func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
 	if highest > 0.0 and (highest - lowest) / highest > PAD_ROSTER_SPREAD:
 		failures.append("launch heights ranged %.0f to %.0f px across the roster, more than %.0f%% apart" % [
 			lowest, highest, PAD_ROSTER_SPREAD * 100.0])
+	return failures
 
 # --- Issue #53: falling and breaking stage parts ----------------------------
 
@@ -9679,6 +9683,61 @@ func _scenario_breakable_wall_ignores_bodies() -> Array[String]:
 		failures.append("a body broke the wall")
 	if player.global_position.x + PLAYER_RADIUS > face + PLANT_CLEARANCE:
 		failures.append("the player got through the wall: at x=%.1f, face at %.1f" % [player.global_position.x, face])
+
+	await _teardown(stage)
+	return failures
+
+## Owner decision on #53: a boomstick bullet damages a breakable wall by its
+## flat projectile damage, stops there, and three such shots bring down a
+## default wall. Nothing gets through while it stands.
+const WALL_BULLET_SIZE: Vector2 = Vector2(24.0, 240.0)
+## Far enough that the boomstick's own head (reach 70) never touches the wall.
+const WALL_BULLET_OFFSET: float = 320.0
+
+func _scenario_boomstick_bullet_damages_breakable_wall() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var wall: StaticBody2D = BreakableWallScene.instantiate() as StaticBody2D
+	wall.size = WALL_BULLET_SIZE
+	wall.position = centre + Vector2.RIGHT * WALL_BULLET_OFFSET
+	stage.add_child(wall)
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var behind: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * (WALL_BULLET_OFFSET + 100.0))
+	var stats: Resource = _quick_boomstick()
+	var per_shot: float = float(stats.projectile_damage)
+	shooter.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_brace(behind)
+	_aim(shooter, 0.0)
+
+	# The quick boomstick can fire again before a bullet crosses the gap, so
+	# the wall is judged by the hits it took, not by shots fired.
+	var hits_to_break: int = int(ceil(WALL_DEFAULT_HP / per_shot))
+	for _i in 12 * _boomstick_quick_ticks():
+		await physics_frame
+		var hits: int = wall.hit_count()
+		if wall.is_solid() and hits > 0:
+			var expected: float = maxf(WALL_DEFAULT_HP - per_shot * float(hits), 0.0)
+			if absf(wall.hp_left() - expected) > WALL_DAMAGE_TOLERANCE:
+				failures.append("after %d bullet hit(s) the wall was on %.1f HP; %.0f per bullet should leave %.1f" % [
+					hits, wall.hp_left(), per_shot, expected])
+				break
+		if behind.damage > 0.0 and hits < hits_to_break:
+			failures.append("the player behind the wall took %.1f after only %d bullet hit(s); a bullet that hits the wall stops there" % [
+				behind.damage, hits])
+			break
+		if not wall.is_solid():
+			break
+	print("      wall took %d bullet hit(s), on %.1f HP, solid %s; player behind took %.1f" % [
+		wall.hit_count(), wall.hp_left(), wall.is_solid(), behind.damage])
+	if wall.is_solid():
+		failures.append("the wall was still standing after %d bullet hit(s) of %.0f on %.0f HP" % [
+			wall.hit_count(), per_shot, WALL_DEFAULT_HP])
+	elif wall.hit_count() != hits_to_break:
+		failures.append("the wall broke after %d bullet hit(s); %.0f HP at %.0f each takes %d" % [
+			wall.hit_count(), WALL_DEFAULT_HP, per_shot, hits_to_break])
 
 	await _teardown(stage)
 	return failures

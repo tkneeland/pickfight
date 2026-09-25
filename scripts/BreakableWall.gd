@@ -209,7 +209,17 @@ func _into_speed(head: Node2D, velocity: Vector2) -> float:
 
 func _take_hit(head: RigidBody2D, speed: float) -> void:
 	var stats: Resource = _owner_stats(head)
-	var amount: float = strike_damage(stats, speed)
+	_absorb(strike_damage(stats, speed), speed)
+
+## A boomstick bullet that meets the wall (owner decision on #53): it takes
+## the bullet's flat damage, the same as a player would. Called by
+## `Projectile._hit`; the bullet is spent either way.
+func take_projectile_hit(amount: float) -> void:
+	if not is_solid():
+		return
+	_absorb(amount, 0.0)
+
+func _absorb(amount: float, speed: float) -> void:
 	_hits += 1
 	_last_hit_speed = speed
 	_last_hit_damage = amount
