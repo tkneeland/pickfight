@@ -1,35 +1,54 @@
-# Proof of work: issue #77, the boomstick "head tunnel"
+# Proof of work: issue #82, the turn guard and other heads
 
 Cleared and recaptured per the evidence policy in `docs/agents/testing.md`:
-this root holds only the latest work package's evidence. #75's evidence is in
-history at `5f163a0:test-results/issue-75/`.
+this root holds only the latest work package's evidence. Earlier evidence is
+in git history:
 
-Branch `fix/issue-77-boomstick-head-tunnel`, macOS, local Godot 4.6.2,
-rebased on `origin/main` at `a3c8fed`.
+- #77 (with #71's integration run): `72669aa:test-results/issue-77/`
+- #75: `5f163a0:test-results/issue-75/`
+- #52: `cb30530:test-results/`
+- #59: `d2fa0a7:test-results/`
+- #47, #61 and damage-display: `8f32c86:test-results/`
 
-## What #77 turned out to be
+Branch `fix/issue-82-turn-guard-heads`, from `origin/main` at `faeee6b`
+(#71 and #77 merged). macOS, local Godot 4.6.2, headless.
 
-It was a bug in how the test measures, not a physics tunnel. On the failing
-tick of `roster_heads_do_not_tunnel_head_reversed`, the attacker's boomstick
-head (mass 0.1) had just been stopped on the blocker's body, and its own body,
-held at 1800 px/s by the charge, ran on past it. The anchor ended up 13 px
-behind its body while the haft still pointed forward (real facing 0.44 rad).
-`_head_circles_world()` rebuilt the facing from the body to the anchor and got
-2.82 rad. That turned the barrel round onto the other head and read -4.8 px of
-overlap. On the physics' own circles the heads were 28-30 px apart before the
-step and never closer than 19.9 px through it, so `WeaponHead`'s pair sweep
-was right to do nothing. The fix makes `_head_circles_world()` return
-`Player.weapon_head_circles_world()`, the circles where the physics has them.
-`WeaponHead.gd` is unchanged.
+## It was real
 
-| Criterion | Proven by | Evidence | Verdict |
+`WeaponHead.guard_turn` traced the per-tick turn against terrain only. The
+pair sweep traces the anchor's translation at the facing the step *began*
+with, so it cannot see the circles orbit the anchor either. Built
+deterministically in `turn_does_not_carry_blade_through_head`: a player
+stands on a floor, aimed just above level at minimum reach, and is commanded
+straight up. On the first fast tick of the turn, a still head (real
+`WeaponHead` script, on the head layer, with steps behind it) is parked just
+ahead of a far blade circle. Measured on `Player.weapon_head_circles_world()`:
+
+| Weapon | Before the tick | After one tick, on `main` |
+| --- | --- | --- |
+| sword (0.33 rad tick) | 7.62 px clear, ahead of the blade | 13.28 px on the **far** side, 7.80 px gap, never touched |
+| boomstick (0.38 rad tick) | 12.07 px clear, ahead of the blade | 14.23 px on the **far** side, 8.43 px gap, never touched |
+
+## The fix
+
+`guard_turn` also traces each circle along its arc against other heads'
+circles (whole circle against whole circle, falling back to the centre for a
+pair already touching). It moves the head back to leave the first circle to
+meet one just short of touching. After a head stop, it records that pose as
+the step's start so the pair sweep catches the anchor's own travel through
+the step. Two things were tried and dropped, both measured on this scenario:
+
+- **Without the step-start hand-off**, both weapons still went through on the
+  second tick.
+- **With only the centre traced**, as for terrain, the heads were left 2.0 and
+  2.3 px overlapped. That is at `PAIR_OVERLAP_ALLOWANCE`.
+
+## Evidence
+
+| Claim | Proven by | Evidence | Verdict |
 | --- | --- | --- | --- |
-| The #77 failure reproduces on unchanged main | suite prefix up to and including `roster_heads_do_not_tunnel_head_reversed` | `issue-77/red-main-suite-prefix.txt` (main `a9f0887`; identical numbers to the #69/#70 runs) | FAIL on main, as reported |
-| A deterministic standalone reproduction goes red before the fix | `charge_measures_heads_where_physics_has_them`: the exact captured pose, no dependence on history | `issue-77/red-new-scenario.txt` (-4.80 px measured vs 19.95 px real) | FAIL before fix |
-| ...and green after | same scenario | `issue-77/green-new-scenario.txt` (19.95 px both ways) | PASS |
-| Full suite, including every scenario using `_head_circles_world` | `--all` | `issue-77/scenario-suite.txt`: 127 passed, 1 failed. The failure is `axe_head_holds_side_near_vertical`, the known #71 order leak, with the same two assertions as on main. Every head-tunnel scenario passes, including `roster_heads_do_not_tunnel_head_reversed` in full suite order | PASS (except #71) |
-| The tunnel checks still catch a real breach | `d582dce` (the #38 fix) reverted in a scratch clone of this branch | `issue-77/revert-38-world-stopped.txt`: `world_stopped_head_blocks_arriving_head` FAILS. `issue-77/revert-38-head-tunnel-scenarios.txt`: `heads_do_not_tunnel_head` FAILS. The two roster sweeps pass in that isolated history, as the #38 breach always depended on suite history (#47) | PASS (red when the physics is broken) |
-| Boots on a fresh clone | `godot --headless --path <fresh clone> --quit`, grep `SCRIPT ERROR` / `Failed to load script` | `issue-77/boot-check.txt` (no matches) | PASS |
-
-`red-main-suite-prefix.txt` was run as
-`godot --headless --path . -s tools/scenario_runner.gd -- --scenarios=<SCENARIO_NAMES up to and including roster_heads_do_not_tunnel_head_reversed>`.
+| Red: on `main`'s `WeaponHead.gd`, the turn carries both blades through the parked head | `turn_does_not_carry_blade_through_head` | `issue-82/red-on-main.txt` | FAIL on main, as expected |
+| Green: with the fix, the parked head stays on its side of the blade for all 6 watched ticks (pushed along, gap about 0 px) | `turn_does_not_carry_blade_through_head` | `issue-82/green-on-branch.txt` | PASS |
+| Nothing else regressed | full suite: 129 of 129 | `issue-82/scenario-suite.txt` | PASS |
+| A fresh clone (no `.godot/`) boots with no `SCRIPT ERROR` or `Failed to load script` | the CLAUDE.md boot check | `issue-82/fresh-clone-boot.txt` | PASS |
+| How it feels to swing a sword into a blocking head | a playtest | none | NEEDS PLAYTEST |

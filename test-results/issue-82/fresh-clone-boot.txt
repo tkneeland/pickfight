@@ -1,0 +1,2 @@
+$ godot --headless --path <fresh clone of 66b7547> --quit 2>&1 | grep -E 'SCRIPT ERROR|Failed to load script'
+grep exit: 1 (1 = no matches = clean)
