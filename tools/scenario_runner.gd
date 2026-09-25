@@ -4242,12 +4242,8 @@ func _head_rear_extent(player: RigidBody2D) -> float:
 ## The gap between a world point and the nearest **surface** of the head a
 ## player is holding: negative once the point is inside one of its circles.
 ##
-## Built from the two things a player will tell anyone -- where the head is
-## and what circles it is made of -- plus the one rule the rig turns it by:
-## head-local +X points outward along the haft. So the facing is read back out
-## of the weapon's own geometry, from the player to the head, rather than off
-## any node in the rig, and this stays true through the rig swap ADR-0006
-## reserves the right to make.
+## Measured on the circles where the physics has them; see
+## `_head_circles_world`.
 func _head_circle_clearance(player: RigidBody2D, point: Vector2) -> float:
 	var clearance: float = INF
 	for circle: Dictionary in _head_circles_world(player):
@@ -4255,25 +4251,24 @@ func _head_circle_clearance(player: RigidBody2D, point: Vector2) -> float:
 		clearance = minf(clearance, centre.distance_to(point) - float(circle["radius"]))
 	return clearance
 
-## The head a player is holding, circle by circle, **in world coordinates**.
+## The head a player is holding, circle by circle, **in world coordinates**:
+## where the physics has them, read off `Player.weapon_head_circles_world()`.
+## That is still the player's public surface, so it survives the rig swap
+## ADR-0006 reserves the right to make.
 ##
-## Built from the two things a player will tell anyone -- where its head is and
-## what circles it is made of -- plus the one rule the rig turns the cluster
-## by: head-local +X points outward along the haft. So the facing is recovered
-## from the weapon's own geometry, player to head, rather than read off a node
-## inside the rig, and this survives the rig swap ADR-0006 reserves the right
-## to make.
+## **Not rebuilt from the anchor and the player-to-head direction any more
+## (issue #77).** That assumed the head's facing points from the body to the
+## anchor, and the head's facing is the haft's, which lags the anchor and need
+## not point at it. Usually the difference is a few pixels. On a light head it
+## can be the whole head: the boomstick (mass 0.1) stopped dead on a body mid
+## charge while its own body, still moving at 1800 px/s, ran past it. Its
+## anchor ended up 13 px *behind* the body with the haft still pointing
+## forward. Rebuilt, the barrel faced backwards onto the other head and read
+## 4.8 px of overlap, and `roster_heads_do_not_tunnel_head_reversed` failed a
+## breach that the physics' own circles, 19.9 px apart, never had. See
+## `charge_measures_heads_where_physics_has_them`.
 func _head_circles_world(player: RigidBody2D) -> Array[Dictionary]:
-	var anchor: Vector2 = player.weapon_head_position()
-	var facing: float = (anchor - player.global_position).angle()
-	var circles: Array[Dictionary] = []
-	for circle: Dictionary in player.weapon_head_circles():
-		var offset: Vector2 = circle["offset"]
-		circles.append({
-			"centre": anchor + offset.rotated(facing),
-			"radius": float(circle["radius"]),
-		})
-	return circles
+	return player.weapon_head_circles_world()
 
 ## The gap between two heads, surface to surface: the closest any circle of
 ## one gets to any circle of the other. Zero is touching and negative is
