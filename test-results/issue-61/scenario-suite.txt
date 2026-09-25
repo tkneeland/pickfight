@@ -44,9 +44,8 @@ PASS  identity_colours_match_controller_page
       pickaxe.tres: 13 circles against 26 points of art, worst fit -0.05 px outside it (negative is inside, clear)
       staff.tres: 1 circles against 20 points of art, worst fit +0.00 px outside it (negative is inside, clear)
       sword.tres: 23 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      axe.tres: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      axe.tres: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
       dagger.tres: 7 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      boomstick.tres: 27 circles against 12 points of art, worst fit -0.20 px outside it (negative is inside, clear)
       the default head: 1 circles against 16 points of art, worst fit +0.00 px outside it (negative is inside, clear)
       misfitted head: 1 circles against 16 points of art, worst fit +23.84 px outside it (negative is inside, clear)
 PASS  weapon_head_circles_within_art
@@ -60,25 +59,22 @@ PASS  round_winner_keeps_weapon
       sword: full drag settled at 70.0 px, its own max reach is 70.0 px
       axe: full drag settled at 140.0 px, its own max reach is 140.0 px
       dagger: full drag settled at 80.0 px, its own max reach is 80.0 px
-      boomstick: full drag settled at 70.0 px, its own max reach is 70.0 px
 PASS  weapon_reach_matches_roster
       pickaxe: head arrived at 2214 px/s and took 34.0 off, its own damage is 34.0 (closest 33.1 px)
       staff: head arrived at 2208 px/s and took 20.1 off, its own damage is 20.0 (closest 29.0 px)
       sword: head arrived at 2214 px/s and took 40.1 off, its own damage is 40.0 (closest 80.2 px)
-      axe: head arrived at 2175 px/s and took 87.7 off, its own damage is 90.0 (closest 46.9 px)
+      axe: head arrived at 2183 px/s and took 69.2 off, its own damage is 70.0 (closest 29.1 px)
       dagger: head arrived at 2208 px/s and took 45.1 off, its own damage is 45.0 (closest 32.4 px)
-      boomstick: head arrived at 2211 px/s and took 8.0 off, its own damage is 8.0 (closest 95.7 px)
 PASS  weapon_damage_matches_roster
       pickaxe: answered a drag from 20.0 px out to 70.0 px in 5 ticks
       staff: answered a drag from 20.0 px out to 70.0 px in 7 ticks
       sword: answered a drag from 20.0 px out to 70.0 px in 4 ticks
-      axe: answered a drag from 27.6 px out to 70.0 px in 10 ticks
+      axe: answered a drag from 20.0 px out to 70.0 px in 9 ticks
       dagger: answered a drag from 20.0 px out to 70.0 px in 3 ticks
-      boomstick: answered a drag from 20.0 px out to 70.0 px in 4 ticks
 PASS  weapon_responsiveness_matches_roster
       dagger against dagger: met -0.6 px off the midline, 16.3 px apart; gave way 13.7 px and 12.5 px
-      axe on the left: met 47.7 px off the midline, 14.6 px apart; axe gave way 24.6 px, dagger 60.0 px
-      axe on the right: met -47.7 px off the midline, 14.7 px apart; dagger gave way 60.0 px, axe 24.7 px
+      axe on the left: met 42.6 px off the midline, 24.9 px apart; axe gave way 34.9 px, dagger 60.0 px
+      axe on the right: met -42.6 px off the midline, 24.7 px apart; dagger gave way 60.0 px, axe 34.7 px
 PASS  heavy_weapon_wins_clash
       pickaxe   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
       pickaxe   0 deg at 1200 px/s each: heads closed to   -4.3 px of each other
@@ -165,7 +161,7 @@ PASS  heavy_weapon_wins_clash
       dagger 135 deg at 600 px/s each: crossed 10.1 px apart -- a miss, not a breach
       dagger 135 deg at 600 px/s each: heads closed to   10.1 px of each other
       dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      dagger 135 deg at 1800 px/s each: crossed 29.3 px apart -- a miss, not a breach
+      dagger 135 deg at 1800 px/s each: crossed 29.0 px apart -- a miss, not a breach
       dagger 135 deg at 1800 px/s each: heads closed to    0.3 px of each other
       boomstick   0 deg at 600 px/s each: heads closed to   -0.4 px of each other
       boomstick   0 deg at 1200 px/s each: crossed 19.8 px apart -- a miss, not a breach
@@ -176,15 +172,13 @@ PASS  heavy_weapon_wins_clash
       boomstick  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       boomstick  45 deg at 1800 px/s each: crossed 20.0 px apart -- a miss, not a breach
       boomstick  45 deg at 1800 px/s each: heads closed to    1.3 px of each other
-      boomstick  90 deg at 600 px/s each: crossed 25.3 px apart -- a miss, not a breach
-      boomstick  90 deg at 600 px/s each: heads closed to    0.8 px of each other
-      boomstick  90 deg at 1200 px/s each: heads closed to   -6.5 px of each other
-      boomstick  90 deg at 1800 px/s each: heads closed to   -7.1 px of each other
-      boomstick 135 deg at 600 px/s each: crossed 24.7 px apart -- a miss, not a breach
-      boomstick 135 deg at 600 px/s each: heads closed to    0.0 px of each other
-      boomstick 135 deg at 1200 px/s each: heads closed to   -0.1 px of each other
-      boomstick 135 deg at 1800 px/s each: crossed 9.9 px apart -- a miss, not a breach
-      boomstick 135 deg at 1800 px/s each: heads closed to    2.7 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 26.7 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to    0.3 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -6.0 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      boomstick 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -5.0 px of each other
+      boomstick 135 deg at 1800 px/s each: heads closed to   -0.6 px of each other
 PASS  roster_heads_do_not_tunnel_head
       pickaxe: head reaches 9.00 px forward and 6.36 px back on 150 px of weapon; bare haft runs 52.0 to 111.6 px
       pickaxe: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.8 px of them, head surface no closer than 54.3 px, shoved 0.00 px
@@ -195,15 +189,12 @@ PASS  roster_heads_do_not_tunnel_head
       sword: head reaches 56.10 px forward and 16.95 px back on 70 px of weapon; bare haft runs 52.0 to -10.1 px
       sword: no bystander half -- its head leaves -10.1 px of bare haft, and two players cannot stand closer than 52.0 px
       sword: bar at 46.1 px, held 69.5 px through it, ended -20.0 px past its top surface at 51.7 px of reach
-      axe: head reaches 17.61 px forward and 19.77 px back on 140 px of weapon; bare haft runs 52.0 to 82.2 px
-      axe: bystander at 67.1 px, bodies 69.0 px apart, haft through 14.5 px of them, head surface no closer than 54.4 px, shoved 0.00 px
-      axe: bar at 70.0 px, held 139.3 px through it, ended -19.5 px past its top surface at 51.4 px of reach
+      axe: head reaches 19.23 px forward and 34.43 px back on 140 px of weapon; bare haft runs 52.0 to 79.9 px
+      axe: bystander at 65.9 px, bodies 66.6 px apart, haft through 18.6 px of them, head surface no closer than 39.5 px, shoved 0.00 px
+      axe: bar at 70.0 px, held 139.4 px through it, ended -34.1 px past its top surface at 65.8 px of reach
       dagger: head reaches 8.28 px forward and 6.18 px back on 80 px of weapon; bare haft runs 52.0 to 47.7 px
       dagger: no bystander half -- its head leaves 47.7 px of bare haft, and two players cannot stand closer than 52.0 px
       dagger: bar at 66.8 px, held 79.5 px through it, ended -10.3 px past its top surface at 42.0 px of reach
-      boomstick: head reaches 71.80 px forward and 23.70 px back on 70 px of weapon; bare haft runs 52.0 to -25.8 px
-      boomstick: no bystander half -- its head leaves -25.8 px of bare haft, and two players cannot stand closer than 52.0 px
-      boomstick: bar at 39.3 px, held 69.6 px through it, ended -29.8 px past its top surface at 61.5 px of reach
 PASS  roster_hafts_are_non_colliding
       res://scenes/stages/Flatlands.tscn: spawn 0 shoved left, out after 58 ticks
       res://scenes/stages/Pillars.tscn: spawn 0 shoved left, out after 53 ticks
@@ -231,7 +222,6 @@ PASS  erosion_island_survives_full_erosion
       sword.tres: hardest possible strike deals 80.0
       axe.tres: hardest possible strike deals 90.0
       dagger.tres: hardest possible strike deals 90.0
-      boomstick.tres: hardest possible strike deals 16.0
 PASS  no_single_strike_kills
 PASS  pickup_appears_at_round_start
 PASS  pickups_arrive_on_interval_and_cap
@@ -254,16 +244,16 @@ PASS  pickup_drawn_with_weapon_art
       boomstick  45 deg at 1200 px/s each: heads closed to   -5.4 px of each other
       boomstick  45 deg at 1800 px/s each: crossed 10.9 px apart -- a miss, not a breach
       boomstick  45 deg at 1800 px/s each: heads closed to    1.6 px of each other
-      boomstick  90 deg at 600 px/s each: crossed 24.9 px apart -- a miss, not a breach
-      boomstick  90 deg at 600 px/s each: heads closed to    0.9 px of each other
-      boomstick  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      boomstick 135 deg at 600 px/s each: crossed 58.5 px apart -- a miss, not a breach
-      boomstick 135 deg at 600 px/s each: heads closed to   57.3 px of each other
-      boomstick 135 deg at 1200 px/s each: crossed 25.1 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: crossed 22.9 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to    0.4 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -6.6 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -3.7 px of each other
+      boomstick 135 deg at 600 px/s each: crossed 59.0 px apart -- a miss, not a breach
+      boomstick 135 deg at 600 px/s each: heads closed to   57.6 px of each other
+      boomstick 135 deg at 1200 px/s each: crossed 16.4 px apart -- a miss, not a breach
       boomstick 135 deg at 1200 px/s each: heads closed to    0.1 px of each other
-      boomstick 135 deg at 1800 px/s each: crossed 53.2 px apart -- a miss, not a breach
-      boomstick 135 deg at 1800 px/s each: heads closed to    3.6 px of each other
+      boomstick 135 deg at 1800 px/s each: crossed 50.9 px apart -- a miss, not a breach
+      boomstick 135 deg at 1800 px/s each: heads closed to    4.5 px of each other
       dagger   0 deg at 600 px/s each: crossed 3.5 px apart -- a miss, not a breach
       dagger   0 deg at 600 px/s each: heads closed to    3.5 px of each other
       dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
@@ -365,7 +355,7 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2654)
+       [0] _await_condition (res://tools/scenario_runner.gd:2690)
 PASS  rising_kill_zone_resets_each_round
 Controller page: http://172.19.9.117:18480/
 PASS  four_phones_claim_four_slots
@@ -384,39 +374,68 @@ PASS  elimination_buzzes_eliminated_player
 Controller page: http://172.19.9.117:18480/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
-      the axe aimed at -45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at 0 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at 45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at -135 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at 180 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at 135 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at -45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at 0 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      the axe aimed at 45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at -45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at 0 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at 45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at -135 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at 180 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at 135 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at -45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at 0 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at 45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
 PASS  axe_head_mirrors_with_aim
 PASS  symmetric_head_ignores_aim_side
 PASS  axe_head_holds_side_near_vertical
       first shot 301 ticks after the boomstick was handed over, the next 300 ticks later (interval 300 ticks)
 PASS  boomstick_fires_on_interval
-      bullet hit 5 ticks after firing: victim on 35.00 damage, shoved 99.5 px along the shot, reported [35.0]
+      bullet hit 11 ticks after firing: victim on 35.00 damage, shoved 99.5 px along the shot, reported [35.0]
 PASS  boomstick_bullet_damages_and_shoves
-      shot 1: furthest x 135.0 (bar face at 156.0), gone after 4 ticks
-      shot 2: furthest x 135.0 (bar face at 156.0), gone after 4 ticks
-      shot 3: furthest x 135.0 (bar face at 156.0), gone after 4 ticks
+      shot 1: furthest x 150.0 (bar face at 156.0), gone after 8 ticks
+      shot 2: furthest x 150.0 (bar face at 156.0), gone after 8 ticks
+      shot 3: furthest x 150.0 (bar face at 156.0), gone after 8 ticks
 PASS  boomstick_bullet_stops_on_terrain
       fired right; the shooter was kicked 72.4 px left in 90 ticks (a body is 48 px wide)
 PASS  boomstick_recoil_is_moderate
       pickaxe.tres: head arrived at 2214 px/s and took 34.0 off
       boomstick.tres: head arrived at 2211 px/s and took 8.0 off
 PASS  boomstick_melee_damage_is_low
-      pool of 5 weapons; the boomstick came up 53 times in 300 draws
+      pool of 5 weapons; the boomstick came up 54 times in 300 draws
 PASS  boomstick_in_pickup_pool
-      at rest reach: bullet started inside the shooter's body and got 290.0 px clear; shooter on 0.0 damage
+      at rest reach: bullet started inside the shooter's body and got 155.0 px clear; shooter on 0.0 damage
       sent back through the shooter: shooter on 0.0 damage, the player behind on 35.0
 PASS  boomstick_bullet_never_hits_shooter
       after eliminate: 0 bullet(s) still in flight, no shot over three intervals
       after leave_round: 0 bullet(s) still in flight, no shot over three intervals
 PASS  boomstick_stops_when_shooter_leaves_play
 PASS  roster_heads_do_not_tunnel_thin_platform
+      low_gravity: plain 383.657, modified 191.829, plain again 383.657
+PASS  round_modifier_low_gravity_applies_and_undoes
+      heavy_weapons: plain 131.701, modified 184.472, plain again 131.701
+PASS  round_modifier_heavy_weapons_applies_and_undoes
+      big pickaxe.tres: 13 circles against 26 points of art, worst fit -0.08 px outside it (negative is inside, clear)
+      big staff.tres: 1 circles against 20 points of art, worst fit +0.00 px outside it (negative is inside, clear)
+      big sword.tres: 23 circles against 7 points of art, worst fit -0.08 px outside it (negative is inside, clear)
+      big axe.tres: 16 circles against 79 points of art, worst fit -0.03 px outside it (negative is inside, clear)
+      big dagger.tres: 7 circles against 7 points of art, worst fit -0.08 px outside it (negative is inside, clear)
+      big_heads: plain 4.920, modified 7.380, plain again 4.920
+PASS  round_modifier_big_heads_applies_and_undoes
+      fast_lava: plain 1.017, modified 0.417, plain again 1.017
+      fast_lava rise speed: plain 120.0, modified 240.0, plain again 120.0 px/s
+PASS  round_modifier_fast_lava_applies_and_undoes
+      slippery_floor: plain 35.880, modified 149.857, plain again 35.934
+PASS  round_modifier_slippery_floor_applies_and_undoes
+      announcement 'BIG HEADS' at 96 px in [P: (0.0, 108.0), S: (1600.0, 180.0)] on a (1600.0, 900.0) screen
+PASS  round_modifier_announced_on_screen
+      chance 0: 0 of 10 rounds had a modifier
+      chance 1: 10 of 10 rounds had a modifier
+PASS  round_modifier_chance_zero_disables
+      bullet gone after 5 ticks, furthest x 114.0 (sword anchor at 175.0, body face at 196.0); victim on 0.0 damage, drifted 0.0 px, 0 strike(s) reported
+PASS  boomstick_head_blocks_bullet
+      across the holder's own head: gone after 15 ticks, furthest x 121.1, victim took 35.0
+      across the same head, fired by another player: gone after 7 ticks, furthest x -8.1 (head at 0.0), victim took 0.0
+PASS  boomstick_own_head_never_blocks
+      head 5.9 px thick against 15.0 px of flight a tick; tick ends 7.5 px from the anchor, contact needs 5.5
+      bullet gone after 7 ticks, furthest x -2.6 (head at 0.0); the player past it on 0.0 damage
+PASS  boomstick_thin_head_blocks_bullet
 ---
-87 passed, 0 failed, 87 total
+97 passed, 0 failed, 97 total

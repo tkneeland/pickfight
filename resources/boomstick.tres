@@ -30,9 +30,10 @@
 ; The gun is the damage.
 ;
 ; Firing (owner's numbers, #55): a shot every 5 s, automatic, straight down
-; the barrel. The bullet flies straight at 1800 px/s with no gravity, deals a
-; flat 35, and hits once: it vanishes on the first player or terrain it
-; meets. It shoves the player it hits with an impulse of 260. Each shot
+; the barrel. The bullet flies straight at 900 px/s with no gravity, a 5 px
+; circle, so players can see it coming (owner, #61; it was 1800 px/s and 3 px
+; in #55). It deals a flat 35 and hits once: it vanishes on the first player,
+; terrain or opposing weapon head it meets (#61). It shoves the player it hits with an impulse of 260. Each shot
 ; kicks the shooter back along the barrel with an impulse of 150, which in
 ; clear air carries the body about one and a half body widths
 ; (`boomstick_recoil_is_moderate`). Enough to stop anyone camping, rarely
@@ -51,9 +52,9 @@ max_drive_force = 6000.0
 damage = 8.0
 fire_interval = 5.0
 projectile_damage = 35.0
-projectile_speed = 1800.0
+projectile_speed = 900.0
 projectile_knockback = 260.0
-projectile_radius = 3.0
+projectile_radius = 5.0
 recoil_impulse = 150.0
 head_circle_offsets = PackedVector2Array(-19.3, 0, -13.5, 0, -8.6, 0, -4.4, 0, -1.3, 0, 1.8, 0, 4.9, 0, 8, 0, 11.1, 0, 14.2, 0, 17.3, 0, 20.4, 0, 23.5, 0, 26.6, 0, 29.7, 0, 32.8, 0, 35.9, 0, 39, 0, 42.1, 0, 45.2, 0, 48.3, 0, 51.4, 0, 54.5, 0, 57.6, 0, 60.7, 0, 65.8, 0, 67.9, 0)
 head_circle_radii = PackedFloat32Array(4.4, 4.3, 3.7, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 3.9, 3.9)

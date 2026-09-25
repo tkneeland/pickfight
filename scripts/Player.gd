@@ -1178,6 +1178,12 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 	victim.take_damage(amount)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
+## The physics RID of this player's weapon head, or an empty RID with no live
+## rig. A bullet reads it every tick, so its shooter's own head -- whichever
+## head the shooter holds now -- never blocks it (issue #61, ADR-0014).
+func weapon_head_rid() -> RID:
+	return _head.get_rid() if _head != null else RID()
+
 ## Frees every bullet this player still has in flight.
 func _clear_projectiles() -> void:
 	for bullet in _projectiles:
