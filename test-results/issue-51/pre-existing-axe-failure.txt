@@ -1,0 +1,13 @@
+# Pre-existing failure: axe_head_holds_side_near_vertical
+
+## Full suite on untouched origin/main (8f32c86), Windows, this machine
+FAIL  axe_head_holds_side_near_vertical
+97 passed, 1 failed, 98 total
+FAIL  axe_head_holds_side_near_vertical
+      - aimed 25 deg past straight down, the head did not flip within two ticks
+      - held straight down, the head ended the wobble on the wrong side
+
+## The same scenario run alone on this branch, three times
+PASS  axe_head_holds_side_near_vertical
+PASS  axe_head_holds_side_near_vertical
+PASS  axe_head_holds_side_near_vertical
