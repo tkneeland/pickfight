@@ -195,6 +195,7 @@ func _try_start_round() -> void:
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1
 	_state = State.ROUND_ACTIVE
+	_start_round_modifier()
 	_start_pickups()
 	_start_kill_zone_rise()
 
@@ -294,6 +295,7 @@ func _check_round_end() -> void:
 		_last_winner_slot = -1
 	_clear_pickups()
 	_stop_kill_zone_rise()
+	_end_round_modifier()
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
@@ -539,3 +541,132 @@ func _stop_kill_zone_rise() -> void:
 	var zone: Node2D = _floor_kill_zone()
 	if zone != null:
 		zone.stop_rising()
+
+# --- Round modifiers (issue #50, ADR-0014) -----------------------------------
+#
+# Some rounds get one random twist from `RoundModifiers.gd`, applied right
+# after the round's players spawn and before the kill zone is armed, and
+# undone the moment the round ends. Its name is shown big on screen for
+# `modifier_announce_sec` by a label this node builds itself, so no scene
+# needs editing.
+
+const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
+
+## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
+@export_range(0.0, 1.0) var modifier_chance: float = 0.35
+## How long a rolled modifier's name stays on screen at round start.
+@export var modifier_announce_sec: float = 3.0
+## A `RoundModifiers` id (e.g. "low_gravity") every round gets, whatever
+## `modifier_chance` and `modifier_rolls_enabled` say: the determinism seam a
+## scenario or a playtest uses to pick one. Empty (the default) rolls.
+@export var forced_modifier: String = ""
+## Determinism seam for the roll itself, like `rotation_seed`: -1 leaves it
+## random every run. Its own RNG, never `_rng`, so a roll can never shift a
+## seeded stage rotation.
+@export var modifier_seed: int = -1
+
+## Master switch for random rolls, shared by every RoundManager. The game
+## never touches it. The scenario runner turns it off at startup so every
+## scenario written before #50 plays exactly as it did; a scenario that wants
+## rolls turns it back on, and `forced_modifier` works either way.
+static var modifier_rolls_enabled: bool = true
+
+var _modifier: RefCounted = null
+var _modifier_rng: RandomNumberGenerator
+var _modifier_layer: CanvasLayer
+var _modifier_label: Label
+## Hides the label `modifier_announce_sec` after an announcement. A child
+## node, so it goes when this node does; restarted by every announcement.
+var _modifier_timer: Timer
+
+## The id of the modifier on the current round, or "" for none.
+func active_modifier_id() -> String:
+	return _modifier.id if _modifier != null else ""
+
+## The announcement label, or null before any modifier was ever announced.
+func modifier_label() -> Label:
+	return _modifier_label
+
+## Round start: roll (or take the forced one), apply it to every player now
+## in the round and the stage, and announce it.
+func _start_round_modifier() -> void:
+	_end_round_modifier()
+	var id: String = _roll_modifier()
+	if id == "":
+		return
+	_modifier = RoundModifiersScript.create(id)
+	if _modifier == null:
+		push_warning("RoundManager: unknown round modifier '%s'" % id)
+		return
+	var in_round: Array = []
+	for player: Variant in _players:
+		if player != null and player.alive:
+			in_round.append(player)
+	_modifier.apply(self, in_round, _current_stage)
+	_announce_modifier(_modifier.title)
+
+## Round end: put back everything the modifier changed and drop its name.
+func _end_round_modifier() -> void:
+	if _modifier != null:
+		_modifier.undo()
+		_modifier = null
+	if _modifier_label != null:
+		_modifier_label.visible = false
+
+func _roll_modifier() -> String:
+	if forced_modifier != "":
+		return forced_modifier
+	if not modifier_rolls_enabled or modifier_chance <= 0.0:
+		return ""
+	if _modifier_rng == null:
+		_modifier_rng = RandomNumberGenerator.new()
+		if modifier_seed == -1:
+			_modifier_rng.randomize()
+		else:
+			_modifier_rng.seed = modifier_seed
+	if _modifier_rng.randf() >= modifier_chance:
+		return ""
+	var ids: PackedStringArray = RoundModifiersScript.IDS
+	return ids[_modifier_rng.randi() % ids.size()]
+
+func _announce_modifier(title: String) -> void:
+	if _modifier_label == null:
+		_build_modifier_label()
+	_modifier_label.text = title
+	_modifier_label.visible = true
+	_modifier_timer.start(maxf(modifier_announce_sec, 0.01))
+
+## Big, outlined, centred across the upper part of the screen, on its own
+## canvas layer above the HUD.
+func _build_modifier_label() -> void:
+	_modifier_layer = CanvasLayer.new()
+	_modifier_layer.name = "ModifierLayer"
+	_modifier_layer.layer = 10
+	add_child(_modifier_layer)
+	_modifier_label = Label.new()
+	_modifier_label.name = "ModifierLabel"
+	_modifier_label.anchor_left = 0.0
+	_modifier_label.anchor_right = 1.0
+	_modifier_label.anchor_top = 0.12
+	_modifier_label.anchor_bottom = 0.32
+	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_modifier_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_modifier_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_modifier_label.add_theme_font_size_override("font_size", 96)
+	_modifier_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 1.0))
+	_modifier_label.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0, 1.0))
+	_modifier_label.add_theme_constant_override("outline_size", 16)
+	_modifier_label.visible = false
+	_modifier_layer.add_child(_modifier_label)
+	_modifier_timer = Timer.new()
+	_modifier_timer.name = "ModifierAnnounceTimer"
+	_modifier_timer.one_shot = true
+	_modifier_timer.timeout.connect(func() -> void: _modifier_label.visible = false)
+	add_child(_modifier_timer)
+
+## A RoundManager leaving the tree mid-round (a scenario tearing down) must
+## not leave its modifier on players that outlive it.
+func _exit_tree() -> void:
+	if _modifier != null:
+		_modifier.undo()
+		_modifier = null

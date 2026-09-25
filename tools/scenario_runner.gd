@@ -125,6 +125,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_bullet_never_hits_shooter",
 	"boomstick_stops_when_shooter_leaves_play",
 	"roster_heads_do_not_tunnel_thin_platform",
+	"round_modifier_low_gravity_applies_and_undoes",
+	"round_modifier_heavy_weapons_applies_and_undoes",
+	"round_modifier_big_heads_applies_and_undoes",
+	"round_modifier_fast_lava_applies_and_undoes",
+	"round_modifier_slippery_floor_applies_and_undoes",
+	"round_modifier_announced_on_screen",
+	"round_modifier_chance_zero_disables",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -468,6 +475,12 @@ func _initialize() -> void:
 			quit(2)
 			return
 
+	# Round modifiers (issue #50) roll on the game's RoundManagers only: every
+	# scenario here plays without random rolls, so nothing written before #50
+	# can turn random. The modifier scenarios force one, or switch rolls back
+	# on for themselves.
+	RoundManagerType.modifier_rolls_enabled = false
+
 	# Not awaited: this kicks off the coroutine and returns control to the
 	# engine, which then drives it forward one physics tick at a time via the
 	# `physics_frame` signal awaited inside the scenarios.
@@ -685,6 +698,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomstick_stops_when_shooter_leaves_play()
 		"roster_heads_do_not_tunnel_thin_platform":
 			return await _scenario_roster_heads_do_not_tunnel_thin_platform()
+		"round_modifier_low_gravity_applies_and_undoes":
+			return await _scenario_round_modifier_low_gravity_applies_and_undoes()
+		"round_modifier_heavy_weapons_applies_and_undoes":
+			return await _scenario_round_modifier_heavy_weapons_applies_and_undoes()
+		"round_modifier_big_heads_applies_and_undoes":
+			return await _scenario_round_modifier_big_heads_applies_and_undoes()
+		"round_modifier_fast_lava_applies_and_undoes":
+			return await _scenario_round_modifier_fast_lava_applies_and_undoes()
+		"round_modifier_slippery_floor_applies_and_undoes":
+			return await _scenario_round_modifier_slippery_floor_applies_and_undoes()
+		"round_modifier_announced_on_screen":
+			return await _scenario_round_modifier_announced_on_screen()
+		"round_modifier_chance_zero_disables":
+			return await _scenario_round_modifier_chance_zero_disables()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -7295,6 +7322,517 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 				way, restart["tick"], quick_ticks])
 
 	await _teardown(stage)
+# --- Round modifiers (issue #50, ADR-0014) -----------------------------------
+#
+# Each modifier gets one scenario that plays three rounds in a row on the same
+# RoundManager: without it, with it (forced through `forced_modifier`), and
+# without it again. Something observable is measured in every round -- how
+# fast a player falls, how hard extending the weapon throws the body, how big
+# the head is, when the lava sets off, how far a shoved body slides -- and the
+# scenario asserts that the middle round differs the way the modifier says
+# and that the third round is back to the first. The third round is the "fully
+# undone" half: the modifier went on and came off through the real round loop,
+# not through a call made by the test.
+#
+# The numbers below are written from the design (ADR-0014), not read back out
+# of `RoundModifiers.gd`: a test that asked the modifier what it does would
+# pass whatever it did.
+
+## The stage every modifier round plays on: flat ground, two platforms, and a
+## floor kill zone that rises to its spawns at y=0 (ADR-0012).
+const MODIFIER_STAGE: String = "res://scenes/stages/Flatlands.tscn"
+## Clear air far above Flatlands, for measurements that must touch nothing.
+const MODIFIER_AIR: Vector2 = Vector2(0, -3000)
+## Ticks a new round is given for `start_round()`'s deferred rig build to land
+## before anything is measured.
+const MODIFIER_RIG_TICKS: int = 5
+## The modifiers, spelled out rather than read from `RoundModifiers.IDS`, and
+## the names the announcement must show for them.
+const MODIFIER_TITLES: Dictionary = {
+	"low_gravity": "LOW GRAVITY",
+	"heavy_weapons": "HEAVY WEAPONS",
+	"big_heads": "BIG HEADS",
+	"fast_lava": "FAST LAVA",
+	"slippery_floor": "SLIPPERY FLOOR",
+}
+
+## Low gravity is half gravity. Speed picked up falling from rest in clear air
+## over a third of a second is proportional to gravity (linear damping is
+## linear), so the modified round's must come out near half the plain one's.
+const LOW_GRAVITY_FALL_TICKS: int = 20
+const LOW_GRAVITY_RATIO_MIN: float = 0.35
+const LOW_GRAVITY_RATIO_MAX: float = 0.65
+
+## Heavy weapons put 1.6x the mass in every head. Extending the weapon in clear
+## air throws the body back by momentum: with the pickaxe's 0.25 head against
+## a 1.0 body, about 0.25/1.25 of the relative speed plain and 0.4/1.4 heavy,
+## so ~1.4x the recoil. Required: at least 1.2x.
+const HEAVY_RECOIL_RATIO_MIN: float = 1.2
+const HEAVY_AIM_TICKS: int = 30
+const HEAVY_EXTEND_TICKS: int = 20
+
+## Big heads scale every head circle, and the art, by 1.5.
+const BIG_HEAD_RATIO: float = 1.5
+const BIG_HEAD_RATIO_TOLERANCE: float = 0.02
+
+## Fast lava: grace x0.4 and rise deadline x0.5 (ADR-0014). Short stand-ins
+## for the rotation's 50 s / 80 s so the scenario sees the lava set off.
+const FAST_LAVA_TEST_GRACE_SEC: float = 1.0
+const FAST_LAVA_TEST_RISE_SEC: float = 4.0
+const FAST_LAVA_GRACE_FRACTION: float = 0.4
+const FAST_LAVA_SPEED_FACTOR: float = 2.0
+## Seconds a measured set-off may miss the expected one by: a few ticks of
+## polling on either side of the grace.
+const FAST_LAVA_GRACE_TOLERANCE_SEC: float = 0.1
+const FAST_LAVA_SPEED_TOLERANCE: float = 0.1
+## Ticks the rise speed is sampled over: short of the fast zone reaching the
+## players standing on the ground, which would end the round under the test.
+const FAST_LAVA_SPEED_TICKS: int = 15
+
+## Slippery floor: a body shoved along the ground slides at least twice as far
+## as on a normal floor. Plain friction (1.0) stops a 500 px/s body in a few
+## tenths of a second; at the slippery 0.05 mostly linear damping is left.
+const SLIPPERY_SHOVE_SPEED: float = 500.0
+const SLIPPERY_SLIDE_TICKS: int = 45
+const SLIPPERY_SETTLE_TICKS: int = 60
+const SLIPPERY_RATIO_MIN: float = 2.0
+
+## Two unmodified rounds measured the same way may differ by this fraction
+## (plus a pixel's worth of slack) and still be "the same game".
+const MODIFIER_UNDO_TOLERANCE: float = 0.05
+
+## How long the announcement scenario asks the name to stay up.
+const MODIFIER_ANNOUNCE_TEST_SEC: float = 0.5
+## "Big": at least twice the HUD's 32 px waiting text.
+const MODIFIER_LABEL_MIN_FONT: int = 64
+## Rounds played by the chance scenario at chance 0, and then at chance 1.
+const MODIFIER_CHANCE_ROUNDS: int = 10
+
+## A real RoundManager (preloaded by path) on a one-stage rotation of
+## `MODIFIER_STAGE`, two round-owned players bound as controllers so
+## `set_input_vector()` takes effect, the never-abandoning _FakeRoster, no
+## pickups (a weapon picked up between rounds would change what is measured)
+## and no pause between rounds. `forced` is the first round's modifier.
+func _new_modifier_round(forced: String, grace_sec: float = 50.0, rise_sec: float = 80.0) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "Container"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	for i in 2:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "P%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.bind_controller()
+		players.append(player)
+	var roster := _FakeRoster.new()
+	roster.name = "Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := Node.new()
+	round_manager.set_script(RoundManagerType)
+	var paths: Array[NodePath] = [NodePath("../P0"), NodePath("../P1")]
+	round_manager.player_paths = paths
+	var scenes: Array[PackedScene] = [load(MODIFIER_STAGE) as PackedScene]
+	round_manager.stage_scenes = scenes
+	round_manager.arena_container_path = NodePath("../Container")
+	round_manager.controller_server_path = NodePath("../Roster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.kill_zone_grace_sec = grace_sec
+	round_manager.kill_zone_rise_sec = rise_sec
+	round_manager.pickup_scene = null
+	round_manager.forced_modifier = forced
+	stage.add_child(round_manager)
+	return {"stage": stage, "container": container, "players": players, "round_manager": round_manager}
+
+## Ends the live round with P0 the winner -- so P0 carries its weapon into the
+## next one, the path a modified weapon could leak through -- and waits for
+## the next round, which gets `forced` ("" for none). Returns its stage
+## instance, or null on timeout. Compares instance ids rather than handing
+## `previous` to `_await_live_stage()`, whose condition would hold on to it
+## after the round loop has freed it.
+func _next_modifier_round(loop: Dictionary, previous: Node2D, forced: String) -> Node2D:
+	loop["round_manager"].forced_modifier = forced
+	var players: Array[RigidBody2D] = loop["players"]
+	var container: Node = loop["container"]
+	var previous_id: int = previous.get_instance_id()
+	players[1].eliminate()
+	var live: bool = await _await_condition(func() -> bool:
+		var active: Node2D = _active_stage(container)
+		return players[0].alive and players[1].alive and active != null and active.get_instance_id() != previous_id,
+		ROUND_LOOP_TIMEOUT_MSEC)
+	return _active_stage(container) if live else null
+
+## Plays off / `id` / off, calling `measure(loop, instance)` once per round
+## after the rig is built, and `inspect(loop, round_index)` right after it
+## (for state checks). Returns {"failures", "values"}; `values` is short when
+## a round never started.
+func _modifier_off_on_off(loop: Dictionary, id: String, measure: Callable, inspect: Callable = Callable()) -> Dictionary:
+	var failures: Array[String] = []
+	var values: Array[float] = []
+	var round_manager: Node = loop["round_manager"]
+	var forced: Array[String] = ["", id, ""]
+	var previous: Node2D = null
+	for i in 3:
+		var instance: Node2D
+		if i == 0:
+			instance = await _await_live_stage(loop)
+		else:
+			instance = await _next_modifier_round(loop, previous, forced[i])
+		if instance == null:
+			failures.append("round %d never started" % (i + 1))
+			return {"failures": failures, "values": values}
+		previous = instance
+		var active: String = round_manager.active_modifier_id()
+		if active != forced[i]:
+			failures.append("round %d: expected modifier '%s' on the round, found '%s'" % [i + 1, forced[i], active])
+		await _await_ticks(MODIFIER_RIG_TICKS)
+		var value: float = await measure.call(loop, instance)
+		values.append(value)
+		if inspect.is_valid():
+			failures.append_array(inspect.call(loop, i))
+	print("      %s: plain %.3f, modified %.3f, plain again %.3f" % [id, values[0], values[1], values[2]])
+	return {"failures": failures, "values": values}
+
+## Whether two unmodified rounds' measurements agree.
+func _same_game(a: float, b: float) -> bool:
+	return absf(a - b) <= absf(a) * MODIFIER_UNDO_TOLERANCE + 1.0
+
+func _check_undone(failures: Array[String], id: String, values: Array[float], what: String) -> void:
+	if values.size() == 3 and not _same_game(values[0], values[2]):
+		failures.append("%s: the round after it measured %s %.3f, the round before %.3f -- not undone" % [
+			id, what, values[2], values[0]])
+
+## Low gravity: falling speed gained from rest in clear air.
+func _scenario_round_modifier_low_gravity_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var saved: Array[float] = []
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		player.set_input_vector(Vector2.ZERO)
+		player.teleport_to(MODIFIER_AIR)
+		await _await_ticks(LOW_GRAVITY_FALL_TICKS)
+		return player.linear_velocity.y
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 0:
+			saved.assign([players[0].gravity_scale, players[1].gravity_scale])
+		elif round_index == 2:
+			for i in 2:
+				if players[i].gravity_scale != saved[i]:
+					found.append("P%d's gravity_scale is %.3f after the low-gravity round, %.3f before it" % [i, players[i].gravity_scale, saved[i]])
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "low_gravity", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] <= 0.0:
+			failures.append("a player in clear air did not fall (%.3f px/s)" % values[0])
+		else:
+			var ratio: float = values[1] / values[0]
+			if ratio < LOW_GRAVITY_RATIO_MIN or ratio > LOW_GRAVITY_RATIO_MAX:
+				failures.append("low gravity: fell at %.2fx the plain speed, expected about half (%.2f..%.2f)" % [
+					ratio, LOW_GRAVITY_RATIO_MIN, LOW_GRAVITY_RATIO_MAX])
+		_check_undone(failures, "low gravity", values, "fall speed")
+	await _teardown(loop["stage"])
+	return failures
+
+## Heavy weapons: the body's recoil from extending the weapon in clear air,
+## and the pickaxe the winner carries is still the real, untouched one.
+func _scenario_round_modifier_heavy_weapons_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var pickaxe: Resource = load("res://resources/pickaxe.tres")
+	var pickaxe_mass: float = pickaxe.mass
+	var pickaxe_force: float = pickaxe.max_drive_force
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		# Aimed along +X, wound all the way in, then parked still in the air.
+		player.set_input_vector(Vector2(0.001, 0.0))
+		player.teleport_to(MODIFIER_AIR)
+		await _await_ticks(HEAVY_AIM_TICKS)
+		player.teleport_to(MODIFIER_AIR)
+		player.set_input_vector(Vector2.RIGHT)
+		var recoil: float = 0.0
+		for tick in HEAVY_EXTEND_TICKS:
+			await physics_frame
+			recoil = maxf(recoil, -player.linear_velocity.x)
+		player.set_input_vector(Vector2.ZERO)
+		return recoil
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		var held: Resource = players[0].weapon_stats
+		if held == null or held.resource_path != "res://resources/pickaxe.tres":
+			found.append("round %d: P0 holds %s, not the pickaxe resource itself" % [
+				round_index + 1, held.resource_path if held != null else "nothing"])
+		if pickaxe.mass != pickaxe_mass or pickaxe.max_drive_force != pickaxe_force:
+			found.append("round %d: the shared pickaxe resource was changed (mass %.3f, force %.1f)" % [
+				round_index + 1, pickaxe.mass, pickaxe.max_drive_force])
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "heavy_weapons", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] <= 0.0:
+			failures.append("extending the weapon threw the body back not at all (%.3f px/s)" % values[0])
+		elif values[1] / values[0] < HEAVY_RECOIL_RATIO_MIN:
+			failures.append("heavy weapons: recoil %.2fx the plain one, expected at least %.2fx" % [
+				values[1] / values[0], HEAVY_RECOIL_RATIO_MIN])
+		_check_undone(failures, "heavy weapons", values, "recoil")
+	await _teardown(loop["stage"])
+	return failures
+
+## The biggest head circle's radius and the art's furthest point from the
+## anchor, so both the hitbox and the drawing have to scale.
+func _head_size(player: RigidBody2D) -> Dictionary:
+	var radius: float = 0.0
+	for circle: Dictionary in player.weapon_head_circles():
+		radius = maxf(radius, float(circle["radius"]))
+	var extent: float = 0.0
+	for point: Vector2 in player.weapon_head_visual_polygon():
+		extent = maxf(extent, point.length())
+	return {"radius": radius, "extent": extent}
+
+## Big heads: circles and art both 1.5x, every circle still inside the art
+## (ADR-0010) for every weapon in the roster -- each handed over mid-round
+## through `set_weapon_stats()`, the pickup path -- and the plain head back
+## exactly afterwards.
+func _scenario_round_modifier_big_heads_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	var sizes: Array[Dictionary] = []
+	var first_circles: Array[Dictionary] = []
+	var extra: Array[String] = []
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		player.teleport_to(MODIFIER_AIR)
+		sizes.append(_head_size(player))
+		if round_manager.active_modifier_id() == "big_heads":
+			for path: String in WEAPON_RESOURCE_PATHS:
+				var stats: Resource = load(path)
+				var plain_radius: float = 0.0
+				for r: float in stats.head_circle_radii:
+					plain_radius = maxf(plain_radius, r)
+				player.set_weapon_stats(stats)
+				await _await_ticks(2)
+				extra.append_array(_art_containment_failures("big " + path.get_file(), player))
+				var got: float = float(_head_size(player)["radius"])
+				if absf(got / plain_radius - BIG_HEAD_RATIO) > BIG_HEAD_RATIO_TOLERANCE:
+					extra.append("big heads: %s picked up mid-round has a %.2f px biggest circle, %.2fx its plain %.2f" % [
+						path.get_file(), got, got / plain_radius, plain_radius])
+			player.set_weapon_stats(load("res://resources/pickaxe.tres"))
+			await _await_ticks(2)
+		return float(sizes[-1]["radius"])
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 0:
+			first_circles.assign(players[0].weapon_head_circles())
+		elif round_index == 2:
+			var circles: Array[Dictionary] = players[0].weapon_head_circles()
+			if circles.size() != first_circles.size():
+				found.append("after big heads the head has %d circles, before it %d" % [circles.size(), first_circles.size()])
+			else:
+				for i in circles.size():
+					if absf(Vector2(circles[i]["offset"]).length() - Vector2(first_circles[i]["offset"]).length()) > 0.001 \
+							or absf(float(circles[i]["radius"]) - float(first_circles[i]["radius"])) > 0.001:
+						found.append("after big heads, head circle %d is not back to its plain size" % i)
+						break
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "big_heads", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	if sizes.size() == 3:
+		for key: String in ["radius", "extent"]:
+			var ratio: float = float(sizes[1][key]) / float(sizes[0][key])
+			if absf(ratio - BIG_HEAD_RATIO) > BIG_HEAD_RATIO_TOLERANCE:
+				failures.append("big heads: the head's %s came out %.3fx, expected %.2fx" % [key, ratio, BIG_HEAD_RATIO])
+			if absf(float(sizes[2][key]) - float(sizes[0][key])) > 0.001:
+				failures.append("big heads: the head's %s is %.3f the round after, %.3f before -- not undone" % [
+					key, float(sizes[2][key]), float(sizes[0][key])])
+	await _teardown(loop["stage"])
+	return failures
+
+## Fast lava: when the floor kill zone sets off, and how fast it then climbs.
+func _scenario_round_modifier_fast_lava_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("", FAST_LAVA_TEST_GRACE_SEC, FAST_LAVA_TEST_RISE_SEC)
+	var round_manager: Node = loop["round_manager"]
+	var tps: float = float(Engine.physics_ticks_per_second)
+	var speeds: Array[float] = []
+	var authored_y: float = _authored_kill_zone_y(MODIFIER_STAGE)
+	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
+		# The rig ticks already spent count toward the grace.
+		var ticks: int = MODIFIER_RIG_TICKS
+		var zone: Node2D = instance.get_node("KillZone")
+		while zone.position.y >= authored_y - RISE_HOLD_TOLERANCE and ticks < int(3.0 * tps):
+			await physics_frame
+			ticks += 1
+		var from_y: float = zone.position.y
+		await _await_ticks(FAST_LAVA_SPEED_TICKS)
+		speeds.append((from_y - zone.position.y) * tps / float(FAST_LAVA_SPEED_TICKS))
+		return ticks / tps
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index != 1 and (round_manager.kill_zone_grace_sec != FAST_LAVA_TEST_GRACE_SEC \
+				or round_manager.kill_zone_rise_sec != FAST_LAVA_TEST_RISE_SEC):
+			found.append("round %d: the rise is set to grace %.2f s / rise %.2f s, expected %.2f / %.2f" % [
+				round_index + 1, round_manager.kill_zone_grace_sec, round_manager.kill_zone_rise_sec,
+				FAST_LAVA_TEST_GRACE_SEC, FAST_LAVA_TEST_RISE_SEC])
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "fast_lava", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3 and speeds.size() == 3:
+		var expected: Array[float] = [FAST_LAVA_TEST_GRACE_SEC, FAST_LAVA_TEST_GRACE_SEC * FAST_LAVA_GRACE_FRACTION, FAST_LAVA_TEST_GRACE_SEC]
+		for i in 3:
+			if absf(values[i] - expected[i]) > FAST_LAVA_GRACE_TOLERANCE_SEC:
+				failures.append("round %d: the lava set off %.2f s in, expected %.2f s" % [i + 1, values[i], expected[i]])
+		print("      fast_lava rise speed: plain %.1f, modified %.1f, plain again %.1f px/s" % [speeds[0], speeds[1], speeds[2]])
+		if speeds[0] <= 0.0:
+			failures.append("the plain round's lava never climbed")
+		else:
+			var factor: float = speeds[1] / speeds[0]
+			if absf(factor - FAST_LAVA_SPEED_FACTOR) > FAST_LAVA_SPEED_FACTOR * FAST_LAVA_SPEED_TOLERANCE:
+				failures.append("fast lava climbed %.2fx as fast as plain, expected %.2fx" % [factor, FAST_LAVA_SPEED_FACTOR])
+			if not _same_game(speeds[0], speeds[2]):
+				failures.append("the round after fast lava climbed at %.1f px/s, the round before %.1f -- not undone" % [speeds[2], speeds[0]])
+	await _teardown(loop["stage"])
+	return failures
+
+## Slippery floor: how far a body shoved along the ground slides.
+func _scenario_round_modifier_slippery_floor_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var saved: Array = []
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		# Weapon up and wound in, clear of the ground, then let the body land
+		# and settle on Flatlands' floor at its spawn.
+		player.set_input_vector(Vector2(0.0, -0.001))
+		await _await_ticks(SLIPPERY_SETTLE_TICKS)
+		# Shoved left, away from P1 and under nothing.
+		var start_x: float = player.global_position.x
+		player.linear_velocity = Vector2(-SLIPPERY_SHOVE_SPEED, 0.0)
+		await _await_ticks(SLIPPERY_SLIDE_TICKS)
+		return start_x - player.global_position.x
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 0:
+			saved.assign([players[0].physics_material_override, players[1].physics_material_override])
+		elif round_index == 2:
+			for i in 2:
+				if players[i].physics_material_override != saved[i]:
+					found.append("P%d's physics material is not what it was before the slippery round" % i)
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "slippery_floor", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] <= 0.0:
+			failures.append("a shoved body did not slide at all (%.1f px)" % values[0])
+		elif values[1] / values[0] < SLIPPERY_RATIO_MIN:
+			failures.append("slippery floor: slid %.2fx as far as plain, expected at least %.2fx" % [
+				values[1] / values[0], SLIPPERY_RATIO_MIN])
+		_check_undone(failures, "slippery floor", values, "slide")
+	await _teardown(loop["stage"])
+	return failures
+
+## The rolled modifier's name is shown big on screen at round start, goes
+## away after `modifier_announce_sec`, and is not shown on a round without
+## one.
+func _scenario_round_modifier_announced_on_screen() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_modifier_round("big_heads")
+	var round_manager: Node = loop["round_manager"]
+	round_manager.modifier_announce_sec = MODIFIER_ANNOUNCE_TEST_SEC
+	var first: Node2D = await _await_live_stage(loop)
+	if first == null:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	await physics_frame
+	var label: Label = round_manager.modifier_label()
+	if label == null:
+		failures.append("a round with a modifier showed no announcement label")
+		await _teardown(loop["stage"])
+		return failures
+	if not label.is_visible_in_tree():
+		failures.append("the announcement label is not visible at round start")
+	if label.text != MODIFIER_TITLES["big_heads"]:
+		failures.append("the announcement reads '%s', expected '%s'" % [label.text, MODIFIER_TITLES["big_heads"]])
+	if not (label.get_parent() is CanvasLayer):
+		failures.append("the announcement is not on a canvas layer, so it moves with the camera instead of sitting on screen")
+	var font_size: int = label.get_theme_font_size("font_size")
+	if font_size < MODIFIER_LABEL_MIN_FONT:
+		failures.append("the announcement's font is %d px, expected at least %d" % [font_size, MODIFIER_LABEL_MIN_FONT])
+	var screen: Rect2 = Rect2(Vector2.ZERO, label.get_viewport_rect().size)
+	var rect: Rect2 = label.get_global_rect()
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0 or not screen.encloses(rect):
+		failures.append("the announcement's box %s is not on the %s screen" % [rect, screen.size])
+	print("      announcement '%s' at %d px in %s on a %s screen" % [label.text, font_size, rect, screen.size])
+	var hid: bool = await _await_condition(func() -> bool: return not label.visible,
+		int(MODIFIER_ANNOUNCE_TEST_SEC * 1000.0) + ROUND_LOOP_TIMEOUT_MSEC)
+	if not hid:
+		failures.append("the announcement was still up well past its %.1f s" % MODIFIER_ANNOUNCE_TEST_SEC)
+	var second: Node2D = await _next_modifier_round(loop, first, "")
+	if second == null:
+		failures.append("second round never started")
+	else:
+		await physics_frame
+		if label.visible:
+			failures.append("a round with no modifier still shows '%s'" % label.text)
+		if round_manager.active_modifier_id() != "":
+			failures.append("a round with no modifier forced and rolls off has '%s' on" % round_manager.active_modifier_id())
+	await _teardown(loop["stage"])
+	return failures
+
+## `modifier_chance` 0 means no round gets one, with random rolls switched on.
+## And the roll is shown to work at all: at chance 1 every round gets one.
+func _scenario_round_modifier_chance_zero_disables() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerType.modifier_rolls_enabled = true
+	var loop: Dictionary = _new_modifier_round("")
+	var round_manager: Node = loop["round_manager"]
+	round_manager.modifier_chance = 0.0
+	round_manager.modifier_seed = 50
+	var previous: Node2D = await _await_live_stage(loop)
+	if previous == null:
+		failures.append("first round never started")
+	for chance: float in [0.0, 1.0]:
+		if previous == null:
+			break
+		round_manager.modifier_chance = chance
+		var with_modifier: int = 0
+		for i in MODIFIER_CHANCE_ROUNDS:
+			var instance: Node2D = await _next_modifier_round(loop, previous, "")
+			if instance == null:
+				failures.append("chance %.0f: round %d never started" % [chance, i + 1])
+				previous = null
+				break
+			previous = instance
+			await physics_frame
+			var id: String = round_manager.active_modifier_id()
+			var label: Label = round_manager.modifier_label()
+			var shown: bool = label != null and label.visible
+			if id != "":
+				with_modifier += 1
+				if not MODIFIER_TITLES.has(id):
+					failures.append("chance %.0f rolled an unknown modifier '%s'" % [chance, id])
+				elif not shown or label.text != MODIFIER_TITLES[id]:
+					failures.append("chance %.0f: '%s' was rolled but not announced" % [chance, id])
+			elif shown:
+				failures.append("chance %.0f: no modifier, but the announcement shows '%s'" % [chance, label.text])
+		var expected: int = 0 if chance == 0.0 else MODIFIER_CHANCE_ROUNDS
+		print("      chance %.0f: %d of %d rounds had a modifier" % [chance, with_modifier, MODIFIER_CHANCE_ROUNDS])
+		if with_modifier != expected:
+			failures.append("chance %.0f: %d of %d rounds had a modifier, expected %d" % [
+				chance, with_modifier, MODIFIER_CHANCE_ROUNDS, expected])
+	RoundManagerType.modifier_rolls_enabled = false
+	await _teardown(loop["stage"])
 	return failures
 
 # --- Issue #48: no roster head tunnels thin terrain -------------------------
