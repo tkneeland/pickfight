@@ -10607,6 +10607,8 @@ func _scenario_axe_swing_deals_damage() -> Array[String]:
 		failures.append("the hardest axe swing took %.1f off, under the %.1f a committed axe hit should" % [
 			hardest, AXE_MIN_COMMITTED_DAMAGE])
 
+	await _teardown(stage)
+	return failures
 
 ## Issue #93: the round-win sound plays quieter than it did before, and every
 ## other sound louder, at full strength. The pre-#93 levels were each entry's
