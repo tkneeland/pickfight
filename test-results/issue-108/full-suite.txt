@@ -214,7 +214,7 @@ PASS  roster_hafts_are_non_colliding
       res://scenes/stages/Bulwark.tscn: spawn 2 shoved left, out after 35 ticks
 PASS  every_stage_can_ring_out
 PASS  hazard_zone_kills_at_full_health
-      platform moved 393.3 px, player moved 400.9 px over one patrol leg
+      platform moved 393.3 px, player moved 390.2 px over one patrol leg
 PASS  moving_platform_carries_player
 PASS  head_plants_moving_platform
       phase 1: holding through the 0.80s warning delay
@@ -357,9 +357,9 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2843)
+       [0] _await_condition (res://tools/scenario_runner.gd:2818)
 PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.19.9.117:52696/
+Controller page: http://172.19.9.117:52511/
 PASS  four_phones_claim_four_slots
 PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
@@ -373,7 +373,7 @@ PASS  damaging_strike_buzzes_victim_and_attacker
 PASS  zero_damage_strike_buzzes_no_one
       5 strike(s) to eliminate slot 2, buzzes: [[2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "eliminated"], [2, "struck"], [0, "hit"], [0, "win"]]
 PASS  elimination_buzzes_eliminated_player
-Controller page: http://172.19.9.117:52704/
+Controller page: http://172.19.9.117:52530/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       first shot 181 ticks after the boomstick was handed over, the next 180 ticks later (interval 180 ticks)
@@ -399,7 +399,7 @@ PASS  boomstick_bullet_never_hits_shooter
 PASS  boomstick_stops_when_shooter_leaves_play
 FAIL  roster_heads_do_not_tunnel_thin_platform
       - axe: slam from 30 px, 1-tick wind-up, from rest: tick 5, circle 5 of 15 went from below the slab to above it, 12.0 px past its centre line
-      - axe: slam from 30 px, 1-tick wind-up, falling: tick 6, circle 5 of 15 went from below the slab to above it, 14.9 px past its centre line
+      - axe: slam from 30 px, 1-tick wind-up, falling: tick 6, circle 5 of 15 went from below the slab to above it, 15.0 px past its centre line
       - axe: slam from 30 px, 3-tick wind-up, falling: tick 3, circle 5 of 15 went from below the slab to above it, 12.0 px past its centre line
       - axe: slam from 30 px, 3-tick wind-up, from rest: tick 3, circle 5 of 15 went from below the slab to above it, 12.1 px past its centre line
       - axe: flung down at 2100 px/s, 34 deg off square: tick 6, circle 12 of 15 went from above the slab to below it, 12.1 px past its centre line
@@ -465,9 +465,9 @@ PASS  collapsing_floor_timed_gives_way_for_good
       stood_on: warning began 32 ticks after the player arrived (stand_sec is 30 ticks)
       stood_on: warned for 48 ticks (configured 48)
 PASS  collapsing_floor_stood_on_gives_way_for_good
-      light pokes (half-sweep 0.3 rad, rehearsed 1524 px/s): 4 swing(s), hits at [1113.40063476562, 408.046813964844, 1113.41577148438, 408.045166015625, 1113.41564941406, 408.045166015625, 1113.41577148438, 408.045166015625] px/s, 37.5 damage, wall 'standing' with 1 crack(s)
-      weak (half-sweep 0.3 rad, rehearsed 1524 px/s): 10 swing(s), hits at [1113.39721679688, 408.046539306641, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891, 1113.412109375, 408.045074462891] px/s, 93.7 damage, wall 'standing' with 3 crack(s)
-      hard (half-sweep 1.3 rad, rehearsed 2771 px/s): 3 swing(s), hits at [2696.74291992188, 838.798828125, 2696.818359375, 838.800903320312, 2696.81030273438] px/s, 142.1 damage, wall 'broken' with 0 crack(s)
+      light pokes (half-sweep 0.3 rad, rehearsed 1524 px/s): 4 swing(s), hits at [1113.40063476562, 408.046813964844, 1113.4140625, 408.045715332031, 1113.412109375, 408.046325683594, 1113.41235351562, 408.046325683594] px/s, 37.5 damage, wall 'standing' with 1 crack(s)
+      weak (half-sweep 0.3 rad, rehearsed 1524 px/s): 10 swing(s), hits at [1113.39721679688, 408.046752929688, 1113.40856933594, 408.045867919922, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391, 1113.4140625, 408.046051025391] px/s, 93.7 damage, wall 'standing' with 3 crack(s)
+      hard (half-sweep 1.3 rad, rehearsed 2771 px/s): 3 swing(s), hits at [2696.74951171875, 838.799438476562, 2696.9267578125, 838.796447753906, 2696.9267578125] px/s, 142.1 damage, wall 'broken' with 0 crack(s)
 PASS  breakable_wall_breaks_on_weapon_hits
       pushed and slammed: wall on 100.0 HP, 0 head hit(s), player at x=-42.9 (face at -16.0)
 PASS  breakable_wall_ignores_bodies
@@ -487,7 +487,7 @@ PASS  sfx_round_events
       lava requested: ["countdown", "countdown", "countdown", "lava_rise"]
 PASS  sfx_lava_countdown_rise_and_sizzle
 PASS  sfx_join_sounds
-      6 damage: -1.64 dB, pitch 1.090; 54 damage: 5.42 dB, pitch 0.959
+      6 damage: -1.64 dB, pitch 1.100; 54 damage: 5.42 dB, pitch 0.929
 PASS  sfx_strength_scales_volume
       clash: cap 3, peak 3 playing, 3 nodes
       round_start: cap 1, peak 1 playing, 1 nodes
@@ -531,22 +531,5 @@ FAIL  axe_swing_deals_damage
       - a 0.50 rad axe swing landed at 1374 px/s and took 0.0 off, under the 700 px/s strike floor
       round_win at full strength: -4.0 dB (was 0.0)
 PASS  sfx_mix_victory_quieter_rest_louder
-      planted head slide: shove 0.0 px, push-off 1.0 px
-PASS  planted_head_grips_sideways_push
-      wall release: pressed 8.7 px off, let go after 10 ticks
-      wall move: pressed 8.7 px off, let go after 6 ticks
-      ceiling release: pressed 8.7 px off, let go after 4 ticks
-      ceiling move: pressed 8.7 px off, let go after 1 ticks
-PASS  gripping_head_lets_go
-      switches: ["fight_fast", "lobby", "fight_mars", "lobby", "fight_fast", "lobby", "fight_mars"]
-PASS  music_lobby_and_fight_switching
-      ducked to -14.0 dB (target -14.0), round_win asked: true, back to 0: true
-PASS  music_ducks_under_round_win
-      3 tracks, 1575 KB
-PASS  music_tracks_exist_and_credited
-PASS  settings_persist_to_config_file
-      display server 'headless', asked for [3, 2, 3, 2]
-PASS  settings_fullscreen_toggle_asks_display_server
 ---
-134 passed, 3 failed, 137 total
-godot --headless --path . -s tools/scenario_runner.gd -- --all  90.45s user 66.98s system 16% cpu 16:14.41 total
+127 passed, 3 failed, 130 total

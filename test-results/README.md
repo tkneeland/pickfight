@@ -1,6 +1,8 @@
 # Test results
 
-Evidence for the latest work package only: issue #118 (music and settings menu). The previous package was issue #119 (exported builds), in commit 26e4b07.
+Evidence for the latest work package only: issue #108 (physics interpolation, frame-time spikes).
 
-- `issue-118/full-suite.txt`: full scenario suite on `feat/issue-118-music-settings` rebased on main 8dad787.
-  Result: 134 passed, 3 failed, 137 total. All three failures are axe scenarios (#99): `weapon_damage_matches_roster`, `roster_heads_do_not_tunnel_thin_platform` and `axe_swing_deals_damage`. The same three also fail on main 8dad787. The `Lambda capture ... was freed` ERROR during `rising_kill_zone_resets_each_round`, which passes, also shows on main 8dad787. No leaked-instance warnings at exit.
+- `issue-108/full-suite.txt`: full scenario suite on `perf/issue-108-smoothness` rebased on main d0f6597: 127/130. The 3 failures (`weapon_damage_matches_roster`, `roster_heads_do_not_tunnel_thin_platform`, `axe_swing_deals_damage`, all axe) fail identically on main d0f6597.
+- `issue-108/perf.txt`: `tools/perf_probe.gd` frame-time runs, before and after, 60 Hz and 120 Hz `--demo`, three seeds each.
+
+Previous package: issue #93 (sound mix), `issue-93/full-suite.txt` at commit 3ab830a, 133/133. Read it from git history (`git show c89a3b0`).
