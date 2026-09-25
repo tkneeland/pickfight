@@ -1,0 +1,14 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+Controller page: http://172.20.6.57:8080/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.20.6.57:8080/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:246)
+       [1] _ready (res://scripts/ControllerServer.gd:168)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:248)
+       [1] _ready (res://scripts/ControllerServer.gd:168)
+exit 0

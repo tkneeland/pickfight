@@ -239,6 +239,7 @@ PASS  pickup_spawn_points_and_fallback
 PASS  stage_pickup_spawns_are_safe
 PASS  pickup_weapon_carries_to_winner_next_round
 PASS  pickup_drawn_with_weapon_art
+<<<<<<<< HEAD:test-results/issue-51/scenario-suite.txt
       boomstick   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
       boomstick   0 deg at 1200 px/s each: crossed 45.8 px apart -- a miss, not a breach
       boomstick   0 deg at 1200 px/s each: heads closed to    0.0 px of each other
@@ -255,6 +256,22 @@ PASS  pickup_drawn_with_weapon_art
       boomstick 135 deg at 600 px/s each: heads closed to   -2.4 px of each other
       boomstick 135 deg at 1200 px/s each: heads closed to   -0.2 px of each other
       boomstick 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+========
+      boomstick   0 deg at 600 px/s each: heads closed to   -5.1 px of each other
+      boomstick   0 deg at 1200 px/s each: heads closed to   -5.1 px of each other
+      boomstick   0 deg at 1800 px/s each: heads closed to   -6.4 px of each other
+      boomstick  45 deg at 600 px/s each: crossed 80.9 px apart -- a miss, not a breach
+      boomstick  45 deg at 600 px/s each: heads closed to   79.5 px of each other
+      boomstick  45 deg at 1200 px/s each: heads closed to   -5.2 px of each other
+      boomstick  45 deg at 1800 px/s each: heads closed to   -6.2 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 24.5 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to   14.6 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -6.6 px of each other
+      boomstick 135 deg at 600 px/s each: heads closed to   -1.5 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -1.7 px of each other
+      boomstick 135 deg at 1800 px/s each: heads closed to   -1.0 px of each other
+>>>>>>>> 005b79f (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
       dagger   0 deg at 600 px/s each: crossed, then the correction put it back
       dagger   0 deg at 600 px/s each: heads closed to    2.8 px of each other
       dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
@@ -275,6 +292,7 @@ PASS  pickup_drawn_with_weapon_art
       dagger 135 deg at 1200 px/s each: heads closed to    0.0 px of each other
       dagger 135 deg at 1800 px/s each: crossed 29.5 px apart -- a miss, not a breach
       dagger 135 deg at 1800 px/s each: heads closed to    0.3 px of each other
+<<<<<<<< HEAD:test-results/issue-51/scenario-suite.txt
       axe   0 deg at 600 px/s each: heads closed to   -7.8 px of each other
       axe   0 deg at 1200 px/s each: heads closed to   -1.1 px of each other
       axe   0 deg at 1800 px/s each: heads closed to   -2.0 px of each other
@@ -311,8 +329,50 @@ PASS  pickup_drawn_with_weapon_art
       staff   0 deg at 600 px/s each: heads closed to   -0.2 px of each other
       staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+<<<<<<<< HEAD:test-results/issue-59/scenario-suite.txt
       staff  45 deg at 600 px/s each: crossed 37.5 px apart -- a miss, not a breach
       staff  45 deg at 600 px/s each: heads closed to   37.5 px of each other
+========
+========
+      axe   0 deg at 600 px/s each: heads closed to   -7.2 px of each other
+      axe   0 deg at 1200 px/s each: crossed 10.2 px apart -- a miss, not a breach
+      axe   0 deg at 1200 px/s each: heads closed to    2.3 px of each other
+      axe   0 deg at 1800 px/s each: heads closed to   -2.2 px of each other
+      axe  45 deg at 600 px/s each: heads closed to   -1.9 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to  -15.7 px of each other
+      axe  45 deg at 1800 px/s each: crossed 7.2 px apart -- a miss, not a breach
+      axe  45 deg at 1800 px/s each: heads closed to    1.7 px of each other
+      axe  90 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -3.1 px of each other
+      axe 135 deg at 600 px/s each: heads closed to   -2.2 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -7.9 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -1.1 px of each other
+      sword   0 deg at 600 px/s each: heads closed to   -5.8 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -1.9 px of each other
+      sword   0 deg at 1800 px/s each: heads closed to   -5.6 px of each other
+      sword  45 deg at 600 px/s each: crossed 20.5 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to   19.2 px of each other
+      sword  45 deg at 1200 px/s each: VOID, an elimination cut the charge short
+      sword  45 deg at 1800 px/s each: crossed 101.7 px apart -- a miss, not a breach
+      sword  45 deg at 1800 px/s each: heads closed to   25.4 px of each other
+      sword  90 deg at 600 px/s each: crossed 20.7 px apart -- a miss, not a breach
+      sword  90 deg at 600 px/s each: heads closed to   20.7 px of each other
+      sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword  90 deg at 1800 px/s each: heads closed to   -5.1 px of each other
+      sword 135 deg at 600 px/s each: crossed 25.8 px apart -- a miss, not a breach
+      sword 135 deg at 600 px/s each: heads closed to    8.7 px of each other
+      sword 135 deg at 1200 px/s each: VOID, an elimination cut the charge short
+      sword 135 deg at 1800 px/s each: heads closed to   -5.7 px of each other
+      sword: 2 of 12 charges were void (elimination mid-charge); 10 measured
+      staff   0 deg at 600 px/s each: heads closed to   -0.2 px of each other
+      staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1800 px/s each: crossed 8.3 px apart -- a miss, not a breach
+      staff   0 deg at 1800 px/s each: heads closed to    0.0 px of each other
+>>>>>>>> 005b79f (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
+      staff  45 deg at 600 px/s each: crossed 36.8 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   36.8 px of each other
+>>>>>>>> 9f27f6c (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
       staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       staff  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       staff  90 deg at 600 px/s each: crossed 29.1 px apart -- a miss, not a breach
@@ -323,6 +383,7 @@ PASS  pickup_drawn_with_weapon_art
       staff 135 deg at 600 px/s each: heads closed to   37.5 px of each other
       staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+<<<<<<<< HEAD:test-results/issue-59/scenario-suite.txt
       pickaxe   0 deg at 600 px/s each: heads closed to   -2.7 px of each other
       pickaxe   0 deg at 1200 px/s each: heads closed to   -0.6 px of each other
       pickaxe   0 deg at 1800 px/s each: heads closed to   -4.1 px of each other
@@ -337,6 +398,37 @@ PASS  pickup_drawn_with_weapon_art
       pickaxe 135 deg at 600 px/s each: heads closed to   38.7 px of each other
       pickaxe 135 deg at 1200 px/s each: heads closed to   -1.8 px of each other
       pickaxe 135 deg at 1800 px/s each: heads closed to   -2.9 px of each other
+========
+<<<<<<<< HEAD:test-results/issue-51/scenario-suite.txt
+      pickaxe   0 deg at 600 px/s each: heads closed to   -2.3 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -4.2 px of each other
+      pickaxe   0 deg at 1800 px/s each: heads closed to   -2.2 px of each other
+      pickaxe  45 deg at 600 px/s each: heads closed to   -5.6 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -0.8 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -5.9 px of each other
+      pickaxe  90 deg at 600 px/s each: crossed 22.8 px apart -- a miss, not a breach
+      pickaxe  90 deg at 600 px/s each: heads closed to   22.8 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -2.1 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.9 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -5.1 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -1.8 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -9.7 px of each other
+========
+      pickaxe   0 deg at 600 px/s each: heads closed to   -2.5 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -2.8 px of each other
+      pickaxe   0 deg at 1800 px/s each: heads closed to   -4.1 px of each other
+      pickaxe  45 deg at 600 px/s each: heads closed to   -2.1 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -4.1 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -4.9 px of each other
+      pickaxe  90 deg at 600 px/s each: crossed 60.7 px apart -- a miss, not a breach
+      pickaxe  90 deg at 600 px/s each: heads closed to   60.7 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -2.7 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -2.9 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -1.0 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -0.4 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -5.7 px of each other
+>>>>>>>> 005b79f (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
+>>>>>>>> 9f27f6c (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
 PASS  roster_heads_do_not_tunnel_head_reversed
       2 strike(s) reported, victim on 45.3 damage, 1 marker(s), 2 number(s)
 PASS  strike_shows_hitmarker_and_number
@@ -357,10 +449,40 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2693)
+       [0] _await_condition (res://tools/scenario_runner.gd:2726)
 PASS  rising_kill_zone_resets_each_round
+<<<<<<<< HEAD:test-results/issue-51/scenario-suite.txt
 Controller page: http://172.20.6.57:18480/
 PASS  four_phones_claim_four_slots
+========
+ERROR: ControllerServer: cannot listen on HTTP port 18480 (error 22)
+   at: push_error (core/variant/variant_utility.cpp:1024)
+   GDScript backtrace (most recent call first):
+       [0] _ready (res://scripts/ControllerServer.gd:145)
+       [1] _scenario_four_phones_claim_four_slots (res://tools/scenario_runner.gd:6293)
+       [2] _run_scenario (res://tools/scenario_runner.gd:673)
+       [3] _run_all (res://tools/scenario_runner.gd:524)
+       [4] _run_scenario (res://tools/scenario_runner.gd:671)
+       [5] _scenario_rising_kill_zone_resets_each_round (res://tools/scenario_runner.gd:6090)
+       [6] _teardown (res://tools/scenario_runner.gd:1306)
+ERROR: ControllerServer: cannot listen on WebSocket port 18481 (error 22)
+   at: push_error (core/variant/variant_utility.cpp:1024)
+   GDScript backtrace (most recent call first):
+       [0] _ready (res://scripts/ControllerServer.gd:148)
+       [1] _scenario_four_phones_claim_four_slots (res://tools/scenario_runner.gd:6293)
+       [2] _run_scenario (res://tools/scenario_runner.gd:673)
+       [3] _run_all (res://tools/scenario_runner.gd:524)
+       [4] _run_scenario (res://tools/scenario_runner.gd:671)
+       [5] _scenario_rising_kill_zone_resets_each_round (res://tools/scenario_runner.gd:6090)
+       [6] _teardown (res://tools/scenario_runner.gd:1306)
+Controller page: http://172.20.6.57:18480/
+FAIL  four_phones_claim_four_slots
+      - phone 1 was given slot 2 (closed=false ''), expected slot 0
+      - phone 2 was given slot -1 (closed=true 'no free player slot'), expected slot 1
+      - phone 3 was given slot -1 (closed=true 'no free player slot'), expected slot 2
+      - phone 4 was given slot -1 (closed=true 'no free player slot'), expected slot 3
+      - claimed slots were [] after four phones joined, expected [0, 1, 2, 3]
+>>>>>>>> 005b79f (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
 PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
 PASS  stage_four_spawns_settle_together
@@ -403,7 +525,15 @@ PASS  boomstick_recoil_is_moderate
       pickaxe.tres: head arrived at 2214 px/s and took 34.0 off
       boomstick.tres: head arrived at 2211 px/s and took 8.0 off
 PASS  boomstick_melee_damage_is_low
+<<<<<<<< HEAD:test-results/issue-59/scenario-suite.txt
       pool of 5 weapons; the boomstick came up 64 times in 300 draws
+========
+<<<<<<<< HEAD:test-results/issue-51/scenario-suite.txt
+      pool of 5 weapons; the boomstick came up 59 times in 300 draws
+========
+      pool of 5 weapons; the boomstick came up 54 times in 300 draws
+>>>>>>>> 005b79f (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
+>>>>>>>> 9f27f6c (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
 PASS  boomstick_in_pickup_pool
       at rest reach: bullet started inside the shooter's body and got 155.0 px clear; shooter on 0.0 damage
       sent back through the shooter: shooter on 0.0 damage, the player behind on 35.0
@@ -446,5 +576,34 @@ PASS  boomstick_thin_head_blocks_bullet
       tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
       tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
 PASS  world_stopped_head_blocks_arriving_head
+      launched on tick 34; peak 316.1 px above the drop height
+PASS  bounce_pad_launches_body
+      launched at (939.8838, -1403.225), 3.8 deg off the pad's up
+PASS  bounce_pad_rotated_launches_diagonally
+      push-off off the pad: rose 132.2 px, peak 485.6 px/s up, 0 launches
+PASS  bounce_pad_head_plant_is_plain_ground
+      phases: CALM > TELL > GUST > CALM; gust gained 491.0 px/s; worst calm/tell gain 0.000 px/s
+      tint alpha calm 0.08, tell 0.12 > 0.32; streaks calm 40, end of tell 871 px/s
+PASS  wind_gust_tell_then_push
+      after 1 s of steady wind: vx -699.0 px/s, tint alpha 0.32
+PASS  wind_steady_pushes_constantly
+      head in the gust 60/60 ticks; worst aim error 0.0000 rad; body drifted 0.00 px
+PASS  wind_does_not_push_heads
+      turned 60.00 deg in 120 ticks, expected 60.00
+PASS  rotating_platform_spins_at_rate
+      right end: tipped 15.0 deg toward the body, 0.02 deg after it left
+      left end: tipped 15.0 deg toward the body, -0.02 deg after it left
+PASS  seesaw_tips_toward_weight_and_levels
+      tipped 15.3 deg under a player standing on its head; body touched the slab: false
+PASS  seesaw_tips_under_planted_head
+      48 trials, 0 breaches
+PASS  head_does_not_tunnel_rotating_platform
+      launch heights (px): pickaxe 486, staff 501, sword 484, axe 445, dagger 500, boomstick 509
+PASS  bounce_pad_launch_same_for_every_weapon
 ---
+<<<<<<<< HEAD:test-results/issue-51/scenario-suite.txt
 97 passed, 1 failed, 98 total
+========
+107 passed, 2 failed, 109 total
+exit 1
+>>>>>>>> 005b79f (Evidence for #52: suite, boot check, part captures):test-results/issue-52/scenario-suite.txt
