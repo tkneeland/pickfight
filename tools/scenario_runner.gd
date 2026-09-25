@@ -3137,9 +3137,10 @@ const ROSTER_SETTLE_TICKS: int = 45
 ## and a long way under a step.
 const ROSTER_REACH_TIER_MARGIN: float = 20.0
 ## Playtest 1 (#45) tuned each weapon on its own, so a tier is now a band and
-## not one number: sword 70 / dagger 80, axe 140 / pickaxe 150. The ordering
-## between tiers is still the roster's rule. 10 px of band plus REACH_TOLERANCE.
-const ROSTER_REACH_SPREAD: float = 16.0
+## not one number: sword 70 / dagger 88 (80 until the hackathon playtest),
+## axe 140 / pickaxe 150. The ordering between tiers is still the roster's
+## rule. 18 px of band plus REACH_TOLERANCE.
+const ROSTER_REACH_SPREAD: float = 24.0
 
 ## The head speed a strike deals exactly the weapon's own `damage` at,
 ## written down here rather than read off `Player`: a test that asked the
