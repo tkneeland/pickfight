@@ -1,0 +1,8 @@
+# charge_sweep_pair_stays_in_play on this branch (godot --headless --path . -s tools/scenario_runner.gd -- --scenarios=charge_sweep_pair_stays_in_play)
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      attacker after the revive: alive true, 0.0 damage, 0 death(s), 23 head circle(s)
+      blocker after the revive: alive true, 0.0 damage, 1 death(s), 23 head circle(s)
+PASS  charge_sweep_pair_stays_in_play
+---
+1 passed, 0 failed, 1 total

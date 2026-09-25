@@ -1,0 +1,3 @@
+# git clone -q <branch worktree> <fresh>; godot --headless --path <fresh> --quit 2>&1 | grep -E "^ERROR|SCRIPT ERROR|Failed to load script"
+# commit d84f5e3; matches below (none expected):
+# end of matches
