@@ -12,6 +12,7 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/sword.tres",
 	"res://resources/axe.tres",
 	"res://resources/dagger.tres",
+	"res://resources/boomstick.tres",
 ]
 
 ## The roster's pickup-eligible weapons, loaded. A path that does not exist

@@ -116,6 +116,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"axe_head_mirrors_with_aim",
 	"symmetric_head_ignores_aim_side",
 	"axe_head_holds_side_near_vertical",
+	"boomstick_fires_on_interval",
+	"boomstick_bullet_damages_and_shoves",
+	"boomstick_bullet_stops_on_terrain",
+	"boomstick_recoil_is_moderate",
+	"boomstick_melee_damage_is_low",
+	"boomstick_in_pickup_pool",
+	"boomstick_bullet_never_hits_shooter",
+	"boomstick_stops_when_shooter_leaves_play",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -405,6 +413,7 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/sword.tres",
 	"res://resources/axe.tres",
 	"res://resources/dagger.tres",
+	"res://resources/boomstick.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -657,6 +666,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_symmetric_head_ignores_aim_side()
 		"axe_head_holds_side_near_vertical":
 			return await _scenario_axe_head_holds_side_near_vertical()
+		"boomstick_fires_on_interval":
+			return await _scenario_boomstick_fires_on_interval()
+		"boomstick_bullet_damages_and_shoves":
+			return await _scenario_boomstick_bullet_damages_and_shoves()
+		"boomstick_bullet_stops_on_terrain":
+			return await _scenario_boomstick_bullet_stops_on_terrain()
+		"boomstick_recoil_is_moderate":
+			return await _scenario_boomstick_recoil_is_moderate()
+		"boomstick_melee_damage_is_low":
+			return await _scenario_boomstick_melee_damage_is_low()
+		"boomstick_in_pickup_pool":
+			return await _scenario_boomstick_in_pickup_pool()
+		"boomstick_bullet_never_hits_shooter":
+			return await _scenario_boomstick_bullet_never_hits_shooter()
+		"boomstick_stops_when_shooter_leaves_play":
+			return await _scenario_boomstick_stops_when_shooter_leaves_play()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2907,6 +2932,7 @@ const ROSTER_REACH_TIERS: Dictionary = {
 	"axe": "M",
 	"sword": "S",
 	"dagger": "S",
+	"boomstick": "S",
 }
 const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"axe": "L",
@@ -2914,6 +2940,7 @@ const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"sword": "M",
 	"dagger": "M",
 	"staff": "S",
+	"boomstick": "S",
 }
 ## Since playtest 1 (#45) the dagger alone is the quick one: the staff is the
 ## long reach weapon and answers with the sword and pickaxe.
@@ -2923,6 +2950,7 @@ const ROSTER_ANSWER_TIERS: Dictionary = {
 	"pickaxe": "M",
 	"sword": "M",
 	"axe": "L",
+	"boomstick": "M",
 }
 ## Smallest measured quantity first, which is the order the tiers have to come
 ## out in.
@@ -2970,6 +2998,7 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## are 21 and 14, so both sit clear of the tolerance above and well under a
 ## step.
 ## A band since #45: the M tier is pickaxe 34, sword 40, dagger 45.
+## Since #55 the S tier is a band too: boomstick 8, staff 20.
 const ROSTER_DAMAGE_SPREAD: float = 13.0
 const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
 ## How far the victim is planted from where the charge starts, and how long
@@ -6824,3 +6853,443 @@ func _leading_circle_world(player: RigidBody2D) -> Vector2:
 			best = forward
 			leading = world[i]["centre"]
 	return leading
+
+# --- The boomstick (issue #55, ADR-0014) --------------------------------------
+#
+# A gun on a stick: it swings like the sword, hits like nothing, and fires a
+# bullet down the barrel every 5 s whether the player wants it to or not. The
+# numbers below are the owner's decisions on #55, written down here on their
+# own rather than read back off `resources/boomstick.tres`, so the resource
+# is checked against the decision and not against itself.
+
+const BOOMSTICK_PATH: String = "res://resources/boomstick.tres"
+const BoomstickProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
+## "Automatic every 5 s."
+const BOOMSTICK_FIRE_INTERVAL_SEC: float = 5.0
+## A shot may land this many ticks after its interval is up, never before:
+## the countdown is summed from fixed physics steps and the swap that starts
+## it is deferred to the end of a frame.
+const BOOMSTICK_FIRE_SLACK_TICKS: int = 2
+## "Damage 35."
+const BOOMSTICK_BULLET_DAMAGE: float = 35.0
+const BOOMSTICK_DAMAGE_TOLERANCE: float = 0.01
+## "Pitiful melee damage, e.g. 8": 8 is the owner's figure, and a full-speed
+## strike must come out there, within the roster trial's tolerance. Whatever
+## tuning does to it, it must stay pitiful: under a third of the pickaxe's.
+const BOOMSTICK_MELEE_DAMAGE: float = 8.0
+const BOOMSTICK_MELEE_FRACTION_OF_PICKAXE: float = 1.0 / 3.0
+## "A moderate nudge on the shooter, about 1 to 2 body widths." A body is
+## 2 x PLAYER_RADIUS wide.
+const BOOMSTICK_RECOIL_MIN: float = 2.0 * PLAYER_RADIUS
+const BOOMSTICK_RECOIL_MAX: float = 4.0 * PLAYER_RADIUS
+## Ticks the recoil is watched for. The body is in clear air under linear
+## damping, so by 1.5 s it has kept all but a few percent of where the kick
+## will take it, and from DEEP_PARK_POSITION it has not reached the arena.
+const BOOMSTICK_RECOIL_TICKS: int = 90
+## "Shoves the player it hits": at least a body width of shove, in clear air,
+## within this many ticks.
+const BOOMSTICK_SHOVE_MIN: float = 2.0 * PLAYER_RADIUS
+const BOOMSTICK_SHOVE_TICKS: int = 60
+## Where the target is held in front of the shooter's barrel.
+const BOOMSTICK_TARGET_OFFSET: float = 220.0
+## A short-interval copy of the boomstick for the scenarios that are about
+## what a bullet does rather than when one comes.
+const BOOMSTICK_QUICK_INTERVAL_SEC: float = 0.25
+## Terrain thinner than a bullet's travel in one tick (30 px at 1800 px/s),
+## so a bullet that were collided discretely would be past it.
+const BOOMSTICK_THIN_BAR: Vector2 = Vector2(8.0, 200.0)
+const BOOMSTICK_BAR_OFFSET: float = 160.0
+const BOOMSTICK_SHOTS_AT_BAR: int = 3
+## How far a bullet has to get from its shooter to have plainly left the
+## body it started inside.
+const BOOMSTICK_CLEAR_OF_SHOOTER: float = 3.0 * PLAYER_RADIUS
+const BOOMSTICK_POOL_DRAWS: int = 300
+## Ticks between two charges in the melee trial, as the roster trial uses.
+const BOOMSTICK_RESET_TICKS: int = BOOST_RESET_TICKS
+
+## Every bullet `shooter` has in the tree. `live_only` leaves out bullets
+## already spent and on their way out.
+func _projectiles_of(shooter: Node, live_only: bool = true) -> Array[Node2D]:
+	var found: Array[Node2D] = []
+	for node: Node in get_nodes_in_group(&"projectiles"):
+		if not is_instance_valid(node) or node.get("shooter") != shooter:
+			continue
+		if live_only and node.is_queued_for_deletion():
+			continue
+		found.append(node as Node2D)
+	return found
+
+## Steps up to `max_ticks` physics ticks, calling `each_tick` before each one,
+## until `shooter` has a bullet it did not have before. Reports that bullet and
+## the tick it was first seen on (1 = the first tick stepped), or a null
+## bullet and -1.
+func _await_boomstick_shot(shooter: Node, max_ticks: int, each_tick: Callable = Callable()) -> Dictionary:
+	var seen: Dictionary = {}
+	for bullet: Node2D in _projectiles_of(shooter, false):
+		seen[bullet.get_instance_id()] = true
+	for i in max_ticks:
+		if each_tick.is_valid():
+			each_tick.call()
+		await physics_frame
+		for bullet: Node2D in _projectiles_of(shooter, false):
+			if not seen.has(bullet.get_instance_id()):
+				return {"bullet": bullet, "tick": i + 1}
+	return {"bullet": null, "tick": -1}
+
+func _boomstick_interval_ticks() -> int:
+	return roundi(BOOMSTICK_FIRE_INTERVAL_SEC / _tick_seconds())
+
+func _boomstick_quick_ticks() -> int:
+	return roundi(BOOMSTICK_QUICK_INTERVAL_SEC / _tick_seconds())
+
+## The real boomstick with its interval cut short.
+func _quick_boomstick() -> WeaponStatsType:
+	var stats: WeaponStatsType = (load(BOOMSTICK_PATH) as WeaponStatsType).duplicate()
+	stats.fire_interval = BOOMSTICK_QUICK_INTERVAL_SEC
+	return stats
+
+## Issue #55: the boomstick fires on its own every 5 s, and not before. The
+## first shot comes a whole interval after the weapon is put in hand, the next
+## one interval after that, and a weapon without an interval -- the pickaxe
+## beside it -- never fires at all.
+func _scenario_boomstick_fires_on_interval() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var control: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2.LEFT * 300.0)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_brace(control)
+	# Straight up, into empty sky: nothing for a bullet to hit.
+	_aim(control, -PI * 0.5)
+
+	var interval: int = _boomstick_interval_ticks()
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	_aim(shooter, -PI * 0.5)
+	var first: Dictionary = await _await_boomstick_shot(shooter, interval + BOOMSTICK_FIRE_SLACK_TICKS)
+	# Judged by the tick, not the bullet: by the time the second shot is in,
+	# the first bullet has flown its full range and been freed.
+	var fired: bool = int(first["tick"]) >= 0
+	var second: Dictionary = {"tick": -1}
+	if fired:
+		second = await _await_boomstick_shot(shooter, interval + BOOMSTICK_FIRE_SLACK_TICKS)
+	print("      first shot %d ticks after the boomstick was handed over, the next %d ticks later (interval %d ticks)" % [
+		first["tick"], second["tick"], interval])
+
+	if not fired:
+		failures.append("no shot within %d ticks of being handed the boomstick" % (interval + BOOMSTICK_FIRE_SLACK_TICKS))
+	elif int(first["tick"]) < interval:
+		failures.append("the first shot came %d ticks after the boomstick was handed over, before its %d-tick interval" % [
+			first["tick"], interval])
+	if fired and absi(int(second["tick"]) - interval) > 1:
+		failures.append("the second shot came %d ticks after the first, not one %d-tick interval" % [second["tick"], interval])
+	if not _projectiles_of(control, false).is_empty():
+		failures.append("the pickaxe fired: a weapon without an interval must never shoot")
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55: a bullet that hits a player deals 35, shoves them along its line
+## of flight, and is gone. The hit is reported as the shooter's
+## `strike_landed`, the one seam the hitmarker (#33) and the phones' buzz (#34)
+## both hang off.
+func _scenario_boomstick_bullet_damages_and_shoves() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	var reported: Array = []
+	shooter.strike_landed.connect(func(v: Node, amount: float, _p: Vector2, _l: bool) -> void:
+		reported.append([v, amount]))
+
+	# The victim is not braced -- it has to be free to be shoved -- so it is
+	# held level with the barrel until the shot.
+	var hold := func() -> void:
+		victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	var start_x: float = victim.global_position.x
+	var hit_after: int = -1
+	for i in BOOMSTICK_SHOVE_TICKS:
+		await physics_frame
+		if victim.damage > 0.0:
+			hit_after = i + 1
+			break
+	await _await_ticks(2)
+	var bullet_left: int = _projectiles_of(shooter).size()
+	await _await_ticks(BOOMSTICK_SHOVE_TICKS)
+	var shove: float = victim.global_position.x - start_x
+	var amounts: Array = reported.map(func(r: Array) -> float: return r[1])
+	print("      bullet hit %d ticks after firing: victim on %.2f damage, shoved %.1f px along the shot, reported %s" % [
+		hit_after, victim.damage, shove, amounts])
+
+	if hit_after < 0:
+		failures.append("the bullet never hit the player %.0f px down the barrel" % BOOMSTICK_TARGET_OFFSET)
+	elif absf(victim.damage - BOOMSTICK_BULLET_DAMAGE) > BOOMSTICK_DAMAGE_TOLERANCE:
+		failures.append("the bullet dealt %.2f, not %.0f" % [victim.damage, BOOMSTICK_BULLET_DAMAGE])
+	if reported.size() != 1 or reported[0][0] != victim or absf(float(reported[0][1]) - BOOMSTICK_BULLET_DAMAGE) > BOOMSTICK_DAMAGE_TOLERANCE:
+		failures.append("the hit was reported as %s, expected one strike_landed of %.0f on the victim" % [
+			amounts, BOOMSTICK_BULLET_DAMAGE])
+	if bullet_left != 0:
+		failures.append("the bullet was still in flight after hitting a player; it hits once")
+	if shove < BOOMSTICK_SHOVE_MIN:
+		failures.append("the victim was shoved %.1f px along the shot, under a body width (%.0f px)" % [shove, BOOMSTICK_SHOVE_MIN])
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55: a bullet disappears on terrain -- even terrain thinner than one
+## tick of its flight, which only a swept bullet can see -- and nobody behind
+## it is hurt.
+func _scenario_boomstick_bullet_stops_on_terrain() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var behind: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * (BOOMSTICK_BAR_OFFSET + 100.0))
+	var bar_x: float = centre.x + BOOMSTICK_BAR_OFFSET
+	_add_bar(stage, Vector2(bar_x, centre.y), BOOMSTICK_THIN_BAR)
+	shooter.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_brace(behind)
+	_aim(shooter, 0.0)
+
+	for n in BOOMSTICK_SHOTS_AT_BAR:
+		var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+		var bullet: Node2D = shot["bullet"]
+		if bullet == null:
+			failures.append("shot %d never came" % (n + 1))
+			break
+		var furthest: float = bullet.global_position.x
+		var gone_after: int = -1
+		for i in 20:
+			if not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+				gone_after = i
+				break
+			furthest = maxf(furthest, bullet.global_position.x)
+			await physics_frame
+		print("      shot %d: furthest x %.1f (bar face at %.1f), gone after %d ticks" % [
+			n + 1, furthest, bar_x - BOOMSTICK_THIN_BAR.x * 0.5, gone_after])
+		if gone_after < 0:
+			failures.append("shot %d was still flying 20 ticks after it was fired at a bar %.0f px away" % [n + 1, BOOMSTICK_BAR_OFFSET])
+		if furthest > bar_x:
+			failures.append("shot %d got to x=%.1f, past the middle of the %.0f px bar at x=%.1f" % [
+				n + 1, furthest, BOOMSTICK_THIN_BAR.x, bar_x])
+	if behind.damage > 0.0:
+		failures.append("the player behind the bar took %.1f; the bar should have stopped every bullet" % behind.damage)
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55: each shot kicks the shooter back along the barrel by a moderate
+## nudge, one to two body widths in clear air.
+func _scenario_boomstick_recoil_is_moderate() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_aim(shooter, 0.0)
+
+	# Held still in the air until the shot, so the kick starts from rest.
+	var hold := func() -> void:
+		shooter.teleport_to(centre)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	await _await_ticks(BOOMSTICK_RECOIL_TICKS - 1)
+	var kicked: float = centre.x - shooter.global_position.x
+	print("      fired right; the shooter was kicked %.1f px left in %d ticks (a body is %.0f px wide)" % [
+		kicked, BOOMSTICK_RECOIL_TICKS, 2.0 * PLAYER_RADIUS])
+	if kicked < BOOMSTICK_RECOIL_MIN:
+		failures.append("the recoil moved the shooter %.1f px back, under one body width (%.0f px)" % [kicked, BOOMSTICK_RECOIL_MIN])
+	elif kicked > BOOMSTICK_RECOIL_MAX:
+		failures.append("the recoil moved the shooter %.1f px back, over two body widths (%.0f px)" % [kicked, BOOMSTICK_RECOIL_MAX])
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55: swinging the boomstick does pitiful damage. A full-speed strike
+## with it is measured the way the roster's damage is, beside the pickaxe's,
+## with no bullet in the air to confuse the two.
+func _scenario_boomstick_melee_damage_is_low() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+
+	var dealt: Dictionary = {}
+	for path: String in [PICKUP_PICKAXE_PATH, BOOMSTICK_PATH]:
+		attacker.set_weapon_stats(load(path))
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * FULL_STRIKE_RUN_UP)
+		await physics_frame
+		_brace(victim)
+		var hit: Dictionary = await _charge_strike(attacker, victim)
+		print("      %s: head arrived at %.0f px/s and took %.1f off" % [path.get_file(), hit["speed"], hit["damage"]])
+		if not hit["landed"]:
+			failures.append("%s: the charge never reached the victim" % path.get_file())
+		dealt[path] = float(hit["damage"])
+		victim.queue_free()
+		await _await_ticks(BOOMSTICK_RESET_TICKS)
+
+	var melee: float = dealt.get(BOOMSTICK_PATH, -1.0)
+	var pickaxe: float = dealt.get(PICKUP_PICKAXE_PATH, -1.0)
+	if not _projectiles_of(attacker, false).is_empty():
+		failures.append("a bullet was fired during the melee trial, so the damage is not the swing's alone")
+	if melee <= 0.0:
+		failures.append("a full-speed boomstick strike dealt nothing; pitiful is not zero")
+	elif absf(melee - BOOMSTICK_MELEE_DAMAGE) > ROSTER_DAMAGE_TOLERANCE:
+		failures.append("a full-speed boomstick strike took %.1f off, not about %.0f" % [melee, BOOMSTICK_MELEE_DAMAGE])
+	if pickaxe > 0.0 and melee > pickaxe * BOOMSTICK_MELEE_FRACTION_OF_PICKAXE:
+		failures.append("a boomstick strike took %.1f against the pickaxe's %.1f: over a third of it is not pitiful" % [melee, pickaxe])
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55 and ADR-0009: the boomstick is in the pickup pool. The pool offers
+## it, a draw from the pool hands it out, and touching its pickup puts it in
+## the player's hands.
+func _scenario_boomstick_in_pickup_pool() -> Array[String]:
+	var failures: Array[String] = []
+	var pool: Array[Resource] = PickupWeaponsScript.available_weapons()
+	var offered: Resource = null
+	for stats: Resource in pool:
+		if stats.resource_path == BOOMSTICK_PATH:
+			offered = stats
+	if offered == null:
+		failures.append("the pickup pool does not offer the boomstick")
+	var drawn: int = 0
+	for i in BOOMSTICK_POOL_DRAWS:
+		var picked: Resource = PickupWeaponsScript.choose(pool)
+		if picked != null and picked.resource_path == BOOMSTICK_PATH:
+			drawn += 1
+	print("      pool of %d weapons; the boomstick came up %d times in %d draws" % [pool.size(), drawn, BOOMSTICK_POOL_DRAWS])
+	if offered != null and drawn == 0:
+		failures.append("%d draws from the pool never handed out the boomstick" % BOOMSTICK_POOL_DRAWS)
+
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	await _await_ticks(5)
+	if offered != null:
+		var pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(120.0, 0.0), offered)
+		await _await_ticks(2)
+		player.teleport_to(pickup.global_position)
+		await _await_ticks(5)
+		if player.weapon_stats == null or player.weapon_stats.resource_path != BOOMSTICK_PATH:
+			failures.append("touching the boomstick pickup did not put the boomstick in the player's hands")
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55: a bullet never hits the player who fired it. At rest reach the
+## head's anchor, which a bullet leaves from, is inside the shooter's own
+## body; and a bullet sent straight back through its shooter passes through
+## them and hits the player behind.
+func _scenario_boomstick_bullet_never_hits_shooter() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var behind: RigidBody2D = _spawn_player(stage, centre + Vector2.LEFT * BOOMSTICK_TARGET_OFFSET)
+	var stats: WeaponStatsType = _quick_boomstick()
+	shooter.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_brace(behind)
+	# Aimed right and then let go: the head eases back to rest reach, inside
+	# the body, still pointing right, away from the player behind.
+	_aim(shooter, 0.0)
+	await _await_ticks(2)
+	shooter.set_input_vector(Vector2.ZERO)
+	await _await_ticks(SETTLE_TICKS)
+
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	var bullet: Node2D = shot["bullet"]
+	var started_inside: bool = bullet != null and bullet.global_position.distance_to(shooter.global_position) < PLAYER_RADIUS
+	var escaped: float = 0.0
+	for i in 10:
+		if bullet == null or not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+			break
+		escaped = maxf(escaped, bullet.global_position.distance_to(shooter.global_position))
+		await physics_frame
+	print("      at rest reach: bullet started %s the shooter's body and got %.1f px clear; shooter on %.1f damage" % [
+		"inside" if started_inside else "outside", escaped, shooter.damage])
+	if bullet == null:
+		failures.append("the boomstick never fired at rest reach")
+	elif not started_inside:
+		failures.append("at rest reach the bullet did not start inside the shooter's body, so this proves nothing")
+	if escaped < BOOMSTICK_CLEAR_OF_SHOOTER:
+		failures.append("the bullet fired from inside its shooter got only %.1f px clear before it stopped" % escaped)
+
+	# A bullet sent back through its own shooter, onto the player behind.
+	var back := BoomstickProjectileScene.instantiate() as Node2D
+	back.setup(shooter, centre + Vector2.RIGHT * 120.0, Vector2.LEFT, stats)
+	stage.add_child(back)
+	await _await_ticks(20)
+	print("      sent back through the shooter: shooter on %.1f damage, the player behind on %.1f" % [shooter.damage, behind.damage])
+	if shooter.damage > 0.0:
+		failures.append("a bullet hit its own shooter for %.1f" % shooter.damage)
+	if absf(behind.damage - BOOMSTICK_BULLET_DAMAGE) > BOOMSTICK_DAMAGE_TOLERANCE:
+		failures.append("the bullet sent back through its shooter dealt %.1f to the player behind, expected %.0f -- it should pass through the shooter" % [
+			behind.damage, BOOMSTICK_BULLET_DAMAGE])
+
+	await _teardown(stage)
+	return failures
+
+## Issue #55: firing and bullets stop when the shooter leaves play, by
+## elimination or at the end of a round (`leave_round()`), and a new round
+## starts the countdown over rather than firing at once.
+func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	shooter.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, -PI * 0.5)
+	var quick_ticks: int = _boomstick_quick_ticks()
+
+	for way: String in ["eliminate", "leave_round"]:
+		var shot: Dictionary = await _await_boomstick_shot(shooter, quick_ticks + BOOMSTICK_FIRE_SLACK_TICKS)
+		if shot["bullet"] == null:
+			failures.append("%s: no shot came before the shooter left play" % way)
+			break
+		shooter.call(way)
+		await _await_ticks(2)
+		var in_flight: int = _projectiles_of(shooter).size()
+		var after: Dictionary = await _await_boomstick_shot(shooter, quick_ticks * 3)
+		print("      after %s: %d bullet(s) still in flight, %s over three intervals" % [
+			way, in_flight, "a shot" if after["bullet"] != null else "no shot"])
+		if in_flight != 0:
+			failures.append("%s: %d bullet(s) still in flight after the shooter left play" % [way, in_flight])
+		if after["bullet"] != null:
+			failures.append("%s: the boomstick fired while its holder was out of play" % way)
+
+		# Back for the next round with the weapon kept, as a winner is.
+		shooter.start_round(DEEP_PARK_POSITION, true)
+		await physics_frame
+		_brace(shooter)
+		_aim(shooter, -PI * 0.5)
+		var restart: Dictionary = await _await_boomstick_shot(shooter, quick_ticks + BOOMSTICK_FIRE_SLACK_TICKS)
+		if restart["bullet"] == null:
+			failures.append("%s: back in a round, the boomstick never fired again" % way)
+		elif int(restart["tick"]) + 1 < quick_ticks:
+			failures.append("%s: back in a round, it fired %d ticks in, before a whole %d-tick interval" % [
+				way, restart["tick"], quick_ticks])
+
+	await _teardown(stage)
+	return failures

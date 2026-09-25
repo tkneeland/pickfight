@@ -52,6 +52,11 @@ const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
 ## out independently, on purpose, to check against). `start_round()` resets to
 ## this whenever `keeps_weapon` is false; `_ready()` falls back to it too.
 const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
+## What a firing weapon shoots (issue #55, ADR-0014). See `_tick_fire()`.
+const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
+## Slack on the fire countdown: the interval is summed from fixed physics
+## deltas, and 300 sixtieths of a second may sum to a hair under 5 s.
+const FIRE_CLOCK_EPSILON: float = 0.000001
 
 enum DebugSource { NONE, MOUSE, KEYBOARD }
 
@@ -242,6 +247,12 @@ var _head_visual_is_fallback: bool = false
 ## in `_ready()` and never touched again -- see `_build_identity_outline`.
 var _identity_outline: Line2D
 
+## Firing (issue #55, ADR-0014): seconds since the held weapon last fired, or
+## since it was put in this player's hands, and the bullets this player has
+## in flight -- freed with the player's rig when it leaves play.
+var _fire_clock: float = 0.0
+var _projectiles: Array[Node] = []
+
 @onready var weapon_line: Line2D = $Haft
 @onready var body_visual: Polygon2D = $Body
 
@@ -280,6 +291,7 @@ func _ready() -> void:
 ## player's first entry is harmless.
 func _exit_tree() -> void:
 	_clear_rig()
+	_clear_projectiles()
 
 func _enter_tree() -> void:
 	if _stats != null:
@@ -297,6 +309,7 @@ func _physics_process(delta: float) -> void:
 	_drive_angle(delta)
 	_drive_extension(delta)
 	_update_weapon_visual()
+	_tick_fire(delta)
 
 func _rig_is_live() -> bool:
 	return _head != null and _head.is_inside_tree()
@@ -340,6 +353,7 @@ func weapon_head_position() -> Vector2:
 func _assign_weapon_stats(stats: WeaponStatsType) -> void:
 	weapon_stats = stats
 	_stats = stats
+	_fire_clock = 0.0
 	weapon_min_length = stats.min_reach
 	weapon_length = clampf(weapon_length, stats.min_reach, stats.max_reach)
 
@@ -425,6 +439,7 @@ func leave_round() -> void:
 func _go_inert() -> void:
 	alive = false
 	_clear_rig()
+	_clear_projectiles()
 	# Deferred: eliminate() can run from KillZone's body_entered, which fires
 	# mid-physics-step while the physics server is still flushing queries --
 	# changing a RigidBody2D's mode synchronously from there is refused
@@ -474,6 +489,7 @@ func _build_rig() -> void:
 	if not alive:
 		return
 	_clear_rig()
+	_fire_clock = 0.0
 	var host: Node = get_parent()
 	if host == null:
 		return
@@ -1043,3 +1059,64 @@ func _strike_damage(speed: float) -> float:
 		return 0.0
 	var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
 	return minf(_stats.damage * strike_scale, MAX_STRIKE_DAMAGE)
+
+# --- Firing (issue #55, ADR-0014) --------------------------------------------
+#
+# A weapon with a `fire_interval` -- the boomstick -- fires on its own: no
+# new control, the phone stays drag-only. Every interval it shoots one bullet
+# straight down the barrel and the shot kicks the shooter back the other way.
+# Nothing here runs for a weapon whose interval is 0, which is every other
+# weapon, so they are untouched.
+
+## Counts the held weapon's interval down and fires when it runs out. Called
+## only while this player is alive with a live rig, so an eliminated player or
+## one between rounds never fires. The count starts over whenever a weapon is
+## assigned or its rig is rebuilt, so the first shot comes a whole interval
+## after the weapon was put in hand.
+func _tick_fire(delta: float) -> void:
+	if _stats.fire_interval <= 0.0:
+		return
+	_fire_clock += delta
+	if _fire_clock + FIRE_CLOCK_EPSILON < _stats.fire_interval:
+		return
+	_fire_clock -= _stats.fire_interval
+	_fire()
+
+## One shot. The bullet leaves from the head's anchor along the haft's actual
+## direction -- the barrel as drawn, which is where the player sees it point
+## -- and the body takes `recoil_impulse` straight back along it.
+func _fire() -> void:
+	var host: Node = get_parent()
+	if host == null or not _rig_is_live():
+		return
+	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
+	var bullet: Node2D = ProjectileScene.instantiate() as Node2D
+	bullet.setup(self, _head.global_position, axis, _stats)
+	host.add_child(bullet)
+	# Forget bullets already gone. Untyped on purpose: a freed bullet is no
+	# longer a Node, and a typed loop variable would refuse it.
+	var in_flight: Array[Node] = []
+	for b in _projectiles:
+		if is_instance_valid(b):
+			in_flight.append(b)
+	in_flight.append(bullet)
+	_projectiles = in_flight
+	apply_central_impulse(-axis * _stats.recoil_impulse)
+
+## A bullet this player fired hit `victim`. The same end as a strike: the
+## damage goes through `take_damage()` and the hit is reported as
+## `strike_landed`, so the hitmarker (#33) and the phones' buzz (#34) treat a
+## bullet exactly as they treat a swing. Public because the bullet, not the
+## player, is what noticed the hit.
+func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
+	if victim == self or not victim.alive:
+		return
+	victim.take_damage(amount)
+	strike_landed.emit(victim, amount, point, not victim.alive)
+
+## Frees every bullet this player still has in flight.
+func _clear_projectiles() -> void:
+	for bullet in _projectiles:
+		if is_instance_valid(bullet):
+			bullet.queue_free()
+	_projectiles.clear()

@@ -33,7 +33,7 @@ round is the exception: they keep whatever they were holding.
 | **Swing** | The movement verb: planting the head and using the weapon to fling, climb, or launch the body. |
 | **Input vector** | The 2D vector a controller sends, giving the weapon's target angle and extension. Relative — never an absolute screen position. |
 | **Roster** | The players currently in the session. A phone that connects joins the roster and enters play at the start of the next round. |
-| **Damage** | Accumulates within a round and resets at its end. Dealt by a head striking a player, scaled by how fast the head is moving. |
+| **Damage** | Accumulates within a round and resets at its end. Dealt by a head striking a player, scaled by how fast the head is moving, or by a bullet from a weapon that fires, at a flat amount (ADR-0014). |
 | **Knockback** | The impulse applied when two players' bodies collide above a relative-velocity threshold. Moves players; deals no damage. |
 | **Clash** | Two heads meeting. Neither passes through the other; the heavier, more forceful swing gives way last. |
 | **Round** | One stage, played until one player remains. Awards a point. |

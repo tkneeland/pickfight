@@ -47,7 +47,8 @@ damage model. It does not govern the moveset. Specifically:
   drag.
 - Weapons are melee. The roster direction is variants distinguished by weight
   and responsiveness — a sluggish heavy hammer, a snappy short sword — not
-  ranged weapons.
+  ranged weapons. *Amended by [ADR-0014](0014-a-weapon-can-fire.md): one
+  weapon, the boomstick, also fires on a timer.*
 
 ## Consequences
 
