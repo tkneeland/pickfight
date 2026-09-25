@@ -2,42 +2,47 @@
 
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
-; The axe (playtest 2, issue #49): redrawn so it reads as an axe at a glance,
-; which the #16 crescent did not. Side-on, the haft runs through the eye at
-; the anchor; a short poll sits behind it (-y) and the blade drops away on the
-; other side (+y) through a narrow neck that flares to a broad, curved cutting
-; edge 40 px long, bearded at both corners. About 42 px from poll to edge
-; against a 48 px player body. One-sided, so it still flips with aim (#16):
-; the blade always leads the swing.
+; The axe: a double-bit head (issue #90). Side-on, the haft runs through the
+; eye at the anchor, and a bit drops away on each side of it (+y and -y)
+; through a narrow neck that flares to a broad, curved cutting edge 40 px
+; long, bearded at both corners -- the #49 bit and its mirror image, so the
+; head is symmetric across the haft and never flips with the aim. About 67 px
+; from edge to edge against a 48 px player body.
 ;
 ; Head-local space is the pickaxe's: +X outward along the haft, origin at the
-; groove anchor. The art is drawn to a design (a curve through the edge, the
-; neck and beard by hand) and the 16 circles were then packed greedily inside
-; it -- largest inscribed circle first -- covering 92.8% of it, every one
-; clamped at least 0.05 px inside the outline (ADR-0010). The forward extent,
-; 19 px past the anchor at the toe, is about what the #45 head reached (19.9).
+; groove anchor. The #49 bit's circles (packed greedily inside it, largest
+; inscribed circle first, every one clamped at least 0.05 px inside the
+; outline, ADR-0010) are mirrored onto the second bit, with one circle
+; filling the eye. The forward extent, 19 px past the anchor at the toes, is
+; unchanged.
 ;
 ; Stats against the pickaxe's M/M/M baseline: the axe is power bought with
-; time, pushed further after the second playtest. Damage 90 -- the per-strike
-; cap (Player.MAX_STRIKE_DAMAGE) -- so two clean hits always kill and one
-; never does (owner's decision). And it is deliberately sluggish: mass 0.7
+; time. Damage 90 -- the per-strike cap (Player.MAX_STRIKE_DAMAGE) -- so two
+; clean hits always kill and one never does (owner's decision). Mass 0.4
 ; against 0.25 and a force ceiling of 9000 against 6000, so it wins every
-; clash, but a drive of 9 rad/s against 24, 300 px/s out against 700 and
-; 150 px/s back against 400 -- by far the slowest weapon on the roster to
-; answer a thumb. Reach M at 140 px.
+; clash; 300 px/s out against 700 and 150 px/s back against 400, so it is
+; still by far the slowest weapon to answer a thumb. Reach M at 140 px.
+;
+; Issue #90 tuned the swing. At the old drive of 9 rad/s the head could
+; never beat 9 x 140 = 1260 px/s, barely over Player.MIN_STRIKE_SPEED (700):
+; measured braced swings struck at 1034 / 1260 / 1268 px/s for 4 / 26 / 26
+; damage, and anything short of full reach did nothing. The drive is now
+; 16 rad/s (against the pickaxe's 24), and the mass came down from 0.7 so
+; the force ceiling can get the head up to that speed inside a swing: the
+; same swings now strike at about 1400 / 2060 / 2220 px/s for 11 / 68 / 73
+; (scenario `axe_swing_deals_damage`).
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
 max_reach = 140.0
-mass = 0.7
-drive_speed = 9.0
+mass = 0.5
+drive_speed = 16.0
 extend_speed = 300.0
 rest_return_speed = 150.0
-max_drive_force = 9000.0
+max_drive_force = 11000.0
 damage = 90.0
 sound_set = &"axe"
-head_circle_offsets = PackedVector2Array(-1, 21.5, 0, 9.5, 0, -2, -12.5, 25, 10.5, 25, -4.5, 3.5, 4.5, 3.5, 15.5, 25.5, -9.5, 30, -5, -7, 5, -7, 8, 29.5, 11, 20, -18, 26.5, -13, 19.5, 7, 12.5)
-head_circle_radii = PackedFloat32Array(11.89, 7.1, 6.95, 5.32, 4.93, 2.45, 2.45, 2.11, 2.01, 1.95, 1.95, 1.88, 1.86, 1.77, 1.42, 1.37)
-art_outline = PackedVector2Array(-7, -9, 7, -9, 7, 8, 9, 14, 13, 19.5, 19, 26, 15.67, 27.9, 12.33, 29.67, 9, 31.2, 5.67, 32.4, 2.33, 33.18, -1, 33.5, -4.33, 33.34, -7.67, 32.73, -11, 31.7, -14.33, 30.33, -17.67, 28.73, -21, 27, -17, 22, -12, 16, -8.5, 11.5, -7, 8)
-flips_with_aim = true
+head_circle_offsets = PackedVector2Array(0, 0, -1, 21.5, 0, 9.5, -12.5, 25, 10.5, 25, 14, 25.2, -4.5, 3.5, 4.5, 3.5, -1, -21.5, 0, -9.5, -12.5, -25, 10.5, -25, 14, -25.2, -4.5, -3.5, 4.5, -3.5)
+head_circle_radii = PackedFloat32Array(6.95, 11.89, 7.1, 5.32, 4.93, 3.05, 2.45, 2.45, 11.89, 7.1, 5.32, 4.93, 3.05, 2.45, 2.45)
+art_outline = PackedVector2Array(7, 8, 9, 14, 13, 19.5, 19, 26, 15.67, 27.9, 12.33, 29.67, 9, 31.2, 5.67, 32.4, 2.33, 33.18, -1, 33.5, -4.33, 33.34, -7.67, 32.73, -11, 31.7, -14.33, 30.33, -17.67, 28.73, -21, 27, -17, 22, -12, 16, -8.5, 11.5, -7, 8, -7, -8, -8.5, -11.5, -12, -16, -17, -22, -21, -27, -17.67, -28.73, -14.33, -30.33, -11, -31.7, -7.67, -32.73, -4.33, -33.34, -1, -33.5, 2.33, -33.18, 5.67, -32.4, 9, -31.2, 12.33, -29.67, 15.67, -27.9, 19, -26, 13, -19.5, 9, -14, 7, -8)

@@ -1,0 +1,31 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      axe swing 0.50 rad: rehearsed peak 1392 px/s, hit at 1386 px/s, damage 1.9, closest 45.9 px
+      axe swing 0.90 rad: rehearsed peak 2227 px/s, hit at 2012 px/s, damage 62.6, closest 34.1 px
+      axe swing 1.30 rad: rehearsed peak 2252 px/s, hit at 2216 px/s, damage 86.4, closest 51.5 px
+PASS  axe_swing_deals_damage
+      dagger against dagger: met -0.6 px off the midline, 16.3 px apart; gave way 13.7 px and 12.5 px
+      axe on the left: met 47.5 px off the midline, 14.9 px apart; axe gave way 24.9 px, dagger 60.0 px
+      axe on the right: met -47.5 px off the midline, 15.0 px apart; dagger gave way 60.0 px, axe 24.9 px
+PASS  heavy_weapon_wins_clash
+      pickaxe: head arrived at 2214 px/s and took 34.0 off, its own damage is 34.0 (closest 33.1 px)
+      staff: head arrived at 2208 px/s and took 20.1 off, its own damage is 20.0 (closest 29.0 px)
+      sword: head arrived at 2214 px/s and took 39.7 off, its own damage is 40.0 (closest 79.8 px)
+      axe: head arrived at 2194 px/s and took 84.3 off, its own damage is 90.0 (closest 32.1 px)
+      dagger: head arrived at 2208 px/s and took 45.1 off, its own damage is 45.0 (closest 32.4 px)
+      boomstick: head arrived at 2211 px/s and took 8.0 off, its own damage is 8.0 (closest 95.7 px)
+FAIL  weapon_damage_matches_roster
+      - axe: a full-speed strike took 84.3 off, not the 90.0 of damage it carries
+      pickaxe.tres: 13 circles against 26 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      staff.tres: 1 circles against 20 points of art, worst fit +0.00 px outside it (negative is inside, clear)
+      sword.tres: 23 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      axe.tres: 15 circles against 40 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      dagger.tres: 7 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      boomstick.tres: 27 circles against 12 points of art, worst fit -0.20 px outside it (negative is inside, clear)
+      the default head: 1 circles against 16 points of art, worst fit +0.00 px outside it (negative is inside, clear)
+      misfitted head: 1 circles against 16 points of art, worst fit +23.84 px outside it (negative is inside, clear)
+PASS  weapon_head_circles_within_art
+      arm z=0 idx=3, outline z=0 idx=2
+PASS  arm_draws_over_identity_outline
+---
+4 passed, 1 failed, 5 total

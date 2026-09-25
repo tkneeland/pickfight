@@ -1,9 +1,8 @@
 # Test results
 
-Evidence for the latest work package only: issue #91 (arm draws over the identity outline).
+Evidence for the latest work package only: issue #90 (axe: double-bit head, no side flip, strikes that land).
 
-- `issue-91/full-suite.txt`: full scenario suite on `fix/issue-91-arm-over-outline`, rebased on origin/main `d4044c5`, 133/133, including the new `arm_draws_over_identity_outline`.
+- `issue-90/full-suite.txt`: a partial run, not the full suite. Deadline cut: only the axe scenarios, `weapon_damage_matches_roster` and `weapon_head_circles_within_art` were run on `fix/issue-90-axe`, rebased on origin/main `44e09d9`. See the PR for results.
 - The fresh-clone boot check printed no script errors.
-- The new scenario fails with the fix reverted (the outline at child index 3, over the haft at 2) and passes with it.
 
-The previous package (#76, stage part sounds) is in history at `d08600f`.
+The previous package (#91, arm draws over the identity outline) is in history at `b8aa689`.
