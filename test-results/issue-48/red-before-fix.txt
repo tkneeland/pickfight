@@ -1,0 +1,12 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+FAIL  roster_heads_do_not_tunnel_thin_platform
+      - staff: slam from 110 px, 3-tick wind-up, falling: tick 6, circle 0 of 1 went from above the slab to below it, 25.3 px past its centre line
+      - staff: 1 of 94 trials put the head through the 24 px platform
+      - sword: slam from 30 px, 1-tick wind-up, falling: tick 6, circle 21 of 23 went from above the slab to below it, 13.4 px past its centre line
+      - sword: 1 of 94 trials put the head through the 24 px platform
+      - axe: standing swing, -60 -> 107 deg: tick 1, circle 3 of 16 went from below the slab to above it, 15.5 px past its centre line
+      - axe: standing swing, 240 -> 73 deg: tick 1, circle 0 of 16 went from above the slab to below it, 18.8 px past its centre line
+      - axe: 2 of 94 trials put the head through the 24 px platform
+---
+0 passed, 1 failed, 1 total
