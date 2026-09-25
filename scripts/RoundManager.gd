@@ -128,7 +128,9 @@ const DEMO_KILL_ZONE_GRACE_SEC: float = 20.0
 const DEMO_KILL_ZONE_RISE_SEC: float = 40.0
 
 func _ready() -> void:
-	_demo = OS.get_cmdline_user_args().has("--demo")
+	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
+	# editor's Play button (project.godot `editor/run/main_run_args`).
+	_demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_args().has("--demo")
 	_random_weapons = _demo or OS.get_cmdline_user_args().has("--random-weapons")
 	if _demo:
 		_apply_demo_mode()
