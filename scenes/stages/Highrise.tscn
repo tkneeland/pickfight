@@ -8,7 +8,7 @@
 size = Vector2(800, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
-size = Vector2(200, 24)
+size = Vector2(240, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_summit"]
 size = Vector2(240, 24)
@@ -33,6 +33,25 @@ size = Vector2(8000, 40)
 ; with nothing to do but be hit; the summit is the prize and should not
 ; evaporate under the player who earned it. The middle of a climb is the
 ; one place a closing route costs position rather than the round.
+;
+; Eased for issue #59, because every rung was a long reach for anything
+; short of the staff: 200 px ledges with 200-270 px of air between their
+; inner edges, so each hand-off was 233-295 px corner to corner. Every
+; ledge is now 240 wide and sits closer to the middle -- Ledge1 x -250 ->
+; -190, Ledge2 220 -> 170, Ledge3 -180 -> -170, Ledge4 220 -> 170 --
+; so the gaps between inner edges are 100-120 px and the hand-offs
+; 156-170 px corner to corner. Ledge4 also dropped 10 (y -100 -> -90) and
+; the Summit 20 (y -260 -> -240), taking those two climbs from 140 to 130
+; and 160 to 150 px. Still a
+; left/right stagger, still four rungs and a summit, still the third one
+; crumbles. A headless search over arm drags (not committed) found every
+; rung climbable with the pickaxe afterwards, and more forgiving of a
+; sloppy thumb: under the same jitter, Ledge2 -> Ledge3 went from 9 to 32
+; successes in 60, Ledge3 -> Ledge4 8 -> 20, Ledge4 -> Summit 14 -> 23,
+; and the dagger could now make Ledge1 -> Ledge2 and Ledge3 -> Ledge4,
+; which it could not before. The sword still cannot leave flat ground
+; here, as on every step-up this search tried from a floor -- it barely
+; lifts itself, so no rung spacing fixes that.
 
 [node name="Highrise" type="Node2D"]
 script = ExtResource("1")
@@ -48,47 +67,48 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-400, -20, 400, -20, 400, 20, -400, 20)
 
 [node name="Ledge1" type="StaticBody2D" parent="."]
-position = Vector2(-250, 280)
+position = Vector2(-190, 280)
 
 [node name="Ledge1Shape" type="CollisionShape2D" parent="Ledge1"]
 shape = SubResource("RectangleShape2D_ledge")
 
 [node name="Ledge1Visual" type="Polygon2D" parent="Ledge1"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
 [node name="Ledge2" type="StaticBody2D" parent="."]
-position = Vector2(220, 160)
+position = Vector2(170, 160)
 
 [node name="Ledge2Shape" type="CollisionShape2D" parent="Ledge2"]
 shape = SubResource("RectangleShape2D_ledge")
 
 [node name="Ledge2Visual" type="Polygon2D" parent="Ledge2"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
-; Same 200x24 footprint and same position the static Ledge3 had, so the
-; climb's spacing is unchanged and only its permanence is not. Default
+; Same footprint and position as the other rungs' spacing asks for (240x24
+; since issue #59, nudged 10 px toward the middle), so only its permanence
+; differs from a static ledge. Default
 ; timings: 0.8 s of amber warning, then 3 s away. The warning matters more
 ; here than anywhere else a crumbling ledge could go -- a player mid-climb
 ; needs long enough to commit to the next rung or drop back to the one
 ; below, and 0.8 s is about one swing.
 [node name="Ledge3" parent="." instance=ExtResource("3")]
-position = Vector2(-180, 40)
-size = Vector2(200, 24)
+position = Vector2(-170, 40)
+size = Vector2(240, 24)
 
 [node name="Ledge4" type="StaticBody2D" parent="."]
-position = Vector2(220, -100)
+position = Vector2(170, -90)
 
 [node name="Ledge4Shape" type="CollisionShape2D" parent="Ledge4"]
 shape = SubResource("RectangleShape2D_ledge")
 
 [node name="Ledge4Visual" type="Polygon2D" parent="Ledge4"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
 [node name="Summit" type="StaticBody2D" parent="."]
-position = Vector2(0, -260)
+position = Vector2(0, -240)
 
 [node name="SummitShape" type="CollisionShape2D" parent="Summit"]
 shape = SubResource("RectangleShape2D_summit")
@@ -107,12 +127,14 @@ position = Vector2(-300, 340)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(300, 340)
 
-; Spawns 2 and 3 (issue #36). On the ground between the first two, clear of every ledge overhead.
+; Spawns 2 and 3 (issue #36). On the ground between the first two. They were
+; at x=-100/100 until issue #59 widened the rungs toward the middle, which put
+; Spawn2 under Ledge1; x=-40/40 keeps them clear of the first rung.
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-100, 340)
+position = Vector2(-40, 340)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(100, 340)
+position = Vector2(40, 340)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
@@ -129,5 +151,5 @@ position = Vector2(-250, 232)
 position = Vector2(220, 112)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(0, -308)
+position = Vector2(0, -288)
 
