@@ -17,7 +17,9 @@ extends Node
 ## 8 bytes, `float32 x` then `float32 y`, little-endian, unit-disc normalised.
 ## Wire format host -> phone: one text frame `{"slot":<i>}` sent on bind, and
 ## a `{"t":"buzz","kind":<kind>}` text frame per `send_buzz()` (issue #34,
-## ADR-0013).
+## ADR-0013), and a `{"t":"lobby",...}` text frame per `set_lobby_state()`
+## (issue #120). Phone -> host text frames (#120): `{"t":"ready","v":<bool>}`
+## and, from the host phone only, `{"t":"target","n":<int>}`.
 ##
 ## Liveness: a phone that screen-locks or leaves Wi-Fi mid-drag stops sending
 ## without ever closing the socket, and the last frame it sent was non-zero.
@@ -177,6 +179,24 @@ var _slot_claimed: PackedByteArray = PackedByteArray()
 ## unclaimed slot.
 var _slot_client_id: PackedStringArray = PackedStringArray()
 
+## Lobby (issue #120). Whether each slot's phone has pressed Ready; cleared
+## when its controller drops, so a phone that walked away is never counted.
+var _slot_ready: PackedByteArray = PackedByteArray()
+## Claimed slots in the order they were first claimed. The host is the first
+## of them with a controller connected right now, so if the host leaves, the
+## next phone to have joined takes over.
+var _join_order: Array[int] = []
+## "First to N": set by the host phone, read by RoundManager.
+var _match_target: int = 5
+const MIN_MATCH_TARGET: int = 1
+const MAX_MATCH_TARGET: int = 99
+## The last lobby state RoundManager set, re-sent to every phone that binds.
+var _lobby_state: Dictionary = {}
+## The join URL and QR the lobby screen shows (#120). The QR is null when
+## `qrencode` is unavailable.
+var join_url: String = ""
+var join_qr_texture: ImageTexture = null
+
 func _ready() -> void:
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
 
@@ -189,6 +209,7 @@ func _ready() -> void:
 	_bound_once.resize(_players.size())
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
+	_slot_ready.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 		_smoothers.append(InputSmoother.new())
@@ -210,6 +231,7 @@ func _ready() -> void:
 	for url in urls:
 		print("Controller page: %s" % url)
 
+	join_url = urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port
 	var label: Label = get_node_or_null(join_label_path) as Label
 	if label != null:
 		# One URL only: the label sits directly above the score line, and every
@@ -223,6 +245,7 @@ func _ready() -> void:
 			qr_rect.visible = false
 		else:
 			var qr_texture: ImageTexture = _generate_qr_texture(urls[0])
+			join_qr_texture = qr_texture
 			qr_rect.visible = qr_texture != null
 			if qr_texture != null:
 				qr_rect.texture = qr_texture
@@ -509,6 +532,8 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 			continue
 		_slot_claimed[slot] = 1
 		_slot_client_id[slot] = id
+		_join_order.erase(slot)
+		_join_order.append(slot)
 		_attach(slot, peer)
 		player_joined.emit(slot)
 		if _log_input:
@@ -527,6 +552,8 @@ func _attach(slot: int, peer: WebSocketPeer) -> void:
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
 	peer.send_text(JSON.stringify({"slot": slot}))
+	if not _lobby_state.is_empty():
+		peer.send_text(JSON.stringify(_lobby_state))
 
 ## Free the slot and park its player: zeroing the vector first means the weapon
 ## eases back to rest over several frames instead of holding the controller's
@@ -538,6 +565,7 @@ func _attach(slot: int, peer: WebSocketPeer) -> void:
 func _unbind(slot: int) -> void:
 	_slot_peers[slot] = null
 	_smoothers[slot].reset()
+	_slot_ready[slot] = 0
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	if _players[slot] != null:
@@ -587,6 +615,7 @@ func expire_disconnected_claims() -> void:
 		if _slot_claimed[slot] == 1 and _slot_peers[slot] == null:
 			_slot_claimed[slot] = 0
 			_slot_client_id[slot] = ""
+			_join_order.erase(slot)
 
 ## Latest value wins: drain everything queued this frame and keep only the last
 ## well-formed packet, so a burst never replays stale input. The packet sets
@@ -596,6 +625,9 @@ func _drain(slot: int, peer: WebSocketPeer) -> void:
 	var got: bool = false
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
+		if peer.was_string_packet():
+			_handle_text(slot, pkt.get_string_from_utf8())
+			continue
 		if pkt.size() != PACKET_SIZE:
 			continue
 		latest = pkt
@@ -634,3 +666,59 @@ func _log_weapon(slot: int) -> void:
 	_last_weapon[slot] = current
 	_steady_frames[slot] = 0
 	print("slot=%d weapon angle=%.4f len=%.1f" % [slot, current.x, current.y])
+
+# --- Lobby (issue #120) ------------------------------------------------------
+#
+# Transport only: this node records what phones asked for (ready, the host's
+# "first to N") and relays RoundManager's lobby state back to them.
+# RoundManager decides what any of it means.
+
+## A phone's text frame: Ready toggles, and the host's match length. Anything
+## else is ignored, as is a target from a phone that is not the host.
+func _handle_text(slot: int, text: String) -> void:
+	var msg: Variant = JSON.parse_string(text)
+	if not msg is Dictionary:
+		return
+	match str(msg.get("t", "")):
+		"ready":
+			_slot_ready[slot] = 1 if bool(msg.get("v", false)) else 0
+			if _log_input:
+				print("slot %d ready %s" % [slot, _slot_ready[slot] == 1])
+		"target":
+			var n: Variant = msg.get("n")
+			if slot == host_slot() and (n is float or n is int):
+				_match_target = clampi(int(n), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
+				if _log_input:
+					print("slot %d set match target %d" % [slot, _match_target])
+
+## Whether `slot`'s phone has pressed Ready (and not un-readied since).
+func slot_ready(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_ready.size() and _slot_ready[slot] == 1
+
+## Every phone back to not-ready: at the start of a match, so Rematch has to
+## be pressed afresh.
+func clear_ready() -> void:
+	for slot in _slot_ready.size():
+		_slot_ready[slot] = 0
+
+## The host phone's slot: the earliest-joined claimed slot with a controller
+## connected right now, or -1 with no phones at all.
+func host_slot() -> int:
+	for slot: int in _join_order:
+		if slot_has_controller(slot):
+			return slot
+	return -1
+
+## The match length the host phone chose ("first to N"), 5 by default.
+func match_target() -> int:
+	return _match_target
+
+## Send the lobby state to every connected phone, and keep it for any phone
+## that binds later.
+func set_lobby_state(state: Dictionary) -> void:
+	_lobby_state = state.duplicate(true)
+	_lobby_state["t"] = "lobby"
+	var text: String = JSON.stringify(_lobby_state)
+	for peer: WebSocketPeer in _slot_peers:
+		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			peer.send_text(text)

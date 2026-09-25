@@ -65,6 +65,48 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* Lobby, countdown and victory (issue #120): covers the pad whenever no
+     match is being played, so its buttons get the touches instead. */
+  #lobby {
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 24px;
+    background: rgba(13, 15, 20, 0.97);
+    text-align: center;
+  }
+  #lobby.show { display: flex; }
+  #lobby-title { font-size: 28px; font-weight: 800; }
+  #lobby-info { font-size: 16px; opacity: 0.75; }
+  #lobby-count { font-size: 30vmin; font-weight: 800; line-height: 1; display: none; }
+  #ready-btn {
+    font: inherit;
+    font-size: 26px;
+    font-weight: 800;
+    min-width: 60vw;
+    padding: 22px 28px;
+    border: 0;
+    border-radius: 16px;
+    color: #0d0f14;
+    background: #59606e;
+  }
+  #ready-btn.on { background: #ffd933; }
+  #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
+  #target-row button, #target-input {
+    font: inherit;
+    font-size: 24px;
+    width: 64px;
+    height: 52px;
+    border-radius: 12px;
+    border: 1px solid #59606e;
+    background: #1b1f29;
+    color: #e8ecf4;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -73,6 +115,17 @@
 <div id="hud">
   <div id="slot">--</div>
   <div id="status">connecting</div>
+</div>
+<div id="lobby">
+  <div id="lobby-title">Lobby</div>
+  <div id="lobby-count"></div>
+  <div id="lobby-info"></div>
+  <div id="target-row">First to
+    <button id="target-down" type="button">-</button>
+    <input id="target-input" type="number" inputmode="numeric" min="1" max="99" value="5">
+    <button id="target-up" type="button">+</button>
+  </div>
+  <button id="ready-btn" type="button">Ready</button>
 </div>
 <div id="hint">Drag anywhere. Direction aims the weapon, distance sets its reach.</div>
 <script>
@@ -275,6 +328,77 @@
     flashEl.style.opacity = "0";
   }
 
+  // ---- lobby (issue #120) ---------------------------------------------------
+  // The host decides everything; this page only shows the latest state it
+  // sent and asks for changes: Ready (Rematch on the victory screen) and, on
+  // the host's phone, the match length.
+  var lobbyEl = document.getElementById("lobby");
+  var lobbyTitleEl = document.getElementById("lobby-title");
+  var lobbyInfoEl = document.getElementById("lobby-info");
+  var lobbyCountEl = document.getElementById("lobby-count");
+  var targetRowEl = document.getElementById("target-row");
+  var targetInput = document.getElementById("target-input");
+  var readyBtn = document.getElementById("ready-btn");
+  var lobby = null;
+  var amReady = false;
+
+  function sendText(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(obj)); }
+  }
+
+  function slotName(n) {
+    if (lobby) {
+      for (var i = 0; i < lobby.players.length; i++) {
+        if (lobby.players[i].slot === n) { return lobby.players[i].name; }
+      }
+    }
+    return "P" + (n + 1);
+  }
+
+  function showLobby(msg) {
+    lobby = msg;
+    var phase = msg.phase;
+    if (phase === "playing") { lobbyEl.className = ""; return; }
+    // A drag in progress would otherwise stay held under the overlay.
+    release();
+    lobbyEl.className = "show";
+    amReady = false;
+    for (var i = 0; i < msg.players.length; i++) {
+      if (msg.players[i].slot === slot) { amReady = !!msg.players[i].ready; }
+    }
+    var ready = 0;
+    for (var j = 0; j < msg.players.length; j++) { if (msg.players[j].ready) { ready++; } }
+    var isHost = slot >= 0 && msg.host === slot;
+    lobbyCountEl.style.display = phase === "countdown" ? "block" : "none";
+    lobbyCountEl.textContent = String(msg.count);
+    targetRowEl.style.display = phase === "victory" ? "none" : "flex";
+    targetInput.disabled = !isHost;
+    document.getElementById("target-down").style.display = isHost ? "" : "none";
+    document.getElementById("target-up").style.display = isHost ? "" : "none";
+    if (document.activeElement !== targetInput) { targetInput.value = String(msg.target); }
+    if (phase === "victory") {
+      lobbyTitleEl.textContent = msg.winner >= 0 ? slotName(msg.winner) + " wins!" : "Match over";
+      readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
+    } else {
+      lobbyTitleEl.textContent = phase === "countdown" ? "Get ready" : (isHost ? "Lobby (you're host)" : "Lobby");
+      readyBtn.textContent = amReady ? "Ready! (tap to cancel)" : "Ready";
+    }
+    readyBtn.className = amReady ? "on" : "";
+    lobbyInfoEl.textContent = ready + " of " + msg.players.length + " ready" +
+      (msg.players.length < 2 ? " (need 2 players)" : "");
+  }
+
+  function sendTarget(n) {
+    n = Math.max(1, Math.min(99, Math.round(Number(n) || 1)));
+    targetInput.value = String(n);
+    sendText({ t: "target", n: n });
+  }
+
+  readyBtn.addEventListener("click", function () { sendText({ t: "ready", v: !amReady }); });
+  targetInput.addEventListener("change", function () { sendTarget(targetInput.value); });
+  document.getElementById("target-down").addEventListener("click", function () { sendTarget(Number(targetInput.value) - 1); });
+  document.getElementById("target-up").addEventListener("click", function () { sendTarget(Number(targetInput.value) + 1); });
+
   function connect() {
     setStatus("connecting");
     ws = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
@@ -292,6 +416,7 @@
         var msg = JSON.parse(ev.data);
         if (typeof msg.slot === "number") { setSlot(msg.slot); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
+        else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }
     };
     // The host drops us for reasons a player needs to be told about: every
@@ -303,6 +428,7 @@
       var reason = (ev && ev.reason) ? String(ev.reason) : "";
       setStatus(reason ? (reason + " — retrying") : "reconnecting");
       setSlot(-1);
+      lobbyEl.className = "";
       // Forget any drag that was in progress: the host has already zeroed this
       // player, and on reconnect the first frame should be "not touching".
       release();

@@ -199,3 +199,4 @@ controller_server_path = NodePath("../ControllerServer")
 score_label_path = NodePath("../UI/ScoreLabel")
 waiting_label_path = NodePath("../UI/WaitingLabel")
 scoreboard_path = NodePath("../UI/Scoreboard")
+lobby_enabled = true
