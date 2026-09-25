@@ -142,7 +142,7 @@ const SOUNDS: Dictionary = {
 	"modifier": {"files": [
 		"kenney_interface/maximize_006.ogg"], "db": 0.0, "overlap": 1, "positional": false},
 	"round_win": {"files": [
-		"kenney_interface/confirmation_002.ogg"], "db": 0.0, "overlap": 1, "positional": false},
+		"kenney_interface/confirmation_002.ogg"], "db": -10.0, "overlap": 1, "positional": false},
 	"join": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": 0.0, "overlap": 2, "positional": false},
 }
@@ -151,6 +151,11 @@ const DEFAULT_OVERLAP: int = 3
 ## Linear gain at strength 0; strength 1 is full gain. About -9 dB, so the
 ## softest hit is clearly quieter without vanishing under the rest.
 const MIN_GAIN: float = 0.35
+## Added to every sound's table `db` (#93, playtest: everything was too
+## quiet next to the victory fanfare). The round-win entry is set 10 dB down
+## to come out 4 dB quieter than it was, while the rest come out 6 dB louder.
+## The master slider and mute still sit on top of this.
+const MIX_BOOST_DB: float = 6.0
 ## Pitch at strength 0 and at strength 1, before jitter.
 const PITCH_AT_ZERO: float = 1.08
 const PITCH_AT_FULL: float = 0.92
@@ -262,7 +267,7 @@ func play(sound: StringName, position: Variant = null, strength: float = 1.0) ->
 func volume_db_for(sound: StringName, strength: float) -> float:
 	var spec: Dictionary = SOUNDS.get(String(sound), {})
 	var gain: float = lerpf(MIN_GAIN, 1.0, clampf(strength, 0.0, 1.0))
-	return float(spec.get("db", 0.0)) + linear_to_db(gain)
+	return float(spec.get("db", 0.0)) + MIX_BOOST_DB + linear_to_db(gain)
 
 func has_sound(sound: StringName) -> bool:
 	return SOUNDS.has(String(sound))

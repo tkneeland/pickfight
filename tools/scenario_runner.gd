@@ -170,6 +170,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_stage_parts_sound",
 	"arm_draws_over_identity_outline",
 	"axe_swing_deals_damage",
+	"sfx_mix_victory_quieter_rest_louder",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -832,6 +833,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_arm_draws_over_identity_outline()
 		"axe_swing_deals_damage":
 			return await _scenario_axe_swing_deals_damage()
+		"sfx_mix_victory_quieter_rest_louder":
+			return await _scenario_sfx_mix_victory_quieter_rest_louder()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10604,5 +10607,44 @@ func _scenario_axe_swing_deals_damage() -> Array[String]:
 		failures.append("the hardest axe swing took %.1f off, under the %.1f a committed axe hit should" % [
 			hardest, AXE_MIN_COMMITTED_DAMAGE])
 
+
+## Issue #93: the round-win sound plays quieter than it did before, and every
+## other sound louder, at full strength. The pre-#93 levels were each entry's
+## table `db` with no boost, and round_win's was 0 dB.
+const SFX_PRE_93_ROUND_WIN_DB: float = 0.0
+const SFX_PRE_93_DB: Dictionary = {
+	"hit_pickaxe": 0.0, "hit_sword": 0.0, "hit_axe": 2.0, "hit_staff": 0.0,
+	"hit_dagger": -2.0, "hit_boomstick": 0.0, "fire_boomstick": -3.0,
+	"bullet_impact": -4.0, "clash": 0.0, "head_terrain": -2.0, "land": -3.0,
+	"eliminated": 0.0, "lava_sizzle": -4.0, "lava_rise": 0.0,
+	"bounce_launch": -4.0, "wind_tell": -12.0, "wind_gust": -5.0,
+	"rock_warning": -8.0, "rock_impact": -2.0, "floor_warning": 0.0,
+	"floor_collapse": 2.0, "wall_hit": 0.0, "wall_break": 2.0,
+	"countdown": 0.0, "round_start": 0.0, "modifier": 0.0, "join": 0.0,
+}
+
+func _scenario_sfx_mix_victory_quieter_rest_louder() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var win: float = sfx.volume_db_for(&"round_win", 1.0)
+	print("      round_win at full strength: %.1f dB (was %.1f)" % [win, SFX_PRE_93_ROUND_WIN_DB])
+	if win >= SFX_PRE_93_ROUND_WIN_DB:
+		failures.append("round_win plays at %.1f dB, not quieter than its old %.1f dB" % [win, SFX_PRE_93_ROUND_WIN_DB])
+	for name: String in sfx.SOUNDS.keys():
+		if name == "round_win":
+			continue
+		if not SFX_PRE_93_DB.has(name):
+			# A sound added after #93 has no old level to be louder than.
+			continue
+		var now: float = sfx.volume_db_for(StringName(name), 1.0)
+		if now <= float(SFX_PRE_93_DB[name]):
+			failures.append("%s plays at %.1f dB, not louder than its old %.1f dB" % [name, now, SFX_PRE_93_DB[name]])
+	for name: String in SFX_PRE_93_DB.keys():
+		if not sfx.has_sound(StringName(name)):
+			failures.append("%s is no longer in the sound table" % name)
 	await _teardown(stage)
 	return failures
