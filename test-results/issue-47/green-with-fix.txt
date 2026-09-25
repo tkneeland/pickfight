@@ -1,4 +1,4 @@
-# 482c97b as committed (the #38 fix in place). macOS, Godot 4.6.2.
+# 482c97b as committed (the #38 fix in place); standalone runs re-confirmed PASS after rebase onto main @ 3c192d4. macOS, Godot 4.6.2.
 ## run 1: -- --scenario=world_stopped_head_blocks_arriving_head
 
       tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)

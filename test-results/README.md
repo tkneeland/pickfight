@@ -31,7 +31,7 @@ other head arrives on it.
 
 | Check | Evidence | Verdict |
 | --- | --- | --- |
-| Red with d582dce reverted (3 standalone runs, and last in `--all`: 78 passed, 1 failed, the new one) | `issue-47/red-without-fix.txt` | PASS |
+| Red with d582dce reverted (3 standalone runs, and last in `--all`: 86 passed, 1 failed, the new one, after rebase onto main) | `issue-47/red-without-fix.txt` | PASS |
 | Green with the fix (3 standalone runs, 3 times among the tunnel scenarios with `--scenarios`) | `issue-47/green-with-fix.txt` | PASS |
-| Full suite green with the fix (79 of 79) | `issue-47/scenario-suite.txt` | PASS |
+| Full suite green with the fix (87 of 87, after rebase onto main) | `issue-47/scenario-suite.txt` | PASS |
 | Boots on a fresh clone | `issue-47/boot-check.txt` | PASS |

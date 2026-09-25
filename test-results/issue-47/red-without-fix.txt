@@ -27,8 +27,13 @@ FAIL  world_stopped_head_blocks_arriving_head
       - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
 ---
 0 passed, 1 failed, 1 total
-## full suite, -- --all, fix still reverted (the new scenario runs last)
+## full suite, -- --all, fix still reverted (the new scenario runs last), on 482c97b before rebase onto main @ 3c192d4
 FAIL  world_stopped_head_blocks_arriving_head
       - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
 ---
 78 passed, 1 failed, 79 total
+## full suite, -- --all, fix reverted, after rebase onto main @ 3c192d4 (branch 2fec4bd), in a scratch clone; FAIL/summary lines only
+FAIL  world_stopped_head_blocks_arriving_head
+      - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
+---
+86 passed, 1 failed, 87 total
