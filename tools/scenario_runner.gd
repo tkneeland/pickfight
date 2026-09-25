@@ -147,6 +147,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"seesaw_tips_under_planted_head",
 	"head_does_not_tunnel_rotating_platform",
 	"bounce_pad_launch_same_for_every_weapon",
+	"falling_rock_warns_then_strikes",
+	"collapsing_floor_timed_gives_way_for_good",
+	"collapsing_floor_stood_on_gives_way_for_good",
+	"breakable_wall_breaks_on_weapon_hits",
+	"breakable_wall_ignores_bodies",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -757,6 +762,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_head_does_not_tunnel_rotating_platform()
 		"bounce_pad_launch_same_for_every_weapon":
 			return await _scenario_bounce_pad_launch_same_for_every_weapon()
+		"falling_rock_warns_then_strikes":
+			return await _scenario_falling_rock_warns_then_strikes()
+		"collapsing_floor_timed_gives_way_for_good":
+			return await _scenario_collapsing_floor_timed_gives_way_for_good()
+		"collapsing_floor_stood_on_gives_way_for_good":
+			return await _scenario_collapsing_floor_stood_on_gives_way_for_good()
+		"breakable_wall_breaks_on_weapon_hits":
+			return await _scenario_breakable_wall_breaks_on_weapon_hits()
+		"breakable_wall_ignores_bodies":
+			return await _scenario_breakable_wall_ignores_bodies()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -9171,4 +9186,499 @@ func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
 	if highest > 0.0 and (highest - lowest) / highest > PAD_ROSTER_SPREAD:
 		failures.append("launch heights ranged %.0f to %.0f px across the roster, more than %.0f%% apart" % [
 			lowest, highest, PAD_ROSTER_SPREAD * 100.0])
+
+# --- Issue #53: falling and breaking stage parts ----------------------------
+
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
+const FallingRockScene: PackedScene = preload("res://scenes/parts/FallingRock.tscn")
+const CollapsingFloorScene: PackedScene = preload("res://scenes/parts/CollapsingFloor.tscn")
+const BreakableWallScene: PackedScene = preload("res://scenes/parts/BreakableWall.tscn")
+
+## The rock is configured short so the scenario is quick; what is asserted is
+## that each phase lasts what it was configured to, not the shipped defaults.
+const ROCK_TEST_INTERVAL_SEC: float = 0.5
+const ROCK_TEST_WARNING_SEC: float = 1.0
+const ROCK_TEST_DAMAGE: float = 25.0
+## Column top above the Arena's ground, clear of both side platforms, and the
+## struck player's offset from the column (so the knock has a side to go).
+const ROCK_COLUMN_TOP: Vector2 = Vector2(0, -300)
+const ROCK_PLAYER_OFFSET: float = 10.0
+## Ticks of slack either side of a phase boundary: `_physics_process` order
+## and float accumulation can move an edge by a tick.
+const ROCK_EDGE_TICKS: int = 2
+## Ticks the fall is given to arrive: ~0.7 s of fall from 576 px up, doubled.
+const ROCK_FALL_TICKS: int = 90
+## Ticks after the hit the knock is measured over, and how far it must carry
+## the struck player sideways.
+const ROCK_SHOVE_TICKS: int = 30
+const ROCK_MIN_SHOVE: float = 30.0
+## Damage the player starts the lethal drop on: already low enough that one
+## more rock finishes them.
+const ROCK_LOW_HEALTH_DAMAGE: float = 80.0
+
+## Issue #53, falling rocks: the rock hangs and marks its landing spot for
+## its whole warning, deals nothing before the warning is over, then lands on
+## a player through the ordinary hit path -- damage up by exactly its
+## configured amount, a hitmarker drawn, the player knocked aside -- and is
+## reused, not re-instanced, for the next drop. A second drop on a player
+## already low finishes them: lethal only when the player was already hurt.
+func _scenario_falling_rock_warns_then_strikes() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var rock: Node2D = FallingRockScene.instantiate()
+	rock.interval_sec = ROCK_TEST_INTERVAL_SEC
+	rock.warning_sec = ROCK_TEST_WARNING_SEC
+	rock.damage = ROCK_TEST_DAMAGE
+	rock.position = ROCK_COLUMN_TOP
+	stage.add_child(rock)
+
+	var stand: Vector2 = Vector2(ROCK_COLUMN_TOP.x + ROCK_PLAYER_OFFSET, GROUND_TOP - PLAYER_RADIUS)
+	var player: RigidBody2D = _spawn_player(stage, stand)
+	player.set_input_vector(Vector2.UP)
+	var log: Dictionary = _hit_feedback_fixture(stage, player)
+	await physics_frame
+	var child_count: int = rock.get_child_count()
+
+	var tps: float = float(Engine.physics_ticks_per_second)
+	var interval_ticks: int = int(round(ROCK_TEST_INTERVAL_SEC * tps))
+	var warning_ticks: int = int(round(ROCK_TEST_WARNING_SEC * tps))
+
+	# Idle: nothing shown, nothing dealt, until the interval is up.
+	for _i in interval_ticks - ROCK_EDGE_TICKS:
+		await physics_frame
+		if rock.state_name() != "idle":
+			failures.append("the rock left idle before its %.2fs interval was up" % ROCK_TEST_INTERVAL_SEC)
+			break
+	# The warning: counted from the tick it starts to the tick the rock falls.
+	var waited: int = 0
+	while rock.state_name() == "idle" and waited < ROCK_EDGE_TICKS * 3:
+		await physics_frame
+		waited += 1
+	if not rock.is_warning():
+		failures.append("the interval ended but no warning showed (state '%s')" % rock.state_name())
+	var landing: Vector2 = rock.landing_point()
+	if is_nan(landing.y) or absf(landing.y - GROUND_TOP) > 2.0 or absf(landing.x - ROCK_COLUMN_TOP.x) > 2.0:
+		failures.append("the landing marker is at %s, not on the ground under the column (%.0f, %.0f) -- the player in the way must be looked past" % [
+			landing, ROCK_COLUMN_TOP.x, GROUND_TOP])
+	var warned_ticks: int = 0
+	var rock_drifted: float = 0.0
+	while rock.state_name() == "warning" and warned_ticks < warning_ticks * 2:
+		if player.damage > 0.0:
+			failures.append("the player took %.1f damage %d ticks into the warning" % [player.damage, warned_ticks])
+			break
+		if not rock.is_warning():
+			failures.append("the warning stopped showing %d ticks in" % warned_ticks)
+			break
+		rock_drifted = maxf(rock_drifted, absf(rock.rock_position().y - ROCK_COLUMN_TOP.y))
+		warned_ticks += 1
+		await physics_frame
+	print("      warned for %d ticks (configured %d), landing marker at %s" % [warned_ticks, warning_ticks, landing])
+	if absi(warned_ticks - warning_ticks) > ROCK_EDGE_TICKS:
+		failures.append("warned for %d ticks, configured %d" % [warned_ticks, warning_ticks])
+	if rock_drifted > 0.5:
+		failures.append("the rock dropped %.1f px during its warning -- it must hang until the warning is over" % rock_drifted)
+
+	# The fall and the hit.
+	var before_x: float = player.global_position.x
+	var hit_tick: int = -1
+	for tick in ROCK_FALL_TICKS:
+		await physics_frame
+		if player.damage > 0.0:
+			hit_tick = tick
+			break
+	if hit_tick == -1:
+		failures.append("the rock fell for %d ticks without hitting the player under it" % ROCK_FALL_TICKS)
+	else:
+		if absf(player.damage - ROCK_TEST_DAMAGE) > 0.01:
+			failures.append("the rock dealt %.2f damage, configured %.2f" % [player.damage, ROCK_TEST_DAMAGE])
+		await _await_ticks(ROCK_SHOVE_TICKS)
+		var shoved: float = player.global_position.x - before_x
+		print("      hit %d ticks into the fall: %.1f damage, knocked %.1f px sideways" % [hit_tick, player.damage, shoved])
+		if shoved < ROCK_MIN_SHOVE:
+			failures.append("the struck player moved %.1f px away from the column, expected at least %.0f" % [shoved, ROCK_MIN_SHOVE])
+	var reported: Array = log["strikes"].filter(func(s: Dictionary) -> bool: return s["victim"] == player)
+	if reported.size() != 1 or absf(float(reported[0]["amount"]) - ROCK_TEST_DAMAGE) > 0.01:
+		failures.append("the hit was reported %d time(s) through strike_landed, expected once for %.0f" % [reported.size(), ROCK_TEST_DAMAGE])
+	if log["markers"].size() != 1:
+		failures.append("the hit drew %d hitmarker(s), expected 1 -- a rock hit must feed back like a weapon hit" % log["markers"].size())
+	if not player.alive:
+		failures.append("one rock eliminated a player from full health")
+
+	# The second drop, onto a player already low: reused rock, lethal hit.
+	player.teleport_to(stand)
+	player.damage = ROCK_LOW_HEALTH_DAMAGE
+	var deadline: int = interval_ticks + warning_ticks + ROCK_FALL_TICKS + 30
+	for _i in deadline:
+		await physics_frame
+		if not player.alive:
+			break
+	if player.alive:
+		failures.append("a second rock on a player on %.0f damage did not finish them (now %.1f)" % [ROCK_LOW_HEALTH_DAMAGE, player.damage])
+	if rock.drop_count() != 2:
+		failures.append("expected 2 drops by now, the rock reports %d" % rock.drop_count())
+	if rock.get_child_count() != child_count:
+		failures.append("the rock part went from %d to %d children over two drops -- rocks must be reused, not re-instanced" % [
+			child_count, rock.get_child_count()])
+
+	await _teardown(stage)
+	return failures
+
+## A collapsing floor well above the Arena's ground, so a player falling
+## through it is plainly falling, and the timings the two scenarios use.
+const FLOOR_TEST_POSITION: Vector2 = Vector2(0, -300)
+const FLOOR_TEST_SIZE: Vector2 = Vector2(240, 24)
+const FLOOR_TEST_WARN_SEC: float = 0.8
+const FLOOR_TEST_COLLAPSE_SEC: float = 2.0
+const FLOOR_TEST_STAND_SEC: float = 0.5
+## Long enough, empty, that a "stood_on" floor would have gone if it were
+## counting round time instead of standing time.
+const FLOOR_TEST_EMPTY_SEC: float = 2.5
+## How long past its collapse the floor is watched staying gone: well past
+## CrumblingLedge's full warn + away cycle (LEDGE_WARN_SEC + LEDGE_AWAY_SEC),
+## which is when a ledge would have come back.
+const FLOOR_TEST_GONE_WATCH_SEC: float = LEDGE_WARN_SEC + LEDGE_AWAY_SEC + 1.0
+## CrumblingLedge's two colours, written down independently: the floor
+## shares its palette on purpose.
+const FLOOR_SOLID_COLOR: Color = Color(0.35, 0.35, 0.4, 1)
+const FLOOR_WARNING_COLOR: Color = Color(0.85, 0.6, 0.15, 1)
+
+func _new_collapsing_floor(stage: Node2D, trigger: String) -> StaticBody2D:
+	var floor_part: StaticBody2D = CollapsingFloorScene.instantiate() as StaticBody2D
+	floor_part.trigger = trigger
+	floor_part.size = FLOOR_TEST_SIZE
+	floor_part.warn_sec = FLOOR_TEST_WARN_SEC
+	floor_part.collapse_after_sec = FLOOR_TEST_COLLAPSE_SEC
+	floor_part.stand_sec = FLOOR_TEST_STAND_SEC
+	floor_part.position = FLOOR_TEST_POSITION
+	stage.add_child(floor_part)
+	return floor_part
+
+func _floor_stand_point() -> Vector2:
+	var top: float = FLOOR_TEST_POSITION.y - FLOOR_TEST_SIZE.y / 2.0
+	return Vector2(FLOOR_TEST_POSITION.x, top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+
+## Whether `player` is resting on the floor rather than falling through it.
+func _held_by_floor(player: RigidBody2D) -> bool:
+	var top: float = FLOOR_TEST_POSITION.y - FLOOR_TEST_SIZE.y / 2.0
+	return player.global_position.y + PLAYER_RADIUS <= top + PLANT_CLEARANCE
+
+## Watches a floor through its warning to the end: it must hold the player
+## and show the warning colour the whole way, then lose its collision and
+## let the player fall.
+func _floor_warning_then_gone(floor_part: StaticBody2D, player: RigidBody2D, label: String) -> Array[String]:
+	var failures: Array[String] = []
+	var warn_ticks: int = int(round(FLOOR_TEST_WARN_SEC * float(Engine.physics_ticks_per_second)))
+	var warned: int = 0
+	while floor_part.state_name() == "warning" and warned < warn_ticks * 2:
+		if not _held_by_floor(player):
+			failures.append("%s: the floor stopped holding %d ticks into its warning" % [label, warned])
+			break
+		if not floor_part.is_solid():
+			failures.append("%s: collision went off %d ticks into the warning" % [label, warned])
+			break
+		if not _color_close(floor_part.visual_color(), FLOOR_WARNING_COLOR, COLOR_MATCH_TOLERANCE):
+			failures.append("%s: the warning shows %s, not CrumblingLedge's amber" % [label, floor_part.visual_color()])
+			break
+		warned += 1
+		await physics_frame
+	print("      %s: warned for %d ticks (configured %d)" % [label, warned, warn_ticks])
+	if absi(warned - warn_ticks) > ROCK_EDGE_TICKS:
+		failures.append("%s: warned for %d ticks, configured %d" % [label, warned, warn_ticks])
+	var fell: bool = false
+	for _i in LEDGE_FALL_CONFIRM_TICKS:
+		await physics_frame
+		if not _held_by_floor(player):
+			fell = true
+	if floor_part.is_solid():
+		failures.append("%s: the warning ended but the floor's collision is still on" % label)
+	if not fell:
+		failures.append("%s: the player was still standing %d ticks after the floor gave way" % [label, LEDGE_FALL_CONFIRM_TICKS])
+	return failures
+
+## Past CrumblingLedge's return time the floor is still gone: no collision, no
+## visual, and a fresh body dropped where it stood goes straight through.
+func _floor_stays_gone(stage: Node2D, floor_part: StaticBody2D, player: RigidBody2D, label: String) -> Array[String]:
+	var failures: Array[String] = []
+	player.leave_round()
+	var watch_ticks: int = int(round(FLOOR_TEST_GONE_WATCH_SEC * float(Engine.physics_ticks_per_second)))
+	for tick in watch_ticks:
+		await physics_frame
+		if floor_part.is_solid() or floor_part.state_name() != "gone":
+			failures.append("%s: the floor came back %d ticks after giving way" % [label, tick])
+			break
+	if floor_part.visual_color().a > 0.0:
+		failures.append("%s: a gone floor is still drawn (%s)" % [label, floor_part.visual_color()])
+	var dropped: RigidBody2D = _spawn_player(stage, _floor_stand_point())
+	dropped.set_input_vector(Vector2.UP)
+	await _await_ticks(LEDGE_FALL_CONFIRM_TICKS)
+	if _held_by_floor(dropped):
+		failures.append("%s: %.1fs after giving way, a body dropped on the floor's spot was held" % [label, FLOOR_TEST_GONE_WATCH_SEC])
+	return failures
+
+## Issue #53, collapsing floor, "timed": solid and grey (holding a player)
+## until its warning starts `warn_sec` before `collapse_after_sec`; amber and
+## still holding through the warning; then gone -- the player falls -- and
+## still gone well past the time a CrumblingLedge would have come back.
+func _scenario_collapsing_floor_timed_gives_way_for_good() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var floor_part: StaticBody2D = _new_collapsing_floor(stage, "timed")
+	var player: RigidBody2D = _spawn_player(stage, _floor_stand_point())
+	player.set_input_vector(Vector2.UP)
+
+	var tps: float = float(Engine.physics_ticks_per_second)
+	var solid_ticks: int = int(round((FLOOR_TEST_COLLAPSE_SEC - FLOOR_TEST_WARN_SEC) * tps))
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+	for tick in solid_ticks - LEDGE_SETTLE_TICKS - ROCK_EDGE_TICKS:
+		if floor_part.state_name() != "solid" or not floor_part.is_solid():
+			failures.append("timed: left solid at tick %d, its warning is due at %d" % [LEDGE_SETTLE_TICKS + tick, solid_ticks])
+			break
+		if not _color_close(floor_part.visual_color(), FLOOR_SOLID_COLOR, COLOR_MATCH_TOLERANCE):
+			failures.append("timed: a solid floor shows %s, not terrain grey" % floor_part.visual_color())
+			break
+		if not _held_by_floor(player):
+			failures.append("timed: the solid floor stopped holding the player at tick %d" % (LEDGE_SETTLE_TICKS + tick))
+			break
+		await physics_frame
+	var waited: int = 0
+	while floor_part.state_name() == "solid" and waited < ROCK_EDGE_TICKS * 3:
+		await physics_frame
+		waited += 1
+	if floor_part.state_name() != "warning":
+		failures.append("timed: expected the warning by %.2fs, the floor is '%s'" % [
+			FLOOR_TEST_COLLAPSE_SEC - FLOOR_TEST_WARN_SEC, floor_part.state_name()])
+	failures.append_array(await _floor_warning_then_gone(floor_part, player, "timed"))
+	failures.append_array(await _floor_stays_gone(stage, floor_part, player, "timed"))
+
+	await _teardown(stage)
+	return failures
+
+## Issue #53, collapsing floor, "stood_on": left empty for longer than a
+## timed floor would last, it stays solid; once a player stands on it, it
+## warns after `stand_sec`, holds through the warning, and is then gone for
+## good.
+func _scenario_collapsing_floor_stood_on_gives_way_for_good() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var floor_part: StaticBody2D = _new_collapsing_floor(stage, "stood_on")
+
+	await _await_ticks(int(round(FLOOR_TEST_EMPTY_SEC * float(Engine.physics_ticks_per_second))))
+	if floor_part.state_name() != "solid" or not floor_part.is_solid():
+		failures.append("stood_on: nobody stood on it for %.1fs and it went '%s' anyway" % [
+			FLOOR_TEST_EMPTY_SEC, floor_part.state_name()])
+
+	var player: RigidBody2D = _spawn_player(stage, _floor_stand_point())
+	player.set_input_vector(Vector2.UP)
+	var stand_ticks: int = int(round(FLOOR_TEST_STAND_SEC * float(Engine.physics_ticks_per_second)))
+	var stood: int = 0
+	while floor_part.state_name() == "solid" and stood < stand_ticks * 3:
+		if not _held_by_floor(player) and stood > LEDGE_SETTLE_TICKS:
+			failures.append("stood_on: the solid floor stopped holding the player at tick %d" % stood)
+			break
+		stood += 1
+		await physics_frame
+	print("      stood_on: warning began %d ticks after the player arrived (stand_sec is %d ticks)" % [stood, stand_ticks])
+	if floor_part.state_name() != "warning":
+		failures.append("stood_on: stood on for %d ticks and no warning began" % stood)
+	elif absi(stood - stand_ticks) > LEDGE_MARGIN_TICKS:
+		failures.append("stood_on: warning began %d ticks after arrival, stand_sec is %d" % [stood, stand_ticks])
+	failures.append_array(await _floor_warning_then_gone(floor_part, player, "stood_on"))
+	failures.append_array(await _floor_stays_gone(stage, floor_part, player, "stood_on"))
+
+	await _teardown(stage)
+	return failures
+
+## The breakable wall's shipped default HP, written down independently rather
+## than read off the wall: about three solid hits.
+const WALL_DEFAULT_HP: float = 100.0
+const WALL_TEST_SIZE: Vector2 = Vector2(24, 100)
+## Half-sweeps for a weak poke and a hard swing (see `_swing_at`).
+const WALL_WEAK_HALF_ANGLE: float = 0.35
+const WALL_HARD_HALF_ANGLE: float = 1.3
+## Most swings either kind gets to break the wall before it is given up on.
+const WALL_MAX_SWINGS: int = 10
+## Weak pokes the wall must survive.
+const WALL_LIGHT_POKES: int = 4
+const WALL_DAMAGE_TOLERANCE: float = 0.01
+## How long a broken wall is watched staying broken: past CrumblingLedge's
+## return time, as for the collapsing floor.
+const WALL_BROKEN_WATCH_SEC: float = LEDGE_WARN_SEC + LEDGE_AWAY_SEC + 1.0
+
+## A wall standing across the head's arc at the point a swing is fastest:
+## its long axis along the arm, so the head meets its face side-on.
+func _wall_across_swing(stage: Node2D, centre: Vector2, aim_point: Vector2) -> StaticBody2D:
+	var arm: Vector2 = aim_point - centre
+	var wall: StaticBody2D = BreakableWallScene.instantiate() as StaticBody2D
+	wall.size = WALL_TEST_SIZE
+	stage.add_child(wall)
+	wall.global_position = centre + arm.normalized() * (arm.length() + ARC_INSET)
+	wall.rotation = arm.angle() - PI * 0.5
+	return wall
+
+## One swing through the wall: wound up `half_angle` short of it, finished
+## `half_angle` past. Returns each head hit the wall scored as
+## `{damage, speed}`.
+##
+## The wind-up is not `_wind_up`'s: that turns and retracts at once, and a
+## head starting pressed against the wall's far face sweeps back through it
+## at speed on the way. This pulls the head in first, along the angle it is
+## at, then turns it while short, so the only thing that meets the wall is
+## the swing. Any hit scored during the wind-up is still recorded, so a
+## wind-up that touched the wall would show up rather than hide.
+func _swing_at_wall(attacker: RigidBody2D, wall: StaticBody2D, centre: Vector2, half_angle: float) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	var seen: int = wall.hit_count()
+	var at: float = (attacker.weapon_head_position() - centre).angle()
+	var steps: Array[Vector2] = [
+		Vector2.RIGHT.rotated(at) * 0.05,
+		Vector2.RIGHT.rotated(-half_angle) * 0.05,
+		Vector2.RIGHT.rotated(-half_angle),
+		Vector2.RIGHT.rotated(half_angle),
+	]
+	var ticks: PackedInt32Array = [RETRACT_TICKS, RETRACT_TICKS, EXTEND_TICKS, SWING_TICKS]
+	for i in steps.size():
+		attacker.set_input_vector(steps[i])
+		for _t in ticks[i]:
+			await physics_frame
+			if wall.hit_count() != seen:
+				seen = wall.hit_count()
+				hits.append({"damage": wall.last_hit_damage(), "speed": wall.last_hit_speed(), "in_swing": i == steps.size() - 1})
+	return hits
+
+## Swings at a fresh wall until it breaks or WALL_MAX_SWINGS run out. Every
+## scored hit is checked against `Player`'s own damage rule for the same
+## speed. Returns `{swings, broke, total, failures, wall}`.
+func _break_wall(stage: Node2D, attacker: RigidBody2D, centre: Vector2, half_angle: float, max_swings: int, label: String) -> Dictionary:
+	var failures: Array[String] = []
+	var aim: Dictionary = await _rehearse_swing(attacker, centre, half_angle)
+	var wall: StaticBody2D = _wall_across_swing(stage, centre, aim["point"])
+	await physics_frame
+	var total: float = 0.0
+	var swings: int = 0
+	var speeds: PackedFloat32Array = []
+	while swings < max_swings and wall.state_name() == "standing":
+		swings += 1
+		for hit: Dictionary in await _swing_at_wall(attacker, wall, centre, half_angle):
+			if not hit["in_swing"] and hit["damage"] > 0.0:
+				failures.append("%s: the wind-up struck the wall for %.1f (%.0f px/s) -- the fixture is broken, not the wall" % [
+					label, hit["damage"], hit["speed"]])
+			total += hit["damage"]
+			speeds.append(hit["speed"])
+			var expected: float = attacker._strike_damage(hit["speed"])
+			if absf(hit["damage"] - expected) > WALL_DAMAGE_TOLERANCE:
+				failures.append("%s: a %.0f px/s hit took %.2f off the wall, a player would take %.2f" % [
+					label, hit["speed"], hit["damage"], expected])
+	await _await_ticks(ceili(0.2 * Engine.physics_ticks_per_second))
+	print("      %s (half-sweep %.1f rad, rehearsed %.0f px/s): %d swing(s), hits at %s px/s, %.1f damage, wall '%s' with %d crack(s)" % [
+		label, half_angle, aim["speed"], swings, speeds, total, wall.state_name(), wall.visible_crack_count()])
+	return {"swings": swings, "broke": wall.is_broken(), "total": total, "failures": failures, "wall": wall}
+
+## Issue #53, breakable wall: each weapon hit takes off exactly the damage the
+## same hit would deal a player (speed-scaled, per the weapon's stats). Light
+## pokes leave it standing; hard swings break it in fewer swings than weak
+## ones, it cracks and darkens on the way, and once broken it has no
+## collision and stays broken past a CrumblingLedge's return time.
+func _scenario_breakable_wall_breaks_on_weapon_hits() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var probe: StaticBody2D = BreakableWallScene.instantiate() as StaticBody2D
+	stage.add_child(probe)
+	await physics_frame
+	if absf(probe.hp_left() - WALL_DEFAULT_HP) > WALL_DAMAGE_TOLERANCE:
+		failures.append("a wall ships with %.1f HP, expected %.1f (about three solid hits)" % [probe.hp_left(), WALL_DEFAULT_HP])
+	probe.queue_free()
+
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	await physics_frame
+	_brace(attacker)
+
+	# Light pokes, on their own wall: it survives them, whatever they chip off.
+	var light: Dictionary = await _break_wall(stage, attacker, centre, WALL_WEAK_HALF_ANGLE, WALL_LIGHT_POKES, "light pokes")
+	failures.append_array(light["failures"])
+	if light["broke"]:
+		failures.append("the wall broke under %d light poke(s)" % light["swings"])
+	light["wall"].queue_free()
+	await physics_frame
+
+	# Then weak pokes against hard swings, each on a fresh wall, to the break.
+	var weak: Dictionary = await _break_wall(stage, attacker, centre, WALL_WEAK_HALF_ANGLE, WALL_MAX_SWINGS, "weak")
+	failures.append_array(weak["failures"])
+	weak["wall"].queue_free()
+	await physics_frame
+	var hard: Dictionary = await _break_wall(stage, attacker, centre, WALL_HARD_HALF_ANGLE, WALL_MAX_SWINGS, "hard")
+	failures.append_array(hard["failures"])
+	var wall: StaticBody2D = hard["wall"]
+	if not hard["broke"]:
+		failures.append("%d hard swings (%.1f damage) did not break a %.0f HP wall" % [hard["swings"], hard["total"], WALL_DEFAULT_HP])
+	else:
+		if hard["total"] < WALL_DEFAULT_HP - WALL_DAMAGE_TOLERANCE:
+			failures.append("the wall broke on %.1f damage, short of its %.0f HP" % [hard["total"], WALL_DEFAULT_HP])
+		if weak["broke"] and weak["swings"] <= hard["swings"]:
+			failures.append("weak pokes broke the wall in %d swings, hard swings took %d" % [weak["swings"], hard["swings"]])
+		if wall.is_solid():
+			failures.append("a broken wall still has collision")
+		if wall.visual_color().a > 0.0:
+			failures.append("a broken wall is still drawn")
+		var watch_ticks: int = int(round(WALL_BROKEN_WATCH_SEC * float(Engine.physics_ticks_per_second)))
+		for tick in watch_ticks:
+			await physics_frame
+			if wall.is_solid() or not wall.is_broken():
+				failures.append("the wall came back %d ticks after breaking" % tick)
+				break
+		# And physically: the space it stood in is empty of it.
+		var query := PhysicsShapeQueryParameters2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = WALL_TEST_SIZE
+		query.shape = rect
+		query.transform = wall.global_transform
+		for hit: Dictionary in attacker.get_world_2d().direct_space_state.intersect_shape(query):
+			if hit.get("collider") == wall:
+				failures.append("%.1fs after breaking, the wall's shape still answers physics queries" % WALL_BROKEN_WATCH_SEC)
+
+	await _teardown(stage)
+	return failures
+
+## Where the bodies-only wall stands: on the Arena's ground, tall enough that
+## a player cannot hop it.
+const WALL_BODY_TEST_SIZE: Vector2 = Vector2(32, 200)
+const WALL_BODY_PUSH_SPEED: float = 600.0
+const WALL_BODY_SLAM_SPEED: float = 1800.0
+const WALL_BODY_PUSH_TICKS: int = 90
+
+## Issue #53, breakable wall: bodies do not damage it. A player walked into it
+## for a second and a half, then slammed into it at speed, leaves it on full
+## HP, uncracked and solid -- and the player never gets past it.
+func _scenario_breakable_wall_ignores_bodies() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var wall: StaticBody2D = BreakableWallScene.instantiate() as StaticBody2D
+	wall.size = WALL_BODY_TEST_SIZE
+	wall.position = Vector2(0, GROUND_TOP - WALL_BODY_TEST_SIZE.y / 2.0)
+	stage.add_child(wall)
+	var face: float = -WALL_BODY_TEST_SIZE.x / 2.0
+
+	var player: RigidBody2D = _spawn_player(stage, Vector2(face - 120.0, GROUND_TOP - PLAYER_RADIUS))
+	# Up and back: the head stays clear of the wall, so only the body meets it.
+	player.set_input_vector(Vector2(-0.3, -1.0).normalized())
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+	for _i in WALL_BODY_PUSH_TICKS:
+		player.linear_velocity.x = WALL_BODY_PUSH_SPEED
+		await physics_frame
+	player.teleport_to(Vector2(face - 200.0, GROUND_TOP - PLAYER_RADIUS))
+	player.linear_velocity = Vector2(WALL_BODY_SLAM_SPEED, 0.0)
+	await _await_ticks(COLLISION_TICKS)
+
+	print("      pushed and slammed: wall on %.1f HP, %d head hit(s), player at x=%.1f (face at %.1f)" % [
+		wall.hp_left(), wall.hit_count(), player.global_position.x, face])
+	if absf(wall.hp_left() - WALL_DEFAULT_HP) > WALL_DAMAGE_TOLERANCE:
+		failures.append("a body pushing and slamming into the wall took it to %.1f HP" % wall.hp_left())
+	if wall.visible_crack_count() > 0:
+		failures.append("a body cracked the wall (%d crack(s))" % wall.visible_crack_count())
+	if not wall.is_solid() or wall.is_broken():
+		failures.append("a body broke the wall")
+	if player.global_position.x + PLAYER_RADIUS > face + PLANT_CLEARANCE:
+		failures.append("the player got through the wall: at x=%.1f, face at %.1f" % [player.global_position.x, face])
+
+	await _teardown(stage)
 	return failures
