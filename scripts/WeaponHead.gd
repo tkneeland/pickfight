@@ -246,6 +246,62 @@ func forget_previous_position() -> void:
 	_has_previous = false
 	_turn_ready = false
 
+# --- Phasing (issue #115) -----------------------------------------------------
+
+## A head can end up on the far side of terrain from its own body -- under a
+## platform too wide to swing round -- and then nothing the player can do
+## brings it back: it is solid, the arm is not, and the retraction drags it
+## into the underside of the slab. `Player` phases it after the drag has been
+## released for a while (see `Player.GRIDLOCK_PHASE_DELAY`): the head drops
+## off every layer and out of every mask, so it collides with nothing, is
+## struck by nothing and grips nothing, and both sweeps and the turn guard
+## stand down, since they would otherwise stop the retraction at the slab
+## exactly as the solver did. `Player` turns it solid again once
+## `overlaps_world()` says it is clear.
+var phased: bool = false
+var _solid_layer: int = 0
+var _solid_mask: int = 0
+## Reused by `overlaps_world`.
+var _overlap_query: PhysicsShapeQueryParameters2D = null
+
+func set_phased(on: bool) -> void:
+	if on == phased:
+		return
+	phased = on
+	if on:
+		_solid_layer = collision_layer
+		_solid_mask = collision_mask
+		collision_layer = 0
+		collision_mask = 0
+	else:
+		collision_layer = _solid_layer
+		collision_mask = _solid_mask
+	# The path the head travelled while phased went through terrain on
+	# purpose; the first sweep after it turns solid must not run along it.
+	forget_previous_position()
+
+## Whether any of the head's circles overlaps anything on `sweep_mask` other
+## than its own player: terrain, or another player's body. A head is only
+## turned solid where this is false, so the solver never has to push a
+## freshly solid head out of something.
+func overlaps_world() -> bool:
+	if not is_inside_tree():
+		return false
+	if _overlap_query == null:
+		_overlap_query = PhysicsShapeQueryParameters2D.new()
+		_overlap_query.collide_with_areas = false
+	_overlap_query.collision_mask = sweep_mask
+	_overlap_query.exclude = sweep_exclude + [get_rid()]
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	for node: CollisionShape2D in sweep_shapes:
+		if node == null or node.shape == null:
+			continue
+		_overlap_query.shape = node.shape
+		_overlap_query.transform = global_transform * node.transform
+		if not space.intersect_shape(_overlap_query, 1).is_empty():
+			return true
+	return false
+
 # --- The turn ----------------------------------------------------------------
 
 ## Issue #48. Everything above sweeps the head's *body*, and the body only
@@ -325,6 +381,9 @@ var _turn_ready: bool = false
 ## `sweep_shapes` sat relative to the anchor before this tick's turn; the
 ## circles themselves already hold the new facing.
 func guard_turn(previous_offsets: PackedVector2Array) -> float:
+	# A phased head (issue #115) is going through terrain on purpose.
+	if phased:
+		return 1.0
 	if not _turn_ready:
 		_turn_ready = true
 		return 1.0
@@ -455,7 +514,7 @@ func _other_head_circles(anchor: Vector2) -> Array[Vector3]:
 		var other: Variant = node
 		if node == self or node.is_queued_for_deletion() or not node.is_inside_tree():
 			continue
-		if node.get_script() != get_script():
+		if node.get_script() != get_script() or other.phased:
 			continue
 		var xform: Transform2D = PhysicsServer2D.body_get_state(
 			other.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM)
@@ -712,7 +771,9 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	# sub-pixel timing, which is why it came and went with test history and
 	# platform. So after a world contact the pair is asked again, over the
 	# rest of the step, with this head held where the world stopped it.
-	if _has_previous:
+	# A phased head (issue #115) passes through everything, so there is
+	# nothing to correct against.
+	if _has_previous and not phased:
 		var world: Dictionary = _find_world_contact(state)
 		var head: Dictionary = _find_head_crossing()
 		if not head.is_empty() and (world.is_empty() or head["fraction"] <= world["fraction"]):
@@ -1049,7 +1110,7 @@ func _find_head_crossing(held_from: float = -1.0) -> Dictionary:
 		var other: Variant = node
 		if node == self or node.is_queued_for_deletion() or not node.is_inside_tree():
 			continue
-		if node.get_script() != get_script():
+		if node.get_script() != get_script() or other.phased:
 			continue
 		# The other head answers for its own half of the encounter, and only
 		# one of the two of us acts on the answer.

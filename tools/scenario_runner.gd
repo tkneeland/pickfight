@@ -185,6 +185,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"every_stage_has_pickup_spot_clear_of_spawns",
 	"spawn_protection_blocks_damage_then_expires",
 	"roster_heads_do_not_clip_platform_in_play",
+	"trapped_head_phases_home_after_release",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -881,6 +882,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_spawn_protection_blocks_damage_then_expires()
 		"roster_heads_do_not_clip_platform_in_play":
 			return await _scenario_roster_heads_do_not_clip_platform_in_play()
+		"trapped_head_phases_home_after_release":
+			return await _scenario_trapped_head_phases_home_after_release()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -11720,5 +11723,117 @@ func _scenario_roster_heads_do_not_clip_platform_in_play() -> Array[String]:
 		print("      %s: %d trials, %d head crossings" % [weapon, PLAYTEST_CLIP_TRIALS, found.size()])
 		for line: String in found:
 			failures.append(line)
+	await _teardown(stage)
+	return failures
+
+# --- A head trapped under a wide platform phases home (issue #115) -----------
+
+## A platform too wide for the head to swing round, clear of the arena's own
+## platforms, with the player standing on it.
+const TRAPPED_SLAB_CENTRE: Vector2 = Vector2(0.0, 180.0)
+const TRAPPED_SLAB_SIZE: Vector2 = Vector2(360.0, 24.0)
+## How far under the slab's underside the head is put.
+const TRAPPED_HEAD_GAP: float = 15.0
+## Ticks the drag is held down after the head is put under the slab.
+const TRAPPED_HOLD_TICKS: int = 20
+## Released-then-dragged ticks for the cancel check: each release is well
+## under the delay, together well over it.
+const TRAPPED_SHORT_RELEASE_TICKS: int = 60
+const TRAPPED_CANCEL_DRAG_TICKS: int = 5
+## Ticks of release checked as still stuck: short of the delay.
+const TRAPPED_STUCK_TICKS: int = 72
+## Ticks of release the head gets to be home and solid again.
+const TRAPPED_HOME_TICKS: int = 240
+
+## Issue #115: a head under a platform too wide to swing round, with its body
+## on top, is gridlocked -- the arm is intangible and the head is not. Released
+## and kept released, the head must stay stuck short of
+## `Player.GRIDLOCK_PHASE_DELAY` (and a drag in between must restart the
+## count), then phase through the slab -- ghosted, off every layer -- and end
+## on the body's side, solid and drawn opaque again.
+func _scenario_trapped_head_phases_home_after_release() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, TRAPPED_SLAB_CENTRE, TRAPPED_SLAB_SIZE)
+	var top: float = TRAPPED_SLAB_CENTRE.y - TRAPPED_SLAB_SIZE.y * 0.5
+	var bottom: float = TRAPPED_SLAB_CENTRE.y + TRAPPED_SLAB_SIZE.y * 0.5
+	var player: RigidBody2D = _spawn_player(stage, Vector2(TRAPPED_SLAB_CENTRE.x, top - PLAYER_RADIUS - 1.0))
+	# Aimed down first, so the haft already points where the head is put.
+	player.set_input_vector(Vector2.DOWN * 0.01)
+	await _await_ticks(TRAPPED_HOLD_TICKS)
+	var head: RigidBody2D = player.get("_head")
+	if head == null:
+		failures.append("no weapon head was built")
+		await _teardown(stage)
+		return failures
+	# Body back on the slab, head straight under it, and the drag holding
+	# that reach.
+	player.call("teleport_to", Vector2(TRAPPED_SLAB_CENTRE.x, top - PLAYER_RADIUS - 1.0))
+	head.global_position = Vector2(player.global_position.x, bottom + TRAPPED_HEAD_GAP)
+	head.linear_velocity = Vector2.ZERO
+	head.call("forget_previous_position")
+	var stats: Resource = player.get("_stats")
+	var reach: float = head.global_position.y - player.global_position.y
+	var hold: Vector2 = Vector2.DOWN * inverse_lerp(stats.min_reach, stats.max_reach, reach)
+	player.set_input_vector(hold)
+	await _await_ticks(TRAPPED_HOLD_TICKS)
+	if player.weapon_head_position().y <= bottom:
+		failures.append("setup: head at y %.1f is not under the slab (underside %.1f)" % [
+			player.weapon_head_position().y, bottom])
+
+	# Two releases each short of the delay, split by a drag: never phased.
+	player.set_input_vector(Vector2.ZERO)
+	await _await_ticks(TRAPPED_SHORT_RELEASE_TICKS)
+	player.set_input_vector(hold)
+	await _await_ticks(TRAPPED_CANCEL_DRAG_TICKS)
+	player.set_input_vector(Vector2.ZERO)
+	for i in TRAPPED_SHORT_RELEASE_TICKS:
+		await physics_frame
+		if player.is_head_phased():
+			failures.append("head phased %d ticks into a release that followed a drag; the drag should restart the delay" % i)
+			break
+
+	# One unbroken release: stuck before the delay...
+	player.set_input_vector(hold)
+	await _await_ticks(TRAPPED_CANCEL_DRAG_TICKS)
+	player.set_input_vector(Vector2.ZERO)
+	for i in TRAPPED_STUCK_TICKS:
+		await physics_frame
+		if player.is_head_phased():
+			failures.append("head phased %d ticks into the release, before the %.1f s delay" % [
+				i, player.GRIDLOCK_PHASE_DELAY])
+			break
+	if player.weapon_head_position().y <= bottom:
+		failures.append("head at y %.1f got past the slab before the delay (underside %.1f)" % [
+			player.weapon_head_position().y, bottom])
+
+	# ...then phased, ghosted and intangible, and home and solid after it.
+	var saw_phased: bool = false
+	var ghost_ok: bool = true
+	for i in TRAPPED_HOME_TICKS:
+		await physics_frame
+		if player.is_head_phased():
+			saw_phased = true
+			var visual: Polygon2D = player.get("_head_visual")
+			if head.collision_layer != 0 or head.collision_mask != 0 \
+					or not is_equal_approx(visual.modulate.a, player.PHASED_HEAD_ALPHA) \
+					or not is_equal_approx(player.modulate.a, 1.0):
+				ghost_ok = false
+	if not saw_phased:
+		failures.append("head never phased after the delay")
+	if not ghost_ok:
+		failures.append("phased head was not off every layer and drawn at the ghost alpha (with the player's own modulate untouched)")
+	var head_y: float = player.weapon_head_position().y
+	if head_y >= top:
+		failures.append("head ended at y %.1f, not above the slab's top %.1f with its body" % [head_y, top])
+	if player.is_head_phased():
+		failures.append("head is still phased after coming home")
+	elif head.collision_layer == 0 or head.collision_mask == 0:
+		failures.append("head came home without its collision layers back")
+	var alpha: float = (player.get("_head_visual") as Polygon2D).modulate.a
+	if not is_equal_approx(alpha, 1.0):
+		failures.append("head is still drawn at alpha %.2f after turning solid" % alpha)
+	print("      head home at y %.1f (slab top %.1f), phased seen: %s" % [head_y, top, saw_phased])
+
 	await _teardown(stage)
 	return failures

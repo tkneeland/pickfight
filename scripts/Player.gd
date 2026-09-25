@@ -320,6 +320,7 @@ func _physics_process(delta: float) -> void:
 	_head_velocity = _head.linear_velocity
 	if head_stopped:
 		_hold_min_reach()
+	_update_gridlock_phase(delta)
 	_update_head_grip()
 	_drive_angle(delta)
 	_drive_extension(delta)
@@ -706,6 +707,8 @@ func _build_rig() -> void:
 	# first frame would draw them sliding in from the origin (issue #108).
 	_rig.reset_physics_interpolation()
 	_haft_tip_before = Vector2(NAN, NAN)
+	# A fresh head is built solid.
+	_release_time = 0.0
 
 func _clear_rig() -> void:
 	if _rig == null:
@@ -1051,6 +1054,7 @@ func weapon_head_visual_is_fallback() -> bool:
 
 func _update_weapon_input(delta: float) -> void:
 	var effective_vector: Vector2 = _get_effective_vector(delta)
+	_drag_released = effective_vector == Vector2.ZERO
 	if effective_vector != Vector2.ZERO:
 		weapon_angle = effective_vector.angle()
 		weapon_length = lerp(_stats.min_reach, _stats.max_reach, effective_vector.length())
@@ -1331,3 +1335,85 @@ func _update_head_grip() -> void:
 		_head_material.rough = rough
 	if not is_equal_approx(_head_material.friction, friction):
 		_head_material.friction = friction
+
+# --- Gridlock phasing (issue #115) --------------------------------------------
+#
+# A head can end up on the far side of terrain from its own body -- under a
+# platform too wide to swing round -- and the player is then gridlocked: the
+# arm is intangible, the head is not, and the retraction only drags the head
+# into the underside of the slab. So once the drag has been released for
+# GRIDLOCK_PHASE_DELAY without a break and terrain still lies between the body
+# and its head, the head phases (`WeaponHead.set_phased`): it passes through
+# everything on its way home, scores no hits, grips nothing and touches no
+# pad or wall, and is drawn at PHASED_HEAD_ALPHA. It turns solid again once
+# nothing lies between it and the body and it overlaps nothing -- or, with
+# nothing between them, once it is home. A head at rest by a body standing on
+# the ground dips its circles into that ground, so "overlaps nothing" alone
+# would leave it a ghost for as long as the player stood still. At home the
+# anchor is on the body's side of the surface and the overlap is a few
+# pixels, which the solver resolves back out of that side, as it does for
+# any head resting on a floor.
+#
+# A new drag during the delay starts the count again. A drag after the head
+# has phased does not turn it solid: it may be inside a slab, and a head
+# turned solid there is thrown out of whichever side is nearer.
+#
+# The ghost look is on the head's art, never on the player's `modulate`,
+# which spawn protection owns (#114).
+
+## Seconds the drag must stay released, with the head still cut off from its
+## body by terrain, before the head phases.
+const GRIDLOCK_PHASE_DELAY: float = 1.5
+## Alpha of the head's art while it is phased.
+const PHASED_HEAD_ALPHA: float = 0.4
+## How far past `min_reach` a head still counts as home for turning solid.
+const GRIDLOCK_HOME_SLACK: float = 6.0
+## Players' bodies share the terrain layer; a line-of-sight ray steps past up
+## to this many of them before giving up.
+const GRIDLOCK_MAX_SKIPS: int = 4
+
+## Whether the drag was released on the latest tick, and for how long it has
+## stayed released.
+var _drag_released: bool = true
+var _release_time: float = 0.0
+
+## Whether this player's head is phased right now (issue #115).
+func is_head_phased() -> bool:
+	return _head != null and _head.phased
+
+func _update_gridlock_phase(delta: float) -> void:
+	if _drag_released:
+		_release_time += delta
+	else:
+		_release_time = 0.0
+	if _head.phased:
+		if not _head_cut_off() and (not _head.overlaps_world() or _head_is_home()):
+			_head.set_phased(false)
+	elif _drag_released and _release_time >= GRIDLOCK_PHASE_DELAY and _head_cut_off():
+		_head.set_phased(true)
+	if _head_visual != null:
+		var alpha: float = PHASED_HEAD_ALPHA if _head.phased else 1.0
+		if not is_equal_approx(_head_visual.modulate.a, alpha):
+			_head_visual.modulate.a = alpha
+
+func _head_is_home() -> bool:
+	return _head_distance() <= _stats.min_reach + GRIDLOCK_HOME_SLACK
+
+## Whether terrain lies on the straight line from this body to its head's
+## anchor. Other players' bodies are on the same layer but are not terrain.
+func _head_cut_off() -> bool:
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(
+		global_position, _head.global_position, LAYER_WORLD, [get_rid(), _head.get_rid()])
+	query.collide_with_areas = false
+	for i in GRIDLOCK_MAX_SKIPS:
+		var hit: Dictionary = space.intersect_ray(query)
+		if hit.is_empty():
+			return false
+		var collider: Object = hit["collider"]
+		if not (collider is Node and (collider as Node).is_in_group("players")):
+			return true
+		var exclude: Array[RID] = query.exclude
+		exclude.append(hit["rid"])
+		query.exclude = exclude
+	return false
