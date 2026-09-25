@@ -33,6 +33,15 @@ extends Node
 ## port scanners, stalled handshakes) are dropped after
 ## `connection_timeout_sec` rather than being polled forever.
 ##
+## Smoothing (issue #113): Wi-Fi delivers the phone's steady 60 Hz stream in
+## clumps -- nothing for a frame, then two or three packets at once -- and
+## "latest value wins" turns every clump into a jump, which makes the weapon
+## twitch. Each slot's packets therefore set a target that the input vector
+## follows with a short exponential ease (`INPUT_SMOOTHING_SEC`), stepped every
+## frame. A release (a (0,0) packet) and a deliberate flick (a jump of at least
+## `INPUT_FLICK_SNAP`) are passed through at once, never eased. Only packets
+## go through this: a direct `Player.set_input_vector()` call is unsmoothed.
+##
 ## Run the host with `-- --log-input` to print every decoded packet, every
 ## bind/unbind/timeout, and a periodic "weapon steady" line while a bound weapon is
 ## unchanged; the automated checks assert on those lines.
@@ -50,6 +59,17 @@ const PACKET_SIZE: int = 8
 const BUZZ_KINDS: PackedStringArray = ["win", "eliminated", "struck", "hit"]
 const ANGLE_LOG_EPSILON: float = 0.0005
 const LENGTH_LOG_EPSILON: float = 0.05
+## Time constant of the ease from the last applied input vector to the newest
+## packet (issue #113). About 1.5 frames at 60 Hz: long enough to spread a
+## clump of late packets over the frames they should have arrived in, short
+## enough that a steady drag lags by only that much.
+const INPUT_SMOOTHING_SEC: float = 0.025
+## A packet at least this far (unit-disc units) from the current input is a
+## deliberate flick and is applied at once rather than eased into.
+const INPUT_FLICK_SNAP: float = 0.5
+## Within this distance of its target the eased input snaps onto it, so a
+## held drag reaches exactly what the phone sends.
+const INPUT_SETTLE_EPSILON: float = 0.001
 ## Physics frames between "weapon steady" lines. Steadiness has to be provable
 ## from a line that is present, not from the absence of change lines.
 const STEADY_LOG_FRAMES: int = 30
@@ -100,6 +120,30 @@ class PendingConn extends RefCounted:
 		peer = p_peer
 		deadline_msec = p_deadline_msec
 
+## One slot's input smoothing (issue #113; see the header). `push()` takes a
+## packet, `step()` advances the ease by `delta` seconds and returns the input
+## vector to apply. Pure, so a scenario can feed it a jitter pattern directly.
+class InputSmoother extends RefCounted:
+	var target: Vector2 = Vector2.ZERO
+	var value: Vector2 = Vector2.ZERO
+
+	func push(v: Vector2) -> void:
+		# A NaN target would poison the ease for good, not just one frame.
+		target = v.limit_length(1.0) if is_finite(v.x) and is_finite(v.y) else Vector2.ZERO
+		if target == Vector2.ZERO or value.distance_to(target) >= INPUT_FLICK_SNAP:
+			value = target
+
+	func step(delta: float) -> Vector2:
+		if value.distance_to(target) <= INPUT_SETTLE_EPSILON:
+			value = target
+		else:
+			value = value.lerp(target, 1.0 - exp(-delta / INPUT_SMOOTHING_SEC))
+		return value
+
+	func reset() -> void:
+		target = Vector2.ZERO
+		value = Vector2.ZERO
+
 var _log_input: bool = false
 
 var _http_server: TCPServer = TCPServer.new()
@@ -116,6 +160,7 @@ var _awaiting_id: Array[PendingConn] = []
 var _players: Array = []
 var _slot_peers: Array[WebSocketPeer] = []
 var _slot_last_packet_msec: PackedInt64Array = PackedInt64Array()
+var _smoothers: Array[InputSmoother] = []
 var _last_weapon: PackedVector2Array = PackedVector2Array()
 var _steady_frames: PackedInt32Array = PackedInt32Array()
 # 1 once a slot has ever held a controller: keeps the startup settle of an
@@ -146,6 +191,7 @@ func _ready() -> void:
 	_slot_client_id.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
+		_smoothers.append(InputSmoother.new())
 
 	var http_err: int = _http_server.listen(http_port)
 	if http_err != OK:
@@ -181,9 +227,17 @@ func _ready() -> void:
 			if qr_texture != null:
 				qr_rect.texture = qr_texture
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
+	_apply_smoothed_input(delta)
+
+## Step every bound slot's ease and hand the result to its player (issue #113).
+func _apply_smoothed_input(delta: float) -> void:
+	for slot in _slot_peers.size():
+		if _slot_peers[slot] == null or _players[slot] == null:
+			continue
+		_players[slot].set_input_vector(_smoothers[slot].step(delta))
 
 ## Weapon diagnostics run on the physics tick because that is the rate the weapon is
 ## actually integrated at, which makes "held steady for N frames" meaningful.
@@ -470,6 +524,7 @@ func _attach(slot: int, peer: WebSocketPeer) -> void:
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	_bound_once[slot] = 1
+	_smoothers[slot].reset()
 	_players[slot].bind_controller()
 	peer.send_text(JSON.stringify({"slot": slot}))
 
@@ -482,6 +537,7 @@ func _attach(slot: int, peer: WebSocketPeer) -> void:
 ## `expire_disconnected_claims()` clears those, at a round boundary.
 func _unbind(slot: int) -> void:
 	_slot_peers[slot] = null
+	_smoothers[slot].reset()
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	if _players[slot] != null:
@@ -533,7 +589,8 @@ func expire_disconnected_claims() -> void:
 			_slot_client_id[slot] = ""
 
 ## Latest value wins: drain everything queued this frame and keep only the last
-## well-formed packet, so a burst never replays stale input.
+## well-formed packet, so a burst never replays stale input. The packet sets
+## the slot's smoothing target; `_apply_smoothed_input` applies it (#113).
 func _drain(slot: int, peer: WebSocketPeer) -> void:
 	var latest: PackedByteArray = PackedByteArray()
 	var got: bool = false
@@ -547,7 +604,7 @@ func _drain(slot: int, peer: WebSocketPeer) -> void:
 		return
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	var v: Vector2 = Vector2(latest.decode_float(0), latest.decode_float(4))
-	_players[slot].set_input_vector(v)
+	_smoothers[slot].push(v)
 	if _log_input:
 		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])
 

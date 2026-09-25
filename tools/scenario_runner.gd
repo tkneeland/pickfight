@@ -178,6 +178,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"music_tracks_exist_and_credited",
 	"settings_persist_to_config_file",
 	"settings_fullscreen_toggle_asks_display_server",
+	"phone_jitter_is_smoothed",
+	"phone_release_and_flick_are_not_smoothed",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -860,6 +862,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_settings_persist_to_config_file()
 		"settings_fullscreen_toggle_asks_display_server":
 			return await _scenario_settings_fullscreen_toggle_asks_display_server()
+		"phone_jitter_is_smoothed":
+			return await _scenario_phone_jitter_is_smoothed()
+		"phone_release_and_flick_are_not_smoothed":
+			return await _scenario_phone_release_and_flick_are_not_smoothed()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -11144,4 +11150,198 @@ func _scenario_settings_fullscreen_toggle_asks_display_server() -> Array[String]
 	sfx.set_fullscreen(was)
 	ui.refresh()
 	_scenario_completed = true
+	return failures
+
+## Issue #113: the phone streams at 60 Hz, but Wi-Fi hands the host those
+## packets in clumps. The host frame rate the jitter pattern is replayed at.
+const JITTER_FRAME_SEC: float = 1.0 / 60.0
+## The drag the phone makes: a steady sweep at this radius and angular rate
+## for JITTER_SWEEP_FRAMES frames, then held still.
+const JITTER_RADIUS: float = 0.8
+const JITTER_RATE_RAD_PER_FRAME: float = 0.04
+const JITTER_SWEEP_FRAMES: int = 120
+## Each packet is late by 0 to this many frames (seeded, in order), so a
+## frame gets none, one, or several at once.
+const JITTER_MAX_DELAY_FRAMES: int = 3
+const JITTER_SEED: int = 113
+## The smoothed angle's frame-to-frame wobble has to come out at most this
+## fraction of the raw "latest wins" wobble.
+const JITTER_MAX_WOBBLE_RATIO: float = 0.6
+## Once the raw input has reached the phone's final value, the smoothed input
+## has this many ticks to reach it too.
+const JITTER_SETTLE_TICKS: int = 6
+
+## Angle difference wrapped to (-PI, PI].
+func _jitter_angle_step(a: float, b: float) -> float:
+	return wrapf(b - a, -PI, PI)
+
+## RMS deviation of each frame's angle change from the phone's true rate --
+## zero for a perfectly even sweep, large when the weapon lurches.
+func _jitter_wobble(angles: PackedFloat32Array, frames: int) -> float:
+	var sum: float = 0.0
+	var n: int = 0
+	for i in range(1, frames):
+		var err: float = _jitter_angle_step(angles[i - 1], angles[i]) - JITTER_RATE_RAD_PER_FRAME
+		sum += err * err
+		n += 1
+	return sqrt(sum / maxf(1.0, float(n)))
+
+## Issue #113: replays a seeded Wi-Fi jitter pattern through the host's
+## packet smoothing and through plain "latest wins", frame by frame. The
+## smoothed input must wobble clearly less, and still reach the phone's final
+## value within JITTER_SETTLE_TICKS of the raw input doing so.
+func _scenario_phone_jitter_is_smoothed() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var total_frames: int = JITTER_SWEEP_FRAMES + JITTER_MAX_DELAY_FRAMES + 30
+	var rng := RandomNumberGenerator.new()
+	rng.seed = JITTER_SEED
+	# Arrival frame of the packet the phone sends on frame i: late by a random
+	# amount, but never before the one sent ahead of it (TCP keeps order).
+	var arrivals := PackedInt32Array()
+	var last_arrival: int = 0
+	for i in total_frames:
+		last_arrival = maxi(last_arrival, i + rng.randi_range(0, JITTER_MAX_DELAY_FRAMES))
+		arrivals.append(last_arrival)
+	var sent: Array[Vector2] = []
+	for i in total_frames:
+		sent.append(Vector2.from_angle(JITTER_RATE_RAD_PER_FRAME * mini(i, JITTER_SWEEP_FRAMES)) * JITTER_RADIUS)
+	var final: Vector2 = sent[total_frames - 1]
+
+	var smoother: RefCounted = ControllerServerScript.InputSmoother.new()
+	var raw: Vector2 = Vector2.ZERO
+	var raw_angles := PackedFloat32Array()
+	var smooth_angles := PackedFloat32Array()
+	var raw_settled: int = -1
+	var smooth_settled: int = -1
+	var next: int = 0
+	for frame in total_frames:
+		var latest: Variant = null
+		while next < total_frames and arrivals[next] <= frame:
+			latest = sent[next]
+			next += 1
+		if latest != null:
+			raw = latest
+			smoother.push(latest)
+		var smooth: Vector2 = smoother.step(JITTER_FRAME_SEC)
+		raw_angles.append(raw.angle())
+		smooth_angles.append(smooth.angle())
+		if raw_settled < 0 and raw.distance_to(final) < 0.001:
+			raw_settled = frame
+		if smooth_settled < 0 and smooth.distance_to(final) < 0.001:
+			smooth_settled = frame
+
+	# Wobble over the sweep only, from once the first packet has landed.
+	var raw_wobble: float = _jitter_wobble(raw_angles.slice(JITTER_MAX_DELAY_FRAMES + 1), JITTER_SWEEP_FRAMES - JITTER_MAX_DELAY_FRAMES - 1)
+	var smooth_wobble: float = _jitter_wobble(smooth_angles.slice(JITTER_MAX_DELAY_FRAMES + 1), JITTER_SWEEP_FRAMES - JITTER_MAX_DELAY_FRAMES - 1)
+	print("      angle wobble per frame (RMS): raw %.4f rad, smoothed %.4f rad (%.0f%% of raw); final reached raw tick %d, smoothed tick %d" % [
+		raw_wobble, smooth_wobble, 100.0 * smooth_wobble / maxf(raw_wobble, 0.000001), raw_settled, smooth_settled])
+	if raw_wobble < 0.01:
+		failures.append("the jitter pattern barely disturbs raw input (%.4f rad RMS); the scenario is not testing anything" % raw_wobble)
+	if smooth_wobble > raw_wobble * JITTER_MAX_WOBBLE_RATIO:
+		failures.append("smoothed input wobbles %.4f rad RMS per frame, over %.0f%% of the raw %.4f" % [
+			smooth_wobble, 100.0 * JITTER_MAX_WOBBLE_RATIO, raw_wobble])
+	if smooth_settled < 0:
+		failures.append("smoothed input never reached the phone's final value")
+	elif smooth_settled - raw_settled > JITTER_SETTLE_TICKS:
+		failures.append("smoothed input reached the final value %d ticks after raw input, over the %d allowed" % [
+			smooth_settled - raw_settled, JITTER_SETTLE_TICKS])
+	await _teardown(stage)
+	return failures
+
+## How long a phone scenario waits for input it sent to show up.
+const SMOOTH_WAIT_MSEC: int = 2000
+
+## Sends `v` from `peer` every frame until `player.input_vector` changes from
+## `before`, then returns the first changed value (or `before` on timeout).
+func _send_until_input_changes(peer: WebSocketPeer, player: RigidBody2D, v: Vector2, before: Vector2) -> Vector2:
+	var buf := PackedByteArray()
+	buf.resize(8)
+	buf.encode_float(0, v.x)
+	buf.encode_float(4, v.y)
+	var deadline: int = Time.get_ticks_msec() + SMOOTH_WAIT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		peer.put_packet(buf)
+		await process_frame
+		peer.poll()
+		if player.input_vector != before:
+			return player.input_vector
+	return before
+
+## Sends `v` every frame until `player.input_vector` is within 0.001 of it.
+func _send_until_input_reaches(peer: WebSocketPeer, player: RigidBody2D, v: Vector2) -> bool:
+	var buf := PackedByteArray()
+	buf.resize(8)
+	buf.encode_float(0, v.x)
+	buf.encode_float(4, v.y)
+	var deadline: int = Time.get_ticks_msec() + SMOOTH_WAIT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		peer.put_packet(buf)
+		await process_frame
+		peer.poll()
+		if player.input_vector.distance_to(v) < 0.001:
+			return true
+	return false
+
+## Issue #113, the real seam: over a real ControllerServer and WebSocket, a
+## small drag change is eased (the first new input is part-way there) yet
+## reached, while a release lands as exactly (0,0) and a flick lands as
+## exactly its target on the first frame either shows up. A direct
+## `set_input_vector()` call stays unsmoothed.
+func _scenario_phone_release_and_flick_are_not_smoothed() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "SmoothP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "SmoothServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../SmoothP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "smooth-phone", [] as Array[WebSocketPeer])
+	if joined["slot"] != 0:
+		failures.append("the phone was not given slot 0 (got %d, closed=%s '%s')" % [joined["slot"], joined["closed"], joined["reason"]])
+	else:
+		var start := Vector2(0.8, 0.0)
+		if not await _send_until_input_reaches(peer, player, start):
+			failures.append("a held drag of %s never became the input vector (at %s)" % [start, player.input_vector])
+		var nudge := Vector2(0.8, 0.2)
+		var first: Vector2 = await _send_until_input_changes(peer, player, nudge, player.input_vector)
+		if first.distance_to(nudge) < 0.001 or first.distance_to(start) < 0.001:
+			failures.append("a small drag change was not eased: first input after it was %s (from %s to %s)" % [first, start, nudge])
+		if not await _send_until_input_reaches(peer, player, nudge):
+			failures.append("a small drag change of %s was never reached (at %s)" % [nudge, player.input_vector])
+		var released: Vector2 = await _send_until_input_changes(peer, player, Vector2.ZERO, player.input_vector)
+		if released != Vector2.ZERO:
+			failures.append("a release was eased: first input after it was %s, not (0, 0)" % released)
+		if not await _send_until_input_reaches(peer, player, start):
+			failures.append("a new drag of %s after the release was never reached" % start)
+		var flick := Vector2(-0.8, 0.0)
+		var flicked: Vector2 = await _send_until_input_changes(peer, player, flick, player.input_vector)
+		if flicked.distance_to(flick) > 0.0001:
+			failures.append("a flick was eased: first input after it was %s, not %s" % [flicked, flick])
+
+	# The direct path the rest of the suite drives stays unsmoothed.
+	var direct: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	direct.start_in_round = false
+	stage.add_child(direct)
+	direct.bind_controller()
+	direct.set_input_vector(Vector2(0.3, -0.6))
+	if direct.input_vector != Vector2(0.3, -0.6):
+		failures.append("a direct set_input_vector() was not applied as given (got %s)" % direct.input_vector)
+
+	peer.close(1000, "scenario done")
+	for _i in 5:
+		await process_frame
+		peer.poll()
+	await _teardown(stage)
 	return failures
