@@ -6,10 +6,10 @@ extends Node2D
 ## way it flies and the weapon's numbers.
 ##
 ## It flies in a straight line at a constant speed, with no gravity, and it
-## hits **once**: the first player body, piece of terrain or opposing weapon
-## head in its path, whichever it reaches first. A player it hits takes
-## `projectile_damage` and is shoved along the line of flight. A head it hits
-## blocks it (issue #61): no damage, no shove. Either way the bullet is gone.
+## hits **once**: the first player body or piece of terrain in its path,
+## whichever it reaches first. A player it hits takes `projectile_damage` and
+## is shoved along the line of flight. Weapon heads do not block it (#92,
+## reversing #61). Either way the bullet is gone.
 ##
 ## **Swept, never discretely collided.** At the boomstick's 900 px/s a bullet
 ## covers 15 px a tick, more than a weapon head's barrel or blade is thick
@@ -18,8 +18,8 @@ extends Node2D
 ## them -- the tunnelling `WeaponHead` exists to undo for the head
 ## (ADR-0006). A bullet has no joints dragging it, so it needs none of the
 ## head's machinery: each tick it shape-casts its own circle along exactly
-## the motion it is about to make, against terrain, player bodies and heads
-## alike, and stops at the first contact. It is a
+## the motion it is about to make, against terrain and player bodies, and
+## stops at the first contact. It is a
 ## plain `Node2D`, not a physics body, so the engine never moves it any other
 ## way.
 ##
@@ -28,7 +28,8 @@ extends Node2D
 ## body is excluded from every cast, and so is the shooter's own head -- read
 ## afresh each tick, so it is whichever head the shooter holds now -- which
 ## the bullet leaves through: it spawns at the head's anchor and flies down
-## the barrel. Every other player's head stops it (issue #61, ADR-0014).
+## the barrel. Since #92 no head stops a bullet, so the exclusion only
+## matters if heads go back into the cast.
 ##
 ## **Gone when its shooter leaves play.** Elimination and the end of a round
 ## both put the shooter through `Player._go_inert()`, which frees every
@@ -106,9 +107,10 @@ func _physics_process(delta: float) -> void:
 	query.shape = _shape
 	query.transform = Transform2D(0.0, global_position)
 	query.motion = motion
-	# One cast against everything that can stop a bullet, so whichever of a
-	# head, terrain or a player is nearest along the path is what it meets.
-	query.collision_mask = LAYER_WORLD | LAYER_HEAD
+	# One cast against everything that can stop a bullet, so whichever of
+	# terrain or a player is nearest along the path is what it meets. Weapon
+	# heads are left out: bullets fly through them (#92, reversing #61).
+	query.collision_mask = LAYER_WORLD
 	query.exclude = _exclusions()
 	query.collide_with_bodies = true
 	query.collide_with_areas = false

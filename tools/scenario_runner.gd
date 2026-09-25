@@ -132,9 +132,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_slippery_floor_applies_and_undoes",
 	"round_modifier_announced_on_screen",
 	"round_modifier_chance_zero_disables",
-	"boomstick_head_blocks_bullet",
 	"boomstick_own_head_never_blocks",
-	"boomstick_thin_head_blocks_bullet",
 	"world_stopped_head_blocks_arriving_head",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
@@ -758,12 +756,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_modifier_announced_on_screen()
 		"round_modifier_chance_zero_disables":
 			return await _scenario_round_modifier_chance_zero_disables()
-		"boomstick_head_blocks_bullet":
-			return await _scenario_boomstick_head_blocks_bullet()
 		"boomstick_own_head_never_blocks":
 			return await _scenario_boomstick_own_head_never_blocks()
-		"boomstick_thin_head_blocks_bullet":
-			return await _scenario_boomstick_thin_head_blocks_bullet()
 		"world_stopped_head_blocks_arriving_head":
 			return await _scenario_world_stopped_head_blocks_arriving_head()
 		"bounce_pad_launches_body":
@@ -6903,8 +6897,8 @@ func _leading_circle_world(player: RigidBody2D) -> Vector2:
 
 const BOOMSTICK_PATH: String = "res://resources/boomstick.tres"
 const BoomstickProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
-## "Automatic every 5 s."
-const BOOMSTICK_FIRE_INTERVAL_SEC: float = 5.0
+## "Automatic every 3 s." (#92; it was 5 s in #55.)
+const BOOMSTICK_FIRE_INTERVAL_SEC: float = 3.0
 ## A shot may land this many ticks after its interval is up, never before:
 ## the countdown is summed from fixed physics steps and the swap that starts
 ## it is deferred to the end of a frame.
@@ -8156,26 +8150,15 @@ func _update_platform_sides(player: RigidBody2D, slab: Vector2, sides: Dictionar
 				"below" if side > 0 else "above", absf(centre.y)]
 	return ""
 
-# --- Weapon heads block bullets (issue #61, ADR-0014) --------------------------
+# --- Bullets and weapon heads (issues #61, #92) ------------------------------
 #
-# A bullet that meets another player's weapon head stops there and is gone:
-# no damage, no shove. The shooter's own head never stops its own bullet. The
-# head is found by the same whole-path sweep as terrain, so a head thinner
-# than one tick of flight still blocks.
+# #61 made opposing heads block bullets; #92 reversed it, so a bullet flies
+# through every head, its shooter's or anyone else's.
 
-## Where the blocking player's weapon is held, relative to the shooter.
-const HEAD_BLOCK_TARGET_OFFSET: float = 220.0
-## A victim that no bullet reached drifts sideways by nothing much while it is
-## held for the shot and let go; a shove is at least BOOMSTICK_SHOVE_MIN.
-const HEAD_BLOCK_MAX_DRIFT: float = 0.25 * BOOMSTICK_SHOVE_MIN
 ## How far to the side of the head a scenario-built bullet starts, and how far
 ## past it the player who would be hit stands.
 const HEAD_CROSS_LEAD_IN: float = 100.0
 const HEAD_CROSS_VICTIM_OFFSET: float = 150.0
-## A pinprick of a bullet for the thin-head case, so it is the head alone that
-## is thinner than a tick of flight rather than head and bullet together.
-const THIN_HEAD_BULLET_RADIUS: float = 0.5
-const THIN_HEAD_WHOLE_TICKS: int = 6
 
 ## Steps up to `max_ticks` ticks and reports whether `bullet` was freed and,
 ## if so, after how many (-1 when it was not), and the furthest x it reached,
@@ -8205,69 +8188,9 @@ func _launch_bullet(stage: Node2D, fired_by: Node2D, origin: Vector2, stats: Res
 func _bullet_ticks(stats: Resource, distance: float) -> int:
 	return ceili(distance / (stats.projectile_speed * _tick_seconds())) + 5
 
-## Issue #61: an opponent's head between the shooter and the opponent's body
-## blocks the shot. The bullet is gone at the head, short of the body; the
-## opponent takes nothing, is not shoved, and no strike is reported.
-func _scenario_boomstick_head_blocks_bullet() -> Array[String]:
-	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
-	var centre: Vector2 = DEEP_PARK_POSITION
-	var shooter: RigidBody2D = _spawn_player(stage, centre)
-	var victim_at: Vector2 = centre + Vector2.RIGHT * HEAD_BLOCK_TARGET_OFFSET
-	var victim: RigidBody2D = _spawn_player(stage, victim_at)
-	shooter.set_weapon_stats(_quick_boomstick())
-	victim.set_weapon_stats(load("res://resources/sword.tres"))
-	await _await_ticks(ROSTER_SWAP_TICKS)
-	_brace(shooter)
-	_aim(shooter, 0.0)
-	# The victim points its sword straight back down the barrel: the blade
-	# lies along the line of fire, between the shooter and the victim's body.
-	_aim(victim, PI)
-	var reported: Array = []
-	shooter.strike_landed.connect(func(v: Node, amount: float, _p: Vector2, _l: bool) -> void:
-		reported.append([v, amount]))
-
-	# Not braced, so a shove would show; held level with the barrel until
-	# the shot, as in `boomstick_bullet_damages_and_shoves`.
-	var hold := func() -> void:
-		victim.teleport_to(victim_at)
-	await _await_ticks(SETTLE_TICKS)
-	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
-	var bullet: Node2D = shot["bullet"]
-	if bullet == null:
-		failures.append("the boomstick never fired")
-		await _teardown(stage)
-		return failures
-	var head_x: float = victim.weapon_head_position().x
-	var start_x: float = victim.global_position.x
-	var watched: Dictionary = await _watch_bullet(bullet, _bullet_ticks(_quick_boomstick(), HEAD_BLOCK_TARGET_OFFSET))
-	await _await_ticks(BOOMSTICK_SHOVE_TICKS)
-	var drift: float = victim.global_position.x - start_x
-	var body_face: float = start_x - PLAYER_RADIUS
-	print("      bullet gone after %d ticks, furthest x %.1f (sword anchor at %.1f, body face at %.1f); victim on %.1f damage, drifted %.1f px, %d strike(s) reported" % [
-		watched["gone_after"], watched["furthest"], head_x, body_face, victim.damage, drift, reported.size()])
-
-	if int(watched["gone_after"]) < 0:
-		failures.append("the bullet was still flying after it reached the victim's head")
-	# The blade reaches from its anchor back towards the shooter, so a bullet
-	# the blade stopped never gets as far as the anchor; one that reached the
-	# body would stop at its face.
-	if float(watched["furthest"]) >= head_x:
-		failures.append("the bullet got to x=%.1f, past the sword's anchor at x=%.1f (body face at x=%.1f): the head in front did not stop it" % [
-			watched["furthest"], head_x, body_face])
-	if victim.damage > 0.0:
-		failures.append("the victim took %.1f from a bullet its head blocked" % victim.damage)
-	if not reported.is_empty():
-		failures.append("a blocked bullet was reported as %d strike(s)" % reported.size())
-	if absf(drift) > HEAD_BLOCK_MAX_DRIFT:
-		failures.append("the victim moved %.1f px along the shot after the block; a blocked bullet shoves no one" % drift)
-
-	await _teardown(stage)
-	return failures
-
-## Issue #61: the shooter's own head never blocks its bullet. The same bullet,
-## crossing the same head, flies on and hits the player past it when the head
-## is its shooter's and is stopped at the head when it is not.
+## Issue #61: the shooter's own head never blocks its bullet. Since #92 no
+## head blocks a bullet, so the same bullet crossing the same head flies on
+## and hits the player past it whoever fired it.
 func _scenario_boomstick_own_head_never_blocks() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -8308,78 +8231,12 @@ func _scenario_boomstick_own_head_never_blocks() -> Array[String]:
 			after_own, BOOMSTICK_BULLET_DAMAGE])
 	if holder.damage > 0.0:
 		failures.append("the holder took %.1f from its own bullet" % holder.damage)
-	if after_foreign > 0.0:
-		failures.append("another player's bullet crossed the holder's head and dealt %.1f past it" % after_foreign)
-	if int(foreign["gone_after"]) < 0 or float(foreign["furthest"]) > head.x:
-		failures.append("another player's bullet was not stopped at the holder's head (furthest x %.1f, head at %.1f)" % [
-			foreign["furthest"], head.x])
+	if absf(after_foreign - BOOMSTICK_BULLET_DAMAGE) > BOOMSTICK_DAMAGE_TOLERANCE:
+		failures.append("another player's bullet dealt %.1f to the player past the holder's head, expected %.0f -- the head blocked it (#92: heads never block)" % [
+			after_foreign, BOOMSTICK_BULLET_DAMAGE])
 
 	await _teardown(stage)
 	return failures
-
-## Issue #61: the head is found by the whole-path sweep, as terrain is, so a
-## head thinner than one tick of flight still blocks. The staff's one 5.9 px
-## circle stands across the line, and the bullet is started so that no tick
-## ends with it touching the head: only a swept bullet can meet it.
-func _scenario_boomstick_thin_head_blocks_bullet() -> Array[String]:
-	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
-	var centre: Vector2 = DEEP_PARK_POSITION
-	var blocker: RigidBody2D = _spawn_player(stage, centre)
-	var shooter: RigidBody2D = _spawn_player(stage, centre + Vector2.LEFT * 400.0)
-	blocker.set_weapon_stats(load("res://resources/staff.tres"))
-	await _await_ticks(ROSTER_SWAP_TICKS)
-	_brace(blocker)
-	_brace(shooter)
-	blocker.set_input_vector(Vector2.UP)
-	_aim(shooter, -PI * 0.5)
-	await _await_ticks(SETTLE_TICKS)
-	var head: Vector2 = blocker.weapon_head_position()
-	var victim: RigidBody2D = _spawn_player(stage, head + Vector2.RIGHT * HEAD_CROSS_VICTIM_OFFSET)
-	await physics_frame
-	_brace(victim)
-	_aim(victim, -PI * 0.5)
-	await _await_ticks(SETTLE_TICKS)
-
-	var stats: WeaponStatsType = _quick_boomstick()
-	stats.projectile_radius = THIN_HEAD_BULLET_RADIUS
-	var per_tick: float = stats.projectile_speed * _tick_seconds()
-	# The head's size, read off the rig: its widest circle and how far any
-	# circle sits from the anchor the bullet is lined up on.
-	var widest: float = 0.0
-	var off_anchor: float = 0.0
-	for circle: Dictionary in blocker.weapon_head_circles():
-		widest = maxf(widest, float(circle["radius"]))
-		off_anchor = maxf(off_anchor, (circle["offset"] as Vector2).length())
-	var thickness: float = 2.0 * widest
-	# Lined up so the tick ends fall half a tick either side of the anchor.
-	head = blocker.weapon_head_position()
-	var origin: Vector2 = head + Vector2.LEFT * per_tick * (THIN_HEAD_WHOLE_TICKS + 0.5)
-	var reach: float = widest + off_anchor + THIN_HEAD_BULLET_RADIUS
-	print("      head %.1f px thick against %.1f px of flight a tick; tick ends %.1f px from the anchor, contact needs %.1f" % [
-		thickness, per_tick, per_tick * 0.5, reach])
-	if thickness + 2.0 * THIN_HEAD_BULLET_RADIUS >= per_tick:
-		failures.append("the %.1f px head is not thinner than a tick's %.1f px of flight, so this proves nothing" % [thickness, per_tick])
-	if per_tick * 0.5 <= reach:
-		failures.append("a tick ends within %.1f px of the head, close enough to touch it, so this proves nothing" % (per_tick * 0.5))
-	if off_anchor >= widest:
-		failures.append("the staff's circle does not cover its anchor, so the line of fire may miss it")
-
-	var bullet: Node2D = _launch_bullet(stage, shooter, origin, stats)
-	var watched: Dictionary = await _watch_bullet(bullet, _bullet_ticks(stats, per_tick * THIN_HEAD_WHOLE_TICKS + HEAD_CROSS_VICTIM_OFFSET))
-	print("      bullet gone after %d ticks, furthest x %.1f (head at %.1f); the player past it on %.1f damage" % [
-		watched["gone_after"], watched["furthest"], head.x, victim.damage])
-	if int(watched["gone_after"]) < 0:
-		failures.append("the bullet was still flying after crossing the thin head")
-	if float(watched["furthest"]) > head.x:
-		failures.append("the bullet got to x=%.1f, past the thin head at x=%.1f" % [watched["furthest"], head.x])
-	if victim.damage > 0.0:
-		failures.append("the player past the thin head took %.1f; the head should have blocked the bullet" % victim.damage)
-
-	await _teardown(stage)
-	return failures
-
-# --- A head held by the world, and a head arriving on it (#38, #47) ---------
 
 ## Where the #47 pair is built: an empty stage, far from anything, so the only
 ## solid thing either head can find is the slab placed for it.

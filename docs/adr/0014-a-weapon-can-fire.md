@@ -41,24 +41,23 @@ only weapon that sets them.
   pushes the body the other way with `recoil_impulse`.
 - **The bullet is swept, not simulated.** `scripts/Projectile.gd` is a plain
   `Node2D` rather than a physics body. Each tick it shape-casts its circle along
-  that tick's motion (`cast_motion`) against the world and head layers, bodies
-  only. It moves to the first contact and resolves the hit there. However thin
-  the terrain or head, or however fast the bullet, it cannot tunnel through
-  (see `boomstick_bullet_stops_on_terrain`, an 8 px bar against 15 px of travel
-  per tick, and `boomstick_thin_head_blocks_bullet`).
+  that tick's motion (`cast_motion`) against the world layer (terrain and
+  player bodies), bodies only. It moves to the first contact and resolves the
+  hit there. However thin the terrain, or however fast the bullet, it cannot
+  tunnel through (see `boomstick_bullet_stops_on_terrain`, an 8 px bar against
+  15 px of travel per tick).
 - **A bullet never hits its shooter.** The cast excludes the shooter's body
   and the shooter's own head, read afresh each tick so a weapon swapped
   mid-flight is still its own. A bullet fired from inside its own body at rest
   reach gets out, one leaves down its own barrel, and one that crosses its
   shooter or its shooter's head passes through
   (`boomstick_own_head_never_blocks`).
-- **Other players' weapon heads block bullets** (#61). Heads are in the same
-  cast as terrain and bodies, so whichever of a head, terrain or a player is
-  nearest along the path is what the bullet meets. A bullet that meets a head
-  stops there and is gone. It deals no damage, shoves no one and reports no
-  strike, so a player can parry a shot with their weapon
-  (`boomstick_head_blocks_bullet`). Bullets still pass through hafts, which
-  collide with nothing, and pickups, which are areas.
+- **Weapons do not block bullets** (#92, owner, reversing #61). The cast
+  leaves the head layer out, so a bullet flies through every weapon head, as
+  it always has through hafts and pickups (`boomstick_own_head_never_blocks`
+  checks a head fired past by its own holder and by another player). #61 had
+  opposing heads stop bullets so a shot could be parried; playtest found it
+  blocked too much.
 - **A bullet hit is a strike, as far as anyone listening can tell.** The bullet
   applies its knockback and then calls the shooter's `land_projectile_hit()`.
   That goes through `take_damage()` and emits the shooter's existing

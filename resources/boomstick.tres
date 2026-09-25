@@ -29,14 +29,14 @@
 ; pitiful on purpose, 8 against the pickaxe's 34, the lowest on the roster.
 ; The gun is the damage.
 ;
-; Firing (owner's numbers, #55): a shot every 5 s, automatic, straight down
-; the barrel. The bullet flies straight at 900 px/s with no gravity, a 5 px
-; circle, so players can see it coming (owner, #61; it was 1800 px/s and 3 px
-; in #55). It deals a flat 35 and hits once: it vanishes on the first player,
-; terrain or opposing weapon head it meets (#61). It shoves the player it hits with an impulse of 260. Each shot
-; kicks the shooter back along the barrel with an impulse of 150, which in
-; clear air carries the body about one and a half body widths
-; (`boomstick_recoil_is_moderate`). Enough to stop anyone camping, rarely
+; Firing (owner's numbers): a shot every 3 s (#92; 5 s in #55), automatic,
+; straight down the barrel. The bullet flies straight at 900 px/s with no
+; gravity, a 6 px circle (#92; 5 px in #61, 3 px in #55), so players can see
+; it coming. It deals a flat 35 and hits once: it vanishes on the first player
+; or terrain it meets, and flies through weapon heads (#92, reversing #61).
+; It shoves the player it hits with an impulse of 260. Each shot kicks the
+; shooter back along the barrel with an impulse of 190 (#92; 150 before),
+; still inside `boomstick_recoil_is_moderate`. Enough to stop anyone camping, rarely
 ; fatal on its own. Knockback and recoil are agent defaults for the owner to
 ; tune in playtest.
 
@@ -51,12 +51,12 @@ rest_return_speed = 600.0
 max_drive_force = 6000.0
 damage = 8.0
 sound_set = &"boomstick"
-fire_interval = 5.0
+fire_interval = 3.0
 projectile_damage = 35.0
 projectile_speed = 900.0
 projectile_knockback = 260.0
-projectile_radius = 5.0
-recoil_impulse = 150.0
+projectile_radius = 6.0
+recoil_impulse = 190.0
 head_circle_offsets = PackedVector2Array(-19.3, 0, -13.5, 0, -8.6, 0, -4.4, 0, -1.3, 0, 1.8, 0, 4.9, 0, 8, 0, 11.1, 0, 14.2, 0, 17.3, 0, 20.4, 0, 23.5, 0, 26.6, 0, 29.7, 0, 32.8, 0, 35.9, 0, 39, 0, 42.1, 0, 45.2, 0, 48.3, 0, 51.4, 0, 54.5, 0, 57.6, 0, 60.7, 0, 65.8, 0, 67.9, 0)
 head_circle_radii = PackedFloat32Array(4.4, 4.3, 3.7, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 3.9, 3.9)
 art_outline = PackedVector2Array(-24, -6, -8, -4.5, -4, -3.2, 62, -3.2, 62, -4.5, 72, -4.5, 72, 4.5, 62, 4.5, 62, 3.2, -4, 3.2, -8, 4.5, -24, 6)
