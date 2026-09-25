@@ -1,0 +1,10 @@
+# Throwaway headless traversal probe (issue #59): cross-entropy search over input sequences,
+# 48 lanes x up to 12 generations; stops early once half a generation succeeds. success_total counts
+# successful lanes across all generations run; gen0 = random first-generation successes.
+# Target = body settled (<80 px/s for 20 ticks) on the destination surface.
+before slant_up RESULT weapon=staff best=10706.0 first_gen=0 gens=12 success_total=24 MAKEABLE
+before slant_up RESULT weapon=pickaxe best=10569.0 first_gen=0 gens=11 success_total=103 MAKEABLE
+before slant_up RESULT weapon=sword best=10471.0 first_gen=2 gens=12 success_total=54 MAKEABLE
+before slant_up RESULT weapon=dagger best=10477.0 first_gen=0 gens=12 success_total=64 MAKEABLE
+before slant_up RESULT weapon=axe best=10061.0 gen0=0/48 first_gen=1 gens=12 success_total=19 MAKEABLE
+before slant_up RESULT weapon=boomstick best=10469.0 gen0=0/48 first_gen=1 gens=12 success_total=52 MAKEABLE

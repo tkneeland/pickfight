@@ -11,11 +11,11 @@ size = Vector2(216, 24)
 size = Vector2(8000, 40)
 
 ; A wide floor built almost entirely out of #18's crumbling ledge, all at the
-; same height so no side of it is the "high ground" -- four 200x24 ledges
-; strung out with 40-70 px gaps between them, wide enough to cross with an
-; ordinary swing but wide enough to fall through if nobody is moving.
+; same height so no side of it is the "high ground" -- four 160x24 ledges
+; strung out with 32-40 px gaps between them and the island, narrower than a
+; 48 px body, so crossing is a matter of keeping moving rather than of jumping.
 ; Standing still is the mistake: whichever ledge a player parks on starts its
-; warning the moment they land on it, and 0.8 s later it is gone for three
+; warning the moment they land on it, and 1 s later it is gone for three
 ; seconds. With two players loose on the same floor, that clock is always
 ; running on somebody.
 ;
@@ -30,21 +30,30 @@ size = Vector2(8000, 40)
 ; was just placed on (US-7) -- the erosion starts only once a player leaves
 ; home and stands on the wide floor built to fall out from under them.
 ;
-; Ledge timings are left at CrumblingLedge's defaults (0.8 s warning, 3 s
-; away), same as Highrise's Ledge3: one swing's worth of warning to commit to
-; the next foothold or fall back, and long enough away that a ledge someone
-; just lost is not simply waiting to be walked straight back onto.
+; Eased in #59. The ledges were 200 px (centres +-240 and +-480) with
+; CrumblingLedge's default 0.8 s warning, so getting from the island out to
+; an outer ledge meant covering 240 px of ledge-plus-gap in 0.8 s -- 300 px/s,
+; which only the staff and pickaxe sustain on flat ground at their very best
+; (measured: ~300-315 px/s; sword ~200, dagger ~210, axe ~120). Now the ledges
+; are 160 px (centres +-220 and +-420, the gaps unchanged) and warn for 1.0 s:
+; 200 px in 1 s, so the pickaxe has room to spare and the sword and dagger can
+; make it with a clean run. 1.0 s is also as long as the warning can go while
+; the island sweep still sees every ledge fall in its window. The 3 s away is
+; unchanged, so a lost ledge is still not simply waiting to be walked back
+; onto; the floor is 160 px narrower overall, still well inside the camera.
 
 [node name="Erosion" type="Node2D"]
 script = ExtResource("1")
 
 [node name="LedgeA" parent="." instance=ExtResource("3")]
-position = Vector2(-480, 300)
-size = Vector2(200, 24)
+position = Vector2(-420, 300)
+size = Vector2(160, 24)
+warn_sec = 1.0
 
 [node name="LedgeB" parent="." instance=ExtResource("3")]
-position = Vector2(-240, 300)
-size = Vector2(200, 24)
+position = Vector2(-220, 300)
+size = Vector2(160, 24)
+warn_sec = 1.0
 
 [node name="Island" type="StaticBody2D" parent="."]
 position = Vector2(0, 300)
@@ -57,12 +66,14 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-108, -12, 108, -12, 108, 12, -108, 12)
 
 [node name="LedgeC" parent="." instance=ExtResource("3")]
-position = Vector2(240, 300)
-size = Vector2(200, 24)
+position = Vector2(220, 300)
+size = Vector2(160, 24)
+warn_sec = 1.0
 
 [node name="LedgeD" parent="." instance=ExtResource("3")]
-position = Vector2(480, 300)
-size = Vector2(200, 24)
+position = Vector2(420, 300)
+size = Vector2(160, 24)
+warn_sec = 1.0
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-40, 220)
@@ -86,8 +97,8 @@ shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). Floating over the inner crumbling ledges: going for one means standing on ground that is about to go.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-240, 240)
+position = Vector2(-220, 240)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(240, 240)
+position = Vector2(220, 240)
 
