@@ -39,8 +39,12 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   after every rebase that pulled in the other dev's changes.
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
-- PRs are merged by a human. The **other** dev reviews and merges, so every
-  change gets a second pair of eyes.
+- **Agents merge their own PRs; there's no pause for human review** (owner's
+  decision, 2026-09-24). Once the full suite is green on a branch rebased onto
+  the current `origin/main`, poll `gh pr view <n> --json mergeable` until it is
+  not `UNKNOWN`, then `gh pr merge <n> --merge --delete-branch`. Either dev's
+  Claude may merge any green PR. If main moved since your last suite run,
+  rebase and re-run before merging.
 
 ## Shared decisions
 
