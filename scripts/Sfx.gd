@@ -104,6 +104,36 @@ const SOUNDS: Dictionary = {
 		"kenney_scifi/thrusterFire_000.ogg"], "db": -4.0, "overlap": 2, "max_sec": 1.2},
 	"lava_rise": {"files": [
 		"kenney_scifi/lowFrequency_explosion_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},
+	# --- Stage parts (#76) --------------------------------------------------
+	"bounce_launch": {"files": [
+		"kenney_scifi/forceField_000.ogg",
+		"kenney_scifi/forceField_001.ogg"], "db": -4.0, "max_sec": 0.6},
+	"wind_tell": {"files": [
+		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -12.0, "overlap": 2, "max_sec": 1.0},
+	"wind_gust": {"files": [
+		"kenney_scifi/thrusterFire_001.ogg",
+		"kenney_scifi/thrusterFire_002.ogg"], "db": -5.0, "overlap": 2, "max_sec": 1.5},
+	"rock_warning": {"files": [
+		"kenney_scifi/spaceEngineLarge_000.ogg"], "db": -8.0, "overlap": 2, "max_sec": 1.5},
+	"rock_impact": {"files": [
+		"kenney_scifi/explosionCrunch_002.ogg",
+		"kenney_scifi/explosionCrunch_003.ogg",
+		"kenney_scifi/explosionCrunch_004.ogg"], "db": -2.0},
+	"floor_warning": {"files": [
+		"kenney_rpg/creak1.ogg",
+		"kenney_rpg/creak2.ogg",
+		"kenney_rpg/creak3.ogg"], "db": 0.0},
+	"floor_collapse": {"files": [
+		"kenney_impact/impactWood_heavy_002.ogg",
+		"kenney_impact/impactWood_heavy_003.ogg",
+		"kenney_impact/impactWood_heavy_004.ogg"], "db": 2.0},
+	"wall_hit": {"files": [
+		"kenney_impact/impactGeneric_light_000.ogg",
+		"kenney_impact/impactGeneric_light_001.ogg",
+		"kenney_impact/impactGeneric_light_002.ogg"], "db": 0.0},
+	"wall_break": {"files": [
+		"kenney_impact/impactPlate_heavy_000.ogg",
+		"kenney_impact/impactPlate_heavy_001.ogg"], "db": 2.0},
 	# --- Round and UI -------------------------------------------------------
 	"countdown": {"files": [
 		"kenney_interface/tick_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},

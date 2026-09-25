@@ -47,3 +47,17 @@ The files:
 
 That is 39 files, about 0.6 MB in all. The `sfx_sound_files_exist` scenario
 fails if a file is missing, or if a shipped file is not used.
+
+Added for the stage parts (issue #76), from the same packs and under the same licence:
+
+| File | Pack | Licence | Used for |
+|---|---|---|---|
+| `kenney_scifi/forceField_000.ogg`, `_001` | Sci-fi Sounds | CC0 1.0 | bounce pad launch |
+| `kenney_scifi/spaceEngineLow_000.ogg` | Sci-fi Sounds | CC0 1.0 | wind tell |
+| `kenney_scifi/thrusterFire_001.ogg`, `_002` | Sci-fi Sounds | CC0 1.0 | wind gust |
+| `kenney_scifi/spaceEngineLarge_000.ogg` | Sci-fi Sounds | CC0 1.0 | falling rock warning rumble |
+| `kenney_scifi/explosionCrunch_002.ogg`, `_003`, `_004` | Sci-fi Sounds | CC0 1.0 | falling rock impact |
+| `kenney_rpg/creak1.ogg`, `creak2.ogg`, `creak3.ogg` | RPG Audio | CC0 1.0 | collapsing floor warning |
+| `kenney_impact/impactWood_heavy_002.ogg`, `_003`, `_004` | Impact Sounds | CC0 1.0 | collapsing floor collapse |
+| `kenney_impact/impactGeneric_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | breakable wall hit |
+| `kenney_impact/impactPlate_heavy_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | breakable wall break |

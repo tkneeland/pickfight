@@ -167,11 +167,13 @@ func _player_standing() -> bool:
 func _begin_warning(seconds: float) -> void:
 	_state = _FloorState.WARNING
 	_warn_remaining = maxf(seconds, 0.0)
+	_sfx(&"floor_warning", global_position)
 	_warn_elapsed = 0.0
 	_visual.color = WARNING_COLOR
 
 func _give_way() -> void:
 	_state = _FloorState.GONE
+	_sfx(&"floor_collapse", global_position)
 	_visual.position = Vector2.ZERO
 	_visual.visible = false
 	# Deferred, as in CrumblingLedge: toggling collision mid-physics-step is
@@ -180,3 +182,10 @@ func _give_way() -> void:
 	_detector.set_deferred("monitoring", false)
 	# Nothing left to count or animate for the rest of the round.
 	set_physics_process(false)
+
+## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
+## name, so this part still works in a tree without the autoload.
+func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, strength)

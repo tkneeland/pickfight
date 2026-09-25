@@ -76,6 +76,9 @@ var _elapsed: float = 0.0
 var _scroll: float = 0.0
 var _streak_seeds: PackedVector2Array = PackedVector2Array()
 
+## The phase last tick, so a tell or gust sounds once, as it starts (#76).
+var _last_phase: int = -1
+
 func _ready() -> void:
 	# Pushes only; nothing detects the zone itself.
 	collision_layer = 0
@@ -158,6 +161,13 @@ func world_direction() -> Vector2:
 
 func _physics_process(delta: float) -> void:
 	_elapsed += delta
+	var now: Phase = phase()
+	if now != _last_phase:
+		_last_phase = now
+		if now == Phase.TELL:
+			_sfx(&"wind_tell", global_position)
+		elif now == Phase.GUST:
+			_sfx(&"wind_gust", global_position)
 	_scroll += streak_speed() * delta
 	if is_pushing():
 		var push: Vector2 = world_direction() * strength
@@ -197,3 +207,10 @@ func _draw() -> void:
 			var tip: float = length * 0.3
 			draw_line(head, head - dir * tip + perp * tip * 0.6, streak_color, width)
 			draw_line(head, head - dir * tip - perp * tip * 0.6, streak_color, width)
+
+## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
+## name, so this part still works in a tree without the autoload.
+func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, strength)

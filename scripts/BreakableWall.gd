@@ -82,6 +82,9 @@ var _hits: int = 0
 var _last_hit_damage: float = 0.0
 var _last_hit_speed: float = 0.0
 
+## Damage that plays a wall hit at full strength (#76): a committed swing.
+const WALL_HIT_FULL_DAMAGE: float = 60.0
+
 func _ready() -> void:
 	_hp_left = hp
 	process_physics_priority = _BEFORE_PLAYERS
@@ -227,6 +230,10 @@ func _absorb(amount: float, speed: float) -> void:
 		return
 	_hp_left = maxf(_hp_left - amount, 0.0)
 	_show_wear()
+	if _hp_left > 0.0:
+		_sfx(&"wall_hit", global_position, amount / WALL_HIT_FULL_DAMAGE)
+	elif _state == _WallState.STANDING:
+		_sfx(&"wall_break", global_position)
 	if _hp_left <= 0.0:
 		_state = _WallState.BREAKING
 		_flash_remaining = BREAK_FLASH_SEC
@@ -274,3 +281,10 @@ func _crack_points(index: int, half: Vector2) -> PackedVector2Array:
 		var along: float = centre + zig[j] * long * (1.0 if index % 2 == 0 else -1.0)
 		points.append(Vector2(across, along) if along_y else Vector2(along, across))
 	return points
+
+## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
+## name, so this part still works in a tree without the autoload.
+func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, strength)

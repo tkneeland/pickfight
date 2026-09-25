@@ -172,6 +172,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"turn_does_not_carry_blade_through_head",
 	"charge_sweep_pair_stays_in_play",
 	"pad_launch_keeps_head_ahead_of_body",
+	"sfx_stage_parts_sound",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -838,6 +839,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_charge_sweep_pair_stays_in_play()
 		"pad_launch_keeps_head_ahead_of_body":
 			return await _scenario_pad_launch_keeps_head_ahead_of_body()
+		"sfx_stage_parts_sound":
+			return await _scenario_sfx_stage_parts_sound()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10824,3 +10827,62 @@ func _scenario_pad_launch_keeps_head_ahead_of_body() -> Array[String]:
 func _head_anchor_reach_along_circles(player: RigidBody2D, circles: Array[Dictionary]) -> float:
 	var haft: Vector2 = (Vector2(circles[circles.size() - 1]["centre"]) - Vector2(circles[0]["centre"])).normalized()
 	return (player.weapon_head_position() - player.global_position).dot(haft)
+
+## Issue #76: each stage part asks for its sounds at the moment it acts --
+## the bounce pad's launch, the wind's tell and gust, the rock's warning and
+## impact, the floor's warning and collapse, the wall's hit and break -- and
+## the wall's break sounds once, not again for a hit during its break flash.
+## The parts' own event functions are driven directly, so this checks the
+## wiring, not the parts' timing, which their own scenarios already hold.
+func _scenario_sfx_stage_parts_sound() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var pad: Node2D = (load("res://scenes/parts/BouncePad.tscn") as PackedScene).instantiate()
+	var wind: Node2D = (load("res://scenes/parts/WindZone.tscn") as PackedScene).instantiate()
+	wind.calm_sec = 0.1
+	wind.tell_sec = 0.1
+	wind.gust_sec = 0.1
+	var rock: Node2D = (load("res://scenes/parts/FallingRock.tscn") as PackedScene).instantiate()
+	var floor_part: Node2D = (load("res://scenes/parts/CollapsingFloor.tscn") as PackedScene).instantiate()
+	var wall: Node2D = (load("res://scenes/parts/BreakableWall.tscn") as PackedScene).instantiate()
+	var x: float = -400.0
+	for part: Node2D in [pad, wind, rock, floor_part, wall]:
+		part.position = Vector2(x, 0.0)
+		x += 200.0
+		stage.add_child(part)
+	var body := RigidBody2D.new()
+	body.position = pad.position + Vector2(0.0, -30.0)
+	body.gravity_scale = 0.0
+	stage.add_child(body)
+	await _await_ticks(1)
+
+	sfx.start_recording()
+	pad._try_launch(body)
+	rock._begin_warning()
+	rock._shatter()
+	floor_part._begin_warning(1.0)
+	floor_part._give_way()
+	wall._absorb(10.0, 0.0)
+	wall._absorb(1000.0, 0.0)
+	wall._absorb(10.0, 0.0)
+	# A 0.3 s wind cycle: calm, tell, gust, round twice.
+	await _await_ticks(40)
+	sfx.stop_recording()
+	print("      requested: %s" % [sfx.recorded_names()])
+
+	for sound: String in ["bounce_launch", "rock_warning", "rock_impact", "floor_warning", "floor_collapse", "wall_hit", "wall_break", "wind_tell", "wind_gust"]:
+		if not sfx.has_sound(StringName(sound)):
+			failures.append("%s is not in the sound table" % sound)
+		if _sfx_count(sfx, sound) == 0:
+			failures.append("%s was never asked for" % sound)
+	if _sfx_count(sfx, "wall_break") != 1:
+		failures.append("wall_break played %d times, expected once" % _sfx_count(sfx, "wall_break"))
+	if _sfx_count(sfx, "wall_hit") != 1:
+		failures.append("wall_hit played %d times, expected once (the hit during the break flash stays quiet)" % _sfx_count(sfx, "wall_hit"))
+
+	await _teardown(stage)
+	return failures

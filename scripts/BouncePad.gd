@@ -181,6 +181,7 @@ func _try_launch(body: RigidBody2D) -> void:
 		part.linear_velocity += change
 	_launches += 1
 	_flash_remaining = _FLASH_SEC
+	_sfx(&"bounce_launch", body.global_position)
 
 ## The rigid bodies of `body`'s weapon (its head and haft), so a launch
 ## carries the whole player and not the body alone.
@@ -218,3 +219,10 @@ func _update_flash(delta: float) -> void:
 	var t: float = _flash_remaining / _FLASH_SEC
 	_body_poly.color = PAD_COLOR.lerp(FLASH_COLOR, t)
 	_visual.scale = Vector2(1.0, lerpf(1.0, _SQUASH_SCALE, t))
+
+## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
+## name, so this part still works in a tree without the autoload.
+func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, strength)

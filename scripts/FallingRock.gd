@@ -226,6 +226,7 @@ func _begin_warning() -> void:
 	_timer_remaining = warning_sec
 	_warning_elapsed = 0.0
 	_landing = _find_landing()
+	_sfx(&"rock_warning", _landing)
 	_rock.global_position = global_position
 	_rock_visual.modulate.a = 1.0
 	_rock.visible = true
@@ -298,6 +299,7 @@ func _strike(victim: Node) -> void:
 func _shatter() -> void:
 	_state = _RockState.SHATTERED
 	_timer_remaining = SHATTER_SEC
+	_sfx(&"rock_impact", _rock.global_position)
 
 func _rest() -> void:
 	_state = _RockState.IDLE
@@ -363,3 +365,10 @@ func _build_marker() -> Node2D:
 		line.points = segment
 		marker.add_child(line)
 	return marker
+
+## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
+## name, so this part still works in a tree without the autoload.
+func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, strength)
