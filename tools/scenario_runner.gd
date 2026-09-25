@@ -124,6 +124,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_in_pickup_pool",
 	"boomstick_bullet_never_hits_shooter",
 	"boomstick_stops_when_shooter_leaves_play",
+	"roster_heads_do_not_tunnel_thin_platform",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -682,6 +683,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomstick_bullet_never_hits_shooter()
 		"boomstick_stops_when_shooter_leaves_play":
 			return await _scenario_boomstick_stops_when_shooter_leaves_play()
+		"roster_heads_do_not_tunnel_thin_platform":
+			return await _scenario_roster_heads_do_not_tunnel_thin_platform()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -7293,3 +7296,244 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 
 	await _teardown(stage)
 	return failures
+
+# --- Issue #48: no roster head tunnels thin terrain -------------------------
+
+## Body heights above the slab's top face for the boost slam, a coarser pass
+## over BOOST_START_HEIGHTS: five weapons carry it now, not one.
+const PLATFORM_TUNNEL_SLAM_HEIGHTS: PackedFloat32Array = [30.0, 70.0, 110.0, 150.0]
+const PLATFORM_TUNNEL_SLAM_WINDUPS: PackedInt32Array = [1, 5]
+## How far from the slab's face a braced body sits for the swing trials, as a
+## fraction of how far that weapon reaches -- max reach plus the head's own
+## forward extent. Near, middle and far: the far one puts only the tip into
+## the slab, where a long blade moves fastest.
+const PLATFORM_TUNNEL_SWING_DEPTHS: PackedFloat32Array = [0.35, 0.6, 0.85]
+## Swings as (wound-up angle, commanded angle), written for a body above the
+## slab, where straight down is +PI/2. Every pair crosses straight down by the
+## shorter way round, so the head is driven through the slab's face at full
+## drive. The last two are the long wind-ups, most of half a turn, which reach
+## the slab at the weapon's top angular speed. A body under the slab runs the
+## same pairs mirrored top to bottom.
+const PLATFORM_TUNNEL_SWINGS: Array[Vector2] = [
+	Vector2(0.0, PI * 0.5 + 0.5),
+	Vector2(PI, PI * 0.5 - 0.5),
+	Vector2(-PI / 3.0, PI * 0.5 + 0.3),
+	Vector2(PI + PI / 3.0, PI * 0.5 - 0.3),
+]
+## The deepest a braced body is put under the slab, so it never sits in the
+## arena floor 248 px below the slab's underside.
+const PLATFORM_TUNNEL_MAX_UNDER_GAP: float = 200.0
+## Body speeds a player is flung at the slab with, weapon out in front: from a
+## hard jump to well past anything a boost off a plant produces. The head is
+## carried by the body here, so its motion comes out of the joints rather than
+## the drive (see WeaponHead's header).
+const PLATFORM_TUNNEL_FLING_SPEEDS: PackedFloat32Array = [900.0, 1500.0, 2100.0]
+## Directions flung, relative to straight at the slab: head on, and about 35
+## degrees either side of it.
+const PLATFORM_TUNNEL_FLING_ANGLES: PackedFloat32Array = [0.0, 0.6, -0.6]
+## Clear air between the head's furthest reach and the slab when a fling
+## starts from above, and between the body and the underside from below.
+const PLATFORM_TUNNEL_FLING_CLEARANCE: float = 60.0
+const PLATFORM_TUNNEL_UNDER_FLING_GAP: float = 150.0
+## Ticks a trial is watched after its swing or fling starts.
+const PLATFORM_TUNNEL_TICKS: int = 45
+## How far inside the slab's ends a circle's centre has to stay for a crossing
+## to count: a circle nearer the end than this may have gone round the corner
+## between two ticks, which is travel and not tunnelling.
+const PLATFORM_TUNNEL_SPAN_MARGIN: float = 4.0
+
+## Issue #48: **no weapon on the roster puts any part of its head through a
+## thin platform.** The owner, second playtest: "the sword sometimes manages to
+## clip thru platforms pretty bad."
+##
+## `head_does_not_tunnel_thin_platform` makes this claim for the pickaxe alone,
+## and only for its anchor. Since #45 the sword's head is a 97 px blade of
+## circles 1.9 to 3.5 px across, lying along the haft and reaching 72 px past
+## the anchor -- so most of the head is not where the anchor is, and the part
+## furthest out moves fastest when the weapon turns. This runs every weapon in
+## WEAPON_RESOURCE_PATHS through three families of move over the arena's 24 px
+## slab:
+##
+##   * **slam** -- the boost move the original was written against, wound in
+##     and then slammed straight down, from rest and falling;
+##   * **swing** -- the body held still above or below the slab and the weapon
+##     swung through the slab's face from four wind-ups at three distances,
+##     plus unbraced while standing on it. Nothing moves the head here but the
+##     turn, so this is the tip-speed case;
+##   * **fling** -- the body thrown at the slab at three speeds and three
+##     angles, weapon held out toward it, from above and from below. The head
+##     is carried, not driven.
+##
+## **A breach is any circle of the head crossing the slab from one face to the
+## other while inside its span.** Each circle's side -- above the top face or
+## below the underside, by its centre -- is tracked tick by tick, and forgotten
+## the moment the circle leaves the span, so going round an end is travel. A
+## circle inside the slab keeps the side it came from. Per circle and not per
+## head, because a cluster whose anchor stays put can still have its tip
+## through the floor, which is exactly what the owner saw; and on the circles
+## where the physics has them (`Player.weapon_head_circles_world()`), not
+## rebuilt from the anchor the way `_head_circles_world()` rebuilds them: the
+## blade faces along the haft, not at the anchor, and at 56 px out the two
+## disagree by more than the slab is thick.
+func _scenario_roster_heads_do_not_tunnel_thin_platform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var top: float = THIN_PLATFORM_CENTRE.y - THIN_PLATFORM_HALF_HEIGHT
+	var bottom: float = THIN_PLATFORM_CENTRE.y + THIN_PLATFORM_HALF_HEIGHT
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var trials: int = 0
+		var breaches: Array[String] = []
+		# Read off a built rig, like every other roster fixture here.
+		var probe: RigidBody2D = await _platform_tunnel_player(stage, stats, DEEP_PARK_POSITION)
+		var reach: float = stats.max_reach + _head_forward_extent(probe)
+		probe.queue_free()
+		await _await_ticks(BOOST_RESET_TICKS)
+
+		# Slam: the boost move, per weapon.
+		for height: float in PLATFORM_TUNNEL_SLAM_HEIGHTS:
+			for windup: int in PLATFORM_TUNNEL_SLAM_WINDUPS:
+				for falling: bool in [true, false]:
+					trials += 1
+					var player: RigidBody2D = await _platform_tunnel_player(
+						stage, stats, Vector2(THIN_PLATFORM_CENTRE.x, top - height))
+					if falling:
+						player.linear_velocity = Vector2(0.0, BOOST_FALL_SPEED)
+					for _w in windup:
+						player.set_input_vector(Vector2.DOWN * WOUND_IN_MAGNITUDE)
+						await physics_frame
+					player.set_input_vector(Vector2.DOWN)
+					var hit: String = await _watch_platform_crossing(player, PLATFORM_TUNNEL_TICKS, top, bottom)
+					if hit != "":
+						breaches.append("slam from %.0f px, %d-tick wind-up, %s: %s" % [
+							height, windup, "falling" if falling else "from rest", hit])
+					player.queue_free()
+					await _await_ticks(BOOST_RESET_TICKS)
+
+		# Swing: braced above and below at three distances, then standing on it.
+		for from_below: bool in [false, true]:
+			var flip: float = -1.0 if from_below else 1.0
+			for depth: float in PLATFORM_TUNNEL_SWING_DEPTHS:
+				var gap: float = reach * depth
+				if from_below:
+					gap = minf(gap, PLATFORM_TUNNEL_MAX_UNDER_GAP)
+				var body_y: float = bottom + gap if from_below else top - gap
+				for swing: Vector2 in PLATFORM_TUNNEL_SWINGS:
+					trials += 1
+					var hit: String = await _platform_tunnel_swing(
+						stage, stats, Vector2(THIN_PLATFORM_CENTRE.x, body_y),
+						swing.x * flip, swing.y * flip, true, top, bottom)
+					if hit != "":
+						breaches.append("braced swing %s the slab at %.0f px, %.0f -> %.0f deg: %s" % [
+							"under" if from_below else "over", gap,
+							rad_to_deg(swing.x * flip), rad_to_deg(swing.y * flip), hit])
+		for swing: Vector2 in PLATFORM_TUNNEL_SWINGS:
+			trials += 1
+			var standing := Vector2(THIN_PLATFORM_CENTRE.x, top - PLAYER_RADIUS - 1.0)
+			var hit: String = await _platform_tunnel_swing(
+				stage, stats, standing, swing.x, swing.y, false, top, bottom)
+			if hit != "":
+				breaches.append("standing swing, %.0f -> %.0f deg: %s" % [
+					rad_to_deg(swing.x), rad_to_deg(swing.y), hit])
+
+		# Fling: thrown at the slab, weapon out in front, from both sides.
+		for from_below: bool in [false, true]:
+			var toward: float = -PI * 0.5 if from_below else PI * 0.5
+			var start_y: float = bottom + PLATFORM_TUNNEL_UNDER_FLING_GAP if from_below \
+				else top - reach - PLATFORM_TUNNEL_FLING_CLEARANCE
+			for speed: float in PLATFORM_TUNNEL_FLING_SPEEDS:
+				for tilt: float in PLATFORM_TUNNEL_FLING_ANGLES:
+					trials += 1
+					var direction: float = toward + tilt
+					var player: RigidBody2D = await _platform_tunnel_player(
+						stage, stats, Vector2(THIN_PLATFORM_CENTRE.x, start_y))
+					_brace(player)
+					player.set_input_vector(Vector2.from_angle(direction))
+					await _await_ticks(ROSTER_SETTLE_TICKS)
+					player.freeze = false
+					player.linear_velocity = Vector2.from_angle(direction) * speed
+					var hit: String = await _watch_platform_crossing(player, PLATFORM_TUNNEL_TICKS, top, bottom)
+					if hit != "":
+						breaches.append("flung %s at %.0f px/s, %.0f deg off square: %s" % [
+							"up" if from_below else "down", speed, rad_to_deg(tilt), hit])
+					player.queue_free()
+					await _await_ticks(BOOST_RESET_TICKS)
+
+		for i in mini(breaches.size(), MAX_FAILURES_PER_SCENARIO):
+			failures.append("%s: %s" % [weapon, breaches[i]])
+		if not breaches.is_empty():
+			failures.append("%s: %d of %d trials put the head through the 24 px platform" % [
+				weapon, breaches.size(), trials])
+
+	await _teardown(stage)
+	return failures
+
+## A fresh player holding `stats` at `pos`, with its new rig built.
+func _platform_tunnel_player(stage: Node2D, stats: WeaponStatsType, pos: Vector2) -> RigidBody2D:
+	var player: RigidBody2D = _spawn_player(stage, pos)
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	return player
+
+## One swing trial: wound up at `from_angle` at full reach, then commanded to
+## `to_angle`, braced or not. Returns the breach, or "".
+func _platform_tunnel_swing(
+		stage: Node2D, stats: WeaponStatsType, pos: Vector2,
+		from_angle: float, to_angle: float, braced: bool,
+		top: float, bottom: float) -> String:
+	var player: RigidBody2D = await _platform_tunnel_player(stage, stats, pos)
+	if braced:
+		_brace(player)
+	player.set_input_vector(Vector2.from_angle(from_angle))
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	player.set_input_vector(Vector2.from_angle(to_angle))
+	var hit: String = await _watch_platform_crossing(player, PLATFORM_TUNNEL_TICKS, top, bottom)
+	player.queue_free()
+	await _await_ticks(BOOST_RESET_TICKS)
+	return hit
+
+## Watch a player's head for `ticks` ticks and report the first circle that
+## crosses the slab from one face to the other inside its span, or "".
+## Tracking starts from the pose the head holds now, so a circle already under
+## the slab when watching starts is simply under it.
+func _watch_platform_crossing(player: RigidBody2D, ticks: int, top: float, bottom: float) -> String:
+	var sides: Dictionary = {}
+	_update_platform_sides(player, sides, top, bottom)
+	for tick in ticks:
+		await physics_frame
+		if not is_instance_valid(player) or not player.alive:
+			return ""
+		var crossed: String = _update_platform_sides(player, sides, top, bottom)
+		if crossed != "":
+			return "tick %d, %s" % [tick + 1, crossed]
+	return ""
+
+## One tick of `_watch_platform_crossing`: update each circle's side of the
+## slab and describe the first that switched sides, or return "".
+func _update_platform_sides(player: RigidBody2D, sides: Dictionary, top: float, bottom: float) -> String:
+	var circles: Array[Dictionary] = player.weapon_head_circles_world()
+	var half_span: float = THIN_PLATFORM_HALF_WIDTH - PLATFORM_TUNNEL_SPAN_MARGIN
+	for i in circles.size():
+		var centre: Vector2 = circles[i]["centre"]
+		if absf(centre.x - THIN_PLATFORM_CENTRE.x) > half_span:
+			sides.erase(i)
+			continue
+		var side: int = 0
+		if centre.y < top:
+			side = -1
+		elif centre.y > bottom:
+			side = 1
+		if side == 0:
+			continue
+		var was: int = sides.get(i, 0)
+		sides[i] = side
+		if was != 0 and was != side:
+			return "circle %d of %d went from %s the slab to %s it, ending at (%.1f, %.1f)" % [
+				i, circles.size(), "above" if was < 0 else "below",
+				"below" if side > 0 else "above", centre.x, centre.y]
+	return ""

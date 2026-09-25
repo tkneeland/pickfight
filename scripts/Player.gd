@@ -896,6 +896,22 @@ func weapon_head_circles() -> Array[Dictionary]:
 		circles.append({"offset": node.position.rotated(-facing), "radius": circle.radius})
 	return circles
 
+## The head's collision circles where the physics has them, in world space:
+## each a `centre` and a `radius`. Not rebuilt from the anchor and the
+## player-to-head direction the way a scenario can rebuild them from
+## `weapon_head_circles()`: the head's facing follows the haft, which lags
+## the anchor by a tick and need not point at it, and on a long blade that
+## difference is several pixels at the tip. A question about where the blade
+## actually went through (issue #48) has to be asked of where it actually is.
+func weapon_head_circles_world() -> Array[Dictionary]:
+	var circles: Array[Dictionary] = []
+	for node: CollisionShape2D in _head_shapes:
+		var circle := node.shape as CircleShape2D
+		if circle == null or not node.is_inside_tree():
+			continue
+		circles.append({"centre": node.global_position, "radius": circle.radius})
+	return circles
+
 ## Whether the head is drawn as the bounding box of its circles -- the
 ## fallback for a weapon with no art -- rather than as its own `art_outline`.
 func weapon_head_visual_is_fallback() -> bool:
