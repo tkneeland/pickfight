@@ -90,6 +90,17 @@ they had, and pickups still spawn.
 godot --path . -- --random-weapons
 ```
 
+### Demo mode
+
+For a short showcase slot: `--demo` turns on random weapons, and plays the
+stages with the most parts first, in a fixed order (Springboard, Rockfall,
+Gale, Bulwark, Carousel, Sinkhole, then the rest). It also brings the lava
+in sooner: it holds for 20 s, then rises over 40 s.
+
+```
+godot --path . -- --demo
+```
+
 A new phone takes the first free player slot and enters play at the start of
 the next round. A phone that drops mid-round keeps its slot until that round
 ends, and reconnecting gets the same player back
