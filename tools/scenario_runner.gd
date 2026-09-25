@@ -168,6 +168,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_weapon_sound_sets_distinct",
 	"sfx_sound_files_exist",
 	"sfx_volume_slider_and_mute",
+	"charge_measures_heads_where_physics_has_them",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -826,6 +827,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_sfx_sound_files_exist()
 		"sfx_volume_slider_and_mute":
 			return await _scenario_sfx_volume_slider_and_mute()
+		"charge_measures_heads_where_physics_has_them":
+			return await _scenario_charge_measures_heads_where_physics_has_them()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10325,4 +10328,102 @@ func _scenario_sfx_volume_slider_and_mute() -> Array[String]:
 	sfx.set_muted(was_muted)
 	ui.refresh()
 	_scenario_completed = true
+	return failures
+
+# --- A charge measured on the heads the physics has (issue #77) -------------
+
+## The #77 "breach", as captured from the one suite history that produced it:
+## `roster_heads_do_not_tunnel_head_reversed`, the boomstick's 45 deg charge
+## at 1800 px/s, on the tick the scenario called a head through a head. Body
+## and head anchor positions and each head's real facing (the haft's, which
+## the circles and the art are turned to), relative to the fixture's centre.
+##
+## The attacker's light head (mass 0.1) had just been stopped dead on the
+## blocker's body by the world sweep, and its own body, held at 1800 px/s by
+## the charge, ran on past it: the anchor sits 13 px *behind* its body while
+## the haft still points forward at 0.44 rad. Rebuilding the facing from body
+## to anchor turns the barrel round to 2.82 rad, straight back onto the other
+## head, and reads -4.8 px of overlap. The circles the physics has are 19.9
+## px apart.
+const CAPTURED_77_ATTACKER_BODY: Vector2 = Vector2(-4.69195, -21.761)
+const CAPTURED_77_ATTACKER_HEAD: Vector2 = Vector2(-17.34456, -17.477)
+const CAPTURED_77_ATTACKER_FACING: float = 0.44250103831291
+const CAPTURED_77_BLOCKER_BODY: Vector2 = Vector2(0.722947, 24.276)
+const CAPTURED_77_BLOCKER_HEAD: Vector2 = Vector2(-50.62579, 1.915)
+const CAPTURED_77_BLOCKER_FACING: float = -2.92381620407104
+## How far a measured circle may sit from where the physics has it: float
+## noise, nothing more.
+const CAPTURED_77_CIRCLE_TOLERANCE: float = 0.01
+
+## Issue #77: the head-tunnel scenarios measure the heads **where the physics
+## has them**.
+##
+## `roster_heads_do_not_tunnel_head_reversed` failed deterministically on the
+## boomstick with a head it said had gone through the other. It had not: on
+## the physics' own circles the two heads were never closer than 19.9 px in
+## that step, and `WeaponHead`'s pair sweep rightly did nothing. The overlap
+## was in the measurement, which rebuilt each head's facing from the player
+## to its anchor. A light head stopped on a body while its own body keeps
+## coming ends up behind that body, and the rebuilt barrel points backwards.
+##
+## This builds that exact pose -- two boomsticks, aimed at the captured
+## facings in clear air, then bodies and anchors put where they were -- and
+## asks the measurement the charge sweep uses, with no physics step in
+## between. It has to agree with `Player.weapon_head_circles_world()` circle
+## for circle, and so has to find the two heads apart.
+func _scenario_charge_measures_heads_where_physics_has_them() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var stats: WeaponStatsType = load("res://resources/boomstick.tres")
+	var attacker: RigidBody2D = _spawn_player(stage, centre + CAPTURED_77_ATTACKER_BODY)
+	var blocker: RigidBody2D = _spawn_player(stage, centre + CAPTURED_77_BLOCKER_BODY + Vector2(0.0, 200.0))
+	attacker.set_weapon_stats(stats)
+	blocker.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	attacker.set_input_vector(Vector2.from_angle(CAPTURED_77_ATTACKER_FACING))
+	blocker.set_input_vector(Vector2.from_angle(CAPTURED_77_BLOCKER_FACING))
+	await _await_ticks(SETTLE_TICKS)
+
+	# Straight into the captured pose between two physics steps. Teleporting
+	# the body carries the haft and head with it and leaves the facing alone;
+	# the anchor is then put where the charge had left it.
+	attacker.teleport_to(centre + CAPTURED_77_ATTACKER_BODY)
+	blocker.teleport_to(centre + CAPTURED_77_BLOCKER_BODY)
+	attacker._head.global_position = centre + CAPTURED_77_ATTACKER_HEAD
+	blocker._head.global_position = centre + CAPTURED_77_BLOCKER_HEAD
+
+	# The pose has to be the #77 one or this proves nothing: the attacker's
+	# anchor behind its own body along the way its haft points.
+	var haft: Vector2 = Vector2.from_angle(CAPTURED_77_ATTACKER_FACING)
+	var anchor_along: float = (attacker.weapon_head_position() - attacker.global_position).dot(haft)
+	if anchor_along >= 0.0:
+		failures.append("fixture: the attacker's anchor is %.1f px ahead of its body along the haft, not behind it as in #77" % anchor_along)
+
+	var physics_gap: float = _head_surface_gap(
+		attacker.weapon_head_circles_world(), blocker.weapon_head_circles_world())
+	var measured_a: Array[Dictionary] = _head_circles_world(attacker)
+	var measured_b: Array[Dictionary] = _head_circles_world(blocker)
+	var measured_gap: float = _head_surface_gap(measured_a, measured_b)
+	print("      captured #77 pose: anchor %.1f px along its own haft; heads %.2f px apart as the charge sweep measures them, %.2f px apart as the physics has them" % [
+		anchor_along, measured_gap, physics_gap])
+
+	for pair: Array in [[attacker, measured_a, "attacker"], [blocker, measured_b, "blocker"]]:
+		var real: Array[Dictionary] = pair[0].weapon_head_circles_world()
+		var measured: Array[Dictionary] = pair[1]
+		if measured.size() != real.size():
+			failures.append("%s: the charge sweep measured %d circles, the physics has %d" % [pair[2], measured.size(), real.size()])
+			continue
+		var worst: float = 0.0
+		for i in real.size():
+			worst = maxf(worst, Vector2(measured[i]["centre"]).distance_to(real[i]["centre"]))
+		if worst > CAPTURED_77_CIRCLE_TOLERANCE:
+			failures.append("%s: the charge sweep puts a head circle %.1f px from where the physics has it" % [pair[2], worst])
+	if physics_gap <= 0.0:
+		failures.append("fixture: the physics' own circles overlap by %.2f px, so this is not the #77 pose" % -physics_gap)
+	if measured_gap < -WeaponHeadType.PAIR_OVERLAP_ALLOWANCE:
+		failures.append("the charge sweep measures the heads overlapping by %.2f px -- a breach -- where the physics has them %.2f px apart" % [
+			-measured_gap, physics_gap])
+
+	await _teardown(stage)
 	return failures
