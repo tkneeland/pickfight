@@ -92,7 +92,9 @@ PASS  round_modifier_fast_lava_applies_and_undoes
 PASS  round_modifier_slippery_floor_applies_and_undoes
 PASS  round_modifier_announced_on_screen
 PASS  round_modifier_chance_zero_disables
+PASS  boomstick_head_blocks_bullet
 PASS  boomstick_own_head_never_blocks
+PASS  boomstick_thin_head_blocks_bullet
 PASS  world_stopped_head_blocks_arriving_head
 PASS  bounce_pad_launches_body
 PASS  bounce_pad_rotated_launches_diagonally
@@ -128,4 +130,5 @@ PASS  turn_does_not_carry_blade_through_head
 PASS  charge_sweep_pair_stays_in_play
 PASS  pad_launch_keeps_head_ahead_of_body
 PASS  sfx_stage_parts_sound
-130 passed, 0 failed, 130 total
+PASS  sfx_mix_victory_quieter_rest_louder
+133 passed, 0 failed, 133 total
