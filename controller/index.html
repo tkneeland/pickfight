@@ -47,6 +47,30 @@
     font-size: 14px;
     opacity: 0.7;
   }
+  /* Nickname (issue #121): tap to edit. The only part of the HUD that takes
+     touches. */
+  #who { display: flex; flex-direction: column; }
+  #name {
+    pointer-events: auto;
+    font-size: 22px;
+    font-weight: 700;
+    color: #59606e;
+    text-decoration: underline dotted;
+    text-underline-offset: 4px;
+  }
+  /* Where this player stands right now (issue #121): waiting, eliminated,
+     next round in... Hidden while it is simply playing. */
+  #state {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 40%;
+    text-align: center;
+    font-size: 30px;
+    font-weight: 800;
+    pointer-events: none;
+    opacity: 0.9;
+  }
   #hint {
     position: fixed;
     left: 0;
@@ -113,7 +137,10 @@
 <canvas id="pad"></canvas>
 <div id="flash"></div>
 <div id="hud">
-  <div id="slot">--</div>
+  <div id="who">
+    <div id="slot">--</div>
+    <div id="name"></div>
+  </div>
   <div id="status">connecting</div>
 </div>
 <div id="lobby">
@@ -127,7 +154,8 @@
   </div>
   <button id="ready-btn" type="button">Ready</button>
 </div>
-<div id="hint">Drag anywhere. Direction aims the weapon, distance sets its reach.</div>
+<div id="state"></div>
+<div id="hint">Drag to swing</div>
 <script>
 (function () {
   "use strict";
@@ -163,6 +191,14 @@
   };
 
   var WS_PORT = __WS_PORT__;
+  var NAME_KEY = "pickfight-name";
+  var MAX_NAME_LENGTH = 12;
+  // Random fun default names (issue #121). Every pairing fits in
+  // MAX_NAME_LENGTH, so no default is ever cut short.
+  var NAME_ADJECTIVES = ["Crispy", "Zesty", "Soggy", "Mighty", "Sneaky", "Wobbly", "Fuzzy", "Salty",
+    "Grumpy", "Spicy", "Rusty", "Jolly", "Turbo", "Lumpy", "Dizzy", "Sassy"];
+  var NAME_NOUNS = ["Walrus", "Moose", "Badger", "Noodle", "Pickle", "Goose", "Yeti", "Otter",
+    "Waffle", "Newt", "Llama", "Toast", "Gecko", "Ferret", "Bean", "Crab"];
   var CLIENT_ID_KEY = "pickfight-client-id";
 
   // ---- identity -------------------------------------------------------------
@@ -190,6 +226,27 @@
   }
   var CLIENT_ID = getClientId();
 
+  function cleanName(raw) {
+    return String(raw || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME_LENGTH).trim();
+  }
+  function randomName() {
+    for (;;) {
+      var name = NAME_ADJECTIVES[Math.floor(Math.random() * NAME_ADJECTIVES.length)] + " " +
+        NAME_NOUNS[Math.floor(Math.random() * NAME_NOUNS.length)];
+      if (name.length <= MAX_NAME_LENGTH) { return name; }
+    }
+  }
+  function loadName() {
+    var name = "";
+    try { name = cleanName(localStorage.getItem(NAME_KEY)); } catch (err) { /* private mode */ }
+    if (!name) {
+      name = randomName();
+      try { localStorage.setItem(NAME_KEY, name); } catch (err) { /* kept for this load only */ }
+    }
+    return name;
+  }
+  var myName = loadName();
+
   // ---- state --------------------------------------------------------------
   var dragRadiusPx = computeDragRadius();
   var anchor = null;   // CSS px, captured on pointerdown -- the drag is relative to this
@@ -203,6 +260,8 @@
   var ctx = canvas.getContext("2d");
   var slotEl = document.getElementById("slot");
   var statusEl = document.getElementById("status");
+  var nameEl = document.getElementById("name");
+  var stateEl = document.getElementById("state");
   var flashEl = document.getElementById("flash");
   // The buzz still playing, so a weaker one arriving on its heels (the
   // `struck` right behind an `eliminated`, a `hit` right behind a `struck`)
@@ -301,13 +360,52 @@
 
   function setSlot(n) {
     slot = n;
-    if (n < 0) {
-      slotEl.textContent = "--";
-      slotEl.style.color = NEUTRAL_COLOR;
-    } else {
-      slotEl.textContent = "P" + (n + 1);
-      slotEl.style.color = SLOT_COLORS[n % SLOT_COLORS.length];
+    var color = n < 0 ? NEUTRAL_COLOR : SLOT_COLORS[n % SLOT_COLORS.length];
+    slotEl.textContent = n < 0 ? "--" : "P" + (n + 1);
+    slotEl.style.color = color;
+    nameEl.style.color = color;
+    nameEl.textContent = myName;
+    document.body.style.boxShadow = n < 0 ? "none" : "inset 0 0 0 6px " + color;
+    showState();
+  }
+
+  function sendName() { sendText({ t: "name", v: myName }); }
+
+  nameEl.addEventListener("click", function () {
+    var typed = window.prompt("Your name (up to " + MAX_NAME_LENGTH + " letters)", myName);
+    if (typed === null) { return; }
+    var name = cleanName(typed);
+    if (!name) { return; }
+    myName = name;
+    try { localStorage.setItem(NAME_KEY, name); } catch (err) { /* kept for this load only */ }
+    nameEl.textContent = name;
+    sendName();
+  });
+
+  // ---- where this player stands (issue #121) --------------------------------
+  // Read off the host's latest lobby state: waiting for a slot, waiting out a
+  // round it joined too late for, eliminated, or counting down to the next.
+  var nextRoundAt = 0;
+  var stateTimer = null;
+  function showState() {
+    var text = "";
+    if (slot < 0) {
+      text = statusEl.textContent === "connected" ? "Waiting for a free slot" : "";
+    } else if (lobby && (lobby.phase === "playing" || lobby.phase === "round_end")) {
+      var inRound = (lobby.in_round || []).indexOf(slot) !== -1;
+      var alive = (lobby.alive || []).indexOf(slot) !== -1;
+      if (lobby.phase === "round_end") {
+        var left = Math.max(1, Math.ceil((nextRoundAt - Date.now()) / 1000));
+        text = "Next round in " + left + "…";
+      } else if (!inRound) {
+        text = "Waiting for the next round";
+      } else if (!alive) {
+        text = "Eliminated — next round soon";
+      }
     }
+    stateEl.textContent = text;
+    document.getElementById("hint").style.display = (lobby && lobby.phase === "playing" &&
+      (lobby.alive || []).indexOf(slot) !== -1) || !lobby ? "" : "none";
   }
 
   function buzz(kind) {
@@ -358,7 +456,10 @@
   function showLobby(msg) {
     lobby = msg;
     var phase = msg.phase;
-    if (phase === "playing") { lobbyEl.className = ""; return; }
+    if (phase === "round_end") { nextRoundAt = Date.now() + (msg.next || 0) * 1000; }
+    if (stateTimer === null) { stateTimer = setInterval(showState, 250); }
+    showState();
+    if (phase === "playing" || phase === "round_end") { lobbyEl.className = ""; return; }
     // A drag in progress would otherwise stay held under the overlay.
     release();
     lobbyEl.className = "show";
@@ -377,10 +478,12 @@
     document.getElementById("target-up").style.display = isHost ? "" : "none";
     if (document.activeElement !== targetInput) { targetInput.value = String(msg.target); }
     if (phase === "victory") {
-      lobbyTitleEl.textContent = msg.winner >= 0 ? slotName(msg.winner) + " wins!" : "Match over";
+      lobbyTitleEl.textContent = "Match over — " + (msg.winner === slot ? "you win!" :
+        (msg.winner >= 0 ? slotName(msg.winner) + " wins" : "no winner"));
       readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
     } else {
-      lobbyTitleEl.textContent = phase === "countdown" ? "Get ready" : (isHost ? "Lobby (you're host)" : "Lobby");
+      lobbyTitleEl.textContent = phase === "countdown" ? "Get ready" :
+        (amReady ? "Ready — waiting for the others" : "In the lobby") + (isHost ? " (you're host)" : "");
       readyBtn.textContent = amReady ? "Ready! (tap to cancel)" : "Ready";
     }
     readyBtn.className = amReady ? "on" : "";
@@ -414,7 +517,7 @@
       if (typeof ev.data !== "string") { return; }
       try {
         var msg = JSON.parse(ev.data);
-        if (typeof msg.slot === "number") { setSlot(msg.slot); }
+        if (typeof msg.slot === "number") { setSlot(msg.slot); sendName(); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }

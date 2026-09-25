@@ -193,6 +193,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_first_to_n_then_victory_and_rematch",
 	"phone_lobby_messages_over_websocket",
 	"stage_title_card_sweeps_at_round_start",
+	"phone_nickname_reaches_host_trimmed",
+	"nicknames_above_players_and_on_scoreboard",
+	"phone_states_through_a_round",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -905,6 +908,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_lobby_messages_over_websocket()
 		"stage_title_card_sweeps_at_round_start":
 			return await _scenario_stage_title_card_sweeps_at_round_start()
+		"phone_nickname_reaches_host_trimmed":
+			return await _scenario_phone_nickname_reaches_host_trimmed()
+		"nicknames_above_players_and_on_scoreboard":
+			return await _scenario_nicknames_above_players_and_on_scoreboard()
+		"phone_states_through_a_round":
+			return await _scenario_phone_states_through_a_round()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12051,7 +12060,7 @@ const LOBBY_SETTLE_TICKS: int = 5
 
 ## Three players over a lobby-enabled RoundManager and the lobby stub roster,
 ## slots 0 and 1 claimed. Players spawn in clear sky like the pickup rounds.
-func _new_lobby_round(target: int) -> Dictionary:
+func _new_lobby_round(target: int, pause_sec: float = 0.0, scoreboard: Control = null) -> Dictionary:
 	var stage := Node2D.new()
 	get_root().add_child(stage)
 	var container := Node2D.new()
@@ -12073,6 +12082,9 @@ func _new_lobby_round(target: int) -> Dictionary:
 	roster.slots = [0, 1]
 	roster.target = target
 	stage.add_child(roster)
+	if scoreboard != null:
+		scoreboard.name = "LobbyScoreboard"
+		stage.add_child(scoreboard)
 	var round_manager := RoundManagerScript.new()
 	round_manager.name = "LobbyRoundManager"
 	round_manager.player_paths = paths
@@ -12080,7 +12092,9 @@ func _new_lobby_round(target: int) -> Dictionary:
 	round_manager.arena_container_path = NodePath("../LobbyContainer")
 	round_manager.controller_server_path = NodePath("../LobbyRoster")
 	round_manager.min_players_to_start = 2
-	round_manager.round_end_pause_sec = 0.0
+	round_manager.round_end_pause_sec = pause_sec
+	if scoreboard != null:
+		round_manager.scoreboard_path = NodePath("../LobbyScoreboard")
 	round_manager.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
 	round_manager.pickup_weapons = [
 		_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH),
@@ -12167,7 +12181,7 @@ func _scenario_match_first_to_n_then_victory_and_rematch() -> Array[String]:
 			return failures
 		players[1].eliminate()
 		await _await_ticks(LOBBY_SETTLE_TICKS)
-		if round_number == 0 and rm.lobby_phase() != "playing":
+		if round_number == 0 and not rm.lobby_phase() in ["playing", "round_end"]:
 			failures.append("one win of two ended the match ('%s')" % rm.lobby_phase())
 
 	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
@@ -12303,5 +12317,140 @@ func _scenario_stage_title_card_sweeps_at_round_start() -> Array[String]:
 		failures.append("the stage title was gone after only %d ms" % shown_msec)
 	if label.position.x >= first_x:
 		failures.append("the title did not sweep across (x %.0f -> %.0f)" % [first_x, label.position.x])
+	await _teardown(loop["stage"])
+	return failures
+
+# --- Nicknames and phone states (issue #121) ----------------------------------
+
+## Issue #121, over the real socket: a phone's nickname reaches the host
+## trimmed to 12 characters (control characters dropped), a rename replaces
+## it, and the name frame may arrive right behind the id frame.
+func _scenario_phone_nickname_reaches_host_trimmed() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "NamePhoneP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "NamePhoneServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../NamePhoneP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "name-phone-0", [] as Array[WebSocketPeer])
+	if result["slot"] != 0:
+		failures.append("the phone got slot %d" % result["slot"])
+		await _teardown(stage)
+		return failures
+	peer.send_text(JSON.stringify({"t": "name", "v": "  Crispy\tWalrus The Third  "}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	print("      name on the host: '%s'" % server.slot_name(0))
+	if server.slot_name(0) != "CrispyWalrus":
+		failures.append("the host has '%s', expected 'CrispyWalrus' (tab dropped, cut to 12)" % server.slot_name(0))
+	peer.send_text(JSON.stringify({"t": "name", "v": "Zesty Newt"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if server.slot_name(0) != "Zesty Newt":
+		failures.append("a rename left '%s', expected 'Zesty Newt'" % server.slot_name(0))
+	peer.close(1000, "scenario done")
+	await _poll_phones([peer] as Array[WebSocketPeer], 5)
+	await _teardown(stage)
+	return failures
+
+## Issue #121: in a match each player in play carries its nickname just above
+## it, and the round-end scoreboard (the real one from scenes/Main.tscn) and
+## the lobby show the same names.
+func _scenario_nicknames_above_players_and_on_scoreboard() -> Array[String]:
+	var failures: Array[String] = []
+	var scoreboard: Control = _main_scoreboard()
+	var loop: Dictionary = _new_lobby_round(5, 1.0, scoreboard)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	roster.names = {0: "Crispy Moose", 1: "Soggy Otter"}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var lobby_names: Array = []
+	for entry: Dictionary in roster.last_state().get("players", []):
+		lobby_names.append(entry["name"])
+	if lobby_names != ["Crispy Moose", "Soggy Otter"]:
+		failures.append("the lobby listed %s" % [lobby_names])
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	for slot in 2:
+		var tag: Label = rm.name_tag(slot)
+		if tag == null or not tag.visible:
+			failures.append("P%d had no name tag in play" % (slot + 1))
+			continue
+		var bottom: float = tag.position.y + tag.get_minimum_size().y
+		var centre_x: float = tag.position.x + tag.get_minimum_size().x * 0.5
+		print("      P%d tag '%s' bottom %.0f px above the body, %.0f px off centre" % [
+			slot + 1, tag.text, players[slot].global_position.y - bottom, centre_x - players[slot].global_position.x])
+		if tag.text != roster.names[slot]:
+			failures.append("P%d's tag read '%s', expected '%s'" % [slot + 1, tag.text, roster.names[slot]])
+		if bottom > players[slot].global_position.y - 24.0 or absf(centre_x - players[slot].global_position.x) > 2.0:
+			failures.append("P%d's tag was not centred above the body" % (slot + 1))
+	if rm.name_tag(2) != null and rm.name_tag(2).visible:
+		failures.append("an unclaimed slot showed a name tag")
+
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return scoreboard.visible, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round-end scoreboard never came up")
+	else:
+		for slot in 2:
+			var entry: Node = scoreboard.get_child(slot)
+			var name_label: Label = entry.get_child(2) as Label if entry.get_child_count() > 2 else null
+			if name_label == null or name_label.text != roster.names[slot]:
+				failures.append("scoreboard entry %d shows '%s', expected '%s'" % [
+					slot, name_label.text if name_label != null else "<no name label>", roster.names[slot]])
+		await _await_ticks(2)
+		if rm.name_tag(0).visible:
+			failures.append("a name tag stayed up after the round ended")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #121: what the phones are told through a round, so each can say
+## where its player stands -- in the round and alive, eliminated, a late
+## joiner waiting for the next round, or counting down to it.
+func _scenario_phone_states_through_a_round() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(5, 1.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		await _teardown(loop["stage"])
+		return failures
+	roster.slots = [0, 1, 2] as Array[int]
+	await _await_ticks(3)
+	var state: Dictionary = roster.last_state()
+	print("      mid-round: %s" % [state])
+	if state.get("phase") != "playing" or state.get("in_round") != [0, 1] or state.get("alive") != [0, 1]:
+		failures.append("mid-round the phones were told %s, expected playing, in_round and alive [0, 1]" % [state])
+	elif state.get("players", []).size() != 3:
+		failures.append("the late joiner was not in the players list: %s" % [state])
+
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return roster.last_state().get("phase") == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the phones were never told the round ended (last %s)" % [roster.last_state()])
+	else:
+		state = roster.last_state()
+		if state.get("next") != 1 or (state.get("alive") as Array).has(1):
+			failures.append("at round end the phones were told %s, expected next 1 and P2 not alive" % [state])
+	var next_round: bool = await _await_condition(
+		func() -> bool: return roster.last_state().get("phase") == "playing" and roster.last_state().get("in_round") == [0, 1, 2],
+		ROUND_LOOP_TIMEOUT_MSEC)
+	if not next_round:
+		failures.append("the next round never told the phones all three were in it (last %s)" % [roster.last_state()])
 	await _teardown(loop["stage"])
 	return failures
