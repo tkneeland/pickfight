@@ -1,4 +1,4 @@
-Fresh-clone boot check, commit a6fb306 (feat/issue-50-round-modifiers)
+Fresh-clone boot check, commit b87bd0b, rebased onto c05fdd8 (feat/issue-50-round-modifiers)
 
 $ git clone -q . <scratch>/i50-fresh
 $ ls -d <scratch>/i50-fresh/.godot   -> No such file or directory
