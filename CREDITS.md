@@ -61,3 +61,35 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 | `kenney_impact/impactWood_heavy_002.ogg`, `_003`, `_004` | Impact Sounds | CC0 1.0 | collapsing floor collapse |
 | `kenney_impact/impactGeneric_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | breakable wall hit |
 | `kenney_impact/impactPlate_heavy_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | breakable wall break |
+
+## Music
+
+Added for issue #118 (ADR-0017). Every track is from OpenGameArt and each
+one's page gives its licence as **CC0** (Creative Commons Zero 1.0,
+http://creativecommons.org/publicdomain/zero/1.0/). I checked each licence
+page on 2026-09-25. Credit is optional under CC0, but it is given here anyway.
+
+The audio is not changed. Only the file names are, so that they carry no
+spaces and say what each track is used for. `scripts/Music.gd` (`TRACKS`)
+maps each one to its use.
+
+| File | Track | Author | Licence | Licence page | Downloaded from | Used for |
+|---|---|---|---|---|---|---|
+| `assets/music/lobby_snowfall_looped.ogg` | Snowfall (Looped ver.) | Kistol | CC0 1.0 | https://opengameart.org/content/snowfall | https://opengameart.org/sites/default/files/Snowfall%20%28Looped%20ver.%29_0.ogg | lobby and menu (chill) |
+| `assets/music/fight_fast_fight_looped.ogg` | Fast fight / battle music (looped) | Ville Nousiainen; loop edit by XCVG | CC0 1.0 | https://opengameart.org/content/fast-fight-battle-music-looped | https://opengameart.org/sites/default/files/fight_looped.ogg | fight, first in the rotation |
+| `assets/music/fight_nes_shooter_mars.ogg` | Mars, from "NES Shooter Music (5 tracks, 3 jingles)" | SketchyLogic | CC0 1.0 | https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles | https://opengameart.org/sites/default/files/Mars.ogg | fight, second in the rotation |
+
+Notes:
+
+- Snowfall is the author's own seamless-loop file.
+- For the other two, the page lists WAV downloads. The OGG used here is the
+  Vorbis copy of the same audio that OpenGameArt serves for the page's
+  player. It is much smaller than the WAV.
+- The fast-fight page says its licence is "same as the original" (Ville
+  Nousiainen's "Fast fight / battle music"). Ville Nousiainen asks, as an
+  optional credit, for a link to http://soundcloud.com/mutkanto.
+- Credit for Snowfall: "Music by Kistol, but credit is not required."
+
+That is three files, about 1.6 MB in all. The `music_tracks_exist_and_credited`
+scenario fails if a track is missing, if it is not listed here with CC0, or if
+a shipped music file is unused.

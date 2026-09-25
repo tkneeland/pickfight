@@ -173,6 +173,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_mix_victory_quieter_rest_louder",
 	"planted_head_grips_sideways_push",
 	"gripping_head_lets_go",
+	"music_lobby_and_fight_switching",
+	"music_ducks_under_round_win",
+	"music_tracks_exist_and_credited",
+	"settings_persist_to_config_file",
+	"settings_fullscreen_toggle_asks_display_server",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -570,6 +575,10 @@ func _run_all() -> void:
 	print("%d passed, %d failed, %d total" % [pass_count, fail_count, to_run.size()])
 	# Let the audio server let go of every sound first, or quitting reports
 	# their playbacks as leaked (#75, ADR-0016).
+	# Music too (#118): its looping tracks are playbacks like any other.
+	var music: Node = get_root().get_node_or_null(^"Music")
+	if music != null:
+		await music.release()
 	var sfx: Node = get_root().get_node_or_null(^"Sfx")
 	if sfx != null:
 		await sfx.release()
@@ -841,6 +850,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_planted_head_grips_sideways_push()
 		"gripping_head_lets_go":
 			return await _scenario_gripping_head_lets_go()
+		"music_lobby_and_fight_switching":
+			return await _scenario_music_lobby_and_fight_switching()
+		"music_ducks_under_round_win":
+			return await _scenario_music_ducks_under_round_win()
+		"music_tracks_exist_and_credited":
+			return await _scenario_music_tracks_exist_and_credited()
+		"settings_persist_to_config_file":
+			return await _scenario_settings_persist_to_config_file()
+		"settings_fullscreen_toggle_asks_display_server":
+			return await _scenario_settings_fullscreen_toggle_asks_display_server()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10809,4 +10828,320 @@ func _scenario_gripping_head_lets_go() -> Array[String]:
 				failures.append("%s: %s did not free the head within %d ticks (%.1f px off the surface)" % [
 					c[0], how, GRIP_LET_GO_TICKS, gap_of.call()])
 			await _teardown(stage)
+	return failures
+
+# --- Music and the settings menu (issue #118, ADR-0017) ---------------------
+
+const MUSIC_AUTOLOAD_PATH: NodePath = ^"Music"
+const MUSIC_DIR: String = "res://assets/music/"
+const MUSIC_CREDITS_PATH: String = "res://CREDITS.md"
+## The shipped music, all together, stays under this.
+const MUSIC_MAX_TOTAL_BYTES: int = 2 * 1024 * 1024
+## Past a crossfade, with room to spare.
+const MUSIC_SETTLE_MSEC: int = 2500
+const MUSIC_DUCK_TIMEOUT_MSEC: int = 3000
+
+## The autoload, with saving switched off so a test run never rewrites the
+## owner's music volume.
+func _music() -> Node:
+	var music: Node = get_root().get_node_or_null(MUSIC_AUTOLOAD_PATH)
+	if music != null:
+		music.persist_settings = false
+	return music
+
+## How many of the Music autoload's voices are playing.
+func _music_voices_playing(music: Node) -> int:
+	var n: int = 0
+	for child: Node in music.get_children():
+		if child is AudioStreamPlayer and (child as AudioStreamPlayer).playing:
+			n += 1
+	return n
+
+## `play_lobby()` / `play_fight()` switch the track, repeating a call changes
+## nothing, the fight tracks take turns, and by default a round start
+## switches the lobby to fight music.
+func _scenario_music_lobby_and_fight_switching() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	if AudioServer.get_bus_index(&"Music") == -1:
+		failures.append("there is no Music bus")
+	elif AudioServer.get_bus_send(AudioServer.get_bus_index(&"Music")) != &"Master":
+		failures.append("the Music bus does not send to Master")
+	var fights: PackedStringArray = music.fight_tracks()
+	if fights.size() < 1 or fights.size() > 2:
+		failures.append("there are %d fight tracks, expected 1 or 2" % fights.size())
+
+	music.play_lobby()
+	if music.current_kind() != "lobby" or not music.is_playing():
+		failures.append("play_lobby() left '%s' (%s), not the lobby track playing" % [
+			music.current_track(), "playing" if music.is_playing() else "silent"])
+	var before: int = music.switches().size()
+	music.play_lobby()
+	if music.switches().size() != before:
+		failures.append("asking for the lobby track twice restarted it")
+
+	music.play_fight()
+	var first_fight: String = music.current_track()
+	if music.current_kind() != "fight" or not music.is_playing():
+		failures.append("play_fight() left '%s', not a fight track playing" % first_fight)
+	before = music.switches().size()
+	music.play_fight()
+	if music.switches().size() != before or music.current_track() != first_fight:
+		failures.append("play_fight() during fight music changed the track")
+	# The crossfade finishes: the lobby voice fades out and stops.
+	var settled: bool = await _await_condition(func() -> bool: return _music_voices_playing(music) == 1, MUSIC_SETTLE_MSEC)
+	if not settled:
+		failures.append("after the crossfade %d voices still play, expected 1" % _music_voices_playing(music))
+
+	music.play_lobby()
+	music.play_fight()
+	if fights.size() > 1 and music.current_track() == first_fight:
+		failures.append("the next fight started '%s' again; the fight tracks should take turns" % first_fight)
+
+	# Default: a round start switches the lobby to fight music.
+	music.play_lobby()
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var started: bool = await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC)
+	await physics_frame
+	if not started:
+		failures.append("a round never started")
+	elif music.current_kind() != "fight":
+		failures.append("a round started, but the music is '%s', not fight music" % music.current_track())
+	print("      switches: %s" % [music.switches()])
+	music.stop()
+	await _teardown(loop["stage"])
+	return failures
+
+## The round win ducks the music under its sound, then lets it back up.
+func _scenario_music_ducks_under_round_win() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	var sfx: Node = _sfx()
+	if music == null or sfx == null:
+		return ["the Music or Sfx autoload is missing"]
+	await physics_frame
+	music.play_fight()
+	sfx.start_recording()
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		sfx.stop_recording()
+		music.stop()
+		failures.append("a round never started")
+		await _teardown(loop["stage"])
+		return failures
+	await physics_frame
+	if music.duck_db() != 0.0:
+		failures.append("the music is ducked %.1f dB before anyone won" % music.duck_db())
+	players[1].eliminate()
+	var deepest: float = 0.0
+	var ducked: bool = await _await_condition(func() -> bool:
+		return music.duck_db() <= music.DUCK_DB + 0.5, MUSIC_DUCK_TIMEOUT_MSEC)
+	deepest = music.duck_db()
+	var win_asked: bool = _sfx_count(sfx, "round_win") > 0
+	sfx.stop_recording()
+	var recovered: bool = await _await_condition(func() -> bool: return music.duck_db() == 0.0, MUSIC_DUCK_TIMEOUT_MSEC)
+	print("      ducked to %.1f dB (target %.1f), round_win asked: %s, back to 0: %s" % [
+		deepest, music.DUCK_DB, win_asked, recovered])
+	if not win_asked:
+		failures.append("the round was won but never asked for round_win")
+	if not ducked:
+		failures.append("the round win ducked the music only to %.1f dB, expected %.1f" % [deepest, music.DUCK_DB])
+	if not recovered:
+		failures.append("the music stayed ducked at %.1f dB" % music.duck_db())
+	music.stop()
+	await _teardown(loop["stage"])
+	return failures
+
+## Every track is on disk, loads, loops, is small, is credited as CC0, and no
+## shipped music file goes unused.
+func _scenario_music_tracks_exist_and_credited() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	var credits: String = FileAccess.get_file_as_string(MUSIC_CREDITS_PATH)
+	var referenced: Dictionary = {}
+	for path: String in music.all_track_files():
+		referenced[path] = true
+		if not FileAccess.file_exists(path):
+			failures.append("missing track %s" % path)
+			continue
+		var stream: AudioStreamOggVorbis = AudioStreamOggVorbis.load_from_file(ProjectSettings.globalize_path(path))
+		if stream == null or stream.get_length() <= 0.0:
+			failures.append("%s does not load as audio" % path)
+		var line: String = ""
+		for row: String in credits.split("\n"):
+			if row.contains(path.get_file()):
+				line = row
+				break
+		if line == "":
+			failures.append("CREDITS.md does not list %s" % path.get_file())
+		elif not line.contains("CC0"):
+			failures.append("CREDITS.md lists %s without a CC0 licence" % path.get_file())
+	music.play_lobby()
+	var voice_stream: AudioStream = null
+	for child: Node in music.get_children():
+		if child is AudioStreamPlayer and (child as AudioStreamPlayer).playing:
+			voice_stream = (child as AudioStreamPlayer).stream
+	if not (voice_stream is AudioStreamOggVorbis) or not (voice_stream as AudioStreamOggVorbis).loop:
+		failures.append("the lobby track does not play as a loop")
+	music.stop()
+	var total: int = 0
+	for file: String in DirAccess.get_files_at(MUSIC_DIR):
+		if file.ends_with(".import"):
+			continue
+		var path: String = MUSIC_DIR + file
+		total += FileAccess.get_file_as_bytes(path).size()
+		if not referenced.has(path):
+			failures.append("%s is shipped but no track uses it" % path)
+	print("      %d tracks, %.0f KB" % [referenced.size(), total / 1024.0])
+	if total > MUSIC_MAX_TOTAL_BYTES:
+		failures.append("the music comes to %d bytes, over %d" % [total, MUSIC_MAX_TOTAL_BYTES])
+	_scenario_completed = true
+	return failures
+
+## The settings menu's choices are saved with ConfigFile and come back on the
+## next load. This runs against a temp file, never the owner's own settings.
+func _scenario_settings_persist_to_config_file() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var music: Node = _music()
+	if sfx == null or music == null:
+		return ["the Sfx or Music autoload is missing"]
+	await physics_frame
+	var was: Dictionary = {
+		"master": sfx.master_volume, "sfx": sfx.sfx_volume, "muted": sfx.muted,
+		"fullscreen": sfx.fullscreen, "music": music.volume,
+		"sfx_path": sfx.settings_path, "music_path": music.settings_path,
+	}
+	var real_path: String = ProjectSettings.globalize_path(sfx.SETTINGS_PATH)
+	var real_before: PackedByteArray = FileAccess.get_file_as_bytes(real_path) if FileAccess.file_exists(real_path) else PackedByteArray()
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_settings_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	sfx.settings_path = temp_path
+	music.settings_path = temp_path
+	sfx.persist_settings = true
+	music.persist_settings = true
+
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	ui.volume_slider().value = 0.4
+	ui.sfx_slider().value = 0.6
+	ui.music_slider().value = 0.3
+	ui.mute_box().button_pressed = true
+	ui.fullscreen_box().button_pressed = true
+
+	var saved := ConfigFile.new()
+	if saved.load(temp_path) != OK:
+		failures.append("nothing was saved to %s" % temp_path)
+	else:
+		var expect: Array = [
+			["audio", "master_volume", 0.4], ["audio", "sfx_volume", 0.6],
+			["music", "volume", 0.3], ["audio", "muted", true], ["display", "fullscreen", true],
+		]
+		for e: Array in expect:
+			var got: Variant = saved.get_value(e[0], e[1], null)
+			if got == null or (got is float and absf(float(got) - float(e[2])) > 0.001) or (got is bool and got != e[2]):
+				failures.append("saved %s/%s is %s, expected %s" % [e[0], e[1], got, e[2]])
+
+	# Forget, then load: the choices come back and reach the buses.
+	sfx.persist_settings = false
+	music.persist_settings = false
+	sfx.master_volume = 1.0
+	sfx.sfx_volume = 1.0
+	sfx.muted = false
+	sfx.fullscreen = false
+	music.volume = 1.0
+	sfx.load_settings()
+	music.load_settings()
+	if absf(sfx.master_volume - 0.4) > 0.001 or absf(sfx.sfx_volume - 0.6) > 0.001 or not sfx.muted or not sfx.fullscreen:
+		failures.append("reloading gave master %.2f, sfx %.2f, muted %s, fullscreen %s" % [
+			sfx.master_volume, sfx.sfx_volume, sfx.muted, sfx.fullscreen])
+	if absf(music.volume - 0.3) > 0.001:
+		failures.append("reloading gave music volume %.2f, expected 0.3" % music.volume)
+	var music_bus: int = AudioServer.get_bus_index(&"Music")
+	var sfx_bus: int = AudioServer.get_bus_index(&"SFX")
+	if music_bus == -1 or absf(AudioServer.get_bus_volume_db(music_bus) - linear_to_db(0.3)) > 0.01:
+		failures.append("the Music bus is not at the music volume's %.2f dB" % linear_to_db(0.3))
+	if sfx_bus == -1 or absf(AudioServer.get_bus_volume_db(sfx_bus) - linear_to_db(0.6)) > 0.01:
+		failures.append("the SFX bus is not at the SFX volume's %.2f dB" % linear_to_db(0.6))
+	if not AudioServer.is_bus_mute(0):
+		failures.append("reloading a saved mute left the Master bus unmuted")
+	ui.refresh()
+	if absf(ui.music_slider().value - 0.3) > 0.001 or not ui.fullscreen_box().button_pressed:
+		failures.append("the menu does not show the reloaded settings")
+
+	# Put everything back, unsaved, and leave the owner's file as it was.
+	sfx.set_master_volume(was["master"])
+	sfx.set_sfx_volume(was["sfx"])
+	sfx.set_muted(was["muted"])
+	sfx.set_fullscreen(was["fullscreen"])
+	music.set_volume(was["music"])
+	sfx.settings_path = was["sfx_path"]
+	music.settings_path = was["music_path"]
+	ui.refresh()
+	DirAccess.remove_absolute(temp_path)
+	var real_after: PackedByteArray = FileAccess.get_file_as_bytes(real_path) if FileAccess.file_exists(real_path) else PackedByteArray()
+	if real_after != real_before:
+		failures.append("the test rewrote the owner's own %s" % sfx.SETTINGS_PATH)
+	_scenario_completed = true
+	return failures
+
+## The fullscreen box and F11 ask DisplayServer for fullscreen, and back for
+## the project's own window mode. Headless has no window to change, so this
+## checks what was asked for.
+func _scenario_settings_fullscreen_toggle_asks_display_server() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var was: bool = sfx.fullscreen
+	var windowed: int = int(ProjectSettings.get_setting("display/window/size/mode"))
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var asked: int = sfx.window_mode_requests().size()
+
+	ui.fullscreen_box().button_pressed = true
+	var requests: Array[int] = sfx.window_mode_requests()
+	if not sfx.fullscreen or requests.size() != asked + 1 or requests.back() != DisplayServer.WINDOW_MODE_FULLSCREEN:
+		failures.append("ticking Fullscreen asked for %s, expected WINDOW_MODE_FULLSCREEN" % [requests.slice(asked)])
+	ui.fullscreen_box().button_pressed = false
+	requests = sfx.window_mode_requests()
+	if sfx.fullscreen or requests.back() != windowed:
+		failures.append("unticking Fullscreen asked for mode %d, expected the project's %d" % [requests.back(), windowed])
+
+	var f11 := InputEventKey.new()
+	f11.physical_keycode = KEY_F11
+	f11.pressed = true
+	ui._unhandled_input(f11)
+	requests = sfx.window_mode_requests()
+	if not sfx.fullscreen or requests.back() != DisplayServer.WINDOW_MODE_FULLSCREEN or not ui.fullscreen_box().button_pressed:
+		failures.append("F11 did not ask for fullscreen and tick the box")
+	ui._unhandled_input(f11)
+	if sfx.fullscreen:
+		failures.append("a second F11 left fullscreen on")
+
+	# Esc opens and closes the menu.
+	var was_open: bool = ui.is_open()
+	var esc := InputEventKey.new()
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	ui._unhandled_input(esc)
+	if ui.is_open() == was_open:
+		failures.append("Esc did not open the settings menu")
+	ui._unhandled_input(esc)
+	if ui.is_open() != was_open:
+		failures.append("a second Esc did not close the settings menu")
+	print("      display server '%s', asked for %s" % [DisplayServer.get_name(), sfx.window_mode_requests().slice(asked)])
+	sfx.set_fullscreen(was)
+	ui.refresh()
+	_scenario_completed = true
 	return failures

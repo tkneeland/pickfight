@@ -20,8 +20,10 @@ extends Node
 ##   project has no bus layout, and no one sound has more than its
 ##   `overlap` copies playing at once: past the cap the oldest copy is cut
 ##   and reused, so a flurry stays a flurry and not a wall of noise.
-## - **Master volume and mute**, applied to the Master bus and remembered in
-##   `user://audio.cfg`. `SfxSettings.gd` is the on-screen control for them.
+## - **Master volume and mute**, applied to the Master bus, the **SFX volume**,
+##   applied to the SFX bus, and the **fullscreen** toggle (#118), all
+##   remembered in `user://audio.cfg`. `SfxSettings.gd` is the on-screen
+##   settings menu for them and for `Music`'s volume.
 ##
 ## Which game events make which sound is not here: `SfxHooks.gd` listens to
 ## the signals the game already emits and calls `play()`. Nothing in the game
@@ -174,6 +176,15 @@ const RELEASE_SEC: float = 1.0
 ## `set_master_volume()` / `set_muted()` so they reach the bus.
 var master_volume: float = 1.0
 var muted: bool = false
+## The SFX bus's own volume, 0..1, under the master (#118). Set through
+## `set_sfx_volume()`.
+var sfx_volume: float = 1.0
+## Whether the host window is fullscreen (#118). Set through
+## `set_fullscreen()`, which asks `DisplayServer` for the window mode.
+var fullscreen: bool = false
+## Where the settings are saved. The scenario suite points it at a temp file
+## when it tests saving.
+var settings_path: String = SETTINGS_PATH
 ## Whether volume and mute are saved to `SETTINGS_PATH` when changed. The
 ## scenario suite switches it off so a test run never rewrites the owner's
 ## settings.
@@ -192,12 +203,15 @@ var _warned: Dictionary = {}
 var _play_serial: int = 0
 var _hooks: Node
 var _settings_ui: CanvasLayer
+## Every window mode `set_fullscreen()` has asked `DisplayServer` for, oldest
+## first. Headless cannot really go fullscreen, so the scenarios check this.
+var _window_mode_requests: Array[int] = []
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
 	_ensure_bus()
-	_load_settings()
+	load_settings()
 	_hooks = HooksScript.new()
 	_hooks.name = "Hooks"
 	_hooks.sfx = self
@@ -341,24 +355,67 @@ func set_muted(value: bool) -> void:
 func toggle_muted() -> void:
 	set_muted(not muted)
 
+func set_sfx_volume(value: float) -> void:
+	sfx_volume = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0
+	_apply_sfx_volume()
+	_save_settings()
+
+## Ask the window to go fullscreen, or back to the project's own window mode
+## (maximized), and remember the choice.
+func set_fullscreen(value: bool) -> void:
+	fullscreen = value
+	_apply_window_mode()
+	_save_settings()
+
+func toggle_fullscreen() -> void:
+	set_fullscreen(not fullscreen)
+
+## The window modes asked for so far (`DisplayServer.WINDOW_MODE_*`).
+func window_mode_requests() -> Array[int]:
+	return _window_mode_requests.duplicate()
+
 func _apply_master() -> void:
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(master_volume, 0.0001)))
 	AudioServer.set_bus_mute(0, muted)
 
-func _load_settings() -> void:
+func _apply_sfx_volume() -> void:
+	var index: int = AudioServer.get_bus_index(BUS_NAME)
+	if index != -1:
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(sfx_volume, 0.0001)))
+
+func _apply_window_mode() -> void:
+	var mode: int = DisplayServer.WINDOW_MODE_FULLSCREEN
+	if not fullscreen:
+		mode = int(ProjectSettings.get_setting("display/window/size/mode", DisplayServer.WINDOW_MODE_WINDOWED))
+		if mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+			mode = DisplayServer.WINDOW_MODE_WINDOWED
+	_window_mode_requests.append(mode)
+	DisplayServer.window_set_mode(mode as DisplayServer.WindowMode)
+
+## Read volume, mute and fullscreen from `settings_path`. Fullscreen is only
+## put into effect with the game's scene (`_build_settings_ui_if_in_game`),
+## so a scenario run never resizes a window.
+func load_settings() -> void:
 	var config := ConfigFile.new()
-	if config.load(SETTINGS_PATH) == OK:
+	if config.load(settings_path) == OK:
 		master_volume = clampf(float(config.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
 		muted = bool(config.get_value("audio", "muted", false))
+		sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
+		fullscreen = bool(config.get_value("display", "fullscreen", false))
 	_apply_master()
+	_apply_sfx_volume()
 
+## Load, change and save, so `Music`'s section of the same file is kept.
 func _save_settings() -> void:
 	if not persist_settings:
 		return
 	var config := ConfigFile.new()
+	config.load(settings_path)
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("audio", "muted", muted)
-	config.save(SETTINGS_PATH)
+	config.set_value("audio", "sfx_volume", sfx_volume)
+	config.set_value("display", "fullscreen", fullscreen)
+	config.save(settings_path)
 
 ## The on-screen volume control, built once the game's own scene is up. Also
 ## public so a scenario can build one and drive it.
@@ -367,11 +424,14 @@ func build_settings_ui() -> CanvasLayer:
 		_settings_ui = SettingsScript.new()
 		_settings_ui.name = "SfxSettings"
 		_settings_ui.sfx = self
+		_settings_ui.music = get_node_or_null(^"/root/Music")
 		add_child(_settings_ui)
 	return _settings_ui
 
 func _build_settings_ui_if_in_game() -> void:
 	if get_tree().current_scene != null:
+		if fullscreen:
+			_apply_window_mode()
 		build_settings_ui()
 
 # --- Internals --------------------------------------------------------------
