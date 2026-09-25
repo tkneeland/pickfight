@@ -2,54 +2,41 @@
 
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
-; The axe: a single broad bit on a heavy haft
-; (docs/art/weapons-whiteboard.jpg, middle right). It is drawn one-sided, so it
-; is authored one-sided (#16): a wide fan broader along the haft than across
-; it, the haft meeting it near one corner, a scalloped back edge -- two humps
-; with a notch between -- and a smooth convex belly sweeping round the leading
-; corner. 31.1 x 22.2 px against a 48 x 48 px player body, the drawing's
-; proportion against its "Reference Player" box, at 1.05 of the roster's
-; whiteboard-to-pixel scale. Sixteen circles fill it (ADR-0010), two big ones
-; through the body of the fan and fourteen small ones feeling into the humps
-; and the corners; they cover 95.2% of it, and the worst of them stands +0.00
-; px outside the traced outline -- inside it, on the geometry rather than on
-; weapon_head_circles_within_art's 0.5 px tolerance.
+; The axe (playtest 2, issue #49): redrawn so it reads as an axe at a glance,
+; which the #16 crescent did not. Side-on, the haft runs through the eye at
+; the anchor; a short poll sits behind it (-y) and the blade drops away on the
+; other side (+y) through a narrow neck that flares to a broad, curved cutting
+; edge 40 px long, bearded at both corners. About 42 px from poll to edge
+; against a 48 px player body. One-sided, so it still flips with aim (#16):
+; the blade always leads the swing.
 ;
 ; Head-local space is the pickaxe's: +X outward along the haft, origin at the
-; groove anchor. The bit is all on +Y, which with the haft pointing right is
-; below it on screen. `flips_with_aim` has Player mirror it to -Y whenever the
-; aim crosses the vertical, circles and outline together, so aimed left it is
-; still below the haft -- the axe is the same axe on both sides of the stage.
+; groove anchor. The art is drawn to a design (a curve through the edge, the
+; neck and beard by hand) and the 16 circles were then packed greedily inside
+; it -- largest inscribed circle first -- covering 92.8% of it, every one
+; clamped at least 0.05 px inside the outline (ADR-0010). The forward extent,
+; 19 px past the anchor at the toe, is about what the #45 head reached (19.9).
 ;
-; The belly reaches 11.00 px past the anchor -- the most on the roster, and
-; exactly what the symmetric crescent it replaces reached, because that is
-; the forward extent the plant and clash scenarios are measured against. The
-; fan trails 19.69 px back down the haft instead; only the reach forward
-; along the haft is budgeted, which is the same trick the sword's blade uses.
-; Nothing enforces a bound on the forward number; see staff.tres.
-;
-; Stats against the pickaxe's M/M/M baseline (retuned after the first
-; playtest, #45): the axe is power bought with time. Weight heavy -- mass
-; 0.55 against 0.25, force ceiling 9000 against 6000 -- so it wins clashes
-; against everything and flings its own body hardest off a plant. Damage L,
-; 70 against 34, so a clean full-speed hit is by far the most devastating
-; thing on the roster. The cost is responsiveness, and the owner asked for
-; it to feel sluggish: 12 rad/s against 24, 380 px/s out against 700, 200 px/s
-; of return against 400 -- the slowest weapon on the roster to answer a thumb
-; and to reach full extension. Reach M at 140 px. The whole head was scaled
-; 1.75x, circles and art together, every circle still inside the art.
+; Stats against the pickaxe's M/M/M baseline: the axe is power bought with
+; time, pushed further after the second playtest. Damage 90 -- the per-strike
+; cap (Player.MAX_STRIKE_DAMAGE) -- so two clean hits always kill and one
+; never does (owner's decision). And it is deliberately sluggish: mass 0.7
+; against 0.25 and a force ceiling of 9000 against 6000, so it wins every
+; clash, but a drive of 9 rad/s against 24, 300 px/s out against 700 and
+; 150 px/s back against 400 -- by far the slowest weapon on the roster to
+; answer a thumb. Reach M at 140 px.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
 max_reach = 140.0
-mass = 0.55
-drive_speed = 12.0
-extend_speed = 380.0
-rest_return_speed = 200.0
+mass = 0.7
+drive_speed = 9.0
+extend_speed = 300.0
+rest_return_speed = 150.0
 max_drive_force = 9000.0
-damage = 70.0
-head_circle_offsets = PackedVector2Array(1.91, 8.59, -15.59, 9.99, -10.69, -3.66, -30.29, 10.34, -18.04, 24.34, -29.59, 6.14, 2.26, 26.09, -29.24, 14.89, 5.76, 25.74, -22.24, 22.94, -6.84, -6.46, 8.56, 24.69, -27.84, 17.69, -1.24, 25.74, -15.24, -4.71, -25.39, 20.84)
-head_circle_radii = PackedFloat32Array(17.32, 14.4, 4.46, 4.14, 3.94, 3.51, 3.4, 2.95, 2.77, 2.63, 2.43, 2.28, 2.28, 2.07, 1.98, 1.93)
-art_outline = PackedVector2Array(-32.46, 3.68, -32.76, 4.55, -33.27, 5.76, -33.84, 7.17, -34.3, 8.75, -34.49, 10.36, -34.3, 11.95, -33.62, 13.56, -32.6, 15.31, -31.31, 17.11, -29.87, 18.88, -28.38, 20.56, -26.95, 22.05, -25.52, 23.47, -24.03, 24.9, -22.47, 26.25, -20.89, 27.35, -19.3, 28.14, -17.76, 28.49, -16.22, 28.12, -14.7, 27.09, -13.16, 25.72, -11.64, 24.36, -10.1, 23.33, -8.58, 22.96, -7.03, 23.45, -5.51, 24.57, -3.97, 26, -2.45, 27.49, -0.91, 28.72, 0.61, 29.4, 2.17, 29.54, 3.75, 29.37, 5.32, 28.95, 6.88, 28.31, 8.38, 27.53, 9.8, 26.65, 11.22, 25.5, 12.67, 23.99, 14.05, 22.33, 15.31, 20.72, 16.38, 19.34, 17.15, 18.38, 17.55, 17.08, 18.18, 15.28, 18.88, 13.14, 19.5, 10.85, 19.9, 8.56, 19.92, 6.44, 19.56, 4.34, 18.99, 2.15, 18.18, -0.05, 17.15, -2.13, 15.89, -4.01, 14.4, -5.51, 12.58, -6.67, 10.45, -7.56, 8.09, -8.21, 5.58, -8.68, 3.06, -8.99, 0.61, -9.19, -1.8, -9.26, -4.29, -9.19, -6.79, -8.96, -9.29, -8.58, -11.72, -8.03, -14.09, -7.35, -16.42, -6.41, -18.78, -5.18, -21.09, -3.8, -23.28, -2.38, -25.25, -1.07, -26.95, 0, -28.35, 0.88, -29.54, 1.63, -30.5, 2.29, -31.31, 2.85, -31.94, 3.32, -32.46, 3.68)
+damage = 90.0
+head_circle_offsets = PackedVector2Array(-1, 21.5, 0, 9.5, 0, -2, -12.5, 25, 10.5, 25, -4.5, 3.5, 4.5, 3.5, 15.5, 25.5, -9.5, 30, -5, -7, 5, -7, 8, 29.5, 11, 20, -18, 26.5, -13, 19.5, 7, 12.5)
+head_circle_radii = PackedFloat32Array(11.89, 7.1, 6.95, 5.32, 4.93, 2.45, 2.45, 2.11, 2.01, 1.95, 1.95, 1.88, 1.86, 1.77, 1.42, 1.37)
+art_outline = PackedVector2Array(-7, -9, 7, -9, 7, 8, 9, 14, 13, 19.5, 19, 26, 15.67, 27.9, 12.33, 29.67, 9, 31.2, 5.67, 32.4, 2.33, 33.18, -1, 33.5, -4.33, 33.34, -7.67, 32.73, -11, 31.7, -14.33, 30.33, -17.67, 28.73, -21, 27, -17, 22, -12, 16, -8.5, 11.5, -7, 8)
 flips_with_aim = true
