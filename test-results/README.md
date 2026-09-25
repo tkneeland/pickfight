@@ -13,7 +13,7 @@ here would only cause merge conflicts.
 | Slippery floor applies (slide 36 to 150 px) and is undone next round | `round_modifier_slippery_floor_applies_and_undoes` | `issue-50/scenario-suite.txt` | PASS |
 | The name is announced big on screen at round start, hides after its time, and is absent on a round with no modifier | `round_modifier_announced_on_screen`; windowed capture | `issue-50/scenario-suite.txt`, `issue-50/announcement-big-heads.png` | PASS |
 | `modifier_chance` 0 disables modifiers (0 of 10 rounds; 10 of 10 at chance 1) | `round_modifier_chance_zero_disables` | `issue-50/scenario-suite.txt` | PASS |
-| Nothing else regressed (main before this branch: 78 of 78) | full suite on b87bd0b (rebased onto c05fdd8, #49 axe included): 85 of 85 | `issue-50/scenario-suite.txt` | PASS |
+| Nothing else regressed (main before this branch: 78 of 78) | full suite on 202cdb2 (rebased onto 3c192d4, #49 axe and #55 boomstick included): 93 of 93 | `issue-50/scenario-suite.txt` | PASS |
 | Boots on a fresh clone | clone, `--quit`, grep for script errors | `issue-50/boot-check.txt` | PASS |
 | Chance (0.35) and the strength of each modifier feel right | playtest | - | NEEDS PLAYTEST |
 
