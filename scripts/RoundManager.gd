@@ -60,6 +60,13 @@ extends Node
 ## `_start_kill_zone_rise()`, and the zone keeps climbing past that spawn.
 @export var kill_zone_rise_sec: float = 80.0
 
+## Sound hooks (issue #75, ADR-0016); nothing in the game reads them.
+## `round_started` once every player is spawned, `round_won` where the
+## winner scores, `modifier_announced` as a modifier's name goes up.
+signal round_started
+signal round_won(slot: int)
+signal modifier_announced(title: String)
+
 enum State { WAITING, ROUND_ACTIVE, ROUND_END }
 
 var _state: int = State.WAITING
@@ -198,6 +205,7 @@ func _try_start_round() -> void:
 	_start_round_modifier()
 	_start_pickups()
 	_start_kill_zone_rise()
+	round_started.emit()
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next `_stage_index` into `stage_scenes` via `_next_stage_index()`, and
@@ -288,6 +296,7 @@ func _check_round_end() -> void:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
 		_buzz(winner_slot, "win")
+		round_won.emit(winner_slot)
 		_players[winner_slot].leave_round()
 		_update_score_label()
 		_last_winner_slot = winner_slot
@@ -635,6 +644,7 @@ func _announce_modifier(title: String) -> void:
 	_modifier_label.text = title
 	_modifier_label.visible = true
 	_modifier_timer.start(maxf(modifier_announce_sec, 0.01))
+	modifier_announced.emit(title)
 
 ## Big, outlined, centred across the upper part of the screen, on its own
 ## canvas layer above the HUD.

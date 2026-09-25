@@ -52,6 +52,10 @@ const TRAIL_RADII: float = 5.0
 const CORE_COLOR: Color = Color(1.0, 0.95, 0.7, 1.0)
 const OUTLINE_COLOR: Color = Color(0.0, 0.0, 0.0, 0.8)
 
+## The bullet met `collider` (terrain, a head, a player, or null) at `point`
+## and is about to go. A sound hook (issue #75, ADR-0016); gameplay ignores it.
+signal impacted(collider: Object, point: Vector2)
+
 ## Who fired it. Read by scenarios; never hit by the bullet itself.
 var shooter: Node2D
 ## Unit vector the bullet flies along.
@@ -142,6 +146,7 @@ func _physics_process(delta: float) -> void:
 ## except a breakable wall, which takes the bullet's damage (#53).
 ## Whatever it hit, the bullet is spent.
 func _hit(collider: Object, point: Vector2) -> void:
+	impacted.emit(collider, point)
 	var victim: Node = collider as Node
 	if victim != null and victim != shooter and victim.is_in_group("players") and victim.alive:
 		if victim is RigidBody2D:

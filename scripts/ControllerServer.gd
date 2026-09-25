@@ -37,6 +37,10 @@ extends Node
 ## bind/unbind/timeout, and a periodic "weapon steady" line while a bound weapon is
 ## unchanged; the automated checks assert on those lines.
 
+## A phone claimed `slot` fresh -- not a reconnect to a slot it already held.
+## A sound hook (issue #75, ADR-0016); nothing in the game reads it.
+signal player_joined(slot: int)
+
 const PAGE_PATH: String = "res://controller/index.html"
 const WS_PORT_TOKEN: String = "__WS_PORT__"
 const MAX_HEADER_BYTES: int = 8192
@@ -452,6 +456,7 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 		_slot_claimed[slot] = 1
 		_slot_client_id[slot] = id
 		_attach(slot, peer)
+		player_joined.emit(slot)
 		if _log_input:
 			print("slot %d claimed" % slot)
 		return

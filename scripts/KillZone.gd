@@ -45,6 +45,14 @@ const WARNING_PULSES_PER_SEC: float = 2.0
 ## Used when the zone has no rectangle shape to size the surface from.
 const FALLBACK_SIZE: Vector2 = Vector2(8000.0, 40.0)
 
+## Sound hooks (issue #75, ADR-0016); nothing in the game reads them.
+## `rise_countdown` fires once for each of the last COUNTDOWN_FROM whole
+## seconds of the grace period (3, 2, 1), and `rise_began` the tick the floor
+## sets off.
+signal rise_countdown(seconds_left: int)
+signal rise_began
+const COUNTDOWN_FROM: int = 3
+
 var _rising: bool = false
 var _grace_left: float = 0.0
 var _speed: float = 0.0
@@ -65,6 +73,8 @@ func start_rising(grace_sec: float, speed: float) -> void:
 	_rising = true
 	_ensure_surface()
 	set_physics_process(true)
+	if _grace_left <= 0.0:
+		rise_began.emit()
 
 ## Freeze wherever the zone is now: the round is over, and a surface still
 ## climbing over the scoreboard or the waiting text would look like a bug.
@@ -81,10 +91,15 @@ func _physics_process(delta: float) -> void:
 	if not _rising:
 		return
 	if _grace_left > 0.0:
+		var whole_before: int = ceili(_grace_left)
 		_grace_left -= delta
 		_update_warning()
 		if _grace_left > 0.0:
+			var whole_after: int = ceili(_grace_left)
+			if whole_after < whole_before and whole_after <= COUNTDOWN_FROM:
+				rise_countdown.emit(whole_after)
 			return
+		rise_began.emit()
 		_surface.color = SURFACE_COLOR
 		# Carry the leftover of the tick grace ended on into the rise, so the
 		# deadline does not slip by up to a tick.

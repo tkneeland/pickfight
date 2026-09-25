@@ -71,6 +71,14 @@ extends Resource
 ## Impulse each shot gives the shooter's body, back along the barrel.
 @export var recoil_impulse: float = 0.0
 
+# --- Sound (issue #75, ADR-0016) ---------------------------------------------
+
+## Which of `Sfx`'s per-weapon sounds this weapon makes: its strikes play
+## `hit_<sound_set>`, and if it fires, its shots play `fire_<sound_set>`. Every
+## weapon in `resources/` names its own. The default is the pickaxe's, which
+## is what a bare `WeaponStats.new()` stands in for.
+@export var sound_set: StringName = &"pickaxe"
+
 # --- The head: what it hits with, and what it is drawn as --------------------
 #
 # ADR-0010. A weapon head is a **cluster of circles fitted to the drawn art**,

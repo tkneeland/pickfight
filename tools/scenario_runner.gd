@@ -156,6 +156,18 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"breakable_wall_breaks_on_weapon_hits",
 	"breakable_wall_ignores_bodies",
 	"boomstick_bullet_damages_breakable_wall",
+	"sfx_strike_sounds_as_attackers_weapon",
+	"sfx_head_meets_terrain_and_head",
+	"sfx_landing_and_elimination",
+	"sfx_boomstick_shot_and_impact",
+	"sfx_round_events",
+	"sfx_lava_countdown_rise_and_sizzle",
+	"sfx_join_sounds",
+	"sfx_strength_scales_volume",
+	"sfx_overlap_cap_holds",
+	"sfx_weapon_sound_sets_distinct",
+	"sfx_sound_files_exist",
+	"sfx_volume_slider_and_mute",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -785,6 +797,30 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_breakable_wall_ignores_bodies()
 		"boomstick_bullet_damages_breakable_wall":
 			return await _scenario_boomstick_bullet_damages_breakable_wall()
+		"sfx_strike_sounds_as_attackers_weapon":
+			return await _scenario_sfx_strike_sounds_as_attackers_weapon()
+		"sfx_head_meets_terrain_and_head":
+			return await _scenario_sfx_head_meets_terrain_and_head()
+		"sfx_landing_and_elimination":
+			return await _scenario_sfx_landing_and_elimination()
+		"sfx_boomstick_shot_and_impact":
+			return await _scenario_sfx_boomstick_shot_and_impact()
+		"sfx_round_events":
+			return await _scenario_sfx_round_events()
+		"sfx_lava_countdown_rise_and_sizzle":
+			return await _scenario_sfx_lava_countdown_rise_and_sizzle()
+		"sfx_join_sounds":
+			return await _scenario_sfx_join_sounds()
+		"sfx_strength_scales_volume":
+			return await _scenario_sfx_strength_scales_volume()
+		"sfx_overlap_cap_holds":
+			return await _scenario_sfx_overlap_cap_holds()
+		"sfx_weapon_sound_sets_distinct":
+			return await _scenario_sfx_weapon_sound_sets_distinct()
+		"sfx_sound_files_exist":
+			return await _scenario_sfx_sound_files_exist()
+		"sfx_volume_slider_and_mute":
+			return await _scenario_sfx_volume_slider_and_mute()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -9756,4 +9792,521 @@ func _scenario_boomstick_bullet_damages_breakable_wall() -> Array[String]:
 			wall.hit_count(), WALL_DEFAULT_HP, per_shot, hits_to_break])
 
 	await _teardown(stage)
+	return failures
+
+# --- Sound effects (issue #75, ADR-0016) -------------------------------------
+#
+# Headless has no ears, so these spy on what was asked of `Sfx` -- its
+# `start_recording()` / `recorded()` test hook -- rather than on what came out.
+# The events are the real ones wherever that is cheap: a real bullet, a real
+# landing, a real clash, a real round. Where it is not (a phone joining needs
+# a real socket), the hook is driven through the same signal the game emits.
+
+const SFX_AUTOLOAD_PATH: NodePath = ^"Sfx"
+const SFX_HOOKS_PATH: String = "res://scripts/SfxHooks.gd"
+const SFX_CONTROLLER_SERVER_PATH: String = "res://scripts/ControllerServer.gd"
+const SFX_DIR: String = "res://assets/sfx/"
+const SFX_SWORD_PATH: String = "res://resources/sword.tres"
+## The shipped sound files, all together, stay under this.
+const SFX_MAX_TOTAL_BYTES: int = 3 * 1024 * 1024
+## Ticks a head strike, a clash or a landing is watched for.
+const SFX_WATCH_TICKS: int = 90
+## Where the bare-head checks run: far from everything else.
+const SFX_HEAD_ORIGIN: Vector2 = Vector2(3000.0, -4000.0)
+## A drop high enough to land at well over SfxHooks.LAND_MIN_SPEED.
+const SFX_DROP_HEIGHT: float = 320.0
+const SFX_LAVA_GRACE_SEC: float = 3.3
+const SFX_LAVA_TIMEOUT_MSEC: int = 8000
+
+## The autoload, with saving switched off so a test run never rewrites the
+## owner's volume. Null only if the autoload is missing, which every sound
+## scenario reports as its failure.
+func _sfx() -> Node:
+	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
+	if sfx != null:
+		sfx.persist_settings = false
+	return sfx
+
+func _sfx_count(sfx: Node, sound: String) -> int:
+	var n: int = 0
+	for name: String in sfx.recorded_names():
+		if name == sound:
+			n += 1
+	return n
+
+func _sfx_last(sfx: Node, sound: String) -> Dictionary:
+	var found: Dictionary = {}
+	for r: Dictionary in sfx.recorded():
+		if r["name"] == sound:
+			found = r
+	return found
+
+## Every strike that dealt damage asks for the attacker's weapon's hit,
+## whichever path reported it; a 0-damage contact asks for nothing.
+func _scenario_sfx_strike_sounds_as_attackers_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var attacker: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2.RIGHT * 300.0)
+	attacker.set_weapon_stats(load(SFX_SWORD_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+
+	sfx.start_recording()
+	var point: Vector2 = victim.global_position
+	attacker.strike_landed.emit(victim, 30.0, point, false)
+	attacker.strike_landed.emit(victim, 0.0, point, false)
+	# The bullet path: the real public call a bullet makes, which deals the
+	# damage and reports it through the same signal.
+	attacker.land_projectile_hit(victim, 10.0, point)
+	sfx.stop_recording()
+
+	var names: PackedStringArray = sfx.recorded_names()
+	print("      requested: %s" % [names])
+	if names != PackedStringArray(["hit_sword", "hit_sword"]):
+		failures.append("a sword's damaging strikes should each ask for hit_sword and a 0-damage one for nothing; got %s" % [names])
+	var last: Dictionary = _sfx_last(sfx, "hit_sword")
+	if not last.is_empty() and not (last["position"] is Vector2 and (last["position"] as Vector2).is_equal_approx(point)):
+		failures.append("the hit was not placed where the strike landed: %s, expected %s" % [last["position"], point])
+
+	await _teardown(stage)
+	return failures
+
+## A head flying into a wall asks for `head_terrain`; two heads flying at
+## each other ask for `clash`. Both come out of `WeaponHead`'s own sweeps, on
+## bare heads (the #47 fixture) so nothing else moves them.
+func _scenario_sfx_head_meets_terrain_and_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+
+	var face: Vector2 = SFX_HEAD_ORIGIN
+	var slab := StaticBody2D.new()
+	slab.collision_layer = 1
+	slab.collision_mask = 0
+	var slab_shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = HELD_SLAB_SIZE
+	slab_shape.shape = rect
+	slab.add_child(slab_shape)
+	slab.position = face + Vector2(HELD_SLAB_SIZE.x * 0.5, 0.0)
+	stage.add_child(slab)
+	var knocker: RigidBody2D = _bare_head(stage, face - Vector2(120.0, 0.0), HELD_HEAD_FORCE)
+	await _await_ticks(2)
+	sfx.start_recording()
+	knocker.linear_velocity = Vector2(HELD_SPEED, 0.0)
+	for _i in SFX_WATCH_TICKS:
+		await physics_frame
+		if _sfx_count(sfx, "head_terrain") > 0:
+			break
+	sfx.stop_recording()
+	print("      wall requested: %s" % [sfx.recorded_names()])
+	if _sfx_count(sfx, "head_terrain") == 0:
+		failures.append("a head flying into a wall at %.0f px/s never asked for head_terrain" % HELD_SPEED)
+	if _sfx_count(sfx, "clash") > 0:
+		failures.append("a head meeting a wall asked for a clash")
+	knocker.queue_free()
+
+	var centre: Vector2 = SFX_HEAD_ORIGIN + Vector2(0.0, 1000.0)
+	var left: RigidBody2D = _bare_head(stage, centre - Vector2(60.0, 0.0), HELD_HEAD_FORCE)
+	var right: RigidBody2D = _bare_head(stage, centre + Vector2(60.0, 0.0), ARRIVING_HEAD_FORCE)
+	await _await_ticks(2)
+	sfx.start_recording()
+	left.linear_velocity = Vector2(HELD_SPEED, 0.0)
+	right.linear_velocity = Vector2(-HELD_SPEED, 0.0)
+	for _i in SFX_WATCH_TICKS:
+		await physics_frame
+		if _sfx_count(sfx, "clash") > 0:
+			break
+	sfx.stop_recording()
+	print("      clash requested: %s" % [sfx.recorded_names()])
+	if _sfx_count(sfx, "clash") != 1:
+		failures.append("two heads flying at each other asked for clash %d times, expected once" % _sfx_count(sfx, "clash"))
+	for name: String in sfx.recorded_names():
+		if name.begins_with("hit_") or name == "head_terrain":
+			failures.append("a clash also asked for %s" % name)
+			break
+
+	await _teardown(stage)
+	return failures
+
+## A body dropped onto the floor asks for `land`, placed at its feet; an
+## elimination asks for `eliminated` where the player was.
+func _scenario_sfx_landing_and_elimination() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, GROUND_TOP - PLAYER_RADIUS - SFX_DROP_HEIGHT))
+	sfx.start_recording()
+	for _i in SFX_WATCH_TICKS:
+		await physics_frame
+		if _sfx_count(sfx, "land") > 0:
+			break
+	print("      drop requested: %s" % [sfx.recorded_names()])
+	var landed: Dictionary = _sfx_last(sfx, "land")
+	if landed.is_empty():
+		failures.append("a body dropped %.0f px onto the floor never asked for land" % SFX_DROP_HEIGHT)
+	elif absf(Vector2(landed["position"]).y - GROUND_TOP) > PLAYER_RADIUS:
+		failures.append("the landing was placed at y %.1f, not at the floor (y %.1f)" % [Vector2(landed["position"]).y, GROUND_TOP])
+	# Resting on the floor afterwards is not another landing.
+	var landings: int = _sfx_count(sfx, "land")
+	await _await_ticks(30)
+	if _sfx_count(sfx, "land") != landings:
+		failures.append("a body resting on the floor kept asking for land")
+
+	var where: Vector2 = player.global_position
+	player.eliminate()
+	sfx.stop_recording()
+	var out: Dictionary = _sfx_last(sfx, "eliminated")
+	if out.is_empty():
+		failures.append("an elimination never asked for eliminated")
+	elif not Vector2(out["position"]).is_equal_approx(where):
+		failures.append("the elimination was placed at %s, not where the player was (%s)" % [out["position"], where])
+
+	await _teardown(stage)
+	return failures
+
+## A real boomstick shot asks for `fire_boomstick` as it leaves the barrel,
+## and `bullet_impact` when it meets a bar.
+func _scenario_sfx_boomstick_shot_and_impact() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	_add_bar(stage, Vector2(centre.x + BOOMSTICK_BAR_OFFSET, centre.y), BOOMSTICK_THIN_BAR)
+	shooter.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+
+	sfx.start_recording()
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		sfx.stop_recording()
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	var fired: Dictionary = _sfx_last(sfx, "fire_boomstick")
+	if fired.is_empty():
+		failures.append("a boomstick shot never asked for fire_boomstick")
+	elif Vector2(fired["position"]).distance_to(shooter.global_position) > MAX_REACH * 2.0:
+		failures.append("the shot was placed at %s, nowhere near the shooter at %s" % [fired["position"], shooter.global_position])
+	for _i in 30:
+		await physics_frame
+		if _sfx_count(sfx, "bullet_impact") > 0:
+			break
+	sfx.stop_recording()
+	print("      requested: %s" % [sfx.recorded_names()])
+	if _sfx_count(sfx, "bullet_impact") == 0:
+		failures.append("a bullet that hit a bar never asked for bullet_impact")
+
+	await _teardown(stage)
+	return failures
+
+## A real round: its start, its modifier's announcement, and its win each ask
+## for their sound.
+func _scenario_sfx_round_events() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	sfx.start_recording()
+	var loop: Dictionary = _new_modifier_round("low_gravity")
+	var players: Array[RigidBody2D] = loop["players"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		sfx.stop_recording()
+		failures.append("a round never started")
+		await _teardown(loop["stage"])
+		return failures
+	await physics_frame
+	if _sfx_count(sfx, "round_start") != 1:
+		failures.append("the round start asked for round_start %d times, expected once" % _sfx_count(sfx, "round_start"))
+	if _sfx_count(sfx, "modifier") != 1:
+		failures.append("the modifier announcement asked for modifier %d times, expected once" % _sfx_count(sfx, "modifier"))
+	players[1].eliminate()
+	var won: bool = await _await_condition(func() -> bool: return _sfx_count(sfx, "round_win") > 0, ROUND_LOOP_TIMEOUT_MSEC)
+	sfx.stop_recording()
+	print("      requested: %s" % [sfx.recorded_names()])
+	if not won:
+		failures.append("the round was won but never asked for round_win")
+	if _sfx_count(sfx, "eliminated") != 1:
+		failures.append("the loser's elimination asked for eliminated %d times, expected once" % _sfx_count(sfx, "eliminated"))
+
+	await _teardown(loop["stage"])
+	return failures
+
+## The lava ticks 3, 2, 1 before it rises, rumbles as it sets off, and sizzles
+## when a player goes in.
+func _scenario_sfx_lava_countdown_rise_and_sizzle() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	sfx.start_recording()
+	var loop: Dictionary = _new_rising_round(PackedStringArray([MODIFIER_STAGE]), SFX_LAVA_GRACE_SEC, 80.0)
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		sfx.stop_recording()
+		failures.append("a round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var rose: bool = await _await_condition(func() -> bool: return _sfx_count(sfx, "lava_rise") > 0, SFX_LAVA_TIMEOUT_MSEC)
+	var order: PackedStringArray = []
+	for name: String in sfx.recorded_names():
+		if name == "countdown" or name == "lava_rise":
+			order.append(name)
+	print("      lava requested: %s" % [order])
+	if not rose:
+		failures.append("the lava rose but never asked for lava_rise")
+	if order != PackedStringArray(["countdown", "countdown", "countdown", "lava_rise"]):
+		failures.append("expected three countdown ticks then lava_rise, got %s" % [order])
+
+	var players: Array[RigidBody2D] = loop["players"]
+	var zone: Node2D = instance.get_node("KillZone")
+	players[0].teleport_to(zone.global_position)
+	var sizzled: bool = await _await_condition(func() -> bool: return _sfx_count(sfx, "lava_sizzle") > 0, ROUND_LOOP_TIMEOUT_MSEC)
+	sfx.stop_recording()
+	if not sizzled:
+		failures.append("a player put into the lava never asked for lava_sizzle")
+
+	await _teardown(loop["stage"])
+	return failures
+
+## A phone claiming a slot asks for `join`. Driven through the signal, since
+## a real claim needs a real socket (#73); `ControllerServer` is checked to
+## declare it and to emit it.
+func _scenario_sfx_join_sounds() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	# Run first, the autoload's hooks are not in the tree yet: wait for them.
+	await physics_frame
+	var declares: bool = false
+	for s: Dictionary in (load(SFX_CONTROLLER_SERVER_PATH) as Script).get_script_signal_list():
+		if s["name"] == "player_joined":
+			declares = true
+	if not declares:
+		failures.append("ControllerServer has no player_joined signal")
+	var source: String = FileAccess.get_file_as_string(SFX_CONTROLLER_SERVER_PATH)
+	if not source.contains("player_joined.emit(slot)"):
+		failures.append("ControllerServer never emits player_joined")
+
+	var roster := Node.new()
+	roster.add_user_signal("player_joined", [{"name": "slot", "type": TYPE_INT}])
+	stage.add_child(roster)
+	sfx.start_recording()
+	roster.emit_signal("player_joined", 2)
+	sfx.stop_recording()
+	if sfx.recorded_names() != PackedStringArray(["join"]):
+		failures.append("a join asked for %s, expected [join]" % [sfx.recorded_names()])
+
+	await _teardown(stage)
+	return failures
+
+## Harder is louder, and lower: the volume curve rises with strength, and a
+## strike's damage is what sets its strength.
+func _scenario_sfx_strength_scales_volume() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var previous: float = -INF
+	for strength: float in [0.0, 0.25, 0.5, 0.75, 1.0]:
+		var db: float = sfx.volume_db_for(&"clash", strength)
+		if db <= previous:
+			failures.append("clash at strength %.2f is %.2f dB, not louder than the step below (%.2f dB)" % [strength, db, previous])
+		previous = db
+	if sfx.volume_db_for(&"clash", 1.0) - sfx.volume_db_for(&"clash", 0.0) < 6.0:
+		failures.append("the softest clash is under 6 dB quieter than the hardest")
+
+	var attacker: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2.RIGHT * 300.0)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	sfx.start_recording()
+	attacker.strike_landed.emit(victim, 6.0, victim.global_position, false)
+	attacker.strike_landed.emit(victim, 54.0, victim.global_position, false)
+	sfx.stop_recording()
+	var hits: Array[Dictionary] = sfx.recorded()
+	if hits.size() != 2:
+		failures.append("two damaging strikes asked for %d sounds" % hits.size())
+	else:
+		print("      6 damage: %.2f dB, pitch %.3f; 54 damage: %.2f dB, pitch %.3f" % [
+			hits[0]["volume_db"], hits[0]["pitch"], hits[1]["volume_db"], hits[1]["pitch"]])
+		if hits[1]["volume_db"] <= hits[0]["volume_db"]:
+			failures.append("a 54-damage strike was no louder than a 6-damage one")
+		if hits[1]["pitch"] >= hits[0]["pitch"]:
+			failures.append("a 54-damage strike was not pitched below a 6-damage one")
+
+	await _teardown(stage)
+	return failures
+
+## However many copies of one sound are asked for at once, no more than its
+## cap play, and it never owns more player nodes than that.
+func _scenario_sfx_overlap_cap_holds() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	# Run first, the autoload has not readied yet: wait for its frame.
+	await physics_frame
+	sfx.stop_all()
+	for sound: String in ["clash", "round_start"]:
+		var cap: int = sfx.overlap_cap(sound)
+		var peak: int = 0
+		for i in cap * 4:
+			sfx.play(sound, Vector2(i * 10.0, 0.0), 1.0)
+			peak = maxi(peak, sfx.active_voices(sound))
+		print("      %s: cap %d, peak %d playing, %d nodes" % [sound, cap, peak, sfx.voice_count(sound)])
+		if peak > cap:
+			failures.append("%s: %d copies played at once, over its cap of %d" % [sound, peak, cap])
+		if sfx.voice_count(sound) > cap:
+			failures.append("%s: owns %d player nodes, over its cap of %d" % [sound, sfx.voice_count(sound), cap])
+		if peak < cap:
+			failures.append("%s: only %d of its %d copies ever played -- the cap check proves nothing" % [sound, peak, cap])
+	sfx.stop_all()
+	_scenario_completed = true
+	return failures
+
+## Every weapon names its own sound set, each has a hit, and no two share a
+## file -- the owner asked for a distinct sound per weapon.
+func _scenario_sfx_weapon_sound_sets_distinct() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	# Run first, the autoload has not readied yet: wait for its frame.
+	await physics_frame
+	var seen_sets: Dictionary = {}
+	var file_owner: Dictionary = {}
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stats: WeaponStatsType = load(path) as WeaponStatsType
+		var set_name: String = String(stats.sound_set)
+		if set_name == "":
+			failures.append("%s names no sound set" % path)
+			continue
+		if seen_sets.has(set_name):
+			failures.append("%s and %s share the sound set '%s'" % [seen_sets[set_name], path, set_name])
+		seen_sets[set_name] = path
+		var hit: String = "hit_%s" % set_name
+		if not sfx.has_sound(hit):
+			failures.append("%s: no %s sound" % [path, hit])
+			continue
+		for file: String in (sfx.get_script() as GDScript).get_script_constant_map()["SOUNDS"][hit]["files"]:
+			if file_owner.has(file):
+				failures.append("%s and %s both use %s" % [file_owner[file], hit, file])
+			file_owner[file] = hit
+		if stats.fire_interval > 0.0 and not sfx.has_sound("fire_%s" % set_name):
+			failures.append("%s fires but has no fire_%s sound" % [path, set_name])
+	print("      sets: %s" % [seen_sets.keys()])
+	if seen_sets.size() != WEAPON_RESOURCE_PATHS.size():
+		failures.append("%d weapons but only %d sound sets" % [WEAPON_RESOURCE_PATHS.size(), seen_sets.size()])
+	_scenario_completed = true
+	return failures
+
+## Every file the table names is on disk and plays; every sound the hooks ask
+## for is in the table; nothing unused is shipped; and the lot stays small.
+func _scenario_sfx_sound_files_exist() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	# Run first, the autoload has not readied yet: wait for its frame.
+	await physics_frame
+	var referenced: Dictionary = {}
+	for path: String in sfx.all_sound_files():
+		referenced[path] = true
+		if not FileAccess.file_exists(path):
+			failures.append("missing sound file %s" % path)
+			continue
+		var stream: AudioStream = AudioStreamOggVorbis.load_from_file(ProjectSettings.globalize_path(path))
+		if stream == null or stream.get_length() <= 0.0:
+			failures.append("%s does not load as audio" % path)
+	if referenced.is_empty():
+		failures.append("Sfx names no sound files at all")
+
+	var hooks_source: String = FileAccess.get_file_as_string(SFX_HOOKS_PATH)
+	var literal := RegEx.new()
+	literal.compile("sfx\\.play\\(&\"(\\w+)\"")
+	var asked: int = 0
+	for m: RegExMatch in literal.search_all(hooks_source):
+		asked += 1
+		if not sfx.has_sound(m.get_string(1)):
+			failures.append("SfxHooks asks for '%s', which Sfx has no entry for" % m.get_string(1))
+	if asked == 0:
+		failures.append("found no sfx.play(&\"...\") calls in SfxHooks -- the check proves nothing")
+
+	var total: int = 0
+	var shipped: int = 0
+	for sub: String in DirAccess.get_directories_at(SFX_DIR):
+		for file: String in DirAccess.get_files_at(SFX_DIR + sub):
+			if file.ends_with(".import"):
+				continue
+			var path: String = SFX_DIR + sub + "/" + file
+			shipped += 1
+			total += FileAccess.get_file_as_bytes(path).size()
+			if not referenced.has(path):
+				failures.append("%s is shipped but no sound uses it" % path)
+	print("      %d files, %.0f KB, %d hook literals" % [shipped, total / 1024.0, asked])
+	if total > SFX_MAX_TOTAL_BYTES:
+		failures.append("the sound files come to %d bytes, over %d" % [total, SFX_MAX_TOTAL_BYTES])
+	_scenario_completed = true
+	return failures
+
+## The on-screen control reaches the Master bus: the slider sets its volume,
+## the box mutes it. Sounds themselves play on the SFX bus.
+func _scenario_sfx_volume_slider_and_mute() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	# Run first, the autoload has not readied yet: wait for its frame.
+	await physics_frame
+	var was_volume: float = sfx.master_volume
+	var was_muted: bool = sfx.muted
+	if AudioServer.get_bus_index(&"SFX") == -1:
+		failures.append("there is no SFX bus")
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	ui.volume_slider().value = 0.5
+	if absf(sfx.master_volume - 0.5) > 0.001:
+		failures.append("the slider at 0.5 left the master volume at %.3f" % sfx.master_volume)
+	if absf(AudioServer.get_bus_volume_db(0) - linear_to_db(0.5)) > 0.01:
+		failures.append("the slider at 0.5 left the Master bus at %.2f dB, expected %.2f" % [
+			AudioServer.get_bus_volume_db(0), linear_to_db(0.5)])
+	ui.mute_box().button_pressed = true
+	if not AudioServer.is_bus_mute(0):
+		failures.append("ticking Mute did not mute the Master bus")
+	ui.mute_box().button_pressed = false
+	if AudioServer.is_bus_mute(0):
+		failures.append("unticking Mute left the Master bus muted")
+	sfx.play(&"round_start")
+	for voice: Node in sfx.get_children():
+		if (voice is AudioStreamPlayer or voice is AudioStreamPlayer2D) and voice.bus != &"SFX":
+			failures.append("a sound played on the %s bus, not SFX" % voice.bus)
+			break
+	sfx.stop_all()
+	sfx.set_master_volume(was_volume)
+	sfx.set_muted(was_muted)
+	ui.refresh()
+	_scenario_completed = true
 	return failures
