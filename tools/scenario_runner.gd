@@ -169,6 +169,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_sound_files_exist",
 	"sfx_volume_slider_and_mute",
 	"charge_measures_heads_where_physics_has_them",
+	"turn_does_not_carry_blade_through_head",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -829,6 +830,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_sfx_volume_slider_and_mute()
 		"charge_measures_heads_where_physics_has_them":
 			return await _scenario_charge_measures_heads_where_physics_has_them()
+		"turn_does_not_carry_blade_through_head":
+			return await _scenario_turn_does_not_carry_blade_through_head()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10422,3 +10425,148 @@ func _scenario_charge_measures_heads_where_physics_has_them() -> Array[String]:
 
 	await _teardown(stage)
 	return failures
+
+# --- A turn carrying a long head through another head (issue #82) ----------
+
+## The floor the swinging player stands on, well away from the world origin
+## (see PART_POSITION for why), and the player's spawn on top of it.
+const TURN_HEAD_FLOOR: Vector2 = Vector2(0.0, 600.0)
+const TURN_HEAD_FLOOR_SIZE: Vector2 = Vector2(800.0, 24.0)
+## Aimed just above level and held at nearly minimum reach: the anchor then
+## sits close to the body, so a turn moves the anchor only a few pixels while
+## the blade's far circles, 50-60 px further out, orbit 20-30 px a tick.
+const TURN_HEAD_START_ANGLE: float = -0.2
+const TURN_HEAD_TARGET_ANGLE: float = -PI * 0.5 - 0.2
+const TURN_HEAD_REACH_INPUT: float = 0.05
+## A tick of turn at least this large is a fast one: the drive's 24 rad/s is
+## 0.4 rad a tick. The other head is parked on the first tick the turn
+## reaches this, with the turn still well short of its target.
+const TURN_HEAD_FAST_TURN: float = 0.3
+## Which blade circle, counted back from the tip, the other head is parked in
+## the path of, and how far along that circle's predicted arc for the next
+## tick. Past the few pixels the anchor's own translation covers (the pair
+## sweep's share of the motion), short of where the turn will leave it.
+const TURN_HEAD_CIRCLE_FROM_TIP: int = 4
+const TURN_HEAD_ARC_FRACTION: float = 0.6
+## The parked head: one circle, the size of a blade's.
+const TURN_HEAD_PARKED_RADIUS: float = 3.0
+## Where the head to be parked waits until it is, relative to the player.
+const TURN_HEAD_STANDBY_OFFSET: Vector2 = Vector2(0.0, -400.0)
+## Ticks watched after the park.
+const TURN_HEAD_WATCH_TICKS: int = 6
+
+## Issue #82: a weapon's per-tick **turn**, where `Player` re-places the
+## head's circles around the anchor, must not carry them through another
+## player's head.
+##
+## `WeaponHead.guard_turn` (#48) traces each circle along the arc of the turn,
+## and the pair sweep traces the anchor's translation; neither used to see the
+## turn against another head. So a long head turning fast -- the sword or the
+## boomstick at 24 rad/s -- teleported its far circles clean past a head
+## parked in their path, and no step ever saw the two touch.
+##
+## Built deterministically: a player on a floor, aimed just above level at
+## minimum reach, commanded straight up. On the first fast tick of the turn, a
+## still head (the real `WeaponHead` script, on the head layer, not moving) is
+## parked just ahead of a far blade circle along its predicted arc. The next
+## tick must not leave that head on the other side of the blade. Measured on
+## `Player.weapon_head_circles_world()`, where the physics has the circles
+## (the #77 lesson), never on a rebuilt facing.
+func _scenario_turn_does_not_carry_blade_through_head() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in ["res://resources/sword.tres", "res://resources/boomstick.tres"]:
+		var stats: WeaponStatsType = load(path)
+		failures.append_array(await _turn_through_parked_head(stats, path.get_file().get_basename()))
+	_scenario_completed = true
+	return failures
+
+func _turn_through_parked_head(stats: WeaponStatsType, label: String) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	_add_bar(stage, TURN_HEAD_FLOOR, TURN_HEAD_FLOOR_SIZE)
+	var stand: Vector2 = TURN_HEAD_FLOOR - Vector2(0.0, TURN_HEAD_FLOOR_SIZE.y * 0.5 + PLAYER_RADIUS)
+	var player: RigidBody2D = _spawn_player(stage, stand)
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	player.set_input_vector(Vector2.from_angle(TURN_HEAD_START_ANGLE) * TURN_HEAD_REACH_INPUT)
+	await _await_ticks(SETTLE_TICKS)
+
+	# The head to park, standing by well clear of everything, with no layers
+	# until it is parked, and with steps behind it by then.
+	var standby: RigidBody2D = _bare_head(stage, stand + TURN_HEAD_STANDBY_OFFSET, stats.max_drive_force * 1000.0)
+	(standby.sweep_shapes[0].shape as CircleShape2D).radius = TURN_HEAD_PARKED_RADIUS
+	await _await_ticks(2)
+
+	player.set_input_vector(Vector2.from_angle(TURN_HEAD_TARGET_ANGLE) * TURN_HEAD_REACH_INPUT)
+	var previous: float = _blade_facing(player.weapon_head_circles_world())
+	var parked: RigidBody2D = null
+	var park_side: float = 0.0
+	var parked_at: Vector2 = Vector2.ZERO
+	for tick in SETTLE_TICKS:
+		await physics_frame
+		var circles: Array[Dictionary] = player.weapon_head_circles_world()
+		var facing: float = _blade_facing(circles)
+		var turn: float = wrapf(facing - previous, -PI, PI)
+		previous = facing
+		if absf(turn) < TURN_HEAD_FAST_TURN:
+			continue
+		var pivot: Vector2 = player.global_position
+		var target: Vector2 = circles[circles.size() - TURN_HEAD_CIRCLE_FROM_TIP]["centre"]
+		var at: Vector2 = pivot + (target - pivot).rotated(turn * TURN_HEAD_ARC_FRACTION)
+		# Moved into place, not created there: a head with no step behind it
+		# is one the pair sweep cannot use, and a real opponent's head always
+		# has one. It is recorded as having stood here, which it did not
+		# travel to.
+		parked = standby
+		parked.global_position = at
+		PhysicsServer2D.body_set_state(parked.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, Transform2D(0.0, at))
+		parked._previous_position = at
+		parked.collision_layer = 2
+		parked.collision_mask = 2
+		parked_at = at
+		park_side = _blade_side(circles, at)
+		var park_gap: float = _head_surface_gap(circles, [{"centre": at, "radius": TURN_HEAD_PARKED_RADIUS}])
+		print("      %s: tick %d turned %.3f rad; head parked %.1f px ahead of blade circle %d, %.2f px clear of the blade" % [
+			label, tick + 1, turn, at.distance_to(target), circles.size() - TURN_HEAD_CIRCLE_FROM_TIP, park_gap])
+		if park_gap <= 0.0:
+			failures.append("%s: fixture: the head was parked touching the blade (%.2f px), not ahead of it" % [label, park_gap])
+		break
+	if parked == null:
+		failures.append("%s: fixture: the turn never reached %.2f rad a tick" % [label, TURN_HEAD_FAST_TURN])
+		await _teardown(stage)
+		return failures
+
+	for tick in TURN_HEAD_WATCH_TICKS:
+		await physics_frame
+		var circles: Array[Dictionary] = player.weapon_head_circles_world()
+		var mine: Vector2 = parked.global_position
+		var side: float = _blade_side(circles, mine)
+		var along: float = _blade_along(circles, mine)
+		var gap: float = _head_surface_gap(circles, [{"centre": mine, "radius": TURN_HEAD_PARKED_RADIUS}])
+		print("      %s: tick +%d: parked head %s the blade (%.2f px across it, %.2f along it), gap %.2f px, parked head moved %.2f px" % [
+			label, tick + 1, "same side of" if side * park_side > 0.0 else "PAST", absf(side), along, gap,
+			mine.distance_to(parked_at)])
+		if side * park_side <= 0.0 and along >= 0.0 and along <= 1.0:
+			failures.append("%s: %d tick(s) after it was parked, the turn had carried the blade through the parked head: it is now on the far side of the blade, %.2f px across it, with a %.2f px gap" % [
+				label, tick + 1, absf(side), gap])
+			break
+
+	await _teardown(stage)
+	return failures
+
+## The blade's facing, base circle to tip circle, where the physics has them.
+func _blade_facing(circles: Array[Dictionary]) -> float:
+	return (Vector2(circles[circles.size() - 1]["centre"]) - Vector2(circles[0]["centre"])).angle()
+
+## Which side of the blade's centre line `point` is on, and how far from it,
+## signed.
+func _blade_side(circles: Array[Dictionary], point: Vector2) -> float:
+	var base: Vector2 = circles[0]["centre"]
+	var line: Vector2 = Vector2(circles[circles.size() - 1]["centre"]) - base
+	return line.normalized().cross(point - base)
+
+## How far along the blade `point` lies: 0 at the base circle, 1 at the tip.
+func _blade_along(circles: Array[Dictionary], point: Vector2) -> float:
+	var base: Vector2 = circles[0]["centre"]
+	var line: Vector2 = Vector2(circles[circles.size() - 1]["centre"]) - base
+	return line.dot(point - base) / line.length_squared()
