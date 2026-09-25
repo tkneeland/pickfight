@@ -135,6 +135,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_head_blocks_bullet",
 	"boomstick_own_head_never_blocks",
 	"boomstick_thin_head_blocks_bullet",
+	"world_stopped_head_blocks_arriving_head",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -721,6 +722,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomstick_own_head_never_blocks()
 		"boomstick_thin_head_blocks_bullet":
 			return await _scenario_boomstick_thin_head_blocks_bullet()
+		"world_stopped_head_blocks_arriving_head":
+			return await _scenario_world_stopped_head_blocks_arriving_head()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -8378,3 +8381,138 @@ func _scenario_boomstick_thin_head_blocks_bullet() -> Array[String]:
 
 	await _teardown(stage)
 	return failures
+
+# --- A head held by the world, and a head arriving on it (#38, #47) ---------
+
+## Where the #47 pair is built: an empty stage, far from anything, so the only
+## solid thing either head can find is the slab placed for it.
+const HELD_ORIGIN: Vector2 = Vector2(0.0, -4000.0)
+## Both heads are one circle this size, centred on the anchor. Two of them
+## touch at twice this.
+const HELD_HEAD_RADIUS: float = 5.0
+## Each head's speed toward the other, px/s: the #38 charge's 1800, so one
+## 60 Hz step carries each head 30 px and closes 60 px between them.
+const HELD_SPEED: float = 1800.0
+## The held head starts this far short of the slab's face, measured from its
+## anchor. Its surface is then 1 px away, so the world stops it 1/30 of the way
+## into the step: early, as the #38 charge was (0.7%).
+const HELD_START_TO_FACE: float = 6.0
+## Where the arriving head starts, ahead of the held head's start along the
+## approach. 15 px between anchors is 5 px clear of contact, so the full-step
+## pair sweep has them meeting 5/60 = 1/12 of the way in: after the world
+## contact, which is what hands the step to the world (#27's rule).
+const HELD_START_GAP: float = 15.0
+## The slab the held head is stopped by. It stands in for the arriving head's
+## own player body, which that head sits on and passes through (it is in its
+## `sweep_exclude`); only the held head treats it as solid.
+const HELD_SLAB_SIZE: Vector2 = Vector2(24.0, 200.0)
+## Force ceilings for the two heads. The lower one owns the pair correction
+## (`_owns_pair`), and it has to be the held head, since that is the head whose
+## step the world contact cut short.
+const HELD_HEAD_FORCE: float = 1000.0
+const ARRIVING_HEAD_FORCE: float = 2000.0
+## Ticks watched after the charge. The crossing and its correction are both in
+## the first; the rest show the ordering is not lost afterwards.
+const HELD_WATCH_TICKS: int = 3
+
+## #47: the #38 fix, built directly rather than found by a sweep.
+##
+## The #38 breach was a head stopped by a world contact early in a step while
+## the other head was still coming. The pair sweep had assumed the stopped head
+## travelled its whole step, saw the heads meet *after* the world contact, and
+## so left the step to the world. The world seated the head back near where it
+## started, and the other head ran on through the place it now held and out the
+## far side. `_find_head_crossing(held_from)` re-sweeps the rest of the step
+## with the head held at the contact, and catches it.
+##
+## Only one exact physics history ever reproduced that from the roster sweeps
+## (issue #47), so this builds the state itself: two bare heads with the real
+## `WeaponHead` script, positions and velocities set, no gravity, no damping and
+## no engine collisions, so the step moves each exactly 30 px and nothing but
+## `WeaponHead`'s own sweeps can change that. Nothing in it depends on which
+## scenarios ran before.
+##
+##   held head     from -6 (relative to the slab face), +30 px: stopped at -5
+##   arriving head from +9, -30 px: ends at -21, 16 px past the held head
+##
+## Without the re-sweep the arriving head ends the step on the far side of the
+## held one, never having touched it. With it, the held head is seated back
+## against the arriving head, on the side it started on.
+func _scenario_world_stopped_head_blocks_arriving_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+
+	var face: Vector2 = HELD_ORIGIN
+	var slab := StaticBody2D.new()
+	slab.collision_layer = 1
+	slab.collision_mask = 0
+	var slab_shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = HELD_SLAB_SIZE
+	slab_shape.shape = rect
+	slab.add_child(slab_shape)
+	slab.position = face + Vector2(HELD_SLAB_SIZE.x * 0.5, 0.0)
+	stage.add_child(slab)
+
+	var held_start: Vector2 = face - Vector2(HELD_START_TO_FACE, 0.0)
+	var held: RigidBody2D = _bare_head(stage, held_start, HELD_HEAD_FORCE)
+	var arriving: RigidBody2D = _bare_head(stage, held_start + Vector2(HELD_START_GAP, 0.0), ARRIVING_HEAD_FORCE)
+	var own_body: Array[RID] = [slab.get_rid()]
+	arriving.sweep_exclude = own_body
+
+	# Standing still first, so each head has a step behind it to sweep from.
+	await _await_ticks(2)
+	var start_line: Vector2 = held.global_position - arriving.global_position
+	held.linear_velocity = Vector2(HELD_SPEED, 0.0)
+	arriving.linear_velocity = Vector2(-HELD_SPEED, 0.0)
+
+	var trace: PackedStringArray = []
+	var step_line: Vector2 = start_line
+	var end_line: Vector2 = start_line
+	for tick in HELD_WATCH_TICKS:
+		await physics_frame
+		end_line = held.global_position - arriving.global_position
+		if tick == 0:
+			step_line = end_line
+		trace.append("tick %d: held %s, arriving %s" % [
+			tick + 1, held.global_position - face, arriving.global_position - face])
+		print("      tick %d: held head at %s, arriving head at %s (from the slab face)" % [
+			tick + 1, held.global_position - face, arriving.global_position - face])
+
+	# The world contact has to be what the step went to first, or this is the
+	# #27 head-first path and proves nothing about #38.
+	if held.swept_into != slab:
+		failures.append("the held head was not stopped by the slab (swept_into = %s), so the world-first path this scenario exists for was not exercised; %s" % [
+			held.swept_into, "; ".join(trace)])
+	if end_line.dot(start_line) <= 0.0:
+		failures.append("one step took the heads from %s apart to %s apart -- the arriving head went through the head the slab was holding, and out the far side, and they were %s apart after %d ticks" % [
+			start_line, step_line, end_line, HELD_WATCH_TICKS])
+
+	await _teardown(stage)
+	return failures
+
+## A weapon head with nothing attached: the real `WeaponHead` script on a
+## single circle, moved only by its own velocity. No gravity or damping, and
+## no collision layers, so the engine never touches it and only the head's own
+## sweeps can.
+func _bare_head(stage: Node2D, pos: Vector2, force: float) -> RigidBody2D:
+	var head: RigidBody2D = WeaponHeadType.new()
+	head.gravity_scale = 0.0
+	head.linear_damp_mode = RigidBody2D.DAMP_MODE_REPLACE
+	head.linear_damp = 0.0
+	head.lock_rotation = true
+	head.can_sleep = false
+	head.collision_layer = 0
+	head.collision_mask = 0
+	var circle := CollisionShape2D.new()
+	var shape := CircleShape2D.new()
+	shape.radius = HELD_HEAD_RADIUS
+	circle.shape = shape
+	head.add_child(circle)
+	var shapes: Array[CollisionShape2D] = [circle]
+	head.sweep_shapes = shapes
+	head.drive_force = force
+	head.position = pos
+	stage.add_child(head)
+	return head
