@@ -1,85 +1,134 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Hazard.tscn" id="3"]
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground_side"]
-size = Vector2(300, 40)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
+size = Vector2(370, 40)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground_mid"]
-size = Vector2(200, 40)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_mid"]
+size = Vector2(380, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ceiling"]
-size = Vector2(700, 40)
+size = Vector2(660, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge_low"]
+size = Vector2(170, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge_high"]
+size = Vector2(180, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
 
-; Two gaps in the ground (players ring out through them) under a low
-; ceiling that pins swing height well below open sky. Rewards a compact,
-; controlled swing over the wide, open arcs a tall stage rewards.
+; A low ceiling over the middle of the stage, two gaps under it, and a
+; hazard hanging from the ceiling's centre. Crossing means going *under* the
+; ceiling, where swings are pinned low and the fastest, highest line runs
+; into the hazard. Out on the two banks the sky is open, and a short
+; staircase of ledges climbs away from the floor.
 ;
-; A hazard hangs from the centre of that ceiling (issue #18). The ceiling
-; was already the thing that made this stage what it is -- it is what stops
-; you swinging over the gaps in a single wide arc -- but it was only a
-; limit, something you bumped into. The hazard makes the middle of it
-; hostile, so the highest, fastest line across the stage is now the one
-; that kills you, and a crossing has to be either low and slow over a gap
-; or wide around the centre.
+; Rebuilt from scratch for issue #51. The earlier Gauntlet (#18, reworked in
+; #45) had 250 px gaps under a ceiling that roofed most of the ground, with
+; the ceiling's top as the only high ground. Playtest 2 still found it
+; "pretty inaccessible": no pickaxe could reach across a gap, so every
+; crossing was a blind fling under the roof, and once the rising lava
+; started the only place left to climb was onto the ceiling. The owner kept
+; the idea -- a low ceiling, gaps, a hazard in the ceiling, a route under it
+; that favours the staff -- and asked that every platform be easy to get on
+; and off, and that nothing trap a player. Nobody should have to walk on
+; the ceiling to cross (#45).
 ;
-; Hung from the ceiling rather than laid on GroundMid, which was the other
-; obvious placement. GroundMid is only 200 px wide and the hazard is 160,
-; so laying it there would leave two 20 px slivers of safe ledge -- the
-; one place in the stage you land after a committed swing would become a
-; coin flip. A hazard belongs in the space you cross, not the space you
-; land on.
+; The reach numbers it is built on. A body is a 24 px circle, so a player
+; standing on a surface has its centre 24 px above it, and its head reaches
+; max_reach plus a few px of head from that centre: staff 240, pickaxe
+; about 159, axe about 151, sword about 124 (the end of its blade), dagger
+; about 87. Every weapon but the staff is held to one rule here: each move
+; on or off a surface is a hook of 90-110 px, which the pickaxe does easily.
 ;
-; Reworked after the first playtest (#45), where players could not get off
-; the side grounds: the ceiling ran to x=+-600, roofing over almost all of
-; them, so there was nowhere to climb to -- and with the rising kill zone
-; that trapped everyone. It now spans only the two gaps and the middle
-; (x=+-350), leaving open sky over the outer ends of the side grounds to
-; climb out onto its top. Its underside was lowered 30 px to 210 px above
-; the ground so that crossing *under* it has a route that suits one weapon:
-; a staff (240 px reach) standing at a gap's edge can hook the underside
-; and swing across hand over hand, while the pickaxe (150) and everything
-; shorter cannot reach it from the ground and has to fling across the gap
-; instead. Crossing low is possible for everyone and easy for the staff;
-; the ceiling's top is the other way round.
+;   Ground: every standing surface's top is y=300 (both banks and the
+;   middle), so the rising floor takes them together and nobody is left on
+;   lower ground than anyone else.
+;
+;   Gaps: 100 px wide (x=+-190..+-290). A pickaxe at one lip hooks the far
+;   lip at about 110 px and hauls itself across; the axe and the sword
+;   reach it too. The dagger has to fling, but 100 px is a short hop.
+;   Coming back is the same move the other way, so the middle is as easy
+;   to leave as it is to reach.
+;
+;   Ceiling: x=-330..330, underside y=90, 210 px over the ground. It covers
+;   the gaps and the middle and overhangs each bank by 40 px, no more. Its
+;   underside is 186 px above a standing player's centre: out of reach of
+;   the pickaxe and everything shorter, well inside the staff's 240. That
+;   is the staff's route: from a bank's lip it plants on the underside out
+;   to about x=+-150, swings hand over hand along the ceiling, and crosses
+;   both gaps without touching the middle. Everyone else crosses on foot,
+;   one hook at a time, under the hazard.
+;
+;   Hazard: centred under the ceiling, x=-80..80, y=90..138. It leaves
+;   114 px of air over a player standing on the middle: room to walk and to
+;   swing low, and a kill for anyone swinging or flung upward there. Hung
+;   from the ceiling rather than laid on the middle ground, so the ground
+;   you land on after a crossing is never itself what kills you.
+;
+;   Banks: x=+-290..+-660, open sky over everything outboard of the ceiling
+;   (|x| > 330). Their outer ends drop straight into the kill zone, so a
+;   player hit hard enough outward rings out.
+;
+;   Low ledges: x=+-620..+-790, top y=190, 110 px up. Their inner 40 px
+;   overhang the bank, the rest hangs out over the drop. From the bank just
+;   inboard of one, the pickaxe hooks its top corner at about 90 px (the
+;   sword too). Off: step off the inner end and you land on the bank.
+;
+;   High ledges: x=+-400..+-580, top y=80, 110 px above the low ledge and
+;   40 px inboard of it. From the low ledge's inner end the pickaxe hooks
+;   the high ledge's outer corner at about 108 px; from the bank only the
+;   staff reaches it (196 px up). Off: either end drops onto the bank,
+;   which runs under the whole ledge.
+;
+;   The ceiling's top (y=50) is 70 px from a high ledge's inner end and 30
+;   px higher, so a pickaxe can hook onto it from there. That is allowed
+;   rather than prevented: it is the last high ground once the lava is up,
+;   and a wide one to finish a round on, but it is three climbs away and
+;   never the way across. Off: either end drops onto a bank.
+;
+; So nothing traps anyone once the lava rises (grace 50 s, rise 80 s): every
+; surface can be left without the staff, and the climb out of the floor --
+; bank, low ledge, high ledge, ceiling top -- is a staircase of pickaxe
+; hooks with open sky over every step.
 
 [node name="Gauntlet" type="Node2D"]
 script = ExtResource("1")
 
-[node name="GroundLeft" type="StaticBody2D" parent="."]
-position = Vector2(-500, 320)
+[node name="BankLeft" type="StaticBody2D" parent="."]
+position = Vector2(-475, 320)
 
-[node name="GroundLeftShape" type="CollisionShape2D" parent="GroundLeft"]
-shape = SubResource("RectangleShape2D_ground_side")
+[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
+shape = SubResource("RectangleShape2D_bank")
 
-[node name="GroundLeftVisual" type="Polygon2D" parent="GroundLeft"]
+[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
 
-[node name="GroundMid" type="StaticBody2D" parent="."]
+[node name="Middle" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)
 
-[node name="GroundMidShape" type="CollisionShape2D" parent="GroundMid"]
-shape = SubResource("RectangleShape2D_ground_mid")
+[node name="MiddleShape" type="CollisionShape2D" parent="Middle"]
+shape = SubResource("RectangleShape2D_mid")
 
-[node name="GroundMidVisual" type="Polygon2D" parent="GroundMid"]
+[node name="MiddleVisual" type="Polygon2D" parent="Middle"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -20, 100, -20, 100, 20, -100, 20)
+polygon = PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)
 
-[node name="GroundRight" type="StaticBody2D" parent="."]
-position = Vector2(500, 320)
+[node name="BankRight" type="StaticBody2D" parent="."]
+position = Vector2(475, 320)
 
-[node name="GroundRightShape" type="CollisionShape2D" parent="GroundRight"]
-shape = SubResource("RectangleShape2D_ground_side")
+[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
+shape = SubResource("RectangleShape2D_bank")
 
-[node name="GroundRightVisual" type="Polygon2D" parent="GroundRight"]
+[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
 
 [node name="Ceiling" type="StaticBody2D" parent="."]
 position = Vector2(0, 70)
@@ -89,27 +138,68 @@ shape = SubResource("RectangleShape2D_ceiling")
 
 [node name="CeilingVisual" type="Polygon2D" parent="Ceiling"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-350, -20, 350, -20, 350, 20, -350, 20)
+polygon = PackedVector2Array(-330, -20, 330, -20, 330, 20, -330, 20)
 
-; Ceiling bottom is y=90 (the ceiling body sits at y=70 with a 40 px shape),
-; so a 48 px hazard centred at y=114 hangs flush beneath it and leaves about
-; 160 px of headroom over the ground at y=300 -- enough for a compact swing
-; to pass under, not enough for the wide flat arc the hazard exists to deny.
+; Flush under the ceiling's underside (y=90): a 48 px hazard centred at
+; y=114 spans y=90..138.
 [node name="CeilingHazard" parent="." instance=ExtResource("3")]
 position = Vector2(0, 114)
 
+[node name="LedgeLowLeft" type="StaticBody2D" parent="."]
+position = Vector2(-705, 202)
+
+[node name="LedgeLowLeftShape" type="CollisionShape2D" parent="LedgeLowLeft"]
+shape = SubResource("RectangleShape2D_ledge_low")
+
+[node name="LedgeLowLeftVisual" type="Polygon2D" parent="LedgeLowLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-85, -12, 85, -12, 85, 12, -85, 12)
+
+[node name="LedgeHighLeft" type="StaticBody2D" parent="."]
+position = Vector2(-490, 92)
+
+[node name="LedgeHighLeftShape" type="CollisionShape2D" parent="LedgeHighLeft"]
+shape = SubResource("RectangleShape2D_ledge_high")
+
+[node name="LedgeHighLeftVisual" type="Polygon2D" parent="LedgeHighLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
+
+[node name="LedgeLowRight" type="StaticBody2D" parent="."]
+position = Vector2(705, 202)
+
+[node name="LedgeLowRightShape" type="CollisionShape2D" parent="LedgeLowRight"]
+shape = SubResource("RectangleShape2D_ledge_low")
+
+[node name="LedgeLowRightVisual" type="Polygon2D" parent="LedgeLowRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-85, -12, 85, -12, 85, 12, -85, 12)
+
+[node name="LedgeHighRight" type="StaticBody2D" parent="."]
+position = Vector2(490, 92)
+
+[node name="LedgeHighRightShape" type="CollisionShape2D" parent="LedgeHighRight"]
+shape = SubResource("RectangleShape2D_ledge_high")
+
+[node name="LedgeHighRightVisual" type="Polygon2D" parent="LedgeHighRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
+
+; All four spawns on the banks, dropped 26 px onto the ground (body bottom
+; y=274, bank top y=300). Spawns 0 and 1 are under the high ledges, 196 px
+; overhead; Spawns 2 and 3 (issue #36) are 150 px inboard, in the open sky
+; between the high ledges and the ceiling.
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-500, 200)
+position = Vector2(-520, 250)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(500, 200)
+position = Vector2(520, 250)
 
-; Spawns 2 and 3 (issue #36). On the inner ends of the two side grounds, 100 px in from the first two.
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-400, 200)
+position = Vector2(-370, 250)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(400, 200)
+position = Vector2(370, 250)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
@@ -118,13 +208,20 @@ script = ExtResource("2")
 [node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
 shape = SubResource("RectangleShape2D_kill")
 
-; Pickup spawn points (issue #14, ADR-0009). On the middle ground under the hazard, and floating over each gap: every one is a risk.
+; Pickup spawn points (issue #14, ADR-0009). One on the middle under the
+; hazard, one floating over each gap, and one on each high ledge: a weapon
+; is either a crossing or a climb away.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
 position = Vector2(0, 264)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(-225, 200)
+position = Vector2(-240, 200)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(225, 200)
+position = Vector2(240, 200)
 
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(-490, 44)
+
+[node name="PickupSpawn4" type="Marker2D" parent="."]
+position = Vector2(490, 44)
