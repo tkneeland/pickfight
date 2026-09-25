@@ -39,12 +39,17 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   after every rebase that pulled in the other dev's changes.
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
-- **Agents merge their own PRs; there's no pause for human review** (owner's
-  decision, 2026-09-24). Once the full suite is green on a branch rebased onto
-  the current `origin/main`, poll `gh pr view <n> --json mergeable` until it is
-  not `UNKNOWN`, then `gh pr merge <n> --merge --delete-branch`. Either dev's
-  Claude may merge any green PR. If main moved since your last suite run,
-  rebase and re-run before merging.
+- **No pause for human review** (owner's decision, 2026-09-24), and **one
+  integrator merges**: tkneeland's Claude. Everyone else, Austin's Claude and
+  any subagents included, pushes the branch, opens the PR with the suite
+  green, comments on the issue with the PR URL, and **stops**. The integrator
+  merges PRs one at a time. For each, it rebases onto the current
+  `origin/main`, resolves conflicts, re-runs the full suite, then runs
+  `gh pr merge <n> --merge --delete-branch` once `mergeable` is not
+  `UNKNOWN`. One merger means nobody rebases against a main that is moving
+  under them.
+- **Fallback:** if the integrator is unavailable (for example, out of
+  usage), Austin's Claude may merge its own green PRs by the same steps.
 
 ## Shared decisions
 
