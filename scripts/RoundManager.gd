@@ -126,6 +126,7 @@ const DEMO_STAGE_ORDER: PackedStringArray = [
 ]
 const DEMO_KILL_ZONE_GRACE_SEC: float = 20.0
 const DEMO_KILL_ZONE_RISE_SEC: float = 40.0
+const DEMO_PHYSICS_TICKS: int = 120
 
 func _ready() -> void:
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
@@ -711,5 +712,9 @@ func _apply_demo_mode() -> void:
 	stage_scenes = ordered
 	kill_zone_grace_sec = DEMO_KILL_ZONE_GRACE_SEC
 	kill_zone_rise_sec = DEMO_KILL_ZONE_RISE_SEC
-	print("RoundManager: --demo on; random weapons, lava after %.0f s, stages from %s" % [
-		kill_zone_grace_sec, ", ".join(DEMO_STAGE_ORDER)])
+	# Twice the physics rate halves how far a fast head or body moves per
+	# step, so far less tunnels through platforms. Gameplay is timed in
+	# seconds, not ticks; the scenarios never pass --demo, so they keep 60.
+	Engine.physics_ticks_per_second = DEMO_PHYSICS_TICKS
+	print("RoundManager: --demo on; random weapons, %d Hz physics, lava after %.0f s, stages from %s" % [
+		Engine.physics_ticks_per_second, kill_zone_grace_sec, ", ".join(DEMO_STAGE_ORDER)])
