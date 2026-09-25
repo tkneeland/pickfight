@@ -28,3 +28,9 @@ func set_lobby_state(state: Dictionary) -> void:
 ## The last state pushed, or {} before any.
 func last_state() -> Dictionary:
 	return lobby_states.back() if not lobby_states.is_empty() else {}
+
+## Nicknames by slot (issue #121); a slot without one reads "".
+var names: Dictionary = {}
+
+func slot_name(slot: int) -> String:
+	return str(names.get(slot, ""))

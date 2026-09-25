@@ -158,6 +158,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_tick_spawn_protection()
+	_tick_name_tags()
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
 			_tick_lobby()
@@ -170,6 +171,8 @@ func _process(_delta: float) -> void:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
 				_tick_pickups()
+				if lobby_enabled:
+					_publish_lobby_state()
 		State.ROUND_END:
 			if Time.get_ticks_msec() >= _pause_until_msec:
 				# Expire first, then test: a winner whose claim lapsed must not
@@ -212,6 +215,8 @@ func _try_start_round() -> void:
 	if _scoreboard != null:
 		_scoreboard.visible = false
 	_swap_stage()
+	_round_number += 1
+	_in_round.clear()
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
@@ -222,6 +227,7 @@ func _try_start_round() -> void:
 			push_warning("RoundManager: stage has %d spawn point(s), none for slot %d; spawning at the origin" % [_stage_spawn_points.size(), slot])
 		var keeps_weapon: bool = slot == _last_winner_slot
 		_players[slot].start_round(spawn, keeps_weapon)
+		_in_round.append(slot)
 		if _random_weapons and not keeps_weapon:
 			_players[slot].set_weapon_stats(load(PLAYTEST_WEAPON_PATHS[randi() % PLAYTEST_WEAPON_PATHS.size()]))
 	_abandoned_since_msec = -1
@@ -340,6 +346,8 @@ func _check_round_end() -> void:
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
+	if lobby_enabled:
+		_publish_lobby_state()
 
 ## Phone buzzes (issue #34, ADR-0013): each slot's player is watched here, so
 ## `Player` never learns about phones and `ControllerServer` never learns
@@ -412,6 +420,9 @@ func _show_scoreboard() -> void:
 			icon.color = player.identity_outline_color()
 		if score_label != null:
 			score_label.text = str(_scores[slot]) if slot < _scores.size() else "0"
+		var name_label: Label = entry.get_child(2) as Label if entry.get_child_count() > 2 else null
+		if name_label != null:
+			name_label.text = _slot_name(slot)
 	_scoreboard.visible = true
 
 ## Whether `slot` is claimed and, where the roster can say, has a phone
@@ -867,6 +878,8 @@ func lobby_phase() -> String:
 			return "countdown"
 		State.VICTORY:
 			return "victory"
+		State.ROUND_END:
+			return "round_end"
 	return "playing"
 
 ## The current match's "first to N", fixed when its countdown finished.
@@ -889,7 +902,10 @@ func score_of(slot: int) -> int:
 func _roster() -> Array[int]:
 	if _controller_server == null:
 		return []
-	_controller_server.expire_disconnected_claims()
+	# Never mid-round: a claim outlives a disconnect until the round ends
+	# (ADR-0007), and the phones' state is published every frame of one.
+	if _state != State.ROUND_ACTIVE and _state != State.ROUND_END:
+		_controller_server.expire_disconnected_claims()
 	return _controller_server.claimed_slots()
 
 func _roster_size() -> int:
@@ -1021,6 +1037,11 @@ func _publish_lobby_state() -> void:
 		"players": players,
 		"count": _countdown_left() if _state == State.COUNTDOWN else 0,
 		"winner": _match_winner_slot,
+		# Issue #121: what each phone needs to say where its player stands.
+		"round": _round_number,
+		"in_round": _in_round.duplicate(),
+		"alive": _alive_slots(),
+		"next": ceili(maxf(0.0, float(_pause_until_msec - Time.get_ticks_msec())) / 1000.0) if _state == State.ROUND_END else 0,
 	}
 	if state == _last_lobby_state:
 		return
@@ -1217,3 +1238,61 @@ func _show_stage_title() -> void:
 	_title_tween.tween_property(_title_label, "position:x", -width - 20.0, stage_title_sec * 0.3) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	_title_tween.tween_callback(func() -> void: _title_label.visible = false)
+
+# --- Nicknames in play (issue #121) -------------------------------------------
+#
+# Each player in a round carries its phone's nickname just above its body, in
+# its colour. Part of the match UI, so only with `lobby_enabled`.
+
+## How far above the body's centre the name tag's bottom edge sits.
+const NAME_TAG_RISE: float = 40.0
+
+var _round_number: int = 0
+## The slots the current (or last) round spawned, in slot order.
+var _in_round: Array[int] = []
+var _name_tag_root: Node2D
+var _name_tags: Array[Label] = []
+
+## A slot's name tag, or null when there are none (lobby off).
+func name_tag(slot: int) -> Label:
+	return _name_tags[slot] if slot >= 0 and slot < _name_tags.size() else null
+
+func _alive_slots() -> Array[int]:
+	var alive: Array[int] = []
+	for slot in _players.size():
+		if _players[slot] != null and _players[slot].alive:
+			alive.append(slot)
+	return alive
+
+func _tick_name_tags() -> void:
+	if not lobby_enabled:
+		return
+	if _name_tag_root == null:
+		_name_tag_root = Node2D.new()
+		_name_tag_root.name = "NameTags"
+		_name_tag_root.z_index = 50
+		add_child(_name_tag_root)
+		for slot in _players.size():
+			var tag := Label.new()
+			tag.name = "NameTag%d" % slot
+			tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			tag.add_theme_font_size_override("font_size", 22)
+			tag.add_theme_color_override("font_color", _slot_color(slot))
+			tag.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
+			tag.add_theme_constant_override("outline_size", 6)
+			tag.visible = false
+			_name_tag_root.add_child(tag)
+			_name_tags.append(tag)
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		var tag: Label = _name_tags[slot]
+		var shown: bool = player != null and player.alive and _state == State.ROUND_ACTIVE
+		tag.visible = shown
+		if not shown:
+			continue
+		var text: String = _slot_name(slot)
+		if tag.text != text:
+			tag.text = text
+			tag.reset_size()
+		var size: Vector2 = tag.get_minimum_size()
+		tag.position = player.global_position + Vector2(-size.x * 0.5, -NAME_TAG_RISE - size.y)

@@ -19,7 +19,8 @@ extends Node
 ## a `{"t":"buzz","kind":<kind>}` text frame per `send_buzz()` (issue #34,
 ## ADR-0013), and a `{"t":"lobby",...}` text frame per `set_lobby_state()`
 ## (issue #120). Phone -> host text frames (#120): `{"t":"ready","v":<bool>}`
-## and, from the host phone only, `{"t":"target","n":<int>}`.
+## and, from the host phone only, `{"t":"target","n":<int>}`; and the
+## phone's nickname, `{"t":"name","v":<string>}` (issue #121).
 ##
 ## Liveness: a phone that screen-locks or leaves Wi-Fi mid-drag stops sending
 ## without ever closing the socket, and the last frame it sent was non-zero.
@@ -190,6 +191,10 @@ var _join_order: Array[int] = []
 var _match_target: int = 5
 const MIN_MATCH_TARGET: int = 1
 const MAX_MATCH_TARGET: int = 99
+## Each slot's nickname (issue #121), as the phone last sent it, trimmed to
+## MAX_NAME_LENGTH. Empty until the phone sends one.
+var _slot_name: PackedStringArray = PackedStringArray()
+const MAX_NAME_LENGTH: int = 12
 ## The last lobby state RoundManager set, re-sent to every phone that binds.
 var _lobby_state: Dictionary = {}
 ## The join URL and QR the lobby screen shows (#120). The QR is null when
@@ -210,6 +215,7 @@ func _ready() -> void:
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
+	_slot_name.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 		_smoothers.append(InputSmoother.new())
@@ -532,6 +538,7 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 			continue
 		_slot_claimed[slot] = 1
 		_slot_client_id[slot] = id
+		_slot_name[slot] = ""
 		_join_order.erase(slot)
 		_join_order.append(slot)
 		_attach(slot, peer)
@@ -615,6 +622,7 @@ func expire_disconnected_claims() -> void:
 		if _slot_claimed[slot] == 1 and _slot_peers[slot] == null:
 			_slot_claimed[slot] = 0
 			_slot_client_id[slot] = ""
+			_slot_name[slot] = ""
 			_join_order.erase(slot)
 
 ## Latest value wins: drain everything queued this frame and keep only the last
@@ -684,6 +692,10 @@ func _handle_text(slot: int, text: String) -> void:
 			_slot_ready[slot] = 1 if bool(msg.get("v", false)) else 0
 			if _log_input:
 				print("slot %d ready %s" % [slot, _slot_ready[slot] == 1])
+		"name":
+			_slot_name[slot] = clean_name(str(msg.get("v", "")))
+			if _log_input:
+				print("slot %d name '%s'" % [slot, _slot_name[slot]])
 		"target":
 			var n: Variant = msg.get("n")
 			if slot == host_slot() and (n is float or n is int):
@@ -722,3 +734,16 @@ func set_lobby_state(state: Dictionary) -> void:
 	for peer: WebSocketPeer in _slot_peers:
 		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
+
+## A slot's nickname (issue #121), or "" when its phone has not sent one.
+func slot_name(slot: int) -> String:
+	return _slot_name[slot] if slot >= 0 and slot < _slot_name.size() else ""
+
+## A nickname as the shared screen may show it: control characters dropped,
+## edges trimmed, at most MAX_NAME_LENGTH characters.
+static func clean_name(raw: String) -> String:
+	var kept: String = ""
+	for i in raw.length():
+		if raw.unicode_at(i) >= 32 and raw.unicode_at(i) != 127:
+			kept += raw[i]
+	return kept.strip_edges().left(MAX_NAME_LENGTH).strip_edges()
