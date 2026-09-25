@@ -1,0 +1,42 @@
+# 482c97b as committed (the #38 fix in place); standalone runs re-confirmed PASS after rebase onto main @ 3c192d4. macOS, Godot 4.6.2.
+## run 1: -- --scenario=world_stopped_head_blocks_arriving_head
+
+      tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+PASS  world_stopped_head_blocks_arriving_head
+---
+1 passed, 0 failed, 1 total
+## run 2: -- --scenario=world_stopped_head_blocks_arriving_head
+
+      tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+PASS  world_stopped_head_blocks_arriving_head
+---
+1 passed, 0 failed, 1 total
+## run 3: -- --scenario=world_stopped_head_blocks_arriving_head
+
+      tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+PASS  world_stopped_head_blocks_arriving_head
+---
+1 passed, 0 failed, 1 total
+## -- --scenarios=world_stopped_head_blocks_arriving_head,roster_heads_do_not_tunnel_head,world_stopped_head_blocks_arriving_head,heads_do_not_tunnel_head,world_stopped_head_blocks_arriving_head (summary lines only)
+      tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+PASS  world_stopped_head_blocks_arriving_head
+PASS  roster_heads_do_not_tunnel_head
+      tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+PASS  world_stopped_head_blocks_arriving_head
+PASS  heads_do_not_tunnel_head
+      tick 1: held head at (-30.97713, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+PASS  world_stopped_head_blocks_arriving_head
+---
+5 passed, 0 failed, 5 total
