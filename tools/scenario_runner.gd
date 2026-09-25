@@ -3164,9 +3164,10 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## margin by which a higher tier has to beat a lower one. The table's steps
 ## are 21 and 14, so both sit clear of the tolerance above and well under a
 ## step.
-## A band since #45: the M tier is pickaxe 34, sword 40, dagger 45.
+## A band since #45: the M tier is pickaxe 34, sword 40, dagger 60 (the
+## dagger was buffed from 45 at the hackathon playtest).
 ## Since #55 the S tier is a band too: boomstick 8, staff 20.
-const ROSTER_DAMAGE_SPREAD: float = 13.0
+const ROSTER_DAMAGE_SPREAD: float = 27.0
 const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
 ## How far the victim is planted from where the charge starts, and how long
 ## the charge is watched for. The run-up has to be long enough that the head
