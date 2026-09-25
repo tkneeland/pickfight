@@ -65,6 +65,23 @@ extends RigidBody2D
 ## across, so it is gated at this 4.00 and the last 0.16 px goes uncovered.
 ## Keeping a plant's settle out of a limit cycle is worth that much.
 const SWEEP_GATE_FLOOR: float = 4.0
+## Ceiling on the sweep gate: half the thinnest terrain on any stage, the
+## arena's 24 px slab (issue #109). A step shorter than this cannot take a
+## circle's centre past that slab's middle, whatever the head looks like, so
+## the solver still pushes it out of the side it came in.
+##
+## The gate's own argument -- a step shorter than the cluster is wide cannot
+## have left the cluster -- stops holding once a cluster is wider than the
+## terrain is thick. It held while every head was narrower than 24 px. The
+## double-bit axe (#90) is 34.87 px across. Its gate let 34 px steps go
+## unswept, so a toe circle 3 px across went through the 24 px slab in a
+## single step (#99, 5 of 94 trials). The same gate also left every axe
+## strike under 2090 px/s (34.87 px a tick) to the solver's contact report,
+## which is how a 1374 px/s swing scored nothing (`axe_swing_deals_damage`),
+## and the full-speed charge took 84.3 instead of 90. Only the axe (34.87)
+## and the pickaxe (15.36) are over the ceiling. Every other head's own width
+## is under it and still gates it.
+const SWEEP_GATE_CEILING: float = 12.0
 ## Directions the head's width is measured along to find its narrowest, half
 ## a turn's worth. A head is a cluster of circles (ADR-0010) whose facing
 ## turns every tick, so the narrowest width has to be a property of the
@@ -190,6 +207,8 @@ var _has_previous: bool = false
 var _gate_shapes: Array[CollisionShape2D] = []
 var _gate_distance: float = 0.0
 var _cluster_radius: float = 0.0
+## Reused by `_step_near_anything`.
+var _near_query: PhysicsShapeQueryParameters2D = null
 
 ## The step that just finished, snapshotted before anything this tick has had
 ## a chance to correct it: where this head started, where it ended, how it was
@@ -305,16 +324,28 @@ var _turn_ready: bool = false
 ## See the block comment above. `previous_offsets` is where each circle of
 ## `sweep_shapes` sat relative to the anchor before this tick's turn; the
 ## circles themselves already hold the new facing.
-func guard_turn(previous_offsets: PackedVector2Array) -> void:
+func guard_turn(previous_offsets: PackedVector2Array) -> float:
 	if not _turn_ready:
 		_turn_ready = true
-		return
+		return 1.0
 	var now := PackedVector2Array()
 	for node: CollisionShape2D in sweep_shapes:
 		now.append(node.position if node != null else Vector2.ZERO)
 	var hit: Dictionary = _first_turn_contact(previous_offsets, now, true)
 	if hit.is_empty():
-		return
+		return 1.0
+	# Terrain stops the turn itself (issue #109). The head used to be moved
+	# instead, by the shift that seats the *first* circle to reach the
+	# surface. That seats only the first one. The turn is finished either way,
+	# and a circle further out travels further. On the boomstick, the barrel's
+	# near circle met the slab 38% of the way into a 0.45 rad turn, and the
+	# muzzle 66 px out ended the tick 10.6 px inside the slab, because
+	# moving the head 6.3 px had seated only the near circle. The step's sweep
+	# could not see it: a cast that starts overlapping is ignored, and so is
+	# a ray from inside. Stopping the facing where the first circle arrives
+	# leaves every circle clear, since none of them met anything sooner.
+	if not hit["head"]:
+		return hit["fraction"]
 	global_position = hit["anchor"] + hit["shift"]
 	# The anchor's own velocity into the surface is taken out, as for a world
 	# contact; the turn itself is the haft's and is resisted through the
@@ -329,11 +360,12 @@ func guard_turn(previous_offsets: PackedVector2Array) -> void:
 	# nothing, and the anchor's own few pixels of travel carry the blade the
 	# rest of the way through (issue #82). Terrain is left as it was: the
 	# slab is thick enough for the solver to hold the rest.
-	if hit["head"] and _has_previous:
+	if _has_previous:
 		_previous_position = global_position
 		_previous_shape_xforms.clear()
 		for node: CollisionShape2D in sweep_shapes:
 			_previous_shape_xforms.append(node.transform)
+	return 1.0
 
 ## The earliest point in a re-placement of the circles at which a centre
 ## enters terrain, or a circle meets another head's (issue #82):
@@ -363,6 +395,7 @@ func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVec
 	var shift: Vector2 = Vector2.ZERO
 	var normal: Vector2 = Vector2.ZERO
 	var by_head: bool = false
+	var allowed: float = 1.0
 	for i in sweep_shapes.size():
 		var from_offset: Vector2 = from_offsets[i]
 		var to_offset: Vector2 = to_offsets[i]
@@ -392,6 +425,9 @@ func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVec
 				var fraction: float = (float(step) + reached / chord.length()) / float(steps)
 				if fraction < soonest:
 					soonest = fraction
+					var path: float = absf(turn) * from_offset.length() if turn != 0.0 \
+						else (to_offset - from_offset).length()
+					allowed = maxf(0.0, fraction - TURN_SEAT_BACKOFF / path) if path > 0.0 else 0.0
 					var seat: Vector2 = Vector2(hit["position"]) \
 						- chord.normalized() * minf(TURN_SEAT_BACKOFF, reached)
 					shift = seat - (anchor + to_offset)
@@ -401,7 +437,7 @@ func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVec
 			previous = next
 	if soonest == INF:
 		return {}
-	return {"anchor": anchor, "shift": shift, "normal": normal, "head": by_head}
+	return {"anchor": anchor, "shift": shift, "normal": normal, "head": by_head, "fraction": allowed}
 
 
 ## Every circle of every other live head that this head's turn could reach,
@@ -493,6 +529,27 @@ func _circle_radius(index: int) -> float:
 	var circle := node.shape as CircleShape2D
 	return circle.radius if circle != null else 0.0
 
+## Whether anything on `sweep_mask` lies within reach of this step's centre
+## traces: every circle centre's path fits in one circle about the step's
+## midpoint, `_cluster_radius` plus half the step.
+func _step_near_anything(space: PhysicsDirectSpaceState2D, motion: Vector2) -> bool:
+	if _near_query == null:
+		_near_query = PhysicsShapeQueryParameters2D.new()
+		_near_query.shape = CircleShape2D.new()
+		_near_query.collide_with_areas = false
+	_near_query.collision_mask = sweep_mask
+	_near_query.exclude = sweep_exclude
+	(_near_query.shape as CircleShape2D).radius = _cluster_radius + motion.length() * 0.5 + 1.0
+	_near_query.transform = Transform2D(0.0, _previous_position + motion * 0.5)
+	return not space.intersect_shape(_near_query, 1).is_empty()
+
+## A ray query for `_trace_terrain` along the sweep's own mask.
+func _terrain_query() -> PhysicsRayQueryParameters2D:
+	var query := PhysicsRayQueryParameters2D.create(Vector2.ZERO, Vector2.ZERO, sweep_mask, sweep_exclude)
+	query.collide_with_areas = false
+	query.hit_from_inside = false
+	return query
+
 ## The first thing on `sweep_mask` the straight line `from` -> `to` enters, or
 ## empty: what the world sweep asks of a circle's centre. Unlike
 ## `_trace_terrain` it counts players' bodies, as the world sweep always has.
@@ -509,16 +566,23 @@ func _trace_terrain(
 		query: PhysicsRayQueryParameters2D,
 		from: Vector2,
 		to: Vector2) -> Dictionary:
-	var exclude: Array[RID] = sweep_exclude.duplicate()
+	# Copied only once a body has to be stepped past: this runs for every
+	# circle near terrain every tick, and most rays meet no body at all.
+	var exclude: Array[RID] = sweep_exclude
+	var copied: bool = false
 	query.from = from
 	query.to = to
+	query.exclude = exclude
 	for _i in TURN_MAX_SKIPS:
-		query.exclude = exclude
 		var hit: Dictionary = space.intersect_ray(query)
 		if hit.is_empty():
 			return {}
 		if hit["collider"] is RigidBody2D:
+			if not copied:
+				exclude = sweep_exclude.duplicate()
+				copied = true
 			exclude.append(hit["rid"])
+			query.exclude = exclude
 			continue
 		return hit
 	return {}
@@ -581,7 +645,7 @@ func _refresh_cluster_metrics() -> void:
 	if _gate_shapes == sweep_shapes:
 		return
 	_gate_shapes = sweep_shapes.duplicate()
-	_gate_distance = maxf(SWEEP_GATE_FLOOR, _narrowest_width())
+	_gate_distance = clampf(_narrowest_width(), SWEEP_GATE_FLOOR, SWEEP_GATE_CEILING)
 	_cluster_radius = _furthest_reach()
 
 ## The narrowest the head is, measured across the cluster in every sampled
@@ -679,7 +743,23 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 
 	var motion: Vector2 = state.transform.origin - _previous_position
 	var distance: float = motion.length()
-	if distance < _sweep_gate():
+	if distance == 0.0:
+		return {}
+	# The gate applies to the whole-circle casts only. The centre traces
+	# further down run on every step (issue #109): they only ever stop a
+	# centre that would enter terrain, which ordinary contact never does, so
+	# they cannot start the limit cycle the gate exists for. Gated, they
+	# missed a head that sank a few pixels a tick. The axe's lower bit, under a
+	# player standing or landing on the slab with the weapon level, reaches 13
+	# px below the feet. It was pressed in 2-6 px a tick, under any gate, until
+	# the toe circle's centre passed the slab's middle and the solver pushed it
+	# out of the far side (#99).
+	var cast_whole: bool = distance >= _sweep_gate()
+	var space: PhysicsDirectSpaceState2D = state.get_space_state()
+	# Most short steps are a head in open air, and a ray per circle every
+	# tick cost about 0.1-0.2 ms of physics a tick across four players. One
+	# overlap test over everything the traces could reach answers those.
+	if not cast_whole and not _step_near_anything(space, motion):
 		return {}
 
 	# Each circle is swept where it actually sits, not at the body's origin:
@@ -710,8 +790,8 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 	params.exclude = sweep_exclude
 	params.margin = 0.0
 
-	var space: PhysicsDirectSpaceState2D = state.get_space_state()
 	var safe: float = 1.0
+	var terrain_query: PhysicsRayQueryParameters2D = null if cast_whole else _terrain_query()
 	var stopped_by: CollisionShape2D = null
 	var centre_hit: Dictionary = {}
 	for node: CollisionShape2D in sweep_shapes:
@@ -719,7 +799,8 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 			continue
 		params.shape = node.shape
 		params.transform = start * node.transform
-		var fractions: PackedFloat32Array = space.cast_motion(params)
+		var fractions: PackedFloat32Array = space.cast_motion(params) if cast_whole \
+			else PackedFloat32Array([1.0, 1.0])
 		if fractions.size() < 2:
 			continue
 		# 1.0 means this circle's path was clear -- or that it began the step
@@ -745,8 +826,16 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 		# surface, from where the solver pushes the circle back out of the
 		# side it came in. For a circle that began clear, the cast above has
 		# already found the same surface earlier, so this changes nothing.
+		#
+		# Under the gate only terrain is asked (#109). A body is not pressed
+		# through the way a slab is -- it gives -- and a centre trace reaches
+		# it a whole radius late, so a strike found that way would be seated
+		# a radius deep and scored off whatever surface the ray met. Short
+		# steps against bodies stay the solver's (`_on_head_hit`), as they
+		# were while the whole sweep was gated.
 		var origin: Vector2 = params.transform.origin
-		var hit: Dictionary = _trace_centre(space, origin, origin + motion)
+		var hit: Dictionary = _trace_centre(space, origin, origin + motion) if cast_whole \
+			else _trace_terrain(space, terrain_query, origin, origin + motion)
 		if not hit.is_empty():
 			var reached: float = maxf(0.0,
 				(Vector2(hit["position"]) - origin).length() - TURN_SEAT_BACKOFF)

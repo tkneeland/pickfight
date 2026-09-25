@@ -852,16 +852,22 @@ func _update_weapon_visual() -> void:
 	# offset each tick rather than turned from wherever they sat last tick --
 	# a circle off the head's centre has to orbit the anchor, not spin in
 	# place, and re-deriving it cannot accumulate drift.
-	var facing: float = _haft.rotation - _head.rotation
+	var held: float = _head_visual.rotation
+	var turn: float = wrapf(_haft.rotation - _head.rotation - held, -PI, PI)
 	var before := PackedVector2Array()
 	for node: CollisionShape2D in _head_shapes:
 		before.append(node.position)
-	_place_head_circles(_head_circle_layout(facing), facing)
-	_head_visual.rotation = facing
+	_place_head_circles(_head_circle_layout(held + turn), held + turn)
 	# The turn just made is a teleport the engine never sees as motion; on a
 	# long blade it can carry the tip through a thin slab. The head guards
-	# it before the step runs (issue #48).
-	_head.guard_turn(before)
+	# it before the step runs (issue #48). If terrain is in the way, the head
+	# keeps only the part of the turn before the first circle reaches it
+	# (issue #109), and the facing catches up with the haft on a later tick.
+	var allowed: float = _head.guard_turn(before)
+	var facing: float = held + turn * allowed
+	if allowed < 1.0:
+		_place_head_circles(_head_circle_layout(facing), facing)
+	_head_visual.rotation = wrapf(facing, -PI, PI)
 
 ## Where each head circle sits relative to the anchor at `facing`.
 func _head_circle_layout(facing: float) -> PackedVector2Array:

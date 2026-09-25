@@ -184,6 +184,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spots_skip_player_spawns",
 	"every_stage_has_pickup_spot_clear_of_spawns",
 	"spawn_protection_blocks_damage_then_expires",
+	"roster_heads_do_not_clip_platform_in_play",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -878,6 +879,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
 		"spawn_protection_blocks_damage_then_expires":
 			return await _scenario_spawn_protection_blocks_damage_then_expires()
+		"roster_heads_do_not_clip_platform_in_play":
+			return await _scenario_roster_heads_do_not_clip_platform_in_play()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3712,8 +3715,12 @@ func _charge_strike(attacker: RigidBody2D, victim: RigidBody2D) -> Dictionary:
 			# differently for every weapon, which would be the rig deciding
 			# the answer rather than the weapon.
 			# Level with the leading circle, not the anchor: the axe's bits sit off its haft.
-			if gap > contact * 3.0:
-				victim.teleport_to(Vector2(victim.global_position.x, _leading_circle_world(attacker).y))
+			# Right up to contact (#109). Levelling stopped at three contact
+			# distances out, and the axe's head then rose 4.3 px before it
+			# arrived: enough, on a head whose bits flare forward of its eye,
+			# for the upper toe to meet the victim first at 48 deg and score
+			# 84 of the axe's 90.
+			victim.teleport_to(Vector2(victim.global_position.x, _leading_circle_world(attacker).y))
 		if victim.damage != before_damage or victim.deaths != before_deaths:
 			# The tick the damage shows up on is a tick the head has already
 			# been stopped part-way through, so the speed it arrived with is
@@ -10636,6 +10643,17 @@ func _scenario_axe_swing_deals_damage() -> Array[String]:
 
 	var hardest: float = 0.0
 	for half_angle: float in SWING_HALF_ANGLES:
+		# Rehearsed twice, and aimed off the second (#109). The wind-up does
+		# not bring the axe's slow drive all the way in or out, so a swing's
+		# arc depends on where the last one left the head. The first
+		# rehearsal of a fresh axe winds up from r=96 and passes its peak at
+		# r=122; the swing it aimed, starting from the rehearsal's own
+		# full-reach finish, ran at r=142, and the victim planted 30 px inside
+		# that arc was clipped by the inner bit at 57 deg. What that scored
+		# came down to which tick the solver noticed, which is why the result
+		# moved with whatever scenario ran before. The second rehearsal starts
+		# from the same finish the swing does.
+		await _rehearse_swing(attacker, centre, half_angle)
 		var aim: Dictionary = await _rehearse_swing(attacker, centre, half_angle)
 		var victim: RigidBody2D = _spawn_player(stage, aim["point"])
 		await physics_frame
@@ -11582,4 +11600,125 @@ func _scenario_spawn_protection_blocks_damage_then_expires() -> Array[String]:
 			failures.append("%s took %.1f damage after protection, expected 10" % [player.name, player.damage])
 
 	await _teardown(loop["stage"])
+	return failures
+
+# --- Heads kept on their side of a thin platform in play (issue #109) --------
+
+## Playtest trials per weapon, each a player on or under the 24 px slab with
+## the stick thrown somewhere new every few ticks. `PLAYTEST_CLIP_SEED` fixes
+## the throws, so the same trials run every time.
+const PLAYTEST_CLIP_TRIALS: int = 48
+const PLAYTEST_CLIP_SEED: int = 109
+const PLAYTEST_CLIP_TICKS: int = 400
+## How many ticks each throw is held for, from the shortest to the longest.
+const PLAYTEST_CLIP_HOLD_MIN: int = 4
+const PLAYTEST_CLIP_HOLD_MAX: int = 15
+## A trial's stick sequence, repeated if it runs out: this many throws.
+const PLAYTEST_CLIP_THROWS: int = 40
+## How far a trial that starts under the slab stands below it.
+const PLAYTEST_CLIP_UNDER_GAP: float = 60.0
+
+## Issue #109: the playtest's boomstick went through a platform, and nothing
+## in `roster_heads_do_not_tunnel_thin_platform` did it. Those trials are
+## single moves -- a swing, a fling, a slam -- from a still player. In play
+## the stick is thrown about while the head is already pressed on the slab,
+## and that is where it went through.
+##
+## The boomstick's haft is light (0.2 x its 0.1 mass), so with the head held
+## on the slab the haft whips 0.45-0.6 rad in a tick, and the head's circles
+## are laid out along the haft. `WeaponHead.guard_turn` used to answer a turn
+## that met terrain by shifting the head back by what seated the *first*
+## circle to arrive; the muzzle, 66 px out, was still 10.6 px inside the
+## slab, and the world sweep, which ignores what a circle starts a step
+## overlapping, never saw it again. The solver then pushed it out of the far
+## side.
+##
+## Every weapon is run, 48 seeded trials each on the same 24 px slab, and a
+## crossing is any head circle (`Player.weapon_head_circles_world`) whose
+## centre goes from one side of the slab to the other within its span.
+## Measured on main at b659ff9: boomstick 4, axe 12, sword 1.
+func _scenario_roster_heads_do_not_clip_platform_in_play() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var slabs: Array[Vector2] = []
+	for lane in PLATFORM_TUNNEL_LANES:
+		var centre := PLATFORM_TUNNEL_LANE_ORIGIN + Vector2(PLATFORM_TUNNEL_LANE_SPACING * lane, 0.0)
+		_add_bar(stage, centre, Vector2(THIN_PLATFORM_HALF_WIDTH, THIN_PLATFORM_HALF_HEIGHT) * 2.0)
+		slabs.append(centre)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = PLAYTEST_CLIP_SEED
+	var trials: Array[Dictionary] = []
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stats: WeaponStatsType = load(path)
+		for t in PLAYTEST_CLIP_TRIALS:
+			var throws: Array[Vector2] = []
+			for _k in PLAYTEST_CLIP_THROWS:
+				var strength: float = [0.0, 0.4, 1.0, 1.0][rng.randi() % 4]
+				throws.append(Vector2.from_angle(rng.randf() * TAU) * strength)
+			trials.append({
+				"weapon": path.get_file().get_basename(),
+				"stats": stats,
+				"under": t % 2 == 1,
+				"throws": throws,
+				"hold": rng.randi_range(PLAYTEST_CLIP_HOLD_MIN, PLAYTEST_CLIP_HOLD_MAX),
+			})
+
+	var lanes: Array[Dictionary] = []
+	for slab: Vector2 in slabs:
+		lanes.append({"slab": slab, "trial": {}, "player": null, "tick": 0, "sides": {}})
+	var crossings: Dictionary = {}
+	var next: int = 0
+	var start: int = ROSTER_SWAP_TICKS
+	var end_at: int = start + PLAYTEST_CLIP_TICKS
+	while true:
+		var busy: bool = false
+		for lane: Dictionary in lanes:
+			if lane["trial"].is_empty():
+				if next >= trials.size():
+					continue
+				var trial: Dictionary = trials[next]
+				next += 1
+				lane["trial"] = trial
+				lane["tick"] = 0
+				lane["sides"] = {}
+				var y: float = THIN_PLATFORM_HALF_HEIGHT + PLAYER_RADIUS + PLAYTEST_CLIP_UNDER_GAP \
+					if trial["under"] else -THIN_PLATFORM_HALF_HEIGHT - PLAYER_RADIUS - 1.0
+				var spawned: RigidBody2D = _spawn_player(stage, Vector2(lane["slab"]) + Vector2(0.0, y))
+				spawned.set_weapon_stats(trial["stats"])
+				lane["player"] = spawned
+			busy = true
+			var current: Dictionary = lane["trial"]
+			var player: RigidBody2D = lane["player"]
+			var tick: int = lane["tick"]
+			lane["tick"] = tick + 1
+			if tick >= start and tick < end_at and player != null and is_instance_valid(player) and player.alive:
+				var throw: int = ((tick - start) / int(current["hold"])) % PLAYTEST_CLIP_THROWS
+				player.set_input_vector(current["throws"][throw])
+				if tick > start:
+					var crossed: String = _update_platform_sides(player, lane["slab"], lane["sides"])
+					if crossed != "":
+						var weapon: String = current["weapon"]
+						if not crossings.has(weapon):
+							crossings[weapon] = []
+						crossings[weapon].append("%s trial %d (%s the slab), tick %d: %s" % [
+							weapon, trials.find(current), "under" if current["under"] else "on",
+							tick - start, crossed])
+						lane["tick"] = end_at
+			if lane["tick"] >= end_at and lane["player"] != null:
+				lane["player"].queue_free()
+				lane["player"] = null
+			if lane["tick"] >= end_at + BOOST_RESET_TICKS:
+				lane["trial"] = {}
+		if not busy:
+			break
+		await physics_frame
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var found: Array = crossings.get(weapon, [])
+		print("      %s: %d trials, %d head crossings" % [weapon, PLAYTEST_CLIP_TRIALS, found.size()])
+		for line: String in found:
+			failures.append(line)
+	await _teardown(stage)
 	return failures
