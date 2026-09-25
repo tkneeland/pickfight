@@ -1,43 +1,24 @@
-# Proof of work: issue #75, sound effects
+# Proof of work: issue #71, axe_head_holds_side_near_vertical in full runs
 
-This root holds only the latest work package's evidence, cleared and
-recaptured per the evidence policy in `docs/agents/testing.md`. Earlier
-evidence is in git history:
+Cleared and recaptured per `docs/agents/testing.md`: this root holds only the latest work package's evidence. The previous package (#59, stage traversal) is in commit `d2fa0a7`: `git show d2fa0a7:test-results/README.md`.
 
-- #52: `cb30530:test-results/`
-- #59: `d2fa0a7:test-results/`
-- #47, #61 and damage-display: `8f32c86:test-results/`
+## Finding
 
-Branch `feat/issue-75-sound-effects`, rebased on `origin/main` `9ed7319`. Run on macOS with local Godot 4.6.2, headless.
+No state leaks from `four_phones_claim_four_slots`. The axe scenario fails **alone** on `main` too. It has failed since #48 merged (`e6b0cc5`) and passed on the commit before (`3c192d4`), whether it ran alone or after `four_phones_claim_four_slots`.
 
-Headless can't hear anything. So the scenarios spy on what was *requested* of
-the `Sfx` autoload, through its `start_recording()` / `recorded()` test hook.
+The scenario runs about 13 s from `PARK_POSITION`, which is clear air for only about the first second. After that the player is standing on the arena. Aimed down, the axe rests on the floor, and #48's flip hold correctly keeps the side it has, because the flip would carry the bit through the floor. The fix gives the scenario a stage without the arena, which is what it was written for. No assertion changed.
 
-| Change (issue #75) | Proven by | Evidence | Verdict |
-| --- | --- | --- | --- |
-| A damaging strike, swung or shot, requests the attacker's weapon's hit. A 0-damage contact is silent. The sound is placed at the strike point. | `sfx_strike_sounds_as_attackers_weapon` | `issue-75/scenario-suite.txt` | PASS |
-| A head flying into a wall requests `head_terrain`. Two heads meeting request exactly one `clash`. | `sfx_head_meets_terrain_and_head` | `issue-75/scenario-suite.txt` | PASS |
-| A 320 px drop requests one `land` at the floor, and none while resting. An elimination requests `eliminated` where the player was. | `sfx_landing_and_elimination` | `issue-75/scenario-suite.txt` | PASS |
-| A real boomstick shot requests `fire_boomstick`, then `bullet_impact` on a bar | `sfx_boomstick_shot_and_impact` | `issue-75/scenario-suite.txt` | PASS |
-| A real round requests `round_start` and `modifier` once each, then `round_win` | `sfx_round_events` | `issue-75/scenario-suite.txt` | PASS |
-| The lava requests `countdown` ×3, then `lava_rise`. A player in the lava requests `lava_sizzle`. | `sfx_lava_countdown_rise_and_sizzle` | `issue-75/scenario-suite.txt` | PASS |
-| A join requests `join`. `ControllerServer` declares and emits `player_joined`. | `sfx_join_sounds` | `issue-75/scenario-suite.txt` | PASS |
-| Strength scales volume: the curve rises monotonically, spans at least 6 dB, and a 54-damage hit is louder and lower-pitched than a 6-damage one | `sfx_strength_scales_volume` | `issue-75/scenario-suite.txt` | PASS |
-| The overlap cap holds: 12 rapid clashes never exceed 3 playing, and the cap is reached | `sfx_overlap_cap_holds` | `issue-75/scenario-suite.txt` | PASS |
-| The six weapons have six distinct sound sets and share no file | `sfx_weapon_sound_sets_distinct` | `issue-75/scenario-suite.txt` | PASS |
-| Every referenced file exists and loads, every sound the hooks name is in the table, no shipped file is unused, and the total is 587 KB | `sfx_sound_files_exist` | `issue-75/scenario-suite.txt` | PASS |
-| The slider sets the Master bus volume, Mute mutes it, and sounds play on the `SFX` bus | `sfx_volume_slider_and_mute` | `issue-75/scenario-suite.txt` | PASS |
-| Nothing else regressed | Full suite: 119 of 121 pass. The 2 failures are not #75's (see below). There is no "ObjectDB leaked" warning at exit. | `issue-75/scenario-suite.txt` | PASS |
-| A fresh clone (no `.godot/`) boots with no `SCRIPT ERROR` or `Failed to load script`, both before and after `--import` | the CLAUDE.md boot check | `issue-75/fresh-clone-boot.txt`, `issue-75/fresh-clone-boot-after-import.txt` | PASS |
-| How it all sounds | a listen test on the host | none | NEEDS PLAYTEST |
+## Evidence
 
-Neither failure in the full suite comes from #75:
+| File | What it shows |
+| --- | --- |
+| `issue-71/red-pair-before-fix.txt` | Red: the pair on `main` (8118a72), before the fix |
+| `issue-71/red-axe-alone-on-main.txt` | Red: the axe scenario alone on `main`. It does not need the pair |
+| `issue-71/bisect-around-48.txt` | Passes before #48, alone and in the pair. Fails alone from #48 on |
+| `issue-71/green-pair.txt` | Green: the pair after the fix |
+| `issue-71/green-axe-alone.txt` | Green: the axe scenario alone after the fix |
+| `issue-71/mutation-deadband-zero-goes-red.txt` | The test still bites: with `HEAD_FLIP_DEADBAND = 0` it fails with 39 to 40 flips per wobble |
+| `issue-71/scenario-suite.txt` | Full suite, `-- --all`: **97/98**. The axe scenario passes |
+| `issue-71/boot-check.txt` | Fresh-clone boot: clean |
 
-- **`axe_head_holds_side_near_vertical` (#71)** fails even when run alone,
-  both on this branch and on untouched `origin/main` `9ed7319`. See
-  `issue-75/rerun-axe_head_holds_side_near_vertical.txt` and
-  `issue-75/baseline-main-9ed7319-axe_head_holds_side_near_vertical.txt`.
-- **`roster_heads_do_not_tunnel_head_reversed`** is the known intermittent
-  failure. It passes when run alone: see
-  `issue-75/rerun-roster_heads_do_not_tunnel_head_reversed.txt`. A parallel
-  main-baseline run on another branch failed the same two scenarios.
+The one suite failure is `roster_heads_do_not_tunnel_head_reversed`, which is **#77**. It fails on `main` with the same numbers (see #77), passes alone, and has nothing to do with this change.

@@ -1,0 +1,14 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+FAIL  axe_head_holds_side_near_vertical
+      - held straight up with the head as authored, a 4 deg wobble flipped it 39 times
+      - held straight up, the head ended the wobble on the wrong side
+      - held straight up with the head mirrored, a 4 deg wobble flipped it 40 times
+      - held straight up with the head as authored, a 4 deg wobble flipped it 39 times
+      - held straight up, the head ended the wobble on the wrong side
+      - held straight down with the head as authored, a 4 deg wobble flipped it 40 times
+      - held straight down with the head mirrored, a 4 deg wobble flipped it 39 times
+      - held straight down, the head ended the wobble on the wrong side
+      - held straight down with the head as authored, a 4 deg wobble flipped it 40 times
+---
+0 passed, 1 failed, 1 total
