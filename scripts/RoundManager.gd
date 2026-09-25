@@ -117,9 +117,21 @@ const PLAYTEST_WEAPON_PATHS: PackedStringArray = [
 	"res://resources/boomstick.tres",
 ]
 var _random_weapons: bool = false
+## `--demo`: a short-slot showcase. Random weapons, a fixed opening run of
+## the stages with the most parts on show, and a quicker lava that still
+## leaves a real fight before it arrives. Tests never pass it.
+var _demo: bool = false
+const DEMO_STAGE_ORDER: PackedStringArray = [
+	"Springboard", "Rockfall", "Gale", "Bulwark", "Carousel", "Sinkhole",
+]
+const DEMO_KILL_ZONE_GRACE_SEC: float = 20.0
+const DEMO_KILL_ZONE_RISE_SEC: float = 40.0
 
 func _ready() -> void:
-	_random_weapons = OS.get_cmdline_user_args().has("--random-weapons")
+	_demo = OS.get_cmdline_user_args().has("--demo")
+	_random_weapons = _demo or OS.get_cmdline_user_args().has("--random-weapons")
+	if _demo:
+		_apply_demo_mode()
 	if _random_weapons:
 		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
 	_rng = RandomNumberGenerator.new()
@@ -231,6 +243,8 @@ func _swap_stage() -> void:
 ## holds the previously-played index at this point, so it doubles as the
 ## "just played" value the fresh bag must not start with.
 func _next_stage_index() -> int:
+	if _demo:
+		return (_stage_index + 1) % stage_scenes.size()
 	if _stage_index == -1:
 		return 0
 	if _bag.is_empty():
@@ -680,3 +694,20 @@ func _exit_tree() -> void:
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
+
+## Puts DEMO_STAGE_ORDER at the front of the rotation (the rest follow in
+## their usual order, played straight through), and shortens the lava.
+func _apply_demo_mode() -> void:
+	var ordered: Array[PackedScene] = []
+	for stage_name: String in DEMO_STAGE_ORDER:
+		for scene: PackedScene in stage_scenes:
+			if scene.resource_path.get_file().get_basename() == stage_name:
+				ordered.append(scene)
+	for scene: PackedScene in stage_scenes:
+		if not ordered.has(scene):
+			ordered.append(scene)
+	stage_scenes = ordered
+	kill_zone_grace_sec = DEMO_KILL_ZONE_GRACE_SEC
+	kill_zone_rise_sec = DEMO_KILL_ZONE_RISE_SEC
+	print("RoundManager: --demo on; random weapons, lava after %.0f s, stages from %s" % [
+		kill_zone_grace_sec, ", ".join(DEMO_STAGE_ORDER)])
