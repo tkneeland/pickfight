@@ -1,0 +1,8 @@
+Fresh-clone boot check, commit a6fb306 (feat/issue-50-round-modifiers)
+
+$ git clone -q . <scratch>/i50-fresh
+$ ls -d <scratch>/i50-fresh/.godot   -> No such file or directory
+$ godot --headless --path <scratch>/i50-fresh --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
+(no output; grep exit 1)
+
+Verdict: PASS
