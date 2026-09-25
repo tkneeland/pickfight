@@ -171,6 +171,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"arm_draws_over_identity_outline",
 	"axe_swing_deals_damage",
 	"sfx_mix_victory_quieter_rest_louder",
+	"planted_head_grips_sideways_push",
+	"gripping_head_lets_go",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -835,6 +837,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_axe_swing_deals_damage()
 		"sfx_mix_victory_quieter_rest_louder":
 			return await _scenario_sfx_mix_victory_quieter_rest_louder()
+		"planted_head_grips_sideways_push":
+			return await _scenario_planted_head_grips_sideways_push()
+		"gripping_head_lets_go":
+			return await _scenario_gripping_head_lets_go()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10651,4 +10657,156 @@ func _scenario_sfx_mix_victory_quieter_rest_louder() -> Array[String]:
 		if not sfx.has_sound(StringName(name)):
 			failures.append("%s is no longer in the sound table" % name)
 	await _teardown(stage)
+	return failures
+
+
+## Issue #110: a planted head bites into the surface. Two sideways pushes on
+## a head planted on the arena floor, and how far the head slides along it
+## while it is still in contact:
+##
+##   * shove: the player stands on its head, pointed straight down, and the
+##     body is knocked sideways at GRIP_SHOVE_SPEED. The head should stay put
+##     and the body swing over it, rather than the whole player skating.
+##   * push-off: the player stands on the floor with the head planted
+##     GRIP_PUSH_DEGREES off vertical and drives out to full reach. The drive
+##     pushes the head along the floor as much as into it, and a head that
+##     skids there spends the push on the skid instead of on the body.
+##
+## Only the slide while planted counts: once the head lifts (more than
+## GRIP_CONTACT_TOLERANCE off the floor) what it does is the swing's
+## business, not the grip's.
+##
+## Measured on a pickaxe with its crescent swapped for one round circle on
+## the anchor. The crescent's circles sit off the anchor and turn with the
+## haft, so its anchor moves several px as the weapon tilts even while the
+## same circle stays planted; a round head's anchor is its contact's centre,
+## so how far it moves is how far the head slid.
+const GRIP_SHOVE_SPEED: float = 300.0
+const GRIP_SHOVE_TICKS: int = 40
+const GRIP_PUSH_DEGREES: float = 70.0
+const GRIP_PUSH_SETTLE_TICKS: int = 60
+const GRIP_PUSH_TICKS: int = 30
+## A planted head's height holds to a hundredth of a px; one lifting off
+## clears this within a tick.
+const GRIP_CONTACT_TOLERANCE: float = 0.5
+## Before #110 the shove slid the head 12.9 px and the push-off 11.2 px.
+const GRIP_MAX_SLIDE: float = 2.0
+
+func _scenario_planted_head_grips_sideways_push() -> Array[String]:
+	var failures: Array[String] = []
+
+	# Shove.
+	var round_head: WeaponStatsType = _round_head_stats()
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+	player.set_weapon_stats(round_head)
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+	var start: Vector2 = player.weapon_head_position()
+	if start.y < GROUND_TOP - HEAD_RADIUS - PLANT_CLEARANCE:
+		failures.append("shove: the player never came to stand on its head (head y %.1f)" % start.y)
+	player.linear_velocity.x = GRIP_SHOVE_SPEED
+	var shove_slide: float = await _planted_slide(player, start, GRIP_SHOVE_TICKS)
+	await _teardown(stage)
+
+	# Push-off.
+	stage = _new_stage()
+	player = _spawn_player(stage, Vector2(0, GROUND_TOP - PLAYER_RADIUS - 2.0))
+	player.set_weapon_stats(round_head)
+	var dir: Vector2 = Vector2.DOWN.rotated(deg_to_rad(GRIP_PUSH_DEGREES))
+	player.set_input_vector(dir * 0.3)
+	await _await_ticks(GRIP_PUSH_SETTLE_TICKS)
+	start = player.weapon_head_position()
+	if start.y < GROUND_TOP - HEAD_RADIUS - PLANT_CLEARANCE:
+		failures.append("push-off: the head never planted on the floor (y %.1f)" % start.y)
+	player.set_input_vector(dir)
+	var push_slide: float = await _planted_slide(player, start, GRIP_PUSH_TICKS)
+	await _teardown(stage)
+
+	print("      planted head slide: shove %.1f px, push-off %.1f px" % [shove_slide, push_slide])
+	if shove_slide > GRIP_MAX_SLIDE:
+		failures.append("shove: the planted head slid %.1f px, expected at most %.1f" % [shove_slide, GRIP_MAX_SLIDE])
+	if push_slide > GRIP_MAX_SLIDE:
+		failures.append("push-off: the planted head slid %.1f px, expected at most %.1f" % [push_slide, GRIP_MAX_SLIDE])
+	return failures
+
+## The pickaxe with one round HEAD_RADIUS circle for a head, drawn as one.
+func _round_head_stats() -> WeaponStatsType:
+	var stats: WeaponStatsType = load("res://resources/pickaxe.tres").duplicate()
+	stats.head_circle_offsets = PackedVector2Array([Vector2.ZERO])
+	stats.head_circle_radii = PackedFloat32Array([HEAD_RADIUS])
+	var outline := PackedVector2Array()
+	for i in 16:
+		outline.append(Vector2.RIGHT.rotated(TAU * i / 16.0) * HEAD_RADIUS)
+	stats.art_outline = outline
+	return stats
+
+## The furthest the head gets along the floor from `start` over `ticks`,
+## up to the first tick it lifts off the floor.
+func _planted_slide(player: RigidBody2D, start: Vector2, ticks: int) -> float:
+	var slide: float = 0.0
+	for _i in ticks:
+		await physics_frame
+		var head: Vector2 = player.weapon_head_position()
+		if absf(head.y - start.y) > GRIP_CONTACT_TOLERANCE:
+			break
+		slide = maxf(slide, absf(head.x - start.x))
+	return slide
+
+## Issue #110: grip is not glue. A head pressed into a wall or a ceiling
+## lets go when the drag is released, and when the drag moves somewhere the
+## surface is not. The player stands on the arena floor throughout, so the
+## only thing the head can be held by is the surface it is pressed into.
+## Both are the hardest case there is: the body is wedged, against the floor
+## under the ceiling and against a second wall behind it for the wall, so the
+## whole drive goes into pressing the head in and nothing gives but the head.
+const GRIP_WALL_GAP: float = 100.0
+const GRIP_PRESS_TICKS: int = 40
+const GRIP_LET_GO_TICKS: int = 60
+## How far off the surface the head has to get to have let go of it.
+const GRIP_LET_GO_DISTANCE: float = 20.0
+
+func _scenario_gripping_head_lets_go() -> Array[String]:
+	var failures: Array[String] = []
+	var ground_y: float = GROUND_TOP - PLAYER_RADIUS - 2.0
+	# Wall to the right: its face GRIP_WALL_GAP from the body's centre, and
+	# one at the body's back.
+	# Ceiling: the arena's left platform's underside, reachable from under it.
+	var ceiling_y: float = 132.0
+	var cases: Array = [
+		# [label, spawn, press vector, moved-drag vector, surface distance fn]
+		["wall", Vector2(0, ground_y), Vector2.RIGHT, Vector2(1, -1).normalized() * 0.6, "x"],
+		["ceiling", Vector2(-320, ground_y), Vector2.UP, Vector2(1, -1).normalized() * 0.6, "y"],
+	]
+	for c: Array in cases:
+		for how: String in ["release", "move"]:
+			var stage: Node2D = _new_stage()
+			var face: float = 0.0
+			if c[4] == "x":
+				_add_bar(stage, Vector2(GRIP_WALL_GAP + 20.0, 180.0), Vector2(40, 200))
+				_add_bar(stage, Vector2(-PLAYER_RADIUS - 21.0, 180.0), Vector2(40, 200))
+				face = GRIP_WALL_GAP
+			else:
+				face = ceiling_y
+			var player: RigidBody2D = _spawn_player(stage, c[1])
+			player.set_input_vector(c[2])
+			await _await_ticks(GRIP_PRESS_TICKS)
+			var gap_of := func() -> float:
+				var h: Vector2 = player.weapon_head_position()
+				return face - h.x if c[4] == "x" else h.y - face
+			var pressed: float = gap_of.call()
+			if pressed > PLANT_CLEARANCE * 3.0:
+				failures.append("%s: the head never reached the surface (%.1f px off it)" % [c[0], pressed])
+			player.set_input_vector(Vector2.ZERO if how == "release" else c[3])
+			var freed_at: int = -1
+			for i in GRIP_LET_GO_TICKS:
+				await physics_frame
+				if gap_of.call() >= GRIP_LET_GO_DISTANCE:
+					freed_at = i
+					break
+			print("      %s %s: pressed %.1f px off, let go after %d ticks" % [c[0], how, pressed, freed_at])
+			if freed_at < 0:
+				failures.append("%s: %s did not free the head within %d ticks (%.1f px off the surface)" % [
+					c[0], how, GRIP_LET_GO_TICKS, gap_of.call()])
+			await _teardown(stage)
 	return failures

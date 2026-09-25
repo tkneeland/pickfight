@@ -309,6 +309,7 @@ func _physics_process(delta: float) -> void:
 	_head_velocity = _head.linear_velocity
 	if head_stopped:
 		_hold_min_reach()
+	_update_head_grip()
 	_drive_angle(delta)
 	_drive_extension(delta)
 	_update_weapon_visual()
@@ -561,6 +562,10 @@ func _build_rig() -> void:
 	# face along the haft each tick instead, so a non-circular head still
 	# points where the weapon points.
 	_head.lock_rotation = true
+	# Its own material, so its grip can change tick to tick without touching
+	# anyone else's head: see `_update_head_grip()`.
+	_head_material = PhysicsMaterial.new()
+	_head.physics_material_override = _head_material
 	_head.collision_layer = LAYER_HEAD
 	_head.collision_mask = LAYER_WORLD | LAYER_HEAD
 	# The head is small and can be swung fast; without continuous detection it
@@ -1212,3 +1217,58 @@ func _clear_projectiles() -> void:
 		if is_instance_valid(bullet):
 			bullet.queue_free()
 	_projectiles.clear()
+
+## Grip (issue #110): a head planted on terrain bites into it.
+##
+## Godot combines two bodies' friction by taking the lower, and terrain has
+## the default 1.0, so a head can be given more only by marking its material
+## `rough`, which makes the head's own friction the one that counts. At the
+## default a planted head slid 13-14 px when the body standing on it was
+## knocked sideways at 300 px/s, and 11 px along the floor pushing off at 70
+## degrees off vertical; at HEAD_GRIP_FRICTION neither moves.
+##
+## It is friction, so it holds only as hard as the head is pressed in:
+## releasing the drag stops the pressing, and the head comes away as it
+## always did. What friction alone gets wrong is the wedge -- a head pressed
+## into a wall by a body that cannot give way, the drag turned away from the
+## wall. The extension drive presses along the haft, into the wall, while the
+## angle drive tries to slide the head off it, and at four times the grip
+## nothing moves at all: measured, the rig froze and fell asleep there. So the
+## grip yields to the drag. Once the haft is more than HEAD_GRIP_YIELD_START
+## off where the drag points it fades, and past HEAD_GRIP_YIELD_FULL the head
+## is back on plain friction, which is what frees it today. A drag held where
+## it planted, or one the weapon is keeping up with, keeps the full grip.
+##
+## Terrain only. Against another head or a player's body the head keeps plain,
+## non-rough friction, exactly what it had before: a grippy head would drag a
+## struck player along its swing and lock clashing heads together, and a head
+## that planted on a slippery-floor player keeps the slip that modifier gives
+## that player's body. The grip is set from what the head touched last tick,
+## so the first tick of a new contact runs on whatever the one before was.
+const HEAD_GRIP_FRICTION: float = 4.0
+const HEAD_BASE_FRICTION: float = 1.0
+const HEAD_GRIP_YIELD_START: float = 0.15
+const HEAD_GRIP_YIELD_FULL: float = 0.5
+
+var _head_material: PhysicsMaterial
+
+func _update_head_grip() -> void:
+	if _head_material == null:
+		return
+	var grip: float = 0.0
+	var bodies: Array[Node2D] = _head.get_colliding_bodies()
+	for body: Node2D in bodies:
+		if body.is_in_group("players") or body is WeaponHeadType:
+			grip = 0.0
+			break
+		grip = 1.0
+	if grip > 0.0:
+		var error: float = absf(wrapf(weapon_angle - _haft.rotation, -PI, PI))
+		grip = 1.0 - clampf(inverse_lerp(HEAD_GRIP_YIELD_START, HEAD_GRIP_YIELD_FULL, error), 0.0, 1.0)
+	var friction: float = lerpf(HEAD_BASE_FRICTION, HEAD_GRIP_FRICTION, grip)
+	var rough: bool = grip > 0.0
+	# Only on a change: every write re-sends the material to the server.
+	if _head_material.rough != rough:
+		_head_material.rough = rough
+	if not is_equal_approx(_head_material.friction, friction):
+		_head_material.friction = friction
