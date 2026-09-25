@@ -170,6 +170,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_volume_slider_and_mute",
 	"charge_measures_heads_where_physics_has_them",
 	"turn_does_not_carry_blade_through_head",
+	"charge_sweep_pair_stays_in_play",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -832,6 +833,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_charge_measures_heads_where_physics_has_them()
 		"turn_does_not_carry_blade_through_head":
 			return await _scenario_turn_does_not_carry_blade_through_head()
+		"charge_sweep_pair_stays_in_play":
+			return await _scenario_charge_sweep_pair_stays_in_play()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3763,13 +3766,14 @@ func _scenario_roster_heads_do_not_tunnel_head() -> Array[String]:
 			failures.append("%s: could not be loaded" % path)
 			continue
 
-		# A fresh pair per weapon. Damage is cleared per charge below, but an
-		# elimination inside a single charge still freezes a body for good,
-		# and a frozen body would carry into every weapon after this one.
+		# A fresh pair per weapon, holding the weapon with its damage taken
+		# out (`_sweep_stats`, issue #86), so no charge can end in an
+		# elimination. A fresh pair still, so that if one ever did, the
+		# frozen body could not carry into every weapon after this one.
 		var attacker: RigidBody2D = _spawn_player(stage, centre)
 		var blocker: RigidBody2D = _spawn_player(stage, centre)
-		attacker.set_weapon_stats(stats)
-		blocker.set_weapon_stats(stats)
+		attacker.set_weapon_stats(_sweep_stats(stats))
+		blocker.set_weapon_stats(_sweep_stats(stats))
 		await _await_ticks(ROSTER_SWAP_TICKS)
 
 		var separation: float = maxf(CHARGE_SEPARATION,
@@ -3803,6 +3807,20 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 	for degrees: float in CHARGE_ANGLES:
 		for speed: float in CHARGE_SPEEDS:
 			trials += 1
+			# Both players in play, or there is nothing to charge. A player
+			# out of play has no rig and so no head circles, and a charge
+			# measured against an empty cluster reads `inf` -- "never came
+			# near" -- which is counted as a completed charge that missed.
+			# That is how one elimination during a revive (issue #86) turned
+			# the last six sword charges into six silent misses. Say so and
+			# stop rather than measure nothing.
+			if not attacker.alive or not blocker.alive:
+				failures.append("%s: a player was out of play at the start of the %.0f deg charge at %.0f px/s, so the charges from there on could not be measured" % [
+					label, degrees, speed])
+				return failures
+			# Taken before the settle, not after it, so that an elimination
+			# during the settle voids this charge as well.
+			var deaths: int = attacker.deaths + blocker.deaths
 			var axis: Vector2 = Vector2.RIGHT.rotated(deg_to_rad(degrees))
 			var half: Vector2 = axis * separation * 0.5
 			attacker.teleport_to(centre - half)
@@ -3820,7 +3838,6 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			blocker.damage = 0.0
 			await _await_ticks(CHARGE_SETTLE_TICKS)
 
-			var deaths: int = attacker.deaths + blocker.deaths
 			var previous_a: Array[Dictionary] = _head_circles_world(attacker)
 			var previous_b: Array[Dictionary] = _head_circles_world(blocker)
 			var previous_rel: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
@@ -3933,10 +3950,10 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 				# while leaving the weapon this sweep is measuring on the
 				# body. Spawning a fresh pair instead would mean re-running
 				# the weapon swap and its settle, sixty times over, for a
-				# state this already reaches in two ticks.
-				attacker.start_round(centre, true)
-				blocker.start_round(centre, true)
-				await _await_ticks(SETTLE_TICKS)
+				# state this already reaches in two ticks. How it is revived
+				# is `_revive_sweep_pair`'s business, and it is not "both at
+				# `centre`" (issue #86).
+				await _revive_sweep_pair(attacker, blocker, centre, half)
 				continue
 
 			if went_through and restored:
@@ -3976,6 +3993,61 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			label, breaches, measured])
 
 	return failures
+
+## The weapon a charge sweep hands its two players: `stats` exactly, down to
+## the head circles, mass and reach, except that it does no damage, by strike
+## or by bullet.
+##
+## Issue #86. Clearing `damage` before every charge was never enough: a sword
+## charge at 1800 px/s can land four strikes inside its own 45 ticks (41.5,
+## 17.6, 17.2 and 32.9 on the captured run) and eliminate a player who started
+## it on 0, and whether a given charge does that is decided by sub-pixel
+## timing, which is decided by everything the process simulated before it.
+## So how many charges a sweep lost to eliminations -- two of the sword's
+## twelve after one suite history, none after another -- was ambient state,
+## and so was what the revive after one did (see `_revive_sweep_pair`).
+##
+## Damage has no say in the physics being measured here. It is scored after
+## the step from the speed the head's own sweep took out of it
+## (`Player._land_strike`), moves nobody (the shove on body contact and a
+## bullet's knockback do not read it), and its only effect on the bodies is
+## the elimination that ends the charge. Taking it out takes nothing away from
+## the head-against-head claim and removes the one way a charge could end
+## early.
+func _sweep_stats(stats: WeaponStatsType) -> WeaponStatsType:
+	var harmless: WeaponStatsType = stats.duplicate() as WeaponStatsType
+	harmless.damage = 0.0
+	harmless.projectile_damage = 0.0
+	return harmless
+
+## Bring a sweep's pair back after a charge an elimination cut short, apart
+## and not fighting, ready for the next charge's own teleport.
+##
+## Issue #86 again. This used to be `start_round(centre, true)` for both,
+## inputs untouched: the two bodies put on the same point with both weapons
+## still pushed out at each other, so each head started the settle inside the
+## other body. After the sword's 45 deg charge at 1800 px/s the survivor then
+## took 2.8, 9.1, 24.8, 31.3, 29.9 and 24.2 in the next seventeen ticks and was
+## eliminated during the settle -- where no charge was watching for it. It
+## stayed out of play for the rest of the sweep, and every charge after it
+## measured one head against an empty cluster, read `inf`, and was counted as
+## completed and missed: six of them. That is the whole of "only 4 of 10
+## completed charges brought the heads together" -- the four were every
+## charge that ran with both players in play.
+##
+## So: inputs released first, so each weapon eases to rest; each player back
+## on its own side of the last charge's line, `half` from `centre`, which is
+## farther apart than two full reaches; and one physics frame first, so the
+## `freeze` that `_go_inert()` defers has landed before `start_round()` lifts
+## it rather than after. `_charge_sweep` checks both are in play before every
+## charge, so if this ever fails again it fails out loud.
+func _revive_sweep_pair(attacker: RigidBody2D, blocker: RigidBody2D, centre: Vector2, half: Vector2) -> void:
+	attacker.set_input_vector(Vector2.ZERO)
+	blocker.set_input_vector(Vector2.ZERO)
+	await physics_frame
+	attacker.start_round(centre - half, true)
+	blocker.start_round(centre + half, true)
+	await _await_ticks(SETTLE_TICKS)
 
 ## US-4/7/12/14/20, the haft half: **every weapon's haft passes through what
 ## its own head is stopped by.**
@@ -5485,8 +5557,8 @@ func _scenario_roster_heads_do_not_tunnel_head_reversed() -> Array[String]:
 			continue
 		var attacker: RigidBody2D = _spawn_player(stage, centre)
 		var blocker: RigidBody2D = _spawn_player(stage, centre)
-		attacker.set_weapon_stats(stats)
-		blocker.set_weapon_stats(stats)
+		attacker.set_weapon_stats(_sweep_stats(stats))
+		blocker.set_weapon_stats(_sweep_stats(stats))
 		await _await_ticks(ROSTER_SWAP_TICKS)
 		var separation: float = maxf(CHARGE_SEPARATION,
 			2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
@@ -10576,3 +10648,83 @@ func _blade_along(circles: Array[Dictionary], point: Vector2) -> float:
 	var base: Vector2 = circles[0]["centre"]
 	var line: Vector2 = Vector2(circles[circles.size() - 1]["centre"]) - base
 	return line.dot(point - base) / line.length_squared()
+
+# --- A charge sweep independent of suite history (issue #86) ----------------
+
+## The approach the revive half below sets up: one of `CHARGE_ANGLES`, the
+## one the captured #86 revive followed.
+const SWEEP_REVIVE_ANGLE: float = 45.0
+
+## Issue #86: `_charge_sweep`'s pair stays in play for every charge, whatever
+## ran before it.
+##
+## `roster_heads_do_not_tunnel_head_reversed` failed the sword on coverage in
+## one suite history and not in others. Two sword charges ended in an
+## elimination -- which charges do is sub-pixel timing, so history -- and the
+## revive after the second put both bodies on one point with both weapons
+## pushed out, so the survivor was struck to death during the settle and every
+## later charge measured an empty head. Both halves of the fix are checked
+## here without any charge at all, so neither depends on timing:
+##
+##   * `_sweep_stats` changes nothing about a weapon but its damage, for every
+##     weapon on the roster: every stored property is compared.
+##   * `_revive_sweep_pair`, handed the worst case -- two swords pushed out at
+##     each other, one player just eliminated -- brings both back in play,
+##     undamaged and each with its head, and neither dies during the settle.
+##     The pair holds the real sword, damage and all, so a revive that let the
+##     heads strike would show it.
+func _scenario_charge_sweep_pair_stays_in_play() -> Array[String]:
+	var failures: Array[String] = []
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var harmless: WeaponStatsType = _sweep_stats(stats)
+		if harmless.damage != 0.0 or harmless.projectile_damage != 0.0:
+			failures.append("%s: the sweep's copy still does %.1f by strike and %.1f by bullet" % [
+				path, harmless.damage, harmless.projectile_damage])
+		for property: Dictionary in stats.get_property_list():
+			var key: String = property["name"]
+			if not (int(property["usage"]) & PROPERTY_USAGE_STORAGE) or key in ["damage", "projectile_damage", "resource_path", "resource_local_to_scene", "resource_name"]:
+				continue
+			if harmless.get(key) != stats.get(key):
+				failures.append("%s: the sweep's copy changed %s from %s to %s" % [
+					path, key, stats.get(key), harmless.get(key)])
+
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var sword: WeaponStatsType = load("res://resources/sword.tres")
+	var attacker: RigidBody2D = _spawn_player(stage, centre)
+	var blocker: RigidBody2D = _spawn_player(stage, centre)
+	attacker.set_weapon_stats(sword)
+	blocker.set_weapon_stats(sword)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var axis: Vector2 = Vector2.RIGHT.rotated(deg_to_rad(SWEEP_REVIVE_ANGLE))
+	var half: Vector2 = axis * (2.0 * sword.max_reach + ROSTER_CHARGE_CLEARANCE) * 0.5
+	attacker.teleport_to(centre - half)
+	blocker.teleport_to(centre + half)
+	attacker.set_input_vector(axis)
+	blocker.set_input_vector(-axis)
+	await _await_ticks(CHARGE_SETTLE_TICKS)
+
+	blocker.eliminate()
+	await physics_frame
+	await _revive_sweep_pair(attacker, blocker, centre, half)
+
+	for player: RigidBody2D in [attacker, blocker]:
+		var role: String = "attacker" if player == attacker else "blocker"
+		print("      %s after the revive: alive %s, %.1f damage, %d death(s), %d head circle(s)" % [
+			role, player.alive, player.damage, player.deaths, player.weapon_head_circles_world().size()])
+		if not player.alive:
+			failures.append("the %s was out of play after the revive" % role)
+		elif player.damage > 0.0:
+			failures.append("the %s took %.1f damage during the revive's settle" % [role, player.damage])
+		if player.weapon_head_circles_world().is_empty():
+			failures.append("the %s had no head to measure after the revive" % role)
+	if attacker.deaths != 0:
+		failures.append("the attacker, never eliminated by the setup, died %d time(s) during the revive" % attacker.deaths)
+
+	await _teardown(stage)
+	return failures
