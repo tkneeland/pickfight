@@ -7322,6 +7322,8 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 				way, restart["tick"], quick_ticks])
 
 	await _teardown(stage)
+	return failures
+
 # --- Round modifiers (issue #50, ADR-0015) -----------------------------------
 #
 # Each modifier gets one scenario that plays three rounds in a row on the same
