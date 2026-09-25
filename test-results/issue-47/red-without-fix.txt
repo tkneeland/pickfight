@@ -1,0 +1,34 @@
+# 482c97b with the #38 fix reverted: `git show d582dce -- scripts/WeaponHead.gd | git apply -R`
+# (1 file changed, 7 insertions(+), 47 deletions(-)). macOS, Godot 4.6.2.
+## run 1: -- --scenario=world_stopped_head_blocks_arriving_head
+
+      tick 1: held head at (-5.003906, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-5.003906, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-5.003906, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+FAIL  world_stopped_head_blocks_arriving_head
+      - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
+---
+0 passed, 1 failed, 1 total
+## run 2: -- --scenario=world_stopped_head_blocks_arriving_head
+
+      tick 1: held head at (-5.003906, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-5.003906, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-5.003906, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+FAIL  world_stopped_head_blocks_arriving_head
+      - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
+---
+0 passed, 1 failed, 1 total
+## run 3: -- --scenario=world_stopped_head_blocks_arriving_head
+
+      tick 1: held head at (-5.003906, 0.0), arriving head at (-21.0, 0.0) (from the slab face)
+      tick 2: held head at (-5.003906, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
+      tick 3: held head at (-5.003906, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
+FAIL  world_stopped_head_blocks_arriving_head
+      - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
+---
+0 passed, 1 failed, 1 total
+## full suite, -- --all, fix still reverted (the new scenario runs last)
+FAIL  world_stopped_head_blocks_arriving_head
+      - one step took the heads from (-15.0, 0.0) apart to (15.9961, 0.0) apart -- the arriving head went through the head the slab was holding, and out the far side, and they were (75.9961, 0.0) apart after 3 ticks
+---
+78 passed, 1 failed, 79 total
