@@ -284,25 +284,7 @@ func forget_previous_position() -> void:
 ## anchor's own travel through the step is caught there. This head alone is
 ## moved, and not by the pair's `_owns_pair` rule: the other head did not move,
 ## the turn is this head's teleport, so there is nothing for the two to
-## contest. A flip asked of `turn_is_clear` is held for a head in the way as
-## it is for terrain.
-##
-## **A one-sided head's flip is not guarded this way; it is held.** When the
-## axe changes sides its bit jumps across the haft, every circle by twice its
-## own distance from it, and moving the head back far enough to stop the bit
-## that meets a slab first jams the circles nearer the haft into that slab.
-## Measured: the axe standing on the slab with its bit hooked under the end
-## and swung over, which the move above put straight through. So `Player`
-## guards the turn on the side the head already has, then asks
-## `turn_is_clear` about the flip and simply keeps that side while the bit
-## would cross terrain to change it. Nothing is lost: which side the bit is on
-## is presentation (see `Player._update_head_mirror`), and it changes as soon
-## as the way is clear.
-##
-## A flip is a jump across the haft, not a swing, so it is traced as the
-## straight line each circle jumps along, not as an arc about the anchor. The
-## arc would run out along the haft, which with the axe pointed at the floor
-## is into the floor, and would hold a flip that crosses nothing.
+## contest.
 
 ## Most of a turn one straight ray stands in for. The circle actually moves
 ## along an arc about the anchor; tracing it as chords of at most this angle
@@ -353,14 +335,6 @@ func guard_turn(previous_offsets: PackedVector2Array) -> void:
 		for node: CollisionShape2D in sweep_shapes:
 			_previous_shape_xforms.append(node.transform)
 
-## Whether jumping the circles straight from `from_offsets` to `to_offsets`
-## would carry no circle's centre into terrain. Asked by `Player` before a
-## flip (see the block comment above).
-func turn_is_clear(from_offsets: PackedVector2Array, to_offsets: PackedVector2Array) -> bool:
-	if not _turn_ready:
-		return true
-	return _first_turn_contact(from_offsets, to_offsets, false).is_empty()
-
 ## The earliest point in a re-placement of the circles at which a centre
 ## enters terrain, or a circle meets another head's (issue #82):
 ## `{anchor, shift, normal, head}`, where `shift` moves the head to leave that
@@ -369,7 +343,7 @@ func turn_is_clear(from_offsets: PackedVector2Array, to_offsets: PackedVector2Ar
 ## each circle is traced along the arc about the anchor from where it was to
 ## where it is going, in chords of at most TURN_ARC_STEP (a circle whose
 ## distance from the anchor changed is traced straight). Without it, every
-## circle is traced straight: a flip.
+## circle is traced straight.
 func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVector2Array,
 		along_arc: bool) -> Dictionary:
 	if from_offsets.size() != sweep_shapes.size() or to_offsets.size() != sweep_shapes.size():
