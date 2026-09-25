@@ -54,6 +54,7 @@ const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
 const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 ## What a firing weapon shoots (issue #55, ADR-0014). See `_tick_fire()`.
 const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
+const DeathBurstScript := preload("res://scripts/DeathBurst.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
 ## deltas, and 300 sixtieths of a second may sum to a hair under 5 s.
 const FIRE_CLOCK_EPSILON: float = 0.000001
@@ -437,8 +438,20 @@ func eliminate() -> void:
 	if not alive:
 		return
 	deaths += 1
+	_spawn_death_burst()
 	_go_inert()
 	eliminated.emit()
+
+## The elimination effect goes on the player's parent at the body's last
+## position, since the body itself is hidden by `_go_inert()` straight after.
+func _spawn_death_burst() -> void:
+	var host: Node = get_parent()
+	if host == null:
+		return
+	var burst: Node2D = DeathBurstScript.new()
+	burst.colour = identity_color
+	host.add_child.call_deferred(burst)
+	burst.set_deferred("global_position", global_position)
 
 ## Take this player out of play without it counting as an elimination.
 ##
