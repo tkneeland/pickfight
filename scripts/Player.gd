@@ -897,6 +897,11 @@ func _build_identity_outline() -> void:
 	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
 	add_child(outline)
+	# Just behind the haft in tree order (#91): same z_index, so the arm
+	# draws over the outline rather than under it. The weapon head lives in
+	# the rig beside the player and hit feedback sits at z 100, so neither's
+	# layering changes.
+	move_child(outline, weapon_line.get_index())
 	_identity_outline = outline
 
 ## Gives the haft a taper and a haft-like colour instead of a bar of uniform
