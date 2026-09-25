@@ -63,7 +63,9 @@ const FAST_LAVA_RISE_SCALE: float = 0.5
 ## Slippery floor: the friction a player's body slides on. Godot combines
 ## two bodies' friction by taking the lower, so a low value on the body is
 ## a low value against every floor. Heads keep theirs: a head that slid off
-## everything it planted on would take away the only way to move.
+## everything it planted on would take away the only way to move. That
+## includes the grip a head gets on terrain (issue #110, `Player`), which
+## never reaches a player's body, so a slippery body stays slippery.
 const SLIPPERY_FRICTION: float = 0.05
 
 ## The on-screen name of modifier `id`, or "" for an unknown id.
