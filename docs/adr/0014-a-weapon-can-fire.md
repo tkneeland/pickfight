@@ -1,7 +1,7 @@
 # 14. A weapon can fire
 
 - Status: Accepted
-- Date: 2026-09-24
+- Date: 2026-09-24 (amended for #61)
 - Amends: [ADR-0005](0005-the-weapon-is-the-arm.md), "Weapons are melee"
 
 ## Context
@@ -15,6 +15,9 @@ on its own every 5 s. The owner settled the design on #55:
   The phone still sends one relative vector (ADR-0003).
 - The bullet flies straight and fast with no gravity. It hits once and vanishes
   on a player or on terrain, deals 35 and shoves the player it hits.
+- Later (#61) the owner asked for bullets players can clearly see: 900 px/s
+  and a 5 px radius, down from 1800 px/s and 3 px. Other players' weapon heads
+  block bullets too.
 - Each shot kicks the shooter back a moderate amount, one to two body widths.
 
 This is the first thing in the game that deals damage without being a head,
@@ -38,18 +41,24 @@ only weapon that sets them.
   pushes the body the other way with `recoil_impulse`.
 - **The bullet is swept, not simulated.** `scripts/Projectile.gd` is a plain
   `Node2D` rather than a physics body. Each tick it shape-casts its circle along
-  that tick's motion (`cast_motion`) against the world layer, bodies only. It
-  moves to the first contact and resolves the hit there. However thin the
-  terrain or however fast the bullet, it cannot tunnel through (see
-  `boomstick_bullet_stops_on_terrain`, an 8 px bar against 30 px of travel per
-  tick).
-- **A bullet never hits its shooter.** The cast excludes the shooter's body,
-  so a bullet fired from inside its own body at rest reach gets out, and one
-  that crosses its shooter passes through.
-- **Weapon heads don't block bullets.** The cast masks the world layer only.
-  Bullets pass through heads, hafts and pickups, and stop on terrain and player
-  bodies. Parrying a bullet with a head is a possible later feature, not part
-  of this one.
+  that tick's motion (`cast_motion`) against the world and head layers, bodies
+  only. It moves to the first contact and resolves the hit there. However thin
+  the terrain or head, or however fast the bullet, it cannot tunnel through
+  (see `boomstick_bullet_stops_on_terrain`, an 8 px bar against 15 px of travel
+  per tick, and `boomstick_thin_head_blocks_bullet`).
+- **A bullet never hits its shooter.** The cast excludes the shooter's body
+  and the shooter's own head, read afresh each tick so a weapon swapped
+  mid-flight is still its own. A bullet fired from inside its own body at rest
+  reach gets out, one leaves down its own barrel, and one that crosses its
+  shooter or its shooter's head passes through
+  (`boomstick_own_head_never_blocks`).
+- **Other players' weapon heads block bullets** (#61). Heads are in the same
+  cast as terrain and bodies, so whichever of a head, terrain or a player is
+  nearest along the path is what the bullet meets. A bullet that meets a head
+  stops there and is gone. It deals no damage, shoves no one and reports no
+  strike, so a player can parry a shot with their weapon
+  (`boomstick_head_blocks_bullet`). Bullets still pass through hafts, which
+  collide with nothing, and pickups, which are areas.
 - **A bullet hit is a strike, as far as anyone listening can tell.** The bullet
   applies its knockback and then calls the shooter's `land_projectile_hit()`.
   That goes through `take_damage()` and emits the shooter's existing
