@@ -1,0 +1,6 @@
+# git clone -q . <scratch> && godot --headless --path <scratch> --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
+# grep output: none (grep exit 1) -> PASS. Full boot output follows.
+
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+Controller page: http://172.20.1.170:8080/
