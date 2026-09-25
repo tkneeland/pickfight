@@ -18,26 +18,42 @@ size = Vector2(8000, 40)
 ; The gap is what makes this stage what it is, so the numbers that hold it
 ; open have to be stated, not implied. PadLeft's right edge sits at x=-300
 ; and PadRight's left edge sits at x=300: 600 px of open water between them.
-; The longest reach in the weapon roster is the staff's max_reach = 200
+; The longest reach in the weapon roster is the staff's max_reach = 240
 ; (resources/staff.tres), measured from the player's own centre, so a
 ; player standing at a pad's very edge and fully extending that weapon
-; reaches out to only 200 px past the edge -- 400 px short of the far pad.
-; 600 px is a 3x margin over that 200 px reach, not a near thing, and there
-; is nothing solid out over the water to plant a swing on in the first
-; place unless the barge happens to be under it.
+; reaches out to only 240 px past the edge -- 360 px short of the far pad.
+; 600 px is 2.5x that reach, not a near thing, and there is nothing solid
+; out over the water to plant a swing on in the first place unless the
+; barge happens to be under it.
 ;
 ; The barge (MovingPlatform, issue #18) is 160 px wide, authored at
-; x=-220 and travelling 440 px right to x=220, both at the pads' shared
-; y=380. At the near end its left edge (-220-80=-300) sits exactly on
-; PadLeft's right edge; at the far end its right edge (220+80=300) sits
-; exactly on PadRight's left edge. Flush both ways, so docking is a step,
-; not a jump, at either end. 4 s a leg (110 px/s) is slow enough that
-; reaching the dock before it arrives is a real wait rather than a
-; formality, and fast enough that a round is not spent mostly standing
-; still.
+; x=-250 and travelling 500 px right to x=250, both at the pads' shared
+; y=380. At each end it runs 30 px in under the dock (its near edge reaches
+; -330 against PadLeft's edge at -300, its far edge 330 against PadRight's
+; 300), so the two tops are level and continuous for about half a second
+; each visit, not just the one tick it used to be flush. The Barge node sits
+; above the pads in this file so the docks draw over the part tucked under
+; them. 4.545 s a leg keeps the old 110 px/s: slow enough that reaching the
+; dock before it arrives is a real wait rather than a formality, and fast
+; enough that a round is not spent mostly standing still.
+;
+; Eased in #59. The barge used to travel -220 to 220, flush at each end for
+; an instant before turning straight round, so boarding or stepping off was
+; a timing check with no slack. Measured with one push stroke from a pad's
+; edge, the boarding window was about 1.0 s for the pickaxe, axe and dagger;
+; the 30 px run-in adds 0.2-0.4 s to it (pickaxe 1.2 s, dagger 1.4 s), and
+; the sword, which needs two or three short strokes, gets the same extra
+; overlap to take them over. The 600 px of water and the cycle time barely
+; change (8 s round trip to 9.1 s).
 
 [node name="Ferry" type="Node2D"]
 script = ExtResource("1")
+
+[node name="Barge" parent="." instance=ExtResource("3")]
+position = Vector2(-250, 380)
+size = Vector2(160, 24)
+travel = Vector2(500, 0)
+one_way_sec = 4.545
 
 [node name="PadLeft" type="StaticBody2D" parent="."]
 position = Vector2(-450, 380)
@@ -58,12 +74,6 @@ shape = SubResource("RectangleShape2D_pad")
 [node name="PadRightVisual" type="Polygon2D" parent="PadRight"]
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
-
-[node name="Barge" parent="." instance=ExtResource("3")]
-position = Vector2(-220, 380)
-size = Vector2(160, 24)
-travel = Vector2(440, 0)
-one_way_sec = 4.0
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-450, 300)
