@@ -17,6 +17,9 @@ extends SceneTree
 ##   --all                run every registered scenario
 ##   --scenario=<name>    run exactly one scenario by name; unknown name fails
 ##                        loudly rather than passing silently on a typo
+##   --port=<n>           scenarios that start a ControllerServer put HTTP on
+##                        <n> and the WebSocket on <n>+1; without it the OS
+##                        picks free ports, so parallel runs never collide (#73)
 ##
 ## To add a scenario: append its name to SCENARIO_NAMES, add a matching case
 ## in `_run_scenario()`, and write a `_scenario_<name>() -> Array[String]`
@@ -481,6 +484,11 @@ const MISFIT_CIRCLE_OFFSET: float = 24.0
 var _scenario_completed: bool = false
 var _scenario_filter: String = ""
 var _run_all_flag: bool = false
+## `--port=`, or 0 for "let the OS pick" (#73).
+var _controller_port: int = 0
+## The WebSocket port the current phone scenario's ControllerServer actually
+## listens on, read back after it comes up; `_join_phone()` dials it.
+var _phone_ws_port: int = 0
 
 func _initialize() -> void:
 	_parse_args()
@@ -517,6 +525,8 @@ func _parse_args() -> void:
 			# A comma-separated run in the given order, for replaying the
 			# history a history-dependent failure needs (#38, #45).
 			_scenario_filter = arg.trim_prefix("--scenarios=")
+		elif arg.begins_with("--port="):
+			_controller_port = arg.trim_prefix("--port=").to_int()
 		else:
 			printerr("SCENARIO: unrecognized argument '%s'" % arg)
 
@@ -6137,10 +6147,6 @@ const FOUR_PLAYER_END_PAUSE_SEC: float = 1.0
 ## scenario checks that it did not.
 const FOUR_PLAYER_ELIMINATION_TICKS: int = 10
 
-## Ports for the in-process ControllerServer. Off the 8080/8081 defaults, so a
-## host running on the same machine does not collide with the suite.
-const FOUR_PHONE_HTTP_PORT: int = 18480
-const FOUR_PHONE_WS_PORT: int = 18481
 ## How long one phone gets to connect, identify, and be answered.
 const FOUR_PHONE_CONNECT_MSEC: int = 3000
 ## The reason ControllerServer closes a refused phone with, which the page
@@ -6245,6 +6251,13 @@ func _clear_owner(node: Node) -> void:
 	for child: Node in node.get_children():
 		_clear_owner(child)
 
+## Ports for an in-process ControllerServer: `--port=` if given, else 0 so the
+## OS hands each run its own free pair and parallel runs never collide (#73).
+## ControllerServer writes the ports it got back once it is in the tree.
+func _set_phone_ports(server: Node) -> void:
+	server.http_port = _controller_port
+	server.ws_port = _controller_port + 1 if _controller_port > 0 else 0
+
 ## One phone joining a ControllerServer over its real WebSocket seam, the way
 ## the controller page does: connect, send `{"id": ...}`, then wait for the
 ## host's `{"slot": n}` or for it to hang up. Every earlier phone in `keep`
@@ -6252,7 +6265,7 @@ func _clear_owner(node: Node) -> void:
 ## Returns {"slot": n or -1, "closed": bool, "reason": String}.
 func _join_phone(peer: WebSocketPeer, id: String, keep: Array[WebSocketPeer]) -> Dictionary:
 	var result: Dictionary = {"slot": -1, "closed": false, "reason": ""}
-	if peer.connect_to_url("ws://127.0.0.1:%d" % FOUR_PHONE_WS_PORT) != OK:
+	if peer.connect_to_url("ws://127.0.0.1:%d" % _phone_ws_port) != OK:
 		result["closed"] = true
 		result["reason"] = "connect_to_url failed"
 		return result
@@ -6302,8 +6315,7 @@ func _scenario_four_phones_claim_four_slots() -> Array[String]:
 		stage.add_child(player)
 	var server: Node = ControllerServerScript.new()
 	server.name = "PhoneServer"
-	server.http_port = FOUR_PHONE_HTTP_PORT
-	server.ws_port = FOUR_PHONE_WS_PORT
+	_set_phone_ports(server)
 	server.player_paths = main_paths
 	# No phone here sends input; it must not be timed out for that while the
 	# rest join.
@@ -6312,6 +6324,10 @@ func _scenario_four_phones_claim_four_slots() -> Array[String]:
 	# A few ticks for the listeners to come up: a phone connecting on the very
 	# first one was hung up on before the handshake.
 	await _await_ticks(5)
+	# Read back after the wait, not straight after add_child: run first, this
+	# scenario adds the server before the root is in the tree, so its _ready()
+	# (which writes the port it got) has not run yet.
+	_phone_ws_port = server.ws_port
 
 	var joined: Array[WebSocketPeer] = []
 	for i in 4:
@@ -6681,12 +6697,12 @@ func _scenario_buzz_reaches_only_its_phone() -> Array[String]:
 		paths.append(NodePath("../BuzzP%d" % i))
 	var server: Node = ControllerServerScript.new()
 	server.name = "BuzzServer"
-	server.http_port = FOUR_PHONE_HTTP_PORT
-	server.ws_port = FOUR_PHONE_WS_PORT
+	_set_phone_ports(server)
 	server.player_paths = paths
 	server.controller_timeout_sec = 60.0
 	stage.add_child(server)
 	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
 
 	var joined: Array[WebSocketPeer] = []
 	for i in 2:

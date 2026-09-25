@@ -1,33 +1,23 @@
-# Proof of work: issue #53, falling and breaking stage parts
+# Proof of work: issue #73, parallel scenario runs collide on the controller port
 
 Cleared and recaptured per the evidence policy in `docs/agents/testing.md`:
-this root holds only the latest work package's evidence. #55's evidence is in
-history at `3c192d4:test-results/issue-55/`.
+this root holds only the latest work package's evidence. The previous package
+(#52) is in history at `cb30530:test-results/`.
 
-Branch `feat/issue-53-falling-breaking-parts`, Windows 11, local Godot 4.6.2.
+Branch `fix/issue-73-parallel-port` (rebased on origin/main `9ed7319`), macOS, local Godot 4.6.2.
 
-| Criterion (issue #53) | Proven by | Evidence | Verdict |
+| Criterion | Proven by | Evidence | Verdict |
 | --- | --- | --- | --- |
-| Falling rock warns (shaking rock + flashing landing marker on the ground) for its configured lead time, deals nothing before it ends, then damages (exactly the configured amount, through `take_damage` + `strike_landed`, so a hitmarker is drawn) and knocks the player aside; lethal only on a player already low; one pooled rock, no node churn | `falling_rock_warns_then_strikes` | `issue-53/scenario-suite.txt`, `issue-53/01-rock-warning-floor-warning.png` | PASS |
-| Collapsing floor, `timed`: solid and grey, amber warning while still holding, then collision off, the player falls, and it is still gone well past CrumblingLedge's return time | `collapsing_floor_timed_gives_way_for_good` | `issue-53/scenario-suite.txt`, `issue-53/05-wall-broken-floor-gone.png` | PASS |
-| Collapsing floor, `stood_on`: stays solid while empty, warns after the configured standing time, holds through the warning, then gone for good | `collapsing_floor_stood_on_gives_way_for_good` | `issue-53/scenario-suite.txt`, `issue-53/01-rock-warning-floor-warning.png` | PASS |
-| Breakable wall: each head hit takes off the damage a player would take for the same hit (checked against `Player._strike_damage`); light pokes leave it standing; hard swings break it in 3 where weak ones had not in 10; cracks and darkens as HP drops; flashes, then no collision, and stays broken | `breakable_wall_breaks_on_weapon_hits` | `issue-53/scenario-suite.txt`, `issue-53/02-wall-cracked-50hp.png`, `03-wall-cracked-20hp.png`, `04-wall-break-flash.png`, `05-wall-broken-floor-gone.png` | PASS |
-| Breakable wall ignores bodies: pushed and slammed by a player, it stays at full HP, uncracked and solid | `breakable_wall_ignores_bodies` | `issue-53/scenario-suite.txt` | PASS |
-| CrumblingLedge unchanged | `crumbling_ledge_three_phases`, `erosion_island_survives_full_erosion` | `issue-53/scenario-suite.txt` | PASS |
-| Phone buzz on a rock hit | Rock emits on the victim's `strike_landed`, which `RoundManager` already turns into a `struck` buzz; not driven by a scenario | - | NEEDS PLAYTEST |
-| Boots, and boots on a fresh clone | `godot --headless --quit`; fresh `git clone` of the branch, grep for `SCRIPT ERROR` / `Failed to load script` | `issue-53/boot-check.txt` | PASS |
+| Two `--all` runs started at the same time (04:20:15Z, one in the worktree, one in a fresh clone) both pass `four_phones_claim_four_slots` and `buzz_reaches_only_its_phone`, each on its own OS-picked port (A: 64997/65010, B: 64995/65012) | full suite x2, run in parallel | `issue-73/parallel-run-A.txt`, `issue-73/parallel-run-B.txt` | PASS |
+| The collision was real: two parallel runs forced onto one port (`--port=18480`, what every run did before) fail both scenarios with `cannot listen ... (error 22)` | the two scenarios x2, run in parallel | `issue-73/fixed-port-collides.txt` | PASS |
+| `--port=<n>` still works (HTTP n, WebSocket n+1) | same file: run A binds 18480 and passes `buzz_reaches_only_its_phone` | `issue-73/fixed-port-collides.txt` | PASS |
+| Game behaviour unchanged: ControllerServer defaults stay 8080/8081; port read-back only happens when a port is 0 | code review of `scripts/ControllerServer.gd` diff | PR diff | PASS |
+| Boots from a fresh clone | `git clone -q . <scratch> && godot --headless --path <scratch> --quit 2>&1 \| grep -E "SCRIPT ERROR\|Failed to load script"` prints nothing | `issue-73/boot-check.txt` | PASS |
 
-Screenshots were captured with a throwaway windowed script modelled on
-`tools/capture_damage_screenshots.gd` (not committed). The rock and floor
-states in them are the real parts running; the wall's worn and flashing
-states were set directly on the wall (its HP and wear display) rather than
-reached by scripted swings, which the scenario covers.
+Full suite, each parallel run: 107 of 109. The two failures are not #73's and
+fail the same way on untouched origin/main `9ed7319` run alone
+(`issue-73/baseline-origin-main-alone.txt`, also 107 of 109):
 
-Full suite after rebasing onto `origin/main` at `8f32c86` (#47, #48, #49, #50,
-#55, #61): 102 passed, 1 failed (`issue-53/scenario-suite.txt`). The one failure,
-`axe_head_holds_side_near_vertical`, is pre-existing: untouched `origin/main` at
-`8f32c86` fails it the same way in a full run, 97 of 98 with the same two
-assertions (`issue-53/baseline-main-8f32c86-suite.txt`). Run alone, it passes
-on both main and this branch, so it looks order-dependent within the suite. It
-is in the other dev's lane, and nothing in this branch touches heads or the axe.
-All five #53 scenarios pass.
+- `axe_head_holds_side_near_vertical`: order-dependent, tracked in #71.
+- `roster_heads_do_not_tunnel_head_reversed`: one boomstick charge at
+  45 deg / 1800 px/s tunnels on this machine; it passes when run alone.
