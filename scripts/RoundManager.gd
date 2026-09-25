@@ -447,6 +447,11 @@ const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const FALLBACK_PICKUP_OFFSET: Vector2 = Vector2(0.0, -200.0)
 ## Two pickups within this of each other are on the same spot.
 const PICKUP_SPOT_EPSILON: float = 8.0
+## A pickup spot this close to a player spawn is skipped (#111, owner
+## playtest: players spawned on a drop and took it before moving). About a
+## body width plus the largest pickup's trigger, with room to spare, so a
+## player standing on their spawn cannot touch a pickup.
+const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
 
 var _pickups: Array[Node2D] = []
 var _next_pickup_msec: int = 0
@@ -513,7 +518,10 @@ func _spawn_pickup() -> void:
 
 ## A random declared spot with no pickup already on it, or the fallback above
 ## the stage's centre when the stage declares none. Null when every spot is
-## taken.
+## taken. Spots within PICKUP_CLEAR_OF_SPAWN_RADIUS of a player spawn are
+## skipped while any other free spot remains; if every free spot is near a
+## spawn, the one furthest from all spawns is used, so a stage still gets
+## its pickups (#111).
 func _free_pickup_spot() -> Variant:
 	var spots: Array[Vector2] = []
 	if _current_stage != null and _current_stage.has_method("get_pickup_spawn_points"):
@@ -532,7 +540,25 @@ func _free_pickup_spot() -> Variant:
 			free.append(spot)
 	if free.is_empty():
 		return null
-	return free[randi() % free.size()]
+	var clear: Array[Vector2] = []
+	for spot: Vector2 in free:
+		if _distance_to_nearest_spawn(spot) >= PICKUP_CLEAR_OF_SPAWN_RADIUS:
+			clear.append(spot)
+	if not clear.is_empty():
+		return clear[randi() % clear.size()]
+	var best: Vector2 = free[0]
+	for spot: Vector2 in free:
+		if _distance_to_nearest_spawn(spot) > _distance_to_nearest_spawn(best):
+			best = spot
+	return best
+
+## How far `spot` is from the nearest player spawn on the current stage; INF
+## when the stage declares none.
+func _distance_to_nearest_spawn(spot: Vector2) -> float:
+	var nearest: float = INF
+	for spawn: Vector2 in _stage_spawn_points:
+		nearest = minf(nearest, spot.distance_to(spawn))
+	return nearest
 
 # --- Rising kill zone (issue #22, ADR-0012) ----------------------------------
 #
