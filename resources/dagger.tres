@@ -39,7 +39,7 @@
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 80.0
+max_reach = 88.0
 mass = 0.15
 drive_speed = 50.0
 extend_speed = 2600.0
@@ -47,6 +47,6 @@ rest_return_speed = 900.0
 max_drive_force = 5000.0
 damage = 60.0
 sound_set = &"dagger"
-head_circle_offsets = PackedVector2Array(-4.26, -0.07, -2.41, -0.07, -0.56, -0.07, 1.29, -0.07, 3.14, -0.07, 4.99, -0.07, 6.84, -0.07)
-head_circle_radii = PackedFloat32Array(1.92, 1.83, 1.75, 1.67, 1.6, 1.52, 1.44)
-art_outline = PackedVector2Array(-8.16, -1.14, -4.81, -2.07, 8.6, -1.49, 10.47, 0, 8.6, 1.49, -4.81, 2.07, -8.16, 1.14)
+head_circle_offsets = PackedVector2Array(-4.9, -0.08, -2.77, -0.08, -0.64, -0.08, 1.48, -0.08, 3.61, -0.08, 5.74, -0.08, 7.87, -0.08)
+head_circle_radii = PackedFloat32Array(2.21, 2.1, 2.01, 1.92, 1.84, 1.75, 1.66)
+art_outline = PackedVector2Array(-9.38, -1.31, -5.53, -2.38, 9.89, -1.71, 12.04, 0.0, 9.89, 1.71, -5.53, 2.38, -9.38, 1.31)
