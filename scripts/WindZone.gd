@@ -123,13 +123,14 @@ func tell_progress() -> float:
 	return clampf((fmod(_elapsed, cycle) - maxf(calm_sec, 0.0)) / tell_sec, 0.0, 1.0)
 
 ## 0 for calm, 1 for a full gust, ramping through the tell. The one number the
-## visual is drawn from.
+## visual is drawn from. The ramp is front-loaded (a square root) so the tell
+## reads as different from calm the moment it starts, not only near its end.
 func _intensity() -> float:
 	match phase():
 		Phase.GUST, Phase.STEADY:
 			return 1.0
 		Phase.TELL:
-			return tell_progress()
+			return sqrt(tell_progress())
 		_:
 			return 0.0
 
@@ -191,3 +192,8 @@ func _draw() -> void:
 		var tail: Vector2 = head - dir * length
 		if box.has_point(head) and box.has_point(tail):
 			draw_line(tail, head, streak_color, width)
+			# An arrow tip, so the wind's direction reads in a still frame
+			# too, not only from the streaks' motion.
+			var tip: float = length * 0.3
+			draw_line(head, head - dir * tip + perp * tip * 0.6, streak_color, width)
+			draw_line(head, head - dir * tip - perp * tip * 0.6, streak_color, width)
