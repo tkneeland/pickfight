@@ -171,6 +171,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"charge_measures_heads_where_physics_has_them",
 	"turn_does_not_carry_blade_through_head",
 	"charge_sweep_pair_stays_in_play",
+	"pad_launch_keeps_head_ahead_of_body",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -835,6 +836,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_turn_does_not_carry_blade_through_head()
 		"charge_sweep_pair_stays_in_play":
 			return await _scenario_charge_sweep_pair_stays_in_play()
+		"pad_launch_keeps_head_ahead_of_body":
+			return await _scenario_pad_launch_keeps_head_ahead_of_body()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10728,3 +10731,96 @@ func _scenario_charge_sweep_pair_stays_in_play() -> Array[String]:
 
 	await _teardown(stage)
 	return failures
+
+# --- A light head behind its own body off a bounce pad (issue #83) ----------
+
+## How far above the pad's top face the ceiling's underside is. The body
+## leaves the pad at 2000 px/s and is still doing 1600 when the muzzle, 142 px
+## ahead of it, gets there; high enough that nothing touches it before the
+## launch, low enough that the launch arrives at full speed.
+const HEAD_AHEAD_CEILING_HEIGHT: float = 288.0
+const HEAD_AHEAD_CEILING_SIZE: Vector2 = Vector2(400.0, 24.0)
+## Where the ceiling's right-hand edge sits across from the pad's centre:
+## the body wholly under it, once near the edge and once well in. Not at the
+## edge itself, where the gun slides off the corner instead of stopping.
+const HEAD_AHEAD_CEILING_EDGES: PackedFloat32Array = [30.0, 150.0]
+## Dropped onto the pad from just above it, so the landing launches it.
+const HEAD_AHEAD_DROP: float = 60.0
+## The launch, the stop at the ceiling, and the fall back down.
+const HEAD_AHEAD_WATCH_TICKS: int = 60
+
+## Issue #83: a bounce pad launch into a ceiling must not leave the boomstick's
+## head **behind its own body**.
+##
+## Found in #77's forced charge, where the charge holds both bodies at 1800
+## px/s every tick, which nothing in play does. But a pad launches a body at
+## 2000 px/s, which is play, and a player aiming up under a ceiling is too.
+## The muzzle stops on the ceiling, the body keeps coming, and the joint
+## holding `min_reach` gives: on `main` the body ran 22.9 px past its own
+## anchor, with the gun still pointing up through it, and stayed behind it for
+## 7 ticks.
+##
+## Measured on `Player.weapon_head_circles_world()`, where the physics has the
+## circles (the #77 lesson): the haft's direction is the direction the gun's
+## circles run, stock to muzzle, and the anchor's reach is read along that,
+## never along a facing rebuilt from the body to the anchor, which is the very
+## thing that goes wrong here.
+func _scenario_pad_launch_keeps_head_ahead_of_body() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: WeaponStatsType = load("res://resources/boomstick.tres")
+	for edge: float in HEAD_AHEAD_CEILING_EDGES:
+		var stage: Node2D = _new_empty_stage()
+		var pad: StaticBody2D = BouncePadScene.instantiate() as StaticBody2D
+		pad.position = PART_POSITION
+		stage.add_child(pad)
+		var pad_top: float = PART_POSITION.y - PAD_SIZE.y / 2.0
+		var underside: float = pad_top - HEAD_AHEAD_CEILING_HEIGHT
+		_add_bar(stage, Vector2(edge - HEAD_AHEAD_CEILING_SIZE.x * 0.5, underside - HEAD_AHEAD_CEILING_SIZE.y * 0.5),
+			HEAD_AHEAD_CEILING_SIZE)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(PART_POSITION.x, pad_top - HEAD_AHEAD_DROP - PLAYER_RADIUS))
+		player.set_weapon_stats(stats)
+		player.set_input_vector(Vector2.UP)
+
+		var launched: bool = false
+		## Muzzle top, least y seen: the furthest up the gun got.
+		var highest_muzzle: float = INF
+		var worst: float = INF
+		var behind_ticks: int = 0
+		for tick in HEAD_AHEAD_WATCH_TICKS:
+			await physics_frame
+			# Only from the launch on. The rig is built a tick after the
+			# stats land, and until its first turn the circles sit at their
+			# authored facing rather than along the haft.
+			if not launched:
+				launched = pad.launch_count() > 0
+				if not launched:
+					continue
+			var circles: Array[Dictionary] = player.weapon_head_circles_world()
+			var along: float = _head_anchor_reach_along_circles(player, circles)
+			worst = minf(worst, along)
+			if along < 0.0:
+				behind_ticks += 1
+			var muzzle: Dictionary = circles[circles.size() - 1]
+			highest_muzzle = minf(highest_muzzle, Vector2(muzzle["centre"]).y - float(muzzle["radius"]))
+		var into_ceiling: float = underside - highest_muzzle
+		print("      ceiling edge %+.0f px: anchor at least %.1f px ahead of the body along its gun, %d ticks behind it; muzzle reached %.1f px into the ceiling" % [
+			edge, worst, behind_ticks, into_ceiling])
+
+		if not launched:
+			failures.append("ceiling edge %+.0f px: fixture: the pad never launched the body" % edge)
+		elif into_ceiling < -1.0 or into_ceiling > HEAD_AHEAD_CEILING_SIZE.y:
+			failures.append("ceiling edge %+.0f px: fixture: the muzzle got %.1f px into the ceiling, so the ceiling is not what stopped the head" % [
+				edge, into_ceiling])
+		elif worst < 0.0:
+			failures.append("ceiling edge %+.0f px: the body ran %.1f px past its own head's anchor and stayed behind it for %d ticks, with the gun still pointing up through it" % [
+				edge, -worst, behind_ticks])
+		await _teardown(stage)
+	return failures
+
+## How far `player`'s head anchor is ahead of its body, along the direction
+## the head's own circles run, base to tip: the haft's direction as the
+## physics has it. Only meaningful for a head laid out straight along the
+## haft, which the boomstick is.
+func _head_anchor_reach_along_circles(player: RigidBody2D, circles: Array[Dictionary]) -> float:
+	var haft: Vector2 = (Vector2(circles[circles.size() - 1]["centre"]) - Vector2(circles[0]["centre"])).normalized()
+	return (player.weapon_head_position() - player.global_position).dot(haft)
