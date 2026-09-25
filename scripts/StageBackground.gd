@@ -66,6 +66,9 @@ func configure(top: Color, bottom: Color, tint: Color, kinds: PackedStringArray,
 func _ready() -> void:
 	z_as_relative = false
 	z_index = Z
+	# Moved in _process, off the physics tick, so it must not be physics
+	# interpolated (#108 turned that on project-wide); the layers inherit this.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_build()
 	_follow_view(0.0)
 
