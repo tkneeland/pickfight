@@ -1,0 +1,158 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
+size = Vector2(300, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bridge"]
+size = Vector2(400, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
+size = Vector2(170, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A quarry causeway (issue #54, #53's FallingRock). Two banks flank a canyon;
+; the only way across is a flat bridge straight down its middle, and the only
+; way up is a lookout ledge perched over each bank's outer shoulder. The rock
+; targets the two places a round actually happens: the bridge everyone must
+; cross, and the right-hand ledge one side climbs to for a look over the
+; whole stage. Nothing else on the map is ever hit.
+;
+; Ground: BankLeft (x=-630..-330) and BankRight (x=330..630), both top y=360.
+; They are 660 px apart, too far to fling across directly -- the bridge is
+; the crossing, not a shortcut around it.
+;
+; The bridge: x=-200..200, flush with the banks' own top (y=360), a flat
+; 400 px plank. Each side leaves a 130 px gap to the nearest bank edge --
+; inside the pickaxe's 150 px reach with a hook to spare, a real fling for
+; the sword and dagger, easiest on the staff. RockBridge hangs at the column
+; top (0, -430), just above the camera's -450 edge, and drops onto the
+; bridge on a timer: crossing is always possible, but camping the middle of
+; it is not free. A player who gets caught by the warning steps back onto
+; either bank -- the gap is the same 130 px either way -- so the bridge
+; never becomes the only route with nowhere to retreat to.
+;
+; The lookout ledges: HighLedgeLeft (x=-635..-465) and HighLedgeRight
+; (x=465..635), both top y=228, sitting almost squarely over each bank's
+; outer shoulder -- a 132 px climb, nearly straight up, one hook for the
+; pickaxe and a committed effort for the sword or dagger. They are set
+; outboard of Spawn0-3 (all inboard, x=-430..430) rather than over them, so
+; every spawn opens under open sky, not under a ceiling. RockLedgeRight
+; falls on the right one only: the left ledge stays a permanent safe perch
+; and vantage point, so a player pressured off the bridge or the right ledge
+; always has one piece of high ground nobody is dropping rocks on -- no
+; pocket on this stage ever traps a player once the floor starts rising.
+;
+; Ring-outs: the canyon under the bridge is open sky straight down to the
+; kill zone, and the banks are far enough apart that a shove from the bridge
+; or from a bank's outer edge sends a player past the far edge and out.
+; every_stage_can_ring_out holds the same way Erosion and Gauntlet's canyons
+; do -- there is no floor under the gap to catch a bad landing.
+;
+; All four spawns share one height (y=320, all on the banks), so the rising
+; kill zone (ADR-0012) reaches them together -- nobody is left holding lower
+; ground than anyone else when the deadline arrives.
+
+[node name="Rockfall" type="Node2D"]
+script = ExtResource("1")
+
+[node name="BankLeft" type="StaticBody2D" parent="."]
+position = Vector2(-480, 380)
+
+[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+
+[node name="BankRight" type="StaticBody2D" parent="."]
+position = Vector2(480, 380)
+
+[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+
+[node name="Bridge" type="StaticBody2D" parent="."]
+position = Vector2(0, 372)
+
+[node name="BridgeShape" type="CollisionShape2D" parent="Bridge"]
+shape = SubResource("RectangleShape2D_bridge")
+
+[node name="BridgeVisual" type="Polygon2D" parent="Bridge"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
+
+[node name="HighLedgeLeft" type="StaticBody2D" parent="."]
+position = Vector2(-550, 240)
+
+[node name="HighLedgeLeftShape" type="CollisionShape2D" parent="HighLedgeLeft"]
+shape = SubResource("RectangleShape2D_ledge")
+
+[node name="HighLedgeLeftVisual" type="Polygon2D" parent="HighLedgeLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-85, -12, 85, -12, 85, 12, -85, 12)
+
+[node name="HighLedgeRight" type="StaticBody2D" parent="."]
+position = Vector2(550, 240)
+
+[node name="HighLedgeRightShape" type="CollisionShape2D" parent="HighLedgeRight"]
+shape = SubResource("RectangleShape2D_ledge")
+
+[node name="HighLedgeRightVisual" type="Polygon2D" parent="HighLedgeRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-85, -12, 85, -12, 85, 12, -85, 12)
+
+; The bridge's rock: column x=0, hanging just above the camera's top edge.
+; Defaults (6 s interval, 1.5 s warning, 25 dmg, 28 px radius, 650 px/s
+; shove) -- the bridge is the whole stage's crossing, so nothing here needs
+; tuning away from the part's own baseline.
+[node name="RockBridge" parent="." instance=ExtResource("3")]
+position = Vector2(0, -430)
+
+; The right ledge's rock, on a slightly longer interval so its warning
+; doesn't always line up with the bridge's -- a player timing one crossing
+; still has to watch the other independently. The left ledge gets no rock at
+; all: it is this stage's one guaranteed-safe piece of high ground.
+[node name="RockLedgeRight" parent="." instance=ExtResource("3")]
+position = Vector2(550, -430)
+interval_sec = 7.0
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-430, 320)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(430, 320)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-360, 320)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(360, 320)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 500)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). One floating over the bridge --
+; going for it means standing where the rock falls -- and one over each
+; lookout ledge, the climb paying out on both the hazarded and the safe side.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-550, 200)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(550, 200)
