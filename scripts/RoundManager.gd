@@ -67,7 +67,7 @@ signal round_started
 signal round_won(slot: int)
 signal modifier_announced(title: String)
 
-enum State { WAITING, ROUND_ACTIVE, ROUND_END }
+enum State { WAITING, ROUND_ACTIVE, ROUND_END, LOBBY, COUNTDOWN, VICTORY }
 
 var _state: int = State.WAITING
 var _pause_until_msec: int = 0
@@ -153,12 +153,19 @@ func _ready() -> void:
 		_scoreboard.visible = false
 	_update_score_label()
 	_set_waiting_text(0)
+	if lobby_enabled:
+		_enter_lobby()
 
 func _process(_delta: float) -> void:
 	_tick_spawn_protection()
 	match _state:
+		State.LOBBY, State.COUNTDOWN, State.VICTORY:
+			_tick_lobby()
 		State.WAITING:
-			_try_start_round()
+			if lobby_enabled and _roster_size() < min_players_to_start:
+				_enter_lobby()
+			else:
+				_try_start_round()
 		State.ROUND_ACTIVE:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
@@ -173,6 +180,9 @@ func _process(_delta: float) -> void:
 					_controller_server.expire_disconnected_claims()
 					if _last_winner_slot != -1 and not _controller_server.claimed_slots().has(_last_winner_slot):
 						_last_winner_slot = -1
+				if _match_winner_slot != -1:
+					_enter_victory()
+					return
 				_state = State.WAITING
 				_try_start_round()
 
@@ -222,6 +232,7 @@ func _try_start_round() -> void:
 	_start_pickups()
 	_start_kill_zone_rise()
 	_start_spawn_protection()
+	_show_stage_title()
 	round_started.emit()
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
@@ -319,6 +330,8 @@ func _check_round_end() -> void:
 		_players[winner_slot].leave_round()
 		_update_score_label()
 		_last_winner_slot = winner_slot
+		if lobby_enabled and _scores[winner_slot] >= _match_target:
+			_match_winner_slot = winner_slot
 	else:
 		_last_winner_slot = -1
 	_clear_pickups()
@@ -799,3 +812,408 @@ func _apply_demo_mode() -> void:
 	Engine.physics_ticks_per_second = DEMO_PHYSICS_TICKS
 	print("RoundManager: --demo on; random weapons, %d Hz physics, lava after %.0f s, stages from %s" % [
 		Engine.physics_ticks_per_second, kill_zone_grace_sec, ", ".join(DEMO_STAGE_ORDER)])
+
+# --- Lobby, ready-up and matches (issue #120) --------------------------------
+#
+# With `lobby_enabled` (scenes/Main.tscn turns it on) the session opens on a
+# lobby screen: the game name, a big join QR, and each joined phone's colour,
+# name and ready state. When every joined phone (2+) is ready a 3-2-1
+# countdown runs; a join, a leave or an un-ready during it cancels it. Then a
+# match: rounds as before, until someone reaches the host phone's "first to
+# N". A victory screen with a podium follows, and every phone pressing
+# Rematch (Ready again) takes the room back to the lobby, which counts down
+# straight away. Off by default, so every scenario written before #120 keeps
+# its endless round loop.
+#
+# ControllerServer only carries the phones' requests and this node's state
+# back to them; everything here reaches it duck-typed, so a stub roster
+# without the lobby methods simply never has anyone ready.
+
+## Open on the lobby and play matches ("first to N") instead of an endless
+## round loop.
+@export var lobby_enabled: bool = false
+## Length of the 3-2-1 countdown once everyone is ready.
+@export var lobby_countdown_sec: float = 3.0
+
+const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
+const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
+const GAME_TITLE: String = "PICKFIGHT"
+## Podium block heights by place, as a fraction of the tallest.
+const PODIUM_HEIGHTS: Array[float] = [1.0, 0.72, 0.5, 0.34]
+const PODIUM_TALLEST_PX: float = 260.0
+
+var _match_target: int = 5
+var _match_winner_slot: int = -1
+var _countdown_until_msec: int = 0
+var _countdown_roster: Array[int] = []
+var _lobby_layer: CanvasLayer
+var _lobby_panel: Control
+var _victory_panel: Control
+var _lobby_rows: VBoxContainer
+var _lobby_status: Label
+var _lobby_target_label: Label
+var _lobby_qr: TextureRect
+var _lobby_url: Label
+var _victory_title: Label
+var _podium: HBoxContainer
+var _last_lobby_state: Dictionary = {}
+
+## "lobby", "countdown", "playing" or "victory": what the phones are told.
+func lobby_phase() -> String:
+	match _state:
+		State.LOBBY:
+			return "lobby"
+		State.COUNTDOWN:
+			return "countdown"
+		State.VICTORY:
+			return "victory"
+	return "playing"
+
+## The current match's "first to N", fixed when its countdown finished.
+func match_target() -> int:
+	return _match_target
+
+## The match winner the victory screen is showing, or -1.
+func match_winner_slot() -> int:
+	return _match_winner_slot
+
+func lobby_panel() -> Control:
+	return _lobby_panel
+
+func victory_panel() -> Control:
+	return _victory_panel
+
+func score_of(slot: int) -> int:
+	return _scores[slot] if slot >= 0 and slot < _scores.size() else 0
+
+func _roster() -> Array[int]:
+	if _controller_server == null:
+		return []
+	_controller_server.expire_disconnected_claims()
+	return _controller_server.claimed_slots()
+
+func _roster_size() -> int:
+	return _roster().size()
+
+func _is_ready(slot: int) -> bool:
+	return _controller_server != null and _controller_server.has_method("slot_ready") and _controller_server.slot_ready(slot)
+
+func _everyone_ready(roster: Array[int]) -> bool:
+	if roster.size() < min_players_to_start:
+		return false
+	for slot: int in roster:
+		if not _is_ready(slot):
+			return false
+	return true
+
+func _host_slot() -> int:
+	if _controller_server != null and _controller_server.has_method("host_slot"):
+		return _controller_server.host_slot()
+	return -1
+
+## What the host phone has typed, or the current value with no host to ask.
+func _requested_target() -> int:
+	if _controller_server != null and _controller_server.has_method("match_target"):
+		return maxi(1, int(_controller_server.match_target()))
+	return _match_target
+
+## A slot's display name: the phone's nickname where the roster has one.
+func _slot_name(slot: int) -> String:
+	if _controller_server != null and _controller_server.has_method("slot_name"):
+		var nickname: String = str(_controller_server.slot_name(slot))
+		if not nickname.is_empty():
+			return nickname
+	return "P%d" % (slot + 1)
+
+func _slot_color(slot: int) -> Color:
+	var player: Variant = _players[slot] if slot >= 0 and slot < _players.size() else null
+	if player != null and player.has_method("identity_outline_color"):
+		return player.identity_outline_color()
+	return Color.WHITE
+
+## The chill lobby track, from the Music autoload (#118) by path. Fight music
+## is Music's own job: it follows `round_started`.
+func _play_lobby_music() -> void:
+	var music: Node = get_node_or_null("/root/Music")
+	if music != null and music.has_method("play_lobby"):
+		music.play_lobby()
+
+func _enter_lobby() -> void:
+	_play_lobby_music()
+	_state = State.LOBBY
+	_match_winner_slot = -1
+	if _waiting_label != null:
+		_waiting_label.visible = false
+	if _scoreboard != null:
+		_scoreboard.visible = false
+	_build_lobby_ui()
+	_lobby_panel.visible = true
+	_victory_panel.visible = false
+	_last_lobby_state = {}
+	_tick_lobby()
+
+func _enter_victory() -> void:
+	_play_lobby_music()
+	_state = State.VICTORY
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+	if _scoreboard != null:
+		_scoreboard.visible = false
+	_build_lobby_ui()
+	_refresh_victory()
+	_lobby_panel.visible = false
+	_victory_panel.visible = true
+	_last_lobby_state = {}
+	_tick_lobby()
+
+## The countdown ran out: fresh scores, everyone back to not-ready (so the
+## victory screen's Rematch needs pressing afresh), and the first round.
+func _begin_match() -> void:
+	_match_target = _requested_target()
+	_match_winner_slot = -1
+	_last_winner_slot = -1
+	for slot in _scores.size():
+		_scores[slot] = 0
+	_update_score_label()
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+	_lobby_panel.visible = false
+	_victory_panel.visible = false
+	_state = State.WAITING
+	_publish_lobby_state()
+	_try_start_round()
+
+func _tick_lobby() -> void:
+	var roster: Array[int] = _roster()
+	match _state:
+		State.LOBBY:
+			if _everyone_ready(roster):
+				_state = State.COUNTDOWN
+				_countdown_roster = roster.duplicate()
+				_countdown_until_msec = Time.get_ticks_msec() + int(lobby_countdown_sec * 1000.0)
+		State.COUNTDOWN:
+			if roster != _countdown_roster or not _everyone_ready(roster):
+				_state = State.LOBBY
+			elif Time.get_ticks_msec() >= _countdown_until_msec:
+				_begin_match()
+				return
+		State.VICTORY:
+			if _everyone_ready(roster) or roster.size() < min_players_to_start:
+				_enter_lobby()
+				return
+	_publish_lobby_state()
+
+func _countdown_left() -> int:
+	return maxi(1, ceili(float(_countdown_until_msec - Time.get_ticks_msec()) / 1000.0))
+
+## Builds the state the phones and the lobby screen show, and pushes it out
+## only when something in it changed.
+func _publish_lobby_state() -> void:
+	var roster: Array[int] = _roster()
+	var players: Array = []
+	for slot: int in roster:
+		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot)})
+	var in_lobby: bool = _state == State.LOBBY or _state == State.COUNTDOWN
+	var state: Dictionary = {
+		"phase": lobby_phase(),
+		"host": _host_slot(),
+		"target": _requested_target() if in_lobby else _match_target,
+		"players": players,
+		"count": _countdown_left() if _state == State.COUNTDOWN else 0,
+		"winner": _match_winner_slot,
+	}
+	if state == _last_lobby_state:
+		return
+	_last_lobby_state = state
+	if _controller_server != null and _controller_server.has_method("set_lobby_state"):
+		_controller_server.set_lobby_state(state)
+	if _lobby_panel != null and in_lobby:
+		_refresh_lobby(state)
+	elif _victory_panel != null and _state == State.VICTORY:
+		_refresh_victory()
+
+func _refresh_lobby(state: Dictionary) -> void:
+	for child: Node in _lobby_rows.get_children():
+		child.queue_free()
+	for entry: Dictionary in state["players"]:
+		var slot: int = entry["slot"]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 20)
+		var swatch := ColorRect.new()
+		swatch.custom_minimum_size = Vector2(40, 40)
+		swatch.color = _slot_color(slot)
+		row.add_child(swatch)
+		var tag: String = "  (host)" if slot == state["host"] else ""
+		var label := _big_label("%s%s  -  %s" % [entry["name"], tag, "READY" if entry["ready"] else "not ready"],
+			36, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
+		row.add_child(label)
+		_lobby_rows.add_child(row)
+	_lobby_target_label.text = "First to %d" % state["target"]
+	var joined: int = state["players"].size()
+	if _state == State.COUNTDOWN:
+		_lobby_status.text = str(state["count"])
+	elif joined < min_players_to_start:
+		_lobby_status.text = "Scan to join: %d joined (need %d)" % [joined, min_players_to_start]
+	else:
+		_lobby_status.text = "Press Ready on your phone"
+	if _controller_server != null:
+		var qr: Variant = _controller_server.get("join_qr_texture")
+		_lobby_qr.texture = qr as Texture2D
+		_lobby_qr.visible = qr != null
+		var url: Variant = _controller_server.get("join_url")
+		_lobby_url.text = str(url) if url != null else ""
+
+## The podium: the match winner on the tallest block, then everyone else in
+## the roster by final score.
+func _refresh_victory() -> void:
+	for child: Node in _podium.get_children():
+		child.queue_free()
+	var roster: Array[int] = _roster()
+	var slots: Array[int] = []
+	for slot in _players.size():
+		if _players[slot] != null and (roster.has(slot) or slot == _match_winner_slot):
+			slots.append(slot)
+	slots.sort_custom(func(a: int, b: int) -> bool:
+		if a == _match_winner_slot or b == _match_winner_slot:
+			return a == _match_winner_slot
+		return _scores[a] > _scores[b])
+	for place in slots.size():
+		var slot: int = slots[place]
+		var column := VBoxContainer.new()
+		column.alignment = BoxContainer.ALIGNMENT_END
+		column.add_theme_constant_override("separation", 8)
+		column.add_child(_big_label("%s\n%d" % [_slot_name(slot), _scores[slot]], 36, Color.WHITE))
+		var block := ColorRect.new()
+		block.color = _slot_color(slot)
+		block.custom_minimum_size = Vector2(160, PODIUM_TALLEST_PX * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
+		column.add_child(block)
+		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
+		_podium.add_child(column)
+	if _match_winner_slot != -1:
+		_victory_title.text = "%s WINS!" % _slot_name(_match_winner_slot)
+		_victory_title.add_theme_color_override("font_color", _slot_color(_match_winner_slot))
+	else:
+		_victory_title.text = "MATCH OVER"
+
+func _build_lobby_ui() -> void:
+	if _lobby_layer != null:
+		return
+	_lobby_layer = CanvasLayer.new()
+	_lobby_layer.name = "LobbyLayer"
+	_lobby_layer.layer = 5
+	add_child(_lobby_layer)
+
+	_lobby_panel = _full_screen_panel("LobbyPanel")
+	var columns := HBoxContainer.new()
+	columns.set_anchors_preset(Control.PRESET_FULL_RECT)
+	columns.alignment = BoxContainer.ALIGNMENT_CENTER
+	columns.add_theme_constant_override("separation", 96)
+	_lobby_panel.add_child(columns)
+	var left := VBoxContainer.new()
+	left.alignment = BoxContainer.ALIGNMENT_CENTER
+	left.add_theme_constant_override("separation", 24)
+	columns.add_child(left)
+	left.add_child(_big_label(GAME_TITLE, 120, LOBBY_ACCENT))
+	_lobby_target_label = _big_label("First to 5", 44, Color.WHITE)
+	left.add_child(_lobby_target_label)
+	_lobby_rows = VBoxContainer.new()
+	_lobby_rows.add_theme_constant_override("separation", 12)
+	left.add_child(_lobby_rows)
+	_lobby_status = _big_label("", 56, LOBBY_ACCENT)
+	left.add_child(_lobby_status)
+	var right := VBoxContainer.new()
+	right.alignment = BoxContainer.ALIGNMENT_CENTER
+	right.add_theme_constant_override("separation", 16)
+	columns.add_child(right)
+	_lobby_qr = TextureRect.new()
+	_lobby_qr.custom_minimum_size = Vector2(420, 420)
+	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	right.add_child(_lobby_qr)
+	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
+	right.add_child(_lobby_url)
+
+	_victory_panel = _full_screen_panel("VictoryPanel")
+	var stack := VBoxContainer.new()
+	stack.set_anchors_preset(Control.PRESET_FULL_RECT)
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", 32)
+	_victory_panel.add_child(stack)
+	_victory_title = _big_label("", 110, LOBBY_ACCENT)
+	stack.add_child(_victory_title)
+	_podium = HBoxContainer.new()
+	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
+	_podium.add_theme_constant_override("separation", 40)
+	stack.add_child(_podium)
+	stack.add_child(_big_label("Press Rematch on your phone", 40, Color.WHITE))
+
+func _full_screen_panel(node_name: String) -> Control:
+	var panel := ColorRect.new()
+	panel.name = node_name
+	panel.color = LOBBY_BACKGROUND
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.visible = false
+	_lobby_layer.add_child(panel)
+	return panel
+
+func _big_label(text: String, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
+	label.add_theme_constant_override("outline_size", maxi(4, font_size / 10))
+	return label
+
+# --- Stage title card (issue #120) -------------------------------------------
+#
+# The stage's name sweeps across the screen for about a second at every round
+# start, below the modifier banner so the two never overlap.
+
+## How long the stage name takes to sweep across. 0 turns it off.
+@export var stage_title_sec: float = 1.1
+
+var _title_layer: CanvasLayer
+var _title_label: Label
+var _title_tween: Tween
+
+## The title card label, or null before any round has started.
+func stage_title_label() -> Label:
+	return _title_label
+
+func _show_stage_title() -> void:
+	if _current_stage == null or stage_title_sec <= 0.0:
+		return
+	if _title_label == null:
+		_title_layer = CanvasLayer.new()
+		_title_layer.name = "StageTitleLayer"
+		_title_layer.layer = 10
+		add_child(_title_layer)
+		_title_label = Label.new()
+		_title_label.name = "StageTitle"
+		_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_title_label.add_theme_font_size_override("font_size", 80)
+		_title_label.add_theme_color_override("font_color", Color.WHITE)
+		_title_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
+		_title_label.add_theme_constant_override("outline_size", 14)
+		_title_layer.add_child(_title_label)
+	_title_label.text = str(_current_stage.name).to_upper()
+	_title_label.reset_size()
+	var screen: Vector2 = get_viewport().get_visible_rect().size
+	var width: float = _title_label.get_minimum_size().x
+	var middle: float = (screen.x - width) * 0.5
+	_title_label.position = Vector2(screen.x, screen.y * 0.36)
+	_title_label.visible = true
+	if _title_tween != null:
+		_title_tween.kill()
+	_title_tween = create_tween()
+	# Fast in, a slow drift through the middle where it can be read, fast out.
+	_title_tween.tween_property(_title_label, "position:x", middle + 40.0, stage_title_sec * 0.3) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_title_tween.tween_property(_title_label, "position:x", middle - 40.0, stage_title_sec * 0.4)
+	_title_tween.tween_property(_title_label, "position:x", -width - 20.0, stage_title_sec * 0.3) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_title_tween.tween_callback(func() -> void: _title_label.visible = false)

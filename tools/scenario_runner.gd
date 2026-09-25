@@ -189,6 +189,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_sparks_on_clash_capped",
 	"juice_dust_on_hard_landing_only",
 	"juice_trail_capped_and_frees",
+	"lobby_ready_up_counts_down_and_starts_match",
+	"match_first_to_n_then_victory_and_rematch",
+	"phone_lobby_messages_over_websocket",
+	"stage_title_card_sweeps_at_round_start",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -893,6 +897,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_dust_on_hard_landing_only()
 		"juice_trail_capped_and_frees":
 			return await _scenario_juice_trail_capped_and_frees()
+		"lobby_ready_up_counts_down_and_starts_match":
+			return await _scenario_lobby_ready_up_counts_down_and_starts_match()
+		"match_first_to_n_then_victory_and_rematch":
+			return await _scenario_match_first_to_n_then_victory_and_rematch()
+		"phone_lobby_messages_over_websocket":
+			return await _scenario_phone_lobby_messages_over_websocket()
+		"stage_title_card_sweeps_at_round_start":
+			return await _scenario_stage_title_card_sweeps_at_round_start()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12029,4 +12041,267 @@ func _scenario_trapped_head_phases_home_after_release() -> Array[String]:
 	print("      head home at y %.1f (slab top %.1f), phased seen: %s" % [head_y, top, saw_phased])
 
 	await _teardown(stage)
+	return failures
+
+# --- Lobby, matches and the stage title card (issue #120) ---------------------
+
+const StubLobbyRosterScript := preload("res://tools/stub_lobby_roster.gd")
+const LOBBY_COUNTDOWN_SEC: float = 0.3
+const LOBBY_SETTLE_TICKS: int = 5
+
+## Three players over a lobby-enabled RoundManager and the lobby stub roster,
+## slots 0 and 1 claimed. Players spawn in clear sky like the pickup rounds.
+func _new_lobby_round(target: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "LobbyContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	var spawns := PackedVector2Array()
+	for i in 3:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "LobbyP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../LobbyP%d" % i))
+		spawns.append(FOUR_PLAYER_SKY_SPAWNS[i])
+	var roster := StubLobbyRosterScript.new()
+	roster.name = "LobbyRoster"
+	roster.slots = [0, 1]
+	roster.target = target
+	stage.add_child(roster)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "LobbyRoundManager"
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = [_make_pickup_stub_stage("LobbyStage", spawns, PICKUP_STUB_POINTS)]
+	round_manager.arena_container_path = NodePath("../LobbyContainer")
+	round_manager.controller_server_path = NodePath("../LobbyRoster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
+	round_manager.pickup_weapons = [
+		_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH),
+		_make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)] as Array[Resource]
+	round_manager.lobby_enabled = true
+	round_manager.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	stage.add_child(round_manager)
+	return {"stage": stage, "players": players, "roster": roster, "round_manager": round_manager}
+
+## Issue #120: the session opens on the lobby, and nothing starts until every
+## joined phone is ready. Then a countdown, which a join or an un-ready
+## cancels; when it runs out the match starts at the host's "first to N".
+func _scenario_lobby_ready_up_counts_down_and_starts_match() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "lobby":
+		failures.append("the session opened in '%s', expected the lobby" % rm.lobby_phase())
+	if rm.lobby_panel() == null or not rm.lobby_panel().visible:
+		failures.append("the lobby screen was not showing")
+	if players[0].alive or players[1].alive:
+		failures.append("a round started before anyone was ready")
+	var state: Dictionary = roster.last_state()
+	if state.get("phase") != "lobby" or state.get("players", []).size() != 2 or state.get("target") != 3:
+		failures.append("the phones were told %s, expected the lobby with 2 players, first to 3" % [state])
+
+	roster.ready_slots = {0: true}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "lobby":
+		failures.append("one of two ready started '%s'" % rm.lobby_phase())
+
+	roster.ready_slots = {0: true, 1: true}
+	await _await_ticks(2)
+	if rm.lobby_phase() != "countdown":
+		failures.append("everyone ready gave '%s', expected the countdown" % rm.lobby_phase())
+	roster.ready_slots = {0: true}
+	await _await_ticks(2)
+	if rm.lobby_phase() != "lobby":
+		failures.append("an un-ready during the countdown left it at '%s'" % rm.lobby_phase())
+
+	roster.ready_slots = {0: true, 1: true}
+	await _await_ticks(2)
+	roster.slots = [0, 1, 2] as Array[int]
+	await _await_ticks(2)
+	if rm.lobby_phase() != "lobby":
+		failures.append("a join during the countdown left it at '%s'" % rm.lobby_phase())
+	if players[0].alive:
+		failures.append("a round started though the countdown was cancelled")
+
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	var started: bool = await _await_condition(
+		func() -> bool: return players[0].alive and players[1].alive and players[2].alive, ROUND_LOOP_TIMEOUT_MSEC)
+	if not started:
+		failures.append("the match never started once everyone was ready")
+	elif rm.lobby_phase() != "playing":
+		failures.append("mid-match the phones were in '%s'" % rm.lobby_phase())
+	if rm.lobby_panel().visible:
+		failures.append("the lobby screen stayed up over the match")
+	if rm.match_target() != 3:
+		failures.append("the match is first to %d, the host asked for 3" % rm.match_target())
+	if not roster.ready_slots.is_empty():
+		failures.append("ready flags survived into the match: %s" % [roster.ready_slots])
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #120: a match is first to N round wins, then a victory screen with a
+## podium; everyone pressing Rematch goes back through the lobby into a fresh
+## match with the scores reset.
+func _scenario_match_first_to_n_then_victory_and_rematch() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(2)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			await _teardown(loop["stage"])
+			return failures
+		players[1].eliminate()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if round_number == 0 and rm.lobby_phase() != "playing":
+			failures.append("one win of two ended the match ('%s')" % rm.lobby_phase())
+
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("two wins of two never reached the victory screen (phase '%s')" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	print("      victory: winner P%d on %d, P2 on %d" % [rm.match_winner_slot() + 1, rm.score_of(0), rm.score_of(1)])
+	if rm.match_winner_slot() != 0 or rm.score_of(0) != 2:
+		failures.append("victory for slot %d on %d wins, expected slot 0 on 2" % [rm.match_winner_slot(), rm.score_of(0)])
+	if _music() != null and _music().current_kind() != "lobby":
+		failures.append("the victory screen left '%s' playing, not the lobby track" % _music().current_track())
+	if rm.victory_panel() == null or not rm.victory_panel().visible:
+		failures.append("no victory screen was showing")
+	var state: Dictionary = roster.last_state()
+	if state.get("phase") != "victory" or state.get("winner") != 0:
+		failures.append("the phones were told %s, expected victory for slot 0" % [state])
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if players[0].alive or players[1].alive:
+		failures.append("a round started on its own after the match was won")
+
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("Rematch from everyone never started a new match")
+	elif rm.score_of(0) != 0 or rm.score_of(1) != 0:
+		failures.append("the rematch kept the old scores (%d, %d)" % [rm.score_of(0), rm.score_of(1)])
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #120, over the real socket: the first phone to join hosts and sets
+## "first to N" (a target from anyone else is ignored); Ready is per phone;
+## lobby state reaches the phones; when the host leaves, the next phone hosts.
+func _scenario_phone_lobby_messages_over_websocket() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var paths: Array[NodePath] = []
+	for i in 2:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "LobbyPhoneP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		paths.append(NodePath("../LobbyPhoneP%d" % i))
+	var server: Node = ControllerServerScript.new()
+	server.name = "LobbyPhoneServer"
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "lobby-phone-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d got slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _teardown(stage)
+		return failures
+	if server.host_slot() != 0:
+		failures.append("the host was slot %d, expected the first phone (0)" % server.host_slot())
+
+	joined[0].send_text(JSON.stringify({"t": "target", "n": 7}))
+	joined[1].send_text(JSON.stringify({"t": "target", "n": 9}))
+	joined[1].send_text(JSON.stringify({"t": "ready", "v": true}))
+	await _poll_phones(joined, 10)
+	if server.match_target() != 7:
+		failures.append("first to %d, expected the host's 7 (the other phone's 9 must be ignored)" % server.match_target())
+	if server.slot_ready(0) or not server.slot_ready(1):
+		failures.append("ready was %s/%s, expected only the second phone" % [server.slot_ready(0), server.slot_ready(1)])
+
+	server.set_lobby_state({"phase": "lobby", "host": 0})
+	var got: Dictionary = {}
+	for _i in 20:
+		await process_frame
+		joined[1].poll()
+		joined[0].poll()
+		while joined[0].get_available_packet_count() > 0:
+			var pkt: PackedByteArray = joined[0].get_packet()
+			var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+			if msg is Dictionary and msg.get("t") == "lobby":
+				got = msg
+		if not got.is_empty():
+			break
+	if got.get("phase") != "lobby":
+		failures.append("the host phone never received the lobby state (got %s)" % [got])
+
+	joined[0].close(1000, "host leaves")
+	await _poll_phones(joined, 20)
+	if server.host_slot() != 1:
+		failures.append("after the host left, host was slot %d, expected 1" % server.host_slot())
+
+	joined[1].close(1000, "scenario done")
+	await _poll_phones(joined, 5)
+	await _teardown(stage)
+	return failures
+
+func _poll_phones(peers: Array[WebSocketPeer], frames: int) -> void:
+	for _i in frames:
+		await process_frame
+		for peer: WebSocketPeer in peers:
+			peer.poll()
+
+## Issue #120: the stage's name sweeps across the screen at round start, right
+## to left, and is gone again after about a second.
+func _scenario_stage_title_card_sweeps_at_round_start() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var label: Label = rm.stage_title_label()
+	if label == null or not label.visible:
+		failures.append("no stage title was showing at round start")
+		await _teardown(loop["stage"])
+		return failures
+	if label.text != "PICKUPSTAGE":
+		failures.append("the title read '%s', expected the stage's name" % label.text)
+	var first_x: float = label.position.x
+	var started: int = Time.get_ticks_msec()
+	while label.visible and Time.get_ticks_msec() - started < 3000:
+		await process_frame
+	var shown_msec: int = Time.get_ticks_msec() - started
+	print("      title '%s' from x=%.0f, gone after %d ms at x=%.0f" % [label.text, first_x, shown_msec, label.position.x])
+	if label.visible:
+		failures.append("the stage title was still up 3 s after round start")
+	elif shown_msec < 600:
+		failures.append("the stage title was gone after only %d ms" % shown_msec)
+	if label.position.x >= first_x:
+		failures.append("the title did not sweep across (x %.0f -> %.0f)" % [first_x, label.position.x])
+	await _teardown(loop["stage"])
 	return failures
