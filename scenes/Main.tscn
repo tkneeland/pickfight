@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
@@ -21,6 +21,7 @@
 [ext_resource type="PackedScene" path="res://scenes/stages/Sinkhole.tscn" id="26"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Bulwark.tscn" id="27"]
 [ext_resource type="Script" path="res://scripts/HitFeedback.gd" id="16"]
+[ext_resource type="Script" path="res://scripts/Juice.gd" id="40"]
 
 [node name="Main" type="Node2D"]
 
@@ -74,6 +75,11 @@ start_in_round = false
 ; where each strike landed. Listens to every player's strike_landed.
 [node name="HitFeedback" type="Node2D" parent="."]
 script = ExtResource("16")
+
+; Landing dust, head motion trails and clash sparks (issue #116), code-drawn
+; in world space. Listens to players' and heads' signals.
+[node name="Juice" type="Node2D" parent="."]
+script = ExtResource("40")
 
 [node name="UI" type="CanvasLayer" parent="."]
 

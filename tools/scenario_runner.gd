@@ -186,6 +186,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"spawn_protection_blocks_damage_then_expires",
 	"roster_heads_do_not_clip_platform_in_play",
 	"trapped_head_phases_home_after_release",
+	"juice_sparks_on_clash_capped",
+	"juice_dust_on_hard_landing_only",
+	"juice_trail_capped_and_frees",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -884,6 +887,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_clip_platform_in_play()
 		"trapped_head_phases_home_after_release":
 			return await _scenario_trapped_head_phases_home_after_release()
+		"juice_sparks_on_clash_capped":
+			return await _scenario_juice_sparks_on_clash_capped()
+		"juice_dust_on_hard_landing_only":
+			return await _scenario_juice_dust_on_hard_landing_only()
+		"juice_trail_capped_and_frees":
+			return await _scenario_juice_trail_capped_and_frees()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -11723,6 +11732,190 @@ func _scenario_roster_heads_do_not_clip_platform_in_play() -> Array[String]:
 		print("      %s: %d trials, %d head crossings" % [weapon, PLAYTEST_CLIP_TRIALS, found.size()])
 		for line: String in found:
 			failures.append(line)
+
+	await _teardown(stage)
+	return failures
+
+# --- Juice: landing dust, head trails, clash sparks (issue #116) ------------
+
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
+const JuiceScript := preload("res://scripts/Juice.gd")
+## Where the bare-head juice checks run: far from everything else.
+const JUICE_ORIGIN: Vector2 = Vector2(-3000.0, -4000.0)
+## Drops onto the arena floor: well under and well over Juice.DUST_MIN_SPEED.
+const JUICE_SOFT_DROP: float = 30.0
+const JUICE_HARD_DROP: float = 700.0
+const JUICE_WATCH_TICKS: int = 120
+
+func _juice(stage: Node2D) -> Node2D:
+	var juice: Node2D = JuiceScript.new()
+	stage.add_child(juice)
+	return juice
+
+## Waits `seconds` of rendered frames, which is what the effects age by.
+func _juice_wait(seconds: float) -> void:
+	var until: int = Time.get_ticks_msec() + int(seconds * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await process_frame
+
+## A real clash throws sparks, sparks die out on their own, and a flood of
+## clashes never holds more than the pool.
+func _scenario_juice_sparks_on_clash_capped() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var left: RigidBody2D = _bare_head(stage, JUICE_ORIGIN - Vector2(60.0, 0.0), HELD_HEAD_FORCE)
+	var right: RigidBody2D = _bare_head(stage, JUICE_ORIGIN + Vector2(60.0, 0.0), ARRIVING_HEAD_FORCE)
+	await _await_ticks(2)
+	var clashes: Array[float] = []
+	left.clashed.connect(func(speed: float, _p: Vector2) -> void: clashes.append(speed))
+	right.clashed.connect(func(speed: float, _p: Vector2) -> void: clashes.append(speed))
+	left.linear_velocity = Vector2(HELD_SPEED, 0.0)
+	right.linear_velocity = Vector2(-HELD_SPEED, 0.0)
+	var sparks: int = 0
+	for _i in JUICE_WATCH_TICKS:
+		await physics_frame
+		sparks = juice.active_particle_count(JuiceScript.Kind.SPARK)
+		if sparks > 0:
+			break
+	print("      clash speeds %s, sparks %d" % [clashes, sparks])
+	if clashes.is_empty():
+		failures.append("the two heads never clashed -- the check proves nothing")
+	elif sparks == 0:
+		failures.append("a clash at %.0f px/s threw no sparks" % clashes.max())
+	if juice.active_particle_count(JuiceScript.Kind.DUST) > 0:
+		failures.append("a clash raised dust")
+	left.queue_free()
+	right.queue_free()
+	await _juice_wait(JuiceScript.SPARK_LIFETIME * 1.3)
+	if juice.active_particle_count() != 0:
+		failures.append("%d sparks still alive after their lifetime" % juice.active_particle_count())
+
+	# A flood: 20 heads clashing flat out in the same tick is far more than
+	# the pool; it must hold at MAX_PARTICLES, never grow.
+	var flood: Array[RigidBody2D] = []
+	for i in 20:
+		flood.append(_bare_head(stage, JUICE_ORIGIN + Vector2(i * 40.0, 400.0), HELD_HEAD_FORCE))
+	await physics_frame
+	for head in flood:
+		head.clashed.emit(JuiceScript.SPARK_FULL_SPEED, head.global_position)
+	var held: int = juice.active_particle_count()
+	print("      flood of %d clashes holds %d particles (cap %d)" % [flood.size(), held, JuiceScript.MAX_PARTICLES])
+	if held > JuiceScript.MAX_PARTICLES or held < JuiceScript.MAX_PARTICLES:
+		failures.append("a flood of clashes holds %d particles, expected exactly the cap %d" % [held, JuiceScript.MAX_PARTICLES])
+	# A slow lean is not a clash worth sparks.
+	await _juice_wait(JuiceScript.SPARK_LIFETIME * 1.3)
+	await _await_ticks(JuiceScript.HEAD_COOLDOWN_FRAMES + 1)
+	flood[0].clashed.emit(JuiceScript.SPARK_MIN_SPEED * 0.5, flood[0].global_position)
+	if juice.active_particle_count() != 0:
+		failures.append("a %.0f px/s lean threw sparks" % (JuiceScript.SPARK_MIN_SPEED * 0.5))
+
+	await _teardown(stage)
+	return failures
+
+## A body dropped a short way raises no dust; dropped from high it puffs at
+## its feet; resting on the floor afterwards raises no more.
+func _scenario_juice_dust_on_hard_landing_only() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var feet_y: float = GROUND_TOP - PLAYER_RADIUS
+
+	var soft: RigidBody2D = _spawn_player(stage, Vector2(-200.0, feet_y - JUICE_SOFT_DROP))
+	var soft_peak: float = 0.0
+	for _i in JUICE_WATCH_TICKS:
+		soft_peak = maxf(soft_peak, soft.linear_velocity.y)
+		await physics_frame
+	print("      soft drop peak %.0f px/s, dust %d" % [soft_peak, juice.active_particle_count(JuiceScript.Kind.DUST)])
+	if juice.active_particle_count(JuiceScript.Kind.DUST) > 0:
+		failures.append("a %.0f px drop (%.0f px/s) raised dust" % [JUICE_SOFT_DROP, soft_peak])
+
+	var hard: RigidBody2D = _spawn_player(stage, Vector2(200.0, feet_y - JUICE_HARD_DROP))
+	var hard_peak: float = 0.0
+	var dust: int = 0
+	for _i in JUICE_WATCH_TICKS:
+		hard_peak = maxf(hard_peak, hard.linear_velocity.y)
+		await physics_frame
+		dust = juice.active_particle_count(JuiceScript.Kind.DUST)
+		if dust > 0:
+			break
+	print("      hard drop peak %.0f px/s, dust %d" % [hard_peak, dust])
+	if hard_peak < JuiceScript.DUST_MIN_SPEED:
+		failures.append("the hard drop only reached %.0f px/s -- the check proves nothing" % hard_peak)
+	elif dust == 0:
+		failures.append("a %.0f px drop (%.0f px/s) raised no dust" % [JUICE_HARD_DROP, hard_peak])
+	elif dust > JuiceScript.DUST_PER_PUFF:
+		failures.append("one landing raised %d dust, more than DUST_PER_PUFF %d" % [dust, JuiceScript.DUST_PER_PUFF])
+	var near: bool = false
+	for i in JuiceScript.MAX_PARTICLES:
+		if juice._p_life[i] > 0.0 and absf(juice._p_pos[i].x - hard.global_position.x) < 60.0 \
+				and absf(juice._p_pos[i].y - (hard.global_position.y + PLAYER_RADIUS)) < 20.0:
+			near = true
+	if dust > 0 and not near:
+		failures.append("the dust puff is not at the landing body's feet")
+	await _juice_wait(JuiceScript.DUST_LIFETIME * 1.3)
+	await _await_ticks(JuiceScript.LAND_COOLDOWN_FRAMES + 20)
+	if juice.active_particle_count() != 0:
+		failures.append("bodies resting on the floor keep raising dust (%d)" % juice.active_particle_count())
+
+	await _teardown(stage)
+	return failures
+
+## A head swung fast leaves a trail of at most TRAIL_POINTS points; a slow
+## head leaves none; the trail fades once the head slows, and the head's slot
+## is released once the head is freed.
+func _scenario_juice_trail_capped_and_frees() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var head: RigidBody2D = _bare_head(stage, JUICE_ORIGIN, HELD_HEAD_FORCE)
+	await _await_ticks(2)
+	if juice.trail_count() != 1:
+		failures.append("one head holds %d trail slots, expected 1" % juice.trail_count())
+
+	var slow: float = JuiceScript.TRAIL_MIN_SPEED * 0.3
+	var until: int = Time.get_ticks_msec() + 300
+	var slow_max: int = 0
+	while Time.get_ticks_msec() < until:
+		head.linear_velocity = Vector2(slow, 0.0)
+		await process_frame
+		slow_max = maxi(slow_max, juice.trail_point_count(head))
+	if slow_max > 0:
+		failures.append("a head at %.0f px/s left a trail of %d points" % [slow, slow_max])
+
+	var fast: float = JuiceScript.TRAIL_MIN_SPEED * 1.8
+	var most: int = 0
+	var frames: int = 0
+	until = Time.get_ticks_msec() + 500
+	while Time.get_ticks_msec() < until:
+		head.linear_velocity = Vector2(0.0, fast).rotated(frames * 0.05)
+		await process_frame
+		frames += 1
+		most = maxi(most, juice.trail_point_count(head))
+	print("      fast head: longest trail %d points over %d frames (cap %d)" % [most, frames, JuiceScript.TRAIL_POINTS])
+	if most == 0:
+		failures.append("a head at %.0f px/s left no trail" % fast)
+	if most > JuiceScript.TRAIL_POINTS:
+		failures.append("a trail held %d points, over the cap %d" % [most, JuiceScript.TRAIL_POINTS])
+
+	head.linear_velocity = Vector2.ZERO
+	await _await_ticks(2)
+	await _juice_wait(JuiceScript.TRAIL_LIFETIME * 1.5)
+	if juice.trail_point_count(head) != 0:
+		failures.append("the trail still has %d points after the head stopped" % juice.trail_point_count(head))
+
+	head.queue_free()
+	await _await_ticks(2)
+	if juice.trail_count() != 0:
+		failures.append("a freed head still holds a trail slot")
+
+	var many: Array[RigidBody2D] = []
+	for i in JuiceScript.MAX_TRAILS + 4:
+		many.append(_bare_head(stage, JUICE_ORIGIN + Vector2(i * 50.0, 300.0), HELD_HEAD_FORCE))
+	await _await_ticks(2)
+	if juice.trail_count() != JuiceScript.MAX_TRAILS:
+		failures.append("%d heads hold %d trail slots, expected the cap %d" % [many.size(), juice.trail_count(), JuiceScript.MAX_TRAILS])
+
 	await _teardown(stage)
 	return failures
 
