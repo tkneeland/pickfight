@@ -136,6 +136,30 @@ is restricted to secure contexts — so the phone screen can still dim or lock
 mid-session. Raise your phone's auto-lock timeout while playing. Adding HTTPS
 is deliberately deferred.
 
+## Exported builds
+
+`tools/export.sh` builds a standalone macOS `.app` and Windows `.exe` into
+`build/` (gitignored), so the host machine doesn't need Godot installed:
+
+```
+tools/export.sh            # both; or: tools/export.sh macos | windows
+```
+
+It needs Godot 4.6.2 on your PATH (or `GODOT=/path/to/godot`) and the 4.6.2
+export templates (in the editor: *Editor > Manage Export Templates*). The
+presets live in `export_presets.cfg`. The controller page is plain HTML, not a
+Godot resource, so the presets list `controller/*` as an extra include; drop
+that and the exported build serves a 500 instead of the page.
+
+- **macOS** (`build/macos/Pickfight.app`, universal): ad-hoc signed only, not
+  notarized, so Gatekeeper blocks a double-click with "cannot be opened".
+  Right-click the app, choose **Open**, then **Open** again. You only have to
+  do it once. On recent macOS, if there's no Open button, allow it under
+  *System Settings > Privacy & Security* ("Open Anyway").
+- **Windows** (`build/windows/Pickfight.exe`, x86_64, PCK embedded): unsigned,
+  so SmartScreen may warn. Choose *More info > Run anyway*. The firewall
+  prompt from step 2 above still applies.
+
 ## Decisions
 
 See [`CONTEXT.md`](./CONTEXT.md) for the glossary and shape of the game,
