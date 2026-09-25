@@ -201,6 +201,8 @@ class BigHeads extends WeaponStatsModifier:
 		big.head_circle_offsets = offsets
 		big.head_circle_radii = radii
 		big.art_outline = outline
+		# The boomstick's bullet grows with its head (owner, hackathon playtest).
+		big.projectile_radius = stats.projectile_radius * BIG_HEAD_SCALE
 		return big
 
 class FastLava extends RoundModifier:
