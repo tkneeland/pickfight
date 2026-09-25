@@ -1,0 +1,13 @@
+# Rerun of the two full-suite failures (third full run: 107/109)
+## four_phones_claim_four_slots alone on this branch (shared controller port; other suites were running)
+PASS  four_phones_claim_four_slots
+1 passed, 0 failed, 1 total
+## axe_head_holds_side_near_vertical alone on this branch
+PASS  axe_head_holds_side_near_vertical
+1 passed, 0 failed, 1 total
+## same pair, in suite order, on untouched origin/main 8f32c86 (no #52 code)
+PASS  four_phones_claim_four_slots
+FAIL  axe_head_holds_side_near_vertical
+      - aimed 25 deg past straight down, the head did not flip within two ticks
+      - held straight down, the head ended the wobble on the wrong side
+1 passed, 1 failed, 2 total

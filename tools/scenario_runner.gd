@@ -136,6 +136,17 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_own_head_never_blocks",
 	"boomstick_thin_head_blocks_bullet",
 	"world_stopped_head_blocks_arriving_head",
+	"bounce_pad_launches_body",
+	"bounce_pad_rotated_launches_diagonally",
+	"bounce_pad_head_plant_is_plain_ground",
+	"wind_gust_tell_then_push",
+	"wind_steady_pushes_constantly",
+	"wind_does_not_push_heads",
+	"rotating_platform_spins_at_rate",
+	"seesaw_tips_toward_weight_and_levels",
+	"seesaw_tips_under_planted_head",
+	"head_does_not_tunnel_rotating_platform",
+	"bounce_pad_launch_same_for_every_weapon",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -724,6 +735,28 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomstick_thin_head_blocks_bullet()
 		"world_stopped_head_blocks_arriving_head":
 			return await _scenario_world_stopped_head_blocks_arriving_head()
+		"bounce_pad_launches_body":
+			return await _scenario_bounce_pad_launches_body()
+		"bounce_pad_rotated_launches_diagonally":
+			return await _scenario_bounce_pad_rotated_launches_diagonally()
+		"bounce_pad_head_plant_is_plain_ground":
+			return await _scenario_bounce_pad_head_plant_is_plain_ground()
+		"wind_gust_tell_then_push":
+			return await _scenario_wind_gust_tell_then_push()
+		"wind_steady_pushes_constantly":
+			return await _scenario_wind_steady_pushes_constantly()
+		"wind_does_not_push_heads":
+			return await _scenario_wind_does_not_push_heads()
+		"rotating_platform_spins_at_rate":
+			return await _scenario_rotating_platform_spins_at_rate()
+		"seesaw_tips_toward_weight_and_levels":
+			return await _scenario_seesaw_tips_toward_weight_and_levels()
+		"seesaw_tips_under_planted_head":
+			return await _scenario_seesaw_tips_under_planted_head()
+		"head_does_not_tunnel_rotating_platform":
+			return await _scenario_head_does_not_tunnel_rotating_platform()
+		"bounce_pad_launch_same_for_every_weapon":
+			return await _scenario_bounce_pad_launch_same_for_every_weapon()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -8516,3 +8549,626 @@ func _bare_head(stage: Node2D, pos: Vector2, force: float) -> RigidBody2D:
 	head.position = pos
 	stage.add_child(head)
 	return head
+
+
+# --- Bounce pad, wind zone, rotating platform (issue #52) -------------------
+
+## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
+const BouncePadScene: PackedScene = preload("res://scenes/parts/BouncePad.tscn")
+const WindZoneScene: PackedScene = preload("res://scenes/parts/WindZone.tscn")
+const RotatingPlatformScene: PackedScene = preload("res://scenes/parts/RotatingPlatform.tscn")
+const WindZoneScript := preload("res://scripts/WindZone.gd")
+const RotatingPlatformScript := preload("res://scripts/RotatingPlatform.gd")
+
+## Independent literals matching the shipped defaults, not read back off the
+## instantiated part, so a drifted default fails here.
+const PAD_LAUNCH_SPEED: float = 2000.0
+const PAD_SIZE: Vector2 = Vector2(120, 16)
+const PAD_COLOR: Color = Color(0.25, 0.85, 0.35, 1)
+## Where each part sits in its own empty fixture, and how far above the pad's
+## top face the dropped body's underside starts.
+##
+## Below the world origin on purpose, with every spawn above the part. A
+## freshly built weapon head's first recorded position is the origin, not
+## where it was placed, so its first tick sweeps from (0, 0) to the spawn; a
+## part lying across that line catches the head and seats it on the part's
+## far side before the scenario has done anything. That is a quirk of how the
+## rig is built, not of any part here, so the fixtures keep out of its way.
+const PART_POSITION: Vector2 = Vector2(0, 600)
+const PAD_DROP_HEIGHT: float = 200.0
+## Ticks to fall onto the pad, bounce, and reach the top of the arc.
+const PAD_WATCH_TICKS: int = 150
+## How far past the drop height a launch has to carry the body. A body that
+## merely bounced back off plain ground would never reach its drop height at
+## all; this asks for a launch that clearly beats it.
+const PAD_MIN_EXTRA_RISE: float = 150.0
+## A pad rotated this far clockwise launches up and to the right.
+const PAD_TILT_DEG: float = 30.0
+## How far the launched body's heading may sit from the pad's local up.
+## Loose, because the body keeps the speed it had across the pad face.
+const PAD_HEADING_TOLERANCE_DEG: float = 20.0
+## A push-off from a head planted on a pad is the plain-ground push-off.
+## Whatever it reaches, it must stay well short of what the pad's own launch
+## gives a body, or the head would be getting launched too.
+const PAD_HEAD_PUSH_SPEED_CAP: float = PAD_LAUNCH_SPEED * 0.5
+const PAD_PLANT_MAGNITUDE: float = 0.25
+## Dropped from just high enough for the weapon to swing down under the body
+## first. A long fall onto a short plant presses the body through the
+## drive's give and onto the pad -- see the scenario.
+const PAD_PLANT_SPAWN_Y: float = 200.0
+
+## Short cycle for the gust scenario, and the force behind it.
+const WIND_CALM_SEC: float = 0.5
+const WIND_TELL_SEC: float = 0.5
+const WIND_GUST_SEC: float = 0.5
+const WIND_STRENGTH: float = 1800.0
+## A zone far bigger than anything the player falls through in a few seconds.
+const WIND_ZONE_SIZE: Vector2 = Vector2(4000, 6000)
+## Gust speed-up that counts as a push: a third of the undamped
+## `strength * gust_sec`, which the body's linear damping eats into.
+const WIND_MIN_GUST_GAIN: float = WIND_STRENGTH * WIND_GUST_SEC / 3.0
+## Largest per-tick gain in the wind's direction outside a gust. Nothing
+## pushes a body sideways in clear air, so this is float noise.
+const WIND_CALM_NOISE: float = 0.5
+## The tell has to wind up visibly: the streaks at its end several times
+## faster than in calm, the tint clearly brighter.
+const WIND_TELL_SPEEDUP: float = 5.0
+const WIND_TELL_ALPHA_GAIN: float = 0.1
+## Aim drift a head inside a gust is allowed. In free fall with nothing
+## pushing it the aim holds exactly (measured 0.0000 rad). Pushing the head
+## too, at this scenario's strength, pulled it 0.009 rad off: the drive is
+## strong, so the margin is small, and this sits between the two.
+const WIND_HEAD_ANGLE_TOLERANCE: float = 0.002
+const WIND_HEAD_TICKS: int = 60
+
+const SPIN_DEG_PER_SEC: float = 30.0
+const SPIN_TICKS: int = 120
+const SPIN_TOLERANCE_DEG: float = 0.5
+
+const SEESAW_SIZE: Vector2 = Vector2(260, 20)
+const SEESAW_MAX_TILT_DEG: float = 25.0
+## Where on the see-saw a body is dropped, from the pivot, and how far it has
+## to tip toward it to count. A player that far out asks for about 17 deg.
+const SEESAW_LOAD_OFFSET: float = 90.0
+const SEESAW_MIN_TILT_DEG: float = 8.0
+const SEESAW_LOAD_TICKS: int = 60
+const SEESAW_LEVEL_TICKS: int = 90
+const SEESAW_LEVEL_TOLERANCE_DEG: float = 1.0
+
+## The rotating-platform tunnel sweep: the thin-platform boost move, against
+## a 20 px spinning slab starting either side of level.
+const ROTATING_TUNNEL_HEIGHTS: PackedFloat32Array = [30.0, 70.0, 110.0, 150.0]
+const ROTATING_TUNNEL_START_DEG: PackedFloat32Array = [-15.0, 15.0]
+
+## An empty fixture: no arena, so nothing but the part under test is solid.
+func _new_empty_stage() -> Node2D:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	return stage
+
+## A bounce pad launches a body that lands on it well past the height it was
+## dropped from, and shows it did (the flash). The weapon is held straight
+## up the whole time, so only the body ever touches the pad.
+func _scenario_bounce_pad_launches_body() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var pad: StaticBody2D = BouncePadScene.instantiate() as StaticBody2D
+	pad.position = PART_POSITION
+	stage.add_child(pad)
+
+	var pad_top: float = PART_POSITION.y - PAD_SIZE.y / 2.0
+	var drop_y: float = pad_top - PAD_DROP_HEIGHT - PLAYER_RADIUS
+	var player: RigidBody2D = _spawn_player(stage, Vector2(PART_POSITION.x, drop_y))
+	player.set_input_vector(Vector2.UP)
+
+	# Watched until the top of the arc after the launch, and no further: the
+	# body falls back onto the pad after that, which is a second landing.
+	var launched_tick: int = -1
+	var flash_seen: bool = false
+	var peak_after_launch: float = INF
+	var launches_to_peak: int = 0
+	for tick in PAD_WATCH_TICKS:
+		await physics_frame
+		if launched_tick < 0 and pad.launch_count() > 0:
+			launched_tick = tick
+			flash_seen = _color_distance(pad.visual_color(), PAD_COLOR) > DISTINCT_COLOR_MIN_DISTANCE
+		if launched_tick >= 0:
+			peak_after_launch = minf(peak_after_launch, player.global_position.y)
+			if tick > launched_tick and player.linear_velocity.y >= 0.0:
+				launches_to_peak = pad.launch_count()
+				break
+
+	if launched_tick < 0:
+		failures.append("the body landed on the pad and was never launched")
+	else:
+		var rise_past_drop: float = drop_y - peak_after_launch
+		print("      launched on tick %d; peak %.1f px above the drop height" % [launched_tick, rise_past_drop])
+		if rise_past_drop < PAD_MIN_EXTRA_RISE:
+			failures.append("launch peaked %.1f px above the drop height, expected at least %.1f px" % [
+				rise_past_drop, PAD_MIN_EXTRA_RISE])
+		if not flash_seen:
+			failures.append("the pad did not flash away from its colour on launch")
+		if launches_to_peak != 1:
+			failures.append("one landing launched %d times before the top of the arc, expected once" % launches_to_peak)
+
+	await _teardown(stage)
+	return failures
+
+## A rotated pad launches along its own local up: a pad tipped clockwise
+## throws a body dropped straight down on it up and to the right.
+func _scenario_bounce_pad_rotated_launches_diagonally() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var pad: StaticBody2D = BouncePadScene.instantiate() as StaticBody2D
+	pad.position = PART_POSITION
+	pad.rotation = deg_to_rad(PAD_TILT_DEG)
+	stage.add_child(pad)
+
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -PAD_DROP_HEIGHT - PLAYER_RADIUS))
+	player.set_input_vector(Vector2.UP)
+
+	var launch_velocity: Vector2 = Vector2.ZERO
+	for _tick in PAD_WATCH_TICKS:
+		await physics_frame
+		if pad.launch_count() > 0:
+			# The first tick after the launch, before gravity bends it much.
+			await physics_frame
+			launch_velocity = player.linear_velocity
+			break
+
+	var expected: Vector2 = Vector2.UP.rotated(deg_to_rad(PAD_TILT_DEG))
+	if launch_velocity == Vector2.ZERO:
+		failures.append("the body landed on the rotated pad and was never launched")
+	else:
+		var off_deg: float = rad_to_deg(absf(launch_velocity.angle_to(expected)))
+		print("      launched at %s, %.1f deg off the pad's up" % [launch_velocity, off_deg])
+		if launch_velocity.x <= 0.0 or launch_velocity.y >= 0.0:
+			failures.append("a pad tipped %.0f deg clockwise launched toward %s, expected up and to the right" % [
+				PAD_TILT_DEG, launch_velocity])
+		if off_deg > PAD_HEADING_TOLERANCE_DEG:
+			failures.append("launch heading is %.1f deg off the pad's local up, tolerance %.1f" % [
+				off_deg, PAD_HEADING_TOLERANCE_DEG])
+
+	await _teardown(stage)
+	return failures
+
+## Mind heads: a head planted on a pad treats it as plain ground. Same shape
+## as `head_plants_terrain`, with the pad's top face at GROUND_TOP: the player
+## lands on its head and settles there unlaunched, then pushes off the plant
+## as it would off the floor -- and gets the push-off, not the pad's launch.
+##
+## Held at a third of its reach rather than `head_plants_terrain`'s 0.05.
+## The pickaxe's shortest reach (20 px) is inside its own body's radius
+## (24 px), so held that short the body hangs only a few pixels over the
+## head and the landing presses it onto the pad -- and a body touching the
+## pad is launched, which is the pad working, not the case this checks. For
+## the same reason it is dropped from low down: the extension drive stops a
+## falling body over a few tens of pixels, so a long fall onto a plant ends
+## with the body on the pad too.
+func _scenario_bounce_pad_head_plant_is_plain_ground() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var pad: StaticBody2D = BouncePadScene.instantiate() as StaticBody2D
+	pad.size = Vector2(240, PAD_SIZE.y)
+	pad.position = Vector2(0, GROUND_TOP + PAD_SIZE.y / 2.0)
+	stage.add_child(pad)
+
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, PAD_PLANT_SPAWN_Y))
+	player.set_input_vector(Vector2.DOWN * PAD_PLANT_MAGNITUDE)
+	await _await_ticks(LANDING_TICKS)
+
+	var planted_y: float = player.global_position.y
+	if pad.launch_count() != 0:
+		failures.append("a head landing on the pad launched the player %d times" % pad.launch_count())
+	if absf(player.linear_velocity.y) > SETTLED_SPEED:
+		failures.append("player never settled on its head on the pad: vertical speed %.1f px/s" % player.linear_velocity.y)
+	if planted_y + PLAYER_RADIUS > GROUND_TOP - PLANT_CLEARANCE:
+		failures.append("player body reached the pad (y %.1f); it should be standing on its head" % planted_y)
+
+	player.set_input_vector(Vector2.DOWN)
+	var highest: float = planted_y
+	var fastest_up: float = 0.0
+	for _i in PUSH_TICKS:
+		await physics_frame
+		highest = minf(highest, player.global_position.y)
+		fastest_up = maxf(fastest_up, -player.linear_velocity.y)
+
+	var risen: float = planted_y - highest
+	print("      push-off off the pad: rose %.1f px, peak %.1f px/s up, %d launches" % [
+		risen, fastest_up, pad.launch_count()])
+	if risen < MIN_PUSH_RISE:
+		failures.append("pushing off a head planted on the pad raised the body %.1f px, expected more than %.1f px" % [
+			risen, MIN_PUSH_RISE])
+	if pad.launch_count() != 0:
+		failures.append("the push-off from a planted head triggered %d pad launches" % pad.launch_count())
+	if fastest_up > PAD_HEAD_PUSH_SPEED_CAP:
+		failures.append("pushing off the planted head flung the body at %.1f px/s, over the %.1f px/s cap" % [
+			fastest_up, PAD_HEAD_PUSH_SPEED_CAP])
+
+	await _teardown(stage)
+	return failures
+
+## The gust cycle: calm, a tell that visibly winds up, a gust that pushes,
+## calm again. A player falls through clear air inside a huge zone blowing
+## right; nothing else moves it sideways, so every change in its horizontal
+## speed is the wind's (or damping's, which only ever slows it).
+##
+## Each tick's change is booked to the phase the zone reports afterwards,
+## which is the phase it pushed with on that tick.
+func _scenario_wind_gust_tell_then_push() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var zone: Area2D = WindZoneScene.instantiate() as Area2D
+	zone.size = WIND_ZONE_SIZE
+	zone.direction = Vector2.RIGHT
+	zone.strength = WIND_STRENGTH
+	zone.calm_sec = WIND_CALM_SEC
+	zone.tell_sec = WIND_TELL_SEC
+	zone.gust_sec = WIND_GUST_SEC
+	zone.position = DEEP_PARK_POSITION + Vector2(0, WIND_ZONE_SIZE.y / 2.0 - 500.0)
+	stage.add_child(zone)
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.UP)
+	await physics_frame
+
+	var cycle_ticks: int = int(round((WIND_CALM_SEC + WIND_TELL_SEC + WIND_GUST_SEC) * Engine.physics_ticks_per_second))
+	var sequence: Array[int] = []
+	var gust_gain: float = 0.0
+	var worst_quiet_gain: float = -INF
+	var tell_alpha_first: float = NAN
+	var tell_alpha_last: float = NAN
+	var tell_speed_last: float = 0.0
+	var calm_alpha: float = NAN
+	var calm_speed: float = NAN
+	var vx: float = player.linear_velocity.x
+	# One full cycle and half the next calm: long enough to see the gust end,
+	# short enough not to reach the next tell.
+	var calm_ticks: int = int(round(WIND_CALM_SEC * Engine.physics_ticks_per_second))
+	for _tick in cycle_ticks + calm_ticks / 2:
+		await physics_frame
+		var p: int = zone.phase()
+		var dv: float = player.linear_velocity.x - vx
+		vx = player.linear_velocity.x
+		if sequence.is_empty() or sequence[-1] != p:
+			sequence.append(p)
+		match p:
+			WindZoneScript.Phase.GUST:
+				gust_gain += dv
+			WindZoneScript.Phase.TELL:
+				worst_quiet_gain = maxf(worst_quiet_gain, dv)
+				if is_nan(tell_alpha_first):
+					tell_alpha_first = zone.visual_color().a
+				tell_alpha_last = zone.visual_color().a
+				tell_speed_last = zone.streak_speed()
+			WindZoneScript.Phase.CALM:
+				worst_quiet_gain = maxf(worst_quiet_gain, dv)
+				if is_nan(calm_alpha):
+					calm_alpha = zone.visual_color().a
+					calm_speed = zone.streak_speed()
+
+	var names: PackedStringArray = []
+	for p: int in sequence:
+		names.append(WindZoneScript.Phase.keys()[p])
+	print("      phases: %s; gust gained %.1f px/s; worst calm/tell gain %.3f px/s" % [
+		" > ".join(names), gust_gain, worst_quiet_gain])
+	var expected: Array[int] = [WindZoneScript.Phase.CALM, WindZoneScript.Phase.TELL,
+		WindZoneScript.Phase.GUST, WindZoneScript.Phase.CALM]
+	if sequence != expected:
+		failures.append("phases ran %s, expected CALM > TELL > GUST > CALM" % " > ".join(names))
+	if gust_gain < WIND_MIN_GUST_GAIN:
+		failures.append("the gust sped the body up %.1f px/s in the wind's direction, expected at least %.1f" % [
+			gust_gain, WIND_MIN_GUST_GAIN])
+	if worst_quiet_gain > WIND_CALM_NOISE:
+		failures.append("outside the gust the body still gained %.2f px/s in one tick; calm and the tell must not push" % worst_quiet_gain)
+	if is_nan(tell_alpha_first) or is_nan(calm_alpha):
+		failures.append("never observed both a calm and a tell")
+	else:
+		print("      tint alpha calm %.2f, tell %.2f > %.2f; streaks calm %.0f, end of tell %.0f px/s" % [
+			calm_alpha, tell_alpha_first, tell_alpha_last, calm_speed, tell_speed_last])
+		if tell_alpha_last < calm_alpha + WIND_TELL_ALPHA_GAIN:
+			failures.append("the tell's tint only reached alpha %.2f against calm's %.2f; it has to brighten visibly" % [
+				tell_alpha_last, calm_alpha])
+		if tell_alpha_last <= tell_alpha_first:
+			failures.append("the tell's tint did not build over the tell (%.2f to %.2f)" % [tell_alpha_first, tell_alpha_last])
+		if tell_speed_last < calm_speed * WIND_TELL_SPEEDUP:
+			failures.append("the tell's streaks only reached %.0f px/s against calm's %.0f; they have to speed up visibly" % [
+				tell_speed_last, calm_speed])
+
+	await _teardown(stage)
+	return failures
+
+## `steady` pushes every tick with the gust visual on the whole time.
+func _scenario_wind_steady_pushes_constantly() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var zone: Area2D = WindZoneScene.instantiate() as Area2D
+	zone.size = WIND_ZONE_SIZE
+	zone.direction = Vector2.LEFT
+	zone.strength = WIND_STRENGTH
+	zone.steady = true
+	zone.position = DEEP_PARK_POSITION + Vector2(0, WIND_ZONE_SIZE.y / 2.0 - 500.0)
+	stage.add_child(zone)
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(2)
+
+	var vx: float = player.linear_velocity.x
+	var unpushed_ticks: int = 0
+	for _tick in Engine.physics_ticks_per_second:
+		await physics_frame
+		if zone.phase() != WindZoneScript.Phase.STEADY:
+			failures.append("a steady zone reported phase %s" % WindZoneScript.Phase.keys()[zone.phase()])
+			break
+		if player.linear_velocity.x - vx >= 0.0:
+			unpushed_ticks += 1
+		vx = player.linear_velocity.x
+	print("      after 1 s of steady wind: vx %.1f px/s, tint alpha %.2f" % [vx, zone.visual_color().a])
+	if unpushed_ticks > 0:
+		failures.append("%d ticks in a steady zone did not push the body along the wind" % unpushed_ticks)
+	if vx > -WIND_MIN_GUST_GAIN:
+		failures.append("a second of steady wind left the body at %.1f px/s, expected well past %.1f leftward" % [
+			vx, -WIND_MIN_GUST_GAIN])
+	if zone.visual_color().a < 0.2:
+		failures.append("a steady zone is drawn at alpha %.2f; the cue must be visible" % zone.visual_color().a)
+
+	await _teardown(stage)
+	return failures
+
+## Mind heads: wind pushes bodies, never heads. The body falls beside a tall
+## zone, outside it, holding its weapon straight out into it; the zone blows
+## steadily across the haft, which is the direction that would pull the aim
+## off if it pushed the head. The aim holds, and the body is not dragged.
+func _scenario_wind_does_not_push_heads() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+
+	var zone: Area2D = WindZoneScene.instantiate() as Area2D
+	# From the body's edge plus a margin out past full reach, and tall enough
+	# for the whole fall.
+	var inner: float = PLAYER_RADIUS + 20.0
+	var outer: float = MAX_REACH + 40.0
+	zone.size = Vector2(outer - inner, WIND_ZONE_SIZE.y)
+	zone.direction = Vector2.UP
+	zone.strength = WIND_STRENGTH * 3.0
+	zone.steady = true
+	zone.position = Vector2(player.global_position.x + (inner + outer) / 2.0, player.global_position.y)
+	stage.add_child(zone)
+	await physics_frame
+
+	var worst_angle: float = 0.0
+	var head_inside_ticks: int = 0
+	var x0: float = player.global_position.x
+	for _tick in WIND_HEAD_TICKS:
+		await physics_frame
+		var offset: Vector2 = player.weapon_head_position() - player.global_position
+		worst_angle = maxf(worst_angle, absf(offset.angle()))
+		var local: Vector2 = zone.to_local(player.weapon_head_position())
+		if absf(local.x) < zone.size.x / 2.0 and absf(local.y) < zone.size.y / 2.0:
+			head_inside_ticks += 1
+	var drift: float = player.global_position.x - x0
+	print("      head in the gust %d/%d ticks; worst aim error %.4f rad; body drifted %.2f px" % [
+		head_inside_ticks, WIND_HEAD_TICKS, worst_angle, drift])
+	if head_inside_ticks < WIND_HEAD_TICKS:
+		failures.append("the head was only inside the zone %d of %d ticks; the fixture is wrong" % [head_inside_ticks, WIND_HEAD_TICKS])
+	if worst_angle > WIND_HEAD_ANGLE_TOLERANCE:
+		failures.append("a gust across the haft pulled the aim %.3f rad off, tolerance %.3f; heads must not be pushed" % [
+			worst_angle, WIND_HEAD_ANGLE_TOLERANCE])
+	if absf(drift) > PLANT_CLEARANCE:
+		failures.append("the body drifted %.1f px with only its head in the wind" % drift)
+
+	await _teardown(stage)
+	return failures
+
+## SPIN mode turns at the set rate, tick for tick.
+func _scenario_rotating_platform_spins_at_rate() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var platform: AnimatableBody2D = RotatingPlatformScene.instantiate() as AnimatableBody2D
+	platform.mode = RotatingPlatformScript.Mode.SPIN
+	platform.spin_deg_per_sec = SPIN_DEG_PER_SEC
+	platform.position = PART_POSITION
+	stage.add_child(platform)
+	await physics_frame
+
+	var start_rotation: float = platform.rotation
+	await _await_ticks(SPIN_TICKS)
+	var turned_deg: float = rad_to_deg(platform.rotation - start_rotation)
+	var expected_deg: float = SPIN_DEG_PER_SEC * float(SPIN_TICKS) / float(Engine.physics_ticks_per_second)
+	print("      turned %.2f deg in %d ticks, expected %.2f" % [turned_deg, SPIN_TICKS, expected_deg])
+	if absf(turned_deg - expected_deg) > SPIN_TOLERANCE_DEG:
+		failures.append("spun %.2f deg in %d ticks at %.0f deg/s, expected %.2f" % [
+			turned_deg, SPIN_TICKS, SPIN_DEG_PER_SEC, expected_deg])
+
+	await _teardown(stage)
+	return failures
+
+## A see-saw tips toward the end a body stands on, and returns toward level
+## once the body is gone. Run for each end, so a sign error in the load
+## moment cannot pass by tipping the same way every time.
+func _scenario_seesaw_tips_toward_weight_and_levels() -> Array[String]:
+	var failures: Array[String] = []
+	for side: float in [1.0, -1.0]:
+		var label: String = "right end" if side > 0.0 else "left end"
+		var stage: Node2D = _new_empty_stage()
+		var seesaw: AnimatableBody2D = _new_seesaw(stage)
+		var top: float = PART_POSITION.y - SEESAW_SIZE.y / 2.0
+		var player: RigidBody2D = _spawn_player(stage, Vector2(PART_POSITION.x + side * SEESAW_LOAD_OFFSET, top - PLAYER_RADIUS - 2.0))
+		player.set_input_vector(Vector2.UP)
+
+		var toward: float = 0.0
+		for _tick in SEESAW_LOAD_TICKS:
+			await physics_frame
+			toward = maxf(toward, rad_to_deg(seesaw.tilt()) * side)
+		player.leave_round()
+		await _await_ticks(SEESAW_LEVEL_TICKS)
+		var after_deg: float = rad_to_deg(seesaw.tilt())
+		print("      %s: tipped %.1f deg toward the body, %.2f deg after it left" % [label, toward, after_deg])
+		if toward < SEESAW_MIN_TILT_DEG:
+			failures.append("%s: a body on it tipped the see-saw only %.1f deg toward it, expected at least %.1f" % [
+				label, toward, SEESAW_MIN_TILT_DEG])
+		if toward > SEESAW_MAX_TILT_DEG + 0.01:
+			failures.append("%s: tipped %.1f deg, past its %.1f deg max" % [label, toward, SEESAW_MAX_TILT_DEG])
+		if absf(after_deg) > SEESAW_LEVEL_TOLERANCE_DEG:
+			failures.append("%s: %d ticks after the body left, the see-saw still sat at %.2f deg" % [
+				label, SEESAW_LEVEL_TICKS, after_deg])
+		await _teardown(stage)
+	return failures
+
+## Mind heads: a player standing on its own weapon on one end of a see-saw
+## weighs it down just as standing on its feet would.
+func _scenario_seesaw_tips_under_planted_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var seesaw: AnimatableBody2D = _new_seesaw(stage)
+	var top: float = PART_POSITION.y - SEESAW_SIZE.y / 2.0
+	var player: RigidBody2D = _spawn_player(stage, Vector2(PART_POSITION.x + SEESAW_LOAD_OFFSET, top - 60.0))
+	player.set_input_vector(Vector2.DOWN * 0.05)
+
+	var toward: float = 0.0
+	var body_touched: bool = false
+	for _tick in SEESAW_LOAD_TICKS:
+		await physics_frame
+		toward = maxf(toward, rad_to_deg(seesaw.tilt()))
+		if player.get_colliding_bodies().has(seesaw):
+			body_touched = true
+	print("      tipped %.1f deg under a player standing on its head; body touched the slab: %s" % [toward, body_touched])
+	if body_touched:
+		failures.append("the player's body touched the see-saw; this scenario is about its head carrying the weight")
+	if toward < SEESAW_MIN_TILT_DEG:
+		failures.append("a player standing on its head tipped the see-saw only %.1f deg, expected at least %.1f" % [
+			toward, SEESAW_MIN_TILT_DEG])
+
+	await _teardown(stage)
+	return failures
+
+func _new_seesaw(stage: Node2D) -> AnimatableBody2D:
+	var seesaw: AnimatableBody2D = RotatingPlatformScene.instantiate() as AnimatableBody2D
+	seesaw.mode = RotatingPlatformScript.Mode.SEESAW
+	seesaw.size = SEESAW_SIZE
+	seesaw.max_tilt_deg = SEESAW_MAX_TILT_DEG
+	seesaw.position = PART_POSITION
+	stage.add_child(seesaw)
+	return seesaw
+
+## Mind heads: the thin-platform boost sweep (`head_does_not_tunnel_thin_platform`)
+## against a 20 px slab that is spinning while the head arrives. A breach is
+## the head ending up past the slab's far face while inside its span, both
+## read in the slab's own turning frame. A fresh slab per trial, starting
+## either side of level, so every trial meets it close to the angle it was
+## set up for.
+func _scenario_head_does_not_tunnel_rotating_platform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var half: Vector2 = SEESAW_SIZE / 2.0
+	var trials: int = 0
+	var breaches: int = 0
+
+	for start_deg: float in ROTATING_TUNNEL_START_DEG:
+		for height: float in ROTATING_TUNNEL_HEIGHTS:
+			for windup: int in BOOST_WINDUP_TICKS:
+				for falling_flag: int in BOOST_FALLING_FLAGS:
+					var falling: bool = falling_flag == 1
+					trials += 1
+					var platform: AnimatableBody2D = RotatingPlatformScene.instantiate() as AnimatableBody2D
+					platform.mode = RotatingPlatformScript.Mode.SPIN
+					platform.spin_deg_per_sec = SPIN_DEG_PER_SEC
+					platform.size = SEESAW_SIZE
+					platform.position = PART_POSITION
+					platform.rotation = deg_to_rad(start_deg)
+					stage.add_child(platform)
+
+					var start := Vector2(PART_POSITION.x, PART_POSITION.y - half.y - height)
+					var player: RigidBody2D = _spawn_player(stage, start)
+					await physics_frame
+					if falling:
+						player.linear_velocity = Vector2(0.0, BOOST_FALL_SPEED)
+					for _w in windup:
+						player.set_input_vector(Vector2.DOWN * 0.05)
+						await physics_frame
+
+					player.set_input_vector(Vector2.DOWN)
+					var deepest: float = -INF
+					for _t in BOOST_TICKS:
+						await physics_frame
+						var local: Vector2 = platform.to_local(player.weapon_head_position())
+						if absf(local.x) > half.x - HEAD_RADIUS:
+							continue
+						if local.y - HEAD_RADIUS > half.y:
+							deepest = maxf(deepest, local.y + half.y)
+
+					if deepest > -INF:
+						breaches += 1
+						if failures.size() < MAX_FAILURES_PER_SCENARIO:
+							failures.append(
+								"slab from %.0f deg, start %.0f px above, %d-tick wind-up, %s: head ended %.1f px past the top of a 20 px spinning slab" % [
+									start_deg, height, windup, "falling" if falling else "from rest", deepest])
+
+					player.queue_free()
+					platform.queue_free()
+					await _await_ticks(BOOST_RESET_TICKS)
+
+	print("      %d trials, %d breaches" % [trials, breaches])
+	if breaches > 0:
+		failures.append("%d of %d boost trials put the head through the spinning slab" % [breaches, trials])
+
+	await _teardown(stage)
+	return failures
+
+## How far apart the launch heights of the whole roster may be, as a share of
+## the highest. Measured with the weapon carried along: 454 px (axe) to 501
+## (staff), 9% apart. With the body launched alone: 167 (axe) to 370, 55%
+## apart. This sits well between the two.
+const PAD_ROSTER_SPREAD: float = 0.2
+
+## A pad launches a player to the same height whatever weapon they hold. The
+## pad gives the weapon the same change of velocity as the body
+## (`BouncePad._weapon_bodies_of`), found through the head's public members
+## rather than a hook in `Player.gd`; if that lookup ever stops finding the
+## weapon, the drive drags each weapon's launch down by a different amount
+## and this spread opens up.
+func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var rises: Dictionary = {}
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stage: Node2D = _new_empty_stage()
+		var pad: StaticBody2D = BouncePadScene.instantiate() as StaticBody2D
+		pad.position = PART_POSITION
+		stage.add_child(pad)
+		var pad_top: float = PART_POSITION.y - PAD_SIZE.y / 2.0
+		var player: RigidBody2D = _spawn_player(stage, Vector2(PART_POSITION.x, pad_top - PAD_DROP_HEIGHT - PLAYER_RADIUS))
+		player.set_weapon_stats(load(path))
+		player.set_input_vector(Vector2.UP)
+
+		var launch_y: float = NAN
+		var peak: float = INF
+		for tick in PAD_WATCH_TICKS:
+			await physics_frame
+			if is_nan(launch_y):
+				if pad.launch_count() > 0:
+					launch_y = player.global_position.y
+					peak = launch_y
+				continue
+			peak = minf(peak, player.global_position.y)
+			if player.linear_velocity.y >= 0.0:
+				break
+		if is_nan(launch_y):
+			failures.append("%s: never launched" % path.get_file())
+		else:
+			rises[path.get_file()] = launch_y - peak
+		await _teardown(stage)
+
+	var parts: PackedStringArray = []
+	var lowest: float = INF
+	var highest: float = 0.0
+	for weapon: String in rises:
+		parts.append("%s %.0f" % [weapon.get_basename(), rises[weapon]])
+		lowest = minf(lowest, rises[weapon])
+		highest = maxf(highest, rises[weapon])
+	print("      launch heights (px): %s" % ", ".join(parts))
+	if highest > 0.0 and (highest - lowest) / highest > PAD_ROSTER_SPREAD:
+		failures.append("launch heights ranged %.0f to %.0f px across the roster, more than %.0f%% apart" % [
+			lowest, highest, PAD_ROSTER_SPREAD * 100.0])
+	return failures
