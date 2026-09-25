@@ -23,7 +23,11 @@ states in them are the real parts running; the wall's worn and flashing
 states were set directly on the wall (its HP and wear display) rather than
 reached by scripted swings, which the scenario covers.
 
-Full suite after rebasing onto `origin/main` at `3c192d4` (#49 axe rework,
-#55 boomstick): 91 passed, 0 failed. `roster_heads_do_not_tunnel_head_reversed`,
-which failed on `origin/main` before #49 landed (the axe, 1 charge of 12), now
-passes; nothing in this branch touches it.
+Full suite after rebasing onto `origin/main` at `8f32c86` (#47, #48, #49, #50,
+#55, #61): 102 passed, 1 failed (`issue-53/scenario-suite.txt`). The one failure,
+`axe_head_holds_side_near_vertical`, is pre-existing: untouched `origin/main` at
+`8f32c86` fails it the same way in a full run, 97 of 98 with the same two
+assertions (`issue-53/baseline-main-8f32c86-suite.txt`). Run alone, it passes
+on both main and this branch, so it looks order-dependent within the suite. It
+is in the other dev's lane, and nothing in this branch touches heads or the axe.
+All five #53 scenarios pass.

@@ -351,7 +351,7 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2708)
+       [0] _await_condition (res://tools/scenario_runner.gd:2693)
 PASS  rising_kill_zone_resets_each_round
 Controller page: http://172.20.6.57:18480/
 PASS  four_phones_claim_four_slots
@@ -397,7 +397,7 @@ PASS  boomstick_recoil_is_moderate
       pickaxe.tres: head arrived at 2214 px/s and took 34.0 off
       boomstick.tres: head arrived at 2211 px/s and took 8.0 off
 PASS  boomstick_melee_damage_is_low
-      pool of 5 weapons; the boomstick came up 57 times in 300 draws
+      pool of 5 weapons; the boomstick came up 65 times in 300 draws
 PASS  boomstick_in_pickup_pool
       at rest reach: bullet started inside the shooter's body and got 155.0 px clear; shooter on 0.0 damage
       sent back through the shooter: shooter on 0.0 damage, the player behind on 35.0
@@ -440,19 +440,5 @@ PASS  boomstick_thin_head_blocks_bullet
       tick 2: held head at (-60.97713, 0.0), arriving head at (-51.0, 0.0) (from the slab face)
       tick 3: held head at (-90.97713, 0.0), arriving head at (-81.00001, 0.0) (from the slab face)
 PASS  world_stopped_head_blocks_arriving_head
-      warned for 60 ticks (configured 60), landing marker at (0.0, 300.0)
-      hit 39 ticks into the fall: 25.0 damage, knocked 90.0 px sideways
-PASS  falling_rock_warns_then_strikes
-      timed: warned for 48 ticks (configured 48)
-PASS  collapsing_floor_timed_gives_way_for_good
-      stood_on: warning began 32 ticks after the player arrived (stand_sec is 30 ticks)
-      stood_on: warned for 48 ticks (configured 48)
-PASS  collapsing_floor_stood_on_gives_way_for_good
-      light pokes (half-sweep 0.3 rad, rehearsed 1524 px/s): 4 swing(s), hits at [1113.40063476563, 408.046997070313, 1113.41186523438, 408.046295166016, 1113.41223144531, 408.046295166016, 1113.41564941406, 408.046142578125] px/s, 37.5 damage, wall 'standing' with 1 crack(s)
-      weak (half-sweep 0.3 rad, rehearsed 1524 px/s): 10 swing(s), hits at [1113.39721679688, 408.046569824219, 1113.41418457031, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922, 1113.41394042969, 408.045867919922] px/s, 93.7 damage, wall 'standing' with 3 crack(s)
-      hard (half-sweep 1.3 rad, rehearsed 2771 px/s): 3 swing(s), hits at [2696.75244140625, 838.799682617188, 2696.93603515625, 838.796264648438, 2696.93603515625] px/s, 142.1 damage, wall 'broken' with 0 crack(s)
-PASS  breakable_wall_breaks_on_weapon_hits
-      pushed and slammed: wall on 100.0 HP, 0 head hit(s), player at x=-42.9 (face at -16.0)
-PASS  breakable_wall_ignores_bodies
 ---
-102 passed, 1 failed, 103 total
+97 passed, 1 failed, 98 total
