@@ -138,7 +138,8 @@ func _physics_process(delta: float) -> void:
 ## takes the bullet's damage -- through the shooter, so it is reported as the
 ## shooter's `strike_landed` like any strike and reaches the hitmarker and the
 ## phones' buzz (#33, #34). Anything else -- terrain, or an opposing head,
-## which is not in the players group -- takes nothing and is not pushed.
+## which is not in the players group -- takes nothing and is not pushed,
+## except a breakable wall, which takes the bullet's damage (#53).
 ## Whatever it hit, the bullet is spent.
 func _hit(collider: Object, point: Vector2) -> void:
 	var victim: Node = collider as Node
@@ -149,6 +150,8 @@ func _hit(collider: Object, point: Vector2) -> void:
 			shooter.land_projectile_hit(victim, damage, point)
 		else:
 			victim.take_damage(damage)
+	elif victim != null and victim.has_method("take_projectile_hit"):
+		victim.take_projectile_hit(damage)
 	queue_free()
 
 ## The shooter's body and, when it has a live rig, its current head. Read

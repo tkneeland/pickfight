@@ -12,3 +12,8 @@ WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrenc
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:248)
        [1] _ready (res://scripts/ControllerServer.gd:168)
 exit 0
+
+--- fresh-clone check (git clone -q . /tmp/pf-fresh-53 at f9a344d; same code as this commit)
+$ godot --headless --path /tmp/pf-fresh-53 --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
+(no output: PASS)
+New scenarios in the fresh clone: 5 passed, 0 failed, 5 total
