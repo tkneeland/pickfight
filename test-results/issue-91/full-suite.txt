@@ -353,9 +353,9 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2816)
+       [0] _await_condition (res://tools/scenario_runner.gd:2819)
 PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.20.1.170:50668/
+Controller page: http://172.19.9.117:51005/
 PASS  four_phones_claim_four_slots
 PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
@@ -369,7 +369,7 @@ PASS  damaging_strike_buzzes_victim_and_attacker
 PASS  zero_damage_strike_buzzes_no_one
       5 strike(s) to eliminate slot 2, buzzes: [[2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "eliminated"], [2, "struck"], [0, "hit"], [0, "win"]]
 PASS  elimination_buzzes_eliminated_player
-Controller page: http://172.20.1.170:50675/
+Controller page: http://172.19.9.117:51013/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       the axe aimed at -45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
@@ -397,7 +397,7 @@ PASS  boomstick_recoil_is_moderate
       pickaxe.tres: head arrived at 2214 px/s and took 34.0 off
       boomstick.tres: head arrived at 2211 px/s and took 8.0 off
 PASS  boomstick_melee_damage_is_low
-      pool of 5 weapons; the boomstick came up 66 times in 300 draws
+      pool of 5 weapons; the boomstick came up 56 times in 300 draws
 PASS  boomstick_in_pickup_pool
       at rest reach: bullet started inside the shooter's body and got 155.0 px clear; shooter on 0.0 damage
       sent back through the shooter: shooter on 0.0 damage, the player behind on 35.0
@@ -494,7 +494,7 @@ PASS  sfx_round_events
       lava requested: ["countdown", "countdown", "countdown", "lava_rise"]
 PASS  sfx_lava_countdown_rise_and_sizzle
 PASS  sfx_join_sounds
-      6 damage: -7.64 dB, pitch 1.032; 54 damage: -0.58 dB, pitch 0.911
+      6 damage: -7.64 dB, pitch 1.078; 54 damage: -0.58 dB, pitch 0.932
 PASS  sfx_strength_scales_volume
       clash: cap 3, peak 3 playing, 3 nodes
       round_start: cap 1, peak 1 playing, 1 nodes
@@ -529,5 +529,7 @@ PASS  charge_sweep_pair_stays_in_play
 PASS  pad_launch_keeps_head_ahead_of_body
       requested: ["bounce_launch", "rock_warning", "rock_impact", "floor_warning", "floor_collapse", "wall_hit", "wall_break", "wind_tell", "wind_gust", "wind_tell", "wind_gust"]
 PASS  sfx_stage_parts_sound
+      arm z=0 idx=3, outline z=0 idx=2
+PASS  arm_draws_over_identity_outline
 ---
-132 passed, 0 failed, 132 total
+133 passed, 0 failed, 133 total

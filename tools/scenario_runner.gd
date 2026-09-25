@@ -173,6 +173,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"charge_sweep_pair_stays_in_play",
 	"pad_launch_keeps_head_ahead_of_body",
 	"sfx_stage_parts_sound",
+	"arm_draws_over_identity_outline",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -841,6 +842,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pad_launch_keeps_head_ahead_of_body()
 		"sfx_stage_parts_sound":
 			return await _scenario_sfx_stage_parts_sound()
+		"arm_draws_over_identity_outline":
+			return await _scenario_arm_draws_over_identity_outline()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -10884,5 +10887,29 @@ func _scenario_sfx_stage_parts_sound() -> Array[String]:
 	if _sfx_count(sfx, "wall_hit") != 1:
 		failures.append("wall_hit played %d times, expected once (the hit during the break flash stays quiet)" % _sfx_count(sfx, "wall_hit"))
 
+	await _teardown(stage)
+	return failures
+
+## #91: the arm (the haft line) draws in front of the identity outline. Both
+## are children of the player at the same z, so the one later in tree order
+## draws on top; this compares effective z first, then child index.
+func _scenario_arm_draws_over_identity_outline() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(1)
+	var arm: CanvasItem = player.get_node_or_null("Haft")
+	var outline: CanvasItem = player.get_node_or_null("IdentityOutline")
+	if arm == null or outline == null:
+		failures.append("missing node: Haft=%s IdentityOutline=%s" % [arm, outline])
+	else:
+		var arm_z: int = arm.z_index + (player.z_index if arm.z_as_relative else 0)
+		var outline_z: int = outline.z_index + (player.z_index if outline.z_as_relative else 0)
+		print("      arm z=%d idx=%d, outline z=%d idx=%d" % [arm_z, arm.get_index(), outline_z, outline.get_index()])
+		if arm_z < outline_z or (arm_z == outline_z and arm.get_index() < outline.get_index()):
+			failures.append("the arm draws under the outline (arm z=%d idx=%d, outline z=%d idx=%d)" % [arm_z, arm.get_index(), outline_z, outline.get_index()])
+		var body_visual: CanvasItem = player.get_node("Body")
+		if body_visual.get_index() > outline.get_index():
+			failures.append("the body fill now draws over the outline")
 	await _teardown(stage)
 	return failures
