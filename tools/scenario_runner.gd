@@ -183,6 +183,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_backgrounds_draw_behind_everything",
 	"pickup_spots_skip_player_spawns",
 	"every_stage_has_pickup_spot_clear_of_spawns",
+	"spawn_protection_blocks_damage_then_expires",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -875,6 +876,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_spots_skip_player_spawns()
 		"every_stage_has_pickup_spot_clear_of_spawns":
 			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
+		"spawn_protection_blocks_damage_then_expires":
+			return await _scenario_spawn_protection_blocks_damage_then_expires()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -6766,6 +6769,8 @@ func _scenario_round_win_buzzes_only_winner() -> Array[String]:
 func _scenario_damaging_strike_buzzes_victim_and_attacker() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = _new_roster_round(3, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS)
+	# Strikes land straight after round start: no spawn protection (#114) here.
+	loop["round_manager"].spawn_protection_sec = 0.0
 	var players: Array[RigidBody2D] = loop["players"]
 	var roster: Node = loop["roster"]
 	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
@@ -6823,6 +6828,8 @@ func _scenario_zero_damage_strike_buzzes_no_one() -> Array[String]:
 func _scenario_elimination_buzzes_eliminated_player() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = _new_roster_round(3, PICKUP_LONG_INTERVAL_SEC, FOUR_PLAYER_END_PAUSE_SEC, PICKUP_STUB_POINTS)
+	# Strikes land straight after round start: no spawn protection (#114) here.
+	loop["round_manager"].spawn_protection_sec = 0.0
 	var players: Array[RigidBody2D] = loop["players"]
 	var roster: Node = loop["roster"]
 	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
@@ -11527,4 +11534,52 @@ func _scenario_every_stage_has_pickup_spot_clear_of_spawns() -> Array[String]:
 	var marker := Node2D.new()
 	get_root().add_child(marker)
 	await _teardown(marker)
+	return failures
+
+## Issue #114: for about a second after a round places them, players take no
+## damage and blink to show it. Then both stop: they go back to full opacity
+## and damage lands again.
+func _scenario_spawn_protection_blocks_damage_then_expires() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+
+	if not round_manager.spawn_protection_active():
+		failures.append("the round started with no spawn protection running")
+	for player: RigidBody2D in players:
+		if not player.spawn_protected:
+			failures.append("%s was not spawn-protected at round start" % player.name)
+		player.take_damage(10.0)
+		if player.damage != 0.0:
+			failures.append("%s took %.1f damage while spawn-protected" % [player.name, player.damage])
+
+	var min_alpha: float = 1.0
+	var started_msec: int = Time.get_ticks_msec()
+	while round_manager.spawn_protection_active():
+		min_alpha = minf(min_alpha, players[0].modulate.a)
+		if Time.get_ticks_msec() - started_msec > 3000:
+			failures.append("spawn protection was still running 3 s after round start")
+			break
+		await process_frame
+	var lasted_msec: int = Time.get_ticks_msec() - started_msec
+	if lasted_msec < 700:
+		failures.append("spawn protection ended after only %d ms, expected about 1 s" % lasted_msec)
+	if min_alpha > 0.5:
+		failures.append("a protected player never blinked (lowest alpha %.2f)" % min_alpha)
+
+	for player: RigidBody2D in players:
+		if player.spawn_protected:
+			failures.append("%s was still spawn-protected after it ended" % player.name)
+		if player.modulate.a != 1.0:
+			failures.append("%s was left at alpha %.2f after protection ended" % [player.name, player.modulate.a])
+		player.take_damage(10.0)
+		if player.damage != 10.0:
+			failures.append("%s took %.1f damage after protection, expected 10" % [player.name, player.damage])
+
+	await _teardown(loop["stage"])
 	return failures

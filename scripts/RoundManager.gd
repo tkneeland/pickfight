@@ -155,6 +155,7 @@ func _ready() -> void:
 	_set_waiting_text(0)
 
 func _process(_delta: float) -> void:
+	_tick_spawn_protection()
 	match _state:
 		State.WAITING:
 			_try_start_round()
@@ -220,6 +221,7 @@ func _try_start_round() -> void:
 	_start_round_modifier()
 	_start_pickups()
 	_start_kill_zone_rise()
+	_start_spawn_protection()
 	round_started.emit()
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
@@ -559,6 +561,57 @@ func _distance_to_nearest_spawn(spot: Vector2) -> float:
 	for spawn: Vector2 in _stage_spawn_points:
 		nearest = minf(nearest, spot.distance_to(spawn))
 	return nearest
+
+# --- Spawn protection (issue #114) -------------------------------------------
+#
+# For `spawn_protection_sec` after a round places the players, none of them can
+# take damage, and each blinks to show it. Knockback still applies (owner's
+# call left to us in #114; a shove at spawn is harmless, and blocking it would
+# mean reaching into Player's physics). The lava still eliminates. There is no
+# mid-round spawn to protect: a phone that joins mid-round waits for the next
+# round (ADR-0004), and that round's start protects it with everyone else.
+
+## Seconds of spawn protection at round start (#114). 0 turns it off.
+@export var spawn_protection_sec: float = 1.0
+## Blink rate and the dimmed alpha a protected player blinks down to.
+const SPAWN_BLINK_HZ: float = 8.0
+const SPAWN_BLINK_ALPHA: float = 0.35
+
+var _protected: Array[Node2D] = []
+var _protected_until_msec: int = 0
+
+func _start_spawn_protection() -> void:
+	_end_spawn_protection()
+	if spawn_protection_sec <= 0.0:
+		return
+	for player: Variant in _players:
+		if player is Node2D and is_instance_valid(player) and bool(player.get("alive")):
+			player.set("spawn_protected", true)
+			_protected.append(player)
+	_protected_until_msec = Time.get_ticks_msec() + int(spawn_protection_sec * 1000.0)
+
+func _tick_spawn_protection() -> void:
+	if _protected.is_empty():
+		return
+	var now: int = Time.get_ticks_msec()
+	if now >= _protected_until_msec or _state != State.ROUND_ACTIVE:
+		_end_spawn_protection()
+		return
+	var lit: bool = int(float(now) / 1000.0 * SPAWN_BLINK_HZ * 2.0) % 2 == 0
+	for player: Node2D in _protected:
+		if is_instance_valid(player):
+			player.modulate.a = 1.0 if lit else SPAWN_BLINK_ALPHA
+
+func _end_spawn_protection() -> void:
+	for player: Node2D in _protected:
+		if is_instance_valid(player):
+			player.set("spawn_protected", false)
+			player.modulate.a = 1.0
+	_protected.clear()
+
+## Whether spawn protection is running, for the scenarios.
+func spawn_protection_active() -> bool:
+	return not _protected.is_empty()
 
 # --- Rising kill zone (issue #22, ADR-0012) ----------------------------------
 #

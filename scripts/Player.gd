@@ -194,6 +194,10 @@ signal eliminated
 ## there is no mid-round respawn (ADR-0004): a round is over the same body
 ## every player entered it with.
 var alive: bool = true
+## Spawn protection (#114): set and cleared by RoundManager for about a second
+## after a round places this player. While true, `take_damage()` does nothing
+## and strikes on this player report 0. Knockback still applies.
+var spawn_protected: bool = false
 
 ## The weapon setpoints the input vector asks for: a world angle in radians
 ## and a reach in pixels. These are what the host commands, not what the
@@ -458,7 +462,7 @@ func teleport_to(pos: Vector2) -> void:
 ## eliminated player's head has no collision layer to be struck through, but
 ## nothing here should rely on that alone.
 func take_damage(amount: float) -> void:
-	if amount <= 0.0 or not alive:
+	if amount <= 0.0 or not alive or spawn_protected:
 		return
 	damage += amount
 	if damage >= DEATH_DAMAGE:
@@ -1159,6 +1163,8 @@ func _land_strike(victim: Node, speed: float) -> void:
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
 	var point: Vector2 = _strike_point(victim)
+	if victim.get("spawn_protected") == true:
+		amount = 0.0
 	victim.take_damage(amount)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
@@ -1247,6 +1253,8 @@ func _fire() -> void:
 func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 	if victim == self or not victim.alive:
 		return
+	if victim.get("spawn_protected") == true:
+		amount = 0.0
 	victim.take_damage(amount)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
