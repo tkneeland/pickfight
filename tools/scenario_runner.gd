@@ -181,6 +181,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"phone_jitter_is_smoothed",
 	"phone_release_and_flick_are_not_smoothed",
 	"stage_backgrounds_draw_behind_everything",
+	"pickup_spots_skip_player_spawns",
+	"every_stage_has_pickup_spot_clear_of_spawns",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -869,6 +871,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_release_and_flick_are_not_smoothed()
 		"stage_backgrounds_draw_behind_everything":
 			return await _scenario_stage_backgrounds_draw_behind_everything()
+		"pickup_spots_skip_player_spawns":
+			return await _scenario_pickup_spots_skip_player_spawns()
+		"every_stage_has_pickup_spot_clear_of_spawns":
+			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -11461,3 +11467,64 @@ func _effective_z(item: CanvasItem) -> int:
 			break
 		node = node.get_parent()
 	return z
+## Issue #111: a pickup never goes down on a spot next to a player spawn while
+## a clear one is free, and a stage whose every spot is near a spawn still
+## gets a pickup, on the spot furthest from them.
+const PICKUP_CLEAR_DRAWS: int = 200
+
+func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
+	var failures: Array[String] = []
+	var radius: float = RoundManagerScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
+	var spawns := PackedVector2Array([Vector2(-300, 0), Vector2(300, 0)])
+	var near := Vector2(-300, -40)
+	var clear := Vector2(0, -40)
+	var cases: Array = [
+		["one near, one clear", PackedVector2Array([near, clear]), clear],
+		["all near", PackedVector2Array([near, Vector2(300, -100)]), Vector2(300, -100)],
+	]
+	for case: Array in cases:
+		var stage: Node2D = _make_pickup_stub_stage("ClearStage", spawns, case[1]).instantiate()
+		get_root().add_child(stage)
+		var rm := RoundManagerScript.new()
+		rm._current_stage = stage
+		rm._stage_spawn_points = stage.get_spawn_points()
+		var bad: int = 0
+		for i in PICKUP_CLEAR_DRAWS:
+			var spot: Variant = rm._free_pickup_spot()
+			if spot == null or (spot as Vector2).distance_to(case[2]) > 1.0:
+				bad += 1
+		print("      %s: %d of %d draws off the expected spot %s (clear radius %.0f px)" % [case[0], bad, PICKUP_CLEAR_DRAWS, case[2], radius])
+		if bad > 0:
+			failures.append("%s: %d of %d pickup spots were not %s" % [case[0], bad, PICKUP_CLEAR_DRAWS, case[2]])
+		rm.free()
+		await _teardown(stage)
+		_scenario_completed = false
+	_scenario_completed = true
+	return failures
+
+## Issue #111: every real stage keeps at least one pickup spot clear of all of
+## its player spawns, so the round-start pickup never lands on a player.
+func _scenario_every_stage_has_pickup_spot_clear_of_spawns() -> Array[String]:
+	var failures: Array[String] = []
+	var radius: float = RoundManagerScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
+	for path: String in STAGE_PATHS:
+		var stage: Node2D = (load(path) as PackedScene).instantiate()
+		get_root().add_child(stage)
+		var spawns: Array[Vector2] = stage.get_spawn_points()
+		var clear: int = 0
+		var points: Array[Vector2] = stage.get_pickup_spawn_points()
+		for point: Vector2 in points:
+			var nearest: float = INF
+			for spawn: Vector2 in spawns:
+				nearest = minf(nearest, point.distance_to(spawn))
+			if nearest >= radius:
+				clear += 1
+		print("      %s: %d of %d pickup spots clear of spawns" % [path.get_file(), clear, points.size()])
+		if clear == 0:
+			failures.append("%s has no pickup spot %.0f px clear of its player spawns" % [path.get_file(), radius])
+		stage.queue_free()
+		await physics_frame
+	var marker := Node2D.new()
+	get_root().add_child(marker)
+	await _teardown(marker)
+	return failures

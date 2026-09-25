@@ -128,7 +128,7 @@ shape = SubResource("RectangleShape2D_kill")
 ; rings: going for one means standing on ground that starts wearing out the
 ; moment you land to grab it.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-195, 240)
+position = Vector2(-225, 240)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(195, 240)
+position = Vector2(225, 240)
