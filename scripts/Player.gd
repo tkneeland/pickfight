@@ -208,6 +208,8 @@ var _keyboard_t: float = 0.5
 var _mouse_anchor: Vector2 = Vector2(NAN, NAN)
 
 var _stats: WeaponStatsType
+## See `set_weapon_stats_modifier()`. Empty unless a round modifier is on.
+var _weapon_stats_modifier: Callable = Callable()
 var _rig: Node2D
 var _haft: RigidBody2D
 var _head: WeaponHeadType
@@ -354,6 +356,8 @@ func _assign_weapon_stats(stats: WeaponStatsType) -> void:
 	weapon_stats = stats
 	_stats = stats
 	_fire_clock = 0.0
+	if _weapon_stats_modifier.is_valid():
+		_stats = _weapon_stats_modifier.call(stats)
 	weapon_min_length = stats.min_reach
 	weapon_length = clampf(weapon_length, stats.min_reach, stats.max_reach)
 
@@ -368,6 +372,22 @@ func set_weapon_stats(stats: WeaponStatsType) -> void:
 	# It also means a caller may set position and stats in either order and
 	# still get a rig built where the player ended up.
 	_build_rig.call_deferred()
+
+## Round modifiers (issue #50, ADR-0015): `modifier` takes the held weapon's
+## stats and returns the stats the rig is actually built from, for every
+## weapon this player holds until it is cleared with an empty `Callable()`.
+## `weapon_stats` stays the resource the player really holds, so what a
+## round's winner carries into the next round, or a scenario reads back, is
+## never the modified copy. Rebuilds the rig only if one is live; a round
+## sets this before `start_round()`'s deferred build and clears it once the
+## player is inert, so neither needs one.
+func set_weapon_stats_modifier(modifier: Callable) -> void:
+	_weapon_stats_modifier = modifier
+	if weapon_stats == null:
+		return
+	_assign_weapon_stats(weapon_stats)
+	if alive and _rig_is_live():
+		_build_rig.call_deferred()
 
 ## Move the player and its weapon together. The rig lives beside the player in
 ## the tree rather than under it (a RigidBody2D cannot drive another one

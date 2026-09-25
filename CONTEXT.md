@@ -43,6 +43,7 @@ round is the exception: they keep whatever they were holding.
 | **Ring-out** | Leaving the stage into its death boundary. Kills whatever damage a player had taken — stage geometry does not care how healthy anyone is. The other route out of a round is accumulated damage. |
 | **Rise** | The stage's death boundary climbing up through it once a round's grace period is over, so a round cannot stall with everyone holding out somewhere safe. Only the floor rises; hazards stay put. Starts afresh with every round. |
 | **Buzz** | A short piece of feedback a player's own phone gives them: a vibration, plus a flash of the phone's screen in their colour (the only kind iOS can give). Sent by the host for four things only, each to the one phone it concerns: a round **win**, being **eliminated**, being **struck** for damage, and landing a **hit** that dealt damage (ADR-0013). |
+| **Modifier** | A twist on the rules for one round only, such as low gravity or big heads. Some rounds roll one at random, and its name is shown on screen as the round starts. It is undone when the round ends (ADR-0015). |
 
 ## Design intent
 
