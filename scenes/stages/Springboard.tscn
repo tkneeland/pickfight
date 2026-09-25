@@ -1,0 +1,119 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
+size = Vector2(370, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_nest"]
+size = Vector2(160, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A pit with a trampoline in it (issue #54, #52's BouncePad). Two banks, the
+; same shape and height as Gauntlet's (tops y=300, x=+-290..+-660), flank a
+; 580 px pit -- far too wide to cross by hooking. What spans it is the pad
+; sunk in its middle: drop in, land on the pad, get launched straight back
+; up, and swing the arm to steer the fall onto whichever side you want.
+;
+; **The pad.** x=-100..100, top y=372, 190 px short of either bank lip, so
+; it is reached by dropping, never by walking. launch_speed is 1250 rather
+; than the part's default 2000: under the player's gravity (1.5 x 980) that
+; is a ~530 px rise, apex around y=-160 -- well inside the camera's -450 top
+; edge, so a launch is never an off-screen blind fall. A fall into the pit
+; is therefore not a ring-out by itself; it is a second chance that fires
+; you back into the fight. Missing the pad is.
+;
+; **The nests.** x=+-130..+-290, top y=100: 200 px above the banks, so the
+; staff (240 reach) can climb to one from its bank, and everyone else gets
+; there off the pad. Their inner edges stop 130 px off centre, clear of the
+; launch column, so a straight launch never slams into a nest's underside.
+; They hold two of the pickups, which is what makes the pad worth riding.
+;
+; Spawns sit on the banks, as on Gauntlet: nobody starts over the pit. The
+; rising floor (ADR-0012) climbs to the spawns' height and takes the pad
+; with it, which leaves the nests as the last high ground late in a round.
+; They are reachable then only by the staff's climb or a fling from a bank,
+; so a camper up there can still be reached.
+
+[node name="Springboard" type="Node2D"]
+script = ExtResource("1")
+
+[node name="BankLeft" type="StaticBody2D" parent="."]
+position = Vector2(-475, 320)
+
+[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+
+[node name="BankRight" type="StaticBody2D" parent="."]
+position = Vector2(475, 320)
+
+[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+
+[node name="Pad" parent="." instance=ExtResource("3")]
+position = Vector2(0, 380)
+size = Vector2(200, 16)
+launch_speed = 1250.0
+
+[node name="NestLeft" type="StaticBody2D" parent="."]
+position = Vector2(-210, 112)
+
+[node name="NestLeftShape" type="CollisionShape2D" parent="NestLeft"]
+shape = SubResource("RectangleShape2D_nest")
+
+[node name="NestLeftVisual" type="Polygon2D" parent="NestLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
+
+[node name="NestRight" type="StaticBody2D" parent="."]
+position = Vector2(210, 112)
+
+[node name="NestRightShape" type="CollisionShape2D" parent="NestRight"]
+shape = SubResource("RectangleShape2D_nest")
+
+[node name="NestRightVisual" type="Polygon2D" parent="NestRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-520, 250)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(520, 250)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-370, 250)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(370, 250)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-210, 60)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(210, 60)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(-600, 260)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(600, 260)

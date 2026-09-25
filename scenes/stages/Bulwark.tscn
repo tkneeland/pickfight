@@ -1,0 +1,142 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/BreakableWall.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_keep"]
+size = Vector2(320, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bastion"]
+size = Vector2(300, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A keep in the middle, two flanking bastions outboard, and a breakable wall
+; sealing each side of the keep (issue #54, part from #53). All four stand
+; at the same height, y=300, so the wall is the only thing that makes one
+; side of the keep different from the other.
+;
+; The keep starts as a shelter. Both walls open at full HP (~three solid
+; pickaxe strikes each, `BreakableWall.hp`'s own default), standing 140 px
+; tall right at the keep's edge -- taller than a body is wide, so nothing
+; hit toward either side of the keep bounces off the wall and stays put
+; instead of ringing out. The bastions are not sheltered: their outer edges
+; are open sky straight down to the kill zone, the same as any flat stage's
+; ends, so `every_stage_can_ring_out` has its route from round one without
+; needing a wall touched. What the wall changes is the *keep*: while it
+; stands, a hit toward either edge is a hit that stops there; once it goes,
+; that edge is a ring-out lane that was not open a moment before -- breaking
+; one wall hands the other player's spot a new way to lose the round, aimed
+; back at whoever is standing in the keep when it happens.
+;
+; Nothing here needs the wall broken to be crossed, though, per
+; `BreakableWall.gd`'s own header: only a fast swing damages it, so it can be
+; "leaned on, planted on and climbed" for free. From the keep's edge a
+; standing player's head is about 116 px from the wall's near top corner --
+; comfortably inside pickaxe reach (~150) and reachable by the sword's blade
+; too, so the wall is climbed with modest skill from that side, no different
+; from any staircase ledge elsewhere in the rotation. From a bastion it is a
+; 124 px gap to the wall's far face (inside the 100-180 px this rotation
+; already asks a pickaxe to fling) and then about 153 px up to the same top
+; corner -- right at a pickaxe's reach and a two-part climb (fling the gap,
+; then hook the face) for the sword and dagger "with effort," never a single
+; impossible reach. The staff clears the whole thing, gap and wall, in one
+; plant from the bastion. So the keep is a shelter you can still visit
+; without breaking anything, at the cost of climbing in over the top while
+; whoever holds it gets a free swing at you -- and it is a shelter an
+; attacker can instead spend three solid hits to remove permanently, opening
+; a straight line to the drop for the rest of the round.
+;
+; The rising kill zone (ADR-0012) only has to climb 230 px here -- from
+; y=480 to the shared y=250 every spawn drops onto -- since keep and
+; bastions share one height. Once it reaches that line every surface goes
+; under together; nobody is sheltered from the lava by anything, wall or no
+; wall, and there is no pocket underneath any of the three platforms for it
+; to trap someone in -- each is a floating slab with open air below, same as
+; every other stage's floors.
+
+[node name="Bulwark" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Keep" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="KeepShape" type="CollisionShape2D" parent="Keep"]
+shape = SubResource("RectangleShape2D_keep")
+
+[node name="KeepVisual" type="Polygon2D" parent="Keep"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)
+
+; The two walls (issue #53's part): 140 px tall, flush with the keep's own
+; edges, so the keep's floor and each wall's base line up with no seam.
+[node name="WallLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-160, 230)
+size = Vector2(32, 140)
+
+[node name="WallRight" parent="." instance=ExtResource("3")]
+position = Vector2(160, 230)
+size = Vector2(32, 140)
+
+[node name="BastionLeft" type="StaticBody2D" parent="."]
+position = Vector2(-450, 320)
+
+[node name="BastionLeftShape" type="CollisionShape2D" parent="BastionLeft"]
+shape = SubResource("RectangleShape2D_bastion")
+
+[node name="BastionLeftVisual" type="Polygon2D" parent="BastionLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+
+[node name="BastionRight" type="StaticBody2D" parent="."]
+position = Vector2(450, 320)
+
+[node name="BastionRightShape" type="CollisionShape2D" parent="BastionRight"]
+shape = SubResource("RectangleShape2D_bastion")
+
+[node name="BastionRightVisual" type="Polygon2D" parent="BastionRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+
+; Spawns 0 and 1 in the keep, sheltered by both walls at round start.
+; Spawns 2 and 3 on the bastions, already exposed on their outer edge.
+; All four 50 px above their platform's top (y=300), same drop convention
+; as Gauntlet and Islands.
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-70, 250)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(70, 250)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-450, 250)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(450, 250)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). One atop each wall -- the prize
+; for whoever climbs it or is standing near when it breaks -- and one on
+; each platform's floor: the keep and both bastions all get a fair shot.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-160, 120)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(160, 120)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(0, 264)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(-450, 264)
+
+[node name="PickupSpawn4" type="Marker2D" parent="."]
+position = Vector2(450, 264)

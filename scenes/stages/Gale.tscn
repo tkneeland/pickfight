@@ -1,0 +1,166 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/WindZone.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
+size = Vector2(370, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_mid"]
+size = Vector2(380, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_overlook"]
+size = Vector2(200, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Two banks and a middle, same shapes and the same 100 px gaps as Gauntlet's
+; ground -- proven reach numbers (pickaxe hooks either lip at ~110 px, the
+; axe and sword too, the dagger flings it), so the crossing itself is never
+; the hard part here. What is new is what's blowing through it: issue #52's
+; WindZone, the star of this stage.
+;
+; **The gale.** Two zones, one over each gap, each spilling 40 px onto the
+; bank on its outer side and the middle on its inner side but never as far
+; as a spawn point. Both blow the same way, RIGHT, so this is one prevailing
+; wind rather than two local ones: crossing rightward (BankLeft->Middle,
+; Middle->BankRight) rides the gust, crossing leftward fights it, and anyone
+; parked on the downwind lip of a gap during a gust -- Middle's or BankLeft's
+; east edge, over either gap -- gets shoved straight into it. That's the
+; ring-out this stage is built around: not a cliff at the map's edge, but
+; the two gaps everyone already has to cross, turned hostile on a timer. The
+; upwind lip of each gap only ever gets blown back to safety, so which side
+; of a gap is dangerous depends on which way you're facing, not where you
+; are.
+;
+; The two zones are offset by half the 5 s cycle (2.5 s), so they never gust
+; together: one gap is always either calm or just winding up while the other
+; is live. A player can read the tell (the streaks brighten and speed up a
+; full second before the push starts) and either wait it out, retreat to the
+; other, calmer gap, or -- since heads are never pushed (see WindZone.gd) --
+; plant a hook on solid ground and let the gust stretch the arm instead of
+; the body. That hold applies wherever the head lands, inside the gust or
+; out, so nobody is ever forced onto a specific "safe" tile to ride out a
+; gust; they just have to be anchored to something.
+;
+; Overlook sits above the middle, out of both zones' reach (they stop 40 px
+; short of it on either side) -- a windless perch and the one place a hook
+; from Middle has to climb rather than cross: 142 px up, within the
+; pickaxe's reach with a plant near the ledge's corner, and dead calm once
+; you're on it. It is a refuge from the gale, not a route around it -- both
+; gaps still have to be crossed to get anywhere else -- and it drops
+; straight back onto Middle on either side, so nobody can get stuck up there
+; once the floor starts rising.
+;
+; Reach math, same stage scale as Gauntlet: a body's centre sits 24 px above
+; whatever it's standing on. Middle's top and both banks' tops are y=300, so
+; every standing surface starts even, and the rising floor takes the whole
+; stage together. The 100 px gaps are hookable from either lip by every
+; weapon but the dagger, which has to fling it -- an easy fling at this
+; width, gale or no gale.
+
+[node name="Gale" type="Node2D"]
+script = ExtResource("1")
+
+[node name="BankLeft" type="StaticBody2D" parent="."]
+position = Vector2(-475, 320)
+
+[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+
+[node name="Middle" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="MiddleShape" type="CollisionShape2D" parent="Middle"]
+shape = SubResource("RectangleShape2D_mid")
+
+[node name="MiddleVisual" type="Polygon2D" parent="Middle"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)
+
+[node name="BankRight" type="StaticBody2D" parent="."]
+position = Vector2(475, 320)
+
+[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+
+; A calm perch above the middle, 142 px up -- one hook's reach for a pickaxe
+; planted near either corner, more effort for the sword and dagger, and out
+; of both wind zones' boxes. Drops back onto Middle on either side, so it is
+; a lookout, not a trap.
+[node name="Overlook" type="StaticBody2D" parent="."]
+position = Vector2(0, 170)
+
+[node name="OverlookShape" type="CollisionShape2D" parent="Overlook"]
+shape = SubResource("RectangleShape2D_overlook")
+
+[node name="OverlookVisual" type="Polygon2D" parent="Overlook"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+; West gap's gale: spans x=-330..-150, 40 px onto BankLeft's inner edge and
+; 40 px onto Middle's outer edge, never reaching either spawn on BankLeft.
+; Blows RIGHT -- into the gap from BankLeft's side, the direction that rings
+; someone out who is standing at the brink when it hits.
+[node name="GustWest" parent="." instance=ExtResource("3")]
+position = Vector2(-240, 150)
+size = Vector2(180, 300)
+direction = Vector2(1, 0)
+
+; East gap's gale, the mirror image, x=150..330. Same RIGHT direction (one
+; prevailing wind, not two), offset half a cycle from GustWest so the two
+; gaps are never both live at once.
+[node name="GustEast" parent="." instance=ExtResource("3")]
+position = Vector2(240, 150)
+size = Vector2(180, 300)
+direction = Vector2(1, 0)
+cycle_offset_sec = 2.5
+
+; All four spawns on the banks, clear of both gale boxes (which stop 40 px
+; short of x=-370/370) and of Overlook's climb line from the origin. Spawns
+; 0 and 1 match Gauntlet's outer pair, 2 and 3 (issue #36) the inner pair
+; closer to the gaps.
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-520, 250)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(520, 250)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-370, 250)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(370, 250)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). One on the middle, one floating
+; in each gale -- the wind never blocks a pickup (it collides with bodies,
+; not areas), so grabbing one there means braving the gust on purpose -- and
+; one on the calm Overlook.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 264)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-240, 200)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(240, 200)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(0, 115)

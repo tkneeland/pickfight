@@ -1,0 +1,116 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_shoulder"]
+size = Vector2(200, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hub"]
+size = Vector2(180, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A fairground of moving footing (issue #54, #52's RotatingPlatform, both
+; modes). Everything between the two edges tips or turns; only the shoulders
+; the players start on and a small hub in the middle hold still.
+;
+; **Shoulders.** x=+-590..+-790, top y=300: the only fixed ground at the
+; edges, and where all four spawns sit, so the round opens on still footing
+; and nobody's first second is a slide.
+;
+; **See-saws.** Centred x=+-380 on y=300, 300 px long (x=+-230..+-530), tilt
+; capped at 20 degrees so a lone player tips one without being poured off
+; it. They are the dependable route: 60 px from a shoulder's lip, 140 px
+; from the hub's, both inside every weapon's hook-and-fling. Standing on the
+; far end of one lifts the other end -- a fight on a see-saw is also a fight
+; over which way it leans.
+;
+; **Hub and spinner.** The hub (x=-90..90, top y=300) is fixed ground, but a
+; 260 px bar spins over it at 25 deg/s about (0,140). Its tips sweep down to
+; y=270, so about every 7 s the bar comes round vertical and swats anyone
+; standing on the hub; in between it passes flat, and for a moment it is
+; the stage's high ground. It is a timed hazard first and footing second,
+; which is the only way a spinner reads fairly.
+;
+; Rising floor (ADR-0012) climbs to the spawns' height and takes the
+; see-saws, hub and shoulders together.
+
+[node name="Carousel" type="Node2D"]
+script = ExtResource("1")
+
+[node name="ShoulderLeft" type="StaticBody2D" parent="."]
+position = Vector2(-690, 320)
+
+[node name="ShoulderLeftShape" type="CollisionShape2D" parent="ShoulderLeft"]
+shape = SubResource("RectangleShape2D_shoulder")
+
+[node name="ShoulderLeftVisual" type="Polygon2D" parent="ShoulderLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -20, 100, -20, 100, 20, -100, 20)
+
+[node name="ShoulderRight" type="StaticBody2D" parent="."]
+position = Vector2(690, 320)
+
+[node name="ShoulderRightShape" type="CollisionShape2D" parent="ShoulderRight"]
+shape = SubResource("RectangleShape2D_shoulder")
+
+[node name="ShoulderRightVisual" type="Polygon2D" parent="ShoulderRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -20, 100, -20, 100, 20, -100, 20)
+
+[node name="Hub" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="HubShape" type="CollisionShape2D" parent="Hub"]
+shape = SubResource("RectangleShape2D_hub")
+
+[node name="HubVisual" type="Polygon2D" parent="Hub"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-90, -20, 90, -20, 90, 20, -90, 20)
+
+[node name="SeesawLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-380, 300)
+size = Vector2(300, 20)
+mode = 1
+max_tilt_deg = 20.0
+
+[node name="SeesawRight" parent="." instance=ExtResource("3")]
+position = Vector2(380, 300)
+size = Vector2(300, 20)
+mode = 1
+max_tilt_deg = 20.0
+
+[node name="Spinner" parent="." instance=ExtResource("3")]
+position = Vector2(0, 140)
+spin_deg_per_sec = 25.0
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-720, 250)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(720, 250)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-640, 250)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(640, 250)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 264)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-380, 240)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(380, 240)

@@ -1,0 +1,129 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CollapsingFloor.tscn" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_core"]
+size = Vector2(260, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Built around #53's collapsing floor. One long flat strip, all at y=300
+; (nobody starts with a height advantage), made of five slabs with 20 px
+; seams between them -- narrower than a body, so at round start it reads and
+; plays as one continuous floor. Two of the five are collapsing-floor
+; instances on each side of a permanent centre, and which trigger goes where
+; is the whole idea: the outer slabs are "timed", so the rim gives way on a
+; schedule every player can learn and plan around; the inner slabs are
+; "stood_on", so the safer ground just outside the permanent core wears out
+; specifically under whoever parks on it waiting out the round. The stage
+; does not just get smaller -- it punishes camping the edge of safety
+; slightly more than camping the middle of it, which is the one thing a
+; plain timer alone could not do.
+;
+; FarLeft/FarRight (timed, 20 s, 1.5 s warning): x=-400..-260 and 260..400.
+; Twenty seconds in, both go together (same schedule), and the playable
+; strip shrinks from 800 px wide to 480 in one visible step -- well before
+; the lava's 50 s grace runs out, so the first squeeze is the floor's own
+; and the players feel it coming from the amber shake, not from the rising
+; surface. Losing a Far slab costs no one a route: beyond it was already
+; open sky over the kill zone, so it only moves the ring-out edge inward.
+;
+; NearLeft/NearRight (stood_on, 1.5 s to warn): x=-240..-150 and 150..240.
+; Immediately outboard of the core, this is the ground a player retreats to
+; without committing to the middle -- and exactly the ground that then
+; starts ticking under them. Hop off before 1.5 s and it holds forever;
+; stand on it and it is gone in under 3 s all told. With four players loose
+; on the same strip, that clock is always running on somebody.
+;
+; Core (permanent): x=-130..130, room for all four spawns with 34 px to
+; spare on each side -- comfortably past Erosion's 216 px / 12 px precedent
+; for "fits four and nothing more". It is the one thing that cannot go, so
+; a round can never deadlock with no floor left anywhere, and it is where
+; the fight ends up however the two triggers play out.
+;
+; Accessibility: if a Near slab goes while its Far neighbour is still there,
+; the gap from the core's edge to that Far slab is 130 px -- inside the
+; pickaxe's 150 reach with room to spare, a hook the sword (70) and dagger
+; (80) cover with a real fling rather than a hook, and trivial for the
+; staff. If a Far slab goes first, there is nothing to cross at all: the
+; stage has simply gotten narrower, and the core is still 130 px of clear
+; approach away with open sky the whole way. No path here ever needs more
+; than a hook and a step off the far lip.
+;
+; Escape: every square inch of this stage is open sky above y=300, so the
+; lava (grace 50 s, rise 80 s) never traps anyone -- there is no ceiling and
+; no alcove to be caught under, only ground that is or is not there yet.
+; By the time the surface is a real threat the floor has usually already
+; shrunk once on its own, so the last refuge is the same core a full round
+; of erosion cannot take away.
+
+[node name="Sinkhole" type="Node2D"]
+script = ExtResource("1")
+
+[node name="FarLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-330, 300)
+size = Vector2(140, 24)
+trigger = "timed"
+collapse_after_sec = 20.0
+warn_sec = 1.5
+
+[node name="NearLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-195, 300)
+size = Vector2(90, 24)
+stand_sec = 1.5
+
+[node name="Core" type="StaticBody2D" parent="."]
+position = Vector2(0, 300)
+
+[node name="CoreShape" type="CollisionShape2D" parent="Core"]
+shape = SubResource("RectangleShape2D_core")
+
+[node name="CoreVisual" type="Polygon2D" parent="Core"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
+
+[node name="NearRight" parent="." instance=ExtResource("3")]
+position = Vector2(195, 300)
+size = Vector2(90, 24)
+stand_sec = 1.5
+
+[node name="FarRight" parent="." instance=ExtResource("3")]
+position = Vector2(330, 300)
+size = Vector2(140, 24)
+trigger = "timed"
+collapse_after_sec = 20.0
+warn_sec = 1.5
+
+; All four spawns on the permanent core, well clear of both collapsing
+; rings -- a round never opens with a countdown already running on the
+; ground a player was just placed on.
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-96, 220)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(96, 220)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-40, 220)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(40, 220)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points (issue #14, ADR-0009). Floating over the two stood_on
+; rings: going for one means standing on ground that starts wearing out the
+; moment you land to grab it.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-195, 240)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(195, 240)
