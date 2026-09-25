@@ -57,6 +57,9 @@ const VIRTUAL_ADAPTER_HINTS: PackedStringArray = [
 	"bridge", "virbr", "loopback",
 ]
 
+## 0 on either port asks the OS for a free one; `_ready()` then writes the port
+## it got back here, so readers (the join URL, the served page) see the real
+## one. The scenario suite does this so parallel runs never collide (#73).
 @export var http_port: int = 8080
 @export var ws_port: int = 8081
 @export var player_paths: Array[NodePath] = []
@@ -146,6 +149,10 @@ func _ready() -> void:
 	var ws_err: int = _ws_server.listen(ws_port)
 	if ws_err != OK:
 		push_error("ControllerServer: cannot listen on WebSocket port %d (error %d)" % [ws_port, ws_err])
+	if http_err == OK and http_port == 0:
+		http_port = _http_server.get_local_port()
+	if ws_err == OK and ws_port == 0:
+		ws_port = _ws_server.get_local_port()
 
 	var urls: PackedStringArray = _join_urls()
 	if urls.is_empty():
