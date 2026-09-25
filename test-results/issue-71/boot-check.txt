@@ -1,4 +1,4 @@
-# Fresh-clone boot check of the branch after the rebase onto a9f0887. The clone has no .godot/
+# Fresh-clone boot check of the branch after the rebase onto 1881062. The clone has no .godot/
 # git clone -q . <scratch>/fresh2 && godot --headless --path <scratch>/fresh2 --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
 
 ## full output of godot --headless --quit (exit 0)

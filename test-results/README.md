@@ -1,8 +1,8 @@
 # Proof of work: issue #71, axe_head_holds_side_near_vertical in full runs
 
-Cleared and recaptured per `docs/agents/testing.md`: this root holds only the latest work package's evidence. The previous package (#53, falling and breaking parts) is in commit `6e907b9`: `git show 6e907b9:test-results/README.md`.
+Cleared and recaptured per `docs/agents/testing.md`: this root holds only the latest work package's evidence. The previous package (#73, parallel controller ports) is in commit `1881062`: `git show 1881062:test-results/README.md`.
 
-macOS, Godot 4.6.2, branch `fix/issue-71-axe-order-leak` rebased onto `origin/main` at `a9f0887`.
+macOS, Godot 4.6.2, branch `fix/issue-71-axe-order-leak` rebased onto `origin/main` at `1881062`.
 
 ## Finding
 
@@ -14,8 +14,8 @@ The scenario runs about 13 s from `PARK_POSITION`, which is clear air for only a
 
 | File | What it shows |
 | --- | --- |
-| `issue-71/red-pair-before-fix.txt` | Red: the pair on `main` (`a9f0887`), before the fix |
-| `issue-71/red-axe-alone-on-main.txt` | Red: the axe scenario alone on `main` (`a9f0887`). It does not need the pair |
+| `issue-71/red-pair-before-fix.txt` | Red: the pair on `main` (`1881062`), before the fix |
+| `issue-71/red-axe-alone-on-main.txt` | Red: the axe scenario alone on `main` (`1881062`). It does not need the pair |
 | `issue-71/bisect-around-48.txt` | Passes before #48, alone and in the pair. Fails alone from #48 on |
 | `issue-71/green-pair.txt` | Green: the pair after the fix |
 | `issue-71/green-axe-alone.txt` | Green: the axe scenario alone after the fix |
