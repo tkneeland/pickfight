@@ -357,21 +357,9 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-<<<<<<<< HEAD:test-results/issue-113/full-suite.txt
-       [0] _await_condition (res://tools/scenario_runner.gd:2849)
+       [0] _await_condition (res://tools/scenario_runner.gd:2846)
 PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.19.9.117:52987/
-========
-<<<<<<<< HEAD:test-results/issue-108/full-suite.txt
-       [0] _await_condition (res://tools/scenario_runner.gd:2818)
-PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.19.9.117:52511/
-========
-       [0] _await_condition (res://tools/scenario_runner.gd:2827)
-PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.19.9.117:52800/
->>>>>>>> 21c3033 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
->>>>>>>> ea8a3d3 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
+Controller page: http://172.19.9.117:53005/
 PASS  four_phones_claim_four_slots
 PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
@@ -385,15 +373,7 @@ PASS  damaging_strike_buzzes_victim_and_attacker
 PASS  zero_damage_strike_buzzes_no_one
       5 strike(s) to eliminate slot 2, buzzes: [[2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "eliminated"], [2, "struck"], [0, "hit"], [0, "win"]]
 PASS  elimination_buzzes_eliminated_player
-<<<<<<<< HEAD:test-results/issue-113/full-suite.txt
-Controller page: http://172.19.9.117:53030/
-========
-<<<<<<<< HEAD:test-results/issue-108/full-suite.txt
-Controller page: http://172.19.9.117:52530/
-========
-Controller page: http://172.19.9.117:52817/
->>>>>>>> 21c3033 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
->>>>>>>> ea8a3d3 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
+Controller page: http://172.19.9.117:53045/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       first shot 181 ticks after the boomstick was handed over, the next 180 ticks later (interval 180 ticks)
@@ -409,11 +389,7 @@ PASS  boomstick_recoil_is_moderate
       pickaxe.tres: head arrived at 2214 px/s and took 34.0 off
       boomstick.tres: head arrived at 2211 px/s and took 8.0 off
 PASS  boomstick_melee_damage_is_low
-<<<<<<<< HEAD:test-results/issue-113/full-suite.txt
-      pool of 5 weapons; the boomstick came up 49 times in 300 draws
-========
-      pool of 5 weapons; the boomstick came up 63 times in 300 draws
->>>>>>>> ea8a3d3 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
+      pool of 5 weapons; the boomstick came up 73 times in 300 draws
 PASS  boomstick_in_pickup_pool
       at rest reach: bullet started inside the shooter's body and got 155.0 px clear; shooter on 0.0 damage
       sent back through the shooter: shooter on 0.0 damage, the player behind on 35.0
@@ -511,15 +487,7 @@ PASS  sfx_round_events
       lava requested: ["countdown", "countdown", "countdown", "lava_rise"]
 PASS  sfx_lava_countdown_rise_and_sizzle
 PASS  sfx_join_sounds
-<<<<<<<< HEAD:test-results/issue-113/full-suite.txt
-      6 damage: -1.64 dB, pitch 1.102; 54 damage: 5.42 dB, pitch 0.970
-========
-<<<<<<<< HEAD:test-results/issue-108/full-suite.txt
-      6 damage: -1.64 dB, pitch 1.100; 54 damage: 5.42 dB, pitch 0.929
-========
-      6 damage: -1.64 dB, pitch 1.106; 54 damage: 5.42 dB, pitch 0.939
->>>>>>>> 21c3033 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
->>>>>>>> ea8a3d3 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
+      6 damage: -1.64 dB, pitch 1.076; 54 damage: 5.42 dB, pitch 0.960
 PASS  sfx_strength_scales_volume
       clash: cap 3, peak 3 playing, 3 nodes
       round_start: cap 1, peak 1 playing, 1 nodes
@@ -563,7 +531,6 @@ FAIL  axe_swing_deals_damage
       - a 0.50 rad axe swing landed at 1374 px/s and took 0.0 off, under the 700 px/s strike floor
       round_win at full strength: -4.0 dB (was 0.0)
 PASS  sfx_mix_victory_quieter_rest_louder
-<<<<<<<< HEAD:test-results/issue-113/full-suite.txt
       planted head slide: shove 0.0 px, push-off 1.0 px
 PASS  planted_head_grips_sideways_push
       wall release: pressed 8.7 px off, let go after 10 ticks
@@ -580,24 +547,6 @@ PASS  music_tracks_exist_and_credited
 PASS  settings_persist_to_config_file
       display server 'headless', asked for [3, 2, 3, 2]
 PASS  settings_fullscreen_toggle_asks_display_server
-      angle wobble per frame (RMS): raw 0.0478 rad, smoothed 0.0200 rad (42% of raw); final reached raw tick 123, smoothed tick 128
-PASS  phone_jitter_is_smoothed
-Controller page: http://172.19.9.117:53102/
-PASS  phone_release_and_flick_are_not_smoothed
----
-136 passed, 3 failed, 139 total
-========
-<<<<<<<< HEAD:test-results/issue-108/full-suite.txt
----
-127 passed, 3 failed, 130 total
-========
-      planted head slide: shove 0.0 px, push-off 1.0 px
-PASS  planted_head_grips_sideways_push
-      wall release: pressed 8.7 px off, let go after 10 ticks
-      wall move: pressed 8.7 px off, let go after 6 ticks
-      ceiling release: pressed 8.7 px off, let go after 4 ticks
-      ceiling move: pressed 8.7 px off, let go after 1 ticks
-PASS  gripping_head_lets_go
       Flatlands.tscn: 3 layers, brightest 0.27, backdrop z<=-1000, everything else z>=0 (Flatlands)
       Pillars.tscn: 2 layers, brightest 0.24, backdrop z<=-1000, everything else z>=0 (Pillars)
       Ferry.tscn: 2 layers, brightest 0.25, backdrop z<=-1000, everything else z>=0 (Ferry)
@@ -617,6 +566,4 @@ PASS  gripping_head_lets_go
       Bulwark.tscn: 3 layers, brightest 0.23, backdrop z<=-1000, everything else z>=0 (Bulwark)
 PASS  stage_backgrounds_draw_behind_everything
 ---
-130 passed, 3 failed, 133 total
->>>>>>>> 21c3033 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
->>>>>>>> ea8a3d3 (test(#117): suite evidence and stage screenshots):test-results/issue-117/full-suite.txt
+135 passed, 3 failed, 138 total
