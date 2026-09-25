@@ -1,39 +1,29 @@
-# Proof of work: issue #52, bounce pad, wind zone, rotating platform
+# Proof of work: issue #53, falling and breaking stage parts
 
 Cleared and recaptured per the evidence policy in `docs/agents/testing.md`:
-this root holds only the latest work package's evidence. Earlier evidence (#47, #61 and
-damage-display) is in history at `8f32c86:test-results/`.
+this root holds only the latest work package's evidence. #55's evidence is in
+history at `3c192d4:test-results/issue-55/`.
 
-Branch `feat/issue-52-bounce-wind-rotate-parts`, Windows 11, local Godot 4.6.2.
+Branch `feat/issue-53-falling-breaking-parts`, Windows 11, local Godot 4.6.2.
 
-| Change (issue #52) | Proven by | Evidence | Verdict |
+| Criterion (issue #53) | Proven by | Evidence | Verdict |
 | --- | --- | --- | --- |
-| Bounce pad launches a landing body well past its drop height, once per landing, and flashes | `bounce_pad_launches_body` | `issue-52/scenario-suite.txt` | PASS |
-| A rotated pad launches along its own local up (30 deg pad: 3.8 deg off) | `bounce_pad_rotated_launches_diagonally` | `issue-52/scenario-suite.txt` | PASS |
-| Heads: a head planted on a pad is plain ground, no launch, ordinary push-off (~490 px/s) | `bounce_pad_head_plant_is_plain_ground` | `issue-52/scenario-suite.txt` | PASS |
-| The pad carries the weapon with the body, so every weapon launches alike (within 20%) | `bounce_pad_launch_same_for_every_weapon` | `issue-52/scenario-suite.txt` | PASS |
-| Wind: calm, then a tell that brightens and speeds its streaks, then a gust that pushes, then calm; calm and tell never push | `wind_gust_tell_then_push` | `issue-52/scenario-suite.txt`, `issue-52/wind-phases.png` | PASS |
-| `steady` wind pushes every tick with the cue drawn | `wind_steady_pushes_constantly` | `issue-52/scenario-suite.txt`, `issue-52/wind-phases.png` | PASS |
-| Heads: wind never pushes a head (aim holds exactly with the head in a gust) | `wind_does_not_push_heads` | `issue-52/scenario-suite.txt` | PASS |
-| Rotating platform SPIN turns at the set rate (60.00 deg in 120 ticks at 30 deg/s) | `rotating_platform_spins_at_rate` | `issue-52/scenario-suite.txt` | PASS |
-| SEESAW tips toward a body on either end (~15 deg) and returns to level once it leaves | `seesaw_tips_toward_weight_and_levels` | `issue-52/scenario-suite.txt` | PASS |
-| Heads: a player standing on its head on a see-saw end tips it | `seesaw_tips_under_planted_head` | `issue-52/scenario-suite.txt` | PASS |
-| Heads: no boost swing tunnels a head through a spinning 20 px slab (0 of 48) | `head_does_not_tunnel_rotating_platform` | `issue-52/scenario-suite.txt` | PASS |
-| Placeholder visuals read (pad green with chevrons, flash/squash; purple striped slab with a hub; see-saw tilted under a player) | windowed capture | `issue-52/parts-overview.png` | PASS / NEEDS PLAYTEST |
-| Nothing else regressed | full suite: 107 of 109; the 2 failures are not #52's (see below) | `issue-52/scenario-suite.txt`, `issue-52/preexisting-failures.txt` | PASS |
-| Boots | `godot --headless --path . --quit`; the only error is the missing `qrencode` binary on this machine | `issue-52/boot-check.txt` | PASS |
+| Falling rock warns (shaking rock + flashing landing marker on the ground) for its configured lead time, deals nothing before it ends, then damages (exactly the configured amount, through `take_damage` + `strike_landed`, so a hitmarker is drawn) and knocks the player aside; lethal only on a player already low; one pooled rock, no node churn | `falling_rock_warns_then_strikes` | `issue-53/scenario-suite.txt`, `issue-53/01-rock-warning-floor-warning.png` | PASS |
+| Collapsing floor, `timed`: solid and grey, amber warning while still holding, then collision off, the player falls, and it is still gone well past CrumblingLedge's return time | `collapsing_floor_timed_gives_way_for_good` | `issue-53/scenario-suite.txt`, `issue-53/05-wall-broken-floor-gone.png` | PASS |
+| Collapsing floor, `stood_on`: stays solid while empty, warns after the configured standing time, holds through the warning, then gone for good | `collapsing_floor_stood_on_gives_way_for_good` | `issue-53/scenario-suite.txt`, `issue-53/01-rock-warning-floor-warning.png` | PASS |
+| Breakable wall: each head hit takes off the damage a player would take for the same hit (checked against `Player._strike_damage`); light pokes leave it standing; hard swings break it in 3 where weak ones had not in 10; cracks and darkens as HP drops; flashes, then no collision, and stays broken | `breakable_wall_breaks_on_weapon_hits` | `issue-53/scenario-suite.txt`, `issue-53/02-wall-cracked-50hp.png`, `03-wall-cracked-20hp.png`, `04-wall-break-flash.png`, `05-wall-broken-floor-gone.png` | PASS |
+| Breakable wall ignores bodies: pushed and slammed by a player, it stays at full HP, uncracked and solid | `breakable_wall_ignores_bodies` | `issue-53/scenario-suite.txt` | PASS |
+| CrumblingLedge unchanged | `crumbling_ledge_three_phases`, `erosion_island_survives_full_erosion` | `issue-53/scenario-suite.txt` | PASS |
+| Phone buzz on a rock hit | Rock emits on the victim's `strike_landed`, which `RoundManager` already turns into a `struck` buzz; not driven by a scenario | - | NEEDS PLAYTEST |
+| Boots, and boots on a fresh clone | `godot --headless --quit`; fresh `git clone` of the branch, grep for `SCRIPT ERROR` / `Failed to load script` | `issue-53/boot-check.txt` | PASS |
 
-Tuning for a playtest: pad `launch_speed` 2000 (about 500 px up); wind
-`strength` 1800 px/s^2, calm 2.5 s, tell 1.0 s, gust 1.5 s; spin 30 deg/s;
-see-saw max tilt 25 deg, settle 0.6 s.
+Screenshots were captured with a throwaway windowed script modelled on
+`tools/capture_damage_screenshots.gd` (not committed). The rock and floor
+states in them are the real parts running; the wall's worn and flashing
+states were set directly on the wall (its HP and wear display) rather than
+reached by scripted swings, which the scenario covers.
 
-Full-suite failures, neither from #52:
-
-- `four_phones_claim_four_slots`: other suites were running at the same time
-  on the shared controller port. It passes when run alone.
-- `axe_head_holds_side_near_vertical`: this one depends on order. It fails
-  when it runs in the same process after `four_phones_claim_four_slots`, and
-  the same happens on untouched origin/main `8f32c86`. It passes alone. The
-  first full run failed on this scenario only (108 of 109).
-- `roster_heads_do_not_tunnel_head_reversed`, the known pre-existing failure,
-  passes on this base.
+Full suite after rebasing onto `origin/main` at `3c192d4` (#49 axe rework,
+#55 boomstick): 91 passed, 0 failed. `roster_heads_do_not_tunnel_head_reversed`,
+which failed on `origin/main` before #49 landed (the axe, 1 charge of 12), now
+passes; nothing in this branch touches it.
