@@ -1,8 +1,10 @@
 # Test results
 
-Evidence for the latest work package only: issue #108 (physics interpolation, frame-time spikes).
+Evidence for the latest work package only: issue #109 (heads clipping through thin platforms; also closes #103 and #99).
 
-- `issue-108/full-suite.txt`: full scenario suite on `perf/issue-108-smoothness` rebased on main d0f6597: 127/130. The 3 failures (`weapon_damage_matches_roster`, `roster_heads_do_not_tunnel_thin_platform`, `axe_swing_deals_damage`, all axe) fail identically on main d0f6597.
-- `issue-108/perf.txt`: `tools/perf_probe.gd` frame-time runs, before and after, 60 Hz and 120 Hz `--demo`, three seeds each.
+- `issue-109/full-suite.txt`: full scenario suite on `fix/issue-109-clipping` rebased on main b659ff9: 138 passed, 0 failed, 138 total.
+- `issue-109/rebased-targeted.txt`: after the final rebase onto main 3e700e5, `weapon_damage_matches_roster`, `roster_heads_do_not_tunnel_thin_platform`, `axe_swing_deals_damage`, `roster_heads_do_not_clip_platform_in_play` and `spawn_protection_blocks_damage_then_expires`: 5/5. All sfx scenarios then `axe_swing_deals_damage`: 15/15.
+- `issue-109/main-red.txt`: the new `roster_heads_do_not_clip_platform_in_play` against main b659ff9's head code: boomstick 4, axe 12, sword 1 head crossings (red). 0 on the branch.
+- `issue-109/perf.txt`: per-call time of `WeaponHead._integrate_forces` and `guard_turn` from `tools/perf_probe.gd`, main against branch.
 
-Previous package: issue #93 (sound mix), `issue-93/full-suite.txt` at commit 3ab830a, 133/133. Read it from git history (`git show c89a3b0`).
+Previous package: issue #114 (spawn protection), `issue-114/` at commit 2427683. Read it from git history (`git show 2427683`).
