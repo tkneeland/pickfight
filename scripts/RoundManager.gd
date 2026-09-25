@@ -542,7 +542,7 @@ func _stop_kill_zone_rise() -> void:
 	if zone != null:
 		zone.stop_rising()
 
-# --- Round modifiers (issue #50, ADR-0014) -----------------------------------
+# --- Round modifiers (issue #50, ADR-0015) -----------------------------------
 #
 # Some rounds get one random twist from `RoundModifiers.gd`, applied right
 # after the round's players spawn and before the kill zone is armed, and

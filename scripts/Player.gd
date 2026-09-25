@@ -373,7 +373,7 @@ func set_weapon_stats(stats: WeaponStatsType) -> void:
 	# still get a rig built where the player ended up.
 	_build_rig.call_deferred()
 
-## Round modifiers (issue #50, ADR-0014): `modifier` takes the held weapon's
+## Round modifiers (issue #50, ADR-0015): `modifier` takes the held weapon's
 ## stats and returns the stats the rig is actually built from, for every
 ## weapon this player holds until it is cleared with an empty `Callable()`.
 ## `weapon_stats` stays the resource the player really holds, so what a

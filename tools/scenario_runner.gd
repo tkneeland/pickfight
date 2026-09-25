@@ -7322,7 +7322,7 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 				way, restart["tick"], quick_ticks])
 
 	await _teardown(stage)
-# --- Round modifiers (issue #50, ADR-0014) -----------------------------------
+# --- Round modifiers (issue #50, ADR-0015) -----------------------------------
 #
 # Each modifier gets one scenario that plays three rounds in a row on the same
 # RoundManager: without it, with it (forced through `forced_modifier`), and
@@ -7334,7 +7334,7 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 # undone" half: the modifier went on and came off through the real round loop,
 # not through a call made by the test.
 #
-# The numbers below are written from the design (ADR-0014), not read back out
+# The numbers below are written from the design (ADR-0015), not read back out
 # of `RoundModifiers.gd`: a test that asked the modifier what it does would
 # pass whatever it did.
 
@@ -7375,7 +7375,7 @@ const HEAVY_EXTEND_TICKS: int = 20
 const BIG_HEAD_RATIO: float = 1.5
 const BIG_HEAD_RATIO_TOLERANCE: float = 0.02
 
-## Fast lava: grace x0.4 and rise deadline x0.5 (ADR-0014). Short stand-ins
+## Fast lava: grace x0.4 and rise deadline x0.5 (ADR-0015). Short stand-ins
 ## for the rotation's 50 s / 80 s so the scenario sees the lava set off.
 const FAST_LAVA_TEST_GRACE_SEC: float = 1.0
 const FAST_LAVA_TEST_RISE_SEC: float = 4.0

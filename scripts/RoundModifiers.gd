@@ -1,6 +1,6 @@
 extends RefCounted
 
-## Round modifiers (issue #50, ADR-0014): a random twist on some rounds.
+## Round modifiers (issue #50, ADR-0015): a random twist on some rounds.
 ##
 ## Each modifier is a small object that applies itself to one round -- its
 ## players, its stage and the `RoundManager` running it -- remembers exactly

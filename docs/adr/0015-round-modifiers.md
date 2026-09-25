@@ -1,4 +1,4 @@
-# 14. Some rounds get a random modifier
+# 15. Some rounds get a random modifier
 
 - Status: Accepted
 - Date: 2026-09-24
