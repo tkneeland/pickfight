@@ -64,8 +64,8 @@ PASS  round_winner_keeps_weapon
 PASS  weapon_reach_matches_roster
       pickaxe: head arrived at 2214 px/s and took 34.0 off, its own damage is 34.0 (closest 33.1 px)
       staff: head arrived at 2208 px/s and took 20.1 off, its own damage is 20.0 (closest 29.0 px)
-      sword: head arrived at 2214 px/s and took 40.1 off, its own damage is 40.0 (closest 80.2 px)
-      axe: head arrived at 2175 px/s and took 87.7 off, its own damage is 90.0 (closest 46.9 px)
+      sword: head arrived at 2214 px/s and took 39.7 off, its own damage is 40.0 (closest 79.8 px)
+      axe: head arrived at 2174 px/s and took 87.1 off, its own damage is 90.0 (closest 43.1 px)
       dagger: head arrived at 2208 px/s and took 45.1 off, its own damage is 45.0 (closest 32.4 px)
       boomstick: head arrived at 2211 px/s and took 8.0 off, its own damage is 8.0 (closest 95.7 px)
 PASS  weapon_damage_matches_roster
@@ -80,19 +80,19 @@ PASS  weapon_responsiveness_matches_roster
       axe on the left: met 47.7 px off the midline, 14.6 px apart; axe gave way 24.6 px, dagger 60.0 px
       axe on the right: met -47.7 px off the midline, 14.7 px apart; dagger gave way 60.0 px, axe 24.7 px
 PASS  heavy_weapon_wins_clash
-      pickaxe   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
-      pickaxe   0 deg at 1200 px/s each: heads closed to   -4.3 px of each other
-      pickaxe   0 deg at 1800 px/s each: heads closed to   -1.9 px of each other
+      pickaxe   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -1.0 px of each other
+      pickaxe   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       pickaxe  45 deg at 600 px/s each: heads closed to   -1.1 px of each other
-      pickaxe  45 deg at 1200 px/s each: heads closed to   -3.2 px of each other
-      pickaxe  45 deg at 1800 px/s each: heads closed to   -6.8 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -0.5 px of each other
       pickaxe  90 deg at 600 px/s each: crossed 11.8 px apart -- a miss, not a breach
       pickaxe  90 deg at 600 px/s each: heads closed to   11.8 px of each other
-      pickaxe  90 deg at 1200 px/s each: heads closed to   -6.0 px of each other
-      pickaxe  90 deg at 1800 px/s each: heads closed to   -1.5 px of each other
-      pickaxe 135 deg at 600 px/s each: heads closed to   -3.5 px of each other
-      pickaxe 135 deg at 1200 px/s each: heads closed to   -4.7 px of each other
-      pickaxe 135 deg at 1800 px/s each: heads closed to   -1.7 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -1.6 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       staff   0 deg at 600 px/s each: heads closed to   -0.2 px of each other
       staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
@@ -103,89 +103,84 @@ PASS  heavy_weapon_wins_clash
       staff  90 deg at 600 px/s each: crossed 29.1 px apart -- a miss, not a breach
       staff  90 deg at 600 px/s each: heads closed to   29.1 px of each other
       staff  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 1800 px/s each: heads closed to   -0.1 px of each other
       staff 135 deg at 600 px/s each: crossed 37.5 px apart -- a miss, not a breach
       staff 135 deg at 600 px/s each: heads closed to   37.5 px of each other
       staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1800 px/s each: heads closed to   -0.4 px of each other
       sword   0 deg at 600 px/s each: crossed, then the correction put it back
-      sword   0 deg at 600 px/s each: heads closed to   -5.0 px of each other
-      sword   0 deg at 1200 px/s each: crossed 31.5 px apart -- a miss, not a breach
-      sword   0 deg at 1200 px/s each: heads closed to    1.2 px of each other
+      sword   0 deg at 600 px/s each: heads closed to   -5.3 px of each other
+      sword   0 deg at 1200 px/s each: crossed 36.2 px apart -- a miss, not a breach
+      sword   0 deg at 1200 px/s each: heads closed to    0.1 px of each other
       sword   0 deg at 1800 px/s each: heads closed to   -5.0 px of each other
-      sword  45 deg at 600 px/s each: crossed 20.3 px apart -- a miss, not a breach
-      sword  45 deg at 600 px/s each: heads closed to   11.6 px of each other
+      sword  45 deg at 600 px/s each: crossed 20.4 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to   11.8 px of each other
       sword  45 deg at 1200 px/s each: VOID, an elimination cut the charge short
-      sword  45 deg at 1800 px/s each: crossed 77.3 px apart -- a miss, not a breach
-      sword  45 deg at 1800 px/s each: heads closed to   25.4 px of each other
+      sword  45 deg at 1800 px/s each: crossed 76.9 px apart -- a miss, not a breach
+      sword  45 deg at 1800 px/s each: heads closed to    5.3 px of each other
       sword  90 deg at 600 px/s each: crossed 21.1 px apart -- a miss, not a breach
       sword  90 deg at 600 px/s each: heads closed to   21.1 px of each other
       sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      sword  90 deg at 1800 px/s each: crossed 21.2 px apart -- a miss, not a breach
+      sword  90 deg at 1800 px/s each: crossed 29.9 px apart -- a miss, not a breach
       sword  90 deg at 1800 px/s each: heads closed to    1.3 px of each other
-      sword 135 deg at 600 px/s each: crossed 17.8 px apart -- a miss, not a breach
-      sword 135 deg at 600 px/s each: heads closed to   12.8 px of each other
-      sword 135 deg at 1200 px/s each: crossed 27.0 px apart -- a miss, not a breach
-      sword 135 deg at 1200 px/s each: heads closed to    1.4 px of each other
-      sword 135 deg at 1800 px/s each: crossed 35.1 px apart -- a miss, not a breach
-      sword 135 deg at 1800 px/s each: heads closed to   16.1 px of each other
+      sword 135 deg at 600 px/s each: crossed 17.5 px apart -- a miss, not a breach
+      sword 135 deg at 600 px/s each: heads closed to   14.9 px of each other
+      sword 135 deg at 1200 px/s each: crossed 38.0 px apart -- a miss, not a breach
+      sword 135 deg at 1200 px/s each: heads closed to    2.8 px of each other
+      sword 135 deg at 1800 px/s each: crossed 43.5 px apart -- a miss, not a breach
+      sword 135 deg at 1800 px/s each: heads closed to    5.3 px of each other
       sword: 1 of 12 charges were void (elimination mid-charge); 11 measured
-      axe   0 deg at 600 px/s each: heads closed to   -7.2 px of each other
-      axe   0 deg at 1200 px/s each: heads closed to  -13.1 px of each other
-      axe   0 deg at 1800 px/s each: crossed 5.3 px apart -- a miss, not a breach
-      axe   0 deg at 1800 px/s each: heads closed to    5.3 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -6.9 px of each other
+      axe   0 deg at 1800 px/s each: crossed 5.2 px apart -- a miss, not a breach
+      axe   0 deg at 1800 px/s each: heads closed to    5.2 px of each other
       axe  45 deg at 600 px/s each: crossed 30.0 px apart -- a miss, not a breach
       axe  45 deg at 600 px/s each: heads closed to   30.0 px of each other
-      axe  45 deg at 1200 px/s each: heads closed to   -8.1 px of each other
-      axe  45 deg at 1800 px/s each: crossed 12.3 px apart -- a miss, not a breach
-      axe  45 deg at 1800 px/s each: heads closed to   12.3 px of each other
-      axe  90 deg at 600 px/s each: crossed 35.4 px apart -- a miss, not a breach
-      axe  90 deg at 600 px/s each: heads closed to   35.4 px of each other
-      axe  90 deg at 1200 px/s each: crossed 60.1 px apart -- a miss, not a breach
-      axe  90 deg at 1200 px/s each: heads closed to    0.7 px of each other
-      axe  90 deg at 1800 px/s each: heads closed to  -13.4 px of each other
-      axe 135 deg at 600 px/s each: crossed 4.1 px apart -- a miss, not a breach
-      axe 135 deg at 600 px/s each: heads closed to    4.1 px of each other
-      axe 135 deg at 1200 px/s each: heads closed to   -6.7 px of each other
-      axe 135 deg at 1800 px/s each: heads closed to   -2.5 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -4.4 px of each other
+      axe  45 deg at 1800 px/s each: crossed 12.4 px apart -- a miss, not a breach
+      axe  45 deg at 1800 px/s each: heads closed to   12.4 px of each other
+      axe  90 deg at 600 px/s each: crossed 35.5 px apart -- a miss, not a breach
+      axe  90 deg at 600 px/s each: heads closed to   35.5 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -1.8 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -3.9 px of each other
+      axe 135 deg at 600 px/s each: crossed 4.2 px apart -- a miss, not a breach
+      axe 135 deg at 600 px/s each: heads closed to    4.2 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -1.5 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -2.2 px of each other
       dagger   0 deg at 600 px/s each: crossed, then the correction put it back
       dagger   0 deg at 600 px/s each: heads closed to    3.2 px of each other
       dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
-      dagger   0 deg at 1800 px/s each: heads closed to   -0.6 px of each other
+      dagger   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       dagger  45 deg at 600 px/s each: crossed, then the correction put it back
-      dagger  45 deg at 600 px/s each: heads closed to   11.1 px of each other
-      dagger  45 deg at 1200 px/s each: crossed 0.1 px apart -- a miss, not a breach
-      dagger  45 deg at 1200 px/s each: heads closed to    0.0 px of each other
-      dagger  45 deg at 1800 px/s each: crossed 42.4 px apart -- a miss, not a breach
-      dagger  45 deg at 1800 px/s each: heads closed to    0.2 px of each other
+      dagger  45 deg at 600 px/s each: heads closed to   11.2 px of each other
+      dagger  45 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      dagger  45 deg at 1800 px/s each: heads closed to   -0.2 px of each other
       dagger  90 deg at 600 px/s each: crossed, then the correction put it back
       dagger  90 deg at 600 px/s each: heads closed to   10.7 px of each other
       dagger  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      dagger  90 deg at 1800 px/s each: heads closed to   -0.3 px of each other
-      dagger 135 deg at 600 px/s each: crossed 10.1 px apart -- a miss, not a breach
-      dagger 135 deg at 600 px/s each: heads closed to   10.1 px of each other
-      dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      dagger 135 deg at 1800 px/s each: crossed 29.3 px apart -- a miss, not a breach
-      dagger 135 deg at 1800 px/s each: heads closed to    0.3 px of each other
-      boomstick   0 deg at 600 px/s each: heads closed to   -0.4 px of each other
-      boomstick   0 deg at 1200 px/s each: crossed 19.8 px apart -- a miss, not a breach
-      boomstick   0 deg at 1200 px/s each: heads closed to    1.8 px of each other
-      boomstick   0 deg at 1800 px/s each: heads closed to   -2.0 px of each other
-      boomstick  45 deg at 600 px/s each: crossed 26.3 px apart -- a miss, not a breach
-      boomstick  45 deg at 600 px/s each: heads closed to    2.2 px of each other
-      boomstick  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick  45 deg at 1800 px/s each: crossed 20.0 px apart -- a miss, not a breach
-      boomstick  45 deg at 1800 px/s each: heads closed to    1.3 px of each other
-      boomstick  90 deg at 600 px/s each: crossed 26.7 px apart -- a miss, not a breach
+      dagger  90 deg at 1800 px/s each: heads closed to   -1.0 px of each other
+      dagger 135 deg at 600 px/s each: crossed 10.0 px apart -- a miss, not a breach
+      dagger 135 deg at 600 px/s each: heads closed to   10.0 px of each other
+      dagger 135 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      dagger 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      boomstick   0 deg at 600 px/s each: heads closed to   -0.5 px of each other
+      boomstick   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick   0 deg at 1800 px/s each: heads closed to   -0.9 px of each other
+      boomstick  45 deg at 600 px/s each: crossed 31.3 px apart -- a miss, not a breach
+      boomstick  45 deg at 600 px/s each: heads closed to    1.7 px of each other
+      boomstick  45 deg at 1200 px/s each: heads closed to   -0.4 px of each other
+      boomstick  45 deg at 1800 px/s each: crossed 41.8 px apart -- a miss, not a breach
+      boomstick  45 deg at 1800 px/s each: heads closed to    0.7 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 32.3 px apart -- a miss, not a breach
       boomstick  90 deg at 600 px/s each: heads closed to    0.3 px of each other
-      boomstick  90 deg at 1200 px/s each: heads closed to   -6.0 px of each other
-      boomstick  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      boomstick 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
-      boomstick 135 deg at 1200 px/s each: heads closed to   -5.8 px of each other
-      boomstick 135 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -6.1 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      boomstick 135 deg at 600 px/s each: heads closed to   -0.2 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -6.2 px of each other
+      boomstick 135 deg at 1800 px/s each: heads closed to   -2.3 px of each other
 PASS  roster_heads_do_not_tunnel_head
       pickaxe: head reaches 9.00 px forward and 6.36 px back on 150 px of weapon; bare haft runs 52.0 to 111.6 px
-      pickaxe: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.8 px of them, head surface no closer than 54.3 px, shoved 0.00 px
+      pickaxe: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.8 px of them, head surface no closer than 54.1 px, shoved 0.00 px
       pickaxe: bar at 70.0 px, held 149.5 px through it, ended -6.1 px past its top surface at 37.8 px of reach
       staff: head reaches 5.00 px forward and 0.86 px back on 240 px of weapon; bare haft runs 52.0 to 211.0 px
       staff: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.9 px of them, head surface no closer than 149.1 px, shoved 0.00 px
@@ -194,7 +189,7 @@ PASS  roster_heads_do_not_tunnel_head
       sword: no bystander half -- its head leaves -10.1 px of bare haft, and two players cannot stand closer than 52.0 px
       sword: bar at 46.1 px, held 69.5 px through it, ended -20.0 px past its top surface at 51.7 px of reach
       axe: head reaches 17.61 px forward and 19.77 px back on 140 px of weapon; bare haft runs 52.0 to 82.2 px
-      axe: bystander at 67.1 px, bodies 69.0 px apart, haft through 14.5 px of them, head surface no closer than 54.4 px, shoved 0.00 px
+      axe: bystander at 67.1 px, bodies 69.0 px apart, haft through 14.5 px of them, head surface no closer than 54.0 px, shoved 0.00 px
       axe: bar at 70.0 px, held 139.3 px through it, ended -19.5 px past its top surface at 51.4 px of reach
       dagger: head reaches 8.28 px forward and 6.18 px back on 80 px of weapon; bare haft runs 52.0 to 47.7 px
       dagger: no bystander half -- its head leaves 47.7 px of bare haft, and two players cannot stand closer than 52.0 px
@@ -244,73 +239,71 @@ PASS  stage_pickup_spawns_are_safe
 PASS  pickup_weapon_carries_to_winner_next_round
 PASS  pickup_drawn_with_weapon_art
       boomstick   0 deg at 600 px/s each: heads closed to   -0.4 px of each other
-      boomstick   0 deg at 1200 px/s each: crossed 21.9 px apart -- a miss, not a breach
-      boomstick   0 deg at 1200 px/s each: heads closed to    1.8 px of each other
-      boomstick   0 deg at 1800 px/s each: heads closed to   -2.6 px of each other
-      boomstick  45 deg at 600 px/s each: crossed 25.0 px apart -- a miss, not a breach
-      boomstick  45 deg at 600 px/s each: heads closed to    2.3 px of each other
-      boomstick  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick  45 deg at 1800 px/s each: heads closed to   -4.8 px of each other  THROUGH
-      boomstick  90 deg at 600 px/s each: crossed 26.9 px apart -- a miss, not a breach
+      boomstick   0 deg at 1200 px/s each: crossed 36.6 px apart -- a miss, not a breach
+      boomstick   0 deg at 1200 px/s each: heads closed to    1.1 px of each other
+      boomstick   0 deg at 1800 px/s each: heads closed to   -0.8 px of each other
+      boomstick  45 deg at 600 px/s each: crossed 31.1 px apart -- a miss, not a breach
+      boomstick  45 deg at 600 px/s each: heads closed to    1.8 px of each other
+      boomstick  45 deg at 1200 px/s each: heads closed to   -0.3 px of each other
+      boomstick  45 deg at 1800 px/s each: crossed 19.9 px apart -- a miss, not a breach
+      boomstick  45 deg at 1800 px/s each: heads closed to    0.7 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 32.2 px apart -- a miss, not a breach
       boomstick  90 deg at 600 px/s each: heads closed to    0.3 px of each other
-      boomstick  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -2.9 px of each other
       boomstick  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      boomstick 135 deg at 600 px/s each: heads closed to   -0.3 px of each other
-      boomstick 135 deg at 1200 px/s each: crossed 27.5 px apart -- a miss, not a breach
+      boomstick 135 deg at 600 px/s each: heads closed to   -0.5 px of each other
+      boomstick 135 deg at 1200 px/s each: crossed 42.0 px apart -- a miss, not a breach
       boomstick 135 deg at 1200 px/s each: heads closed to    0.1 px of each other
-      boomstick 135 deg at 1800 px/s each: heads closed to   -0.7 px of each other
+      boomstick 135 deg at 1800 px/s each: heads closed to   -1.7 px of each other
       dagger   0 deg at 600 px/s each: crossed 3.5 px apart -- a miss, not a breach
       dagger   0 deg at 600 px/s each: heads closed to    3.5 px of each other
       dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
-      dagger   0 deg at 1800 px/s each: heads closed to   -0.5 px of each other
-      dagger  45 deg at 600 px/s each: crossed 11.1 px apart -- a miss, not a breach
-      dagger  45 deg at 600 px/s each: heads closed to   11.1 px of each other
-      dagger  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      dagger  45 deg at 1800 px/s each: crossed 43.0 px apart -- a miss, not a breach
-      dagger  45 deg at 1800 px/s each: heads closed to    0.2 px of each other
+      dagger   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      dagger  45 deg at 600 px/s each: crossed 11.2 px apart -- a miss, not a breach
+      dagger  45 deg at 600 px/s each: heads closed to   11.2 px of each other
+      dagger  45 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      dagger  45 deg at 1800 px/s each: heads closed to   -0.2 px of each other
       dagger  90 deg at 600 px/s each: crossed 10.6 px apart -- a miss, not a breach
       dagger  90 deg at 600 px/s each: heads closed to   10.6 px of each other
       dagger  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      dagger  90 deg at 1800 px/s each: heads closed to   -2.9 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -1.7 px of each other
       dagger 135 deg at 600 px/s each: crossed 10.1 px apart -- a miss, not a breach
       dagger 135 deg at 600 px/s each: heads closed to   10.1 px of each other
       dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      dagger 135 deg at 1800 px/s each: crossed 29.5 px apart -- a miss, not a breach
-      dagger 135 deg at 1800 px/s each: heads closed to    0.3 px of each other
-      axe   0 deg at 600 px/s each: heads closed to   -6.7 px of each other
-      axe   0 deg at 1200 px/s each: heads closed to  -10.4 px of each other
-      axe   0 deg at 1800 px/s each: heads closed to  -11.7 px of each other
+      dagger 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -1.6 px of each other
+      axe   0 deg at 1800 px/s each: heads closed to   -1.5 px of each other
       axe  45 deg at 600 px/s each: heads closed to   -0.2 px of each other
-      axe  45 deg at 1200 px/s each: heads closed to   -2.4 px of each other
-      axe  45 deg at 1800 px/s each: heads closed to   -2.3 px of each other
-      axe  90 deg at 600 px/s each: heads closed to  -10.0 px of each other
-      axe  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      axe  90 deg at 1800 px/s each: heads closed to   -2.5 px of each other
-      axe 135 deg at 600 px/s each: heads closed to  -10.5 px of each other
-      axe 135 deg at 1200 px/s each: heads closed to   -2.5 px of each other
-      axe 135 deg at 1800 px/s each: heads closed to   -1.8 px of each other
-      sword   0 deg at 600 px/s each: crossed 28.2 px apart -- a miss, not a breach
-      sword   0 deg at 600 px/s each: heads closed to    3.0 px of each other
-      sword   0 deg at 1200 px/s each: crossed 34.5 px apart -- a miss, not a breach
-      sword   0 deg at 1200 px/s each: heads closed to    7.2 px of each other
-      sword   0 deg at 1800 px/s each: heads closed to   -5.8 px of each other
-      sword  45 deg at 600 px/s each: crossed 17.5 px apart -- a miss, not a breach
-      sword  45 deg at 600 px/s each: heads closed to   17.5 px of each other
-      sword  45 deg at 1200 px/s each: crossed 38.5 px apart -- a miss, not a breach
-      sword  45 deg at 1200 px/s each: heads closed to    1.9 px of each other
-      sword  45 deg at 1800 px/s each: crossed 67.8 px apart -- a miss, not a breach
-      sword  45 deg at 1800 px/s each: heads closed to   16.6 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -0.6 px of each other
+      axe  45 deg at 1800 px/s each: heads closed to   -2.1 px of each other
+      axe  90 deg at 600 px/s each: heads closed to   -2.6 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -1.3 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -1.3 px of each other
+      axe 135 deg at 600 px/s each: heads closed to   -2.2 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -0.7 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -1.6 px of each other
+      sword   0 deg at 600 px/s each: crossed 30.5 px apart -- a miss, not a breach
+      sword   0 deg at 600 px/s each: heads closed to    3.1 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -0.3 px of each other
+      sword   0 deg at 1800 px/s each: heads closed to   -5.7 px of each other
+      sword  45 deg at 600 px/s each: crossed 17.7 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to   17.7 px of each other
+      sword  45 deg at 1200 px/s each: crossed 41.1 px apart -- a miss, not a breach
+      sword  45 deg at 1200 px/s each: heads closed to    3.0 px of each other
+      sword  45 deg at 1800 px/s each: crossed 71.9 px apart -- a miss, not a breach
+      sword  45 deg at 1800 px/s each: heads closed to    5.4 px of each other
       sword  90 deg at 600 px/s each: crossed, then the correction put it back
       sword  90 deg at 600 px/s each: heads closed to   13.2 px of each other
       sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      sword  90 deg at 1800 px/s each: crossed 30.7 px apart -- a miss, not a breach
+      sword  90 deg at 1800 px/s each: crossed 47.3 px apart -- a miss, not a breach
       sword  90 deg at 1800 px/s each: heads closed to    3.1 px of each other
-      sword 135 deg at 600 px/s each: crossed 26.8 px apart -- a miss, not a breach
-      sword 135 deg at 600 px/s each: heads closed to    9.9 px of each other
-      sword 135 deg at 1200 px/s each: crossed 28.3 px apart -- a miss, not a breach
-      sword 135 deg at 1200 px/s each: heads closed to    1.4 px of each other
-      sword 135 deg at 1800 px/s each: crossed 59.5 px apart -- a miss, not a breach
-      sword 135 deg at 1800 px/s each: heads closed to   11.8 px of each other
+      sword 135 deg at 600 px/s each: crossed 27.5 px apart -- a miss, not a breach
+      sword 135 deg at 600 px/s each: heads closed to   12.2 px of each other
+      sword 135 deg at 1200 px/s each: crossed 37.5 px apart -- a miss, not a breach
+      sword 135 deg at 1200 px/s each: heads closed to    2.8 px of each other
+      sword 135 deg at 1800 px/s each: crossed 68.9 px apart -- a miss, not a breach
+      sword 135 deg at 1800 px/s each: heads closed to    4.7 px of each other
       staff   0 deg at 600 px/s each: heads closed to   -0.2 px of each other
       staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
@@ -321,27 +314,26 @@ PASS  pickup_drawn_with_weapon_art
       staff  90 deg at 600 px/s each: crossed 29.1 px apart -- a miss, not a breach
       staff  90 deg at 600 px/s each: heads closed to   29.1 px of each other
       staff  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 1800 px/s each: heads closed to   -0.1 px of each other
       staff 135 deg at 600 px/s each: crossed 36.6 px apart -- a miss, not a breach
       staff 135 deg at 600 px/s each: heads closed to   36.6 px of each other
       staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      pickaxe   0 deg at 600 px/s each: heads closed to   -2.7 px of each other
-      pickaxe   0 deg at 1200 px/s each: heads closed to   -0.6 px of each other
-      pickaxe   0 deg at 1800 px/s each: heads closed to   -2.0 px of each other
+      staff 135 deg at 1800 px/s each: heads closed to   -0.4 px of each other
+      pickaxe   0 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      pickaxe   0 deg at 1800 px/s each: crossed 14.7 px apart -- a miss, not a breach
+      pickaxe   0 deg at 1800 px/s each: heads closed to    0.0 px of each other
       pickaxe  45 deg at 600 px/s each: crossed 6.6 px apart -- a miss, not a breach
       pickaxe  45 deg at 600 px/s each: heads closed to    6.6 px of each other
-      pickaxe  45 deg at 1200 px/s each: heads closed to   -4.0 px of each other
-      pickaxe  45 deg at 1800 px/s each: heads closed to   -2.6 px of each other
-      pickaxe  90 deg at 600 px/s each: heads closed to   -0.0 px of each other
-      pickaxe  90 deg at 1200 px/s each: heads closed to   -2.0 px of each other
-      pickaxe  90 deg at 1800 px/s each: heads closed to   -3.1 px of each other
-      pickaxe 135 deg at 600 px/s each: heads closed to   -2.3 px of each other
-      pickaxe 135 deg at 1200 px/s each: heads closed to   -0.3 px of each other
-      pickaxe 135 deg at 1800 px/s each: heads closed to   -6.5 px of each other
-FAIL  roster_heads_do_not_tunnel_head_reversed
-      - boomstick, 45 deg approach at 1800 px/s each: one step took the heads from (-2.175503, 44.29773) apart to (-33.28123, 19.39172) apart -- through each other and out the far side -- without the two of them ever once being in contact
-      - boomstick: 1 of 12 completed charges put a head through another head
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      pickaxe  90 deg at 600 px/s each: heads closed to   -0.7 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -0.5 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.4 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -0.8 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -3.9 px of each other
+PASS  roster_heads_do_not_tunnel_head_reversed
       2 strike(s) reported, victim on 45.3 damage, 1 marker(s), 2 number(s)
 PASS  strike_shows_hitmarker_and_number
       5 strike(s) to eliminate, 5 marker(s)
@@ -361,9 +353,9 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2754)
+       [0] _await_condition (res://tools/scenario_runner.gd:2798)
 PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.20.1.170:65529/
+Controller page: http://172.20.1.170:49339/
 PASS  four_phones_claim_four_slots
 PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
@@ -377,7 +369,7 @@ PASS  damaging_strike_buzzes_victim_and_attacker
 PASS  zero_damage_strike_buzzes_no_one
       5 strike(s) to eliminate slot 2, buzzes: [[2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "eliminated"], [2, "struck"], [0, "hit"], [0, "win"]]
 PASS  elimination_buzzes_eliminated_player
-Controller page: http://172.20.1.170:49152/
+Controller page: http://172.20.1.170:49348/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       the axe aimed at -45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
@@ -488,5 +480,31 @@ PASS  breakable_wall_breaks_on_weapon_hits
 PASS  breakable_wall_ignores_bodies
       wall took 3 bullet hit(s), on 0.0 HP, solid false; player behind took 0.0
 PASS  boomstick_bullet_damages_breakable_wall
+      requested: ["hit_sword", "hit_sword"]
+PASS  sfx_strike_sounds_as_attackers_weapon
+      wall requested: ["head_terrain"]
+      clash requested: ["clash"]
+PASS  sfx_head_meets_terrain_and_head
+      drop requested: ["land"]
+PASS  sfx_landing_and_elimination
+      requested: ["fire_boomstick", "bullet_impact"]
+PASS  sfx_boomstick_shot_and_impact
+      requested: ["modifier", "round_start", "eliminated", "round_win", "modifier", "round_start"]
+PASS  sfx_round_events
+      lava requested: ["countdown", "countdown", "countdown", "lava_rise"]
+PASS  sfx_lava_countdown_rise_and_sizzle
+PASS  sfx_join_sounds
+      6 damage: -7.64 dB, pitch 1.034; 54 damage: -0.58 dB, pitch 0.911
+PASS  sfx_strength_scales_volume
+      clash: cap 3, peak 3 playing, 3 nodes
+      round_start: cap 1, peak 1 playing, 1 nodes
+PASS  sfx_overlap_cap_holds
+      sets: ["pickaxe", "staff", "sword", "axe", "dagger", "boomstick"]
+PASS  sfx_weapon_sound_sets_distinct
+      39 files, 587 KB, 12 hook literals
+PASS  sfx_sound_files_exist
+PASS  sfx_volume_slider_and_mute
+      captured #77 pose: anchor -9.6 px along its own haft; heads 19.95 px apart as the charge sweep measures them, 19.95 px apart as the physics has them
+PASS  charge_measures_heads_where_physics_has_them
 ---
-114 passed, 1 failed, 115 total
+128 passed, 0 failed, 128 total

@@ -1,0 +1,11 @@
+# origin/main a3c8fed + the new scenario only, before the fix
+# godot --headless --path . -s tools/scenario_runner.gd -- --scenario=charge_measures_heads_where_physics_has_them
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      captured #77 pose: anchor -9.6 px along its own haft; heads -4.80 px apart as the charge sweep measures them, 19.95 px apart as the physics has them
+FAIL  charge_measures_heads_where_physics_has_them
+      - attacker: the charge sweep puts a head circle 125.9 px from where the physics has it
+      - blocker: the charge sweep puts a head circle 13.1 px from where the physics has it
+      - the charge sweep measures the heads overlapping by 4.80 px -- a breach -- where the physics has them 19.95 px apart
+---
+0 passed, 1 failed, 1 total

@@ -168,6 +168,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_weapon_sound_sets_distinct",
 	"sfx_sound_files_exist",
 	"sfx_volume_slider_and_mute",
+	"charge_measures_heads_where_physics_has_them",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -826,6 +827,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_sfx_sound_files_exist()
 		"sfx_volume_slider_and_mute":
 			return await _scenario_sfx_volume_slider_and_mute()
+		"charge_measures_heads_where_physics_has_them":
+			return await _scenario_charge_measures_heads_where_physics_has_them()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -4239,12 +4242,8 @@ func _head_rear_extent(player: RigidBody2D) -> float:
 ## The gap between a world point and the nearest **surface** of the head a
 ## player is holding: negative once the point is inside one of its circles.
 ##
-## Built from the two things a player will tell anyone -- where the head is
-## and what circles it is made of -- plus the one rule the rig turns it by:
-## head-local +X points outward along the haft. So the facing is read back out
-## of the weapon's own geometry, from the player to the head, rather than off
-## any node in the rig, and this stays true through the rig swap ADR-0006
-## reserves the right to make.
+## Measured on the circles where the physics has them; see
+## `_head_circles_world`.
 func _head_circle_clearance(player: RigidBody2D, point: Vector2) -> float:
 	var clearance: float = INF
 	for circle: Dictionary in _head_circles_world(player):
@@ -4252,25 +4251,24 @@ func _head_circle_clearance(player: RigidBody2D, point: Vector2) -> float:
 		clearance = minf(clearance, centre.distance_to(point) - float(circle["radius"]))
 	return clearance
 
-## The head a player is holding, circle by circle, **in world coordinates**.
+## The head a player is holding, circle by circle, **in world coordinates**:
+## where the physics has them, read off `Player.weapon_head_circles_world()`.
+## That is still the player's public surface, so it survives the rig swap
+## ADR-0006 reserves the right to make.
 ##
-## Built from the two things a player will tell anyone -- where its head is and
-## what circles it is made of -- plus the one rule the rig turns the cluster
-## by: head-local +X points outward along the haft. So the facing is recovered
-## from the weapon's own geometry, player to head, rather than read off a node
-## inside the rig, and this survives the rig swap ADR-0006 reserves the right
-## to make.
+## **Not rebuilt from the anchor and the player-to-head direction any more
+## (issue #77).** That assumed the head's facing points from the body to the
+## anchor, and the head's facing is the haft's, which lags the anchor and need
+## not point at it. Usually the difference is a few pixels. On a light head it
+## can be the whole head: the boomstick (mass 0.1) stopped dead on a body mid
+## charge while its own body, still moving at 1800 px/s, ran past it. Its
+## anchor ended up 13 px *behind* the body with the haft still pointing
+## forward. Rebuilt, the barrel faced backwards onto the other head and read
+## 4.8 px of overlap, and `roster_heads_do_not_tunnel_head_reversed` failed a
+## breach that the physics' own circles, 19.9 px apart, never had. See
+## `charge_measures_heads_where_physics_has_them`.
 func _head_circles_world(player: RigidBody2D) -> Array[Dictionary]:
-	var anchor: Vector2 = player.weapon_head_position()
-	var facing: float = (anchor - player.global_position).angle()
-	var circles: Array[Dictionary] = []
-	for circle: Dictionary in player.weapon_head_circles():
-		var offset: Vector2 = circle["offset"]
-		circles.append({
-			"centre": anchor + offset.rotated(facing),
-			"radius": float(circle["radius"]),
-		})
-	return circles
+	return player.weapon_head_circles_world()
 
 ## The gap between two heads, surface to surface: the closest any circle of
 ## one gets to any circle of the other. Zero is touching and negative is
@@ -10325,4 +10323,102 @@ func _scenario_sfx_volume_slider_and_mute() -> Array[String]:
 	sfx.set_muted(was_muted)
 	ui.refresh()
 	_scenario_completed = true
+	return failures
+
+# --- A charge measured on the heads the physics has (issue #77) -------------
+
+## The #77 "breach", as captured from the one suite history that produced it:
+## `roster_heads_do_not_tunnel_head_reversed`, the boomstick's 45 deg charge
+## at 1800 px/s, on the tick the scenario called a head through a head. Body
+## and head anchor positions and each head's real facing (the haft's, which
+## the circles and the art are turned to), relative to the fixture's centre.
+##
+## The attacker's light head (mass 0.1) had just been stopped dead on the
+## blocker's body by the world sweep, and its own body, held at 1800 px/s by
+## the charge, ran on past it: the anchor sits 13 px *behind* its body while
+## the haft still points forward at 0.44 rad. Rebuilding the facing from body
+## to anchor turns the barrel round to 2.82 rad, straight back onto the other
+## head, and reads -4.8 px of overlap. The circles the physics has are 19.9
+## px apart.
+const CAPTURED_77_ATTACKER_BODY: Vector2 = Vector2(-4.69195, -21.761)
+const CAPTURED_77_ATTACKER_HEAD: Vector2 = Vector2(-17.34456, -17.477)
+const CAPTURED_77_ATTACKER_FACING: float = 0.44250103831291
+const CAPTURED_77_BLOCKER_BODY: Vector2 = Vector2(0.722947, 24.276)
+const CAPTURED_77_BLOCKER_HEAD: Vector2 = Vector2(-50.62579, 1.915)
+const CAPTURED_77_BLOCKER_FACING: float = -2.92381620407104
+## How far a measured circle may sit from where the physics has it: float
+## noise, nothing more.
+const CAPTURED_77_CIRCLE_TOLERANCE: float = 0.01
+
+## Issue #77: the head-tunnel scenarios measure the heads **where the physics
+## has them**.
+##
+## `roster_heads_do_not_tunnel_head_reversed` failed deterministically on the
+## boomstick with a head it said had gone through the other. It had not: on
+## the physics' own circles the two heads were never closer than 19.9 px in
+## that step, and `WeaponHead`'s pair sweep rightly did nothing. The overlap
+## was in the measurement, which rebuilt each head's facing from the player
+## to its anchor. A light head stopped on a body while its own body keeps
+## coming ends up behind that body, and the rebuilt barrel points backwards.
+##
+## This builds that exact pose -- two boomsticks, aimed at the captured
+## facings in clear air, then bodies and anchors put where they were -- and
+## asks the measurement the charge sweep uses, with no physics step in
+## between. It has to agree with `Player.weapon_head_circles_world()` circle
+## for circle, and so has to find the two heads apart.
+func _scenario_charge_measures_heads_where_physics_has_them() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var stats: WeaponStatsType = load("res://resources/boomstick.tres")
+	var attacker: RigidBody2D = _spawn_player(stage, centre + CAPTURED_77_ATTACKER_BODY)
+	var blocker: RigidBody2D = _spawn_player(stage, centre + CAPTURED_77_BLOCKER_BODY + Vector2(0.0, 200.0))
+	attacker.set_weapon_stats(stats)
+	blocker.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	attacker.set_input_vector(Vector2.from_angle(CAPTURED_77_ATTACKER_FACING))
+	blocker.set_input_vector(Vector2.from_angle(CAPTURED_77_BLOCKER_FACING))
+	await _await_ticks(SETTLE_TICKS)
+
+	# Straight into the captured pose between two physics steps. Teleporting
+	# the body carries the haft and head with it and leaves the facing alone;
+	# the anchor is then put where the charge had left it.
+	attacker.teleport_to(centre + CAPTURED_77_ATTACKER_BODY)
+	blocker.teleport_to(centre + CAPTURED_77_BLOCKER_BODY)
+	attacker._head.global_position = centre + CAPTURED_77_ATTACKER_HEAD
+	blocker._head.global_position = centre + CAPTURED_77_BLOCKER_HEAD
+
+	# The pose has to be the #77 one or this proves nothing: the attacker's
+	# anchor behind its own body along the way its haft points.
+	var haft: Vector2 = Vector2.from_angle(CAPTURED_77_ATTACKER_FACING)
+	var anchor_along: float = (attacker.weapon_head_position() - attacker.global_position).dot(haft)
+	if anchor_along >= 0.0:
+		failures.append("fixture: the attacker's anchor is %.1f px ahead of its body along the haft, not behind it as in #77" % anchor_along)
+
+	var physics_gap: float = _head_surface_gap(
+		attacker.weapon_head_circles_world(), blocker.weapon_head_circles_world())
+	var measured_a: Array[Dictionary] = _head_circles_world(attacker)
+	var measured_b: Array[Dictionary] = _head_circles_world(blocker)
+	var measured_gap: float = _head_surface_gap(measured_a, measured_b)
+	print("      captured #77 pose: anchor %.1f px along its own haft; heads %.2f px apart as the charge sweep measures them, %.2f px apart as the physics has them" % [
+		anchor_along, measured_gap, physics_gap])
+
+	for pair: Array in [[attacker, measured_a, "attacker"], [blocker, measured_b, "blocker"]]:
+		var real: Array[Dictionary] = pair[0].weapon_head_circles_world()
+		var measured: Array[Dictionary] = pair[1]
+		if measured.size() != real.size():
+			failures.append("%s: the charge sweep measured %d circles, the physics has %d" % [pair[2], measured.size(), real.size()])
+			continue
+		var worst: float = 0.0
+		for i in real.size():
+			worst = maxf(worst, Vector2(measured[i]["centre"]).distance_to(real[i]["centre"]))
+		if worst > CAPTURED_77_CIRCLE_TOLERANCE:
+			failures.append("%s: the charge sweep puts a head circle %.1f px from where the physics has it" % [pair[2], worst])
+	if physics_gap <= 0.0:
+		failures.append("fixture: the physics' own circles overlap by %.2f px, so this is not the #77 pose" % -physics_gap)
+	if measured_gap < -WeaponHeadType.PAIR_OVERLAP_ALLOWANCE:
+		failures.append("the charge sweep measures the heads overlapping by %.2f px -- a breach -- where the physics has them %.2f px apart" % [
+			-measured_gap, physics_gap])
+
+	await _teardown(stage)
 	return failures
