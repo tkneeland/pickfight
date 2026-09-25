@@ -1,3 +1,0 @@
-Fresh-clone boot check, feat/issue-45-playtest-tuning @ f1a9447
-$ git clone -q . <clone> && godot --headless --path <clone> --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
-(no output -- clean)

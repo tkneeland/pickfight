@@ -44,7 +44,7 @@ PASS  identity_colours_match_controller_page
       pickaxe.tres: 13 circles against 26 points of art, worst fit -0.05 px outside it (negative is inside, clear)
       staff.tres: 1 circles against 20 points of art, worst fit +0.00 px outside it (negative is inside, clear)
       sword.tres: 23 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
-      axe.tres: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      axe.tres: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
       dagger.tres: 7 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
       the default head: 1 circles against 16 points of art, worst fit +0.00 px outside it (negative is inside, clear)
       misfitted head: 1 circles against 16 points of art, worst fit +23.84 px outside it (negative is inside, clear)
@@ -63,18 +63,18 @@ PASS  weapon_reach_matches_roster
       pickaxe: head arrived at 2214 px/s and took 34.0 off, its own damage is 34.0 (closest 33.1 px)
       staff: head arrived at 2208 px/s and took 20.1 off, its own damage is 20.0 (closest 29.0 px)
       sword: head arrived at 2214 px/s and took 40.1 off, its own damage is 40.0 (closest 80.2 px)
-      axe: head arrived at 2183 px/s and took 69.2 off, its own damage is 70.0 (closest 29.1 px)
+      axe: head arrived at 2175 px/s and took 87.7 off, its own damage is 90.0 (closest 46.9 px)
       dagger: head arrived at 2208 px/s and took 45.1 off, its own damage is 45.0 (closest 32.4 px)
 PASS  weapon_damage_matches_roster
       pickaxe: answered a drag from 20.0 px out to 70.0 px in 5 ticks
       staff: answered a drag from 20.0 px out to 70.0 px in 7 ticks
       sword: answered a drag from 20.0 px out to 70.0 px in 4 ticks
-      axe: answered a drag from 20.0 px out to 70.0 px in 9 ticks
+      axe: answered a drag from 27.6 px out to 70.0 px in 10 ticks
       dagger: answered a drag from 20.0 px out to 70.0 px in 3 ticks
 PASS  weapon_responsiveness_matches_roster
       dagger against dagger: met -0.6 px off the midline, 16.3 px apart; gave way 13.7 px and 12.5 px
-      axe on the left: met 42.6 px off the midline, 24.9 px apart; axe gave way 34.9 px, dagger 60.0 px
-      axe on the right: met -42.6 px off the midline, 24.7 px apart; dagger gave way 60.0 px, axe 34.7 px
+      axe on the left: met 47.7 px off the midline, 14.6 px apart; axe gave way 24.6 px, dagger 60.0 px
+      axe on the right: met -47.7 px off the midline, 14.7 px apart; dagger gave way 60.0 px, axe 24.7 px
 PASS  heavy_weapon_wins_clash
       pickaxe   0 deg at 600 px/s each: heads closed to   -2.6 px of each other
       pickaxe   0 deg at 1200 px/s each: heads closed to   -1.9 px of each other
@@ -126,23 +126,19 @@ PASS  heavy_weapon_wins_clash
       sword 135 deg at 1800 px/s each: crossed 68.3 px apart -- a miss, not a breach
       sword 135 deg at 1800 px/s each: heads closed to   13.5 px of each other
       sword: 2 of 12 charges were void (elimination mid-charge); 10 measured
-      axe   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
-      axe   0 deg at 1200 px/s each: heads closed to   -8.5 px of each other
-      axe   0 deg at 1800 px/s each: crossed 3.8 px apart -- a miss, not a breach
-      axe   0 deg at 1800 px/s each: heads closed to    1.8 px of each other
-      axe  45 deg at 600 px/s each: crossed 30.7 px apart -- a miss, not a breach
-      axe  45 deg at 600 px/s each: heads closed to   30.7 px of each other
-      axe  45 deg at 1200 px/s each: crossed 19.3 px apart -- a miss, not a breach
-      axe  45 deg at 1200 px/s each: heads closed to   19.3 px of each other
-      axe  45 deg at 1800 px/s each: heads closed to   -3.1 px of each other
-      axe  90 deg at 600 px/s each: crossed 26.8 px apart -- a miss, not a breach
-      axe  90 deg at 600 px/s each: heads closed to   26.8 px of each other
-      axe  90 deg at 1200 px/s each: heads closed to  -10.7 px of each other
-      axe  90 deg at 1800 px/s each: heads closed to   -5.9 px of each other
-      axe 135 deg at 600 px/s each: crossed 30.1 px apart -- a miss, not a breach
-      axe 135 deg at 600 px/s each: heads closed to   30.1 px of each other
-      axe 135 deg at 1200 px/s each: heads closed to   -0.1 px of each other
-      axe 135 deg at 1800 px/s each: heads closed to   -0.7 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -0.8 px of each other
+      axe   0 deg at 1800 px/s each: heads closed to   -3.9 px of each other
+      axe  45 deg at 600 px/s each: heads closed to  -13.0 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -2.9 px of each other
+      axe  45 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      axe  90 deg at 600 px/s each: heads closed to  -13.0 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -8.7 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to  -17.4 px of each other
+      axe 135 deg at 600 px/s each: crossed 23.7 px apart -- a miss, not a breach
+      axe 135 deg at 600 px/s each: heads closed to   23.7 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to  -19.7 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to    0.1 px of each other
       dagger   0 deg at 600 px/s each: crossed, then the correction put it back
       dagger   0 deg at 600 px/s each: heads closed to    3.2 px of each other
       dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
@@ -172,9 +168,9 @@ PASS  roster_heads_do_not_tunnel_head
       sword: head reaches 56.10 px forward and 16.95 px back on 70 px of weapon; bare haft runs 52.0 to -10.1 px
       sword: no bystander half -- its head leaves -10.1 px of bare haft, and two players cannot stand closer than 52.0 px
       sword: bar at 46.1 px, held 69.5 px through it, ended -20.0 px past its top surface at 51.7 px of reach
-      axe: head reaches 19.23 px forward and 34.43 px back on 140 px of weapon; bare haft runs 52.0 to 79.9 px
-      axe: bystander at 65.9 px, bodies 66.6 px apart, haft through 18.6 px of them, head surface no closer than 39.5 px, shoved 0.00 px
-      axe: bar at 70.0 px, held 139.4 px through it, ended -34.1 px past its top surface at 65.8 px of reach
+      axe: head reaches 17.61 px forward and 19.77 px back on 140 px of weapon; bare haft runs 52.0 to 82.2 px
+      axe: bystander at 67.1 px, bodies 69.0 px apart, haft through 14.5 px of them, head surface no closer than 54.4 px, shoved 0.00 px
+      axe: bar at 70.0 px, held 139.3 px through it, ended -19.5 px past its top surface at 51.4 px of reach
       dagger: head reaches 8.28 px forward and 6.18 px back on 80 px of weapon; bare haft runs 52.0 to 47.7 px
       dagger: no bystander half -- its head leaves 47.7 px of bare haft, and two players cannot stand closer than 52.0 px
       dagger: bar at 66.8 px, held 79.5 px through it, ended -10.3 px past its top surface at 42.0 px of reach
@@ -236,21 +232,20 @@ PASS  pickup_drawn_with_weapon_art
       dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       dagger 135 deg at 1800 px/s each: crossed 29.3 px apart -- a miss, not a breach
       dagger 135 deg at 1800 px/s each: heads closed to    0.3 px of each other
-      axe   0 deg at 600 px/s each: heads closed to   -0.5 px of each other
-      axe   0 deg at 1200 px/s each: heads closed to   -7.7 px of each other
-      axe   0 deg at 1800 px/s each: heads closed to   -2.2 px of each other
-      axe  45 deg at 600 px/s each: crossed 31.4 px apart -- a miss, not a breach
-      axe  45 deg at 600 px/s each: heads closed to   31.4 px of each other
-      axe  45 deg at 1200 px/s each: crossed 5.3 px apart -- a miss, not a breach
-      axe  45 deg at 1200 px/s each: heads closed to    0.2 px of each other
-      axe  45 deg at 1800 px/s each: heads closed to   -5.9 px of each other
-      axe  90 deg at 600 px/s each: crossed 41.6 px apart -- a miss, not a breach
-      axe  90 deg at 600 px/s each: heads closed to   41.1 px of each other
-      axe  90 deg at 1200 px/s each: heads closed to  -17.8 px of each other
-      axe  90 deg at 1800 px/s each: heads closed to   -3.3 px of each other
-      axe 135 deg at 600 px/s each: heads closed to   -0.1 px of each other
-      axe 135 deg at 1200 px/s each: heads closed to   -3.2 px of each other
-      axe 135 deg at 1800 px/s each: heads closed to  -10.4 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -5.9 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      axe   0 deg at 1800 px/s each: crossed 29.1 px apart -- a miss, not a breach
+      axe   0 deg at 1800 px/s each: heads closed to    2.0 px of each other
+      axe  45 deg at 600 px/s each: crossed 4.7 px apart -- a miss, not a breach
+      axe  45 deg at 600 px/s each: heads closed to    4.7 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -8.6 px of each other
+      axe  45 deg at 1800 px/s each: heads closed to   -1.1 px of each other
+      axe  90 deg at 600 px/s each: heads closed to  -12.7 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -6.0 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -2.9 px of each other
+      axe 135 deg at 600 px/s each: heads closed to   -4.0 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -3.4 px of each other
       sword   0 deg at 600 px/s each: crossed 26.0 px apart -- a miss, not a breach
       sword   0 deg at 600 px/s each: heads closed to    2.9 px of each other
       sword   0 deg at 1200 px/s each: heads closed to   -1.9 px of each other
@@ -339,15 +334,15 @@ PASS  elimination_buzzes_eliminated_player
 Controller page: http://172.19.9.117:18480/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
-      the axe aimed at -45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at 0 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at 45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at -135 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at 180 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at 135 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at -45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at 0 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
-      the axe aimed at 45 deg: 16 circles against 79 points of art, worst fit -0.02 px outside it (negative is inside, clear)
+      the axe aimed at -45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at 0 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at 45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at -135 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at 180 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at 135 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at -45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at 0 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      the axe aimed at 45 deg: 16 circles against 22 points of art, worst fit -0.05 px outside it (negative is inside, clear)
 PASS  axe_head_mirrors_with_aim
 PASS  symmetric_head_ignores_aim_side
 PASS  axe_head_holds_side_near_vertical
