@@ -1,0 +1,25 @@
+# Throwaway headless traversal probe (issue #59): cross-entropy search over input sequences,
+# 48 lanes x up to 12 generations; stops early once half a generation succeeds. success_total counts
+# successful lanes across all generations run; gen0 = random first-generation successes.
+# Target = body settled (<80 px/s for 20 ticks) on the destination surface.
+before flat_left RESULT weapon=pickaxe best=10632.0 gen0=6/48 first_gen=0 gens=11 success_total=98 MAKEABLE
+before flat_left RESULT weapon=axe best=10571.0 gen0=0/48 first_gen=3 gens=12 success_total=112 MAKEABLE
+before flat_left RESULT weapon=sword best=10433.0 gen0=2/48 first_gen=0 gens=12 success_total=15 MAKEABLE
+before flat_left RESULT weapon=dagger best=-52.2 gen0=0/48 first_gen=-1 gens=12 success_total=0 NOT_FOUND
+before flat_right RESULT weapon=staff best=10589.0 gen0=3/48 first_gen=0 gens=6 success_total=62 MAKEABLE
+before flat_right RESULT weapon=pickaxe best=10586.0 gen0=3/48 first_gen=0 gens=5 success_total=61 MAKEABLE
+before flat_right RESULT weapon=axe best=10580.0 gen0=1/48 first_gen=0 gens=11 success_total=120 MAKEABLE
+before flat_right RESULT weapon=sword best=10535.0 gen0=0/48 first_gen=1 gens=12 success_total=30 MAKEABLE
+before flat_right RESULT weapon=dagger best=10500.0 gen0=0/48 first_gen=5 gens=12 success_total=11 MAKEABLE
+before flat_left RESULT weapon=boomstick best=10557.0 gen0=0/48 first_gen=5 gens=12 success_total=78 MAKEABLE
+before flat_right RESULT weapon=boomstick best=10560.0 gen0=1/48 first_gen=0 gens=12 success_total=68 MAKEABLE
+before flat_left RESULT weapon=staff best=10605.0 gen0=4/48 first_gen=0 gens=8 success_total=107 MAKEABLE
+after24 flat_left RESULT weapon=dagger best=-29.7 gen0=0/48 first_gen=-1 gens=12 success_total=0 NOT_FOUND
+after24 flat_left RESULT weapon=sword best=10526.0 gen0=1/48 first_gen=0 gens=12 success_total=35 MAKEABLE
+after24 flat_left RESULT weapon=boomstick best=10542.0 gen0=1/48 first_gen=0 gens=12 success_total=59 MAKEABLE
+after36 flat_left RESULT weapon=dagger best=-18.2 gen0=0/48 first_gen=-1 gens=12 success_total=0 NOT_FOUND
+after48 flat_left RESULT weapon=dagger best=-4.6 gen0=0/48 first_gen=-1 gens=12 success_total=0 NOT_FOUND
+after24 flat_left RESULT weapon=staff best=10607.0 gen0=6/48 first_gen=0 gens=7 success_total=96 MAKEABLE
+after24 flat_left RESULT weapon=pickaxe best=10632.0 gen0=4/48 first_gen=0 gens=5 success_total=62 MAKEABLE
+after24 flat_left RESULT weapon=axe best=10617.0 gen0=0/48 first_gen=1 gens=10 success_total=142 MAKEABLE
+# after24 = the committed change (left platform 24 px lower). after36/after48 were exploratory drops of 36/48 px, not kept.

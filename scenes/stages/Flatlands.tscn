@@ -12,6 +12,20 @@ size = Vector2(240, 24)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
 
+; One wide floor with a platform over each half: the left one high, the
+; right one low. Nothing here has to be climbed to get around -- the floor is
+; continuous and the only ring-outs are its two open ends -- so the platforms
+; are for the pickups on them and for a few more seconds once the lava rises.
+;
+; Eased for issue #59: the left platform came down 24 px (y 140 -> 164, top
+; 172 -> 148 px above the floor), still 36 px higher than the right one's
+; 112. Its top was just past what a short weapon can fling to: a headless
+; search over input sequences found the sword onto it in 15 of ~560 tries
+; before and 35 after, the boomstick from its sixth generation to its first.
+; The dagger still cannot reach it (it gets within about 30 px, and tops out
+; around 120 px of climb from flat ground); it can reach the right one, and
+; lowering the left to that height would have erased the high/low pair.
+
 [node name="Flatlands" type="Node2D"]
 script = ExtResource("1")
 
@@ -26,7 +40,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-600, -20, 600, -20, 600, 20, -600, 20)
 
 [node name="PlatformLeft" type="StaticBody2D" parent="."]
-position = Vector2(-320, 140)
+position = Vector2(-320, 164)
 
 [node name="PlatformLeftShape" type="CollisionShape2D" parent="PlatformLeft"]
 shape = SubResource("RectangleShape2D_platform")
@@ -67,7 +81,7 @@ shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). On the two platforms, not the ground between the spawns: the first weapon of a round goes to whoever climbs, not whoever lands.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-320, 92)
+position = Vector2(-320, 116)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(320, 152)
