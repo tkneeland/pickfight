@@ -45,8 +45,13 @@ size = Vector2(8000, 40)
 ; second death rule -- it is the same KillZone.gd every other stage already
 ; uses, so reaching it still eliminates through the one path (US-6).
 
+; Backdrop (issue #117): volcano.
 [node name="Furnace" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.1, 0.05, 0.05, 1)
+background_sky_bottom = Color(0.3, 0.12, 0.08, 1)
+background_silhouette = Color(0.1, 0.05, 0.05, 1)
+background_layers = PackedStringArray("mountains", "rocks")
 
 [node name="Ground" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)

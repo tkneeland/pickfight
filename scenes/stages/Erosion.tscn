@@ -42,8 +42,13 @@ size = Vector2(8000, 40)
 ; unchanged, so a lost ledge is still not simply waiting to be walked back
 ; onto; the floor is 160 px narrower overall, still well inside the camera.
 
+; Backdrop (issue #117): desert.
 [node name="Erosion" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.2, 0.16, 0.14, 1)
+background_sky_bottom = Color(0.32, 0.24, 0.18, 1)
+background_silhouette = Color(0.2, 0.13, 0.1, 1)
+background_layers = PackedStringArray("mountains", "rocks")
 
 [node name="LedgeA" parent="." instance=ExtResource("3")]
 position = Vector2(-420, 300)

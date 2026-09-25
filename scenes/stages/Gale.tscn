@@ -61,8 +61,13 @@ size = Vector2(8000, 40)
 ; weapon but the dagger, which has to fling it -- an easy fling at this
 ; width, gale or no gale.
 
+; Backdrop (issue #117): storm.
 [node name="Gale" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.1, 0.11, 0.13, 1)
+background_sky_bottom = Color(0.22, 0.23, 0.25, 1)
+background_silhouette = Color(0.1, 0.11, 0.13, 1)
+background_layers = PackedStringArray("clouds", "mountains", "clouds")
 
 [node name="BankLeft" type="StaticBody2D" parent="."]
 position = Vector2(-475, 320)

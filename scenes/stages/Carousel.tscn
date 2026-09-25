@@ -38,8 +38,13 @@ size = Vector2(8000, 40)
 ; Rising floor (ADR-0012) climbs to the spawns' height and takes the
 ; see-saws, hub and shoulders together.
 
+; Backdrop (issue #117): fairground night.
 [node name="Carousel" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.08, 0.06, 0.16, 1)
+background_sky_bottom = Color(0.22, 0.14, 0.24, 1)
+background_silhouette = Color(0.1, 0.07, 0.14, 1)
+background_layers = PackedStringArray("clouds", "hills")
 
 [node name="ShoulderLeft" type="StaticBody2D" parent="."]
 position = Vector2(-690, 320)

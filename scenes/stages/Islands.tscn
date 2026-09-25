@@ -33,8 +33,13 @@ size = Vector2(8000, 40)
 ; opens and closes rather than a moving obstacle: at either end there is a
 ; step you can take, and in between there is not.
 
+; Backdrop (issue #117): island dusk.
 [node name="Islands" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.1, 0.14, 0.24, 1)
+background_sky_bottom = Color(0.26, 0.22, 0.28, 1)
+background_silhouette = Color(0.1, 0.12, 0.18, 1)
+background_layers = PackedStringArray("clouds", "hills")
 
 [node name="IslandA" type="StaticBody2D" parent="."]
 position = Vector2(-420, 300)

@@ -357,9 +357,9 @@ PASS  hazard_never_rises
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:2849)
+       [0] _await_condition (res://tools/scenario_runner.gd:2846)
 PASS  rising_kill_zone_resets_each_round
-Controller page: http://172.19.9.117:52987/
+Controller page: http://172.19.9.117:53005/
 PASS  four_phones_claim_four_slots
 PASS  four_player_round_ends_on_last_survivor
 PASS  four_player_winner_keeps_weapon
@@ -373,7 +373,7 @@ PASS  damaging_strike_buzzes_victim_and_attacker
 PASS  zero_damage_strike_buzzes_no_one
       5 strike(s) to eliminate slot 2, buzzes: [[2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "struck"], [0, "hit"], [2, "eliminated"], [2, "struck"], [0, "hit"], [0, "win"]]
 PASS  elimination_buzzes_eliminated_player
-Controller page: http://172.19.9.117:53030/
+Controller page: http://172.19.9.117:53045/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       first shot 181 ticks after the boomstick was handed over, the next 180 ticks later (interval 180 ticks)
@@ -389,7 +389,7 @@ PASS  boomstick_recoil_is_moderate
       pickaxe.tres: head arrived at 2214 px/s and took 34.0 off
       boomstick.tres: head arrived at 2211 px/s and took 8.0 off
 PASS  boomstick_melee_damage_is_low
-      pool of 5 weapons; the boomstick came up 49 times in 300 draws
+      pool of 5 weapons; the boomstick came up 73 times in 300 draws
 PASS  boomstick_in_pickup_pool
       at rest reach: bullet started inside the shooter's body and got 155.0 px clear; shooter on 0.0 damage
       sent back through the shooter: shooter on 0.0 damage, the player behind on 35.0
@@ -487,7 +487,7 @@ PASS  sfx_round_events
       lava requested: ["countdown", "countdown", "countdown", "lava_rise"]
 PASS  sfx_lava_countdown_rise_and_sizzle
 PASS  sfx_join_sounds
-      6 damage: -1.64 dB, pitch 1.102; 54 damage: 5.42 dB, pitch 0.970
+      6 damage: -1.64 dB, pitch 1.076; 54 damage: 5.42 dB, pitch 0.960
 PASS  sfx_strength_scales_volume
       clash: cap 3, peak 3 playing, 3 nodes
       round_start: cap 1, peak 1 playing, 1 nodes
@@ -547,9 +547,23 @@ PASS  music_tracks_exist_and_credited
 PASS  settings_persist_to_config_file
       display server 'headless', asked for [3, 2, 3, 2]
 PASS  settings_fullscreen_toggle_asks_display_server
-      angle wobble per frame (RMS): raw 0.0478 rad, smoothed 0.0200 rad (42% of raw); final reached raw tick 123, smoothed tick 128
-PASS  phone_jitter_is_smoothed
-Controller page: http://172.19.9.117:53102/
-PASS  phone_release_and_flick_are_not_smoothed
+      Flatlands.tscn: 3 layers, brightest 0.27, backdrop z<=-1000, everything else z>=0 (Flatlands)
+      Pillars.tscn: 2 layers, brightest 0.24, backdrop z<=-1000, everything else z>=0 (Pillars)
+      Ferry.tscn: 2 layers, brightest 0.25, backdrop z<=-1000, everything else z>=0 (Ferry)
+      Highrise.tscn: 3 layers, brightest 0.18, backdrop z<=-1000, everything else z>=0 (Highrise)
+      Erosion.tscn: 2 layers, brightest 0.25, backdrop z<=-1000, everything else z>=0 (Erosion)
+      Islands.tscn: 2 layers, brightest 0.24, backdrop z<=-1000, everything else z>=0 (Islands)
+      Furnace.tscn: 2 layers, brightest 0.16, backdrop z<=-1000, everything else z>=0 (Furnace)
+      Gauntlet.tscn: 2 layers, brightest 0.15, backdrop z<=-1000, everything else z>=0 (Gauntlet)
+      Cascade.tscn: 3 layers, brightest 0.26, backdrop z<=-1000, everything else z>=0 (Cascade)
+      Slant.tscn: 2 layers, brightest 0.27, backdrop z<=-1000, everything else z>=0 (Slant)
+      Bowl.tscn: 2 layers, brightest 0.20, backdrop z<=-1000, everything else z>=0 (Bowl)
+      Springboard.tscn: 2 layers, brightest 0.25, backdrop z<=-1000, everything else z>=0 (Springboard)
+      Gale.tscn: 3 layers, brightest 0.23, backdrop z<=-1000, everything else z>=0 (Gale)
+      Carousel.tscn: 2 layers, brightest 0.18, backdrop z<=-1000, everything else z>=0 (Carousel)
+      Rockfall.tscn: 2 layers, brightest 0.27, backdrop z<=-1000, everything else z>=0 (Rockfall)
+      Sinkhole.tscn: 2 layers, brightest 0.22, backdrop z<=-1000, everything else z>=0 (Sinkhole)
+      Bulwark.tscn: 3 layers, brightest 0.23, backdrop z<=-1000, everything else z>=0 (Bulwark)
+PASS  stage_backgrounds_draw_behind_everything
 ---
-136 passed, 3 failed, 139 total
+135 passed, 3 failed, 138 total

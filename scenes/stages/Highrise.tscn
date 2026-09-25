@@ -53,8 +53,13 @@ size = Vector2(8000, 40)
 ; here, as on every step-up this search tried from a floor -- it barely
 ; lifts itself, so no rung spacing fixes that.
 
+; Backdrop (issue #117): city at night.
 [node name="Highrise" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.06, 0.07, 0.14, 1)
+background_sky_bottom = Color(0.18, 0.16, 0.26, 1)
+background_silhouette = Color(0.08, 0.08, 0.13, 1)
+background_layers = PackedStringArray("clouds", "city", "city")
 
 [node name="Ground" type="StaticBody2D" parent="."]
 position = Vector2(0, 400)

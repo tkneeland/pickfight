@@ -180,6 +180,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_fullscreen_toggle_asks_display_server",
 	"phone_jitter_is_smoothed",
 	"phone_release_and_flick_are_not_smoothed",
+	"stage_backgrounds_draw_behind_everything",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -866,6 +867,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_jitter_is_smoothed()
 		"phone_release_and_flick_are_not_smoothed":
 			return await _scenario_phone_release_and_flick_are_not_smoothed()
+		"stage_backgrounds_draw_behind_everything":
+			return await _scenario_stage_backgrounds_draw_behind_everything()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -11345,3 +11348,116 @@ func _scenario_phone_release_and_flick_are_not_smoothed() -> Array[String]:
 		peer.poll()
 	await _teardown(stage)
 	return failures
+
+# --- Stage backgrounds (issue #117) ------------------------------------------
+
+## The brightest any backdrop colour may be. Stage geometry is Color(0.35,
+## 0.35, 0.4), luminance ~0.35, and players and heads are brighter still, so a
+## backdrop kept under this never out-shines what is being fought on.
+const BACKGROUND_MAX_LUMINANCE: float = 0.3
+## The issue asks for two or three parallax layers per stage.
+const BACKGROUND_MIN_LAYERS: int = 2
+const BACKGROUND_MAX_LAYERS: int = 3
+
+## Issue #117: every stage in the live rotation -- read off scenes/Main.tscn's
+## RoundManager, not STAGE_PATHS, so a stage added to the game is swept even
+## if this suite's list is forgotten -- builds a backdrop that fills the
+## camera's view, has 2-3 layers, stays dim, and draws below every other
+## canvas item on the stage, a player, its weapon rig and a pickup included.
+func _scenario_stage_backgrounds_draw_behind_everything() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	if rotation.is_empty():
+		failures.append("could not read RoundManager.stage_scenes out of scenes/Main.tscn")
+	for path: String in STAGE_PATHS:
+		if not rotation.has(path):
+			failures.append("%s is in STAGE_PATHS but not in Main's rotation" % path)
+
+	for path: String in rotation:
+		_scenario_completed = false
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		holder.add_child(instance)
+		_spawn_player(holder, PARK_POSITION)
+		_place_pickup(holder, PARK_POSITION + Vector2(200.0, 0.0), load(AXE_PATH))
+		await _await_ticks(2)
+
+		var background: Node2D = instance.get_background() if instance.has_method("get_background") else null
+		if background == null:
+			failures.append("%s: no background" % path)
+			await _teardown(holder)
+			continue
+
+		var layers: int = background.get_layer_count()
+		if layers < BACKGROUND_MIN_LAYERS or layers > BACKGROUND_MAX_LAYERS:
+			failures.append("%s: %d parallax layers, expected %d-%d" % [
+				path, layers, BACKGROUND_MIN_LAYERS, BACKGROUND_MAX_LAYERS])
+		if not background.get_sky_rect().encloses(CAMERA_VIEW):
+			failures.append("%s: the sky %s does not cover the camera's view %s" % [
+				path, background.get_sky_rect(), CAMERA_VIEW])
+		var brightest: float = 0.0
+		for colour: Color in background.get_colours():
+			brightest = maxf(brightest, colour.get_luminance())
+		if brightest > BACKGROUND_MAX_LUMINANCE:
+			failures.append("%s: a backdrop colour reaches luminance %.2f, over the %.2f that keeps players readable" % [
+				path, brightest, BACKGROUND_MAX_LUMINANCE])
+
+		var back_items: Array[CanvasItem] = []
+		var other_items: Array[CanvasItem] = []
+		_collect_canvas_items(holder, background, back_items, other_items)
+		var back_top: int = -RenderingServer.CANVAS_ITEM_Z_MAX
+		for item: CanvasItem in back_items:
+			back_top = maxi(back_top, _effective_z(item))
+		var lowest: int = RenderingServer.CANVAS_ITEM_Z_MAX
+		var lowest_name: String = ""
+		for item: CanvasItem in other_items:
+			var z: int = _effective_z(item)
+			if z < lowest:
+				lowest = z
+				lowest_name = String(holder.get_path_to(item))
+		print("      %s: %d layers, brightest %.2f, backdrop z<=%d, everything else z>=%d (%s)" % [
+			path.get_file(), layers, brightest, back_top, lowest, lowest_name])
+		if back_items.is_empty() or other_items.is_empty():
+			failures.append("%s: found %d backdrop and %d other canvas items" % [
+				path, back_items.size(), other_items.size()])
+		elif back_top >= lowest:
+			failures.append("%s: the backdrop draws at z %d, not below %s at z %d" % [
+				path, back_top, lowest_name, lowest])
+		await _teardown(holder)
+	return failures
+
+## The stage paths RoundManager rotates through in scenes/Main.tscn, read
+## from the packed scene's state without instancing it (which would start a
+## ControllerServer).
+func _main_rotation_paths() -> PackedStringArray:
+	var paths: PackedStringArray = []
+	var state: SceneState = (load("res://scenes/Main.tscn") as PackedScene).get_state()
+	for i in state.get_node_count():
+		if state.get_node_name(i) != &"RoundManager":
+			continue
+		for p in state.get_node_property_count(i):
+			if state.get_node_property_name(i, p) == &"stage_scenes":
+				for scene: PackedScene in state.get_node_property_value(i, p):
+					paths.append(scene.resource_path)
+	return paths
+
+func _collect_canvas_items(node: Node, background: Node, back: Array[CanvasItem], other: Array[CanvasItem]) -> void:
+	for child: Node in node.get_children():
+		var in_back: bool = child == background or background.is_ancestor_of(child)
+		if child is CanvasItem:
+			(back if in_back else other).append(child as CanvasItem)
+		_collect_canvas_items(child, background, back, other)
+
+## The z a canvas item actually draws at: its own z_index plus each
+## ancestor's for as long as z_as_relative chains up.
+func _effective_z(item: CanvasItem) -> int:
+	var z: int = 0
+	var node: Node = item
+	while node is CanvasItem:
+		var ci: CanvasItem = node as CanvasItem
+		z += ci.z_index
+		if not ci.z_as_relative:
+			break
+		node = node.get_parent()
+	return z
