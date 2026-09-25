@@ -11636,7 +11636,7 @@ const PLAYTEST_CLIP_UNDER_GAP: float = 60.0
 ## Every weapon is run, 48 seeded trials each on the same 24 px slab, and a
 ## crossing is any head circle (`Player.weapon_head_circles_world`) whose
 ## centre goes from one side of the slab to the other within its span.
-## Measured on main at 5b90579: boomstick 4, axe 12, sword 1.
+## Measured on main at b659ff9: boomstick 4, axe 12, sword 1.
 func _scenario_roster_heads_do_not_clip_platform_in_play() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()

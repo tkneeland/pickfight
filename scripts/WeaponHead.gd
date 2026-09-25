@@ -207,6 +207,8 @@ var _has_previous: bool = false
 var _gate_shapes: Array[CollisionShape2D] = []
 var _gate_distance: float = 0.0
 var _cluster_radius: float = 0.0
+## Reused by `_step_near_anything`.
+var _near_query: PhysicsShapeQueryParameters2D = null
 
 ## The step that just finished, snapshotted before anything this tick has had
 ## a chance to correct it: where this head started, where it ended, how it was
@@ -527,6 +529,20 @@ func _circle_radius(index: int) -> float:
 	var circle := node.shape as CircleShape2D
 	return circle.radius if circle != null else 0.0
 
+## Whether anything on `sweep_mask` lies within reach of this step's centre
+## traces: every circle centre's path fits in one circle about the step's
+## midpoint, `_cluster_radius` plus half the step.
+func _step_near_anything(space: PhysicsDirectSpaceState2D, motion: Vector2) -> bool:
+	if _near_query == null:
+		_near_query = PhysicsShapeQueryParameters2D.new()
+		_near_query.shape = CircleShape2D.new()
+		_near_query.collide_with_areas = false
+	_near_query.collision_mask = sweep_mask
+	_near_query.exclude = sweep_exclude
+	(_near_query.shape as CircleShape2D).radius = _cluster_radius + motion.length() * 0.5 + 1.0
+	_near_query.transform = Transform2D(0.0, _previous_position + motion * 0.5)
+	return not space.intersect_shape(_near_query, 1).is_empty()
+
 ## A ray query for `_trace_terrain` along the sweep's own mask.
 func _terrain_query() -> PhysicsRayQueryParameters2D:
 	var query := PhysicsRayQueryParameters2D.create(Vector2.ZERO, Vector2.ZERO, sweep_mask, sweep_exclude)
@@ -550,16 +566,23 @@ func _trace_terrain(
 		query: PhysicsRayQueryParameters2D,
 		from: Vector2,
 		to: Vector2) -> Dictionary:
-	var exclude: Array[RID] = sweep_exclude.duplicate()
+	# Copied only once a body has to be stepped past: this runs for every
+	# circle near terrain every tick, and most rays meet no body at all.
+	var exclude: Array[RID] = sweep_exclude
+	var copied: bool = false
 	query.from = from
 	query.to = to
+	query.exclude = exclude
 	for _i in TURN_MAX_SKIPS:
-		query.exclude = exclude
 		var hit: Dictionary = space.intersect_ray(query)
 		if hit.is_empty():
 			return {}
 		if hit["collider"] is RigidBody2D:
+			if not copied:
+				exclude = sweep_exclude.duplicate()
+				copied = true
 			exclude.append(hit["rid"])
+			query.exclude = exclude
 			continue
 		return hit
 	return {}
@@ -732,6 +755,12 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 	# the toe circle's centre passed the slab's middle and the solver pushed it
 	# out of the far side (#99).
 	var cast_whole: bool = distance >= _sweep_gate()
+	var space: PhysicsDirectSpaceState2D = state.get_space_state()
+	# Most short steps are a head in open air, and a ray per circle every
+	# tick cost about 0.1-0.2 ms of physics a tick across four players. One
+	# overlap test over everything the traces could reach answers those.
+	if not cast_whole and not _step_near_anything(space, motion):
+		return {}
 
 	# Each circle is swept where it actually sits, not at the body's origin:
 	# the body is rotation-locked, so the cluster carries its facing on the
@@ -761,8 +790,8 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 	params.exclude = sweep_exclude
 	params.margin = 0.0
 
-	var space: PhysicsDirectSpaceState2D = state.get_space_state()
 	var safe: float = 1.0
+	var terrain_query: PhysicsRayQueryParameters2D = null if cast_whole else _terrain_query()
 	var stopped_by: CollisionShape2D = null
 	var centre_hit: Dictionary = {}
 	for node: CollisionShape2D in sweep_shapes:
@@ -806,7 +835,7 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 		# were while the whole sweep was gated.
 		var origin: Vector2 = params.transform.origin
 		var hit: Dictionary = _trace_centre(space, origin, origin + motion) if cast_whole \
-			else _trace_terrain(space, _terrain_query(), origin, origin + motion)
+			else _trace_terrain(space, terrain_query, origin, origin + motion)
 		if not hit.is_empty():
 			var reached: float = maxf(0.0,
 				(Vector2(hit["position"]) - origin).length() - TURN_SEAT_BACKOFF)
