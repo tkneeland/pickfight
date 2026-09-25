@@ -6942,9 +6942,20 @@ func _scenario_symmetric_head_ignores_aim_side() -> Array[String]:
 ## must not follow every wobble. Held near straight up and then near straight
 ## down, jittering a few degrees either side, the axe keeps the side it had;
 ## aimed decisively past the vertical, it flips once and at once.
+##
+## All of this is about the aim in clear air, so the stage has no arena
+## (#71). The scenario runs about 13 s, and PARK_POSITION is clear air for
+## only the first second or so: after that the player has fallen onto the
+## arena. Aimed down, the axe then rests on the ground, and a flip there would
+## carry the bit through the floor, so the terrain hold from #48 correctly
+## keeps the side it has. That, not anything left behind by an earlier
+## scenario, is why this failed on main with or without
+## `four_phones_claim_four_slots` before it. The hold itself belongs to the
+## #48 thin-terrain scenarios.
 func _scenario_axe_head_holds_side_near_vertical() -> Array[String]:
 	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
+	var stage := Node2D.new()
+	get_root().add_child(stage)
 	var player: RigidBody2D = _spawn_player(stage, PARK_POSITION)
 	var axe: WeaponStatsType = load(AXE_PATH)
 	player.set_weapon_stats(axe)
