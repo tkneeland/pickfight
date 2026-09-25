@@ -171,6 +171,19 @@ const ATTENUATION: float = 0.5
 const FADE_SEC: float = 0.15
 ## How long `release()` waits for the audio server to free stopped playbacks.
 const RELEASE_SEC: float = 1.0
+## Longest file decoded to PCM (see `_start_decoding`); anything longer stays
+## compressed. Every file in the table is well under it.
+const MAX_DECODE_SEC: float = 10.0
+## What a decoded file is stored as: plain 16-bit PCM, untouched otherwise.
+const PCM_OPTIONS: Dictionary = {
+	"compress/mode": 0,
+	"edit/trim": false,
+	"edit/normalize": false,
+	"edit/loop_mode": 0,
+	"force/8_bit": false,
+	"force/mono": false,
+	"force/max_rate": false,
+}
 
 ## The master volume, 0..1, and whether everything is muted. Set through
 ## `set_master_volume()` / `set_muted()` so they reach the bus.
@@ -207,6 +220,17 @@ var _settings_ui: CanvasLayer
 ## first. Headless cannot really go fullscreen, so the scenarios check this.
 var _window_mode_requests: Array[int] = []
 
+## Decoded copies of the sound files, res:// path -> AudioStreamWAV, filled by
+## a worker thread; see `_start_decoding`. Guarded by `_pcm_mutex`, as are the
+## two flags below it.
+var _pcm: Dictionary = {}
+var _pcm_mutex := Mutex.new()
+var _decode_done: bool = false
+var _decode_cancelled: bool = false
+var _decode_task: int = -1
+## Whether `_streams` has been rebuilt from `_pcm` since decoding finished.
+var _streams_decoded: bool = false
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
@@ -216,6 +240,7 @@ func _ready() -> void:
 	_hooks.name = "Hooks"
 	_hooks.sfx = self
 	add_child(_hooks)
+	_start_decoding()
 	# The game's own scene is only current once autoloads have all readied.
 	# The scenario runner never has one, so it never builds the overlay.
 	_build_settings_ui_if_in_game.call_deferred()
@@ -225,6 +250,8 @@ func _ready() -> void:
 ## a script that quits straight after a sound -- the scenario runner -- gets
 ## "ObjectDB instances leaked at exit" unless it awaits this first.
 func release() -> void:
+	_stop_decoding()
+	_pcm.clear()
 	for key: String in _voices:
 		for voice: Node in _voices[key]:
 			voice.stop()
@@ -436,6 +463,95 @@ func _build_settings_ui_if_in_game() -> void:
 
 # --- Internals --------------------------------------------------------------
 
+## Every sound decoded to PCM once, on a worker thread (issue #108).
+##
+## Playing an Ogg Vorbis file costs its setup headers parsed again on every
+## play -- measured at 0.7-0.8 ms of main thread per `play()`, the same on the
+## hundredth play as the first. The head knocks and landings fire several
+## times a second each, so in a four-player round that was the largest single
+## per-frame cost in the game, and a burst of them in one frame was a dropped
+## frame. A PCM stream starts in 0.01-0.03 ms. All of the table decodes in
+## about a third of a second (around 10 MB), so it is done up front, off the
+## main thread; until a file is ready it plays compressed, as it always did.
+func _start_decoding() -> void:
+	var paths := PackedStringArray()
+	for path: String in all_sound_files():
+		if not paths.has(path):
+			paths.append(path)
+	var rate: int = int(AudioServer.get_mix_rate())
+	_decode_task = WorkerThreadPool.add_task(_decode_files.bind(paths, rate), false, "Sfx decode")
+
+func _stop_decoding() -> void:
+	if _decode_task == -1:
+		return
+	_pcm_mutex.lock()
+	_decode_cancelled = true
+	_pcm_mutex.unlock()
+	WorkerThreadPool.wait_for_task_completion(_decode_task)
+	_decode_task = -1
+
+func _exit_tree() -> void:
+	_stop_decoding()
+
+## Worker thread. Touches nothing of this node's but `_pcm` and the flags,
+## and those only under the mutex.
+func _decode_files(paths: PackedStringArray, rate: int) -> void:
+	for path: String in paths:
+		_pcm_mutex.lock()
+		var cancelled: bool = _decode_cancelled
+		_pcm_mutex.unlock()
+		if cancelled:
+			break
+		var source: AudioStream = _read_stream(path)
+		var pcm: AudioStreamWAV = _decode_to_pcm(source, rate) if source != null else null
+		if pcm != null:
+			_pcm_mutex.lock()
+			_pcm[path] = pcm
+			_pcm_mutex.unlock()
+	_pcm_mutex.lock()
+	_decode_done = true
+	_pcm_mutex.unlock()
+
+## `source` rendered out at the mix rate, as 16-bit PCM; or null for anything
+## that is not worth it or did not decode.
+static func _decode_to_pcm(source: AudioStream, rate: int) -> AudioStreamWAV:
+	if source is AudioStreamWAV or rate <= 0:
+		return null
+	var length: float = source.get_length()
+	if length <= 0.0 or length > MAX_DECODE_SEC:
+		return null
+	var playback: AudioStreamPlayback = source.instantiate_playback()
+	if playback == null:
+		return null
+	var wanted: int = ceili(length * rate)
+	playback.start(0.0)
+	var frames: PackedVector2Array = playback.mix_audio(1.0, wanted)
+	playback.stop()
+	if frames.is_empty():
+		return null
+	if frames.size() > wanted:
+		frames.resize(wanted)
+	# Handed over as a float WAV file in memory, so the conversion to 16-bit
+	# is the engine's rather than a GDScript loop over every sample.
+	var pcm: PackedByteArray = frames.to_byte_array()
+	var wav := PackedByteArray()
+	wav.resize(44)
+	wav.encode_u32(0, 0x46464952)  # "RIFF"
+	wav.encode_u32(4, 36 + pcm.size())
+	wav.encode_u32(8, 0x45564157)  # "WAVE"
+	wav.encode_u32(12, 0x20746d66)  # "fmt "
+	wav.encode_u32(16, 16)
+	wav.encode_u16(20, 3)  # IEEE float
+	wav.encode_u16(22, 2)  # stereo: mix_audio renders a frame as a Vector2
+	wav.encode_u32(24, rate)
+	wav.encode_u32(28, rate * 8)
+	wav.encode_u16(32, 8)
+	wav.encode_u16(34, 32)
+	wav.encode_u32(36, 0x61746164)  # "data"
+	wav.encode_u32(40, pcm.size())
+	wav.append_array(pcm)
+	return AudioStreamWAV.load_from_buffer(wav, PCM_OPTIONS)
+
 func _ensure_bus() -> void:
 	if AudioServer.get_bus_index(BUS_NAME) != -1:
 		return
@@ -445,6 +561,15 @@ func _ensure_bus() -> void:
 	AudioServer.set_bus_send(index, &"Master")
 
 func _pick_stream(key: String) -> AudioStream:
+	if not _streams_decoded:
+		_pcm_mutex.lock()
+		var done: bool = _decode_done
+		_pcm_mutex.unlock()
+		if done:
+			# Anything loaded while decoding ran is the compressed copy; load
+			# again, from `_pcm`, now that it is complete.
+			_streams_decoded = true
+			_streams.clear()
 	if not _streams.has(key):
 		var loaded: Array[AudioStream] = []
 		for file: String in SOUNDS[key]["files"]:
@@ -464,6 +589,20 @@ func _pick_stream(key: String) -> AudioStream:
 ## Straight off disk when the raw file is there (any checkout, imported or
 ## not), else the imported copy (an exported build ships only that).
 func _load_stream(path: String) -> AudioStream:
+	_pcm_mutex.lock()
+	var pcm: AudioStream = _pcm.get(path)
+	_pcm_mutex.unlock()
+	if pcm != null:
+		return pcm
+	var stream: AudioStream = _read_stream(path)
+	if stream == null and not _warned.has(path):
+		_warned[path] = true
+		push_warning("Sfx: missing sound file %s" % path)
+	return stream
+
+## The file as it is stored, without warning when it is missing: the decoding
+## thread reads through this too.
+static func _read_stream(path: String) -> AudioStream:
 	if FileAccess.file_exists(path):
 		var absolute: String = ProjectSettings.globalize_path(path)
 		match path.get_extension().to_lower():
@@ -473,9 +612,6 @@ func _load_stream(path: String) -> AudioStream:
 				return AudioStreamWAV.load_from_file(absolute)
 	if ResourceLoader.exists(path):
 		return load(path) as AudioStream
-	if not _warned.has(path):
-		_warned[path] = true
-		push_warning("Sfx: missing sound file %s" % path)
 	return null
 
 ## A free player node for `key`, making one while under the cap, or else the

@@ -48,9 +48,31 @@ var _last_zero_frame: Dictionary = {}
 
 func _ready() -> void:
 	z_index = 100
+	# Markers and numbers animate per rendered frame in `_process`, not per
+	# physics tick, so physics interpolation (issue #108) has nothing to blend
+	# for them and would only draw them a tick late. Off here, off for every
+	# marker and number under it.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_warm_number_sizes()
 	get_tree().node_added.connect(_on_node_added)
 	for player in get_tree().get_nodes_in_group("players"):
 		_watch(player)
+
+## Lays out the digits at every size a damage number can be, once, up front
+## (issue #108). The first number at a size the font has not been used at
+## costs the font that size's glyphs: measured at 3.2 ms against 0.1 ms once
+## warm, inside the physics tick the strike landed in -- a hitch on the very
+## hits the game is about, a different one for every new damage band. All
+## twenty-one sizes together are about 70 ms, paid here at scene load. The
+## font is Godot's fallback, which is what a Label with no theme uses.
+func _warm_number_sizes() -> void:
+	if not show_damage_numbers:
+		return
+	var font: Font = ThemeDB.fallback_font
+	if font == null:
+		return
+	for size in range(NUMBER_MIN_FONT, NUMBER_MAX_FONT + 1):
+		font.get_string_size("0123456789", HORIZONTAL_ALIGNMENT_LEFT, -1, size)
 
 func _on_node_added(node: Node) -> void:
 	_watch(node)

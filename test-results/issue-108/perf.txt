@@ -1,0 +1,88 @@
+# perf_probe runs, issue #108. 7200 timed frames each, 4 bots, headless.
+# before = main at 0447782 (this branch's changes stashed, probe only); after = this branch before rebasing onto d0f6597 (a dagger tune). Seeds 108/109/110.
+# 60 Hz:  godot --headless --path . --fixed-fps 60 -s tools/perf_probe.gd -- --frames=7200 --seed=N
+# 120 Hz: godot --headless --path . --fixed-fps 120 -s tools/perf_probe.gd -- --demo --frames=7200 --seed=N
+
+== before 60Hz seed 108
+PERF physics_hz=60 frames=7200 rounds=5 strikes=22 eliminations=14
+PERF frame_ms   mean=0.988 p50=0.816 p95=1.817 p99=2.721 max=14.263 over_budget=0
+PERF physics_ms mean=0.703 p50=0.631 p95=1.107 p99=1.416 max=8.338 over_budget=0
+PERF spikes>4ms 357:4.3(phys 1.3) 403:4.9(phys 1.1) 1761:8.2(phys 7.9) 2111:8.3(phys 8.0) 3526:14.3(phys 0.5) 4928:14.1(phys 0.5) 5036:8.7(phys 8.2) 6350:9.1(phys 7.9) 8357:12.7(phys 0.7) 8362:8.8(phys 8.3) 8514:9.9(phys 8.3) 9021:14.2(phys 0.6) 10260:8.0(phys 7.7)
+PERF objects=1960 nodes=153
+
+== before 60Hz seed 109
+PERF physics_hz=60 frames=7200 rounds=8 strikes=44 eliminations=22
+PERF frame_ms   mean=1.183 p50=1.047 p95=2.118 p99=2.963 max=15.014 over_budget=0
+PERF physics_ms mean=0.814 p50=0.782 p95=1.193 p99=1.567 max=8.601 over_budget=0
+PERF spikes>4ms 221:9.0(phys 8.6) 251:9.8(phys 8.4) 283:9.0(phys 4.2) 390:4.7(phys 1.7) 542:4.1(phys 1.3) 606:5.5(phys 1.5) 1376:8.7(phys 8.0) 3133:13.7(phys 0.5) 3145:4.1(phys 1.1) 3362:8.8(phys 8.2) 3498:4.5(phys 1.4) 4463:8.3(phys 7.8) 6575:12.0(phys 0.5) 6633:4.4(phys 1.3) 8282:13.8(phys 0.5) 9183:14.5(phys 0.7) 11027:15.0(phys 0.7) 11033:4.2(phys 3.0) 11379:14.2(phys 0.6) 12346:11.9(phys 0.6)
+PERF objects=2007 nodes=161
+
+== before 60Hz seed 110
+PERF physics_hz=60 frames=7200 rounds=14 strikes=78 eliminations=41
+PERF frame_ms   mean=1.466 p50=1.296 p95=2.725 p99=3.974 max=15.883 over_budget=0
+PERF physics_ms mean=1.004 p50=0.960 p95=1.512 p99=2.304 max=10.299 over_budget=0
+PERF spikes>4ms 366:10.0(phys 9.5) 432:5.4(phys 1.4) 1931:14.0(phys 0.5) 1939:4.7(phys 3.8) 2252:15.0(phys 0.6) 2259:9.3(phys 8.9) 3718:13.2(phys 0.7) 5314:14.1(phys 2.2) 5374:5.4(phys 4.7) 5419:4.7(phys 3.8) 5421:9.6(phys 8.9) 5498:4.9(phys 3.4) 5507:9.8(phys 8.7) 5537:4.3(phys 1.8) 5569:4.3(phys 1.9) 5570:10.4(phys 9.1) 5628:4.3(phys 2.7) 5631:4.7(phys 3.0) 5634:6.0(phys 3.6) 5636:4.2(phys 2.6) 5638:4.4(phys 2.7) 5640:5.6(phys 2.9) 5642:4.3(phys 2.6) 5644:5.1(phys 3.2) 5646:4.3(phys 2.6) 5648:5.2(phys 3.3) 5650:4.3(phys 2.6) 5652:4.4(phys 2.7) 5654:4.7(phys 2.8) 5656:4.2(phys 2.6) 5658:4.9(phys 3.0) 5660:4.3(phys 2.6) 5662:4.3(phys 2.6) 5664:4.7(phys 2.8) 5666:4.3(phys 2.6) 5668:4.6(phys 2.8) 5673:5.3(phys 3.4) 5678:4.2(phys 1.4) 5692:4.3(phys 2.6) 5694:4.7(phys 2.7) 5709:4.6(phys 2.8) 5710:5.9(phys 2.8) 5713:4.2(phys 2.3) 5738:4.4(phys 2.2) 6173:14.1(phys 0.6) 6924:4.1(phys 1.2) 8416:13.9(phys 0.5) 8621:4.3(phys 1.8) 9153:14.1(phys 0.5) 9416:4.3(phys 2.4) 9418:4.2(phys 1.3) 9471:4.0(phys 1.6) 9481:9.1(phys 8.4) 10328:10.5(phys 10.3) 11946:12.1(phys 0.5) 11989:4.3(phys 1.7) 12046:4.6(phys 1.9) 12060:4.8(phys 2.7) 12125:6.3(phys 2.6) 12201:4.4(phys 3.8) 12204:5.4(phys 2.8) 12206:4.6(phys 3.1) 13870:15.9(phys 0.7) 15747:14.2(phys 0.6) 15797:8.8(phys 8.2) 17302:14.1(phys 0.5) 19210:14.4(phys 0.6) 21156:13.9(phys 0.5)
+PERF objects=2023 nodes=143
+
+== before 120Hz seed 108
+PERF physics_hz=120 frames=7200 rounds=7 strikes=31 eliminations=19
+PERF frame_ms   mean=1.399 p50=1.257 p95=2.766 p99=3.436 max=16.421 over_budget=12
+PERF physics_ms mean=1.010 p50=0.976 p95=1.611 p99=1.931 max=9.661 over_budget=2
+PERF spikes>4ms 159:4.0(phys 1.4) 200:4.4(phys 1.4) 211:4.2(phys 1.8) 226:4.5(phys 1.4) 230:10.6(phys 9.7) 360:5.4(phys 4.4) 714:8.9(phys 4.3) 821:5.1(phys 1.3) 1445:9.1(phys 8.8) 2644:14.7(phys 0.6) 3118:8.7(phys 8.2) 3639:4.5(phys 4.3) 4860:15.2(phys 2.2) 4980:4.3(phys 4.1) 6099:16.4(phys 0.8) 6199:5.6(phys 3.2) 6322:4.8(phys 1.7) 6439:4.2(phys 2.0) 6490:4.4(phys 3.1) 6526:4.4(phys 2.2) 6554:5.2(phys 2.9) 6558:4.2(phys 1.7) 6638:4.1(phys 1.5) 6784:9.4(phys 4.4) 8285:15.9(phys 0.6) 9525:14.7(phys 0.6) 9581:8.7(phys 8.3) 10148:4.2(phys 3.0) 10269:4.4(phys 4.0) 11494:15.8(phys 0.7) 12050:4.3(phys 1.7)
+PERF objects=2119 nodes=201
+
+== before 120Hz seed 109
+PERF physics_hz=120 frames=7200 rounds=7 strikes=22 eliminations=18
+PERF frame_ms   mean=1.299 p50=1.121 p95=2.444 p99=3.277 max=18.462 over_budget=12
+PERF physics_ms mean=0.970 p50=0.866 p95=1.531 p99=1.835 max=10.704 over_budget=4
+PERF spikes>4ms 151:4.5(phys 1.6) 156:4.8(phys 2.5) 266:10.1(phys 9.6) 293:5.2(phys 1.3) 2631:14.9(phys 0.6) 3253:9.6(phys 9.3) 3427:10.5(phys 4.2) 3621:10.9(phys 10.7) 4863:18.5(phys 2.2) 4983:5.2(phys 4.8) 6244:15.3(phys 0.8) 6454:5.0(phys 2.3) 6456:4.0(phys 1.7) 6517:4.5(phys 4.0) 6745:4.0(phys 1.8) 6811:4.4(phys 1.9) 6936:9.3(phys 4.4) 9211:15.4(phys 0.6) 9222:5.2(phys 3.0) 9889:16.5(phys 0.5) 9900:4.8(phys 2.0) 9935:4.3(phys 1.7) 9938:4.2(phys 1.6) 9982:4.2(phys 1.3) 9993:5.0(phys 2.6) 9994:11.1(phys 8.8) 9995:4.0(phys 2.7) 11699:14.4(phys 0.6) 11935:4.4(phys 4.1) 12330:4.2(phys 1.6) 12395:4.1(phys 2.2)
+PERF objects=2173 nodes=230
+
+== before 120Hz seed 110
+PERF physics_hz=120 frames=7200 rounds=7 strikes=19 eliminations=20
+PERF frame_ms   mean=1.150 p50=0.994 p95=2.111 p99=3.148 max=64.187 over_budget=12
+PERF physics_ms mean=0.853 p50=0.781 p95=1.395 p99=1.799 max=63.906 over_budget=3
+PERF spikes>4ms 253:5.1(phys 1.3) 360:4.2(phys 4.0) 397:9.8(phys 9.4) 592:64.2(phys 63.9) 594:4.4(phys 4.2) 614:4.9(phys 4.7) 1895:14.5(phys 0.6) 3200:16.1(phys 2.2) 3320:4.8(phys 4.6) 4559:10.5(phys 10.2) 5146:15.3(phys 0.7) 5338:5.2(phys 1.4) 5500:4.2(phys 3.1) 6575:8.7(phys 8.3) 6762:8.6(phys 8.2) 9349:15.5(phys 0.6) 9357:5.7(phys 3.0) 9359:4.1(phys 1.9) 9361:10.5(phys 5.1) 9370:4.1(phys 1.9) 9718:15.0(phys 0.6) 9783:4.4(phys 2.9) 11298:14.6(phys 0.6) 11409:4.2(phys 3.7)
+PERF objects=2033 nodes=172
+
+== after 60Hz seed 108
+PERF physics_hz=60 frames=7200 rounds=12 strikes=38 eliminations=33
+PERF frame_ms   mean=1.172 p50=1.076 p95=1.924 p99=2.593 max=6.259 over_budget=0
+PERF physics_ms mean=0.838 p50=0.782 p95=1.265 p99=1.568 max=5.218 over_budget=0
+PERF spikes>4ms 1761:4.6(phys 4.2) 2111:4.9(phys 4.4) 3406:4.2(phys 0.6) 5167:5.3(phys 4.6) 7663:4.3(phys 0.7) 7949:5.0(phys 4.6) 11295:5.2(phys 4.7) 12561:4.3(phys 0.7) 13847:6.3(phys 4.7) 13849:5.7(phys 5.0) 13854:5.9(phys 5.2)
+PERF objects=2074 nodes=185
+
+== after 60Hz seed 109
+PERF physics_hz=60 frames=7200 rounds=8 strikes=71 eliminations=22
+PERF frame_ms   mean=1.172 p50=1.105 p95=1.858 p99=2.371 max=5.737 over_budget=0
+PERF physics_ms mean=0.822 p50=0.799 p95=1.193 p99=1.445 max=4.972 over_budget=0
+PERF spikes>4ms 221:4.9(phys 4.4) 251:5.0(phys 4.4) 283:5.6(phys 4.4) 1376:5.2(phys 4.5) 3025:5.3(phys 4.8) 5644:4.0(phys 0.6) 5877:5.5(phys 4.8) 5878:5.7(phys 5.0) 7932:5.1(phys 4.6) 9763:4.5(phys 0.6)
+PERF objects=2043 nodes=156
+
+== after 60Hz seed 110
+PERF physics_hz=60 frames=7200 rounds=12 strikes=51 eliminations=34
+PERF frame_ms   mean=1.265 p50=1.215 p95=2.056 p99=2.631 max=6.102 over_budget=0
+PERF physics_ms mean=0.899 p50=0.903 p95=1.320 p99=1.578 max=4.863 over_budget=0
+PERF spikes>4ms 366:4.9(phys 4.4) 2285:4.8(phys 0.7) 2351:4.4(phys 3.7) 2378:4.4(phys 3.7) 3640:4.5(phys 0.6) 5038:4.1(phys 0.8) 5070:4.8(phys 4.3) 5600:5.0(phys 4.5) 5687:6.1(phys 4.9) 5802:4.9(phys 4.5) 7834:5.3(phys 4.7) 14044:4.9(phys 4.4) 16006:4.1(phys 0.6) 17529:4.1(phys 0.7)
+PERF objects=2069 nodes=178
+
+== after 120Hz seed 108
+PERF physics_hz=120 frames=7200 rounds=4 strikes=10 eliminations=9
+PERF frame_ms   mean=0.962 p50=0.770 p95=1.627 p99=3.064 max=7.472 over_budget=0
+PERF physics_ms mean=0.710 p50=0.593 p95=1.243 p99=1.722 max=4.522 over_budget=0
+PERF spikes>4ms 230:5.6(phys 4.5) 714:5.2(phys 4.3) 1445:4.4(phys 4.1) 2459:6.7(phys 0.7) 3904:5.0(phys 0.8) 9547:7.5(phys 0.7)
+PERF objects=2138 nodes=231
+
+== after 120Hz seed 109
+PERF physics_hz=120 frames=7200 rounds=7 strikes=20 eliminations=20
+PERF frame_ms   mean=1.306 p50=1.145 p95=2.570 p99=3.020 max=7.909 over_budget=0
+PERF physics_ms mean=0.934 p50=0.858 p95=1.557 p99=1.800 max=4.856 over_budget=0
+PERF spikes>4ms 266:5.0(phys 4.5) 2558:6.1(phys 0.6) 2580:5.8(phys 4.9) 3160:4.6(phys 3.9) 4771:6.5(phys 0.8) 5340:5.2(phys 4.3) 7111:5.6(phys 0.6) 7130:5.0(phys 4.4) 7340:4.8(phys 4.2) 9019:7.9(phys 0.7) 9035:4.4(phys 2.2) 9504:4.6(phys 2.4) 9535:4.6(phys 2.9) 9536:5.1(phys 3.0) 9537:4.2(phys 2.4) 9568:4.1(phys 2.3) 9569:4.4(phys 1.6) 9951:6.4(phys 0.7) 11594:6.1(phys 0.6)
+PERF objects=2049 nodes=167
+
+== after 120Hz seed 110
+PERF physics_hz=120 frames=7200 rounds=6 strikes=24 eliminations=16
+PERF frame_ms   mean=1.089 p50=1.010 p95=1.917 p99=2.936 max=7.177 over_budget=0
+PERF physics_ms mean=0.792 p50=0.748 p95=1.346 p99=1.650 max=4.912 over_budget=0
+PERF spikes>4ms 397:4.9(phys 4.5) 1703:5.5(phys 0.5) 2070:4.5(phys 3.7) 2138:5.0(phys 4.3) 3917:6.0(phys 0.7) 3999:4.7(phys 4.3) 6173:6.0(phys 0.6) 6871:5.0(phys 4.7) 7702:4.4(phys 3.7) 9269:6.9(phys 0.6) 9360:5.3(phys 4.3) 9734:4.9(phys 4.4) 10296:7.2(phys 0.7) 10347:5.5(phys 4.9) 10773:4.6(phys 2.1)
+PERF objects=2124 nodes=213

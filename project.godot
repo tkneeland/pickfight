@@ -26,6 +26,11 @@ window/size/viewport_height=900
 window/size/mode=2
 window/stretch/mode="canvas_items"
 
+[physics]
+
+common/physics_interpolation=true
+common/physics_jitter_fix=0.0
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

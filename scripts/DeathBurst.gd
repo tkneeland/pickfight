@@ -19,6 +19,10 @@ var _shards: Array[Vector2] = []
 
 func _ready() -> void:
 	z_index = 90
+	# Animated per rendered frame, and placed after it enters the tree (the
+	# player sets its position deferred): with physics interpolation on
+	# (issue #108) it would be drawn flying in from the origin for a tick.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	for i in SHARD_COUNT:

@@ -234,6 +234,10 @@ func _begin_warning() -> void:
 	# top under the shaking rock instead: the warning is never skipped.
 	_marker.global_position = global_position if is_nan(_landing.y) else _landing
 	_marker.visible = true
+	# Both jump back to the column from wherever the last drop left them: not
+	# motion to interpolate across (issue #108).
+	_rock.reset_physics_interpolation()
+	_marker.reset_physics_interpolation()
 	_animate_warning()
 
 func _animate_warning() -> void:

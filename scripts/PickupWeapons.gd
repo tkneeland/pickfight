@@ -15,15 +15,27 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/boomstick.tres",
 ]
 
+## The weapons as `available_weapons()` first loaded them, held for the
+## session. See there for why.
+static var _loaded: Array[Resource] = []
+static var _loaded_once: bool = false
+
 ## The roster's pickup-eligible weapons, loaded. A path that does not exist
 ## is skipped rather than failing the round, so a roster edit that removes a
 ## weapon file costs that weapon and nothing else.
+##
+## Loaded once and held (issue #108). `load()` only returns a cached resource
+## while something still holds it, and between rounds nothing holds a weapon
+## nobody picked up -- so every pickup spawn re-read all five files from disk,
+## measured at 9-10 ms, a dropped frame at every round start and every pickup
+## interval. A copy of the list goes out, so a caller cannot edit the cache.
 static func available_weapons() -> Array[Resource]:
-	var weapons: Array[Resource] = []
-	for path: String in WEAPON_PATHS:
-		if ResourceLoader.exists(path):
-			weapons.append(load(path))
-	return weapons
+	if not _loaded_once:
+		_loaded_once = true
+		for path: String in WEAPON_PATHS:
+			if ResourceLoader.exists(path):
+				_loaded.append(load(path))
+	return _loaded.duplicate()
 
 ## One weapon drawn uniformly at random from `candidates`, never the pickaxe
 ## however it got into the list. Null when nothing eligible is offered, rather
