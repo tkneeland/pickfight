@@ -1,24 +1,37 @@
 extends CanvasLayer
 
-## The host screen's sound control (issue #75, ADR-0016): a small "Sound"
-## button in the bottom-right corner that opens a master volume slider and a
-## mute box. `M` toggles mute from the keyboard. There is no settings or pause
-## screen in the game yet, so this is the whole of it; it drives `Sfx`'s
-## `set_master_volume()` / `set_muted()`, which remember the choice.
+## The host screen's settings menu (issues #75 and #118, ADR-0016, ADR-0017).
+## A small "Settings" button in the bottom-right corner opens a panel with
+## these controls:
 ##
-## Built by `Sfx` once the game's own scene is running, so no scene file has
+## - master, SFX and music volume sliders;
+## - a mute box;
+## - a fullscreen box.
+##
+## Keys: `Esc` opens and closes the panel, `M` toggles mute and `F11` toggles
+## fullscreen.
+##
+## It drives `Sfx` (master, SFX, mute, fullscreen) and `Music` (music volume),
+## and they remember each choice. This file holds no settings of its own.
+##
+## `Sfx` builds it once the game's own scene is running, so no scene file has
 ## to carry it. The bottom-right corner is free: the join text and scores sit
 ## top-left, the QR code top-right.
 
 const MARGIN: float = 12.0
-const SLIDER_WIDTH: float = 160.0
+const SLIDER_WIDTH: float = 180.0
 
 var sfx: Node
+## The `Music` autoload, or null. Without it the music slider is hidden.
+var music: Node
 
 var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
+var _sfx_slider: HSlider
+var _music_slider: HSlider
 var _mute: CheckBox
+var _fullscreen: CheckBox
 
 func _ready() -> void:
 	layer = 20
@@ -43,22 +56,13 @@ func _ready() -> void:
 	corner.add_child(_panel)
 	var rows := VBoxContainer.new()
 	_panel.add_child(rows)
-	var title := Label.new()
-	title.text = "Master volume"
-	rows.add_child(title)
-	_slider = HSlider.new()
-	_slider.name = "Volume"
-	_slider.min_value = 0.0
-	_slider.max_value = 1.0
-	_slider.step = 0.05
-	_slider.custom_minimum_size = Vector2(SLIDER_WIDTH, 0.0)
-	_slider.focus_mode = Control.FOCUS_NONE
-	rows.add_child(_slider)
-	_mute = CheckBox.new()
-	_mute.name = "Mute"
-	_mute.text = "Mute (M)"
-	_mute.focus_mode = Control.FOCUS_NONE
-	rows.add_child(_mute)
+	_slider = _add_slider(rows, "Volume", "Master volume")
+	_sfx_slider = _add_slider(rows, "SfxVolume", "Sound effects")
+	_music_slider = _add_slider(rows, "MusicVolume", "Music")
+	if music == null:
+		_music_slider.get_parent().visible = false
+	_mute = _add_box(rows, "Mute", "Mute (M)")
+	_fullscreen = _add_box(rows, "Fullscreen", "Fullscreen (F11)")
 
 	_toggle = Button.new()
 	_toggle.name = "Toggle"
@@ -68,35 +72,101 @@ func _ready() -> void:
 
 	refresh()
 	_slider.value_changed.connect(_on_volume_changed)
+	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
+	_music_slider.value_changed.connect(_on_music_volume_changed)
 	_mute.toggled.connect(_on_mute_toggled)
-	_toggle.pressed.connect(_on_toggle_pressed)
+	_fullscreen.toggled.connect(_on_fullscreen_toggled)
+	_toggle.pressed.connect(toggle_panel)
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_M:
-		sfx.toggle_muted()
-		refresh()
-		get_viewport().set_input_as_handled()
+	if key == null or not key.pressed or key.echo:
+		return
+	match key.physical_keycode:
+		KEY_M:
+			sfx.toggle_muted()
+		KEY_F11:
+			sfx.toggle_fullscreen()
+		KEY_ESCAPE:
+			toggle_panel()
+		_:
+			return
+	refresh()
+	get_viewport().set_input_as_handled()
 
-## Show `Sfx`'s current volume and mute, without echoing them back to it.
+## Show the current settings, without echoing them back.
 func refresh() -> void:
 	_slider.set_value_no_signal(sfx.master_volume)
+	_sfx_slider.set_value_no_signal(sfx.sfx_volume)
+	if music != null:
+		_music_slider.set_value_no_signal(music.volume)
 	_mute.set_pressed_no_signal(sfx.muted)
-	_toggle.text = "Sound: off" if sfx.muted else "Sound"
+	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
+	_toggle.text = "Settings (muted)" if sfx.muted else "Settings"
+
+func toggle_panel() -> void:
+	_panel.visible = not _panel.visible
+
+func is_open() -> bool:
+	return _panel.visible
 
 func volume_slider() -> HSlider:
 	return _slider
 
+func sfx_slider() -> HSlider:
+	return _sfx_slider
+
+func music_slider() -> HSlider:
+	return _music_slider
+
 func mute_box() -> CheckBox:
 	return _mute
 
+func fullscreen_box() -> CheckBox:
+	return _fullscreen
+
+func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlider:
+	var group := VBoxContainer.new()
+	group.name = node_name + "Row"
+	rows.add_child(group)
+	var label := Label.new()
+	label.text = title
+	group.add_child(label)
+	var slider := HSlider.new()
+	slider.name = node_name
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.custom_minimum_size = Vector2(SLIDER_WIDTH, 0.0)
+	slider.focus_mode = Control.FOCUS_NONE
+	group.add_child(slider)
+	return slider
+
+func _add_box(rows: VBoxContainer, node_name: String, title: String) -> CheckBox:
+	var box := CheckBox.new()
+	box.name = node_name
+	box.text = title
+	box.focus_mode = Control.FOCUS_NONE
+	rows.add_child(box)
+	return box
+
 func _on_volume_changed(value: float) -> void:
 	sfx.set_master_volume(value)
+	refresh()
+
+func _on_sfx_volume_changed(value: float) -> void:
+	sfx.set_sfx_volume(value)
+	refresh()
+
+func _on_music_volume_changed(value: float) -> void:
+	if music != null:
+		music.set_volume(value)
 	refresh()
 
 func _on_mute_toggled(pressed: bool) -> void:
 	sfx.set_muted(pressed)
 	refresh()
 
-func _on_toggle_pressed() -> void:
-	_panel.visible = not _panel.visible
+func _on_fullscreen_toggled(pressed: bool) -> void:
+	sfx.set_fullscreen(pressed)
+	refresh()
