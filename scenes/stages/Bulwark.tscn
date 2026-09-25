@@ -57,8 +57,13 @@ size = Vector2(8000, 40)
 ; to trap someone in -- each is a floating slab with open air below, same as
 ; every other stage's floors.
 
+; Backdrop (issue #117): fortress.
 [node name="Bulwark" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.1, 0.1, 0.18, 1)
+background_sky_bottom = Color(0.24, 0.22, 0.26, 1)
+background_silhouette = Color(0.1, 0.1, 0.14, 1)
+background_layers = PackedStringArray("clouds", "mountains", "city")
 
 [node name="Keep" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)

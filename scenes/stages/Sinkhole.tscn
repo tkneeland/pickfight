@@ -60,8 +60,13 @@ size = Vector2(8000, 40)
 ; shrunk once on its own, so the last refuge is the same core a full round
 ; of erosion cannot take away.
 
+; Backdrop (issue #117): marsh.
 [node name="Sinkhole" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.08, 0.11, 0.1, 1)
+background_sky_bottom = Color(0.2, 0.22, 0.18, 1)
+background_silhouette = Color(0.08, 0.11, 0.08, 1)
+background_layers = PackedStringArray("clouds", "hills")
 
 [node name="FarLeft" parent="." instance=ExtResource("3")]
 position = Vector2(-330, 300)

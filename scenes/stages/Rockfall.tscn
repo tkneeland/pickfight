@@ -58,8 +58,13 @@ size = Vector2(8000, 40)
 ; kill zone (ADR-0012) reaches them together -- nobody is left holding lower
 ; ground than anyone else when the deadline arrives.
 
+; Backdrop (issue #117): quarry.
 [node name="Rockfall" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.16, 0.15, 0.16, 1)
+background_sky_bottom = Color(0.3, 0.26, 0.22, 1)
+background_silhouette = Color(0.16, 0.13, 0.11, 1)
+background_layers = PackedStringArray("mountains", "rocks")
 
 [node name="BankLeft" type="StaticBody2D" parent="."]
 position = Vector2(-480, 380)

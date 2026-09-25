@@ -21,8 +21,13 @@ size = Vector2(8000, 40)
 ; stepped approximation of a slope catches a swung head on every riser, and
 ; the whole idea here is one clean surface to slide and swing along.
 
+; Backdrop (issue #117): hillside.
 [node name="Slant" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.14, 0.16, 0.24, 1)
+background_sky_bottom = Color(0.28, 0.26, 0.26, 1)
+background_silhouette = Color(0.14, 0.14, 0.16, 1)
+background_layers = PackedStringArray("clouds", "hills")
 
 [node name="Landmass" type="StaticBody2D" parent="."]
 

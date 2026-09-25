@@ -97,8 +97,13 @@ size = Vector2(8000, 40)
 ; bank, low ledge, high ledge, ceiling top -- is a staircase of pickaxe
 ; hooks with open sky over every step.
 
+; Backdrop (issue #117): cavern.
 [node name="Gauntlet" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.07, 0.07, 0.09, 1)
+background_sky_bottom = Color(0.16, 0.15, 0.17, 1)
+background_silhouette = Color(0.08, 0.07, 0.08, 1)
+background_layers = PackedStringArray("rocks", "rocks")
 
 [node name="BankLeft" type="StaticBody2D" parent="."]
 position = Vector2(-475, 320)

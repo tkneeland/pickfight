@@ -46,8 +46,13 @@ size = Vector2(8000, 40)
 ; overlap to take them over. The 600 px of water and the cycle time barely
 ; change (8 s round trip to 9.1 s).
 
+; Backdrop (issue #117): open water, a far coast.
 [node name="Ferry" type="Node2D"]
 script = ExtResource("1")
+background_sky_top = Color(0.08, 0.14, 0.22, 1)
+background_sky_bottom = Color(0.18, 0.26, 0.3, 1)
+background_silhouette = Color(0.08, 0.14, 0.18, 1)
+background_layers = PackedStringArray("clouds", "mountains")
 
 [node name="Barge" parent="." instance=ExtResource("3")]
 position = Vector2(-250, 380)
