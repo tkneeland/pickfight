@@ -85,9 +85,11 @@ Notes:
 - For the other two, the page lists WAV downloads. The OGG used here is the
   Vorbis copy of the same audio that OpenGameArt serves for the page's
   player. It is much smaller than the WAV.
-- The fast-fight page says its licence is "same as the original" (Ville
-  Nousiainen's "Fast fight / battle music"). Ville Nousiainen asks, as an
-  optional credit, for a link to http://soundcloud.com/mutkanto.
+- The fast-fight page says its licence is "same as the original". The
+  original is Ville Nousiainen's "Fast fight / battle music",
+  https://opengameart.org/content/fast-fight-battle-music, and its page also
+  gives CC0 (checked the same day). Ville Nousiainen asks, as an optional
+  credit, for a link to http://soundcloud.com/mutkanto.
 - Credit for Snowfall: "Music by Kistol, but credit is not required."
 
 That is three files, about 1.6 MB in all. The `music_tracks_exist_and_credited`
