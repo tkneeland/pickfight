@@ -1,0 +1,8 @@
+$ git clone -q . <scratch>/pf-fresh-61        # at df1d322; the clone has no .godot/
+$ godot --headless --path <scratch>/pf-fresh-61 --quit
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+Controller page: http://172.19.9.117:8080/
+(exit 0)
+$ grep -E "SCRIPT ERROR|Failed to load script" <output above>
+(no output, grep exit 1): PASS
