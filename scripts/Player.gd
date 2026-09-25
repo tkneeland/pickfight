@@ -84,6 +84,12 @@ const MIN_HAFT_MASS: float = 0.05
 ## vertical does not make it flicker. See `_update_head_mirror()`.
 const HEAD_FLIP_DEADBAND: float = PI / 18.0
 
+## How far inside the groove's `min_reach` the anchor may be before the body
+## is stopped from closing on it (issue #83): room for the solver's ordinary
+## give, so a weapon resting at `min_reach` is left alone. See
+## `_hold_min_reach()`.
+const MIN_REACH_SLACK: float = 2.0
+
 ## Damage a player dies at. A scale, not a health bar -- there is no health
 ## bar, and how hurt a player is shows on their body -- but the number has to
 ## be something, and 100 is the one every per-hit figure below is read
@@ -306,8 +312,13 @@ func _physics_process(delta: float) -> void:
 	_update_damage_visual()
 	if not _rig_is_live():
 		return
+	# Whether something is holding the head up, read before the strike
+	# scoring clears the sweep's half of it: see `_hold_min_reach()`.
+	var head_stopped: bool = _head.swept_into != null or _head.get_contact_count() > 0
 	_score_swept_strike()
 	_head_velocity = _head.linear_velocity
+	if head_stopped:
+		_hold_min_reach()
 	_drive_angle(delta)
 	_drive_extension(delta)
 	_update_weapon_visual()
@@ -701,6 +712,54 @@ func _drive_angle(delta: float) -> void:
 	var target_w: float = clampf(error / delta, -limit, limit)
 	var torque: float = (target_w - _haft.angular_velocity) * inertia / delta
 	_haft.apply_torque(clampf(torque, -max_torque, max_torque))
+
+## The groove's inner end as a hard stop for the body (issue #83).
+##
+## `min_reach` is meant to be a physical limit, like `max_reach`: the groove
+## runs from one to the other. But a joint is only as stiff as the solver can
+## make it, and this one is a chain -- body, pin, a haft of 0.05, groove, head
+## -- asked to stop a body ten and twenty times heavier than what is on it.
+## When the head is stopped on something and the body keeps coming, the
+## solver gives, and the body runs on past its own head. Measured on the
+## boomstick (head 0.1) launched off a bounce pad straight up under a
+## ceiling: the muzzle stopped on the ceiling, the body at 1600 px/s took five
+## ticks to stop, and it did so 22.9 px *past* its anchor, with the gun still
+## pointing up and drawn through the body and the haft line running backwards
+## from the body to the anchor for seven ticks. The same happens without the
+## head's world sweep, only less (10 px), so it is the joint and not the
+## sweep; and it is the boomstick because it is the lightest head.
+##
+## So here, between steps, a body inside `min_reach` of its own anchor loses
+## the part of its velocity that is still carrying it onto the head. Only
+## that part, and only down to the head's own speed along the haft or to
+## zero, whichever is more: the body is never pushed back or sped up, so this
+## can take energy out of a collision but never put any in, and a head
+## knocked back into its owner does not throw the owner. The extension drive
+## then brings the reach back out as it does from any other error.
+##
+## Only while the head is stopped on something -- touching it, or caught by
+## the world sweep this tick -- because that is the only case the solver
+## gets wrong. A head in clear air inside `min_reach` is one the body is
+## about to carry along, and there the joint shares the velocity out between
+## the two, which is right: stopping the body instead would throw away the
+## body's momentum, and a shove on the body alone (a knockback, a bullet, a
+## scenario setting the body's velocity) would come out a fraction of itself.
+##
+## It acts between steps, so it cannot undo a step that carried the body past
+## the anchor on its own. Off the pad that step leaves the anchor 7 px ahead
+## of the body, so it holds. Two bodies thrown at each other in mid-air at
+## 1200-1800 px/s each close 40-60 px a tick, and there the body can still
+## end up to 10 px behind for a tick or two, where it used to go 34 px behind
+## for seven.
+func _hold_min_reach() -> void:
+	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
+	var reach: float = (_head.global_position - global_position).dot(axis)
+	if reach >= _stats.min_reach - MIN_REACH_SLACK:
+		return
+	var onto: float = linear_velocity.dot(axis)
+	var allowed: float = maxf(_head.linear_velocity.dot(axis), 0.0)
+	if onto > allowed:
+		linear_velocity -= axis * (onto - allowed)
 
 ## Extension drive: clamped force along the haft, per ADR-0006.
 ##
