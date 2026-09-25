@@ -146,6 +146,15 @@ var drive_force: float = 0.0
 var swept_into: Object = null
 var swept_speed: float = 0.0
 
+## Sound hooks (issue #75, ADR-0016); nothing in the physics reads them.
+## `struck_world`: the world sweep stopped this head against `collider` --
+## terrain, or a player's body -- heading into it at `speed` px/s.
+## `clashed`: this head's pair correction took `speed` px/s of closing speed
+## out against another head. Only the head that owns the pair corrects it,
+## so one clash is one `clashed`.
+signal struck_world(collider: Object, speed: float, point: Vector2)
+signal clashed(speed: float, point: Vector2)
+
 var _previous_position: Vector2 = Vector2.ZERO
 ## The facing that goes with `_previous_position`. Both sweeps reconstruct the
 ## pose the head held when the step began, and a pose is a position *and* a
@@ -673,6 +682,7 @@ func _apply_world_contact(state: PhysicsDirectBodyState2D, hit: Dictionary) -> v
 		state.linear_velocity -= normal * into
 		swept_into = hit["collider"]
 		swept_speed = -into
+		struck_world.emit(hit["collider"], -into, Vector2(hit["contact"]))
 
 ## Whatever the sweep stopped against: its normal, and which body it was.
 ## Probed just past the contact point, the shallowest overlap that still
@@ -937,6 +947,7 @@ func _apply_head_crossing(state: PhysicsDirectBodyState2D, hit: Dictionary) -> v
 	var closing: float = (state.linear_velocity - Vector2(hit["partner_velocity"])).dot(normal)
 	if closing < 0.0:
 		state.linear_velocity -= normal * closing
+		clashed.emit(-closing, Vector2(hit["origin"]))
 
 ## The earliest moment in the step at which any circle of this head met any
 ## circle of another, and the normal along which they met there.

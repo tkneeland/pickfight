@@ -38,6 +38,7 @@ extend_speed = 1500.0
 rest_return_speed = 700.0
 max_drive_force = 4000.0
 damage = 20.0
+sound_set = &"staff"
 head_circle_offsets = PackedVector2Array(2.07, 0.1)
 head_circle_radii = PackedFloat32Array(2.93)
 art_outline = PackedVector2Array(5.08, 0, 4.93, 0.96, 4.48, 1.83, 3.8, 2.51, 2.93, 2.95, 1.97, 3.1, 1.01, 2.95, 0.15, 2.51, -0.54, 1.83, -0.98, 0.96, -1.13, 0, -0.98, -0.96, -0.54, -1.83, 0.15, -2.51, 1.01, -2.95, 1.97, -3.1, 2.93, -2.95, 3.8, -2.51, 4.48, -1.83, 4.93, -0.96)

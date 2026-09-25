@@ -50,6 +50,7 @@ extend_speed = 900.0
 rest_return_speed = 600.0
 max_drive_force = 6000.0
 damage = 8.0
+sound_set = &"boomstick"
 fire_interval = 5.0
 projectile_damage = 35.0
 projectile_speed = 900.0
