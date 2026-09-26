@@ -86,17 +86,27 @@ func _watch(node: Node) -> void:
 
 ## `attacker` comes last because that is where the signal's bind puts it.
 func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool, attacker: Node) -> void:
+	var world_scale: float = _world_scale()
 	if amount > 0.0:
 		var colour: Color = LETHAL_COLOR if lethal else _identity_colour(attacker)
 		var marker := HitMarker.new()
-		marker.setup(point, colour, _marker_arm(amount, lethal), lethal, amount)
+		marker.setup(point, colour, _marker_arm(amount, lethal), lethal, amount, world_scale)
 		add_child(marker)
 	elif not _zero_allowed(attacker, victim):
 		return
 	if show_damage_numbers:
 		var number := DamageNumber.new()
-		number.setup(point, amount, _number_font(amount))
+		number.setup(point, amount, _number_font(amount), world_scale)
 		add_child(number)
+
+## How much to scale a marker or number up so it reads the same size on
+## screen however far the camera is zoomed out (#163): 1 on a normal stage,
+## 1 / zoom on a large one (issue #144), like RoundManager's name tags.
+func _world_scale() -> float:
+	var camera: Camera2D = get_viewport().get_camera_2d() if is_inside_tree() else null
+	if camera != null and camera.zoom.x > 0.0:
+		return 1.0 / camera.zoom.x
+	return 1.0
 
 func _zero_allowed(attacker: Node, victim: Node) -> bool:
 	var key: String = "%d:%d" % [attacker.get_instance_id(), victim.get_instance_id()]
@@ -124,13 +134,17 @@ class HitMarker extends Node2D:
 	var lethal: bool
 	var amount: float
 	var age: float = 0.0
+	## The camera-zoom compensation the pop is applied on top of (#163).
+	var base_scale: float = 1.0
 
-	func setup(at: Vector2, c: Color, a: float, is_lethal: bool, dealt: float) -> void:
+	func setup(at: Vector2, c: Color, a: float, is_lethal: bool, dealt: float, world_scale: float = 1.0) -> void:
 		position = at
 		colour = c
 		arm = a
 		lethal = is_lethal
 		amount = dealt
+		base_scale = world_scale
+		scale = Vector2.ONE * base_scale
 
 	func _process(delta: float) -> void:
 		age += delta
@@ -139,7 +153,7 @@ class HitMarker extends Node2D:
 			return
 		var t: float = age / MARKER_LIFETIME
 		# Pops slightly past full size, then settles while fading.
-		scale = Vector2.ONE * (1.0 + 0.3 * sin(minf(t * 3.0, 1.0) * PI))
+		scale = Vector2.ONE * base_scale * (1.0 + 0.3 * sin(minf(t * 3.0, 1.0) * PI))
 		modulate.a = 1.0 - t
 		queue_redraw()
 
@@ -158,8 +172,9 @@ class DamageNumber extends Label:
 	var amount: float
 	var age: float = 0.0
 	var _start: Vector2
+	var _rise: float = NUMBER_RISE
 
-	func setup(at: Vector2, dealt: float, font_size: int) -> void:
+	func setup(at: Vector2, dealt: float, font_size: int, world_scale: float = 1.0) -> void:
 		amount = dealt
 		text = str(roundi(dealt))
 		var settings := LabelSettings.new()
@@ -172,8 +187,12 @@ class DamageNumber extends Label:
 		vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		size = Vector2(font_size * 3, font_size * 1.5)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Scaled from its top-left corner by the camera-zoom compensation (#163),
+		# so the centring and the offset above the hit are scaled with it.
+		scale = Vector2.ONE * world_scale
+		_rise = NUMBER_RISE * world_scale
 		# Centred on the hit, and a little above it so the marker stays visible.
-		_start = at - size * 0.5 + Vector2(0, -font_size)
+		_start = at + (-size * 0.5 + Vector2(0, -font_size)) * world_scale
 		position = _start
 
 	func _process(delta: float) -> void:
@@ -182,5 +201,5 @@ class DamageNumber extends Label:
 			queue_free()
 			return
 		var t: float = age / NUMBER_LIFETIME
-		position = _start + Vector2(0, -NUMBER_RISE * t)
+		position = _start + Vector2(0, -_rise * t)
 		modulate.a = 1.0 - t * t

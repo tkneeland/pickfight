@@ -94,9 +94,11 @@ func get_background() -> Node2D:
 	return get_node_or_null(BACKGROUND_NODE_NAME) as Node2D
 
 ## Spawn points declared as `Marker2D` children named `Spawn0`, `Spawn1`, ...
-## Sorted by name so slot order matches player slot order regardless of the
-## order children were added in the editor -- naturally, so `Spawn10` lands
-## after `Spawn9` rather than after `Spawn1`.
+## Sorted by name, regardless of the order children were added in the editor
+## -- naturally, so `Spawn10` lands after `Spawn9` rather than after `Spawn1`.
+## RoundManager hands them out in roster order (#163): the round's first
+## player gets `Spawn0`, its second `Spawn1`, whatever their slot numbers, so
+## a stage that pairs its spawns left/right splits any two players.
 ##
 ## World positions, so a stage root placed anywhere other than the origin
 ## still spawns players on its own geometry. `RoundManager` reads these after

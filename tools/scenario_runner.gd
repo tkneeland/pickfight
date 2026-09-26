@@ -225,6 +225,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_rate_about_one_in_three",
 	"large_stages_only_with_five_or_more_players",
 	"large_stage_camera_fits_view_with_eight_players",
+	"gap_roster_spawns_in_roster_order",
+	"stage_bag_redeals_when_player_count_crosses_large",
+	"stage_freed_under_victory_and_lobby",
+	"last_survivor_scores_when_falling_a_tick_later",
+	"hit_feedback_scales_with_camera_zoom",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1001,6 +1006,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_large_stages_only_with_five_or_more_players()
 		"large_stage_camera_fits_view_with_eight_players":
 			return await _scenario_large_stage_camera_fits_view_with_eight_players()
+		"gap_roster_spawns_in_roster_order":
+			return await _scenario_gap_roster_spawns_in_roster_order()
+		"stage_bag_redeals_when_player_count_crosses_large":
+			return await _scenario_stage_bag_redeals_when_player_count_crosses_large()
+		"stage_freed_under_victory_and_lobby":
+			return await _scenario_stage_freed_under_victory_and_lobby()
+		"last_survivor_scores_when_falling_a_tick_later":
+			return await _scenario_last_survivor_scores_when_falling_a_tick_later()
+		"hit_feedback_scales_with_camera_zoom":
+			return await _scenario_hit_feedback_scales_with_camera_zoom()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12709,7 +12724,7 @@ func _scenario_spawns_shared_when_stage_has_fewer_than_players() -> Array[String
 	rm.set("_stage_spawn_points", [Vector2(-300, 0), Vector2(-100, 0), Vector2(100, 0), Vector2(300, 0)] as Array[Vector2])
 	var spots: Array[Vector2] = []
 	for slot in 8:
-		spots.append(rm._spawn_for_slot(slot))
+		spots.append(rm._spawn_point(slot))
 	print("      8 on 4 spawns: %s" % [spots])
 	for i in 8:
 		for j in range(i + 1, 8):
@@ -12722,8 +12737,8 @@ func _scenario_spawns_shared_when_stage_has_fewer_than_players() -> Array[String
 		eight.append(Vector2(i * 100, 0))
 	rm.set("_stage_spawn_points", eight)
 	for slot in 8:
-		if rm._spawn_for_slot(slot) != eight[slot]:
-			failures.append("with eight spawns slot %d got %s, not its own %s" % [slot, rm._spawn_for_slot(slot), eight[slot]])
+		if rm._spawn_point(slot) != eight[slot]:
+			failures.append("with eight spawns slot %d got %s, not its own %s" % [slot, rm._spawn_point(slot), eight[slot]])
 	rm.free()
 	_scenario_completed = true
 	return failures
@@ -15205,5 +15220,306 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 				path.get_file(), camera.zoom, camera.global_position])
 		await _teardown(holder)
 
+	_scenario_completed = true
+	return failures
+
+# --- Round flow fixes (issue #163) ---------------------------------------------
+
+## A RoundManager over `player_count` players (slots 0..n-1) with only
+## `roster_slots` claimed, rotating `scenes` into a container under one holder
+## node -- rounds restart at once, no title card. Players start inert.
+func _round_flow_fixture(player_count: int, roster_slots: Array[int], scenes: Array[PackedScene]) -> Dictionary:
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var container := Node2D.new()
+	container.name = "Container"
+	holder.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	for i in player_count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "P%d" % i
+		player.start_in_round = false
+		holder.add_child(player)
+		player.global_position = DEEP_PARK_POSITION + Vector2(400.0 * i, 0.0)
+		players.append(player)
+		paths.append(NodePath("../P%d" % i))
+	var roster := _FakeRoster.new()
+	roster.name = "Roster"
+	roster.slots = roster_slots
+	holder.add_child(roster)
+	var rm := Node.new()
+	rm.set_script(RoundManagerType)
+	rm.player_paths = paths
+	rm.stage_scenes = scenes
+	rm.arena_container_path = NodePath("../Container")
+	rm.controller_server_path = NodePath("../Roster")
+	rm.min_players_to_start = 2
+	rm.round_end_pause_sec = 0.0
+	rm.stage_title_sec = 0.0
+	holder.add_child(rm)
+	return {"holder": holder, "container": container, "players": players, "roster": roster, "round_manager": rm}
+
+## Whether every one of `slots` is alive and a stage is up.
+func _round_live(fixture: Dictionary, slots: Array[int]) -> bool:
+	if _active_stage(fixture["container"]) == null:
+		return false
+	for slot: int in slots:
+		if not fixture["players"][slot].alive:
+			return false
+	return true
+
+const GAP_SPAWN_TOLERANCE: float = 30.0
+
+## Issue #163, finding 1: players start on spawn points in roster order, not
+## by slot number. Stages pair their spawns left/right (Flatlands: -60/+60,
+## then -520/+520), so a roster of slots 0 and 2 -- slot 1 left -- used to put
+## both on the left, 460 px apart on the same side. Now slot 0 takes Spawn0
+## and slot 2 takes Spawn1, on either side of the middle; slot 1 stays out.
+func _scenario_gap_roster_spawns_in_roster_order() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = [load("res://scenes/stages/Flatlands.tscn") as PackedScene]
+	var fixture: Dictionary = _round_flow_fixture(3, [0, 2], scenes)
+	var players: Array[RigidBody2D] = fixture["players"]
+	var live: bool = await _await_condition(func() -> bool: return _round_live(fixture, [0, 2]), ROUND_LOOP_TIMEOUT_MSEC)
+	if not live:
+		failures.append("the round with slots 0 and 2 never started")
+		await _teardown(fixture["holder"])
+		_scenario_completed = true
+		return failures
+	var spawns: Array[Vector2] = _active_stage(fixture["container"]).get_spawn_points()
+	print("      slot 0 at %s, slot 2 at %s; Spawn0 %s, Spawn1 %s" % [
+		players[0].global_position, players[2].global_position, spawns[0], spawns[1]])
+	for pair: Array in [[0, 0], [2, 1]]:
+		var slot: int = pair[0]
+		var spawn: Vector2 = spawns[pair[1]]
+		if absf(players[slot].global_position.x - spawn.x) > GAP_SPAWN_TOLERANCE:
+			failures.append("slot %d started at x %.0f, not on Spawn%d at x %.0f" % [
+				slot, players[slot].global_position.x, pair[1], spawn.x])
+	if signf(players[0].global_position.x) == signf(players[2].global_position.x):
+		failures.append("slots 0 and 2 both started on the same side (x %.0f and %.0f)" % [
+			players[0].global_position.x, players[2].global_position.x])
+	if players[1].alive or players[1].visible:
+		failures.append("unclaimed slot 1 was brought into the round")
+	await _teardown(fixture["holder"])
+	_scenario_completed = true
+	return failures
+
+const REDEAL_SEEDS: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8]
+
+## Issue #163, finding 2: the stage bag follows the player count. A bag dealt
+## for three players holds no large stage; when seven play the next round, the
+## bag is re-dealt at once, so every large stage comes up within one bag's
+## worth of rounds -- before, the rest of the three-player bag played out
+## first. Checked over several seeds, with no stage twice in a row across the
+## re-deal. Going back down to three re-deals too, and deals no large stage.
+## And a new match starts a fresh bag.
+func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[String]:
+	var failures: Array[String] = []
+	var big := Vector2(2400.0, 1350.0)
+	var scenes: Array[PackedScene] = []
+	for i in 9:
+		scenes.append(_make_view_stub_stage("Normal%d" % i, StageType.DEFAULT_VIEW_SIZE))
+	var large: Array[int] = []
+	for i in 3:
+		large.append(scenes.size())
+		scenes.append(_make_view_stub_stage("Large%d" % i, big))
+	for seed_value: int in REDEAL_SEEDS:
+		var rm: Node = _new_stage_dealer(scenes, 3, seed_value)
+		var small: Array[int] = _deal_stages(rm, 6)
+		rm.set("_round_player_count", 7)
+		var grown: Array[int] = _deal_stages(rm, scenes.size())
+		var first_large: int = -1
+		for i in grown.size():
+			if large.has(grown[i]):
+				first_large = i
+				break
+		print("      seed %d: 3 players %s, then 7 players %s (first large %d round(s) in)" % [seed_value, small, grown, first_large + 1])
+		for index: int in large:
+			if not grown.has(index):
+				failures.append("seed %d: large stage %d was not dealt in the %d rounds after seven joined" % [seed_value, index, grown.size()])
+		var sequence: Array[int] = small + grown
+		rm.set("_round_player_count", 3)
+		var shrunk: Array[int] = _deal_stages(rm, 10)
+		sequence += shrunk
+		for index: int in shrunk:
+			if large.has(index):
+				failures.append("seed %d: large stage %d dealt after the count fell back to three" % [seed_value, index])
+				break
+		for i in range(1, sequence.size()):
+			if sequence[i] == sequence[i - 1]:
+				failures.append("seed %d: stage %d dealt twice in a row at round %d" % [seed_value, sequence[i], i])
+		rm.free()
+
+	# A new match starts from a fresh bag.
+	var match_rm: Node = _new_stage_dealer(scenes, 3, 163)
+	_deal_stages(match_rm, 3)
+	var panel_a := Control.new()
+	var panel_b := Control.new()
+	match_rm.set("_lobby_panel", panel_a)
+	match_rm.set("_victory_panel", panel_b)
+	var before: int = (match_rm.get("_bag") as Array).size()
+	match_rm._begin_match()
+	var after: int = (match_rm.get("_bag") as Array).size()
+	print("      bag before a new match: %d left; after: %d" % [before, after])
+	if before == 0:
+		failures.append("the match fixture's bag was already empty; the check below proves nothing")
+	if after != 0:
+		failures.append("a new match kept the last match's bag (%d stage(s) left in it)" % after)
+	panel_a.free()
+	panel_b.free()
+	match_rm.free()
+	_scenario_completed = true
+	return failures
+
+## Issue #163, finding 3: the last round's stage does not keep running under
+## the victory screen or the lobby. Entering either frees it -- no falling
+## rocks or collapsing floors ticking, and making sounds, behind the podium --
+## and the next round instances a fresh one, still not a repeat.
+func _scenario_stage_freed_under_victory_and_lobby() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = []
+	for stage_name: String in ["StubA", "StubB", "StubC"]:
+		scenes.append(_make_stub_stage(stage_name, [Vector2(-100, -2000), Vector2(100, -2000)]))
+	var fixture: Dictionary = _round_flow_fixture(2, [0, 1], scenes)
+	var rm: Node = fixture["round_manager"]
+	var container: Node = fixture["container"]
+	for screen: String in ["victory", "lobby"]:
+		var live: bool = await _await_condition(func() -> bool: return _round_live(fixture, [0, 1]), ROUND_LOOP_TIMEOUT_MSEC)
+		if not live:
+			failures.append("no round was running before the %s screen" % screen)
+			break
+		var stage: Node2D = _active_stage(container)
+		var played: String = stage.get_meta("stub_stage_name")
+		if screen == "victory":
+			rm._enter_victory()
+		else:
+			rm._enter_lobby()
+		await _await_ticks(2)
+		print("      %s: %s freed %s; %d stage(s) left under it; phase %s" % [
+			screen, played, not is_instance_valid(stage), container.get_child_count(), rm.lobby_phase()])
+		if is_instance_valid(stage):
+			failures.append("%s kept running under the %s screen" % [played, screen])
+		if _active_stage(container) != null:
+			failures.append("a stage is still up under the %s screen" % screen)
+		if rm.lobby_phase() != screen:
+			failures.append("expected the %s screen, phase is %s" % [screen, rm.lobby_phase()])
+		# Back to a round: players out, then start one straight from WAITING.
+		for player: RigidBody2D in fixture["players"]:
+			player.leave_round()
+		rm.set("_state", 0)
+		live = await _await_condition(func() -> bool: return _round_live(fixture, [0, 1]), ROUND_LOOP_TIMEOUT_MSEC)
+		if not live:
+			failures.append("no round started after the %s screen" % screen)
+			break
+		var next: String = _active_stage(container).get_meta("stub_stage_name")
+		if next == played:
+			failures.append("the round after the %s screen repeated %s" % [screen, played])
+	await _teardown(fixture["holder"])
+	_scenario_completed = true
+	return failures
+
+## Issue #163, finding 4: the round's end is checked once per rendered frame,
+## but eliminations land on physics ticks, and a slow frame runs two. The last
+## survivor falling on the tick after the deciding KO used to leave nobody
+## standing when the check ran, and the round scored nobody. Driven here with
+## the check held off across two ticks: P1 falls, a tick later P2 falls, then
+## the check runs -- P2 scores. Two falling on the same tick is still a draw.
+func _scenario_last_survivor_scores_when_falling_a_tick_later() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = [_make_stub_stage("StubA", [Vector2(-100, -2000), Vector2(100, -2000)]),
+		_make_stub_stage("StubB", [Vector2(-100, -2000), Vector2(100, -2000)])]
+	var fixture: Dictionary = _round_flow_fixture(2, [0, 1], scenes)
+	var rm: Node = fixture["round_manager"]
+	var players: Array[RigidBody2D] = fixture["players"]
+	for case: String in ["a tick apart", "the same tick"]:
+		var live: bool = await _await_condition(func() -> bool: return _round_live(fixture, [0, 1]), ROUND_LOOP_TIMEOUT_MSEC)
+		if not live:
+			failures.append("%s: no round started" % case)
+			break
+		var scores_before: Array[int] = [rm.score_of(0), rm.score_of(1)]
+		var round_before: int = rm.get("_round_number")
+		rm.set_process(false)
+		var first_tick: int = Engine.get_physics_frames()
+		players[0].eliminate()
+		if case == "a tick apart":
+			await physics_frame
+		var second_tick: int = Engine.get_physics_frames()
+		players[1].eliminate()
+		rm.set_process(true)
+		var ended: bool = await _await_condition(func() -> bool:
+			return int(rm.get("_round_number")) > round_before or rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC)
+		var scored: Array[int] = [rm.score_of(0) - scores_before[0], rm.score_of(1) - scores_before[1]]
+		print("      %s (physics frames %d and %d): P1 +%d, P2 +%d" % [case, first_tick, second_tick, scored[0], scored[1]])
+		if not ended:
+			failures.append("%s: the round never ended" % case)
+		if case == "a tick apart":
+			if second_tick == first_tick:
+				failures.append("the two falls landed on the same physics frame; the race was not exercised")
+			if scored != [0, 1]:
+				failures.append("P2 outlived P1 by a tick and should have scored the round; scores moved by %s" % [scored])
+		elif scored != [0, 0]:
+			failures.append("both fell on the same tick, a draw, yet scores moved by %s" % [scored])
+	await _teardown(fixture["holder"])
+	_scenario_completed = true
+	return failures
+
+const LARGE_FEEDBACK_ZOOM: float = 0.5
+const FEEDBACK_SCALE_TOLERANCE: float = 0.001
+
+## Issue #163, finding 5: hitmarkers and damage numbers live in world space,
+## so a large stage's zoomed-out camera (issue #144) shrank them. They are now
+## scaled up by 1 / zoom, as the name tags are: at zoom 0.5 a marker and a
+## number are drawn at twice their size, the number still centred over the
+## hit. At zoom 1 nothing changes.
+func _scenario_hit_feedback_scales_with_camera_zoom() -> Array[String]:
+	var failures: Array[String] = []
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var camera := Camera2D.new()
+	camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
+	holder.add_child(camera)
+	await process_frame
+	camera.make_current()
+	var feedback: Node2D = HitFeedbackType.new()
+	holder.add_child(feedback)
+	var attacker := Node2D.new()
+	var victim := Node2D.new()
+	holder.add_child(attacker)
+	holder.add_child(victim)
+	var point := Vector2(300.0, -200.0)
+	for zoom: float in [1.0, LARGE_FEEDBACK_ZOOM]:
+		camera.zoom = Vector2(zoom, zoom)
+		var expected: float = 1.0 / zoom
+		var first_new: int = feedback.get_child_count()
+		feedback._on_strike_landed(victim, 45.0, point, false, attacker)
+		var marker: Node2D = null
+		var number: Label = null
+		for i in range(first_new, feedback.get_child_count()):
+			var child: Node = feedback.get_child(i)
+			if child is Label:
+				number = child
+			else:
+				marker = child
+		if marker == null or number == null:
+			failures.append("zoom %.2f: expected a marker and a number, got %s and %s" % [zoom, marker, number])
+			continue
+		var centre_x: float = number.position.x + number.size.x * number.scale.x * 0.5
+		var bottom: float = number.position.y + number.size.y * number.scale.y
+		print("      zoom %.2f: marker scale %.2f, number scale %.2f, number centred at x %.1f (hit at %.1f)" % [
+			zoom, marker.scale.x, number.scale.x, centre_x, point.x])
+		if absf(marker.scale.x - expected) > FEEDBACK_SCALE_TOLERANCE:
+			failures.append("zoom %.2f: hitmarker scaled %.3f, expected %.3f" % [zoom, marker.scale.x, expected])
+		if absf(number.scale.x - expected) > FEEDBACK_SCALE_TOLERANCE:
+			failures.append("zoom %.2f: damage number scaled %.3f, expected %.3f" % [zoom, number.scale.x, expected])
+		if absf(centre_x - point.x) > 1.0:
+			failures.append("zoom %.2f: damage number centred at x %.1f, not over the hit at %.1f" % [zoom, centre_x, point.x])
+		if bottom > point.y + 1.0:
+			failures.append("zoom %.2f: damage number reaches down to y %.1f, below the hit at %.1f" % [zoom, bottom, point.y])
+		# The pop animates on top of the zoom scale, never below it.
+		await process_frame
+		if is_instance_valid(marker) and marker.scale.x < expected - FEEDBACK_SCALE_TOLERANCE:
+			failures.append("zoom %.2f: the popping hitmarker shrank to %.3f, under %.3f" % [zoom, marker.scale.x, expected])
+	await _teardown(holder)
 	_scenario_completed = true
 	return failures
