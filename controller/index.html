@@ -25,8 +25,14 @@
     height: 100%;
     display: block;
   }
+  /* Issue #194: stacked above the lobby card (which covers the pad whenever
+     no round is being played) so the player sees its own badge and name there
+     and can tap the name to rename. pointer-events: none leaves the name the
+     only part that takes a touch. Below the gear (5), the host menu (8) and
+     the name and look cards (10). */
   #hud {
     position: fixed;
+    z-index: 4;
     top: env(safe-area-inset-top, 0px);
     left: 0;
     right: 0;
@@ -102,6 +108,8 @@
     justify-content: flex-start;
     gap: 20px;
     padding: 24px;
+    /* Issue #194: clear of the HUD (badge + name) now drawn on top of it. */
+    padding-top: calc(env(safe-area-inset-top, 0px) + 15vmin + 64px);
     background: rgba(13, 15, 20, 0.97);
     text-align: center;
   }
@@ -147,6 +155,7 @@
     background: #1b1f29;
     display: none;
   }
+  #solo-btn:disabled { opacity: 0.5; }
   #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
   #target-row button, #target-input {
     font: inherit;
@@ -607,10 +616,16 @@
   canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
 
   // ---- transport ----------------------------------------------------------
-  function setStatus(text) { statusEl.textContent = text; }
+  // Issue #194: the state line reads the status (connected, or why the host
+  // refused us), so every change redraws it.
+  function setStatus(text) {
+    statusEl.textContent = text;
+    showState();
+  }
 
   function setSlot(n) {
     slot = n;
+    if (n >= 0) { closeReason = ""; }
     slotEl.textContent = n < 0 ? "--" : "P" + (n + 1);
     nameEl.textContent = myName;
     applyColor();
@@ -697,6 +712,9 @@
   // taking the slot off each other.
   var replacedOut = false;
   var stateTimer = null;
+  // Issue #194: why the host last closed this phone's socket, kept until it
+  // is given a slot, so a refused phone keeps saying so while it retries.
+  var closeReason = "";
   function showState() {
     var text = "";
     if (kickedOut) {
@@ -706,7 +724,11 @@
     } else if (slot >= 0 && lobby && lobby.paused) {
       text = "Paused by the host";
     } else if (slot < 0) {
-      text = statusEl.textContent === "connected" ? "Waiting for a free slot" : "";
+      if (statusEl.textContent === "connected" || closeReason === NO_SLOT_REASON) {
+        text = "Waiting for a free slot";
+      } else if (closeReason) {
+        text = closeReason.charAt(0).toUpperCase() + closeReason.slice(1) + " — reconnecting…";
+      }
     } else if (lobby && (lobby.phase === "playing" || lobby.phase === "round_end")) {
       var inRound = (lobby.in_round || []).indexOf(slot) !== -1;
       var alive = (lobby.alive || []).indexOf(slot) !== -1;
@@ -721,8 +743,9 @@
     }
     stateEl.textContent = text;
     nameEl.classList.toggle("locked", inPlay());
-    document.getElementById("hint").style.display = (lobby && lobby.phase === "playing" &&
-      (lobby.alive || []).indexOf(slot) !== -1) || !lobby ? "" : "none";
+    // Issue #194: no "Drag to swing" on a phone that has no player to swing.
+    document.getElementById("hint").style.display = slot >= 0 && ((lobby && lobby.phase === "playing" &&
+      (lobby.alive || []).indexOf(slot) !== -1) || !lobby) ? "" : "none";
   }
 
   function buzz(kind) {
@@ -820,8 +843,15 @@
     for (var i = 0; i < msg.players.length; i++) { if (msg.players[i].bot) { haveBots = true; } }
     soloBtn.style.display = isHost && msg.phase === "lobby" ? "block" : "none";
     soloBtn.textContent = haveBots ? "Remove bots" : "Solo practice";
+    soloBtn.disabled = false;
   }
-  soloBtn.addEventListener("click", function () { sendText({ t: "solo", v: !haveBots }); });
+  // Issue #194: one press per lobby state -- a double tap must not add the
+  // bots and send them away again. The next lobby state enables it again.
+  soloBtn.addEventListener("click", function () {
+    if (soloBtn.disabled) { return; }
+    soloBtn.disabled = true;
+    sendText({ t: "solo", v: !haveBots });
+  });
 
   function sendTarget(n) {
     n = Math.max(1, Math.min(99, Math.round(Number(n) || 1)));
@@ -1111,7 +1141,7 @@
       b.addEventListener("click", (function (target, name, claim) {
         return function () {
           askConfirm("Are you sure? Kick " + name + " out of the game?",
-            function () { sendHost("kick", { slot: target, claim: claim, name: name }); },
+            function () { sendHost("kick", { slot: target, claim: claim }); },
             function () { return claimHolder(target, claim) !== null; });
         };
       })(p.slot, p.name, p.claim));
@@ -1175,6 +1205,9 @@
   // Must match ControllerServer.REPLACED_REASON (issue #164): this phone's id
   // connected again elsewhere, which now holds the slot. No retry either.
   var REPLACED_REASON = "opened somewhere else";
+  // Must match the reason ControllerServer closes a phone with when every
+  // slot is taken (issue #194): shown as "Waiting for a free slot".
+  var NO_SLOT_REASON = "no free player slot";
 
   function connect() {
     setStatus("connecting");
@@ -1218,6 +1251,7 @@
       var reason = (ev && ev.reason) ? String(ev.reason) : "";
       var kicked = reason === KICKED_REASON;
       var replaced = reason === REPLACED_REASON;
+      closeReason = kicked || replaced ? "" : reason;
       setStatus(kicked ? "Removed by the host" : (replaced ? "Opened somewhere else" :
         (reason ? (reason + " — retrying") : "reconnecting")));
       setSlot(-1);
@@ -1299,6 +1333,11 @@
       if (navigator.wakeLock && navigator.wakeLock.request) {
         navigator.wakeLock.request("screen").then(function (lock) {
           wakeLock = lock;
+          // Issue #194: the browser drops the lock whenever the page is
+          // hidden; forget it then so visibilitychange asks for a new one.
+          lock.addEventListener("release", function () {
+            if (wakeLock === lock) { wakeLock = null; }
+          });
         }, function () { /* expected over plain HTTP */ });
       }
     } catch (err) { /* expected over plain HTTP */ }
