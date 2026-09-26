@@ -1,5 +1,8 @@
 extends RigidBody2D
 
+# SCRATCH (#195 CI proof, reverted next commit): a class_name dependency.
+var _scratch_195: WeaponStats = null
+
 ## A player: a rotation-locked body, and the weapon it drives.
 ##
 ## The weapon is one real object used for movement, damage and blocking
