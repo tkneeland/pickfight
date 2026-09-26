@@ -96,6 +96,12 @@ const NORMAL_PROBE_DEPTH: float = 1.0
 ## Membership tracks being in the tree, so a rig torn down mid-frame stops
 ## being a candidate as soon as it leaves.
 const HEAD_GROUP: StringName = &"weapon_heads"
+## How squarely a contact has to face a push before it counts as blocking it
+## (`mass_blocking`): cos 60 degrees. Friction holds a gripping head well
+## past that (HEAD_GRIP_FRICTION 4 holds to 76 degrees), but inside it the
+## surface is plainly what the drive is pushing against, and outside it the
+## head can still slide along it on plain friction.
+const BLOCK_ANGLE_COS: float = 0.5
 ## Halvings spent finding the moment in the step at which two heads first
 ## touched. Ten resolves the largest relative step this rig produces -- 60 px,
 ## two heads charged at 1800 px/s each -- to 0.06 px, which is finer than the
@@ -175,6 +181,47 @@ var tether_length: float = 0.0
 ## that would have to be told otherwise.
 var swept_into: Object = null
 var swept_speed: float = 0.0
+
+## What held the head up during the last step (issue #180), read by
+## `Player._drive_extension` to tell a head that is blocked from one in clear
+## air. One entry per contact the solver reported, plus the world sweep's
+## correction if there was one: the surface normal, pointing out of whatever
+## the head touched and into the head, and how much mass stands behind that
+## surface -- INF for anything that will not move out of the way (terrain, a
+## frozen body, another driven head), or the body's own mass for something
+## loose that the head could shove along instead.
+##
+## Why another head counts as immovable: it is being driven back at this one
+## by a drive of its own, so while the two are pressed together it gives only
+## as the contest between the two drives says, not as its 0.1-0.5 of mass
+## would. Treating it as a loose 0.25 would size this drive's push on the
+## pair of heads and never let it reach its force ceiling -- the very cap
+## this exists to lift.
+var blocking_normals: PackedVector2Array = PackedVector2Array()
+var blocking_masses: PackedFloat32Array = PackedFloat32Array()
+
+## The mass standing behind the surface this head is pressed against in
+## direction `push`, or 0.0 when nothing is in the way of that push. A
+## contact counts only when its normal is within BLOCK_ANGLE_COS of straight
+## back against the push: a head sliding along a wall, or brushing a floor it
+## is pulling away from, is not blocked by it. Of several, the heaviest wins,
+## because that is the one that decides whether the head moves.
+func mass_blocking(push: Vector2) -> float:
+	var held: float = 0.0
+	for i in blocking_normals.size():
+		if blocking_normals[i].dot(push) <= -BLOCK_ANGLE_COS:
+			held = maxf(held, blocking_masses[i])
+	return held
+
+## The mass behind a collider, as `blocking_masses` records it.
+func _mass_behind(collider: Object) -> float:
+	if collider == null or not (collider is RigidBody2D):
+		return INF
+	var body := collider as RigidBody2D
+	if body.freeze or body.is_in_group(HEAD_GROUP):
+		return INF
+	return body.mass
+
 
 ## Sound hooks (issue #75, ADR-0016); nothing in the physics reads them.
 ## `struck_world`: the world sweep stopped this head against `collider` --
@@ -755,6 +802,11 @@ func _furthest_reach() -> float:
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_snapshot_step(state.transform, state.linear_velocity)
+	blocking_normals.clear()
+	blocking_masses.clear()
+	for i in state.get_contact_count():
+		blocking_normals.append(state.get_contact_local_normal(i))
+		blocking_masses.append(_mass_behind(state.get_contact_collider_object(i)))
 	# At most one correction a tick, and it is whichever contact came *first*
 	# in the step: the world (terrain, other bodies) or another head.
 	#
@@ -1017,6 +1069,8 @@ func _apply_world_contact(state: PhysicsDirectBodyState2D, hit: Dictionary) -> v
 		state.linear_velocity -= normal * into
 		swept_into = hit["collider"]
 		swept_speed = -into
+		blocking_normals.append(normal)
+		blocking_masses.append(_mass_behind(hit["collider"]))
 		struck_world.emit(hit["collider"], -into, Vector2(hit["contact"]))
 
 ## Whatever the sweep stopped against: its normal, and which body it was.

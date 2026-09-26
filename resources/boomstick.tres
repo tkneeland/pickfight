@@ -23,7 +23,8 @@
 ; through the barrel as drawn.
 ;
 ; Handling was the sword's, per the owner (#55): reach S 70 px, drive 36
-; rad/s, 1350 px/s out, 900 px/s back (since #136), and its 6000 force ceiling, so it wins
+; rad/s, 1350 px/s out, 900 px/s back (since #136), and its force ceiling (8000
+; since #180, 6000 before), so it wins
 ; and loses clashes like the sword and pickaxe. Mass is much lower, 0.1
 ; against the sword's 0.25: a light weapon on a stick. Melee damage is
 ; pitiful on purpose, 8 against the pickaxe's 34, the lowest on the roster.
@@ -52,7 +53,7 @@ mass = 0.1
 drive_speed = 36.0
 extend_speed = 1350.0
 rest_return_speed = 900.0
-max_drive_force = 6000.0
+max_drive_force = 8000.0
 damage = 8.0
 sound_set = &"boomstick"
 fire_interval = 3.0

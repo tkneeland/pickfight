@@ -18,8 +18,8 @@
 ; over 90. It also shoves the victim along its path by its momentum
 ; (speed x 0.25 x 1.2), up to 700. A slow ball does nothing.
 ;
-; Reach S (70) and the sword's drive. Force 5500, under the medium weapons'
-; 6000 (#177). The ball never owns a clash correction against another head
+; Reach S (70) and the sword's drive. Force 7300, under the medium weapons'
+; 8000 (#180; 5500 against 6000 before). The ball never owns a clash correction against another head
 ; (its drive is 0), so the flail blocks poorly.
 
 [resource]
@@ -30,7 +30,7 @@ mass = 0.2
 drive_speed = 36.0
 extend_speed = 1150.0
 rest_return_speed = 800.0
-max_drive_force = 5500.0
+max_drive_force = 7300.0
 damage = 14.0
 sound_set = &"flail"
 special = &"flail"
