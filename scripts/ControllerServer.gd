@@ -25,6 +25,15 @@ extends Node
 ## `{"t":"host","cmd":"kick","slot":<int>}` (issue #149); and the phone's
 ## look (issue #151), `{"t":"hat","v":<hat id>}` and `{"t":"color","v":<int>}`,
 ## answered by a `{"t":"looks",...}` frame to every phone (see `looks_message()`).
+## From the host phone only, `{"t":"solo","v":<bool>}` asks for bots, or
+## for them to go (issue #152).
+##
+## Virtual controllers (issue #152): a bot holds a slot the way a phone does,
+## but with no socket. `add_virtual_controller()` claims it, and
+## `push_virtual_input()` is its packet: the vector goes through the same
+## smoothing as a phone's and on to `Player.set_input_vector()`. A virtual
+## slot counts as connected and always ready; it is never the host, never
+## buzzed and never expires. `BotDirector`, built here, owns the bots.
 ##
 ## Liveness: a phone that screen-locks or leaves Wi-Fi mid-drag stops sending
 ## without ever closing the socket, and the last frame it sent was non-zero.
@@ -56,6 +65,8 @@ extends Node
 ## A phone claimed `slot` fresh -- not a reconnect to a slot it already held.
 ## A sound hook (issue #75, ADR-0016); nothing in the game reads it.
 signal player_joined(slot: int)
+## The host phone pressed "Solo practice" (`on`) or "Remove bots" (issue #152).
+signal solo_requested(on: bool)
 
 ## The host phone asked for `cmd` (issue #149): "pause", "resume" or "end",
 ## with `slot` -1; or "kick", emitted after `slot` has been removed from the
@@ -226,6 +237,11 @@ var _slot_color: PackedInt32Array = PackedInt32Array()
 var _palette: Array[Color] = []
 ## The last lobby state RoundManager set, re-sent to every phone that binds.
 var _lobby_state: Dictionary = {}
+## 1 where a bot holds the slot (issue #152), with no socket behind it.
+var _slot_virtual: PackedByteArray = PackedByteArray()
+const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
+## The bots' owner, built in `_ready()` so no scene has to add it.
+var bot_director: Node = null
 ## The join URL and QR the lobby screen shows (#120). The QR is null when
 ## `qrencode` is unavailable.
 var join_url: String = ""
@@ -253,6 +269,7 @@ func _ready() -> void:
 		_slot_hat[i] = HatScript.NONE
 		_slot_color[i] = -1
 		_palette.append(_players[i].identity_color if _players[i] != null else Color(0, 0, 0, 0))
+	_slot_virtual.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 		_smoothers.append(InputSmoother.new())
@@ -293,6 +310,11 @@ func _ready() -> void:
 			if qr_texture != null:
 				qr_rect.texture = qr_texture
 
+	bot_director = BotDirectorScript.new()
+	bot_director.name = "BotDirector"
+	bot_director.server = self
+	add_child(bot_director)
+
 func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
@@ -301,7 +323,7 @@ func _process(delta: float) -> void:
 ## Step every bound slot's ease and hand the result to its player (issue #113).
 func _apply_smoothed_input(delta: float) -> void:
 	for slot in _slot_peers.size():
-		if _slot_peers[slot] == null or _players[slot] == null:
+		if (_slot_peers[slot] == null and _slot_virtual[slot] == 0) or _players[slot] == null:
 			continue
 		_players[slot].set_input_vector(_smoothers[slot].step(delta))
 
@@ -645,7 +667,7 @@ func send_buzz(slot: int, kind: String) -> void:
 	if not slot_has_controller(slot):
 		return
 	var peer: WebSocketPeer = _slot_peers[slot]
-	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	if peer == null or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
 	if _log_input:
@@ -655,7 +677,7 @@ func send_buzz(slot: int, kind: String) -> void:
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round
 ## that no one still in it can finish.
 func slot_has_controller(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] != null
+	return slot >= 0 and slot < _slot_peers.size() and (_slot_peers[slot] != null or _slot_virtual[slot] == 1)
 
 ## Drop every claimed slot that has no live controller right now. Called by
 ## the round loop before every attempt to start a round: a roster entry
@@ -665,7 +687,7 @@ func slot_has_controller(slot: int) -> bool:
 func expire_disconnected_claims() -> void:
 	var released: bool = false
 	for slot in _slot_claimed.size():
-		if _slot_claimed[slot] == 1 and _slot_peers[slot] == null:
+		if _slot_claimed[slot] == 1 and not slot_has_controller(slot):
 			_slot_claimed[slot] = 0
 			_slot_client_id[slot] = ""
 			_slot_name[slot] = ""
@@ -760,6 +782,9 @@ func _handle_text(slot: int, text: String) -> void:
 			var c: Variant = msg.get("v")
 			if c is float or c is int:
 				request_color(slot, int(c))
+		"solo":
+			if slot == host_slot():
+				solo_requested.emit(bool(msg.get("v", false)))
 
 ## A host-menu request (issue #149). Anything from a phone that is not the host
 ## right now is ignored, as is an unknown command or a kick aimed at the host
@@ -786,6 +811,10 @@ func _handle_host_command(slot: int, msg: Dictionary) -> void:
 func kick(slot: int) -> bool:
 	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1 or slot == host_slot():
 		return false
+	if is_virtual(slot):
+		# A bot (issue #152): its director sends it away.
+		bot_director.remove_bot(slot)
+		return true
 	var peer: WebSocketPeer = _slot_peers[slot]
 	if peer != null:
 		peer.close(4001, KICKED_REASON)
@@ -805,7 +834,13 @@ func kick(slot: int) -> bool:
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).
 func slot_ready(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_ready.size() and _slot_ready[slot] == 1
+	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1)
+
+## Mark `slot` ready or not, as its phone's Ready button would: Solo
+## practice readies the host (issue #152).
+func set_slot_ready(slot: int, on: bool) -> void:
+	if slot >= 0 and slot < _slot_ready.size():
+		_slot_ready[slot] = 1 if on else 0
 
 ## Every phone back to not-ready: at the start of a match, so Rematch has to
 ## be pressed afresh.
@@ -817,7 +852,7 @@ func clear_ready() -> void:
 ## connected right now, or -1 with no phones at all.
 func host_slot() -> int:
 	for slot: int in _join_order:
-		if slot_has_controller(slot):
+		if _slot_peers[slot] != null:
 			return slot
 	return -1
 
@@ -830,6 +865,9 @@ func match_target() -> int:
 func set_lobby_state(state: Dictionary) -> void:
 	_lobby_state = state.duplicate(true)
 	_lobby_state["t"] = "lobby"
+	for entry: Variant in _lobby_state.get("players", []):
+		if entry is Dictionary and is_virtual(int(entry.get("slot", -1))):
+			entry["bot"] = true
 	var text: String = JSON.stringify(_lobby_state)
 	for peer: WebSocketPeer in _slot_peers:
 		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
@@ -960,3 +998,67 @@ func _broadcast_looks() -> void:
 	for peer: WebSocketPeer in _slot_peers:
 		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
+
+# --- Virtual controllers (issue #152) ----------------------------------------
+
+## Claim the lowest free slot for a bot, named `bot_name`, and return it; -1
+## when every slot is taken. Like a phone's fresh claim (`_bind_with_id`), it
+## joins the roster at the back and emits `player_joined`.
+func add_virtual_controller(bot_name: String) -> int:
+	for slot in _slot_peers.size():
+		if _slot_claimed[slot] == 1 or _players[slot] == null:
+			continue
+		_slot_claimed[slot] = 1
+		_slot_virtual[slot] = 1
+		_slot_client_id[slot] = ""
+		_slot_name[slot] = clean_name(bot_name)
+		_join_order.erase(slot)
+		_join_order.append(slot)
+		_smoothers[slot].reset()
+		_claim_look(slot)
+		_players[slot].bind_controller()
+		_broadcast_looks()
+		player_joined.emit(slot)
+		if _log_input:
+			print("slot %d claimed by a bot" % slot)
+		return slot
+	return -1
+
+## Give a bot's slot back: the roster entry goes at once, as a phone's
+## expired claim does, and the player is parked.
+func remove_virtual_controller(slot: int) -> void:
+	if not is_virtual(slot):
+		return
+	_slot_virtual[slot] = 0
+	_slot_claimed[slot] = 0
+	_slot_name[slot] = ""
+	_join_order.erase(slot)
+	_smoothers[slot].reset()
+	if _players[slot] != null:
+		_players[slot].set_input_vector(Vector2.ZERO)
+		_players[slot].unbind_controller()
+	_release_look(slot)
+	_broadcast_looks()
+	if _log_input:
+		print("slot %d bot removed" % slot)
+
+## A bot's packet: `v` becomes the slot's smoothing target, as a phone's
+## decoded packet does in `_drain()`.
+func push_virtual_input(slot: int, v: Vector2) -> void:
+	if is_virtual(slot):
+		_smoothers[slot].push(v)
+
+func is_virtual(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_virtual.size() and _slot_virtual[slot] == 1
+
+## The bots' slots, in slot order.
+func virtual_slots() -> Array[int]:
+	var result: Array[int] = []
+	for slot in _slot_virtual.size():
+		if _slot_virtual[slot] == 1:
+			result.append(slot)
+	return result
+
+## The player node in `slot`, or null.
+func player_in_slot(slot: int) -> Node:
+	return _players[slot] if slot >= 0 and slot < _players.size() else null

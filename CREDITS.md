@@ -2,8 +2,9 @@
 
 ## Sound effects
 
-Every sound under `assets/sfx/` is by **Kenney** (https://kenney.nl). Each
-one is released under **Creative Commons Zero (CC0 1.0)**:
+Every sound under `assets/sfx/` is by **Kenney** (https://kenney.nl), except
+the synthesised announcer lines listed under "Announcer voice" below. Each
+Kenney sound is released under **Creative Commons Zero (CC0 1.0)**:
 http://creativecommons.org/publicdomain/zero/1.0/. Each pack's `License.txt`
 says so. Credit is not required, but it is given here anyway.
 
@@ -61,6 +62,46 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 | `kenney_impact/impactWood_heavy_002.ogg`, `_003`, `_004` | Impact Sounds | CC0 1.0 | collapsing floor collapse |
 | `kenney_impact/impactGeneric_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | breakable wall hit |
 | `kenney_impact/impactPlate_heavy_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | breakable wall break |
+
+## Announcer voice
+
+Added for issue #152. `scripts/Sfx.gd` maps each line to its file (the
+`announce_*` entries), and `scripts/Announcer.gd` decides when each is said.
+
+Five lines are recordings from Kenney's **Voiceover Pack: Fighter**, released
+under **CC0 1.0** (the pack's `License.txt` says so). They are shipped
+unchanged, only renamed:
+
+- Page: https://kenney.nl/assets/voiceover-pack-fighter
+- Download: https://kenney.nl/media/pages/assets/voiceover-pack-fighter/6ceb77c6f1-1677589837/kenney_voiceover-pack-fighter.zip
+
+| File | Pack file | Licence | Used for |
+|---|---|---|---|
+| `announcer/count_3.ogg` | `Audio/3.ogg` | CC0 1.0 | "3" |
+| `announcer/count_2.ogg` | `Audio/2.ogg` | CC0 1.0 | "2" |
+| `announcer/count_1.ogg` | `Audio/1.ogg` | CC0 1.0 | "1" |
+| `announcer/fight.ogg` | `Audio/fight.ogg` | CC0 1.0 | "FIGHT!" |
+| `announcer/winner.ogg` | `Audio/winner.ogg` | CC0 1.0 | "Winner!" |
+
+No CC0 recording could be found for "KO!", "Double KO!" or the modifier
+names, so those were **synthesised** for this repository. The speech engine
+is espeak-ng (voice `en-us+m3`, 140 wpm, pitch 30), run through the
+`espeakng-loader` Python wheel. Each clip was then trimmed, given a short
+two-tap echo, normalised, faded in and out, and encoded as Ogg Vorbis. The
+engine's own licence does not cover what it speaks. These clips are
+dedicated to the public domain under **CC0 1.0** like the rest.
+
+| File | Text spoken | Licence | Used for |
+|---|---|---|---|
+| `announcer/ko.ogg` | "Kay, Oh!" | CC0 1.0 (synthesised) | "KO!" |
+| `announcer/double_ko.ogg` | "Double, Kay Oh!" | CC0 1.0 (synthesised) | "Double KO!" |
+| `announcer/low_gravity.ogg` | "Low gravity!" | CC0 1.0 (synthesised) | modifier LOW GRAVITY |
+| `announcer/heavy_weapons.ogg` | "Heavy weapons!" | CC0 1.0 (synthesised) | modifier HEAVY WEAPONS |
+| `announcer/big_heads.ogg` | "Big heads!" | CC0 1.0 (synthesised) | modifier BIG HEADS |
+| `announcer/fast_lava.ogg` | "Fast lava!" | CC0 1.0 (synthesised) | modifier FAST LAVA |
+| `announcer/slippery_floor.ogg` | "Slippery floor!" | CC0 1.0 (synthesised) | modifier SLIPPERY FLOOR |
+
+That is 12 files, about 0.17 MB in all.
 
 ## Music
 

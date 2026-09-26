@@ -213,6 +213,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"phone_colour_first_come_first_served",
 	"name_tags_on_for_every_living_player_all_round",
 	"controller_page_look_picker_after_name",
+	"bots_flag_fills_lobby_and_bots_fight",
+	"solo_practice_button_adds_and_removes_bots",
+	"pickups_come_faster_and_more_with_a_crowd",
+	"announcer_calls_the_match",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -965,6 +969,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_name_tags_on_for_every_living_player_all_round()
 		"controller_page_look_picker_after_name":
 			return await _scenario_controller_page_look_picker_after_name()
+		"bots_flag_fills_lobby_and_bots_fight":
+			return await _scenario_bots_flag_fills_lobby_and_bots_fight()
+		"solo_practice_button_adds_and_removes_bots":
+			return await _scenario_solo_practice_button_adds_and_removes_bots()
+		"pickups_come_faster_and_more_with_a_crowd":
+			return await _scenario_pickups_come_faster_and_more_with_a_crowd()
+		"announcer_calls_the_match":
+			return await _scenario_announcer_calls_the_match()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -14068,4 +14080,343 @@ func _scenario_controller_page_look_picker_after_name() -> Array[String]:
 		if page.contains(old):
 			failures.append("the page still colours by slot alone: %s" % old)
 	_scenario_completed = true
+	return failures
+
+# --- Issue #152: bots, pickup scaling, announcer --------------------------------
+
+const BotDirectorScript := preload("res://scripts/BotDirector.gd")
+const BOT_FLATLANDS_PATH: String = "res://scenes/stages/Flatlands.tscn"
+## How many bots `--bots=` asks for in the flag scenario.
+const BOT_FLAG_COUNT: int = 3
+## Wall-clock budgets: for the bots' match to start by itself, and for a bot
+## to land a damaging strike once it has.
+const BOT_START_MSEC: int = 8000
+const BOT_DAMAGE_MSEC: int = 40000
+## A bot has "acted" once its player is this far from where it spawned.
+const BOT_MOVED_PX: float = 60.0
+
+## Main.tscn with a real ControllerServer and RoundManager on Flatlands, for
+## the bot scenarios. Not yet in the tree: the caller adds it.
+func _new_bot_main() -> Dictionary:
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	var scenes: Array[PackedScene] = [load(BOT_FLATLANDS_PATH) as PackedScene]
+	rm.stage_scenes = scenes
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.round_end_pause_sec = 0.5
+	return {"main": main, "server": server, "rm": rm}
+
+## Issue #152: `--bots=N` adds N bots, one per slot, named "Bot 1".. and
+## marked as bots in the lobby state. With no phone joined they are the whole
+## lobby, and all ready, so the match starts by itself. Each bot's brain feeds
+## its slot's input smoothing, the same path a phone's packets take, and the
+## bots move and hurt each other.
+func _scenario_bots_flag_fills_lobby_and_bots_fight() -> Array[String]:
+	var failures: Array[String] = []
+	var parsed: Dictionary = {
+		"--bots=3": 3, "--bots=0": 0, "--bots=-2": 0, "--bots=x": 0, "--log-input": 0}
+	for arg: String in parsed:
+		var got: int = BotDirectorScript.bots_from_args(PackedStringArray([arg]))
+		if got != int(parsed[arg]):
+			failures.append("bots_from_args(['%s']) gave %d, expected %d" % [arg, got, parsed[arg]])
+
+	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % BOT_FLAG_COUNT])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	BotDirectorScript.extra_args = PackedStringArray()
+	var director: Node = server.bot_director
+	var bot_slots: Array[int] = server.virtual_slots()
+	if director == null or director.bot_count() != BOT_FLAG_COUNT or bot_slots.size() != BOT_FLAG_COUNT:
+		failures.append("--bots=%d made %d bots in %s" % [
+			BOT_FLAG_COUNT, director.bot_count() if director != null else -1, bot_slots])
+		await _teardown(main)
+		return failures
+	if server.claimed_slots() != bot_slots:
+		failures.append("the roster is %s, expected just the bots %s" % [server.claimed_slots(), bot_slots])
+	for i in bot_slots.size():
+		var slot: int = bot_slots[i]
+		if server.slot_name(slot) != "Bot %d" % (i + 1):
+			failures.append("slot %d is named '%s', expected 'Bot %d'" % [slot, server.slot_name(slot), i + 1])
+		if not server.slot_has_controller(slot) or not server.slot_ready(slot):
+			failures.append("bot slot %d does not count as a connected, ready controller" % slot)
+	if server.host_slot() != -1:
+		failures.append("a bot (slot %d) was made host" % server.host_slot())
+
+	var players: Array[RigidBody2D] = []
+	for slot: int in bot_slots:
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	var started: bool = await _await_condition(func() -> bool: return _all_alive(players), BOT_START_MSEC)
+	if not started:
+		failures.append("the bots' match never started by itself (phase '%s')" % rm.lobby_phase())
+		director.remove_bots()
+		await _teardown(main)
+		return failures
+	var marked: int = 0
+	for entry: Dictionary in server._lobby_state.get("players", []):
+		if entry.get("bot", false):
+			marked += 1
+	if marked != BOT_FLAG_COUNT:
+		failures.append("the lobby state marks %d players as bots, expected %d" % [marked, BOT_FLAG_COUNT])
+
+	var spawned_at: Array[Vector2] = []
+	for player: RigidBody2D in players:
+		spawned_at.append(player.global_position)
+	var damage: Array = [0.0, 0]
+	for player: RigidBody2D in players:
+		player.strike_landed.connect(func(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+			damage[0] += amount
+			if amount > 0.0:
+				damage[1] += 1)
+	var smoothed: Array = [false]
+	var check_path := func() -> bool:
+		for slot: int in bot_slots:
+			var bot: Node = director.bots[slot]
+			if bot.last_input != Vector2.ZERO and server._smoothers[slot].target.is_equal_approx(bot.last_input):
+				smoothed[0] = true
+		return float(damage[0]) > 0.0
+	var fight_from: int = Time.get_ticks_msec()
+	var hurt: bool = await _await_condition(check_path, BOT_DAMAGE_MSEC)
+	var fight_msec: int = Time.get_ticks_msec() - fight_from
+	var moved: int = 0
+	for i in players.size():
+		if players[i].global_position.distance_to(spawned_at[i]) > BOT_MOVED_PX or not players[i].alive:
+			moved += 1
+	print("      %d bots: first damaging strike after %.1f s (%d strikes, %.0f damage), %d moved" % [
+		players.size(), fight_msec / 1000.0, damage[1], damage[0], moved])
+	if not smoothed[0]:
+		failures.append("no bot's input reached its slot's input smoothing")
+	if moved == 0:
+		failures.append("no bot moved %.0f px from its spawn" % BOT_MOVED_PX)
+	if not hurt:
+		failures.append("no bot landed a damaging strike in %d s" % (BOT_DAMAGE_MSEC / 1000))
+
+	director.remove_bots()
+	if not server.claimed_slots().is_empty():
+		failures.append("slots %s stayed claimed after the bots were removed" % server.claimed_slots())
+	await _teardown(main)
+	return failures
+
+## Issue #152: the host phone's Solo practice. A non-host's request is
+## ignored. The host's fills the lobby with bots to four players and readies
+## the host; "Remove bots" sends them away. With every phone ready, Solo
+## practice starts the match straight away.
+func _scenario_solo_practice_button_adds_and_removes_bots() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var director: Node = server.bot_director
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "solo-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+
+	joined[1].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if director.bot_count() != 0:
+		failures.append("a phone that is not the host added %d bots" % director.bot_count())
+
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if director.bot_count() != BotDirectorScript.SOLO_PLAYERS - 2:
+		failures.append("Solo practice with two phones added %d bots, expected %d" % [
+			director.bot_count(), BotDirectorScript.SOLO_PLAYERS - 2])
+	if not server.slot_ready(0):
+		failures.append("Solo practice did not ready the host")
+	if rm.lobby_phase() != "lobby":
+		failures.append("the match left the lobby ('%s') with a phone still not ready" % rm.lobby_phase())
+	var bots_marked: int = _lobby_bots_seen(joined[1])
+	if bots_marked != director.bot_count():
+		failures.append("the phones were told of %d bots, expected %d" % [bots_marked, director.bot_count()])
+
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": false}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if director.bot_count() != 0 or server.claimed_slots() != [0, 1]:
+		failures.append("Remove bots left %d bots, roster %s" % [director.bot_count(), server.claimed_slots()])
+
+	joined[1].send_text(JSON.stringify({"t": "ready", "v": true}))
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	var begun: bool = false
+	var deadline: int = Time.get_ticks_msec() + BOT_START_MSEC
+	while Time.get_ticks_msec() < deadline and not begun:
+		await _poll_phones(joined, 1)
+		begun = rm.lobby_phase() == "playing"
+	if not begun:
+		failures.append("Solo practice with everyone ready never started the match (phase '%s')" % rm.lobby_phase())
+	elif rm._in_round.size() != BotDirectorScript.SOLO_PLAYERS:
+		failures.append("the solo match started with %d players, expected %d" % [
+			rm._in_round.size(), BotDirectorScript.SOLO_PLAYERS])
+
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+
+## Bots in the last lobby frame `peer` has waiting, or -1 without one.
+func _lobby_bots_seen(peer: WebSocketPeer) -> int:
+	var seen: int = -1
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if not peer.was_string_packet():
+			continue
+		var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		if msg is Dictionary and msg.get("t", "") == "lobby":
+			seen = 0
+			for entry: Variant in msg.get("players", []):
+				if entry is Dictionary and bool(entry.get("bot", false)):
+					seen += 1
+	return seen
+
+## Roster size -> pickup cap (issue #152 on top of #36): one fewer than the
+## players below five, one per player from five. Written out by hand.
+const CROWD_PICKUP_CAP: Dictionary = {2: 2, 3: 2, 4: 3, 5: 5, 6: 6, 7: 7, 8: 8}
+## The pickup interval the game ships with (#152: 12 s, up from 10) and the
+## share of it a crowd waits.
+const SHIPPED_PICKUP_INTERVAL_SEC: float = 12.0
+const CROWD_INTERVAL_SCALE: float = 0.6
+const CROWD_ROSTER: int = 5
+## The live check's interval: long enough to tell apart from the crowd's.
+const CROWD_LIVE_INTERVAL_SEC: float = 0.6
+
+## Issue #152: more pickups at once, and sooner, with five or more players,
+## and a slightly rarer baseline. The cap and the interval by roster size
+## straight off a RoundManager, then live: a four-player round told a crowd
+## starts at four sees the second pickup after the crowd's shorter interval
+## and fills the stage to one per player.
+func _scenario_pickups_come_faster_and_more_with_a_crowd() -> Array[String]:
+	var failures: Array[String] = []
+	var shipped: Node = RoundManagerScript.new()
+	if not is_equal_approx(shipped.pickup_spawn_interval_sec, SHIPPED_PICKUP_INTERVAL_SEC):
+		failures.append("the pickup interval ships at %.1f s, expected %.1f" % [
+			shipped.pickup_spawn_interval_sec, SHIPPED_PICKUP_INTERVAL_SEC])
+	var roster := StubRosterScript.new()
+	shipped._controller_server = roster
+	for count: int in CROWD_PICKUP_CAP:
+		var slots: Array[int] = []
+		for i in count:
+			slots.append(i)
+		roster.slots = slots
+		if shipped._pickup_cap() != int(CROWD_PICKUP_CAP[count]):
+			failures.append("%d players: pickup cap %d, expected %d" % [count, shipped._pickup_cap(), CROWD_PICKUP_CAP[count]])
+		var expected_sec: float = SHIPPED_PICKUP_INTERVAL_SEC * (CROWD_INTERVAL_SCALE if count >= CROWD_ROSTER else 1.0)
+		if not is_equal_approx(shipped._pickup_interval_sec(), expected_sec):
+			failures.append("%d players: pickup every %.2f s, expected %.2f" % [count, shipped._pickup_interval_sec(), expected_sec])
+	shipped.free()
+	roster.free()
+
+	var loop: Dictionary = _new_roster_round(4, CROWD_LIVE_INTERVAL_SEC, 0.0, PICKUP_CAP_STUB_POINTS)
+	var rm: Node = loop["round_manager"]
+	rm.crowded_roster = 4
+	var container: Node2D = loop["container"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the four-player round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var first_at: int = Time.get_ticks_msec()
+	var second_at: int = -1
+	var peak: int = 0
+	var deadline: int = first_at + int(CROWD_LIVE_INTERVAL_SEC * 1000.0) * PICKUP_INTERVAL_WINDOW
+	while Time.get_ticks_msec() < deadline:
+		await physics_frame
+		var live: int = _pickups_under(container).size()
+		if live >= 2 and second_at == -1:
+			second_at = Time.get_ticks_msec()
+		peak = maxi(peak, live)
+	var crowd_msec: float = CROWD_LIVE_INTERVAL_SEC * CROWD_INTERVAL_SCALE * 1000.0
+	print("      crowd: second pickup after %d ms (crowd interval %.0f ms), peak %d" % [
+		second_at - first_at, crowd_msec, peak])
+	if second_at == -1:
+		failures.append("a second pickup never arrived")
+	elif float(second_at - first_at) > (crowd_msec + CROWD_LIVE_INTERVAL_SEC * 1000.0) * 0.5:
+		failures.append("the second pickup took %d ms; a crowd should wait about %.0f ms, not %.0f" % [
+			second_at - first_at, crowd_msec, CROWD_LIVE_INTERVAL_SEC * 1000.0])
+	if peak != 4:
+		failures.append("a crowd of four held at most %d pickups at once, expected one each (4)" % peak)
+	await _teardown(loop["stage"])
+	return failures
+
+## The lines the announcer says for one lobby match, in order: the countdown,
+## "FIGHT!", the forced modifier, the KO and "Winner!" for the match.
+const ANNOUNCER_MATCH_LINES: PackedStringArray = [
+	"announce_3", "announce_2", "announce_1", "announce_fight",
+	"announce_low_gravity", "announce_ko", "announce_winner"]
+const ANNOUNCER_WAIT_MSEC: int = 15000
+
+## Issue #152: the announcer calls a match. "3, 2, 1" on the lobby
+## countdown, "FIGHT!" as the round starts and then the modifier's name,
+## "KO!" for the elimination and "Winner!" for the match win, one line after
+## another; two eliminations together are one "Double KO!". Every line has a
+## sound file, and plays through the Sfx table.
+func _scenario_announcer_calls_the_match() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or sfx.announcer == null:
+		return ["the Sfx autoload has no announcer"]
+	await physics_frame
+	var announcer: Node = sfx.announcer
+	for title: String in MODIFIER_TITLES.values():
+		if announcer.modifier_line(title) == &"":
+			failures.append("no announcer line for the modifier '%s'" % title)
+	announcer.clear()
+	sfx.start_recording()
+
+	var loop: Dictionary = _new_lobby_round(1)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	rm.lobby_countdown_sec = 3.0
+	rm.forced_modifier = "low_gravity"
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, 6000):
+		failures.append("the lobby match never started")
+	else:
+		await _await_ticks(10)
+		players[1].eliminate()
+		await _await_condition(func() -> bool: return announcer.said.size() >= ANNOUNCER_MATCH_LINES.size(), ANNOUNCER_WAIT_MSEC)
+		if announcer.said != ANNOUNCER_MATCH_LINES:
+			failures.append("the announcer said %s, expected %s" % [announcer.said, ANNOUNCER_MATCH_LINES])
+		var played: PackedStringArray = sfx.recorded_names()
+		for line: String in ANNOUNCER_MATCH_LINES:
+			if not played.has(line):
+				failures.append("'%s' never went through Sfx.play" % line)
+	await _teardown(loop["stage"])
+
+	_scenario_completed = false
+	announcer.clear()
+	var stage: Node2D = _new_stage()
+	var a: RigidBody2D = _spawn_player(stage, Vector2(-200, 100))
+	var b: RigidBody2D = _spawn_player(stage, Vector2(200, 100))
+	await _await_ticks(5)
+	a.eliminate()
+	await _await_ticks(3)
+	b.eliminate()
+	await _await_condition(func() -> bool: return announcer.said.size() >= 1, 3000)
+	await _await_msec(int(announcer.DOUBLE_KO_WINDOW_SEC * 1000.0) + 200)
+	if announcer.said != PackedStringArray(["announce_double_ko"]):
+		failures.append("two eliminations together were announced as %s, expected one double KO" % announcer.said)
+	sfx.stop_recording()
+	await _teardown(stage)
 	return failures
