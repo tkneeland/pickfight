@@ -200,6 +200,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"spawns_shared_when_stage_has_fewer_than_players",
 	"controller_page_prompts_for_nickname_first",
 	"music_loops_have_no_silent_seam",
+	"haft_tip_meets_drawn_head_every_frame",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -926,6 +927,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_controller_page_prompts_for_nickname_first()
 		"music_loops_have_no_silent_seam":
 			return await _scenario_music_loops_have_no_silent_seam()
+		"haft_tip_meets_drawn_head_every_frame":
+			return await _scenario_haft_tip_meets_drawn_head_every_frame()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12754,4 +12757,157 @@ func _scenario_music_loops_have_no_silent_seam() -> Array[String]:
 		if cut_sec > MUSIC_SEAM_MAX_CUT_SEC:
 			failures.append("%s: the loop window cuts %.0f ms of sound" % [track, cut_sec * 1000.0])
 	_scenario_completed = true
+
+
+# --- The haft meets the head it holds in every drawn frame (issue #135) -------
+
+const HaftDrawObserverScript := preload("res://tools/haft_draw_observer.gd")
+const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
+## How far apart the drawn haft tip and the drawn head's anchor may be. The
+## two are blended between the same two ticks, so they meet exactly; this is
+## room for float error. Before the fix they parted by up to 94 px.
+const HAFT_DRAW_GAP_TOLERANCE: float = 2.0
+## Where the swinging players hang, one column apart per player, high enough
+## above the arena that a whole swing's fall never reaches it.
+const HAFT_DRAW_AIR: Vector2 = Vector2(-2750.0, -3000.0)
+const HAFT_DRAW_COLUMN: float = 500.0
+## Ticks the new rigs get to settle, then the swing: the drag turns this fast
+## (rad per tick) and its length rises and falls, so the head sweeps round
+## and slides along the haft at once.
+const HAFT_DRAW_SETTLE_TICKS: int = 10
+const HAFT_DRAW_SWING_TICKS: int = 120
+const HAFT_DRAW_TURN_PER_TICK: float = 0.35
+## A player's checked frames must include this many well between two ticks,
+## where a lag between the two would show, or the check proved nothing.
+const HAFT_DRAW_MIN_BETWEEN_FRAMES: int = 10
+## The phased heads: each trapped under its own slab like
+## `trapped_head_phases_home_after_release`, the slabs a column apart, and
+## given this long after release to phase home through it.
+const HAFT_DRAW_SLAB_ORIGIN: Vector2 = Vector2(-1500.0, -4000.0)
+const HAFT_DRAW_SLAB_COLUMN: float = 600.0
+const HAFT_DRAW_PHASE_TICKS: int = 240
+## Frames a phased head must have been checked in.
+const HAFT_DRAW_MIN_PHASED_FRAMES: int = 30
+## Once phased, the head is swung this far (rad) either side of straight
+## down, which keeps it under the slab.
+const HAFT_DRAW_UNDER_SLAB_SWING: float = 0.6
+
+## Issue #135: the haft line is drawn to meet the head in every rendered
+## frame, not only on physics ticks. With physics interpolation on (#108) the
+## renderer draws the player and the head between their last two ticks; the
+## haft's far end is written by script, and if it is blended from the wrong
+## pair the head is drawn trailing behind it. Headless runs draw nothing, so
+## `tools/haft_draw_observer.gd` reconstructs what interpolation draws and
+## measures the gap each frame, for every weapon, plain and under the big
+## heads modifier (#50) mid-swing, and for every weapon's head phased (#115)
+## as it passes home through a slab.
+func _scenario_haft_tip_meets_drawn_head_every_frame() -> Array[String]:
+	var failures: Array[String] = []
+	if not physics_interpolation:
+		failures.append("physics interpolation is off; this scenario checks what it draws (issue #108)")
+		_scenario_completed = true
+		return failures
+
+	# Every weapon swinging in open air, plain and with big heads.
+	var stage: Node2D = _new_stage()
+	var players: Array[RigidBody2D] = []
+	var labels: Array[String] = []
+	var big: Array = []
+	for variant: String in ["plain", "big heads"]:
+		for path: String in WEAPON_RESOURCE_PATHS:
+			var column: int = players.size()
+			var player: RigidBody2D = _spawn_player(stage, HAFT_DRAW_AIR + Vector2(HAFT_DRAW_COLUMN * column, 0.0))
+			player.set_weapon_stats(load(path))
+			players.append(player)
+			labels.append("%s (%s)" % [path.get_file().get_basename(), variant])
+			if variant == "big heads":
+				big.append(player)
+	var big_heads: RefCounted = RoundModifiersScript.create(RoundModifiersScript.BIG_HEADS)
+	big_heads.apply(null, big, stage)
+	var observer: Node = HaftDrawObserverScript.new()
+	observer.players = players
+	stage.add_child(observer)
+	await _await_ticks(HAFT_DRAW_SETTLE_TICKS)
+	observer.measuring = true
+	for t in HAFT_DRAW_SWING_TICKS:
+		var reach: float = 0.3 + 0.7 * absf(sin(t * 0.2))
+		for i in players.size():
+			players[i].set_input_vector(Vector2.RIGHT.rotated(t * HAFT_DRAW_TURN_PER_TICK + i) * reach)
+		await physics_frame
+	observer.measuring = false
+	failures.append_array(_haft_draw_failures(observer, labels, false))
+	big_heads.undo()
+	await _teardown(stage)
+
+	# Every weapon's head phased, travelling home through the slab it was
+	# trapped under.
+	_scenario_completed = false
+	stage = _new_stage()
+	players = []
+	labels = []
+	var holds: Array[Vector2] = []
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var centre: Vector2 = HAFT_DRAW_SLAB_ORIGIN + Vector2(HAFT_DRAW_SLAB_COLUMN * players.size(), 0.0)
+		_add_bar(stage, centre, TRAPPED_SLAB_SIZE)
+		var top: float = centre.y - TRAPPED_SLAB_SIZE.y * 0.5
+		var player: RigidBody2D = _spawn_player(stage, Vector2(centre.x, top - PLAYER_RADIUS - 1.0))
+		player.set_weapon_stats(load(path))
+		player.set_input_vector(Vector2.DOWN * 0.01)
+		players.append(player)
+		labels.append("%s (phased)" % path.get_file().get_basename())
+	await _await_ticks(TRAPPED_HOLD_TICKS)
+	for i in players.size():
+		var player: RigidBody2D = players[i]
+		var centre: Vector2 = HAFT_DRAW_SLAB_ORIGIN + Vector2(HAFT_DRAW_SLAB_COLUMN * i, 0.0)
+		var top: float = centre.y - TRAPPED_SLAB_SIZE.y * 0.5
+		var bottom: float = centre.y + TRAPPED_SLAB_SIZE.y * 0.5
+		player.call("teleport_to", Vector2(centre.x, top - PLAYER_RADIUS - 1.0))
+		var head: RigidBody2D = player.get("_head")
+		head.global_position = Vector2(player.global_position.x, bottom + TRAPPED_HEAD_GAP)
+		head.linear_velocity = Vector2.ZERO
+		head.call("forget_previous_position")
+		var stats: Resource = player.get("_stats")
+		var reach: float = head.global_position.y - player.global_position.y
+		var hold: Vector2 = Vector2.DOWN * inverse_lerp(stats.min_reach, stats.max_reach, reach)
+		player.set_input_vector(hold)
+	observer = HaftDrawObserverScript.new()
+	observer.players = players
+	stage.add_child(observer)
+	await _await_ticks(TRAPPED_HOLD_TICKS)
+	observer.measuring = true
+	for player: RigidBody2D in players:
+		player.set_input_vector(Vector2.ZERO)
+	# Released until it phases; from then on dragged to and fro under the
+	# slab, which keeps the slab between body and head and so keeps it phased.
+	var phased_seen: Array[bool] = []
+	phased_seen.resize(players.size())
+	for t in HAFT_DRAW_PHASE_TICKS:
+		for i in players.size():
+			if players[i].is_head_phased():
+				phased_seen[i] = true
+			if phased_seen[i]:
+				var reach: float = 0.5 + 0.5 * absf(sin(t * 0.2))
+				players[i].set_input_vector(Vector2.DOWN.rotated(HAFT_DRAW_UNDER_SLAB_SWING * sin(t * 0.3)) * reach)
+		await physics_frame
+	observer.measuring = false
+	failures.append_array(_haft_draw_failures(observer, labels, true))
+	await _teardown(stage)
+	return failures
+
+func _haft_draw_failures(observer: Node, labels: Array[String], phased: bool) -> Array[String]:
+	var failures: Array[String] = []
+	for i in labels.size():
+		var gap: float = observer.max_gap[i]
+		print("      %s: widest drawn haft-to-head gap %.2f px (at fraction %.2f), %d frames, %d between ticks, %d phased (widest %.2f px)" % [
+			labels[i], gap, observer.max_gap_fraction[i], observer.frames[i],
+			observer.between_frames[i], observer.phased_frames[i], observer.max_phased_gap[i]])
+		if gap > HAFT_DRAW_GAP_TOLERANCE:
+			failures.append("%s: the drawn haft tip and the drawn head were %.1f px apart (fraction %.2f); allowed %.1f" % [
+				labels[i], gap, observer.max_gap_fraction[i], HAFT_DRAW_GAP_TOLERANCE])
+		if observer.between_frames[i] < HAFT_DRAW_MIN_BETWEEN_FRAMES:
+			failures.append("%s: only %d frames fell well between two ticks (need %d); the check saw too little to prove anything" % [
+				labels[i], observer.between_frames[i], HAFT_DRAW_MIN_BETWEEN_FRAMES])
+		if phased and observer.phased_frames[i] < HAFT_DRAW_MIN_PHASED_FRAMES:
+			failures.append("%s: the head was phased in only %d checked frames (need %d)" % [
+				labels[i], observer.phased_frames[i], HAFT_DRAW_MIN_PHASED_FRAMES])
 	return failures

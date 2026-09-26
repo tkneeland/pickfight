@@ -1,5 +1,0 @@
-PERF physics_hz=60 frames=3600 rounds=5 strikes=4 eliminations=28
-PERF frame_ms   mean=1.055 p50=0.761 p95=2.349 p99=3.007 max=5.777 over_budget=0
-PERF physics_ms mean=0.641 p50=0.475 p95=1.352 p99=1.627 max=3.150 over_budget=0
-PERF spikes>4ms 2414:5.6(phys 1.0) 3795:5.1(phys 0.7) 7019:5.3(phys 0.8) 7871:5.8(phys 0.8)
-PERF objects=2399 nodes=360
