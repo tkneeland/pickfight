@@ -14198,6 +14198,11 @@ func _scenario_bots_flag_fills_lobby_and_bots_fight() -> Array[String]:
 	if not hurt:
 		failures.append("no bot landed a damaging strike in %d s" % (BOT_DAMAGE_MSEC / 1000))
 
+	# The host's kick (issue #149) sends a bot away through its director.
+	var kicked: int = bot_slots[0]
+	if not server.kick(kicked) or director.bots.has(kicked) or server.is_virtual(kicked) \
+			or server.claimed_slots().has(kicked):
+		failures.append("kicking bot slot %d left it behind (claimed %s)" % [kicked, server.claimed_slots()])
 	director.remove_bots()
 	if not server.claimed_slots().is_empty():
 		failures.append("slots %s stayed claimed after the bots were removed" % server.claimed_slots())
