@@ -247,6 +247,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_draws_follow_modifier_seed",
 	"mid_match_joiner_starts_with_fresh_slot",
 	"pause_keeps_ko_credit_and_survival_time",
+	"juice_overflow_head_claims_trail_later",
+	"hit_feedback_pools_markers_and_numbers",
+	"roster_heads_do_not_clip_platform_in_play_sword_axe",
+	"roster_heads_do_not_clip_platform_in_play_dagger_boomstick",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -622,6 +626,20 @@ func _parse_args() -> void:
 			printerr("SCENARIO: unrecognized argument '%s'" % arg)
 
 func _run_all() -> void:
+	# `_initialize()` runs before the root has entered the tree: autoloads
+	# (Sfx, Music) are not in it yet, and a scenario that never awaits would
+	# otherwise finish the whole run -- and the release() awaits and quit()
+	# below -- from inside `_initialize()` (#168). The first frame also
+	# catches up on start-up time with a burst of physics steps (up to
+	# max_physics_steps_per_frame) under a single process frame, so a
+	# scenario started in it sees ticks without _process running between
+	# them. Wait that burst out, then start on a physics frame: every later
+	# scenario starts right after the physics frame its predecessor's teardown
+	# awaited, and the first must see the same step phase
+	# (trapped_head_phases_home_after_release and
+	# nicknames_above_players_and_on_scoreboard both depend on it).
+	await process_frame
+	await physics_frame
 	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else _scenario_filter.split(",")
 	var pass_count: int = 0
 	var fail_count: int = 0
@@ -650,6 +668,14 @@ func _run_all() -> void:
 		await music.release()
 	var sfx: Node = get_root().get_node_or_null(^"Sfx")
 	if sfx != null:
+		# The announcer queues lines and plays them from its own _process, so
+		# a line still queued at the end would start a fresh Sfx voice during
+		# release()'s wait -- the ObjectDB leak at exit (#168). Hush it first.
+		var announcer: Node = sfx.get_node_or_null(^"Announcer")
+		if announcer != null:
+			announcer.set_process(false)
+			if announcer.has_method("clear"):
+				announcer.call("clear")
 		await sfx.release()
 	quit(1 if fail_count > 0 else 0)
 
@@ -1067,6 +1093,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mid_match_joiner_starts_with_fresh_slot()
 		"pause_keeps_ko_credit_and_survival_time":
 			return await _scenario_pause_keeps_ko_credit_and_survival_time()
+		"juice_overflow_head_claims_trail_later":
+			return await _scenario_juice_overflow_head_claims_trail_later()
+		"hit_feedback_pools_markers_and_numbers":
+			return await _scenario_hit_feedback_pools_markers_and_numbers()
+		"roster_heads_do_not_clip_platform_in_play_sword_axe":
+			return await _scenario_roster_heads_do_not_clip_platform_in_play_sword_axe()
+		"roster_heads_do_not_clip_platform_in_play_dagger_boomstick":
+			return await _scenario_roster_heads_do_not_clip_platform_in_play_dagger_boomstick()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2948,38 +2982,14 @@ const STAGE_PATHS: PackedStringArray = [
 ]
 
 func _scenario_stage_spawns_are_safe() -> Array[String]:
-	var failures: Array[String] = []
-	var stage_paths: PackedStringArray = STAGE_PATHS
-
-	for path: String in stage_paths:
-		# Each stage's _teardown() marks the scenario complete, so reset it
-		# here: a script error on a later stage must not inherit the earlier
-		# stage's "completed" and pass silently.
-		_scenario_completed = false
-		var stage: Node2D = Node2D.new()
-		get_root().add_child(stage)
-		var stage_scene: PackedScene = load(path)
-		var instance: Node2D = stage_scene.instantiate()
-		stage.add_child(instance)
-		var spawns: Array[Vector2] = instance.get_spawn_points()
-
-		if spawns.size() < STAGE_MIN_SPAWNS:
-			failures.append("%s: declared %d spawn point(s), needs at least %d" % [
-				path, spawns.size(), STAGE_MIN_SPAWNS])
-
-		for i in spawns.size():
-			var player: RigidBody2D = _spawn_player(stage, spawns[i])
-			await _await_ticks(60)
-			if not player.alive:
-				failures.append("%s spawn %d: player died within 60 idle ticks" % [path, i])
-			elif absf(player.linear_velocity.y) > SETTLED_SPEED:
-				failures.append("%s spawn %d: never settled, vertical speed %.1f px/s" % [
-					path, i, player.linear_velocity.y])
-			player.queue_free()
-			await _await_ticks(BOOST_RESET_TICKS)
-
-		await _teardown(stage)
-
+	# Every stage at once, each on its own copy in a physics world of its own
+	# and well apart from the rest (#168). Per stage nothing changed: one copy,
+	# its spawns tried one after another, 60 idle ticks each, the same checks.
+	var jobs: Array[Callable] = []
+	for s in STAGE_PATHS.size():
+		jobs.append(_stage_spawn_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
+	var failures: Array[String] = await _run_concurrently(jobs, "stage spawn sweep")
+	_scenario_completed = true
 	return failures
 
 # --- Roster and round loop (issue #12) --------------------------------------
@@ -4008,36 +4018,15 @@ const WOUND_IN_MAGNITUDE: float = 0.05
 ## 200. And each weapon gets a fresh pair of players, so an elimination under
 ## one weapon cannot freeze a body and quietly void the four sweeps after it.
 func _scenario_roster_heads_do_not_tunnel_head() -> Array[String]:
-	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
-	var centre: Vector2 = DEEP_PARK_POSITION
-
-	for path: String in WEAPON_RESOURCE_PATHS:
-		var weapon: String = path.get_file().get_basename()
-		var stats: WeaponStatsType = load(path)
-		if stats == null:
-			failures.append("%s: could not be loaded" % path)
-			continue
-
-		# A fresh pair per weapon, holding the weapon with its damage taken
-		# out (`_sweep_stats`, issue #86), so no charge can end in an
-		# elimination. A fresh pair still, so that if one ever did, the
-		# frozen body could not carry into every weapon after this one.
-		var attacker: RigidBody2D = _spawn_player(stage, centre)
-		var blocker: RigidBody2D = _spawn_player(stage, centre)
-		attacker.set_weapon_stats(_sweep_stats(stats))
-		blocker.set_weapon_stats(_sweep_stats(stats))
-		await _await_ticks(ROSTER_SWAP_TICKS)
-
-		var separation: float = maxf(CHARGE_SEPARATION,
-			2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
-		failures.append_array(await _charge_sweep(weapon, attacker, blocker, centre, separation))
-
-		attacker.queue_free()
-		blocker.queue_free()
-		await _await_ticks(2)
-
-	await _teardown(stage)
+	# Three physics worlds at once, two weapons in each (#168): pickaxe then
+	# staff, sword then axe, dagger then boomstick. Each weapon still gets a
+	# fresh pair, the same twelve charges and the same checks; the first of
+	# each two runs in a fresh world and the second after the first's
+	# history. `roster_heads_do_not_tunnel_head_reversed` pairs them the
+	# other way round, so across the two every weapon runs both fresh and
+	# after another weapon's history.
+	var failures: Array[String] = await _roster_charge_sweeps(WEAPON_RESOURCE_PATHS)
+	_scenario_completed = true
 	return failures
 
 ## One weapon's worth of `heads_do_not_tunnel_head`: both players hold it,
@@ -4658,47 +4647,14 @@ const RINGOUT_SHOVE_TICKS: int = 300
 ## check. What it catches is the real mistake -- a stage whose walls, floor or
 ## kill zone were drawn or placed so that nobody can leave it.
 func _scenario_every_stage_can_ring_out() -> Array[String]:
-	var failures: Array[String] = []
-
-	for path: String in STAGE_PATHS:
-		# As in stage_spawns_are_safe: each stage's _teardown() sets the
-		# completion flag, so clear it before the next stage runs.
-		_scenario_completed = false
-		var stage: Node2D = Node2D.new()
-		get_root().add_child(stage)
-		var instance: Node2D = (load(path) as PackedScene).instantiate()
-		stage.add_child(instance)
-		var spawns: Array[Vector2] = instance.get_spawn_points()
-
-		var escape: String = ""
-		for i in spawns.size():
-			for direction: float in [-1.0, 1.0]:
-				var player: RigidBody2D = _spawn_player(stage, spawns[i])
-				await physics_frame
-				player.linear_velocity = Vector2(direction * RINGOUT_SHOVE_SPEED, 0.0)
-				var ticks: int = 0
-				while ticks < RINGOUT_SHOVE_TICKS and player.alive:
-					await physics_frame
-					ticks += 1
-				var died: bool = not player.alive
-				player.queue_free()
-				await _await_ticks(BOOST_RESET_TICKS)
-				if died:
-					escape = "spawn %d shoved %s, out after %d ticks" % [
-						i, "left" if direction < 0.0 else "right", ticks]
-					break
-			if escape != "":
-				break
-
-		if escape == "":
-			failures.append(
-				"%s: no spawn point shoved at %.0f px/s in either direction reached the kill zone in %d ticks" % [
-					path, RINGOUT_SHOVE_SPEED, RINGOUT_SHOVE_TICKS])
-		else:
-			print("      %s: %s" % [path, escape])
-
-		await _teardown(stage)
-
+	# Every stage at once, each on its own copy in a physics world of its own
+	# and well apart from the rest (#168). Per stage nothing changed: one copy,
+	# spawn by spawn, left then right, until the first shove gets out.
+	var jobs: Array[Callable] = []
+	for s in STAGE_PATHS.size():
+		jobs.append(_stage_ringout_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
+	var failures: Array[String] = await _run_concurrently(jobs, "stage ring-out sweep")
+	_scenario_completed = true
 	return failures
 
 # --- Stage parts (issue #18) -------------------------------------------------
@@ -5796,31 +5752,13 @@ func _scenario_pickup_drawn_with_weapon_art() -> Array[String]:
 ## first) and `_first_circle_contact` (a touching pair driven through the line
 ## of centres still counts).
 func _scenario_roster_heads_do_not_tunnel_head_reversed() -> Array[String]:
-	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
-	var centre: Vector2 = DEEP_PARK_POSITION
 	var paths: PackedStringArray = WEAPON_RESOURCE_PATHS.duplicate()
 	paths.reverse()
-
-	for path: String in paths:
-		var weapon: String = path.get_file().get_basename()
-		var stats: WeaponStatsType = load(path)
-		if stats == null:
-			failures.append("%s: could not be loaded" % path)
-			continue
-		var attacker: RigidBody2D = _spawn_player(stage, centre)
-		var blocker: RigidBody2D = _spawn_player(stage, centre)
-		attacker.set_weapon_stats(_sweep_stats(stats))
-		blocker.set_weapon_stats(_sweep_stats(stats))
-		await _await_ticks(ROSTER_SWAP_TICKS)
-		var separation: float = maxf(CHARGE_SEPARATION,
-			2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
-		failures.append_array(await _charge_sweep(weapon, attacker, blocker, centre, separation))
-		attacker.queue_free()
-		blocker.queue_free()
-		await _await_ticks(2)
-
-	await _teardown(stage)
+	# As `roster_heads_do_not_tunnel_head`, three worlds at once (#168), with
+	# the roster reversed: boomstick then dagger, axe then sword, staff then
+	# pickaxe -- each weapon in the other place in its world's history.
+	var failures: Array[String] = await _roster_charge_sweeps(paths)
+	_scenario_completed = true
 	return failures
 
 # --- Hitmarkers and damage numbers (issue #33) -------------------------------
@@ -6281,9 +6219,12 @@ func _highest_spawn_y(stage_instance: Node2D) -> float:
 func _await_live_stage(loop: Dictionary, previous: Node2D = null) -> Node2D:
 	var players: Array[RigidBody2D] = loop["players"]
 	var container: Node = loop["container"]
+	# An instance id, not `previous` itself: the round loop frees the old
+	# stage while this condition is still being polled (#168).
+	var previous_id: int = previous.get_instance_id() if previous != null else 0
 	var live: bool = await _await_condition(func() -> bool:
 		var active: Node2D = _active_stage(container)
-		return players[0].alive and players[1].alive and active != null and active != previous,
+		return players[0].alive and players[1].alive and active != null and active.get_instance_id() != previous_id,
 		ROUND_LOOP_TIMEOUT_MSEC)
 	return _active_stage(container) if live else null
 
@@ -11853,90 +11794,11 @@ const PLAYTEST_CLIP_UNDER_GAP: float = 60.0
 ## centre goes from one side of the slab to the other within its span.
 ## Measured on main at b659ff9: boomstick 4, axe 12, sword 1.
 func _scenario_roster_heads_do_not_clip_platform_in_play() -> Array[String]:
-	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
-	var slabs: Array[Vector2] = []
-	for lane in PLATFORM_TUNNEL_LANES:
-		var centre := PLATFORM_TUNNEL_LANE_ORIGIN + Vector2(PLATFORM_TUNNEL_LANE_SPACING * lane, 0.0)
-		_add_bar(stage, centre, Vector2(THIN_PLATFORM_HALF_WIDTH, THIN_PLATFORM_HALF_HEIGHT) * 2.0)
-		slabs.append(centre)
-
-	var rng := RandomNumberGenerator.new()
-	rng.seed = PLAYTEST_CLIP_SEED
-	var trials: Array[Dictionary] = []
-	for path: String in WEAPON_RESOURCE_PATHS:
-		var stats: WeaponStatsType = load(path)
-		for t in PLAYTEST_CLIP_TRIALS:
-			var throws: Array[Vector2] = []
-			for _k in PLAYTEST_CLIP_THROWS:
-				var strength: float = [0.0, 0.4, 1.0, 1.0][rng.randi() % 4]
-				throws.append(Vector2.from_angle(rng.randf() * TAU) * strength)
-			trials.append({
-				"weapon": path.get_file().get_basename(),
-				"stats": stats,
-				"under": t % 2 == 1,
-				"throws": throws,
-				"hold": rng.randi_range(PLAYTEST_CLIP_HOLD_MIN, PLAYTEST_CLIP_HOLD_MAX),
-			})
-
-	var lanes: Array[Dictionary] = []
-	for slab: Vector2 in slabs:
-		lanes.append({"slab": slab, "trial": {}, "player": null, "tick": 0, "sides": {}})
-	var crossings: Dictionary = {}
-	var next: int = 0
-	var start: int = ROSTER_SWAP_TICKS
-	var end_at: int = start + PLAYTEST_CLIP_TICKS
-	while true:
-		var busy: bool = false
-		for lane: Dictionary in lanes:
-			if lane["trial"].is_empty():
-				if next >= trials.size():
-					continue
-				var trial: Dictionary = trials[next]
-				next += 1
-				lane["trial"] = trial
-				lane["tick"] = 0
-				lane["sides"] = {}
-				var y: float = THIN_PLATFORM_HALF_HEIGHT + PLAYER_RADIUS + PLAYTEST_CLIP_UNDER_GAP \
-					if trial["under"] else -THIN_PLATFORM_HALF_HEIGHT - PLAYER_RADIUS - 1.0
-				var spawned: RigidBody2D = _spawn_player(stage, Vector2(lane["slab"]) + Vector2(0.0, y))
-				spawned.set_weapon_stats(trial["stats"])
-				lane["player"] = spawned
-			busy = true
-			var current: Dictionary = lane["trial"]
-			var player: RigidBody2D = lane["player"]
-			var tick: int = lane["tick"]
-			lane["tick"] = tick + 1
-			if tick >= start and tick < end_at and player != null and is_instance_valid(player) and player.alive:
-				var throw: int = ((tick - start) / int(current["hold"])) % PLAYTEST_CLIP_THROWS
-				player.set_input_vector(current["throws"][throw])
-				if tick > start:
-					var crossed: String = _update_platform_sides(player, lane["slab"], lane["sides"])
-					if crossed != "":
-						var weapon: String = current["weapon"]
-						if not crossings.has(weapon):
-							crossings[weapon] = []
-						crossings[weapon].append("%s trial %d (%s the slab), tick %d: %s" % [
-							weapon, trials.find(current), "under" if current["under"] else "on",
-							tick - start, crossed])
-						lane["tick"] = end_at
-			if lane["tick"] >= end_at and lane["player"] != null:
-				lane["player"].queue_free()
-				lane["player"] = null
-			if lane["tick"] >= end_at + BOOST_RESET_TICKS:
-				lane["trial"] = {}
-		if not busy:
-			break
-		await physics_frame
-
-	for path: String in WEAPON_RESOURCE_PATHS:
-		var weapon: String = path.get_file().get_basename()
-		var found: Array = crossings.get(weapon, [])
-		print("      %s: %d trials, %d head crossings" % [weapon, PLAYTEST_CLIP_TRIALS, found.size()])
-		for line: String in found:
-			failures.append(line)
-
-	await _teardown(stage)
+	# Split three ways (#168): pickaxe and staff here, the other four in
+	# `..._sword_axe` and `..._dagger_boomstick` at the end of the list, so
+	# the shards run them side by side. Same seed, same trials for each.
+	var failures: Array[String] = await _clip_platform_sweep([0, 1])
+	_scenario_completed = true
 	return failures
 
 # --- Juice: landing dust, head trails, clash sparks (issue #116) ------------
@@ -14492,10 +14354,13 @@ const ANNOUNCER_WAIT_MSEC: int = 15000
 ## sound file, and plays through the Sfx table.
 func _scenario_announcer_calls_the_match() -> Array[String]:
 	var failures: Array[String] = []
+	# After a tick, not before: run on its own, the autoloads may not be
+	# ready yet on the first line (#168).
+	await physics_frame
 	var sfx: Node = _sfx()
 	if sfx == null or sfx.announcer == null:
+		_scenario_completed = true
 		return ["the Sfx autoload has no announcer"]
-	await physics_frame
 	var announcer: Node = sfx.announcer
 	for title: String in MODIFIER_TITLES.values():
 		if announcer.modifier_line(title) == &"":
@@ -16814,4 +16679,507 @@ func _scenario_pause_keeps_ko_credit_and_survival_time() -> Array[String]:
 	if rm.is_paused():
 		failures.append("the game was still paused")
 	await _teardown(loop["stage"])
+	return failures
+
+# --- Harness fixes, pooled effects and suite speed (issue #168) ---------------
+
+## A stage in a physics world of its own -- a SubViewport with its own
+## World2D, never drawn -- placed at `offset`, so the slow sweeps can run side
+## by side (#168). Bodies in it touch nothing in any other world, and
+## everything in the game that queries physics goes through `get_world_2d()`,
+## which is this world.
+##
+## **The offset is not optional for anything holding a weapon.** Worlds do not
+## hide heads from each other: `WeaponHead` finds the other heads to guard
+## against through the scene tree's `HEAD_GROUP`, which spans every world, so
+## two sweeps at the same coordinates in different worlds steer each other's
+## heads. Keep every world's heads further apart than two reaches (about
+## 400 px) for as long as they live. Free it with `_free_isolated_stage()`.
+func _new_isolated_stage(with_arena: bool = true, offset: Vector2 = Vector2.ZERO) -> Node2D:
+	var viewport := SubViewport.new()
+	viewport.world_2d = World2D.new()
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	viewport.size = Vector2i(2, 2)
+	get_root().add_child(viewport)
+	var stage := Node2D.new()
+	stage.position = offset
+	viewport.add_child(stage)
+	if with_arena:
+		stage.add_child(ArenaScene.instantiate())
+	return stage
+
+func _free_isolated_stage(stage: Node2D) -> void:
+	var viewport: Node = stage.get_parent()
+	if viewport is SubViewport:
+		viewport.queue_free()
+	else:
+		stage.queue_free()
+
+## Longest a batch of concurrent jobs may run before the scenario gives up on
+## it: far past any sweep's own length, so only a hang reaches it.
+const CONCURRENT_TIMEOUT_MSEC: int = 600000
+
+## Starts every job at once and waits for all of them; returns each job's
+## result in job order. A job abandoned by a script error resumes its runner
+## with null, so a crashed job reads back as null rather than hanging this.
+func _run_concurrently_raw(jobs: Array[Callable]) -> Array:
+	var results: Array = []
+	results.resize(jobs.size())
+	var state: Dictionary = {"left": jobs.size()}
+	for i in jobs.size():
+		_run_one_job(jobs[i], results, i, state)
+	var deadline: int = Time.get_ticks_msec() + CONCURRENT_TIMEOUT_MSEC
+	while state["left"] > 0 and Time.get_ticks_msec() < deadline:
+		await physics_frame
+	return results
+
+## `_run_concurrently_raw()` for jobs that return failure lists: all of them,
+## in job order, plus one for any job that did not run to completion.
+func _run_concurrently(jobs: Array[Callable], label: String) -> Array[String]:
+	var failures: Array[String] = []
+	var results: Array = await _run_concurrently_raw(jobs)
+	for i in results.size():
+		if results[i] is Array:
+			for f: String in results[i]:
+				failures.append(f)
+		else:
+			failures.append("%s %d did not run to completion -- look for a SCRIPT ERROR above" % [label, i])
+	return failures
+
+func _run_one_job(job: Callable, results: Array, i: int, state: Dictionary) -> void:
+	results[i] = await job.call()
+	state["left"] -= 1
+
+## Where stage copy `index` of the stage sweeps goes: a grid six wide,
+## 10000 px apart across and 6000 down. Every stage's kill zone is 8000 px
+## wide, so a player is out of play before it can get near a neighbour.
+##
+## Rows go down from the origin, never up: moved 9000 px up, Highrise's
+## shoves stopped reaching the kill zone at all (the body barely slid), while
+## moved sideways or down it plays out to within a tick of where it stands.
+## Something in the game reads absolute height; until that is found, a stage
+## copy stays at or below where the game puts it.
+const STAGE_WORLD_COLUMNS: int = 6
+const STAGE_WORLD_SPACING: Vector2 = Vector2(10000.0, 6000.0)
+
+func _stage_world_offset(index: int) -> Vector2:
+	var column: int = index % STAGE_WORLD_COLUMNS
+	var row: int = index / STAGE_WORLD_COLUMNS
+	return Vector2((column - (STAGE_WORLD_COLUMNS - 1) * 0.5) * STAGE_WORLD_SPACING.x,
+		row * STAGE_WORLD_SPACING.y)
+
+## `stage_spawns_are_safe`'s loop for one stage, unchanged but for where the
+## copy is: its spawns one after another on one copy, 60 idle ticks each.
+func _stage_spawn_sweep(path: String, offset: Vector2) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_isolated_stage(false, offset)
+	var instance: Node2D = (load(path) as PackedScene).instantiate()
+	stage.add_child(instance)
+	var spawns: Array[Vector2] = instance.get_spawn_points()
+
+	if spawns.size() < STAGE_MIN_SPAWNS:
+		failures.append("%s: declared %d spawn point(s), needs at least %d" % [
+			path, spawns.size(), STAGE_MIN_SPAWNS])
+
+	for i in spawns.size():
+		var player: RigidBody2D = _spawn_player(stage, spawns[i])
+		await _await_ticks(60)
+		if not player.alive:
+			failures.append("%s spawn %d: player died within 60 idle ticks" % [path, i])
+		elif absf(player.linear_velocity.y) > SETTLED_SPEED:
+			failures.append("%s spawn %d: never settled, vertical speed %.1f px/s" % [
+				path, i, player.linear_velocity.y])
+		player.queue_free()
+		await _await_ticks(BOOST_RESET_TICKS)
+
+	_free_isolated_stage(stage)
+	await physics_frame
+	return failures
+
+## `every_stage_can_ring_out`'s loop for one stage, unchanged but for where
+## the copy is.
+func _stage_ringout_sweep(path: String, offset: Vector2) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_isolated_stage(false, offset)
+	var instance: Node2D = (load(path) as PackedScene).instantiate()
+	stage.add_child(instance)
+	var spawns: Array[Vector2] = instance.get_spawn_points()
+
+	var escape: String = ""
+	for i in spawns.size():
+		for direction: float in [-1.0, 1.0]:
+			var player: RigidBody2D = _spawn_player(stage, spawns[i])
+			await physics_frame
+			player.linear_velocity = Vector2(direction * RINGOUT_SHOVE_SPEED, 0.0)
+			var ticks: int = 0
+			while ticks < RINGOUT_SHOVE_TICKS and player.alive:
+				await physics_frame
+				ticks += 1
+			var died: bool = not player.alive
+			player.queue_free()
+			await _await_ticks(BOOST_RESET_TICKS)
+			if died:
+				escape = "spawn %d shoved %s, out after %d ticks" % [
+					i, "left" if direction < 0.0 else "right", ticks]
+				break
+		if escape != "":
+			break
+
+	if escape == "":
+		failures.append(
+			"%s: no spawn point shoved at %.0f px/s in either direction reached the kill zone in %d ticks" % [
+				path, RINGOUT_SHOVE_SPEED, RINGOUT_SHOVE_TICKS])
+	else:
+		print("      %s: %s" % [path, escape])
+
+	_free_isolated_stage(stage)
+	await physics_frame
+	return failures
+
+## The roster charge sweeps, two weapons to a world and three worlds at once:
+## `paths` in order, split into consecutive pairs.
+## The worlds sit 6000 px apart across, the middle one where the sweep always
+## ran: a charge never strays more than a few hundred pixels from its centre.
+const CHARGE_WORLD_SPACING: float = 6000.0
+
+func _roster_charge_sweeps(paths: PackedStringArray) -> Array[String]:
+	var jobs: Array[Callable] = []
+	var worlds: int = (paths.size() + 1) / 2
+	for k in worlds:
+		var offset := Vector2((k - (worlds - 1) * 0.5) * CHARGE_WORLD_SPACING, 0.0)
+		jobs.append(_roster_charge_world.bind(paths.slice(k * 2, k * 2 + 2), offset))
+	return await _run_concurrently(jobs, "charge world")
+
+## `roster_heads_do_not_tunnel_head`'s loop, unchanged, for `paths` on one
+## Arena in a world of its own: a fresh pair per weapon holding it with its
+## damage taken out, the twelve charges, and the pair freed before the next.
+func _roster_charge_world(paths: PackedStringArray, offset: Vector2) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_isolated_stage(true, offset)
+	var centre: Vector2 = DEEP_PARK_POSITION + offset
+	for path: String in paths:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var attacker: RigidBody2D = _spawn_player(stage, centre)
+		var blocker: RigidBody2D = _spawn_player(stage, centre)
+		attacker.set_weapon_stats(_sweep_stats(stats))
+		blocker.set_weapon_stats(_sweep_stats(stats))
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		var separation: float = maxf(CHARGE_SEPARATION,
+			2.0 * stats.max_reach + ROSTER_CHARGE_CLEARANCE)
+		failures.append_array(await _charge_sweep(weapon, attacker, blocker, centre, separation))
+		attacker.queue_free()
+		blocker.queue_free()
+		await _await_ticks(2)
+	_free_isolated_stage(stage)
+	await physics_frame
+	return failures
+
+## Where weapon `index`'s lanes go in `roster_heads_do_not_clip_platform_in_play`:
+## three blocks of sixteen lanes side by side, and two weapons to a block,
+## the second's lanes half a lane over from the first's -- 1200 px from any
+## other world's slab, never above or below one (half the trials start under
+## a slab and fall).
+func _clip_world_offset(index: int) -> Vector2:
+	var block: int = index / 2
+	return Vector2((block - 1) * PLATFORM_TUNNEL_LANES * PLATFORM_TUNNEL_LANE_SPACING
+		+ (index % 2) * PLATFORM_TUNNEL_LANE_SPACING * 0.5, 0.0)
+
+## `roster_heads_do_not_clip_platform_in_play`'s lanes, unchanged, for one
+## weapon's trials on an Arena and sixteen slabs in a world of its own at
+## `offset`. Returns the crossings, one line each.
+func _clip_platform_lanes(trials: Array[Dictionary], offset: Vector2) -> Array[String]:
+	var stage: Node2D = _new_isolated_stage(true, offset)
+	var slabs: Array[Vector2] = []
+	for lane in PLATFORM_TUNNEL_LANES:
+		var centre := offset + PLATFORM_TUNNEL_LANE_ORIGIN + Vector2(PLATFORM_TUNNEL_LANE_SPACING * lane, 0.0)
+		_add_bar(stage, centre, Vector2(THIN_PLATFORM_HALF_WIDTH, THIN_PLATFORM_HALF_HEIGHT) * 2.0)
+		slabs.append(centre)
+
+	var lanes: Array[Dictionary] = []
+	for slab: Vector2 in slabs:
+		lanes.append({"slab": slab, "trial": {}, "player": null, "tick": 0, "sides": {}})
+	var crossings: Array[String] = []
+	var next: int = 0
+	var start: int = ROSTER_SWAP_TICKS
+	var end_at: int = start + PLAYTEST_CLIP_TICKS
+	while true:
+		var busy: bool = false
+		for lane: Dictionary in lanes:
+			if lane["trial"].is_empty():
+				if next >= trials.size():
+					continue
+				var trial: Dictionary = trials[next]
+				next += 1
+				lane["trial"] = trial
+				lane["tick"] = 0
+				lane["sides"] = {}
+				var y: float = THIN_PLATFORM_HALF_HEIGHT + PLAYER_RADIUS + PLAYTEST_CLIP_UNDER_GAP \
+					if trial["under"] else -THIN_PLATFORM_HALF_HEIGHT - PLAYER_RADIUS - 1.0
+				var spawned: RigidBody2D = _spawn_player(stage, Vector2(lane["slab"]) + Vector2(0.0, y))
+				spawned.set_weapon_stats(trial["stats"])
+				lane["player"] = spawned
+			busy = true
+			var current: Dictionary = lane["trial"]
+			var player: RigidBody2D = lane["player"]
+			var tick: int = lane["tick"]
+			lane["tick"] = tick + 1
+			if tick >= start and tick < end_at and player != null and is_instance_valid(player) and player.alive:
+				var throw: int = ((tick - start) / int(current["hold"])) % PLAYTEST_CLIP_THROWS
+				player.set_input_vector(current["throws"][throw])
+				if tick > start:
+					var crossed: String = _update_platform_sides(player, lane["slab"], lane["sides"])
+					if crossed != "":
+						crossings.append("%s trial %d (%s the slab), tick %d: %s" % [
+							current["weapon"], current["index"], "under" if current["under"] else "on",
+							tick - start, crossed])
+						lane["tick"] = end_at
+			if lane["tick"] >= end_at and lane["player"] != null:
+				lane["player"].queue_free()
+				lane["player"] = null
+			if lane["tick"] >= end_at + BOOST_RESET_TICKS:
+				lane["trial"] = {}
+		if not busy:
+			break
+		await physics_frame
+	_free_isolated_stage(stage)
+	await physics_frame
+	return crossings
+
+## Issue #168, finding 3: a head that finds every trail slot taken is not
+## left trail-less for good. With more heads than `Juice.MAX_TRAILS`, the
+## overflow heads claim the slots freed heads let go of. And a weapon swap
+## (`Player._clear_rig()` retiring the old head and building the new one in
+## the same frame) with every slot held hands the new head the old one's slot
+## -- before #168 the retired head, still valid until the end of the frame,
+## kept it, so eight players swapping at once left nobody trailing.
+func _scenario_juice_overflow_head_claims_trail_later() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var heads: Array[RigidBody2D] = []
+	for i in JuiceScript.MAX_TRAILS + 2:
+		heads.append(_bare_head(stage, JUICE_ORIGIN + Vector2(i * 50.0, 0.0), HELD_HEAD_FORCE))
+	await _await_ticks(2)
+	var holders: Array[RigidBody2D] = []
+	var waiting: Array[RigidBody2D] = []
+	for head: RigidBody2D in heads:
+		if juice.holds_trail(head):
+			holders.append(head)
+		else:
+			waiting.append(head)
+	if juice.trail_count() != JuiceScript.MAX_TRAILS or waiting.size() != 2:
+		failures.append("%d heads: %d hold trail slots and %d wait, expected %d and 2" % [
+			heads.size(), juice.trail_count(), waiting.size(), JuiceScript.MAX_TRAILS])
+	else:
+		holders[0].queue_free()
+		holders[1].queue_free()
+		await _await_ticks(2)
+		for head: RigidBody2D in waiting:
+			if not juice.holds_trail(head):
+				failures.append("an overflow head never claimed a slot freed heads let go of")
+		if juice.trail_count() != JuiceScript.MAX_TRAILS:
+			failures.append("after two heads were freed, %d heads hold slots, expected the cap %d" % [
+				juice.trail_count(), JuiceScript.MAX_TRAILS])
+		# The late claim is a real trail: swung fast, it draws.
+		var late: RigidBody2D = waiting[0]
+		var most: int = 0
+		var frames: int = 0
+		var until: int = Time.get_ticks_msec() + 400
+		while Time.get_ticks_msec() < until:
+			late.linear_velocity = Vector2(0.0, JuiceScript.TRAIL_MIN_SPEED * 1.8).rotated(frames * 0.05)
+			await process_frame
+			frames += 1
+			most = maxi(most, juice.trail_point_count(late))
+		if most == 0:
+			failures.append("an overflow head that claimed a slot late left no trail when swung fast")
+	await _teardown(stage)
+
+	# Eight players, every slot held, all swapping weapons in the same frame.
+	_scenario_completed = false
+	stage = _new_stage()
+	juice = _juice(stage)
+	var players: Array[RigidBody2D] = []
+	for i in JuiceScript.MAX_TRAILS:
+		players.append(_spawn_player(stage, Vector2(-1400.0 + 400.0 * i, -1400.0)))
+	await _await_ticks(5)
+	var old_heads: Array = []
+	for player: RigidBody2D in players:
+		var head: Node = player.get("_head")
+		old_heads.append(head)
+		if head == null or not juice.holds_trail(head):
+			failures.append("%s's head holds no trail slot before the swap" % player.name)
+	if juice.trail_count() != JuiceScript.MAX_TRAILS:
+		failures.append("%d players hold %d trail slots, expected %d" % [
+			players.size(), juice.trail_count(), JuiceScript.MAX_TRAILS])
+	var swap_to: WeaponStatsType = load(WEAPON_RESOURCE_PATHS[1])
+	for player: RigidBody2D in players:
+		player.set_weapon_stats(swap_to)
+	await _await_ticks(3)
+	var trailing: int = 0
+	for p in players.size():
+		var head: Node = players[p].get("_head")
+		if head == null or head == old_heads[p]:
+			failures.append("%s's weapon was not rebuilt by the swap" % players[p].name)
+		elif juice.holds_trail(head):
+			trailing += 1
+	if trailing != players.size():
+		failures.append("after %d players swapped weapons in one frame, %d new heads hold trail slots, expected all %d" % [
+			players.size(), trailing, players.size()])
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## Issue #168, finding 4: hitmarkers and damage numbers are pooled, not
+## allocated per strike. Numbers at one size share one LabelSettings (the grey
+## `0` its own); a finished marker and number leave the tree and the next
+## strike re-uses them, reset -- fresh age, full opacity, the new point, the
+## new text; and the parked ones are freed with the feedback node rather than
+## leaked.
+func _scenario_hit_feedback_pools_markers_and_numbers() -> Array[String]:
+	var failures: Array[String] = []
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var feedback: Node2D = HitFeedbackType.new()
+	holder.add_child(feedback)
+	var attacker := Node2D.new()
+	var victim := Node2D.new()
+	holder.add_child(attacker)
+	holder.add_child(victim)
+	await process_frame
+
+	feedback._on_strike_landed(victim, 45.0, Vector2(0.0, 0.0), false, attacker)
+	feedback._on_strike_landed(victim, 45.0, Vector2(100.0, 0.0), false, attacker)
+	feedback._on_strike_landed(victim, 0.0, Vector2(200.0, 0.0), false, attacker)
+	var markers: Array[Node] = []
+	var numbers: Array[Label] = []
+	for child: Node in feedback.get_children():
+		if child is Label:
+			numbers.append(child)
+		else:
+			markers.append(child)
+	if markers.size() != 2 or numbers.size() != 3:
+		failures.append("two damaging strikes and a 0 drew %d marker(s) and %d number(s), expected 2 and 3" % [
+			markers.size(), numbers.size()])
+		await _teardown(holder)
+		_scenario_completed = true
+		return failures
+	if numbers[0].label_settings != numbers[1].label_settings:
+		failures.append("two damage numbers at the same size have their own LabelSettings each")
+	if numbers[2].label_settings == numbers[0].label_settings:
+		failures.append("the grey 0 shares the white numbers' LabelSettings")
+	elif numbers[2].label_settings.font_color != HitFeedbackType.ZERO_NUMBER_COLOR \
+			or numbers[0].label_settings.font_color != Color.WHITE:
+		failures.append("shared LabelSettings mixed up the colours: damage %s, zero %s" % [
+			numbers[0].label_settings.font_color, numbers[2].label_settings.font_color])
+
+	var pooled: Array[Node] = []
+	pooled.append_array(markers)
+	pooled.append_array(numbers)
+	var until: int = Time.get_ticks_msec() + int(HitFeedbackType.NUMBER_LIFETIME * 1300.0)
+	while Time.get_ticks_msec() < until:
+		await process_frame
+	await process_frame
+	if feedback.get_child_count() != 0:
+		failures.append("%d marker(s)/number(s) still in the tree after their lifetime" % feedback.get_child_count())
+	for node: Node in pooled:
+		if not is_instance_valid(node):
+			failures.append("a finished marker or number was freed rather than kept for re-use")
+			break
+
+	var point := Vector2(-300.0, 50.0)
+	feedback._on_strike_landed(victim, 45.0, point, false, attacker)
+	var marker: Node2D = null
+	var number: Label = null
+	for child: Node in feedback.get_children():
+		if child is Label:
+			number = child
+		else:
+			marker = child
+	if marker == null or number == null:
+		failures.append("a strike after the pool filled drew no marker or number")
+	else:
+		if not pooled.has(marker):
+			failures.append("a strike allocated a new hitmarker with finished ones waiting for re-use")
+		if not pooled.has(number):
+			failures.append("a strike allocated a new damage number with finished ones waiting for re-use")
+		if marker.position != point or marker.get("age") != 0.0 or marker.modulate.a != 1.0 \
+				or not marker.is_processing():
+			failures.append("a re-used hitmarker was not reset: at %s, age %.2f, alpha %.2f" % [
+				marker.position, marker.get("age"), marker.modulate.a])
+		if number.text != "45" or number.get("age") != 0.0 or number.modulate.a != 1.0 \
+				or not number.is_processing():
+			failures.append("a re-used damage number was not reset: '%s', age %.2f, alpha %.2f" % [
+				number.text, number.get("age"), number.modulate.a])
+
+	await _teardown(holder)
+	await process_frame
+	for node: Node in pooled:
+		if is_instance_valid(node):
+			failures.append("a pooled marker or number outlived the feedback node that owned it")
+			break
+	_scenario_completed = true
+	return failures
+
+## `roster_heads_do_not_clip_platform_in_play`'s seeded sweep for the weapons
+## at `weapon_indices` in WEAPON_RESOURCE_PATHS. Every weapon's trials are
+## drawn in full first, so the RNG hands each weapon exactly the throws it had
+## when one scenario ran all six; each chosen weapon's trials then run on
+## their own sixteen lanes in a physics world of their own, all at once,
+## instead of queued through one set of lanes. See `_clip_world_offset()`.
+func _clip_platform_sweep(weapon_indices: Array[int]) -> Array[String]:
+	var failures: Array[String] = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = PLAYTEST_CLIP_SEED
+	var trials: Array[Dictionary] = []
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stats: WeaponStatsType = load(path)
+		for t in PLAYTEST_CLIP_TRIALS:
+			var throws: Array[Vector2] = []
+			for _k in PLAYTEST_CLIP_THROWS:
+				var strength: float = [0.0, 0.4, 1.0, 1.0][rng.randi() % 4]
+				throws.append(Vector2.from_angle(rng.randf() * TAU) * strength)
+			trials.append({
+				"index": trials.size(),
+				"weapon": path.get_file().get_basename(),
+				"stats": stats,
+				"under": t % 2 == 1,
+				"throws": throws,
+				"hold": rng.randi_range(PLAYTEST_CLIP_HOLD_MIN, PLAYTEST_CLIP_HOLD_MAX),
+			})
+
+	var jobs: Array[Callable] = []
+	for w: int in weapon_indices:
+		var weapon: String = WEAPON_RESOURCE_PATHS[w].get_file().get_basename()
+		var own: Array[Dictionary] = []
+		for trial: Dictionary in trials:
+			if trial["weapon"] == weapon:
+				own.append(trial)
+		jobs.append(_clip_platform_lanes.bind(own, _clip_world_offset(jobs.size())))
+	var results: Array = await _run_concurrently_raw(jobs)
+
+	for j in weapon_indices.size():
+		var weapon: String = WEAPON_RESOURCE_PATHS[weapon_indices[j]].get_file().get_basename()
+		if not results[j] is Array:
+			failures.append("%s: the lanes did not run to completion -- look for a SCRIPT ERROR above" % weapon)
+			continue
+		var found: Array = results[j]
+		print("      %s: %d trials, %d head crossings" % [weapon, PLAYTEST_CLIP_TRIALS, found.size()])
+		for line: String in found:
+			failures.append(line)
+	return failures
+
+## The sword and axe share of `roster_heads_do_not_clip_platform_in_play`.
+func _scenario_roster_heads_do_not_clip_platform_in_play_sword_axe() -> Array[String]:
+	var failures: Array[String] = await _clip_platform_sweep([2, 3])
+	_scenario_completed = true
+	return failures
+
+## The dagger and boomstick share of `roster_heads_do_not_clip_platform_in_play`.
+func _scenario_roster_heads_do_not_clip_platform_in_play_dagger_boomstick() -> Array[String]:
+	var failures: Array[String] = await _clip_platform_sweep([4, 5])
+	_scenario_completed = true
 	return failures
