@@ -14,8 +14,11 @@ extends Node2D
 ## node's fixed pools, sized in `_ready`: a landing or a clash writes into
 ## ring-buffer slots, it never spawns a node or grows an array. When the
 ## particle pool is full the oldest particle is overwritten; a trail keeps at
-## most `TRAIL_POINTS` points; at most `MAX_TRAILS` heads trail at once. The
-## node redraws only while something is on screen.
+## most `TRAIL_POINTS` points; at most `MAX_TRAILS` heads trail at once. A
+## head that finds every slot taken waits in `_t_waiting` and claims the next
+## slot to come free (issue #168), so a weapon swap or a crowded round never
+## leaves a head trail-less for good. The node redraws only while something
+## is on screen.
 ##
 ## Lives in world space, like `HitFeedback`. Animated per rendered frame, so
 ## physics interpolation is off for it; trails follow the head's *rendered*
@@ -98,6 +101,10 @@ var _t_pts := PackedVector2Array()
 var _t_born := PackedFloat32Array()
 var _t_count := PackedInt32Array()
 var _t_next := PackedInt32Array()
+## Heads that found every slot taken, oldest first; each claims the next slot
+## that comes free. Untyped for the same reason as `_t_head`. Grows only when
+## a head is added to the tree, never per tick or per strike.
+var _t_waiting: Array = []
 
 var _players: Array[Node] = []
 ## instance id -> linear velocity at the start of this physics step.
@@ -154,9 +161,14 @@ func trail_point_count(head: Node) -> int:
 func trail_count() -> int:
 	var n: int = 0
 	for s in MAX_TRAILS:
-		if is_instance_valid(_t_head[s]):
+		if _slot_held(s):
 			n += 1
 	return n
+
+## Whether `head` holds a trail slot right now.
+func holds_trail(head: Node) -> bool:
+	var slot: int = _t_head.find(head)
+	return slot >= 0 and _slot_held(slot)
 
 # --- Watching -----------------------------------------------------------------
 
@@ -173,17 +185,32 @@ func _on_node_added(node: Node) -> void:
 			node.connect("body_entered", _on_player_touched.bind(node))
 		_players.append(node)
 	elif node.has_signal("struck_world") and node.has_signal("clashed"):
-		node.connect("clashed", _on_head_clashed.bind(node))
-		_claim_trail(node as Node2D)
+		# A head that left the tree and came back is re-watched, and is
+		# already connected.
+		var on_clash: Callable = _on_head_clashed.bind(node)
+		if not node.is_connected("clashed", on_clash):
+			node.connect("clashed", on_clash)
+		if not _claim_trail(node as Node2D) and not _t_waiting.has(node):
+			_t_waiting.append(node)
 	else:
 		return
 	node.set_meta(META_WATCHED, true)
 
-func _claim_trail(head: Node2D) -> void:
+## Whether slot `s` belongs to a head still in play. A head queued for
+## deletion is already gone: `Player._clear_rig()` retires the old head and
+## builds the new one in the same frame, and the new one must be able to take
+## the old one's slot then, not a frame later when nothing retries (#168).
+func _slot_held(s: int) -> bool:
+	var head: Variant = _t_head[s]
+	return is_instance_valid(head) and not (head as Node).is_queued_for_deletion()
+
+## Gives `head` the first free slot. False when every slot is held: the
+## caller queues it in `_t_waiting` for the next slot to come free.
+func _claim_trail(head: Node2D) -> bool:
 	if head == null:
-		return
+		return true
 	for i in MAX_TRAILS:
-		if not is_instance_valid(_t_head[i]):
+		if not _slot_held(i):
 			_t_head[i] = head
 			_t_count[i] = 0
 			_t_next[i] = 0
@@ -191,8 +218,25 @@ func _claim_trail(head: Node2D) -> void:
 			var at: Vector2 = head.global_position if head.is_inside_tree() else head.position
 			_t_prev[i] = at
 			_t_curr[i] = at
-			return
-	# More heads than slots: this one simply leaves no trail.
+			return true
+	return false
+
+## Hands freed slots to waiting heads, oldest first. Heads freed while
+## waiting are dropped; ones out of the tree or on their way out keep waiting
+## until they are back or gone.
+func _serve_waiting() -> void:
+	var i: int = 0
+	while i < _t_waiting.size():
+		var head: Variant = _t_waiting[i]
+		if not is_instance_valid(head) or (head as Node).is_queued_for_deletion():
+			_t_waiting.remove_at(i)
+			continue
+		if (head as Node2D).is_inside_tree():
+			if not _claim_trail(head as Node2D):
+				return
+			_t_waiting.remove_at(i)
+			continue
+		i += 1
 
 # --- Per tick -------------------------------------------------------------------
 
@@ -213,10 +257,10 @@ func _physics_process(delta: float) -> void:
 		var head: Variant = _t_head[s]
 		if head == null:
 			continue
-		if not is_instance_valid(head) or not (head as Node2D).is_inside_tree():
+		if not _slot_held(s) or not (head as Node2D).is_inside_tree():
 			# The head is gone (round over, weapon swapped): free the slot.
 			# A head merely out of the tree may come back; it re-claims then.
-			if is_instance_valid(head):
+			if _slot_held(s):
 				(head as Node).remove_meta(META_WATCHED)
 			_t_head[s] = null
 			_t_count[s] = 0
@@ -231,6 +275,9 @@ func _physics_process(delta: float) -> void:
 			continue
 		var v: Vector2 = (now - _t_prev[s]) / maxf(delta, 0.0001)
 		_t_fast[s] = 1 if v.length_squared() >= fast_sq else 0
+	# After the loop above has let go of every slot whose head is gone.
+	if not _t_waiting.is_empty():
+		_serve_waiting()
 
 # --- Per rendered frame -----------------------------------------------------
 

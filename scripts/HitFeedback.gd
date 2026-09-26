@@ -14,6 +14,13 @@ extends Node2D
 ##   floating number -- including `0` for a contact that was a real swing but
 ##   too slow to count, which gets no hitmarker. Those `0`s are rate-limited
 ##   per attacker/victim pair so a head dragged along someone doesn't spray.
+##
+## **No per-strike allocation (issue #168).** Markers and numbers are pooled:
+## a finished one is taken out of the tree and parked, and the next strike
+## re-uses it, so a hit only allocates when more are on screen at once than
+## ever before. Damage numbers share one `LabelSettings` per font size. A
+## re-used node is added back as the last child, as a new one would be, so
+## `child_entered_tree` still announces every marker and number.
 
 ## The debug switch. Damage numbers are a testing aid, not part of the game;
 ## flip this to hide them. Hitmarkers are always on.
@@ -45,6 +52,14 @@ var show_damage_numbers: bool = SHOW_DAMAGE_NUMBERS
 
 ## "attacker_id:victim_id" -> the physics frame its last `0` was shown on.
 var _last_zero_frame: Dictionary = {}
+
+## Finished markers and numbers, out of the tree, waiting to be re-used.
+var _free_markers: Array[HitMarker] = []
+var _free_numbers: Array[DamageNumber] = []
+## font size -> the LabelSettings every damage number at that size shares;
+## `ZERO_SETTINGS_KEY` for the grey `0`.
+var _label_settings: Dictionary = {}
+const ZERO_SETTINGS_KEY: int = -1
 
 func _ready() -> void:
 	z_index = 100
@@ -89,15 +104,54 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 	var world_scale: float = _world_scale()
 	if amount > 0.0:
 		var colour: Color = LETHAL_COLOR if lethal else _identity_colour(attacker)
-		var marker := HitMarker.new()
+		var marker: HitMarker = _free_markers.pop_back() if not _free_markers.is_empty() else HitMarker.new()
+		marker.done = _retire
 		marker.setup(point, colour, _marker_arm(amount, lethal), lethal, amount, world_scale)
 		add_child(marker)
 	elif not _zero_allowed(attacker, victim):
 		return
 	if show_damage_numbers:
-		var number := DamageNumber.new()
-		number.setup(point, amount, _number_font(amount), world_scale)
+		var font_size: int = _number_font(amount)
+		var number: DamageNumber = _free_numbers.pop_back() if not _free_numbers.is_empty() else DamageNumber.new()
+		number.done = _retire
+		number.setup(point, amount, font_size, world_scale, _settings_for(amount, font_size))
 		add_child(number)
+
+## A marker or number has finished: out of the tree and back in the pool.
+## Called deferred, never from inside the node's own `_process`.
+func _retire(node: Variant) -> void:
+	if not is_instance_valid(node) or (node as Node).get_parent() != self:
+		return
+	remove_child(node)
+	if node is HitMarker:
+		_free_markers.append(node)
+	else:
+		_free_numbers.append(node)
+
+## One shared LabelSettings per font size (and one for the grey `0`).
+func _settings_for(amount: float, font_size: int) -> LabelSettings:
+	var key: int = font_size if amount > 0.0 else ZERO_SETTINGS_KEY
+	var settings: LabelSettings = _label_settings.get(key)
+	if settings == null:
+		settings = LabelSettings.new()
+		settings.font_size = font_size
+		settings.font_color = Color.WHITE if amount > 0.0 else ZERO_NUMBER_COLOR
+		settings.outline_size = maxi(4, font_size / 5)
+		settings.outline_color = Color(0, 0, 0, 0.9)
+		_label_settings[key] = settings
+	return settings
+
+## Parked nodes are out of the tree, so nothing else frees them.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		for node: Node in _free_markers:
+			if is_instance_valid(node):
+				node.free()
+		for node: Node in _free_numbers:
+			if is_instance_valid(node):
+				node.free()
+		_free_markers.clear()
+		_free_numbers.clear()
 
 ## How much to scale a marker or number up so it reads the same size on
 ## screen however far the camera is zoomed out (#163): 1 on a normal stage,
@@ -136,6 +190,8 @@ class HitMarker extends Node2D:
 	var age: float = 0.0
 	## The camera-zoom compensation the pop is applied on top of (#163).
 	var base_scale: float = 1.0
+	## Hands the finished marker back to the pool; freed instead without one.
+	var done: Callable
 
 	func setup(at: Vector2, c: Color, a: float, is_lethal: bool, dealt: float, world_scale: float = 1.0) -> void:
 		position = at
@@ -143,13 +199,21 @@ class HitMarker extends Node2D:
 		arm = a
 		lethal = is_lethal
 		amount = dealt
+		age = 0.0
 		base_scale = world_scale
 		scale = Vector2.ONE * base_scale
+		modulate.a = 1.0
+		set_process(true)
+		queue_redraw()
 
 	func _process(delta: float) -> void:
 		age += delta
 		if age >= MARKER_LIFETIME:
-			queue_free()
+			set_process(false)
+			if done.is_valid():
+				done.call_deferred(self)
+			else:
+				queue_free()
 			return
 		var t: float = age / MARKER_LIFETIME
 		# Pops slightly past full size, then settles while fading.
@@ -173,15 +237,23 @@ class DamageNumber extends Label:
 	var age: float = 0.0
 	var _start: Vector2
 	var _rise: float = NUMBER_RISE
+	## Hands the finished number back to the pool; freed instead without one.
+	var done: Callable
 
-	func setup(at: Vector2, dealt: float, font_size: int, world_scale: float = 1.0) -> void:
+	## `settings` is shared between every number at this size; it is made
+	## here only when the caller has none to share.
+	func setup(at: Vector2, dealt: float, font_size: int, world_scale: float = 1.0, settings: LabelSettings = null) -> void:
 		amount = dealt
+		age = 0.0
+		modulate.a = 1.0
+		set_process(true)
 		text = str(roundi(dealt))
-		var settings := LabelSettings.new()
-		settings.font_size = font_size
-		settings.font_color = Color.WHITE if dealt > 0.0 else ZERO_NUMBER_COLOR
-		settings.outline_size = maxi(4, font_size / 5)
-		settings.outline_color = Color(0, 0, 0, 0.9)
+		if settings == null:
+			settings = LabelSettings.new()
+			settings.font_size = font_size
+			settings.font_color = Color.WHITE if dealt > 0.0 else ZERO_NUMBER_COLOR
+			settings.outline_size = maxi(4, font_size / 5)
+			settings.outline_color = Color(0, 0, 0, 0.9)
 		label_settings = settings
 		horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -198,7 +270,11 @@ class DamageNumber extends Label:
 	func _process(delta: float) -> void:
 		age += delta
 		if age >= NUMBER_LIFETIME:
-			queue_free()
+			set_process(false)
+			if done.is_valid():
+				done.call_deferred(self)
+			else:
+				queue_free()
 			return
 		var t: float = age / NUMBER_LIFETIME
 		position = _start + Vector2(0, -_rise * t)
