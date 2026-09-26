@@ -18,6 +18,8 @@ extends SceneTree
 ##   --seed=<n>       bot and weapon RNG seed (default 108)
 ##   --demo           the game's own demo mode (random weapons, 120 Hz physics)
 ##   --random-weapons random weapons at 60 Hz
+##   --weapon=<name>  every player holds resources/<name>.tres from the start
+##                    of every round (issue #150: eight flails)
 ##
 ## Main.tscn is used as shipped except its ControllerServer, which is swapped
 ## for the scenario suite's roster stub so no sockets open and all eight slots
@@ -32,6 +34,8 @@ const PLAYER_COUNT: int = 8
 
 var _frames: int = 3600
 var _seed: int = 108
+## `--weapon=`: what every player is handed at each round start, or null.
+var _weapon: Resource = null
 var _players: Array[RigidBody2D] = []
 var _bots: Array[Dictionary] = []
 var _rng := RandomNumberGenerator.new()
@@ -57,6 +61,8 @@ func _initialize() -> void:
 			_seed = arg.trim_prefix("--seed=").to_int()
 		elif arg == "--trace":
 			_trace_on = true
+		elif arg.begins_with("--weapon="):
+			_weapon = load("res://resources/%s.tres" % arg.trim_prefix("--weapon="))
 	seed(_seed)
 	_rng.seed = _seed
 	RoundManagerType.modifier_rolls_enabled = false
@@ -82,7 +88,11 @@ func _initialize() -> void:
 	round_manager.round_end_pause_sec = 0.05
 	round_manager.round_started.connect(func() -> void:
 		_rounds += 1
-		_note("round"))
+		_note("round")
+		if _weapon != null:
+			for p: RigidBody2D in _players:
+				if p.alive:
+					p.set_weapon_stats.call_deferred(_weapon))
 	for i in PLAYER_COUNT:
 		var player: RigidBody2D = main.get_node("Player%d" % (i + 1)) as RigidBody2D
 		player.bind_controller()
@@ -206,6 +216,11 @@ func _report() -> void:
 	print("PERF spikes>4ms %s" % " ".join(_spikes))
 	if _trace_on:
 		print("PERF trace %s" % " ".join(_trace))
+	var held: Dictionary = {}
+	for p: RigidBody2D in _players:
+		var name: String = p.weapon_stats.resource_path.get_file().get_basename() if p.weapon_stats != null else "none"
+		held[name] = int(held.get(name, 0)) + 1
+	print("PERF held_at_end %s" % [held])
 	print("PERF objects=%d nodes=%d" % [
 		int(Performance.get_monitor(Performance.OBJECT_COUNT)),
 		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))])

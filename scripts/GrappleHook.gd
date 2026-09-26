@@ -6,11 +6,13 @@ extends Node2D
 ##
 ## - **Flying**: straight out along the flick at `projectile_speed`, no
 ##   gravity, until it meets something or runs out of rope (`launch_range`).
-## - **Stuck**: it met terrain and holds on to it -- to the spot on that body,
-##   so a moving or rotating platform carries it. While the drag is held the
-##   rope hauls in at `reel_speed`, pulling the body toward the hook with at
-##   most `reel_force`, down to `reel_min_length`, where it holds and the
-##   player hangs and swings. The rope only ever pulls.
+## - **Stuck**: it met terrain further off than the arm reaches (terrain
+##   closer than that the arm can plant on itself, so the hook comes home)
+##   and holds on to it -- to the spot on that body, so a moving or
+##   rotating platform carries it. While the drag is held the rope hauls
+##   in at `reel_speed`, pulling the body toward the hook with at most
+##   `reel_force`, down to `reel_min_length`, where it holds and the player
+##   hangs and swings. The rope only ever pulls.
 ## - **A player**: a hook that meets another player takes a light, flat
 ##   `projectile_damage` off them and tugs them toward the thrower
 ##   (`projectile_knockback`), then comes home. It is a traversal tool, not a
@@ -38,6 +40,8 @@ const GROUP: StringName = &"grapple_hooks"
 ## How fast a released hook reels home, and how close it has to get.
 const HOME_SPEED: float = 2600.0
 const HOME_REACHED: float = 12.0
+## How far past the arm's `max_reach` terrain has to be for the hook to hold.
+const STICK_MARGIN: float = 16.0
 const ROPE_WIDTH: float = 2.0
 const ROPE_COLOR: Color = Color(0.85, 0.8, 0.65, 0.9)
 const OUTLINE_COLOR: Color = Color(0.0, 0.0, 0.0, 0.8)
@@ -161,7 +165,11 @@ func _meet(collider: Object, point: Vector2) -> void:
 			shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)
 		state = State.HOME
 		return
-	if node is Node2D and _solid(node):
+	# Terrain inside the arm's own reach is somewhere the arm can already
+	# plant, so a hook there does not hold: it would only fight the plant (a
+	# flick down to vault fires the hook into the floor underfoot).
+	var close: bool = (global_position - shooter.global_position).length() <= float(_stats.max_reach) + STICK_MARGIN
+	if node is Node2D and _solid(node) and not close:
 		_stuck_to = node as Node2D
 		_stuck_local = _stuck_to.to_local(global_position)
 		state = State.STUCK

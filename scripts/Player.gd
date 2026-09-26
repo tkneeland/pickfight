@@ -1592,7 +1592,8 @@ func special_loaded() -> bool:
 
 ## Whether a flick now would launch.
 func special_ready() -> bool:
-	return launched_hook() == null and launched_boomerang() == null and _launch_cooldown <= 0.0
+	return launched_hook() == null and launched_boomerang() == null and _launch_cooldown <= 0.0 \
+		and not is_head_phased()
 
 func _build_special(axis: Vector2) -> void:
 	_clear_launched()
@@ -1635,7 +1636,9 @@ func _tick_launcher(delta: float) -> void:
 		_set_loaded(true)
 	if _launch_cooldown > 0.0:
 		_launch_cooldown = maxf(0.0, _launch_cooldown - delta)
-	if flicked and _launch_cooldown <= 0.0:
+	# Not from a phased head (issue #115): a ghost scores nothing and grips
+	# nothing, and it may be inside the slab it was trapped under.
+	if flicked and _launch_cooldown <= 0.0 and not _head.phased:
 		_launch_special()
 
 ## Whether this tick's drag completes a flick. Called every tick so the history
