@@ -144,6 +144,12 @@ var sweep_exclude: Array[RID] = []
 ## correction. See `_owns_pair`.
 var drive_force: float = 0.0
 
+## Other heads this one never corrects against or is corrected against: the
+## flail's ball and the head its chain hangs from belong to one weapon and
+## pass through each other (issue #150). Checked from both sides, so the pair
+## is skipped whichever of the two would have owned it.
+var pair_exclude: Array[Node] = []
+
 ## What the last sweep correction stopped the head against, and how fast the
 ## head was heading into it when it did. Read and cleared by `Player`.
 ##
@@ -515,6 +521,8 @@ func _other_head_circles(anchor: Vector2) -> Array[Vector3]:
 		if node == self or node.is_queued_for_deletion() or not node.is_inside_tree():
 			continue
 		if node.get_script() != get_script() or other.phased:
+			continue
+		if pair_exclude.has(node) or other.pair_exclude.has(self):
 			continue
 		var xform: Transform2D = PhysicsServer2D.body_get_state(
 			other.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM)
@@ -1111,6 +1119,8 @@ func _find_head_crossing(held_from: float = -1.0) -> Dictionary:
 		if node == self or node.is_queued_for_deletion() or not node.is_inside_tree():
 			continue
 		if node.get_script() != get_script() or other.phased:
+			continue
+		if pair_exclude.has(node) or other.pair_exclude.has(self):
 			continue
 		# The other head answers for its own half of the encounter, and only
 		# one of the two of us acts on the answer.

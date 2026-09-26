@@ -303,11 +303,28 @@ class WeaponStatsModifier extends RoundModifier:
 	func _modified(stats: Resource) -> Resource:
 		return stats.duplicate()
 
+	## Scales what the three special weapons (issue #150) draw and hit with
+	## beyond the head: the loaded hook or boomerang's art and the flail's
+	## ball. Nothing for any other weapon, whose fields are empty.
+	func _scale_special_art(scaled: Resource, stats: Resource, factor: float) -> void:
+		scaled.loaded_art = _scaled_points(stats.loaded_art, factor)
+		scaled.ball_art = _scaled_points(stats.ball_art, factor)
+		scaled.ball_radius = stats.ball_radius * factor
+
+	func _scaled_points(points: PackedVector2Array, factor: float) -> PackedVector2Array:
+		var out: PackedVector2Array = points.duplicate()
+		for i in out.size():
+			out[i] = out[i] * factor
+		return out
+
 class HeavyWeapons extends WeaponStatsModifier:
 	func _modified(stats: Resource) -> Resource:
 		var heavy: Resource = stats.duplicate()
 		heavy.mass = stats.mass * HEAVY_MASS_SCALE
 		heavy.max_drive_force = stats.max_drive_force * HEAVY_FORCE_SCALE
+		# The flail's ball and chain are weapon weight too (issue #150).
+		heavy.ball_mass = stats.ball_mass * HEAVY_MASS_SCALE
+		heavy.chain_link_mass = stats.chain_link_mass * HEAVY_MASS_SCALE
 		return heavy
 
 class BigHeads extends WeaponStatsModifier:
@@ -327,6 +344,7 @@ class BigHeads extends WeaponStatsModifier:
 		big.art_outline = outline
 		# The boomstick's bullet grows with its head (owner, hackathon playtest).
 		big.projectile_radius = stats.projectile_radius * BIG_HEAD_SCALE
+		_scale_special_art(big, stats, BIG_HEAD_SCALE)
 		return big
 
 class FastLava extends RoundModifier:
@@ -381,6 +399,8 @@ class TinyWeapons extends WeaponStatsModifier:
 		tiny.art_outline = outline
 		tiny.projectile_radius = stats.projectile_radius * TINY_HEAD_SCALE
 		tiny.max_reach = maxf(stats.min_reach, stats.max_reach * TINY_REACH_SCALE)
+		_scale_special_art(tiny, stats, TINY_HEAD_SCALE)
+		tiny.chain_length = stats.chain_length * TINY_REACH_SCALE
 		return tiny
 
 ## Owns a Timer under the RoundManager for the length of one round: the two
@@ -583,4 +603,5 @@ class DoubleDamage extends WeaponStatsModifier:
 		var doubled: Resource = stats.duplicate()
 		doubled.damage = stats.damage * DOUBLE_DAMAGE_SCALE
 		doubled.projectile_damage = stats.projectile_damage * DOUBLE_DAMAGE_SCALE
+		doubled.ball_damage = stats.ball_damage * DOUBLE_DAMAGE_SCALE
 		return doubled

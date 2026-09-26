@@ -82,10 +82,31 @@ const SOUNDS: Dictionary = {
 		"kenney_impact/impactPunch_heavy_000.ogg",
 		"kenney_impact/impactPunch_heavy_001.ogg",
 		"kenney_impact/impactPunch_heavy_002.ogg"], "db": 0.0},
+	# The three weapons issue #150 added. Their files are shared with stage
+	# parts (a wall, a collapsing floor), never with another weapon's hits.
+	"hit_grapple": {"files": [
+		"kenney_impact/impactGeneric_light_000.ogg",
+		"kenney_impact/impactGeneric_light_001.ogg",
+		"kenney_impact/impactGeneric_light_002.ogg"], "db": -2.0},
+	"hit_flail": {"files": [
+		"kenney_impact/impactPlate_heavy_000.ogg",
+		"kenney_impact/impactPlate_heavy_001.ogg",
+		"kenney_impact/impactWood_heavy_003.ogg"], "db": 2.0},
+	"hit_boomerang": {"files": [
+		"kenney_impact/impactWood_heavy_002.ogg",
+		"kenney_impact/impactWood_heavy_004.ogg"], "db": 0.0},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",
 		"kenney_scifi/explosionCrunch_001.ogg"], "db": -3.0, "overlap": 4},
+	# The grapple's hook and the boomerang leaving the hand (issue #150).
+	# Each is a node with `impacted` and `setup`, so SfxHooks watches it as it
+	# does a bullet and plays `fire_<sound_set>` as it is placed.
+	"fire_grapple": {"files": [
+		"kenney_interface/pluck_001.ogg"], "db": -4.0, "overlap": 4},
+	"fire_boomerang": {"files": [
+		"kenney_scifi/forceField_000.ogg",
+		"kenney_scifi/forceField_001.ogg"], "db": -8.0, "overlap": 4, "max_sec": 0.4},
 	"bullet_impact": {"files": [
 		"kenney_impact/impactTin_medium_000.ogg",
 		"kenney_impact/impactTin_medium_001.ogg"], "db": -4.0},
