@@ -148,6 +148,10 @@ const StageRotationScript := preload("res://scripts/StageRotation.gd")
 const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const NameTagsScript := preload("res://scripts/NameTags.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
+## Every deadline this node and its pieces keep (`*_msec`) is game time
+## (#182), read from here: it stops while the tree is paused and runs at
+## `Engine.time_scale`, so none of them needs pushing back after a pause.
+const GameClockScript := preload("res://scripts/GameClock.gd")
 
 var _state: int = State.WAITING
 var _pause_until_msec: int = 0
@@ -260,7 +264,7 @@ func _process(_delta: float) -> void:
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
 		State.ROUND_END:
-			if Time.get_ticks_msec() >= _pause_until_msec:
+			if GameClockScript.now_msec() >= _pause_until_msec:
 				# Expire first, then test: a winner whose claim lapsed must not
 				# pass its weapon to whoever claims the freed slot (issue #6 D3).
 				# `_try_start_round()` expires again on the way in; it is idempotent,
@@ -429,7 +433,7 @@ func _check_round_end() -> void:
 	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
 	_state = State.ROUND_END
-	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
+	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
 		_publish_lobby_state()
 
@@ -508,7 +512,7 @@ func _round_abandoned(alive_slots: Array[int]) -> bool:
 		if _controller_server.slot_has_controller(slot):
 			_abandoned_since_msec = -1
 			return false
-	var now: int = Time.get_ticks_msec()
+	var now: int = GameClockScript.now_msec()
 	if _abandoned_since_msec < 0:
 		_abandoned_since_msec = now
 	return now - _abandoned_since_msec >= int(abandoned_round_grace_sec * 1000.0)
@@ -620,12 +624,12 @@ func _start_spawn_protection() -> void:
 		if player is Node2D and is_instance_valid(player) and bool(player.get("alive")):
 			player.set("spawn_protected", true)
 			_protected.append(player)
-	_protected_until_msec = Time.get_ticks_msec() + int(spawn_protection_sec * 1000.0)
+	_protected_until_msec = GameClockScript.now_msec() + int(spawn_protection_sec * 1000.0)
 
 func _tick_spawn_protection() -> void:
 	if _protected.is_empty():
 		return
-	var now: int = Time.get_ticks_msec()
+	var now: int = GameClockScript.now_msec()
 	if now >= _protected_until_msec or _state != State.ROUND_ACTIVE:
 		_end_spawn_protection()
 		return
@@ -997,11 +1001,11 @@ func _tick_lobby() -> void:
 			if _everyone_ready(roster):
 				_state = State.COUNTDOWN
 				_countdown_roster = roster.duplicate()
-				_countdown_until_msec = Time.get_ticks_msec() + int(lobby_countdown_sec * 1000.0)
+				_countdown_until_msec = GameClockScript.now_msec() + int(lobby_countdown_sec * 1000.0)
 		State.COUNTDOWN:
 			if roster != _countdown_roster or not _everyone_ready(roster):
 				_state = State.LOBBY
-			elif Time.get_ticks_msec() >= _countdown_until_msec:
+			elif GameClockScript.now_msec() >= _countdown_until_msec:
 				_begin_match()
 				return
 		State.VICTORY:
@@ -1018,12 +1022,12 @@ func _tick_lobby() -> void:
 var _last_countdown_tick: int = 0
 
 func _countdown_left() -> int:
-	return maxi(1, ceili(float(_countdown_until_msec - Time.get_ticks_msec()) / 1000.0))
+	return maxi(1, ceili(float(_countdown_until_msec - GameClockScript.now_msec()) / 1000.0))
 
 ## Builds the state the phones and the lobby screen show, and pushes it out
 ## only when something in it changed.
 func _publish_lobby_state() -> void:
-	_lobby_published_msec = Time.get_ticks_msec()
+	_lobby_published_msec = GameClockScript.now_msec()
 	lobby_state_builds += 1
 	var roster: Array[int] = _roster()
 	var players: Array = []
@@ -1044,7 +1048,7 @@ func _publish_lobby_state() -> void:
 		"round": _round_number,
 		"in_round": _in_round.duplicate(),
 		"alive": _alive_slots(),
-		"next": ceili(maxf(0.0, float(_pause_until_msec - Time.get_ticks_msec())) / 1000.0) if _state == State.ROUND_END else 0,
+		"next": ceili(maxf(0.0, float(_pause_until_msec - GameClockScript.now_msec())) / 1000.0) if _state == State.ROUND_END else 0,
 		# Issue #149: the host phone's menu offers Resume instead of Pause.
 		"paused": _paused,
 	}
@@ -1135,14 +1139,14 @@ func _tick_name_tags() -> void:
 # match and Kick player; ControllerServer lets only the host's requests through
 # as `host_command`, and they are acted on here. Pause freezes the whole scene
 # tree except ControllerServer (which must keep hearing the phones) and this
-# node's pause banner; every deadline this node keeps in wall-clock msec is
-# pushed back by however long the pause lasted, so nothing expires during it.
+# node's pause banner. Every deadline this node keeps is game time
+# (`GameClock.gd`, #182), which stops with the tree, so nothing expires
+# during a pause and nothing needs pushing back after it.
 #
 # The lobby screen -- the shared screen, not the phones -- carries a short
 # how-to-play panel.
 
 var _paused: bool = false
-var _paused_at_msec: int = 0
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
@@ -1180,19 +1184,11 @@ func _on_host_command(cmd: String, slot: int) -> void:
 
 func _pause_match() -> void:
 	_paused = true
-	_paused_at_msec = Time.get_ticks_msec()
 	_set_tree_paused(true)
 	_show_pause_banner(true)
 	_publish_lobby_state()
 
 func _resume_match() -> void:
-	var paused_for: int = Time.get_ticks_msec() - _paused_at_msec
-	_pause_until_msec += paused_for
-	_pickup_director.shift(paused_for)
-	_protected_until_msec += paused_for
-	if _abandoned_since_msec >= 0:
-		_abandoned_since_msec += paused_for
-	_stats.shift(paused_for)
 	_paused = false
 	_set_tree_paused(false)
 	_show_pause_banner(false)
@@ -1253,7 +1249,7 @@ func _lobby_publish_due() -> bool:
 	if key != _lobby_key:
 		_lobby_key = key
 		return true
-	return Time.get_ticks_msec() - _lobby_published_msec >= LOBBY_REFRESH_MSEC
+	return GameClockScript.now_msec() - _lobby_published_msec >= LOBBY_REFRESH_MSEC
 
 func _on_host_changed(_slot: int) -> void:
 	if lobby_enabled:
@@ -1297,12 +1293,12 @@ func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
-	_stats.record_hit(attacker_slot, _players.find(victim), amount, Time.get_ticks_msec())
+	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec())
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()
-	_pending_kos.append([slot, Time.get_ticks_msec()])
+	_pending_kos.append([slot, GameClockScript.now_msec()])
 
 func _flush_kos() -> void:
 	var pending: Array = _pending_kos
@@ -1344,12 +1340,12 @@ func _on_slot_claimed_fresh(slot: int) -> void:
 
 func _ko_round_started() -> void:
 	_pending_kos.clear()
-	_stats.begin_round(_in_round, Time.get_ticks_msec())
+	_stats.begin_round(_in_round, GameClockScript.now_msec())
 
 ## A round won by the last of three or more is a big moment; one of two
 ## winning speaks for itself on the scoreboard.
 func _ko_round_ended(winner_slot: int) -> void:
-	_stats.end_round(Time.get_ticks_msec())
+	_stats.end_round(GameClockScript.now_msec())
 	var feed: Control = kill_feed()
 	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
 		feed.show_banner("LAST ONE STANDING", _slot_name(winner_slot), _slot_color(winner_slot))

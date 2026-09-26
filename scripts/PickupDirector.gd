@@ -16,6 +16,9 @@ extends Node
 ## did; this node has no `_process` of its own.
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+## Game time (#182), not wall clock: the interval stops for a pause and runs
+## at `Engine.time_scale`.
+const GameClockScript := preload("res://scripts/GameClock.gd")
 ## Where a pickup lands on a stage that declares no `PickupSpawn*` markers,
 ## relative to the stage's origin: above its centre (user story 17).
 const FALLBACK_PICKUP_OFFSET: Vector2 = Vector2(0.0, -200.0)
@@ -41,21 +44,17 @@ func _init(round_manager: Node = null) -> void:
 func start() -> void:
 	clear()
 	_spawn_pickup()
-	_next_pickup_msec = Time.get_ticks_msec() + int(interval_sec() * 1000.0)
+	_next_pickup_msec = GameClockScript.now_msec() + int(interval_sec() * 1000.0)
 
 ## Each tick of an active round: once the interval is up, add one if the
 ## stage is below the cap, and start the next interval either way.
 func tick() -> void:
-	var now: int = Time.get_ticks_msec()
+	var now: int = GameClockScript.now_msec()
 	if now < _next_pickup_msec:
 		return
 	_next_pickup_msec = now + int(interval_sec() * 1000.0)
 	if _live_pickups().size() < cap():
 		_spawn_pickup()
-
-## Pushes the next arrival back by `msec`: the host paused for that long (#149).
-func shift(msec: int) -> void:
-	_next_pickup_msec += msec
 
 ## Most pickups the stage holds at once right now: one fewer than the players
 ## on the roster, and never under `max_pickups` -- 2 for two or three players,
