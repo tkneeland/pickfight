@@ -27,10 +27,10 @@
 ;
 ; Stats against the pickaxe's M/M/M baseline (retuned after the first
 ; playtest, #45): the sword is the pickaxe with its reach traded for blade.
-; Weight M is the baseline (mass 0.25, force 6000, drive 24 rad/s). Reach S,
+; Weight M is the baseline (mass 0.25, force 6000, drive 36 rad/s since #136). Reach S,
 ; 70 px against 150, is balanced by a blade 2.5x as long as it first was --
 ; the blocking area and the reach are the trade. A quicker extension than the
-; pickaxe (900 px/s out, 600 px/s back, against 700 / 400) and damage a
+; pickaxe (1150 px/s out, 800 px/s back, against 700 / 600 since #136) and damage a
 ; little over the baseline (40 against 34) keep a short lever worth swinging.
 ; The blade was stretched 2.5x along its length only, forward: its back end
 ; stays 24 px behind the anchor, because stretched about the anchor it
@@ -38,15 +38,21 @@
 ; body. So the tip now reaches about 72 px past the anchor, 142 px from the
 ; body. Circles refitted at the same spacing and width, every one still
 ; clamped inside the art.
+;
+; Issue #136, more responsive: drive 24 -> 36 rad/s, extension 900 -> 1150
+; px/s out and 600 -> 800 px/s back. The 6000 force ceiling stays. 1350 px/s
+; out (the boomstick's) with the 36 rad/s drive put the long blade through
+; another head in one charge of roster_heads_do_not_tunnel_head_reversed
+; (135 degrees at 1800 px/s each); either change alone did not.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
 max_reach = 70.0
 mass = 0.25
-drive_speed = 24.0
-extend_speed = 900.0
-rest_return_speed = 600.0
+drive_speed = 36.0
+extend_speed = 1150.0
+rest_return_speed = 800.0
 max_drive_force = 6000.0
 damage = 40.0
 sound_set = &"sword"

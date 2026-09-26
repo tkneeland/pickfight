@@ -255,6 +255,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_slider_drag_saves_once_on_release",
 	"audio_release_out_of_tree_returns",
 	"announcer_said_capped_and_lengths_from_decode",
+	"roster_traversal_is_measured",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1113,6 +1114,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_audio_release_out_of_tree_returns()
 		"announcer_said_capped_and_lengths_from_decode":
 			return await _scenario_announcer_said_capped_and_lengths_from_decode()
+		"roster_traversal_is_measured":
+			return await _scenario_roster_traversal_is_measured()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -1381,6 +1384,9 @@ func _scenario_head_does_not_tunnel_thin_platform() -> Array[String]:
 ## head_plants_terrain, with an opponent standing in for the floor: one
 ## player settles standing on its head on top of another, its own body clear
 ## of them, and then pushes off.
+const PLAYER_PLANT_EXTRA_TICKS: int = 60
+const PLAYER_PLANT_HOLD_TICKS: int = 10
+
 func _scenario_head_plants_player() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -1393,6 +1399,19 @@ func _scenario_head_plants_player() -> Array[String]:
 	var over: RigidBody2D = _spawn_player(stage, Vector2(0, -100.0 + (MAX_REACH - 140.0)))
 	over.set_input_vector(Vector2.DOWN * 0.25)
 	await _await_ticks(LANDING_TICKS)
+	# Landing on a body is a pogo: the head meets the other player, the drive
+	# springs the body back up off it and it lands again, each bounce lower.
+	# One snapshot at LANDING_TICKS read whatever phase of that the tick
+	# happened to fall on -- on main at #136 it was below SETTLED_SPEED at
+	# tick 90 by luck, with the bounce dying out at tick 101. So the settle is
+	# waited for, up to PLAYER_PLANT_EXTRA_TICKS more, and has to hold for
+	# PLAYER_PLANT_HOLD_TICKS so the top of a bounce does not pass for it.
+	var held: int = 0
+	for _i in PLAYER_PLANT_EXTRA_TICKS:
+		held = held + 1 if absf(over.linear_velocity.y) <= SETTLED_SPEED else 0
+		if held >= PLAYER_PLANT_HOLD_TICKS:
+			break
+		await physics_frame
 
 	var planted_y: float = over.global_position.y
 	var gap: float = under.global_position.y - planted_y
@@ -3370,15 +3389,20 @@ const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"staff": "S",
 	"boomstick": "S",
 }
-## Since playtest 1 (#45) the dagger alone is the quick one: the staff is the
-## long reach weapon and answers with the sword and pickaxe.
+## Since playtest 1 (#45) the dagger alone was the quick one. Issue #136 made
+## every weapon but the axe more responsive, and on this 50 px drag they now
+## all answer with the dagger (3-4 ticks; the dagger is bound by its force
+## ceiling at 3, so quicker drive speeds cannot pull it further ahead here --
+## its lead is in turn rate and in extension speed over a longer drag). What
+## the tiers still pin down is the claim that matters: the axe's power costs
+## it time, and it answers well behind everything else.
 const ROSTER_ANSWER_TIERS: Dictionary = {
-	"staff": "M",
+	"staff": "S",
 	"dagger": "S",
-	"pickaxe": "M",
-	"sword": "M",
+	"pickaxe": "S",
+	"sword": "S",
 	"axe": "L",
-	"boomstick": "M",
+	"boomstick": "S",
 }
 ## Smallest measured quantity first, which is the order the tiers have to come
 ## out in.
@@ -3585,15 +3609,16 @@ func _scenario_weapon_damage_matches_roster() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
-## US-10/11/17: a light weapon answers a newly commanded drag quicker than a
-## medium one, which answers quicker than the heavy one.
+## US-10/11/17: the heavy weapon answers a newly commanded drag well behind
+## everything else, and the rest answer alike (since #136, which made every
+## weapon but the axe quicker; see ROSTER_ANSWER_TIERS).
 ##
 ## Asserted as an ordering in ticks and never against a tick count, because
 ## the drive speeds are a starting table the design expects to be tuned
 ## (issue #13) and tuning them must not turn this red. What it does pin down
-## is the one thing tuning must not break: the axe's power costs it time, the
-## dagger and staff buy their speed with damage or nothing to hit with, and if
-## all five answered alike the roster would not feel like five weapons.
+## is the one thing tuning must not break: the axe's power costs it time.
+## What else tells the roster apart is reach and damage, which
+## `weapon_reach_matches_roster` and `weapon_damage_matches_roster` hold.
 ##
 ## The drag measured is a **reach** drag: every weapon is let go to the 20 px
 ## of rest reach they all share, then asked for 90 px, the shortest full reach
@@ -17492,3 +17517,308 @@ class _ReleaseErrorLog extends Logger:
 		var got: PackedStringArray = _errors.slice(from)
 		_mutex.unlock()
 		return got
+
+# --- Traversal measurement (issue #136) --------------------------------------
+
+## The ledge the climb trial is run against: its top this far above the floor
+## the player stands on. 80 px is well over the 48 px body, so it cannot be
+## stepped or bumped onto -- it has to be climbed -- and low enough that the
+## shortest weapon on the roster (the dagger, 88 px) can still reach its top
+## from the foot of it.
+const CLIMB_LEDGE_HEIGHT: float = 80.0
+## Where the climb aims: this far in from the ledge's edge, on its top.
+const CLIMB_TARGET_INSET: float = 40.0
+## The climb is run once from each of these distances out from the ledge's
+## wall, standing, because one run of a scripted thumb against a physics
+## contact is a sample, not a measurement: a pixel's difference in where the
+## head lands can decide whether a swing holds.
+const CLIMB_START_GAPS: PackedFloat32Array = [2.0, 6.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0]
+## How far past the target the climb presses the head, so it arrives planted
+## rather than stopping short in the air.
+const CLIMB_PRESS: float = 15.0
+## Ticks the climb is given before it counts as never having got up.
+const CLIMB_MAX_TICKS: int = 600
+## Ticks a climber has to stay put on the ledge top to count as up.
+const CLIMB_REST_TICKS: int = 10
+const CLIMB_REST_SPEED: float = 40.0
+## Ticks a swing may run without the body getting up before the climb lets
+## go and reaches again, and ticks it carries on after the head has lost the
+## ledge.
+const CLIMB_SWING_TIMEOUT: int = 90
+const CLIMB_SWING_LOST_TICKS: int = 4
+## The swing turns the aim this far a tick past the head's bearing, until it
+## points down and back at CLIMB_SWING_END.
+const CLIMB_SWING_STEP: float = 0.3
+const CLIMB_SWING_END: float = PI * 0.75
+## The climb's phases: vault off the floor, hook the head over the top, swing
+## the body up and over it, and up -- resting on the top.
+const CLIMB_VAULT: int = 0
+const CLIMB_HOOK: int = 1
+const CLIMB_SWING: int = 2
+const CLIMB_UP: int = 3
+## The vault stops driving once the feet are this far above the ledge top.
+const CLIMB_VAULT_CLEAR: float = 10.0
+## Ticks a hook may spend back on the floor before the climb vaults again.
+const CLIMB_HOOK_TIMEOUT: int = 40
+## How far off its aim a hook swings at rest reach before it extends.
+const CLIMB_HOOK_SWING: float = 0.35
+## The head has to be this far in over the top before it is brought down onto
+## it, and is held this far above the top until then.
+const CLIMB_OVER_MARGIN: float = 2.0
+const CLIMB_CLEARANCE: float = 40.0
+## How far below the top the head may sit and still count as planted on it
+## rather than caught on the wall: a head is its circles, up to 16 px across
+## the anchor (the pickaxe's crescent).
+const CLIMB_PLANT_DEPTH: float = 16.0
+## The turn timed for aim tracking: a quarter turn, right to straight up, at
+## full reach, and how close the haft has to hold to the new aim to count.
+const AIM_SETTLE_TOLERANCE: float = 0.05
+const AIM_SETTLE_HOLD: int = 3
+const AIM_SETTLE_MAX_TICKS: int = 120
+const EXTEND_MAX_TICKS: int = 120
+## How long the vault trial watches the body rise.
+const VAULT_TICKS: int = 120
+
+## Issue #136: responsiveness and traversal, measured per weapon. For each
+## weapon on the roster:
+##
+## - **aim**: braced at full reach pointing right, the drag swings straight
+##   up; ticks until the head's bearing from the body is within
+##   AIM_SETTLE_TOLERANCE of up and stays there for AIM_SETTLE_HOLD ticks.
+## - **extend**: braced, let go to rest reach, then a full drag; ticks until
+##   the head first gets within ROSTER_ANSWER_TOLERANCE of its own max reach.
+## - **vault**: standing on the floor, the head at rest reach pointing down,
+##   then a full drag straight down; how high the body gets (px) in
+##   VAULT_TICKS. This is the drive hauling the body, with nothing chaotic in
+##   it, so it is the same number every run.
+## - **climb**: standing at the foot of an 80 px wall, climb onto the ledge on
+##   top of it with a fixed, scripted thumb: hook the head over the top and
+##   swing the body up over it, vaulting off the floor when the head cannot
+##   reach the top from there. Run once from each of CLIMB_START_GAPS; ticks
+##   until the body rests on the top, and how many of the runs got there.
+##
+## The same script for every weapon, so what separates them is the weapon.
+## The numbers are printed for the PR's before/after table. Asserted: every
+## clock came back, and every weapon but the axe vaults higher than the ledge
+## (on main before #136 the boomstick managed 69 px) and gets up it at least
+## once. The climb's time is only reported: which runs a swing holds on is
+## decided by a pixel of where the head lands, so its median moves a long way
+## on a small change and would make a flaky assertion. The axe is power
+## bought with time (axe.tres) and is only reported.
+func _scenario_roster_traversal_is_measured() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var aim: int = await _time_aim_settle(stats)
+		var extend: int = await _time_extension(stats)
+		var vault: float = await _time_vault(stats)
+		var climbs: Array[int] = []
+		var made: int = 0
+		for gap: float in CLIMB_START_GAPS:
+			var ticks: int = await _time_ledge_climb(stats, gap)
+			if ticks >= 0:
+				made += 1
+			climbs.append(ticks if ticks >= 0 else CLIMB_MAX_TICKS)
+		var sorted: Array[int] = climbs.duplicate()
+		sorted.sort()
+		var median: int = sorted[sorted.size() / 2]
+		print("      %s: aim settles in %d ticks, extends in %d ticks, vaults %.1f px, climbs the ledge %d/%d times, median %d ticks (runs %s, %d = never)" % [
+			weapon, aim, extend, vault, made, climbs.size(), median, str(climbs), CLIMB_MAX_TICKS])
+		if aim < 0:
+			failures.append("%s: never settled on a quarter turn within %d ticks" % [weapon, AIM_SETTLE_MAX_TICKS])
+		if extend < 0:
+			failures.append("%s: never came out to full reach within %d ticks" % [weapon, EXTEND_MAX_TICKS])
+		if weapon != "axe" and vault <= CLIMB_LEDGE_HEIGHT:
+			failures.append("%s: vaults only %.1f px, not over an %.0f px ledge" % [weapon, vault, CLIMB_LEDGE_HEIGHT])
+		if weapon != "axe" and made == 0:
+			failures.append("%s: never got up an %.0f px ledge in %d runs" % [weapon, CLIMB_LEDGE_HEIGHT, climbs.size()])
+	_scenario_completed = true
+	return failures
+
+func _time_aim_settle(stats: WeaponStatsType) -> int:
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2.ZERO)
+	await physics_frame
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(player)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	player.set_input_vector(Vector2.UP)
+	var settled: int = -1
+	var held: int = 0
+	for i in AIM_SETTLE_MAX_TICKS:
+		await physics_frame
+		var bearing: Vector2 = player.weapon_head_position() - player.global_position
+		if absf(wrapf(bearing.angle() - Vector2.UP.angle(), -PI, PI)) <= AIM_SETTLE_TOLERANCE:
+			held += 1
+			if held >= AIM_SETTLE_HOLD:
+				settled = i + 2 - AIM_SETTLE_HOLD
+				break
+		else:
+			held = 0
+	player.queue_free()
+	stage.queue_free()
+	await physics_frame
+	return settled
+
+func _time_extension(stats: WeaponStatsType) -> int:
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2.ZERO)
+	await physics_frame
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(player)
+	player.set_input_vector(Vector2.ZERO)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	player.set_input_vector(Vector2.RIGHT)
+	var answered: int = -1
+	for i in EXTEND_MAX_TICKS:
+		await physics_frame
+		# Arrival, not settling: a quick drive runs a few px into the groove's
+		# end stop and rings off it, and that is the length already there.
+		if _reach_of(player) >= stats.max_reach - ROSTER_ANSWER_TOLERANCE:
+			answered = i + 1
+			break
+	player.queue_free()
+	stage.queue_free()
+	await physics_frame
+	return answered
+
+func _time_vault(stats: WeaponStatsType) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_add_bar(stage, Vector2(0, 20.0), Vector2(3000, 40))
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, -PLAYER_RADIUS))
+	await physics_frame
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	player.set_input_vector(Vector2.DOWN * 0.01)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	var rest_y: float = player.global_position.y
+	player.set_input_vector(Vector2.DOWN)
+	var peak: float = 0.0
+	for _i in VAULT_TICKS:
+		await physics_frame
+		peak = maxf(peak, rest_y - player.global_position.y)
+	player.queue_free()
+	stage.queue_free()
+	await physics_frame
+	return peak
+
+func _time_ledge_climb(stats: WeaponStatsType, gap: float) -> int:
+	var stage: Node2D = _new_empty_stage()
+	var floor_top: float = 0.0
+	var floor_rest: float = floor_top - PLAYER_RADIUS
+	_add_bar(stage, Vector2(0, floor_top + 20.0), Vector2(3000, 40))
+	var edge: float = 0.0
+	var top: float = floor_top - CLIMB_LEDGE_HEIGHT
+	var ledge: StaticBody2D = _add_bar(stage, Vector2(edge + 500.0, top + CLIMB_LEDGE_HEIGHT * 0.5), Vector2(1000, CLIMB_LEDGE_HEIGHT))
+	var start: Vector2 = Vector2(edge - PLAYER_RADIUS - gap, floor_rest)
+	var player: RigidBody2D = _spawn_player(stage, start)
+	await physics_frame
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	# Settle standing with the weapon held straight up, clear of the wall.
+	player.set_input_vector(Vector2.UP * 0.01)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	player.teleport_to(start)
+	await _await_ticks(20)
+
+	var target: Vector2 = Vector2(edge + CLIMB_TARGET_INSET, top)
+	var phase: int = CLIMB_HOOK
+	var phase_ticks: int = 0
+	var lost: int = 0
+	var rest: int = 0
+	var pushing: bool = false
+	var climbed: int = -1
+	var head: RigidBody2D = player._head
+	var forward: float = 0.0
+	for circle: Dictionary in player.weapon_head_circles():
+		forward = maxf(forward, (circle["offset"] as Vector2).x + float(circle["radius"]))
+	for i in CLIMB_MAX_TICKS:
+		var body: Vector2 = player.global_position
+		var head_pos: Vector2 = player.weapon_head_position()
+		var bearing: Vector2 = head_pos - body
+		var touching: bool = head != null and is_instance_valid(head) \
+			and head.get_colliding_bodies().has(ledge)
+		# Where the head reaches to along the haft: a blade (the sword, the
+		# boomstick) lies mostly out past its anchor, so it is the tip and not
+		# the anchor that meets the ledge.
+		var tip: Vector2 = head_pos + bearing.normalized() * forward
+		var over: bool = tip.x > edge + CLIMB_OVER_MARGIN
+		var grounded: bool = body.y >= floor_rest - 2.0 and absf(player.linear_velocity.y) < CLIMB_REST_SPEED
+		phase_ticks += 1
+		if body.x > edge and body.y + PLAYER_RADIUS <= top + 3.0:
+			phase = CLIMB_UP
+		match phase:
+			CLIMB_UP:
+				player.set_input_vector(Vector2.ZERO)
+				if player.linear_velocity.length() <= CLIMB_REST_SPEED:
+					rest += 1
+					if rest >= CLIMB_REST_TICKS:
+						climbed = i + 1 - CLIMB_REST_TICKS
+						break
+				else:
+					rest = 0
+				if body.y + PLAYER_RADIUS > top + 3.0:
+					phase = CLIMB_HOOK
+					phase_ticks = 0
+					rest = 0
+			CLIMB_VAULT:
+				# Pole-vault off the floor: turned straight down at rest reach,
+				# then driven out to full reach, which throws the body up.
+				var vault: Vector2 = Vector2.DOWN
+				var aimed: bool = absf(wrapf(bearing.angle() - vault.angle(), -PI, PI)) <= 0.2
+				if not aimed and not pushing:
+					player.set_input_vector(vault * 0.02)
+				else:
+					if not pushing:
+						pushing = true
+						phase_ticks = 0
+					player.set_input_vector(vault)
+					if body.y + PLAYER_RADIUS < top - CLIMB_VAULT_CLEAR or (phase_ticks > 3 and (player.linear_velocity.y >= 0.0 or _reach_of(player) >= stats.max_reach - 4.0)):
+						phase = CLIMB_HOOK
+						phase_ticks = 0
+						pushing = false
+			CLIMB_HOOK:
+				if touching and over and absf(tip.y - top) < CLIMB_PLANT_DEPTH:
+					phase = CLIMB_SWING
+					phase_ticks = 0
+					lost = 0
+				elif grounded and phase_ticks > CLIMB_HOOK_TIMEOUT:
+					# Cannot get the head onto the top from the floor: vault.
+					phase = CLIMB_VAULT
+					phase_ticks = 0
+				# Over the top first, then down onto it, pressed in so it
+				# arrives planted: a head sent straight at the target catches
+				# the ledge's corner on the way.
+				var aim_at: Vector2 = target + (Vector2.DOWN * CLIMB_PRESS if over else Vector2.UP * CLIMB_CLEARANCE)
+				var to: Vector2 = aim_at - body
+				var want: float = clampf(to.length() - forward, stats.min_reach, stats.max_reach)
+				var magnitude: float = clampf((want - stats.min_reach) / (stats.max_reach - stats.min_reach), 0.02, 1.0)
+				# Swung round at rest reach and only then sent out, so the
+				# head does not sweep the wall on its way to the top.
+				if absf(wrapf(bearing.angle() - to.angle(), -PI, PI)) > CLIMB_HOOK_SWING:
+					magnitude = 0.02
+				player.set_input_vector(to.normalized() * magnitude)
+			CLIMB_SWING:
+				# The head planted on the top, the aim swings on past it --
+				# from down-right toward down-left -- which carries the body
+				# up and over the planted head onto the ledge.
+				lost = 0 if touching else lost + 1
+				if phase_ticks > CLIMB_SWING_TIMEOUT or lost > CLIMB_SWING_LOST_TICKS:
+					phase = CLIMB_VAULT if grounded else CLIMB_HOOK
+					phase_ticks = 0
+					pushing = false
+				var angle: float = minf(bearing.angle() + CLIMB_SWING_STEP, CLIMB_SWING_END)
+				var hold: float = clampf((bearing.length() - stats.min_reach) / (stats.max_reach - stats.min_reach), 0.02, 1.0)
+				player.set_input_vector(Vector2.RIGHT.rotated(angle) * hold)
+		await physics_frame
+	player.queue_free()
+	stage.queue_free()
+	await physics_frame
+	return climbed

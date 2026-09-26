@@ -22,8 +22,8 @@
 ; leave from the anchor along the haft (Player._fire), so they come out
 ; through the barrel as drawn.
 ;
-; Handling is the sword's, per the owner (#55): reach S 70 px, drive 24
-; rad/s, 900 px/s out, 600 px/s back, and its 6000 force ceiling, so it wins
+; Handling was the sword's, per the owner (#55): reach S 70 px, drive 36
+; rad/s, 1350 px/s out, 900 px/s back (since #136), and its 6000 force ceiling, so it wins
 ; and loses clashes like the sword and pickaxe. Mass is much lower, 0.1
 ; against the sword's 0.25: a light weapon on a stick. Melee damage is
 ; pitiful on purpose, 8 against the pickaxe's 34, the lowest on the roster.
@@ -39,15 +39,19 @@
 ; still inside `boomstick_recoil_is_moderate`. Enough to stop anyone camping, rarely
 ; fatal on its own. Knockback and recoil are agent defaults for the owner to
 ; tune in playtest.
+;
+; Issue #136: drive 24 -> 36 rad/s, extension 900 -> 1350 px/s out and
+; 600 -> 900 px/s back. The sword stops at 1150 / 800 (see sword.tres); the
+; gun's barrel passes the head-tunnelling charges at the full 1350.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
 max_reach = 70.0
 mass = 0.1
-drive_speed = 24.0
-extend_speed = 900.0
-rest_return_speed = 600.0
+drive_speed = 36.0
+extend_speed = 1350.0
+rest_return_speed = 900.0
 max_drive_force = 6000.0
 damage = 8.0
 sound_set = &"boomstick"
