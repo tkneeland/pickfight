@@ -6993,8 +6993,14 @@ func _scenario_buzz_reaches_only_its_phone() -> Array[String]:
 				joined[i].poll()
 				while joined[i].get_available_packet_count() > 0:
 					var pkt: PackedByteArray = joined[i].get_packet()
-					if joined[i].was_string_packet():
-						got[i].append(JSON.parse_string(pkt.get_string_from_utf8()))
+					if not joined[i].was_string_packet():
+						continue
+					var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+					# The roster's hats-and-colours broadcast (#151) goes to every
+					# phone whenever someone joins; it is not a buzz.
+					if msg is Dictionary and msg.get("t") == "looks":
+						continue
+					got[i].append(msg)
 		print("      phone 1 got %s, phone 2 got %s" % [got[0], got[1]])
 		if got[1] != [{"t": "buzz", "kind": "struck"}]:
 			failures.append("slot 1's phone got %s, expected one {\"t\":\"buzz\",\"kind\":\"struck\"}" % [got[1]])
