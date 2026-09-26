@@ -201,6 +201,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_page_prompts_for_nickname_first",
 	"music_loops_have_no_silent_seam",
 	"haft_tip_meets_drawn_head_every_frame",
+	"host_phone_controls_over_websocket",
+	"lobby_how_to_play_on_host_screen_only",
+	"controller_page_host_menu_is_guarded",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -929,6 +932,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_music_loops_have_no_silent_seam()
 		"haft_tip_meets_drawn_head_every_frame":
 			return await _scenario_haft_tip_meets_drawn_head_every_frame()
+		"host_phone_controls_over_websocket":
+			return await _scenario_host_phone_controls_over_websocket()
+		"lobby_how_to_play_on_host_screen_only":
+			return await _scenario_lobby_how_to_play_on_host_screen_only()
+		"controller_page_host_menu_is_guarded":
+			return await _scenario_controller_page_host_menu_is_guarded()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12911,4 +12920,247 @@ func _haft_draw_failures(observer: Node, labels: Array[String], phased: bool) ->
 		if phased and observer.phased_frames[i] < HAFT_DRAW_MIN_PHASED_FRAMES:
 			failures.append("%s: the head was phased in only %d checked frames (need %d)" % [
 				labels[i], observer.phased_frames[i], HAFT_DRAW_MIN_PHASED_FRAMES])
+	return failures
+
+
+# --- Host phone controls and how to play (issue #149) --------------------------
+
+## Every text frame waiting on `peer`, consumed; returns the last lobby state
+## among them, or `last` when none arrived.
+func _latest_lobby_msg(peer: WebSocketPeer, last: Dictionary) -> Dictionary:
+	peer.poll()
+	var latest: Dictionary = last
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if not peer.was_string_packet():
+			continue
+		var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		if msg is Dictionary and msg.get("t") == "lobby":
+			latest = msg
+	return latest
+
+## Issue #149, over the real socket in the real game (scenes/Main.tscn): three
+## phones join and start a match. Pause, End match and Kick sent by a phone
+## that is not the host change nothing. The host's Pause freezes the game and
+## tells the phones, Resume picks it back up, a kick of the host itself is
+## ignored, kicking another phone hangs it up with the reason the page shows,
+## drops it from the roster and the round, and refuses it when it comes back;
+## End match takes the room back to the lobby.
+func _scenario_host_phone_controls_over_websocket() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 149
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	# Long lava grace: nobody may leave the round on their own mid-scenario.
+	rm.kill_zone_grace_sec = 600.0
+	var players: Array[RigidBody2D] = []
+	for i in 3:
+		players.append(server.get_node(server.player_paths[i]) as RigidBody2D)
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 3:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "host-controls-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	if failures.size() > 0 or server.host_slot() != 0:
+		failures.append("host was slot %d, expected 0" % server.host_slot())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var started: bool = false
+	var deadline: int = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC * 2
+	while Time.get_ticks_msec() < deadline and not started:
+		await _poll_phones(joined, 1)
+		started = players[0].alive and players[1].alive and players[2].alive
+	if not started:
+		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+
+	# A phone that is not the host: every command ignored.
+	for msg: Dictionary in [{"t": "host", "cmd": "pause"}, {"t": "host", "cmd": "end"},
+			{"t": "host", "cmd": "kick", "slot": 2}, {"t": "host", "cmd": "kick", "slot": 0}]:
+		joined[1].send_text(JSON.stringify(msg))
+	await _poll_phones(joined, 20)
+	if paused or rm.is_paused():
+		failures.append("a non-host phone's Pause paused the game")
+	if rm.lobby_phase() != "playing":
+		failures.append("a non-host phone's End match left the phase at '%s'" % rm.lobby_phase())
+	if server.claimed_slots() != [0, 1, 2] or not players[2].alive or not players[0].alive:
+		failures.append("a non-host phone's Kick removed someone: roster %s" % [server.claimed_slots()])
+
+	# The host pauses: the tree stops, the banner and the phones say so.
+	var lobby_msg: Dictionary = _latest_lobby_msg(joined[1], {})
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "pause"}))
+	await _poll_phones(joined, 10)
+	lobby_msg = _latest_lobby_msg(joined[1], lobby_msg)
+	if not paused or not rm.is_paused():
+		failures.append("the host's Pause did not pause the game (tree paused %s)" % paused)
+	if rm.pause_label() == null or not rm.pause_label().is_visible_in_tree():
+		failures.append("no PAUSED banner on the shared screen")
+	if lobby_msg.get("paused") != true:
+		failures.append("the phones were not told the game is paused (last %s)" % [lobby_msg])
+	# A shove while paused: nothing may move until Resume, and then it must.
+	players[1].linear_velocity = Vector2(0.0, -600.0)
+	var frozen_at: Vector2 = players[1].global_position
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 0}))
+	await _poll_phones(joined, 30)
+	var drift: float = players[1].global_position.distance_to(frozen_at)
+	print("      paused: P2 moved %.2f px in 30 frames; tree paused %s" % [drift, paused])
+	if drift > 0.01:
+		failures.append("P2 moved %.2f px while paused" % drift)
+	if not server.claimed_slots().has(0) or server.host_slot() != 0:
+		failures.append("the host kicked itself: roster %s, host %d" % [server.claimed_slots(), server.host_slot()])
+
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "resume"}))
+	await _poll_phones(joined, 10)
+	lobby_msg = _latest_lobby_msg(joined[1], lobby_msg)
+	if paused or rm.is_paused():
+		failures.append("the host's Resume did not resume the game")
+	if lobby_msg.get("paused") != false:
+		failures.append("the phones were not told the game resumed (last %s)" % [lobby_msg])
+	if rm.pause_label() != null and rm.pause_label().is_visible_in_tree():
+		failures.append("the PAUSED banner stayed up after Resume")
+	var moved: float = players[1].global_position.distance_to(frozen_at)
+	print("      resumed: P2 moved %.1f px" % moved)
+	if moved < 1.0:
+		failures.append("P2 never moved again after Resume (%.2f px)" % moved)
+
+	# The host kicks the third phone.
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 2}))
+	await _poll_phones(joined, 20)
+	var kicked_state: int = joined[2].get_ready_state()
+	var kicked_reason: String = joined[2].get_close_reason()
+	print("      kicked phone: state %d, reason '%s'; roster %s" % [kicked_state, kicked_reason, server.claimed_slots()])
+	if kicked_state != WebSocketPeer.STATE_CLOSED or kicked_reason != ControllerServerScript.KICKED_REASON:
+		failures.append("the kicked phone was not hung up with '%s' (state %d, reason '%s')" % [
+			ControllerServerScript.KICKED_REASON, kicked_state, kicked_reason])
+	if server.claimed_slots() != [0, 1]:
+		failures.append("after the kick the roster was %s, expected [0, 1]" % [server.claimed_slots()])
+	if players[2].alive:
+		failures.append("the kicked player was still in the round")
+	if not players[0].alive or not players[1].alive or rm.lobby_phase() != "playing":
+		failures.append("the kick ended the round for the others (phase '%s')" % rm.lobby_phase())
+	var again := WebSocketPeer.new()
+	var rejoin: Dictionary = await _join_phone(again, "host-controls-2", joined.slice(0, 2))
+	if rejoin["slot"] != -1 or rejoin["reason"] != ControllerServerScript.KICKED_REASON:
+		failures.append("the kicked phone came back: slot %d, reason '%s'" % [rejoin["slot"], rejoin["reason"]])
+
+	# The host ends the match: back to the lobby, nobody left in a round.
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "end"}))
+	await _poll_phones(joined, 10)
+	lobby_msg = _latest_lobby_msg(joined[1], lobby_msg)
+	if rm.lobby_phase() != "lobby" or lobby_msg.get("phase") != "lobby":
+		failures.append("End match left the room in '%s' (phones told '%s')" % [rm.lobby_phase(), lobby_msg.get("phase")])
+	if players[0].alive or players[1].alive:
+		failures.append("players were still in a round after End match")
+	if rm.lobby_panel() == null or not rm.lobby_panel().visible:
+		failures.append("the lobby screen did not come back after End match")
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+	return failures
+
+## Issue #149: the lobby on the shared screen explains how to play -- drag and
+## flick to swing, climbing, pickups -- and the explainer goes when the match
+## starts. It is on the shared screen only: the phone page has none.
+func _scenario_lobby_how_to_play_on_host_screen_only() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var panel: Control = rm.how_to_play_panel()
+	if panel == null or not panel.is_visible_in_tree():
+		failures.append("the lobby shows no how-to-play panel")
+	else:
+		var text: String = ""
+		for child: Node in panel.get_children():
+			if child is Label:
+				text += (child as Label).text.to_lower() + "\n"
+		print("      how to play:\n%s" % text.strip_edges().indent("        "))
+		for needed: String in ["drag", "flick", "climb", "pickup"]:
+			if not text.contains(needed):
+				failures.append("the how-to-play panel never mentions '%s'" % needed)
+		var size: Vector2 = _content_size(rm.lobby_panel())
+		if size.x > SCREEN_SIZE.x or size.y > SCREEN_SIZE.y:
+			failures.append("the lobby with the explainer needs %s, more than the %s screen" % [size, SCREEN_SIZE])
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH).to_lower()
+	if page.contains("how to play") or page.contains("how-to-play"):
+		failures.append("the phone page carries a how-to-play explainer; it belongs on the shared screen only")
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+	elif panel != null and panel.is_visible_in_tree():
+		failures.append("the how-to-play panel stayed up over the match")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #149, read off controller/index.html as shipped (a headless run has no
+## browser): the gear shows on the host phone only; while a round is being
+## played it opens only when held, never on a tap and never under a finger
+## that is already dragging; Pause/Resume is one tap in the menu, End match and
+## Kick each ask "Are you sure?" first; and the commands and kick reason are
+## the ones ControllerServer understands.
+func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if not page.contains('<button id="gear"'):
+		failures.append("the page has no gear button")
+	if not _js_function_body(page, "amHost").contains("lobby.host === slot"):
+		failures.append("the host check does not compare the lobby's host slot with this phone's")
+	if not _js_function_body(page, "refreshHostControls").contains('gearEl.classList.toggle("show", host)'):
+		failures.append("the gear is not shown only for the host")
+	if not _js_function_body(page, "openHostMenu").contains("if (!amHost()) { return; }"):
+		failures.append("the menu can open on a phone that is not the host")
+	var down: int = page.find('gearEl.addEventListener("pointerdown"')
+	var handler: String = page.substr(down, page.find("});", down) - down) if down >= 0 else ""
+	if not handler.contains("if (activePointer !== null"):
+		failures.append("a finger landing on the gear mid-drag is not ignored")
+	if not handler.contains("if (!(inMatch() && !lobby.paused)) { openHostMenu(); return; }") or not handler.contains("setTimeout(") or not handler.contains("GEAR_HOLD_MS"):
+		failures.append("during play the gear does not need holding to open: %s" % handler)
+	var hold_re := RegEx.new()
+	hold_re.compile("var GEAR_HOLD_MS = (\\d+);")
+	var hold: RegExMatch = hold_re.search(page)
+	if hold == null or int(hold.get_string(1)) < 400:
+		failures.append("the gear hold is missing or too short to rule out a stray touch")
+	for release_evt: String in ["pointerup", "pointercancel", "pointerleave"]:
+		if not page.contains('gearEl.addEventListener("%s", cancelGearHold)' % release_evt):
+			failures.append("lifting off the gear (%s) does not cancel the hold" % release_evt)
+	var pause_at: int = page.find("menuPauseBtn.addEventListener(\"click\"")
+	var pause_handler: String = page.substr(pause_at, page.find("});", pause_at) - pause_at) if pause_at >= 0 else ""
+	if not pause_handler.contains('sendHost("pause")') or not pause_handler.contains('sendHost("resume")') or pause_handler.contains("askConfirm"):
+		failures.append("Pause/Resume is not a single tap in the menu: %s" % pause_handler)
+	var end_at: int = page.find("menuEndBtn.addEventListener(\"click\"")
+	var end_handler: String = page.substr(end_at, page.find("});", end_at) - end_at) if end_at >= 0 else ""
+	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end")'):
+		failures.append("End match does not ask 'Are you sure?' before sending: %s" % end_handler)
+	var kick_body: String = _js_function_body(page, "showKickList")
+	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target })'):
+		failures.append("Kick player does not ask 'Are you sure?' before sending")
+	if not kick_body.contains("if (p.slot === slot) { continue; }"):
+		failures.append("the kick list offers the host itself")
+	if not _js_function_body(page, "sendHost").contains('t: "host", cmd: cmd'):
+		failures.append("the menu does not send {t: host, cmd: ...} frames")
+	for cmd: String in ["pause", "resume", "end"]:
+		if not ControllerServerScript.HOST_COMMANDS.has(cmd):
+			failures.append("ControllerServer does not accept the page's '%s'" % cmd)
+	if not page.contains('var KICKED_REASON = "%s";' % ControllerServerScript.KICKED_REASON):
+		failures.append("the page's kick reason does not match ControllerServer.KICKED_REASON")
+	_scenario_completed = true
 	return failures
