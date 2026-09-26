@@ -23,6 +23,7 @@ func _initialize() -> void:
 func _run() -> void:
 	var cam := Camera2D.new()
 	get_root().add_child(cam)
+	await process_frame
 	cam.make_current()
 	for n in _stages:
 		var holder := Node2D.new()
