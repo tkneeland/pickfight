@@ -68,6 +68,55 @@ extends Node
 ## `_start_kill_zone_rise()`, and the zone keeps climbing past that spawn.
 @export var kill_zone_rise_sec: float = 80.0
 
+## The pickup scene instanced per spawn (scenes/Pickup.tscn).
+@export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
+## Seconds between pickup arrivals once a round is running (user story 20).
+## 12 since #152 (was 10): a little rarer with few players, and
+## `_pickup_interval_sec()` shortens it for a crowd.
+@export var pickup_spawn_interval_sec: float = 12.0
+## With this many players or more on the roster the stage is crowded (#152):
+## pickups come every `crowded_interval_scale` of the interval, and the cap
+## rises to one per player.
+@export var crowded_roster: int = 5
+@export var crowded_interval_scale: float = 0.6
+## Fewest pickups the stage is allowed to hold at once (user stories 3 and
+## 20). The live cap is `_pickup_cap()`: one fewer than the roster, never
+## below this (#36, amending ADR-0009).
+@export var max_pickups: int = 2
+## Weapons a pickup may hold. Empty means the roster's own list
+## (`PickupWeapons.available_weapons()`); scenarios fill it with test weapons.
+## The pickaxe is filtered out either way.
+@export var pickup_weapons: Array[Resource] = []
+
+## Seconds of spawn protection at round start (#114). 0 turns it off.
+@export var spawn_protection_sec: float = 1.0
+
+## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
+@export_range(0.0, 1.0) var modifier_chance: float = 0.35
+## How long a rolled modifier's name stays on screen at round start.
+@export var modifier_announce_sec: float = 3.0
+## A `RoundModifiers` id (e.g. "low_gravity") every round gets, whatever
+## `modifier_chance` and `modifier_rolls_enabled` say: the determinism seam a
+## scenario or a playtest uses to pick one. Empty (the default) rolls.
+@export var forced_modifier: String = ""
+## Determinism seam for the roll itself, like `rotation_seed`: -1 leaves it
+## random every run. Its own RNG, never `_rng`, so a roll can never shift a
+## seeded stage rotation.
+@export var modifier_seed: int = -1
+
+## Open on the lobby and play matches ("first to N") instead of an endless
+## round loop.
+@export var lobby_enabled: bool = false
+## Length of the 3-2-1 countdown once everyone is ready.
+@export var lobby_countdown_sec: float = 3.0
+
+## How long the stage name takes to sweep across. 0 turns it off.
+@export var stage_title_sec: float = 1.1
+
+## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
+## just not shown.
+@export var kill_feed_path: NodePath
+
 ## Sound hooks (issue #75, ADR-0016); nothing in the game reads them.
 ## `round_started` once every player is spawned, `round_won` where the
 ## winner scores, `modifier_announced` as a modifier's name goes up.
@@ -638,26 +687,6 @@ func _update_score_label() -> void:
 # left when the round ends are cleared. Pickups are parented to the active
 # stage instance, so a stage swap can never strand one either.
 
-## The pickup scene instanced per spawn (scenes/Pickup.tscn).
-@export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
-## Seconds between pickup arrivals once a round is running (user story 20).
-## 12 since #152 (was 10): a little rarer with few players, and
-## `_pickup_interval_sec()` shortens it for a crowd.
-@export var pickup_spawn_interval_sec: float = 12.0
-## With this many players or more on the roster the stage is crowded (#152):
-## pickups come every `crowded_interval_scale` of the interval, and the cap
-## rises to one per player.
-@export var crowded_roster: int = 5
-@export var crowded_interval_scale: float = 0.6
-## Fewest pickups the stage is allowed to hold at once (user stories 3 and
-## 20). The live cap is `_pickup_cap()`: one fewer than the roster, never
-## below this (#36, amending ADR-0009).
-@export var max_pickups: int = 2
-## Weapons a pickup may hold. Empty means the roster's own list
-## (`PickupWeapons.available_weapons()`); scenarios fill it with test weapons.
-## The pickaxe is filtered out either way.
-@export var pickup_weapons: Array[Resource] = []
-
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 ## Where a pickup lands on a stage that declares no `PickupSpawn*` markers,
 ## relative to the stage's origin: above its centre (user story 17).
@@ -797,8 +826,6 @@ func _distance_to_nearest_spawn(spot: Vector2) -> float:
 # mid-round spawn to protect: a phone that joins mid-round waits for the next
 # round (ADR-0004), and that round's start protects it with everyone else.
 
-## Seconds of spawn protection at round start (#114). 0 turns it off.
-@export var spawn_protection_sec: float = 1.0
 ## Blink rate and the dimmed alpha a protected player blinks down to.
 const SPAWN_BLINK_HZ: float = 8.0
 const SPAWN_BLINK_ALPHA: float = 0.35
@@ -884,19 +911,6 @@ func _stop_kill_zone_rise() -> void:
 # needs editing.
 
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
-
-## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
-@export_range(0.0, 1.0) var modifier_chance: float = 0.35
-## How long a rolled modifier's name stays on screen at round start.
-@export var modifier_announce_sec: float = 3.0
-## A `RoundModifiers` id (e.g. "low_gravity") every round gets, whatever
-## `modifier_chance` and `modifier_rolls_enabled` say: the determinism seam a
-## scenario or a playtest uses to pick one. Empty (the default) rolls.
-@export var forced_modifier: String = ""
-## Determinism seam for the roll itself, like `rotation_seed`: -1 leaves it
-## random every run. Its own RNG, never `_rng`, so a roll can never shift a
-## seeded stage rotation.
-@export var modifier_seed: int = -1
 
 ## Master switch for random rolls, shared by every RoundManager. The game
 ## never touches it. The scenario runner turns it off at startup so every
@@ -1043,12 +1057,6 @@ func _apply_demo_mode() -> void:
 # ControllerServer only carries the phones' requests and this node's state
 # back to them; everything here reaches it duck-typed, so a stub roster
 # without the lobby methods simply never has anyone ready.
-
-## Open on the lobby and play matches ("first to N") instead of an endless
-## round loop.
-@export var lobby_enabled: bool = false
-## Length of the 3-2-1 countdown once everyone is ready.
-@export var lobby_countdown_sec: float = 3.0
 
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
 const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
@@ -1440,9 +1448,6 @@ func _big_label(text: String, font_size: int, color: Color) -> Label:
 # The stage's name sweeps across the screen for about a second at every round
 # start, below the modifier banner so the two never overlap.
 
-## How long the stage name takes to sweep across. 0 turns it off.
-@export var stage_title_sec: float = 1.1
-
 var _title_layer: CanvasLayer
 var _title_label: Label
 var _title_tween: Tween
@@ -1772,10 +1777,6 @@ func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 
 const MatchStatsScript := preload("res://scripts/MatchStats.gd")
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
-
-## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
-## just not shown.
-@export var kill_feed_path: NodePath
 
 var _stats: RefCounted = MatchStatsScript.new()
 ## Eliminations not yet credited, as [slot, msec]: `Player.eliminate()` emits
