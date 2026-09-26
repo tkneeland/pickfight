@@ -87,6 +87,16 @@ func stop_rising() -> void:
 func is_rising() -> bool:
 	return _rising
 
+## The global y of the zone's top edge, where the lava's surface is drawn:
+## anything at or below it is in the zone (issue #200). Its node's own y
+## without a rectangle shape to take the edge from.
+func surface_y() -> float:
+	for child in get_children():
+		if child is CollisionShape2D and child.shape is RectangleShape2D:
+			var shape: CollisionShape2D = child
+			return shape.global_position.y - shape.shape.size.y * 0.5 * absf(shape.global_scale.y)
+	return global_position.y
+
 func _physics_process(delta: float) -> void:
 	if not _rising:
 		return

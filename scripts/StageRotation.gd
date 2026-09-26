@@ -5,7 +5,8 @@ extends RefCounted
 ## instances the stage this picks, frames the camera on it and hands out its
 ## spawns; this only deals.
 ##
-## `scenes[0]` opens every session, then shuffled bags cover the rest with no
+## `scenes[0]` opens every match (RoundManager puts `stage_index` back to
+## -1 for each, #200), then shuffled bags cover the rest with no
 ## stage playing twice in a row. A large stage (`Stage.view_size` bigger than
 ## the normal view) is only dealt to a round of `large_stage_min_players` or
 ## more, and a bag is re-dealt the moment the player count crosses that line.
@@ -63,7 +64,7 @@ func stage_allowed(index: int) -> bool:
 			return false
 	return true
 
-## Picks the next stage index (ADR-0011): `scenes[0]` opens every session
+## Picks the next stage index (ADR-0011): `scenes[0]` opens every match
 ## (`stage_index` still at -1), then shuffled bags cover the whole roster,
 ## refilling once the current bag is empty. `stage_index` still holds the
 ## previously-played index at this point, so it doubles as the "just played"
