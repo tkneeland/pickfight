@@ -11451,6 +11451,11 @@ func _scenario_settings_fullscreen_toggle_asks_display_server() -> Array[String]
 	var was: bool = sfx.fullscreen
 	var windowed: int = int(ProjectSettings.get_setting("display/window/size/mode"))
 	var ui: CanvasLayer = sfx.build_settings_ui()
+	# Start windowed whatever the saved settings say: a host who left the game
+	# fullscreen saves `fullscreen=true`, and ticking an already-ticked box asks
+	# for nothing. `was` is put back at the end.
+	sfx.set_fullscreen(false)
+	ui.refresh()
 	await physics_frame
 	var asked: int = sfx.window_mode_requests().size()
 
