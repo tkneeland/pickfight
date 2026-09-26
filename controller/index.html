@@ -131,6 +131,50 @@
     color: #e8ecf4;
     text-align: center;
   }
+  /* Nickname prompt (issue #139): the first time a phone joins, before the
+     pad or the Ready button, it picks a name. Above everything else, lobby
+     included, so it gets every touch while it is up. Tapping the name later
+     opens it again. */
+  #name-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 24px;
+    background: #0d0f14;
+    text-align: center;
+  }
+  #name-prompt.show { display: flex; }
+  #name-prompt-title { font-size: 26px; font-weight: 800; }
+  #name-prompt-info { font-size: 15px; opacity: 0.7; }
+  #name-input {
+    font: inherit;
+    font-size: 30px;
+    font-weight: 700;
+    width: 80vw;
+    max-width: 420px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 2px solid #59606e;
+    background: #1b1f29;
+    color: #e8ecf4;
+    text-align: center;
+  }
+  #name-row { display: flex; gap: 12px; }
+  #name-shuffle, #name-go {
+    font: inherit;
+    font-size: 22px;
+    font-weight: 800;
+    padding: 18px 22px;
+    border: 0;
+    border-radius: 16px;
+  }
+  #name-shuffle { color: #e8ecf4; background: #2a303d; }
+  #name-go { color: #0d0f14; background: #ffd933; min-width: 40vw; }
 </style>
 </head>
 <body>
@@ -153,6 +197,15 @@
     <button id="target-up" type="button">+</button>
   </div>
   <button id="ready-btn" type="button">Ready</button>
+</div>
+<div id="name-prompt">
+  <div id="name-prompt-title">Pick your name</div>
+  <input id="name-input" type="text" maxlength="12" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done">
+  <div id="name-prompt-info">Up to 12 letters. It shows above your fighter.</div>
+  <div id="name-row">
+    <button id="name-shuffle" type="button">Shuffle</button>
+    <button id="name-go" type="button">Let's go</button>
+  </div>
 </div>
 <div id="state"></div>
 <div id="hint">Drag to swing</div>
@@ -193,6 +246,9 @@
 
   var WS_PORT = __WS_PORT__;
   var NAME_KEY = "pickfight-name";
+  // Set once this phone's player has picked a name in the prompt (issue
+  // #139), so a reconnect or a later game goes straight to the controls.
+  var NAME_CHOSEN_KEY = "pickfight-name-chosen";
   var MAX_NAME_LENGTH = 12;
   // Random fun default names (issue #121). Every pairing fits in
   // MAX_NAME_LENGTH, so no default is ever cut short.
@@ -372,16 +428,43 @@
 
   function sendName() { sendText({ t: "name", v: myName }); }
 
-  nameEl.addEventListener("click", function () {
-    var typed = window.prompt("Your name (up to " + MAX_NAME_LENGTH + " letters)", myName);
-    if (typed === null) { return; }
-    var name = cleanName(typed);
-    if (!name) { return; }
+  // ---- nickname prompt (issue #139) -----------------------------------------
+  var promptEl = document.getElementById("name-prompt");
+  var nameInput = document.getElementById("name-input");
+  nameInput.maxLength = MAX_NAME_LENGTH;
+
+  function nameChosen() {
+    try { return localStorage.getItem(NAME_CHOSEN_KEY) === "1"; } catch (err) { return false; }
+  }
+
+  // Up whenever the phone has joined but its player has never picked a name,
+  // prefilled with the fun default so "Let's go" alone keeps it.
+  function openNamePrompt() {
+    nameInput.value = myName;
+    promptEl.classList.add("show");
+  }
+
+  function commitName() {
+    var name = cleanName(nameInput.value) || myName;
     myName = name;
-    try { localStorage.setItem(NAME_KEY, name); } catch (err) { /* kept for this load only */ }
+    try {
+      localStorage.setItem(NAME_KEY, name);
+      localStorage.setItem(NAME_CHOSEN_KEY, "1");
+    } catch (err) { /* kept for this load only */ }
     nameEl.textContent = name;
+    promptEl.classList.remove("show");
+    nameInput.blur();
     sendName();
+  }
+
+  document.getElementById("name-go").addEventListener("click", commitName);
+  document.getElementById("name-shuffle").addEventListener("click", function () {
+    nameInput.value = randomName();
   });
+  nameInput.addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter") { commitName(); }
+  });
+  nameEl.addEventListener("click", openNamePrompt);
 
   // ---- where this player stands (issue #121) --------------------------------
   // Read off the host's latest lobby state: waiting for a slot, waiting out a
@@ -518,7 +601,11 @@
       if (typeof ev.data !== "string") { return; }
       try {
         var msg = JSON.parse(ev.data);
-        if (typeof msg.slot === "number") { setSlot(msg.slot); sendName(); }
+        if (typeof msg.slot === "number") {
+          setSlot(msg.slot);
+          sendName();
+          if (!nameChosen()) { openNamePrompt(); }
+        }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }

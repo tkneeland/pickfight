@@ -198,6 +198,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"phone_states_through_a_round",
 	"eight_phones_join_and_play_a_round",
 	"spawns_shared_when_stage_has_fewer_than_players",
+	"controller_page_prompts_for_nickname_first",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -920,6 +921,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eight_phones_join_and_play_a_round()
 		"spawns_shared_when_stage_has_fewer_than_players":
 			return await _scenario_spawns_shared_when_stage_has_fewer_than_players()
+		"controller_page_prompts_for_nickname_first":
+			return await _scenario_controller_page_prompts_for_nickname_first()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12633,3 +12636,66 @@ func _close_phones(peers: Array[WebSocketPeer]) -> void:
 	for peer: WebSocketPeer in peers:
 		peer.close(1000, "scenario done")
 	await _poll_phones(peers, 5)
+
+# --- Nickname prompt on first join (issue #139) ---------------------------------
+
+## Issue #139, read off controller/index.html as shipped (a headless run has no
+## browser): the first time a phone is given a slot it shows a nickname prompt
+## over everything -- pad, lobby and Ready button included -- prefilled with
+## the random default and capped at the host's MAX_NAME_LENGTH. Picking a name
+## stores it and a "chosen" flag, so a reconnect or a later game skips the
+## prompt, and tapping the name opens the same prompt to edit it.
+func _scenario_controller_page_prompts_for_nickname_first() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var cap: int = ControllerServerScript.MAX_NAME_LENGTH
+	var input_re := RegEx.new()
+	input_re.compile('<input id="name-input"[^>]*maxlength="(\\d+)"')
+	var input_match: RegExMatch = input_re.search(page)
+	if input_match == null:
+		failures.append("the page has no name-input field with a maxlength")
+	elif int(input_match.get_string(1)) != cap:
+		failures.append("the name field allows %s characters, the host keeps %d" % [input_match.get_string(1), cap])
+	var z_re := RegEx.new()
+	z_re.compile("#name-prompt \\{[^}]*z-index:\\s*(\\d+)")
+	var z_match: RegExMatch = z_re.search(page)
+	if z_match == null or int(z_match.get_string(1)) < 1:
+		failures.append("the name prompt is not stacked above the lobby and pad (no z-index)")
+	# The slot handler: the prompt opens there, and only when no name has been chosen.
+	var slot_re := RegEx.new()
+	slot_re.compile("typeof msg\\.slot === \"number\"\\) \\{([^}]*)\\}")
+	var slot_match: RegExMatch = slot_re.search(page)
+	if slot_match == null or not slot_match.get_string(1).contains("if (!nameChosen()) { openNamePrompt();"):
+		failures.append("joining (the slot message) does not open the name prompt for a phone with no chosen name")
+	var open_body: String = _js_function_body(page, "openNamePrompt")
+	if not open_body.contains("nameInput.value = myName"):
+		failures.append("the prompt is not prefilled with the default name: %s" % open_body)
+	var commit_body: String = _js_function_body(page, "commitName")
+	for needed: String in ["cleanName(nameInput.value)", "localStorage.setItem(NAME_KEY, name)",
+			"localStorage.setItem(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
+		if not commit_body.contains(needed):
+			failures.append("picking a name does not do %s" % needed)
+	if not _js_function_body(page, "nameChosen").contains("localStorage.getItem(NAME_CHOSEN_KEY)"):
+		failures.append("whether a name was chosen is not read back from localStorage")
+	if not page.contains("nameEl.addEventListener(\"click\", openNamePrompt)"):
+		failures.append("tapping the name does not open the prompt to edit it")
+	if page.contains("window.prompt("):
+		failures.append("the old window.prompt() name editor is still there")
+	_scenario_completed = true
+	return failures
+
+## The body of `function <name>() { ... }` in the page's script, brace-matched.
+func _js_function_body(page: String, name: String) -> String:
+	var start: int = page.find("function %s(" % name)
+	if start < 0:
+		return ""
+	var open: int = page.find("{", start)
+	var depth: int = 0
+	for i in range(open, page.length()):
+		if page[i] == "{":
+			depth += 1
+		elif page[i] == "}":
+			depth -= 1
+			if depth == 0:
+				return page.substr(open, i - open + 1)
+	return ""
