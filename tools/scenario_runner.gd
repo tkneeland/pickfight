@@ -209,6 +209,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kill_feed_and_awards_fit_eight_long_names",
 	"every_stage_has_eight_safe_spawns",
 	"every_stage_terrain_spans_the_view",
+	"phone_hat_choice_reaches_player",
+	"phone_colour_first_come_first_served",
+	"name_tags_on_for_every_living_player_all_round",
+	"controller_page_look_picker_after_name",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -953,6 +957,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_eight_safe_spawns()
 		"every_stage_terrain_spans_the_view":
 			return await _scenario_every_stage_terrain_spans_the_view()
+		"phone_hat_choice_reaches_player":
+			return await _scenario_phone_hat_choice_reaches_player()
+		"phone_colour_first_come_first_served":
+			return await _scenario_phone_colour_first_come_first_served()
+		"name_tags_on_for_every_living_player_all_round":
+			return await _scenario_name_tags_on_for_every_living_player_all_round()
+		"controller_page_look_picker_after_name":
+			return await _scenario_controller_page_look_picker_after_name()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13552,3 +13564,502 @@ func _covered_width(spans: Array[Vector2]) -> float:
 	if end > start:
 		total += end - start
 	return total
+
+# --- Hats, colour choice and always-on name tags (issue #151) -----------------
+
+const HatScript := preload("res://scripts/Hat.gd")
+## Spacing of the row of frozen fighters the tag-stacking check lines up: a
+## body's width and a bit, far narrower than any of the names.
+const TAG_ROW_SPACING: float = 56.0
+## Where that row hangs: open sky above every stage.
+const TAG_ROW_Y: float = -5000.0
+## Frames of a live round over which every tag is checked.
+const TAG_ROUND_FRAMES: int = 45
+
+## The last `{"t":"looks",...}` frame waiting on `peer`, or `last` if none came.
+## Reads (and so drops) everything else queued.
+func _drain_looks(peer: WebSocketPeer, last: Dictionary) -> Dictionary:
+	peer.poll()
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if not peer.was_string_packet():
+			continue
+		var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		if msg is Dictionary and str(msg.get("t", "")) == "looks":
+			last = msg
+	return last
+
+## One hat part's extreme points, for a bounds check.
+func _hat_part_points(part: Dictionary) -> PackedVector2Array:
+	match str(part["kind"]):
+		"poly":
+			return part["pts"]
+		"circle":
+			var c: Vector2 = part["c"]
+			var r: float = part["r"]
+			return PackedVector2Array([c + Vector2(-r, 0), c + Vector2(r, 0), c + Vector2(0, -r), c + Vector2(0, r)])
+		"ring":
+			var rc: Vector2 = part["c"]
+			var half: float = float(part["width"]) * 0.5
+			var rx: float = float(part["rx"]) + half
+			var ry: float = float(part["ry"]) + half
+			return PackedVector2Array([rc + Vector2(-rx, 0), rc + Vector2(rx, 0), rc + Vector2(0, -ry), rc + Vector2(0, ry)])
+	return PackedVector2Array()
+
+## Issue #151: every hat is drawable and stays inside the box a name tag
+## clears; a phone's hat pick reaches its player over the real socket (an
+## unknown id is ignored, "none" takes it off); and the hat stays on the head
+## through a swing, an elimination and the next spawn.
+func _scenario_phone_hat_choice_reaches_player() -> Array[String]:
+	var failures: Array[String] = []
+	for id: String in HatScript.IDS:
+		for spin: float in [0.0, 1.0, 2.2, 4.0]:
+			var parts: Array[Dictionary] = HatScript.parts(id, spin)
+			if id == HatScript.NONE:
+				if not parts.is_empty():
+					failures.append("'none' draws %d parts" % parts.size())
+				break
+			if parts.is_empty():
+				failures.append("hat '%s' draws nothing" % id)
+				break
+			var height: float = HatScript.height_of(id)
+			var top: float = 0.0
+			for part: Dictionary in parts:
+				if part["kind"] == "poly" and Geometry2D.triangulate_polygon(part["pts"]).is_empty():
+					failures.append("hat '%s' has a polygon that cannot be filled" % id)
+				for p: Vector2 in _hat_part_points(part):
+					top = minf(top, p.y)
+					if p.y < -height - 0.5 or p.y > 0.5 or absf(p.x) > HatScript.HALF_WIDTH:
+						failures.append("hat '%s' pokes out of its box at %s (height %.0f)" % [id, p, height])
+						break
+			if top > -height + 3.0:
+				failures.append("hat '%s' reaches only %.1f px up, HEIGHTS says %.0f" % [id, -top, height])
+			if id != "propeller":
+				break
+
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "HatP0"
+	stage.add_child(player)
+	player.global_position = PARK_POSITION
+	var server: Node = ControllerServerScript.new()
+	server.name = "HatServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../HatP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "hat-phone-0", [] as Array[WebSocketPeer])
+	if result["slot"] != 0:
+		failures.append("the phone got slot %d" % result["slot"])
+		await _teardown(stage)
+		return failures
+	await _poll_phones([peer] as Array[WebSocketPeer], 5)
+	var looks: Dictionary = _drain_looks(peer, {})
+	var hat_ids: Array = []
+	for entry: Dictionary in looks.get("hats", []):
+		hat_ids.append(entry["id"])
+	if hat_ids != Array(HatScript.IDS):
+		failures.append("the phone was offered hats %s, expected %s" % [hat_ids, HatScript.IDS])
+	for id: String in HatScript.IDS:
+		if not looks.get("art", {}).has(id):
+			failures.append("the phone got no drawing for hat '%s'" % id)
+	if player.hat_id() != HatScript.NONE:
+		failures.append("a fresh claim came in wearing '%s'" % player.hat_id())
+
+	peer.send_text(JSON.stringify({"t": "hat", "v": "crown"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	looks = _drain_looks(peer, looks)
+	var hat: Node2D = player.hat_node()
+	var on_head := Vector2(0, -24)
+	print("      picked 'crown': host has '%s', player wears '%s', hat at %s" % [server.slot_hat(0), player.hat_id(), hat.position if hat != null else "-"])
+	if server.slot_hat(0) != "crown" or player.hat_id() != "crown":
+		failures.append("the crown did not reach the player (host '%s', player '%s')" % [server.slot_hat(0), player.hat_id()])
+	var told: Array = looks.get("looks", [])
+	if told.size() != 1 or told[0].get("hat") != "crown":
+		failures.append("the phone was told looks %s, expected its crown" % [told])
+	if hat == null or hat.get_parent() != player or not hat.position.is_equal_approx(on_head):
+		failures.append("the hat is not on the body's top edge")
+		peer.close(1000, "scenario done")
+		await _teardown(stage)
+		return failures
+	peer.send_text(JSON.stringify({"t": "hat", "v": "sombrero"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if player.hat_id() != "crown":
+		failures.append("an unknown hat id changed the hat to '%s'" % player.hat_id())
+
+	# A swing: the drag sweeps round the disc for a while.
+	var start_angle: float = player.weapon_angle
+	var swept: float = 0.0
+	var worst: float = 0.0
+	for f in 60:
+		var pkt := PackedByteArray()
+		pkt.resize(8)
+		pkt.encode_float(0, cos(f * 0.25))
+		pkt.encode_float(4, sin(f * 0.25))
+		peer.put_packet(pkt)
+		await physics_frame
+		peer.poll()
+		swept = maxf(swept, absf(angle_difference(start_angle, player.weapon_angle)))
+		worst = maxf(worst, hat.global_position.distance_to(player.global_position + on_head))
+		if not hat.position.is_equal_approx(on_head):
+			worst = INF
+	print("      swing turned the weapon %.2f rad; hat strayed %.3f px from the head" % [swept, worst])
+	if swept < 1.0:
+		failures.append("the swing never happened (weapon turned only %.2f rad)" % swept)
+	if worst > 0.01:
+		failures.append("the hat came off the head during the swing (%.3f px)" % worst)
+
+	player.eliminate()
+	await _await_ticks(2)
+	if hat.is_visible_in_tree():
+		failures.append("the hat still showed after its wearer was eliminated")
+	if player.hat_id() != "crown" or hat.get_parent() != player:
+		failures.append("elimination took the hat off")
+	player.start_round(PARK_POSITION)
+	await _await_ticks(3)
+	if not hat.is_visible_in_tree() or player.hat_id() != "crown" or not hat.position.is_equal_approx(on_head):
+		failures.append("the hat was not back on the head at the next spawn (visible=%s, '%s')" % [hat.is_visible_in_tree(), player.hat_id()])
+
+	peer.send_text(JSON.stringify({"t": "hat", "v": "none"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if player.hat_id() != HatScript.NONE:
+		failures.append("'none' left the player wearing '%s'" % player.hat_id())
+	peer.close(1000, "scenario done")
+	await _poll_phones([peer] as Array[WebSocketPeer], 5)
+	await _teardown(stage)
+	return failures
+
+## Issue #151, over the real socket: colours are first come, first served.
+## Every slot starts in its automatic colour; asking for a colour another
+## player holds is refused (and every phone is told who holds what), a colour
+## given up is free at once, and a leaving player's colour is released when
+## the claim goes -- not by a mere disconnect, which keeps the roster entry.
+## A newcomer whose automatic colour is taken gets the first one free.
+func _scenario_phone_colour_first_come_first_served() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	for i in 3:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "ColourP%d" % i
+		player.start_in_round = false
+		player.identity_color = FOUR_PLAYER_COLORS[i]
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../ColourP%d" % i))
+	var server: Node = ControllerServerScript.new()
+	server.name = "ColourServer"
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var a := WebSocketPeer.new()
+	var b := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	if (await _join_phone(a, "colour-a", phones))["slot"] != 0:
+		failures.append("phone A did not get slot 0")
+	phones.append(a)
+	if (await _join_phone(b, "colour-b", phones))["slot"] != 1:
+		failures.append("phone B did not get slot 1")
+	phones.append(b)
+	await _poll_phones(phones, 5)
+	var b_looks: Dictionary = _drain_looks(b, {})
+	_drain_looks(a, {})
+	if server.slot_color(0) != 0 or server.slot_color(1) != 1:
+		failures.append("the automatic colours were %d and %d, expected 0 and 1" % [server.slot_color(0), server.slot_color(1)])
+	var palette: Array = b_looks.get("palette", [])
+	if palette.size() != 3 or palette[2] != "#" + FOUR_PLAYER_COLORS[2].to_html(false):
+		failures.append("the phones were offered palette %s" % [palette])
+
+	var ask := func(peer: WebSocketPeer, index: int) -> void:
+		peer.send_text(JSON.stringify({"t": "color", "v": index}))
+		await _poll_phones(phones, 10)
+	await ask.call(b, 0)
+	b_looks = _drain_looks(b, b_looks)
+	var held_by: Dictionary = {}
+	for look: Dictionary in b_looks.get("looks", []):
+		held_by[int(look["color"])] = int(look["slot"])
+	print("      B asked for A's colour: B holds %d; B was told %s" % [server.slot_color(1), held_by])
+	if server.slot_color(1) != 1:
+		failures.append("B was given colour 0 while A held it (B holds %d)" % server.slot_color(1))
+	if held_by.get(0, -1) != 0 or held_by.get(1, -1) != 1:
+		failures.append("B's phone was not told who holds what: %s" % [held_by])
+
+	await ask.call(a, 2)
+	if server.slot_color(0) != 2:
+		failures.append("A could not take the free colour 2 (holds %d)" % server.slot_color(0))
+	if not _color_close(players[0].identity_outline_color(), FOUR_PLAYER_COLORS[2], COLOR_MATCH_TOLERANCE) \
+			or not _color_close(players[0].body_fill_color(), FOUR_PLAYER_COLORS[2], COLOR_MATCH_TOLERANCE):
+		failures.append("A's fighter was not repainted in colour 2 (outline %s)" % players[0].identity_outline_color())
+	await ask.call(b, 0)
+	if server.slot_color(1) != 0:
+		failures.append("colour 0 was not free once A gave it up (B holds %d)" % server.slot_color(1))
+	await ask.call(b, 2)
+	if server.slot_color(1) != 0:
+		failures.append("B took colour 2 from A")
+
+	# A walks away: the claim, and its colour, hold until it expires.
+	a.close(1000, "A leaves")
+	await _poll_phones(phones, 10)
+	await ask.call(b, 2)
+	if server.slot_color(1) == 2:
+		failures.append("a mere disconnect released A's colour")
+	server.expire_disconnected_claims()
+	if not _color_close(players[0].identity_outline_color(), FOUR_PLAYER_COLORS[0], COLOR_MATCH_TOLERANCE):
+		failures.append("A's slot was not put back in its own colour when the claim went")
+	await ask.call(b, 2)
+	if server.slot_color(1) != 2:
+		failures.append("A's colour was not released when A's claim expired")
+	await ask.call(b, 0)
+	# C takes slot 0, whose own colour B now holds: first free is colour 1.
+	var c := WebSocketPeer.new()
+	if (await _join_phone(c, "colour-c", [b] as Array[WebSocketPeer]))["slot"] != 0:
+		failures.append("phone C did not get slot 0")
+	phones = [b, c] as Array[WebSocketPeer]
+	await _poll_phones(phones, 5)
+	print("      C joined into slot 0 with colour %d (B holds %d)" % [server.slot_color(0), server.slot_color(1)])
+	if server.slot_color(0) != 1:
+		failures.append("C's automatic colour was %d, expected the first free one, 1" % server.slot_color(0))
+	if not _color_close(players[0].identity_outline_color(), FOUR_PLAYER_COLORS[1], COLOR_MATCH_TOLERANCE):
+		failures.append("C's fighter is not in colour 1")
+
+	# A kick releases at once, hat included.
+	c.send_text(JSON.stringify({"t": "hat", "v": "halo"}))
+	await _poll_phones(phones, 10)
+	b.send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 0}))
+	await _poll_phones(phones, 10)
+	if server.slot_color(0) != -1 or players[0].hat_id() != HatScript.NONE:
+		failures.append("the kicked slot kept colour %d / hat '%s'" % [server.slot_color(0), players[0].hat_id()])
+	await ask.call(b, 1)
+	if server.slot_color(1) != 1:
+		failures.append("the kicked player's colour was not released")
+	await _close_phones(phones)
+	await _teardown(stage)
+	return failures
+
+## Issue #151: nicknames stay up above every living fighter all round. The
+## real game (scenes/Main.tscn) with eight phones, each with a hat and a
+## colour picked as it joined (the early joiners take the later slots'
+## colours, which pushes those onto the first free ones): every frame of the
+## round every living fighter has its tag, reading its name, in its colour,
+## clear above its hat. Eight fighters bunched in a row still get eight tags
+## that do not cover each other. An eliminated fighter's tag goes, the rest
+## stay. And with no lobby at all, tags still show.
+func _scenario_name_tags_on_for_every_living_player_all_round() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 151
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.round_end_pause_sec = 3.0
+	var players: Array[RigidBody2D] = []
+	for i in server.player_paths.size():
+		players.append(server.get_node(server.player_paths[i]) as RigidBody2D)
+	var palette: Array[Color] = []
+	for player: RigidBody2D in players:
+		palette.append(player.identity_color)
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var n: int = players.size()
+	var names: Array[String] = []
+	var joined: Array[WebSocketPeer] = []
+	for i in n:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "tag-phone-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+		names.append("Wwwwwwwwwww%d" % (i + 1))
+		peer.send_text(JSON.stringify({"t": "name", "v": names[i]}))
+		peer.send_text(JSON.stringify({"t": "hat", "v": HatScript.IDS[1 + i % (HatScript.IDS.size() - 1)]}))
+		peer.send_text(JSON.stringify({"t": "color", "v": n - 1 - i}))
+		await _poll_phones(joined, 5)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	for i in n:
+		var want_hat: String = HatScript.IDS[1 + i % (HatScript.IDS.size() - 1)]
+		if players[i].hat_id() != want_hat:
+			failures.append("P%d wears '%s', its phone picked '%s'" % [i + 1, players[i].hat_id(), want_hat])
+		if server.slot_color(i) != n - 1 - i or not _color_close(players[i].identity_outline_color(), palette[n - 1 - i], COLOR_MATCH_TOLERANCE):
+			failures.append("P%d holds colour %d, its phone picked %d" % [i + 1, server.slot_color(i), n - 1 - i])
+
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var all_alive := func() -> bool:
+		for player: RigidBody2D in players:
+			if not player.alive:
+				return false
+		return true
+	var started: bool = false
+	var deadline: int = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC * 2
+	while Time.get_ticks_msec() < deadline and not started:
+		await _poll_phones(joined, 1)
+		started = all_alive.call()
+	if not started:
+		failures.append("eight ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+
+	# Every frame of the live round: every tag up, right name, right colour,
+	# over its own fighter, never covering another.
+	var bad_frames: int = 0
+	var first_bad: String = ""
+	for f in TAG_ROUND_FRAMES:
+		await _poll_phones(joined, 1)
+		var problem: String = _tag_problem(rm, players, names, 24.0)
+		if not problem.is_empty():
+			bad_frames += 1
+			if first_bad.is_empty():
+				first_bad = "frame %d: %s" % [f, problem]
+	print("      %d frames of a live round, %d with a tag problem %s" % [TAG_ROUND_FRAMES, bad_frames, first_bad])
+	if bad_frames > 0:
+		failures.append("name tags were wrong in %d of %d frames (first: %s)" % [bad_frames, TAG_ROUND_FRAMES, first_bad])
+
+	# All eight frozen shoulder to shoulder: the tags stack clear of each other.
+	for i in n:
+		players[i].teleport_to(Vector2((i - n * 0.5) * TAG_ROW_SPACING, TAG_ROW_Y))
+		players[i].freeze = true
+	await _poll_phones(joined, 3)
+	var row_problem: String = _tag_problem(rm, players, names, 0.5)
+	var highest: float = 0.0
+	for i in n:
+		highest = maxf(highest, players[i].global_position.y - rm.name_tag(i).position.y)
+	print("      eight in a row %.0f px apart: %s; top tag %.0f px above the row" % [TAG_ROW_SPACING, row_problem if not row_problem.is_empty() else "all tags clear", highest])
+	if not row_problem.is_empty():
+		failures.append("bunched up, the tags failed: %s" % row_problem)
+
+	for i in range(n - 1, 1, -1):
+		players[i].eliminate()
+		await _poll_phones(joined, 2)
+		if rm.name_tag(i).visible:
+			failures.append("P%d's tag stayed up after it was eliminated" % (i + 1))
+		for j in i:
+			if not rm.name_tag(j).visible:
+				failures.append("P%d's tag went when P%d was eliminated" % [j + 1, i + 1])
+	players[1].eliminate()
+	await _poll_phones(joined, 3)
+	for i in n:
+		if rm.name_tag(i).visible:
+			failures.append("P%d's tag stayed up once the round was over" % (i + 1))
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+
+	# No lobby at all: the tags are not a lobby feature.
+	var loop: Dictionary = _new_round_loop(10.0)
+	var bare: Array[RigidBody2D] = loop["players"]
+	loop["roster"].slots = [0, 1] as Array[int]
+	loop["roster"].live = [0, 1] as Array[int]
+	if not await _await_condition(func() -> bool: return bare[0].alive and bare[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the lobby-less round never started")
+	else:
+		await _await_ticks(2)
+		for slot in 2:
+			var tag: Label = loop["round_manager"].name_tag(slot)
+			if tag == null or not tag.visible or tag.text != "P%d" % (slot + 1):
+				failures.append("with no lobby, P%d had no tag (%s)" % [slot + 1, tag.text if tag != null else "none"])
+	await _teardown(loop["stage"])
+	return failures
+
+## What is wrong with the name tags right now, or "": each living fighter's
+## tag must show, read `names`, be in the fighter's colour, sit centred over
+## it (within `slack` px, for a fighter moving between frames) and clear of
+## its hat, and no two tags may overlap.
+func _tag_problem(rm: Node, players: Array[RigidBody2D], names: Array[String], slack: float) -> String:
+	var rects: Array[Rect2] = []
+	for i in players.size():
+		var player: RigidBody2D = players[i]
+		var tag: Label = rm.name_tag(i)
+		if not player.alive:
+			continue
+		if tag == null or not tag.visible:
+			return "P%d had no tag" % (i + 1)
+		if tag.text != names[i]:
+			return "P%d's tag read '%s'" % [i + 1, tag.text]
+		if not _color_close(tag.get_theme_color("font_color"), player.identity_outline_color(), COLOR_MATCH_TOLERANCE):
+			return "P%d's tag is %s, its fighter %s" % [i + 1, tag.get_theme_color("font_color"), player.identity_outline_color()]
+		var rect := Rect2(tag.position, tag.get_minimum_size())
+		if absf(rect.get_center().x - player.global_position.x) > slack:
+			return "P%d's tag is %.0f px off centre" % [i + 1, rect.get_center().x - player.global_position.x]
+		var clearance: float = player.global_position.y - player.hat_top() - rect.end.y
+		if clearance < RoundManagerScript.NAME_TAG_HAT_GAP - slack:
+			return "P%d's tag is only %.1f px above its %s" % [i + 1, clearance, player.hat_id()]
+		for other: Rect2 in rects:
+			if rect.intersects(other):
+				return "P%d's tag overlaps another" % (i + 1)
+		rects.append(rect)
+	return ""
+
+## Issue #151, read off controller/index.html as shipped: the hat-and-colour
+## picker is the step straight after the nickname (and after every rename),
+## or opened from the lobby -- never from the pad a round is fought on. It
+## asks the host with the frames ControllerServer understands, re-sends the
+## stored pick on every join like the name, shows a colour someone else holds
+## as taken and untappable, and uses the host's colour for this phone.
+func _scenario_controller_page_look_picker_after_name() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var server_src: String = FileAccess.get_file_as_string("res://scripts/ControllerServer.gd")
+	if not page.contains('<div id="look-prompt">'):
+		failures.append("the page has no look picker")
+	var z_re := RegEx.new()
+	z_re.compile("#look-prompt \\{[^}]*z-index:\\s*(\\d+)")
+	var z_match: RegExMatch = z_re.search(page)
+	if z_match == null or int(z_match.get_string(1)) < 1:
+		failures.append("the look picker is not stacked above the pad and lobby")
+	if not _js_function_body(page, "commitName").contains("openLookPrompt()"):
+		failures.append("picking a name does not go on to the look picker")
+	var slot_at: int = page.find('typeof msg.slot === "number"')
+	var slot_handler: String = page.substr(slot_at, page.find('msg.t === "looks"', slot_at) - slot_at) if slot_at >= 0 else ""
+	if not slot_handler.contains("sendLook();") or not slot_handler.contains("else if (!lookChosen()) { openLookPrompt(); }"):
+		failures.append("joining does not re-send the stored look and open the picker for a new phone: %s" % slot_handler)
+	if not page.contains('msg.t === "looks") { showLooks(msg); }'):
+		failures.append("the page ignores the host's looks frame")
+	var lobby_at: int = page.find('<div id="lobby">')
+	var lobby_end: int = page.find("</div>\n<div id=\"name-prompt\">", lobby_at)
+	var button_at: int = page.find('<button id="look-btn"')
+	if lobby_at < 0 or button_at < lobby_at or button_at > lobby_end:
+		failures.append("the look button is not on the lobby card (which is hidden during play)")
+	# Who may open it: the join, the rename, the lobby button. Nothing on the pad.
+	var callers: int = page.count("openLookPrompt()") + page.count("openLookPrompt)")
+	if callers != 4 or not page.contains('getElementById("look-btn").addEventListener("click", openLookPrompt)'):
+		failures.append("openLookPrompt is reached from %d places, expected the join, the rename and the lobby button" % (callers - 1))
+	for pad_fn: String in ["showLobby", "showState", "frame", "draw", "begin", "move"]:
+		if _js_function_body(page, pad_fn).contains("openLookPrompt"):
+			failures.append("%s() opens the look picker" % pad_fn)
+	if not _js_function_body(page, "openLookPrompt").contains("release()"):
+		failures.append("opening the picker does not let go of a drag in progress")
+	var send_body: String = _js_function_body(page, "sendLook")
+	if not send_body.contains('t: "hat"') or not send_body.contains('t: "color"'):
+		failures.append("the stored look is not re-sent as hat and color frames")
+	for arm: String in ['\t\t"hat":', '\t\t"color":']:
+		if not server_src.contains(arm):
+			failures.append("ControllerServer does not handle the page's %s frame" % arm.strip_edges())
+	var render: String = _js_function_body(page, "renderLookPrompt")
+	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 't: "hat", v: id', "drawHat(preview"]:
+		if not render.contains(needed):
+			failures.append("the picker does not do %s" % needed)
+	if not _js_function_body(page, "colorOf").contains("looks.palette[look.color]"):
+		failures.append("the phone does not take its colour from the host")
+	for old: String in ["SLOT_COLORS[slot % SLOT_COLORS.length]", "SLOT_COLORS[p.slot % SLOT_COLORS.length]"]:
+		if page.contains(old):
+			failures.append("the page still colours by slot alone: %s" % old)
+	_scenario_completed = true
+	return failures

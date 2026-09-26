@@ -232,6 +232,82 @@
   #host-menu button.primary { color: #0d0f14; background: #ffd933; }
   #host-menu button.danger { color: #fff; background: #c62f3a; }
   #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
+  /* Hat and colour (issue #151): the second step of joining, straight after
+     the nickname, and opened again from the lobby's "Hat & colour" button or
+     by renaming. A full-screen card like the name prompt, never part of the
+     pad a fight is played on. */
+  #look-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 20px;
+    background: #0d0f14;
+    text-align: center;
+    overflow-y: auto;
+  }
+  #look-prompt.show { display: flex; }
+  #look-title { font-size: 26px; font-weight: 800; }
+  .look-label { font-size: 15px; opacity: 0.7; }
+  #hat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(92vw, 420px); }
+  #hat-grid button {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 6px 4px 8px;
+    border: 2px solid #2a303d;
+    border-radius: 14px;
+    background: #1b1f29;
+    color: #e8ecf4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  #hat-grid button.on { border-color: #ffd933; background: #2a303d; }
+  #hat-grid canvas { width: 72px; height: 56px; pointer-events: none; }
+  #color-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: min(92vw, 420px); }
+  #color-row button {
+    position: relative;
+    height: 52px;
+    border: 3px solid transparent;
+    border-radius: 14px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    color: #0d0f14;
+  }
+  #color-row button.on { border-color: #ffffff; box-shadow: 0 0 0 3px #0d0f14 inset; }
+  /* A colour another player holds: dimmed, crossed out and not tappable. */
+  #color-row button.taken {
+    opacity: 0.3;
+    background-image: linear-gradient(135deg, transparent 46%, #0d0f14 46%, #0d0f14 54%, transparent 54%) !important;
+  }
+  #look-go {
+    font: inherit;
+    font-size: 22px;
+    font-weight: 800;
+    padding: 18px 22px;
+    min-width: 50vw;
+    border: 0;
+    border-radius: 16px;
+    color: #0d0f14;
+    background: #ffd933;
+  }
+  #look-btn {
+    font: inherit;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 12px 20px;
+    border: 0;
+    border-radius: 14px;
+    color: #e8ecf4;
+    background: #2a303d;
+  }
 </style>
 </head>
 <body>
@@ -254,6 +330,7 @@
     <button id="target-up" type="button">+</button>
   </div>
   <button id="ready-btn" type="button">Ready</button>
+  <button id="look-btn" type="button">Hat &amp; colour</button>
 </div>
 <div id="name-prompt">
   <div id="name-prompt-title">Pick your name</div>
@@ -263,6 +340,14 @@
     <button id="name-shuffle" type="button">Shuffle</button>
     <button id="name-go" type="button">Let's go</button>
   </div>
+</div>
+<div id="look-prompt">
+  <div id="look-title">Pick your look</div>
+  <div class="look-label">Hat</div>
+  <div id="hat-grid"></div>
+  <div class="look-label" id="color-label">Colour: first come, first served</div>
+  <div id="color-row"></div>
+  <button id="look-go" type="button">Done</button>
 </div>
 <button id="gear" type="button" aria-label="Host menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 <div id="host-menu">
@@ -299,7 +384,9 @@
   // slot 6 = Player7 violet, slot 7 = Player8 red (issue #138). The host paints that same colour on each
   // player's persistent outline and weapon head (ADR-0005)
   // -- not the body fill, which reddens with damage -- so changing a colour
-  // here means changing the matching identity_color there.
+  // here means changing the matching identity_color there. Since issue #151
+  // these are each slot's automatic colour, used until the host's "looks"
+  // frame says which colour the player actually holds (colorOf()).
   var SLOT_COLORS = ["#2666ff", "#ff8c1a", "#1fd98c", "#ff52d1", "#ffdb1a", "#1ad1ff", "#9959ff", "#eb2933"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
@@ -490,13 +577,18 @@
 
   function setSlot(n) {
     slot = n;
-    var color = n < 0 ? NEUTRAL_COLOR : SLOT_COLORS[n % SLOT_COLORS.length];
     slotEl.textContent = n < 0 ? "--" : "P" + (n + 1);
+    nameEl.textContent = myName;
+    applyColor();
+    showState();
+  }
+
+  // This phone's colour everywhere it shows: the badge, the name and the rim.
+  function applyColor() {
+    var color = colorOf(slot);
     slotEl.style.color = color;
     nameEl.style.color = color;
-    nameEl.textContent = myName;
-    document.body.style.boxShadow = n < 0 ? "none" : "inset 0 0 0 6px " + color;
-    showState();
+    document.body.style.boxShadow = slot < 0 ? "none" : "inset 0 0 0 6px " + color;
   }
 
   function sendName() { sendText({ t: "name", v: myName }); }
@@ -528,6 +620,8 @@
     promptEl.classList.remove("show");
     nameInput.blur();
     sendName();
+    // Step two of joining (issue #151), and of every rename after it.
+    openLookPrompt();
   }
 
   document.getElementById("name-go").addEventListener("click", commitName);
@@ -581,7 +675,7 @@
     if (typeof navigator.vibrate === "function") {
       try { navigator.vibrate(b.vibrate); } catch (err) { /* flash still plays */ }
     }
-    flashEl.style.background = SLOT_COLORS[slot % SLOT_COLORS.length];
+    flashEl.style.background = colorOf(slot);
     flashEl.style.transition = "none";
     flashEl.style.opacity = String(b.alpha);
     void flashEl.offsetWidth; // commit the peak before fading from it
@@ -666,6 +760,171 @@
   document.getElementById("target-down").addEventListener("click", function () { sendTarget(Number(targetInput.value) - 1); });
   document.getElementById("target-up").addEventListener("click", function () { sendTarget(Number(targetInput.value) + 1); });
 
+  // ---- hat and colour (issue #151) ------------------------------------------
+  // Picked after the nickname, kept in localStorage and sent again on every
+  // join like the name. The host owns the outcome: it answers every pick with
+  // a "looks" frame listing the palette, the hats (with their drawings, so
+  // the previews here are the shapes the shared screen draws) and what each
+  // player wears. A colour another player holds is shown taken; it frees up
+  // when that player leaves the game.
+  var HAT_KEY = "pickfight-hat";
+  var COLOR_KEY = "pickfight-color";
+  var LOOK_CHOSEN_KEY = "pickfight-look-chosen";
+  var HAT_OUTLINE = "#121217";
+  var lookEl = document.getElementById("look-prompt");
+  var hatGridEl = document.getElementById("hat-grid");
+  var colorRowEl = document.getElementById("color-row");
+  var looks = null;
+
+  function stored(key) { try { return localStorage.getItem(key); } catch (err) { return null; } }
+  function store(key, value) { try { localStorage.setItem(key, value); } catch (err) { /* this load only */ } }
+  function lookChosen() { return stored(LOOK_CHOSEN_KEY) === "1"; }
+
+  function lookOf(n) {
+    if (looks) {
+      for (var i = 0; i < looks.looks.length; i++) { if (looks.looks[i].slot === n) { return looks.looks[i]; } }
+    }
+    return null;
+  }
+  // A slot's colour as the host has it, else the slot's automatic colour.
+  function colorOf(n) {
+    if (n < 0) { return NEUTRAL_COLOR; }
+    var look = lookOf(n);
+    if (look && looks.palette[look.color]) { return looks.palette[look.color]; }
+    return SLOT_COLORS[n % SLOT_COLORS.length];
+  }
+
+  function sendLook() {
+    var hat = stored(HAT_KEY);
+    if (hat) { sendText({ t: "hat", v: hat }); }
+    var color = stored(COLOR_KEY);
+    if (color !== null && color !== "" && isFinite(Number(color))) { sendText({ t: "color", v: Number(color) }); }
+  }
+
+  function showLooks(msg) {
+    looks = msg;
+    applyColor();
+    if (lookEl.classList.contains("show")) { renderLookPrompt(); }
+  }
+
+  function openLookPrompt() {
+    release(); // a drag in progress would otherwise stay held under the card
+    renderLookPrompt();
+    lookEl.classList.add("show");
+  }
+  function closeLookPrompt() {
+    store(LOOK_CHOSEN_KEY, "1");
+    lookEl.classList.remove("show");
+  }
+
+  function darken(hex, amount) {
+    var n = parseInt(String(hex).slice(1), 16);
+    var k = 1 - amount;
+    var r = Math.round(((n >> 16) & 255) * k), g = Math.round(((n >> 8) & 255) * k), b = Math.round((n & 255) * k);
+    return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+  }
+
+  // A hat preview: the top of a body in `tint` wearing hat `id`, drawn from
+  // the host's own description of it (Hat.gd parts(): origin on the body's
+  // top edge, up is -y).
+  function drawHat(canvas, id, tint) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = 72, h = 56;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var c = canvas.getContext("2d");
+    var scale = 0.95;
+    c.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * w / 2, dpr * (h - 12));
+    c.lineJoin = "round";
+    c.fillStyle = tint;
+    c.strokeStyle = HAT_OUTLINE;
+    c.lineWidth = 2;
+    c.fillRect(-24, 0, 48, 20);
+    c.strokeRect(-24, 0, 48, 20);
+    var parts = (looks && looks.art && looks.art[id]) || [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      var fill = p.fill === "tint" ? tint : (p.fill === "tint_dark" ? darken(tint, 0.35) : p.fill);
+      c.beginPath();
+      if (p.kind === "poly") {
+        c.moveTo(p.pts[0], p.pts[1]);
+        for (var j = 2; j < p.pts.length; j += 2) { c.lineTo(p.pts[j], p.pts[j + 1]); }
+        c.closePath();
+      } else if (p.kind === "circle") {
+        c.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      } else if (p.kind === "ring") {
+        c.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2);
+        c.strokeStyle = HAT_OUTLINE;
+        c.lineWidth = p.width + 3;
+        c.stroke();
+        c.strokeStyle = fill;
+        c.lineWidth = p.width;
+        c.stroke();
+        c.strokeStyle = HAT_OUTLINE;
+        c.lineWidth = 2;
+        continue;
+      }
+      c.fillStyle = fill;
+      c.fill();
+      if (p.outline) { c.stroke(); }
+    }
+  }
+
+  function renderLookPrompt() {
+    var mine = lookOf(slot) || { hat: stored(HAT_KEY) || "none", color: -1 };
+    var tint = colorOf(slot);
+    var hats = (looks && looks.hats) || [{ id: "none", label: "None" }];
+    hatGridEl.textContent = "";
+    for (var i = 0; i < hats.length; i++) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = hats[i].id === mine.hat ? "on" : "";
+      var preview = document.createElement("canvas");
+      b.appendChild(preview);
+      var label = document.createElement("span");
+      label.textContent = hats[i].label;
+      b.appendChild(label);
+      drawHat(preview, hats[i].id, tint);
+      b.addEventListener("click", (function (id) {
+        return function () {
+          store(HAT_KEY, id);
+          sendText({ t: "hat", v: id });
+          var look = lookOf(slot);
+          if (look) { look.hat = id; }
+          renderLookPrompt();
+        };
+      })(hats[i].id));
+      hatGridEl.appendChild(b);
+    }
+    colorRowEl.textContent = "";
+    var palette = (looks && looks.palette) || [];
+    document.getElementById("color-label").style.display = palette.length ? "" : "none";
+    for (var k = 0; k < palette.length; k++) {
+      if (!palette[k]) { continue; }
+      var holder = -1;
+      for (var m = 0; m < looks.looks.length; m++) {
+        if (looks.looks[m].color === k && looks.looks[m].slot !== slot) { holder = looks.looks[m].slot; }
+      }
+      var sw = document.createElement("button");
+      sw.type = "button";
+      sw.style.background = palette[k];
+      sw.className = holder >= 0 ? "taken" : (k === mine.color ? "on" : "");
+      sw.disabled = holder >= 0;
+      sw.setAttribute("aria-label", holder >= 0 ? "Taken by " + slotName(holder) : (k === mine.color ? "Your colour" : "Free"));
+      sw.textContent = k === mine.color ? "You" : "";
+      sw.addEventListener("click", (function (index) {
+        return function () {
+          store(COLOR_KEY, String(index));
+          sendText({ t: "color", v: index });
+        };
+      })(k));
+      colorRowEl.appendChild(sw);
+    }
+  }
+
+  document.getElementById("look-go").addEventListener("click", closeLookPrompt);
+  document.getElementById("look-btn").addEventListener("click", openLookPrompt);
+
   // ---- host controls (issue #149) -------------------------------------------
   // Only the host phone -- the one allowed to set "first to N" -- gets the
   // gear; the host decides, and ignores the same requests from anyone else.
@@ -733,7 +992,7 @@
       var b = document.createElement("button");
       b.type = "button";
       b.textContent = "P" + (p.slot + 1) + " " + p.name;
-      b.style.boxShadow = "inset 6px 0 0 " + SLOT_COLORS[p.slot % SLOT_COLORS.length];
+      b.style.boxShadow = "inset 6px 0 0 " + colorOf(p.slot);
       b.addEventListener("click", (function (target, name) {
         return function () {
           askConfirm("Are you sure? Kick " + name + " out of the game?", function () { sendHost("kick", { slot: target }); });
@@ -810,8 +1069,11 @@
         if (typeof msg.slot === "number") {
           setSlot(msg.slot);
           sendName();
+          sendLook();
           if (!nameChosen()) { openNamePrompt(); }
+          else if (!lookChosen()) { openLookPrompt(); }
         }
+        else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }
@@ -827,6 +1089,7 @@
       setStatus(kicked ? "Removed by the host" : (reason ? (reason + " — retrying") : "reconnecting"));
       setSlot(-1);
       lobbyEl.className = "";
+      lookEl.classList.remove("show");
       lobby = null;
       refreshHostControls();
       // Forget any drag that was in progress: the host has already zeroed this
@@ -843,7 +1106,7 @@
     var w = window.innerWidth, h = window.innerHeight;
     ctx.clearRect(0, 0, w, h);
     if (!anchor || !point) { return; }
-    var color = (slot >= 0) ? SLOT_COLORS[slot % SLOT_COLORS.length] : NEUTRAL_COLOR;
+    var color = colorOf(slot);
 
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
