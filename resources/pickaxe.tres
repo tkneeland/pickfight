@@ -58,8 +58,8 @@
 ; clamped inside the art.
 ;
 ; Issue #136, more responsive: drive 24 -> 36 rad/s and 400 -> 600 px/s back
-; to rest. The 6000 force ceiling stays, so clashes and the axe's win over it
-; are unchanged. Extension stays 700 px/s out: every speed tried from 750 to
+; to rest. The force ceiling stayed at 6000 then; issue #180 raised it to 8000
+; once a stalled drive pushed its rated force, and the axe's 11000 still wins. Extension stays 700 px/s out: every speed tried from 750 to
 ; 1050 broke one of the grip scenarios (a planted head skidding in
 ; planted_head_grips_sideways_push, or a head pressed into a wall not letting
 ; go in gripping_head_lets_go), all of which run on the pickaxe.
@@ -72,7 +72,7 @@ mass = 0.25
 drive_speed = 36.0
 extend_speed = 700.0
 rest_return_speed = 600.0
-max_drive_force = 6000.0
+max_drive_force = 8000.0
 damage = 34.0
 sound_set = &"pickaxe"
 head_circle_offsets = PackedVector2Array(-4.32, -11.34, -2.42, -10.96, -0.52, -10.59, 1.08, -8.46, 2.68, -6.34, 3.38, -3.09, 4.08, 0.16, 3.38, 3.16, 2.68, 6.16, 1.08, 8.41, -0.52, 10.66, -2.42, 11.04, -4.32, 11.41)

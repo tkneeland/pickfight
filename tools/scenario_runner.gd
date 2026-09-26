@@ -297,6 +297,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_built_clear_of_neighbours",
 	"match_seed_replays_bot_match",
 	"script_run_never_touches_owner_settings",
+	"stalled_drive_pushes_rated_force",
+	"axe_wins_clash_against_every_weapon",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1267,6 +1269,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_seed_replays_bot_match()
 		"script_run_never_touches_owner_settings":
 			return await _scenario_script_run_never_touches_owner_settings()
+		"stalled_drive_pushes_rated_force":
+			return await _scenario_stalled_drive_pushes_rated_force()
+		"axe_wins_clash_against_every_weapon":
+			return await _scenario_axe_wins_clash_against_every_weapon()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3863,8 +3869,8 @@ func _scenario_weapon_responsiveness_matches_roster() -> Array[String]:
 ## `clash_higher_drive_force_wins` already says a bigger force ceiling wins
 ## ground, using a stub weapon built in this file. This says the roster's own
 ## weight tiers are that difference: nothing here is synthesised, both sides
-## are the shipped resources, and the axe's advantage is the 0.45 kg and
-## 9000 N it actually carries against the dagger's 0.15 and 4000.
+## are the shipped resources, and the axe's advantage is the 0.4 kg and
+## 11000 N it actually carries against the dagger's 0.15 and 7300 (#180).
 ##
 ## Two measurements, because where the heads met is not the whole story. How
 ## far off the midline they met is the ground won, which is what a player
@@ -3983,13 +3989,14 @@ func _roster_tier_failures(quantity: String, unit: String, observed: Dictionary,
 ##
 ## Reports where the two heads met relative to the midline between the bodies,
 ## how far apart they ended up, and how much of its own commanded reach each
-## side surrendered.
-func _roster_clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2, left_stats: WeaponStatsType, right_stats: WeaponStatsType) -> Dictionary:
+## side surrendered. `separation` is how far apart the two bodies stand;
+## pairs with reaches unlike the two daggers' pass their own.
+func _roster_clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2, left_stats: WeaponStatsType, right_stats: WeaponStatsType, separation: float = ROSTER_CLASH_SEPARATION) -> Dictionary:
 	left.set_weapon_stats(left_stats)
 	right.set_weapon_stats(right_stats)
 	await _await_ticks(ROSTER_SWAP_TICKS)
 
-	var half: Vector2 = Vector2.RIGHT * ROSTER_CLASH_SEPARATION * 0.5
+	var half: Vector2 = Vector2.RIGHT * separation * 0.5
 	left.teleport_to(centre - half)
 	right.teleport_to(centre + half)
 	await _close_heads(left, right, CLASH_APPROACH_TICKS)
@@ -11132,7 +11139,13 @@ func _scenario_sfx_mix_victory_quieter_rest_louder() -> Array[String]:
 ##
 ## Only the slide while planted counts: once the head lifts (more than
 ## GRIP_CONTACT_TOLERANCE off the floor) what it does is the swing's
-## business, not the grip's.
+## business, not the grip's. The push-off also ends when the weapon runs out
+## of reach (issue #180): from there the body is flying and the groove's end
+## stop hauls the head along after it. At the 6000 the pickaxe used to carry
+## that haul happened to lift the head the same tick; at 8000 the body gets
+## there at about 500 px/s and drags the planted head 6.6 px in the one tick
+## before it lifts, with the head having held to a hundredth of a px for the
+## whole push before that.
 ##
 ## Measured on a pickaxe with its crescent swapped for one round circle on
 ## the anchor. The crescent's circles sit off the anchor and turn with the
@@ -11149,6 +11162,8 @@ const GRIP_PUSH_TICKS: int = 30
 const GRIP_CONTACT_TOLERANCE: float = 0.5
 ## Before #110 the shove slid the head 12.9 px and the push-off 11.2 px.
 const GRIP_MAX_SLIDE: float = 2.0
+## How close to full reach the push-off counts as over.
+const GRIP_FULL_REACH_SLACK: float = 1.0
 
 func _scenario_planted_head_grips_sideways_push() -> Array[String]:
 	var failures: Array[String] = []
@@ -11178,7 +11193,8 @@ func _scenario_planted_head_grips_sideways_push() -> Array[String]:
 	if start.y < GROUND_TOP - HEAD_RADIUS - PLANT_CLEARANCE:
 		failures.append("push-off: the head never planted on the floor (y %.1f)" % start.y)
 	player.set_input_vector(dir)
-	var push_slide: float = await _planted_slide(player, start, GRIP_PUSH_TICKS)
+	var push_slide: float = await _planted_slide(player, start, GRIP_PUSH_TICKS,
+			round_head.max_reach - GRIP_FULL_REACH_SLACK)
 	await _teardown(stage, false)
 
 	print("      planted head slide: shove %.1f px, push-off %.1f px" % [shove_slide, push_slide])
@@ -11201,13 +11217,13 @@ func _round_head_stats() -> WeaponStatsType:
 	return stats
 
 ## The furthest the head gets along the floor from `start` over `ticks`,
-## up to the first tick it lifts off the floor.
-func _planted_slide(player: RigidBody2D, start: Vector2, ticks: int) -> float:
+## up to the first tick it lifts off the floor or reaches `until_reach`.
+func _planted_slide(player: RigidBody2D, start: Vector2, ticks: int, until_reach: float = INF) -> float:
 	var slide: float = 0.0
 	for _i in ticks:
 		await physics_frame
 		var head: Vector2 = player.weapon_head_position()
-		if absf(head.y - start.y) > GRIP_CONTACT_TOLERANCE:
+		if absf(head.y - start.y) > GRIP_CONTACT_TOLERANCE or _reach_of(player) >= until_reach:
 			break
 		slide = maxf(slide, absf(head.x - start.x))
 	return slide
@@ -19156,3 +19172,233 @@ func _scenario_script_run_never_touches_owner_settings() -> Array[String]:
 	music.set_volume(was["music"], false)
 	_scenario_completed = true
 	return failures
+
+# --- Stalled drive force and the axe's clash (issue #180) -------------------
+
+## The load a stalled head is pushed into: heavy enough that 11000 N moves it
+## only 45 px/s in the window, so the drive stays stalled -- nowhere near the
+## speed it is asking for -- the whole time it is being measured.
+const STALL_LOAD_MASS: float = 40.0
+const STALL_LOAD_RADIUS: float = 16.0
+## The pushed load is a slab this many times taller than it is wide.
+const STALL_SLAB_HEIGHT_FACTOR: float = 4.0
+## Ticks allowed for the head to reach the load at all.
+const STALL_CONTACT_TICKS: int = 60
+## Ticks let go by after the first touch, so the knock of arriving is out of
+## the measurement and only the steady push is in it.
+const STALL_SKIP_TICKS: int = 2
+## Ticks the push is measured over.
+const STALL_WINDOW_TICKS: int = 8
+## The measured push, as a fraction of the weapon's `max_drive_force`, has to
+## land in this band. The floor is what "pushes its rated force" means; the
+## ceiling says the clamp still holds. The gap below 1.0 is what the head and
+## the haft keep for themselves and the solver's give.
+const STALL_FORCE_FLOOR: float = 0.85
+const STALL_FORCE_CEILING: float = 1.05
+## How far out both pushes start: half the weapon's reach range. Not from
+## rest, because a drag from rest to full in one tick is a flick, and a flick
+## fires the boomstick, the grapple and the boomerang (issue #150).
+const STALL_START_REACH: float = 0.5
+## The load sits on the head layer and collides with heads only (Player.gd's
+## LAYER_HEAD). Not on the terrain layer: the head's world sweep would then
+## treat it as terrain and re-seat a small head against it every other tick,
+## which halves the measured push for reasons that have nothing to do with
+## the drive.
+const STALL_LOAD_LAYER: int = 2
+const STALL_LOAD_MASK: int = 2
+
+## Issue #180: a stalled drive pushes with the weapon's rated force.
+##
+## The extension drive is a velocity servo, and it used to size its push on
+## the pair's reduced mass even when the head could not move. Stalled, it then
+## asked for `extend_speed * reduced_mass / delta` and no more: about 6000 for
+## the axe, rated 11000. This braces a player, puts a 40 kg free-floating load
+## against its head, and drives the head into it -- once straight out along
+## the haft, once turning into it -- and reads the force off the load itself:
+## mass times the speed it gained over a window. Turning, the rated force is
+## rated at the head's anchor (`max_drive_force` through the lever arm, see
+## `Player._drive_angle`), so what is compared is the torque the load took
+## about the body divided by that lever. Nothing reads the drive's own
+## numbers. Every weapon on the roster has to push at least
+## STALL_FORCE_FLOOR of its `max_drive_force`, and no more than the clamp.
+##
+## The turn is here because the issue asked whether the angle drive had the
+## same cap. Mostly not: stalled, the angle drive asks for `drive_speed *
+## inertia / delta`, and past a reach of 15-37 px that was already more than
+## the force ceiling for every weapon on main. The one exception was the light
+## boomstick at its new 8000, which turned at 83%; `Player._stalled_mass`
+## gives the angle drive the same stall floor as the extension.
+func _scenario_stalled_drive_pushes_rated_force() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		player.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		var pushed: float = await _stalled_push(stage, player, stats, false)
+		var turned: float = await _stalled_push(stage, player, stats, true)
+		var rated: float = stats.max_drive_force
+		print("      %s: rated %.0f; stalled push %.0f (%.0f%%), stalled turn %.0f (%.0f%%)" % [
+			weapon, rated, pushed, 100.0 * pushed / rated, turned, 100.0 * turned / rated])
+		for measured: Array in [["pushing out", pushed], ["turning", turned]]:
+			var force: float = measured[1]
+			if force < 0.0:
+				failures.append("%s: the head never reached the load %s" % [weapon, measured[0]])
+			elif force < rated * STALL_FORCE_FLOOR:
+				failures.append("%s: stalled %s, it pushed %.0f of its rated %.0f (wanted at least %.0f%%)" % [
+					weapon, measured[0], force, rated, 100.0 * STALL_FORCE_FLOOR])
+			elif force > rated * STALL_FORCE_CEILING:
+				failures.append("%s: stalled %s, it pushed %.0f, past its rated %.0f: the clamp did not hold" % [
+					weapon, measured[0], force, rated])
+	await _teardown(stage)
+	return failures
+
+## Drive a braced player's head into a heavy free-floating load and return the
+## force it pushed with, read off the load: `(load + head) * dv / dt` over
+## STALL_WINDOW_TICKS. Pushing, the head goes from half reach straight out into
+## a flat-faced load just past the tip of its head. Turning, it swings up from pointing
+## right into a load just above its anchor, and the force is the torque the
+## load took about the body (the contact force on a round load acts through
+## its centre) over the head's reach. Returns -1.0 if the head never got
+## there.
+func _stalled_push(stage: Node2D, player: RigidBody2D, stats: WeaponStatsType, turning: bool) -> float:
+	player.freeze = false
+	player.teleport_to(DEEP_PARK_POSITION)
+	_brace(player)
+	player.set_input_vector(Vector2.RIGHT * STALL_START_REACH)
+	await _await_ticks(SETTLE_TICKS)
+
+	# Measured off the resource's circles in the haft's frame, where +x is
+	# out along the haft: the sword's and the boomstick's reach 54-68 px past
+	# their anchor, so the omnidirectional `_head_extent` will not do here.
+	var forward: float = _stats_forward_extent(stats)
+	var side: float = 0.0
+	for i in stats.head_circle_count():
+		side = maxf(side, absf(stats.head_circle_offsets[i].y) + stats.head_circle_radii[i])
+	var toward: Vector2 = Vector2.UP if turning else Vector2.RIGHT
+	var gap: float = (side if turning else forward) + STALL_LOAD_RADIUS + 1.0
+	var load_body := RigidBody2D.new()
+	load_body.mass = STALL_LOAD_MASS
+	load_body.gravity_scale = 0.0
+	load_body.linear_damp_mode = RigidBody2D.DAMP_MODE_REPLACE
+	load_body.linear_damp = 0.0
+	load_body.collision_layer = STALL_LOAD_LAYER
+	load_body.collision_mask = STALL_LOAD_MASK
+	var shape := CollisionShape2D.new()
+	if turning:
+		var circle := CircleShape2D.new()
+		circle.radius = STALL_LOAD_RADIUS
+		shape.shape = circle
+	else:
+		# A flat face square to the haft, so a long thin head (the boomstick's
+		# 70 px barrel) pushes it rather than skidding off a round load's
+		# shoulder and sliding past it.
+		var slab := RectangleShape2D.new()
+		slab.size = Vector2(2.0, STALL_SLAB_HEIGHT_FACTOR * 2.0) * STALL_LOAD_RADIUS
+		shape.shape = slab
+	load_body.add_child(shape)
+	stage.add_child(load_body)
+	load_body.global_position = player.weapon_head_position() + toward * gap
+	await physics_frame
+
+	player.set_input_vector(Vector2.UP * STALL_START_REACH if turning else Vector2.RIGHT)
+	var touched: bool = false
+	for _i in STALL_CONTACT_TICKS:
+		await physics_frame
+		if load_body.linear_velocity.length() > 1.0:
+			touched = true
+			break
+	var force: float = -1.0
+	if touched:
+		await _await_ticks(STALL_SKIP_TICKS)
+		var before: Vector2 = load_body.linear_velocity
+		var lever: float = _reach_of(player)
+		await _await_ticks(STALL_WINDOW_TICKS)
+		var push: Vector2 = (load_body.linear_velocity - before) * (STALL_LOAD_MASS + stats.mass) / (STALL_WINDOW_TICKS * _tick_seconds())
+		if turning:
+			var arm: Vector2 = load_body.global_position - player.global_position
+			force = absf(arm.cross(push)) / lever
+		else:
+			force = push.length()
+	player.set_input_vector(Vector2.ZERO)
+	load_body.queue_free()
+	player.freeze = false
+	await physics_frame
+	return force
+
+## How much the two heads overlap in `axe_wins_clash_against_every_weapon`:
+## each pair is set this much closer than their two full reaches plus the
+## length of head in front of each anchor, so both are pushing at everything
+## they have when they meet. Small enough that the shortest travel on the
+## roster (50 px: every weapon with 70 px of reach) can give all of it.
+const AXE_CLASH_OVERLAP: float = 40.0
+
+## Issue #180: the axe wins a head-on clash against every other weapon.
+##
+## `heavy_weapon_wins_clash` pins the axe against the dagger. Lifting the
+## stalled drive to its rated force (see `stalled_drive_pushes_rated_force`)
+## is what lets the medium weapons carry more force without beating the axe,
+## so the claim that matters now is the axe against all of them: braced,
+## walked head-on into each other, the axe has to surrender at least
+## MIN_GIVE_MARGIN less of its own commanded reach than the other weapon, from
+## both sides of the arena. Give is the measure because it owes nothing to
+## either weapon's reach (see `heavy_weapon_wins_clash`); where the heads met
+## would, and the staff is longer than the axe.
+func _scenario_axe_wins_clash_against_every_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var left: RigidBody2D = _spawn_player(stage, centre + Vector2.LEFT * ROSTER_CLASH_SEPARATION * 0.5)
+	var right: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * ROSTER_CLASH_SEPARATION * 0.5)
+	await physics_frame
+	var axe: WeaponStatsType = load(AXE_PATH)
+	if axe == null:
+		failures.append("the axe could not be loaded, so there is no clash to run")
+		await _teardown(stage)
+		return failures
+	_brace(left)
+	_brace(right)
+
+	for path: String in WEAPON_RESOURCE_PATHS:
+		if path == AXE_PATH:
+			continue
+		var weapon: String = path.get_file().get_basename()
+		var other: WeaponStatsType = load(path)
+		if other == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var separation: float = axe.max_reach + _stats_forward_extent(axe) \
+				+ other.max_reach + _stats_forward_extent(other) - AXE_CLASH_OVERLAP
+		var on_left: Dictionary = await _roster_clash(left, right, centre, axe, other, separation)
+		var on_right: Dictionary = await _roster_clash(left, right, centre, other, axe, separation)
+		print("      axe vs %s (%.0f vs %.0f N): axe on the left gave %.1f px, %s %.1f px; axe on the right gave %.1f px, %s %.1f px" % [
+			weapon, axe.max_drive_force, other.max_drive_force,
+			on_left["left_give"], weapon, on_left["right_give"],
+			on_right["right_give"], weapon, on_right["left_give"]])
+		failures.append_array(_clash_met_failures("axe vs %s, axe on the left" % weapon, on_left))
+		failures.append_array(_clash_met_failures("axe vs %s, axe on the right" % weapon, on_right))
+		for side: Array in [["left", on_left["left_give"], on_left["right_give"]], ["right", on_right["right_give"], on_right["left_give"]]]:
+			var axe_give: float = side[1]
+			var other_give: float = side[2]
+			if other_give - axe_give < MIN_GIVE_MARGIN:
+				failures.append("axe vs %s, axe on the %s: the axe gave %.1f px of its reach and the %s %.1f px (wanted the axe to give at least %.1f px less)" % [
+					weapon, side[0], axe_give, weapon, other_give, MIN_GIVE_MARGIN])
+
+	await _teardown(stage)
+	return failures
+
+## How far a weapon's head reaches in front of its anchor, out along the haft:
+## the furthest circle's offset plus radius in the haft's frame, read off the
+## resource. Unlike `_head_extent` this is forward only, which is the
+## direction two heads meet in head-on.
+func _stats_forward_extent(stats: WeaponStatsType) -> float:
+	var forward: float = 0.0
+	for i in stats.head_circle_count():
+		forward = maxf(forward, stats.head_circle_offsets[i].x + stats.head_circle_radii[i])
+	return forward

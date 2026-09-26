@@ -27,7 +27,7 @@
 ;
 ; Stats against the pickaxe's M/M/M baseline (retuned after the first
 ; playtest, #45): the sword is the pickaxe with its reach traded for blade.
-; Weight M is the baseline (mass 0.25, force 6000, drive 36 rad/s since #136). Reach S,
+; Weight M is the baseline (mass 0.25, force 8000 since #180, drive 36 rad/s since #136). Reach S,
 ; 70 px against 150, is balanced by a blade 2.5x as long as it first was --
 ; the blocking area and the reach are the trade. A quicker extension than the
 ; pickaxe (1150 px/s out, 800 px/s back, against 700 / 600 since #136) and damage a
@@ -40,7 +40,8 @@
 ; clamped inside the art.
 ;
 ; Issue #136, more responsive: drive 24 -> 36 rad/s, extension 900 -> 1150
-; px/s out and 600 -> 800 px/s back. The 6000 force ceiling stays. 1350 px/s
+; px/s out and 600 -> 800 px/s back. The force ceiling stayed at 6000 (8000
+; since #180). 1350 px/s
 ; out (the boomstick's) with the 36 rad/s drive put the long blade through
 ; another head in one charge of roster_heads_do_not_tunnel_head_reversed
 ; (135 degrees at 1800 px/s each); either change alone did not.
@@ -53,7 +54,7 @@ mass = 0.25
 drive_speed = 36.0
 extend_speed = 1150.0
 rest_return_speed = 800.0
-max_drive_force = 6000.0
+max_drive_force = 8000.0
 damage = 40.0
 sound_set = &"sword"
 head_circle_offsets = PackedVector2Array(-14.33, -0.05, -11.22, -0.05, -8.1, -0.05, -4.99, -0.05, -1.88, -0.05, 1.24, -0.05, 4.35, -0.05, 7.47, -0.05, 10.58, -0.05, 13.69, -0.05, 16.81, -0.05, 19.92, -0.05, 23.03, -0.05, 26.15, -0.05, 29.26, -0.05, 32.37, -0.05, 35.49, -0.05, 38.6, -0.05, 41.72, -0.05, 44.83, -0.05, 47.94, -0.05, 51.06, -0.05, 54.17, -0.05)
