@@ -628,6 +628,9 @@ func _run_all() -> void:
 
 	for name: String in to_run:
 		_scenario_completed = false
+		# Every scenario starts with rolls off, whatever the last one left
+		# behind: several switch them back on as they finish (#161's shards).
+		RoundManagerType.modifier_rolls_enabled = false
 		var failures: Array[String] = await _run_scenario(name)
 		if not _scenario_completed:
 			failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
@@ -16668,6 +16671,7 @@ const REAL_PAUSE_161_MSEC: int = 3500
 ## scoreboard says so at once.
 func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 	var failures: Array[String] = []
+	var rolls_were: bool = RoundManagerScript.modifier_rolls_enabled
 	RoundManagerScript.modifier_rolls_enabled = false
 	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
 	var server: Node = main.get_node("ControllerServer")
@@ -16694,7 +16698,7 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 	if not failures.is_empty():
 		await _close_phones(joined)
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = true
+		RoundManagerScript.modifier_rolls_enabled = rolls_were
 		return failures
 	for peer: WebSocketPeer in joined:
 		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
@@ -16707,7 +16711,7 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
 		await _close_phones(joined)
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = true
+		RoundManagerScript.modifier_rolls_enabled = rolls_were
 		return failures
 
 	# P2's match so far: four wins, a KO of P3, damage dealt, and a fresh hit on P1.
@@ -16753,7 +16757,7 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 	newcomer.close(1000, "scenario done")
 	await _close_phones([joined[0], joined[2]] as Array[WebSocketPeer])
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
+	RoundManagerScript.modifier_rolls_enabled = rolls_were
 	return failures
 
 ## Issue #161, item 2: a pause does not count against the 3 s KO credit
