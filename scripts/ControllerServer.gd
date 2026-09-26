@@ -15,7 +15,9 @@ extends Node
 ##
 ## Wire format phone -> host: one binary frame per controller frame, exactly
 ## 8 bytes, `float32 x` then `float32 y`, little-endian, unit-disc normalised.
-## Wire format host -> phone: one text frame `{"slot":<i>}` sent on bind, and
+## Wire format host -> phone: one text frame `{"slot":<i>,"id":<claim id>}`
+## sent on bind (the id is the one the phone sent, or one the host made up for
+## a client that sent none (issue #164), so it can present it next time), and
 ## a `{"t":"buzz","kind":<kind>}` text frame per `send_buzz()` (issue #34,
 ## ADR-0013), and a `{"t":"lobby",...}` text frame per `set_lobby_state()`
 ## (issue #120). Phone -> host text frames (#120): `{"t":"ready","v":<bool>}`
@@ -24,9 +26,18 @@ extends Node
 ## host phone only, `{"t":"host","cmd":"pause"|"resume"|"end"}` and
 ## `{"t":"host","cmd":"kick","slot":<int>}` (issue #149); and the phone's
 ## look (issue #151), `{"t":"hat","v":<hat id>}` and `{"t":"color","v":<int>}`,
-## answered by a `{"t":"looks",...}` frame to every phone (see `looks_message()`).
+## answered by a `{"t":"looks",...}` frame (see `looks_message()`).
 ## From the host phone only, `{"t":"solo","v":<bool>}` asks for bots, or
 ## for them to go (issue #152).
+##
+## Hardening (issue #164): a kick may carry the `"claim"` serial the lobby
+## state gave the target, and End match the `"match"` serial it gave the
+## match; a command whose serial is out of date -- a confirm left open while
+## the slot changed hands or the next match began -- is ignored. Text frames
+## are limited to `TEXT_FRAMES_PER_SEC` per slot, and a malformed one is
+## dropped quietly. A phone that connects with the id of a slot whose socket
+## is still open (a quick reconnect, the QR opened in a second tab) takes that
+## slot over, and the old socket is closed with `REPLACED_REASON`.
 ##
 ## Virtual controllers (issue #152): a bot holds a slot the way a phone does,
 ## but with no socket. `add_virtual_controller()` claims it, and
@@ -43,7 +54,9 @@ extends Node
 ##     eventually detected by the socket layer.
 ##   * A per-slot input deadline (`controller_timeout_sec`): no well-formed
 ##     packet for that long and the controller is treated as gone — the
-##     player's vector is zeroed so the weapon eases to rest, and the slot frees.
+##     player's vector is zeroed so the weapon eases to rest and the socket is
+##     closed. The slot's claim is held, as for any disconnect (ADR-0007),
+##     until the phone reclaims it or `expire_disconnected_claims()` drops it.
 ##
 ## Sockets that connect and never finish a request (speculative preconnect,
 ## port scanners, stalled handshakes) are dropped after
@@ -82,6 +95,19 @@ signal host_command(cmd: String, slot: int)
 const KICKED_REASON: String = "removed by the host"
 ## Commands the host phone may send besides "kick".
 const HOST_COMMANDS: PackedStringArray = ["pause", "resume", "end"]
+## The close reason (code 4002) an older socket gets when the same phone
+## connects again before it timed out (issue #164). The page does not retry
+## on it, so two tabs sharing one id cannot keep taking the slot off each other.
+const REPLACED_REASON: String = "opened somewhere else"
+## At most this many text frames per slot per second are acted on (issue
+## #164); the rest are dropped. A phone sends a handful on join and one per tap.
+const TEXT_FRAMES_PER_SEC: int = 20
+## Combining marks kept on one character of a nickname (issue #164): enough
+## for real accents, not for a tower of them.
+const MAX_STACKED_MARKS: int = 2
+## The lobby phases a match is being played in; entering one from any other
+## phase starts a new match serial (issue #164).
+const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 
 ## The hats a phone may pick (issue #151), by path (CLAUDE.md).
 const HatScript := preload("res://scripts/Hat.gd")
@@ -202,9 +228,10 @@ var _steady_frames: PackedInt32Array = PackedInt32Array()
 # 1 once a slot has ever held a controller: keeps the startup settle of an
 # untouched weapon out of the diagnostics.
 var _bound_once: PackedByteArray = PackedByteArray()
-## Whether a slot has an open roster entry (ADR-0007): set on first bind,
-## cleared only by `expire_disconnected_claims()` at a round boundary --
-## never by an ordinary disconnect, which is the whole point. A round loop
+## Whether a slot has an open roster entry (ADR-0007): set by `_fresh_claim()`,
+## cleared by `_release_claim()` -- when `expire_disconnected_claims()` runs at
+## a round boundary, on a kick, or when a bot leaves -- and never by an
+## ordinary disconnect, which is the whole point. A round loop
 ## reads `claimed_slots()` to know who is in the roster and calls
 ## `expire_disconnected_claims()` before every attempt to start a round.
 var _slot_claimed: PackedByteArray = PackedByteArray()
@@ -243,6 +270,20 @@ var _palette: Array[Color] = []
 var _lobby_state: Dictionary = {}
 ## 1 where a bot holds the slot (issue #152), with no socket behind it.
 var _slot_virtual: PackedByteArray = PackedByteArray()
+## Issue #164. A serial per fresh claim, so a kick aimed at "whoever held slot
+## 2 when the confirm opened" cannot land on the next player in slot 2; 0 for
+## an unclaimed slot. Sent to the phones in the lobby state's player entries.
+var _slot_claim_serial: PackedInt32Array = PackedInt32Array()
+var _last_claim_serial: int = 0
+## Issue #164. Bumped each time a match starts (see MATCH_PHASES), and sent as
+## the lobby state's "match", so an old End match cannot end the next one.
+var _match_serial: int = 0
+## Issue #164. Each slot's text-frame budget: when its one-second window
+## began, and how many text frames arrived in it.
+var _slot_text_window_msec: PackedInt64Array = PackedInt64Array()
+var _slot_text_count: PackedInt32Array = PackedInt32Array()
+## Issue #164. Ids made up for clients that never sent one.
+var _last_generated_id: int = 0
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 ## The bots' owner, built in `_ready()` so no scene has to add it.
 var bot_director: Node = null
@@ -278,6 +319,9 @@ func _ready() -> void:
 		_slot_color[i] = -1
 		_palette.append(_players[i].identity_color if _players[i] != null else Color(0, 0, 0, 0))
 	_slot_virtual.resize(_players.size())
+	_slot_claim_serial.resize(_players.size())
+	_slot_text_window_msec.resize(_players.size())
+	_slot_text_count.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 		_smoothers.append(InputSmoother.new())
@@ -584,44 +628,58 @@ func _read_client_id(peer: WebSocketPeer) -> Variant:
 		var pkt: PackedByteArray = peer.get_packet()
 		if not peer.was_string_packet():
 			continue
-		var parsed: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		var parsed: Variant = _parse_json(pkt.get_string_from_utf8())
 		if parsed is Dictionary and typeof(parsed.get("id")) == TYPE_STRING:
 			return parsed["id"]
 	return null
 
-## Bind a newly-identified controller (ADR-0007). A non-empty id that matches
-## a claimed slot whose controller is currently disconnected reclaims that
-## exact slot -- this is the whole reconnect path. Otherwise the lowest
-## unclaimed slot is claimed fresh, under this id (which may be empty, for a
-## client that never sent one). Refuses the connection once every slot is
-## claimed, exactly as before id-matching existed.
+## `text` parsed as JSON, or null. Unlike `JSON.parse_string()` it prints
+## nothing for malformed text (issue #164): a phone must not be able to fill
+## the host's log with engine errors.
+static func _parse_json(text: String) -> Variant:
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		return null
+	return json.data
+
+## Bind a newly-identified controller (ADR-0007). An id that matches a claimed
+## slot takes that exact slot back -- this is the whole reconnect path. If the
+## slot's old socket is still open (the phone dropped and came back before the
+## old one timed out, or the same page is open in a second tab), the old socket
+## is closed with REPLACED_REASON and the new one takes over (issue #164);
+## otherwise the phone would be handed a second, ghost slot. With no match the
+## lowest unclaimed slot is claimed fresh under this id -- one the host makes
+## up if the client sent none (issue #164), so it can still be told apart and
+## banned. Refuses the connection once every slot is claimed.
 func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
-	if not id.is_empty() and _kicked_ids.has(id):
+	if id.is_empty():
+		_last_generated_id += 1
+		id = "host-assigned-%d-%d" % [_last_generated_id, randi()]
+	if _kicked_ids.has(id):
 		peer.close(4001, KICKED_REASON)
 		if _log_input:
 			print("controller refused: kicked by the host")
 		return
-	if not id.is_empty():
-		for slot in _slot_peers.size():
-			if _slot_claimed[slot] == 1 and _slot_peers[slot] == null and _slot_client_id[slot] == id:
-				_attach(slot, peer)
-				_broadcast_looks()
-				if _log_input:
-					print("slot %d reclaimed" % slot)
-				return
+	for slot in _slot_peers.size():
+		if _slot_claimed[slot] != 1 or _slot_virtual[slot] == 1 or _slot_client_id[slot] != id:
+			continue
+		var old: WebSocketPeer = _slot_peers[slot]
+		if old != null:
+			old.close(4002, REPLACED_REASON)
+			_unbind(slot)
+		_attach(slot, peer)
+		_broadcast_looks(peer)
+		if _log_input:
+			print("slot %d %s" % [slot, "taken over by a new connection" if old != null else "reclaimed"])
+		return
 	for slot in _slot_peers.size():
 		if _slot_claimed[slot] == 1:
 			continue
 		if _players[slot] == null:
 			continue
-		_slot_claimed[slot] = 1
-		_slot_client_id[slot] = id
-		_slot_name[slot] = ""
-		_join_order.erase(slot)
-		_join_order.append(slot)
-		_claim_look(slot)
+		_fresh_claim(slot, id, "")
 		_attach(slot, peer)
-		_broadcast_looks()
+		_broadcast_looks(peer)
 		player_joined.emit(slot)
 		if _log_input:
 			print("slot %d claimed" % slot)
@@ -630,17 +688,53 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 	if _log_input:
 		print("controller refused: no free player slot")
 
+## Open a roster entry on `slot` (ADR-0007) for a phone with client id `id`
+## or, with `virtual`, for a bot: at the back of the join order, under a new
+## claim serial, bare-headed in its automatic colour. The one place a claim
+## starts (issue #164).
+func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false) -> void:
+	_slot_claimed[slot] = 1
+	_slot_virtual[slot] = 1 if virtual else 0
+	_slot_client_id[slot] = id
+	_slot_name[slot] = nickname
+	_slot_ready[slot] = 0
+	_last_claim_serial += 1
+	_slot_claim_serial[slot] = _last_claim_serial
+	_join_order.erase(slot)
+	_join_order.append(slot)
+	_claim_look(slot)
+
+## Close `slot`'s roster entry: everything `_fresh_claim()` set goes, and its
+## colour is free again. The one place a claim ends (issue #164) -- an expired
+## claim, a kick and a departing bot all come here. The caller unbinds any
+## socket first and broadcasts the looks after.
+func _release_claim(slot: int) -> void:
+	_slot_claimed[slot] = 0
+	_slot_virtual[slot] = 0
+	_slot_client_id[slot] = ""
+	_slot_name[slot] = ""
+	_slot_ready[slot] = 0
+	_slot_claim_serial[slot] = 0
+	_join_order.erase(slot)
+	_release_look(slot)
+
+## Bind `peer` to `slot`: the slot frame, the current lobby state, and the full
+## looks frame -- hat drawings included, which only a newly bound phone needs
+## (issue #164). The caller tells every other phone with `_broadcast_looks(peer)`.
 func _attach(slot: int, peer: WebSocketPeer) -> void:
 	_slot_peers[slot] = peer
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	_bound_once[slot] = 1
+	_slot_text_count[slot] = 0
+	_slot_text_window_msec[slot] = 0
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
-	peer.send_text(JSON.stringify({"slot": slot}))
+	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
-		peer.send_text(JSON.stringify(_lobby_state))
+		peer.send_text(_lobby_text())
+	peer.send_text(JSON.stringify(looks_message()))
 
 ## Free the slot and park its player: zeroing the vector first means the weapon
 ## eases back to rest over several frames instead of holding the controller's
@@ -648,7 +742,7 @@ func _attach(slot: int, peer: WebSocketPeer) -> void:
 ##
 ## Does not touch `_slot_claimed` / `_slot_client_id`: an ordinary disconnect
 ## keeps the roster entry open for the rest of the round (ADR-0007). Only
-## `expire_disconnected_claims()` clears those, at a round boundary.
+## `_release_claim()` clears those.
 func _unbind(slot: int) -> void:
 	_slot_peers[slot] = null
 	_smoothers[slot].reset()
@@ -701,11 +795,7 @@ func expire_disconnected_claims() -> void:
 	var released: bool = false
 	for slot in _slot_claimed.size():
 		if _slot_claimed[slot] == 1 and not slot_has_controller(slot):
-			_slot_claimed[slot] = 0
-			_slot_client_id[slot] = ""
-			_slot_name[slot] = ""
-			_join_order.erase(slot)
-			_release_look(slot)
+			_release_claim(slot)
 			released = true
 	if released:
 		_broadcast_looks()
@@ -719,7 +809,8 @@ func _drain(slot: int, peer: WebSocketPeer) -> void:
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
 		if peer.was_string_packet():
-			_handle_text(slot, pkt.get_string_from_utf8())
+			if _take_text_budget(slot):
+				_handle_text(slot, pkt.get_string_from_utf8())
 			continue
 		if pkt.size() != PACKET_SIZE:
 			continue
@@ -766,47 +857,83 @@ func _log_weapon(slot: int) -> void:
 # "first to N") and relays RoundManager's lobby state back to them.
 # RoundManager decides what any of it means.
 
-## A phone's text frame: Ready toggles, and the host's match length. Anything
-## else is ignored, as is a target from a phone that is not the host.
+## Whether `slot` may have one more text frame acted on this second (issue
+## #164). A phone flooding the host -- malformed or not -- is cut off at
+## TEXT_FRAMES_PER_SEC until the next window.
+func _take_text_budget(slot: int) -> bool:
+	var now: int = Time.get_ticks_msec()
+	if now - _slot_text_window_msec[slot] >= 1000:
+		_slot_text_window_msec[slot] = now
+		_slot_text_count[slot] = 0
+	_slot_text_count[slot] += 1
+	if _slot_text_count[slot] == TEXT_FRAMES_PER_SEC + 1 and _log_input:
+		print("slot %d text frames over %d/s: dropping the rest this second" % [slot, TEXT_FRAMES_PER_SEC])
+	return _slot_text_count[slot] <= TEXT_FRAMES_PER_SEC
+
+## A phone's text frame (see the header for the list): Ready, nickname, look,
+## Solo practice, the host's match length and host-menu commands. A frame that
+## is not a JSON object, has an unknown "t", or carries a value of the wrong
+## type (a "v" that is not a bool for Ready and Solo, say) is ignored, as is a
+## host-only frame from a phone that is not the host.
 func _handle_text(slot: int, text: String) -> void:
-	var msg: Variant = JSON.parse_string(text)
+	var msg: Variant = _parse_json(text)
 	if not msg is Dictionary:
 		return
 	match str(msg.get("t", "")):
 		"ready":
-			_slot_ready[slot] = 1 if bool(msg.get("v", false)) else 0
+			var on: Variant = msg.get("v")
+			if not on is bool:
+				return
+			_slot_ready[slot] = 1 if on else 0
 			if _log_input:
 				print("slot %d ready %s" % [slot, _slot_ready[slot] == 1])
 		"name":
-			_slot_name[slot] = clean_name(str(msg.get("v", "")))
+			var nickname: Variant = msg.get("v")
+			if not nickname is String:
+				return
+			_slot_name[slot] = clean_name(nickname)
 			if _log_input:
 				print("slot %d name '%s'" % [slot, _slot_name[slot]])
 		"target":
 			var n: Variant = msg.get("n")
-			if slot == host_slot() and (n is float or n is int):
+			if slot == host_slot() and _is_number(n):
 				_match_target = clampi(int(n), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
 				if _log_input:
 					print("slot %d set match target %d" % [slot, _match_target])
 		"host":
 			_handle_host_command(slot, msg)
 		"hat":
-			set_slot_hat(slot, str(msg.get("v", "")))
+			var hat: Variant = msg.get("v")
+			if hat is String:
+				set_slot_hat(slot, hat)
 		"color":
 			var c: Variant = msg.get("v")
-			if c is float or c is int:
+			if _is_number(c):
 				request_color(slot, int(c))
 		"solo":
-			if slot == host_slot() and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
-				solo_requested.emit(bool(msg.get("v", false)))
+			var on: Variant = msg.get("v")
+			if slot == host_slot() and on is bool and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+				solo_requested.emit(on)
+
+## A finite JSON number (JSON gives floats; a scenario may send ints).
+static func _is_number(v: Variant) -> bool:
+	return v is int or (v is float and is_finite(v))
 
 ## A host-menu request (issue #149). Anything from a phone that is not the host
 ## right now is ignored, as is an unknown command or a kick aimed at the host
-## itself or at a slot nobody holds.
+## itself or at a slot nobody holds. Issue #164: a request carrying a "match"
+## serial that is not the current match's, or a kick carrying a "claim" serial
+## that is not the target slot's current claim, is stale -- a confirm that sat
+## open while things changed -- and is ignored too.
 func _handle_host_command(slot: int, msg: Dictionary) -> void:
 	var cmd: String = str(msg.get("cmd", ""))
 	if slot != host_slot():
 		if _log_input:
 			print("slot %d host command '%s' ignored: not the host" % [slot, cmd])
+		return
+	if msg.has("match") and (not _is_number(msg["match"]) or int(msg["match"]) != _match_serial):
+		if _log_input:
+			print("slot %d host command '%s' ignored: stale match %s (now %d)" % [slot, cmd, msg["match"], _match_serial])
 		return
 	if HOST_COMMANDS.has(cmd):
 		if _log_input:
@@ -814,8 +941,23 @@ func _handle_host_command(slot: int, msg: Dictionary) -> void:
 		host_command.emit(cmd, -1)
 	elif cmd == "kick":
 		var target: Variant = msg.get("slot")
-		if (target is float or target is int) and kick(int(target)):
-			host_command.emit("kick", int(target))
+		if not _is_number(target):
+			return
+		var t: int = int(target)
+		if msg.has("claim") and (not _is_number(msg["claim"]) or int(msg["claim"]) != claim_serial(t)):
+			if _log_input:
+				print("slot %d kick of slot %d ignored: stale claim %s (now %d)" % [slot, t, msg["claim"], claim_serial(t)])
+			return
+		if kick(t):
+			host_command.emit("kick", t)
+
+## `slot`'s current claim serial (issue #164), or 0 when it is unclaimed.
+func claim_serial(slot: int) -> int:
+	return _slot_claim_serial[slot] if slot >= 0 and slot < _slot_claim_serial.size() else 0
+
+## The current match serial (issue #164): bumped each time a match starts.
+func match_serial() -> int:
+	return _match_serial
 
 ## Remove `slot` from the roster at once (issue #149): its phone is told why
 ## and hung up on, its claim is dropped -- not held to the end of the round as
@@ -834,12 +976,7 @@ func kick(slot: int) -> bool:
 		_unbind(slot)
 	if not _slot_client_id[slot].is_empty() and not _kicked_ids.has(_slot_client_id[slot]):
 		_kicked_ids.append(_slot_client_id[slot])
-	_slot_claimed[slot] = 0
-	_slot_client_id[slot] = ""
-	_slot_name[slot] = ""
-	_slot_ready[slot] = 0
-	_join_order.erase(slot)
-	_release_look(slot)
+	_release_claim(slot)
 	_broadcast_looks()
 	if _log_input:
 		print("slot %d kicked by the host" % slot)
@@ -874,29 +1011,81 @@ func match_target() -> int:
 	return _match_target
 
 ## Send the lobby state to every connected phone, and keep it for any phone
-## that binds later.
+## that binds later. Issue #164: entering a match phase from any other phase
+## starts a new match serial.
 func set_lobby_state(state: Dictionary) -> void:
+	var was: String = str(_lobby_state.get("phase", ""))
 	_lobby_state = state.duplicate(true)
 	_lobby_state["t"] = "lobby"
-	for entry: Variant in _lobby_state.get("players", []):
-		if entry is Dictionary and is_virtual(int(entry.get("slot", -1))):
-			entry["bot"] = true
-	var text: String = JSON.stringify(_lobby_state)
+	if MATCH_PHASES.has(str(_lobby_state.get("phase", ""))) and not MATCH_PHASES.has(was):
+		_match_serial += 1
+	var text: String = _lobby_text()
 	for peer: WebSocketPeer in _slot_peers:
 		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
+
+## The stored lobby state as sent to a phone, marked up as it stands right
+## now: each bot's entry flagged "bot" (issue #152), each entry's "claim"
+## serial and the "match" serial (issue #164), which the host menu echoes
+## back so the host can tell a stale kick or End match from a current one.
+func _lobby_text() -> String:
+	_lobby_state["match"] = _match_serial
+	for entry: Variant in _lobby_state.get("players", []):
+		if entry is Dictionary:
+			var slot: int = int(entry.get("slot", -1))
+			if is_virtual(slot):
+				entry["bot"] = true
+			else:
+				entry.erase("bot")
+			entry["claim"] = claim_serial(slot)
+	return JSON.stringify(_lobby_state)
 
 ## A slot's nickname (issue #121), or "" when its phone has not sent one.
 func slot_name(slot: int) -> String:
 	return _slot_name[slot] if slot >= 0 and slot < _slot_name.size() else ""
 
-## A nickname as the shared screen may show it: control characters dropped,
+## Code points a nickname may use (issue #164), as inclusive [first, last]
+## pairs: printable text in every script, punctuation, symbols and emoji. Left
+## out: control and format characters (zero-width ones, bidi embeddings,
+## overrides and isolates, the line and paragraph separators), every space but
+## the plain one, invisible fillers, private use, variation selectors and tags.
+const NAME_CHAR_RANGES: PackedInt32Array = [
+	0x20, 0x7E, 0xA1, 0xAC, 0xAE, 0x2FF, 0x370, 0x5FF, 0x606, 0x61B,
+	0x61D, 0x6DC, 0x6DE, 0x70E, 0x710, 0x8E1, 0x8E3, 0x115E, 0x1161, 0x167F,
+	0x1681, 0x180A, 0x1810, 0x1FFF, 0x2010, 0x2027, 0x2030, 0x205E, 0x2070, 0x2FFF,
+	0x3001, 0x3163, 0x3165, 0xD7FF, 0xF900, 0xFDFF, 0xFE10, 0xFEFE, 0xFF00, 0xFF9F,
+	0xFFA1, 0xFFEF, 0x10000, 0x1BC9F, 0x1BCA4, 0x1D172, 0x1D17B, 0x2FFFF,
+]
+## The combining marks a nickname may stack on one character, at most
+## MAX_STACKED_MARKS deep (issue #164): the generic diacritic blocks, which is
+## what a tower of accents is built from.
+const NAME_MARK_RANGES: PackedInt32Array = [
+	0x300, 0x36F, 0x1AB0, 0x1AFF, 0x1DC0, 0x1DFF, 0x20D0, 0x20FF, 0xFE20, 0xFE2F,
+]
+
+static func _in_ranges(c: int, ranges: PackedInt32Array) -> bool:
+	for i in range(0, ranges.size(), 2):
+		if c >= ranges[i] and c <= ranges[i + 1]:
+			return true
+	return false
+
+## A nickname as the shared screen may show it: only whitelisted characters
+## (NAME_CHAR_RANGES), at most MAX_STACKED_MARKS combining marks on any one,
 ## edges trimmed, at most MAX_NAME_LENGTH characters.
 static func clean_name(raw: String) -> String:
 	var kept: String = ""
+	var marks: int = 0
 	for i in raw.length():
-		if raw.unicode_at(i) >= 32 and raw.unicode_at(i) != 127:
-			kept += raw[i]
+		var c: int = raw.unicode_at(i)
+		if _in_ranges(c, NAME_MARK_RANGES):
+			if kept.is_empty() or marks >= MAX_STACKED_MARKS:
+				continue
+			marks += 1
+		elif _in_ranges(c, NAME_CHAR_RANGES):
+			marks = 0
+		else:
+			continue
+		kept += raw[i]
 	return kept.strip_edges().left(MAX_NAME_LENGTH).strip_edges()
 
 # --- Looks: hat and colour (issue #151) ----------------------------------------
@@ -984,10 +1173,15 @@ func slot_hat(slot: int) -> String:
 func slot_color(slot: int) -> int:
 	return _slot_color[slot] if slot >= 0 and slot < _slot_color.size() else -1
 
-## What every phone is told about looks: the palette ("#rrggbb", or "" for a
-## colour no player can wear), each hat's id, name and drawing (so the
-## picker's previews are exactly what the shared screen draws), and each
-## claimed slot's colour and hat -- a colour listed there is taken.
+## `Hat.gd`'s drawings as the phones get them, built once.
+var _hat_art: Dictionary = {}
+
+## What a phone is told about looks when it binds: the palette ("#rrggbb", or
+## "" for a colour no player can wear), each hat's id, name and drawing (so
+## the picker's previews are exactly what the shared screen draws), and each
+## claimed slot's colour and hat -- a colour listed there is taken. None of it
+## but the last part ever changes, so after this a phone gets only
+## `looks_update_message()` (issue #164): the drawings are a few kilobytes.
 func looks_message() -> Dictionary:
 	var palette: Array = []
 	for i in _palette.size():
@@ -995,21 +1189,29 @@ func looks_message() -> Dictionary:
 	var hats: Array = []
 	for id: String in HatScript.IDS:
 		hats.append({"id": id, "label": HatScript.LABELS.get(id, id)})
+	if _hat_art.is_empty():
+		_hat_art = HatScript.art_for_phone()
+	var msg: Dictionary = looks_update_message()
+	msg["palette"] = palette
+	msg["hats"] = hats
+	msg["art"] = _hat_art
+	return msg
+
+## What every phone is told when someone's looks change (issue #164): just
+## each claimed slot's colour and hat.
+func looks_update_message() -> Dictionary:
 	var looks: Array = []
 	for slot in _slot_claimed.size():
 		if _slot_claimed[slot] == 1:
 			looks.append({"slot": slot, "color": _slot_color[slot], "hat": _slot_hat[slot]})
-	if _hat_art.is_empty():
-		_hat_art = HatScript.art_for_phone()
-	return {"t": "looks", "palette": palette, "hats": hats, "art": _hat_art, "looks": looks}
+	return {"t": "looks", "looks": looks}
 
-## `Hat.gd`'s drawings as the phones get them, built once.
-var _hat_art: Dictionary = {}
-
-func _broadcast_looks() -> void:
-	var text: String = JSON.stringify(looks_message())
+## Tell every connected phone but `except` (one that has just been sent the
+## full looks frame on binding) who wears what.
+func _broadcast_looks(except: WebSocketPeer = null) -> void:
+	var text: String = JSON.stringify(looks_update_message())
 	for peer: WebSocketPeer in _slot_peers:
-		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		if peer != null and peer != except and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
 
 # --- Virtual controllers (issue #152) ----------------------------------------
@@ -1021,14 +1223,8 @@ func add_virtual_controller(bot_name: String) -> int:
 	for slot in _slot_peers.size():
 		if _slot_claimed[slot] == 1 or _players[slot] == null:
 			continue
-		_slot_claimed[slot] = 1
-		_slot_virtual[slot] = 1
-		_slot_client_id[slot] = ""
-		_slot_name[slot] = clean_name(bot_name)
-		_join_order.erase(slot)
-		_join_order.append(slot)
+		_fresh_claim(slot, "", clean_name(bot_name), true)
 		_smoothers[slot].reset()
-		_claim_look(slot)
 		_players[slot].bind_controller()
 		_broadcast_looks()
 		player_joined.emit(slot)
@@ -1042,15 +1238,11 @@ func add_virtual_controller(bot_name: String) -> int:
 func remove_virtual_controller(slot: int) -> void:
 	if not is_virtual(slot):
 		return
-	_slot_virtual[slot] = 0
-	_slot_claimed[slot] = 0
-	_slot_name[slot] = ""
-	_join_order.erase(slot)
 	_smoothers[slot].reset()
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
-	_release_look(slot)
+	_release_claim(slot)
 	_broadcast_looks()
 	if _log_input:
 		print("slot %d bot removed" % slot)
