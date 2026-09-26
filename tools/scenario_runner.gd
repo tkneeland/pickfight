@@ -3190,6 +3190,7 @@ func _scenario_abandoned_round_ends_without_winner() -> Array[String]:
 ## global class cache lives in the gitignored `.godot/` and only an editor
 ## run builds it, so a fresh clone would fail to resolve the name.
 const RoundManagerScript := preload("res://scripts/RoundManager.gd")
+const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const StubRosterScript := preload("res://tools/stub_roster.gd")
 
 ## Clear air above the arena, well apart, so a full-reach weapon never
@@ -11692,7 +11693,7 @@ const PICKUP_CLEAR_DRAWS: int = 200
 
 func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
 	var failures: Array[String] = []
-	var radius: float = RoundManagerScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
+	var radius: float = PickupDirectorScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
 	var spawns := PackedVector2Array([Vector2(-300, 0), Vector2(300, 0)])
 	var near := Vector2(-300, -40)
 	var clear := Vector2(0, -40)
@@ -11708,7 +11709,7 @@ func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
 		rm._stage_spawn_points = stage.get_spawn_points()
 		var bad: int = 0
 		for i in PICKUP_CLEAR_DRAWS:
-			var spot: Variant = rm._free_pickup_spot()
+			var spot: Variant = rm._pickup_director.free_spot()
 			if spot == null or (spot as Vector2).distance_to(case[2]) > 1.0:
 				bad += 1
 		print("      %s: %d of %d draws off the expected spot %s (clear radius %.0f px)" % [case[0], bad, PICKUP_CLEAR_DRAWS, case[2], radius])
@@ -11724,7 +11725,7 @@ func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
 ## its player spawns, so the round-start pickup never lands on a player.
 func _scenario_every_stage_has_pickup_spot_clear_of_spawns() -> Array[String]:
 	var failures: Array[String] = []
-	var radius: float = RoundManagerScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
+	var radius: float = PickupDirectorScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
 	for path: String in STAGE_PATHS:
 		var stage: Node2D = (load(path) as PackedScene).instantiate()
 		get_root().add_child(stage)
@@ -14338,11 +14339,11 @@ func _scenario_pickups_come_faster_and_more_with_a_crowd() -> Array[String]:
 		for i in count:
 			slots.append(i)
 		roster.slots = slots
-		if shipped._pickup_cap() != int(CROWD_PICKUP_CAP[count]):
-			failures.append("%d players: pickup cap %d, expected %d" % [count, shipped._pickup_cap(), CROWD_PICKUP_CAP[count]])
+		if shipped._pickup_director.cap() != int(CROWD_PICKUP_CAP[count]):
+			failures.append("%d players: pickup cap %d, expected %d" % [count, shipped._pickup_director.cap(), CROWD_PICKUP_CAP[count]])
 		var expected_sec: float = SHIPPED_PICKUP_INTERVAL_SEC * (CROWD_INTERVAL_SCALE if count >= CROWD_ROSTER else 1.0)
-		if not is_equal_approx(shipped._pickup_interval_sec(), expected_sec):
-			failures.append("%d players: pickup every %.2f s, expected %.2f" % [count, shipped._pickup_interval_sec(), expected_sec])
+		if not is_equal_approx(shipped._pickup_director.interval_sec(), expected_sec):
+			failures.append("%d players: pickup every %.2f s, expected %.2f" % [count, shipped._pickup_director.interval_sec(), expected_sec])
 	shipped.free()
 	roster.free()
 
