@@ -268,6 +268,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"announcer_said_capped_and_lengths_from_decode",
 	"roster_traversal_is_measured",
 	"timers_follow_game_time",
+	"harness_static_left_flipped",
+	"harness_static_restored_for_next_scenario",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -662,10 +664,7 @@ func _run_all() -> void:
 	var fail_count: int = 0
 
 	for name: String in to_run:
-		_scenario_completed = false
-		var failures: Array[String] = await _run_scenario(name)
-		if not _scenario_completed:
-			failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
+		var failures: Array[String] = await _run_one(name)
 		if failures.is_empty():
 			print("PASS  %s" % name)
 			pass_count += 1
@@ -695,6 +694,34 @@ func _run_all() -> void:
 				announcer.call("clear")
 		await sfx.release()
 	quit(1 if fail_count > 0 else 0)
+
+## Runs one scenario the way the run does. Every scenario starts from the
+## harness's statics and cannot leave them changed for the next one, whatever
+## order it runs in (#179).
+func _run_one(name: String) -> Array[String]:
+	_scenario_completed = false
+	var statics: Dictionary = _snapshot_statics()
+	var failures: Array[String] = await _run_scenario(name)
+	_restore_statics(statics)
+	if not _scenario_completed:
+		failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
+	return failures
+
+## The script statics that scenarios switch for themselves (#179). A static
+## outlives the scenario that set it, so one scenario forgetting to switch it
+## back -- or a SCRIPT ERROR abandoning it before it could -- changes what
+## every later scenario in the same process sees, and a pass would depend on
+## the shard order. `_run_all()` snapshots these before each scenario and
+## puts them back after it. A new static a scenario sets goes here too.
+func _snapshot_statics() -> Dictionary:
+	return {
+		"modifier_rolls_enabled": RoundManagerType.modifier_rolls_enabled,
+		"bot_extra_args": BotDirectorScript.extra_args.duplicate(),
+	}
+
+func _restore_statics(snapshot: Dictionary) -> void:
+	RoundManagerType.modifier_rolls_enabled = snapshot["modifier_rolls_enabled"]
+	BotDirectorScript.extra_args = (snapshot["bot_extra_args"] as PackedStringArray).duplicate()
 
 func _run_scenario(name: String) -> Array[String]:
 	match name:
@@ -1130,6 +1157,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_traversal_is_measured()
 		"timers_follow_game_time":
 			return await _scenario_timers_follow_game_time()
+		"harness_static_left_flipped":
+			return await _scenario_harness_static_left_flipped()
+		"harness_static_restored_for_next_scenario":
+			return await _scenario_harness_static_restored_for_next_scenario()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -8123,7 +8154,6 @@ func _scenario_round_modifier_chance_zero_disables() -> Array[String]:
 		if with_modifier != expected:
 			failures.append("chance %.0f: %d of %d rounds had a modifier, expected %d" % [
 				chance, with_modifier, MODIFIER_CHANCE_ROUNDS, expected])
-	RoundManagerType.modifier_rolls_enabled = false
 	await _teardown(loop["stage"])
 	return failures
 
@@ -12689,7 +12719,6 @@ func _scenario_eight_phones_join_and_play_a_round() -> Array[String]:
 			failures.append("the eight-player podium needs %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	return failures
 
 ## Issue #138: until #137 gives every stage eight spawn points, eight players
@@ -13177,7 +13206,6 @@ func _scenario_host_phone_controls_over_websocket() -> Array[String]:
 	paused = false
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	return failures
 
 ## Issue #149: the lobby on the shared screen explains how to play -- drag and
@@ -13439,7 +13467,6 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	if feed == null:
 		failures.append("Main.tscn's RoundManager has no kill feed")
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = true
 		return failures
 	var qr: Control = main.get_node("UI/JoinQrCode") as Control
 	for i in 7:
@@ -13489,7 +13516,6 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	return failures
 
 # --- Wide stages and eight spawns (issue #137) ---------------------------------
@@ -14043,7 +14069,6 @@ func _scenario_name_tags_on_for_every_living_player_all_round() -> Array[String]
 			failures.append("P%d's tag stayed up once the round was over" % (i + 1))
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 
 	# No lobby at all: the tags are not a lobby feature.
 	var loop: Dictionary = _new_round_loop(10.0)
@@ -14098,8 +14123,10 @@ func _tag_problem(rm: Node, players: Array[RigidBody2D], names: Array[String], s
 ## as taken and untappable, and uses the host's colour for this phone.
 func _scenario_controller_page_look_picker_after_name() -> Array[String]:
 	var failures: Array[String] = []
-	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
-	var server_src: String = FileAccess.get_file_as_string("res://scripts/ControllerServer.gd")
+	# A Windows checkout may have CRLF line endings; the matches below are
+	# written for LF (#179).
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH).replace("\r\n", "\n")
+	var server_src: String = FileAccess.get_file_as_string("res://scripts/ControllerServer.gd").replace("\r\n", "\n")
 	if not page.contains('<div id="look-prompt">'):
 		failures.append("the page has no look picker")
 	var z_re := RegEx.new()
@@ -14196,7 +14223,6 @@ func _scenario_bots_flag_fills_lobby_and_bots_fight() -> Array[String]:
 	var rm: Node = built["rm"]
 	get_root().add_child(main)
 	await _await_ticks(5)
-	BotDirectorScript.extra_args = PackedStringArray()
 	var director: Node = server.bot_director
 	var bot_slots: Array[int] = server.virtual_slots()
 	if director == null or director.bot_count() != BOT_FLAG_COUNT or bot_slots.size() != BOT_FLAG_COUNT:
@@ -14913,7 +14939,6 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 		if id != "":
 			rolled += 1
 			counts[id] = int(counts.get(id, 0)) + 1
-	RoundManagerType.modifier_rolls_enabled = false
 	rm.free()
 	var rate: float = float(rolled) / float(MIXUP_RATE_ROLLS)
 	print("      modifier_chance %.3f: %d of %d rounds rolled a mixup (%.3f), %s" % [chance, rolled, MIXUP_RATE_ROLLS, rate, counts])
@@ -15607,7 +15632,6 @@ func _scenario_host_drop_while_paused_hands_menu_to_next_phone() -> Array[String
 	if joined.is_empty():
 		failures.append(built["bad_join"])
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = true
 		_scenario_completed = true
 		return failures
 	for peer: WebSocketPeer in joined:
@@ -15640,7 +15664,6 @@ func _scenario_host_drop_while_paused_hands_menu_to_next_phone() -> Array[String
 	paused = false
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
 	return failures
 
@@ -15686,7 +15709,6 @@ func _scenario_solo_ignored_mid_match_and_removed_bots_leave_round() -> Array[St
 	director.remove_bots()
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
 	return failures
 
@@ -15734,7 +15756,6 @@ func _scenario_bots_stop_thinking_while_paused() -> Array[String]:
 	director.remove_bots()
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
 	return failures
 
@@ -15755,7 +15776,6 @@ func _scenario_solo_bots_go_when_the_last_phone_leaves() -> Array[String]:
 	if joined.is_empty():
 		failures.append(built["bad_join"])
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = true
 		_scenario_completed = true
 		return failures
 	rm.lobby_countdown_sec = ORPHAN_COUNTDOWN_SEC
@@ -15820,7 +15840,6 @@ func _scenario_solo_bots_go_when_the_last_phone_leaves() -> Array[String]:
 	director.remove_bots()
 	await _close_phones(joined)
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
 	return failures
 
@@ -15907,7 +15926,6 @@ func _scenario_bot_upkeep_cached_and_names_unique() -> Array[String]:
 				failures.append("a KO in slot %d was not published by the next frame (alive %s)" % [victim, alive])
 	director.remove_bots()
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
 	return failures
 
@@ -16620,7 +16638,6 @@ const REAL_PAUSE_161_MSEC: int = 3500
 ## scoreboard says so at once.
 func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 	var failures: Array[String] = []
-	var rolls_were: bool = RoundManagerScript.modifier_rolls_enabled
 	RoundManagerScript.modifier_rolls_enabled = false
 	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
 	var server: Node = main.get_node("ControllerServer")
@@ -16647,7 +16664,6 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 	if not failures.is_empty():
 		await _close_phones(joined)
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = rolls_were
 		return failures
 	for peer: WebSocketPeer in joined:
 		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
@@ -16660,7 +16676,6 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
 		await _close_phones(joined)
 		await _teardown(main)
-		RoundManagerScript.modifier_rolls_enabled = rolls_were
 		return failures
 
 	# P2's match so far: four wins, a KO of P3, damage dealt, and a fresh hit on P1.
@@ -16706,7 +16721,6 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 	newcomer.close(1000, "scenario done")
 	await _close_phones([joined[0], joined[2]] as Array[WebSocketPeer])
 	await _teardown(main)
-	RoundManagerScript.modifier_rolls_enabled = rolls_were
 	return failures
 
 ## Issue #161, item 2: a pause does not count against the 3 s KO credit
@@ -17980,4 +17994,41 @@ func _scenario_timers_follow_game_time() -> Array[String]:
 	paused = false
 	await _teardown(loop["stage"])
 	_scenario_completed = true
+	return failures
+
+# --- Issue #179: shared statics reset per scenario -----------------------------
+
+## Issue #179, the first half of a pair: switches round-modifier rolls back on
+## and hands the bot director a `--bots=` flag -- both statics -- and leaves
+## them that way on purpose, as a scenario that forgets its clean-up would.
+func _scenario_harness_static_left_flipped() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerType.modifier_rolls_enabled = true
+	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % BOT_FLAG_COUNT])
+	if not RoundManagerType.modifier_rolls_enabled:
+		failures.append("modifier_rolls_enabled did not switch on")
+	_scenario_completed = true
+	return failures
+
+## Issue #179, the second half: runs straight after the one above in a serial
+## `--all`, and sees the harness's defaults -- rolls off, no extra bot flags --
+## because `_run_one()` put them back, not because anything cleaned up after
+## itself. In a shard the two can land in different processes, so it also
+## replays the first through `_run_one()` and checks again.
+func _scenario_harness_static_restored_for_next_scenario() -> Array[String]:
+	var failures: Array[String] = []
+	failures.append_array(_harness_statics_default_failures("at the start"))
+	var inner: Array[String] = await _run_one("harness_static_left_flipped")
+	for f: String in inner:
+		failures.append("replaying harness_static_left_flipped: %s" % f)
+	failures.append_array(_harness_statics_default_failures("after replaying harness_static_left_flipped"))
+	_scenario_completed = true
+	return failures
+
+func _harness_statics_default_failures(when: String) -> Array[String]:
+	var failures: Array[String] = []
+	if RoundManagerType.modifier_rolls_enabled:
+		failures.append("%s: modifier_rolls_enabled is still on, leaked from an earlier scenario" % when)
+	if not BotDirectorScript.extra_args.is_empty():
+		failures.append("%s: BotDirector.extra_args is still %s, leaked from an earlier scenario" % [when, BotDirectorScript.extra_args])
 	return failures
