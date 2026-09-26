@@ -13364,7 +13364,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
 		if texts.size() != 3 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
-		if row.get_index() != rm._podium.get_index() + 1:
+		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
 	await _teardown(loop["stage"])
 	return failures
