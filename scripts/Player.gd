@@ -255,10 +255,13 @@ var _identity_outline: Line2D
 var _fire_clock: float = 0.0
 var _projectiles: Array[Node] = []
 
-## The haft line's far end as it stood at the start of this physics tick, in
-## the body's frame: where the head was last tick. See `_process`. NaN until a
-## tick has recorded it for the rig now built.
+## The haft line's far end where the renderer's interpolation starts from, in
+## the body's frame: the head's offset as the last tick left it. See
+## `_process`. NaN until a tick has recorded it for the rig now built.
 var _haft_tip_before: Vector2 = Vector2(NAN, NAN)
+## The head's offset as this tick leaves it, recorded at the end of
+## `_physics_process`; the next tick moves it into `_haft_tip_before`.
+var _haft_tip_at_tick_end: Vector2 = Vector2(NAN, NAN)
 
 @onready var weapon_line: Line2D = $Haft
 @onready var body_visual: Polygon2D = $Body
@@ -308,7 +311,7 @@ func _physics_process(delta: float) -> void:
 	if not alive:
 		return
 	if _rig_is_live():
-		_haft_tip_before = to_local(_head.global_position)
+		_haft_tip_before = _haft_tip_at_tick_end
 	_update_weapon_input(delta)
 	_update_damage_visual()
 	if not _rig_is_live():
@@ -326,6 +329,7 @@ func _physics_process(delta: float) -> void:
 	_drive_extension(delta)
 	_update_weapon_visual()
 	_tick_fire(delta)
+	_haft_tip_at_tick_end = to_local(_head.global_position)
 
 ## The haft line's far end, redrawn every rendered frame (issue #108).
 ##
@@ -342,6 +346,18 @@ func _physics_process(delta: float) -> void:
 ## blended by how far the frame is between them -- which is exactly how the
 ## body and the head are themselves being drawn, so the line meets the head.
 ## Presentation only: nothing reads the line back, and physics never sees it.
+##
+## "The last two ticks" means the two transforms the renderer blends, and the
+## older one is not what the head reads at the start of `_physics_process`
+## (issue #135). The renderer snapshots every transform as the previous one
+## at the very start of a tick, and only after that does the physics server
+## write the last step's result into the bodies, still before any
+## `_physics_process` runs. Sampled there, the "before" offset was already
+## the new one, the blend did nothing, and the line was drawn at the latest
+## tick while the head was drawn up to a tick behind it: up to 94 px on the
+## staff in a fast swing. So the older end is recorded where the renderer
+## takes it, as the previous tick leaves the head: the end of
+## `_physics_process`, after the facing guard has moved it for the last time.
 func _process(_delta: float) -> void:
 	if not alive or not _rig_is_live():
 		return
@@ -707,6 +723,7 @@ func _build_rig() -> void:
 	# first frame would draw them sliding in from the origin (issue #108).
 	_rig.reset_physics_interpolation()
 	_haft_tip_before = Vector2(NAN, NAN)
+	_haft_tip_at_tick_end = Vector2(NAN, NAN)
 	# A fresh head is built solid.
 	_release_time = 0.0
 
