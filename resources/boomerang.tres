@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The boomerang (issue #150): the second ranged weapon, and the one that
+; comes back.
+;
+; Flick the drag to throw it. It leaves along the flick at 1100 px/s, slows
+; to a stop about 380 px out while arcing upward, then turns and flies home
+; to the thrower wherever they now are, at up to 1000 px/s. It passes
+; through players, and hits each one once going out and once coming back:
+; 14 and a 190 shove along its flight each time (Boomerang.gd). Terrain on
+; the way out turns it round; terrain on the way back is ghosted through,
+; harmlessly. It is caught at the body, or back in hand after 3 s anyway,
+; and can be thrown again 0.4 s later.
+;
+; Balance against the boomstick, the other ranged weapon: the boomstick
+; fires on its own every 3 s, 35 a bullet at any range; the
+; boomerang has to be aimed and thrown, deals 14 a leg at up to 380 px,
+; and the thrower is down to a grip until it is back. Two legs through the
+; same player is 28, under one bullet, and only if they stay on the
+; boomerang's path both ways.
+;
+; The head in hand is a small grip (`art_outline`, one circle) that swings
+; as a light melee weapon: reach S, damage S (12). The boomerang in it is
+; `loaded_art`, drawn over the grip while it is home and colliding with
+; nothing; the thrown boomerang is drawn as it too, spinning. Force 5500,
+; under the medium weapons' 6000 (#177).
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 80.0
+mass = 0.2
+drive_speed = 36.0
+extend_speed = 1150.0
+rest_return_speed = 800.0
+max_drive_force = 5500.0
+damage = 12.0
+sound_set = &"boomerang"
+special = &"boomerang"
+loaded_art = PackedVector2Array(-3, -12, 1, -12, 8, 0, 1, 12, -3, 12, 3, 0)
+launch_range = 380.0
+launch_cooldown = 0.4
+return_speed = 1000.0
+projectile_speed = 1100.0
+projectile_damage = 14.0
+projectile_knockback = 190.0
+projectile_radius = 7.0
+pickup_art = PackedVector2Array(-3, -12, 1, -12, 8, 0, 1, 12, -3, 12, 3, 0)
+head_circle_offsets = PackedVector2Array(0, 0)
+head_circle_radii = PackedFloat32Array(4)
+art_outline = PackedVector2Array(4.62, 1.91, 1.91, 4.62, -1.91, 4.62, -4.62, 1.91, -4.62, -1.91, -1.91, -4.62, 1.91, -4.62, 4.62, -1.91)

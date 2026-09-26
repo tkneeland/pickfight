@@ -213,7 +213,10 @@ func _into_speed(head: Node2D, velocity: Vector2) -> float:
 
 func _take_hit(head: RigidBody2D, speed: float) -> void:
 	var stats: Resource = _owner_stats(head)
-	_absorb(strike_damage(stats, speed), speed)
+	# A flail's ball (issue #150) is a head of its own and strikes with the
+	# weapon's `ball_damage`, as it does a player.
+	var key: StringName = &"ball_damage" if head.has_meta(&"flail_ball") else &"damage"
+	_absorb(strike_damage(stats, speed, key), speed)
 
 ## A boomstick bullet that meets the wall (owner decision on #53): it takes
 ## the bullet's flat damage, the same as a player would. Called by
@@ -244,14 +247,14 @@ func _absorb(amount: float, speed: float) -> void:
 
 ## What a strike at `speed` from a weapon with `stats` deals: `Player`'s rule,
 ## restated from its constants (see the header).
-static func strike_damage(stats: Resource, speed: float) -> float:
+static func strike_damage(stats: Resource, speed: float, key: StringName = &"damage") -> float:
 	if stats == null:
 		return 0.0
 	var over: float = speed - PlayerType.MIN_STRIKE_SPEED
 	if over <= 0.0:
 		return 0.0
 	var strike_scale: float = minf(over / (PlayerType.FULL_STRIKE_SPEED - PlayerType.MIN_STRIKE_SPEED), PlayerType.MAX_STRIKE_SCALE)
-	return minf(float(stats.get("damage")) * strike_scale, PlayerType.MAX_STRIKE_DAMAGE)
+	return minf(float(stats.get(key)) * strike_scale, PlayerType.MAX_STRIKE_DAMAGE)
 
 ## The weapon stats of whoever holds `head`: the player it holds a collision
 ## exception for (see the header). The *effective* stats the player's rig is

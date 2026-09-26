@@ -56,6 +56,10 @@ const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
 const DeathBurstScript := preload("res://scripts/DeathBurst.gd")
 const HatScript := preload("res://scripts/Hat.gd")
+## The three special weapons (issue #150). See "Special weapons" at the end.
+const FlailChainScript := preload("res://scripts/FlailChain.gd")
+const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
+const BoomerangScript := preload("res://scripts/Boomerang.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
 ## deltas, and 300 sixtieths of a second may sum to a hair under 5 s.
 const FIRE_CLOCK_EPSILON: float = 0.000001
@@ -307,6 +311,7 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	_clear_rig()
 	_clear_projectiles()
+	_clear_launched()
 
 func _enter_tree() -> void:
 	if _stats != null:
@@ -334,6 +339,7 @@ func _physics_process(delta: float) -> void:
 	_drive_extension(delta)
 	_update_weapon_visual()
 	_tick_fire(delta)
+	_tick_special(delta)
 	_haft_tip_at_tick_end = to_local(_head.global_position)
 
 ## The haft line's far end, redrawn every rendered frame (issue #108).
@@ -458,7 +464,10 @@ func teleport_to(pos: Vector2) -> void:
 	var offset: Vector2 = pos - global_position
 	global_position = pos
 	linear_velocity = Vector2.ZERO
-	for body: RigidBody2D in [_haft, _head]:
+	var moved: Array[RigidBody2D] = [_haft, _head]
+	if _flail != null:
+		moved.append_array(_flail.bodies())
+	for body: RigidBody2D in moved:
 		if body == null:
 			continue
 		body.global_position += offset
@@ -469,6 +478,8 @@ func teleport_to(pos: Vector2) -> void:
 	# where it was moved away from.
 	if _head != null:
 		_head.forget_previous_position()
+	if _flail != null and _flail.ball != null:
+		_flail.ball.forget_previous_position()
 	# Nor is it something to draw as motion (issue #108): with physics
 	# interpolation on, the body and the rig would otherwise be drawn sliding
 	# across the arena from where they were for a tick.
@@ -538,6 +549,7 @@ func _go_inert() -> void:
 	alive = false
 	_clear_rig()
 	_clear_projectiles()
+	_clear_launched()
 	# Deferred: eliminate() can run from KillZone's body_entered, which fires
 	# mid-physics-step while the physics server is still flushing queries --
 	# changing a RigidBody2D's mode synchronously from there is refused
@@ -724,6 +736,9 @@ func _build_rig() -> void:
 	_groove.initial_offset = 0.0
 	_groove.node_a = _groove.get_path_to(_haft)
 	_groove.node_b = _groove.get_path_to(_head)
+	# The grapple's hook or the boomerang drawn loaded, or the flail's chain
+	# and ball (issue #150): nothing for an ordinary weapon.
+	_build_special(axis)
 	# The rig's bodies were placed after entering the tree, so without this the
 	# first frame would draw them sliding in from the origin (issue #108).
 	_rig.reset_physics_interpolation()
@@ -735,6 +750,8 @@ func _build_rig() -> void:
 func _clear_rig() -> void:
 	if _rig == null:
 		return
+	if _flail != null:
+		_flail.retire()
 	# Joints first: a half-freed rig that still constrains the body would
 	# drag the player around for the rest of the frame.
 	if _pin != null:
@@ -763,6 +780,8 @@ func _clear_rig() -> void:
 	_groove = null
 	_head_visual = null
 	_head_visual_is_fallback = false
+	_flail = null
+	_loaded_visual = null
 
 func _head_distance() -> float:
 	return (_head.global_position - global_position).length()
@@ -1125,16 +1144,26 @@ func set_identity_color(colour: Color) -> void:
 		_head_visual.color = colour
 	if _hat != null:
 		_hat.set_tint(colour)
+	if _loaded_visual != null:
+		_loaded_visual.color = colour
+	if _flail != null:
+		_flail.set_colour(colour)
 	_update_damage_visual()
 
 # --- Input ------------------------------------------------------------------
 
 func _update_weapon_input(delta: float) -> void:
 	var effective_vector: Vector2 = _get_effective_vector(delta)
+	_effective_input = effective_vector
 	_drag_released = effective_vector == Vector2.ZERO
 	if effective_vector != Vector2.ZERO:
 		weapon_angle = effective_vector.angle()
 		weapon_length = lerp(_stats.min_reach, _stats.max_reach, effective_vector.length())
+		# Reeling in on a stuck hook (issue #150), the launcher is held in
+		# on the rope: an arm pushed out at the surface it is reeling toward
+		# would plant there and hold the player off at its own reach.
+		if _is_out(_hook) and _hook.is_stuck():
+			weapon_length = _stats.min_reach
 	else:
 		# Released: hold the last angle and ease the extension back to rest
 		# over several physics frames rather than snapping or drifting.
@@ -1494,3 +1523,238 @@ func _head_cut_off() -> bool:
 		exclude.append(hit["rid"])
 		query.exclude = exclude
 	return false
+
+# --- Special weapons (issue #150) ---------------------------------------------
+#
+# Three weapons do something besides swing, named by `WeaponStats.special`.
+# Nothing in this block runs for a weapon whose `special` is empty, which is
+# every weapon from before them, so those are untouched.
+#
+#   * The grapple and the boomerang each launch something on a FLICK: a drag
+#     that goes from near the centre (FLICK_FROM) out to near full length
+#     (FLICK_TO) within FLICK_TICKS. An ordinary drag that eases out, or one
+#     held out and moved around, never launches. While the thing is out, the
+#     head is drawn without it (`loaded_art`, over the head's own art, is
+#     hidden) and still swings as the launcher itself does. Once it is back,
+#     `launch_cooldown` has to pass before the next flick counts.
+#   * The grapple's hook (`GrappleHook.gd`) is told each tick whether the drag
+#     is still held; releasing lets go.
+#   * The boomerang (`Boomerang.gd`) flies out and back on its own.
+#   * The flail (`FlailChain.gd`) is a ball on a real jointed chain hanging off
+#     the head, built into the rig. The ball scores its own strikes here, the
+#     same two ways the head does (its sweep and its contacts), against
+#     `ball_damage` on the same speed scale, plus a shove along its path that
+#     grows with its momentum.
+#
+# Every hit any of them lands goes through `land_projectile_hit` or the same
+# end as a strike, so it is a `strike_landed` like any other: hitmarker, buzz,
+# kill feed, announcer and awards all see it. Timers here are summed physics
+# deltas, never the wall clock.
+
+const FLICK_TICKS: int = 8
+const FLICK_FROM: float = 0.35
+const FLICK_TO: float = 0.8
+## The most a flail ball's shove can be, however hard it was whipped.
+const BALL_KNOCKBACK_MAX: float = 700.0
+
+var _flail: FlailChainScript
+var _hook: Node2D
+var _boomerang: Node2D
+## Whether a hook or boomerang was out on the last tick, so its return is seen.
+var _was_launched: bool = false
+var _launch_cooldown: float = 0.0
+var _loaded_visual: Polygon2D
+var _effective_input: Vector2 = Vector2.ZERO
+var _flick_history: PackedFloat32Array = PackedFloat32Array()
+var _flick_armed: bool = false
+
+## The held weapon's `special`, or empty.
+func weapon_special() -> StringName:
+	return _stats.special if _stats != null else &""
+
+## The flail's chain and ball, or null for any other weapon.
+func flail_chain() -> RefCounted:
+	return _flail
+
+func flail_ball() -> RigidBody2D:
+	return _flail.ball if _flail != null else null
+
+## The grapple's hook or the boomerang while it is out, else null.
+func launched_hook() -> Node2D:
+	return _hook if _is_out(_hook) else null
+
+func launched_boomerang() -> Node2D:
+	return _boomerang if _is_out(_boomerang) else null
+
+## Whether the launcher's loaded art is showing: nothing out, and not cooling down.
+func special_loaded() -> bool:
+	return _loaded_visual != null and _loaded_visual.visible
+
+## Whether a flick now would launch.
+func special_ready() -> bool:
+	return launched_hook() == null and launched_boomerang() == null and _launch_cooldown <= 0.0 \
+		and not is_head_phased()
+
+func _build_special(axis: Vector2) -> void:
+	_clear_launched()
+	_launch_cooldown = 0.0
+	# A drag held through a weapon swap is not a flick.
+	_flick_armed = false
+	_flick_history.clear()
+	match _stats.special:
+		&"flail":
+			_flail = FlailChainScript.new()
+			_flail.build(self, _rig, _head, _stats, axis, identity_color)
+			_flail.ball.body_entered.connect(_on_ball_hit)
+		&"grapple", &"boomerang":
+			if _stats.loaded_art.size() >= 3:
+				_loaded_visual = Polygon2D.new()
+				_loaded_visual.name = "LoadedVisual"
+				_loaded_visual.polygon = _stats.loaded_art
+				_loaded_visual.color = identity_color
+				_head_visual.add_child(_loaded_visual)
+
+func _tick_special(delta: float) -> void:
+	match _stats.special:
+		&"flail":
+			_tick_flail()
+		&"grapple", &"boomerang":
+			_tick_launcher(delta)
+
+func _tick_launcher(delta: float) -> void:
+	var flicked: bool = _detect_flick()
+	if _is_out(_hook):
+		_hook.set_held(not _drag_released)
+		return
+	if _is_out(_boomerang):
+		return
+	if _was_launched:
+		_was_launched = false
+		_hook = null
+		_boomerang = null
+		_launch_cooldown = _stats.launch_cooldown
+		_set_loaded(true)
+	if _launch_cooldown > 0.0:
+		_launch_cooldown = maxf(0.0, _launch_cooldown - delta)
+	# Not from a phased head (issue #115): a ghost scores nothing and grips
+	# nothing, and it may be inside the slab it was trapped under.
+	if flicked and _launch_cooldown <= 0.0 and not _head.phased:
+		_launch_special()
+
+## Whether this tick's drag completes a flick. Called every tick so the history
+## stays current; a flick is spent whether or not anything could launch.
+func _detect_flick() -> bool:
+	var length: float = _effective_input.length()
+	_flick_history.append(length)
+	if _flick_history.size() > FLICK_TICKS:
+		_flick_history.remove_at(0)
+	if length <= FLICK_FROM:
+		_flick_armed = true
+		return false
+	if not _flick_armed or length < FLICK_TO:
+		return false
+	var lowest: float = INF
+	for l: float in _flick_history:
+		lowest = minf(lowest, l)
+	if lowest > FLICK_FROM:
+		return false
+	_flick_armed = false
+	return true
+
+func _launch_special() -> void:
+	var host: Node = get_parent()
+	if host == null or not _rig_is_live():
+		return
+	var direction: Vector2 = _effective_input.normalized()
+	if direction == Vector2.ZERO:
+		direction = Vector2.RIGHT.rotated(_haft.rotation)
+	var origin: Vector2 = _launch_origin(float(_stats.projectile_radius))
+	var thrown: Node2D
+	if _stats.special == &"grapple":
+		thrown = GrappleHookScript.new()
+		_hook = thrown
+	else:
+		thrown = BoomerangScript.new()
+		_boomerang = thrown
+	thrown.setup(self, origin, direction, _stats)
+	host.add_child(thrown)
+	_was_launched = true
+	_set_loaded(false)
+
+## Where a launch starts: the head's anchor, or as far toward it from the body's
+## centre as a circle of `radius` gets without meeting anything, so a hook or
+## a boomerang never starts inside a wall the head is pressed against.
+func _launch_origin(radius: float) -> Vector2:
+	var shape := CircleShape2D.new()
+	shape.radius = maxf(0.5, radius)
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = shape
+	query.transform = Transform2D(0.0, global_position)
+	query.motion = _head.global_position - global_position
+	query.collision_mask = LAYER_WORLD
+	query.exclude = [get_rid()]
+	var fractions: PackedFloat32Array = get_world_2d().direct_space_state.cast_motion(query)
+	var safe: float = fractions[0] if fractions.size() >= 1 else 1.0
+	return global_position + query.motion * safe
+
+func _set_loaded(loaded: bool) -> void:
+	if _loaded_visual != null:
+		_loaded_visual.visible = loaded
+
+func _is_out(node: Variant) -> bool:
+	return is_instance_valid(node) and not (node as Node).is_queued_for_deletion()
+
+## Frees a hook or boomerang still out: the player left play or changed weapon.
+func _clear_launched() -> void:
+	for node: Variant in [_hook, _boomerang]:
+		if is_instance_valid(node):
+			(node as Node).queue_free()
+	_hook = null
+	_boomerang = null
+	_was_launched = false
+
+func _tick_flail() -> void:
+	if _flail == null or _flail.ball == null or not _flail.ball.is_inside_tree():
+		return
+	var ball: WeaponHeadType = _flail.ball
+	var hit: Object = ball.swept_into
+	var speed: float = ball.swept_speed
+	ball.swept_into = null
+	ball.swept_speed = 0.0
+	var struck: Node = hit as Node
+	if struck != null and struck != self and struck.is_in_group("players"):
+		_land_ball_strike(struck, speed)
+	_flail.tick(_release_time)
+
+## The ball touched something slowly enough for the solver to notice it.
+func _on_ball_hit(body: Node) -> void:
+	if _flail == null or _flail.ball == null or body == self or not body.is_in_group("players"):
+		return
+	var to_body: Vector2 = body.global_position - _flail.ball.global_position
+	if to_body.length_squared() == 0.0:
+		return
+	_land_ball_strike(body, _flail.ball_velocity.dot(to_body.normalized()))
+
+## A flail ball strike: `ball_damage` on the strike scale, and a shove along the
+## ball's path worth its momentum times `ball_knockback`, up to
+## BALL_KNOCKBACK_MAX. Reported as `strike_landed` like any strike.
+func _land_ball_strike(victim: Node, speed: float) -> void:
+	if not victim.alive:
+		return
+	var amount: float = 0.0
+	var over: float = speed - MIN_STRIKE_SPEED
+	if over > 0.0:
+		var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
+		amount = minf(_stats.ball_damage * strike_scale, MAX_STRIKE_DAMAGE)
+	if amount <= 0.0 and speed <= knockback_threshold:
+		return
+	var ball: RigidBody2D = _flail.ball
+	var toward: Vector2 = ((victim as Node2D).global_position - ball.global_position).normalized()
+	var point: Vector2 = ball.global_position + toward * float(_stats.ball_radius)
+	if amount > 0.0 and victim is RigidBody2D:
+		var shove: float = minf(speed * ball.mass * float(_stats.ball_knockback), BALL_KNOCKBACK_MAX)
+		(victim as RigidBody2D).apply_central_impulse(toward * shove)
+	if victim.get("spawn_protected") == true:
+		amount = 0.0
+	victim.take_damage(amount)
+	strike_landed.emit(victim, amount, point, not victim.alive)

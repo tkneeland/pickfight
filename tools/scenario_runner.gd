@@ -271,6 +271,18 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"harness_static_left_flipped",
 	"harness_static_restored_for_next_scenario",
 	"bots_survive_hazard_stages",
+	"grapple_fires_sticks_reels_and_releases",
+	"grapple_hook_hits_player_lightly",
+	"flail_whip_damage_scales_with_speed",
+	"flail_ball_does_not_tunnel_thin_platform",
+	"flail_ball_does_not_clip_head",
+	"boomerang_hits_on_the_way_out_and_back",
+	"boomerang_turns_at_terrain_and_ghosts_home",
+	"new_weapons_are_pickups_only",
+	"bots_wield_new_weapons",
+	"new_weapon_hits_credit_the_thrower",
+	"roster_heads_do_not_clip_platform_in_play_new_weapons",
+	"flail_built_clear_of_neighbours",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -561,6 +573,11 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/axe.tres",
 	"res://resources/dagger.tres",
 	"res://resources/boomstick.tres",
+	# Issue #150. Last, so the seeded sweeps that draw every weapon's trials
+	# in this order hand the six before them exactly the throws they had.
+	"res://resources/grapple.tres",
+	"res://resources/flail.tres",
+	"res://resources/boomerang.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -1164,6 +1181,30 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_harness_static_restored_for_next_scenario()
 		"bots_survive_hazard_stages":
 			return await _scenario_bots_survive_hazard_stages()
+		"grapple_fires_sticks_reels_and_releases":
+			return await _scenario_grapple_fires_sticks_reels_and_releases()
+		"grapple_hook_hits_player_lightly":
+			return await _scenario_grapple_hook_hits_player_lightly()
+		"flail_whip_damage_scales_with_speed":
+			return await _scenario_flail_whip_damage_scales_with_speed()
+		"flail_ball_does_not_tunnel_thin_platform":
+			return await _scenario_flail_ball_does_not_tunnel_thin_platform()
+		"flail_ball_does_not_clip_head":
+			return await _scenario_flail_ball_does_not_clip_head()
+		"boomerang_hits_on_the_way_out_and_back":
+			return await _scenario_boomerang_hits_on_the_way_out_and_back()
+		"boomerang_turns_at_terrain_and_ghosts_home":
+			return await _scenario_boomerang_turns_at_terrain_and_ghosts_home()
+		"new_weapons_are_pickups_only":
+			return await _scenario_new_weapons_are_pickups_only()
+		"bots_wield_new_weapons":
+			return await _scenario_bots_wield_new_weapons()
+		"new_weapon_hits_credit_the_thrower":
+			return await _scenario_new_weapon_hits_credit_the_thrower()
+		"roster_heads_do_not_clip_platform_in_play_new_weapons":
+			return await _scenario_roster_heads_do_not_clip_platform_in_play_new_weapons()
+		"flail_built_clear_of_neighbours":
+			return await _scenario_flail_built_clear_of_neighbours()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3441,6 +3482,9 @@ const ROSTER_REACH_TIERS: Dictionary = {
 	"sword": "S",
 	"dagger": "S",
 	"boomstick": "S",
+	"grapple": "S",
+	"flail": "S",
+	"boomerang": "S",
 }
 const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"axe": "L",
@@ -3449,6 +3493,11 @@ const ROSTER_DAMAGE_TIERS: Dictionary = {
 	"dagger": "M",
 	"staff": "S",
 	"boomstick": "S",
+	# Issue #150: the arm's own head. The flail's ball and the thrown hook
+	# and boomerang have scenarios of their own.
+	"grapple": "S",
+	"flail": "S",
+	"boomerang": "S",
 }
 ## Since playtest 1 (#45) the dagger alone was the quick one. Issue #136 made
 ## every weapon but the axe more responsive, and on this 50 px drag they now
@@ -3464,6 +3513,9 @@ const ROSTER_ANSWER_TIERS: Dictionary = {
 	"sword": "S",
 	"axe": "L",
 	"boomstick": "S",
+	"grapple": "S",
+	"flail": "S",
+	"boomerang": "S",
 }
 ## Smallest measured quantity first, which is the order the tiers have to come
 ## out in.
@@ -18090,4 +18142,659 @@ func _scenario_bots_survive_hazard_stages() -> Array[String]:
 		holder.queue_free()
 		await _await_ticks(2)
 	_scenario_completed = true
+	return failures
+
+# --- New weapons: grapple, flail, boomerang (issue #150) ---------------------
+
+const GRAPPLE_PATH: String = "res://resources/grapple.tres"
+const FLAIL_PATH: String = "res://resources/flail.tres"
+const BOOMERANG_PATH: String = "res://resources/boomerang.tres"
+const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH]
+## The arena's ground top (its floor is 40 tall, centred at y 320) and where a
+## player stands on it.
+const NEW_WEAPON_FLOOR_STAND: Vector2 = Vector2(0, 274)
+
+## Puts `path`'s weapon in `player`'s hands and waits out the deferred rebuild.
+func _equip(player: RigidBody2D, path: String) -> WeaponStatsType:
+	var stats: WeaponStatsType = load(path)
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	return stats
+
+## A flick along `direction`: the drag let go for a couple of ticks, then
+## straight out to full length, the way a thumb flicks on the phone.
+func _flick(player: RigidBody2D, direction: Vector2) -> void:
+	player.set_input_vector(Vector2.ZERO)
+	await _await_ticks(3)
+	player.set_input_vector(direction.normalized())
+	await physics_frame
+
+## Every `strike_landed` `player` emits, as dictionaries, appended to `into`.
+## Returns the connected callable, for a scenario that disconnects it.
+func _record_strikes(player: RigidBody2D, into: Array) -> Callable:
+	var record := func(victim: Node, amount: float, point: Vector2, lethal: bool) -> void:
+		into.append({"victim": victim, "amount": amount, "point": point, "lethal": lethal})
+	player.strike_landed.connect(record)
+	return record
+
+## The grapple: a flick fires the hook, the hook sticks in terrain, holding
+## the drag reels the player up to it, releasing lets go and the hook comes
+## home. An ordinary drag that eases out fires nothing.
+func _scenario_grapple_fires_sticks_reels_and_releases() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var ceiling: StaticBody2D = _add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	if not player.special_loaded():
+		failures.append("the grapple was not drawn loaded before it was fired")
+
+	# An ordinary drag, eased out over half a second, is not a flick.
+	player.set_input_vector(Vector2.ZERO)
+	await _await_ticks(3)
+	for i in 30:
+		player.set_input_vector(Vector2.UP * float(i + 1) / 30.0)
+		await physics_frame
+	await _await_ticks(10)
+	if player.launched_hook() != null:
+		failures.append("a drag eased out over 30 ticks fired the hook; only a flick should")
+
+	# The flick.
+	await _flick(player, Vector2.UP)
+	var hook: Node2D = player.launched_hook()
+	if hook == null:
+		failures.append("a flick straight up did not fire the hook")
+		await _teardown(stage)
+		return failures
+	if player.special_loaded():
+		failures.append("the launcher still drew its hook while the hook was out")
+	var stuck: bool = await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
+	var start_distance: float = (hook.global_position - player.global_position).length() if is_instance_valid(hook) else 0.0
+	print("      hook stuck %s at %s, %.0f px above the player" % [stuck, hook.global_position if is_instance_valid(hook) else Vector2.ZERO, start_distance])
+	if not stuck:
+		failures.append("the hook never stuck in the platform above")
+		await _teardown(stage)
+		return failures
+	var underside: float = ceiling.global_position.y + 12.0
+	if absf(hook.global_position.y - (underside + stats.projectile_radius)) > 3.0:
+		failures.append("the hook stuck at y %.1f, not on the platform's underside (%.1f)" % [
+			hook.global_position.y, underside + stats.projectile_radius])
+
+	# Held: reel in.
+	var closest: float = start_distance
+	for i in 90:
+		await physics_frame
+		closest = minf(closest, (hook.global_position - player.global_position).length())
+	var hanging: float = (hook.global_position - player.global_position).length()
+	print("      reeled from %.0f px to %.0f px (closest %.0f), rope min %.0f" % [start_distance, hanging, closest, stats.reel_min_length])
+	if closest > stats.reel_min_length + 20.0:
+		failures.append("holding the drag reeled the player only to %.0f px of the hook (from %.0f); it should haul them up to about %.0f" % [
+			closest, start_distance, stats.reel_min_length])
+	if hanging > stats.reel_min_length + 30.0:
+		failures.append("still holding, the player hung %.0f px from the hook, not held near it" % hanging)
+
+	# Released: the hook lets go and comes home, and the player drops.
+	var height: float = player.global_position.y
+	player.set_input_vector(Vector2.ZERO)
+	await physics_frame
+	if is_instance_valid(hook) and not hook.is_going_home():
+		failures.append("releasing the drag did not let go of the platform")
+	var home: bool = await _await_condition(func() -> bool: return player.launched_hook() == null, 1000)
+	if not home:
+		failures.append("the released hook never got home")
+	await _await_ticks(2)
+	if not player.special_loaded():
+		failures.append("the hook came home but the launcher was not drawn loaded again")
+	if player.special_ready():
+		failures.append("the launcher could fire again the tick its hook came home, with no cooldown")
+	await _await_ticks(20)
+	print("      released: fell %.0f px in about 20 ticks" % (player.global_position.y - height))
+	if player.global_position.y - height < 20.0:
+		failures.append("released, the player did not drop (moved %.1f px down in 20 ticks)" % (player.global_position.y - height))
+	await _await_ticks(int(stats.launch_cooldown * 60.0) + 2)
+	if not player.special_ready():
+		failures.append("the launcher was still not ready %.2f s after its hook came home" % stats.launch_cooldown)
+
+	await _teardown(stage)
+	return failures
+
+## A hook that meets a player: a light hit, credited to the thrower, and a tug
+## toward them; then it comes home rather than sticking.
+func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	victim.freeze = true
+	var strikes: Array = []
+	_record_strikes(shooter, strikes)
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		return failures
+	victim.freeze = false
+	victim.linear_velocity = Vector2.ZERO
+	var hit: bool = await _await_condition(func() -> bool: return victim.damage > 0.0 or not is_instance_valid(hook) or hook.is_going_home(), 1000)
+	await physics_frame
+	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
+	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
+		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
+	if victim.linear_velocity.x >= -50.0:
+		failures.append("the hook did not tug its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
+	if strikes.is_empty() or strikes[0]["victim"] != victim:
+		failures.append("the hook's hit was not reported as the thrower's strike_landed")
+	if is_instance_valid(hook) and hook.is_stuck():
+		failures.append("the hook stuck to a player")
+	await _teardown(stage)
+	return failures
+
+## The flail's ball strikes on its own speed: a whip lands harder than a slow
+## sweep through the same spot, and the scale is the head's own (nothing
+## below MIN_STRIKE_SPEED, `ball_damage` at full speed, capped).
+func _scenario_flail_whip_damage_scales_with_speed() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(attacker, FLAIL_PATH)
+	var ball: RigidBody2D = attacker.flail_ball()
+	if ball == null:
+		failures.append("the flail was built without a ball")
+		await _teardown(stage)
+		return failures
+	_brace(attacker)
+
+	# The scale itself, on the real scoring path.
+	var expected: Array[Vector2] = [
+		Vector2(600.0, 0.0),
+		Vector2(1450.0, stats.ball_damage * 0.5),
+		Vector2(2200.0, stats.ball_damage),
+		Vector2(3700.0, minf(stats.ball_damage * 2.0, 90.0)),
+		Vector2(6000.0, minf(stats.ball_damage * 2.0, 90.0)),
+	]
+	for pair: Vector2 in expected:
+		var dummy: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, 400))
+		await physics_frame
+		_brace(dummy)
+		attacker._land_ball_strike(dummy, pair.x)
+		print("      ball at %.0f px/s took %.1f (expected %.1f)" % [pair.x, dummy.damage, pair.y])
+		if absf(dummy.damage - pair.y) > 0.05:
+			failures.append("a ball strike at %.0f px/s took %.1f, expected %.1f" % [pair.x, dummy.damage, pair.y])
+		dummy.queue_free()
+		await physics_frame
+
+	# A real whip against a slow swing: the arm spun round at a steady rate
+	# until the ball is trailing it, then a braced victim put in the ball's
+	# orbit. The first strike the ball lands on them is what the swing is worth.
+	var results: Dictionary = {}
+	for kind: String in ["slow", "whip"]:
+		var rate: float = 4.0 if kind == "slow" else 15.0
+		attacker.teleport_to(DEEP_PARK_POSITION)
+		_brace(attacker)
+		var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -500))
+		await physics_frame
+		_brace(victim)
+		var angle: float = 0.0
+		attacker.set_input_vector(Vector2.RIGHT)
+		await _await_ticks(30)
+		for i in 90:
+			angle -= rate / 60.0
+			attacker.set_input_vector(Vector2.from_angle(angle))
+			await physics_frame
+		var strikes: Array = []
+		var recorder: Callable = _record_strikes(attacker, strikes)
+		# Ahead of the ball on its orbit, a quarter turn on, as far out as
+		# the ball is.
+		var from_body: Vector2 = ball.global_position - attacker.global_position
+		var ahead: float = from_body.angle() - PI * 0.5
+		victim.global_position = attacker.global_position + Vector2.from_angle(ahead) * from_body.length()
+		var fastest: float = 0.0
+		for i in 120:
+			angle -= rate / 60.0
+			attacker.set_input_vector(Vector2.from_angle(angle))
+			await physics_frame
+			fastest = maxf(fastest, ball.linear_velocity.length())
+			if not strikes.is_empty():
+				break
+		attacker.strike_landed.disconnect(recorder)
+		var first: float = float(strikes[0]["amount"]) if not strikes.is_empty() else 0.0
+		results[kind] = first
+		print("      %s (%.0f rad/s): ball at %.0f px/s, first strike took %.1f (%d strikes)" % [kind, rate, fastest, first, strikes.size()])
+		victim.queue_free()
+		await _await_ticks(2)
+	if float(results.get("whip", 0.0)) <= 0.0:
+		failures.append("a whip of the flail never struck the victim in its path")
+	if float(results.get("whip", 0.0)) <= float(results.get("slow", 0.0)) + 10.0:
+		failures.append("the whip took %.1f and the slow sweep %.1f: the ball's hit should grow with its speed" % [
+			results.get("whip", 0.0), results.get("slow", 0.0)])
+	if float(results.get("whip", 0.0)) <= stats.damage:
+		failures.append("the whip took %.1f, no more than the knob's own %.1f: the ball should be the flail's big hit" % [
+			results.get("whip", 0.0), stats.damage])
+
+	await _teardown(stage)
+	return failures
+
+## The flail's ball is a real weapon head with its own sweep: whipped down
+## hard onto a thin platform it stops on the surface, never passing through,
+## and it is drawn round its own circle.
+func _scenario_flail_ball_does_not_tunnel_thin_platform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var origin: Vector2 = DEEP_PARK_POSITION
+	var slab_y: float = origin.y + 120.0
+	var slab: StaticBody2D = _add_bar(stage, Vector2(origin.x, slab_y), Vector2(600, 12))
+	var attacker: RigidBody2D = _spawn_player(stage, origin)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(attacker, FLAIL_PATH)
+	_brace(attacker)
+	var ball: RigidBody2D = attacker.flail_ball()
+	if ball == null:
+		failures.append("the flail was built without a ball")
+		await _teardown(stage)
+		return failures
+	# Drawn round its circle.
+	var chain: RefCounted = attacker.flail_chain()
+	var circle: Dictionary = chain.ball_circle_world()
+	var art: PackedVector2Array = chain.ball_visual.polygon
+	var worst: float = -INF
+	for i in 64:
+		var p: Vector2 = Vector2.from_angle(TAU * float(i) / 64.0) * float(circle["radius"])
+		if not Geometry2D.is_point_in_polygon(p, art):
+			var edge_gap: float = INF
+			for k in art.size():
+				var c: Vector2 = Geometry2D.get_closest_point_to_segment(p, art[k], art[(k + 1) % art.size()])
+				edge_gap = minf(edge_gap, c.distance_to(p))
+			worst = maxf(worst, edge_gap)
+	if worst > 0.5:
+		failures.append("the ball's circle sticks %.2f px out of its drawn art" % worst)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 150
+	var crossings: int = 0
+	var fastest: float = 0.0
+	for trial in 12:
+		attacker.teleport_to(origin)
+		_brace(attacker)
+		var start: float = rng.randf_range(-PI, 0.0)
+		attacker.set_input_vector(Vector2.from_angle(start))
+		await _await_ticks(40)
+		# Whip down through the slab, one way or the other.
+		var down: float = PI * 0.5 + rng.randf_range(-0.6, 0.6)
+		attacker.set_input_vector(Vector2.from_angle(down))
+		for i in 45:
+			var before: float = ball.global_position.y
+			await physics_frame
+			fastest = maxf(fastest, ball.linear_velocity.length())
+			var after: float = ball.global_position.y
+			if before < slab_y and after > slab_y + 6.0 and absf(ball.global_position.x - origin.x) < 300.0:
+				crossings += 1
+				failures.append("trial %d: the ball went from above the slab (y %.1f) to below it (y %.1f) in one tick" % [trial, before, after])
+			elif after > slab_y + 6.0 and absf(ball.global_position.x - origin.x) < 300.0 and before >= slab_y + 6.0:
+				pass
+	print("      12 whips at a 12 px slab: fastest ball %.0f px/s, %d crossings" % [fastest, crossings])
+	if fastest < 1200.0:
+		failures.append("the whips never got the ball past %.0f px/s, so they prove nothing" % fastest)
+	slab.queue_free()
+	await _teardown(stage)
+	return failures
+
+## Whipped at another player's held head, the ball is stopped by it -- the
+## pair correction every head gets -- and never passes through it.
+func _scenario_flail_ball_does_not_clip_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var origin: Vector2 = DEEP_PARK_POSITION
+	var attacker: RigidBody2D = _spawn_player(stage, origin)
+	var blocker: RigidBody2D = _spawn_player(stage, origin + Vector2(0, 260))
+	await _await_ticks(2)
+	await _equip(attacker, FLAIL_PATH)
+	var sword: WeaponStatsType = load("res://resources/sword.tres")
+	blocker.set_weapon_stats(sword)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(attacker)
+	_brace(blocker)
+	blocker.set_input_vector(Vector2.UP)
+	var ball: RigidBody2D = attacker.flail_ball()
+	var radius: float = float(attacker.flail_chain().ball_circle_world()["radius"])
+	var deepest: float = 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1501
+	for trial in 10:
+		attacker.teleport_to(origin)
+		_brace(attacker)
+		attacker.set_input_vector(Vector2.from_angle(rng.randf_range(-PI, 0.0)))
+		await _await_ticks(40)
+		attacker.set_input_vector(Vector2.from_angle(PI * 0.5 + rng.randf_range(-0.5, 0.5)))
+		for i in 45:
+			var from: Vector2 = ball.global_position
+			await physics_frame
+			var to: Vector2 = ball.global_position
+			for c: Dictionary in blocker.weapon_head_circles_world():
+				var closest: Vector2 = Geometry2D.get_closest_point_to_segment(c["centre"], from, to)
+				var overlap: float = radius + float(c["radius"]) - closest.distance_to(c["centre"])
+				deepest = maxf(deepest, overlap)
+	print("      10 whips at a held sword: deepest the ball's path went into the blade %.1f px" % deepest)
+	if deepest > 5.0:
+		failures.append("the ball's path went %.1f px into another player's head: it passed through instead of being stopped" % deepest)
+	await _teardown(stage)
+	return failures
+
+## The boomerang: thrown on a flick, it flies about `launch_range` out, comes
+## back to the thrower and is caught, hitting a player in its path once on
+## the way out and once on the way back.
+func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, -20))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(thrower, BOOMERANG_PATH)
+	_brace(thrower)
+	_brace(victim)
+	var strikes: Array = []
+	_record_strikes(thrower, strikes)
+	await _flick(thrower, Vector2.RIGHT)
+	var boomerang: Node2D = thrower.launched_boomerang()
+	if boomerang == null:
+		failures.append("a flick did not throw the boomerang")
+		await _teardown(stage)
+		return failures
+	if thrower.special_loaded():
+		failures.append("the boomerang was still drawn in hand while thrown")
+	var furthest: float = 0.0
+	var caught: bool = false
+	var legs: Array = []
+	for i in 240:
+		if not is_instance_valid(boomerang):
+			break
+		furthest = maxf(furthest, boomerang.global_position.x - thrower.global_position.x)
+		caught = boomerang.caught
+		var hits_before: int = strikes.size()
+		var leg: int = boomerang.leg
+		await physics_frame
+		if strikes.size() > hits_before:
+			legs.append(leg)
+	var gone: bool = not is_instance_valid(boomerang)
+	print("      flew %.0f px out (range %.0f); %d hits on legs %s, damage %.1f; back in hand %s" % [
+		furthest, stats.launch_range, strikes.size(), legs, victim.damage, gone])
+	if absf(furthest - stats.launch_range) > stats.launch_range * 0.2:
+		failures.append("the boomerang flew %.0f px out, not about its %.0f px range" % [furthest, stats.launch_range])
+	if strikes.size() != 2:
+		failures.append("the boomerang hit the player in its path %d times, expected once out and once back" % strikes.size())
+	elif legs != [0, 1]:
+		failures.append("the boomerang's hits landed on legs %s, expected one out (0) and one back (1)" % [legs])
+	if absf(victim.damage - stats.projectile_damage * 2.0) > 0.01:
+		failures.append("the victim took %.1f, expected %.1f from two legs" % [victim.damage, stats.projectile_damage * 2.0])
+	if not gone:
+		failures.append("the boomerang was never caught")
+	await _await_ticks(2)
+	if not thrower.special_loaded():
+		failures.append("the caught boomerang was not drawn back in hand")
+	if thrower.special_ready():
+		failures.append("the boomerang could be thrown again the tick it was caught, with no cooldown")
+	await _teardown(stage)
+	return failures
+
+## Terrain on the way out turns the boomerang round where it meets it;
+## terrain in its way home is ghosted through, and it is still caught.
+func _scenario_boomerang_turns_at_terrain_and_ghosts_home() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var origin: Vector2 = DEEP_PARK_POSITION
+	var wall: StaticBody2D = _add_bar(stage, origin + Vector2(160, 0), Vector2(20, 300))
+	var thrower: RigidBody2D = _spawn_player(stage, origin)
+	await _await_ticks(2)
+	await _equip(thrower, BOOMERANG_PATH)
+	_brace(thrower)
+	await _flick(thrower, Vector2.RIGHT)
+	var boomerang: Node2D = thrower.launched_boomerang()
+	if boomerang == null:
+		failures.append("a flick did not throw the boomerang")
+		await _teardown(stage)
+		return failures
+	var furthest: float = 0.0
+	for i in 240:
+		if not is_instance_valid(boomerang):
+			break
+		furthest = maxf(furthest, boomerang.global_position.x - origin.x)
+		await physics_frame
+	print("      thrown at a wall 150 px away: got %.0f px out, back in hand %s" % [furthest, not is_instance_valid(boomerang)])
+	if furthest > 150.0:
+		failures.append("the boomerang got %.0f px out, through a wall 150 px away" % furthest)
+	if is_instance_valid(boomerang):
+		failures.append("turned round by the wall, the boomerang never came back")
+	wall.queue_free()
+	await _await_ticks(int(thrower.weapon_stats.launch_cooldown * 60.0) + 4)
+
+	# Out into clear air, then a wall dropped between it and the thrower.
+	await _flick(thrower, Vector2.RIGHT)
+	boomerang = thrower.launched_boomerang()
+	if boomerang == null:
+		failures.append("a second flick, after the cooldown, did not throw the boomerang")
+		await _teardown(stage)
+		return failures
+	var turned: bool = await _await_condition(func() -> bool: return is_instance_valid(boomerang) and boomerang.leg == 1, 2000)
+	if not turned:
+		failures.append("the boomerang never turned for home")
+		await _teardown(stage)
+		return failures
+	var between: StaticBody2D = _add_bar(stage, origin + Vector2(maxf(60.0, (boomerang.global_position.x - origin.x) * 0.5), 0), Vector2(20, 400))
+	var ghosted: bool = false
+	for i in 240:
+		if not is_instance_valid(boomerang):
+			break
+		ghosted = ghosted or boomerang.ghost
+		await physics_frame
+	print("      wall dropped in its way home: ghosted %s, back in hand %s" % [ghosted, not is_instance_valid(boomerang)])
+	if not ghosted:
+		failures.append("a wall in the boomerang's way home did not ghost it")
+	if is_instance_valid(boomerang):
+		failures.append("the ghosted boomerang never got home")
+	between.queue_free()
+	await _teardown(stage)
+	return failures
+
+## Issue #150's availability rule: the three new weapons are pickups only.
+## They are in the pickup pool and in Weapon Roulette's, a pickup of one hands
+## it over (the flail with its chain and ball), and nobody starts a round with
+## one: everyone who did not win starts with the pickaxe, and the ball goes
+## with the flail.
+func _scenario_new_weapons_are_pickups_only() -> Array[String]:
+	var failures: Array[String] = []
+	var pool: Array[String] = []
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		pool.append(stats.resource_path)
+	var roulette: Array[String] = []
+	for stats: Resource in RoundModifiersScript.WeaponRoulette.roster():
+		roulette.append(stats.resource_path)
+	var drawn: Dictionary = {}
+	seed(150)
+	for i in 400:
+		var pick: Resource = PickupWeaponsScript.choose(PickupWeaponsScript.available_weapons())
+		drawn[pick.resource_path] = true
+	for path: String in NEW_WEAPON_PATHS:
+		if not pool.has(path):
+			failures.append("%s is not in the pickup pool" % path)
+		if not roulette.has(path):
+			failures.append("%s is not in Weapon Roulette's pool" % path)
+		if not drawn.has(path):
+			failures.append("%s never came up in 400 pickup draws" % path)
+	var fresh: Node = PlayerScene.instantiate()
+	var authored: Resource = fresh.get("weapon_stats") as Resource
+	if authored != null and NEW_WEAPON_PATHS.has(authored.resource_path):
+		failures.append("Player.tscn hands every player %s" % authored.resource_path)
+	fresh.free()
+
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	if player.weapon_stats.resource_path != PickupWeaponsScript.PICKAXE_PATH:
+		failures.append("a fresh player held %s, not the pickaxe" % player.weapon_stats.resource_path)
+	_place_pickup(stage, NEW_WEAPON_FLOOR_STAND, load(FLAIL_PATH))
+	var took: bool = await _await_condition(func() -> bool: return player.weapon_stats.resource_path == FLAIL_PATH, 1000)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	if not took:
+		failures.append("walking onto a flail pickup did not hand over the flail")
+	elif player.flail_ball() == null:
+		failures.append("the flail picked up was built without its ball")
+	var ball: RigidBody2D = player.flail_ball()
+	player.leave_round()
+	await physics_frame
+	player.start_round(NEW_WEAPON_FLOOR_STAND, false)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	print("      pool %d, roulette %d, drew %d weapons; after a round: %s, ball %s" % [
+		pool.size(), roulette.size(), drawn.size(), player.weapon_stats.resource_path.get_file(), player.flail_ball()])
+	if player.weapon_stats.resource_path != PickupWeaponsScript.PICKAXE_PATH:
+		failures.append("the next round started with %s, not the pickaxe" % player.weapon_stats.resource_path)
+	if player.flail_ball() != null or is_instance_valid(ball):
+		failures.append("the flail's ball outlived the flail into the next round")
+	await _teardown(stage)
+	return failures
+
+## Bots (#152) can hold and use each new weapon: driven by a bot for a few
+## seconds against a target, the weapon swings, and a bot's drag launches
+## the grapple's hook and the boomerang at least once.
+func _scenario_bots_wield_new_weapons() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in NEW_WEAPON_PATHS:
+		var stage: Node2D = _new_stage()
+		var player: RigidBody2D = _spawn_player(stage, Vector2(-120, 270))
+		var target: RigidBody2D = _spawn_player(stage, Vector2(120, 270))
+		await _await_ticks(2)
+		await _equip(player, path)
+		var bot: Node = BotScript.new()
+		bot.rng.seed = BOT_SEED
+		bot.player = player
+		bot.output = player.set_input_vector
+		stage.add_child(bot)
+		var travelled: float = 0.0
+		var last: Vector2 = player.weapon_head_position() - player.global_position
+		var launched: bool = false
+		var modes: Dictionary = {}
+		for i in 300:
+			await physics_frame
+			if not player.alive:
+				break
+			var now: Vector2 = player.weapon_head_position() - player.global_position
+			travelled += now.distance_to(last)
+			last = now
+			launched = launched or player.launched_hook() != null or player.launched_boomerang() != null
+			modes[bot.mode] = true
+		var weapon: String = path.get_file().get_basename()
+		print("      %s: head travelled %.0f px in 5 s, launched %s, modes %s, still holding %s" % [
+			weapon, travelled, launched, modes.keys(), player.weapon_stats.resource_path.get_file()])
+		if player.weapon_stats.resource_path != path:
+			failures.append("%s: the bot's player ended up holding %s" % [weapon, player.weapon_stats.resource_path])
+		if travelled < 400.0:
+			failures.append("%s: driven by a bot, the head moved only %.0f px in 5 s" % [weapon, travelled])
+		if path != FLAIL_PATH and not launched:
+			failures.append("%s: a bot never launched it in 5 s" % weapon)
+		bot.queue_free()
+		stage.queue_free()
+		await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+
+## The new weapons' hits go where every strike goes: a lethal boomerang or
+## flail-ball hit is a lethal `strike_landed` from the thrower, the signal the
+## kill feed, announcer, awards and hitmarkers all read.
+func _scenario_new_weapon_hits_credit_the_thrower() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, -20))
+	await _await_ticks(2)
+	await _equip(thrower, BOOMERANG_PATH)
+	_brace(thrower)
+	_brace(victim)
+	victim.damage = 95.0
+	var strikes: Array = []
+	_record_strikes(thrower, strikes)
+	var eliminated: Array = []
+	victim.eliminated.connect(func() -> void: eliminated.append(true))
+	await _flick(thrower, Vector2.RIGHT)
+	await _await_condition(func() -> bool: return not victim.alive, 1500)
+	print("      boomerang: %d strikes, lethal %s, victim alive %s" % [strikes.size(), strikes.map(func(s: Dictionary) -> bool: return s["lethal"]), victim.alive])
+	if victim.alive or eliminated.is_empty():
+		failures.append("a boomerang hit on a victim at 95 did not eliminate them")
+	if strikes.is_empty() or not strikes.back()["lethal"] or strikes.back()["victim"] != victim:
+		failures.append("the lethal boomerang hit was not reported as the thrower's lethal strike_landed")
+
+	# The flail's ball.
+	var second: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, 300))
+	await physics_frame
+	_brace(second)
+	await _equip(thrower, FLAIL_PATH)
+	_brace(thrower)
+	second.damage = 95.0
+	strikes.clear()
+	thrower._land_ball_strike(second, 2200.0)
+	if second.alive or strikes.is_empty() or not strikes.back()["lethal"]:
+		failures.append("a lethal flail-ball strike was not reported as the thrower's lethal strike_landed")
+	await _teardown(stage)
+	return failures
+
+## The new weapons' share of `roster_heads_do_not_clip_platform_in_play`:
+## their arm heads, on the same seeded sweep.
+func _scenario_roster_heads_do_not_clip_platform_in_play_new_weapons() -> Array[String]:
+	var failures: Array[String] = await _clip_platform_sweep([6, 7, 8])
+	_scenario_completed = true
+	return failures
+
+## A row of players as close as a stage's spawns put them (120 px apart, the
+## flail's chain reaching 100 px), all handed a flail on the same tick, the
+## way a round start hands a kept or rouletted flail out. Every ball has to be
+## built clear of the others' bodies, and every chain has to stay together
+## through two seconds of swinging: a ball built inside a neighbour was thrown
+## out so hard the chains blew up to infinite positions within two ticks.
+func _scenario_flail_built_clear_of_neighbours() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		players.append(_spawn_player(stage, DEEP_PARK_POSITION + Vector2(120.0 * i, 0.0)))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = load(FLAIL_PATH)
+	for p: RigidBody2D in players:
+		_brace(p)
+		# The balls land real strikes on the neighbours; nobody may be
+		# eliminated (and lose their rig) before the two seconds are up.
+		p.spawn_protected = true
+		p.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	for p: RigidBody2D in players:
+		if p.flail_ball() == null:
+			failures.append("%s: no ball after the swap" % p.name)
+		elif p.flail_ball().overlaps_world():
+			failures.append("%s: ball built inside another player's body" % p.name)
+	if not failures.is_empty():
+		await _teardown(stage)
+		return failures
+	# Arm plus chain, with room for the stretch the chain is allowed and a
+	# tick of a whirled ball's travel past it before it is held.
+	var reach: float = (float(stats.max_reach) + float(stats.chain_length)) * 1.5
+	var furthest: float = 0.0
+	for tick in 120:
+		for i in players.size():
+			players[i].set_input_vector(Vector2.from_angle(float(tick) * (0.15 + 0.05 * i)))
+		await physics_frame
+		for p: RigidBody2D in players:
+			var at: Vector2 = p.flail_ball().global_position
+			if not at.is_finite():
+				failures.append("%s: the ball's position went non-finite on tick %d" % [p.name, tick])
+				break
+			furthest = maxf(furthest, at.distance_to(p.global_position))
+		if not failures.is_empty():
+			break
+	print("      4 flails 120 px apart: furthest a ball got from its player %.0f px (allowed %.0f)" % [furthest, reach])
+	if failures.is_empty() and furthest > reach:
+		failures.append("a ball got %.0f px from its player, past the %.0f px its arm and chain reach: the chain came apart" % [furthest, reach])
+	await _teardown(stage)
 	return failures

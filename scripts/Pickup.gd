@@ -76,7 +76,7 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 
 ## The outline drawn for this pickup, in the art's own coordinates: exactly
-## the weapon's `art_outline` when it has one.
+## the weapon's `pickup_art` when it has one, else its `art_outline`.
 func art_polygon() -> PackedVector2Array:
 	return _art.polygon if _art != null else PackedVector2Array()
 
@@ -96,6 +96,11 @@ func _build() -> void:
 	var outline: PackedVector2Array = PackedVector2Array()
 	if weapon_stats != null and "art_outline" in weapon_stats:
 		outline = weapon_stats.art_outline
+	# A weapon whose head alone does not show what it is -- the grapple's
+	# launcher without its hook, the flail's knob without its ball (issue
+	# #150) -- carries a fuller drawing for its pickup.
+	if weapon_stats != null and "pickup_art" in weapon_stats and weapon_stats.pickup_art.size() >= 3:
+		outline = weapon_stats.pickup_art
 	_art_is_fallback = outline.size() < 3
 	if _art_is_fallback:
 		outline = FALLBACK_ART

@@ -208,7 +208,9 @@ func _weapon_bodies_of(body: RigidBody2D) -> Array[RigidBody2D]:
 			continue
 		var rig: Node = head.get_parent()
 		for child: Node in rig.get_children():
-			if child is RigidBody2D and child != body:
+			# A flail's ball is a head in the same rig (issue #150), so the
+			# rig can be reached twice.
+			if child is RigidBody2D and child != body and not parts.has(child):
 				parts.append(child as RigidBody2D)
 	return parts
 

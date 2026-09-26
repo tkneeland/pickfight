@@ -79,6 +79,67 @@ extends Resource
 ## is what a bare `WeaponStats.new()` stands in for.
 @export var sound_set: StringName = &"pickaxe"
 
+# --- Special weapons: the grappling hook, the flail, the boomerang (#150) -----
+#
+# Every default here means "an ordinary weapon", so a resource that sets none
+# of them -- every weapon before #150, and every stub a scenario builds -- is
+# exactly the weapon it always was. `Player` reads `special` alone to decide
+# whether any of this runs.
+
+## Which special behaviour the weapon has on top of the ordinary arm:
+##   &""          -- none: a plain weapon on the arm.
+##   &"grapple"   -- a flick fires a hook; holding the drag reels the player
+##                   in to where it stuck; releasing lets go.
+##   &"flail"     -- a ball hangs off the head on a chain of real jointed
+##                   links and hits by its own momentum.
+##   &"boomerang" -- a flick throws the boomerang, which arcs out and comes
+##                   back, hitting on both legs.
+## The head on the arm is always a real head as well (it plants, climbs and
+## blocks like any other), so a special weapon is never also a lost moveset.
+@export var special: StringName = &""
+
+## Drawn on the head, in the holder's colour, while the thing it launches is
+## loaded: the hook on the grapple, the boomerang itself. Visual only -- it
+## collides with nothing, the head's circles do (ADR-0010's guarantee is
+## one-directional: art may reach past the circles, never the reverse). It
+## disappears while the hook or boomerang is out.
+@export var loaded_art: PackedVector2Array = PackedVector2Array()
+## What a pickup draws on the end of its haft instead of `art_outline`, when
+## set: the whole weapon as a player would recognise it (a boomerang, not
+## the grip it hangs from). Empty means the head's own art.
+@export var pickup_art: PackedVector2Array = PackedVector2Array()
+
+## The launched hook or boomerang reuses the firing fields above for its
+## flight: `projectile_speed` (launch speed, px/s), `projectile_damage` (flat,
+## per hit), `projectile_knockback` (impulse on the player hit) and
+## `projectile_radius` (what it is swept and drawn as). These are its range
+## (the hook's rope, the boomerang's furthest point out, in px) and the pause
+## after it is back before it can be launched again.
+@export var launch_range: float = 0.0
+@export var launch_cooldown: float = 0.0
+
+## Grapple: how fast holding the drag hauls the rope in (px/s), the force it
+## may pull the player's body with, and the shortest the rope gets.
+@export var reel_speed: float = 0.0
+@export var reel_force: float = 0.0
+@export var reel_min_length: float = 40.0
+
+## Boomerang: its top speed on the way back to the thrower (px/s).
+@export var return_speed: float = 0.0
+
+## Flail: the chain (how many jointed links, how long in all, the mass of each
+## link) and the ball on its end (mass, collision radius, damage at a full
+## speed strike on the same scale as `damage`, knockback per unit of the
+## ball's momentum, and the ball's drawn art around its circle).
+@export var chain_links: int = 0
+@export var chain_length: float = 0.0
+@export var chain_link_mass: float = 0.02
+@export var ball_mass: float = 0.0
+@export var ball_radius: float = 0.0
+@export var ball_damage: float = 0.0
+@export var ball_knockback: float = 0.0
+@export var ball_art: PackedVector2Array = PackedVector2Array()
+
 # --- The head: what it hits with, and what it is drawn as --------------------
 #
 # ADR-0010. A weapon head is a **cluster of circles fitted to the drawn art**,

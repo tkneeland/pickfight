@@ -1,0 +1,51 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The grappling hook (issue #150): a launcher on a short arm that fires a
+; hook on a rope. Mostly a way round the stage, with a light hit.
+;
+; Flick the drag to fire: the hook flies straight out along the flick at
+; 1600 px/s for up to 560 px. If it meets terrain it sticks there, and while
+; the drag stays held the rope reels in at 650 px/s, hauling the player
+; toward the hook with at most 4200 of force (gravity on a player is about
+; 1470), down to 44 px, where they hang and swing. Release to let go; the
+; hook reels home and can fire again 0.35 s after it arrives. A hook that
+; meets a player takes 6 off them and tugs them 320 toward the thrower, then
+; comes home (GrappleHook.gd). The launcher itself swings as a light melee
+; weapon: reach S, damage S (12), with the sword's drive.
+;
+; The head is the launcher, a small block drawn as `art_outline` and filled
+; by three circles. The hook sitting in it is `loaded_art`: drawn over the
+; head while the hook is home, hidden while it is out, and colliding with
+; nothing. It is also what the flying hook is drawn as.
+;
+; Force ceiling 5500, under the medium weapons' 6000 (#177: a light weapon
+; at 6000 stops losing the axe clash).
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 84.0
+mass = 0.2
+drive_speed = 36.0
+extend_speed = 1150.0
+rest_return_speed = 800.0
+max_drive_force = 5500.0
+damage = 12.0
+sound_set = &"grapple"
+special = &"grapple"
+loaded_art = PackedVector2Array(7, -1.2, 13, -1.2, 11, -5, 19, 0, 11, 5, 13, 1.2, 7, 1.2)
+launch_range = 560.0
+launch_cooldown = 0.35
+reel_speed = 650.0
+reel_force = 4200.0
+reel_min_length = 44.0
+projectile_speed = 1600.0
+projectile_damage = 6.0
+projectile_knockback = 320.0
+projectile_radius = 5.0
+pickup_art = PackedVector2Array(19, 0, 11, 5, 13, 1.2, 8, 1.2, 8, 2.5, 6, 4, -6, 4, -6, -4, 6, -4, 8, -2.5, 8, -1.2, 13, -1.2, 11, -5)
+head_circle_offsets = PackedVector2Array(-2.4, 0, 0.8, 0, 4, 0)
+head_circle_radii = PackedFloat32Array(3.4, 3.4, 3.4)
+art_outline = PackedVector2Array(-6, -4, 6, -4, 8, -2.5, 8, 2.5, 6, 4, -6, 4)
