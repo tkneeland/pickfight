@@ -12757,6 +12757,7 @@ func _scenario_music_loops_have_no_silent_seam() -> Array[String]:
 		if cut_sec > MUSIC_SEAM_MAX_CUT_SEC:
 			failures.append("%s: the loop window cuts %.0f ms of sound" % [track, cut_sec * 1000.0])
 	_scenario_completed = true
+	return failures
 
 
 # --- The haft meets the head it holds in every drawn frame (issue #135) -------

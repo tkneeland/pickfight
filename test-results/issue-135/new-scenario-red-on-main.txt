@@ -1,0 +1,39 @@
+      pickaxe (plain): widest drawn haft-to-head gap 56.80 px (at fraction 0.00), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      staff (plain): widest drawn haft-to-head gap 44.11 px (at fraction 0.02), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      sword (plain): widest drawn haft-to-head gap 28.46 px (at fraction 0.01), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      axe (plain): widest drawn haft-to-head gap 36.76 px (at fraction 0.00), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      dagger (plain): widest drawn haft-to-head gap 37.30 px (at fraction 0.03), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      boomstick (plain): widest drawn haft-to-head gap 26.78 px (at fraction 0.00), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      pickaxe (big heads): widest drawn haft-to-head gap 56.80 px (at fraction 0.00), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      staff (big heads): widest drawn haft-to-head gap 56.29 px (at fraction 0.01), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      sword (big heads): widest drawn haft-to-head gap 28.33 px (at fraction 0.02), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      axe (big heads): widest drawn haft-to-head gap 37.67 px (at fraction 0.02), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      dagger (big heads): widest drawn haft-to-head gap 33.31 px (at fraction 0.00), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      boomstick (big heads): widest drawn haft-to-head gap 26.58 px (at fraction 0.01), 286 frames, 166 between ticks, 0 phased (widest 0.00 px)
+      pickaxe (phased): widest drawn haft-to-head gap 25.64 px (at fraction 0.00), 580 frames, 366 between ticks, 363 phased (widest 25.64 px)
+      staff (phased): widest drawn haft-to-head gap 40.03 px (at fraction 0.02), 580 frames, 366 between ticks, 363 phased (widest 40.03 px)
+      sword (phased): widest drawn haft-to-head gap 14.51 px (at fraction 0.06), 580 frames, 366 between ticks, 363 phased (widest 14.51 px)
+      axe (phased): widest drawn haft-to-head gap 21.37 px (at fraction 0.00), 580 frames, 366 between ticks, 363 phased (widest 21.37 px)
+      dagger (phased): widest drawn haft-to-head gap 17.55 px (at fraction 0.06), 580 frames, 366 between ticks, 363 phased (widest 17.55 px)
+      boomstick (phased): widest drawn haft-to-head gap 13.00 px (at fraction 0.01), 580 frames, 366 between ticks, 363 phased (widest 13.00 px)
+FAIL  haft_tip_meets_drawn_head_every_frame
+      - pickaxe (plain): the drawn haft tip and the drawn head were 56.8 px apart (fraction 0.00); allowed 2.0
+      - staff (plain): the drawn haft tip and the drawn head were 44.1 px apart (fraction 0.02); allowed 2.0
+      - sword (plain): the drawn haft tip and the drawn head were 28.5 px apart (fraction 0.01); allowed 2.0
+      - axe (plain): the drawn haft tip and the drawn head were 36.8 px apart (fraction 0.00); allowed 2.0
+      - dagger (plain): the drawn haft tip and the drawn head were 37.3 px apart (fraction 0.03); allowed 2.0
+      - boomstick (plain): the drawn haft tip and the drawn head were 26.8 px apart (fraction 0.00); allowed 2.0
+      - pickaxe (big heads): the drawn haft tip and the drawn head were 56.8 px apart (fraction 0.00); allowed 2.0
+      - staff (big heads): the drawn haft tip and the drawn head were 56.3 px apart (fraction 0.01); allowed 2.0
+      - sword (big heads): the drawn haft tip and the drawn head were 28.3 px apart (fraction 0.02); allowed 2.0
+      - axe (big heads): the drawn haft tip and the drawn head were 37.7 px apart (fraction 0.02); allowed 2.0
+      - dagger (big heads): the drawn haft tip and the drawn head were 33.3 px apart (fraction 0.00); allowed 2.0
+      - boomstick (big heads): the drawn haft tip and the drawn head were 26.6 px apart (fraction 0.01); allowed 2.0
+      - pickaxe (phased): the drawn haft tip and the drawn head were 25.6 px apart (fraction 0.00); allowed 2.0
+      - staff (phased): the drawn haft tip and the drawn head were 40.0 px apart (fraction 0.02); allowed 2.0
+      - sword (phased): the drawn haft tip and the drawn head were 14.5 px apart (fraction 0.06); allowed 2.0
+      - axe (phased): the drawn haft tip and the drawn head were 21.4 px apart (fraction 0.00); allowed 2.0
+      - dagger (phased): the drawn haft tip and the drawn head were 17.5 px apart (fraction 0.06); allowed 2.0
+      - boomstick (phased): the drawn haft tip and the drawn head were 13.0 px apart (fraction 0.01); allowed 2.0
+---
+0 passed, 1 failed, 1 total
