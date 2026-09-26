@@ -193,6 +193,9 @@ const PLAYTEST_WEAPON_PATHS: PackedStringArray = [
 	"res://resources/axe.tres",
 	"res://resources/dagger.tres",
 	"res://resources/boomstick.tres",
+	"res://resources/grapple.tres",
+	"res://resources/flail.tres",
+	"res://resources/boomerang.tres",
 ]
 var _random_weapons: bool = false
 ## `--demo`: a short-slot showcase. Random weapons, a fixed opening run of
