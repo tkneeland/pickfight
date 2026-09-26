@@ -12920,6 +12920,8 @@ func _haft_draw_failures(observer: Node, labels: Array[String], phased: bool) ->
 		if phased and observer.phased_frames[i] < HAFT_DRAW_MIN_PHASED_FRAMES:
 			failures.append("%s: the head was phased in only %d checked frames (need %d)" % [
 				labels[i], observer.phased_frames[i], HAFT_DRAW_MIN_PHASED_FRAMES])
+	return failures
+
 
 # --- Host phone controls and how to play (issue #149) --------------------------
 
