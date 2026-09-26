@@ -57,9 +57,12 @@
 ; re-placed along the crescent with midpoints added, 7 -> 13, every one still
 ; clamped inside the art.
 ;
-; Issue #136, more responsive: drive 24 -> 36 rad/s, extension 700 -> 950
-; px/s out and 400 -> 600 px/s back. The 6000 force ceiling stays, so clashes
-; and the axe's win over it are unchanged.
+; Issue #136, more responsive: drive 24 -> 36 rad/s and 400 -> 600 px/s back
+; to rest. The 6000 force ceiling stays, so clashes and the axe's win over it
+; are unchanged. Extension stays 700 px/s out: every speed tried from 750 to
+; 1050 broke one of the grip scenarios (a planted head skidding in
+; planted_head_grips_sideways_push, or a head pressed into a wall not letting
+; go in gripping_head_lets_go), all of which run on the pickaxe.
 
 [resource]
 script = ExtResource("1")
@@ -67,7 +70,7 @@ min_reach = 20.0
 max_reach = 150.0
 mass = 0.25
 drive_speed = 36.0
-extend_speed = 950.0
+extend_speed = 700.0
 rest_return_speed = 600.0
 max_drive_force = 6000.0
 damage = 34.0

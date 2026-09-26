@@ -22,7 +22,7 @@
 ; leave from the anchor along the haft (Player._fire), so they come out
 ; through the barrel as drawn.
 ;
-; Handling is the sword's, per the owner (#55): reach S 70 px, drive 36
+; Handling was the sword's, per the owner (#55): reach S 70 px, drive 36
 ; rad/s, 1350 px/s out, 900 px/s back (since #136), and its 6000 force ceiling, so it wins
 ; and loses clashes like the sword and pickaxe. Mass is much lower, 0.1
 ; against the sword's 0.25: a light weapon on a stick. Melee damage is
@@ -40,8 +40,9 @@
 ; fatal on its own. Knockback and recoil are agent defaults for the owner to
 ; tune in playtest.
 ;
-; Issue #136 raised the handling with the sword's: drive 24 -> 36 rad/s,
-; extension 900 -> 1350 px/s out and 600 -> 900 px/s back.
+; Issue #136: drive 24 -> 36 rad/s, extension 900 -> 1350 px/s out and
+; 600 -> 900 px/s back. The sword stops at 1150 / 800 (see sword.tres); the
+; gun's barrel passes the head-tunnelling charges at the full 1350.
 
 [resource]
 script = ExtResource("1")
