@@ -207,6 +207,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_stats_ko_credit_and_awards",
 	"kill_feed_credits_hits_and_awards_at_match_end",
 	"kill_feed_and_awards_fit_eight_long_names",
+	"every_stage_has_eight_safe_spawns",
+	"every_stage_terrain_spans_the_view",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -947,6 +949,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kill_feed_credits_hits_and_awards_at_match_end()
 		"kill_feed_and_awards_fit_eight_long_names":
 			return await _scenario_kill_feed_and_awards_fit_eight_long_names()
+		"every_stage_has_eight_safe_spawns":
+			return await _scenario_every_stage_has_eight_safe_spawns()
+		"every_stage_terrain_spans_the_view":
+			return await _scenario_every_stage_terrain_spans_the_view()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13395,3 +13401,154 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	await _teardown(main)
 	RoundManagerScript.modifier_rolls_enabled = true
 	return failures
+
+# --- Wide stages and eight spawns (issue #137) ---------------------------------
+
+## Issue #137: eight players (#138) need eight spawn points on every stage.
+const EIGHT_SPAWNS: int = 8
+
+## Issue #137: every stage declares at least eight spawns, and eight bodies
+## dropped onto Spawn0-7 on the same tick all land and rest where they were
+## put -- alive, not falling, not shoved sideways off their spot, not inside
+## one another -- with every spawn on screen under the fixed camera.
+## `stage_four_spawns_settle_together` is the same crowd check for four;
+## `stage_spawns_are_safe` still checks each spawn alone.
+func _scenario_every_stage_has_eight_safe_spawns() -> Array[String]:
+	var failures: Array[String] = []
+	var inside: Rect2 = CAMERA_VIEW.grow(-PLAYER_RADIUS)
+
+	for path: String in STAGE_PATHS:
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+		if spawns.size() < EIGHT_SPAWNS:
+			failures.append("%s: declared %d spawn point(s), eight players need %d" % [
+				path, spawns.size(), EIGHT_SPAWNS])
+			await _teardown(stage)
+			continue
+
+		var players: Array[RigidBody2D] = []
+		for i in EIGHT_SPAWNS:
+			if not inside.has_point(spawns[i]):
+				failures.append("%s spawn %d at %s: not wholly inside the fixed camera's view %s" % [
+					path, i, spawns[i], CAMERA_VIEW])
+			players.append(_spawn_player(stage, spawns[i]))
+		await _await_ticks(FOUR_SPAWN_SETTLE_TICKS)
+
+		var settled: int = 0
+		for i in EIGHT_SPAWNS:
+			var player: RigidBody2D = players[i]
+			if not player.alive:
+				failures.append("%s spawn %d: died with eight players spawned together" % [path, i])
+				continue
+			if player.linear_velocity.length() > SETTLED_SPEED:
+				failures.append("%s spawn %d: never settled, speed %.1f px/s" % [
+					path, i, player.linear_velocity.length()])
+				continue
+			var drift: float = absf(player.global_position.x - spawns[i].x)
+			if drift > FOUR_SPAWN_DRIFT_TOLERANCE:
+				failures.append("%s spawn %d: came to rest %.1f px sideways of its spawn" % [path, i, drift])
+				continue
+			settled += 1
+			for j in range(i + 1, EIGHT_SPAWNS):
+				if not players[j].alive:
+					continue
+				var gap: float = player.global_position.distance_to(players[j].global_position)
+				if gap < 2.0 * PLAYER_RADIUS - FOUR_SPAWN_OVERLAP_ALLOWANCE:
+					failures.append("%s spawns %d and %d: bodies overlap, centres %.1f px apart" % [path, i, j, gap])
+		print("      %s: %d spawns, %d of 8 settled together" % [path.get_file(), spawns.size(), settled])
+
+		await _teardown(stage)
+
+	return failures
+
+## The share of the fixed camera's width a stage's terrain must span.
+const TERRAIN_MIN_VIEW_FRACTION: float = 0.8
+
+## Issue #137: the owner's playtest lost too many rounds to walking or being
+## nudged off a short floor with half the screen of open air beside it. Every
+## stage's solid geometry -- static bodies and the #18 parts built on them
+## (crumbling ledges, collapsing floors, moving and rotating platforms), as
+## authored at round start -- must reach from within 20% of the view's width
+## of one side to the other: its leftmost and rightmost solid edges on screen
+## at least TERRAIN_MIN_VIEW_FRACTION of CAMERA_VIEW's width apart.
+##
+## Asserts the extent, not the coverage: gaps, pits and drains inside that
+## span are each stage's own ring-outs and stay legal (Pillars and Islands
+## are still mostly air between their tops). Coverage is printed so a stage
+## that satisfies the span with two slivers at the edges is visible.
+func _scenario_every_stage_terrain_spans_the_view() -> Array[String]:
+	var failures: Array[String] = []
+	var need: float = TERRAIN_MIN_VIEW_FRACTION * CAMERA_VIEW.size.x
+
+	for path: String in STAGE_PATHS:
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		# Parts build their collision shapes in _ready().
+		await _await_ticks(2)
+
+		var spans: Array[Vector2] = []
+		_collect_terrain_spans(instance, spans)
+		var left: float = INF
+		var right: float = -INF
+		for span: Vector2 in spans:
+			left = minf(left, span.x)
+			right = maxf(right, span.y)
+		var width: float = right - left if not spans.is_empty() else 0.0
+		var covered: float = _covered_width(spans)
+		print("      %s: terrain x %.0f..%.0f, spans %.0f px (%.0f%% of the view), %.0f%% covered" % [
+			path.get_file(), left, right, width, 100.0 * width / CAMERA_VIEW.size.x,
+			100.0 * covered / CAMERA_VIEW.size.x])
+		if width < need:
+			failures.append("%s: terrain spans %.0f px of the %.0f px view, needs %.0f" % [
+				path, width, CAMERA_VIEW.size.x, need])
+		await _teardown(stage)
+
+	return failures
+
+## The on-screen x-extent of every enabled collision shape on a static body
+## (AnimatableBody2D included) under `node`, clipped to CAMERA_VIEW.
+func _collect_terrain_spans(node: Node, spans: Array[Vector2]) -> void:
+	for child: Node in node.get_children():
+		if child.get_parent() is StaticBody2D:
+			var rect: Rect2 = Rect2()
+			var found: bool = false
+			if child is CollisionShape2D and not child.disabled and child.shape != null:
+				rect = (child as CollisionShape2D).global_transform * (child as CollisionShape2D).shape.get_rect()
+				found = true
+			elif child is CollisionPolygon2D and not child.disabled:
+				var points: PackedVector2Array = (child as CollisionPolygon2D).global_transform * (child as CollisionPolygon2D).polygon
+				if not points.is_empty():
+					rect = Rect2(points[0], Vector2.ZERO)
+					for point: Vector2 in points:
+						rect = rect.expand(point)
+					found = true
+			if found and rect.intersects(CAMERA_VIEW):
+				spans.append(Vector2(maxf(rect.position.x, CAMERA_VIEW.position.x),
+					minf(rect.end.x, CAMERA_VIEW.end.x)))
+		_collect_terrain_spans(child, spans)
+
+## Total width of the union of x-intervals.
+func _covered_width(spans: Array[Vector2]) -> float:
+	var sorted: Array[Vector2] = spans.duplicate()
+	sorted.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+	var total: float = 0.0
+	var start: float = -INF
+	var end: float = -INF
+	for span: Vector2 in sorted:
+		if span.x > end:
+			if end > start:
+				total += end - start
+			start = span.x
+			end = span.y
+		else:
+			end = maxf(end, span.y)
+	if end > start:
+		total += end - start
+	return total

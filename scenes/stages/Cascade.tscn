@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
@@ -8,10 +8,13 @@
 size = Vector2(260, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
-size = Vector2(800, 40)
+size = Vector2(1440, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_balcony"]
+size = Vector2(200, 24)
 
 ; A descending run: a static start platform up high, three moving platforms
 ; carrying a rider down in a staircase, and a static floor at the bottom
@@ -69,6 +72,30 @@ shape = SubResource("RectangleShape2D_top")
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
 
+; Balconies (issue #137): two more static tops at TopPlatform's height, far
+; out to each side, so eight players can all start high. They are off the
+; staircase: the way down from one is a drop to the widened floor, and the
+; way back up is the same ping-pong run as from anywhere else.
+[node name="BalconyLeft" type="StaticBody2D" parent="."]
+position = Vector2(-560, -260)
+
+[node name="BalconyLeftShape" type="CollisionShape2D" parent="BalconyLeft"]
+shape = SubResource("RectangleShape2D_balcony")
+
+[node name="BalconyLeftVisual" type="Polygon2D" parent="BalconyLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="BalconyRight" type="StaticBody2D" parent="."]
+position = Vector2(560, -260)
+
+[node name="BalconyRightShape" type="CollisionShape2D" parent="BalconyRight"]
+shape = SubResource("RectangleShape2D_balcony")
+
+[node name="BalconyRightVisual" type="Polygon2D" parent="BalconyRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
 ; Authored at the top of its leg (travel points down), so it starts the
 ; instant the stage loads already at the boarding point directly beneath
 ; TopPlatform -- the first descent is always available to whoever gets
@@ -109,6 +136,8 @@ size = Vector2(200, 24)
 travel = Vector2(0, 90)
 one_way_sec = 2.0
 
+; Widened for issue #137 from 800 px (x=+-400) to +-720, so a rider thrown
+; off the staircase, or dropping off a balcony, lands on it.
 [node name="Floor" type="StaticBody2D" parent="."]
 position = Vector2(0, 400)
 
@@ -117,7 +146,7 @@ shape = SubResource("RectangleShape2D_floor")
 
 [node name="FloorVisual" type="Polygon2D" parent="Floor"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-400, -20, 400, -20, 400, 20, -400, 20)
+polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
 
 ; Both spawns sit on the static TopPlatform, not on any moving platform --
 ; a spawn point that lands on a platform mid-patrol can still be carrying
@@ -136,6 +165,20 @@ position = Vector2(-30, -352)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(30, -352)
+
+; Spawns 4-7 (issue #137): eight players. Two on each balcony, level with Spawn0-3, so the highest spawn -- which
+; sets the lava's rise -- is unchanged.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-600, -352)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(600, -352)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-520, -352)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(520, -352)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)

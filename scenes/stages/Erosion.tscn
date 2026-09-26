@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
-size = Vector2(216, 24)
+size = Vector2(448, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -51,15 +51,18 @@ background_silhouette = Color(0.2, 0.13, 0.1, 1)
 background_layers = PackedStringArray("mountains", "rocks")
 
 [node name="LedgeA" parent="." instance=ExtResource("3")]
-position = Vector2(-420, 300)
+position = Vector2(-536, 300)
 size = Vector2(160, 24)
 warn_sec = 1.0
 
 [node name="LedgeB" parent="." instance=ExtResource("3")]
-position = Vector2(-220, 300)
+position = Vector2(-336, 300)
 size = Vector2(160, 24)
 warn_sec = 1.0
 
+; Widened for issue #137 from 216 to 448 px so eight spawns fit on permanent
+; ground (none on a crumbling ledge, per US-7); every ledge moved out with it,
+; gaps unchanged (32 px island-to-ledge, 40 px ledge-to-ledge).
 [node name="Island" type="StaticBody2D" parent="."]
 position = Vector2(0, 300)
 
@@ -68,30 +71,56 @@ shape = SubResource("RectangleShape2D_island")
 
 [node name="IslandVisual" type="Polygon2D" parent="Island"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-108, -12, 108, -12, 108, 12, -108, 12)
+polygon = PackedVector2Array(-224, -12, 224, -12, 224, 12, -224, 12)
 
 [node name="LedgeC" parent="." instance=ExtResource("3")]
-position = Vector2(220, 300)
+position = Vector2(336, 300)
 size = Vector2(160, 24)
 warn_sec = 1.0
 
 [node name="LedgeD" parent="." instance=ExtResource("3")]
-position = Vector2(420, 300)
+position = Vector2(536, 300)
 size = Vector2(160, 24)
 warn_sec = 1.0
 
+; Outer ledges (issue #137): 120 px, 24 px outboard of A and D, so the
+; crumbling floor runs x=+-760. Crumbling like the rest -- the outer rim of
+; the stage is ground that goes away, not ground to camp on.
+[node name="LedgeE" parent="." instance=ExtResource("3")]
+position = Vector2(-700, 300)
+size = Vector2(120, 24)
+warn_sec = 1.0
+
+[node name="LedgeF" parent="." instance=ExtResource("3")]
+position = Vector2(700, 300)
+size = Vector2(120, 24)
+warn_sec = 1.0
+
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-40, 220)
+position = Vector2(-28, 220)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(40, 220)
+position = Vector2(28, 220)
 
 ; Spawns 2 and 3 (issue #36). On the widened island, outboard of the first two: four bodies, and still none on a crumbling ledge.
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-96, 220)
+position = Vector2(-84, 220)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(96, 220)
+position = Vector2(84, 220)
+
+; Spawns 4-7 (issue #137): eight players. All eight on the widened island, 56 px apart.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-140, 220)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(140, 220)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-196, 220)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(196, 220)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
@@ -102,8 +131,8 @@ shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). Floating over the inner crumbling ledges: going for one means standing on ground that is about to go.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-220, 240)
+position = Vector2(-336, 240)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(220, 240)
+position = Vector2(336, 240)
 

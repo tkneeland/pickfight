@@ -65,6 +65,30 @@ shape = SubResource("RectangleShape2D_pillar")
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
 
+; Outer columns (issue #137): the same 140 px column and the same 180 px gap
+; again outboard of each side, so the row of tops runs x=+-710 across the view.
+; Still no floor anywhere: every gap is still a committed swing over a fall,
+; but a player knocked off the end column lands on another top more often.
+[node name="PillarFarLeft" type="StaticBody2D" parent="."]
+position = Vector2(-640, 270)
+
+[node name="PillarFarLeftShape" type="CollisionShape2D" parent="PillarFarLeft"]
+shape = SubResource("RectangleShape2D_pillar")
+
+[node name="PillarFarLeftVisual" type="Polygon2D" parent="PillarFarLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
+
+[node name="PillarFarRight" type="StaticBody2D" parent="."]
+position = Vector2(640, 270)
+
+[node name="PillarFarRightShape" type="CollisionShape2D" parent="PillarFarRight"]
+shape = SubResource("RectangleShape2D_pillar")
+
+[node name="PillarFarRightVisual" type="Polygon2D" parent="PillarFarRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
+
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-320, 60)
 
@@ -77,6 +101,19 @@ position = Vector2(-30, 60)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(30, 60)
+
+; Spawns 4-7 (issue #137): eight players. Two on each new outer column, side by side like 2 and 3.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-675, 60)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(675, 60)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-605, 60)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(605, 60)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
-size = Vector2(800, 40)
+size = Vector2(1440, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
 size = Vector2(240, 24)
@@ -61,6 +61,9 @@ background_sky_bottom = Color(0.18, 0.16, 0.26, 1)
 background_silhouette = Color(0.08, 0.08, 0.13, 1)
 background_layers = PackedStringArray("clouds", "city", "city")
 
+; Widened for issue #137: the ground strip was 800 px (x=+-400); it now runs
+; +-720, so the climb starts from a floor that is hard to be knocked off
+; rather than a short strip. The rungs above are untouched.
 [node name="Ground" type="StaticBody2D" parent="."]
 position = Vector2(0, 400)
 
@@ -69,7 +72,7 @@ shape = SubResource("RectangleShape2D_ground")
 
 [node name="GroundVisual" type="Polygon2D" parent="Ground"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-400, -20, 400, -20, 400, 20, -400, 20)
+polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
 
 [node name="Ledge1" type="StaticBody2D" parent="."]
 position = Vector2(-190, 280)
@@ -140,6 +143,19 @@ position = Vector2(-40, 340)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(40, 340)
+
+; Spawns 4-7 (issue #137): eight players. On the widened ground, outboard of the rungs, so nobody starts a rung up.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-420, 340)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(420, 340)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-560, 340)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(560, 340)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)

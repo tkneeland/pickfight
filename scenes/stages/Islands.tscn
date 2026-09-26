@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
@@ -9,6 +9,9 @@ size = Vector2(180, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_islet"]
+size = Vector2(120, 24)
 
 ; Four small platforms, all at exactly the same height, with kill space between
 ; them and underneath. Nothing here is higher than anything else, so the height
@@ -82,6 +85,29 @@ shape = SubResource("RectangleShape2D_island")
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
 
+; Outer islets (issue #137): 120 px, one each side, 100 px off IslandA and
+; IslandD -- the same gap as A to B -- so the chain runs x=+-730 and a player
+; knocked off an end island has somewhere to land. Same height as the rest.
+[node name="IslandE" type="StaticBody2D" parent="."]
+position = Vector2(-670, 300)
+
+[node name="IslandEShape" type="CollisionShape2D" parent="IslandE"]
+shape = SubResource("RectangleShape2D_islet")
+
+[node name="IslandEVisual" type="Polygon2D" parent="IslandE"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-60, -12, 60, -12, 60, 12, -60, 12)
+
+[node name="IslandF" type="StaticBody2D" parent="."]
+position = Vector2(670, 300)
+
+[node name="IslandFShape" type="CollisionShape2D" parent="IslandF"]
+shape = SubResource("RectangleShape2D_islet")
+
+[node name="IslandFVisual" type="Polygon2D" parent="IslandF"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-60, -12, 60, -12, 60, 12, -60, 12)
+
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-420, 220)
 
@@ -94,6 +120,19 @@ position = Vector2(-200, 220)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(-80, 220)
+
+; Spawns 4-7 (issue #137): eight players. One on each outer islet, and a second on IslandA and IslandD.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-670, 220)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(670, 220)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-480, 220)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(480, 220)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_pad"]
-size = Vector2(300, 24)
+size = Vector2(420, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -60,25 +60,27 @@ size = Vector2(160, 24)
 travel = Vector2(500, 0)
 one_way_sec = 4.545
 
+; Widened for issue #137: each pad ran out to x=+-600; now +-720. The inner
+; edges (and so the 600 px of water and the barge's run-in) are untouched.
 [node name="PadLeft" type="StaticBody2D" parent="."]
-position = Vector2(-450, 380)
+position = Vector2(-510, 380)
 
 [node name="PadLeftShape" type="CollisionShape2D" parent="PadLeft"]
 shape = SubResource("RectangleShape2D_pad")
 
 [node name="PadLeftVisual" type="Polygon2D" parent="PadLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
+polygon = PackedVector2Array(-210, -12, 210, -12, 210, 12, -210, 12)
 
 [node name="PadRight" type="StaticBody2D" parent="."]
-position = Vector2(450, 380)
+position = Vector2(510, 380)
 
 [node name="PadRightShape" type="CollisionShape2D" parent="PadRight"]
 shape = SubResource("RectangleShape2D_pad")
 
 [node name="PadRightVisual" type="Polygon2D" parent="PadRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
+polygon = PackedVector2Array(-210, -12, 210, -12, 210, 12, -210, 12)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-450, 300)
@@ -92,6 +94,19 @@ position = Vector2(-550, 300)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(550, 300)
+
+; Spawns 4-7 (issue #137): eight players. Outboard on the widened pads, and at each dock's lip.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-650, 300)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(650, 300)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-360, 300)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(360, 300)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
