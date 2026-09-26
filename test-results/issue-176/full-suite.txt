@@ -1,4 +1,4 @@
-# Full scenario list (215 scenarios), run as 5 parallel shards of --scenarios=, 294 s
+# Full scenario list (216 scenarios), run as 5 parallel shards of --scenarios=, 478 s
 ## shard 0
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -19,13 +19,13 @@ PASS  eliminated_player_cannot_collect
 PASS  pickup_drawn_with_weapon_art
 PASS  damage_numbers_switch_off
 PASS  kill_zone_rises_after_grace
-Controller page: http://172.19.6.46:58743/
+Controller page: http://172.19.6.46:49185/
 PASS  four_phones_claim_four_slots
       buzzes: [[0, "eliminated"], [2, "eliminated"], [1, "win"]]
 PASS  round_win_buzzes_only_winner
       first shot 181 ticks after the boomstick was handed over, the next 180 ticks later (interval 180 ticks)
 PASS  boomstick_fires_on_interval
-      pool of 5 weapons; the boomstick came up 70 times in 300 draws
+      pool of 5 weapons; the boomstick came up 62 times in 300 draws
 PASS  boomstick_in_pickup_pool
       heavy_weapons: plain 131.701, modified 184.472, plain again 131.701
 PASS  round_modifier_heavy_weapons_applies_and_undoes
@@ -45,8 +45,8 @@ PASS  sfx_strike_sounds_as_attackers_weapon
 PASS  sfx_lava_countdown_rise_and_sizzle
       76 files, 1811 KB, 12 hook literals
 PASS  sfx_sound_files_exist
-      ceiling edge +30 px: anchor at least 7.2 px ahead of the body along its gun, 0 ticks behind it; muzzle reached 3.4 px into the ceiling
-      ceiling edge +150 px: anchor at least 7.2 px ahead of the body along its gun, 0 ticks behind it; muzzle reached 3.4 px into the ceiling
+      ceiling edge +30 px: anchor at least 7.2 px ahead of the body along its gun, 0 ticks behind it; muzzle reached 0.7 px into the ceiling
+      ceiling edge +150 px: anchor at least 7.2 px ahead of the body along its gun, 0 ticks behind it; muzzle reached 0.7 px into the ceiling
 PASS  pad_launch_keeps_head_ahead_of_body
       planted head slide: shove 0.0 px, push-off 1.0 px
 PASS  planted_head_grips_sideways_push
@@ -57,112 +57,112 @@ PASS  pickup_spots_skip_player_spawns
       clash speeds [3600.0], sparks 12
       flood of 20 clashes holds 96 particles (cap 96)
 PASS  juice_sparks_on_clash_capped
-Controller page: http://172.19.6.46:51050/
+Controller page: http://172.19.6.46:55737/
 PASS  phone_lobby_messages_over_websocket
-Controller page: http://172.19.6.46:51054/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:51054/
+Controller page: http://172.19.6.46:55741/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:55741/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12545)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1000)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:990)
-       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12341)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12572)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1001)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:991)
+       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12368)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12545)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1000)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:990)
-       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12341)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12572)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1001)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:991)
+       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12368)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
       lobby with 8 needs 1390 x 779 px
       8 players started, closest pair 90 px apart
       scoreboard: 8 entries in 1372 x 158 px
       podium with 8 needs 1552 x 824 px
 PASS  eight_phones_join_and_play_a_round
-Controller page: http://172.19.6.46:51064/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:51064/
+Controller page: http://172.19.6.46:55751/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:55751/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:12998)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1010)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1000)
-       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12644)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13025)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1011)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1001)
+       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12671)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:12998)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1010)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1000)
-       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12644)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13025)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1011)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1001)
+       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12671)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
       paused: P2 moved 0.00 px in 30 frames; tree paused true
-      resumed: P2 moved 14.4 px
+      resumed: P2 moved 18.6 px
       kicked phone: state 3, reason 'removed by the host'; roster [0, 1]
 PASS  host_phone_controls_over_websocket
-Controller page: http://172.19.6.46:65341/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:65341/
+Controller page: http://172.19.6.46:55758/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:55758/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13365)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1020)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1010)
-       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13110)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13392)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1021)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1011)
+       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13137)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13365)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1020)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1010)
-       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13110)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13392)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1021)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1011)
+       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13137)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
       feed [P: (1061.0, 204.0), S: (523.0, 166.0)] (5 lines), scoreboard [P: (40.0, 371.0), S: (1520.0, 158.0)], banner [P: (0.0, 567.0), S: (1600.0, 143.0)] needs 644 px wide, QR [P: (1404.0, 8.0), S: (184.0, 184.0)]
       victory with 8 and awards needs 1591 x 824 px; awards 1240 x 99
 PASS  kill_feed_and_awards_fit_eight_long_names
-Controller page: http://172.19.6.46:65343/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:65343/
+Controller page: http://172.19.6.46:55760/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:55760/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:13885)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1030)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1020)
-       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13422)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:13912)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1031)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1021)
+       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13449)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:13885)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1030)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1020)
-       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13422)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:13912)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1031)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1021)
+       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13449)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
       45 frames of a live round, 0 with a tag problem 
       eight in a row 56 px apart: all tags clear; top tag 213 px above the row
 PASS  name_tags_on_for_every_living_player_all_round
@@ -170,8 +170,7 @@ PASS  announcer_calls_the_match
       double_damage: plain 18.133, modified 36.267, plain again 18.133
       bullet damage: plain 35.0, modified 70.0, plain again 35.0
       falling rock damage: plain 25.0, doubled 50.0, after 25.0
-FAIL  round_modifier_double_damage_applies_and_undoes
-      - round 3: expected modifier '' on the round, found 'big_heads'
+PASS  round_modifier_double_damage_applies_and_undoes
       seed 1: 3 players [0, 5, 2, 3, 8, 7], then 7 players [11, 2, 7, 9, 8, 0, 6, 5, 3, 1, 4, 10] (first large 1 round(s) in)
       seed 2: 3 players [0, 6, 3, 0, 4, 1], then 7 players [6, 5, 2, 4, 10, 8, 1, 3, 7, 0, 9, 11] (first large 5 round(s) in)
       seed 3: 3 players [0, 4, 5, 3, 8, 2], then 7 players [9, 6, 3, 7, 11, 8, 0, 1, 2, 5, 10, 4] (first large 1 round(s) in)
@@ -182,35 +181,35 @@ FAIL  round_modifier_double_damage_applies_and_undoes
       seed 8: 3 players [0, 5, 1, 3, 7, 0], then 7 players [2, 8, 10, 3, 0, 5, 11, 9, 6, 7, 1, 4] (first large 3 round(s) in)
       bag before a new match: 7 left; after: 0
 PASS  stage_bag_redeals_when_player_count_crosses_large
-Controller page: http://172.19.6.46:65355/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:65355/
+Controller page: http://172.19.6.46:55501/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:55501/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15582)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1070)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1050)
-       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14825)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15609)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1071)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1051)
+       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14852)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15582)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1070)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1050)
-       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14825)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15609)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1071)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1051)
+       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14852)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
       Remove bots mid-round: 3 bots left, roster [0, 1, 2, 3], phase 'playing'
       remove_bots(): bodies still in the round []; roster [0]
 PASS  solo_ignored_mid_match_and_removed_bots_leave_round
-Controller page: http://172.19.6.46:65358/
+Controller page: http://172.19.6.46:55504/
       stale kick of Bob's claim 2.0: roster [0, 1], Alice's socket state 1
       End match from match 1.0 during match 2.0: commands []
 PASS  host_phone_stale_kick_and_end_are_ignored
@@ -218,11 +217,14 @@ PASS  host_phone_stale_kick_and_end_are_ignored
       Pistons.tscn: view [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]; meteors start x -1112..1116, lowest y -710, dropped past y 2630
       Ziggurat.tscn: view [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]; meteors start x -1112..1116, lowest y -710, dropped past y 2630
 PASS  meteor_shower_rains_across_large_stage_view
-      kos { 0: 1 }, self-KOs {  }, alive { 0: 48, 1: 47 } (round took 3546 ms, 3500 of them paused)
+      kos { 0: 1 }, self-KOs {  }, alive { 0: 48, 1: 47 } (round took 3547 ms, 3500 of them paused)
 PASS  pause_keeps_ko_credit_and_survival_time
 PASS  settings_fullscreen_follows_the_real_window
+      Ferry: the bot is alive after 10 s, at (-422, 302)
+      Updraft: the bot is alive after 10 s, at (-515, 214)
+PASS  bots_survive_hazard_stages
 ---
-42 passed, 1 failed, 43 total
+44 passed, 0 failed, 44 total
 ## shard 1
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -233,7 +235,7 @@ PASS  non_finite_input_rejected
       swing 1.30 rad: head 2482 px/s, damage 42.9, closest 32.7 px
       creep: head 661 px/s, damage 0.0, closest 33.0 px
 PASS  head_strike_damage_scales
-      walked together at up to 13.8 px a tick: met at 16.5 px, still 17.5 px apart under full push
+      walked together at up to 16.6 px a tick: met at 16.5 px, still 17.5 px apart under full push
       sent at each other at up to 22.6 px a tick: met at 16.3 px, still 17.2 px apart at the end
 PASS  heads_do_not_interpenetrate
       pickaxe.tres: 13 circles against 26 points of art, worst fit -0.05 px outside it (negative is inside, clear)
@@ -247,57 +249,56 @@ PASS  heads_do_not_interpenetrate
 PASS  weapon_head_circles_within_art
 PASS  round_winner_keeps_weapon
       pickaxe   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
-      sword   0 deg at 600 px/s each: crossed 10.5 px apart -- a miss, not a breach
+      sword   0 deg at 600 px/s each: crossed 12.0 px apart -- a miss, not a breach
       sword   0 deg at 600 px/s each: heads closed to    2.7 px of each other
       dagger   0 deg at 600 px/s each: crossed, then the correction put it back
-      dagger   0 deg at 600 px/s each: heads closed to    3.3 px of each other
+      dagger   0 deg at 600 px/s each: heads closed to    3.5 px of each other
       pickaxe   0 deg at 1200 px/s each: crossed 22.4 px apart -- a miss, not a breach
       pickaxe   0 deg at 1200 px/s each: heads closed to    0.0 px of each other
-      sword   0 deg at 1200 px/s each: crossed 14.5 px apart -- a miss, not a breach
-      sword   0 deg at 1200 px/s each: heads closed to   -1.3 px of each other
-      dagger   0 deg at 1200 px/s each: crossed 0.9 px apart -- a miss, not a breach
-      dagger   0 deg at 1200 px/s each: heads closed to    0.9 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -2.0 px of each other
+      dagger   0 deg at 1200 px/s each: crossed 7.6 px apart -- a miss, not a breach
+      dagger   0 deg at 1200 px/s each: heads closed to    7.6 px of each other
       pickaxe   0 deg at 1800 px/s each: heads closed to   -0.4 px of each other
-      sword   0 deg at 1800 px/s each: crossed 10.2 px apart -- a miss, not a breach
-      sword   0 deg at 1800 px/s each: heads closed to    0.7 px of each other
-      dagger   0 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      sword   0 deg at 1800 px/s each: heads closed to   -5.6 px of each other
+      dagger   0 deg at 1800 px/s each: heads closed to   -0.3 px of each other
       pickaxe  45 deg at 600 px/s each: heads closed to   -1.1 px of each other
-      sword  45 deg at 600 px/s each: crossed 20.3 px apart -- a miss, not a breach
-      sword  45 deg at 600 px/s each: heads closed to   12.0 px of each other
-      dagger  45 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
-      dagger  45 deg at 600 px/s each: heads closed to   11.7 px of each other
+      sword  45 deg at 600 px/s each: crossed 33.2 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to    0.3 px of each other
+      dagger  45 deg at 600 px/s each: crossed 11.6 px apart -- a miss, not a breach
+      dagger  45 deg at 600 px/s each: heads closed to   11.6 px of each other
       pickaxe  45 deg at 1200 px/s each: heads closed to   -1.8 px of each other
-      sword  45 deg at 1200 px/s each: crossed 27.9 px apart -- a miss, not a breach
-      sword  45 deg at 1200 px/s each: heads closed to    0.5 px of each other
-      dagger  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      sword  45 deg at 1200 px/s each: heads closed to   -0.3 px of each other
+      dagger  45 deg at 1200 px/s each: crossed 34.1 px apart -- a miss, not a breach
+      dagger  45 deg at 1200 px/s each: heads closed to    0.0 px of each other
       pickaxe  45 deg at 1800 px/s each: heads closed to   -0.3 px of each other
-      sword  45 deg at 1800 px/s each: crossed 24.2 px apart -- a miss, not a breach
-      sword  45 deg at 1800 px/s each: heads closed to    4.7 px of each other
+      sword  45 deg at 1800 px/s each: heads closed to   -2.0 px of each other
       dagger  45 deg at 1800 px/s each: heads closed to   -0.1 px of each other
-      pickaxe  90 deg at 600 px/s each: heads closed to   -0.0 px of each other
-      sword  90 deg at 600 px/s each: crossed, then the correction put it back
-      sword  90 deg at 600 px/s each: heads closed to   13.3 px of each other
-      dagger  90 deg at 600 px/s each: crossed 11.1 px apart -- a miss, not a breach
-      dagger  90 deg at 600 px/s each: heads closed to   11.1 px of each other
-      pickaxe  90 deg at 1200 px/s each: heads closed to   -1.4 px of each other
+      pickaxe  90 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      sword  90 deg at 600 px/s each: crossed 26.2 px apart -- a miss, not a breach
+      sword  90 deg at 600 px/s each: heads closed to    5.5 px of each other
+      dagger  90 deg at 600 px/s each: crossed, then the correction put it back
+      dagger  90 deg at 600 px/s each: heads closed to    5.4 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -2.0 px of each other
       sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       dagger  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.7 px of each other
-      sword  90 deg at 1800 px/s each: crossed 97.7 px apart -- a miss, not a breach
-      sword  90 deg at 1800 px/s each: heads closed to   14.2 px of each other
-      dagger  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      pickaxe 135 deg at 600 px/s each: heads closed to   -0.2 px of each other
-      sword 135 deg at 600 px/s each: crossed 26.9 px apart -- a miss, not a breach
-      sword 135 deg at 600 px/s each: heads closed to   11.2 px of each other
-      dagger 135 deg at 600 px/s each: crossed, then the correction put it back
-      dagger 135 deg at 600 px/s each: heads closed to    4.8 px of each other
-      pickaxe 135 deg at 1200 px/s each: heads closed to   -1.6 px of each other
-      sword 135 deg at 1200 px/s each: crossed 70.4 px apart -- a miss, not a breach
-      sword 135 deg at 1200 px/s each: heads closed to    0.7 px of each other
-      dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      pickaxe 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
-      sword 135 deg at 1800 px/s each: crossed 26.4 px apart -- a miss, not a breach
-      sword 135 deg at 1800 px/s each: heads closed to    4.1 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      sword  90 deg at 1800 px/s each: crossed 42.3 px apart -- a miss, not a breach
+      sword  90 deg at 1800 px/s each: heads closed to    0.9 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -0.4 px of each other
+      pickaxe 135 deg at 600 px/s each: crossed 13.2 px apart -- a miss, not a breach
+      pickaxe 135 deg at 600 px/s each: heads closed to   13.2 px of each other
+      sword 135 deg at 600 px/s each: crossed 17.7 px apart -- a miss, not a breach
+      sword 135 deg at 600 px/s each: heads closed to   17.7 px of each other
+      dagger 135 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
+      dagger 135 deg at 600 px/s each: heads closed to   11.7 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -0.2 px of each other
+      sword 135 deg at 1200 px/s each: crossed 55.5 px apart -- a miss, not a breach
+      sword 135 deg at 1200 px/s each: heads closed to    0.8 px of each other
+      dagger 135 deg at 1200 px/s each: crossed 33.0 px apart -- a miss, not a breach
+      dagger 135 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -0.8 px of each other
+      sword 135 deg at 1800 px/s each: crossed 51.0 px apart -- a miss, not a breach
+      sword 135 deg at 1800 px/s each: heads closed to    7.0 px of each other
       dagger 135 deg at 1800 px/s each: heads closed to   -0.1 px of each other
       staff   0 deg at 600 px/s each: crossed, then the correction put it back
       staff   0 deg at 600 px/s each: heads closed to    2.5 px of each other
@@ -306,146 +307,142 @@ PASS  round_winner_keeps_weapon
       staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       axe   0 deg at 1200 px/s each: heads closed to   -2.2 px of each other
       boomstick   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1800 px/s each: heads closed to   -0.3 px of each other
       axe   0 deg at 1800 px/s each: heads closed to   -1.5 px of each other
-      boomstick   0 deg at 1800 px/s each: crossed 30.1 px apart -- a miss, not a breach
+      boomstick   0 deg at 1800 px/s each: crossed 1.8 px apart -- a miss, not a breach
       boomstick   0 deg at 1800 px/s each: heads closed to    0.6 px of each other
-      staff  45 deg at 600 px/s each: crossed 36.8 px apart -- a miss, not a breach
-      staff  45 deg at 600 px/s each: heads closed to   36.8 px of each other
+      staff  45 deg at 600 px/s each: crossed 38.3 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   38.3 px of each other
       axe  45 deg at 600 px/s each: heads closed to   -1.0 px of each other
-      boomstick  45 deg at 600 px/s each: crossed 26.5 px apart -- a miss, not a breach
-      boomstick  45 deg at 600 px/s each: heads closed to    3.6 px of each other
+      boomstick  45 deg at 600 px/s each: heads closed to   -0.1 px of each other
       staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       axe  45 deg at 1200 px/s each: heads closed to   -0.9 px of each other
-      boomstick  45 deg at 1200 px/s each: crossed 35.8 px apart -- a miss, not a breach
-      boomstick  45 deg at 1200 px/s each: heads closed to    0.5 px of each other
+      boomstick  45 deg at 1200 px/s each: crossed 39.3 px apart -- a miss, not a breach
+      boomstick  45 deg at 1200 px/s each: heads closed to    0.6 px of each other
       staff  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       axe  45 deg at 1800 px/s each: heads closed to   -3.3 px of each other
-      boomstick  45 deg at 1800 px/s each: crossed 42.7 px apart -- a miss, not a breach
-      boomstick  45 deg at 1800 px/s each: heads closed to    1.0 px of each other
-      staff  90 deg at 600 px/s each: crossed 17.4 px apart -- a miss, not a breach
-      staff  90 deg at 600 px/s each: heads closed to   17.4 px of each other
+      boomstick  45 deg at 1800 px/s each: heads closed to   -0.6 px of each other
+      staff  90 deg at 600 px/s each: crossed 17.9 px apart -- a miss, not a breach
+      staff  90 deg at 600 px/s each: heads closed to   17.9 px of each other
       axe  90 deg at 600 px/s each: heads closed to   -1.2 px of each other
-      boomstick  90 deg at 600 px/s each: crossed 29.3 px apart -- a miss, not a breach
-      boomstick  90 deg at 600 px/s each: heads closed to    6.5 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 29.8 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to    3.8 px of each other
       staff  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       axe  90 deg at 1200 px/s each: heads closed to   -1.7 px of each other
-      boomstick  90 deg at 1200 px/s each: heads closed to   -6.4 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -5.7 px of each other
       staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       axe  90 deg at 1800 px/s each: heads closed to   -0.4 px of each other
-      boomstick  90 deg at 1800 px/s each: heads closed to   -6.0 px of each other
-      staff 135 deg at 600 px/s each: crossed 16.3 px apart -- a miss, not a breach
-      staff 135 deg at 600 px/s each: heads closed to   16.3 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -5.8 px of each other
+      staff 135 deg at 600 px/s each: crossed 17.6 px apart -- a miss, not a breach
+      staff 135 deg at 600 px/s each: heads closed to   17.6 px of each other
       axe 135 deg at 600 px/s each: heads closed to   -0.1 px of each other
-      boomstick 135 deg at 600 px/s each: heads closed to   -6.8 px of each other
+      boomstick 135 deg at 600 px/s each: crossed 32.3 px apart -- a miss, not a breach
+      boomstick 135 deg at 600 px/s each: heads closed to    0.5 px of each other
       staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       axe 135 deg at 1200 px/s each: heads closed to   -0.9 px of each other
-      boomstick 135 deg at 1200 px/s each: crossed 37.1 px apart -- a miss, not a breach
-      boomstick 135 deg at 1200 px/s each: heads closed to    0.5 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -2.2 px of each other
       staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       axe 135 deg at 1800 px/s each: heads closed to   -0.5 px of each other
-      boomstick 135 deg at 1800 px/s each: crossed 38.5 px apart -- a miss, not a breach
-      boomstick 135 deg at 1800 px/s each: heads closed to    0.4 px of each other
+      boomstick 135 deg at 1800 px/s each: heads closed to   -6.2 px of each other
 PASS  roster_heads_do_not_tunnel_head
 PASS  head_plants_moving_platform
 PASS  pickups_arrive_on_interval_and_cap
 PASS  pickups_cleared_at_round_end
-      boomstick   0 deg at 600 px/s each: heads closed to   -1.0 px of each other
+      boomstick   0 deg at 600 px/s each: heads closed to   -0.9 px of each other
       axe   0 deg at 600 px/s each: heads closed to   -0.8 px of each other
-      staff   0 deg at 600 px/s each: heads closed to   -0.3 px of each other
+      staff   0 deg at 600 px/s each: heads closed to   -0.2 px of each other
       boomstick   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
       axe   0 deg at 1200 px/s each: heads closed to   -1.0 px of each other
       staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick   0 deg at 1800 px/s each: heads closed to   -4.4 px of each other
+      boomstick   0 deg at 1800 px/s each: heads closed to   -5.8 px of each other
       axe   0 deg at 1800 px/s each: heads closed to  -15.9 px of each other
-      staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      boomstick  45 deg at 600 px/s each: crossed 37.1 px apart -- a miss, not a breach
-      boomstick  45 deg at 600 px/s each: heads closed to    1.7 px of each other
+      staff   0 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      boomstick  45 deg at 600 px/s each: crossed 34.0 px apart -- a miss, not a breach
+      boomstick  45 deg at 600 px/s each: heads closed to    0.0 px of each other
       axe  45 deg at 600 px/s each: crossed 7.0 px apart -- a miss, not a breach
       axe  45 deg at 600 px/s each: heads closed to    7.0 px of each other
-      staff  45 deg at 600 px/s each: crossed 17.3 px apart -- a miss, not a breach
-      staff  45 deg at 600 px/s each: heads closed to   17.3 px of each other
-      boomstick  45 deg at 1200 px/s each: crossed 28.2 px apart -- a miss, not a breach
-      boomstick  45 deg at 1200 px/s each: heads closed to    0.5 px of each other
+      staff  45 deg at 600 px/s each: crossed 37.3 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   37.3 px of each other
+      boomstick  45 deg at 1200 px/s each: crossed 34.8 px apart -- a miss, not a breach
+      boomstick  45 deg at 1200 px/s each: heads closed to    0.2 px of each other
       axe  45 deg at 1200 px/s each: heads closed to   -1.4 px of each other
       staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick  45 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      boomstick  45 deg at 1800 px/s each: heads closed to   -1.6 px of each other
       axe  45 deg at 1800 px/s each: heads closed to   -0.2 px of each other
       staff  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      boomstick  90 deg at 600 px/s each: crossed 30.0 px apart -- a miss, not a breach
-      boomstick  90 deg at 600 px/s each: heads closed to    5.1 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 28.1 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to    5.9 px of each other
       axe  90 deg at 600 px/s each: heads closed to   -1.9 px of each other
-      staff  90 deg at 600 px/s each: crossed 17.5 px apart -- a miss, not a breach
-      staff  90 deg at 600 px/s each: heads closed to   17.5 px of each other
-      boomstick  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 600 px/s each: crossed 36.5 px apart -- a miss, not a breach
+      staff  90 deg at 600 px/s each: heads closed to   36.5 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -7.1 px of each other
       axe  90 deg at 1200 px/s each: heads closed to   -1.6 px of each other
       staff  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -5.9 px of each other
       axe  90 deg at 1800 px/s each: heads closed to   -3.1 px of each other
       staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      boomstick 135 deg at 600 px/s each: crossed 32.1 px apart -- a miss, not a breach
-      boomstick 135 deg at 600 px/s each: heads closed to    0.0 px of each other
+      boomstick 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
       axe 135 deg at 600 px/s each: heads closed to   -0.2 px of each other
-      staff 135 deg at 600 px/s each: crossed 16.3 px apart -- a miss, not a breach
-      staff 135 deg at 600 px/s each: heads closed to   16.3 px of each other
-      boomstick 135 deg at 1200 px/s each: heads closed to   -1.0 px of each other
+      staff 135 deg at 600 px/s each: crossed 17.6 px apart -- a miss, not a breach
+      staff 135 deg at 600 px/s each: heads closed to   17.6 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -0.8 px of each other
       axe 135 deg at 1200 px/s each: heads closed to   -4.4 px of each other
       staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      boomstick 135 deg at 1800 px/s each: heads closed to   -6.5 px of each other
+      boomstick 135 deg at 1800 px/s each: crossed 13.5 px apart -- a miss, not a breach
+      boomstick 135 deg at 1800 px/s each: heads closed to    0.1 px of each other
       axe 135 deg at 1800 px/s each: heads closed to   -3.1 px of each other
       staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
       dagger   0 deg at 600 px/s each: crossed, then the correction put it back
-      dagger   0 deg at 600 px/s each: heads closed to    3.8 px of each other
-      sword   0 deg at 600 px/s each: crossed 31.2 px apart -- a miss, not a breach
+      dagger   0 deg at 600 px/s each: heads closed to    3.9 px of each other
+      sword   0 deg at 600 px/s each: crossed 31.3 px apart -- a miss, not a breach
       sword   0 deg at 600 px/s each: heads closed to    2.8 px of each other
       pickaxe   0 deg at 600 px/s each: heads closed to   -0.4 px of each other
-      dagger   0 deg at 1200 px/s each: heads closed to   -0.1 px of each other
-      sword   0 deg at 1200 px/s each: crossed 35.1 px apart -- a miss, not a breach
-      sword   0 deg at 1200 px/s each: heads closed to    0.5 px of each other
+      dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -2.6 px of each other
       pickaxe   0 deg at 1200 px/s each: heads closed to   -0.7 px of each other
-      dagger   0 deg at 1800 px/s each: heads closed to   -0.1 px of each other
-      sword   0 deg at 1800 px/s each: crossed 31.6 px apart -- a miss, not a breach
-      sword   0 deg at 1800 px/s each: heads closed to    0.2 px of each other
+      dagger   0 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      sword   0 deg at 1800 px/s each: heads closed to   -5.7 px of each other
       pickaxe   0 deg at 1800 px/s each: crossed 1.9 px apart -- a miss, not a breach
       pickaxe   0 deg at 1800 px/s each: heads closed to    0.0 px of each other
-      dagger  45 deg at 600 px/s each: crossed 13.7 px apart -- a miss, not a breach
-      dagger  45 deg at 600 px/s each: heads closed to   13.7 px of each other
-      sword  45 deg at 600 px/s each: crossed 21.3 px apart -- a miss, not a breach
-      sword  45 deg at 600 px/s each: heads closed to   12.7 px of each other
+      dagger  45 deg at 600 px/s each: crossed 11.6 px apart -- a miss, not a breach
+      dagger  45 deg at 600 px/s each: heads closed to   11.6 px of each other
+      sword  45 deg at 600 px/s each: crossed 29.7 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to   12.8 px of each other
       pickaxe  45 deg at 600 px/s each: crossed 15.1 px apart -- a miss, not a breach
       pickaxe  45 deg at 600 px/s each: heads closed to   15.1 px of each other
-      dagger  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      sword  45 deg at 1200 px/s each: crossed 24.3 px apart -- a miss, not a breach
+      dagger  45 deg at 1200 px/s each: crossed 34.9 px apart -- a miss, not a breach
+      dagger  45 deg at 1200 px/s each: heads closed to    0.1 px of each other
+      sword  45 deg at 1200 px/s each: crossed 64.4 px apart -- a miss, not a breach
       sword  45 deg at 1200 px/s each: heads closed to    0.5 px of each other
       pickaxe  45 deg at 1200 px/s each: heads closed to   -1.2 px of each other
       dagger  45 deg at 1800 px/s each: heads closed to   -0.1 px of each other
-      sword  45 deg at 1800 px/s each: crossed 31.5 px apart -- a miss, not a breach
-      sword  45 deg at 1800 px/s each: heads closed to    5.0 px of each other
+      sword  45 deg at 1800 px/s each: crossed 57.6 px apart -- a miss, not a breach
+      sword  45 deg at 1800 px/s each: heads closed to    3.7 px of each other
       pickaxe  45 deg at 1800 px/s each: heads closed to   -1.0 px of each other
-      dagger  90 deg at 600 px/s each: crossed 11.8 px apart -- a miss, not a breach
-      dagger  90 deg at 600 px/s each: heads closed to   11.8 px of each other
-      sword  90 deg at 600 px/s each: crossed 20.6 px apart -- a miss, not a breach
-      sword  90 deg at 600 px/s each: heads closed to   20.6 px of each other
+      dagger  90 deg at 600 px/s each: crossed, then the correction put it back
+      dagger  90 deg at 600 px/s each: heads closed to    5.4 px of each other
+      sword  90 deg at 600 px/s each: crossed 21.1 px apart -- a miss, not a breach
+      sword  90 deg at 600 px/s each: heads closed to   21.1 px of each other
       pickaxe  90 deg at 600 px/s each: crossed 4.4 px apart -- a miss, not a breach
       pickaxe  90 deg at 600 px/s each: heads closed to    4.4 px of each other
       dagger  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      sword  90 deg at 1200 px/s each: heads closed to   -1.6 px of each other
+      sword  90 deg at 1200 px/s each: heads closed to   -3.9 px of each other
       pickaxe  90 deg at 1200 px/s each: heads closed to   -0.4 px of each other
-      dagger  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
-      sword  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -0.8 px of each other
+      sword  90 deg at 1800 px/s each: heads closed to   -3.1 px of each other
       pickaxe  90 deg at 1800 px/s each: heads closed to   -1.1 px of each other
       dagger 135 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
       dagger 135 deg at 600 px/s each: heads closed to   11.7 px of each other
-      sword 135 deg at 600 px/s each: crossed, then the correction put it back
-      sword 135 deg at 600 px/s each: heads closed to   15.1 px of each other
+      sword 135 deg at 600 px/s each: heads closed to   -2.1 px of each other
       pickaxe 135 deg at 600 px/s each: crossed 12.8 px apart -- a miss, not a breach
       pickaxe 135 deg at 600 px/s each: heads closed to   12.8 px of each other
-      dagger 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
-      sword 135 deg at 1200 px/s each: crossed 97.9 px apart -- a miss, not a breach
-      sword 135 deg at 1200 px/s each: heads closed to    0.7 px of each other
+      dagger 135 deg at 1200 px/s each: crossed 32.9 px apart -- a miss, not a breach
+      dagger 135 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      sword 135 deg at 1200 px/s each: crossed 43.0 px apart -- a miss, not a breach
+      sword 135 deg at 1200 px/s each: heads closed to    0.5 px of each other
       pickaxe 135 deg at 1200 px/s each: heads closed to   -0.3 px of each other
       dagger 135 deg at 1800 px/s each: heads closed to   -0.1 px of each other
-      sword 135 deg at 1800 px/s each: heads closed to   -0.9 px of each other
+      sword 135 deg at 1800 px/s each: heads closed to   -3.8 px of each other
       pickaxe 135 deg at 1800 px/s each: heads closed to   -0.1 px of each other
 PASS  roster_heads_do_not_tunnel_head_reversed
 PASS  zero_numbers_rate_limited
@@ -484,9 +481,9 @@ PASS  sfx_join_sounds
 PASS  sfx_volume_slider_and_mute
       requested: ["bounce_launch", "rock_warning", "rock_impact", "floor_warning", "floor_collapse", "wall_hit", "wall_break", "wind_tell", "wind_gust", "wind_tell", "wind_gust"]
 PASS  sfx_stage_parts_sound
-      wall release: pressed 8.7 px off, let go after 10 ticks
+      wall release: pressed 8.7 px off, let go after 7 ticks
       wall move: pressed 8.7 px off, let go after 6 ticks
-      ceiling release: pressed 8.7 px off, let go after 4 ticks
+      ceiling release: pressed 8.7 px off, let go after 2 ticks
       ceiling move: pressed 8.7 px off, let go after 1 ticks
 PASS  gripping_head_lets_go
       display server 'headless', asked for [3, 2, 3, 2]
@@ -563,38 +560,38 @@ FAIL  controller_page_look_picker_after_name
       tiny axe.tres: 15 circles against 40 points of art, worst fit -0.03 px outside it (negative is inside, clear)
       tiny dagger.tres: 7 circles against 7 points of art, worst fit -0.03 px outside it (negative is inside, clear)
       tiny boomstick.tres: 27 circles against 12 points of art, worst fit -0.12 px outside it (negative is inside, clear)
-      tiny_weapons: plain 150.000, modified 90.013, plain again 150.000
+      tiny_weapons: plain 150.000, modified 90.008, plain again 150.000
 PASS  round_modifier_tiny_weapons_applies_and_undoes
       modifier_chance 0.350: 2037 of 6000 rounds rolled a mixup (0.340), { "tiny_weapons": 202, "heavy_weapons": 202, "weapon_roulette": 215, "low_gravity": 200, "big_heads": 206, "fast_lava": 207, "double_damage": 208, "bouncy": 200, "slippery_floor": 190, "meteor_shower": 207 }
 PASS  round_modifier_rate_about_one_in_three
       victory: StubA freed true; 0 stage(s) left under it; phase victory
-      lobby: StubB freed true; 0 stage(s) left under it; phase lobby
+      lobby: StubC freed true; 0 stage(s) left under it; phase lobby
 PASS  stage_freed_under_victory_and_lobby
-Controller page: http://172.19.6.46:59267/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59267/
+Controller page: http://172.19.6.46:63727/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63727/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15628)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1072)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1062)
-       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15352)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15655)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1073)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1063)
+       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15379)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15628)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1072)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1062)
-       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15352)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15655)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1073)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1063)
+       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15379)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
       paused 30 frames: bots that still thought []; director process mode 1
 PASS  bots_stop_thinking_while_paused
 PASS  controller_page_stale_confirms_close
@@ -626,10 +623,10 @@ PASS  stage_rotates_each_round
 PASS  weapon_reach_matches_roster
       pickaxe: head reaches 9.00 px forward and 6.36 px back on 150 px of weapon; bare haft runs 52.0 to 111.6 px
       pickaxe: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.8 px of them, head surface no closer than 54.1 px, shoved 0.00 px
-      pickaxe: bar at 70.0 px, held 149.5 px through it, ended -8.5 px past its top surface at 40.2 px of reach
+      pickaxe: bar at 70.0 px, held 149.5 px through it, ended -6.1 px past its top surface at 37.8 px of reach
       staff: head reaches 5.00 px forward and 0.86 px back on 240 px of weapon; bare haft runs 52.0 to 211.0 px
       staff: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.9 px of them, head surface no closer than 149.1 px, shoved 0.00 px
-      staff: bar at 70.0 px, held 239.5 px through it, ended -4.2 px past its top surface at 35.9 px of reach
+      staff: bar at 70.0 px, held 239.5 px through it, ended -0.6 px past its top surface at 32.3 px of reach
       sword: head reaches 56.10 px forward and 16.95 px back on 70 px of weapon; bare haft runs 52.0 to -10.1 px
       sword: no bystander half -- its head leaves -10.1 px of bare haft, and two players cannot stand closer than 52.0 px
       sword: bar at 46.1 px, held 69.5 px through it, ended -20.0 px past its top surface at 51.7 px of reach
@@ -638,10 +635,10 @@ PASS  weapon_reach_matches_roster
       axe: bar at 70.0 px, held 139.4 px through it, ended -17.5 px past its top surface at 49.2 px of reach
       dagger: head reaches 9.53 px forward and 7.11 px back on 88 px of weapon; bare haft runs 52.0 to 54.5 px
       dagger: no bystander half -- its head leaves 54.5 px of bare haft, and two players cannot stand closer than 52.0 px
-      dagger: bar at 70.0 px, held 87.5 px through it, ended -11.3 px past its top surface at 43.0 px of reach
+      dagger: bar at 70.0 px, held 87.5 px through it, ended -11.7 px past its top surface at 43.4 px of reach
       boomstick: head reaches 71.80 px forward and 23.70 px back on 70 px of weapon; bare haft runs 52.0 to -25.8 px
       boomstick: no bystander half -- its head leaves -25.8 px of bare haft, and two players cannot stand closer than 52.0 px
-      boomstick: bar at 39.3 px, held 69.6 px through it, ended -30.4 px past its top surface at 64.1 px of reach
+      boomstick: bar at 39.3 px, held 69.6 px through it, ended -31.1 px past its top surface at 62.6 px of reach
 PASS  roster_hafts_are_non_colliding
       phase 1: holding through the 0.80s warning delay
       phase 2: falling away once the warning delay is over
@@ -678,11 +675,11 @@ PASS  wind_steady_pushes_constantly
 PASS  head_does_not_tunnel_rotating_platform
       light pokes (half-sweep 0.3 rad, rehearsed 1524 px/s): 4 swing(s), hits at [1113.40063476563, 0.0, 1113.39282226563, 0.0, 1113.4013671875, 0.0, 1113.40112304688] px/s, 37.5 damage, wall 'standing' with 1 crack(s)
       weak (half-sweep 0.3 rad, rehearsed 1524 px/s): 10 swing(s), hits at [1113.4013671875, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125, 0.0, 1113.39892578125] px/s, 93.7 damage, wall 'standing' with 3 crack(s)
-      hard (half-sweep 1.3 rad, rehearsed 2771 px/s): 3 swing(s), hits at [2696.87377929688, 838.805480957031, 2696.85205078125, 838.80419921875, 2696.85205078125] px/s, 142.1 damage, wall 'broken' with 0 crack(s)
+      hard (half-sweep 1.3 rad, rehearsed 2771 px/s): 3 swing(s), hits at [2696.8779296875, 838.805847167969, 2696.85424804688, 838.803833007813, 2696.85205078125] px/s, 142.1 damage, wall 'broken' with 0 crack(s)
 PASS  breakable_wall_breaks_on_weapon_hits
       drop requested: ["land"]
 PASS  sfx_landing_and_elimination
-      6 damage: -1.64 dB, pitch 1.084; 54 damage: 5.42 dB, pitch 0.939
+      6 damage: -1.64 dB, pitch 1.062; 54 damage: 5.42 dB, pitch 0.930
 PASS  sfx_strength_scales_volume
       captured #77 pose: anchor -9.6 px along its own haft; heads 19.95 px apart as the charge sweep measures them, 19.95 px apart as the physics has them
 PASS  charge_measures_heads_where_physics_has_them
@@ -695,7 +692,7 @@ PASS  phone_jitter_is_smoothed
 PASS  spawn_protection_blocks_damage_then_expires
       fast head: longest trail 10 points over 73 frames (cap 10)
 PASS  juice_trail_capped_and_frees
-Controller page: http://172.19.6.46:54575/
+Controller page: http://172.19.6.46:58127/
       name on the host: 'CrispyWalrus'
 PASS  phone_nickname_reaches_host_trimmed
 PASS  controller_page_prompts_for_nickname_first
@@ -725,32 +722,32 @@ PASS  controller_page_host_menu_is_guarded
       Mill.tscn: terrain x -740..740, spans 1480 px (93% of the view), 85% covered
       Reactor.tscn: terrain x -720..720, spans 1440 px (90% of the view), 90% covered
 PASS  every_stage_terrain_spans_the_view
-Controller page: http://172.19.6.46:54578/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54578/
+Controller page: http://172.19.6.46:58130/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:58130/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14126)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1034)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1024)
-       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13537)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14153)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1035)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1025)
+       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13564)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14126)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1034)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1024)
-       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13537)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
-      3 bots: first damaging strike after 3.3 s (1 strikes, 5 damage), 3 moved
+       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14153)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1035)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1025)
+       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13564)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
+      3 bots: first damaging strike after 4.1 s (1 strikes, 20 damage), 3 moved
 PASS  bots_flag_fills_lobby_and_bots_fight
-      roulette swap at 10.00 s: pickaxe.tres -> sword.tres, pickaxe.tres -> sword.tres
+      roulette swap at 10.00 s: pickaxe.tres -> axe.tres, pickaxe.tres -> axe.tres
       weapon_roulette: plain 0.000, modified 10.000, plain again 0.000
 PASS  round_modifier_weapon_roulette_swaps_every_ten_seconds
       Main rotation: 24 stages, 3 large (Pistons 2240x1260, Overpass 2400x1350, Ziggurat 2240x1260)
@@ -761,34 +758,34 @@ PASS  round_modifier_weapon_roulette_swaps_every_ten_seconds
       6 players: plays per stage [60, 60, 60, 60, 60], 120 on large stages
       8 players: plays per stage [61, 60, 60, 60, 59], 119 on large stages
 PASS  large_stages_only_with_five_or_more_players
-      a tick apart (physics frames 10871 and 10872): P1 +0, P2 +1
-      the same tick (physics frames 10877 and 10877): P1 +0, P2 +0
+      a tick apart (physics frames 10919 and 10920): P1 +0, P2 +1
+      the same tick (physics frames 10927 and 10927): P1 +0, P2 +0
 PASS  last_survivor_scores_when_falling_a_tick_later
-Controller page: http://172.19.6.46:59262/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59262/
+Controller page: http://172.19.6.46:64137/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:64137/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15678)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1074)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1064)
-       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15397)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15705)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1075)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1065)
+       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15424)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15678)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1074)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1064)
-       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15397)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15705)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1075)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1065)
+       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15424)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
       lobby, solo host gone: phases seen ["lobby"]; 0 bots left, roster []
       mid-round, solo host gone: 0 bots left, 0 bot bodies standing, phase 'lobby', roster []
 PASS  solo_bots_go_when_the_last_phone_leaves
@@ -822,7 +819,7 @@ PASS  stage_spawns_are_safe
       pickaxe: head arrived at 2214 px/s and took 33.8 off, its own damage is 34.0 (closest 33.1 px)
       staff: head arrived at 2208 px/s and took 20.1 off, its own damage is 20.0 (closest 29.0 px)
       sword: head arrived at 2213 px/s and took 40.1 off, its own damage is 40.0 (closest 80.2 px)
-      axe: head arrived at 2194 px/s and took 88.7 off, its own damage is 90.0 (closest 31.1 px)
+      axe: head arrived at 2193 px/s and took 88.6 off, its own damage is 90.0 (closest 31.1 px)
       dagger: head arrived at 2208 px/s and took 60.3 off, its own damage is 60.0 (closest 33.6 px)
       boomstick: head arrived at 2211 px/s and took 8.1 off, its own damage is 8.0 (closest 95.9 px)
 PASS  weapon_damage_matches_roster
@@ -880,20 +877,20 @@ PASS  sfx_boomstick_shot_and_impact
       clash: cap 3, peak 3 playing, 3 nodes
       round_start: cap 1, peak 1 playing, 1 nodes
 PASS  sfx_overlap_cap_holds
-      sword: tick 3 turned -0.332 rad; head parked 13.5 px ahead of blade circle 19, 7.62 px clear of the blade
-      sword: tick +1: parked head same side of the blade (5.50 px across it, 0.86 along it), gap 0.02 px, parked head moved 0.33 px
-      sword: tick +2: parked head same side of the blade (5.42 px across it, 0.88 along it), gap 0.00 px, parked head moved 1.42 px
-      sword: tick +3: parked head same side of the blade (5.24 px across it, 0.89 along it), gap -0.00 px, parked head moved 2.98 px
-      sword: tick +4: parked head same side of the blade (5.39 px across it, 0.90 along it), gap 0.01 px, parked head moved 5.20 px
-      sword: tick +5: parked head same side of the blade (6.97 px across it, 0.90 along it), gap 1.60 px, parked head moved 9.74 px
-      sword: tick +6: parked head same side of the blade (4.93 px across it, 0.90 along it), gap -0.42 px, parked head moved 14.05 px
-      boomstick: tick 3 turned -0.380 rad; head parked 18.3 px ahead of blade circle 23, 12.07 px clear of the blade
-      boomstick: tick +1: parked head same side of the blade (5.79 px across it, 0.88 along it), gap 0.01 px, parked head moved 0.31 px
-      boomstick: tick +2: parked head same side of the blade (5.77 px across it, 0.89 along it), gap -0.00 px, parked head moved 0.67 px
-      boomstick: tick +3: parked head same side of the blade (5.96 px across it, 0.90 along it), gap 0.28 px, parked head moved 1.62 px
-      boomstick: tick +4: parked head same side of the blade (20.71 px across it, 0.86 along it), gap 14.93 px, parked head moved 2.85 px
-      boomstick: tick +5: parked head same side of the blade (6.59 px across it, 0.89 along it), gap 0.80 px, parked head moved 4.66 px
-      boomstick: tick +6: parked head same side of the blade (23.94 px across it, 0.83 along it), gap 18.17 px, parked head moved 6.49 px
+      sword: tick 3 turned -0.332 rad; head parked 13.6 px ahead of blade circle 19, 7.59 px clear of the blade
+      sword: tick +1: parked head same side of the blade (4.72 px across it, 0.90 along it), gap -0.64 px, parked head moved 1.55 px
+      sword: tick +2: parked head same side of the blade (7.53 px across it, 0.83 along it), gap 2.04 px, parked head moved 4.73 px
+      sword: tick +3: parked head same side of the blade (12.40 px across it, 0.85 along it), gap 6.98 px, parked head moved 9.46 px
+      sword: tick +4: parked head same side of the blade (2.74 px across it, 0.80 along it), gap -2.63 px, parked head moved 12.94 px
+      sword: tick +5: parked head same side of the blade (1.43 px across it, 0.85 along it), gap -3.59 px, parked head moved 16.15 px
+      sword: tick +6: parked head same side of the blade (5.61 px across it, 0.84 along it), gap 0.28 px, parked head moved 19.32 px
+      boomstick: tick 3 turned -0.542 rad; head parked 26.2 px ahead of blade circle 23, 19.06 px clear of the blade
+      boomstick: tick +1: parked head same side of the blade (6.14 px across it, 0.86 along it), gap 0.48 px, parked head moved 0.60 px
+      boomstick: tick +2: parked head same side of the blade (8.28 px across it, 0.86 along it), gap 2.54 px, parked head moved 1.19 px
+      boomstick: tick +3: parked head same side of the blade (5.75 px across it, 0.87 along it), gap 0.12 px, parked head moved 1.79 px
+      boomstick: tick +4: parked head same side of the blade (16.14 px across it, 0.84 along it), gap 10.34 px, parked head moved 2.28 px
+      boomstick: tick +5: parked head same side of the blade (8.82 px across it, 0.84 along it), gap 3.02 px, parked head moved 2.83 px
+      boomstick: tick +6: parked head same side of the blade (22.01 px across it, 0.81 along it), gap 16.21 px, parked head moved 3.33 px
 PASS  turn_does_not_carry_blade_through_head
       axe swing 0.50 rad: rehearsed peak 1649 px/s, hit at 755 px/s, damage 15.0, closest 56.6 px
       axe swing 0.90 rad: rehearsed peak 2216 px/s, hit at 1699 px/s, damage 76.0, closest 57.0 px
@@ -901,7 +898,7 @@ PASS  turn_does_not_carry_blade_through_head
 PASS  axe_swing_deals_damage
       ducked to -14.0 dB (target -14.0), round_win asked: true, back to 0: true
 PASS  music_ducks_under_round_win
-Controller page: http://172.19.6.46:61557/
+Controller page: http://172.19.6.46:63754/
 PASS  phone_release_and_flick_are_not_smoothed
       pickaxe: 48 trials, 0 head crossings
       staff: 48 trials, 0 head crossings
@@ -925,33 +922,33 @@ PASS  music_loops_have_no_silent_seam
       CLUMSY: Butterfingers -> slot 2 (1 self-KO)
       SURVIVOR: Hard to Kill -> slot 0 (0:13 alive)
 PASS  match_stats_ko_credit_and_awards
-Controller page: http://172.19.6.46:57508/
+Controller page: http://172.19.6.46:63769/
       picked 'crown': host has 'crown', player wears 'crown', hat at (0.0, -24.0)
       swing turned the weapon 3.07 rad; hat strayed 0.000 px from the head
 PASS  phone_hat_choice_reaches_player
-Controller page: http://172.19.6.46:57513/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57513/
+Controller page: http://172.19.6.46:63772/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63772/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14216)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1036)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1026)
-       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13746)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14243)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1037)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1027)
+       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13773)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14216)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1036)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1026)
-       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13746)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14243)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1037)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1027)
+       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13773)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 PASS  solo_practice_button_adds_and_removes_bots
       meteor on P0: hit true, damage 12.0, sideways knock 539 px/s
       meteor_shower: plain 0.000, modified 3.000, plain again 0.000
@@ -964,28 +961,28 @@ PASS  large_stage_camera_fits_view_with_eight_players
       zoom 0.50: marker scale 2.00, number scale 2.00, number centred at x 300.0 (hit at 300.0)
 PASS  hit_feedback_scales_with_camera_zoom
       bare stage: lava lookups in 1.2 s 1; player alive true
-Controller page: http://172.19.6.46:49731/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:49731/
+Controller page: http://172.19.6.46:64654/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:64654/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15797)
-       [3] _await_ticks (res://tools/scenario_runner.gd:1669)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15824)
+       [3] _await_ticks (res://tools/scenario_runner.gd:1688)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15797)
-       [3] _await_ticks (res://tools/scenario_runner.gd:1669)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15824)
+       [3] _await_ticks (res://tools/scenario_runner.gd:1688)
       bot names after a kick and an add: ["Bot 1", "Bot 2", "Bot 3"]
       60 frames of a bots' round: lobby state built 4 times
 PASS  bot_upkeep_cached_and_names_unique
-Controller page: http://172.19.6.46:49733/
+Controller page: http://172.19.6.46:64656/
       after bad frames: ready false, name ''
       60 names in a burst: the host kept 'n19' (limit 20/s)
-      id-less client: bound { "id": "host-assigned-1-2498182038", "slot": 1.0 }
+      id-less client: bound { "id": "host-assigned-1-520123283", "slot": 1.0 }
 PASS  phone_bad_frames_ignored_and_rate_limited
       run 1 on seed 162: dagger.tres, staff.tres, pickaxe.tres, staff.tres, dagger.tres, pickaxe.tres, sword.tres, staff.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
       run 2 on seed 162: dagger.tres, staff.tres, pickaxe.tres, staff.tres, dagger.tres, pickaxe.tres, sword.tres, staff.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
@@ -1005,11 +1002,11 @@ PASS  ringout_kills_at_full_health
 PASS  damage_reddens_fill_identity_persists
 PASS  waiting_expires_disconnected_claims
       pickaxe: answered a drag from 20.0 px out to 70.0 px in 5 ticks
-      staff: answered a drag from 20.0 px out to 70.0 px in 7 ticks
+      staff: answered a drag from 20.0 px out to 70.0 px in 3 ticks
       sword: answered a drag from 20.0 px out to 70.0 px in 4 ticks
       axe: answered a drag from 27.6 px out to 70.0 px in 10 ticks
       dagger: answered a drag from 20.0 px out to 70.0 px in 3 ticks
-      boomstick: answered a drag from 20.0 px out to 70.0 px in 4 ticks
+      boomstick: answered a drag from 20.0 px out to 70.0 px in 3 ticks
 PASS  weapon_responsiveness_matches_roster
 PASS  hazard_zone_kills_at_full_health
       pickaxe.tres: hardest possible strike deals 68.0
@@ -1025,7 +1022,7 @@ PASS  slow_contact_shows_zero_not_marker
 PASS  stage_rotation_never_repeats_back_to_back
 PASS  rising_kill_zone_resets_each_round
 PASS  pickup_cap_scales_with_roster
-Controller page: http://172.19.6.46:59760/
+Controller page: http://172.19.6.46:52367/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       pickaxe.tres: head arrived at 2214 px/s and took 33.8 off
@@ -1086,31 +1083,31 @@ PASS  trapped_head_phases_home_after_release
 PASS  match_first_to_n_then_victory_and_rematch
       mid-round: { "phase": "playing", "host": -1, "target": 5, "players": [{ "slot": 0, "ready": false, "name": "P1", "color": "e6e6f2" }, { "slot": 1, "ready": false, "name": "P2", "color": "e6e6f2" }, { "slot": 2, "ready": false, "name": "P3", "color": "e6e6f2" }], "count": 0, "winner": -1, "round": 1, "in_round": [0, 1], "alive": [0, 1], "next": 0, "paused": false }
 PASS  phone_states_through_a_round
-      pickaxe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.36), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      staff (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.64), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      sword (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.81), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      axe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.33), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      dagger (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.26), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      boomstick (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.46), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      pickaxe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.19), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      staff (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.93), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      sword (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.67), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      axe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.26), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      dagger (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.02), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      boomstick (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.75), 290 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      pickaxe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.36), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
-      staff (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.15), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
-      sword (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.98), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
-      axe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.53), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
-      dagger (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.70), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
-      boomstick (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.29), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
+      pickaxe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.83), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      staff (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.59), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      sword (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.25), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      axe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.35), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      dagger (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.01), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      boomstick (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.21), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      pickaxe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.66), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      staff (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.59), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      sword (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.97), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      axe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.25), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      dagger (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.90), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      boomstick (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.35), 290 frames, 180 between ticks, 0 phased (widest 0.00 px)
+      pickaxe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.02), 580 frames, 343 between ticks, 362 phased (widest 0.00 px)
+      staff (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.64), 580 frames, 343 between ticks, 362 phased (widest 0.00 px)
+      sword (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.33), 580 frames, 343 between ticks, 362 phased (widest 0.00 px)
+      axe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.13), 580 frames, 343 between ticks, 362 phased (widest 0.00 px)
+      dagger (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.33), 580 frames, 343 between ticks, 362 phased (widest 0.00 px)
+      boomstick (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.82), 580 frames, 343 between ticks, 362 phased (widest 0.00 px)
 PASS  haft_tip_meets_drawn_head_every_frame
       round 1 feed: ["Alice KO Bob", "Carl self-KO"]
       feed: ["Alice KO Bob", "Carl self-KO", "Alice KO Bob", "Alice KO Carl"]
       banners: ["FIRST BLOOD|Alice", "LAST ONE STANDING|Alice", "DOUBLE KO!|Alice", "LAST ONE STANDING|Alice"]
       awards: ["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO", "SURVIVOR / Hard to Kill / Alice  -  0:00 alive"]
 PASS  kill_feed_credits_hits_and_awards_at_match_end
-Controller page: http://172.19.6.46:52022/
+Controller page: http://172.19.6.46:49984/
       B asked for A's colour: B holds 1; B was told { 0: 0, 1: 1 }
       C joined into slot 0 with colour 1 (B holds 0)
 PASS  phone_colour_first_come_first_served
@@ -1120,71 +1117,75 @@ PASS  pickups_come_faster_and_more_with_a_crowd
 PASS  round_modifier_bouncy_applies_and_undoes
       slot 0 at (-60.0, 0.0), slot 2 at (60.0, 0.0); Spawn0 (-60.0, 0.0), Spawn1 (60.0, 0.0)
 PASS  gap_roster_spawns_in_roster_order
-Controller page: http://172.19.6.46:59777/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59777/
+Controller page: http://172.19.6.46:49165/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:49165/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15531)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1068)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1058)
-       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15238)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15558)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1069)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1059)
+       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15265)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15484)
-       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15531)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1068)
-       [5] _run_all (res://tools/scenario_runner.gd:654)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1058)
-       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15238)
-       [8] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15511)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15558)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1069)
+       [5] _run_all (res://tools/scenario_runner.gd:655)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1059)
+       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15265)
+       [8] _teardown (res://tools/scenario_runner.gd:1684)
       host dropped while paused: server host 1; phone 2 last told host 1.0, paused true
 PASS  host_drop_while_paused_hands_menu_to_next_phone
-Controller page: http://172.19.6.46:64584/
+Controller page: http://172.19.6.46:49169/
       A reconnected into slot 0; roster [0, 1]; old socket state 3 reason 'opened somewhere else'
 PASS  phone_quick_reconnect_takes_back_its_slot
-Controller page: http://172.19.6.46:50249/
+Controller page: http://172.19.6.46:49174/
       join frame 4223 bytes; 5 later looks frames of [91, 92, 92, 92, 92] bytes
 PASS  phone_hat_art_sent_once_on_bind
-Controller page: http://172.19.6.46:50253/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:50253/
+Controller page: http://172.19.6.46:49178/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:49178/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16565)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1098)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1088)
-       [6] _scenario_phone_hat_art_sent_once_on_bind (res://tools/scenario_runner.gd:16293)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16592)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1099)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1089)
+       [6] _scenario_phone_hat_art_sent_once_on_bind (res://tools/scenario_runner.gd:16320)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16565)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1098)
-       [4] _run_all (res://tools/scenario_runner.gd:654)
-       [5] _run_scenario (res://tools/scenario_runner.gd:1088)
-       [6] _scenario_phone_hat_art_sent_once_on_bind (res://tools/scenario_runner.gd:16293)
-       [7] _teardown (res://tools/scenario_runner.gd:1665)
-      newcomer slot 1; scores [0, 0, 0, 0, 0, 0, 0, 0]; kos {  }, damage { 0: 10.0 }, deaths { 2: 1 }, alive { 0: 0, 2: -393 }
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16592)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1099)
+       [4] _run_all (res://tools/scenario_runner.gd:655)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1089)
+       [6] _scenario_phone_hat_art_sent_once_on_bind (res://tools/scenario_runner.gd:16320)
+       [7] _teardown (res://tools/scenario_runner.gd:1684)
+      newcomer slot 1; scores [0, 0, 0, 0, 0, 0, 0, 0]; kos {  }, damage { 0: 10.0 }, deaths { 2: 1 }, alive { 0: 0, 2: -394 }
 PASS  mid_match_joiner_starts_with_fresh_slot
       dagger: 48 trials, 0 head crossings
       boomstick: 48 trials, 0 head crossings
 PASS  roster_heads_do_not_clip_platform_in_play_dagger_boomstick
-      Rockfall: the bot is alive after 20 s, at (-199, 336)
-      Mill: the bot is alive after 20 s, at (300, 296)
-PASS  bots_survive_hazard_stages
+      pickaxe: aim settles in 11 ticks, extends in 12 ticks, vaults 163.2 px, climbs the ledge 9/10 times, median 322 ticks (runs [514, 130, 463, 145, 412, 99, 322, 307, 600, 122], 600 = never)
+      staff: aim settles in 12 ticks, extends in 9 ticks, vaults 347.6 px, climbs the ledge 10/10 times, median 81 ticks (runs [90, 69, 81, 107, 80, 77, 77, 79, 82, 81], 600 = never)
+      sword: aim settles in 8 ticks, extends in 4 ticks, vaults 88.2 px, climbs the ledge 8/10 times, median 228 ticks (runs [237, 200, 600, 228, 282, 600, 174, 220, 167, 88], 600 = never)
+      axe: aim settles in 11 ticks, extends in 25 ticks, vaults 123.0 px, climbs the ledge 9/10 times, median 318 ticks (runs [196, 196, 196, 291, 347, 334, 600, 318, 194, 475], 600 = never)
+      dagger: aim settles in 7 ticks, extends in 4 ticks, vaults 119.1 px, climbs the ledge 7/10 times, median 244 ticks (runs [74, 600, 244, 173, 108, 84, 600, 69, 285, 600], 600 = never)
+      boomstick: aim settles in 8 ticks, extends in 3 ticks, vaults 86.1 px, climbs the ledge 5/10 times, median 600 ticks (runs [600, 600, 600, 125, 132, 197, 88, 171, 600, 600], 600 = never)
+PASS  roster_traversal_is_measured
 ---
 43 passed, 0 failed, 43 total
 ## total
-213 passed, 2 failed, 215 total
+215 passed, 1 failed, 216 total
