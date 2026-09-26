@@ -1,9 +1,0 @@
-# roster_traversal_is_measured with main's weapon resources (main 8981238; the weapon resources are unchanged on main since). Red on main: the boomstick vaults 69 px, under the 80 px ledge.
-      pickaxe: aim settles in 11 ticks, extends in 12 ticks, vaults 163.2 px, climbs the ledge 8/10 times, median 311 ticks (runs [600, 131, 600, 153, 412, 99, 311, 341, 137, 122], 600 = never)
-      staff: aim settles in 13 ticks, extends in 11 ticks, vaults 308.5 px, climbs the ledge 10/10 times, median 94 ticks (runs [95, 83, 94, 76, 213, 99, 102, 81, 84, 82], 600 = never)
-      sword: aim settles in 8 ticks, extends in 4 ticks, vaults 86.9 px, climbs the ledge 5/10 times, median 600 ticks (runs [600, 95, 600, 151, 244, 600, 600, 251, 73, 600], 600 = never)
-      axe: aim settles in 11 ticks, extends in 25 ticks, vaults 123.0 px, climbs the ledge 9/10 times, median 289 ticks (runs [196, 196, 196, 289, 334, 600, 387, 318, 194, 288], 600 = never)
-      dagger: aim settles in 8 ticks, extends in 4 ticks, vaults 113.3 px, climbs the ledge 6/10 times, median 378 ticks (runs [353, 600, 600, 56, 80, 73, 378, 600, 600, 134], 600 = never)
-      boomstick: aim settles in 6 ticks, extends in 4 ticks, vaults 69.0 px, climbs the ledge 5/10 times, median 600 ticks (runs [600, 85, 265, 183, 600, 266, 600, 600, 600, 126], 600 = never)
-FAIL  roster_traversal_is_measured
-      - boomstick: vaults only 69.0 px, not over an 80 px ledge

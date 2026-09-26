@@ -16,12 +16,19 @@ extends Node
 ## Stages to rotate through: `stage_scenes[0]` opens every session, then
 ## shuffled bags cover the rest with no repeat back-to-back (ADR-0011).
 ## Swapped once per round, in `_swap_stage()`. Spawn points come from the
-## active stage's `get_spawn_points()`, not from an export here.
-@export var stage_scenes: Array[PackedScene] = []
+## active stage's `get_spawn_points()`, not from an export here. Dealt by
+## `StageRotation.gd`, which shares this array.
+@export var stage_scenes: Array[PackedScene] = []:
+	set(value):
+		stage_scenes = value
+		_stage_rotation.scenes = value
 ## Issue #144: a large stage (`Stage.view_size` bigger than the normal view)
 ## is only offered to a round with at least this many players; normal stages
-## are offered at any count. See `_stage_allowed()`.
-@export var large_stage_min_players: int = 5
+## are offered at any count. See `StageRotation.stage_allowed()`.
+@export var large_stage_min_players: int = 5:
+	set(value):
+		large_stage_min_players = value
+		_stage_rotation.large_stage_min_players = value
 ## Issue #144: the camera `_swap_stage()` zooms and centres on each new
 ## stage's view (`Stage.get_view_rect()`). Empty leaves every camera alone,
 ## which is what every scenario's RoundManager does unless it tests this.
@@ -68,6 +75,55 @@ extends Node
 ## `_start_kill_zone_rise()`, and the zone keeps climbing past that spawn.
 @export var kill_zone_rise_sec: float = 80.0
 
+## The pickup scene instanced per spawn (scenes/Pickup.tscn).
+@export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
+## Seconds between pickup arrivals once a round is running (user story 20).
+## 12 since #152 (was 10): a little rarer with few players, and
+## `PickupDirector.interval_sec()` shortens it for a crowd.
+@export var pickup_spawn_interval_sec: float = 12.0
+## With this many players or more on the roster the stage is crowded (#152):
+## pickups come every `crowded_interval_scale` of the interval, and the cap
+## rises to one per player.
+@export var crowded_roster: int = 5
+@export var crowded_interval_scale: float = 0.6
+## Fewest pickups the stage is allowed to hold at once (user stories 3 and
+## 20). The live cap is `PickupDirector.cap()`: one fewer than the roster, never
+## below this (#36, amending ADR-0009).
+@export var max_pickups: int = 2
+## Weapons a pickup may hold. Empty means the roster's own list
+## (`PickupWeapons.available_weapons()`); scenarios fill it with test weapons.
+## The pickaxe is filtered out either way.
+@export var pickup_weapons: Array[Resource] = []
+
+## Seconds of spawn protection at round start (#114). 0 turns it off.
+@export var spawn_protection_sec: float = 1.0
+
+## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
+@export_range(0.0, 1.0) var modifier_chance: float = 0.35
+## How long a rolled modifier's name stays on screen at round start.
+@export var modifier_announce_sec: float = 3.0
+## A `RoundModifiers` id (e.g. "low_gravity") every round gets, whatever
+## `modifier_chance` and `modifier_rolls_enabled` say: the determinism seam a
+## scenario or a playtest uses to pick one. Empty (the default) rolls.
+@export var forced_modifier: String = ""
+## Determinism seam for the roll itself, like `rotation_seed`: -1 leaves it
+## random every run. Its own RNG, never the rotation's, so a roll can never shift a
+## seeded stage rotation.
+@export var modifier_seed: int = -1
+
+## Open on the lobby and play matches ("first to N") instead of an endless
+## round loop.
+@export var lobby_enabled: bool = false
+## Length of the 3-2-1 countdown once everyone is ready.
+@export var lobby_countdown_sec: float = 3.0
+
+## How long the stage name takes to sweep across. 0 turns it off.
+@export var stage_title_sec: float = 1.1
+
+## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
+## just not shown.
+@export var kill_feed_path: NodePath
+
 ## Sound hooks (issue #75, ADR-0016); nothing in the game reads them.
 ## `round_started` once every player is spawned, `round_won` where the
 ## winner scores, `modifier_announced` as a modifier's name goes up.
@@ -81,6 +137,18 @@ signal match_won(slot: int)
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END, LOBBY, COUNTDOWN, VICTORY }
 
+## The pieces split out of this script (#175), loaded by path (never by
+## class_name). This node still runs the round loop and owns every setting
+## above; these do one job each and are driven from here:
+## - StageRotation (RefCounted): which stage plays next.
+## - PickupDirector (Node child): weapon pickups.
+## - NameTags (Node2D child): the nicknames over players' heads.
+## - LobbyScreen (CanvasLayer child): lobby, podium, title card, pause banner.
+const StageRotationScript := preload("res://scripts/StageRotation.gd")
+const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
+const NameTagsScript := preload("res://scripts/NameTags.gd")
+const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
+
 var _state: int = State.WAITING
 var _pause_until_msec: int = 0
 var _players: Array = []
@@ -88,21 +156,15 @@ var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
 var _waiting_label: Label
 var _scoreboard: Control
-## Stage rotation state (ADR-0011): shuffled bags over `stage_scenes` with no
-## stage playing twice in a row, opening every session on `stage_scenes[0]`.
-## `_stage_index` starts at -1 so the first `_swap_stage()` call is recognized
-## as the opener rather than the seam between two bags.
-var _stage_index: int = -1
+## Stage rotation (ADR-0011, #144, #163): which stage plays next. Built here,
+## not in `_ready()`, so the export setters above can reach it and a
+## RoundManager outside the tree can still deal.
+var _stage_rotation: RefCounted = StageRotationScript.new()
 var _current_stage: Node2D
 var _stage_spawn_points: Array[Vector2] = []
-## Remaining stage indices for the current bag, next-to-play at the front
-## (`pop_front()`). Refilled by `_refill_bag()` once emptied.
-var _bag: Array[int] = []
-## Seeded from `rotation_seed` in `_ready()`; never the global RNG, so two
-## RoundManagers can be given the same seed and produce the same sequence
-## (ADR-0011) -- `Array.shuffle()` can't do that, since it always draws from
-## the global RNG.
-var _rng: RandomNumberGenerator
+## Weapon pickups (#14, #152): spawns, caps and clears them. A child built in
+## `_init()`, so a RoundManager outside the tree has one too.
+var _pickup_director: Node
 ## When the current round was first seen with no connected controller among
 ## its surviving players, or -1 while at least one is connected.
 var _abandoned_since_msec: int = -1
@@ -140,6 +202,10 @@ const DEMO_KILL_ZONE_GRACE_SEC: float = 20.0
 const DEMO_KILL_ZONE_RISE_SEC: float = 40.0
 const DEMO_PHYSICS_TICKS: int = 120
 
+func _init() -> void:
+	_pickup_director = PickupDirectorScript.new(self)
+	add_child(_pickup_director)
+
 func _ready() -> void:
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
 	# editor's Play button (project.godot `editor/run/main_run_args`).
@@ -149,11 +215,13 @@ func _ready() -> void:
 		_apply_demo_mode()
 	if _random_weapons:
 		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
-	_rng = RandomNumberGenerator.new()
+	_stage_rotation.demo = _demo
+	var rng := RandomNumberGenerator.new()
 	if rotation_seed == -1:
-		_rng.randomize()
+		rng.randomize()
 	else:
-		_rng.seed = rotation_seed
+		rng.seed = rotation_seed
+	_stage_rotation.rng = rng
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_watch_for_buzzes()
@@ -188,7 +256,7 @@ func _process(_delta: float) -> void:
 		State.ROUND_ACTIVE:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
-				_tick_pickups()
+				_pickup_director.tick()
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
 		State.ROUND_END:
@@ -232,7 +300,7 @@ func _try_start_round() -> void:
 		_waiting_label.visible = false
 	if _scoreboard != null:
 		_scoreboard.visible = false
-	_round_player_count = roster.size()
+	_stage_rotation.round_player_count = roster.size()
 	_swap_stage()
 	_round_number += 1
 	_in_round.clear()
@@ -254,14 +322,14 @@ func _try_start_round() -> void:
 	_survivor_slot = -1
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
-	_start_pickups()
+	_pickup_director.start()
 	_start_kill_zone_rise()
 	_start_spawn_protection()
 	_show_stage_title()
 	round_started.emit()
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
-## the next `_stage_index` into `stage_scenes` via `_next_stage_index()`, and
+## the next index into `stage_scenes` via `StageRotation.next_stage_index()`, and
 ## caches the new stage's spawn points so `_try_start_round()`'s loop above
 ## can hand them out in roster order. A no-op with an empty `stage_scenes`, leaving
 ## `_stage_spawn_points` as it was.
@@ -273,8 +341,8 @@ func _swap_stage() -> void:
 		return
 	if _current_stage != null:
 		_current_stage.queue_free()
-	_stage_index = _next_stage_index()
-	_current_stage = stage_scenes[_stage_index].instantiate()
+	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
+	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	container.add_child(_current_stage)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
@@ -289,11 +357,6 @@ func _swap_stage() -> void:
 # the zoom (see `_tick_name_tags()`).
 
 const StageScript := preload("res://scripts/Stage.gd")
-
-## How many players the round being started has; read by `_stage_allowed()`.
-var _round_player_count: int = 0
-## `Stage.view_size_of()` per stage scene, so a scene's state is read once.
-var _large_stage_cache: Dictionary = {}
 
 func _fit_camera_to_stage() -> void:
 	var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
@@ -312,111 +375,6 @@ func _fit_camera_to_stage() -> void:
 	camera.reset_smoothing()
 	camera.reset_physics_interpolation()
 	camera.force_update_scroll()
-
-## Whether `stage_scenes[index]` is a large stage.
-func _stage_is_large(index: int) -> bool:
-	var scene: PackedScene = stage_scenes[index]
-	if not _large_stage_cache.has(scene):
-		_large_stage_cache[scene] = StageScript.is_large_view(StageScript.view_size_of(scene))
-	return _large_stage_cache[scene]
-
-## Whether the round being started may play `stage_scenes[index]`: any normal
-## stage, and a large one only with `large_stage_min_players` or more. A
-## rotation with no stage the round may play (say, only large stages and two
-## players) ignores the rule rather than play nothing.
-func _stage_allowed(index: int) -> bool:
-	if _round_player_count >= large_stage_min_players or not _stage_is_large(index):
-		return true
-	for i in stage_scenes.size():
-		if not _stage_is_large(i):
-			return false
-	return true
-
-## Picks the next stage index (ADR-0011): `stage_scenes[0]` opens every
-## session (`_stage_index` still at -1), then shuffled bags cover the whole
-## roster, refilling once the current bag is empty. `_stage_index` still
-## holds the previously-played index at this point, so it doubles as the
-## "just played" value the fresh bag must not start with.
-##
-## Issue #144: only stages `_stage_allowed()` for this round's player count are
-## played. A bag is dealt from the stages allowed when it is filled, and
-## re-dealt the moment the count crosses `large_stage_min_players` either way
-## (#163): a bag dealt for three would otherwise hold no large stage for
-## however many rounds of seven it had left. A new match deals afresh too
-## (`_begin_match()`).
-func _next_stage_index() -> int:
-	if _demo:
-		var next: int = _stage_index
-		for _i in stage_scenes.size():
-			next = (next + 1) % stage_scenes.size()
-			if _stage_allowed(next):
-				break
-		return next
-	if _stage_index == -1:
-		for i in stage_scenes.size():
-			if _stage_allowed(i):
-				return i
-		return 0
-	if _bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage():
-		_bag.clear()
-	# A fresh bag always holds an allowed stage, so this ends within one bag's
-	# worth of skips and one refill.
-	var index: int = 0
-	for _attempt in 2 * stage_scenes.size() + 1:
-		if _bag.is_empty():
-			_refill_bag(_stage_index)
-		index = _bag.pop_front()
-		if _stage_allowed(index):
-			break
-	return index
-
-## Builds a fresh shuffled bag (one Fisher-Yates pass over `_rng`, never the
-## global RNG or `Array.shuffle()`, which draws from it) covering every index
-## into `stage_scenes`, then fixes up a bag that would repeat `avoid` back to
-## back by swapping its first entry with another position -- every index
-## plays exactly once regardless of where in the bag it lands, so this cannot
-## skip or duplicate a stage. Left alone when the roster has only one stage,
-## since no swap can avoid a repeat there (the opener's own repeat case).
-func _refill_bag(avoid: int) -> void:
-	# Shuffled first and filtered after, so a rotation with no large stages
-	# draws exactly the order it drew before issue #144.
-	_bag = []
-	_bag_large_eligible = _large_stages_eligible()
-	for index: int in _shuffled_indices():
-		if _stage_allowed(index):
-			_bag.append(index)
-	if _bag.size() > 1 and _bag[0] == avoid:
-		var swap_with: int = 1 + _rng.randi() % (_bag.size() - 1)
-		var tmp: int = _bag[0]
-		_bag[0] = _bag[swap_with]
-		_bag[swap_with] = tmp
-
-## Whether this round's player count may play large stages (issue #144).
-func _large_stages_eligible() -> bool:
-	return _round_player_count >= large_stage_min_players
-
-## What `_large_stages_eligible()` said when `_bag` was dealt (#163).
-var _bag_large_eligible: bool = false
-
-## Whether any stage in the rotation is large. Without one the player count
-## never changes a bag, so it is never re-dealt for it.
-func _rotation_has_large_stage() -> bool:
-	for i in stage_scenes.size():
-		if _stage_is_large(i):
-			return true
-	return false
-
-## A Fisher-Yates shuffle of `range(stage_scenes.size())` over `_rng`.
-func _shuffled_indices() -> Array[int]:
-	var indices: Array[int] = []
-	for i in stage_scenes.size():
-		indices.append(i)
-	for i in range(indices.size() - 1, 0, -1):
-		var j: int = _rng.randi_range(0, i)
-		var tmp: int = indices[i]
-		indices[i] = indices[j]
-		indices[j] = tmp
-	return indices
 
 func _set_waiting_text(connected: int) -> void:
 	if _waiting_label == null:
@@ -465,7 +423,7 @@ func _check_round_end() -> void:
 			match_won.emit(winner_slot)
 	else:
 		_last_winner_slot = -1
-	_clear_pickups()
+	_pickup_director.clear()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
 	_ko_round_ended(_last_winner_slot)
@@ -578,9 +536,6 @@ func _spawn_point(place: int) -> Vector2:
 ## rather than on top, still on the same platform.
 const SPAWN_SHARE_OFFSET: Vector2 = Vector2(48.0, -24.0)
 
-## A podium column's width once more than four are on it (issue #138).
-const PODIUM_CROWDED_COLUMN_PX: float = 180.0
-
 ## Refreshes and reveals the round-end scoreboard: one icon+score entry per
 ## player slot, read from that slot's Scoreboard/SlotN child (Icon then
 ## Score, per scenes/Main.tscn) and this node's own _players/_scores.
@@ -636,157 +591,10 @@ func _update_score_label() -> void:
 # One pickup lies on the stage when a round starts; another arrives every
 # `pickup_spawn_interval_sec` while fewer than `max_pickups` are on it; any
 # left when the round ends are cleared. Pickups are parented to the active
-# stage instance, so a stage swap can never strand one either.
-
-## The pickup scene instanced per spawn (scenes/Pickup.tscn).
-@export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
-## Seconds between pickup arrivals once a round is running (user story 20).
-## 12 since #152 (was 10): a little rarer with few players, and
-## `_pickup_interval_sec()` shortens it for a crowd.
-@export var pickup_spawn_interval_sec: float = 12.0
-## With this many players or more on the roster the stage is crowded (#152):
-## pickups come every `crowded_interval_scale` of the interval, and the cap
-## rises to one per player.
-@export var crowded_roster: int = 5
-@export var crowded_interval_scale: float = 0.6
-## Fewest pickups the stage is allowed to hold at once (user stories 3 and
-## 20). The live cap is `_pickup_cap()`: one fewer than the roster, never
-## below this (#36, amending ADR-0009).
-@export var max_pickups: int = 2
-## Weapons a pickup may hold. Empty means the roster's own list
-## (`PickupWeapons.available_weapons()`); scenarios fill it with test weapons.
-## The pickaxe is filtered out either way.
-@export var pickup_weapons: Array[Resource] = []
-
-const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
-## Where a pickup lands on a stage that declares no `PickupSpawn*` markers,
-## relative to the stage's origin: above its centre (user story 17).
-const FALLBACK_PICKUP_OFFSET: Vector2 = Vector2(0.0, -200.0)
-## Two pickups within this of each other are on the same spot.
-const PICKUP_SPOT_EPSILON: float = 8.0
-## A pickup spot this close to a player spawn is skipped (#111, owner
-## playtest: players spawned on a drop and took it before moving). About a
-## body width plus the largest pickup's trigger, with room to spare, so a
-## player standing on their spawn cannot touch a pickup.
-const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
-
-var _pickups: Array[Node2D] = []
-var _next_pickup_msec: int = 0
-
-## Round start: clear anything left over, put the first pickup down, and
-## start the interval from now.
-func _start_pickups() -> void:
-	_clear_pickups()
-	_spawn_pickup()
-	_next_pickup_msec = Time.get_ticks_msec() + int(_pickup_interval_sec() * 1000.0)
-
-## Each tick of an active round: once the interval is up, add one if the
-## stage is below the cap, and start the next interval either way.
-func _tick_pickups() -> void:
-	var now: int = Time.get_ticks_msec()
-	if now < _next_pickup_msec:
-		return
-	_next_pickup_msec = now + int(_pickup_interval_sec() * 1000.0)
-	if _live_pickups().size() < _pickup_cap():
-		_spawn_pickup()
-
-## Most pickups the stage holds at once right now: one fewer than the players
-## on the roster, and never under `max_pickups` -- 2 for two or three players,
-## 3 for four (#36, amending ADR-0009's "at most two"); one per player from
-## `crowded_roster` up (#152).
-func _pickup_cap() -> int:
-	var roster: int = _controller_server.claimed_slots().size() if _controller_server != null else 0
-	if roster >= crowded_roster:
-		return maxi(max_pickups, roster)
-	return maxi(max_pickups, roster - 1)
-
-## Seconds until the next pickup: `pickup_spawn_interval_sec`, shortened by
-## `crowded_interval_scale` from `crowded_roster` players up (#152).
-func _pickup_interval_sec() -> float:
-	var roster: int = _controller_server.claimed_slots().size() if _controller_server != null else 0
-	if roster >= crowded_roster:
-		return pickup_spawn_interval_sec * crowded_interval_scale
-	return pickup_spawn_interval_sec
-
-func _clear_pickups() -> void:
-	for pickup: Node2D in _live_pickups():
-		pickup.queue_free()
-	_pickups.clear()
-
-## Pickups still on the stage: collected ones free themselves, so anything
-## freed or on its way out is dropped from the list here.
-func _live_pickups() -> Array[Node2D]:
-	var live: Array[Node2D] = []
-	for pickup: Node2D in _pickups:
-		if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
-			live.append(pickup)
-	_pickups = live
-	return live
-
-func _spawn_pickup() -> void:
-	if pickup_scene == null or _live_pickups().size() >= _pickup_cap():
-		return
-	var parent: Node = _current_stage if _current_stage != null else get_node_or_null(arena_container_path)
-	if parent == null:
-		return
-	var spot: Variant = _free_pickup_spot()
-	if spot == null:
-		return
-	var offered: Array[Resource] = pickup_weapons if not pickup_weapons.is_empty() else PickupWeaponsScript.available_weapons()
-	var weapon: Resource = PickupWeaponsScript.choose(offered)
-	if weapon == null:
-		return
-	var pickup: Node2D = pickup_scene.instantiate() as Node2D
-	pickup.set_weapon(weapon)
-	parent.add_child(pickup)
-	pickup.global_position = spot
-	# Placed after entering the tree: a spawn, not motion (issue #108).
-	pickup.reset_physics_interpolation()
-	_pickups.append(pickup)
-
-## A random declared spot with no pickup already on it, or the fallback above
-## the stage's centre when the stage declares none. Null when every spot is
-## taken. Spots within PICKUP_CLEAR_OF_SPAWN_RADIUS of a player spawn are
-## skipped while any other free spot remains; if every free spot is near a
-## spawn, the one furthest from all spawns is used, so a stage still gets
-## its pickups (#111).
-func _free_pickup_spot() -> Variant:
-	var spots: Array[Vector2] = []
-	if _current_stage != null and _current_stage.has_method("get_pickup_spawn_points"):
-		spots = _current_stage.get_pickup_spawn_points()
-	if spots.is_empty():
-		var origin: Vector2 = _current_stage.global_position if _current_stage != null else Vector2.ZERO
-		spots = [origin + FALLBACK_PICKUP_OFFSET]
-	var free: Array[Vector2] = []
-	for spot: Vector2 in spots:
-		var taken: bool = false
-		for pickup: Node2D in _live_pickups():
-			if pickup.global_position.distance_to(spot) < PICKUP_SPOT_EPSILON:
-				taken = true
-				break
-		if not taken:
-			free.append(spot)
-	if free.is_empty():
-		return null
-	var clear: Array[Vector2] = []
-	for spot: Vector2 in free:
-		if _distance_to_nearest_spawn(spot) >= PICKUP_CLEAR_OF_SPAWN_RADIUS:
-			clear.append(spot)
-	if not clear.is_empty():
-		return clear[randi() % clear.size()]
-	var best: Vector2 = free[0]
-	for spot: Vector2 in free:
-		if _distance_to_nearest_spawn(spot) > _distance_to_nearest_spawn(best):
-			best = spot
-	return best
-
-## How far `spot` is from the nearest player spawn on the current stage; INF
-## when the stage declares none.
-func _distance_to_nearest_spawn(spot: Vector2) -> float:
-	var nearest: float = INF
-	for spawn: Vector2 in _stage_spawn_points:
-		nearest = minf(nearest, spot.distance_to(spawn))
-	return nearest
+# stage instance, so a stage swap can never strand one either. All of it is
+# `PickupDirector.gd` (#175), driven from `_try_start_round()`, `_process()`,
+# `_check_round_end()` and the host controls; the settings are the exports up
+# top.
 
 # --- Spawn protection (issue #114) -------------------------------------------
 #
@@ -797,8 +605,6 @@ func _distance_to_nearest_spawn(spot: Vector2) -> float:
 # mid-round spawn to protect: a phone that joins mid-round waits for the next
 # round (ADR-0004), and that round's start protects it with everyone else.
 
-## Seconds of spawn protection at round start (#114). 0 turns it off.
-@export var spawn_protection_sec: float = 1.0
 ## Blink rate and the dimmed alpha a protected player blinks down to.
 const SPAWN_BLINK_HZ: float = 8.0
 const SPAWN_BLINK_ALPHA: float = 0.35
@@ -884,19 +690,6 @@ func _stop_kill_zone_rise() -> void:
 # needs editing.
 
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
-
-## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
-@export_range(0.0, 1.0) var modifier_chance: float = 0.35
-## How long a rolled modifier's name stays on screen at round start.
-@export var modifier_announce_sec: float = 3.0
-## A `RoundModifiers` id (e.g. "low_gravity") every round gets, whatever
-## `modifier_chance` and `modifier_rolls_enabled` say: the determinism seam a
-## scenario or a playtest uses to pick one. Empty (the default) rolls.
-@export var forced_modifier: String = ""
-## Determinism seam for the roll itself, like `rotation_seed`: -1 leaves it
-## random every run. Its own RNG, never `_rng`, so a roll can never shift a
-## seeded stage rotation.
-@export var modifier_seed: int = -1
 
 ## Master switch for random rolls, shared by every RoundManager. The game
 ## never touches it. The scenario runner turns it off at startup so every
@@ -1044,33 +837,13 @@ func _apply_demo_mode() -> void:
 # back to them; everything here reaches it duck-typed, so a stub roster
 # without the lobby methods simply never has anyone ready.
 
-## Open on the lobby and play matches ("first to N") instead of an endless
-## round loop.
-@export var lobby_enabled: bool = false
-## Length of the 3-2-1 countdown once everyone is ready.
-@export var lobby_countdown_sec: float = 3.0
-
-const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
-const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
-const GAME_TITLE: String = "PICKFIGHT"
-## Podium block heights by place, as a fraction of the tallest.
-const PODIUM_HEIGHTS: Array[float] = [1.0, 0.72, 0.5, 0.34]
-const PODIUM_TALLEST_PX: float = 260.0
-
 var _match_target: int = 5
 var _match_winner_slot: int = -1
 var _countdown_until_msec: int = 0
 var _countdown_roster: Array[int] = []
-var _lobby_layer: CanvasLayer
-var _lobby_panel: Control
-var _victory_panel: Control
-var _lobby_rows: VBoxContainer
-var _lobby_status: Label
-var _lobby_target_label: Label
-var _lobby_qr: TextureRect
-var _lobby_url: Label
-var _victory_title: Label
-var _podium: HBoxContainer
+## The lobby, podium, title card and pause banner (`LobbyScreen.gd`, #175),
+## built the first time any of them is needed; see `_screen()`.
+var _lobby_screen: CanvasLayer
 var _last_lobby_state: Dictionary = {}
 
 ## "lobby", "countdown", "playing", "round_end" (the pause between rounds)
@@ -1096,10 +869,10 @@ func match_winner_slot() -> int:
 	return _match_winner_slot
 
 func lobby_panel() -> Control:
-	return _lobby_panel
+	return _lobby_screen.lobby_panel() if _lobby_screen != null else null
 
 func victory_panel() -> Control:
-	return _victory_panel
+	return _lobby_screen.victory_panel() if _lobby_screen != null else null
 
 func score_of(slot: int) -> int:
 	return _scores[slot] if slot >= 0 and slot < _scores.size() else 0
@@ -1169,8 +942,7 @@ func _enter_lobby() -> void:
 	if _scoreboard != null:
 		_scoreboard.visible = false
 	_build_lobby_ui()
-	_lobby_panel.visible = true
-	_victory_panel.visible = false
+	_lobby_screen.show_panel("lobby")
 	_last_lobby_state = {}
 	_tick_lobby()
 
@@ -1184,15 +956,14 @@ func _enter_victory() -> void:
 		_scoreboard.visible = false
 	_build_lobby_ui()
 	_refresh_victory()
-	_lobby_panel.visible = false
-	_victory_panel.visible = true
+	_lobby_screen.show_panel("victory")
 	_last_lobby_state = {}
 	_tick_lobby()
 
 ## Frees the last round's stage on the way into the lobby or the victory
 ## screen (#163), so its falling rocks and collapsing floors stop running --
 ## and making sounds -- behind them. The next round instances a fresh stage
-## anyway; `_stage_index` is kept, so it still never repeats the last one.
+## anyway; the rotation's `stage_index` is kept, so it still never repeats the last one.
 func _clear_stage() -> void:
 	if _current_stage != null:
 		_current_stage.queue_free()
@@ -1208,13 +979,13 @@ func _begin_match() -> void:
 	for slot in _scores.size():
 		_scores[slot] = 0
 	# A fresh bag for a fresh match (#163), dealt for its own player count.
-	_bag.clear()
+	_stage_rotation.new_bag()
 	_update_score_label()
 	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
-	_lobby_panel.visible = false
-	_victory_panel.visible = false
+	if _lobby_screen != null and _lobby_screen.panels_built():
+		_lobby_screen.show_panel("")
 	_state = State.WAITING
 	_publish_lobby_state()
 	_try_start_round()
@@ -1282,47 +1053,15 @@ func _publish_lobby_state() -> void:
 	_last_lobby_state = state
 	if _controller_server != null and _controller_server.has_method("set_lobby_state"):
 		_controller_server.set_lobby_state(state)
-	if _lobby_panel != null and in_lobby:
-		_refresh_lobby(state)
-	elif _victory_panel != null and _state == State.VICTORY:
+	var panels: bool = _lobby_screen != null and _lobby_screen.panels_built()
+	if panels and in_lobby:
+		_lobby_screen.refresh_lobby(state, min_players_to_start, _controller_server)
+	elif panels and _state == State.VICTORY:
 		_refresh_victory()
 
-func _refresh_lobby(state: Dictionary) -> void:
-	for child: Node in _lobby_rows.get_children():
-		child.queue_free()
-	for entry: Dictionary in state["players"]:
-		var slot: int = entry["slot"]
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 20)
-		var swatch := ColorRect.new()
-		swatch.custom_minimum_size = Vector2(40, 40)
-		swatch.color = _slot_color(slot)
-		row.add_child(swatch)
-		var tag: String = "  (host)" if slot == state["host"] else ""
-		var label := _big_label("%s%s  -  %s" % [entry["name"], tag, "READY" if entry["ready"] else "not ready"],
-			36 if state["players"].size() <= 4 else 28, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
-		row.add_child(label)
-		_lobby_rows.add_child(row)
-	_lobby_target_label.text = "First to %d" % state["target"]
-	var joined: int = state["players"].size()
-	if _state == State.COUNTDOWN:
-		_lobby_status.text = str(state["count"])
-	elif joined < min_players_to_start:
-		_lobby_status.text = "Scan to join: %d joined (need %d)" % [joined, min_players_to_start]
-	else:
-		_lobby_status.text = "Press Ready on your phone"
-	if _controller_server != null:
-		var qr: Variant = _controller_server.get("join_qr_texture")
-		_lobby_qr.texture = qr as Texture2D
-		_lobby_qr.visible = qr != null
-		var url: Variant = _controller_server.get("join_url")
-		_lobby_url.text = str(url) if url != null else ""
-
 ## The podium: the match winner on the tallest block, then everyone else in
-## the roster by final score.
+## the roster by final score, drawn by the lobby screen with the awards.
 func _refresh_victory() -> void:
-	for child: Node in _podium.get_children():
-		child.queue_free()
 	var roster: Array[int] = _roster()
 	var slots: Array[int] = []
 	for slot in _players.size():
@@ -1332,183 +1071,49 @@ func _refresh_victory() -> void:
 		if a == _match_winner_slot or b == _match_winner_slot:
 			return a == _match_winner_slot
 		return _scores[a] > _scores[b])
-	# Five to eight on the podium (issue #138) take narrower columns and smaller
-	# names that wrap, so eight columns still fit across the 1600 px screen.
-	var crowded: bool = slots.size() > 4
-	_podium.add_theme_constant_override("separation", 16 if crowded else 40)
-	for place in slots.size():
-		var slot: int = slots[place]
-		var column := VBoxContainer.new()
-		column.alignment = BoxContainer.ALIGNMENT_END
-		column.add_theme_constant_override("separation", 8)
-		var name_label: Label = _big_label("%s\n%d" % [_slot_name(slot), _scores[slot]], 24 if crowded else 36, Color.WHITE)
-		if crowded:
-			# A fixed column that a long name wraps inside rather than widens.
-			name_label.custom_minimum_size.x = PODIUM_CROWDED_COLUMN_PX
-			name_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-		column.add_child(name_label)
-		var block := ColorRect.new()
-		block.color = _slot_color(slot)
-		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
-		column.add_child(block)
-		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
-		_podium.add_child(column)
-	if _match_winner_slot != -1:
-		_victory_title.text = "%s WINS!" % _slot_name(_match_winner_slot)
-		_victory_title.add_theme_color_override("font_color", _slot_color(_match_winner_slot))
-	else:
-		_victory_title.text = "MATCH OVER"
-	_refresh_awards(slots)
+	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
+
+## The lobby screen, built (and added under this node) the first time
+## anything on it is needed.
+func _screen() -> CanvasLayer:
+	if _lobby_screen == null:
+		_lobby_screen = LobbyScreenScript.new(_slot_name, _slot_color)
+		add_child(_lobby_screen)
+	return _lobby_screen
 
 func _build_lobby_ui() -> void:
-	if _lobby_layer != null:
-		return
-	_lobby_layer = CanvasLayer.new()
-	_lobby_layer.name = "LobbyLayer"
-	_lobby_layer.layer = 5
-	add_child(_lobby_layer)
-
-	_lobby_panel = _full_screen_panel("LobbyPanel")
-	var columns := HBoxContainer.new()
-	columns.set_anchors_preset(Control.PRESET_FULL_RECT)
-	columns.alignment = BoxContainer.ALIGNMENT_CENTER
-	columns.add_theme_constant_override("separation", 96)
-	_lobby_panel.add_child(columns)
-	var left := VBoxContainer.new()
-	left.alignment = BoxContainer.ALIGNMENT_CENTER
-	left.add_theme_constant_override("separation", 24)
-	columns.add_child(left)
-	left.add_child(_big_label(GAME_TITLE, 120, LOBBY_ACCENT))
-	_lobby_target_label = _big_label("First to 5", 44, Color.WHITE)
-	left.add_child(_lobby_target_label)
-	_lobby_rows = VBoxContainer.new()
-	_lobby_rows.add_theme_constant_override("separation", 12)
-	left.add_child(_lobby_rows)
-	_lobby_status = _big_label("", 56, LOBBY_ACCENT)
-	left.add_child(_lobby_status)
-	var right := VBoxContainer.new()
-	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	right.add_theme_constant_override("separation", 16)
-	columns.add_child(right)
-	_lobby_qr = TextureRect.new()
-	_lobby_qr.custom_minimum_size = Vector2(420, 420)
-	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	right.add_child(_lobby_qr)
-	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
-	right.add_child(_lobby_url)
-	_how_to_play = _build_how_to_play()
-	right.add_child(_how_to_play)
-
-	_victory_panel = _full_screen_panel("VictoryPanel")
-	var stack := VBoxContainer.new()
-	stack.set_anchors_preset(Control.PRESET_FULL_RECT)
-	stack.alignment = BoxContainer.ALIGNMENT_CENTER
-	stack.add_theme_constant_override("separation", 32)
-	_victory_panel.add_child(stack)
-	_victory_title = _big_label("", 110, LOBBY_ACCENT)
-	stack.add_child(_victory_title)
-	_podium = HBoxContainer.new()
-	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
-	_podium.add_theme_constant_override("separation", 40)
-	stack.add_child(_podium)
-	stack.add_child(_big_label("Press Rematch on your phone", 40, Color.WHITE))
-
-func _full_screen_panel(node_name: String) -> Control:
-	var panel := ColorRect.new()
-	panel.name = node_name
-	panel.color = LOBBY_BACKGROUND
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.visible = false
-	_lobby_layer.add_child(panel)
-	return panel
-
-func _big_label(text: String, font_size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
-	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
-	label.add_theme_constant_override("outline_size", maxi(4, font_size / 10))
-	return label
+	_screen().build_panels()
 
 # --- Stage title card (issue #120) -------------------------------------------
 #
 # The stage's name sweeps across the screen for about a second at every round
-# start, below the modifier banner so the two never overlap.
-
-## How long the stage name takes to sweep across. 0 turns it off.
-@export var stage_title_sec: float = 1.1
-
-var _title_layer: CanvasLayer
-var _title_label: Label
-var _title_tween: Tween
+# start, below the modifier banner so the two never overlap. Drawn by
+# `LobbyScreen.gd` (#175).
 
 ## The title card label, or null before any round has started.
 func stage_title_label() -> Label:
-	return _title_label
+	return _lobby_screen.stage_title_label() if _lobby_screen != null else null
 
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
-	if _title_label == null:
-		_title_layer = CanvasLayer.new()
-		_title_layer.name = "StageTitleLayer"
-		_title_layer.layer = 10
-		add_child(_title_layer)
-		_title_label = Label.new()
-		_title_label.name = "StageTitle"
-		_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_title_label.add_theme_font_size_override("font_size", 80)
-		_title_label.add_theme_color_override("font_color", Color.WHITE)
-		_title_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
-		_title_label.add_theme_constant_override("outline_size", 14)
-		_title_layer.add_child(_title_label)
-	_title_label.text = str(_current_stage.name).to_upper()
-	_title_label.reset_size()
-	var screen: Vector2 = get_viewport().get_visible_rect().size
-	var width: float = _title_label.get_minimum_size().x
-	var middle: float = (screen.x - width) * 0.5
-	_title_label.position = Vector2(screen.x, screen.y * 0.36)
-	_title_label.visible = true
-	if _title_tween != null:
-		_title_tween.kill()
-	_title_tween = create_tween()
-	# Fast in, a slow drift through the middle where it can be read, fast out.
-	_title_tween.tween_property(_title_label, "position:x", middle + 40.0, stage_title_sec * 0.3) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_title_tween.tween_property(_title_label, "position:x", middle - 40.0, stage_title_sec * 0.4)
-	_title_tween.tween_property(_title_label, "position:x", -width - 20.0, stage_title_sec * 0.3) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	_title_tween.tween_callback(func() -> void: _title_label.visible = false)
+	_screen().show_stage_title(str(_current_stage.name).to_upper(), stage_title_sec)
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
 # Every living player carries its phone's nickname ("P3" without one) above
 # its head, in its colour -- whatever the round loop is doing, lobby or not.
-# The tag clears the player's hat (issue #151), follows a colour change at
-# once, and, when fighters bunch up, a tag that would cover another's is
-# lifted clear of it so all eight stay readable.
-
-## How far above the body's centre the name tag's bottom edge sits, at least.
-const NAME_TAG_RISE: float = 40.0
-## Gap between the top of a player's hat and its name tag's bottom edge.
-const NAME_TAG_HAT_GAP: float = 6.0
-## Gap kept between two tags stacked to clear each other.
-const NAME_TAG_STACK_GAP: float = 2.0
+# The tags themselves are `NameTags.gd` (#175), a child this node builds on
+# its first frame and lays out at the top of every `_process`.
 
 var _round_number: int = 0
 ## The slots the current (or last) round spawned, in slot order.
 var _in_round: Array[int] = []
-var _name_tag_root: Node2D
-var _name_tags: Array[Label] = []
+var _name_tags: Node2D
 
 ## A slot's name tag, or null before the first frame has built them.
 func name_tag(slot: int) -> Label:
-	return _name_tags[slot] if slot >= 0 and slot < _name_tags.size() else null
+	return _name_tags.name_tag(slot) if _name_tags != null else null
 
 func _alive_slots() -> Array[int]:
 	var alive: Array[int] = []
@@ -1518,66 +1123,11 @@ func _alive_slots() -> Array[int]:
 	return alive
 
 func _tick_name_tags() -> void:
-	if _name_tag_root == null:
-		_name_tag_root = Node2D.new()
-		_name_tag_root.name = "NameTags"
-		_name_tag_root.z_index = 50
-		add_child(_name_tag_root)
-		for slot in _players.size():
-			var tag := Label.new()
-			tag.name = "NameTag%d" % slot
-			tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			tag.add_theme_font_size_override("font_size", 22)
-			tag.add_theme_color_override("font_color", _slot_color(slot))
-			tag.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
-			tag.add_theme_constant_override("outline_size", 6)
-			tag.visible = false
-			_name_tag_root.add_child(tag)
-			_name_tags.append(tag)
-	var placed: Array[Rect2] = []
-	var shown_slots: Array[int] = []
-	# Scaled up by however far the camera is zoomed out (issue #144), so a name
-	# reads the same size on a large stage as on a normal one.
-	var tag_scale: float = 1.0
-	var camera: Camera2D = get_viewport().get_camera_2d()
-	if camera != null and camera.zoom.x > 0.0:
-		tag_scale = 1.0 / camera.zoom.x
-	for slot in _players.size():
-		var player: Variant = _players[slot]
-		var tag: Label = _name_tags[slot]
-		var shown: bool = player != null and player.alive and player.visible
-		tag.visible = shown
-		if not shown:
-			continue
-		var text: String = _slot_name(slot)
-		if tag.text != text:
-			tag.text = text
-			tag.reset_size()
-		var colour: Color = _slot_color(slot)
-		if tag.get_theme_color("font_color") != colour:
-			tag.add_theme_color_override("font_color", colour)
-		var rise: float = NAME_TAG_RISE
-		if player.has_method("hat_top"):
-			rise = maxf(rise, player.hat_top() + NAME_TAG_HAT_GAP)
-		tag.scale = Vector2(tag_scale, tag_scale)
-		var size: Vector2 = tag.get_minimum_size() * tag_scale
-		tag.position = player.global_position + Vector2(-size.x * 0.5, -rise - size.y)
-		shown_slots.append(slot)
-	# Lowest tag first; each one after it moves up past any tag it would cover.
-	shown_slots.sort_custom(func(a: int, b: int) -> bool:
-		return _name_tags[a].position.y > _name_tags[b].position.y)
-	for slot: int in shown_slots:
-		var tag: Label = _name_tags[slot]
-		var rect := Rect2(tag.position, tag.get_minimum_size() * tag_scale)
-		var moved: bool = true
-		while moved:
-			moved = false
-			for other: Rect2 in placed:
-				if rect.intersects(other):
-					rect.position.y = other.position.y - rect.size.y - NAME_TAG_STACK_GAP * tag_scale
-					moved = true
-		tag.position = rect.position
-		placed.append(rect)
+	if _name_tags == null:
+		_name_tags = NameTagsScript.new(_players, _slot_name, _slot_color)
+		add_child(_name_tags)
+		_name_tags.build()
+	_name_tags.tick()
 
 # --- Host phone controls and how to play (issue #149) --------------------------
 #
@@ -1591,24 +1141,12 @@ func _tick_name_tags() -> void:
 # The lobby screen -- the shared screen, not the phones -- carries a short
 # how-to-play panel.
 
-## The lines of the lobby's how-to-play panel.
-const HOW_TO_PLAY_LINES: PackedStringArray = [
-	"Drag on your phone to swing your pick - flick it fast to hit hard",
-	"Hook the pick on a ledge and pull yourself up to climb",
-	"Touch a weapon pickup to grab a new weapon",
-	"Knock the others off the stage or into the rising lava - last one standing wins the round",
-]
-const HOW_TO_PLAY_WIDTH_PX: float = 560.0
-
-var _how_to_play: Control
 var _paused: bool = false
 var _paused_at_msec: int = 0
-var _pause_layer: CanvasLayer
-var _pause_label: Label
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
-	return _how_to_play
+	return _lobby_screen.how_to_play_panel() if _lobby_screen != null else null
 
 ## Whether the host phone has the match paused.
 func is_paused() -> bool:
@@ -1616,20 +1154,7 @@ func is_paused() -> bool:
 
 ## The PAUSED banner, or null before the first pause.
 func pause_label() -> Label:
-	return _pause_label
-
-func _build_how_to_play() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "HowToPlay"
-	box.add_theme_constant_override("separation", 8)
-	box.add_child(_big_label("HOW TO PLAY", 34, LOBBY_ACCENT))
-	for line: String in HOW_TO_PLAY_LINES:
-		var label: Label = _big_label(line, 24, Color.WHITE)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.custom_minimum_size.x = HOW_TO_PLAY_WIDTH_PX
-		box.add_child(label)
-	return box
+	return _lobby_screen.pause_label() if _lobby_screen != null else null
 
 ## Whether a match is under way: what Pause and End match act on.
 func _in_match() -> bool:
@@ -1663,7 +1188,7 @@ func _pause_match() -> void:
 func _resume_match() -> void:
 	var paused_for: int = Time.get_ticks_msec() - _paused_at_msec
 	_pause_until_msec += paused_for
-	_next_pickup_msec += paused_for
+	_pickup_director.shift(paused_for)
 	_protected_until_msec += paused_for
 	if _abandoned_since_msec >= 0:
 		_abandoned_since_msec += paused_for
@@ -1683,7 +1208,7 @@ func _end_match() -> void:
 	for player: Variant in _players:
 		if player != null and player.alive:
 			player.leave_round()
-	_clear_pickups()
+	_pickup_director.clear()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
 	_end_spawn_protection()
@@ -1697,26 +1222,9 @@ func _set_tree_paused(on: bool) -> void:
 		get_tree().paused = on
 
 func _show_pause_banner(on: bool) -> void:
-	if _pause_label == null:
-		if not on:
-			return
-		_pause_layer = CanvasLayer.new()
-		_pause_layer.name = "PauseLayer"
-		_pause_layer.layer = 12
-		_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-		add_child(_pause_layer)
-		var dim := ColorRect.new()
-		dim.color = Color(0.0, 0.0, 0.0, 0.45)
-		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-		dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_pause_layer.add_child(dim)
-		_pause_label = _big_label("PAUSED", 120, LOBBY_ACCENT)
-		_pause_label.name = "PauseLabel"
-		_pause_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_pause_layer.add_child(_pause_label)
-	_pause_layer.visible = on
-	_pause_label.visible = on
+	if _lobby_screen == null and not on:
+		return
+	_screen().show_pause_banner(on)
 
 # --- Host changes, solo bots, lobby publishing (issue #165) --------------------
 #
@@ -1771,11 +1279,6 @@ func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 # the big moments. The victory screen gets up to three awards under the podium.
 
 const MatchStatsScript := preload("res://scripts/MatchStats.gd")
-const KillFeedScript := preload("res://scripts/KillFeed.gd")
-
-## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
-## just not shown.
-@export var kill_feed_path: NodePath
 
 var _stats: RefCounted = MatchStatsScript.new()
 ## Eliminations not yet credited, as [slot, msec]: `Player.eliminate()` emits
@@ -1791,7 +1294,7 @@ func kill_feed() -> Control:
 
 ## The victory screen's awards row, or null before any.
 func awards_row() -> Control:
-	return _podium.get_parent().get_node_or_null("Awards") as Control if _podium != null else null
+	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	_stats.record_hit(attacker_slot, _players.find(victim), amount, Time.get_ticks_msec())
@@ -1850,16 +1353,3 @@ func _ko_round_ended(winner_slot: int) -> void:
 	var feed: Control = kill_feed()
 	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
 		feed.show_banner("LAST ONE STANDING", _slot_name(winner_slot), _slot_color(winner_slot))
-
-func _refresh_awards(slots: Array[int]) -> void:
-	var stack: Node = _podium.get_parent()
-	var old: Node = stack.get_node_or_null("Awards")
-	if old != null:
-		stack.remove_child(old)
-		old.queue_free()
-	var awards: Array[Dictionary] = _stats.awards(slots)
-	if awards.is_empty():
-		return
-	var row: HBoxContainer = KillFeedScript.award_cards(awards, _slot_name, _slot_color)
-	stack.add_child(row)
-	stack.move_child(row, _podium.get_index() + 1)

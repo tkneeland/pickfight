@@ -1,3 +1,0 @@
-# psuite: fresh-clone boot check plus all 211 scenarios in 4 parallel shards on feat/issue-136-responsive c538078, rebased on main 74ed45f
-boot grep exit 1 (1 = clean);      211 scenarios in 4 shards
-TOTAL 211 passed, 0 failed of      211

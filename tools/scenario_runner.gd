@@ -3190,6 +3190,8 @@ func _scenario_abandoned_round_ends_without_winner() -> Array[String]:
 ## global class cache lives in the gitignored `.godot/` and only an editor
 ## run builds it, so a fresh clone would fail to resolve the name.
 const RoundManagerScript := preload("res://scripts/RoundManager.gd")
+const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
+const NameTagsScript := preload("res://scripts/NameTags.gd")
 const StubRosterScript := preload("res://tools/stub_roster.gd")
 
 ## Clear air above the arena, well apart, so a full-reach weapon never
@@ -11692,7 +11694,7 @@ const PICKUP_CLEAR_DRAWS: int = 200
 
 func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
 	var failures: Array[String] = []
-	var radius: float = RoundManagerScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
+	var radius: float = PickupDirectorScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
 	var spawns := PackedVector2Array([Vector2(-300, 0), Vector2(300, 0)])
 	var near := Vector2(-300, -40)
 	var clear := Vector2(0, -40)
@@ -11708,7 +11710,7 @@ func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
 		rm._stage_spawn_points = stage.get_spawn_points()
 		var bad: int = 0
 		for i in PICKUP_CLEAR_DRAWS:
-			var spot: Variant = rm._free_pickup_spot()
+			var spot: Variant = rm._pickup_director.free_spot()
 			if spot == null or (spot as Vector2).distance_to(case[2]) > 1.0:
 				bad += 1
 		print("      %s: %d of %d draws off the expected spot %s (clear radius %.0f px)" % [case[0], bad, PICKUP_CLEAR_DRAWS, case[2], radius])
@@ -11724,7 +11726,7 @@ func _scenario_pickup_spots_skip_player_spawns() -> Array[String]:
 ## its player spawns, so the round-start pickup never lands on a player.
 func _scenario_every_stage_has_pickup_spot_clear_of_spawns() -> Array[String]:
 	var failures: Array[String] = []
-	var radius: float = RoundManagerScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
+	var radius: float = PickupDirectorScript.PICKUP_CLEAR_OF_SPAWN_RADIUS
 	for path: String in STAGE_PATHS:
 		var stage: Node2D = (load(path) as PackedScene).instantiate()
 		get_root().add_child(stage)
@@ -13362,7 +13364,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
 		if texts.size() != 3 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
-		if row.get_index() != rm._podium.get_index() + 1:
+		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
 	await _teardown(loop["stage"])
 	return failures
@@ -14033,7 +14035,7 @@ func _tag_problem(rm: Node, players: Array[RigidBody2D], names: Array[String], s
 		if absf(rect.get_center().x - player.global_position.x) > slack:
 			return "P%d's tag is %.0f px off centre" % [i + 1, rect.get_center().x - player.global_position.x]
 		var clearance: float = player.global_position.y - player.hat_top() - rect.end.y
-		if clearance < RoundManagerScript.NAME_TAG_HAT_GAP - slack:
+		if clearance < NameTagsScript.NAME_TAG_HAT_GAP - slack:
 			return "P%d's tag is only %.1f px above its %s" % [i + 1, clearance, player.hat_id()]
 		for other: Rect2 in rects:
 			if rect.intersects(other):
@@ -14338,11 +14340,11 @@ func _scenario_pickups_come_faster_and_more_with_a_crowd() -> Array[String]:
 		for i in count:
 			slots.append(i)
 		roster.slots = slots
-		if shipped._pickup_cap() != int(CROWD_PICKUP_CAP[count]):
-			failures.append("%d players: pickup cap %d, expected %d" % [count, shipped._pickup_cap(), CROWD_PICKUP_CAP[count]])
+		if shipped._pickup_director.cap() != int(CROWD_PICKUP_CAP[count]):
+			failures.append("%d players: pickup cap %d, expected %d" % [count, shipped._pickup_director.cap(), CROWD_PICKUP_CAP[count]])
 		var expected_sec: float = SHIPPED_PICKUP_INTERVAL_SEC * (CROWD_INTERVAL_SCALE if count >= CROWD_ROSTER else 1.0)
-		if not is_equal_approx(shipped._pickup_interval_sec(), expected_sec):
-			failures.append("%d players: pickup every %.2f s, expected %.2f" % [count, shipped._pickup_interval_sec(), expected_sec])
+		if not is_equal_approx(shipped._pickup_director.interval_sec(), expected_sec):
+			failures.append("%d players: pickup every %.2f s, expected %.2f" % [count, shipped._pickup_director.interval_sec(), expected_sec])
 	shipped.free()
 	roster.free()
 
@@ -14924,16 +14926,16 @@ func _new_stage_dealer(scenes: Array[PackedScene], players: int, seed_value: int
 	rm.stage_scenes = scenes
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
-	rm.set("_rng", rng)
-	rm.set("_round_player_count", players)
+	rm._stage_rotation.set("rng", rng)
+	rm._stage_rotation.set("round_player_count", players)
 	return rm
 
 ## Deals `draws` stages the way `_swap_stage()` does; returns the indices.
 func _deal_stages(rm: Node, draws: int) -> Array[int]:
 	var dealt: Array[int] = []
 	for i in draws:
-		var index: int = rm._next_stage_index()
-		rm.set("_stage_index", index)
+		var index: int = rm._stage_rotation.next_stage_index()
+		rm._stage_rotation.set("stage_index", index)
 		dealt.append(index)
 	return dealt
 
@@ -15015,7 +15017,7 @@ func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
 	# A bag dealt for eight, then a round of four: its large stages are skipped.
 	var shrinking: Node = _new_stage_dealer(scenes, 8, 9)
 	_deal_stages(shrinking, 2)
-	shrinking.set("_round_player_count", 4)
+	shrinking._stage_rotation.set("round_player_count", 4)
 	var after: Array[int] = _deal_stages(shrinking, 20)
 	shrinking.free()
 	for index: int in after:
@@ -15167,7 +15169,7 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 
 		# A normal stage and two players: back to the unzoomed view.
 		roster.slots = [0, 1]
-		rm.set("_round_player_count", 2)
+		rm._stage_rotation.set("round_player_count", 2)
 		rm._swap_stage()
 		if camera.zoom != Vector2.ONE or camera.global_position.distance_to(Vector2.ZERO) > LARGE_VIEW_TOLERANCE:
 			failures.append("%s: on a normal stage afterwards the camera stayed at zoom %s, %s" % [
@@ -15281,7 +15283,7 @@ func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[Stri
 	for seed_value: int in REDEAL_SEEDS:
 		var rm: Node = _new_stage_dealer(scenes, 3, seed_value)
 		var small: Array[int] = _deal_stages(rm, 6)
-		rm.set("_round_player_count", 7)
+		rm._stage_rotation.set("round_player_count", 7)
 		var grown: Array[int] = _deal_stages(rm, scenes.size())
 		var first_large: int = -1
 		for i in grown.size():
@@ -15293,7 +15295,7 @@ func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[Stri
 			if not grown.has(index):
 				failures.append("seed %d: large stage %d was not dealt in the %d rounds after seven joined" % [seed_value, index, grown.size()])
 		var sequence: Array[int] = small + grown
-		rm.set("_round_player_count", 3)
+		rm._stage_rotation.set("round_player_count", 3)
 		var shrunk: Array[int] = _deal_stages(rm, 10)
 		sequence += shrunk
 		for index: int in shrunk:
@@ -15312,9 +15314,9 @@ func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[Stri
 	var panel_b := Control.new()
 	match_rm.set("_lobby_panel", panel_a)
 	match_rm.set("_victory_panel", panel_b)
-	var before: int = (match_rm.get("_bag") as Array).size()
+	var before: int = (match_rm._stage_rotation.get("bag") as Array).size()
 	match_rm._begin_match()
-	var after: int = (match_rm.get("_bag") as Array).size()
+	var after: int = (match_rm._stage_rotation.get("bag") as Array).size()
 	print("      bag before a new match: %d left; after: %d" % [before, after])
 	if before == 0:
 		failures.append("the match fixture's bag was already empty; the check below proves nothing")
