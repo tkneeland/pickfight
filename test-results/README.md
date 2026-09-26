@@ -1,9 +1,6 @@
 # Test results
 
-Evidence for the latest work package only: issue #135 (the weapon head drawn trailing behind the haft tip).
+Evidence for the latest work package only: issue #148 (kill feed, KO credit and match awards).
 
-- `issue-135/full-suite.txt`: boot check plus the full scenario suite in 4 parallel shards on `fix/issue-135-head-drift` rebased on main 46e6925: boot clean, 159/159. It includes the new `haft_tip_meets_drawn_head_every_frame`: every weapon, plain and with big heads, and phased, with a widest drawn gap of 0.00 px.
-- `issue-135/new-scenario-red-on-main.txt`: the new scenario run with main 46e6925's `scripts/Player.gd`. It fails all 18 cases, with the drawn haft tip 13 to 57 px from the drawn head.
-- Real-renderer check (windowed, Compatibility renderer, not committed): coloured dots on the head's anchor and on the haft tip, found in the rendered frames by pixel scan. Staff and pickaxe on main: median gap 47 px, worst 197 px and 110 px (retina pixels). With the fix: 0.1 px. This confirms the headless reconstruction matches what the renderer draws.
-
-Previous packages: issue #139 (nickname prompt), `issue-139/`, in `git show a721c7d`; issue #138 (eight players), `issue-138/`, in `git show 00ee7eb`; issue #121 (nicknames, controller polish), `issue-121/`, in `git show c9a1e9b`.
+- `issue-148/full-suite.txt`: the full scenario list on `feat/issue-148-kill-feed-awards`, based on main `cfde4cc`, run as 5 parallel shards of `--scenarios=`: **162 passed, 0 failed, 162 total**. It includes the three new scenarios `match_stats_ko_credit_and_awards`, `kill_feed_credits_hits_and_awards_at_match_end` and `kill_feed_and_awards_fit_eight_long_names`.
+- Fresh-clone boot check (`godot --headless --quit` on a throwaway clone): the only ERROR is qrencode's "Could not create child process", which comes from the environment (qrencode is not installed on this machine) and not from the code.

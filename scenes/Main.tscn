@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
@@ -22,6 +22,7 @@
 [ext_resource type="PackedScene" path="res://scenes/stages/Bulwark.tscn" id="27"]
 [ext_resource type="Script" path="res://scripts/HitFeedback.gd" id="16"]
 [ext_resource type="Script" path="res://scripts/Juice.gd" id="40"]
+[ext_resource type="Script" path="res://scripts/KillFeed.gd" id="41"]
 
 [node name="Main" type="Node2D"]
 
@@ -141,7 +142,9 @@ text = "Waiting for players..."
 ; Large and centred so the result reads from across the room on the shared
 ; screen. A grid four wide (issue #138): up to four players is the old single
 ; row, and five to eight wrap to a second row, since eight entries with
-; 12-character names would not fit across the 1600 px screen.
+; 12-character names would not fit across the 1600 px screen. Names at 22
+; and a 20 px gap (issue #148) so four of the widest 12-character names
+; ("WWWWWWWWWWWW") still fit across it.
 [node name="Scoreboard" type="GridContainer" parent="UI"]
 anchor_left = 0.5
 anchor_top = 0.5
@@ -149,7 +152,7 @@ anchor_right = 0.5
 anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/h_separation = 32
+theme_override_constants/h_separation = 20
 theme_override_constants/v_separation = 24
 columns = 4
 visible = false
@@ -166,7 +169,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot0"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot1" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -181,7 +184,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot1"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot2" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -196,7 +199,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot2"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot3" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -211,7 +214,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot3"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot4" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -226,7 +229,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot4"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot5" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -241,7 +244,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot5"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot6" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -256,7 +259,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot6"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="Slot7" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -271,7 +274,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot7"]
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 text = ""
 
 [node name="JoinQrCode" type="TextureRect" parent="UI"]
@@ -285,6 +288,15 @@ texture_filter = 1
 expand_mode = 1
 stretch_mode = 5
 visible = false
+
+; Kill feed (issue #148): KOs ticker down the top right, under JoinQrCode, and
+; a centre banner for big moments. Full-screen and click-through; it builds
+; its own children. RoundManager tells it what to show (kill_feed_path).
+[node name="KillFeed" type="Control" parent="UI"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("41")
 
 [node name="ControllerServer" type="Node" parent="."]
 script = ExtResource("3")
@@ -309,3 +321,4 @@ score_label_path = NodePath("../UI/ScoreLabel")
 waiting_label_path = NodePath("../UI/WaitingLabel")
 scoreboard_path = NodePath("../UI/Scoreboard")
 lobby_enabled = true
+kill_feed_path = NodePath("../UI/KillFeed")

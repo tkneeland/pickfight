@@ -1,4 +1,4 @@
-# Full scenario list (162 scenarios), run as 5 parallel shards of --scenarios=, 410 s
+# Full scenario list (162 scenarios), run as 5 parallel shards of --scenarios=, 409 s
 ## shard 0
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -19,7 +19,7 @@ PASS  eliminated_player_cannot_collect
 PASS  pickup_drawn_with_weapon_art
 PASS  damage_numbers_switch_off
 PASS  kill_zone_rises_after_grace
-Controller page: http://172.19.6.46:58579/
+Controller page: http://172.19.6.46:58066/
 PASS  four_phones_claim_four_slots
       buzzes: [[0, "eliminated"], [2, "eliminated"], [1, "win"]]
 PASS  round_win_buzzes_only_winner
@@ -57,14 +57,14 @@ PASS  pickup_spots_skip_player_spawns
       clash speeds [3600.0], sparks 12
       flood of 20 clashes holds 96 particles (cap 96)
 PASS  juice_sparks_on_clash_capped
-Controller page: http://172.19.6.46:65513/
+Controller page: http://172.19.6.46:56340/
 PASS  phone_lobby_messages_over_websocket
-Controller page: http://172.19.6.46:65517/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:65517/
+Controller page: http://172.19.6.46:56344/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:56344/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
-       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:358)
-       [1] _ready (res://scripts/ControllerServer.gd:271)
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:340)
+       [1] _ready (res://scripts/ControllerServer.gd:253)
        [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12509)
        [3] _run_scenario (res://tools/scenario_runner.gd:925)
        [4] _run_all (res://tools/scenario_runner.gd:587)
@@ -74,26 +74,24 @@ ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roamin
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
-       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:360)
-       [1] _ready (res://scripts/ControllerServer.gd:271)
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:342)
+       [1] _ready (res://scripts/ControllerServer.gd:253)
        [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12509)
        [3] _run_scenario (res://tools/scenario_runner.gd:925)
        [4] _run_all (res://tools/scenario_runner.gd:587)
        [5] _run_scenario (res://tools/scenario_runner.gd:915)
        [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12305)
        [7] _teardown (res://tools/scenario_runner.gd:1484)
-      lobby with 8 needs 1390 x 779 px
+      lobby with 8 needs 1167 x 779 px
       8 players started, closest pair 54 px apart
-      scoreboard: 8 entries in 1484 x 158 px
-      podium with 8 needs 1552 x 693 px
+      scoreboard: 8 entries in 1372 x 158 px
+      podium with 8 needs 1552 x 824 px
 PASS  eight_phones_join_and_play_a_round
-      how to play:
-        how to play
-        drag on your phone to swing your pick - flick it fast to hit hard
-        hook the pick on a ledge and pull yourself up to climb
-        touch a weapon pickup to grab a new weapon
-        knock the others off the stage or into the rising lava - last one standing wins the round
-PASS  lobby_how_to_play_on_host_screen_only
+      round 1 feed: ["Alice KO Bob", "Carl self-KO"]
+      feed: ["Alice KO Bob", "Carl self-KO", "Alice KO Bob", "Alice KO Carl"]
+      banners: ["FIRST BLOOD|Alice", "LAST ONE STANDING|Alice", "DOUBLE KO!|Alice", "LAST ONE STANDING|Alice"]
+      awards: ["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO", "SURVIVOR / Hard to Kill / Alice  -  0:00 alive"]
+PASS  kill_feed_credits_hits_and_awards_at_match_end
 ---
 33 passed, 0 failed, 33 total
 ## shard 1
@@ -383,11 +381,36 @@ PASS  every_stage_has_pickup_spot_clear_of_spawns
       soft drop peak 272 px/s, dust 0
       hard drop peak 732 px/s, dust 8
 PASS  juice_dust_on_hard_landing_only
-      title 'PICKUPSTAGE' from x=1477, gone after 1090 ms at x=-549
+      title 'PICKUPSTAGE' from x=1477, gone after 1084 ms at x=-549
 PASS  stage_title_card_sweeps_at_round_start
       8 on 4 spawns: [(-300.0, 0.0), (-100.0, 0.0), (100.0, 0.0), (300.0, 0.0), (-252.0, -24.0), (-148.0, -24.0), (148.0, -24.0), (252.0, -24.0)]
 PASS  spawns_shared_when_stage_has_fewer_than_players
-PASS  controller_page_host_menu_is_guarded
+Controller page: http://172.19.6.46:62495/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:62495/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:340)
+       [1] _ready (res://scripts/ControllerServer.gd:253)
+       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:12931)
+       [3] _run_scenario (res://tools/scenario_runner.gd:937)
+       [4] _run_all (res://tools/scenario_runner.gd:587)
+       [5] _run_scenario (res://tools/scenario_runner.gd:917)
+       [6] _scenario_stage_title_card_sweeps_at_round_start (res://tools/scenario_runner.gd:12344)
+       [7] _teardown (res://tools/scenario_runner.gd:1484)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:342)
+       [1] _ready (res://scripts/ControllerServer.gd:253)
+       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:12931)
+       [3] _run_scenario (res://tools/scenario_runner.gd:937)
+       [4] _run_all (res://tools/scenario_runner.gd:587)
+       [5] _run_scenario (res://tools/scenario_runner.gd:917)
+       [6] _scenario_stage_title_card_sweeps_at_round_start (res://tools/scenario_runner.gd:12344)
+       [7] _teardown (res://tools/scenario_runner.gd:1484)
+      feed [P: (1061.0, 204.0), S: (523.0, 166.0)] (5 lines), scoreboard [P: (40.0, 371.0), S: (1520.0, 158.0)], banner [P: (0.0, 567.0), S: (1600.0, 143.0)] needs 644 px wide, QR [P: (1404.0, 8.0), S: (184.0, 184.0)]
+      victory with 8 and awards needs 1591 x 824 px; awards 1240 x 99
+PASS  kill_feed_and_awards_fit_eight_long_names
 ---
 33 passed, 0 failed, 33 total
 ## shard 2
@@ -465,7 +488,7 @@ PASS  head_does_not_tunnel_rotating_platform
 PASS  breakable_wall_breaks_on_weapon_hits
       drop requested: ["land"]
 PASS  sfx_landing_and_elimination
-      6 damage: -1.64 dB, pitch 1.081; 54 damage: 5.42 dB, pitch 0.915
+      6 damage: -1.64 dB, pitch 1.100; 54 damage: 5.42 dB, pitch 0.919
 PASS  sfx_strength_scales_volume
       captured #77 pose: anchor -9.6 px along its own haft; heads 19.95 px apart as the charge sweep measures them, 19.95 px apart as the physics has them
 PASS  charge_measures_heads_where_physics_has_them
@@ -478,7 +501,7 @@ PASS  phone_jitter_is_smoothed
 PASS  spawn_protection_blocks_damage_then_expires
       fast head: longest trail 10 points over 73 frames (cap 10)
 PASS  juice_trail_capped_and_frees
-Controller page: http://172.19.6.46:59438/
+Controller page: http://172.19.6.46:58148/
       name on the host: 'CrispyWalrus'
 PASS  phone_nickname_reaches_host_trimmed
 PASS  controller_page_prompts_for_nickname_first
@@ -579,7 +602,7 @@ PASS  turn_does_not_carry_blade_through_head
 PASS  axe_swing_deals_damage
       ducked to -14.0 dB (target -14.0), round_win asked: true, back to 0: true
 PASS  music_ducks_under_round_win
-Controller page: http://172.19.6.46:59064/
+Controller page: http://172.19.6.46:49804/
 PASS  phone_release_and_flick_are_not_smoothed
       pickaxe: 48 trials, 0 head crossings
       staff: 48 trials, 0 head crossings
@@ -631,7 +654,7 @@ ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
        [0] _await_condition (res://tools/scenario_runner.gd:2918)
 PASS  rising_kill_zone_resets_each_round
 PASS  pickup_cap_scales_with_roster
-Controller page: http://172.19.6.46:57877/
+Controller page: http://172.19.6.46:59432/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       pickaxe.tres: head arrived at 2214 px/s and took 33.8 off
@@ -683,35 +706,13 @@ PASS  stage_backgrounds_draw_behind_everything
 PASS  trapped_head_phases_home_after_release
       victory: winner P1 on 2, P2 on 0
 PASS  match_first_to_n_then_victory_and_rematch
-      mid-round: { "phase": "playing", "host": -1, "target": 5, "players": [{ "slot": 0, "ready": false, "name": "P1" }, { "slot": 1, "ready": false, "name": "P2" }, { "slot": 2, "ready": false, "name": "P3" }], "count": 0, "winner": -1, "round": 1, "in_round": [0, 1], "alive": [0, 1], "next": 0, "paused": false }
+      mid-round: { "phase": "playing", "host": -1, "target": 5, "players": [{ "slot": 0, "ready": false, "name": "P1" }, { "slot": 1, "ready": false, "name": "P2" }, { "slot": 2, "ready": false, "name": "P3" }], "count": 0, "winner": -1, "round": 1, "in_round": [0, 1], "alive": [0, 1], "next": 0 }
 PASS  phone_states_through_a_round
-Controller page: http://172.19.6.46:58462/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:58462/
-   at: execute (platform/windows/os_windows.cpp:1496)
-   GDScript backtrace (most recent call first):
-       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:358)
-       [1] _ready (res://scripts/ControllerServer.gd:271)
-       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:12806)
-       [3] _run_scenario (res://tools/scenario_runner.gd:933)
-       [4] _run_all (res://tools/scenario_runner.gd:587)
-       [5] _run_scenario (res://tools/scenario_runner.gd:923)
-       [6] _scenario_phone_states_through_a_round (res://tools/scenario_runner.gd:12479)
-       [7] _teardown (res://tools/scenario_runner.gd:1484)
-WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
-   at: push_warning (core/variant/variant_utility.cpp:1034)
-   GDScript backtrace (most recent call first):
-       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:360)
-       [1] _ready (res://scripts/ControllerServer.gd:271)
-       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:12806)
-       [3] _run_scenario (res://tools/scenario_runner.gd:933)
-       [4] _run_all (res://tools/scenario_runner.gd:587)
-       [5] _run_scenario (res://tools/scenario_runner.gd:923)
-       [6] _scenario_phone_states_through_a_round (res://tools/scenario_runner.gd:12479)
-       [7] _teardown (res://tools/scenario_runner.gd:1484)
-      paused: P2 moved 0.00 px in 30 frames; tree paused true
-      resumed: P2 moved 18.6 px
-      kicked phone: state 3, reason 'removed by the host'; roster [0, 1]
-PASS  host_phone_controls_over_websocket
+      kos { 0: 3 }, self-KOs { 2: 1, 3: 1 }, alive { 0: 13000, 1: 5500, 2: 7001, 3: 6100 }
+      COMBAT: Top Brawler -> slot 0 (3 KOs)
+      CLUMSY: Butterfingers -> slot 2 (1 self-KO)
+      SURVIVOR: Hard to Kill -> slot 0 (0:13 alive)
+PASS  match_stats_ko_credit_and_awards
 ---
 32 passed, 0 failed, 32 total
 ## total
