@@ -1,11 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
-size = Vector2(370, 40)
+size = Vector2(430, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_nest"]
 size = Vector2(160, 24)
@@ -47,25 +47,27 @@ background_sky_bottom = Color(0.28, 0.24, 0.24, 1)
 background_silhouette = Color(0.12, 0.12, 0.18, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
+; Banks widened outward for issue #137: x=+-290..+-660 -> +-290..+-720.
+; The pit and the pad are untouched.
 [node name="BankLeft" type="StaticBody2D" parent="."]
-position = Vector2(-475, 320)
+position = Vector2(-505, 320)
 
 [node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
 shape = SubResource("RectangleShape2D_bank")
 
 [node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
 
 [node name="BankRight" type="StaticBody2D" parent="."]
-position = Vector2(475, 320)
+position = Vector2(505, 320)
 
 [node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
 shape = SubResource("RectangleShape2D_bank")
 
 [node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
 
 [node name="Pad" parent="." instance=ExtResource("3")]
 position = Vector2(0, 380)
@@ -93,16 +95,30 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-520, 250)
+position = Vector2(-490, 250)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(520, 250)
+position = Vector2(490, 250)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-370, 250)
+position = Vector2(-415, 250)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(370, 250)
+position = Vector2(415, 250)
+
+; Spawns 4-7 (issue #137): eight players. Four on each bank, 75 px apart; the bank pickups moved out to the
+; widened ends to stay 120 px clear of them (#111).
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-565, 250)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(565, 250)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-340, 250)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(340, 250)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
@@ -118,7 +134,7 @@ position = Vector2(-210, 60)
 position = Vector2(210, 60)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(-600, 260)
+position = Vector2(-690, 260)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
-position = Vector2(600, 260)
+position = Vector2(690, 260)

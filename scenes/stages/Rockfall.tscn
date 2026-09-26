@@ -5,13 +5,13 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
-size = Vector2(300, 40)
+size = Vector2(390, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_bridge"]
 size = Vector2(400, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
-size = Vector2(170, 24)
+size = Vector2(160, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -66,25 +66,30 @@ background_sky_bottom = Color(0.3, 0.26, 0.22, 1)
 background_silhouette = Color(0.16, 0.13, 0.11, 1)
 background_layers = PackedStringArray("mountains", "rocks")
 
+; Banks widened outward for issue #137: x=+-330..+-630 -> +-330..+-720.
+; The lookout ledges moved out with the banks' outer shoulders (now
+; x=+-560..+-720, same height) and RockLedgeRight with its ledge, which
+; leaves room for four spawns per bank under open sky. The canyon and
+; bridge are untouched.
 [node name="BankLeft" type="StaticBody2D" parent="."]
-position = Vector2(-480, 380)
+position = Vector2(-525, 380)
 
 [node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
 shape = SubResource("RectangleShape2D_bank")
 
 [node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+polygon = PackedVector2Array(-195, -20, 195, -20, 195, 20, -195, 20)
 
 [node name="BankRight" type="StaticBody2D" parent="."]
-position = Vector2(480, 380)
+position = Vector2(525, 380)
 
 [node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
 shape = SubResource("RectangleShape2D_bank")
 
 [node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+polygon = PackedVector2Array(-195, -20, 195, -20, 195, 20, -195, 20)
 
 [node name="Bridge" type="StaticBody2D" parent="."]
 position = Vector2(0, 372)
@@ -97,24 +102,24 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
 
 [node name="HighLedgeLeft" type="StaticBody2D" parent="."]
-position = Vector2(-550, 240)
+position = Vector2(-640, 240)
 
 [node name="HighLedgeLeftShape" type="CollisionShape2D" parent="HighLedgeLeft"]
 shape = SubResource("RectangleShape2D_ledge")
 
 [node name="HighLedgeLeftVisual" type="Polygon2D" parent="HighLedgeLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-85, -12, 85, -12, 85, 12, -85, 12)
+polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
 
 [node name="HighLedgeRight" type="StaticBody2D" parent="."]
-position = Vector2(550, 240)
+position = Vector2(640, 240)
 
 [node name="HighLedgeRightShape" type="CollisionShape2D" parent="HighLedgeRight"]
 shape = SubResource("RectangleShape2D_ledge")
 
 [node name="HighLedgeRightVisual" type="Polygon2D" parent="HighLedgeRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-85, -12, 85, -12, 85, 12, -85, 12)
+polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
 
 ; The bridge's rock: column x=0, hanging just above the camera's top edge.
 ; Defaults (6 s interval, 1.5 s warning, 25 dmg, 28 px radius, 650 px/s
@@ -128,20 +133,33 @@ position = Vector2(0, -430)
 ; still has to watch the other independently. The left ledge gets no rock at
 ; all: it is this stage's one guaranteed-safe piece of high ground.
 [node name="RockLedgeRight" parent="." instance=ExtResource("3")]
-position = Vector2(550, -430)
+position = Vector2(640, -430)
 interval_sec = 7.0
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-430, 320)
+position = Vector2(-415, 320)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(430, 320)
+position = Vector2(415, 320)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-360, 320)
+position = Vector2(-355, 320)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(360, 320)
+position = Vector2(355, 320)
+
+; Spawns 4-7 (issue #137): eight players. Four on each bank, 60 px apart, all inboard of the lookout ledges.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-475, 320)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(475, 320)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-535, 320)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(535, 320)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 500)
@@ -157,7 +175,7 @@ shape = SubResource("RectangleShape2D_kill")
 position = Vector2(0, 320)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(-550, 200)
+position = Vector2(-640, 200)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(550, 200)
+position = Vector2(640, 200)

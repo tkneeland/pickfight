@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/Hazard.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
-size = Vector2(400, 40)
+size = Vector2(1300, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -53,6 +53,11 @@ background_sky_bottom = Color(0.3, 0.12, 0.08, 1)
 background_silhouette = Color(0.1, 0.05, 0.05, 1)
 background_layers = PackedStringArray("mountains", "rocks")
 
+; Widened for issue #137: the floor was 400 px (x=+-200), too short to hold
+; eight players; it now runs +-650 and the two hazard columns moved out with it
+; (centres +-730, inner faces flush with the floor's ends at +-650, outer faces
+; at the view's edge). Still sealed wall to wall: the hazard is still the wall,
+; and reaching the edge is still the mistake -- there is just more floor first.
 [node name="Ground" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)
 
@@ -61,61 +66,61 @@ shape = SubResource("RectangleShape2D_ground")
 
 [node name="GroundVisual" type="Polygon2D" parent="Ground"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)
+polygon = PackedVector2Array(-650, -20, 650, -20, 650, 20, -650, 20)
 
 [node name="WallHazardLeft0" parent="." instance=ExtResource("3")]
-position = Vector2(-280, -16)
+position = Vector2(-730, -16)
 
 [node name="WallHazardLeft1" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 32)
+position = Vector2(-730, 32)
 
 [node name="WallHazardLeft2" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 80)
+position = Vector2(-730, 80)
 
 [node name="WallHazardLeft3" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 128)
+position = Vector2(-730, 128)
 
 [node name="WallHazardLeft4" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 176)
+position = Vector2(-730, 176)
 
 [node name="WallHazardLeft5" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 224)
+position = Vector2(-730, 224)
 
 [node name="WallHazardLeft6" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 272)
+position = Vector2(-730, 272)
 
 [node name="WallHazardLeft7" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 320)
+position = Vector2(-730, 320)
 
 [node name="WallHazardLeft8" parent="." instance=ExtResource("3")]
-position = Vector2(-280, 368)
+position = Vector2(-730, 368)
 
 [node name="WallHazardRight0" parent="." instance=ExtResource("3")]
-position = Vector2(280, -16)
+position = Vector2(730, -16)
 
 [node name="WallHazardRight1" parent="." instance=ExtResource("3")]
-position = Vector2(280, 32)
+position = Vector2(730, 32)
 
 [node name="WallHazardRight2" parent="." instance=ExtResource("3")]
-position = Vector2(280, 80)
+position = Vector2(730, 80)
 
 [node name="WallHazardRight3" parent="." instance=ExtResource("3")]
-position = Vector2(280, 128)
+position = Vector2(730, 128)
 
 [node name="WallHazardRight4" parent="." instance=ExtResource("3")]
-position = Vector2(280, 176)
+position = Vector2(730, 176)
 
 [node name="WallHazardRight5" parent="." instance=ExtResource("3")]
-position = Vector2(280, 224)
+position = Vector2(730, 224)
 
 [node name="WallHazardRight6" parent="." instance=ExtResource("3")]
-position = Vector2(280, 272)
+position = Vector2(730, 272)
 
 [node name="WallHazardRight7" parent="." instance=ExtResource("3")]
-position = Vector2(280, 320)
+position = Vector2(730, 320)
 
 [node name="WallHazardRight8" parent="." instance=ExtResource("3")]
-position = Vector2(280, 368)
+position = Vector2(730, 368)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-120, 100)
@@ -129,6 +134,19 @@ position = Vector2(-60, 100)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(60, 100)
+
+; Spawns 4-7 (issue #137): eight players. Out on the widened floor, well short of the hazard walls.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-300, 100)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(300, 100)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-480, 100)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(480, 100)
 
 ; Just below the ground (underside y=340) and the hazard columns (bottom
 ; y=392), like every other stage. At y=700 a body thrown over a column fell

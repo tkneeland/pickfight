@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/WindZone.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
-size = Vector2(370, 40)
+size = Vector2(430, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_mid"]
 size = Vector2(380, 40)
@@ -69,15 +69,17 @@ background_sky_bottom = Color(0.22, 0.23, 0.25, 1)
 background_silhouette = Color(0.1, 0.11, 0.13, 1)
 background_layers = PackedStringArray("clouds", "mountains", "clouds")
 
+; Banks widened outward for issue #137: x=+-290..+-660 -> +-290..+-720.
+; The gaps and the gusts over them are untouched.
 [node name="BankLeft" type="StaticBody2D" parent="."]
-position = Vector2(-475, 320)
+position = Vector2(-505, 320)
 
 [node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
 shape = SubResource("RectangleShape2D_bank")
 
 [node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
 
 [node name="Middle" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)
@@ -90,14 +92,14 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)
 
 [node name="BankRight" type="StaticBody2D" parent="."]
-position = Vector2(475, 320)
+position = Vector2(505, 320)
 
 [node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
 shape = SubResource("RectangleShape2D_bank")
 
 [node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-185, -20, 185, -20, 185, 20, -185, 20)
+polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
 
 ; A calm perch above the middle, 142 px up -- one hook's reach for a pickaxe
 ; planted near either corner, more effort for the sword and dagger, and out
@@ -146,6 +148,19 @@ position = Vector2(-370, 250)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(370, 250)
+
+; Spawns 4-7 (issue #137): eight players. Two more on each widened bank, still outside both gusts.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-600, 250)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(600, 250)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-445, 250)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(445, 250)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

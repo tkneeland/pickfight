@@ -68,6 +68,18 @@ background_sky_bottom = Color(0.2, 0.22, 0.18, 1)
 background_silhouette = Color(0.08, 0.11, 0.08, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
+; Rim slabs (issue #137): timed collapsing floor outboard of each Far slab
+; across the same 20 px seam, x=+-420..+-720, so the strip runs nearly the
+; view's width at round start. They go at 15 s, five seconds before the Far
+; slabs: the floor now shrinks in two visible steps (1440 -> 800 -> 480 px),
+; both on a schedule, both well ahead of the lava.
+[node name="RimLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-570, 300)
+size = Vector2(300, 24)
+trigger = "timed"
+collapse_after_sec = 15.0
+warn_sec = 1.5
+
 [node name="FarLeft" parent="." instance=ExtResource("3")]
 position = Vector2(-330, 300)
 size = Vector2(140, 24)
@@ -102,6 +114,13 @@ trigger = "timed"
 collapse_after_sec = 20.0
 warn_sec = 1.5
 
+[node name="RimRight" parent="." instance=ExtResource("3")]
+position = Vector2(570, 300)
+size = Vector2(300, 24)
+trigger = "timed"
+collapse_after_sec = 15.0
+warn_sec = 1.5
+
 ; All four spawns on the permanent core, well clear of both collapsing
 ; rings -- a round never opens with a countdown already running on the
 ; ground a player was just placed on.
@@ -116,6 +135,20 @@ position = Vector2(-40, 220)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(40, 220)
+
+; Spawns 4-7 (issue #137): eight players. On the rim slabs: eight do not fit on the core, and the rim is timed
+; (15 s), never stood_on, so nobody starts on ground already ticking.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-620, 220)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(620, 220)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-520, 220)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(520, 220)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

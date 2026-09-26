@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
-size = Vector2(1200, 40)
+size = Vector2(1440, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_platform"]
 size = Vector2(240, 24)
@@ -34,6 +34,9 @@ background_sky_bottom = Color(0.24, 0.27, 0.3, 1)
 background_silhouette = Color(0.12, 0.17, 0.15, 1)
 background_layers = PackedStringArray("clouds", "mountains", "hills")
 
+; Widened for issue #137: the floor ran x=+-600, leaving 200 px of open air
+; at each side of the view to be knocked into; it now runs +-720, 80 px short
+; of each edge. The open ends are still the ring-outs, just further out.
 [node name="Ground" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)
 
@@ -42,7 +45,7 @@ shape = SubResource("RectangleShape2D_ground")
 
 [node name="GroundVisual" type="Polygon2D" parent="Ground"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-600, -20, 600, -20, 600, 20, -600, 20)
+polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
 
 [node name="PlatformLeft" type="StaticBody2D" parent="."]
 position = Vector2(-320, 164)
@@ -65,10 +68,10 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-100, 0)
+position = Vector2(-60, 0)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(100, 0)
+position = Vector2(60, 0)
 
 ; Spawns 2 and 3 (issue #36). On the open ground outboard of both platforms, clear of the pickups on them.
 [node name="Spawn2" type="Marker2D" parent="."]
@@ -76,6 +79,20 @@ position = Vector2(-520, 0)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(520, 0)
+
+; Spawns 4-7 (issue #137): eight players. Two more out on each end of the widened floor, two more in the middle;
+; none drops onto a platform, so every pickup is still a climb away.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-640, 0)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(640, 0)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-150, 0)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(150, 0)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

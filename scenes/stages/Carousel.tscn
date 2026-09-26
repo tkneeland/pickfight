@@ -1,11 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_shoulder"]
-size = Vector2(200, 40)
+size = Vector2(220, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hub"]
 size = Vector2(180, 40)
@@ -46,25 +46,27 @@ background_sky_bottom = Color(0.22, 0.14, 0.24, 1)
 background_silhouette = Color(0.1, 0.07, 0.14, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
+; Shoulders widened inward for issue #137 (x=+-590..+-790 ->
+; +-570..+-790) to fit four spawns each; the gap to each see-saw is now 40 px.
 [node name="ShoulderLeft" type="StaticBody2D" parent="."]
-position = Vector2(-690, 320)
+position = Vector2(-680, 320)
 
 [node name="ShoulderLeftShape" type="CollisionShape2D" parent="ShoulderLeft"]
 shape = SubResource("RectangleShape2D_shoulder")
 
 [node name="ShoulderLeftVisual" type="Polygon2D" parent="ShoulderLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -20, 100, -20, 100, 20, -100, 20)
+polygon = PackedVector2Array(-110, -20, 110, -20, 110, 20, -110, 20)
 
 [node name="ShoulderRight" type="StaticBody2D" parent="."]
-position = Vector2(690, 320)
+position = Vector2(680, 320)
 
 [node name="ShoulderRightShape" type="CollisionShape2D" parent="ShoulderRight"]
 shape = SubResource("RectangleShape2D_shoulder")
 
 [node name="ShoulderRightVisual" type="Polygon2D" parent="ShoulderRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -20, 100, -20, 100, 20, -100, 20)
+polygon = PackedVector2Array(-110, -20, 110, -20, 110, 20, -110, 20)
 
 [node name="Hub" type="StaticBody2D" parent="."]
 position = Vector2(0, 320)
@@ -93,16 +95,29 @@ position = Vector2(0, 140)
 spin_deg_per_sec = 25.0
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-720, 250)
+position = Vector2(-765, 250)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(720, 250)
+position = Vector2(765, 250)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-640, 250)
+position = Vector2(-705, 250)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(640, 250)
+position = Vector2(705, 250)
+
+; Spawns 4-7 (issue #137): eight players. Four on each shoulder, 60 px apart: still fixed footing for everyone.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-645, 250)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(645, 250)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-585, 250)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(585, 250)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)

@@ -29,14 +29,16 @@ background_sky_bottom = Color(0.28, 0.26, 0.26, 1)
 background_silhouette = Color(0.14, 0.14, 0.16, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
+; Widened for issue #137: both flats run out to x=+-720 (they stopped at
+; +-560). The slope between them is untouched.
 [node name="Landmass" type="StaticBody2D" parent="."]
 
 [node name="LandmassShape" type="CollisionPolygon2D" parent="Landmass"]
-polygon = PackedVector2Array(-560, 380, -360, 380, 300, 180, 560, 180, 560, 440, -560, 440)
+polygon = PackedVector2Array(-720, 380, -360, 380, 300, 180, 720, 180, 720, 440, -720, 440)
 
 [node name="LandmassVisual" type="Polygon2D" parent="Landmass"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-560, 380, -360, 380, 300, 180, 560, 180, 560, 440, -560, 440)
+polygon = PackedVector2Array(-720, 380, -360, 380, 300, 180, 720, 180, 720, 440, -720, 440)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-460, 300)
@@ -50,6 +52,19 @@ position = Vector2(-385, 300)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(350, 100)
+
+; Spawns 4-7 (issue #137): eight players. Further out along each widened flat.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-560, 300)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(520, 100)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-650, 300)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(620, 100)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)

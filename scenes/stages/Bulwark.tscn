@@ -8,7 +8,7 @@
 size = Vector2(320, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_bastion"]
-size = Vector2(300, 40)
+size = Vector2(420, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
 size = Vector2(8000, 40)
@@ -85,25 +85,27 @@ size = Vector2(32, 140)
 position = Vector2(160, 230)
 size = Vector2(32, 140)
 
+; Bastions widened outward for issue #137: x=+-300..+-600 -> +-300..+-720.
+; Their outer ends are still open sky; the keep and walls are untouched.
 [node name="BastionLeft" type="StaticBody2D" parent="."]
-position = Vector2(-450, 320)
+position = Vector2(-510, 320)
 
 [node name="BastionLeftShape" type="CollisionShape2D" parent="BastionLeft"]
 shape = SubResource("RectangleShape2D_bastion")
 
 [node name="BastionLeftVisual" type="Polygon2D" parent="BastionLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+polygon = PackedVector2Array(-210, -20, 210, -20, 210, 20, -210, 20)
 
 [node name="BastionRight" type="StaticBody2D" parent="."]
-position = Vector2(450, 320)
+position = Vector2(510, 320)
 
 [node name="BastionRightShape" type="CollisionShape2D" parent="BastionRight"]
 shape = SubResource("RectangleShape2D_bastion")
 
 [node name="BastionRightVisual" type="Polygon2D" parent="BastionRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -20, 150, -20, 150, 20, -150, 20)
+polygon = PackedVector2Array(-210, -20, 210, -20, 210, 20, -210, 20)
 
 ; Spawns 0 and 1 in the keep, sheltered by both walls at round start.
 ; Spawns 2 and 3 on the bastions, already exposed on their outer edge.
@@ -120,6 +122,20 @@ position = Vector2(-450, 250)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(450, 250)
+
+; Spawns 4-7 (issue #137): eight players. Three on each bastion with Spawn2/3; the bastion pickups moved out to
+; the widened ends to stay 120 px clear of them (#111).
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-530, 250)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(530, 250)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-370, 250)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(370, 250)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
@@ -141,7 +157,7 @@ position = Vector2(160, 120)
 position = Vector2(0, 264)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
-position = Vector2(-450, 264)
+position = Vector2(-660, 264)
 
 [node name="PickupSpawn4" type="Marker2D" parent="."]
-position = Vector2(450, 264)
+position = Vector2(660, 264)

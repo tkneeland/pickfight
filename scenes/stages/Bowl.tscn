@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
@@ -36,26 +36,29 @@ background_sky_bottom = Color(0.26, 0.18, 0.26, 1)
 background_silhouette = Color(0.12, 0.08, 0.14, 1)
 background_layers = PackedStringArray("mountains", "hills")
 
+; Widened for issue #137: each upper step runs out to x=+-660 (was +-500),
+; with the walls moved out to match (+-660..+-700). Still sealed at the sides;
+; the drain is still the only way out.
 [node name="LandLeft" type="StaticBody2D" parent="."]
 
 [node name="LandLeftShape" type="CollisionPolygon2D" parent="LandLeft"]
-polygon = PackedVector2Array(-500, 208, -300, 208, -300, 288, -60, 288, -60, 440, -500, 440)
+polygon = PackedVector2Array(-660, 208, -300, 208, -300, 288, -60, 288, -60, 440, -660, 440)
 
 [node name="LandLeftVisual" type="Polygon2D" parent="LandLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-500, 208, -300, 208, -300, 288, -60, 288, -60, 440, -500, 440)
+polygon = PackedVector2Array(-660, 208, -300, 208, -300, 288, -60, 288, -60, 440, -660, 440)
 
 [node name="LandRight" type="StaticBody2D" parent="."]
 
 [node name="LandRightShape" type="CollisionPolygon2D" parent="LandRight"]
-polygon = PackedVector2Array(500, 208, 300, 208, 300, 288, 60, 288, 60, 440, 500, 440)
+polygon = PackedVector2Array(660, 208, 300, 208, 300, 288, 60, 288, 60, 440, 660, 440)
 
 [node name="LandRightVisual" type="Polygon2D" parent="LandRight"]
 color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(500, 208, 300, 208, 300, 288, 60, 288, 60, 440, 500, 440)
+polygon = PackedVector2Array(660, 208, 300, 208, 300, 288, 60, 288, 60, 440, 660, 440)
 
 [node name="WallLeft" type="StaticBody2D" parent="."]
-position = Vector2(-520, 100)
+position = Vector2(-680, 100)
 
 [node name="WallLeftShape" type="CollisionShape2D" parent="WallLeft"]
 shape = SubResource("RectangleShape2D_wall")
@@ -65,7 +68,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-20, -280, 20, -280, 20, 280, -20, 280)
 
 [node name="WallRight" type="StaticBody2D" parent="."]
-position = Vector2(520, 100)
+position = Vector2(680, 100)
 
 [node name="WallRightShape" type="CollisionShape2D" parent="WallRight"]
 shape = SubResource("RectangleShape2D_wall")
@@ -86,6 +89,19 @@ position = Vector2(-250, 220)
 
 [node name="Spawn3" type="Marker2D" parent="."]
 position = Vector2(250, 220)
+
+; Spawns 4-7 (issue #137): eight players. On the widened upper steps, outboard of Spawn0 and 1.
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-490, 140)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(490, 140)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-580, 140)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(580, 140)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 560)
