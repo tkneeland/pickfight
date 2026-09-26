@@ -16,12 +16,19 @@ extends Node
 ## Stages to rotate through: `stage_scenes[0]` opens every session, then
 ## shuffled bags cover the rest with no repeat back-to-back (ADR-0011).
 ## Swapped once per round, in `_swap_stage()`. Spawn points come from the
-## active stage's `get_spawn_points()`, not from an export here.
-@export var stage_scenes: Array[PackedScene] = []
+## active stage's `get_spawn_points()`, not from an export here. Dealt by
+## `StageRotation.gd`, which shares this array.
+@export var stage_scenes: Array[PackedScene] = []:
+	set(value):
+		stage_scenes = value
+		_stage_rotation.scenes = value
 ## Issue #144: a large stage (`Stage.view_size` bigger than the normal view)
 ## is only offered to a round with at least this many players; normal stages
-## are offered at any count. See `_stage_allowed()`.
-@export var large_stage_min_players: int = 5
+## are offered at any count. See `StageRotation.stage_allowed()`.
+@export var large_stage_min_players: int = 5:
+	set(value):
+		large_stage_min_players = value
+		_stage_rotation.large_stage_min_players = value
 ## Issue #144: the camera `_swap_stage()` zooms and centres on each new
 ## stage's view (`Stage.get_view_rect()`). Empty leaves every camera alone,
 ## which is what every scenario's RoundManager does unless it tests this.
@@ -100,7 +107,7 @@ extends Node
 ## scenario or a playtest uses to pick one. Empty (the default) rolls.
 @export var forced_modifier: String = ""
 ## Determinism seam for the roll itself, like `rotation_seed`: -1 leaves it
-## random every run. Its own RNG, never `_rng`, so a roll can never shift a
+## random every run. Its own RNG, never the rotation's, so a roll can never shift a
 ## seeded stage rotation.
 @export var modifier_seed: int = -1
 
@@ -130,6 +137,11 @@ signal match_won(slot: int)
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END, LOBBY, COUNTDOWN, VICTORY }
 
+## The pieces split out of this script (#175), loaded by path (never by
+## class_name): the stage dealer, and further down the pickups, name tags and
+## lobby screen this node drives.
+const StageRotationScript := preload("res://scripts/StageRotation.gd")
+
 var _state: int = State.WAITING
 var _pause_until_msec: int = 0
 var _players: Array = []
@@ -137,21 +149,12 @@ var _scores: PackedInt32Array = PackedInt32Array()
 var _controller_server: Node
 var _waiting_label: Label
 var _scoreboard: Control
-## Stage rotation state (ADR-0011): shuffled bags over `stage_scenes` with no
-## stage playing twice in a row, opening every session on `stage_scenes[0]`.
-## `_stage_index` starts at -1 so the first `_swap_stage()` call is recognized
-## as the opener rather than the seam between two bags.
-var _stage_index: int = -1
+## Stage rotation (ADR-0011, #144, #163): which stage plays next. Built here,
+## not in `_ready()`, so the export setters above can reach it and a
+## RoundManager outside the tree can still deal.
+var _stage_rotation: RefCounted = StageRotationScript.new()
 var _current_stage: Node2D
 var _stage_spawn_points: Array[Vector2] = []
-## Remaining stage indices for the current bag, next-to-play at the front
-## (`pop_front()`). Refilled by `_refill_bag()` once emptied.
-var _bag: Array[int] = []
-## Seeded from `rotation_seed` in `_ready()`; never the global RNG, so two
-## RoundManagers can be given the same seed and produce the same sequence
-## (ADR-0011) -- `Array.shuffle()` can't do that, since it always draws from
-## the global RNG.
-var _rng: RandomNumberGenerator
 ## When the current round was first seen with no connected controller among
 ## its surviving players, or -1 while at least one is connected.
 var _abandoned_since_msec: int = -1
@@ -198,11 +201,13 @@ func _ready() -> void:
 		_apply_demo_mode()
 	if _random_weapons:
 		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
-	_rng = RandomNumberGenerator.new()
+	_stage_rotation.demo = _demo
+	var rng := RandomNumberGenerator.new()
 	if rotation_seed == -1:
-		_rng.randomize()
+		rng.randomize()
 	else:
-		_rng.seed = rotation_seed
+		rng.seed = rotation_seed
+	_stage_rotation.rng = rng
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_watch_for_buzzes()
@@ -281,7 +286,7 @@ func _try_start_round() -> void:
 		_waiting_label.visible = false
 	if _scoreboard != null:
 		_scoreboard.visible = false
-	_round_player_count = roster.size()
+	_stage_rotation.round_player_count = roster.size()
 	_swap_stage()
 	_round_number += 1
 	_in_round.clear()
@@ -310,7 +315,7 @@ func _try_start_round() -> void:
 	round_started.emit()
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
-## the next `_stage_index` into `stage_scenes` via `_next_stage_index()`, and
+## the next index into `stage_scenes` via `StageRotation.next_stage_index()`, and
 ## caches the new stage's spawn points so `_try_start_round()`'s loop above
 ## can hand them out in roster order. A no-op with an empty `stage_scenes`, leaving
 ## `_stage_spawn_points` as it was.
@@ -322,8 +327,8 @@ func _swap_stage() -> void:
 		return
 	if _current_stage != null:
 		_current_stage.queue_free()
-	_stage_index = _next_stage_index()
-	_current_stage = stage_scenes[_stage_index].instantiate()
+	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
+	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	container.add_child(_current_stage)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
@@ -338,11 +343,6 @@ func _swap_stage() -> void:
 # the zoom (see `_tick_name_tags()`).
 
 const StageScript := preload("res://scripts/Stage.gd")
-
-## How many players the round being started has; read by `_stage_allowed()`.
-var _round_player_count: int = 0
-## `Stage.view_size_of()` per stage scene, so a scene's state is read once.
-var _large_stage_cache: Dictionary = {}
 
 func _fit_camera_to_stage() -> void:
 	var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
@@ -361,111 +361,6 @@ func _fit_camera_to_stage() -> void:
 	camera.reset_smoothing()
 	camera.reset_physics_interpolation()
 	camera.force_update_scroll()
-
-## Whether `stage_scenes[index]` is a large stage.
-func _stage_is_large(index: int) -> bool:
-	var scene: PackedScene = stage_scenes[index]
-	if not _large_stage_cache.has(scene):
-		_large_stage_cache[scene] = StageScript.is_large_view(StageScript.view_size_of(scene))
-	return _large_stage_cache[scene]
-
-## Whether the round being started may play `stage_scenes[index]`: any normal
-## stage, and a large one only with `large_stage_min_players` or more. A
-## rotation with no stage the round may play (say, only large stages and two
-## players) ignores the rule rather than play nothing.
-func _stage_allowed(index: int) -> bool:
-	if _round_player_count >= large_stage_min_players or not _stage_is_large(index):
-		return true
-	for i in stage_scenes.size():
-		if not _stage_is_large(i):
-			return false
-	return true
-
-## Picks the next stage index (ADR-0011): `stage_scenes[0]` opens every
-## session (`_stage_index` still at -1), then shuffled bags cover the whole
-## roster, refilling once the current bag is empty. `_stage_index` still
-## holds the previously-played index at this point, so it doubles as the
-## "just played" value the fresh bag must not start with.
-##
-## Issue #144: only stages `_stage_allowed()` for this round's player count are
-## played. A bag is dealt from the stages allowed when it is filled, and
-## re-dealt the moment the count crosses `large_stage_min_players` either way
-## (#163): a bag dealt for three would otherwise hold no large stage for
-## however many rounds of seven it had left. A new match deals afresh too
-## (`_begin_match()`).
-func _next_stage_index() -> int:
-	if _demo:
-		var next: int = _stage_index
-		for _i in stage_scenes.size():
-			next = (next + 1) % stage_scenes.size()
-			if _stage_allowed(next):
-				break
-		return next
-	if _stage_index == -1:
-		for i in stage_scenes.size():
-			if _stage_allowed(i):
-				return i
-		return 0
-	if _bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage():
-		_bag.clear()
-	# A fresh bag always holds an allowed stage, so this ends within one bag's
-	# worth of skips and one refill.
-	var index: int = 0
-	for _attempt in 2 * stage_scenes.size() + 1:
-		if _bag.is_empty():
-			_refill_bag(_stage_index)
-		index = _bag.pop_front()
-		if _stage_allowed(index):
-			break
-	return index
-
-## Builds a fresh shuffled bag (one Fisher-Yates pass over `_rng`, never the
-## global RNG or `Array.shuffle()`, which draws from it) covering every index
-## into `stage_scenes`, then fixes up a bag that would repeat `avoid` back to
-## back by swapping its first entry with another position -- every index
-## plays exactly once regardless of where in the bag it lands, so this cannot
-## skip or duplicate a stage. Left alone when the roster has only one stage,
-## since no swap can avoid a repeat there (the opener's own repeat case).
-func _refill_bag(avoid: int) -> void:
-	# Shuffled first and filtered after, so a rotation with no large stages
-	# draws exactly the order it drew before issue #144.
-	_bag = []
-	_bag_large_eligible = _large_stages_eligible()
-	for index: int in _shuffled_indices():
-		if _stage_allowed(index):
-			_bag.append(index)
-	if _bag.size() > 1 and _bag[0] == avoid:
-		var swap_with: int = 1 + _rng.randi() % (_bag.size() - 1)
-		var tmp: int = _bag[0]
-		_bag[0] = _bag[swap_with]
-		_bag[swap_with] = tmp
-
-## Whether this round's player count may play large stages (issue #144).
-func _large_stages_eligible() -> bool:
-	return _round_player_count >= large_stage_min_players
-
-## What `_large_stages_eligible()` said when `_bag` was dealt (#163).
-var _bag_large_eligible: bool = false
-
-## Whether any stage in the rotation is large. Without one the player count
-## never changes a bag, so it is never re-dealt for it.
-func _rotation_has_large_stage() -> bool:
-	for i in stage_scenes.size():
-		if _stage_is_large(i):
-			return true
-	return false
-
-## A Fisher-Yates shuffle of `range(stage_scenes.size())` over `_rng`.
-func _shuffled_indices() -> Array[int]:
-	var indices: Array[int] = []
-	for i in stage_scenes.size():
-		indices.append(i)
-	for i in range(indices.size() - 1, 0, -1):
-		var j: int = _rng.randi_range(0, i)
-		var tmp: int = indices[i]
-		indices[i] = indices[j]
-		indices[j] = tmp
-	return indices
 
 func _set_waiting_text(connected: int) -> void:
 	if _waiting_label == null:
@@ -1200,7 +1095,7 @@ func _enter_victory() -> void:
 ## Frees the last round's stage on the way into the lobby or the victory
 ## screen (#163), so its falling rocks and collapsing floors stop running --
 ## and making sounds -- behind them. The next round instances a fresh stage
-## anyway; `_stage_index` is kept, so it still never repeats the last one.
+## anyway; the rotation's `stage_index` is kept, so it still never repeats the last one.
 func _clear_stage() -> void:
 	if _current_stage != null:
 		_current_stage.queue_free()
@@ -1216,7 +1111,7 @@ func _begin_match() -> void:
 	for slot in _scores.size():
 		_scores[slot] = 0
 	# A fresh bag for a fresh match (#163), dealt for its own player count.
-	_bag.clear()
+	_stage_rotation.new_bag()
 	_update_score_label()
 	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):

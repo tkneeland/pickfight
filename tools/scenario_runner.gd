@@ -14924,16 +14924,16 @@ func _new_stage_dealer(scenes: Array[PackedScene], players: int, seed_value: int
 	rm.stage_scenes = scenes
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
-	rm.set("_rng", rng)
-	rm.set("_round_player_count", players)
+	rm._stage_rotation.set("rng", rng)
+	rm._stage_rotation.set("round_player_count", players)
 	return rm
 
 ## Deals `draws` stages the way `_swap_stage()` does; returns the indices.
 func _deal_stages(rm: Node, draws: int) -> Array[int]:
 	var dealt: Array[int] = []
 	for i in draws:
-		var index: int = rm._next_stage_index()
-		rm.set("_stage_index", index)
+		var index: int = rm._stage_rotation.next_stage_index()
+		rm._stage_rotation.set("stage_index", index)
 		dealt.append(index)
 	return dealt
 
@@ -15015,7 +15015,7 @@ func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
 	# A bag dealt for eight, then a round of four: its large stages are skipped.
 	var shrinking: Node = _new_stage_dealer(scenes, 8, 9)
 	_deal_stages(shrinking, 2)
-	shrinking.set("_round_player_count", 4)
+	shrinking._stage_rotation.set("round_player_count", 4)
 	var after: Array[int] = _deal_stages(shrinking, 20)
 	shrinking.free()
 	for index: int in after:
@@ -15167,7 +15167,7 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 
 		# A normal stage and two players: back to the unzoomed view.
 		roster.slots = [0, 1]
-		rm.set("_round_player_count", 2)
+		rm._stage_rotation.set("round_player_count", 2)
 		rm._swap_stage()
 		if camera.zoom != Vector2.ONE or camera.global_position.distance_to(Vector2.ZERO) > LARGE_VIEW_TOLERANCE:
 			failures.append("%s: on a normal stage afterwards the camera stayed at zoom %s, %s" % [
@@ -15281,7 +15281,7 @@ func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[Stri
 	for seed_value: int in REDEAL_SEEDS:
 		var rm: Node = _new_stage_dealer(scenes, 3, seed_value)
 		var small: Array[int] = _deal_stages(rm, 6)
-		rm.set("_round_player_count", 7)
+		rm._stage_rotation.set("round_player_count", 7)
 		var grown: Array[int] = _deal_stages(rm, scenes.size())
 		var first_large: int = -1
 		for i in grown.size():
@@ -15293,7 +15293,7 @@ func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[Stri
 			if not grown.has(index):
 				failures.append("seed %d: large stage %d was not dealt in the %d rounds after seven joined" % [seed_value, index, grown.size()])
 		var sequence: Array[int] = small + grown
-		rm.set("_round_player_count", 3)
+		rm._stage_rotation.set("round_player_count", 3)
 		var shrunk: Array[int] = _deal_stages(rm, 10)
 		sequence += shrunk
 		for index: int in shrunk:
@@ -15312,9 +15312,9 @@ func _scenario_stage_bag_redeals_when_player_count_crosses_large() -> Array[Stri
 	var panel_b := Control.new()
 	match_rm.set("_lobby_panel", panel_a)
 	match_rm.set("_victory_panel", panel_b)
-	var before: int = (match_rm.get("_bag") as Array).size()
+	var before: int = (match_rm._stage_rotation.get("bag") as Array).size()
 	match_rm._begin_match()
-	var after: int = (match_rm.get("_bag") as Array).size()
+	var after: int = (match_rm._stage_rotation.get("bag") as Array).size()
 	print("      bag before a new match: %d left; after: %d" % [before, after])
 	if before == 0:
 		failures.append("the match fixture's bag was already empty; the check below proves nothing")
