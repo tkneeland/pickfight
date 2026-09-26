@@ -10,8 +10,18 @@ extends SceneTree
 ## fallback rig that would change all of those, and this suite has to survive
 ## it. See the "Testing Decisions" section of issue #2.
 ##
-##   godot --headless --path . -s tools/scenario_runner.gd -- --all
-##   godot --headless --path . -s tools/scenario_runner.gd -- --scenario=aim_angle
+##   godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --all
+##   godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenario=aim_angle
+##
+## `--fixed-fps 60` is recommended (#182): every frame is then exactly one
+## 1/60 s physics tick, run as fast as the machine can, so a run no longer
+## waits on real time (the full suite in 4 shards: about 2.5 min against
+## about 10.5 min without it) and no longer depends on how loaded the machine
+## is. It works because every gameplay timer, and every wait here that waits
+## on one, reads the game clock (`scripts/GameClock.gd`), not the wall clock.
+## Without the flag the suite still passes, in real time. Waits on a phone's
+## socket, a decoding thread or ControllerServer's own wall-clock windows stay
+## on `Time.get_ticks_msec()`; see `_game_msec()`.
 ##
 ## Arguments (after `--`):
 ##   --all                run every registered scenario

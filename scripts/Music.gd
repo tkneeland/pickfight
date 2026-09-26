@@ -215,7 +215,12 @@ func release(wait_sec: float = RELEASE_SEC) -> void:
 	# Out of the tree there is no SceneTree to wait on (issue #167).
 	if not is_inside_tree():
 		return
-	await get_tree().create_timer(wait_sec, true, false, true).timeout
+	# Wall clock, not a SceneTreeTimer (#182): the mix thread lets go in real
+	# time, and under `--fixed-fps` a timer counts frames, which can run far
+	# faster than that.
+	var until: int = Time.get_ticks_msec() + int(wait_sec * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await get_tree().process_frame
 
 # --- Volume -------------------------------------------------------------------
 
