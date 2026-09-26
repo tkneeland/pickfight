@@ -282,6 +282,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bots_wield_new_weapons",
 	"new_weapon_hits_credit_the_thrower",
 	"roster_heads_do_not_clip_platform_in_play_new_weapons",
+	"flail_built_clear_of_neighbours",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1202,6 +1203,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_new_weapon_hits_credit_the_thrower()
 		"roster_heads_do_not_clip_platform_in_play_new_weapons":
 			return await _scenario_roster_heads_do_not_clip_platform_in_play_new_weapons()
+		"flail_built_clear_of_neighbours":
+			return await _scenario_flail_built_clear_of_neighbours()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -18347,9 +18350,11 @@ func _scenario_flail_whip_damage_scales_with_speed() -> Array[String]:
 			await physics_frame
 		var strikes: Array = []
 		var recorder: Callable = _record_strikes(attacker, strikes)
-		# Ahead of the ball on its orbit, a quarter turn on.
-		var ahead: float = (ball.global_position - attacker.global_position).angle() - PI * 0.5
-		victim.global_position = attacker.global_position + Vector2.from_angle(ahead) * 125.0
+		# Ahead of the ball on its orbit, a quarter turn on, as far out as
+		# the ball is.
+		var from_body: Vector2 = ball.global_position - attacker.global_position
+		var ahead: float = from_body.angle() - PI * 0.5
+		victim.global_position = attacker.global_position + Vector2.from_angle(ahead) * from_body.length()
 		var fastest: float = 0.0
 		for i in 120:
 			angle -= rate / 60.0
@@ -18741,4 +18746,55 @@ func _scenario_new_weapon_hits_credit_the_thrower() -> Array[String]:
 func _scenario_roster_heads_do_not_clip_platform_in_play_new_weapons() -> Array[String]:
 	var failures: Array[String] = await _clip_platform_sweep([6, 7, 8])
 	_scenario_completed = true
+	return failures
+
+## A row of players as close as a stage's spawns put them (120 px apart, the
+## flail's chain reaching 100 px), all handed a flail on the same tick, the
+## way a round start hands a kept or rouletted flail out. Every ball has to be
+## built clear of the others' bodies, and every chain has to stay together
+## through two seconds of swinging: a ball built inside a neighbour was thrown
+## out so hard the chains blew up to infinite positions within two ticks.
+func _scenario_flail_built_clear_of_neighbours() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		players.append(_spawn_player(stage, DEEP_PARK_POSITION + Vector2(120.0 * i, 0.0)))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = load(FLAIL_PATH)
+	for p: RigidBody2D in players:
+		_brace(p)
+		# The balls land real strikes on the neighbours; nobody may be
+		# eliminated (and lose their rig) before the two seconds are up.
+		p.spawn_protected = true
+		p.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	for p: RigidBody2D in players:
+		if p.flail_ball() == null:
+			failures.append("%s: no ball after the swap" % p.name)
+		elif p.flail_ball().overlaps_world():
+			failures.append("%s: ball built inside another player's body" % p.name)
+	if not failures.is_empty():
+		await _teardown(stage)
+		return failures
+	# Arm plus chain, with room for the stretch the chain is allowed and a
+	# tick of a whirled ball's travel past it before it is held.
+	var reach: float = (float(stats.max_reach) + float(stats.chain_length)) * 1.5
+	var furthest: float = 0.0
+	for tick in 120:
+		for i in players.size():
+			players[i].set_input_vector(Vector2.from_angle(float(tick) * (0.15 + 0.05 * i)))
+		await physics_frame
+		for p: RigidBody2D in players:
+			var at: Vector2 = p.flail_ball().global_position
+			if not at.is_finite():
+				failures.append("%s: the ball's position went non-finite on tick %d" % [p.name, tick])
+				break
+			furthest = maxf(furthest, at.distance_to(p.global_position))
+		if not failures.is_empty():
+			break
+	print("      4 flails 120 px apart: furthest a ball got from its player %.0f px (allowed %.0f)" % [furthest, reach])
+	if failures.is_empty() and furthest > reach:
+		failures.append("a ball got %.0f px from its player, past the %.0f px its arm and chain reach: the chain came apart" % [furthest, reach])
+	await _teardown(stage)
 	return failures

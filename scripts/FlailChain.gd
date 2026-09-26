@@ -47,12 +47,18 @@ const LAYER_HEAD: int = 2
 ## never whip.
 const LINK_DAMP: float = 0.3
 const BALL_DAMP: float = 0.3
-## How far past its length the chain may be pulled before the ball's outward
-## speed is taken off it. A chain of pin joints stretches under load -- the
+## How far past its length the chain may be pulled before the ball is held
+## there and its outward speed taken off it. A chain of pin joints stretches under load -- the
 ## ball is ten times a link's mass -- and this is the stop behind the joints,
 ## not the thing that holds the ball: at ordinary swings they hold it well
 ## inside this.
 const CHAIN_STRETCH_LIMIT: float = 1.12
+## Directions tried when laying the chain out at build (`_clear_axis`), and
+## the room left round the ball.
+const BUILD_DIRECTIONS: int = 12
+const BUILD_CLEARANCE: float = 2.0
+## Fastest a link or the ball may move, px/s (`_cap_speeds`).
+const MAX_SPEED: float = 6000.0
 ## Links are point masses on the end of a joint; a body with no shape has no
 ## inertia of its own, so each gets this small one.
 const LINK_INERTIA_FRACTION: float = 0.25
@@ -94,6 +100,7 @@ func build(owner_player: RigidBody2D, rig: Node2D, from_head: RigidBody2D, stats
 	var segment: float = length / float(count + 1)
 	var previous: RigidBody2D = head
 	var at: Vector2 = head.global_position
+	axis = _clear_axis(axis, maxf(1.0, float(stats.ball_radius)))
 	for i in count:
 		at += axis * segment
 		var link := RigidBody2D.new()
@@ -165,6 +172,7 @@ func bodies() -> Array[RigidBody2D]:
 func tick(release_time: float) -> void:
 	if ball == null or not ball.is_inside_tree():
 		return
+	_cap_speeds()
 	_limit_stretch()
 	_update_phase(release_time)
 	ball_velocity = ball.linear_velocity
@@ -187,12 +195,63 @@ func ball_circle_world() -> Dictionary:
 		return {}
 	return {"centre": ball_shape.global_position, "radius": (ball_shape.shape as CircleShape2D).radius}
 
+## The direction to lay the chain out in at build: `axis` if the ball can sit
+## at the chain's end along it without meeting anything, else the clear
+## direction nearest to it, else whichever lets the ball get furthest. A ball
+## built inside terrain or another player's body -- players spawn 120 px apart
+## and the chain reaches 100 px -- is thrown out of it so hard, against links
+## a tenth of its mass, that the whole chain blows up.
+func _clear_axis(axis: Vector2, radius: float) -> Vector2:
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var circle := CircleShape2D.new()
+	circle.radius = radius + BUILD_CLEARANCE
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = circle
+	query.collision_mask = LAYER_WORLD
+	query.exclude = [player.get_rid()]
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	var best: Vector2 = axis
+	var best_safe: float = -1.0
+	for i in BUILD_DIRECTIONS:
+		# axis, then alternately either side of it, widening.
+		var turn: float = TAU / float(BUILD_DIRECTIONS) * float((i + 1) / 2) * (1.0 if i % 2 == 1 else -1.0)
+		var dir: Vector2 = axis.rotated(turn)
+		query.transform = Transform2D(0.0, head.global_position)
+		query.motion = dir * length
+		var fractions: PackedFloat32Array = space.cast_motion(query)
+		var safe: float = fractions[0] if fractions.size() >= 1 else 1.0
+		if safe >= 1.0:
+			query.transform = Transform2D(0.0, head.global_position + dir * length)
+			query.motion = Vector2.ZERO
+			if space.intersect_shape(query, 1).is_empty():
+				return dir
+		if safe > best_safe:
+			best_safe = safe
+			best = dir
+	return best
+
+## A backstop behind the joints: no link or ball ever moves faster than this.
+## A hard whip measures under 3000 px/s; this only stops one bad contact
+## solve from compounding into a chain flung off to infinity.
+func _cap_speeds() -> void:
+	for body: RigidBody2D in bodies():
+		var v: Vector2 = body.linear_velocity
+		if not v.is_finite():
+			body.linear_velocity = head.linear_velocity if head.linear_velocity.is_finite() else Vector2.ZERO
+		elif v.length() > MAX_SPEED:
+			body.linear_velocity = v.limit_length(MAX_SPEED)
+
 func _limit_stretch() -> void:
 	var span: Vector2 = ball.global_position - head.global_position
 	var distance: float = span.length()
 	if distance <= length * CHAIN_STRETCH_LIMIT or distance == 0.0:
 		return
 	var out: Vector2 = span / distance
+	# Back onto the limit as well as stopped there: with only its outward
+	# speed taken off, a ball whirled fast enough still creeps out by its
+	# sideways speed every tick, and at 4000 px/s ends up three chains out.
+	ball.global_position = head.global_position + out * length * CHAIN_STRETCH_LIMIT
 	var away: float = (ball.linear_velocity - head.linear_velocity).dot(out)
 	if away > 0.0:
 		ball.linear_velocity -= out * away
