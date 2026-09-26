@@ -628,9 +628,6 @@ func _run_all() -> void:
 
 	for name: String in to_run:
 		_scenario_completed = false
-		# Every scenario starts with rolls off, whatever the last one left
-		# behind: several switch them back on as they finish (#161's shards).
-		RoundManagerType.modifier_rolls_enabled = false
 		var failures: Array[String] = await _run_scenario(name)
 		if not _scenario_completed:
 			failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
