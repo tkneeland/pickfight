@@ -1,4 +1,4 @@
-# Full scenario list (204 scenarios), run as 5 parallel shards of --scenarios=, 839 s
+# Full scenario list (202 scenarios), run as 5 parallel shards of --scenarios=, 839 s
 ## shard 0
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -19,13 +19,13 @@ PASS  eliminated_player_cannot_collect
 PASS  pickup_drawn_with_weapon_art
 PASS  damage_numbers_switch_off
 PASS  kill_zone_rises_after_grace
-Controller page: http://172.19.6.46:49829/
+Controller page: http://172.19.6.46:61158/
 PASS  four_phones_claim_four_slots
       buzzes: [[0, "eliminated"], [2, "eliminated"], [1, "win"]]
 PASS  round_win_buzzes_only_winner
       first shot 181 ticks after the boomstick was handed over, the next 180 ticks later (interval 180 ticks)
 PASS  boomstick_fires_on_interval
-      pool of 5 weapons; the boomstick came up 63 times in 300 draws
+      pool of 5 weapons; the boomstick came up 55 times in 300 draws
 PASS  boomstick_in_pickup_pool
       heavy_weapons: plain 131.701, modified 184.472, plain again 131.701
 PASS  round_modifier_heavy_weapons_applies_and_undoes
@@ -57,112 +57,112 @@ PASS  pickup_spots_skip_player_spawns
       clash speeds [3600.0], sparks 12
       flood of 20 clashes holds 96 particles (cap 96)
 PASS  juice_sparks_on_clash_capped
-Controller page: http://172.19.6.46:63732/
+Controller page: http://172.19.6.46:65011/
 PASS  phone_lobby_messages_over_websocket
-Controller page: http://172.19.6.46:63736/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63736/
+Controller page: http://172.19.6.46:65015/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:65015/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12662)
-       [3] _run_scenario (res://tools/scenario_runner.gd:967)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:957)
-       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12458)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12656)
+       [3] _run_scenario (res://tools/scenario_runner.gd:965)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:955)
+       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12452)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12662)
-       [3] _run_scenario (res://tools/scenario_runner.gd:967)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:957)
-       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12458)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12656)
+       [3] _run_scenario (res://tools/scenario_runner.gd:965)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:955)
+       [6] _scenario_phone_lobby_messages_over_websocket (res://tools/scenario_runner.gd:12452)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
       lobby with 8 needs 1390 x 779 px
       8 players started, closest pair 90 px apart
       scoreboard: 8 entries in 1372 x 158 px
       podium with 8 needs 1552 x 824 px
 PASS  eight_phones_join_and_play_a_round
-Controller page: http://172.19.6.46:63746/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63746/
+Controller page: http://172.19.6.46:52555/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52555/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13114)
-       [3] _run_scenario (res://tools/scenario_runner.gd:977)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:967)
-       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12761)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13108)
+       [3] _run_scenario (res://tools/scenario_runner.gd:975)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:965)
+       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12755)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13114)
-       [3] _run_scenario (res://tools/scenario_runner.gd:977)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:967)
-       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12761)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13108)
+       [3] _run_scenario (res://tools/scenario_runner.gd:975)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:965)
+       [6] _scenario_eight_phones_join_and_play_a_round (res://tools/scenario_runner.gd:12755)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
       paused: P2 moved 0.00 px in 30 frames; tree paused true
-      resumed: P2 moved 14.9 px
+      resumed: P2 moved 18.6 px
       kicked phone: state 3, reason 'removed by the host'; roster [0, 1]
 PASS  host_phone_controls_over_websocket
-Controller page: http://172.19.6.46:63752/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63752/
+Controller page: http://172.19.6.46:52564/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52564/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13481)
-       [3] _run_scenario (res://tools/scenario_runner.gd:987)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:977)
-       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13226)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13475)
+       [3] _run_scenario (res://tools/scenario_runner.gd:985)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:975)
+       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13220)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13481)
-       [3] _run_scenario (res://tools/scenario_runner.gd:987)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:977)
-       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13226)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13475)
+       [3] _run_scenario (res://tools/scenario_runner.gd:985)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:975)
+       [6] _scenario_host_phone_controls_over_websocket (res://tools/scenario_runner.gd:13220)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
       feed [P: (1061.0, 204.0), S: (523.0, 166.0)] (5 lines), scoreboard [P: (40.0, 371.0), S: (1520.0, 158.0)], banner [P: (0.0, 567.0), S: (1600.0, 143.0)] needs 644 px wide, QR [P: (1404.0, 8.0), S: (184.0, 184.0)]
       victory with 8 and awards needs 1591 x 824 px; awards 1240 x 99
 PASS  kill_feed_and_awards_fit_eight_long_names
-Controller page: http://172.19.6.46:63754/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63754/
+Controller page: http://172.19.6.46:52566/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52566/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:14001)
-       [3] _run_scenario (res://tools/scenario_runner.gd:997)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:987)
-       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13538)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:13995)
+       [3] _run_scenario (res://tools/scenario_runner.gd:995)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:985)
+       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13532)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:14001)
-       [3] _run_scenario (res://tools/scenario_runner.gd:997)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:987)
-       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13538)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_name_tags_on_for_every_living_player_all_round (res://tools/scenario_runner.gd:13995)
+       [3] _run_scenario (res://tools/scenario_runner.gd:995)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:985)
+       [6] _scenario_kill_feed_and_awards_fit_eight_long_names (res://tools/scenario_runner.gd:13532)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
       45 frames of a live round, 0 with a tag problem 
       eight in a row 56 px apart: all tags clear; top tag 213 px above the row
 PASS  name_tags_on_for_every_living_player_all_round
@@ -171,7 +171,7 @@ PASS  announcer_calls_the_match
       bullet damage: plain 35.0, modified 70.0, plain again 35.0
       falling rock damage: plain 25.0, doubled 50.0, after 25.0
 FAIL  round_modifier_double_damage_applies_and_undoes
-      - round 1: expected modifier '' on the round, found 'weapon_roulette'
+      - round 1: expected modifier '' on the round, found 'big_heads'
       seed 1: 3 players [0, 5, 2, 3, 8, 7], then 7 players [11, 2, 7, 9, 8, 0, 6, 5, 3, 1, 4, 10] (first large 1 round(s) in)
       seed 2: 3 players [0, 6, 3, 0, 4, 1], then 7 players [6, 5, 2, 4, 10, 8, 1, 3, 7, 0, 9, 11] (first large 5 round(s) in)
       seed 3: 3 players [0, 4, 5, 3, 8, 2], then 7 players [9, 6, 3, 7, 11, 8, 0, 1, 2, 5, 10, 4] (first large 1 round(s) in)
@@ -182,42 +182,63 @@ FAIL  round_modifier_double_damage_applies_and_undoes
       seed 8: 3 players [0, 5, 1, 3, 7, 0], then 7 players [2, 8, 10, 3, 0, 5, 11, 9, 6, 7, 1, 4] (first large 3 round(s) in)
       bag before a new match: 7 left; after: 0
 PASS  stage_bag_redeals_when_player_count_crosses_large
-Controller page: http://172.19.6.46:63261/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63261/
+Controller page: http://172.19.6.46:52582/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52582/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15695)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1037)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1017)
-       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14938)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15689)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1035)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1015)
+       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14932)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15695)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1037)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1017)
-       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14938)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15689)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1035)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1015)
+       [7] _scenario_round_modifier_double_damage_applies_and_undoes (res://tools/scenario_runner.gd:14932)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
       Remove bots mid-round: 3 bots left, roster [0, 1, 2, 3], phase 'playing'
       remove_bots(): bodies still in the round []; roster [0]
 PASS  solo_ignored_mid_match_and_removed_bots_leave_round
-Controller page: http://172.19.6.46:63264/
+Controller page: http://172.19.6.46:52585/
       stale kick of Bob's claim 2.0: roster [0, 1], Alice's socket state 1
       End match from match 1.0 during match 2.0: commands []
 PASS  host_phone_stale_kick_and_end_are_ignored
-      Overpass.tscn: view [P: (-1200.0, -675.0), S: (2400.0, 1350.0)]; meteors start x -1191..1195, lowest y -755, dropped past y 2675
-      Pistons.tscn: view [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]; meteors start x -1112..1116, lowest y -710, dropped past y 2630
-      Ziggurat.tscn: view [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]; meteors start x -1112..1116, lowest y -710, dropped past y 2630
-PASS  meteor_shower_rains_across_large_stage_view
+Controller page: http://172.19.6.46:52590/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52590/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16428)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1055)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1045)
+       [6] _scenario_host_phone_stale_kick_and_end_are_ignored (res://tools/scenario_runner.gd:16141)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16428)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1055)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:1045)
+       [6] _scenario_host_phone_stale_kick_and_end_are_ignored (res://tools/scenario_runner.gd:16141)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
+      newcomer slot 1; scores [0, 0, 0, 0, 0, 0, 0, 0]; kos {  }, damage { 0: 10.0 }, deaths { 2: 1 }, alive { 0: 0, 2: -394 }
+PASS  mid_match_joiner_starts_with_fresh_slot
 ---
 40 passed, 1 failed, 41 total
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
@@ -516,7 +537,7 @@ PASS  every_stage_has_pickup_spot_clear_of_spawns
       soft drop peak 272 px/s, dust 0
       hard drop peak 732 px/s, dust 8
 PASS  juice_dust_on_hard_landing_only
-      title 'PICKUPSTAGE' from x=1419, gone after 1085 ms at x=-549
+      title 'PICKUPSTAGE' from x=1477, gone after 1090 ms at x=-549
 PASS  stage_title_card_sweeps_at_round_start
       8 on 4 spawns: [(-300.0, 0.0), (-100.0, 0.0), (100.0, 0.0), (300.0, 0.0), (-252.0, -24.0), (-148.0, -24.0), (148.0, -24.0), (252.0, -24.0)]
 PASS  spawns_shared_when_stage_has_fewer_than_players
@@ -565,43 +586,42 @@ PASS  round_modifier_tiny_weapons_applies_and_undoes
       modifier_chance 0.350: 2037 of 6000 rounds rolled a mixup (0.340), { "tiny_weapons": 202, "heavy_weapons": 202, "weapon_roulette": 215, "low_gravity": 200, "big_heads": 206, "fast_lava": 207, "double_damage": 208, "bouncy": 200, "slippery_floor": 190, "meteor_shower": 207 }
 PASS  round_modifier_rate_about_one_in_three
       victory: StubA freed true; 0 stage(s) left under it; phase victory
-      lobby: StubB freed true; 0 stage(s) left under it; phase lobby
+      lobby: StubC freed true; 0 stage(s) left under it; phase lobby
 PASS  stage_freed_under_victory_and_lobby
-Controller page: http://172.19.6.46:59750/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59750/
+Controller page: http://172.19.6.46:59204/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59204/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15741)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1039)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1029)
-       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15465)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15735)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1037)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1027)
+       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15459)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15741)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1039)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1029)
-       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15465)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15735)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1037)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1027)
+       [7] _scenario_stage_freed_under_victory_and_lobby (res://tools/scenario_runner.gd:15459)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
       paused 30 frames: bots that still thought []; director process mode 1
 PASS  bots_stop_thinking_while_paused
 PASS  controller_page_stale_confirms_close
-      meteor on a protected player: hit true (knock 539 px/s), took 0.0, reported []
-      rock on a protected player: took 0.0, reported []
-      meteor on a unprotected player: hit true (knock 539 px/s), took 12.0, reported [12.0]
-      rock on a unprotected player: took 12.0, reported [12.0]
-PASS  hazards_report_only_damage_dealt
+      kos { 0: 1 }, self-KOs {  }, alive { 0: 48, 1: 48 } (round took 3554 ms, 3500 of them paused)
+PASS  pause_keeps_ko_credit_and_survival_time
 ---
 40 passed, 1 failed, 41 total
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2641)
 ## shard 2
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -677,7 +697,7 @@ PASS  head_does_not_tunnel_rotating_platform
 PASS  breakable_wall_breaks_on_weapon_hits
       drop requested: ["land"]
 PASS  sfx_landing_and_elimination
-      6 damage: -1.64 dB, pitch 1.095; 54 damage: 5.42 dB, pitch 0.953
+      6 damage: -1.64 dB, pitch 1.082; 54 damage: 5.42 dB, pitch 0.973
 PASS  sfx_strength_scales_volume
       captured #77 pose: anchor -9.6 px along its own haft; heads 19.95 px apart as the charge sweep measures them, 19.95 px apart as the physics has them
 PASS  charge_measures_heads_where_physics_has_them
@@ -690,7 +710,7 @@ PASS  phone_jitter_is_smoothed
 PASS  spawn_protection_blocks_damage_then_expires
       fast head: longest trail 10 points over 73 frames (cap 10)
 PASS  juice_trail_capped_and_frees
-Controller page: http://172.19.6.46:63478/
+Controller page: http://172.19.6.46:51329/
       name on the host: 'CrispyWalrus'
 PASS  phone_nickname_reaches_host_trimmed
 PASS  controller_page_prompts_for_nickname_first
@@ -720,30 +740,30 @@ PASS  controller_page_host_menu_is_guarded
       Mill.tscn: terrain x -740..740, spans 1480 px (93% of the view), 85% covered
       Reactor.tscn: terrain x -720..720, spans 1440 px (90% of the view), 90% covered
 PASS  every_stage_terrain_spans_the_view
-Controller page: http://172.19.6.46:63481/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63481/
+Controller page: http://172.19.6.46:51332/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:51332/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14242)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1001)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:991)
-       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13653)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14236)
+       [3] _run_scenario (res://tools/scenario_runner.gd:999)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:989)
+       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13647)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14242)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1001)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:991)
-       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13653)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
-      3 bots: first damaging strike after 5.7 s (1 strikes, 26 damage), 3 moved
+       [2] _scenario_bots_flag_fills_lobby_and_bots_fight (res://tools/scenario_runner.gd:14236)
+       [3] _run_scenario (res://tools/scenario_runner.gd:999)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:989)
+       [6] _scenario_every_stage_terrain_spans_the_view (res://tools/scenario_runner.gd:13647)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
+      3 bots: first damaging strike after 5.5 s (1 strikes, 0 damage), 3 moved
 PASS  bots_flag_fills_lobby_and_bots_fight
       roulette swap at 10.00 s: pickaxe.tres -> sword.tres, pickaxe.tres -> sword.tres
       weapon_roulette: plain 0.000, modified 10.000, plain again 0.000
@@ -756,44 +776,40 @@ PASS  round_modifier_weapon_roulette_swaps_every_ten_seconds
       6 players: plays per stage [60, 60, 60, 60, 60], 120 on large stages
       8 players: plays per stage [61, 60, 60, 60, 59], 119 on large stages
 PASS  large_stages_only_with_five_or_more_players
-      a tick apart (physics frames 11003 and 11004): P1 +0, P2 +1
-      the same tick (physics frames 11010 and 11010): P1 +0, P2 +0
+      a tick apart (physics frames 10991 and 10992): P1 +0, P2 +1
+      the same tick (physics frames 10998 and 10998): P1 +0, P2 +0
 PASS  last_survivor_scores_when_falling_a_tick_later
-Controller page: http://172.19.6.46:63485/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:63485/
+Controller page: http://172.19.6.46:54391/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54391/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15791)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1041)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1031)
-       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15510)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15785)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1039)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1029)
+       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15504)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15791)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1041)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1031)
-       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15510)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:15785)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1039)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1029)
+       [7] _scenario_last_survivor_scores_when_falling_a_tick_later (res://tools/scenario_runner.gd:15504)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
       lobby, solo host gone: phases seen ["lobby"]; 0 bots left, roster []
       mid-round, solo host gone: 0 bots left, 0 bot bodies standing, phase 'lobby', roster []
 PASS  solo_bots_go_when_the_last_phone_leaves
 PASS  controller_page_no_traps_in_play
-      wall takes plain 17.0, double damage 34.0, after 17.0; a player takes [17.0, 34.0, 17.0]
-PASS  breakable_wall_double_damage_melee
 ---
-41 passed, 0 failed, 41 total
-WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
-   at: cleanup (core/object/object.cpp:2641)
+40 passed, 0 failed, 40 total
 ## shard 3
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -896,7 +912,7 @@ PASS  turn_does_not_carry_blade_through_head
 PASS  axe_swing_deals_damage
       ducked to -14.0 dB (target -14.0), round_win asked: true, back to 0: true
 PASS  music_ducks_under_round_win
-Controller page: http://172.19.6.46:59734/
+Controller page: http://172.19.6.46:62690/
 PASS  phone_release_and_flick_are_not_smoothed
       pickaxe: 48 trials, 0 head crossings
       staff: 48 trials, 0 head crossings
@@ -918,33 +934,33 @@ PASS  music_loops_have_no_silent_seam
       CLUMSY: Butterfingers -> slot 2 (1 self-KO)
       SURVIVOR: Hard to Kill -> slot 0 (0:13 alive)
 PASS  match_stats_ko_credit_and_awards
-Controller page: http://172.19.6.46:52560/
+Controller page: http://172.19.6.46:56750/
       picked 'crown': host has 'crown', player wears 'crown', hat at (0.0, -24.0)
-      swing turned the weapon 3.07 rad; hat strayed 0.000 px from the head
+      swing turned the weapon 3.11 rad; hat strayed 0.000 px from the head
 PASS  phone_hat_choice_reaches_player
-Controller page: http://172.19.6.46:52577/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52577/
+Controller page: http://172.19.6.46:56754/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:56754/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14332)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1003)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:993)
-       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13862)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14326)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1001)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:991)
+       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13856)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14332)
-       [3] _run_scenario (res://tools/scenario_runner.gd:1003)
-       [4] _run_all (res://tools/scenario_runner.gd:629)
-       [5] _run_scenario (res://tools/scenario_runner.gd:993)
-       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13862)
-       [7] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _scenario_solo_practice_button_adds_and_removes_bots (res://tools/scenario_runner.gd:14326)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1001)
+       [4] _run_all (res://tools/scenario_runner.gd:627)
+       [5] _run_scenario (res://tools/scenario_runner.gd:991)
+       [6] _scenario_phone_hat_choice_reaches_player (res://tools/scenario_runner.gd:13856)
+       [7] _teardown (res://tools/scenario_runner.gd:1604)
 PASS  solo_practice_button_adds_and_removes_bots
       meteor on P0: hit true, damage 12.0, sideways knock 539 px/s
       meteor_shower: plain 0.000, modified 3.000, plain again 0.000
@@ -957,34 +973,31 @@ PASS  large_stage_camera_fits_view_with_eight_players
       zoom 0.50: marker scale 2.00, number scale 2.00, number centred at x 300.0 (hit at 300.0)
 PASS  hit_feedback_scales_with_camera_zoom
       bare stage: lava lookups in 1.2 s 1; player alive true
-Controller page: http://172.19.6.46:52596/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52596/
+Controller page: http://172.19.6.46:56759/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:56759/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15910)
-       [3] _await_ticks (res://tools/scenario_runner.gd:1614)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15904)
+       [3] _await_ticks (res://tools/scenario_runner.gd:1608)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15910)
-       [3] _await_ticks (res://tools/scenario_runner.gd:1614)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:15904)
+       [3] _await_ticks (res://tools/scenario_runner.gd:1608)
       bot names after a kick and an add: ["Bot 1", "Bot 2", "Bot 3"]
       60 frames of a bots' round: lobby state built 4 times
 PASS  bot_upkeep_cached_and_names_unique
-Controller page: http://172.19.6.46:52598/
+Controller page: http://172.19.6.46:56761/
       after bad frames: ready false, name ''
       60 names in a burst: the host kept 'n19' (limit 20/s)
-      id-less client: bound { "id": "host-assigned-1-1735673795", "slot": 1.0 }
+      id-less client: bound { "id": "host-assigned-1-3455524644", "slot": 1.0 }
 PASS  phone_bad_frames_ignored_and_rate_limited
-      run 1 on seed 162: dagger.tres, staff.tres, pickaxe.tres, staff.tres, dagger.tres, pickaxe.tres, sword.tres, staff.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
-      run 2 on seed 162: dagger.tres, staff.tres, pickaxe.tres, staff.tres, dagger.tres, pickaxe.tres, sword.tres, staff.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
-PASS  round_modifier_draws_follow_modifier_seed
 ---
-41 passed, 0 failed, 41 total
+40 passed, 0 failed, 40 total
 ## shard 4
 Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 
@@ -1015,10 +1028,10 @@ PASS  stage_rotation_never_repeats_back_to_back
 ERROR: Lambda capture at index 2 was freed. Passed "null" instead.
    at: call (modules/gdscript/gdscript_lambda_callable.cpp:242)
    GDScript backtrace (most recent call first):
-       [0] _await_condition (res://tools/scenario_runner.gd:3051)
+       [0] _await_condition (res://tools/scenario_runner.gd:3045)
 PASS  rising_kill_zone_resets_each_round
 PASS  pickup_cap_scales_with_roster
-Controller page: http://172.19.6.46:62969/
+Controller page: http://172.19.6.46:52499/
       phone 1 got [], phone 2 got [{ "kind": "struck", "t": "buzz" }]
 PASS  buzz_reaches_only_its_phone
       pickaxe.tres: head arrived at 2214 px/s and took 33.8 off
@@ -1026,7 +1039,7 @@ PASS  buzz_reaches_only_its_phone
 PASS  boomstick_melee_damage_is_low
       low_gravity: plain 383.657, modified 191.829, plain again 383.657
 PASS  round_modifier_low_gravity_applies_and_undoes
-      announcement 'Big Heads' at 96 px in [P: (0.0, 108.0), S: (1600.0, 180.0)] on a (1600.0, 900.0) screen
+      announcement 'BIG HEADS' at 96 px in [P: (0.0, 108.0), S: (1600.0, 180.0)] on a (1600.0, 900.0) screen
 PASS  round_modifier_announced_on_screen
       launched at (939.8838, -1403.225), 3.8 deg off the pad's up
 PASS  bounce_pad_rotated_launches_diagonally
@@ -1079,31 +1092,31 @@ PASS  trapped_head_phases_home_after_release
 PASS  match_first_to_n_then_victory_and_rematch
       mid-round: { "phase": "playing", "host": -1, "target": 5, "players": [{ "slot": 0, "ready": false, "name": "P1", "color": "e6e6f2" }, { "slot": 1, "ready": false, "name": "P2", "color": "e6e6f2" }, { "slot": 2, "ready": false, "name": "P3", "color": "e6e6f2" }], "count": 0, "winner": -1, "round": 1, "in_round": [0, 1], "alive": [0, 1], "next": 0, "paused": false }
 PASS  phone_states_through_a_round
-      pickaxe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.86), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      staff (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.66), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      sword (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.38), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      axe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.69), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      dagger (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.90), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      boomstick (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.91), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      pickaxe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.14), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      staff (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.04), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      sword (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.29), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      axe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.49), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      dagger (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.90), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      boomstick (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.45), 288 frames, 170 between ticks, 0 phased (widest 0.00 px)
-      pickaxe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.68), 580 frames, 350 between ticks, 363 phased (widest 0.00 px)
-      staff (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.34), 580 frames, 350 between ticks, 363 phased (widest 0.00 px)
-      sword (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.48), 580 frames, 350 between ticks, 363 phased (widest 0.00 px)
-      axe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.03), 580 frames, 350 between ticks, 363 phased (widest 0.00 px)
-      dagger (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.10), 580 frames, 350 between ticks, 363 phased (widest 0.00 px)
-      boomstick (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.68), 580 frames, 350 between ticks, 363 phased (widest 0.00 px)
+      pickaxe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.96), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      staff (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.41), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      sword (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.75), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      axe (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.44), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      dagger (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.75), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      boomstick (plain): widest drawn haft-to-head gap 0.00 px (at fraction 0.72), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      pickaxe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.41), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      staff (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.86), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      sword (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.75), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      axe (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.55), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      dagger (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.75), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      boomstick (big heads): widest drawn haft-to-head gap 0.00 px (at fraction 0.03), 290 frames, 171 between ticks, 0 phased (widest 0.00 px)
+      pickaxe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.74), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
+      staff (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.18), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
+      sword (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.15), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
+      axe (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.05), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
+      dagger (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.84), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
+      boomstick (phased): widest drawn haft-to-head gap 0.00 px (at fraction 0.63), 580 frames, 347 between ticks, 362 phased (widest 0.00 px)
 PASS  haft_tip_meets_drawn_head_every_frame
       round 1 feed: ["Alice KO Bob", "Carl self-KO"]
       feed: ["Alice KO Bob", "Carl self-KO", "Alice KO Bob", "Alice KO Carl"]
       banners: ["FIRST BLOOD|Alice", "LAST ONE STANDING|Alice", "DOUBLE KO!|Alice", "LAST ONE STANDING|Alice"]
       awards: ["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO", "SURVIVOR / Hard to Kill / Alice  -  0:00 alive"]
 PASS  kill_feed_credits_hits_and_awards_at_match_end
-Controller page: http://172.19.6.46:57683/
+Controller page: http://172.19.6.46:62487/
       B asked for A's colour: B holds 1; B was told { 0: 0, 1: 1 }
       C joined into slot 0 with colour 1 (B holds 0)
 PASS  phone_colour_first_come_first_served
@@ -1113,37 +1126,37 @@ PASS  pickups_come_faster_and_more_with_a_crowd
 PASS  round_modifier_bouncy_applies_and_undoes
       slot 0 at (-60.0, 0.0), slot 2 at (60.0, 0.0); Spawn0 (-60.0, 0.0), Spawn1 (60.0, 0.0)
 PASS  gap_roster_spawns_in_roster_order
-Controller page: http://172.19.6.46:65416/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:65416/
+Controller page: http://172.19.6.46:61143/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:61143/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15644)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1035)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1025)
-       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15351)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15638)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1033)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1023)
+       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15345)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15597)
-       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15644)
-       [4] _run_scenario (res://tools/scenario_runner.gd:1035)
-       [5] _run_all (res://tools/scenario_runner.gd:629)
-       [6] _run_scenario (res://tools/scenario_runner.gd:1025)
-       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15351)
-       [8] _teardown (res://tools/scenario_runner.gd:1610)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15591)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15638)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1033)
+       [5] _run_all (res://tools/scenario_runner.gd:627)
+       [6] _run_scenario (res://tools/scenario_runner.gd:1023)
+       [7] _scenario_gap_roster_spawns_in_roster_order (res://tools/scenario_runner.gd:15345)
+       [8] _teardown (res://tools/scenario_runner.gd:1604)
       host dropped while paused: server host 1; phone 2 last told host 1.0, paused true
 PASS  host_drop_while_paused_hands_menu_to_next_phone
-Controller page: http://172.19.6.46:65420/
+Controller page: http://172.19.6.46:61147/
       A reconnected into slot 0; roster [0, 1]; old socket state 3 reason 'opened somewhere else'
 PASS  phone_quick_reconnect_takes_back_its_slot
-Controller page: http://172.19.6.46:65425/
+Controller page: http://172.19.6.46:61152/
       join frame 4223 bytes; 5 later looks frames of [91, 92, 92, 92, 92] bytes
 PASS  phone_hat_art_sent_once_on_bind
 ---
@@ -1151,4 +1164,4 @@ PASS  phone_hat_art_sent_once_on_bind
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
    at: cleanup (core/object/object.cpp:2641)
 ## total
-202 passed, 2 failed, 204 total
+200 passed, 2 failed, 202 total

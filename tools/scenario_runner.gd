@@ -245,6 +245,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazards_report_only_damage_dealt",
 	"breakable_wall_double_damage_melee",
 	"round_modifier_draws_follow_modifier_seed",
+	"mid_match_joiner_starts_with_fresh_slot",
+	"pause_keeps_ko_credit_and_survival_time",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1061,6 +1063,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_breakable_wall_double_damage_melee()
 		"round_modifier_draws_follow_modifier_seed":
 			return await _scenario_round_modifier_draws_follow_modifier_seed()
+		"mid_match_joiner_starts_with_fresh_slot":
+			return await _scenario_mid_match_joiner_starts_with_fresh_slot()
+		"pause_keeps_ko_credit_and_survival_time":
+			return await _scenario_pause_keeps_ko_credit_and_survival_time()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -16645,5 +16651,167 @@ func _scenario_round_modifier_draws_follow_modifier_seed() -> Array[String]:
 	elif runs[0] != runs[1]:
 		failures.append("two runs on modifier_seed %d drew different weapons or meteors" % SEEDED_TEST_SEED)
 	round_manager.modifier_seed = -1
+	await _teardown(loop["stage"])
+	return failures
+
+
+# --- A newcomer's slot and a pause's clock (issue #161) -----------------------
+
+const PAUSE_161_MSEC: int = 30000
+## A real pause through RoundManager: longer than the KO credit window.
+const REAL_PAUSE_161_MSEC: int = 3500
+
+## Issue #161, item 1, over the real Main.tscn and phones: P2 has 4 points,
+## KOs, damage and a hit on P1 still in the credit window when the host kicks
+## them; a new phone joins mid-match and gets their slot. The newcomer starts
+## on 0 points with none of P2's numbers, so no award can go to them, and the
+## scoreboard says so at once.
+func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
+	var failures: Array[String] = []
+	var rolls_were: bool = RoundManagerScript.modifier_rolls_enabled
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 161
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.kill_zone_grace_sec = 600.0
+	var players: Array[RigidBody2D] = []
+	for i in 3:
+		players.append(server.get_node(server.player_paths[i]) as RigidBody2D)
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 3:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "fresh-slot-161-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	if not failures.is_empty():
+		await _close_phones(joined)
+		await _teardown(main)
+		RoundManagerScript.modifier_rolls_enabled = rolls_were
+		return failures
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var started: bool = false
+	var deadline: int = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC * 2
+	while Time.get_ticks_msec() < deadline and not started:
+		await _poll_phones(joined, 1)
+		started = players[0].alive and players[1].alive and players[2].alive
+	if not started:
+		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		RoundManagerScript.modifier_rolls_enabled = rolls_were
+		return failures
+
+	# P2's match so far: four wins, a KO of P3, damage dealt, and a fresh hit on P1.
+	var stats: RefCounted = rm.match_stats()
+	var now: int = Time.get_ticks_msec()
+	rm._scores[1] = 4
+	stats.record_hit(1, 2, 40.0, now - 500)
+	stats.record_elimination(2, now - 400)
+	stats.record_hit(1, 0, 25.0, now)
+	stats.record_hit(0, 1, 10.0, now)
+	rm._update_score_label()
+
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 1}))
+	await _poll_phones(joined, 20)
+	if server.claimed_slots().has(1):
+		failures.append("the host's kick left slot 1 claimed: roster %s" % [server.claimed_slots()])
+	var keep: Array[WebSocketPeer] = [joined[0], joined[2]]
+	var newcomer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(newcomer, "fresh-slot-161-new", keep)
+	keep.append(newcomer)
+	await _poll_phones(keep, 5)
+	print("      newcomer slot %d; scores %s; kos %s, damage %s, deaths %s, alive %s" % [
+		result["slot"], rm._scores, stats.kos, stats.damage_dealt, stats.deaths, stats.survival_msec])
+	if result["slot"] != 1:
+		failures.append("the newcomer was given slot %d, expected the freed slot 1" % result["slot"])
+	else:
+		if rm._scores[1] != 0:
+			failures.append("the newcomer started on %d points, P2's score" % rm._scores[1])
+		for table: String in ["kos", "self_kos", "deaths", "damage_dealt", "damage_taken", "survival_msec"]:
+			if (stats.get(table) as Dictionary).has(1):
+				failures.append("the newcomer inherited P2's %s: %s" % [table, stats.get(table)[1]])
+		var hits: Dictionary = stats.get("_last_hit")
+		if hits.has(1) or (hits.has(0) and int(hits[0]["attacker"]) == 1):
+			failures.append("a hit P2 took or dealt is still pending for the newcomer: %s" % [hits])
+		if not stats.damage_dealt.has(0) or stats.deaths.get(2, 0) != 1:
+			failures.append("forgetting slot 1 wiped the others' numbers too: damage %s, deaths %s" % [stats.damage_dealt, stats.deaths])
+		for award: Dictionary in stats.awards([0, 1, 2]):
+			if award["slot"] == 1:
+				failures.append("the newcomer would get P2's award %s" % [award])
+		var label: Label = main.get_node_or_null("UI/ScoreLabel") as Label
+		if label != null and not label.text.contains("P2: 0"):
+			failures.append("the score label read '%s', expected P2 on 0" % label.text)
+	newcomer.close(1000, "scenario done")
+	await _close_phones([joined[0], joined[2]] as Array[WebSocketPeer])
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = rolls_were
+	return failures
+
+## Issue #161, item 2: a pause does not count against the 3 s KO credit
+## window or as time alive. MatchStats on a fake clock first (a 30 s pause),
+## then the real RoundManager: a shove, a real 3.5 s pause, and the ring-out
+## just after Resume is the shover's KO, and the winner's time alive leaves
+## the pause out.
+func _scenario_pause_keeps_ko_credit_and_survival_time() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1], 0)
+	stats.record_hit(0, 1, 0.0, 1000)
+	if not stats.has_method("shift"):
+		failures.append("MatchStats has no shift() to move its clocks past a pause")
+	else:
+		stats.shift(PAUSE_161_MSEC)
+		var ko: Dictionary = stats.record_elimination(1, 1500 + PAUSE_161_MSEC)
+		if ko["killer"] != 0:
+			failures.append("fake clock: a KO 0.5 s of play after the hit, across a 30 s pause, went to %d, expected slot 0" % ko["killer"])
+		stats.end_round(5000 + PAUSE_161_MSEC)
+		if stats.survival_msec.get(0, 0) != 5000 or stats.survival_msec.get(1, 0) != 1500:
+			failures.append("fake clock: time alive %s, expected 5000 and 1500 ms with the pause left out" % [stats.survival_msec])
+
+	var loop: Dictionary = _new_lobby_round(3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	rm.spawn_protection_sec = 0.0
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	var round_began: int = Time.get_ticks_msec()
+	players[0].strike_landed.emit(players[1], 0.0, players[1].global_position, false)
+	rm._pause_match()
+	var resume_at: int = Time.get_ticks_msec() + REAL_PAUSE_161_MSEC
+	while Time.get_ticks_msec() < resume_at:
+		await process_frame
+	rm._resume_match()
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm._scores[0] == 1, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never went to P1")
+	await _await_ticks(2)
+	var real_stats: RefCounted = rm.match_stats()
+	var took: int = Time.get_ticks_msec() - round_began
+	print("      kos %s, self-KOs %s, alive %s (round took %d ms, %d of them paused)" % [
+		real_stats.kos, real_stats.self_kos, real_stats.survival_msec, took, REAL_PAUSE_161_MSEC])
+	if real_stats.kos.get(0, 0) != 1 or real_stats.self_kos.has(1):
+		failures.append("the ring-out just after Resume was not the shover's KO: kos %s, self-KOs %s" % [real_stats.kos, real_stats.self_kos])
+	var alive_for: int = int(real_stats.survival_msec.get(0, 0))
+	if alive_for <= 0 or alive_for >= REAL_PAUSE_161_MSEC:
+		failures.append("the winner's time alive was %d ms, expected the play either side of the %d ms pause only" % [alive_for, REAL_PAUSE_161_MSEC])
+	if rm.is_paused():
+		failures.append("the game was still paused")
 	await _teardown(loop["stage"])
 	return failures

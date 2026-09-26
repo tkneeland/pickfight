@@ -5,7 +5,8 @@ extends RefCounted
 ## hits and eliminations with the time they happened (`Time.get_ticks_msec()`
 ## in the game, any number a scenario likes), and asks it who gets a KO and,
 ## at match end, who gets which award. Nothing is persisted: `begin_match()`
-## wipes the lot.
+## wipes the lot, `forget_slot()` one slot's share, and `shift()` moves the
+## running clocks past a pause.
 ##
 ## KO credit: whoever last hit the victim within `KO_CREDIT_WINDOW_MSEC` of the
 ## elimination gets the KO; with no such hit it is a self-KO (a ring-out, the
@@ -68,6 +69,31 @@ func end_round(now_msec: int) -> void:
 	for slot: int in _alive_since.keys():
 		_add(survival_msec, slot, now_msec - int(_alive_since[slot]))
 	_alive_since.clear()
+
+## A fresh player took `slot` mid-match (issue #161): nothing the slot's last
+## occupant did is theirs, so every entry for it goes -- their numbers, the
+## hit they last took or dealt, their streak and their round clock.
+func forget_slot(slot: int) -> void:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, _streak, _alive_since]:
+		table.erase(slot)
+	_last_hit.erase(slot)
+	for victim: int in _last_hit.keys():
+		if int(_last_hit[victim]["attacker"]) == slot:
+			_last_hit.erase(victim)
+
+## The game was paused for `msec` (issue #161): every clock still running
+## moves on by that much, so a pause neither runs out a KO credit window or a
+## multi-KO run nor counts as time alive.
+func shift(msec: int) -> void:
+	if msec <= 0:
+		return
+	for victim: int in _last_hit.keys():
+		_last_hit[victim]["msec"] = int(_last_hit[victim]["msec"]) + msec
+	for killer: int in _streak.keys():
+		_streak[killer][0] = int(_streak[killer][0]) + msec
+	for slot: int in _alive_since.keys():
+		_alive_since[slot] = int(_alive_since[slot]) + msec
+	_round_start_msec += msec
 
 func record_hit(attacker: int, victim: int, amount: float, now_msec: int) -> void:
 	if attacker < 0 or victim < 0 or attacker == victim:
