@@ -15,12 +15,12 @@ Built with Godot 4.6.
 ## Status
 
 Early prototype, ready for playtesting. `scenes/Main.tscn` runs the endless
-round loop for up to four phone-controlled players across 11 rotating
-stages, some built around moving platforms, crumbling ledges and hazard
-walls. Five
-weapons exist (pickaxe, staff, sword, axe, dagger); everything but the
-pickaxe is found as a pickup on the stage. Art is still flat placeholder
-shapes.
+round loop for up to eight phone-controlled players across 24 rotating
+stages, some built around moving platforms, crumbling ledges, falling rocks,
+wind and hazard walls; the largest stages only come up when enough players
+are in the round. Nine weapons exist (pickaxe, staff, sword, axe, dagger,
+boomstick, grappling hook, flail and boomerang); everything but the pickaxe
+is found as a pickup on the stage. Art is still flat placeholder shapes.
 
 ## How it plays
 
@@ -72,8 +72,8 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
 4. **Open it on a phone** on the same network. Prefer a 5 GHz band or the
    host machine's own hotspot — congested 2.4 GHz is the biggest threat to
    input feel ([ADR-0002](docs/adr/0002-phone-browser-controllers.md)).
-   The page shows `P1` to `P4` once it is bound to a player; two are
-   needed to start a round, and a fifth phone is turned away.
+   The page shows `P1` to `P8` once it is bound to a player; two are
+   needed to start a round, and a ninth phone is turned away.
 5. **Drag anywhere on the phone screen to swing.** The drag is relative to
    wherever your thumb lands, so you never need to look at the phone. One
    finger drives: a second finger touching down is ignored until the first
@@ -160,6 +160,17 @@ that and the exported build serves a 500 instead of the page.
   so SmartScreen may warn. Choose *More info > Run anyway*. The firewall
   prompt from step 2 above still applies.
 
+TODO: both presets leave `application/icon` empty, so the builds carry
+Godot's default icon. The repo has no icon art yet (everything is drawn in
+code); set `application/icon` in `export_presets.cfg` once there is one
+(`.icns` or `.png` for macOS, `.ico` for Windows).
+
+## Testing
+
+The scenario suite in `tools/scenario_runner.gd` drives the real game
+headless. See [`docs/agents/testing.md`](docs/agents/testing.md) for the
+commands, including the full suite and how CI runs it.
+
 ## Decisions
 
 See [`CONTEXT.md`](./CONTEXT.md) for the glossary and shape of the game,
@@ -178,15 +189,16 @@ resolved and no longer applies.
 ```
 scenes/      .tscn scene files (Main, Player; Arena is the scenario
              suite's physics fixture)
-scenes/stages/  the 11 rotating stages, one .tscn each (ADR-0008)
-scenes/parts/   reusable stage parts: MovingPlatform, CrumblingLedge, Hazard
-scripts/     GDScript sources (Player, WeaponHead, WeaponStats,
-             ControllerServer, RoundManager, Stage, KillZone,
-             MovingPlatform, CrumblingLedge, Pickup, PickupWeapons)
-resources/   weapon stat resources (pickaxe, staff, sword, axe, dagger)
+scenes/stages/  the 24 rotating stages, one .tscn each (ADR-0008)
+scenes/parts/   reusable stage parts: MovingPlatform, RotatingPlatform,
+                CrumblingLedge, CollapsingFloor, BreakableWall, BouncePad,
+                FallingRock, WindZone, Hazard
+scripts/     GDScript sources (among them Player, WeaponHead, WeaponStats,
+             ControllerServer, RoundManager, Stage, Bot, Sfx, Music, Juice)
+resources/   weapon stat resources, one .tres per weapon (nine)
 controller/  the single-file controller web page served to phones
 tools/       headless test fixtures (scenario_runner, ws_probe_client,
-             capture_damage_screenshots)
+             capture_damage_screenshots) and export.sh
 ```
 
 <!-- atlas-v3:readme:start -->

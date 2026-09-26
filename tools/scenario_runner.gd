@@ -297,6 +297,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_built_clear_of_neighbours",
 	"match_seed_replays_bot_match",
 	"script_run_never_touches_owner_settings",
+	"juice_trail_draws_every_swing",
+	"settings_esc_mid_drag_saves",
+	"hat_parts_stay_in_their_box",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1267,6 +1270,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_seed_replays_bot_match()
 		"script_run_never_touches_owner_settings":
 			return await _scenario_script_run_never_touches_owner_settings()
+		"juice_trail_draws_every_swing":
+			return await _scenario_juice_trail_draws_every_swing()
+		"settings_esc_mid_drag_saves":
+			return await _scenario_settings_esc_mid_drag_saves()
+		"hat_parts_stay_in_their_box":
+			return await _scenario_hat_parts_stay_in_their_box()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -19154,5 +19163,171 @@ func _scenario_script_run_never_touches_owner_settings() -> Array[String]:
 	music.settings_path = was["music_path"]
 	sfx.set_master_volume(was["master"], false)
 	music.set_volume(was["music"], false)
+	_scenario_completed = true
+	return failures
+
+# --- Issue #196: trails every swing, Esc mid-drag, hat boxes --------------------
+
+## Fast-then-still bursts the multi-swing trail check runs, each a real
+## swing's length: rendered frames of speed, fewer than TRAIL_POINTS, so the
+## ring never wraps within one (a wrap hid the bug).
+const JUICE_SWING_BURSTS: int = 3
+const JUICE_SWING_FRAMES: int = 7
+
+## Issue #196, item 1: a head's trail draws on every swing, not just its first.
+## The trail's write index used to survive its count going back to 0, so the
+## next swing wrote past the slots `_live_points` reads and was zeroed at once.
+func _scenario_juice_trail_draws_every_swing() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var head: RigidBody2D = _bare_head(stage, JUICE_ORIGIN, HELD_HEAD_FORCE)
+	await _await_ticks(2)
+	var fast: float = JuiceScript.TRAIL_MIN_SPEED * 1.8
+	var bests: Array[int] = []
+	for burst in JUICE_SWING_BURSTS:
+		var most: int = 0
+		var frames: int = 0
+		while frames < JUICE_SWING_FRAMES:
+			head.linear_velocity = Vector2(0.0, fast).rotated(frames * 0.05)
+			await process_frame
+			frames += 1
+			most = maxi(most, juice.trail_point_count(head))
+		bests.append(most)
+		head.linear_velocity = Vector2.ZERO
+		await _await_ticks(2)
+		await _juice_wait(JuiceScript.TRAIL_LIFETIME * 1.5)
+		if juice.trail_point_count(head) != 0:
+			failures.append("after swing %d the trail still has %d points" % [burst, juice.trail_point_count(head)])
+	print("      longest trail per swing: %s (cap %d)" % [bests, JuiceScript.TRAIL_POINTS])
+	if bests[0] < 3:
+		failures.append("the first swing left a trail of only %d points" % bests[0])
+	for burst in range(1, bests.size()):
+		if bests[burst] < maxi(3, bests[0] - 1):
+			failures.append("swing %d left a trail of %d points, the first left %d" % [burst, bests[burst], bests[0]])
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## Issue #196, item 2: Esc closing the settings panel mid-drag saves the value
+## the drag left, and ends the drag, so later changes save at once again.
+func _scenario_settings_esc_mid_drag_saves() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var music: Node = _music()
+	if sfx == null or music == null:
+		return ["the Sfx or Music autoload is missing"]
+	await physics_frame
+	var was: Dictionary = {"master": sfx.master_volume, "sfx": sfx.sfx_volume, "music": music.volume,
+		"sfx_path": sfx.settings_path, "music_path": music.settings_path,
+		"sfx_persist": sfx.persist_settings, "music_persist": music.persist_settings}
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_esc_drag_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	sfx.settings_path = temp_path
+	music.settings_path = temp_path
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	ui.volume_slider().set_value_no_signal(1.0)
+	sfx.persist_settings = true
+	music.persist_settings = true
+	var esc := InputEventKey.new()
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	if not ui.is_open():
+		ui._unhandled_input(esc)
+	if not ui.is_open():
+		failures.append("Esc did not open the settings menu")
+
+	var slider: HSlider = ui.volume_slider()
+	slider.drag_started.emit()
+	slider.value = 0.9
+	slider.value = 0.6
+	if FileAccess.file_exists(temp_path):
+		failures.append("the drag wrote the settings file before it ended")
+		DirAccess.remove_absolute(temp_path)
+	ui._unhandled_input(esc)
+	if ui.is_open():
+		failures.append("Esc mid-drag did not close the settings menu")
+	var saved := ConfigFile.new()
+	if saved.load(temp_path) != OK:
+		failures.append("Esc mid-drag saved nothing: the drag's value is lost")
+	else:
+		var got: float = float(saved.get_value("audio", "master_volume", -1.0))
+		if absf(got - 0.6) > 0.001:
+			failures.append("Esc mid-drag saved master volume %.2f, expected 0.60" % got)
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	# The drag is over: a wheel step now saves at once.
+	slider.value = 0.8
+	if not FileAccess.file_exists(temp_path):
+		failures.append("after Esc mid-drag, a slider change outside a drag was not saved")
+
+	sfx.persist_settings = was["sfx_persist"]
+	music.persist_settings = was["music_persist"]
+	sfx.set_master_volume(was["master"], false)
+	sfx.set_sfx_volume(was["sfx"], false)
+	music.set_volume(was["music"], false)
+	sfx.settings_path = was["sfx_path"]
+	music.settings_path = was["music_path"]
+	ui.refresh()
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+
+## How far `part` is drawn past its points: half its stroke, as `Hat._draw()`
+## strokes it.
+func _hat_part_stroke(part: Dictionary) -> float:
+	match str(part["kind"]):
+		"poly":
+			return HatScript.OUTLINE_WIDTH * 0.5 if part.get("outline", true) else 0.0
+		"circle":
+			return HatScript.OUTLINE_WIDTH * 0.75 * 0.5 if part.get("outline", true) else 0.0
+		"ring":
+			# The outline pass is width + 1.5 outlines wide, round the ring's line.
+			return (float(part["width"]) + HatScript.OUTLINE_WIDTH * 1.5) * 0.5 - float(part["width"]) * 0.5
+	return 0.0
+
+## Issue #196, item 3 (the check `Hat.gd`'s HEIGHTS comment names): every
+## part of every hat, stroke included, stays under its HEIGHTS entry and within
+## HALF_WIDTH of the centre, at every propeller angle; and each entry is tight,
+## within 2 px of the hat's real top, so name tags do not float.
+func _scenario_hat_parts_stay_in_their_box() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var reaches: Array[String] = []
+	for id: String in HatScript.IDS:
+		if id == HatScript.NONE:
+			if HatScript.height_of(id) != 0.0 or not HatScript.parts(id).is_empty():
+				failures.append("'none' has a height or draws parts")
+			continue
+		var height: float = HatScript.height_of(id)
+		var top: float = 0.0
+		var steps: int = 48 if id == "propeller" else 1
+		var poked: bool = false
+		for step in steps:
+			var spin: float = TAU * float(step) / float(steps)
+			for part: Dictionary in HatScript.parts(id, spin):
+				var stroke: float = _hat_part_stroke(part)
+				for p: Vector2 in _hat_part_points(part):
+					top = maxf(top, -p.y + stroke)
+					if poked:
+						continue
+					if -p.y + stroke > height + 0.01:
+						failures.append("hat '%s' is drawn %.2f px up at %s (spin %.2f), over HEIGHTS %.0f" % [
+							id, -p.y + stroke, p, spin, height])
+						poked = true
+					elif absf(p.x) + stroke > HatScript.HALF_WIDTH + 0.01:
+						failures.append("hat '%s' is drawn %.2f px out at %s, over HALF_WIDTH %.0f" % [
+							id, absf(p.x) + stroke, p, HatScript.HALF_WIDTH])
+						poked = true
+					elif p.y - stroke > 0.01:
+						failures.append("hat '%s' has a part wholly below the body's top edge at %s" % [id, p])
+						poked = true
+		reaches.append("%s %.2f/%.0f" % [id, top, height])
+		if top < height - 2.0:
+			failures.append("hat '%s' reaches only %.2f px up, HEIGHTS says %.0f" % [id, top, height])
+	print("      drawn top / HEIGHTS: %s" % ", ".join(reaches))
 	_scenario_completed = true
 	return failures

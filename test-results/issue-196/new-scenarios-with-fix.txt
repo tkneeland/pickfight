@@ -1,0 +1,7 @@
+      longest trail per swing: [5, 5, 5] (cap 10)
+PASS  juice_trail_draws_every_swing
+PASS  settings_esc_mid_drag_saves
+      drawn top / HEIGHTS: crown 25.25/26, top_hat 35.00/35, cap 20.25/21, beanie 28.75/29, viking 34.00/34, party 40.25/41, halo 21.50/22, propeller 27.80/28
+PASS  hat_parts_stay_in_their_box
+---
+3 passed, 0 failed, 3 total

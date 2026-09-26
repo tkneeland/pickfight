@@ -264,6 +264,7 @@ func _physics_process(delta: float) -> void:
 				(head as Node).remove_meta(META_WATCHED)
 			_t_head[s] = null
 			_t_count[s] = 0
+			_t_next[s] = 0
 			continue
 		var now: Vector2 = (head as Node2D).global_position
 		_t_prev[s] = _t_curr[s]
@@ -271,6 +272,7 @@ func _physics_process(delta: float) -> void:
 		if now.distance_squared_to(_t_prev[s]) > jump_sq:
 			_t_prev[s] = now
 			_t_count[s] = 0
+			_t_next[s] = 0
 			_t_fast[s] = 0
 			continue
 		var v: Vector2 = (now - _t_prev[s]) / maxf(delta, 0.0001)
@@ -300,6 +302,7 @@ func _process(delta: float) -> void:
 			busy = true
 		else:
 			_t_count[s] = 0
+			_t_next[s] = 0
 	if busy or _drew_last_frame:
 		queue_redraw()
 	_drew_last_frame = busy
@@ -326,6 +329,9 @@ func _step_particles(delta: float) -> bool:
 	_p_active = active
 	return true
 
+## Points of `slot`'s trail still inside their lifetime. Reads indices
+## 0..count-1, which is where the points are only while `_t_next` is reset
+## with `_t_count` (issue #196): until the ring wraps, next == count.
 func _live_points(slot: int) -> int:
 	var n: int = 0
 	var base: int = slot * TRAIL_POINTS
