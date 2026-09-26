@@ -235,6 +235,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bots_stop_thinking_while_paused",
 	"solo_bots_go_when_the_last_phone_leaves",
 	"bot_upkeep_cached_and_names_unique",
+	"phone_quick_reconnect_takes_back_its_slot",
+	"host_phone_stale_kick_and_end_are_ignored",
+	"controller_page_stale_confirms_close",
+	"controller_page_no_traps_in_play",
+	"phone_bad_frames_ignored_and_rate_limited",
+	"phone_hat_art_sent_once_on_bind",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1031,6 +1037,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_solo_bots_go_when_the_last_phone_leaves()
 		"bot_upkeep_cached_and_names_unique":
 			return await _scenario_bot_upkeep_cached_and_names_unique()
+		"phone_quick_reconnect_takes_back_its_slot":
+			return await _scenario_phone_quick_reconnect_takes_back_its_slot()
+		"host_phone_stale_kick_and_end_are_ignored":
+			return await _scenario_host_phone_stale_kick_and_end_are_ignored()
+		"controller_page_stale_confirms_close":
+			return await _scenario_controller_page_stale_confirms_close()
+		"controller_page_no_traps_in_play":
+			return await _scenario_controller_page_no_traps_in_play()
+		"phone_bad_frames_ignored_and_rate_limited":
+			return await _scenario_phone_bad_frames_ignored_and_rate_limited()
+		"phone_hat_art_sent_once_on_bind":
+			return await _scenario_phone_hat_art_sent_once_on_bind()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13268,10 +13286,10 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("Pause/Resume is not a single tap in the menu: %s" % pause_handler)
 	var end_at: int = page.find("menuEndBtn.addEventListener(\"click\"")
 	var end_handler: String = page.substr(end_at, page.find("});", end_at) - end_at) if end_at >= 0 else ""
-	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end")'):
+	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end", { match: match'):
 		failures.append("End match does not ask 'Are you sure?' before sending: %s" % end_handler)
 	var kick_body: String = _js_function_body(page, "showKickList")
-	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target })'):
+	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
 		failures.append("Kick player does not ask 'Are you sure?' before sending")
 	if not kick_body.contains("if (p.slot === slot) { continue; }"):
 		failures.append("the kick list offers the host itself")
@@ -15921,4 +15939,456 @@ func _scenario_bot_upkeep_cached_and_names_unique() -> Array[String]:
 	await _teardown(main)
 	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
+	return failures
+
+# --- Phone and server hardening (issue #164) ------------------------------------
+
+## A bare ControllerServer holding `count` parked player slots, listening on
+## free ports, for the issue #164 socket scenarios. Constants and methods that
+## #164 added are read by name, never referenced, so these scenarios still
+## compile -- and fail -- against the server as it was before the fix.
+func _phone_rig_164(count: int, tag: String) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "%sP%d" % [tag, i]
+		player.start_in_round = false
+		player.identity_color = FOUR_PLAYER_COLORS[i % FOUR_PLAYER_COLORS.size()]
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../%sP%d" % [tag, i]))
+	var server: Node = ControllerServerScript.new()
+	server.name = "%sServer" % tag
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	return {"stage": stage, "server": server, "players": players}
+
+## A ControllerServer constant by name, or `fallback` when it has none.
+func _server_const_164(name: String, fallback: Variant) -> Variant:
+	return (ControllerServerScript as GDScript).get_script_constant_map().get(name, fallback)
+
+## The lobby entry for `slot` in lobby state `lobby`, or {}.
+func _lobby_entry_164(lobby: Dictionary, slot: int) -> Dictionary:
+	for entry: Variant in lobby.get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+			return entry
+	return {}
+
+## Issue #164, item 1, over the real socket: a phone that drops off Wi-Fi and
+## reconnects before its old socket timed out -- or the same page opened in a
+## second tab -- takes its own slot back, with its name and colour, instead of
+## being handed a ghost second slot. The old socket is hung up on with the
+## reason the page will not retry on, and the page knows that reason.
+func _scenario_phone_quick_reconnect_takes_back_its_slot() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "Reconnect164")
+	var stage: Node2D = rig["stage"]
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var a := WebSocketPeer.new()
+	var b := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	if (await _join_phone(a, "reconnect-164-a", phones))["slot"] != 0:
+		failures.append("phone A did not get slot 0")
+	phones.append(a)
+	if (await _join_phone(b, "reconnect-164-b", phones))["slot"] != 1:
+		failures.append("phone B did not get slot 1")
+	phones.append(b)
+	a.send_text(JSON.stringify({"t": "name", "v": "Alice"}))
+	a.send_text(JSON.stringify({"t": "color", "v": 2}))
+	await _poll_phones(phones, 10)
+	if failures.size() > 0 or server.slot_color(0) != 2:
+		failures.append("setup: A holds colour %d, expected 2" % server.slot_color(0))
+		await _close_phones(phones)
+		await _teardown(stage)
+		return failures
+
+	# A is back a moment later, as a new socket; the host still has A's old one open.
+	var a2 := WebSocketPeer.new()
+	var again: Dictionary = await _join_phone(a2, "reconnect-164-a", phones)
+	var all: Array[WebSocketPeer] = [a, b, a2]
+	await _poll_phones(all, 10)
+	var replaced_reason: String = str(_server_const_164("REPLACED_REASON", "<no REPLACED_REASON>"))
+	print("      A reconnected into slot %d; roster %s; old socket state %d reason '%s'" % [
+		again["slot"], server.claimed_slots(), a.get_ready_state(), a.get_close_reason()])
+	if again["slot"] != 0:
+		failures.append("A's reconnect was given slot %d, expected its own slot 0" % again["slot"])
+	if server.claimed_slots() != [0, 1]:
+		failures.append("the roster is %s after A's reconnect, expected [0, 1] (a ghost slot)" % [server.claimed_slots()])
+	if a.get_ready_state() != WebSocketPeer.STATE_CLOSED or a.get_close_reason() != replaced_reason:
+		failures.append("A's old socket was not closed with '%s' (state %d, reason '%s')" % [
+			replaced_reason, a.get_ready_state(), a.get_close_reason()])
+	if server.slot_name(0) != "Alice" or server.host_slot() != 0 or not server.slot_has_controller(0) or not players[0].has_controller:
+		failures.append("slot 0 lost its name, host or controller: '%s', host %d" % [server.slot_name(0), server.host_slot()])
+	# The page re-sends its saved colour on every join: it must still be A's own.
+	a2.send_text(JSON.stringify({"t": "color", "v": 2}))
+	await _poll_phones(all, 10)
+	if server.slot_color(0) != 2:
+		failures.append("A's saved colour was refused after the reconnect (slot 0 holds %d)" % server.slot_color(0))
+	await _close_phones(all)
+	await _teardown(stage)
+
+	# The page's side: it knows the reason and does not retry on it, and a
+	# late event from an old socket cannot undo the new one.
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if not page.contains('var REPLACED_REASON = "%s";' % replaced_reason):
+		failures.append("the page's REPLACED_REASON does not match ControllerServer's")
+	var connect_body: String = _js_function_body(page, "connect")
+	if not connect_body.contains("if (replaced) { replacedOut = true; showState(); return; }"):
+		failures.append("the page still retries after being replaced, so two tabs would ping-pong")
+	if not connect_body.contains("if (sock !== ws) { return; }"):
+		failures.append("a stale socket's close can still reset the page")
+	return failures
+
+## Issue #164, item 2, over the real socket: the host's kick names the claim it
+## saw in the lobby state, so when Bob leaves and Alice takes his slot while
+## "Kick Bob?" is open, Yes does nothing to Alice; a kick naming Alice's claim
+## still works. And End match names the match it was opened in, so an old
+## confirm cannot end the next match.
+func _scenario_host_phone_stale_kick_and_end_are_ignored() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "Stale164")
+	var stage: Node2D = rig["stage"]
+	var server: Node = rig["server"]
+	var commands: Array = []
+	server.host_command.connect(func(cmd: String, slot: int) -> void: commands.append([cmd, slot]))
+	var host := WebSocketPeer.new()
+	var bob := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	if (await _join_phone(host, "stale-164-host", phones))["slot"] != 0:
+		failures.append("the host phone did not get slot 0")
+	phones.append(host)
+	if (await _join_phone(bob, "stale-164-bob", phones))["slot"] != 1:
+		failures.append("Bob did not get slot 1")
+	phones.append(bob)
+	server.set_lobby_state({"phase": "lobby", "host": 0, "players": [{"slot": 0, "name": "Host"}, {"slot": 1, "name": "Bob"}]})
+	await _poll_phones(phones, 5)
+	var lobby: Dictionary = _latest_lobby_msg(host, {})
+	var bob_claim: Variant = _lobby_entry_164(lobby, 1).get("claim")
+	if bob_claim == null:
+		failures.append("the lobby state names no claim for each player: %s" % [lobby])
+
+	# Bob leaves and Alice takes slot 1 while the host's "Kick Bob?" is open.
+	bob.close(1000, "Bob leaves")
+	await _poll_phones(phones, 10)
+	server.expire_disconnected_claims()
+	var alice := WebSocketPeer.new()
+	phones = [host] as Array[WebSocketPeer]
+	if (await _join_phone(alice, "stale-164-alice", phones))["slot"] != 1:
+		failures.append("Alice did not get slot 1")
+	phones.append(alice)
+	host.send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 1, "claim": bob_claim, "name": "Bob"}))
+	await _poll_phones(phones, 10)
+	print("      stale kick of Bob's claim %s: roster %s, Alice's socket state %d" % [bob_claim, server.claimed_slots(), alice.get_ready_state()])
+	if server.claimed_slots() != [0, 1] or alice.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the stale 'Kick Bob?' removed Alice (roster %s, reason '%s')" % [server.claimed_slots(), alice.get_close_reason()])
+
+	# A kick naming Alice's own claim goes through.
+	server.set_lobby_state({"phase": "lobby", "host": 0, "players": [{"slot": 0, "name": "Host"}, {"slot": 1, "name": "Alice"}]})
+	await _poll_phones(phones, 5)
+	lobby = _latest_lobby_msg(host, lobby)
+	var alice_claim: Variant = _lobby_entry_164(lobby, 1).get("claim")
+	if alice_claim == null or alice_claim == bob_claim:
+		failures.append("Alice's claim %s is not a new one (Bob's was %s)" % [alice_claim, bob_claim])
+	host.send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 1, "claim": alice_claim, "name": "Alice"}))
+	await _poll_phones(phones, 10)
+	if server.claimed_slots() != [0] or alice.get_close_reason() != ControllerServerScript.KICKED_REASON:
+		failures.append("a kick naming Alice's claim did not remove her (roster %s)" % [server.claimed_slots()])
+
+	# An End match confirm opened in one match, answered in the next.
+	var state := {"phase": "playing", "host": 0, "players": [{"slot": 0, "name": "Host"}]}
+	server.set_lobby_state(state)
+	await _poll_phones(phones, 5)
+	lobby = _latest_lobby_msg(host, lobby)
+	var first_match: Variant = lobby.get("match")
+	state["phase"] = "round_end"
+	server.set_lobby_state(state)
+	state["phase"] = "victory"
+	server.set_lobby_state(state)
+	state["phase"] = "playing"
+	server.set_lobby_state(state)
+	await _poll_phones(phones, 5)
+	lobby = _latest_lobby_msg(host, lobby)
+	var next_match: Variant = lobby.get("match")
+	if first_match == null or first_match == next_match:
+		failures.append("the lobby state does not number the matches (%s, then %s)" % [first_match, next_match])
+	commands.clear()
+	host.send_text(JSON.stringify({"t": "host", "cmd": "end", "match": first_match}))
+	await _poll_phones(phones, 10)
+	print("      End match from match %s during match %s: commands %s" % [first_match, next_match, commands])
+	if commands.has(["end", -1]):
+		failures.append("an End match confirmed in the last match ended the next one")
+	commands.clear()
+	host.send_text(JSON.stringify({"t": "host", "cmd": "end", "match": next_match}))
+	await _poll_phones(phones, 10)
+	if not commands.has(["end", -1]):
+		failures.append("End match naming the current match did nothing (commands %s)" % [commands])
+	await _close_phones(phones)
+	await _teardown(stage)
+	return failures
+
+## Issue #164, item 2, read off controller/index.html as shipped: the kick
+## confirm sends the target's claim and End match the match serial, both off
+## the lobby state; an open confirm whose subject has gone is taken down when
+## the next lobby state arrives, the kick list is redrawn when the roster
+## changes, and Yes checks once more before sending.
+func _scenario_controller_page_stale_confirms_close() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var kick_body: String = _js_function_body(page, "showKickList")
+	if not kick_body.contains('sendHost("kick", { slot: target, claim: claim, name: name })'):
+		failures.append("the kick does not name the target's claim")
+	if not kick_body.contains("return claimHolder(target, claim) !== null;"):
+		failures.append("the kick confirm does not check its target still holds that claim")
+	if not _js_function_body(page, "claimHolder").contains("lobby.players[i].claim === claim"):
+		failures.append("claimHolder does not compare claims")
+	var end_at: int = page.find('menuEndBtn.addEventListener("click"')
+	var end_to: int = page.find("menuKickBtn.addEventListener", end_at)
+	var end_handler: String = page.substr(end_at, end_to - end_at) if end_at >= 0 and end_to > end_at else ""
+	if not end_handler.contains("var match = lobby.match;") or not end_handler.contains('sendHost("end", { match: match })') \
+			or not end_handler.contains("inMatch() && lobby.match === match"):
+		failures.append("End match does not name and check the match it was opened in: %s" % end_handler)
+	var refresh: String = _js_function_body(page, "refreshHostControls")
+	if not refresh.contains('viewShown("menu-confirm") && confirmValid && !confirmValid()') or not refresh.contains('showMenuView("menu-main")'):
+		failures.append("a confirm whose subject has gone stays open when the lobby changes")
+	if not refresh.contains('viewShown("menu-kick-list") && rosterKey() !== kickListKey'):
+		failures.append("the kick list is not redrawn when the roster changes")
+	if not _js_function_body(page, "showLobby").contains("refreshHostControls()"):
+		failures.append("a lobby state does not refresh the host menu")
+	if not page.contains("if (action && (!valid || valid())) { action(); }"):
+		failures.append("Yes does not re-check the confirm before sending")
+	_scenario_completed = true
+	return failures
+
+## Issue #164, item 3, read off controller/index.html as shipped: while this
+## player is in the round, a tap on the nickname opens nothing (and passes to
+## the pad); play starting closes an open name or look card; and every
+## full-screen card scrolls, top included, when it is taller than the screen --
+## no card centres itself with justify-content: center, which leaves an
+## overflowing top out of reach.
+func _scenario_controller_page_no_traps_in_play() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if not _js_function_body(page, "openNamePrompt").contains("if (inPlay()) { return; }"):
+		failures.append("tapping the name mid-round still opens the full-screen name prompt")
+	var in_play: String = _js_function_body(page, "inPlay")
+	if not in_play.contains("inMatch()") or not in_play.contains("lobby.in_round"):
+		failures.append("inPlay() does not mean 'in the round being played': %s" % in_play)
+	if not page.contains("#name.locked { pointer-events: none;") or not _js_function_body(page, "showState").contains('nameEl.classList.toggle("locked", inPlay())'):
+		failures.append("the name is not locked out of touches while in play")
+	var show_lobby: String = _js_function_body(page, "showLobby")
+	var close_at: int = show_lobby.find("if (inPlay()) { closePrompts(); }")
+	var early_out: int = show_lobby.find('lobbyEl.className = ""; return;')
+	if close_at < 0 or early_out < 0 or close_at > early_out:
+		failures.append("play starting does not close the name and look cards")
+	var close_body: String = _js_function_body(page, "closePrompts")
+	if not close_body.contains('promptEl.classList.remove("show")') or not close_body.contains('lookEl.classList.remove("show")'):
+		failures.append("closePrompts() does not take both cards down: %s" % close_body)
+	var scroll_re := RegEx.new()
+	scroll_re.compile("#lobby, #name-prompt, #look-prompt, #host-menu \\{([^}]*)\\}")
+	var scroll: RegExMatch = scroll_re.search(page)
+	if scroll == null or not scroll.get_string(1).contains("overflow-y: auto"):
+		failures.append("the full-screen cards do not all scroll")
+	for card: String in ["lobby", "name-prompt", "look-prompt", "host-menu"]:
+		var block_re := RegEx.new()
+		block_re.compile("(?m)^\\s*#%s \\{([^}]*)\\}" % card)
+		var block: RegExMatch = block_re.search(page)
+		if block == null or block.get_string(1).contains("justify-content: center"):
+			failures.append("#%s centres with justify-content: center, cutting off an overflowing top" % card)
+		if not page.contains("#%s::before, #%s::after" % [card, card]):
+			failures.append("#%s has no shrinking spacers to centre it" % card)
+	if not page.contains("flex: 1 0 0px;"):
+		failures.append("the centring spacers do not shrink to nothing")
+	if page.contains("a fifth phone"):
+		failures.append("the page still says a fifth phone is one too many")
+	_scenario_completed = true
+	return failures
+
+## Issue #164, item 4, over the real socket: frames with the wrong types are
+## ignored (a Ready whose v is not a bool, a name that is not a string), as is
+## text that is not JSON; nicknames keep only whitelisted characters and at
+## most two stacked accents; a flood of text frames is cut off at the per-slot
+## rate; and a client that sends no id is given one, so a kick sticks to it.
+func _scenario_phone_bad_frames_ignored_and_rate_limited() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "BadFrames164")
+	var stage: Node2D = rig["stage"]
+	var server: Node = rig["server"]
+	server.connection_timeout_sec = 0.5
+	var host := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	if (await _join_phone(host, "bad-frames-164-host", phones))["slot"] != 0:
+		failures.append("the phone did not get slot 0")
+		await _teardown(stage)
+		return failures
+	phones.append(host)
+	for v: Variant in ["yes", null, 1, {"on": true}]:
+		host.send_text(JSON.stringify({"t": "ready", "v": v}))
+	host.send_text(JSON.stringify({"t": "name", "v": 42}))
+	for junk: String in ["{not json", "", "[1, 2]", "null"]:
+		host.send_text(junk)
+	await _poll_phones(phones, 10)
+	print("      after bad frames: ready %s, name '%s'" % [server.slot_ready(0), server.slot_name(0)])
+	if server.slot_ready(0):
+		failures.append("a Ready whose v was not a bool readied the phone")
+	if server.slot_name(0) != "":
+		failures.append("a name that was not a string was taken as '%s'" % server.slot_name(0))
+	host.send_text(JSON.stringify({"t": "ready", "v": true}))
+	await _poll_phones(phones, 10)
+	if not server.slot_ready(0):
+		failures.append("a proper Ready after the bad frames was lost")
+
+	var sneaky: String = "A" + String.chr(0x2028) + "B" + String.chr(0x2029) + "C" + String.chr(0x202E) + "D" \
+		+ String.chr(0x200B) + "E" + String.chr(0x2066) + "F" + String.chr(0xA0) + "G"
+	host.send_text(JSON.stringify({"t": "name", "v": sneaky}))
+	await _poll_phones(phones, 10)
+	if server.slot_name(0) != "ABCDEFG":
+		failures.append("separators, bidi and zero-width characters got through: %s" % [server.slot_name(0).to_utf32_buffer().to_int32_array()])
+	var accent: String = String.chr(0x301)
+	var tower: String = "Z" + accent.repeat(8) + "o" + String.chr(0xEB) + String.chr(0x7ADC) + String.chr(0x1F642)
+	var kept: String = "Z" + accent.repeat(2) + "o" + String.chr(0xEB) + String.chr(0x7ADC) + String.chr(0x1F642)
+	host.send_text(JSON.stringify({"t": "name", "v": tower}))
+	await _poll_phones(phones, 10)
+	if server.slot_name(0) != kept:
+		failures.append("a tower of accents was not cut to two, or real letters were lost: %s" % [server.slot_name(0).to_utf32_buffer().to_int32_array()])
+
+	# A flood, in a fresh one-second window.
+	var quiet_until: int = Time.get_ticks_msec() + 1100
+	while Time.get_ticks_msec() < quiet_until:
+		await _poll_phones(phones, 1)
+	for i in 60:
+		host.send_text(JSON.stringify({"t": "name", "v": "n%d" % i}))
+	await _poll_phones(phones, 10)
+	var limit: int = int(_server_const_164("TEXT_FRAMES_PER_SEC", -1))
+	print("      60 names in a burst: the host kept '%s' (limit %d/s)" % [server.slot_name(0), limit])
+	if server.slot_name(0) == "n59":
+		failures.append("a burst of 60 text frames was acted on in full; no rate limit")
+	quiet_until = Time.get_ticks_msec() + 1100
+	while Time.get_ticks_msec() < quiet_until:
+		await _poll_phones(phones, 1)
+	host.send_text(JSON.stringify({"t": "name", "v": "Later"}))
+	await _poll_phones(phones, 10)
+	if server.slot_name(0) != "Later":
+		failures.append("after the flood, the next second's name was still dropped ('%s')" % server.slot_name(0))
+
+	# A client that never says who it is.
+	var raw := WebSocketPeer.new()
+	raw.connect_to_url("ws://127.0.0.1:%d" % _phone_ws_port)
+	var bound: Dictionary = {}
+	var sent: bool = false
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and bound.is_empty():
+		await _poll_phones(phones, 1)
+		raw.poll()
+		if raw.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent:
+			raw.send_text("hello, no id here")
+			sent = true
+		while raw.get_available_packet_count() > 0:
+			var msg: Variant = JSON.parse_string(raw.get_packet().get_string_from_utf8())
+			if msg is Dictionary and msg.has("slot"):
+				bound = msg
+	var given: String = str(bound.get("id", ""))
+	print("      id-less client: bound %s" % [bound])
+	if int(bound.get("slot", -1)) != 1:
+		failures.append("the id-less client was not bound to slot 1 (%s)" % [bound])
+	if given.is_empty():
+		failures.append("the id-less client was given no id, so a kick cannot stick to it")
+	host.send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 1}))
+	var both: Array[WebSocketPeer] = [host, raw]
+	await _poll_phones(both, 10)
+	if raw.get_close_reason() != ControllerServerScript.KICKED_REASON:
+		failures.append("the id-less client was not kicked (reason '%s')" % raw.get_close_reason())
+	if not given.is_empty():
+		var back := WebSocketPeer.new()
+		var rejoin: Dictionary = await _join_phone(back, given, phones)
+		if rejoin["slot"] != -1 or rejoin["reason"] != ControllerServerScript.KICKED_REASON:
+			failures.append("the kicked id-less client came back with its given id: slot %d" % rejoin["slot"])
+	await _close_phones(phones)
+	await _teardown(stage)
+	return failures
+
+## Every looks frame waiting on `peer`, consumed, as [byte size, message].
+func _looks_frames_164(peer: WebSocketPeer) -> Array:
+	var frames: Array = []
+	peer.poll()
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if not peer.was_string_packet():
+			continue
+		var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		if msg is Dictionary and str(msg.get("t", "")) == "looks":
+			frames.append([pkt.size(), msg])
+	return frames
+
+## Issue #164, item 5, over the real socket: the hat drawings go to a phone
+## once, in the looks frame it gets on joining; every later looks frame --
+## someone else joining, a hat or colour tap -- carries only who wears what.
+func _scenario_phone_hat_art_sent_once_on_bind() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "HatArt164")
+	var stage: Node2D = rig["stage"]
+	var server: Node = rig["server"]
+	var a := WebSocketPeer.new()
+	var b := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	if (await _join_phone(a, "hat-art-164-a", phones))["slot"] != 0:
+		failures.append("phone A did not get slot 0")
+	phones.append(a)
+	await _poll_phones(phones, 5)
+	var a_join: Array = _looks_frames_164(a)
+	if (await _join_phone(b, "hat-art-164-b", phones))["slot"] != 1:
+		failures.append("phone B did not get slot 1")
+	phones.append(b)
+	await _poll_phones(phones, 5)
+	var a_later: Array = _looks_frames_164(a)
+	var b_join: Array = _looks_frames_164(b)
+	var joined_full := func(frames: Array) -> bool:
+		if frames.is_empty():
+			return false
+		var msg: Dictionary = frames[0][1]
+		for id: String in HatScript.IDS:
+			if not msg.get("art", {}).has(id):
+				return false
+		return msg.get("palette", []).size() == 2 and msg.get("hats", []).size() == HatScript.IDS.size()
+	if not joined_full.call(a_join) or not joined_full.call(b_join):
+		failures.append("a joining phone's first looks frame lacks the palette, hats or drawings")
+	a.send_text(JSON.stringify({"t": "hat", "v": "crown"}))
+	await _poll_phones(phones, 10)
+	a_later.append_array(_looks_frames_164(a))
+	var b_later: Array = _looks_frames_164(b)
+	b.send_text(JSON.stringify({"t": "color", "v": 0}))
+	await _poll_phones(phones, 10)
+	a_later.append_array(_looks_frames_164(a))
+	b_later.append_array(_looks_frames_164(b))
+	var later: Array = a_later + b_later
+	var sizes: Array = []
+	for frame: Array in later:
+		sizes.append(frame[0])
+		var msg: Dictionary = frame[1]
+		if msg.has("art") or msg.has("hats") or msg.has("palette"):
+			failures.append("a later looks frame resent the palette, hats or drawings (%d bytes)" % frame[0])
+			break
+	print("      join frame %d bytes; %d later looks frames of %s bytes" % [b_join[0][0] if not b_join.is_empty() else -1, later.size(), sizes])
+	if a_later.size() < 2 or b_later.size() < 2:
+		failures.append("a phone missed a looks update (A got %d, B got %d)" % [a_later.size(), b_later.size()])
+	var told: Array = b_later[0][1].get("looks", []) if not b_later.is_empty() else []
+	var crown_seen: bool = false
+	for look: Dictionary in told:
+		if int(look.get("slot", -1)) == 0 and look.get("hat") == "crown":
+			crown_seen = true
+	if not crown_seen:
+		failures.append("B was not told A put on the crown: %s" % [told])
+	if server.slot_color(1) != 1:
+		failures.append("B took A's colour (B holds %d)" % server.slot_color(1))
+	await _close_phones(phones)
+	await _teardown(stage)
 	return failures

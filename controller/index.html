@@ -48,7 +48,8 @@
     opacity: 0.7;
   }
   /* Nickname (issue #121): tap to edit. The only part of the HUD that takes
-     touches. */
+     touches -- except while this player is in play (issue #164), when a
+     touch on it goes to the pad like anywhere else. */
   #who { display: flex; flex-direction: column; }
   #name {
     pointer-events: auto;
@@ -58,6 +59,7 @@
     text-decoration: underline dotted;
     text-underline-offset: 4px;
   }
+  #name.locked { pointer-events: none; text-decoration: none; }
   /* Where this player stands right now (issue #121): waiting, eliminated,
      next round in... Hidden while it is simply playing. */
   #state {
@@ -97,13 +99,28 @@
     display: none;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 20px;
     padding: 24px;
     background: rgba(13, 15, 20, 0.97);
     text-align: center;
   }
   #lobby.show { display: flex; }
+  /* Issue #164: every full-screen card scrolls when it is taller than the
+     screen (a small phone, landscape). Centred by two growing spacers rather
+     than justify-content: center, which pushes an overflowing card's top out
+     of reach above the scroll area; the spacers shrink to nothing instead. */
+  #lobby, #name-prompt, #look-prompt, #host-menu {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+  #lobby::before, #lobby::after, #name-prompt::before, #name-prompt::after,
+  #look-prompt::before, #look-prompt::after, #host-menu::before, #host-menu::after {
+    content: "";
+    flex: 1 0 0px;
+  }
   #lobby-title { font-size: 28px; font-weight: 800; }
   #lobby-info { font-size: 16px; opacity: 0.75; }
   #lobby-count { font-size: 30vmin; font-weight: 800; line-height: 1; display: none; }
@@ -153,7 +170,7 @@
     display: none;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 18px;
     padding: 24px;
     background: #0d0f14;
@@ -218,7 +235,7 @@
     display: none;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 16px;
     padding: 24px;
     background: rgba(13, 15, 20, 0.97);
@@ -254,12 +271,11 @@
     display: none;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 16px;
     padding: 20px;
     background: #0d0f14;
     text-align: center;
-    overflow-y: auto;
   }
   #look-prompt.show { display: flex; }
   #look-title { font-size: 26px; font-weight: 800; }
@@ -397,8 +413,10 @@
   // player's persistent outline and weapon head (ADR-0005)
   // -- not the body fill, which reddens with damage -- so changing a colour
   // here means changing the matching identity_color there. Since issue #151
-  // these are each slot's automatic colour, used until the host's "looks"
-  // frame says which colour the player actually holds (colorOf()).
+  // these are each slot's automatic colour, used only until the host's
+  // "looks" frame -- sent right behind the slot frame -- says which colour the
+  // player actually holds (colorOf()). The scenario
+  // identity_colours_match_controller_page keeps this list and Main.tscn in step.
   var SLOT_COLORS = ["#2666ff", "#ff8c1a", "#1fd98c", "#ff52d1", "#ffdb1a", "#1ad1ff", "#9959ff", "#eb2933"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
@@ -455,8 +473,12 @@
   }
   var CLIENT_ID = getClientId();
 
+  // Control characters, zero-width and bidi format characters and the line
+  // and paragraph separators go. The host has the last word
+  // (ControllerServer.clean_name, issue #164); this only keeps the prompt honest.
   function cleanName(raw) {
-    return String(raw || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME_LENGTH).trim();
+    return String(raw || "").replace(/[\u0000-\u001f\u007f-\u00a0\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
+      .trim().slice(0, MAX_NAME_LENGTH).trim();
   }
   function randomName() {
     for (;;) {
@@ -615,10 +637,29 @@
   }
 
   // Up whenever the phone has joined but its player has never picked a name,
-  // prefilled with the fun default so "Let's go" alone keeps it.
+  // prefilled with the fun default so "Let's go" alone keeps it. Never while
+  // this player is fighting (issue #164): a tap on the name mid-swing must not
+  // throw a full-screen card over the pad.
   function openNamePrompt() {
+    if (inPlay()) { return; }
     nameInput.value = myName;
     promptEl.classList.add("show");
+  }
+
+  // Issue #164: whether this phone's player is in the round being played --
+  // the time no full-screen card may cover the pad.
+  function inPlay() {
+    return inMatch() && slot >= 0 && (lobby.in_round || []).indexOf(slot) !== -1;
+  }
+
+  // Issue #164: play started under an open name or look card -- take it down.
+  // Nothing is saved; the next join or the lobby offers it again.
+  function closePrompts() {
+    if (promptEl.classList.contains("show")) {
+      promptEl.classList.remove("show");
+      nameInput.blur();
+    }
+    lookEl.classList.remove("show");
   }
 
   function commitName() {
@@ -651,11 +692,17 @@
   var nextRoundAt = 0;
   // Set once the host kicks this phone (issue #149): it stops reconnecting.
   var kickedOut = false;
+  // Set once the same phone connected again somewhere else -- another tab, or
+  // a reload (issue #164): it stops reconnecting too, or two tabs would keep
+  // taking the slot off each other.
+  var replacedOut = false;
   var stateTimer = null;
   function showState() {
     var text = "";
     if (kickedOut) {
       text = "The host removed you from the game";
+    } else if (replacedOut) {
+      text = "This controller was opened somewhere else. Reload the page to play here.";
     } else if (slot >= 0 && lobby && lobby.paused) {
       text = "Paused by the host";
     } else if (slot < 0) {
@@ -673,6 +720,7 @@
       }
     }
     stateEl.textContent = text;
+    nameEl.classList.toggle("locked", inPlay());
     document.getElementById("hint").style.display = (lobby && lobby.phase === "playing" &&
       (lobby.alive || []).indexOf(slot) !== -1) || !lobby ? "" : "none";
   }
@@ -729,6 +777,7 @@
     if (stateTimer === null) { stateTimer = setInterval(showState, 250); }
     showState();
     refreshHostControls();
+    if (inPlay()) { closePrompts(); }
     if (phase === "playing" || phase === "round_end") { lobbyEl.className = ""; return; }
     // A drag in progress would otherwise stay held under the overlay.
     release();
@@ -826,7 +875,14 @@
     if (color !== null && color !== "" && isFinite(Number(color))) { sendText({ t: "color", v: Number(color) }); }
   }
 
+  // Only the frame sent on joining carries the palette, the hats and their
+  // drawings; later ones carry just who wears what (issue #164), so keep the rest.
   function showLooks(msg) {
+    if (looks) {
+      if (!msg.palette) { msg.palette = looks.palette; }
+      if (!msg.hats) { msg.hats = looks.hats; }
+      if (!msg.art) { msg.art = looks.art; }
+    }
     looks = msg;
     applyColor();
     if (lookEl.classList.contains("show")) { renderLookPrompt(); }
@@ -954,7 +1010,10 @@
   // Only the host phone -- the one allowed to set "first to N" -- gets the
   // gear; the host decides, and ignores the same requests from anyone else.
   // Pause/Resume is one tap inside the menu; End match and Kick player each
-  // ask "Are you sure?" first.
+  // ask "Are you sure?" first. Issue #164: that question is about one match
+  // and one player -- the kick carries the target's claim serial and End match
+  // the match serial, both off the lobby state, so the host can refuse a stale
+  // one, and a confirm is taken down as soon as its subject is gone.
   var GEAR_HOLD_MS = 700;
   var gearEl = document.getElementById("gear");
   var menuEl = document.getElementById("host-menu");
@@ -964,6 +1023,10 @@
   var kickListEl = document.getElementById("menu-kick-list");
   var confirmTextEl = document.getElementById("confirm-text");
   var confirmAction = null;
+  // While a confirm is up: a function that says whether it still applies.
+  var confirmValid = null;
+  // The roster the kick list was drawn from, to redraw it when that changes.
+  var kickListKey = "";
   var gearHoldTimer = null;
   var gearPointer = null;
 
@@ -989,11 +1052,30 @@
   function closeHostMenu() {
     menuEl.classList.remove("show");
     confirmAction = null;
+    confirmValid = null;
   }
-  function askConfirm(text, action) {
+  function askConfirm(text, action, valid) {
     confirmTextEl.textContent = text;
     confirmAction = action;
+    confirmValid = valid || null;
     showMenuView("menu-confirm");
+  }
+  function viewShown(id) { return document.getElementById(id).classList.contains("show"); }
+  // The lobby entry for `target` under claim `claim`, or null once that
+  // player has gone (a new player in the same slot has a new claim).
+  function claimHolder(target, claim) {
+    for (var i = 0; lobby && i < lobby.players.length; i++) {
+      if (lobby.players[i].slot === target && lobby.players[i].claim === claim) { return lobby.players[i]; }
+    }
+    return null;
+  }
+  function rosterKey() {
+    var key = "";
+    for (var i = 0; lobby && i < lobby.players.length; i++) {
+      var p = lobby.players[i];
+      key += p.slot + ":" + p.claim + ":" + p.name + ";";
+    }
+    return key;
   }
 
   function refreshHostControls() {
@@ -1007,9 +1089,17 @@
     var others = 0;
     for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
     menuKickBtn.disabled = others === 0;
+    // Issue #164: the lobby moved on under an open menu.
+    if (viewShown("menu-confirm") && confirmValid && !confirmValid()) {
+      confirmAction = null;
+      confirmValid = null;
+      showMenuView("menu-main");
+    }
+    if (viewShown("menu-kick-list") && rosterKey() !== kickListKey) { showKickList(); }
   }
 
   function showKickList() {
+    kickListKey = rosterKey();
     kickListEl.textContent = "";
     for (var i = 0; i < lobby.players.length; i++) {
       var p = lobby.players[i];
@@ -1018,11 +1108,13 @@
       b.type = "button";
       b.textContent = "P" + (p.slot + 1) + " " + p.name;
       b.style.boxShadow = "inset 6px 0 0 " + colorOf(p.slot);
-      b.addEventListener("click", (function (target, name) {
+      b.addEventListener("click", (function (target, name, claim) {
         return function () {
-          askConfirm("Are you sure? Kick " + name + " out of the game?", function () { sendHost("kick", { slot: target }); });
+          askConfirm("Are you sure? Kick " + name + " out of the game?",
+            function () { sendHost("kick", { slot: target, claim: claim, name: name }); },
+            function () { return claimHolder(target, claim) !== null; });
         };
-      })(p.slot, p.name));
+      })(p.slot, p.name, p.claim));
       kickListEl.appendChild(b);
     }
     var back = document.createElement("button");
@@ -1059,36 +1151,48 @@
     else { sendHost("pause"); }
   });
   menuEndBtn.addEventListener("click", function () {
-    askConfirm("Are you sure? End the match for everyone?", function () { sendHost("end"); });
+    var match = lobby.match;
+    askConfirm("Are you sure? End the match for everyone?",
+      function () { sendHost("end", { match: match }); },
+      function () { return inMatch() && lobby.match === match; });
   });
   menuKickBtn.addEventListener("click", showKickList);
   document.getElementById("menu-close").addEventListener("click", closeHostMenu);
   document.getElementById("confirm-yes").addEventListener("click", function () {
     var action = confirmAction;
+    var valid = confirmValid;
     closeHostMenu();
-    if (action) { action(); }
+    if (action && (!valid || valid())) { action(); }
   });
   document.getElementById("confirm-no").addEventListener("click", function () {
     confirmAction = null;
+    confirmValid = null;
     showMenuView("menu-main");
   });
 
   // Must match ControllerServer.KICKED_REASON: a kicked phone stops retrying.
   var KICKED_REASON = "removed by the host";
+  // Must match ControllerServer.REPLACED_REASON (issue #164): this phone's id
+  // connected again elsewhere, which now holds the slot. No retry either.
+  var REPLACED_REASON = "opened somewhere else";
 
   function connect() {
     setStatus("connecting");
-    ws = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
-    ws.binaryType = "arraybuffer";
-    ws.onopen = function () {
+    // Every handler checks it still belongs to the current socket: a late
+    // event from an old one must not undo the new one's state.
+    var sock = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
+    ws = sock;
+    sock.binaryType = "arraybuffer";
+    sock.onopen = function () {
+      if (sock !== ws) { return; }
       // Identify ourselves before any binary input frame, so the host's
       // id-await stage (ControllerServer._process_websocket) has our id to
       // match before it ever needs to fall back to binding us as new.
-      ws.send(JSON.stringify({ id: CLIENT_ID }));
+      sock.send(JSON.stringify({ id: CLIENT_ID }));
       setStatus("connected");
     };
-    ws.onmessage = function (ev) {
-      if (typeof ev.data !== "string") { return; }
+    sock.onmessage = function (ev) {
+      if (sock !== ws || typeof ev.data !== "string") { return; }
       try {
         var msg = JSON.parse(ev.data);
         if (typeof msg.slot === "number") {
@@ -1104,14 +1208,18 @@
       } catch (err) { /* ignore anything that is not a known message */ }
     };
     // The host drops us for reasons a player needs to be told about: every
-    // slot is taken (a fifth phone, or a stray extra tab), or our input went
-    // quiet long enough to look like a locked screen. Show the server's
+    // slot is taken (one phone more than the host has players), or our input
+    // went quiet long enough to look like a locked screen. Show the server's
     // reason, then keep retrying -- a dropped controller must be able to
-    // rejoin by itself once a slot frees up or the phone wakes.
-    ws.onclose = function (ev) {
+    // rejoin by itself once a slot frees up or the phone wakes. Not after a
+    // kick, and not once this phone's id connected again somewhere else.
+    sock.onclose = function (ev) {
+      if (sock !== ws) { return; }
       var reason = (ev && ev.reason) ? String(ev.reason) : "";
       var kicked = reason === KICKED_REASON;
-      setStatus(kicked ? "Removed by the host" : (reason ? (reason + " — retrying") : "reconnecting"));
+      var replaced = reason === REPLACED_REASON;
+      setStatus(kicked ? "Removed by the host" : (replaced ? "Opened somewhere else" :
+        (reason ? (reason + " — retrying") : "reconnecting")));
       setSlot(-1);
       lobbyEl.className = "";
       lookEl.classList.remove("show");
@@ -1121,9 +1229,10 @@
       // player, and on reconnect the first frame should be "not touching".
       release();
       if (kicked) { kickedOut = true; showState(); return; }
+      if (replaced) { replacedOut = true; showState(); return; }
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
-    ws.onerror = function () { /* onclose does the reconnecting */ };
+    sock.onerror = function () { /* onclose does the reconnecting */ };
   }
 
   // ---- render + send loop -------------------------------------------------
