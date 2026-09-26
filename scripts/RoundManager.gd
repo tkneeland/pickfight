@@ -220,11 +220,7 @@ func _try_start_round() -> void:
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
-		var spawn: Vector2 = Vector2.ZERO
-		if slot < _stage_spawn_points.size():
-			spawn = _stage_spawn_points[slot]
-		else:
-			push_warning("RoundManager: stage has %d spawn point(s), none for slot %d; spawning at the origin" % [_stage_spawn_points.size(), slot])
+		var spawn: Vector2 = _spawn_for_slot(slot)
 		var keeps_weapon: bool = slot == _last_winner_slot
 		_players[slot].start_round(spawn, keeps_weapon)
 		_in_round.append(slot)
@@ -402,6 +398,31 @@ func _round_abandoned(alive_slots: Array[int]) -> bool:
 ## Score, per scenes/Main.tscn) and this node's own _players/_scores.
 ## Only slots in play get an entry (#45): an empty or disconnected slot's
 ## entry is hidden, so two players see two scores, not four.
+## Where `slot` starts a round: its own stage spawn point, or, on a stage with
+## fewer spawns than players (issue #138: eight players on stages built for
+## four until #137 gives every stage eight), a spawn shared round-robin and
+## nudged by `SPAWN_SHARE_OFFSET` per lap -- alternately left and right -- so
+## two players never start inside each other.
+func _spawn_for_slot(slot: int) -> Vector2:
+	var count: int = _stage_spawn_points.size()
+	if count == 0:
+		push_warning("RoundManager: stage has no spawn points; slot %d spawns at the origin" % slot)
+		return Vector2.ZERO
+	var lap: int = slot / count
+	var spawn: Vector2 = _stage_spawn_points[slot % count]
+	if lap > 0:
+		var side: float = 1.0 if slot % 2 == 0 else -1.0
+		spawn += Vector2(SPAWN_SHARE_OFFSET.x * side * lap, SPAWN_SHARE_OFFSET.y * lap)
+	return spawn
+
+## How far a player sharing a spawn point starts from the one it shares with:
+## to the side by about a body width and a little higher, so it lands beside
+## rather than on top, still on the same platform.
+const SPAWN_SHARE_OFFSET: Vector2 = Vector2(48.0, -24.0)
+
+## A podium column's width once more than four are on it (issue #138).
+const PODIUM_CROWDED_COLUMN_PX: float = 180.0
+
 func _show_scoreboard() -> void:
 	if _scoreboard == null:
 		return
@@ -1066,7 +1087,7 @@ func _refresh_lobby(state: Dictionary) -> void:
 		row.add_child(swatch)
 		var tag: String = "  (host)" if slot == state["host"] else ""
 		var label := _big_label("%s%s  -  %s" % [entry["name"], tag, "READY" if entry["ready"] else "not ready"],
-			36, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
+			36 if state["players"].size() <= 4 else 28, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
 		row.add_child(label)
 		_lobby_rows.add_child(row)
 	_lobby_target_label.text = "First to %d" % state["target"]
@@ -1098,15 +1119,24 @@ func _refresh_victory() -> void:
 		if a == _match_winner_slot or b == _match_winner_slot:
 			return a == _match_winner_slot
 		return _scores[a] > _scores[b])
+	# Five to eight on the podium (issue #138) take narrower columns and smaller
+	# names that wrap, so eight columns still fit across the 1600 px screen.
+	var crowded: bool = slots.size() > 4
+	_podium.add_theme_constant_override("separation", 16 if crowded else 40)
 	for place in slots.size():
 		var slot: int = slots[place]
 		var column := VBoxContainer.new()
 		column.alignment = BoxContainer.ALIGNMENT_END
 		column.add_theme_constant_override("separation", 8)
-		column.add_child(_big_label("%s\n%d" % [_slot_name(slot), _scores[slot]], 36, Color.WHITE))
+		var name_label: Label = _big_label("%s\n%d" % [_slot_name(slot), _scores[slot]], 24 if crowded else 36, Color.WHITE)
+		if crowded:
+			# A fixed column that a long name wraps inside rather than widens.
+			name_label.custom_minimum_size.x = PODIUM_CROWDED_COLUMN_PX
+			name_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		column.add_child(name_label)
 		var block := ColorRect.new()
 		block.color = _slot_color(slot)
-		block.custom_minimum_size = Vector2(160, PODIUM_TALLEST_PX * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
+		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
 		column.add_child(block)
 		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
 		_podium.add_child(column)

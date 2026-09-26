@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Frame-time probe (issue #108): the real game scene, four bot players, timed
+## Frame-time probe (issue #108): the real game scene, eight bot players (issue #138), timed
 ## per frame. Not a scenario -- it asserts nothing -- but the number a change
 ## to the game's per-frame cost is judged by.
 ##
@@ -20,7 +20,7 @@ extends SceneTree
 ##   --random-weapons random weapons at 60 Hz
 ##
 ## Main.tscn is used as shipped except its ControllerServer, which is swapped
-## for the scenario suite's roster stub so no sockets open and all four slots
+## for the scenario suite's roster stub so no sockets open and all eight slots
 ## are claimed from the first frame. Round modifiers are off so a run repeats.
 
 const MAIN_SCENE: PackedScene = preload("res://scenes/Main.tscn")
@@ -28,7 +28,7 @@ const StubRosterScript := preload("res://tools/stub_roster.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
 
 const WARMUP_FRAMES: int = 120
-const PLAYER_COUNT: int = 4
+const PLAYER_COUNT: int = 8
 
 var _frames: int = 3600
 var _seed: int = 108
@@ -74,6 +74,9 @@ func _initialize() -> void:
 	main.add_child(roster)
 	var round_manager: Node = main.get_node("RoundManager")
 	round_manager.rotation_seed = _seed
+	# Straight into rounds: the lobby (#120) waits for phones to ready up, and
+	# the stub roster never does.
+	round_manager.lobby_enabled = false
 	# The round-end pause is wall-clock, and a probe runs many times faster
 	# than real time: shortened so the run is rounds, not scoreboards.
 	round_manager.round_end_pause_sec = 0.05
