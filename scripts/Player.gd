@@ -55,6 +55,7 @@ const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 ## What a firing weapon shoots (issue #55, ADR-0014). See `_tick_fire()`.
 const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
 const DeathBurstScript := preload("res://scripts/DeathBurst.gd")
+const HatScript := preload("res://scripts/Hat.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
 ## deltas, and 300 sixtieths of a second may sum to a hair under 5 s.
 const FIRE_CLOCK_EPSILON: float = 0.000001
@@ -246,8 +247,11 @@ var _head_visual: Polygon2D
 var _head_visual_is_fallback: bool = false
 
 ## The persistent ring drawn around the body in `identity_color`. Built once
-## in `_ready()` and never touched again -- see `_build_identity_outline`.
+## in `_ready()`; only `set_identity_color()` repaints it.
 var _identity_outline: Line2D
+## What this player wears on its head (issue #151): a `Hat.gd` child sitting
+## on the body's top edge. Built once in `_ready()`, bare until `set_hat()`.
+var _hat: HatScript
 
 ## Firing (issue #55, ADR-0014): seconds since the held weapon last fired, or
 ## since it was put in this player's hands, and the bullets this player has
@@ -276,6 +280,7 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	_style_haft()
 	_build_identity_outline()
+	_build_hat()
 	if not start_in_round:
 		# A round loop owns this player: stay out of play, inert and
 		# unbuilt, until it calls start_round(). _build_rig() below checks
@@ -910,9 +915,10 @@ func _place_head_circles(layout: PackedVector2Array, facing: float) -> void:
 #   * The body fill is the only thing damage is allowed to touch, and it is
 #     free to converge toward DAMAGE_FILL_COLOR for every player alike --
 #     that is what "how hurt someone is shows on their body" means.
-#   * `identity_color` is what a player is found by. It never changes after
-#     `_ready()`, and it is drawn in exactly two places: the outline traced
-#     once around the body, and the weapon head's fill.
+#   * `identity_color` is what a player is found by. It changes only when the
+#     player's phone picks another colour (`set_identity_color()`, issue
+#     #151), and it is drawn in exactly two places: the outline traced around
+#     the body, and the weapon head's fill.
 #   * The weapon head is drawn as `WeaponStats.art_outline` and collides as
 #     the circles fitted inside it (ADR-0010), so a hit lands where the art
 #     is. The two cannot drift the way they had (a circular hitbox drawn as a
@@ -1066,6 +1072,60 @@ func weapon_head_circles_world() -> Array[Dictionary]:
 ## fallback for a weapon with no art -- rather than as its own `art_outline`.
 func weapon_head_visual_is_fallback() -> bool:
 	return _head_visual_is_fallback
+
+# --- Presentation: hat and chosen colour (issue #151) -------------------------
+#
+# Both are picked on the phone and applied by ControllerServer. The hat is a
+# child of the body, so it rides every swing (the body never rotates), hides
+# with the body at an elimination and comes back with it at the next spawn;
+# nothing here has to re-attach it.
+
+func _build_hat() -> void:
+	var hat: HatScript = HatScript.new()
+	hat.name = "Hat"
+	hat.position = Vector2(0.0, _body_top())
+	hat.set_tint(identity_color)
+	add_child(hat)
+	# Over the body and its outline, under the haft: a swing passes in front.
+	move_child(hat, weapon_line.get_index())
+	_hat = hat
+
+## The body polygon's top edge, in the body's frame (negative: above centre).
+func _body_top() -> float:
+	var top: float = 0.0
+	for p: Vector2 in body_visual.polygon:
+		top = minf(top, p.y)
+	return top
+
+## Wear hat `id`, one of `Hat.gd`'s IDS; anything else (or "none") is bare.
+func set_hat(id: String) -> void:
+	if _hat != null:
+		_hat.set_hat(id)
+
+func hat_id() -> String:
+	return _hat.hat_id if _hat != null else HatScript.NONE
+
+## The hat node itself, for a scenario to check where it sits.
+func hat_node() -> Node2D:
+	return _hat
+
+## How far above the body's centre the top of this player reaches: the top of
+## its hat, or the body's own top edge when bare. The name tag goes above it.
+func hat_top() -> float:
+	return -_body_top() + HatScript.height_of(hat_id())
+
+## Repaint this player in `colour` (issue #151): the outline, the weapon head
+## (unless it is the no-art fallback, which belongs to no one), the body fill's
+## undamaged end, and whatever of the hat comes in the wearer's colour.
+func set_identity_color(colour: Color) -> void:
+	identity_color = colour
+	if _identity_outline != null:
+		_identity_outline.default_color = colour
+	if _head_visual != null and not _head_visual_is_fallback:
+		_head_visual.color = colour
+	if _hat != null:
+		_hat.set_tint(colour)
+	_update_damage_visual()
 
 # --- Input ------------------------------------------------------------------
 

@@ -1060,7 +1060,10 @@ func _publish_lobby_state() -> void:
 	var roster: Array[int] = _roster()
 	var players: Array = []
 	for slot: int in roster:
-		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot)})
+		# "color" (issue #151): a phone picking a colour changes the state, so
+		# the lobby's swatches are redrawn in it.
+		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot),
+			"color": _slot_color(slot).to_html(false)})
 	var in_lobby: bool = _state == State.LOBBY or _state == State.COUNTDOWN
 	var state: Dictionary = {
 		"phase": lobby_phase(),
@@ -1285,13 +1288,20 @@ func _show_stage_title() -> void:
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	_title_tween.tween_callback(func() -> void: _title_label.visible = false)
 
-# --- Nicknames in play (issue #121) -------------------------------------------
+# --- Nicknames in play (issue #121, always on since #151) --------------------
 #
-# Each player in a round carries its phone's nickname just above its body, in
-# its colour. Part of the match UI, so only with `lobby_enabled`.
+# Every living player carries its phone's nickname ("P3" without one) above
+# its head, in its colour -- whatever the round loop is doing, lobby or not.
+# The tag clears the player's hat (issue #151), follows a colour change at
+# once, and, when fighters bunch up, a tag that would cover another's is
+# lifted clear of it so all eight stay readable.
 
-## How far above the body's centre the name tag's bottom edge sits.
+## How far above the body's centre the name tag's bottom edge sits, at least.
 const NAME_TAG_RISE: float = 40.0
+## Gap between the top of a player's hat and its name tag's bottom edge.
+const NAME_TAG_HAT_GAP: float = 6.0
+## Gap kept between two tags stacked to clear each other.
+const NAME_TAG_STACK_GAP: float = 2.0
 
 var _round_number: int = 0
 ## The slots the current (or last) round spawned, in slot order.
@@ -1299,7 +1309,7 @@ var _in_round: Array[int] = []
 var _name_tag_root: Node2D
 var _name_tags: Array[Label] = []
 
-## A slot's name tag, or null when there are none (lobby off).
+## A slot's name tag, or null before the first frame has built them.
 func name_tag(slot: int) -> Label:
 	return _name_tags[slot] if slot >= 0 and slot < _name_tags.size() else null
 
@@ -1311,8 +1321,6 @@ func _alive_slots() -> Array[int]:
 	return alive
 
 func _tick_name_tags() -> void:
-	if not lobby_enabled:
-		return
 	if _name_tag_root == null:
 		_name_tag_root = Node2D.new()
 		_name_tag_root.name = "NameTags"
@@ -1329,10 +1337,12 @@ func _tick_name_tags() -> void:
 			tag.visible = false
 			_name_tag_root.add_child(tag)
 			_name_tags.append(tag)
+	var placed: Array[Rect2] = []
+	var shown_slots: Array[int] = []
 	for slot in _players.size():
 		var player: Variant = _players[slot]
 		var tag: Label = _name_tags[slot]
-		var shown: bool = player != null and player.alive and _state == State.ROUND_ACTIVE
+		var shown: bool = player != null and player.alive and player.visible
 		tag.visible = shown
 		if not shown:
 			continue
@@ -1340,8 +1350,30 @@ func _tick_name_tags() -> void:
 		if tag.text != text:
 			tag.text = text
 			tag.reset_size()
+		var colour: Color = _slot_color(slot)
+		if tag.get_theme_color("font_color") != colour:
+			tag.add_theme_color_override("font_color", colour)
+		var rise: float = NAME_TAG_RISE
+		if player.has_method("hat_top"):
+			rise = maxf(rise, player.hat_top() + NAME_TAG_HAT_GAP)
 		var size: Vector2 = tag.get_minimum_size()
-		tag.position = player.global_position + Vector2(-size.x * 0.5, -NAME_TAG_RISE - size.y)
+		tag.position = player.global_position + Vector2(-size.x * 0.5, -rise - size.y)
+		shown_slots.append(slot)
+	# Lowest tag first; each one after it moves up past any tag it would cover.
+	shown_slots.sort_custom(func(a: int, b: int) -> bool:
+		return _name_tags[a].position.y > _name_tags[b].position.y)
+	for slot: int in shown_slots:
+		var tag: Label = _name_tags[slot]
+		var rect := Rect2(tag.position, tag.get_minimum_size())
+		var moved: bool = true
+		while moved:
+			moved = false
+			for other: Rect2 in placed:
+				if rect.intersects(other):
+					rect.position.y = other.position.y - rect.size.y - NAME_TAG_STACK_GAP
+					moved = true
+		tag.position = rect.position
+		placed.append(rect)
 
 # --- Host phone controls and how to play (issue #149) --------------------------
 #
