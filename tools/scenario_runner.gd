@@ -18038,14 +18038,17 @@ func _harness_statics_default_failures(when: String) -> Array[String]:
 
 # --- Bots read stage hazards (issue #176) ---------------------------------------
 
-## Each case: a lone bot on a stage, set down on the hazard itself, and how
-## long it has to stay alive there. Main's bot (before #176) died on both:
-## under Rockfall's bridge rock in about 10 s, knocked off the bridge, and on
-## Mill's see-saw sails in about 8 s, tipped off them. The bot now leaves the
-## rock's column when the warning shows and walks off the sails to the field.
+## Each case: a bot on its stage's first spawn, an idle rival on the second,
+## across the stage's hazard, and how long the bot has to stay alive. Main's
+## bot (before #176) died on both within 4 s: on Ferry it walked off its
+## landing onto the barge's route and into the water (about 3 s), and on Updraft
+## it walked off its ledge (2.2 s). It did from anywhere within 45 px of the
+## spawn, too. The bot now waits on ground it trusts for a way across. It
+## survived from every start in that range, so the cases do not hang on one
+## lucky throw: physics runs a little differently after other scenarios.
 const HAZARD_SURVIVAL_CASES: Array[Dictionary] = [
-	{"stage": "res://scenes/stages/Rockfall.tscn", "at": Vector2(0.0, 320.0), "seconds": 20.0},
-	{"stage": "res://scenes/stages/Mill.tscn", "at": Vector2(-120.0, 260.0), "seconds": 20.0},
+	{"stage": "res://scenes/stages/Ferry.tscn", "at": Vector2(-450.0, 300.0), "rival": Vector2(450.0, 300.0), "seconds": 10.0},
+	{"stage": "res://scenes/stages/Updraft.tscn", "at": Vector2(-500.0, 230.0), "rival": Vector2(500.0, 230.0), "seconds": 10.0},
 ]
 const HAZARD_BOT_SEED: int = 1
 
@@ -18060,6 +18063,9 @@ func _scenario_bots_survive_hazard_stages() -> Array[String]:
 		holder.add_child(player)
 		player.global_position = case["at"]
 		player.bind_controller()
+		var rival: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		holder.add_child(rival)
+		rival.global_position = case["rival"]
 		var bot: Node = BotScript.new()
 		bot.rng.seed = HAZARD_BOT_SEED
 		bot.player = player
