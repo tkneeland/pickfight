@@ -27,24 +27,29 @@
 ; Stats against the pickaxe's M/M/M baseline (retuned after the first
 ; playtest, #45): the dagger is the close-range brawler, and the owner asked
 ; for it significantly faster. Weight light -- mass 0.15 against 0.25 -- but a
-; force ceiling of 5000 against 6000: fast, yet it wins a clash of heads only
-; against the staff's 4000. Force also caps how hard the drive can pull, and
-; at 5000 the dagger answers a drag in 3 ticks. Its drive is the quickest on
-; the roster (50 rad/s, 1800 px/s out, 900 px/s back). Reach S, 80 px against
+; force ceiling of 5500 against 6000: fast, yet it wins a clash of heads only
+; against the staff's 5000. Force also caps how hard the drive can pull, and
+; at 5500 the dagger answers a drag in 3 ticks. Its drive is the quickest on
+; the roster (65 rad/s, 3400 px/s out, 1200 px/s back). Reach S, 80 px against
 ; 150, keeps it a brawler and makes climbing hard with it. Damage 45 against
 ; 34: a weapon you have to be next to someone to use should hurt when it
 ; lands. The blade was stretched 1.5x along its length only, circles
 ; refitted at the same spacing and width, every one still inside the art.
+;
+; Issue #136, more responsive: drive 50 -> 65 rad/s, extension 2600 -> 3400
+; px/s out and 900 -> 1200 px/s back, force ceiling 5000 -> 5500. The ceiling
+; stays under the medium weapons' 6000: at 6000-7500 the dagger stopped losing
+; to the axe head-on (heavy_weapon_wins_clash).
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
 max_reach = 88.0
 mass = 0.15
-drive_speed = 50.0
-extend_speed = 2600.0
-rest_return_speed = 900.0
-max_drive_force = 5000.0
+drive_speed = 65.0
+extend_speed = 3400.0
+rest_return_speed = 1200.0
+max_drive_force = 5500.0
 damage = 60.0
 sound_set = &"dagger"
 head_circle_offsets = PackedVector2Array(-4.9, -0.08, -2.77, -0.08, -0.64, -0.08, 1.48, -0.08, 3.61, -0.08, 5.74, -0.08, 7.87, -0.08)

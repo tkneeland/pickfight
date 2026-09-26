@@ -56,15 +56,19 @@
 ; stretched 1.25x tip to tip (head-local y) and no thicker. The circles were
 ; re-placed along the crescent with midpoints added, 7 -> 13, every one still
 ; clamped inside the art.
+;
+; Issue #136, more responsive: drive 24 -> 36 rad/s, extension 700 -> 950
+; px/s out and 400 -> 600 px/s back. The 6000 force ceiling stays, so clashes
+; and the axe's win over it are unchanged.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
 max_reach = 150.0
 mass = 0.25
-drive_speed = 24.0
-extend_speed = 700.0
-rest_return_speed = 400.0
+drive_speed = 36.0
+extend_speed = 950.0
+rest_return_speed = 600.0
 max_drive_force = 6000.0
 damage = 34.0
 sound_set = &"pickaxe"
