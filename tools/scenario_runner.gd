@@ -3191,6 +3191,7 @@ func _scenario_abandoned_round_ends_without_winner() -> Array[String]:
 ## run builds it, so a fresh clone would fail to resolve the name.
 const RoundManagerScript := preload("res://scripts/RoundManager.gd")
 const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
+const NameTagsScript := preload("res://scripts/NameTags.gd")
 const StubRosterScript := preload("res://tools/stub_roster.gd")
 
 ## Clear air above the arena, well apart, so a full-reach weapon never
@@ -14034,7 +14035,7 @@ func _tag_problem(rm: Node, players: Array[RigidBody2D], names: Array[String], s
 		if absf(rect.get_center().x - player.global_position.x) > slack:
 			return "P%d's tag is %.0f px off centre" % [i + 1, rect.get_center().x - player.global_position.x]
 		var clearance: float = player.global_position.y - player.hat_top() - rect.end.y
-		if clearance < RoundManagerScript.NAME_TAG_HAT_GAP - slack:
+		if clearance < NameTagsScript.NAME_TAG_HAT_GAP - slack:
 			return "P%d's tag is only %.1f px above its %s" % [i + 1, clearance, player.hat_id()]
 		for other: Rect2 in rects:
 			if rect.intersects(other):
