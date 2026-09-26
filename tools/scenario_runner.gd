@@ -12863,6 +12863,11 @@ const HAFT_DRAW_TURN_PER_TICK: float = 0.35
 ## A player's checked frames must include this many well between two ticks,
 ## where a lag between the two would show, or the check proved nothing.
 const HAFT_DRAW_MIN_BETWEEN_FRAMES: int = 10
+## Frames looked at to tell whether they are locked to ticks, and the tick
+## rate used instead when they are (#182): 50 against 60 frames a second puts
+## five frames in six between two ticks.
+const HAFT_DRAW_LOCK_PROBE_FRAMES: int = 12
+const HAFT_DRAW_LOCKED_TICKS_PER_SEC: int = 50
 ## The phased heads: each trapped under its own slab like
 ## `trapped_head_phases_home_after_release`, the slabs a column apart, and
 ## given this long after release to phase home through it.
@@ -12890,6 +12895,12 @@ func _scenario_haft_tip_meets_drawn_head_every_frame() -> Array[String]:
 		failures.append("physics interpolation is off; this scenario checks what it draws (issue #108)")
 		_scenario_completed = true
 		return failures
+	# Under `--fixed-fps 60` (#182) every frame lands on a tick and none is
+	# drawn between two, which is what this checks: tick at a rate the frames
+	# do not divide for its length instead.
+	var ticks_was: int = Engine.physics_ticks_per_second
+	if await _frames_locked_to_ticks():
+		Engine.physics_ticks_per_second = HAFT_DRAW_LOCKED_TICKS_PER_SEC
 
 	# Every weapon swinging in open air, plain and with big heads.
 	var stage: Node2D = _new_stage()
@@ -12974,8 +12985,19 @@ func _scenario_haft_tip_meets_drawn_head_every_frame() -> Array[String]:
 		await physics_frame
 	observer.measuring = false
 	failures.append_array(_haft_draw_failures(observer, labels, true))
+	Engine.physics_ticks_per_second = ticks_was
 	await _teardown(stage)
 	return failures
+
+## Whether every rendered frame lands on a physics tick, as under
+## `--fixed-fps` at the physics rate (#182): none is drawn between two.
+func _frames_locked_to_ticks() -> bool:
+	for i in HAFT_DRAW_LOCK_PROBE_FRAMES:
+		await process_frame
+		var f: float = Engine.get_physics_interpolation_fraction()
+		if f > 0.05 and f < 0.95:
+			return false
+	return true
 
 func _haft_draw_failures(observer: Node, labels: Array[String], phased: bool) -> Array[String]:
 	var failures: Array[String] = []
