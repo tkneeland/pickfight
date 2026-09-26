@@ -1,9 +1,5 @@
 # Test results
 
-Evidence for the latest work package only: issue #182 (one game clock; the suite runs under `--fixed-fps 60`).
+Evidence for the latest work package only: issue #176 (bots read stage hazards: they flee falling-rock warnings and hazard zones, keep off crumbling, collapsing and travelling ground, hold edges, and take bounce pads when a pad is the way up; with a before/after table of time to first stage death per stage). See `issue-176/README.md`.
 
-- `issue-182/full-suite-realtime.txt`: fresh-clone boot check plus the full suite in 4 parallel shards on `feat/issue-182-game-clock` 445eff6, the way `psuite.sh` runs it today. Boot is clean and the suite passes 216/216 in 10:21.
-- `issue-182/full-suite-fixed-fps-60.txt`: the same, with `--fixed-fps 60` on the scenario runner's command line. It passes 216/216 in 2:30.
-- `issue-182/main-baseline-realtime.txt`: main e91ab17 in realtime for comparison: 215/215 in 10:01.
-
-Previous package: issue #175 (RoundManager split), `issue-175/`, in `git show e91ab17`.
+Previous packages: issue #175 (RoundManager split), `issue-175/`, in `git show c31f35e`; issue #136 (responsive weapons), `issue-136/`, in `git show 56ca799`; issue #167 (audio and settings), `issue-167/`, in `git show 10f16af`; issue #168 (harness fixes), `issue-168/`, in `git show 74ed45f`.
