@@ -15482,8 +15482,9 @@ const GAP_SPAWN_TOLERANCE: float = 30.0
 ## Issue #163, finding 1: players start on spawn points in roster order, not
 ## by slot number. Stages pair their spawns left/right (Flatlands: -60/+60,
 ## then -520/+520), so a roster of slots 0 and 2 -- slot 1 left -- used to put
-## both on the left, 460 px apart on the same side. Now slot 0 takes Spawn0
-## and slot 2 takes Spawn1, on either side of the middle; slot 1 stays out.
+## both on the left, 460 px apart on the same side. Now slots 0 and 2 take
+## Spawn0 and Spawn1 between them (which way round rotates by round, #200),
+## on either side of the middle; slot 1 stays out.
 func _scenario_gap_roster_spawns_in_roster_order() -> Array[String]:
 	var failures: Array[String] = []
 	var scenes: Array[PackedScene] = [load("res://scenes/stages/Flatlands.tscn") as PackedScene]
@@ -15498,12 +15499,16 @@ func _scenario_gap_roster_spawns_in_roster_order() -> Array[String]:
 	var spawns: Array[Vector2] = _active_stage(fixture["container"]).get_spawn_points()
 	print("      slot 0 at %s, slot 2 at %s; Spawn0 %s, Spawn1 %s" % [
 		players[0].global_position, players[2].global_position, spawns[0], spawns[1]])
-	for pair: Array in [[0, 0], [2, 1]]:
-		var slot: int = pair[0]
-		var spawn: Vector2 = spawns[pair[1]]
-		if absf(players[slot].global_position.x - spawn.x) > GAP_SPAWN_TOLERANCE:
-			failures.append("slot %d started at x %.0f, not on Spawn%d at x %.0f" % [
-				slot, players[slot].global_position.x, pair[1], spawn.x])
+	# Between them, not necessarily in that order: since #200 the places are
+	# rotated a seeded amount each round, so slot 0 may take Spawn1.
+	var on_pair: Dictionary = {}
+	for slot: int in [0, 2]:
+		for i in 2:
+			if absf(players[slot].global_position.x - spawns[i].x) <= GAP_SPAWN_TOLERANCE:
+				on_pair[i] = slot
+	if on_pair.size() != 2:
+		failures.append("slots 0 and 2 started at x %.0f and %.0f, not on Spawn0 (x %.0f) and Spawn1 (x %.0f) between them" % [
+			players[0].global_position.x, players[2].global_position.x, spawns[0].x, spawns[1].x])
 	if signf(players[0].global_position.x) == signf(players[2].global_position.x):
 		failures.append("slots 0 and 2 both started on the same side (x %.0f and %.0f)" % [
 			players[0].global_position.x, players[2].global_position.x])
