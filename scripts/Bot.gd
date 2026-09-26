@@ -22,8 +22,30 @@ extends Node
 ##   much nearer than anyone to hit; otherwise the nearest player.
 ## - **Staying alive**: it will not vault towards open air with no ground
 ##   under it, and once the lava comes close it heads up instead.
+## - **Reading the stage** (issue #176): the ground ahead has to be ground it
+##   can trust. Hazard zones (with a margin) and the column under a falling
+##   rock's warning count as no ground at all, and so does a spinning
+##   platform, a crumbling ledge or collapsing floor that is already giving
+##   way, and a bounce pad (it throws the body somewhere else). Crumbling
+##   ledges, collapsing floors and see-saws are "unstable": the bot does not
+##   step onto one from solid ground, and standing on one it heads for the
+##   nearest solid ground. It only steps over a gap narrow enough to step
+##   over; a wider one it waits at, well back from the edge, so a moving
+##   platform is boarded when it comes alongside. It does not swing with an
+##   edge close behind it, nor back off towards one. Standing under a rock's
+##   warning, in a hazard's margin or on ground that is giving way, it
+##   flees. A bounce pad is used on purpose when the target is high above
+##   and a pad on the bot's own floor is the way up.
 ##
 ## Preloaded by path (CLAUDE.md), never referenced by a `class_name`.
+
+const KillZoneScript: GDScript = preload("res://scripts/KillZone.gd")
+const CrumblingLedgeScript: GDScript = preload("res://scripts/CrumblingLedge.gd")
+const CollapsingFloorScript: GDScript = preload("res://scripts/CollapsingFloor.gd")
+const RotatingPlatformScript: GDScript = preload("res://scripts/RotatingPlatform.gd")
+const BouncePadScript: GDScript = preload("res://scripts/BouncePad.gd")
+const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
+const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
 
 ## Player.LAYER_WORLD: terrain and bodies. Heads are on their own layer, so
 ## the rays below never see one.
@@ -66,12 +88,14 @@ const CEILING_SCAN_MAX: float = 480.0
 const BODY_RADIUS: float = 24.0
 ## How far below a point the bot looks for ground to land on.
 const GROUND_PROBE: float = 1400.0
-## How far ahead the bot checks for ground before vaulting sideways.
+## How far ahead the bot checks for ground before vaulting sideways. (Issue
+## #176 dropped the jump over any gap with ground 320 px beyond it: measured,
+## the vault falls short of most of them.)
 const EDGE_LOOKAHEAD: float = 150.0
-## A gap is jumped when there is ground this far ahead beyond it.
-const GAP_LOOKAHEAD: float = 320.0
 ## How close the lava may come below before the bot climbs instead.
 const LAVA_WORRY: float = 280.0
+## The bot starts worrying about the lava this long before its grace ends.
+const LAVA_GRACE_HEADSTART: float = 2.0
 ## No real progress for this long and the bot vaults somewhere at random for
 ## WIGGLE_SEC, to get out of whatever it is stuck in.
 const STUCK_SEC: float = 1.6
@@ -82,6 +106,56 @@ const WIGGLE_SEC: float = 0.8
 const PICKUP_DETOUR: float = 0.5
 const PICKAXE_PATH: String = "res://resources/pickaxe.tres"
 
+## Issue #176: what the ground under a point is. NONE is open air, a hazard,
+## or ground about to go; UNSTABLE is ground that will not last (a crumbling
+## ledge, a collapsing floor, a see-saw); PAD is a bounce pad.
+const FOOT_NONE: int = 0
+const FOOT_UNSTABLE: int = 1
+const FOOT_SOLID: int = 2
+const FOOT_PAD: int = 3
+## Ground this far below the body's edge counts as under its feet.
+const FOOT_SLACK: float = 20.0
+## The step between the points checked for ground along the way ahead.
+const SCAN_STEP: float = 25.0
+## A gap this wide or narrower is stepped over; a wider one is waited at.
+const GAP_STEP_MAX: float = 60.0
+## Nearer than this to an edge, with nowhere to go that way, the bot steps
+## back from it.
+const EDGE_KEEP: float = 75.0
+## The room the bot wants behind it before it swings: a swing throws the
+## body back, away from the target.
+const ATTACK_EDGE_ROOM: float = 200.0
+## Hazard zones count as this much bigger than they are.
+const HAZARD_MARGIN: float = 50.0
+## Room either side of a falling rock's column, past the rock and a body.
+const ROCK_MARGIN: float = 45.0
+## How far either way the bot looks for solid ground to leave unstable
+## ground for, and how much ground past a hazard or a rock's column it
+## wants on the side it flees to.
+const SOLID_SEARCH: float = 600.0
+const FLEE_DISTANCE: float = 200.0
+## A target this far above sends the bot to a bounce pad on its own floor,
+## if there is one within PAD_SEARCH.
+const PAD_CLIMB: float = 150.0
+const PAD_SEARCH: float = 700.0
+## A pad this close in height to the bot's own ground is on its floor.
+const PAD_FLOOR_SLACK: float = 40.0
+## A moving platform travelling further than this sideways counts as ground
+## that will not last.
+const SIDEWAYS_TRAVEL: float = 20.0
+const LIFT_TRAVEL: float = 150.0
+## Ground further than this below a point is too far to drop to on purpose:
+## a step off an edge onto it is a fall.
+const MAX_DROP: float = 240.0
+## How far the bot's own speed carries it: the edge check looks this many
+## seconds of its speed further ahead.
+const MOMENTUM_SEC: float = 0.3
+## Slower than this with nothing to push off, the bot is resting on an
+## edge's corner; it flings its head this way (x mirrored away from the
+## ground) to rock back onto it.
+const PERCHED_SPEED: float = 40.0
+const PERCH_FLING: Vector2 = Vector2(0.8, -0.6)
+
 ## The `Player` this bot drives, and where its input goes.
 var player: Node2D
 var output: Callable = Callable()
@@ -89,9 +163,10 @@ var output: Callable = Callable()
 ## seed set before the bot enters the tree is kept (issue #165).
 var rng := RandomNumberGenerator.new()
 
-## What the bot is doing, for the scenarios: "idle", "move", "attack" or
-## "back" (stepping away from someone too close to swing at), and the point
-## it is heading for.
+## What the bot is doing, for the scenarios: "idle", "move", "attack",
+## "back" (stepping away from someone too close to swing at) or "flee"
+## (getting out from under a hazard, issue #176), and the point it is
+## heading for.
 var mode: String = "idle"
 var goal: Vector2 = Vector2.ZERO
 ## The last vector sent.
@@ -109,12 +184,29 @@ var _airborne: bool = true
 var _progress_from: Vector2 = Vector2.ZERO
 var _progress_left: float = STUCK_SEC
 var _wiggle_left: float = 0.0
+## True while the way to the goal is blocked by an edge or a hazard, and the
+## bot waits there rather than going over.
+var _held_at_edge: bool = false
 var _lava: Area2D = null
-## Whether this life has looked for the lava yet. The stage only changes
-## between rounds, while the bot is out, so once a life is enough (#165).
+## Whether this life has read the stage yet: its lava, hazard zones, falling
+## rocks and bounce pads. The stage only changes between rounds, while the
+## bot is out, so once a life is enough (#165).
 var _lava_looked_up: bool = false
-## How many times the tree has been searched for the lava, for the scenarios.
+## How many times the tree has been searched for the lava (and, since #176,
+## the rest of the stage's hazards with it), for the scenarios.
 var lava_lookups: int = 0
+## The stage's hazard zones (KillZone areas other than the lava), as world
+## rectangles grown by HAZARD_MARGIN; its falling rocks and bounce pads.
+var _hazard_rects: Array[Rect2] = []
+var _rocks: Array[Node2D] = []
+var _pads: Array[Node2D] = []
+## The hazard rectangles plus the columns under any rock now warning or
+## falling: built once a physics tick.
+var _danger: Array[Rect2] = []
+var _danger_frame: int = -1
+## True while the bot is heading for a bounce pad on purpose, so the pad
+## counts as ground to walk onto.
+var _pad_route: bool = false
 ## The players' bodies, which every ray ignores: gathered once a physics tick,
 ## not once a ray (issue #165).
 var _rids: Array[RID] = []
@@ -136,6 +228,11 @@ func think(delta: float) -> Vector2:
 		_target = null
 		_lava = null
 		_lava_looked_up = false
+		_hazard_rects.clear()
+		_rocks.clear()
+		_pads.clear()
+		_danger_frame = -1
+		_pad_route = false
 		return Vector2.ZERO
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
@@ -155,17 +252,30 @@ func _choose_goal() -> void:
 	var pickup: Node2D = _nearest_pickup()
 	var pickup_distance: float = me.distance_to(pickup.global_position) if pickup != null else INF
 	var lava_close: bool = _lava_worry()
+	_pad_route = false
+	# Out from under a rock, out of a hazard's margin, off ground giving way
+	# or ground that will not last: before anything else (issue #176).
+	var escape: Vector2 = _escape_goal()
+	if escape != Vector2.INF and not lava_close:
+		mode = "flee"
+		_target = null
+		goal = escape
+		return
 	if enemy != null and enemy_distance < _reach() * CLOSE_FRACTION and not lava_close:
 		# Too close to swing fast: a short lever moves the head slowly, and
 		# a slow head does no damage. Step back out to a swinging distance,
-		# unless there is no ground that way.
+		# unless there is no ground that way, or not enough of it.
 		var away: float = _safe_side(signf(me.x - enemy.global_position.x) if me.x != enemy.global_position.x else 1.0)
-		if away != 0.0:
+		if away != 0.0 and _edge_room(away, BACK_OFF_DISTANCE + EDGE_KEEP) >= BACK_OFF_DISTANCE + EDGE_KEEP:
 			mode = "back"
 			_target = enemy
 			goal = Vector2(me.x + away * BACK_OFF_DISTANCE, me.y)
 			return
-	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS and not lava_close:
+	# A swing throws the body back, away from the target: with an edge close
+	# behind, the bot presses in towards the target instead (issue #176).
+	var behind: float = -signf(enemy.global_position.x - me.x) if enemy != null and enemy.global_position.x != me.x else 0.0
+	var room_behind: bool = behind == 0.0 or _edge_room(behind, ATTACK_EDGE_ROOM) >= ATTACK_EDGE_ROOM
+	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS and not lava_close and room_behind:
 		if mode != "attack":
 			_phase = 0
 			_phase_left = SWING_SEC
@@ -184,20 +294,34 @@ func _choose_goal() -> void:
 		goal = me
 	if lava_close:
 		goal = Vector2(goal.x, minf(goal.y, me.y - 300.0))
+	elif goal.y < me.y - PAD_CLIMB:
+		var pad: Vector2 = _pad_towards(goal)
+		if pad != Vector2.INF:
+			_pad_route = true
+			goal = pad
 
+## The nearest player the bot can walk to (issue #176), or failing that the
+## nearest at all: it waits at the edge for that one.
 func _nearest_enemy() -> Node2D:
 	var best: Node2D = null
 	var best_distance: float = INF
+	var walkable: Node2D = null
+	var walkable_distance: float = INF
 	for other: Node in player.get_tree().get_nodes_in_group("players"):
 		if other == player or not _alive(other):
 			continue
-		var d: float = player.global_position.distance_to((other as Node2D).global_position)
+		var at: Vector2 = (other as Node2D).global_position
+		var d: float = player.global_position.distance_to(at)
 		if d < best_distance:
 			best_distance = d
 			best = other
-	return best
+		if d < walkable_distance and _walkable_to(at.x):
+			walkable_distance = d
+			walkable = other
+	return walkable if walkable != null else best
 
-## The nearest pickup with ground under it: one over open air is bait.
+## The nearest pickup with solid ground under it and either side of it: one
+## over open air, a hazard, a pad or ground that will not last is bait.
 func _nearest_pickup() -> Node2D:
 	var best: Node2D = null
 	var best_distance: float = INF
@@ -206,7 +330,8 @@ func _nearest_pickup() -> Node2D:
 			continue
 		var at: Vector2 = (pickup as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
-		if d < best_distance and _over_ground(at):
+		if d < best_distance and _footing(at) == FOOT_SOLID and _footing(at + Vector2(EDGE_KEEP, 0.0)) == FOOT_SOLID \
+				and _footing(at - Vector2(EDGE_KEEP, 0.0)) == FOOT_SOLID and _walkable_to(at.x):
 			best_distance = d
 			best = pickup
 	return best
@@ -300,13 +425,35 @@ func _pick_anchor() -> void:
 		# Shallow only: from any higher, the bot falls back to the ground
 		# first, rather than vaulting steeply and staying up in the air.
 		candidates.append(Vector2(-side * 0.92, 0.38))
+		# Standing at an edge and heading away from it, the shallow anchor
+		# is over the drop: plant steeply instead, just behind the feet
+		# (issue #176). So too when the bot rests up on its own head, too
+		# high for the shallow one to reach the ground.
+		var body := player as RigidBody2D
+		var resting: bool = body != null and body.linear_velocity.length() < PERCHED_SPEED
+		if resting or _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + FOOT_SLACK)):
+			candidates.append(Vector2(-side * 0.38, 0.92))
+			# Right at the edge even that is over the drop: all but
+			# straight down, a hop that drifts the bot back from it.
+			candidates.append(Vector2(-side * 0.15, 0.99).normalized())
 	# The first one with ground to plant on. Where none has, the bot is in
 	# the air: it holds the head short and low, ready to plant on landing,
 	# without pogoing on it.
 	_airborne = true
 	for dir: Vector2 in candidates:
-		if _ray_hits(me, me + dir * (_reach() + ANCHOR_SLACK)):
+		if _floor_hit(me, me + dir * (_reach() + ANCHOR_SLACK)):
 			_anchor = dir
+			_anchor_length = AIM_LENGTH
+			_airborne = false
+			return
+	# Perched on an edge's corner, the body's middle over the drop and no
+	# ground behind to push off: fling the head out over the drop, and the
+	# kick of it rocks the body back onto the ground (issue #176).
+	var body := player as RigidBody2D
+	if side != 0.0 and body != null and body.linear_velocity.length() < PERCHED_SPEED and _standing_on() == FOOT_NONE:
+		var foot: Vector2 = me + Vector2(side * BODY_RADIUS, 0.0)
+		if _ray_hits(foot, foot + Vector2(0.0, BODY_RADIUS + FOOT_SLACK)):
+			_anchor = PERCH_FLING * Vector2(-side, 1.0)
 			_anchor_length = AIM_LENGTH
 			_airborne = false
 			return
@@ -324,15 +471,149 @@ func _travel_side() -> float:
 		side = signf(to_goal.x)
 	if to_goal.y < -CLIMB_THRESHOLD and _ray_hits(me, me + Vector2(0.0, -CEILING_PROBE)):
 		side = _way_round_ceiling(side)
-	return _safe_side(side)
+	# Getting off ground that is going, or over none: straight for the
+	# solid ground, the way there checked already (issue #176).
+	if mode == "flee" and _standing_on() != FOOT_SOLID:
+		return side
+	var safe: float = _safe_side(side)
+	_held_at_edge = side != 0.0 and safe == 0.0
+	if safe == 0.0:
+		# Stopped by an edge or a hazard (issue #176): not right at it,
+		# where a knock or its own swing puts the bot over.
+		safe = _step_back_from_edges()
+	return safe
 
-## `side`, or 0 where heading that way is open air with nothing to land on.
+## `side`, or 0 where the way ahead is no ground the bot can trust: open
+## air, a hazard, a pad, or ground that will not last when the bot is on
+## solid ground (issue #176). A gap of up to GAP_STEP_MAX is stepped over.
 func _safe_side(side: float) -> float:
-	var me: Vector2 = player.global_position
-	if side != 0.0 and not _over_ground(me + Vector2(side * EDGE_LOOKAHEAD, 0.0)) \
-			and not _over_ground(me + Vector2(side * GAP_LOOKAHEAD, 0.0)):
+	if side == 0.0:
 		return 0.0
-	return side
+	var ahead: float = EDGE_LOOKAHEAD + _momentum(side)
+	return side if _edge_room(side, ahead) >= ahead else 0.0
+
+## How far the body's speed along `side` carries it on its own.
+func _momentum(side: float) -> float:
+	var body := player as RigidBody2D
+	if body == null:
+		return 0.0
+	return maxf(body.linear_velocity.x * side, 0.0) * MOMENTUM_SEC
+
+## The side away from an edge nearer than EDGE_KEEP, or 0 where neither is.
+func _step_back_from_edges() -> float:
+	var keep_right: float = EDGE_KEEP + _momentum(1.0)
+	var keep_left: float = EDGE_KEEP + _momentum(-1.0)
+	var right: float = _edge_room(1.0, keep_right)
+	var left: float = _edge_room(-1.0, keep_left)
+	if right < keep_right and left >= EDGE_KEEP:
+		return -1.0
+	if left < keep_left and right >= EDGE_KEEP:
+		return 1.0
+	return 0.0
+
+## How far the bot can go along `side` on ground it trusts, up to `limit`,
+## stepping over any gap of up to GAP_STEP_MAX.
+func _edge_room(side: float, limit: float, past_danger: bool = false) -> float:
+	var me: Vector2 = player.global_position
+	var from: int = _standing_on()
+	var d: float = SCAN_STEP
+	while d <= limit:
+		if not _can_step(_footing(me + Vector2(side * d, 0.0), past_danger), from):
+			var gap_end: float = d + SCAN_STEP
+			var crossed: bool = false
+			while gap_end <= d + GAP_STEP_MAX:
+				if _can_step(_footing(me + Vector2(side * gap_end, 0.0), past_danger), from):
+					crossed = true
+					break
+				gap_end += SCAN_STEP
+			if not crossed:
+				return d - SCAN_STEP
+			d = gap_end
+		d += SCAN_STEP
+	return limit
+
+## Whether the bot could walk to `x` on ground it trusts, at its own
+## height, stepping over narrow gaps only (issue #176). Checked coarsely:
+## this is for choosing what to go for, not for placing a foot.
+func _walkable_to(x: float) -> bool:
+	var me: Vector2 = player.global_position
+	var span: float = absf(x - me.x)
+	var side: float = signf(x - me.x)
+	if span <= SCAN_STEP * 2.0:
+		return true
+	var from: int = _standing_on()
+	var step: float = GAP_STEP_MAX * 0.5
+	var d: float = step
+	var bad_run: float = 0.0
+	while d < span:
+		if _can_step(_footing(me + Vector2(side * d, 0.0)), from):
+			bad_run = 0.0
+		else:
+			bad_run += step
+			if bad_run > GAP_STEP_MAX:
+				return false
+		d += step
+	return true
+
+## Whether ground of kind `kind` is somewhere to step, for a bot now on
+## ground of kind `from`.
+func _can_step(kind: int, from: int) -> bool:
+	match kind:
+		FOOT_SOLID:
+			return true
+		FOOT_UNSTABLE:
+			return from != FOOT_SOLID
+		FOOT_PAD:
+			return _pad_route
+	return false
+
+## What the bot is standing on, or over, now.
+func _standing_on() -> int:
+	return _footing(player.global_position)
+
+## What the ground under `point` is (FOOT_*): the first terrain straight
+## below it, above the lava, with no hazard (or falling rock's column) in
+## between. A point inside terrain counts as that terrain.
+func _footing(point: Vector2, past_danger: bool = false) -> int:
+	var bottom: float = minf(point.y + GROUND_PROBE, _lava_top())
+	if bottom <= point.y:
+		return FOOT_NONE
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(point, Vector2(point.x, bottom), LAYER_WORLD, _player_rids())
+	query.hit_from_inside = true
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty():
+		return FOOT_NONE
+	var ground_y: float = (hit["position"] as Vector2).y
+	if ground_y - point.y > MAX_DROP:
+		return FOOT_NONE
+	for rect: Rect2 in ([] as Array[Rect2]) if past_danger else _danger_rects():
+		if point.x >= rect.position.x and point.x <= rect.end.x \
+				and rect.position.y <= ground_y + BODY_RADIUS and rect.end.y >= point.y:
+			return FOOT_NONE
+	return _ground_kind(hit["collider"])
+
+## FOOT_* for a piece of terrain.
+func _ground_kind(collider: Object) -> int:
+	if collider == null:
+		return FOOT_NONE
+	var script: Script = collider.get_script()
+	if script == CrumblingLedgeScript:
+		return FOOT_UNSTABLE if collider.call("visual_color") == CrumblingLedgeScript.SOLID_COLOR else FOOT_NONE
+	if script == CollapsingFloorScript:
+		return FOOT_UNSTABLE if collider.call("state_name") == "solid" else FOOT_NONE
+	if script == RotatingPlatformScript:
+		return FOOT_UNSTABLE if int(collider.get("mode")) == RotatingPlatformScript.Mode.SEESAW else FOOT_NONE
+	if script == BouncePadScript:
+		return FOOT_PAD
+	# A platform moving sideways (a ferry's barge) is gone from under a
+	# step a moment later, and a lift a long way up or down is soon far from
+	# where it was stepped on; a piston's short stroke is ground enough.
+	if script == MovingPlatformScript:
+		var travel: Vector2 = collider.get("travel")
+		if absf(travel.x) > SIDEWAYS_TRAVEL or absf(travel.y) > LIFT_TRAVEL:
+			return FOOT_UNSTABLE
+	return FOOT_SOLID
 
 ## The side of the nearest clear column above the bot, preferring `side` on
 ## a tie; `side` itself if the whole scan is covered.
@@ -343,20 +624,34 @@ func _way_round_ceiling(side: float) -> float:
 	while step <= CEILING_SCAN_MAX:
 		for s: float in [first, -first]:
 			var x: Vector2 = me + Vector2(s * step, 0.0)
-			if not _ray_hits(x, x + Vector2(0.0, -CEILING_PROBE)) and _over_ground(x):
+			if not _ray_hits(x, x + Vector2(0.0, -CEILING_PROBE)) and _footing(x) != FOOT_NONE:
 				return s
 		step += CEILING_SCAN_STEP
 	return side
+
+## Whether the ray from `from` to `to` meets ground facing up, to plant a
+## head on (issue #176): the side of a ledge below its edge is no anchor,
+## and a push into it throws the bot out over the drop.
+func _floor_hit(from: Vector2, to: Vector2) -> bool:
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(from, to, LAYER_WORLD, _player_rids())
+	var hit: Dictionary = space.intersect_ray(query)
+	return not hit.is_empty() and (hit["normal"] as Vector2).y < -0.5
 
 func _ray_hits(from: Vector2, to: Vector2) -> bool:
 	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
 	var query := PhysicsRayQueryParameters2D.create(from, to, LAYER_WORLD, _player_rids())
 	return not space.intersect_ray(query).is_empty()
 
-## Whether the lava is rising and close below.
+## Whether the lava is rising and close below. Not during the grace before
+## it sets off: `is_rising()` is true from the round's start, and a bot on a
+## low stage that worried all through the grace climbed instead of getting
+## off ground giving way under it (issue #176).
 func _lava_worry() -> bool:
 	var top: float = _lava_top()
 	if _lava == null or not bool(_lava.call("is_rising")):
+		return false
+	if float(_lava.get("_grace_left")) > LAVA_GRACE_HEADSTART:
 		return false
 	return top - player.global_position.y < LAVA_WORRY
 
@@ -370,21 +665,106 @@ func _player_rids() -> Array[RID]:
 				_rids.append((other as CollisionObject2D).get_rid())
 	return _rids
 
-## Whether there is ground under `point`, above the lava.
-func _over_ground(point: Vector2) -> bool:
+## The hazard rectangles, plus the column under every falling rock that is
+## warning or falling (issue #176). Built once a physics tick.
+func _danger_rects() -> Array[Rect2]:
+	var frame: int = Engine.get_physics_frames()
+	if frame == _danger_frame:
+		return _danger
+	_danger_frame = frame
+	_lava_top()
+	_danger.clear()
+	_danger.append_array(_hazard_rects)
+	for rock: Node2D in _rocks:
+		if not is_instance_valid(rock) or not rock.is_inside_tree():
+			continue
+		var state: String = rock.call("state_name")
+		if state != "warning" and state != "falling":
+			continue
+		var half: float = float(rock.get("rock_radius")) + BODY_RADIUS + ROCK_MARGIN
+		var top: float = (rock.call("rock_position") as Vector2).y
+		var landing: Vector2 = rock.call("landing_point")
+		var bottom: float = landing.y + BODY_RADIUS * 2.0 if not is_nan(landing.y) else top + GROUND_PROBE * 3.0
+		_danger.append(Rect2(rock.global_position.x - half, top, half * 2.0, maxf(bottom - top, 1.0)))
+	return _danger
+
+## Where to go to get out of trouble (issue #176), or Vector2.INF when the
+## bot is in none: from under a falling rock's warning, out of a hazard's
+## margin, off ground that is giving way (or over none), or off unstable
+## ground to the nearest solid ground.
+func _escape_goal() -> Vector2:
+	var me: Vector2 = player.global_position
+	for rect: Rect2 in _danger_rects():
+		if rect.has_point(me) or (me.x >= rect.position.x and me.x <= rect.end.x and me.y <= rect.end.y and me.y >= rect.position.y - BODY_RADIUS):
+			# Out the nearer side, unless the other has more ground past
+			# the danger to stand on: fleeing a rock towards an edge is
+			# fleeing off the stage.
+			var away: float = signf(me.x - rect.get_center().x)
+			if away == 0.0:
+				away = 1.0
+			var out: float = rect.end.x - me.x if away > 0.0 else me.x - rect.position.x
+			var out_other: float = rect.size.x - out
+			var room: float = _edge_room(away, out + FLEE_DISTANCE, true) - out
+			var room_other: float = _edge_room(-away, out_other + FLEE_DISTANCE, true) - out_other
+			if room < FLEE_DISTANCE and room_other > room:
+				away = -away
+				out = out_other
+			return Vector2(me.x + away * (out + EDGE_KEEP), me.y)
+	var kind: int = _standing_on()
+	if kind == FOOT_SOLID:
+		return Vector2.INF
+	# Over nothing (or ground giving way), or on ground that will not last:
+	# to the nearest solid ground either way, if there is any near enough.
+	var best: float = INF
+	for side: float in [1.0, -1.0]:
+		var d: float = SCAN_STEP
+		while d <= SOLID_SEARCH:
+			if _footing(me + Vector2(side * d, 0.0)) == FOOT_SOLID:
+				if d < absf(best):
+					best = side * d
+				break
+			d += SCAN_STEP
+	if best == INF:
+		return Vector2.INF
+	return Vector2(me.x + best + signf(best) * EDGE_KEEP, me.y)
+
+## The nearest bounce pad on the bot's own floor that it can walk to, when
+## the target is high above (issue #176): the pad is the way up. The bot
+## runs onto it and the launch keeps its run. Vector2.INF when there is none.
+func _pad_towards(high: Vector2) -> Vector2:
+	if _pads.is_empty() or _standing_on() != FOOT_SOLID:
+		return Vector2.INF
+	var me: Vector2 = player.global_position
 	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
-	var bottom: float = minf(point.y + GROUND_PROBE, _lava_top())
-	if bottom <= point.y:
-		return false
-	var query := PhysicsRayQueryParameters2D.create(point, Vector2(point.x, bottom), LAYER_WORLD, _player_rids())
-	return not space.intersect_ray(query).is_empty()
+	var query := PhysicsRayQueryParameters2D.create(me, me + Vector2(0.0, GROUND_PROBE), LAYER_WORLD, _player_rids())
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty():
+		return Vector2.INF
+	var floor_y: float = (hit["position"] as Vector2).y
+	var best: Vector2 = Vector2.INF
+	for pad: Node2D in _pads:
+		if not is_instance_valid(pad) or not pad.is_inside_tree():
+			continue
+		var at: Vector2 = pad.global_position
+		if absf(at.y - floor_y) > PAD_FLOOR_SLACK or absf(at.x - me.x) > PAD_SEARCH:
+			continue
+		if absf(at.x - me.x) >= absf(best.x - me.x):
+			continue
+		_pad_route = true
+		var reachable: bool = _walkable_to(at.x)
+		_pad_route = false
+		if reachable:
+			best = at
+	return best
 
 ## No real progress towards the goal for STUCK_SEC and the bot wiggles.
 func _track_progress(delta: float) -> void:
 	if _wiggle_left > 0.0:
 		_wiggle_left -= delta
 		return
-	if mode != "move":
+	# Waiting at an edge on purpose is not being stuck: a wiggle there is
+	# how a bot used to hop off it (issue #176).
+	if (mode != "move" and mode != "flee") or _held_at_edge:
 		_progress_from = player.global_position
 		_progress_left = STUCK_SEC
 		return
@@ -407,9 +787,41 @@ func _lava_top() -> float:
 			if node.has_method("is_rising"):
 				_lava = node as Area2D
 				break
+		_read_stage()
 	if _lava == null:
 		return INF
 	return _lava.global_position.y + _lava_top_offset()
+
+## The stage's other hazards, read with the lava once a life (issue #176):
+## its hazard zones (KillZone areas other than the lava), falling rocks and
+## bounce pads. The stage is the lava's parent; with no lava there is no
+## stage to read.
+func _read_stage() -> void:
+	_hazard_rects.clear()
+	_rocks.clear()
+	_pads.clear()
+	_danger_frame = -1
+	if _lava == null or _lava.get_parent() == null:
+		return
+	for node: Node in _lava.get_parent().find_children("*", "", true, false):
+		var script: Script = node.get_script()
+		if script == KillZoneScript and node != _lava:
+			var rect: Rect2 = _zone_rect(node as Area2D)
+			if rect.has_area():
+				_hazard_rects.append(rect.grow(HAZARD_MARGIN))
+		elif script == FallingRockScript:
+			_rocks.append(node as Node2D)
+		elif script == BouncePadScript:
+			_pads.append(node as Node2D)
+
+## A zone's rectangle shape in world space (unrotated, as stages place them).
+func _zone_rect(zone: Area2D) -> Rect2:
+	for child: Node in zone.get_children():
+		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+			var shape := child as CollisionShape2D
+			var size: Vector2 = (shape.shape as RectangleShape2D).size * zone.global_scale.abs()
+			return Rect2(shape.global_position - size * 0.5, size)
+	return Rect2()
 
 ## The zone's surface relative to its node, the way KillZone draws it.
 func _lava_top_offset() -> float:

@@ -13,9 +13,33 @@ extends SceneTree
 ## off, bot-minutes alive pre-lava, falls per bot-minute, and the median time
 ## to a round's first elimination. The lobby is switched off, the round-end
 ## pause shortened and round modifiers disabled, as in perf_probe.gd.
+##
+## `--brain=bot` (issue #176) drives every player with the real `Bot.gd`
+## instead, seeded from --seed, its input through the same smoothing a
+## phone's takes. The line then also reports stage deaths: eliminations with
+## no strike from another player in the STRUCK_SEC before, so a bot knocked
+## off by a rival is not counted against the stage. `first_stage_death_s` is
+## the mean, over rounds, of the time to the round's first stage death, with a
+## round that had none counted at the lava's grace (a lower bound).
 const MAIN_SCENE: PackedScene = preload("res://scenes/Main.tscn")
 const StubRosterScript := preload("res://tools/stub_roster.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
+const BotType := preload("res://scripts/Bot.gd")
+const ControllerServerType := preload("res://scripts/ControllerServer.gd")
+## An elimination this soon after a strike from another player is the
+## striker's, not the stage's.
+const STRUCK_SEC: float = 2.0
+var _brain: String = "random"
+## --verbose: one ELIM line per elimination, for tuning the bots.
+var _verbose: bool = false
+## Each bot's mode and position every 10 ticks, the last few, for --verbose.
+var _mode_log: Array = []
+var _brains: Array[Node] = []
+var _smoothers: Array = []
+var _last_struck: Dictionary = {}
+var _stage_deaths: int = 0
+var _round_stage_death: bool = false
+var _first_stage_ticks: Array[int] = []
 const MAX_PLAYERS: int = 8
 var _player_count: int = 4
 var _stage: String = "Flatlands"
@@ -46,6 +70,8 @@ func _initialize() -> void:
 		elif arg.begins_with("--seconds="): _seconds = arg.trim_prefix("--seconds=").to_float()
 		elif arg.begins_with("--seed="): _seed = arg.trim_prefix("--seed=").to_int()
 		elif arg.begins_with("--players="): _player_count = clampi(arg.trim_prefix("--players=").to_int(), 2, MAX_PLAYERS)
+		elif arg.begins_with("--brain="): _brain = arg.trim_prefix("--brain=")
+		elif arg == "--verbose": _verbose = true
 	seed(_seed)
 	_rng.seed = _seed
 	RoundManagerType.modifier_rolls_enabled = false
@@ -67,7 +93,10 @@ func _initialize() -> void:
 	_rm.stage_scenes = scenes
 	_grace_ticks = int(_rm.kill_zone_grace_sec * 60.0)
 	_rm.round_started.connect(func() -> void:
+		_close_round()
 		_rounds += 1
+		_round_stage_death = false
+		_last_struck.clear()
 		_round_tick = Engine.get_physics_frames()
 		_round_had_elim = false
 		var stage: Node2D = _rm.get("_current_stage")
@@ -76,7 +105,19 @@ func _initialize() -> void:
 		var player: RigidBody2D = main.get_node("Player%d" % (i + 1)) as RigidBody2D
 		player.bind_controller()
 		player.eliminated.connect(_on_elim.bind(player))
+		player.strike_landed.connect(func(victim: Node, _amount: float, _point: Vector2, _lethal: bool) -> void:
+			_last_struck[victim] = Engine.get_physics_frames())
 		_players.append(player)
+		if _brain == "bot":
+			var bot: Node = BotType.new()
+			bot.name = "ProbeBot%d" % i
+			bot.rng.seed = _seed * 100 + i
+			bot.player = player
+			var smoother: RefCounted = ControllerServerType.InputSmoother.new()
+			_smoothers.append(smoother)
+			bot.output = func(v: Vector2) -> void: smoother.push(v)
+			_brains.append(bot)
+			main.add_child(bot)
 		_bots.append({"mode": 0, "until": 0, "phase": _rng.randf() * TAU, "rate": _rng.randf_range(4.0, 9.0)})
 	get_root().add_child(main)
 	current_scene = main
@@ -103,6 +144,27 @@ func _on_elim(player: RigidBody2D) -> void:
 	if not _round_had_elim:
 		_round_had_elim = true
 		_first_elim_ticks.append(t)
+	var struck: int = int(_last_struck.get(player, -100000))
+	var by_stage: bool = Engine.get_physics_frames() - struck > int(STRUCK_SEC * 60.0)
+	if _verbose:
+		var modes: String = ""
+		var i: int = _players.find(player)
+		if _brain == "bot" and i >= 0 and i < _mode_log.size():
+			modes = " modes=%s" % ",".join(_mode_log[i])
+		print("ELIM round=%d t=%.1f %s at=(%.0f, %.0f) damage=%.0f %s%s" % [_rounds, t / 60.0, player.name,
+			p.x, p.y, float(player.get("damage")), "stage" if by_stage else "struck", modes])
+	if by_stage:
+		_stage_deaths += 1
+		if not _round_stage_death:
+			_round_stage_death = true
+			_first_stage_ticks.append(t)
+
+## A round that ended (or the probe that stopped) with no stage death counts
+## the whole grace as its time to one.
+func _close_round() -> void:
+	if _rounds > 0 and not _round_stage_death:
+		_first_stage_ticks.append(mini(_grace_ticks, Engine.get_physics_frames() - _round_tick))
+	_round_stage_death = true
 
 func on_physics() -> void:
 	var tick: int = Engine.get_physics_frames()
@@ -118,6 +180,13 @@ func on_physics() -> void:
 	for i in _players.size():
 		var player: RigidBody2D = _players[i]
 		if not player.alive: continue
+		if _brain == "bot":
+			player.set_input_vector(_smoothers[i].step(1.0 / 60.0))
+			if _verbose and tick % 10 == 0:
+				while _mode_log.size() <= i: _mode_log.append([])
+				_mode_log[i].append("%s@%.0f/%.0f" % [_brains[i].mode, player.global_position.x, player.global_position.y])
+				if _mode_log[i].size() > 12: _mode_log[i].pop_front()
+			continue
 		var bot: Dictionary = _bots[i]
 		if tick >= int(bot["until"]):
 			bot["mode"] = _rng.randi() % 4
@@ -154,8 +223,13 @@ func _report() -> void:
 	if not _first_elim_ticks.is_empty():
 		_first_elim_ticks.sort()
 		med = _first_elim_ticks[_first_elim_ticks.size() / 2] / 60.0
-	print("RINGOUT stage=%s seed=%d players=%d rounds=%d prelava_falls=%d prelava_hazard=%d lava_elims=%d bot_min=%.1f falls_per_bot_min=%.3f median_first_elim_s=%.1f" % [
-		_stage, _seed, _player_count, _rounds, _falls, _hazard, _late, bot_min, _falls / maxf(bot_min, 0.001), med])
+	_close_round()
+	var stage_mean: float = 0.0
+	for ticks: int in _first_stage_ticks: stage_mean += ticks / 60.0
+	stage_mean /= maxf(_first_stage_ticks.size(), 1.0)
+	print("RINGOUT stage=%s seed=%d players=%d brain=%s rounds=%d prelava_falls=%d prelava_hazard=%d lava_elims=%d bot_min=%.1f falls_per_bot_min=%.3f median_first_elim_s=%.1f stage_deaths=%d stage_deaths_per_bot_min=%.3f first_stage_death_s=%.1f" % [
+		_stage, _seed, _player_count, _brain, _rounds, _falls, _hazard, _late, bot_min, _falls / maxf(bot_min, 0.001), med,
+		_stage_deaths, _stage_deaths / maxf(bot_min, 0.001), stage_mean])
 	var sfx: Node = get_root().get_node_or_null(^"Sfx")
 	if sfx != null: await sfx.release()
 	quit(0)
