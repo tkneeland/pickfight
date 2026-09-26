@@ -28,10 +28,13 @@ const LINE_GAP_SEC: float = 0.08
 ## backs up (a flurry of KOs) must not still be talking a round later.
 const STALE_SEC: float = 4.0
 const META_WATCHED: StringName = &"_announcer_watched"
+## How many lines `said` keeps: the latest, so a long session does not grow
+## it forever (issue #167).
+const SAID_MAX: int = 32
 
 var sfx: Node
 
-## Every line said, oldest first: what the scenarios check.
+## The last `SAID_MAX` lines said, oldest first: what the scenarios check.
 var said: PackedStringArray = PackedStringArray()
 
 ## Queued lines, as {"sound": StringName, "at": msec queued}.
@@ -56,7 +59,7 @@ func _process(_delta: float) -> void:
 		return
 	var sound: StringName = line["sound"]
 	sfx.play(sound)
-	said.append(String(sound))
+	_record(sound)
 	_busy_until_msec = now + int((_length(sound) + LINE_GAP_SEC) * 1000.0)
 
 ## Queue `sound` (an `announce_*` key of `Sfx.SOUNDS`). A KO still waiting
@@ -79,6 +82,11 @@ func modifier_line(title: String) -> StringName:
 	var key: String = "announce_" + title.strip_edges().to_lower().replace(" ", "_")
 	return StringName(key) if sfx != null and sfx.has_sound(key) else &""
 
+func _record(sound: StringName) -> void:
+	said.append(String(sound))
+	if said.size() > SAID_MAX:
+		said = said.slice(said.size() - SAID_MAX)
+
 func _enqueue(sound: StringName) -> void:
 	_queue.append({"sound": sound, "at": Time.get_ticks_msec()})
 
@@ -87,6 +95,8 @@ func _flush_ko() -> void:
 	_pending_kos = 0
 	_enqueue(sound)
 
+## `Sfx` times each file as its decoding thread goes through it, so this
+## reads nothing off disk once that is done (issue #167).
 func _length(sound: StringName) -> float:
 	if not _lengths.has(sound):
 		_lengths[sound] = float(sfx.sound_length(sound)) if sfx.has_method("sound_length") else 1.0

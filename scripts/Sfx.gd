@@ -214,8 +214,19 @@ var muted: bool = false
 ## `set_sfx_volume()`.
 var sfx_volume: float = 1.0
 ## Whether the host window is fullscreen (#118). Set through
-## `set_fullscreen()`, which asks `DisplayServer` for the window mode.
+## `set_fullscreen()`, which asks `DisplayServer` for the window mode, and
+## brought back in line with the real window by `sync_fullscreen()` when the
+## window leaves or enters fullscreen some other way (the OS's own button or
+## shortcut; issue #167).
 var fullscreen: bool = false
+## What `sync_fullscreen()` reads the window mode from: a Callable returning a
+## `DisplayServer.WINDOW_MODE_*`, or an empty one for the real window. The
+## scenarios point it at a fake window, as headless has none.
+var window_mode_probe: Callable = Callable()
+## How long after asking for a window mode `sync_fullscreen()` leaves the flag
+## alone: some platforms (macOS) animate into fullscreen and report the old
+## mode until they are done.
+var fullscreen_sync_grace_msec: int = 1500
 ## Where the settings are saved. The scenario suite points it at a temp file
 ## when it tests saving.
 var settings_path: String = SETTINGS_PATH
@@ -242,6 +253,17 @@ var _settings_ui: CanvasLayer
 ## Every window mode `set_fullscreen()` has asked `DisplayServer` for, oldest
 ## first. Headless cannot really go fullscreen, so the scenarios check this.
 var _window_mode_requests: Array[int] = []
+## When a window mode was last asked for (msec), or -1 for never: the
+## fullscreen flag is only synced from the window once the game has put its
+## own choice into effect, so a boot never overwrites the saved setting.
+var _window_mode_requested_msec: int = -1
+## Seconds each sound file runs, res:// path -> float, filled by the decoding
+## thread (and by `sound_length()` for a file it has not reached yet), so the
+## announcer never reads a file off disk to time a line (issue #167). Guarded
+## by `_pcm_mutex`.
+var _file_lengths: Dictionary = {}
+## How many files `sound_length()` has had to read off disk itself.
+var _length_disk_reads: int = 0
 
 ## Decoded copies of the sound files, res:// path -> AudioStreamWAV, filled by
 ## a worker thread; see `_start_decoding`. Guarded by `_pcm_mutex`, as are the
@@ -268,6 +290,8 @@ func _ready() -> void:
 	announcer.sfx = self
 	add_child(announcer)
 	_start_decoding()
+	# Leaving fullscreen through the OS resizes the window.
+	get_tree().root.size_changed.connect(_on_window_size_changed)
 	# The game's own scene is only current once autoloads have all readied.
 	# The scenario runner never has one, so it never builds the overlay.
 	_build_settings_ui_if_in_game.call_deferred()
@@ -285,6 +309,9 @@ func release() -> void:
 			voice.stream = null
 	_streams.clear()
 	_last_variant.clear()
+	# Out of the tree there is no SceneTree to wait on (issue #167).
+	if not is_inside_tree():
+		return
 	await get_tree().create_timer(RELEASE_SEC, true, false, true).timeout
 
 # --- Playing ----------------------------------------------------------------
@@ -350,10 +377,34 @@ func sound_length(sound: StringName) -> float:
 		return 0.0
 	var longest: float = 0.0
 	for file: String in SOUNDS[key]["files"]:
-		var stream: AudioStream = _read_stream(DIR + file)
-		if stream != null:
-			longest = maxf(longest, stream.get_length())
+		longest = maxf(longest, _file_length(DIR + file))
 	return longest
+
+## How many sound files `sound_length()` has read off disk because decoding
+## had not timed them yet.
+func length_disk_reads() -> int:
+	return _length_disk_reads
+
+## Whether the decoding thread has been through every file.
+func decoding_done() -> bool:
+	_pcm_mutex.lock()
+	var done: bool = _decode_done
+	_pcm_mutex.unlock()
+	return done
+
+func _file_length(path: String) -> float:
+	_pcm_mutex.lock()
+	var known: Variant = _file_lengths.get(path)
+	_pcm_mutex.unlock()
+	if known != null:
+		return float(known)
+	_length_disk_reads += 1
+	var stream: AudioStream = _read_stream(path)
+	var length: float = stream.get_length() if stream != null else 0.0
+	_pcm_mutex.lock()
+	_file_lengths[path] = length
+	_pcm_mutex.unlock()
+	return length
 
 ## Every file `SOUNDS` refers to, as res:// paths.
 func all_sound_files() -> PackedStringArray:
@@ -411,10 +462,14 @@ func recorded_names() -> PackedStringArray:
 
 # --- Volume and mute --------------------------------------------------------
 
-func set_master_volume(value: float) -> void:
+## `save` false applies the volume without writing the settings file: the
+## settings menu's sliders apply every step of a drag live and save once, when
+## the drag ends (issue #167).
+func set_master_volume(value: float, save: bool = true) -> void:
 	master_volume = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0
 	_apply_master()
-	_save_settings()
+	if save:
+		_save_settings()
 
 func set_muted(value: bool) -> void:
 	muted = value
@@ -424,9 +479,14 @@ func set_muted(value: bool) -> void:
 func toggle_muted() -> void:
 	set_muted(not muted)
 
-func set_sfx_volume(value: float) -> void:
+func set_sfx_volume(value: float, save: bool = true) -> void:
 	sfx_volume = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0
 	_apply_sfx_volume()
+	if save:
+		_save_settings()
+
+## Write the current settings to `settings_path` (when `persist_settings`).
+func save_settings() -> void:
 	_save_settings()
 
 ## Ask the window to go fullscreen, or back to the project's own window mode
@@ -436,8 +496,37 @@ func set_fullscreen(value: bool) -> void:
 	_apply_window_mode()
 	_save_settings()
 
+## Flip fullscreen from what the window really is, so after leaving
+## fullscreen through the OS the next F11 goes back in (issue #167).
 func toggle_fullscreen() -> void:
+	sync_fullscreen()
 	set_fullscreen(not fullscreen)
+
+## Bring `fullscreen` in line with the real window mode, and save it if it
+## changed. Does nothing until the game has asked for a mode, shortly after
+## asking (see `fullscreen_sync_grace_msec`), or with no window to read.
+func sync_fullscreen() -> void:
+	if _window_mode_requested_msec < 0:
+		return
+	if Time.get_ticks_msec() - _window_mode_requested_msec < fullscreen_sync_grace_msec:
+		return
+	var mode: int = -1
+	if window_mode_probe.is_valid():
+		mode = int(window_mode_probe.call())
+	elif DisplayServer.get_name() != "headless":
+		mode = int(DisplayServer.window_get_mode())
+	if mode < 0:
+		return
+	var real: bool = mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if real == fullscreen:
+		return
+	fullscreen = real
+	_save_settings()
+	if _settings_ui != null:
+		_settings_ui.refresh()
+
+func _on_window_size_changed() -> void:
+	sync_fullscreen()
 
 ## The window modes asked for so far (`DisplayServer.WINDOW_MODE_*`).
 func window_mode_requests() -> Array[int]:
@@ -459,6 +548,7 @@ func _apply_window_mode() -> void:
 		if mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
 			mode = DisplayServer.WINDOW_MODE_WINDOWED
 	_window_mode_requests.append(mode)
+	_window_mode_requested_msec = Time.get_ticks_msec()
 	DisplayServer.window_set_mode(mode as DisplayServer.WindowMode)
 
 ## Read volume, mute and fullscreen from `settings_path`. Fullscreen is only
@@ -501,6 +591,9 @@ func _build_settings_ui_if_in_game() -> void:
 	if get_tree().current_scene != null:
 		if fullscreen:
 			_apply_window_mode()
+		else:
+			# The project's own window mode is the choice in effect.
+			_window_mode_requested_msec = Time.get_ticks_msec()
 		build_settings_ui()
 
 # --- Internals --------------------------------------------------------------
@@ -546,10 +639,11 @@ func _decode_files(paths: PackedStringArray, rate: int) -> void:
 			break
 		var source: AudioStream = _read_stream(path)
 		var pcm: AudioStreamWAV = _decode_to_pcm(source, rate) if source != null else null
+		_pcm_mutex.lock()
+		_file_lengths[path] = source.get_length() if source != null else 0.0
 		if pcm != null:
-			_pcm_mutex.lock()
 			_pcm[path] = pcm
-			_pcm_mutex.unlock()
+		_pcm_mutex.unlock()
 	_pcm_mutex.lock()
 	_decode_done = true
 	_pcm_mutex.unlock()

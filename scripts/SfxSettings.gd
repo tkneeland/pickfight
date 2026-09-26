@@ -32,6 +32,9 @@ var _sfx_slider: HSlider
 var _music_slider: HSlider
 var _mute: CheckBox
 var _fullscreen: CheckBox
+## Whether a slider is being dragged. A drag applies every step live and
+## saves once, when it ends (issue #167).
+var _dragging: bool = false
 
 func _ready() -> void:
 	layer = 20
@@ -74,6 +77,9 @@ func _ready() -> void:
 	_slider.value_changed.connect(_on_volume_changed)
 	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
 	_music_slider.value_changed.connect(_on_music_volume_changed)
+	for slider: HSlider in [_slider, _sfx_slider, _music_slider]:
+		slider.drag_started.connect(_on_drag_started)
+		slider.drag_ended.connect(_on_drag_ended)
 	_mute.toggled.connect(_on_mute_toggled)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
@@ -94,8 +100,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	refresh()
 	get_viewport().set_input_as_handled()
 
-## Show the current settings, without echoing them back.
+## Show the current settings, without echoing them back. Fullscreen is read
+## from the real window first, which the OS may have changed (issue #167).
 func refresh() -> void:
+	sfx.sync_fullscreen()
 	_slider.set_value_no_signal(sfx.master_volume)
 	_sfx_slider.set_value_no_signal(sfx.sfx_volume)
 	if music != null:
@@ -106,6 +114,8 @@ func refresh() -> void:
 
 func toggle_panel() -> void:
 	_panel.visible = not _panel.visible
+	if _panel.visible:
+		refresh()
 
 func is_open() -> bool:
 	return _panel.visible
@@ -151,17 +161,30 @@ func _add_box(rows: VBoxContainer, node_name: String, title: String) -> CheckBox
 	return box
 
 func _on_volume_changed(value: float) -> void:
-	sfx.set_master_volume(value)
+	sfx.set_master_volume(value, not _dragging)
 	refresh()
 
 func _on_sfx_volume_changed(value: float) -> void:
-	sfx.set_sfx_volume(value)
+	sfx.set_sfx_volume(value, not _dragging)
 	refresh()
 
 func _on_music_volume_changed(value: float) -> void:
 	if music != null:
-		music.set_volume(value)
+		music.set_volume(value, not _dragging)
 	refresh()
+
+func _on_drag_started() -> void:
+	_dragging = true
+
+## The drag is over: save what it left, once. `Sfx` and `Music` share the
+## file, and each keeps the other's section.
+func _on_drag_ended(value_changed: bool) -> void:
+	_dragging = false
+	if not value_changed:
+		return
+	sfx.save_settings()
+	if music != null:
+		music.save_settings()
 
 func _on_mute_toggled(pressed: bool) -> void:
 	sfx.set_muted(pressed)

@@ -212,13 +212,23 @@ func release(wait_sec: float = RELEASE_SEC) -> void:
 		_levels[i] = 0.0
 		_targets[i] = 0.0
 	_streams.clear()
+	# Out of the tree there is no SceneTree to wait on (issue #167).
+	if not is_inside_tree():
+		return
 	await get_tree().create_timer(wait_sec, true, false, true).timeout
 
 # --- Volume -------------------------------------------------------------------
 
-func set_volume(value: float) -> void:
+## `save` false applies the volume without writing the settings file; the
+## settings menu saves once a slider drag ends (issue #167).
+func set_volume(value: float, save: bool = true) -> void:
 	volume = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0
 	_apply_volume()
+	if save:
+		_save_settings()
+
+## Write the volume to `settings_path` (when `persist_settings`).
+func save_settings() -> void:
 	_save_settings()
 
 func load_settings() -> void:
@@ -344,15 +354,36 @@ func _stream_for(track: String) -> AudioStream:
 	var stream: AudioStream = null
 	if FileAccess.file_exists(path):
 		# Straight off disk, which needs no import cache (as `Sfx` does).
-		var ogg := AudioStreamOggVorbis.load_from_file(ProjectSettings.globalize_path(path))
-		if ogg != null:
-			ogg.loop = true
-			ogg.loop_offset = float(TRACKS[track].get("loop_start", 0.0))
-		stream = ogg
-	elif ResourceLoader.exists(path):
-		stream = load(path) as AudioStream
+		stream = AudioStreamOggVorbis.load_from_file(ProjectSettings.globalize_path(path))
+	else:
+		stream = imported_stream(track)
+	_apply_loop(stream, track)
 	if stream == null and not _warned.has(path):
 		_warned[path] = true
 		push_warning("Music: missing track %s" % path)
 	_streams[track] = stream
 	return stream
+
+## The imported copy of `track` (all an exported build ships), looping from
+## its `loop_start` as the raw file does (issue #167); null when there is none.
+## A copy, so the shared cached resource is left as imported.
+func imported_stream(track: String) -> AudioStream:
+	if not TRACKS.has(track):
+		return null
+	var path: String = DIR + String(TRACKS[track]["file"])
+	if not ResourceLoader.exists(path):
+		return null
+	var loaded: AudioStream = load(path) as AudioStream
+	if loaded == null:
+		return null
+	var stream: AudioStream = loaded.duplicate() as AudioStream
+	_apply_loop(stream, track)
+	return stream
+
+## Loop `stream` back to `track`'s `loop_start` whenever it wraps by itself --
+## after a hitch that let `_wrap_trimmed_loop` miss the window's end.
+func _apply_loop(stream: AudioStream, track: String) -> void:
+	if stream == null or not ("loop" in stream and "loop_offset" in stream):
+		return
+	stream.set("loop", true)
+	stream.set("loop_offset", float(TRACKS[track].get("loop_start", 0.0)))
