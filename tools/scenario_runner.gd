@@ -270,6 +270,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"timers_follow_game_time",
 	"harness_static_left_flipped",
 	"harness_static_restored_for_next_scenario",
+	"bots_survive_hazard_stages",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1161,6 +1162,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_harness_static_left_flipped()
 		"harness_static_restored_for_next_scenario":
 			return await _scenario_harness_static_restored_for_next_scenario()
+		"bots_survive_hazard_stages":
+			return await _scenario_bots_survive_hazard_stages()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -18031,4 +18034,60 @@ func _harness_statics_default_failures(when: String) -> Array[String]:
 		failures.append("%s: modifier_rolls_enabled is still on, leaked from an earlier scenario" % when)
 	if not BotDirectorScript.extra_args.is_empty():
 		failures.append("%s: BotDirector.extra_args is still %s, leaked from an earlier scenario" % [when, BotDirectorScript.extra_args])
+	return failures
+
+# --- Bots read stage hazards (issue #176) ---------------------------------------
+
+## Each case: a bot on its stage's first spawn, an idle rival on the second,
+## across the stage's hazard, and how long the bot has to stay alive. Main's
+## bot (before #176) died on both within 4 s: on Ferry it walked off its
+## landing onto the barge's route and into the water (about 3 s), and on Updraft
+## it walked off its ledge (2.2 s). It did from anywhere within 45 px of the
+## spawn, too. The bot now waits on ground it trusts for a way across. It
+## survived from every start in that range, so the cases do not hang on one
+## lucky throw: physics runs a little differently after other scenarios.
+const HAZARD_SURVIVAL_CASES: Array[Dictionary] = [
+	{"stage": "res://scenes/stages/Ferry.tscn", "at": Vector2(-450.0, 300.0), "rival": Vector2(450.0, 300.0), "seconds": 10.0},
+	{"stage": "res://scenes/stages/Updraft.tscn", "at": Vector2(-500.0, 230.0), "rival": Vector2(500.0, 230.0), "seconds": 10.0},
+]
+const HAZARD_BOT_SEED: int = 1
+
+func _scenario_bots_survive_hazard_stages() -> Array[String]:
+	var failures: Array[String] = []
+	for case: Dictionary in HAZARD_SURVIVAL_CASES:
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var stage: Node2D = (load(String(case["stage"])) as PackedScene).instantiate()
+		holder.add_child(stage)
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		holder.add_child(player)
+		player.global_position = case["at"]
+		player.bind_controller()
+		var rival: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		holder.add_child(rival)
+		rival.global_position = case["rival"]
+		var bot: Node = BotScript.new()
+		bot.rng.seed = HAZARD_BOT_SEED
+		bot.player = player
+		var smoother: RefCounted = ControllerServerScript.InputSmoother.new()
+		bot.output = func(v: Vector2) -> void: smoother.push(v)
+		holder.add_child(bot)
+		var ticks: int = int(float(case["seconds"]) * 60.0)
+		var died_at: int = -1
+		for tick in ticks:
+			await physics_frame
+			if not player.alive:
+				died_at = tick
+				break
+			player.set_input_vector(smoother.step(1.0 / 60.0))
+		var name: String = String(case["stage"]).get_file().get_basename()
+		if died_at >= 0:
+			print("      %s: the bot died after %.1f s at (%.0f, %.0f)" % [name, died_at / 60.0, player.global_position.x, player.global_position.y])
+			failures.append("on %s the bot set down at %s died after %.1f s, expected it alive after %.0f s" % [
+				name, case["at"], died_at / 60.0, float(case["seconds"])])
+		else:
+			print("      %s: the bot is alive after %.0f s, at (%.0f, %.0f)" % [name, float(case["seconds"]), player.global_position.x, player.global_position.y])
+		holder.queue_free()
+		await _await_ticks(2)
+	_scenario_completed = true
 	return failures
