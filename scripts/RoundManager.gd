@@ -163,6 +163,8 @@ func _ready() -> void:
 	if _controller_server != null and _controller_server.has_signal("host_command"):
 		_controller_server.connect("host_command", _on_host_command)
 	_watch_for_lobby_changes()
+	if _controller_server != null and _controller_server.has_signal("player_joined"):
+		_controller_server.connect("player_joined", _on_slot_claimed_fresh)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
 	_scoreboard = get_node_or_null(scoreboard_path) as Control
 	if _scoreboard != null:
@@ -1665,6 +1667,7 @@ func _resume_match() -> void:
 	_protected_until_msec += paused_for
 	if _abandoned_since_msec >= 0:
 		_abandoned_since_msec += paused_for
+	_stats.shift(paused_for)
 	_paused = false
 	_set_tree_paused(false)
 	_show_pause_banner(false)
@@ -1824,6 +1827,17 @@ func _ko_match_started() -> void:
 	var feed: Control = kill_feed()
 	if feed != null:
 		feed.clear()
+
+## A fresh phone (or bot) claimed `slot` (issue #161). The slot may be one a
+## drop-out's expired claim or a kick freed mid-match: the newcomer starts on
+## no points and none of the old occupant's KOs, deaths or awards.
+func _on_slot_claimed_fresh(slot: int) -> void:
+	if slot < 0 or slot >= _scores.size():
+		return
+	_scores[slot] = 0
+	_stats.forget_slot(slot)
+	_pending_kos = _pending_kos.filter(func(entry: Array) -> bool: return entry[0] != slot)
+	_update_score_label()
 
 func _ko_round_started() -> void:
 	_pending_kos.clear()
