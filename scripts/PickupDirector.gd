@@ -34,10 +34,15 @@ const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
 var _rm: Node
 var _pickups: Array[Node2D] = []
 var _next_pickup_msec: int = 0
+## Every draw this node makes -- which weapon, which spot (issue #187). The
+## RoundManager hands it a stream derived from the match seed; until then (a
+## director driven by hand) it is an unseeded one of its own.
+var rng := RandomNumberGenerator.new()
 
 func _init(round_manager: Node = null) -> void:
 	name = "PickupDirector"
 	_rm = round_manager
+	rng.randomize()
 
 ## Round start: clear anything left over, put the first pickup down, and
 ## start the interval from now.
@@ -104,7 +109,7 @@ func _spawn_pickup() -> void:
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
-	var weapon: Resource = PickupWeaponsScript.choose(offered)
+	var weapon: Resource = PickupWeaponsScript.choose(offered, rng)
 	if weapon == null:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
@@ -145,7 +150,7 @@ func free_spot() -> Variant:
 		if _distance_to_nearest_spawn(spot) >= PICKUP_CLEAR_OF_SPAWN_RADIUS:
 			clear_spots.append(spot)
 	if not clear_spots.is_empty():
-		return clear_spots[randi() % clear_spots.size()]
+		return clear_spots[rng.randi() % clear_spots.size()]
 	var best: Vector2 = free[0]
 	for spot: Vector2 in free:
 		if _distance_to_nearest_spawn(spot) > _distance_to_nearest_spawn(best):

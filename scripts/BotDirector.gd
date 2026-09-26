@@ -48,6 +48,22 @@ var solo: bool = false
 ## enough to ride out a phone that drops and reconnects.
 @export var orphan_grace_sec: float = 10.0
 var _orphaned_for: float = 0.0
+## The match seed the RoundManager last handed over (issue #187), or -1 for
+## none yet. Each bot's `rng` is `bot_seed(match_seed, slot)`.
+var match_seed: int = -1
+
+## One bot's seed, from the match seed and the slot it drives: two bots in a
+## match never share a stream, and the same slot in a replayed match gets the
+## same one.
+static func bot_seed(seed_value: int, slot: int) -> int:
+	return hash([seed_value, "bot", slot])
+
+## A new match on `seed_value` (issue #187): every bot here restarts its
+## stream from it, and bots added later in the match are seeded from it too.
+func seed_bots(seed_value: int) -> void:
+	match_seed = seed_value
+	for slot: int in bots:
+		(bots[slot] as Node).rng.seed = bot_seed(seed_value, slot)
 
 func _ready() -> void:
 	if server == null:
@@ -98,6 +114,8 @@ func add_bots(count: int) -> int:
 		bot.name = "Bot%d" % slot
 		bot.player = server.player_in_slot(slot)
 		bot.output = func(v: Vector2) -> void: server.push_virtual_input(slot, v)
+		if match_seed != -1:
+			bot.rng.seed = bot_seed(match_seed, slot)
 		add_child(bot)
 		bots[slot] = bot
 		added += 1
