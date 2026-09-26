@@ -2581,6 +2581,13 @@ func _swing_at(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2, half
 
 ## The slow-contact anchor: the head held fully out while the body walks it
 ## into someone. Same measurements as `_swing_at`, so the two are comparable.
+##
+## Walked level: both bodies have their fall taken off every tick. They are in
+## open air and fall together, which leaves the geometry alone, but a strike
+## is scored on the head's own speed, and by the end of CREEP_TICKS the fall
+## by itself is past Player.MIN_STRIKE_SPEED. A head that shifted on the
+## bystander in the last tick then scored the fall as a strike (issue #180,
+## where the pickaxe's 8000 N ceiling made it shift).
 func _creep_into(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2) -> Dictionary:
 	victim.teleport_to(centre + Vector2.RIGHT * CREEP_DISTANCE)
 	victim.set_input_vector(Vector2.ZERO)
@@ -2594,7 +2601,8 @@ func _creep_into(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2) ->
 	var closest: float = INF
 
 	for _t in CREEP_TICKS:
-		attacker.linear_velocity = Vector2(CREEP_SPEED, attacker.linear_velocity.y)
+		attacker.linear_velocity = Vector2(CREEP_SPEED, 0.0)
+		victim.linear_velocity = Vector2(victim.linear_velocity.x, 0.0)
 		await physics_frame
 		var head: Vector2 = attacker.weapon_head_position()
 		var speed: float = (head - previous_head).length() / _tick_seconds()
@@ -3665,7 +3673,10 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## A band since #45: the M tier is pickaxe 34, sword 40, dagger 60 (the
 ## dagger was buffed from 45 at the hackathon playtest).
 ## Since #55 the S tier is a band too: boomstick 8, staff 20.
-const ROSTER_DAMAGE_SPREAD: float = 27.0
+## The M band's own width is 26 (34 to 60), so the spread is that plus one
+## ROSTER_DAMAGE_TOLERANCE of measurement: at 27 a pickaxe strike landing
+## 0.7 under its 34 (#180, well inside its own tolerance) failed the band.
+const ROSTER_DAMAGE_SPREAD: float = 26.0 + ROSTER_DAMAGE_TOLERANCE
 const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
 ## How far the victim is planted from where the charge starts, and how long
 ## the charge is watched for. The run-up has to be long enough that the head

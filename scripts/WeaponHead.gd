@@ -339,6 +339,10 @@ func set_phased(on: bool) -> void:
 	# The path the head travelled while phased went through terrain on
 	# purpose; the first sweep after it turns solid must not run along it.
 	forget_previous_position()
+	# Nothing blocks a ghost. Left in, last step's contacts would have the
+	# drive push the freed head home at the stalled force (issue #180).
+	blocking_normals.clear()
+	blocking_masses.clear()
 
 ## Whether any of the head's circles overlaps anything on `sweep_mask` other
 ## than its own player: terrain, or another player's body. A head is only
