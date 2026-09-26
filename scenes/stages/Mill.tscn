@@ -1,0 +1,125 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CollapsingFloor.tscn" id="4"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
+size = Vector2(340, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A windmill's sails turning in a gap, on ground that shrinks (issue #143:
+; two of #52's RotatingPlatforms crossed at one hub, plus #53's timed
+; CollapsingFloor). Carousel has a lone spinner over solid ground. Here the
+; sails are the only way across a gap.
+;
+; **Ground.** Two fields (x=+-260..+-600, top y=320) hold all eight spawns.
+; Past each field is a timed CollapsingFloor (x=+-600..+-740, the same
+; top). It holds for 20 s, warns for 2 s, then drops for the rest of the
+; round, so the ring-out edge moves in by 140 px mid-round. Until then the
+; outer ends are open sky.
+;
+; **Sails.** Two 400 px bars on one hub at (0, 300), 90 degrees apart,
+; turning at 22 deg/s. There is always one sail near level, a bridge
+; across the 520 px gap, and one near upright, a wall between the fields.
+; Each quarter turn (about 4 s) they swap. The tips sweep a 200 px radius,
+; 60 px short of either field's lip. Riding the upright sail up is the way
+; to the pickup above the hub (0, 40), just outside the tips' circle.
+; Falling between the sails is a ring-out.
+
+; Backdrop (issue #117): harvest evening over farmland.
+[node name="Mill" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.1, 0.13, 0.09, 1)
+background_sky_bottom = Color(0.27, 0.25, 0.15, 1)
+background_silhouette = Color(0.1, 0.12, 0.07, 1)
+background_layers = PackedStringArray("clouds", "hills", "hills")
+
+[node name="FieldLeft" type="StaticBody2D" parent="."]
+position = Vector2(-430, 340)
+
+[node name="FieldLeftShape" type="CollisionShape2D" parent="FieldLeft"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="FieldLeftVisual" type="Polygon2D" parent="FieldLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-170, -20, 170, -20, 170, 20, -170, 20)
+
+[node name="FieldRight" type="StaticBody2D" parent="."]
+position = Vector2(430, 340)
+
+[node name="FieldRightShape" type="CollisionShape2D" parent="FieldRight"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="FieldRightVisual" type="Polygon2D" parent="FieldRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-170, -20, 170, -20, 170, 20, -170, 20)
+
+; 24 px thick, centred 12 px below the fields' top so the surfaces meet flush.
+[node name="EdgeLeft" parent="." instance=ExtResource("4")]
+position = Vector2(-670, 332)
+size = Vector2(140, 24)
+trigger = "timed"
+collapse_after_sec = 20.0
+warn_sec = 2.0
+
+[node name="EdgeRight" parent="." instance=ExtResource("4")]
+position = Vector2(670, 332)
+size = Vector2(140, 24)
+trigger = "timed"
+collapse_after_sec = 20.0
+warn_sec = 2.0
+
+[node name="SailA" parent="." instance=ExtResource("3")]
+position = Vector2(0, 300)
+size = Vector2(400, 20)
+spin_deg_per_sec = 22.0
+
+[node name="SailB" parent="." instance=ExtResource("3")]
+position = Vector2(0, 300)
+rotation = 1.5708
+size = Vector2(400, 20)
+spin_deg_per_sec = 22.0
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-390, 270)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(390, 270)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-460, 270)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(460, 270)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-320, 270)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(320, 270)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-530, 270)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(530, 270)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 40)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-680, 270)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(680, 270)
