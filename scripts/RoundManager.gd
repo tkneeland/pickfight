@@ -66,6 +66,10 @@ extends Node
 signal round_started
 signal round_won(slot: int)
 signal modifier_announced(title: String)
+## Announcer hooks (#152): each whole second of the lobby countdown (3, 2,
+## 1), and the round win that wins the match.
+signal countdown_ticked(seconds_left: int)
+signal match_won(slot: int)
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END, LOBBY, COUNTDOWN, VICTORY }
 
@@ -338,6 +342,7 @@ func _check_round_end() -> void:
 		_last_winner_slot = winner_slot
 		if lobby_enabled and _scores[winner_slot] >= _match_target:
 			_match_winner_slot = winner_slot
+			match_won.emit(winner_slot)
 	else:
 		_last_winner_slot = -1
 	_clear_pickups()
@@ -486,7 +491,14 @@ func _update_score_label() -> void:
 ## The pickup scene instanced per spawn (scenes/Pickup.tscn).
 @export var pickup_scene: PackedScene = preload("res://scenes/Pickup.tscn")
 ## Seconds between pickup arrivals once a round is running (user story 20).
-@export var pickup_spawn_interval_sec: float = 10.0
+## 12 since #152 (was 10): a little rarer with few players, and
+## `_pickup_interval_sec()` shortens it for a crowd.
+@export var pickup_spawn_interval_sec: float = 12.0
+## With this many players or more on the roster the stage is crowded (#152):
+## pickups come every `crowded_interval_scale` of the interval, and the cap
+## rises to one per player.
+@export var crowded_roster: int = 5
+@export var crowded_interval_scale: float = 0.6
 ## Fewest pickups the stage is allowed to hold at once (user stories 3 and
 ## 20). The live cap is `_pickup_cap()`: one fewer than the roster, never
 ## below this (#36, amending ADR-0009).
@@ -516,7 +528,7 @@ var _next_pickup_msec: int = 0
 func _start_pickups() -> void:
 	_clear_pickups()
 	_spawn_pickup()
-	_next_pickup_msec = Time.get_ticks_msec() + int(pickup_spawn_interval_sec * 1000.0)
+	_next_pickup_msec = Time.get_ticks_msec() + int(_pickup_interval_sec() * 1000.0)
 
 ## Each tick of an active round: once the interval is up, add one if the
 ## stage is below the cap, and start the next interval either way.
@@ -524,16 +536,27 @@ func _tick_pickups() -> void:
 	var now: int = Time.get_ticks_msec()
 	if now < _next_pickup_msec:
 		return
-	_next_pickup_msec = now + int(pickup_spawn_interval_sec * 1000.0)
+	_next_pickup_msec = now + int(_pickup_interval_sec() * 1000.0)
 	if _live_pickups().size() < _pickup_cap():
 		_spawn_pickup()
 
 ## Most pickups the stage holds at once right now: one fewer than the players
 ## on the roster, and never under `max_pickups` -- 2 for two or three players,
-## 3 for four (#36, amending ADR-0009's "at most two").
+## 3 for four (#36, amending ADR-0009's "at most two"); one per player from
+## `crowded_roster` up (#152).
 func _pickup_cap() -> int:
 	var roster: int = _controller_server.claimed_slots().size() if _controller_server != null else 0
+	if roster >= crowded_roster:
+		return maxi(max_pickups, roster)
 	return maxi(max_pickups, roster - 1)
+
+## Seconds until the next pickup: `pickup_spawn_interval_sec`, shortened by
+## `crowded_interval_scale` from `crowded_roster` players up (#152).
+func _pickup_interval_sec() -> float:
+	var roster: int = _controller_server.claimed_slots().size() if _controller_server != null else 0
+	if roster >= crowded_roster:
+		return pickup_spawn_interval_sec * crowded_interval_scale
+	return pickup_spawn_interval_sec
 
 func _clear_pickups() -> void:
 	for pickup: Node2D in _live_pickups():
@@ -1049,7 +1072,14 @@ func _tick_lobby() -> void:
 			if _everyone_ready(roster) or roster.size() < min_players_to_start:
 				_enter_lobby()
 				return
+	var tick: int = _countdown_left() if _state == State.COUNTDOWN else 0
+	if tick != _last_countdown_tick and tick > 0:
+		countdown_ticked.emit(tick)
+	_last_countdown_tick = tick
 	_publish_lobby_state()
+
+## The countdown second last announced by `countdown_ticked` (#152).
+var _last_countdown_tick: int = 0
 
 func _countdown_left() -> int:
 	return maxi(1, ceili(float(_countdown_until_msec - Time.get_ticks_msec()) / 1000.0))

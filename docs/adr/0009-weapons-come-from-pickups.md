@@ -25,7 +25,9 @@ A **pickup** is a weapon lying on the stage during a round. It is the only way
 to get a weapon other than the pickaxe.
 
 - One pickup appears at round start, then one more roughly every 10 seconds,
-  with at most two on the stage at once. Its weapon is random and never the
+  with at most two on the stage at once. (Amended by #36 and #152: the cap is
+  one fewer than the players, one per player from five players up; the
+  interval is 12 seconds, and 60% of that from five players up.) Its weapon is random and never the
   pickaxe.
 - A player collects a pickup by touching it with their **body**, not their
   weapon's head. Their previous weapon vanishes: nothing is dropped.

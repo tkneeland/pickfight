@@ -37,6 +37,7 @@ extends Node
 ## carries only the imported copy, loads that instead.
 
 const HooksScript := preload("res://scripts/SfxHooks.gd")
+const AnnouncerScript := preload("res://scripts/Announcer.gd")
 const SettingsScript := preload("res://scripts/SfxSettings.gd")
 
 const BUS_NAME: StringName = &"SFX"
@@ -50,6 +51,8 @@ const DIR: String = "res://assets/sfx/"
 ##   overlap     -- most copies playing at once (DEFAULT_OVERLAP if absent)
 ##   positional  -- false for UI sounds, which play flat (default true)
 ##   max_sec     -- fade out and stop after this long (for long files)
+##   voice       -- true for the announcer's lines (#152): always at natural
+##                  pitch, whatever the strength, and never jittered
 ##
 ## The `hit_<set>` and `fire_<set>` names are per weapon: a weapon's
 ## `WeaponStats.sound_set` picks them. See CREDITS.md for every file's source.
@@ -147,6 +150,19 @@ const SOUNDS: Dictionary = {
 		"kenney_interface/confirmation_002.ogg"], "db": -10.0, "overlap": 1, "positional": false},
 	"join": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": 0.0, "overlap": 2, "positional": false},
+	# --- Announcer (#152); `Announcer.gd` says when ---------------------------
+	"announce_3": {"files": ["announcer/count_3.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_2": {"files": ["announcer/count_2.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_1": {"files": ["announcer/count_1.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_fight": {"files": ["announcer/fight.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_ko": {"files": ["announcer/ko.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_double_ko": {"files": ["announcer/double_ko.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_winner": {"files": ["announcer/winner.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_low_gravity": {"files": ["announcer/low_gravity.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_heavy_weapons": {"files": ["announcer/heavy_weapons.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_big_heads": {"files": ["announcer/big_heads.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_fast_lava": {"files": ["announcer/fast_lava.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_slippery_floor": {"files": ["announcer/slippery_floor.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
 }
 
 const DEFAULT_OVERLAP: int = 3
@@ -215,6 +231,8 @@ var _requests: Array[Dictionary] = []
 var _warned: Dictionary = {}
 var _play_serial: int = 0
 var _hooks: Node
+## The announcer's voice lines (#152), built beside the hooks.
+var announcer: Node
 var _settings_ui: CanvasLayer
 ## Every window mode `set_fullscreen()` has asked `DisplayServer` for, oldest
 ## first. Headless cannot really go fullscreen, so the scenarios check this.
@@ -240,6 +258,10 @@ func _ready() -> void:
 	_hooks.name = "Hooks"
 	_hooks.sfx = self
 	add_child(_hooks)
+	announcer = AnnouncerScript.new()
+	announcer.name = "Announcer"
+	announcer.sfx = self
+	add_child(announcer)
 	_start_decoding()
 	# The game's own scene is only current once autoloads have all readied.
 	# The scenario runner never has one, so it never builds the overlay.
@@ -276,6 +298,8 @@ func play(sound: StringName, position: Variant = null, strength: float = 1.0) ->
 	var s: float = clampf(strength, 0.0, 1.0) if is_finite(strength) else 1.0
 	var volume_db: float = volume_db_for(key, s)
 	var pitch: float = lerpf(PITCH_AT_ZERO, PITCH_AT_FULL, s) * (1.0 + _rng.randf_range(-PITCH_JITTER, PITCH_JITTER))
+	if bool(spec.get("voice", false)):
+		pitch = 1.0
 	var positional: bool = bool(spec.get("positional", true)) and position is Vector2
 	if _recording:
 		_requests.append({
@@ -312,6 +336,19 @@ func volume_db_for(sound: StringName, strength: float) -> float:
 
 func has_sound(sound: StringName) -> bool:
 	return SOUNDS.has(String(sound))
+
+## Seconds the longest file of `sound` runs, or 0 when it has none: the
+## announcer waits this long before its next line (#152).
+func sound_length(sound: StringName) -> float:
+	var key: String = String(sound)
+	if not SOUNDS.has(key):
+		return 0.0
+	var longest: float = 0.0
+	for file: String in SOUNDS[key]["files"]:
+		var stream: AudioStream = _read_stream(DIR + file)
+		if stream != null:
+			longest = maxf(longest, stream.get_length())
+	return longest
 
 ## Every file `SOUNDS` refers to, as res:// paths.
 func all_sound_files() -> PackedStringArray:

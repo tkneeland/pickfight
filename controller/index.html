@@ -119,6 +119,17 @@
     background: #59606e;
   }
   #ready-btn.on { background: #ffd933; }
+  /* Issue #152: the host's Solo practice / Remove bots button. */
+  #solo-btn {
+    font: inherit;
+    font-size: 20px;
+    padding: 14px 22px;
+    border: 1px solid #59606e;
+    border-radius: 14px;
+    color: #e6e9ef;
+    background: #1b1f29;
+    display: none;
+  }
   #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
   #target-row button, #target-input {
     font: inherit;
@@ -331,6 +342,7 @@
   </div>
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
+  <button id="solo-btn" type="button">Solo practice</button>
 </div>
 <div id="name-prompt">
   <div id="name-prompt-title">Pick your name</div>
@@ -747,7 +759,20 @@
     readyBtn.className = amReady ? "on" : "";
     lobbyInfoEl.textContent = ready + " of " + msg.players.length + " ready" +
       (msg.players.length < 2 ? " (need 2 players)" : "");
+    showSolo(msg, isHost);
   }
+
+  // Issue #152: the host can fill the lobby with bots and start at once, or
+  // send the bots away again. Only in the lobby itself, never mid-countdown.
+  var soloBtn = document.getElementById("solo-btn");
+  var haveBots = false;
+  function showSolo(msg, isHost) {
+    haveBots = false;
+    for (var i = 0; i < msg.players.length; i++) { if (msg.players[i].bot) { haveBots = true; } }
+    soloBtn.style.display = isHost && msg.phase === "lobby" ? "block" : "none";
+    soloBtn.textContent = haveBots ? "Remove bots" : "Solo practice";
+  }
+  soloBtn.addEventListener("click", function () { sendText({ t: "solo", v: !haveBots }); });
 
   function sendTarget(n) {
     n = Math.max(1, Math.min(99, Math.round(Number(n) || 1)));

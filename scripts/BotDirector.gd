@@ -1,0 +1,103 @@
+extends Node
+
+## Owns the bots (issue #152). `ControllerServer` builds one of these as its
+## own child, so no scene has to know about it.
+##
+## A bot is a virtual controller: it holds a roster slot the way a phone does,
+## and its `Bot` brain sends input vectors through
+## `ControllerServer.push_virtual_input()`, down the same smoothing and
+## `Player.set_input_vector()` path a phone's packets take. Nothing else in
+## the game can tell a bot from a phone, except the lobby list and the phone
+## page, which mark bots.
+##
+## Two ways in:
+##
+## - `--bots=N` on the command line (after `--`) adds N bots at start-up, for
+##   testing. With no phone joined the bots are all the lobby has and all are
+##   ready, so a match starts by itself.
+## - The host phone's "Solo practice" button sends `{"t":"solo","v":true}`.
+##   The lobby fills up to SOLO_PLAYERS with bots and the host is readied, so
+##   the countdown starts. "Remove bots" (`v` false) sends them all away.
+##
+## Preloaded by path (CLAUDE.md), never referenced by a `class_name`.
+
+const BotScript: GDScript = preload("res://scripts/Bot.gd")
+## How many players a solo practice match has, the host included.
+const SOLO_PLAYERS: int = 4
+const BOTS_FLAG: String = "--bots="
+
+## Extra command-line arguments, read as if they followed `--`. A test seam:
+## the scenario runner cannot pass the game its own arguments.
+static var extra_args: PackedStringArray = PackedStringArray()
+
+## The `ControllerServer` this director belongs to. Set before `_ready()`.
+var server: Node = null
+## slot -> the `Bot` driving it.
+var bots: Dictionary = {}
+
+func _ready() -> void:
+	if server == null:
+		return
+	if server.has_signal("solo_requested"):
+		server.connect("solo_requested", _on_solo_requested)
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	args.append_array(extra_args)
+	var wanted: int = bots_from_args(args)
+	if wanted > 0:
+		# Deferred: the players are the server's siblings, and each one has
+		# to be ready before a controller binds to it.
+		add_bots.call_deferred(wanted)
+
+## The N in `--bots=N`, or 0 without the flag. Negative or junk reads as 0.
+static func bots_from_args(args: PackedStringArray) -> int:
+	var wanted: int = 0
+	for arg: String in args:
+		if arg.begins_with(BOTS_FLAG):
+			wanted = maxi(0, arg.trim_prefix(BOTS_FLAG).to_int())
+	return wanted
+
+## Add up to `count` bots, as many as there are free slots; returns how many
+## were added.
+func add_bots(count: int) -> int:
+	var added: int = 0
+	for i in count:
+		var slot: int = server.add_virtual_controller("Bot %d" % (bots.size() + 1))
+		if slot == -1:
+			break
+		var bot: Node = BotScript.new()
+		bot.name = "Bot%d" % slot
+		bot.player = server.player_in_slot(slot)
+		bot.output = func(v: Vector2) -> void: server.push_virtual_input(slot, v)
+		add_child(bot)
+		bots[slot] = bot
+		added += 1
+	return added
+
+## Send every bot away.
+func remove_bots() -> void:
+	for slot: int in bots.keys():
+		remove_bot(slot)
+
+## Send the bot in `slot` away (the host's kick lands here too).
+func remove_bot(slot: int) -> void:
+	var bot: Node = bots.get(slot)
+	bots.erase(slot)
+	if bot != null:
+		bot.queue_free()
+	server.remove_virtual_controller(slot)
+
+func bot_count() -> int:
+	return bots.size()
+
+## The host phone's Solo practice button. On: bots fill the lobby to
+## SOLO_PLAYERS (always at least one) and the host is readied, so the match
+## starts. Off: every bot goes.
+func _on_solo_requested(on: bool) -> void:
+	if not on:
+		remove_bots()
+		return
+	var roster: int = server.claimed_slots().size()
+	add_bots(maxi(1, SOLO_PLAYERS - roster))
+	var host: int = server.host_slot()
+	if host != -1:
+		server.set_slot_ready(host, true)
