@@ -270,6 +270,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"timers_follow_game_time",
 	"harness_static_left_flipped",
 	"harness_static_restored_for_next_scenario",
+	"bots_survive_hazard_stages",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1161,6 +1162,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_harness_static_left_flipped()
 		"harness_static_restored_for_next_scenario":
 			return await _scenario_harness_static_restored_for_next_scenario()
+		"bots_survive_hazard_stages":
+			return await _scenario_bots_survive_hazard_stages()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -18031,4 +18034,54 @@ func _harness_statics_default_failures(when: String) -> Array[String]:
 		failures.append("%s: modifier_rolls_enabled is still on, leaked from an earlier scenario" % when)
 	if not BotDirectorScript.extra_args.is_empty():
 		failures.append("%s: BotDirector.extra_args is still %s, leaked from an earlier scenario" % [when, BotDirectorScript.extra_args])
+	return failures
+
+# --- Bots read stage hazards (issue #176) ---------------------------------------
+
+## Each case: a lone bot on a stage, set down on the hazard itself, and how
+## long it has to stay alive there. Main's bot (before #176) died on both:
+## under Rockfall's bridge rock in about 10 s, knocked off the bridge, and on
+## Mill's see-saw sails in about 8 s, tipped off them. The bot now leaves the
+## rock's column when the warning shows and walks off the sails to the field.
+const HAZARD_SURVIVAL_CASES: Array[Dictionary] = [
+	{"stage": "res://scenes/stages/Rockfall.tscn", "at": Vector2(0.0, 320.0), "seconds": 20.0},
+	{"stage": "res://scenes/stages/Mill.tscn", "at": Vector2(-120.0, 260.0), "seconds": 20.0},
+]
+const HAZARD_BOT_SEED: int = 1
+
+func _scenario_bots_survive_hazard_stages() -> Array[String]:
+	var failures: Array[String] = []
+	for case: Dictionary in HAZARD_SURVIVAL_CASES:
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var stage: Node2D = (load(String(case["stage"])) as PackedScene).instantiate()
+		holder.add_child(stage)
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		holder.add_child(player)
+		player.global_position = case["at"]
+		player.bind_controller()
+		var bot: Node = BotScript.new()
+		bot.rng.seed = HAZARD_BOT_SEED
+		bot.player = player
+		var smoother: RefCounted = ControllerServerScript.InputSmoother.new()
+		bot.output = func(v: Vector2) -> void: smoother.push(v)
+		holder.add_child(bot)
+		var ticks: int = int(float(case["seconds"]) * 60.0)
+		var died_at: int = -1
+		for tick in ticks:
+			await physics_frame
+			if not player.alive:
+				died_at = tick
+				break
+			player.set_input_vector(smoother.step(1.0 / 60.0))
+		var name: String = String(case["stage"]).get_file().get_basename()
+		if died_at >= 0:
+			print("      %s: the bot died after %.1f s at (%.0f, %.0f)" % [name, died_at / 60.0, player.global_position.x, player.global_position.y])
+			failures.append("on %s the bot set down at %s died after %.1f s, expected it alive after %.0f s" % [
+				name, case["at"], died_at / 60.0, float(case["seconds"])])
+		else:
+			print("      %s: the bot is alive after %.0f s, at (%.0f, %.0f)" % [name, float(case["seconds"]), player.global_position.x, player.global_position.y])
+		holder.queue_free()
+		await _await_ticks(2)
+	_scenario_completed = true
 	return failures
