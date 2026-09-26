@@ -35,8 +35,9 @@ the dispatcher; don't reorder), `CONTEXT.md`.
 - Commit and push to your branch often, at least every accepted deliverable,
   so work is never stranded on one laptop.
 - Rebase onto `origin/main` right before opening the PR and again before
-  merge. Re-run `godot --headless --path . -s tools/scenario_runner.gd -- --all`
-  after every rebase that pulled in the other dev's changes.
+  merge. Re-run `godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --all`
+  after every rebase that pulled in the other dev's changes. (`--fixed-fps 60`
+  runs the suite on game time, faster than real time, #182.)
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
 - **No pause for human review** (owner's decision, 2026-09-24), and **one

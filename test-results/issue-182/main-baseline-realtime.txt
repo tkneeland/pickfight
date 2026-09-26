@@ -1,0 +1,4 @@
+# main e91ab17, realtime, for timing
+boot grep exit 1 (1 = clean);      215 scenarios in 4 shards
+TOTAL 215 passed, 0 failed of      215
+bash $S/psuite.sh $S/wt182 a182base 4  270.38s user 155.53s system 70% cpu 10:00.54 total

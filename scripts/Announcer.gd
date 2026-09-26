@@ -31,6 +31,9 @@ const META_WATCHED: StringName = &"_announcer_watched"
 ## How many lines `said` keeps: the latest, so a long session does not grow
 ## it forever (issue #167).
 const SAID_MAX: int = 32
+## Every wait here is game time (#182): a pause holds the queue, and a
+## scenario stepping faster than real time hears the same lines.
+const GameClockScript := preload("res://scripts/GameClock.gd")
 
 var sfx: Node
 
@@ -49,7 +52,7 @@ func _ready() -> void:
 	_watch_subtree(get_tree().root)
 
 func _process(_delta: float) -> void:
-	var now: int = Time.get_ticks_msec()
+	var now: int = GameClockScript.now_msec()
 	if _pending_kos > 0 and now >= _ko_due_msec:
 		_flush_ko()
 	if _queue.is_empty() or now < _busy_until_msec:
@@ -88,7 +91,7 @@ func _record(sound: StringName) -> void:
 		said = said.slice(said.size() - SAID_MAX)
 
 func _enqueue(sound: StringName) -> void:
-	_queue.append({"sound": sound, "at": Time.get_ticks_msec()})
+	_queue.append({"sound": sound, "at": GameClockScript.now_msec()})
 
 func _flush_ko() -> void:
 	var sound: StringName = &"announce_double_ko" if _pending_kos >= 2 else &"announce_ko"
@@ -139,7 +142,7 @@ func _on_round_started() -> void:
 		if modifier_line_is(_queue[i]["sound"]):
 			at = i
 			break
-	_queue.insert(at, {"sound": &"announce_fight", "at": Time.get_ticks_msec()})
+	_queue.insert(at, {"sound": &"announce_fight", "at": GameClockScript.now_msec()})
 
 ## Whether `sound` is one of the modifier names.
 func modifier_line_is(sound: StringName) -> bool:
@@ -155,7 +158,7 @@ func _on_modifier_announced(title: String) -> void:
 
 func _on_eliminated() -> void:
 	if _pending_kos == 0:
-		_ko_due_msec = Time.get_ticks_msec() + int(DOUBLE_KO_WINDOW_SEC * 1000.0)
+		_ko_due_msec = GameClockScript.now_msec() + int(DOUBLE_KO_WINDOW_SEC * 1000.0)
 	_pending_kos += 1
 
 func _on_round_won(_slot: int, round_manager: Node) -> void:

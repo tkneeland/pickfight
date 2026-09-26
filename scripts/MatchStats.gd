@@ -2,11 +2,12 @@ extends RefCounted
 
 ## Per-match numbers behind the kill feed and the match awards (issue #148).
 ## Pure bookkeeping: no nodes, no clock of its own. `RoundManager` feeds it
-## hits and eliminations with the time they happened (`Time.get_ticks_msec()`
-## in the game, any number a scenario likes), and asks it who gets a KO and,
-## at match end, who gets which award. Nothing is persisted: `begin_match()`
-## wipes the lot, `forget_slot()` one slot's share, and `shift()` moves the
-## running clocks past a pause.
+## hits and eliminations with the time they happened (game time from
+## `GameClock.gd` in the game, #182; any number a scenario likes), and asks
+## it who gets a KO and, at match end, who gets which award. Nothing is
+## persisted: `begin_match()` wipes the lot, `forget_slot()` one slot's share.
+## `shift()` moves the running clocks past a pause for a caller whose clock
+## keeps running through one; the game's clock stops, so it never needs it.
 ##
 ## KO credit: whoever last hit the victim within `KO_CREDIT_WINDOW_MSEC` of the
 ## elimination gets the KO; with no such hit it is a self-KO (a ring-out, the

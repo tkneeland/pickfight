@@ -16,6 +16,7 @@ config/features=PackedStringArray("4.6", "GL Compatibility")
 
 [autoload]
 
+GameClock="*res://scripts/GameClock.gd"
 Sfx="*res://scripts/Sfx.gd"
 Music="*res://scripts/Music.gd"
 

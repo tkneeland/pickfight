@@ -10,8 +10,18 @@ extends SceneTree
 ## fallback rig that would change all of those, and this suite has to survive
 ## it. See the "Testing Decisions" section of issue #2.
 ##
-##   godot --headless --path . -s tools/scenario_runner.gd -- --all
-##   godot --headless --path . -s tools/scenario_runner.gd -- --scenario=aim_angle
+##   godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --all
+##   godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenario=aim_angle
+##
+## `--fixed-fps 60` is recommended (#182): every frame is then exactly one
+## 1/60 s physics tick, run as fast as the machine can, so a run no longer
+## waits on real time (the full suite in 4 shards: about 2.5 min against
+## about 10.5 min without it) and no longer depends on how loaded the machine
+## is. It works because every gameplay timer, and every wait here that waits
+## on one, reads the game clock (`scripts/GameClock.gd`), not the wall clock.
+## Without the flag the suite still passes, in real time. Waits on a phone's
+## socket, a decoding thread or ControllerServer's own wall-clock windows stay
+## on `Time.get_ticks_msec()`; see `_game_msec()`.
 ##
 ## Arguments (after `--`):
 ##   --all                run every registered scenario
@@ -39,6 +49,7 @@ const StageType := preload("res://scripts/Stage.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
 const HitFeedbackType := preload("res://scripts/HitFeedback.gd")
 const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+const GameClockScript := preload("res://scripts/GameClock.gd")
 
 const SCENARIO_NAMES: PackedStringArray = [
 	"aim_angle",
@@ -256,6 +267,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"audio_release_out_of_tree_returns",
 	"announcer_said_capped_and_lengths_from_decode",
 	"roster_traversal_is_measured",
+	"timers_follow_game_time",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1116,6 +1128,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_announcer_said_capped_and_lengths_from_decode()
 		"roster_traversal_is_measured":
 			return await _scenario_roster_traversal_is_measured()
+		"timers_follow_game_time":
+			return await _scenario_timers_follow_game_time()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3088,20 +3102,31 @@ func _new_round_loop(grace_sec: float) -> Dictionary:
 	stage.add_child(round_manager)
 	return {"stage": stage, "players": players, "roster": roster, "round_manager": round_manager}
 
-## Steps physics until `condition` holds or `timeout_msec` of wall-clock time
-## passes; returns whether it held. Wall-clock rather than ticks because
-## RoundManager's grace and pause timers are wall-clock.
-func _await_condition(condition: Callable, timeout_msec: int) -> bool:
-	var deadline: int = Time.get_ticks_msec() + timeout_msec
-	while Time.get_ticks_msec() < deadline:
+## Game time in msec (#182): the clock RoundManager, PickupDirector and the
+## Announcer time everything by. A wait measured on it lasts as long as the
+## game thinks it does, however fast the frames really run (a loaded machine,
+## or `--fixed-fps 60` running ahead of real time). Waits on a phone's
+## socket, a decoding thread or ControllerServer's own wall-clock windows
+## stay on `Time.get_ticks_msec()`.
+func _game_msec() -> int:
+	return GameClockScript.now_msec()
+
+## Steps physics until `condition` holds or `timeout_msec` passes; returns
+## whether it held. Game time (#182), like the timers it waits on, unless
+## `wall` asks for wall-clock time: for a condition only a thread or the
+## network can make true.
+func _await_condition(condition: Callable, timeout_msec: int, wall: bool = false) -> bool:
+	var start: int = Time.get_ticks_msec() if wall else _game_msec()
+	while (Time.get_ticks_msec() if wall else _game_msec()) - start < timeout_msec:
 		await physics_frame
 		if condition.call():
 			return true
 	return false
 
+## Steps physics for `msec` of game time (#182).
 func _await_msec(msec: int) -> void:
-	var deadline: int = Time.get_ticks_msec() + msec
-	while Time.get_ticks_msec() < deadline:
+	var deadline: int = _game_msec() + msec
+	while _game_msec() < deadline:
 		await physics_frame
 
 ## Issue #12: a claim whose controller dropped while no round was running is
@@ -5337,18 +5362,18 @@ func _scenario_pickups_arrive_on_interval_and_cap() -> Array[String]:
 		return failures
 
 	var interval_msec: int = int(PICKUP_SHORT_INTERVAL_SEC * 1000.0)
-	var deadline: int = Time.get_ticks_msec() + interval_msec * PICKUP_INTERVAL_WINDOW
+	var deadline: int = _game_msec() + interval_msec * PICKUP_INTERVAL_WINDOW
 	var first_msec: int = -1
 	var second_msec: int = -1
 	var peak: int = 0
-	while Time.get_ticks_msec() < deadline:
+	while _game_msec() < deadline:
 		await physics_frame
 		var count: int = _pickups_under(container).size()
 		peak = maxi(peak, count)
 		if count >= 1 and first_msec < 0:
-			first_msec = Time.get_ticks_msec()
+			first_msec = _game_msec()
 		if count >= 2 and second_msec < 0:
-			second_msec = Time.get_ticks_msec()
+			second_msec = _game_msec()
 
 	if first_msec < 0:
 		failures.append("no pickup was ever on the stage")
@@ -6894,9 +6919,9 @@ func _scenario_pickup_cap_scales_with_roster() -> Array[String]:
 			await _teardown(loop["stage"])
 			continue
 
-		var deadline: int = Time.get_ticks_msec() + int(PICKUP_SHORT_INTERVAL_SEC * 1000.0) * PICKUP_INTERVAL_WINDOW
+		var deadline: int = _game_msec() + int(PICKUP_SHORT_INTERVAL_SEC * 1000.0) * PICKUP_INTERVAL_WINDOW
 		var peak: int = 0
-		while Time.get_ticks_msec() < deadline:
+		while _game_msec() < deadline:
 			await physics_frame
 			peak = maxi(peak, _pickups_under(container).size())
 		var expected: int = PICKUP_CAP_BY_ROSTER[count]
@@ -11772,14 +11797,14 @@ func _scenario_spawn_protection_blocks_damage_then_expires() -> Array[String]:
 			failures.append("%s took %.1f damage while spawn-protected" % [player.name, player.damage])
 
 	var min_alpha: float = 1.0
-	var started_msec: int = Time.get_ticks_msec()
+	var started_msec: int = _game_msec()
 	while round_manager.spawn_protection_active():
 		min_alpha = minf(min_alpha, players[0].modulate.a)
-		if Time.get_ticks_msec() - started_msec > 3000:
+		if _game_msec() - started_msec > 3000:
 			failures.append("spawn protection was still running 3 s after round start")
 			break
 		await process_frame
-	var lasted_msec: int = Time.get_ticks_msec() - started_msec
+	var lasted_msec: int = _game_msec() - started_msec
 	if lasted_msec < 700:
 		failures.append("spawn protection ended after only %d ms, expected about 1 s" % lasted_msec)
 	if min_alpha > 0.5:
@@ -11858,8 +11883,8 @@ func _juice(stage: Node2D) -> Node2D:
 
 ## Waits `seconds` of rendered frames, which is what the effects age by.
 func _juice_wait(seconds: float) -> void:
-	var until: int = Time.get_ticks_msec() + int(seconds * 1000.0)
-	while Time.get_ticks_msec() < until:
+	var until: int = _game_msec() + int(seconds * 1000.0)
+	while _game_msec() < until:
 		await process_frame
 
 ## A real clash throws sparks, sparks die out on their own, and a flood of
@@ -11978,9 +12003,9 @@ func _scenario_juice_trail_capped_and_frees() -> Array[String]:
 		failures.append("one head holds %d trail slots, expected 1" % juice.trail_count())
 
 	var slow: float = JuiceScript.TRAIL_MIN_SPEED * 0.3
-	var until: int = Time.get_ticks_msec() + 300
+	var until: int = _game_msec() + 300
 	var slow_max: int = 0
-	while Time.get_ticks_msec() < until:
+	while _game_msec() < until:
 		head.linear_velocity = Vector2(slow, 0.0)
 		await process_frame
 		slow_max = maxi(slow_max, juice.trail_point_count(head))
@@ -11990,8 +12015,8 @@ func _scenario_juice_trail_capped_and_frees() -> Array[String]:
 	var fast: float = JuiceScript.TRAIL_MIN_SPEED * 1.8
 	var most: int = 0
 	var frames: int = 0
-	until = Time.get_ticks_msec() + 500
-	while Time.get_ticks_msec() < until:
+	until = _game_msec() + 500
+	while _game_msec() < until:
 		head.linear_velocity = Vector2(0.0, fast).rotated(frames * 0.05)
 		await process_frame
 		frames += 1
@@ -12389,10 +12414,10 @@ func _scenario_stage_title_card_sweeps_at_round_start() -> Array[String]:
 	if label.text != "PICKUPSTAGE":
 		failures.append("the title read '%s', expected the stage's name" % label.text)
 	var first_x: float = label.position.x
-	var started: int = Time.get_ticks_msec()
-	while label.visible and Time.get_ticks_msec() - started < 3000:
+	var started: int = _game_msec()
+	while label.visible and _game_msec() - started < 3000:
 		await process_frame
-	var shown_msec: int = Time.get_ticks_msec() - started
+	var shown_msec: int = _game_msec() - started
 	print("      title '%s' from x=%.0f, gone after %d ms at x=%.0f" % [label.text, first_x, shown_msec, label.position.x])
 	if label.visible:
 		failures.append("the stage title was still up 3 s after round start")
@@ -12848,6 +12873,11 @@ const HAFT_DRAW_TURN_PER_TICK: float = 0.35
 ## A player's checked frames must include this many well between two ticks,
 ## where a lag between the two would show, or the check proved nothing.
 const HAFT_DRAW_MIN_BETWEEN_FRAMES: int = 10
+## Frames looked at to tell whether they are locked to ticks, and the tick
+## rate used instead when they are (#182): 50 against 60 frames a second puts
+## five frames in six between two ticks.
+const HAFT_DRAW_LOCK_PROBE_FRAMES: int = 12
+const HAFT_DRAW_LOCKED_TICKS_PER_SEC: int = 50
 ## The phased heads: each trapped under its own slab like
 ## `trapped_head_phases_home_after_release`, the slabs a column apart, and
 ## given this long after release to phase home through it.
@@ -12875,6 +12905,12 @@ func _scenario_haft_tip_meets_drawn_head_every_frame() -> Array[String]:
 		failures.append("physics interpolation is off; this scenario checks what it draws (issue #108)")
 		_scenario_completed = true
 		return failures
+	# Under `--fixed-fps 60` (#182) every frame lands on a tick and none is
+	# drawn between two, which is what this checks: tick at a rate the frames
+	# do not divide for its length instead.
+	var ticks_was: int = Engine.physics_ticks_per_second
+	if await _frames_locked_to_ticks():
+		Engine.physics_ticks_per_second = HAFT_DRAW_LOCKED_TICKS_PER_SEC
 
 	# Every weapon swinging in open air, plain and with big heads.
 	var stage: Node2D = _new_stage()
@@ -12959,8 +12995,19 @@ func _scenario_haft_tip_meets_drawn_head_every_frame() -> Array[String]:
 		await physics_frame
 	observer.measuring = false
 	failures.append_array(_haft_draw_failures(observer, labels, true))
+	Engine.physics_ticks_per_second = ticks_was
 	await _teardown(stage)
 	return failures
+
+## Whether every rendered frame lands on a physics tick, as under
+## `--fixed-fps` at the physics rate (#182): none is drawn between two.
+func _frames_locked_to_ticks() -> bool:
+	for i in HAFT_DRAW_LOCK_PROBE_FRAMES:
+		await process_frame
+		var f: float = Engine.get_physics_interpolation_fraction()
+		if f > 0.05 and f < 0.95:
+			return false
+	return true
 
 func _haft_draw_failures(observer: Node, labels: Array[String], phased: bool) -> Array[String]:
 	var failures: Array[String] = []
@@ -14200,9 +14247,9 @@ func _scenario_bots_flag_fills_lobby_and_bots_fight() -> Array[String]:
 			if bot.last_input != Vector2.ZERO and server._smoothers[slot].target.is_equal_approx(bot.last_input):
 				smoothed[0] = true
 		return float(damage[0]) > 0.0
-	var fight_from: int = Time.get_ticks_msec()
+	var fight_from: int = _game_msec()
 	var hurt: bool = await _await_condition(check_path, BOT_DAMAGE_MSEC)
-	var fight_msec: int = Time.get_ticks_msec() - fight_from
+	var fight_msec: int = _game_msec() - fight_from
 	var moved: int = 0
 	for i in players.size():
 		if players[i].global_position.distance_to(spawned_at[i]) > BOT_MOVED_PX or not players[i].alive:
@@ -14357,15 +14404,15 @@ func _scenario_pickups_come_faster_and_more_with_a_crowd() -> Array[String]:
 		failures.append("the four-player round never started")
 		await _teardown(loop["stage"])
 		return failures
-	var first_at: int = Time.get_ticks_msec()
+	var first_at: int = _game_msec()
 	var second_at: int = -1
 	var peak: int = 0
 	var deadline: int = first_at + int(CROWD_LIVE_INTERVAL_SEC * 1000.0) * PICKUP_INTERVAL_WINDOW
-	while Time.get_ticks_msec() < deadline:
+	while _game_msec() < deadline:
 		await physics_frame
 		var live: int = _pickups_under(container).size()
 		if live >= 2 and second_at == -1:
-			second_at = Time.get_ticks_msec()
+			second_at = _game_msec()
 		peak = maxi(peak, live)
 	var crowd_msec: float = CROWD_LIVE_INTERVAL_SEC * CROWD_INTERVAL_SCALE * 1000.0
 	print("      crowd: second pickup after %d ms (crowd interval %.0f ms), peak %d" % [
@@ -16618,7 +16665,7 @@ func _scenario_mid_match_joiner_starts_with_fresh_slot() -> Array[String]:
 
 	# P2's match so far: four wins, a KO of P3, damage dealt, and a fresh hit on P1.
 	var stats: RefCounted = rm.match_stats()
-	var now: int = Time.get_ticks_msec()
+	var now: int = _game_msec()
 	rm._scores[1] = 4
 	stats.record_hit(1, 2, 40.0, now - 500)
 	stats.record_elimination(2, now - 400)
@@ -17028,8 +17075,8 @@ func _scenario_juice_overflow_head_claims_trail_later() -> Array[String]:
 		var late: RigidBody2D = waiting[0]
 		var most: int = 0
 		var frames: int = 0
-		var until: int = Time.get_ticks_msec() + 400
-		while Time.get_ticks_msec() < until:
+		var until: int = _game_msec() + 400
+		while _game_msec() < until:
 			late.linear_velocity = Vector2(0.0, JuiceScript.TRAIL_MIN_SPEED * 1.8).rotated(frames * 0.05)
 			await process_frame
 			frames += 1
@@ -17119,8 +17166,8 @@ func _scenario_hit_feedback_pools_markers_and_numbers() -> Array[String]:
 	var pooled: Array[Node] = []
 	pooled.append_array(markers)
 	pooled.append_array(numbers)
-	var until: int = Time.get_ticks_msec() + int(HitFeedbackType.NUMBER_LIFETIME * 1300.0)
-	while Time.get_ticks_msec() < until:
+	var until: int = _game_msec() + int(HitFeedbackType.NUMBER_LIFETIME * 1300.0)
+	while _game_msec() < until:
 		await process_frame
 	await process_frame
 	if feedback.get_child_count() != 0:
@@ -17450,7 +17497,7 @@ func _scenario_audio_release_out_of_tree_returns() -> Array[String]:
 			await node.release()
 			done[0] = true
 		run.call()
-		await _await_condition(func() -> bool: return done[0], 3000)
+		await _await_condition(func() -> bool: return done[0], 3000, true)
 		if not done[0]:
 			failures.append("%s release() out of the tree never returned" % path.get_file())
 		if log.count() != before:
@@ -17485,7 +17532,7 @@ func _scenario_announcer_said_capped_and_lengths_from_decode() -> Array[String]:
 
 	if not (sfx.has_method("length_disk_reads") and sfx.has_method("decoding_done")):
 		failures.append("Sfx times the announcer's lines by reading each file off disk")
-	elif not await _await_condition(func() -> bool: return sfx.decoding_done(), 10000):
+	elif not await _await_condition(func() -> bool: return sfx.decoding_done(), 10000, true):
 		failures.append("Sfx never finished decoding")
 	else:
 		var reads: int = sfx.length_disk_reads()
@@ -17824,3 +17871,113 @@ func _time_ledge_climb(stats: WeaponStatsType, gap: float) -> int:
 	stage.queue_free()
 	await physics_frame
 	return climbed
+
+# --- One game clock (issue #182) -----------------------------------------------
+
+## Ticks the clock is read over at half speed.
+const GAME_CLOCK_TICKS: int = 30
+## How long the tree stays paused: well past both 1 s timers below.
+const GAME_CLOCK_PAUSE_TICKS: int = 150
+## Share of its length in ticks a timer must last not to count as early.
+const GAME_CLOCK_TIMER_SLACK: float = 0.9
+
+## Issue #182: gameplay timers run on game time (`GameClock.gd`, the physics
+## delta summed up), not the wall clock. At `Engine.time_scale` 0.5 the clock
+## moves half a tick a tick, and a 1 s spawn protection and a 1 s round-end
+## pause each last twice the ticks they do at full speed. While the tree is
+## paused the clock stands still, and neither timer runs out, however long
+## the pause. Counted in physics ticks, so it reads the same with or without
+## `--fixed-fps`.
+func _scenario_timers_follow_game_time() -> Array[String]:
+	var failures: Array[String] = []
+	var tick_msec: float = 1000.0 / float(Engine.physics_ticks_per_second)
+	var scale_was: float = Engine.time_scale
+	var loop: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+	var roster: _LiveRoster = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	rm.spawn_protection_sec = 1.0
+	rm.round_end_pause_sec = 1.0
+	var timer_ticks: int = int(round(1000.0 / tick_msec))
+
+	# The clock itself, at half speed.
+	Engine.time_scale = 0.5
+	await physics_frame
+	var before: int = _game_msec()
+	await _await_ticks(GAME_CLOCK_TICKS)
+	var moved: int = _game_msec() - before
+	var expected: float = GAME_CLOCK_TICKS * tick_msec * 0.5
+	print("      time_scale 0.5: %d ticks moved the clock %d ms (expected %.0f)" % [GAME_CLOCK_TICKS, moved, expected])
+	if absf(moved - expected) > tick_msec:
+		failures.append("at time_scale 0.5, %d ticks moved the game clock %d ms, expected %.0f" % [GAME_CLOCK_TICKS, moved, expected])
+
+	# Spawn protection at half speed: twice the ticks.
+	roster.slots = [0, 1]
+	roster.live = [0, 1]
+	var started: bool = await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC)
+	var protected_ticks: int = 0
+	if not started:
+		failures.append("the round never started")
+	else:
+		while rm.spawn_protection_active() and protected_ticks < timer_ticks * 4:
+			await physics_frame
+			protected_ticks += 1
+		print("      time_scale 0.5: 1 s of spawn protection lasted %d ticks (%d at full speed)" % [protected_ticks, timer_ticks])
+		if protected_ticks < int(timer_ticks * 2 * GAME_CLOCK_TIMER_SLACK):
+			failures.append("at time_scale 0.5, 1 s of spawn protection ran out after %d ticks, expected about %d" % [protected_ticks, timer_ticks * 2])
+		elif protected_ticks >= timer_ticks * 4:
+			failures.append("at time_scale 0.5, spawn protection never ran out")
+
+		# The round-end pause at half speed: twice the ticks too.
+		players[1].eliminate()
+		var ended: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_END, ROUND_LOOP_TIMEOUT_MSEC)
+		var pause_ticks: int = 0
+		while ended and rm._state == RoundManagerType.State.ROUND_END and pause_ticks < timer_ticks * 4:
+			await physics_frame
+			pause_ticks += 1
+		print("      time_scale 0.5: the 1 s round-end pause lasted %d ticks" % pause_ticks)
+		if not ended:
+			failures.append("the round never ended")
+		elif pause_ticks < int(timer_ticks * 2 * GAME_CLOCK_TIMER_SLACK):
+			failures.append("at time_scale 0.5, the 1 s round-end pause ended after %d ticks, expected about %d" % [pause_ticks, timer_ticks * 2])
+	Engine.time_scale = scale_was
+
+	# A paused tree: the clock stops, and spawn protection outlasts the pause.
+	if started and await _await_condition(func() -> bool: return _all_alive(players) and rm.spawn_protection_active(), ROUND_LOOP_TIMEOUT_MSEC):
+		paused = true
+		var frozen: int = _game_msec()
+		await _await_ticks(GAME_CLOCK_PAUSE_TICKS)
+		var paused_moved: int = _game_msec() - frozen
+		var still_protected: bool = rm.spawn_protection_active() and players[0].spawn_protected
+		paused = false
+		print("      paused %d ticks: the clock moved %d ms; spawn protection still on %s" % [GAME_CLOCK_PAUSE_TICKS, paused_moved, still_protected])
+		if paused_moved != 0:
+			failures.append("the game clock moved %d ms while the tree was paused" % paused_moved)
+		if not still_protected:
+			failures.append("spawn protection ran out while the tree was paused")
+
+		# ...and so does the round-end pause.
+		players[1].eliminate()
+		if not await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_END, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("the second round never ended")
+		else:
+			paused = true
+			await _await_ticks(GAME_CLOCK_PAUSE_TICKS)
+			var held: bool = rm._state == RoundManagerType.State.ROUND_END
+			paused = false
+			var after_ticks: int = 0
+			while rm._state == RoundManagerType.State.ROUND_END and after_ticks < timer_ticks * 4:
+				await physics_frame
+				after_ticks += 1
+			print("      round-end pause across a %d-tick tree pause: held %s, then %d more ticks" % [GAME_CLOCK_PAUSE_TICKS, held, after_ticks])
+			if not held:
+				failures.append("the round-end pause ran out while the tree was paused")
+			elif after_ticks < timer_ticks / 2:
+				failures.append("after the tree was unpaused the round-end pause ended within %d ticks, expected most of %d" % [after_ticks, timer_ticks])
+	elif started:
+		failures.append("the next round never started after the round-end pause")
+	Engine.time_scale = scale_was
+	paused = false
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
