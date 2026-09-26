@@ -106,9 +106,18 @@ func _strike(victim: Node) -> void:
 	if away == Vector2.ZERO:
 		away = Vector2.UP
 	var point: Vector2 = global_position + away * radius
+	# Report what the hit actually took off (issue #162): a spawn-protected
+	# player takes nothing, and a report of the full damage would put a
+	# phantom number on screen and buzz their phone. Nothing dealt, nothing
+	# reported; the knock still lands.
+	var before: Variant = victim.get("damage")
 	victim.take_damage(damage)
-	if victim.has_signal("strike_landed"):
-		victim.emit_signal("strike_landed", victim, damage, point, not victim.alive)
+	var after: Variant = victim.get("damage")
+	var dealt: float = damage
+	if before != null and after != null:
+		dealt = float(after) - float(before)
+	if dealt > 0.0 and victim.has_signal("strike_landed"):
+		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
 	if not victim.alive:
 		return
 	# Sideways away from where the meteor came down, with some lift: a meteor

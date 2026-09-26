@@ -6,8 +6,9 @@ extends StaticBody2D
 ## **Damage is a strike's real damage.** Each weapon hit takes off exactly
 ## what the same hit would take off a player: the head's speed into the wall,
 ## scored by `Player._strike_damage`'s rule against the striking weapon's own
-## `WeaponStats.damage`. So a hard axe swing counts for far more than a sword
-## poke, a flick counts for a little, and a contact too slow to be a swing
+## effective `WeaponStats.damage` (a round modifier's included, #162). So a
+## hard axe swing counts for far more than a sword poke, a flick counts for a
+## little, and a contact too slow to be a swing
 ## counts for nothing -- a wall can be leaned on, planted on and climbed
 ## without wearing it. The rule is re-stated here from `Player`'s own
 ## constants rather than called, because it is private to `Player` and
@@ -253,10 +254,18 @@ static func strike_damage(stats: Resource, speed: float) -> float:
 	return minf(float(stats.get("damage")) * strike_scale, PlayerType.MAX_STRIKE_DAMAGE)
 
 ## The weapon stats of whoever holds `head`: the player it holds a collision
-## exception for (see the header).
+## exception for (see the header). The *effective* stats the player's rig is
+## built from and scores its own strikes with -- `weapon_stats` run through a
+## round modifier, if one is on -- rather than the pristine `weapon_stats`
+## resource, so under Double Damage a swing wears the wall twice as fast, the
+## same as a bullet does (whose damage comes from those stats too), and the
+## same as that swing hurts a player (issue #162).
 func _owner_stats(head: RigidBody2D) -> Resource:
 	for body: PhysicsBody2D in head.get_collision_exceptions():
 		if body.is_in_group(&"players"):
+			var effective: Variant = body.get("_stats")
+			if effective is Resource:
+				return effective
 			return body.get("weapon_stats")
 	return null
 

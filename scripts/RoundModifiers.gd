@@ -117,6 +117,12 @@ const METEOR_DRIFT_SPEED: float = 180.0
 const METEOR_RADIUS: float = 16.0
 const METEOR_DAMAGE: float = 12.0
 const METEOR_KNOCK_SPEED: float = 650.0
+## On a stage with a view rect (`Stage.get_view_rect()`, issue #144) meteors
+## instead start this far above the top of the view, at a random x across the
+## whole view (issue #162), so they always fall in from out of sight and reach
+## every part of a large stage. The margin is more than the meteor's size,
+## so it is never already on screen when it appears.
+const METEOR_VIEW_MARGIN: float = 80.0
 ## How far below the lowest spawn a meteor that met nothing is dropped.
 const METEOR_DROP_BELOW: float = 2000.0
 
@@ -132,19 +138,22 @@ const BOUNCY_BOUNCE: float = 0.85
 ## at `Player.MAX_STRIKE_DAMAGE` per hit.
 const DOUBLE_DAMAGE_SCALE: float = 2.0
 
-## The on-screen name of modifier `id`, or "" for an unknown id.
+## The on-screen name of modifier `id`, or "" for an unknown id. Every title
+## is in Title Case (issue #162), set by "Double Damage", the one the owner
+## named exactly. `Announcer.modifier_line` lower-cases a title and joins its
+## words with "_" to find the clip, so the casing never changes the line.
 static func title_of(id: String) -> String:
 	match id:
 		LOW_GRAVITY:
-			return "LOW GRAVITY"
+			return "Low Gravity"
 		HEAVY_WEAPONS:
-			return "HEAVY WEAPONS"
+			return "Heavy Weapons"
 		BIG_HEADS:
-			return "BIG HEADS"
+			return "Big Heads"
 		FAST_LAVA:
-			return "FAST LAVA"
+			return "Fast Lava"
 		SLIPPERY_FLOOR:
-			return "SLIPPERY FLOOR"
+			return "Slippery Floor"
 		TINY_WEAPONS:
 			return "Tiny Weapons"
 		WEAPON_ROULETTE:
@@ -219,6 +228,34 @@ class RoundModifier extends RefCounted:
 
 	func is_applied() -> bool:
 		return _applied
+
+	## The random numbers a modifier draws with (issue #162): the round
+	## manager's own modifier RNG, the one `modifier_seed` seeds, so a seeded
+	## run draws the same roulette weapons and the same meteors every time.
+	## A round that was forced rather than rolled has not made that RNG yet,
+	## so it is made here exactly as `RoundManager._roll_modifier` makes it
+	## and handed back to the round manager, keeping one stream for the rolls
+	## and the draws alike. With no round manager (a scenario applying a
+	## modifier by hand) it is an unseeded RNG of the modifier's own. A
+	## scenario may also set `rng` before the first draw.
+	var rng: RandomNumberGenerator
+
+	func _rng() -> RandomNumberGenerator:
+		if rng != null:
+			return rng
+		var holder: Object = _round if _round != null and is_instance_valid(_round) else null
+		if holder != null and holder.get("_modifier_rng") is RandomNumberGenerator:
+			rng = holder.get("_modifier_rng")
+			return rng
+		rng = RandomNumberGenerator.new()
+		var seed_value: Variant = holder.get("modifier_seed") if holder != null else null
+		if seed_value == null or int(seed_value) == -1:
+			rng.randomize()
+		else:
+			rng.seed = int(seed_value)
+		if holder != null and "_modifier_rng" in holder:
+			holder.set("_modifier_rng", rng)
+		return rng
 
 	## The round's players that still exist; a scenario tearing its stage
 	## down can free them before the round ends.
@@ -416,7 +453,7 @@ class WeaponRoulette extends TimedModifier:
 				choices.append(stats)
 		if choices.is_empty():
 			return
-		_last_pick = choices[randi() % choices.size()]
+		_last_pick = choices[_rng().randi() % choices.size()]
 		_swaps += 1
 		for player: Variant in in_play:
 			player.set_weapon_stats(_last_pick)
@@ -450,6 +487,17 @@ class MeteorShower extends TimedModifier:
 			_max_x += METEOR_X_MARGIN
 			_top_y = high - METEOR_HEIGHT
 			_lowest_y = low + METEOR_DROP_BELOW
+		# A stage that says what the camera shows (issue #144) rains across
+		# all of it, from just out of sight above it (issue #162): on a large
+		# stage the spawns' span misses the outer edges, and a fixed height
+		# over the spawns is inside the view, so meteors popped into being.
+		if _stage != null and is_instance_valid(_stage) and _stage.has_method("get_view_rect"):
+			var view: Rect2 = _stage.get_view_rect()
+			if view.size.x > 0.0 and view.size.y > 0.0:
+				_min_x = view.position.x
+				_max_x = view.end.x
+				_top_y = view.position.y - METEOR_VIEW_MARGIN
+				_lowest_y = maxf(_lowest_y, view.end.y + METEOR_DROP_BELOW)
 		_start_timer(METEOR_INTERVAL_SEC, _spawn_meteor)
 
 	func _undo() -> void:
@@ -486,8 +534,9 @@ class MeteorShower extends TimedModifier:
 		return meteor
 
 	func _spawn_meteor() -> void:
-		var from := Vector2(randf_range(_min_x, _max_x), _top_y)
-		var drift: float = randf_range(-METEOR_DRIFT_SPEED, METEOR_DRIFT_SPEED)
+		var draw: RandomNumberGenerator = _rng()
+		var from := Vector2(draw.randf_range(_min_x, _max_x), _top_y)
+		var drift: float = draw.randf_range(-METEOR_DRIFT_SPEED, METEOR_DRIFT_SPEED)
 		spawn_meteor_at(from, Vector2(drift, METEOR_FALL_SPEED))
 
 class Bouncy extends RoundModifier:
