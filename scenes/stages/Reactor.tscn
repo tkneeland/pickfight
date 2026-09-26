@@ -1,0 +1,112 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Hazard.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/BreakableWall.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="5"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
+size = Vector2(1440, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A molten core in the middle of an unbroken floor, behind shield walls you
+; can smash (issue #143: #18's Hazard, #53's BreakableWall and #18's
+; MovingPlatform). Bulwark's walls guard a keep. These guard a pit of death.
+;
+; **Floor.** One slab, x=-720..720, top y=320. There is no gap in it. The
+; ring-outs are the open ends and the core.
+;
+; **Core.** Two Hazards side by side on the floor (x=-160..160, y=272..320).
+; Touching it eliminates at any health, like the kill zone.
+;
+; **Shields.** A BreakableWall stands on each side of the core (x=+-174..+-206,
+; y=160..320). While both stand, nobody can be knocked into the core, so the
+; round opens as two separate halves. Swinging at your own side's shield wears
+; it down. Once it breaks, the core is open to anyone thrown along the floor
+; from that side.
+;
+; **Bridge.** A MovingPlatform (180 wide, top y=90) runs over both walls from
+; x=-320 to 320 and back in 3.5 s each way. The walls' tops are 50 px below
+; its underside. The bridge is the only way to cross while the walls stand,
+; and it passes over the pickup above the core (0, 50).
+
+; Backdrop (issue #117): magenta haze over a skyline of stacks.
+[node name="Reactor" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.12, 0.05, 0.1, 1)
+background_sky_bottom = Color(0.25, 0.1, 0.16, 1)
+background_silhouette = Color(0.1, 0.05, 0.09, 1)
+background_layers = PackedStringArray("mountains", "city")
+
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(0, 340)
+
+[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("RectangleShape2D_floor")
+
+[node name="FloorVisual" type="Polygon2D" parent="Floor"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
+
+[node name="CoreLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-80, 296)
+
+[node name="CoreRight" parent="." instance=ExtResource("3")]
+position = Vector2(80, 296)
+
+[node name="ShieldLeft" parent="." instance=ExtResource("4")]
+position = Vector2(-190, 240)
+size = Vector2(32, 160)
+
+[node name="ShieldRight" parent="." instance=ExtResource("4")]
+position = Vector2(190, 240)
+size = Vector2(32, 160)
+
+[node name="Bridge" parent="." instance=ExtResource("5")]
+position = Vector2(-320, 100)
+size = Vector2(180, 20)
+travel = Vector2(640, 0)
+one_way_sec = 3.5
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-400, 270)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(400, 270)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-470, 270)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(470, 270)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-330, 270)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(330, 270)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-540, 270)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(540, 270)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 50)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-670, 270)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(670, 270)

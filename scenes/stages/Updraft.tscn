@@ -1,0 +1,142 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/WindZone.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="4"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
+size = Vector2(320, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_core"]
+size = Vector2(320, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Two chimneys of rising air (issue #143: #52's WindZone pointed up, plus
+; #18's CrumblingLedge). Gale's wind blows across; here it blows up.
+;
+; **Ground.** A low core in the middle (x=-160..160, top y=320) and two
+; higher banks (x=+-420..+-740, top y=280). Between them are two 260 px
+; shafts, too wide to walk and open to the kill zone.
+;
+; **Updrafts.** Each shaft has an upward gust (x=+-160..+-420, y=-170..470).
+; They use the part's default cycle: 2.5 s calm, 1 s tell, 1.5 s gust. The
+; two shafts are half a cycle apart, so one is always about to blow.
+; strength 1900 is a little over the player's gravity (1470): a gust stops a
+; fall and lifts slowly, up to around y=-190, well inside the -450 top edge.
+; Falling into a shaft during a gust is a second chance; falling into it
+; while it is calm is a ring-out.
+;
+; **Perches.** A crumbling ledge sits high over each shaft (x=+-210..+-370,
+; top y=-72) with a pickup on it. An updraft is the easy way up, and the
+; ledge drops you back into the shaft soon after.
+;
+; Spawns: four on the core, two on each bank, all clear of the shafts. The
+; outer ends of the banks are open sky and ring out.
+
+; Backdrop (issue #117): cold, high air over a range.
+[node name="Updraft" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.07, 0.15, 0.19, 1)
+background_sky_bottom = Color(0.18, 0.25, 0.27, 1)
+background_silhouette = Color(0.09, 0.14, 0.16, 1)
+background_layers = PackedStringArray("mountains", "clouds")
+
+[node name="BankLeft" type="StaticBody2D" parent="."]
+position = Vector2(-580, 300)
+
+[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)
+
+[node name="BankRight" type="StaticBody2D" parent="."]
+position = Vector2(580, 300)
+
+[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
+shape = SubResource("RectangleShape2D_bank")
+
+[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)
+
+[node name="Core" type="StaticBody2D" parent="."]
+position = Vector2(0, 340)
+
+[node name="CoreShape" type="CollisionShape2D" parent="Core"]
+shape = SubResource("RectangleShape2D_core")
+
+[node name="CoreVisual" type="Polygon2D" parent="Core"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)
+
+[node name="UpdraftWest" parent="." instance=ExtResource("3")]
+position = Vector2(-290, 150)
+size = Vector2(260, 640)
+direction = Vector2(0, -1)
+strength = 1900.0
+
+[node name="UpdraftEast" parent="." instance=ExtResource("3")]
+position = Vector2(290, 150)
+size = Vector2(260, 640)
+direction = Vector2(0, -1)
+strength = 1900.0
+cycle_offset_sec = 2.5
+
+[node name="PerchLeft" parent="." instance=ExtResource("4")]
+position = Vector2(-290, -60)
+size = Vector2(160, 24)
+
+[node name="PerchRight" parent="." instance=ExtResource("4")]
+position = Vector2(290, -60)
+size = Vector2(160, 24)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-500, 230)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(500, 230)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-110, 270)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(110, 270)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-570, 230)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(570, 230)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-40, 270)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(40, 270)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-290, -115)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(290, -115)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(0, 120)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(-700, 230)
+
+[node name="PickupSpawn4" type="Marker2D" parent="."]
+position = Vector2(700, 230)

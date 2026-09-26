@@ -1,0 +1,130 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="4"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
+size = Vector2(440, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_roof"]
+size = Vector2(180, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A mine head with two lifts and a roof under a chute (issue #143: #18's
+; MovingPlatform used as lifts, plus #53's FallingRock). The high ground is
+; worth taking, but it is always under fire.
+;
+; **Ground.** Two yards (x=+-300..+-740, top y=320) with a 600 px open pit
+; between them. All eight spawns are in the yards. Their outer ends are open
+; sky.
+;
+; **Lifts.** Each side of the pit has a lift (160 wide, x=+-100..+-260). It
+; runs between flush with the yards (top y=320) and the roof's height (top
+; y=-100) in 3 s each way. The two lifts run in opposite phase, so one is
+; always at the bottom. The gap from a yard to a lift is 40 px, so you can
+; step on at the bottom. If you miss it, you fall into the pit.
+;
+; **Roof.** A fixed slab (x=-90..90, top y=-122) between the tops of the two
+; lifts' runs, 22 px above a lift at the top. It holds the best pickup. A
+; FallingRock above it (the chute) drops onto the roof every 6 s after a
+; 1.5 s warning. The rock knocks whoever holds the roof sideways, off a
+; 180 px slab and 540 px above the pit.
+
+; Backdrop (issue #117): dusty ochre dusk over spoil heaps.
+[node name="Quarry" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.14, 0.1, 0.07, 1)
+background_sky_bottom = Color(0.3, 0.21, 0.13, 1)
+background_silhouette = Color(0.13, 0.09, 0.06, 1)
+background_layers = PackedStringArray("mountains", "rocks", "rocks")
+
+[node name="YardLeft" type="StaticBody2D" parent="."]
+position = Vector2(-520, 340)
+
+[node name="YardLeftShape" type="CollisionShape2D" parent="YardLeft"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="YardLeftVisual" type="Polygon2D" parent="YardLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-220, -20, 220, -20, 220, 20, -220, 20)
+
+[node name="YardRight" type="StaticBody2D" parent="."]
+position = Vector2(520, 340)
+
+[node name="YardRightShape" type="CollisionShape2D" parent="YardRight"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="YardRightVisual" type="Polygon2D" parent="YardRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-220, -20, 220, -20, 220, 20, -220, 20)
+
+; Authored at the bottom of its run, heading up.
+[node name="LiftLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-180, 330)
+size = Vector2(160, 20)
+travel = Vector2(0, -420)
+one_way_sec = 3.0
+
+; Authored at the top of its run, heading down: opposite phase to LiftLeft.
+[node name="LiftRight" parent="." instance=ExtResource("3")]
+position = Vector2(180, -90)
+size = Vector2(160, 20)
+travel = Vector2(0, 420)
+one_way_sec = 3.0
+
+[node name="Roof" type="StaticBody2D" parent="."]
+position = Vector2(0, -110)
+
+[node name="RoofShape" type="CollisionShape2D" parent="Roof"]
+shape = SubResource("RectangleShape2D_roof")
+
+[node name="RoofVisual" type="Polygon2D" parent="Roof"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
+
+[node name="Chute" parent="." instance=ExtResource("4")]
+position = Vector2(0, -430)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-430, 270)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(430, 270)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-500, 270)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(500, 270)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-360, 270)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(360, 270)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-570, 270)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(570, 270)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, -170)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-700, 270)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(700, 270)
