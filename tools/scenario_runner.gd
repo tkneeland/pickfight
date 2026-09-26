@@ -16767,13 +16767,16 @@ func _scenario_pause_keeps_ko_credit_and_survival_time() -> Array[String]:
 	stats.begin_match()
 	stats.begin_round([0, 1], 0)
 	stats.record_hit(0, 1, 0.0, 1000)
-	stats.shift(PAUSE_161_MSEC)
-	var ko: Dictionary = stats.record_elimination(1, 1500 + PAUSE_161_MSEC)
-	if ko["killer"] != 0:
-		failures.append("fake clock: a KO 0.5 s of play after the hit, across a 30 s pause, went to %d, expected slot 0" % ko["killer"])
-	stats.end_round(5000 + PAUSE_161_MSEC)
-	if stats.survival_msec.get(0, 0) != 5000 or stats.survival_msec.get(1, 0) != 1500:
-		failures.append("fake clock: time alive %s, expected 5000 and 1500 ms with the pause left out" % [stats.survival_msec])
+	if not stats.has_method("shift"):
+		failures.append("MatchStats has no shift() to move its clocks past a pause")
+	else:
+		stats.shift(PAUSE_161_MSEC)
+		var ko: Dictionary = stats.record_elimination(1, 1500 + PAUSE_161_MSEC)
+		if ko["killer"] != 0:
+			failures.append("fake clock: a KO 0.5 s of play after the hit, across a 30 s pause, went to %d, expected slot 0" % ko["killer"])
+		stats.end_round(5000 + PAUSE_161_MSEC)
+		if stats.survival_msec.get(0, 0) != 5000 or stats.survival_msec.get(1, 0) != 1500:
+			failures.append("fake clock: time alive %s, expected 5000 and 1500 ms with the pause left out" % [stats.survival_msec])
 
 	var loop: Dictionary = _new_lobby_round(3)
 	var players: Array[RigidBody2D] = loop["players"]
