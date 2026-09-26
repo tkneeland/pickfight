@@ -1,6 +1,6 @@
 # Issue #143: four new normal-size stages
 
-Tested on this branch, based on main `9102999`.
+Tested on this branch, rebased on main `d00dba3`.
 
 ## Stages
 
@@ -51,4 +51,8 @@ All four stages fall within the range of the existing 17, which is 1.2 to 15.8 f
 
 ## Full suite
 
-`full-suite.txt` has the full scenario list, run as 5 parallel shards, plus the fresh-clone boot check. The result is **168 passed, 0 failed, 168 total**. The only boot ERROR is qrencode's "Could not create child process". That comes from this environment, not from the change.
+`full-suite.txt` has the full scenario list, run as 5 parallel shards on main `d00dba3`, plus the fresh-clone boot check. The result is **171 passed, 1 failed, 172 total**.
+
+The one failure is `controller_page_look_picker_after_name`, from #151. It fails here only because this Windows worktree checks files out with CRLF line endings (`core.autocrlf=true`), and the scenario searches `controller/index.html` for a literal `"</div>\n<div id=\"name-prompt\">"` (an LF newline). This PR doesn't touch the controller page or that scenario. The same scenario **passes** on this branch in an LF checkout (`git clone -c core.autocrlf=false`). That rerun is at the end of `full-suite.txt`. Before the rebase, the suite on main `9102999` was 168/168.
+
+The only boot ERROR is qrencode's "Could not create child process". That comes from this environment, not from the change.
