@@ -1,21 +1,23 @@
 extends SceneTree
 ## Ring-out rate probe (issue #137): the real game scene with only one stage
-## in the rotation and perf_probe.gd's four random bots (same input model),
+## in the rotation and perf_probe.gd's random bots (same input model; four by
+## default, up to eight with --players, which a large stage needs -- #144),
 ## counting eliminations before the rising lava's grace ends, per bot-minute
 ## alive. Random bots fall off a lot, which is the point: it is a measure of
 ## how easy a stage is to fall off by accident. Asserts nothing.
 ##
-##   godot --headless --path . --fixed-fps 60 -s tools/ringout_probe.gd -- --stage=Flatlands --seconds=600 --seed=1
+##   godot --headless --path . --fixed-fps 60 -s tools/ringout_probe.gd -- --stage=Flatlands --seconds=600 --seed=1 [--players=4]
 ##
 ## Prints one RINGOUT line: rounds, pre-lava falls (eliminated below the view
-## or off its sides), pre-lava hazard deaths, eliminations after the lava set
+## or off its sides -- the stage's own view, zoomed out on a large one), pre-lava hazard deaths, eliminations after the lava set
 ## off, bot-minutes alive pre-lava, falls per bot-minute, and the median time
 ## to a round's first elimination. The lobby is switched off, the round-end
 ## pause shortened and round modifiers disabled, as in perf_probe.gd.
 const MAIN_SCENE: PackedScene = preload("res://scenes/Main.tscn")
 const StubRosterScript := preload("res://tools/stub_roster.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
-const PLAYER_COUNT: int = 4
+const MAX_PLAYERS: int = 8
+var _player_count: int = 4
 var _stage: String = "Flatlands"
 var _seconds: float = 600.0
 var _seed: int = 1
@@ -33,12 +35,17 @@ var _first_elim_ticks: Array[int] = []
 var _round_had_elim: bool = false
 var _start_tick: int = -1
 var _grace_ticks: int = 0
+## The live stage's view, refreshed each round start.
+var _view: Rect2 = Rect2(-800, -450, 1600, 900)
+## How far above the view's bottom an elimination still counts as a fall.
+const PLAYER_MARGIN: float = 30.0
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--stage="): _stage = arg.trim_prefix("--stage=")
 		elif arg.begins_with("--seconds="): _seconds = arg.trim_prefix("--seconds=").to_float()
 		elif arg.begins_with("--seed="): _seed = arg.trim_prefix("--seed=").to_int()
+		elif arg.begins_with("--players="): _player_count = clampi(arg.trim_prefix("--players=").to_int(), 2, MAX_PLAYERS)
 	seed(_seed)
 	_rng.seed = _seed
 	RoundManagerType.modifier_rolls_enabled = false
@@ -49,7 +56,7 @@ func _initialize() -> void:
 	var roster: Node = StubRosterScript.new()
 	roster.name = "ControllerServer"
 	var slots: Array[int] = []
-	for i in PLAYER_COUNT: slots.append(i)
+	for i in _player_count: slots.append(i)
 	roster.slots = slots
 	main.add_child(roster)
 	_rm = main.get_node("RoundManager")
@@ -62,8 +69,10 @@ func _initialize() -> void:
 	_rm.round_started.connect(func() -> void:
 		_rounds += 1
 		_round_tick = Engine.get_physics_frames()
-		_round_had_elim = false)
-	for i in PLAYER_COUNT:
+		_round_had_elim = false
+		var stage: Node2D = _rm.get("_current_stage")
+		if stage != null: _view = stage.get_view_rect())
+	for i in _player_count:
 		var player: RigidBody2D = main.get_node("Player%d" % (i + 1)) as RigidBody2D
 		player.bind_controller()
 		player.eliminated.connect(_on_elim.bind(player))
@@ -86,7 +95,8 @@ func _on_elim(player: RigidBody2D) -> void:
 		_late += 1
 		return
 	var p: Vector2 = player.global_position
-	if p.y > 420.0 or absf(p.x) > 800.0:
+	# Below or beside the stage's view (the camera's 1600x900 on a normal one).
+	if p.y > _view.end.y - PLAYER_MARGIN or p.x < _view.position.x or p.x > _view.end.x:
 		_falls += 1
 	else:
 		_hazard += 1
@@ -144,8 +154,8 @@ func _report() -> void:
 	if not _first_elim_ticks.is_empty():
 		_first_elim_ticks.sort()
 		med = _first_elim_ticks[_first_elim_ticks.size() / 2] / 60.0
-	print("RINGOUT stage=%s seed=%d rounds=%d prelava_falls=%d prelava_hazard=%d lava_elims=%d bot_min=%.1f falls_per_bot_min=%.3f median_first_elim_s=%.1f" % [
-		_stage, _seed, _rounds, _falls, _hazard, _late, bot_min, _falls / maxf(bot_min, 0.001), med])
+	print("RINGOUT stage=%s seed=%d players=%d rounds=%d prelava_falls=%d prelava_hazard=%d lava_elims=%d bot_min=%.1f falls_per_bot_min=%.3f median_first_elim_s=%.1f" % [
+		_stage, _seed, _player_count, _rounds, _falls, _hazard, _late, bot_min, _falls / maxf(bot_min, 0.001), med])
 	var sfx: Node = get_root().get_node_or_null(^"Sfx")
 	if sfx != null: await sfx.release()
 	quit(0)
