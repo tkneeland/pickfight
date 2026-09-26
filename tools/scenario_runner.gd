@@ -196,6 +196,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"phone_nickname_reaches_host_trimmed",
 	"nicknames_above_players_and_on_scoreboard",
 	"phone_states_through_a_round",
+	"eight_phones_join_and_play_a_round",
+	"spawns_shared_when_stage_has_fewer_than_players",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -914,6 +916,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_nicknames_above_players_and_on_scoreboard()
 		"phone_states_through_a_round":
 			return await _scenario_phone_states_through_a_round()
+		"eight_phones_join_and_play_a_round":
+			return await _scenario_eight_phones_join_and_play_a_round()
+		"spawns_shared_when_stage_has_fewer_than_players":
+			return await _scenario_spawns_shared_when_stage_has_fewer_than_players()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -6542,8 +6548,10 @@ func _scenario_four_phones_claim_four_slots() -> Array[String]:
 	# (which writes the port it got) has not run yet.
 	_phone_ws_port = server.ws_port
 
+	# The cap is however many slots Main.tscn gives (eight since #138).
+	var cap: int = main_paths.size()
 	var joined: Array[WebSocketPeer] = []
-	for i in 4:
+	for i in cap:
 		var peer := WebSocketPeer.new()
 		var result: Dictionary = await _join_phone(peer, "four-phones-%d" % i, joined)
 		if result["slot"] != i:
@@ -6552,17 +6560,17 @@ func _scenario_four_phones_claim_four_slots() -> Array[String]:
 		joined.append(peer)
 
 	var fifth := WebSocketPeer.new()
-	var refused: Dictionary = await _join_phone(fifth, "four-phones-4", joined)
+	var refused: Dictionary = await _join_phone(fifth, "four-phones-%d" % cap, joined)
 	if refused["slot"] >= 0:
-		failures.append("a fifth phone was given slot %d; four is the cap" % refused["slot"])
+		failures.append("phone %d was given slot %d; %d is the cap" % [cap + 1, refused["slot"], cap])
 	elif not refused["closed"]:
-		failures.append("a fifth phone was neither given a slot nor refused")
+		failures.append("phone %d was neither given a slot nor refused" % (cap + 1))
 	elif refused["reason"] != NO_FREE_SLOT_REASON:
-		failures.append("a fifth phone was refused with '%s', expected '%s'" % [refused["reason"], NO_FREE_SLOT_REASON])
+		failures.append("phone %d was refused with '%s', expected '%s'" % [cap + 1, refused["reason"], NO_FREE_SLOT_REASON])
 
 	var claimed: Array[int] = server.claimed_slots()
-	if claimed != [0, 1, 2, 3]:
-		failures.append("claimed slots were %s after four phones joined, expected [0, 1, 2, 3]" % [claimed])
+	if claimed != range(cap):
+		failures.append("claimed slots were %s after %d phones joined, expected %s" % [claimed, cap, range(cap)])
 
 	for peer: WebSocketPeer in joined:
 		peer.close(1000, "scenario done")
@@ -12454,3 +12462,174 @@ func _scenario_phone_states_through_a_round() -> Array[String]:
 		failures.append("the next round never told the phones all three were in it (last %s)" % [roster.last_state()])
 	await _teardown(loop["stage"])
 	return failures
+
+# --- Eight players (issue #138) ------------------------------------------------
+
+## The shared screen, 1600 x 900 (project.godot), that eight players' lobby,
+## scoreboard and podium all have to fit inside.
+const SCREEN_SIZE: Vector2 = Vector2(1600, 900)
+## The closest two players may start a round to each other, centre to centre,
+## when stages with four spawns are shared by eight.
+const EIGHT_SPAWN_MIN_GAP: float = 40.0
+
+## Issue #138: eight phones join the real game (scenes/Main.tscn, its real
+## ControllerServer over the real WebSocket seam), each with a 12-character
+## name, set first-to-1, ready up and play a round on a stage built for four.
+## All eight start apart in eight different colours; the lobby, round-end
+## scoreboard and victory podium each fit on the screen with all eight on it.
+func _scenario_eight_phones_join_and_play_a_round() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 138
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.round_end_pause_sec = 0.5
+	var players: Array[RigidBody2D] = []
+	for i in server.player_paths.size():
+		players.append(server.get_node(server.player_paths[i]) as RigidBody2D)
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	if players.size() != 8:
+		failures.append("Main.tscn has %d player slots, expected 8" % players.size())
+
+	var joined: Array[WebSocketPeer] = []
+	for i in players.size():
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "eight-phones-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d (closed=%s '%s')" % [i + 1, result["slot"], result["closed"], result["reason"]])
+		joined.append(peer)
+		peer.send_text(JSON.stringify({"t": "name", "v": "Wwwwwwwwwww%d" % (i + 1)}))
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "target", "n": 1}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	var lobby: Control = rm.lobby_panel()
+	var lobby_size: Vector2 = _content_size(lobby) if lobby != null else Vector2.ZERO
+	print("      lobby with 8 needs %.0f x %.0f px" % [lobby_size.x, lobby_size.y])
+	if lobby == null or lobby_size.x > SCREEN_SIZE.x or lobby_size.y > SCREEN_SIZE.y:
+		failures.append("the lobby with eight players needs %s, more than the %s screen" % [lobby_size, SCREEN_SIZE])
+
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var all_alive := func() -> bool:
+		for player: RigidBody2D in players:
+			if not player.alive:
+				return false
+		return true
+	var started: bool = false
+	var deadline: int = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC * 2
+	while Time.get_ticks_msec() < deadline and not started:
+		await _poll_phones(joined, 1)
+		started = all_alive.call()
+	if not started:
+		failures.append("eight ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	var closest: float = INF
+	var colours: Array[Color] = []
+	for i in players.size():
+		for j in range(i + 1, players.size()):
+			closest = minf(closest, players[i].global_position.distance_to(players[j].global_position))
+		var colour: Color = players[i].identity_color
+		for other: Color in colours:
+			if _color_close(colour, other, COLOR_MATCH_TOLERANCE):
+				failures.append("slot %d's colour %s matches another slot's" % [i, colour])
+		colours.append(colour)
+	print("      8 players started, closest pair %.0f px apart" % closest)
+	if closest < EIGHT_SPAWN_MIN_GAP:
+		failures.append("two of the eight started %.0f px apart, closer than %.0f" % [closest, EIGHT_SPAWN_MIN_GAP])
+
+	await _poll_phones(joined, 30)
+	for i in range(1, players.size()):
+		players[i].eliminate()
+		await _poll_phones(joined, 2)
+	var scoreboard: Control = main.get_node("UI/Scoreboard") as Control
+	var shown: bool = false
+	deadline = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline and not shown:
+		await _poll_phones(joined, 1)
+		shown = scoreboard.visible
+	if not shown:
+		failures.append("the round-end scoreboard never came up after seven eliminations")
+	else:
+		var entries: int = 0
+		for entry: Node in scoreboard.get_children():
+			if entry is CanvasItem and entry.visible:
+				entries += 1
+		var board_size: Vector2 = scoreboard.get_combined_minimum_size()
+		print("      scoreboard: %d entries in %.0f x %.0f px" % [entries, board_size.x, board_size.y])
+		if entries != 8:
+			failures.append("the scoreboard showed %d entries, expected 8" % entries)
+		if board_size.x > SCREEN_SIZE.x or board_size.y > SCREEN_SIZE.y:
+			failures.append("the eight-entry scoreboard needs %s, more than the %s screen" % [board_size, SCREEN_SIZE])
+	if rm.score_of(0) != 1:
+		failures.append("the last survivor (slot 0) scored %d, expected 1" % rm.score_of(0))
+
+	var victory: bool = false
+	deadline = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline and not victory:
+		await _poll_phones(joined, 1)
+		victory = rm.lobby_phase() == "victory"
+	if not victory:
+		failures.append("first-to-1 never reached the victory screen (phase '%s')" % rm.lobby_phase())
+	else:
+		await _poll_phones(joined, 2)
+		var podium_size: Vector2 = _content_size(rm.victory_panel())
+		print("      podium with 8 needs %.0f x %.0f px" % [podium_size.x, podium_size.y])
+		if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
+			failures.append("the eight-player podium needs %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+	return failures
+
+## Issue #138: until #137 gives every stage eight spawn points, eight players
+## share a four-spawn stage round-robin, the second lap nudged aside so no two
+## start on top of each other; a stage with enough spawns gives each slot its own.
+func _scenario_spawns_shared_when_stage_has_fewer_than_players() -> Array[String]:
+	var failures: Array[String] = []
+	var rm: Node = RoundManagerScript.new()
+	rm.set("_stage_spawn_points", [Vector2(-300, 0), Vector2(-100, 0), Vector2(100, 0), Vector2(300, 0)] as Array[Vector2])
+	var spots: Array[Vector2] = []
+	for slot in 8:
+		spots.append(rm._spawn_for_slot(slot))
+	print("      8 on 4 spawns: %s" % [spots])
+	for i in 8:
+		for j in range(i + 1, 8):
+			if spots[i].distance_to(spots[j]) < EIGHT_SPAWN_MIN_GAP:
+				failures.append("slots %d and %d start %.0f px apart" % [i, j, spots[i].distance_to(spots[j])])
+		if i >= 4 and spots[i].distance_to(spots[i - 4]) > 80.0:
+			failures.append("slot %d starts %.0f px from the spawn it shares, not beside it" % [i, spots[i].distance_to(spots[i - 4])])
+	var eight: Array[Vector2] = []
+	for i in 8:
+		eight.append(Vector2(i * 100, 0))
+	rm.set("_stage_spawn_points", eight)
+	for slot in 8:
+		if rm._spawn_for_slot(slot) != eight[slot]:
+			failures.append("with eight spawns slot %d got %s, not its own %s" % [slot, rm._spawn_for_slot(slot), eight[slot]])
+	rm.free()
+	_scenario_completed = true
+	return failures
+
+## What a full-screen panel's contents need: the panel itself is a ColorRect,
+## whose own minimum size ignores its children.
+func _content_size(panel: Control) -> Vector2:
+	var size: Vector2 = Vector2.ZERO
+	for child: Node in panel.get_children():
+		if child is Control:
+			size = size.max((child as Control).get_combined_minimum_size())
+	return size
+
+func _close_phones(peers: Array[WebSocketPeer]) -> void:
+	for peer: WebSocketPeer in peers:
+		peer.close(1000, "scenario done")
+	await _poll_phones(peers, 5)

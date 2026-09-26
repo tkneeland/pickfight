@@ -169,11 +169,12 @@
   var RECONNECT_DELAY_MS = 1000;
   // Must stay in sync with each Player's identity_color in scenes/Main.tscn:
   // slot 0 = Player1 blue, slot 1 = Player2 orange, slot 2 = Player3 green,
-  // slot 3 = Player4 magenta. The host paints that same colour on each
+  // slot 3 = Player4 magenta, slot 4 = Player5 yellow, slot 5 = Player6 cyan,
+  // slot 6 = Player7 violet, slot 7 = Player8 red (issue #138). The host paints that same colour on each
   // player's persistent outline and weapon head (ADR-0005)
   // -- not the body fill, which reddens with damage -- so changing a colour
   // here means changing the matching identity_color there.
-  var SLOT_COLORS = ["#2666ff", "#ff8c1a", "#1fd98c", "#ff52d1"];
+  var SLOT_COLORS = ["#2666ff", "#ff8c1a", "#1fd98c", "#ff52d1", "#ffdb1a", "#1ad1ff", "#9959ff", "#eb2933"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector

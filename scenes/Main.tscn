@@ -35,13 +35,15 @@ current = true
 
 ; identity_color is paired with SLOT_COLORS in controller/index.html: slot 0
 ; must match Player1 (blue), slot 1 Player2 (orange), slot 2 Player3 (green)
-; and slot 3 Player4 (magenta). The phone tints its "P1"-"P4" badge from that
+; slot 3 Player4 (magenta), slot 4 Player5 (yellow), slot 5 Player6 (cyan),
+; slot 6 Player7 (violet) and slot 7 Player8 (red). The phone tints its
+; "P1"-"P8" badge from that
 ; list, which is how a player finds the
 ; outline, weapon and scoreboard icon that are theirs on the shared screen
 ; (ADR-0005) -- the
 ; body fill itself is no longer identity, since it reddens with damage -- so
 ; the two lists have to stay in sync.
-; start_in_round = false: all four are owned by RoundManager now, which
+; start_in_round = false: all eight are owned by RoundManager now, which
 ; brings each into play with start_round() once the roster below it is
 ; ready, rather than any building a live rig at boot with nobody bound.
 [node name="Player1" parent="." instance=ExtResource("2")]
@@ -71,6 +73,34 @@ debug_source = 0
 identity_color = Color(1, 0.32, 0.82, 1)
 start_in_round = false
 
+; Players 5 to 8 (issue #138, the cap raised to eight). Yellow, cyan, violet
+; and red: the four hues left between the first four, each a clear step from
+; its neighbours in lightness too, so they still read apart on the stages'
+; skies and under the common colour-blindnesses alongside the name tags.
+[node name="Player5" parent="." instance=ExtResource("2")]
+position = Vector2(-500, 0)
+debug_source = 0
+identity_color = Color(1, 0.86, 0.1, 1)
+start_in_round = false
+
+[node name="Player6" parent="." instance=ExtResource("2")]
+position = Vector2(500, 0)
+debug_source = 0
+identity_color = Color(0.1, 0.82, 1, 1)
+start_in_round = false
+
+[node name="Player7" parent="." instance=ExtResource("2")]
+position = Vector2(-700, 0)
+debug_source = 0
+identity_color = Color(0.6, 0.35, 1, 1)
+start_in_round = false
+
+[node name="Player8" parent="." instance=ExtResource("2")]
+position = Vector2(700, 0)
+debug_source = 0
+identity_color = Color(0.92, 0.16, 0.2, 1)
+start_in_round = false
+
 ; Hitmarkers and debug damage numbers (issue #33), drawn in world space
 ; where each strike landed. Listens to every player's strike_landed.
 [node name="HitFeedback" type="Node2D" parent="."]
@@ -95,7 +125,7 @@ offset_left = 12.0
 offset_top = 74.0
 offset_right = 620.0
 offset_bottom = 110.0
-text = "P1: 0  P2: 0  P3: 0  P4: 0"
+text = ""
 
 [node name="WaitingLabel" type="Label" parent="UI"]
 anchor_right = 1.0
@@ -106,19 +136,22 @@ vertical_alignment = 1
 text = "Waiting for players..."
 
 ; Round-end scoreboard: one entry per player slot (Slot0 = Player1 through
-; Slot3 = Player4, matching player_paths order below), each an icon tinted
-; with that slot's Player.identity_color next to its score number. Large and
-; centred so the result reads from across the room on the shared screen; a
-; row of four is under 600 px wide, well inside the 1600 px screen.
-[node name="Scoreboard" type="HBoxContainer" parent="UI"]
+; Slot7 = Player8, matching player_paths order below), each an icon tinted
+; with that slot's Player.identity_color next to its score number and name.
+; Large and centred so the result reads from across the room on the shared
+; screen. A grid four wide (issue #138): up to four players is the old single
+; row, and five to eight wrap to a second row, since eight entries with
+; 12-character names would not fit across the 1600 px screen.
+[node name="Scoreboard" type="GridContainer" parent="UI"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 64
-alignment = 1
+theme_override_constants/h_separation = 32
+theme_override_constants/v_separation = 24
+columns = 4
 visible = false
 
 [node name="Slot0" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -133,7 +166,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot0"]
-theme_override_font_sizes/font_size = 32
+theme_override_font_sizes/font_size = 24
 text = ""
 
 [node name="Slot1" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -148,7 +181,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot1"]
-theme_override_font_sizes/font_size = 32
+theme_override_font_sizes/font_size = 24
 text = ""
 
 [node name="Slot2" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -163,7 +196,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot2"]
-theme_override_font_sizes/font_size = 32
+theme_override_font_sizes/font_size = 24
 text = ""
 
 [node name="Slot3" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -178,7 +211,67 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot3"]
-theme_override_font_sizes/font_size = 32
+theme_override_font_sizes/font_size = 24
+text = ""
+
+[node name="Slot4" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot4"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot4"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
+[node name="Name" type="Label" parent="UI/Scoreboard/Slot4"]
+theme_override_font_sizes/font_size = 24
+text = ""
+
+[node name="Slot5" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot5"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot5"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
+[node name="Name" type="Label" parent="UI/Scoreboard/Slot5"]
+theme_override_font_sizes/font_size = 24
+text = ""
+
+[node name="Slot6" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot6"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot6"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
+[node name="Name" type="Label" parent="UI/Scoreboard/Slot6"]
+theme_override_font_sizes/font_size = 24
+text = ""
+
+[node name="Slot7" type="HBoxContainer" parent="UI/Scoreboard"]
+theme_override_constants/separation = 16
+
+[node name="Icon" type="ColorRect" parent="UI/Scoreboard/Slot7"]
+custom_minimum_size = Vector2(56, 56)
+color = Color(1, 1, 1, 1)
+
+[node name="Score" type="Label" parent="UI/Scoreboard/Slot7"]
+theme_override_font_sizes/font_size = 48
+text = "0"
+
+[node name="Name" type="Label" parent="UI/Scoreboard/Slot7"]
+theme_override_font_sizes/font_size = 24
 text = ""
 
 [node name="JoinQrCode" type="TextureRect" parent="UI"]
@@ -195,7 +288,7 @@ visible = false
 
 [node name="ControllerServer" type="Node" parent="."]
 script = ExtResource("3")
-player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4")]
+player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4"), NodePath("../Player5"), NodePath("../Player6"), NodePath("../Player7"), NodePath("../Player8")]
 join_label_path = NodePath("../UI/JoinLabel")
 qr_texture_path = NodePath("../UI/JoinQrCode")
 
@@ -208,7 +301,7 @@ qr_texture_path = NodePath("../UI/JoinQrCode")
 ; eleven in this same order, and the two are meant to stay that way.
 [node name="RoundManager" type="Node" parent="."]
 script = ExtResource("4")
-player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4")]
+player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4"), NodePath("../Player5"), NodePath("../Player6"), NodePath("../Player7"), NodePath("../Player8")]
 stage_scenes = [ExtResource("5"), ExtResource("8"), ExtResource("12"), ExtResource("6"), ExtResource("13"), ExtResource("9"), ExtResource("14"), ExtResource("7"), ExtResource("15"), ExtResource("10"), ExtResource("11"), ExtResource("22"), ExtResource("23"), ExtResource("24"), ExtResource("25"), ExtResource("26"), ExtResource("27")]
 arena_container_path = NodePath("../Arena")
 controller_server_path = NodePath("../ControllerServer")
