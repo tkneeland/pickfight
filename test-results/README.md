@@ -1,9 +1,9 @@
 # Test results
 
-Evidence for the latest work package only: issue #136 (every weapon but the axe more responsive; values only).
+Evidence for the latest work package only: issue #182 (one game clock; the suite runs under `--fixed-fps 60`).
 
-- `issue-136/full-suite.txt`: fresh-clone boot check plus the full suite in 4 parallel shards on `feat/issue-136-responsive` c538078, rebased on main 74ed45f. Boot is clean and the suite passes 211/211.
-- `issue-136/traversal-before.txt` and `issue-136/traversal-after.txt`: the new `roster_traversal_is_measured`, run with main's weapon resources and with the branch's. It reports aim settle, extension, vault height and ledge climbs per weapon. It is red on main's resources, because the boomstick vaults 69 px, under the 80 px ledge.
-- `issue-136/perf-probe.txt`: `tools/perf_probe.gd`, 3600 frames with eight bots, main resources against the branch, interleaved runs.
+- `issue-182/full-suite-realtime.txt`: fresh-clone boot check plus the full suite in 4 parallel shards on `feat/issue-182-game-clock` 445eff6, the way `psuite.sh` runs it today. Boot is clean and the suite passes 216/216 in 10:21.
+- `issue-182/full-suite-fixed-fps-60.txt`: the same, with `--fixed-fps 60` on the scenario runner's command line. It passes 216/216 in 2:30.
+- `issue-182/main-baseline-realtime.txt`: main e91ab17 in realtime for comparison: 215/215 in 10:01.
 
-Previous package: issue #168 (harness fixes), `issue-168/`, in `git show 74ed45f`.
+Previous package: issue #175 (RoundManager split), `issue-175/`, in `git show e91ab17`.
