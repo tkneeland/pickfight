@@ -1,0 +1,3 @@
+# psuite.sh, 4 shards, branch feat/issue-137-wide-maps at a9970f9 (rebased on main 2456323)
+boot grep exit 1 (1 = clean);      162 scenarios in 4 shards
+TOTAL 162 passed, 0 failed of      162

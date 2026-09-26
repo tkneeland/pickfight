@@ -2,7 +2,7 @@
 
 ## Files
 
-- `full-suite.txt`: boot check plus the full scenario suite (psuite, 4 parallel shards) on this branch rebased on main 2456323.
+- `full-suite.txt`: boot check plus the full scenario suite (psuite, 4 parallel shards) on this branch rebased on main 2456323: boot clean, 162/162.
 - `new-scenarios-red-on-main.txt`: the two new scenarios (`every_stage_has_eight_safe_spawns`, `every_stage_terrain_spans_the_view`) run against main's stages. Both fail there, and both pass on the branch.
 - `before/`, `after/`: one windowed screenshot per stage (Compatibility renderer, downscaled to 1600 px wide). Each has a coloured body on every spawn labelled S0..S7 (main has only 4 spawns per stage) and a ring on every pickup spot. Made with `godot --path . -s tools/capture_stage_screenshots.gd -- --out=<dir>`.
 - `widen_stages.py`: the one-shot migration that edited the 17 `.tscn` files. It uses `tools/stage_tscn.py`.
