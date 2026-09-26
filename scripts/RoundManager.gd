@@ -157,6 +157,7 @@ func _ready() -> void:
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_watch_for_buzzes()
+	_watch_for_survivor()
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
 	if _controller_server != null and _controller_server.has_signal("host_command"):
@@ -235,7 +236,9 @@ func _try_start_round() -> void:
 	for slot in roster:
 		if slot < 0 or slot >= _players.size() or _players[slot] == null:
 			continue
-		var spawn: Vector2 = _spawn_for_slot(slot)
+		# By place in the round, not slot number (#163): stages pair their spawns
+		# left/right, so slots 0 and 2 alone would both start on the left.
+		var spawn: Vector2 = _spawn_point(_in_round.size())
 		var keeps_weapon: bool = slot == _last_winner_slot
 		_players[slot].start_round(spawn, keeps_weapon)
 		_in_round.append(slot)
@@ -245,6 +248,7 @@ func _try_start_round() -> void:
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1
+	_survivor_slot = -1
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
 	_start_pickups()
@@ -256,7 +260,7 @@ func _try_start_round() -> void:
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next `_stage_index` into `stage_scenes` via `_next_stage_index()`, and
 ## caches the new stage's spawn points so `_try_start_round()`'s loop above
-## can read them per slot. A no-op with an empty `stage_scenes`, leaving
+## can hand them out in roster order. A no-op with an empty `stage_scenes`, leaving
 ## `_stage_spawn_points` as it was.
 func _swap_stage() -> void:
 	if stage_scenes.is_empty():
@@ -332,9 +336,11 @@ func _stage_allowed(index: int) -> bool:
 ## "just played" value the fresh bag must not start with.
 ##
 ## Issue #144: only stages `_stage_allowed()` for this round's player count are
-## played. A bag is dealt from the stages allowed when it is filled; one
-## dealt for five or more players and then reached with fewer skips its large
-## stages, and a bag dealt for fewer holds none, so they wait for the next.
+## played. A bag is dealt from the stages allowed when it is filled, and
+## re-dealt the moment the count crosses `large_stage_min_players` either way
+## (#163): a bag dealt for three would otherwise hold no large stage for
+## however many rounds of seven it had left. A new match deals afresh too
+## (`_begin_match()`).
 func _next_stage_index() -> int:
 	if _demo:
 		var next: int = _stage_index
@@ -348,6 +354,8 @@ func _next_stage_index() -> int:
 			if _stage_allowed(i):
 				return i
 		return 0
+	if _bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage():
+		_bag.clear()
 	# A fresh bag always holds an allowed stage, so this ends within one bag's
 	# worth of skips and one refill.
 	var index: int = 0
@@ -370,6 +378,7 @@ func _refill_bag(avoid: int) -> void:
 	# Shuffled first and filtered after, so a rotation with no large stages
 	# draws exactly the order it drew before issue #144.
 	_bag = []
+	_bag_large_eligible = _large_stages_eligible()
 	for index: int in _shuffled_indices():
 		if _stage_allowed(index):
 			_bag.append(index)
@@ -378,6 +387,21 @@ func _refill_bag(avoid: int) -> void:
 		var tmp: int = _bag[0]
 		_bag[0] = _bag[swap_with]
 		_bag[swap_with] = tmp
+
+## Whether this round's player count may play large stages (issue #144).
+func _large_stages_eligible() -> bool:
+	return _round_player_count >= large_stage_min_players
+
+## What `_large_stages_eligible()` said when `_bag` was dealt (#163).
+var _bag_large_eligible: bool = false
+
+## Whether any stage in the rotation is large. Without one the player count
+## never changes a bag, so it is never re-dealt for it.
+func _rotation_has_large_stage() -> bool:
+	for i in stage_scenes.size():
+		if _stage_is_large(i):
+			return true
+	return false
 
 ## A Fisher-Yates shuffle of `range(stage_scenes.size())` over `_rng`.
 func _shuffled_indices() -> Array[int]:
@@ -414,12 +438,17 @@ func _check_round_end() -> void:
 		var player: Variant = _players[slot]
 		if player != null and player.alive:
 			alive_slots.append(slot)
+	# Nobody left, but someone was the last one standing on an earlier physics
+	# tick of this frame: they won before they fell (#163).
+	if alive_slots.is_empty() and _survivor_slot != -1:
+		alive_slots.append(_survivor_slot)
 	if alive_slots.size() > 1:
 		if not _round_abandoned(alive_slots):
 			return
 		for slot in alive_slots:
 			_players[slot].leave_round()
 		alive_slots.clear()
+	_survivor_slot = -1
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
@@ -442,6 +471,35 @@ func _check_round_end() -> void:
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
 		_publish_lobby_state()
+
+## The round's last one standing, recorded the moment an elimination leaves a
+## single player alive (#163), or -1. `_check_round_end()` runs once per
+## rendered frame, but eliminations land on physics ticks and a slow frame
+## can hold two: without this, a survivor who falls on the tick after the
+## deciding KO ends the round with nobody standing, and nobody scores.
+var _survivor_slot: int = -1
+## The physics frame `_survivor_slot` was recorded on. A survivor eliminated
+## on that same tick went down together with the last opponent: still a draw.
+var _survivor_frame: int = -1
+
+func _watch_for_survivor() -> void:
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player != null and player.has_signal("eliminated"):
+			player.connect("eliminated", _on_eliminated_check_survivor.bind(slot))
+
+func _on_eliminated_check_survivor(slot: int) -> void:
+	if _state != State.ROUND_ACTIVE:
+		return
+	var frame: int = Engine.get_physics_frames()
+	if slot == _survivor_slot:
+		if frame == _survivor_frame:
+			_survivor_slot = -1
+		return
+	var alive: Array[int] = _alive_slots()
+	if alive.size() == 1:
+		_survivor_slot = alive[0]
+		_survivor_frame = frame
 
 ## Phone buzzes (issue #34, ADR-0013): each slot's player is watched here, so
 ## `Player` never learns about phones and `ControllerServer` never learns
@@ -494,25 +552,21 @@ func _round_abandoned(alive_slots: Array[int]) -> bool:
 		_abandoned_since_msec = now
 	return now - _abandoned_since_msec >= int(abandoned_round_grace_sec * 1000.0)
 
-## Refreshes and reveals the round-end scoreboard: one icon+score entry per
-## player slot, read from that slot's Scoreboard/SlotN child (Icon then
-## Score, per scenes/Main.tscn) and this node's own _players/_scores.
-## Only slots in play get an entry (#45): an empty or disconnected slot's
-## entry is hidden, so two players see two scores, not four.
-## Where `slot` starts a round: its own stage spawn point, or, on a stage with
-## fewer spawns than players (issue #138: eight players on stages built for
-## four until #137 gives every stage eight), a spawn shared round-robin and
+## Where the `place`-th player of a round (0-based, in roster order) starts:
+## spawn point `place`, so the first two players of any roster take a stage's
+## first left/right pair whatever their slot numbers (#163). On a stage with
+## fewer spawns than players (issue #138) a spawn is shared round-robin and
 ## nudged by `SPAWN_SHARE_OFFSET` per lap -- alternately left and right -- so
 ## two players never start inside each other.
-func _spawn_for_slot(slot: int) -> Vector2:
+func _spawn_point(place: int) -> Vector2:
 	var count: int = _stage_spawn_points.size()
 	if count == 0:
-		push_warning("RoundManager: stage has no spawn points; slot %d spawns at the origin" % slot)
+		push_warning("RoundManager: stage has no spawn points; player %d spawns at the origin" % place)
 		return Vector2.ZERO
-	var lap: int = slot / count
-	var spawn: Vector2 = _stage_spawn_points[slot % count]
+	var lap: int = place / count
+	var spawn: Vector2 = _stage_spawn_points[place % count]
 	if lap > 0:
-		var side: float = 1.0 if slot % 2 == 0 else -1.0
+		var side: float = 1.0 if place % 2 == 0 else -1.0
 		spawn += Vector2(SPAWN_SHARE_OFFSET.x * side * lap, SPAWN_SHARE_OFFSET.y * lap)
 	return spawn
 
@@ -524,6 +578,11 @@ const SPAWN_SHARE_OFFSET: Vector2 = Vector2(48.0, -24.0)
 ## A podium column's width once more than four are on it (issue #138).
 const PODIUM_CROWDED_COLUMN_PX: float = 180.0
 
+## Refreshes and reveals the round-end scoreboard: one icon+score entry per
+## player slot, read from that slot's Scoreboard/SlotN child (Icon then
+## Score, per scenes/Main.tscn) and this node's own _players/_scores.
+## Only slots in play get an entry (#45): an empty or disconnected slot's
+## entry is hidden, so two players see two scores, not four.
 func _show_scoreboard() -> void:
 	if _scoreboard == null:
 		return
@@ -1011,7 +1070,8 @@ var _victory_title: Label
 var _podium: HBoxContainer
 var _last_lobby_state: Dictionary = {}
 
-## "lobby", "countdown", "playing" or "victory": what the phones are told.
+## "lobby", "countdown", "playing", "round_end" (the pause between rounds)
+## or "victory": what the phones are told.
 func lobby_phase() -> String:
 	match _state:
 		State.LOBBY:
@@ -1100,6 +1160,7 @@ func _enter_lobby() -> void:
 	_play_lobby_music()
 	_state = State.LOBBY
 	_match_winner_slot = -1
+	_clear_stage()
 	if _waiting_label != null:
 		_waiting_label.visible = false
 	if _scoreboard != null:
@@ -1113,6 +1174,7 @@ func _enter_lobby() -> void:
 func _enter_victory() -> void:
 	_play_lobby_music()
 	_state = State.VICTORY
+	_clear_stage()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
 	if _scoreboard != null:
@@ -1124,6 +1186,16 @@ func _enter_victory() -> void:
 	_last_lobby_state = {}
 	_tick_lobby()
 
+## Frees the last round's stage on the way into the lobby or the victory
+## screen (#163), so its falling rocks and collapsing floors stop running --
+## and making sounds -- behind them. The next round instances a fresh stage
+## anyway; `_stage_index` is kept, so it still never repeats the last one.
+func _clear_stage() -> void:
+	if _current_stage != null:
+		_current_stage.queue_free()
+		_current_stage = null
+	_stage_spawn_points = []
+
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
 ## victory screen's Rematch needs pressing afresh), and the first round.
 func _begin_match() -> void:
@@ -1132,6 +1204,8 @@ func _begin_match() -> void:
 	_last_winner_slot = -1
 	for slot in _scores.size():
 		_scores[slot] = 0
+	# A fresh bag for a fresh match (#163), dealt for its own player count.
+	_bag.clear()
 	_update_score_label()
 	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
