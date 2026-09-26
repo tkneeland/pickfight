@@ -76,7 +76,8 @@ extends Node
 ## unchanged; the automated checks assert on those lines.
 
 ## A phone claimed `slot` fresh -- not a reconnect to a slot it already held.
-## A sound hook (issue #75, ADR-0016); nothing in the game reads it.
+## RoundManager clears the slot's match numbers on it (issue #161) and
+## SfxHooks plays the join sound (issue #75, ADR-0016).
 signal player_joined(slot: int)
 ## The host phone pressed "Solo practice" (`on`) or "Remove bots" (issue #152).
 signal solo_requested(on: bool)
@@ -105,6 +106,25 @@ const TEXT_FRAMES_PER_SEC: int = 20
 ## Combining marks kept on one character of a nickname (issue #164): enough
 ## for real accents, not for a tower of them.
 const MAX_STACKED_MARKS: int = 2
+## Issue #193: a text frame longer than this many bytes is dropped unread.
+## Every frame a phone sends is well under it; a 60 KB nickname is not.
+const MAX_TEXT_FRAME_BYTES: int = 1024
+## Issue #193: each socket's inbound buffer. WebSocketPeer's default (64 KB)
+## admits a frame far larger than anything a phone has a reason to send.
+const INBOUND_BUFFER_BYTES: int = 16384
+## Issue #193: a nickname is cut to this many characters before it is
+## cleaned, so cleaning costs the same however long the raw text was.
+const MAX_RAW_NAME_LENGTH: int = 64
+## Issue #193: client ids longer than this are cut to it. The page's are
+## 36-character UUIDs.
+const MAX_CLIENT_ID_LENGTH: int = 64
+## Issue #193: a phone whose claim was released (a reload or a screen lock in
+## the lobby lets it go at once) and that comes back within this long gets its
+## old place in the join order back -- so the host is host again -- along
+## with its slot, colour, hat and nickname where still free.
+const REJOIN_GRACE_MSEC: int = 10000
+## Issue #193: at most this many recently released claims are remembered.
+const MAX_RECENT_LEAVERS: int = 32
 ## The lobby phases a match is being played in; entering one from any other
 ## phase starts a new match serial (issue #164).
 const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
@@ -284,6 +304,15 @@ var _slot_text_window_msec: PackedInt64Array = PackedInt64Array()
 var _slot_text_count: PackedInt32Array = PackedInt32Array()
 ## Issue #164. Ids made up for clients that never sent one.
 var _last_generated_id: int = 0
+## Issue #193. Each claimed slot's place in the join order: `_join_order` is
+## kept sorted by it. A phone that comes back within REJOIN_GRACE_MSEC of
+## losing its claim reuses its old rank; everyone else gets the next one.
+var _slot_join_rank: PackedInt32Array = PackedInt32Array()
+var _last_join_rank: int = 0
+## Issue #193. Client id -> what its released claim held: {"rank", "slot",
+## "color", "hat", "name", "msec"}. Entries older than REJOIN_GRACE_MSEC are
+## ignored and pruned.
+var _recent_leavers: Dictionary = {}
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 ## The bots' owner, built in `_ready()` so no scene has to add it.
 var bot_director: Node = null
@@ -322,6 +351,7 @@ func _ready() -> void:
 	_slot_claim_serial.resize(_players.size())
 	_slot_text_window_msec.resize(_players.size())
 	_slot_text_count.resize(_players.size())
+	_slot_join_rank.resize(_players.size())
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 		_smoothers.append(InputSmoother.new())
@@ -559,6 +589,7 @@ func _process_websocket() -> void:
 		# Defaults to 0.0, i.e. no ping/pong, which is exactly how a dead phone
 		# stays STATE_OPEN forever.
 		peer.heartbeat_interval = heartbeat_interval_sec
+		peer.inbound_buffer_size = INBOUND_BUFFER_BYTES
 		if peer.accept_stream(tcp) == OK:
 			_pending.append(PendingConn.new(peer, now + int(connection_timeout_sec * 1000.0)))
 
@@ -630,7 +661,7 @@ func _read_client_id(peer: WebSocketPeer) -> Variant:
 			continue
 		var parsed: Variant = _parse_json(pkt.get_string_from_utf8())
 		if parsed is Dictionary and typeof(parsed.get("id")) == TYPE_STRING:
-			return parsed["id"]
+			return (parsed["id"] as String).left(MAX_CLIENT_ID_LENGTH)
 	return null
 
 ## `text` parsed as JSON, or null. Unlike `JSON.parse_string()` it prints
@@ -677,22 +708,71 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 			continue
 		if _players[slot] == null:
 			continue
-		_fresh_claim(slot, id, "")
-		_attach(slot, peer)
-		_broadcast_looks(peer)
-		player_joined.emit(slot)
+		_claim_for_phone(_rejoin_slot(id, slot), id, peer)
+		return
+	# Issue #193: every slot is claimed, but in the lobby a Solo bot makes
+	# way for a real phone.
+	var bot_slot: int = _yielding_bot_slot()
+	if bot_slot != -1:
+		bot_director.remove_bot(bot_slot)
 		if _log_input:
-			print("slot %d claimed" % slot)
+			print("slot %d: a Solo bot made way for a phone" % bot_slot)
+		_claim_for_phone(bot_slot, id, peer)
 		return
 	peer.close(1000, "no free player slot")
 	if _log_input:
 		print("controller refused: no free player slot")
 
+## Claim the free `slot` fresh for a phone with client id `id` and bind `peer`.
+func _claim_for_phone(slot: int, id: String, peer: WebSocketPeer) -> void:
+	_fresh_claim(slot, id, "")
+	_attach(slot, peer)
+	_broadcast_looks(peer)
+	player_joined.emit(slot)
+	if _log_input:
+		print("slot %d claimed" % slot)
+
+## The slot a phone with id `id` should claim, given `lowest` is the lowest
+## free one (issue #193): the slot its recently released claim held, if that
+## is still free, else `lowest`.
+func _rejoin_slot(id: String, lowest: int) -> int:
+	var left: Dictionary = _recent_leaver(id)
+	var slot: int = int(left.get("slot", -1))
+	if slot >= 0 and slot < _slot_claimed.size() and _slot_claimed[slot] == 0 and _players[slot] != null:
+		return slot
+	return lowest
+
+## What `id`'s released claim held, if it was released under
+## REJOIN_GRACE_MSEC ago; else empty (issue #193).
+func _recent_leaver(id: String) -> Dictionary:
+	if id.is_empty() or not _recent_leavers.has(id):
+		return {}
+	var left: Dictionary = _recent_leavers[id]
+	if Time.get_ticks_msec() - int(left["msec"]) > REJOIN_GRACE_MSEC:
+		_recent_leavers.erase(id)
+		return {}
+	return left
+
+## The slot of the Solo bot that makes way when a phone finds every slot
+## claimed (issue #193): the most recent Solo bot, and only in the lobby
+## (SOLO_PHASES) -- mid-match a bot's body is in the round. -1 for none.
+func _yielding_bot_slot() -> int:
+	if bot_director == null or not bot_director.solo:
+		return -1
+	if not SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+		return -1
+	var bots: Array[int] = virtual_slots()
+	return bots[bots.size() - 1] if not bots.is_empty() else -1
+
 ## Open a roster entry on `slot` (ADR-0007) for a phone with client id `id`
 ## or, with `virtual`, for a bot: at the back of the join order, under a new
 ## claim serial, bare-headed in its automatic colour. The one place a claim
-## starts (issue #164).
+## starts (issue #164). Issue #193: a phone whose claim was released under
+## REJOIN_GRACE_MSEC ago goes back to its old place in the join order instead,
+## with its colour (if still free), hat and nickname.
 func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false) -> void:
+	var left: Dictionary = {} if virtual else _recent_leaver(id)
+	_recent_leavers.erase(id)
 	_slot_claimed[slot] = 1
 	_slot_virtual[slot] = 1 if virtual else 0
 	_slot_client_id[slot] = id
@@ -700,15 +780,31 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	_slot_ready[slot] = 0
 	_last_claim_serial += 1
 	_slot_claim_serial[slot] = _last_claim_serial
+	if left.is_empty():
+		_last_join_rank += 1
+		_slot_join_rank[slot] = _last_join_rank
+	else:
+		_slot_join_rank[slot] = int(left["rank"])
 	_join_order.erase(slot)
-	_join_order.append(slot)
+	var at: int = _join_order.size()
+	while at > 0 and _slot_join_rank[_join_order[at - 1]] > _slot_join_rank[slot]:
+		at -= 1
+	_join_order.insert(at, slot)
 	_claim_look(slot)
+	if not left.is_empty():
+		if nickname.is_empty():
+			_slot_name[slot] = str(left["name"])
+		_slot_hat[slot] = str(left["hat"])
+		if _color_free(int(left["color"]), slot):
+			_slot_color[slot] = int(left["color"])
+		_apply_look(slot)
 
 ## Close `slot`'s roster entry: everything `_fresh_claim()` set goes, and its
 ## colour is free again. The one place a claim ends (issue #164) -- an expired
 ## claim, a kick and a departing bot all come here. The caller unbinds any
 ## socket first and broadcasts the looks after.
 func _release_claim(slot: int) -> void:
+	_remember_leaver(slot)
 	_slot_claimed[slot] = 0
 	_slot_virtual[slot] = 0
 	_slot_client_id[slot] = ""
@@ -717,6 +813,27 @@ func _release_claim(slot: int) -> void:
 	_slot_claim_serial[slot] = 0
 	_join_order.erase(slot)
 	_release_look(slot)
+
+## Note what `slot`'s claim holds before it is released, so its phone gets
+## it back if it returns within REJOIN_GRACE_MSEC (issue #193). Not for a bot,
+## a slot with no id, or a kicked phone, which is never coming back.
+func _remember_leaver(slot: int) -> void:
+	var id: String = _slot_client_id[slot]
+	if _slot_virtual[slot] == 1 or id.is_empty() or _kicked_ids.has(id):
+		return
+	var now: int = Time.get_ticks_msec()
+	for old: String in _recent_leavers.keys():
+		if now - int(_recent_leavers[old]["msec"]) > REJOIN_GRACE_MSEC:
+			_recent_leavers.erase(old)
+	if _recent_leavers.size() >= MAX_RECENT_LEAVERS and not _recent_leavers.has(id):
+		var oldest: String = ""
+		for old: String in _recent_leavers.keys():
+			if oldest.is_empty() or int(_recent_leavers[old]["msec"]) < int(_recent_leavers[oldest]["msec"]):
+				oldest = old
+		_recent_leavers.erase(oldest)
+	_recent_leavers[id] = {
+		"rank": _slot_join_rank[slot], "slot": slot, "color": _slot_color[slot],
+		"hat": _slot_hat[slot], "name": _slot_name[slot], "msec": now}
 
 ## Bind `peer` to `slot`: the slot frame, the current lobby state, and the full
 ## looks frame -- hat drawings included, which only a newly bound phone needs
@@ -809,7 +926,9 @@ func _drain(slot: int, peer: WebSocketPeer) -> void:
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
 		if peer.was_string_packet():
-			if _take_text_budget(slot):
+			# Issue #193: an oversized frame is never parsed; it still
+			# counts against the slot's budget.
+			if _take_text_budget(slot) and pkt.size() <= MAX_TEXT_FRAME_BYTES:
 				_handle_text(slot, pkt.get_string_from_utf8())
 			continue
 		if pkt.size() != PACKET_SIZE:
@@ -1071,8 +1190,11 @@ static func _in_ranges(c: int, ranges: PackedInt32Array) -> bool:
 
 ## A nickname as the shared screen may show it: only whitelisted characters
 ## (NAME_CHAR_RANGES), at most MAX_STACKED_MARKS combining marks on any one,
-## edges trimmed, at most MAX_NAME_LENGTH characters.
-static func clean_name(raw: String) -> String:
+## edges trimmed, at most MAX_NAME_LENGTH characters. Only the first
+## MAX_RAW_NAME_LENGTH characters of `text` are looked at (issue #193).
+static func clean_name(text: String) -> String:
+	# Issue #193: cut first, so the loop is bounded however long `text` is.
+	var raw: String = text.left(MAX_RAW_NAME_LENGTH)
 	var kept: String = ""
 	var marks: int = 0
 	for i in raw.length():

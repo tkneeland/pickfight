@@ -402,6 +402,10 @@ func _set_waiting_text(connected: int) -> void:
 	# Not "x / 2": two is the minimum to start, not the most who can play (#36).
 	_waiting_label.text = "Waiting for players: %d connected (need %d)" % [connected, min_players_to_start]
 
+## Issue #193: set by a mid-round kick, consumed by the next
+## `_check_round_end()`.
+var _kicked_this_round_check: bool = false
+
 ## A round ends the instant one or zero players are still standing --
 ## whichever came from a ring-out or the last hit that crossed DEATH_DAMAGE.
 ## The lone survivor (if any) scores the round and is returned to the same
@@ -411,7 +415,13 @@ func _set_waiting_text(connected: int) -> void:
 ## A round nobody can finish -- no survivor has a connected controller -- is
 ## ended with no winner once `abandoned_round_grace_sec` has passed; every
 ## survivor leaves the round the same way a winner does.
+##
+## Issue #193: the first check after the host kicks someone mid-round reads
+## `_kicked_this_round_check`. If that kick left a lone survivor, the round
+## ends with no winner: kicking the last opponent must not hand anyone a point.
 func _check_round_end() -> void:
+	var after_kick: bool = _kicked_this_round_check
+	_kicked_this_round_check = false
 	_flush_kos()
 	var alive_slots: Array[int] = []
 	for slot in _players.size():
@@ -429,6 +439,10 @@ func _check_round_end() -> void:
 			_players[slot].leave_round()
 		alive_slots.clear()
 	_survivor_slot = -1
+	if after_kick and alive_slots.size() == 1:
+		if _players[alive_slots[0]].alive:
+			_players[alive_slots[0]].leave_round()
+		alive_slots.clear()
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
@@ -1221,6 +1235,10 @@ func _on_host_command(cmd: String, slot: int) -> void:
 			if _in_match():
 				_end_match()
 		"kick":
+			# Issue #193: a round a kick ends -- the last opponent kicked --
+			# is won by nobody. The next `_check_round_end()` reads this.
+			if _state == State.ROUND_ACTIVE:
+				_kicked_this_round_check = true
 			# Already out of the roster; out of the round too, without a death.
 			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
 				_players[slot].leave_round()
