@@ -151,8 +151,8 @@ const MAX_DROP: float = 240.0
 ## seconds of its speed further ahead.
 const MOMENTUM_SEC: float = 0.3
 ## Slower than this with nothing to push off, the bot is resting on an
-## edge's corner; it flings its head this way (x mirrored away from the
-## ground) to rock back onto it.
+## edge's corner; it flings its head this way (x towards the ground) to
+## rock back onto it.
 const PERCHED_SPEED: float = 40.0
 const PERCH_FLING: Vector2 = Vector2(0.8, -0.6)
 
@@ -187,6 +187,9 @@ var _wiggle_left: float = 0.0
 ## True while the way to the goal is blocked by an edge or a hazard, and the
 ## bot waits there rather than going over.
 var _held_at_edge: bool = false
+## The side the bot is fleeing a danger to, kept while it flees so a bot
+## right under a rock's middle does not dither from side to side.
+var _flee_side: float = 0.0
 var _lava: Area2D = null
 ## Whether this life has read the stage yet: its lava, hazard zones, falling
 ## rocks and bounce pads. The stage only changes between rounds, while the
@@ -447,13 +450,13 @@ func _pick_anchor() -> void:
 			_airborne = false
 			return
 	# Perched on an edge's corner, the body's middle over the drop and no
-	# ground behind to push off: fling the head out over the drop, and the
-	# kick of it rocks the body back onto the ground (issue #176).
+	# ground behind to push off: fling the head up and in over the ground,
+	# and the swing of it rocks the body back onto it (issue #176).
 	var body := player as RigidBody2D
 	if side != 0.0 and body != null and body.linear_velocity.length() < PERCHED_SPEED and _standing_on() == FOOT_NONE:
 		var foot: Vector2 = me + Vector2(side * BODY_RADIUS, 0.0)
 		if _ray_hits(foot, foot + Vector2(0.0, BODY_RADIUS + FOOT_SLACK)):
-			_anchor = PERCH_FLING * Vector2(-side, 1.0)
+			_anchor = PERCH_FLING * Vector2(side, 1.0)
 			_anchor_length = AIM_LENGTH
 			_airborne = false
 			return
@@ -473,7 +476,13 @@ func _travel_side() -> float:
 		side = _way_round_ceiling(side)
 	# Getting off ground that is going, or over none: straight for the
 	# solid ground, the way there checked already (issue #176).
+	# Out from under a danger over solid ground, the ground's own edges
+	# still hold: a flee's throw is no reason to run off the far side.
 	if mode == "flee" and _standing_on() != FOOT_SOLID:
+		if side != 0.0 and _footing(me, true) == FOOT_SOLID:
+			var ahead: float = EDGE_LOOKAHEAD + _momentum(side)
+			if _edge_room(side, ahead, true) < ahead:
+				return 0.0
 		return side
 	var safe: float = _safe_side(side)
 	_held_at_edge = side != 0.0 and safe == 0.0
@@ -702,14 +711,19 @@ func _escape_goal() -> Vector2:
 			var away: float = signf(me.x - rect.get_center().x)
 			if away == 0.0:
 				away = 1.0
+			if mode == "flee" and _flee_side != 0.0:
+				away = _flee_side
 			var out: float = rect.end.x - me.x if away > 0.0 else me.x - rect.position.x
-			var out_other: float = rect.size.x - out
-			var room: float = _edge_room(away, out + FLEE_DISTANCE, true) - out
-			var room_other: float = _edge_room(-away, out_other + FLEE_DISTANCE, true) - out_other
-			if room < FLEE_DISTANCE and room_other > room:
-				away = -away
-				out = out_other
+			if not (mode == "flee" and _flee_side != 0.0):
+				var out_other: float = rect.size.x - out
+				var room: float = _edge_room(away, out + FLEE_DISTANCE, true) - out
+				var room_other: float = _edge_room(-away, out_other + FLEE_DISTANCE, true) - out_other
+				if room < FLEE_DISTANCE and room_other > room:
+					away = -away
+					out = out_other
+			_flee_side = away
 			return Vector2(me.x + away * (out + EDGE_KEEP), me.y)
+	_flee_side = 0.0
 	var kind: int = _standing_on()
 	if kind == FOOT_SOLID:
 		return Vector2.INF
