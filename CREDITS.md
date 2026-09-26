@@ -100,8 +100,13 @@ dedicated to the public domain under **CC0 1.0** like the rest.
 | `announcer/big_heads.ogg` | "Big heads!" | CC0 1.0 (synthesised) | modifier BIG HEADS |
 | `announcer/fast_lava.ogg` | "Fast lava!" | CC0 1.0 (synthesised) | modifier FAST LAVA |
 | `announcer/slippery_floor.ogg` | "Slippery floor!" | CC0 1.0 (synthesised) | modifier SLIPPERY FLOOR |
+| `announcer/tiny_weapons.ogg` | "Tiny weapons!" | CC0 1.0 (synthesised) | modifier TINY WEAPONS |
+| `announcer/weapon_roulette.ogg` | "Weapon roulette!" | CC0 1.0 (synthesised) | modifier WEAPON ROULETTE |
+| `announcer/meteor_shower.ogg` | "Meteor shower!" | CC0 1.0 (synthesised) | modifier METEOR SHOWER |
+| `announcer/bouncy.ogg` | "Bouncy!" | CC0 1.0 (synthesised) | modifier BOUNCY |
+| `announcer/double_damage.ogg` | "Double damage!" | CC0 1.0 (synthesised) | modifier DOUBLE DAMAGE |
 
-That is 12 files, about 0.17 MB in all.
+That is 17 files, about 0.23 MB in all. The last five were added for the #147 mixups.
 
 ## Music
 

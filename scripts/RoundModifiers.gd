@@ -25,16 +25,33 @@ extends RefCounted
 ## `WeaponStats` resource a player holds: `Player.weapon_stats` stays the
 ## pristine shared resource, so the round's winner carries the real weapon
 ## into the next round, and a pickup collected mid-round is modified too.
+## The one exception is Weapon roulette (issue #147), whose whole point is to
+## change the weapon held: it hands every player back the weapon they started
+## the round with on `undo()`, so the next round still starts as authored.
+##
+## Modifiers that act on a clock (Weapon roulette, Meteor shower) own a Timer
+## under the `RoundManager` for the round and free it on `undo()`; meteors are
+## `Meteor.gd` nodes on the stage, cleared on `undo()` too.
 
 const LOW_GRAVITY: String = "low_gravity"
 const HEAVY_WEAPONS: String = "heavy_weapons"
 const BIG_HEADS: String = "big_heads"
 const FAST_LAVA: String = "fast_lava"
 const SLIPPERY_FLOOR: String = "slippery_floor"
+const TINY_WEAPONS: String = "tiny_weapons"
+const WEAPON_ROULETTE: String = "weapon_roulette"
+const METEOR_SHOWER: String = "meteor_shower"
+const BOUNCY: String = "bouncy"
+const DOUBLE_DAMAGE: String = "double_damage"
+
+const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const FallingRockScript := preload("res://scripts/FallingRock.gd")
+const MeteorScript := preload("res://scripts/Meteor.gd")
 
 ## Every modifier a round can roll, in a fixed order so a seeded roll picks
 ## the same one every run.
-const IDS: PackedStringArray = [LOW_GRAVITY, HEAVY_WEAPONS, BIG_HEADS, FAST_LAVA, SLIPPERY_FLOOR]
+const IDS: PackedStringArray = [LOW_GRAVITY, HEAVY_WEAPONS, BIG_HEADS, FAST_LAVA, SLIPPERY_FLOOR,
+	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE]
 
 ## Low gravity: players and their weapons fall at this fraction of their
 ## usual gravity. Half, not less: a swing still has to come back down onto
@@ -68,6 +85,53 @@ const FAST_LAVA_RISE_SCALE: float = 0.5
 ## never reaches a player's body, so a slippery body stays slippery.
 const SLIPPERY_FRICTION: float = 0.05
 
+## Tiny weapons (issue #147): Big heads turned the other way, plus a shorter
+## haft. Every head circle's offset and radius and every point of the art are
+## scaled about the anchor (so the circles stay inside the art, ADR-0010), and
+## the haft's full reach is scaled too. The shortest reach is left alone: it is
+## what keeps a wound-in head clear of its own body.
+const TINY_HEAD_SCALE: float = 0.6
+const TINY_REACH_SCALE: float = 0.6
+
+## Weapon roulette (issue #147): every this many seconds, every player still
+## in the round is handed the same weapon, drawn from the whole roster -- the
+## pickups' list (`PickupWeapons.WEAPON_PATHS`, so a new weapon joins the draw
+## by being added there) plus the pickaxe -- and never the one the last swap
+## handed out, so a swap always shows. At round end each player gets back the
+## weapon they walked into the round with.
+const ROULETTE_INTERVAL_SEC: float = 10.0
+
+## Meteor shower (issue #147): a meteor every `METEOR_INTERVAL_SEC`, starting
+## `METEOR_HEIGHT` above the stage's highest spawn point at a random x across
+## the spawns' span widened by `METEOR_X_MARGIN` each side, flying down at
+## `METEOR_FALL_SPEED` with up to `METEOR_DRIFT_SPEED` of sideways drift.
+## A hit is a flat `METEOR_DAMAGE` and a knock of `METEOR_KNOCK_SPEED`: enough
+## to matter, well short of a kill on its own -- the ring-out is still the
+## threat. 900 px/s is 15 px a tick at 60 Hz, well under the 32 px meteor plus
+## the thinnest (24 px) platform, so nothing is stepped through.
+const METEOR_INTERVAL_SEC: float = 0.7
+const METEOR_HEIGHT: float = 800.0
+const METEOR_X_MARGIN: float = 250.0
+const METEOR_FALL_SPEED: float = 900.0
+const METEOR_DRIFT_SPEED: float = 180.0
+const METEOR_RADIUS: float = 16.0
+const METEOR_DAMAGE: float = 12.0
+const METEOR_KNOCK_SPEED: float = 650.0
+## How far below the lowest spawn a meteor that met nothing is dropped.
+const METEOR_DROP_BELOW: float = 2000.0
+
+## Bouncy (issue #147): the bounce on every player's body. Godot adds two
+## bodies' bounces together (capped at 1), and terrain has none authored, so
+## this is the bounce against every floor, wall and platform, and a player
+## meeting another bouncy player rebounds fully. Friction is kept as it was.
+const BOUNCY_BOUNCE: float = 0.85
+
+## Double Damage (issue #147): every source of damage to a player, doubled --
+## weapon strikes and bullets through the held weapon's effective stats, and
+## the stage's falling rocks through their `damage`. A strike is still capped
+## at `Player.MAX_STRIKE_DAMAGE` per hit.
+const DOUBLE_DAMAGE_SCALE: float = 2.0
+
 ## The on-screen name of modifier `id`, or "" for an unknown id.
 static func title_of(id: String) -> String:
 	match id:
@@ -81,6 +145,17 @@ static func title_of(id: String) -> String:
 			return "FAST LAVA"
 		SLIPPERY_FLOOR:
 			return "SLIPPERY FLOOR"
+		TINY_WEAPONS:
+			return "Tiny Weapons"
+		WEAPON_ROULETTE:
+			return "Weapon Roulette"
+		METEOR_SHOWER:
+			return "Meteor Shower"
+		BOUNCY:
+			return "Bouncy"
+		DOUBLE_DAMAGE:
+			# Exactly this, as the owner asked (issue #147).
+			return "Double Damage"
 	return ""
 
 ## A fresh, unapplied modifier for `id`, or null for an unknown id.
@@ -97,6 +172,16 @@ static func create(id: String) -> RoundModifier:
 			modifier = FastLava.new()
 		SLIPPERY_FLOOR:
 			modifier = SlipperyFloor.new()
+		TINY_WEAPONS:
+			modifier = TinyWeapons.new()
+		WEAPON_ROULETTE:
+			modifier = WeaponRoulette.new()
+		METEOR_SHOWER:
+			modifier = MeteorShower.new()
+		BOUNCY:
+			modifier = Bouncy.new()
+		DOUBLE_DAMAGE:
+			modifier = DoubleDamage.new()
 	if modifier != null:
 		modifier.id = id
 		modifier.title = title_of(id)
@@ -241,3 +326,212 @@ class SlipperyFloor extends RoundModifier:
 			if _saved.has(player):
 				player.physics_material_override = _saved[player]
 		_saved.clear()
+
+class TinyWeapons extends WeaponStatsModifier:
+	func _modified(stats: Resource) -> Resource:
+		var tiny: Resource = stats.duplicate()
+		var offsets: PackedVector2Array = stats.head_circle_offsets.duplicate()
+		for i in offsets.size():
+			offsets[i] = offsets[i] * TINY_HEAD_SCALE
+		var radii: PackedFloat32Array = stats.head_circle_radii.duplicate()
+		for i in radii.size():
+			radii[i] = radii[i] * TINY_HEAD_SCALE
+		var outline: PackedVector2Array = stats.art_outline.duplicate()
+		for i in outline.size():
+			outline[i] = outline[i] * TINY_HEAD_SCALE
+		tiny.head_circle_offsets = offsets
+		tiny.head_circle_radii = radii
+		tiny.art_outline = outline
+		tiny.projectile_radius = stats.projectile_radius * TINY_HEAD_SCALE
+		tiny.max_reach = maxf(stats.min_reach, stats.max_reach * TINY_REACH_SCALE)
+		return tiny
+
+## Owns a Timer under the RoundManager for the length of one round: the two
+## modifiers below that do something on a clock rather than once.
+class TimedModifier extends RoundModifier:
+	var _timer: Timer
+
+	func _start_timer(interval_sec: float, on_timeout: Callable) -> void:
+		if _round == null:
+			return
+		_timer = Timer.new()
+		_timer.name = "RoundModifierTimer"
+		_timer.wait_time = interval_sec
+		_timer.one_shot = false
+		# On the physics clock, like the rest of the round.
+		_timer.process_callback = Timer.TIMER_PROCESS_PHYSICS
+		_timer.timeout.connect(on_timeout)
+		_round.add_child(_timer)
+		_timer.start()
+
+	func _stop_timer() -> void:
+		if _timer != null and is_instance_valid(_timer):
+			_timer.stop()
+			_timer.queue_free()
+		_timer = null
+
+class WeaponRoulette extends TimedModifier:
+	## Each player's weapon when the round started, handed back on undo.
+	var _saved: Dictionary = {}
+	var _last_pick: Resource
+	var _swaps: int = 0
+
+	func _apply() -> void:
+		for player: Variant in _live_players():
+			_saved[player] = player.weapon_stats
+		_start_timer(ROULETTE_INTERVAL_SEC, _swap)
+
+	func _undo() -> void:
+		_stop_timer()
+		for player: Variant in _live_players():
+			if _saved.has(player) and player.weapon_stats != _saved[player]:
+				player.set_weapon_stats(_saved[player])
+		_saved.clear()
+		_last_pick = null
+
+	## Swaps done this round: a scenario seam.
+	func swap_count() -> int:
+		return _swaps
+
+	## The whole roster: every pickup weapon plus the pickaxe.
+	static func roster() -> Array[Resource]:
+		var weapons: Array[Resource] = PickupWeaponsScript.available_weapons()
+		if ResourceLoader.exists(PickupWeaponsScript.PICKAXE_PATH):
+			weapons.append(load(PickupWeaponsScript.PICKAXE_PATH))
+		return weapons
+
+	func _swap() -> void:
+		var in_play: Array = []
+		for player: Variant in _live_players():
+			if player.alive:
+				in_play.append(player)
+		if in_play.is_empty():
+			return
+		# Never what the last swap handed out, nor -- on the first swap --
+		# what the first player in play already holds, so a swap always shows.
+		var avoid: Resource = _last_pick if _last_pick != null else in_play[0].weapon_stats
+		var choices: Array[Resource] = []
+		for stats: Resource in roster():
+			if stats != null and stats != avoid:
+				choices.append(stats)
+		if choices.is_empty():
+			return
+		_last_pick = choices[randi() % choices.size()]
+		_swaps += 1
+		for player: Variant in in_play:
+			player.set_weapon_stats(_last_pick)
+
+class MeteorShower extends TimedModifier:
+	var _meteors: Array = []
+	var _spawned: int = 0
+	var _min_x: float = -600.0
+	var _max_x: float = 600.0
+	var _top_y: float = -800.0
+	var _lowest_y: float = 2000.0
+
+	func _apply() -> void:
+		var points: Array[Vector2] = []
+		if _stage != null and _stage.has_method("get_spawn_points"):
+			points = _stage.get_spawn_points()
+		if points.is_empty():
+			for player: Variant in _live_players():
+				points.append(player.global_position)
+		if not points.is_empty():
+			_min_x = INF
+			_max_x = -INF
+			var high: float = INF
+			var low: float = -INF
+			for point: Vector2 in points:
+				_min_x = minf(_min_x, point.x)
+				_max_x = maxf(_max_x, point.x)
+				high = minf(high, point.y)
+				low = maxf(low, point.y)
+			_min_x -= METEOR_X_MARGIN
+			_max_x += METEOR_X_MARGIN
+			_top_y = high - METEOR_HEIGHT
+			_lowest_y = low + METEOR_DROP_BELOW
+		_start_timer(METEOR_INTERVAL_SEC, _spawn_meteor)
+
+	func _undo() -> void:
+		_stop_timer()
+		for meteor: Variant in _meteors:
+			if meteor != null and is_instance_valid(meteor):
+				meteor.queue_free()
+		_meteors.clear()
+
+	## Meteors spawned this round, and the ones still in flight: scenario seams.
+	func spawned_count() -> int:
+		return _spawned
+
+	func live_meteors() -> Array:
+		var live: Array = []
+		for meteor: Variant in _meteors:
+			if meteor != null and is_instance_valid(meteor) and not meteor.is_queued_for_deletion():
+				live.append(meteor)
+		return live
+
+	## One meteor at `from` flying at `flight_velocity`, parented to the stage
+	## (or the RoundManager with no stage) and tracked so undo can clear it.
+	func spawn_meteor_at(from: Vector2, flight_velocity: Vector2) -> Node2D:
+		var host: Node = _stage if _stage != null and is_instance_valid(_stage) else _round
+		if host == null or not is_instance_valid(host):
+			return null
+		var meteor: Node2D = MeteorScript.new()
+		meteor.name = "Meteor%d" % _spawned
+		meteor.setup(from, flight_velocity, METEOR_DAMAGE, METEOR_KNOCK_SPEED, METEOR_RADIUS, _lowest_y)
+		host.add_child(meteor)
+		_spawned += 1
+		_meteors = live_meteors()
+		_meteors.append(meteor)
+		return meteor
+
+	func _spawn_meteor() -> void:
+		var from := Vector2(randf_range(_min_x, _max_x), _top_y)
+		var drift: float = randf_range(-METEOR_DRIFT_SPEED, METEOR_DRIFT_SPEED)
+		spawn_meteor_at(from, Vector2(drift, METEOR_FALL_SPEED))
+
+class Bouncy extends RoundModifier:
+	## Whatever each player had before, which may be null (none authored).
+	var _saved: Dictionary = {}
+
+	func _apply() -> void:
+		for player: Variant in _live_players():
+			var before: PhysicsMaterial = player.physics_material_override
+			var material := PhysicsMaterial.new()
+			material.friction = before.friction if before != null else 1.0
+			material.rough = before.rough if before != null else false
+			material.bounce = BOUNCY_BOUNCE
+			_saved[player] = before
+			player.physics_material_override = material
+
+	func _undo() -> void:
+		for player: Variant in _live_players():
+			if _saved.has(player):
+				player.physics_material_override = _saved[player]
+		_saved.clear()
+
+class DoubleDamage extends WeaponStatsModifier:
+	## Each of the stage's falling rocks, and the damage it was authored with.
+	var _rocks: Dictionary = {}
+
+	func _apply() -> void:
+		super()
+		if _stage == null:
+			return
+		for node: Node in _stage.find_children("*", "Node2D", true, false):
+			if node.get_script() == FallingRockScript:
+				_rocks[node] = node.damage
+				node.damage = node.damage * DOUBLE_DAMAGE_SCALE
+
+	func _undo() -> void:
+		super()
+		for rock: Variant in _rocks:
+			if rock != null and is_instance_valid(rock):
+				rock.damage = _rocks[rock]
+		_rocks.clear()
+
+	func _modified(stats: Resource) -> Resource:
+		var doubled: Resource = stats.duplicate()
+		doubled.damage = stats.damage * DOUBLE_DAMAGE_SCALE
+		doubled.projectile_damage = stats.projectile_damage * DOUBLE_DAMAGE_SCALE
+		return doubled

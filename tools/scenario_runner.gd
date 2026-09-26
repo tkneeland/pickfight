@@ -217,6 +217,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_practice_button_adds_and_removes_bots",
 	"pickups_come_faster_and_more_with_a_crowd",
 	"announcer_calls_the_match",
+	"round_modifier_tiny_weapons_applies_and_undoes",
+	"round_modifier_weapon_roulette_swaps_every_ten_seconds",
+	"round_modifier_meteor_shower_hits_and_undoes",
+	"round_modifier_bouncy_applies_and_undoes",
+	"round_modifier_double_damage_applies_and_undoes",
+	"round_modifier_rate_about_one_in_three",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -977,6 +983,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickups_come_faster_and_more_with_a_crowd()
 		"announcer_calls_the_match":
 			return await _scenario_announcer_calls_the_match()
+		"round_modifier_tiny_weapons_applies_and_undoes":
+			return await _scenario_round_modifier_tiny_weapons_applies_and_undoes()
+		"round_modifier_weapon_roulette_swaps_every_ten_seconds":
+			return await _scenario_round_modifier_weapon_roulette_swaps_every_ten_seconds()
+		"round_modifier_meteor_shower_hits_and_undoes":
+			return await _scenario_round_modifier_meteor_shower_hits_and_undoes()
+		"round_modifier_bouncy_applies_and_undoes":
+			return await _scenario_round_modifier_bouncy_applies_and_undoes()
+		"round_modifier_double_damage_applies_and_undoes":
+			return await _scenario_round_modifier_double_damage_applies_and_undoes()
+		"round_modifier_rate_about_one_in_three":
+			return await _scenario_round_modifier_rate_about_one_in_three()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -7530,6 +7548,11 @@ const MODIFIER_TITLES: Dictionary = {
 	"big_heads": "BIG HEADS",
 	"fast_lava": "FAST LAVA",
 	"slippery_floor": "SLIPPERY FLOOR",
+	"tiny_weapons": "Tiny Weapons",
+	"weapon_roulette": "Weapon Roulette",
+	"meteor_shower": "Meteor Shower",
+	"bouncy": "Bouncy",
+	"double_damage": "Double Damage",
 }
 
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
@@ -14424,4 +14447,444 @@ func _scenario_announcer_calls_the_match() -> Array[String]:
 		failures.append("two eliminations together were announced as %s, expected one double KO" % announcer.said)
 	sfx.stop_recording()
 	await _teardown(stage)
+	return failures
+
+# --- Round mixups batch 2 (issue #147) -----------------------------------------
+#
+# Tiny weapons, Weapon roulette, Meteor shower, Bouncy and Double Damage, each
+# played off / on / off through the real round loop like issue #50's five, and
+# the overall rate a round gets any mixup at all. The expected numbers are
+# written from the ticket, not read back out of `RoundModifiers.gd`.
+
+const RoundModifiersType := preload("res://scripts/RoundModifiers.gd")
+const MeteorType := preload("res://scripts/Meteor.gd")
+
+## Tiny weapons: heads and hafts at 0.6.
+const TINY_RATIO: float = 0.6
+const TINY_HEAD_TOLERANCE: float = 0.02
+const TINY_REACH_TOLERANCE: float = 0.1
+## Ticks the weapon is held fully extended in clear air before its reach is read.
+const TINY_EXTEND_TICKS: int = 45
+
+## Weapon roulette: one swap every 10 s, everyone at once.
+const ROULETTE_TEST_INTERVAL_SEC: float = 10.0
+## How early before the 10 s mark nothing may have swapped yet, and how long
+## after it the swap has to have happened by.
+const ROULETTE_EARLY_SEC: float = 0.5
+const ROULETTE_LATE_SEC: float = 0.5
+
+## Meteor shower: meteors are falling within this long of the round starting.
+const METEOR_WATCH_SEC: float = 2.5
+const METEOR_MIN_SEEN: int = 2
+## A meteor dropped this far above a standing player, straight down.
+const METEOR_TEST_DROP: float = 200.0
+const METEOR_TEST_SPEED: float = 900.0
+const METEOR_EXPECTED_DAMAGE: float = 12.0
+## Sideways speed the knock must leave a struck player with at least.
+const METEOR_MIN_KNOCK_SPEED: float = 200.0
+
+## Bouncy: dropped onto flat ground, the body comes back up at more than half
+## the speed it landed at; plainly it barely rebounds.
+const BOUNCY_DROP_HEIGHT: float = 300.0
+const BOUNCY_WATCH_TICKS: int = 90
+const BOUNCY_SETTLE_TICKS: int = 60
+const BOUNCY_MIN_RATIO: float = 0.5
+const BOUNCY_PLAIN_MAX_RATIO: float = 0.25
+const BOUNCY_UNDO_TOLERANCE: float = 0.1
+
+## Double Damage: exactly twice, and the name exactly this.
+const DOUBLE_DAMAGE_TITLE: String = "Double Damage"
+const DOUBLE_DAMAGE_RATIO: float = 2.0
+## A strike speed well inside the linear part of the damage curve, so the
+## per-strike cap never comes into it.
+const DOUBLE_DAMAGE_TEST_SPEED: float = 1500.0
+const DOUBLE_DAMAGE_STAGE: String = "res://scenes/stages/Rockfall.tscn"
+
+## The rate: "about 1 in 3 rounds".
+const MIXUP_RATE_MIN: float = 0.30
+const MIXUP_RATE_MAX: float = 0.37
+const MIXUP_RATE_ROLLS: int = 6000
+
+## The modifier object on the round right now (a RoundModifiers inner class).
+func _live_modifier(round_manager: Node) -> RefCounted:
+	return round_manager.get("_modifier") as RefCounted
+
+## Tiny weapons: the head's circles and art at 0.6x for every roster weapon
+## (each still inside its art, ADR-0010), the haft's full reach at 0.6x, the
+## shared weapon resources untouched, and all of it back the round after.
+func _scenario_round_modifier_tiny_weapons_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	var sizes: Array[Dictionary] = []
+	var extra: Array[String] = []
+	var pickaxe: Resource = load("res://resources/pickaxe.tres")
+	var pickaxe_reach: float = pickaxe.max_reach
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		player.teleport_to(MODIFIER_AIR)
+		sizes.append(_head_size(player))
+		if round_manager.active_modifier_id() == "tiny_weapons":
+			for path: String in WEAPON_RESOURCE_PATHS:
+				var stats: Resource = load(path)
+				var plain_radius: float = 0.0
+				for r: float in stats.head_circle_radii:
+					plain_radius = maxf(plain_radius, r)
+				player.set_weapon_stats(stats)
+				await _await_ticks(2)
+				extra.append_array(_art_containment_failures("tiny " + path.get_file(), player))
+				var got: float = float(_head_size(player)["radius"])
+				if absf(got / plain_radius - TINY_RATIO) > TINY_HEAD_TOLERANCE:
+					extra.append("tiny weapons: %s picked up mid-round has a %.2f px biggest circle, %.2fx its plain %.2f" % [
+						path.get_file(), got, got / plain_radius, plain_radius])
+			player.set_weapon_stats(pickaxe)
+			await _await_ticks(2)
+		# Full reach: the weapon held all the way out in clear air.
+		player.teleport_to(MODIFIER_AIR)
+		player.set_input_vector(Vector2.RIGHT)
+		var reach: float = 0.0
+		for tick in TINY_EXTEND_TICKS:
+			await physics_frame
+			reach = maxf(reach, player.weapon_head_position().distance_to(player.global_position))
+		player.set_input_vector(Vector2.ZERO)
+		return reach
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if pickaxe.max_reach != pickaxe_reach:
+			found.append("round %d: the shared pickaxe resource's reach was changed to %.1f" % [round_index + 1, pickaxe.max_reach])
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "tiny_weapons", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if sizes.size() == 3:
+		for key: String in ["radius", "extent"]:
+			var ratio: float = float(sizes[1][key]) / float(sizes[0][key])
+			if absf(ratio - TINY_RATIO) > TINY_HEAD_TOLERANCE:
+				failures.append("tiny weapons: the head's %s came out %.3fx, expected %.2fx" % [key, ratio, TINY_RATIO])
+			if absf(float(sizes[2][key]) - float(sizes[0][key])) > 0.001:
+				failures.append("tiny weapons: the head's %s is %.3f the round after, %.3f before -- not undone" % [
+					key, float(sizes[2][key]), float(sizes[0][key])])
+	if values.size() == 3:
+		if values[0] <= 0.0:
+			failures.append("the plain weapon never extended (%.1f px)" % values[0])
+		else:
+			var reach_ratio: float = values[1] / values[0]
+			if absf(reach_ratio - TINY_RATIO) > TINY_REACH_TOLERANCE:
+				failures.append("tiny weapons: full reach %.1f px, %.2fx the plain %.1f, expected about %.2fx" % [
+					values[1], reach_ratio, values[0], TINY_RATIO])
+		_check_undone(failures, "tiny weapons", values, "reach")
+	await _teardown(loop["stage"])
+	return failures
+
+## Weapon roulette: nothing changes for the first 10 s; at 10 s every player
+## is handed the same weapon, one from the roster and not the one they held;
+## the round after, the winner is back on the weapon it walked in with and
+## no swap timer is left running.
+func _scenario_round_modifier_weapon_roulette_swaps_every_ten_seconds() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	var tps: float = float(Engine.physics_ticks_per_second)
+	var extra: Array[String] = []
+	var roster: Array[String] = []
+	for path: String in WEAPON_RESOURCE_PATHS:
+		roster.append(path)
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		if round_manager.active_modifier_id() != "weapon_roulette":
+			return 0.0
+		var modifier: RefCounted = _live_modifier(round_manager)
+		var before: Array[Resource] = [players[0].weapon_stats, players[1].weapon_stats]
+		# The rig ticks already spent count toward the 10 s.
+		var ticks: int = MODIFIER_RIG_TICKS
+		var early: int = int((ROULETTE_TEST_INTERVAL_SEC - ROULETTE_EARLY_SEC) * tps)
+		await _await_ticks(early - ticks)
+		ticks = early
+		if modifier.swap_count() != 0 or players[0].weapon_stats != before[0] or players[1].weapon_stats != before[1]:
+			extra.append("weapon roulette swapped before %.1f s" % (float(ticks) / tps))
+		var late: int = int((ROULETTE_TEST_INTERVAL_SEC + ROULETTE_LATE_SEC) * tps)
+		while modifier.swap_count() == 0 and ticks < late:
+			await physics_frame
+			ticks += 1
+		if modifier.swap_count() == 0:
+			extra.append("weapon roulette never swapped within %.1f s" % (float(late) / tps))
+			return float(ticks) / tps
+		await _await_ticks(2)
+		var got: Array[Resource] = [players[0].weapon_stats, players[1].weapon_stats]
+		print("      roulette swap at %.2f s: %s -> %s, %s -> %s" % [float(ticks) / tps,
+			before[0].resource_path.get_file(), got[0].resource_path.get_file(),
+			before[1].resource_path.get_file(), got[1].resource_path.get_file()])
+		if got[0] != got[1]:
+			extra.append("weapon roulette handed out different weapons at once (%s, %s)" % [
+				got[0].resource_path, got[1].resource_path])
+		if got[0] == before[0]:
+			extra.append("weapon roulette 'swapped' P0 to the weapon it already held (%s)" % got[0].resource_path)
+		if not roster.has(got[0].resource_path):
+			extra.append("weapon roulette handed out %s, which is not in the roster" % got[0].resource_path)
+		var circles: Array[Dictionary] = players[0].weapon_head_circles()
+		var expected_circles: int = got[0].head_circle_radii.size()
+		if circles.size() != expected_circles:
+			extra.append("after the swap P0's rig has %d head circles, its %s has %d -- the rig was not rebuilt" % [
+				circles.size(), got[0].resource_path.get_file(), expected_circles])
+		return float(ticks) / tps
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 2:
+			if players[0].weapon_stats == null or players[0].weapon_stats.resource_path != "res://resources/pickaxe.tres":
+				found.append("after weapon roulette the winner holds %s, not the pickaxe it started that round with" % [
+					players[0].weapon_stats.resource_path if players[0].weapon_stats != null else "nothing"])
+			for child: Node in round_manager.get_children():
+				if child is Timer and child.name.begins_with("RoundModifierTimer") and not child.is_queued_for_deletion():
+					found.append("the roulette's swap timer is still running the round after")
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "weapon_roulette", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	await _teardown(loop["stage"])
+	return failures
+
+## Meteors under a round's stage instance right now.
+func _meteors_in(instance: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	if instance == null:
+		return found
+	for child: Node in instance.get_children():
+		if child.get_script() == MeteorType and not child.is_queued_for_deletion():
+			found.append(child)
+	return found
+
+## Meteor shower: meteors fall from above the stage within a couple of seconds;
+## one landing on a player hurts them and knocks them aside; none fall on the
+## rounds either side, and none are left behind.
+func _scenario_round_modifier_meteor_shower_hits_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	var tps: float = float(Engine.physics_ticks_per_second)
+	var extra: Array[String] = []
+	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
+		var seen: Dictionary = {}
+		var highest: float = INF
+		for tick in int(METEOR_WATCH_SEC * tps):
+			await physics_frame
+			for meteor: Node in _meteors_in(instance):
+				if not seen.has(meteor.get_instance_id()):
+					seen[meteor.get_instance_id()] = true
+					highest = minf(highest, (meteor as Node2D).global_position.y)
+		if round_manager.active_modifier_id() != "meteor_shower":
+			return float(seen.size())
+		if seen.size() < METEOR_MIN_SEEN:
+			extra.append("only %d meteors fell in the first %.1f s" % [seen.size(), METEOR_WATCH_SEC])
+		elif highest > -200.0:
+			extra.append("meteors first appeared at y %.0f, not from the sky above the spawns (y 0)" % highest)
+		# One dropped square on P0, standing on the floor.
+		var modifier: RefCounted = _live_modifier(round_manager)
+		var victim: RigidBody2D = players[0]
+		if victim.spawn_protected:
+			extra.append("P0 is still spawn-protected %.1f s in" % METEOR_WATCH_SEC)
+		var damage_before: float = victim.damage
+		var meteor: Node2D = modifier.spawn_meteor_at(victim.global_position + Vector2(0.0, -METEOR_TEST_DROP), Vector2(0.0, METEOR_TEST_SPEED))
+		# The meteor frees itself the tick it hits, so the hit is heard on the
+		# victim's own `strike_landed`, which is where a meteor reports it.
+		var reports: Array[float] = []
+		var on_report := func(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+			reports.append(amount)
+		victim.strike_landed.connect(on_report)
+		var knock: float = 0.0
+		var hit: bool = false
+		for tick in 60:
+			await physics_frame
+			if not hit and not reports.is_empty():
+				hit = true
+			if hit:
+				knock = maxf(knock, absf(victim.linear_velocity.x))
+			if hit and tick > 20:
+				break
+		victim.strike_landed.disconnect(on_report)
+		var taken: float = victim.damage - damage_before
+		print("      meteor on P0: hit %s, damage %.1f, sideways knock %.0f px/s" % [hit, taken, knock])
+		if not hit:
+			extra.append("a meteor dropped straight onto P0 never hit them")
+		else:
+			if taken < METEOR_EXPECTED_DAMAGE - 0.01:
+				extra.append("a meteor hit took %.1f damage, expected %.1f" % [taken, METEOR_EXPECTED_DAMAGE])
+			if knock < METEOR_MIN_KNOCK_SPEED:
+				extra.append("a meteor hit knocked P0 aside at only %.0f px/s, expected at least %.0f" % [knock, METEOR_MIN_KNOCK_SPEED])
+		return float(seen.size())
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 2:
+			for child: Node in round_manager.get_children():
+				if child is Timer and child.name.begins_with("RoundModifierTimer") and not child.is_queued_for_deletion():
+					found.append("the meteor spawner is still running the round after")
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "meteor_shower", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] != 0.0 or values[2] != 0.0:
+			failures.append("meteors fell on a round without the shower (%d before, %d after)" % [int(values[0]), int(values[2])])
+	await _teardown(loop["stage"])
+	return failures
+
+## Bouncy: a body dropped onto flat ground comes back up at more than half its
+## landing speed, where plainly it barely rebounds; the material is put back.
+func _scenario_round_modifier_bouncy_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var saved: Array = []
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		# Weapon up and wound in, clear of the ground, then settled on the floor.
+		player.set_input_vector(Vector2(0.0, -0.001))
+		await _await_ticks(BOUNCY_SETTLE_TICKS)
+		var rest: Vector2 = player.global_position
+		player.teleport_to(rest + Vector2(0.0, -BOUNCY_DROP_HEIGHT))
+		var landing: float = 0.0
+		var rebound: float = 0.0
+		var landed: bool = false
+		for tick in BOUNCY_WATCH_TICKS:
+			await physics_frame
+			var vy: float = player.linear_velocity.y
+			if not landed:
+				if vy > landing:
+					landing = vy
+				elif landing > 0.0 and vy < landing * 0.5:
+					landed = true
+			if landed:
+				rebound = maxf(rebound, -vy)
+		return rebound / landing if landing > 0.0 else 0.0
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 0:
+			saved.assign([players[0].physics_material_override, players[1].physics_material_override])
+		elif round_index == 2:
+			for i in 2:
+				if players[i].physics_material_override != saved[i]:
+					found.append("P%d's physics material is not what it was before the bouncy round" % i)
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "bouncy", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] > BOUNCY_PLAIN_MAX_RATIO:
+			failures.append("a plain body rebounded at %.2fx its landing speed -- the baseline is already bouncy" % values[0])
+		if values[1] < BOUNCY_MIN_RATIO:
+			failures.append("bouncy: rebounded at %.2fx the landing speed, expected at least %.2fx" % [values[1], BOUNCY_MIN_RATIO])
+		if absf(values[2] - values[0]) > BOUNCY_UNDO_TOLERANCE:
+			failures.append("bouncy: the round after rebounded at %.2fx, the round before %.2fx -- not undone" % [values[2], values[0]])
+	await _teardown(loop["stage"])
+	return failures
+
+## Double Damage: announced as exactly "Double Damage"; a strike and a bullet
+## both do exactly twice the damage, without the shared weapon resources
+## changing; a stage's falling rocks hit twice as hard too; all of it back
+## the round after.
+func _scenario_round_modifier_double_damage_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	var bullets: Array[float] = []
+	var extra: Array[String] = []
+	var boomstick: Resource = load("res://resources/boomstick.tres")
+	var pickaxe: Resource = load("res://resources/pickaxe.tres")
+	var authored: Array[float] = [pickaxe.damage, boomstick.projectile_damage]
+	if RoundModifiersType.title_of("double_damage") != DOUBLE_DAMAGE_TITLE:
+		extra.append("the modifier is named '%s', expected exactly '%s'" % [RoundModifiersType.title_of("double_damage"), DOUBLE_DAMAGE_TITLE])
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		if round_manager.active_modifier_id() == "double_damage":
+			var label: Label = round_manager.modifier_label()
+			if label == null or label.text != DOUBLE_DAMAGE_TITLE:
+				extra.append("the announcement reads '%s', expected exactly '%s'" % [label.text if label != null else "", DOUBLE_DAMAGE_TITLE])
+		var strike: float = player._strike_damage(DOUBLE_DAMAGE_TEST_SPEED)
+		player.set_weapon_stats(boomstick)
+		await _await_ticks(2)
+		bullets.append(float(player.get("_stats").projectile_damage))
+		player.set_weapon_stats(pickaxe)
+		await _await_ticks(2)
+		return strike
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if pickaxe.damage != authored[0] or boomstick.projectile_damage != authored[1]:
+			found.append("round %d: a shared weapon resource's damage was changed" % (round_index + 1))
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "double_damage", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if values.size() == 3 and bullets.size() == 3:
+		print("      bullet damage: plain %.1f, modified %.1f, plain again %.1f" % [bullets[0], bullets[1], bullets[2]])
+		if values[0] <= 0.0:
+			failures.append("a %.0f px/s strike did no damage plainly" % DOUBLE_DAMAGE_TEST_SPEED)
+		elif absf(values[1] / values[0] - DOUBLE_DAMAGE_RATIO) > 0.001:
+			failures.append("double damage: a strike did %.2fx the plain damage, expected %.1fx" % [values[1] / values[0], DOUBLE_DAMAGE_RATIO])
+		if absf(bullets[1] / bullets[0] - DOUBLE_DAMAGE_RATIO) > 0.001:
+			failures.append("double damage: a bullet does %.2fx the plain damage, expected %.1fx" % [bullets[1] / bullets[0], DOUBLE_DAMAGE_RATIO])
+		if values[2] != values[0] or bullets[2] != bullets[0]:
+			failures.append("double damage: the round after does strike %.1f / bullet %.1f, the round before %.1f / %.1f -- not undone" % [
+				values[2], bullets[2], values[0], bullets[0]])
+	await _teardown(loop["stage"])
+	# The stage's own damage: Rockfall's falling rocks, doubled and put back.
+	var stage: Node2D = (load(DOUBLE_DAMAGE_STAGE) as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	await physics_frame
+	var rocks: Array[Node] = []
+	for node: Node in stage.find_children("*", "Node2D", true, false):
+		if node.get_script() == preload("res://scripts/FallingRock.gd"):
+			rocks.append(node)
+	if rocks.is_empty():
+		failures.append("%s has no falling rocks to check" % DOUBLE_DAMAGE_STAGE)
+	else:
+		var plain: float = rocks[0].damage
+		var modifier: RefCounted = RoundModifiersType.create("double_damage")
+		modifier.apply(null, [], stage)
+		var doubled: float = rocks[0].damage
+		modifier.undo()
+		print("      falling rock damage: plain %.1f, doubled %.1f, after %.1f" % [plain, doubled, rocks[0].damage])
+		if absf(doubled - plain * DOUBLE_DAMAGE_RATIO) > 0.001:
+			failures.append("double damage: a falling rock does %.1f, expected %.1f" % [doubled, plain * DOUBLE_DAMAGE_RATIO])
+		if rocks[0].damage != plain:
+			failures.append("double damage: a falling rock does %.1f after undo, %.1f before" % [rocks[0].damage, plain])
+	await _teardown(stage)
+	return failures
+
+## The overall rate: the game's RoundManager (as Main.tscn configures it) rolls
+## a mixup on about 1 in 3 rounds, and every one of the ten can come up.
+func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
+	var failures: Array[String] = []
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var chance: float = main.get_node("RoundManager").modifier_chance
+	main.free()
+	var rm: Node = RoundManagerType.new()
+	rm.modifier_chance = chance
+	rm.modifier_seed = 147
+	RoundManagerType.modifier_rolls_enabled = true
+	var counts: Dictionary = {}
+	var rolled: int = 0
+	for i in MIXUP_RATE_ROLLS:
+		var id: String = rm._roll_modifier()
+		if id != "":
+			rolled += 1
+			counts[id] = int(counts.get(id, 0)) + 1
+	RoundManagerType.modifier_rolls_enabled = false
+	rm.free()
+	var rate: float = float(rolled) / float(MIXUP_RATE_ROLLS)
+	print("      modifier_chance %.3f: %d of %d rounds rolled a mixup (%.3f), %s" % [chance, rolled, MIXUP_RATE_ROLLS, rate, counts])
+	if chance < MIXUP_RATE_MIN or chance > MIXUP_RATE_MAX:
+		failures.append("Main.tscn's RoundManager rolls a mixup with chance %.3f, not about 1 in 3" % chance)
+	if rate < MIXUP_RATE_MIN or rate > MIXUP_RATE_MAX:
+		failures.append("%.3f of rounds rolled a mixup, not about 1 in 3" % rate)
+	for id: String in MODIFIER_TITLES:
+		if not counts.has(id):
+			failures.append("'%s' never came up in %d rolls" % [id, MIXUP_RATE_ROLLS])
+		if RoundModifiersType.title_of(id) != MODIFIER_TITLES[id]:
+			failures.append("'%s' is titled '%s', expected '%s'" % [id, RoundModifiersType.title_of(id), MODIFIER_TITLES[id]])
+		if RoundModifiersType.create(id) == null:
+			failures.append("'%s' cannot be created" % id)
+	for id: String in counts:
+		if not MODIFIER_TITLES.has(id):
+			failures.append("rolled '%s', which is not one of the ten" % id)
+	_scenario_completed = true
 	return failures

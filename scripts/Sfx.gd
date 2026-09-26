@@ -163,6 +163,11 @@ const SOUNDS: Dictionary = {
 	"announce_big_heads": {"files": ["announcer/big_heads.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_fast_lava": {"files": ["announcer/fast_lava.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_slippery_floor": {"files": ["announcer/slippery_floor.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_tiny_weapons": {"files": ["announcer/tiny_weapons.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_weapon_roulette": {"files": ["announcer/weapon_roulette.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_meteor_shower": {"files": ["announcer/meteor_shower.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_bouncy": {"files": ["announcer/bouncy.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_double_damage": {"files": ["announcer/double_damage.ogg"], "db": 0.0, "overlap": 1, "positional": false, "voice": true},
 }
 
 const DEFAULT_OVERLAP: int = 3
