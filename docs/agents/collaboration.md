@@ -38,6 +38,11 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   merge. Re-run `godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --all`
   after every rebase that pulled in the other dev's changes. (`--fixed-fps 60`
   runs the suite on game time, faster than real time, #182.)
+- **CI check (#186):** `.github/workflows/scenarios.yml` runs on every PR and
+  push to `main`: import, boot check, runner parse check, then the full suite
+  in 4 `--fixed-fps 60` shards (`tools/list_scenarios.sh <i> 4`). Each shard's
+  output is uploaded as an artifact. Don't merge a PR whose `scenarios` check
+  is red.
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
 - **No pause for human review** (owner's decision, 2026-09-24), and **one

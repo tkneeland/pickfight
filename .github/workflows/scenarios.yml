@@ -1,0 +1,150 @@
+# Runs the headless scenario suite on every PR and on pushes to main (#186).
+#
+# check:  installs Godot (cached), imports the project once, runs the boot
+#         check and the runner parse check, and hands the imported .godot/
+#         to the shards.
+# suite:  4 parallel shards, each a contiguous slice of SCENARIO_NAMES
+#         (tools/list_scenarios.sh), run under --fixed-fps 60 (#182/#183).
+#
+# Audio: --headless already selects the Dummy audio driver, so no
+# --audio-driver flag is needed on the runner.
+# The only expected boot noise is qrencode "Could not create child process"
+# (qrencode is not installed); the greps below ignore it.
+name: scenarios
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: scenarios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.6.2-stable
+  GODOT_DIR: /home/runner/godot-bin
+  SHARDS: 4
+
+jobs:
+  check:
+    name: import + boot + parse check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GODOT_DIR }}
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Install Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$GODOT_DIR"
+          curl -fsSL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d "$GODOT_DIR"
+          mv "$GODOT_DIR/Godot_v${GODOT_VERSION}_linux.x86_64" "$GODOT_DIR/godot"
+          chmod +x "$GODOT_DIR/godot"
+
+      - name: Godot version
+        run: '"$GODOT_DIR/godot" --headless --version'
+
+      - name: Import project
+        run: '"$GODOT_DIR/godot" --headless --path . --import 2>&1 | tee import.log'
+
+      - name: Boot check
+        run: |
+          "$GODOT_DIR/godot" --headless --path . --quit > boot.log 2>&1 || true
+          cat boot.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' boot.log | grep -v 'Could not create child process'; then
+            echo "::error::boot check found script errors"
+            exit 1
+          fi
+
+      - name: Runner parse check
+        run: |
+          "$GODOT_DIR/godot" --headless --path . --check-only -s tools/scenario_runner.gd > parse.log 2>&1 || true
+          cat parse.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' parse.log | grep -v 'Could not create child process'; then
+            echo "::error::tools/scenario_runner.gd does not parse"
+            exit 1
+          fi
+
+      - name: Upload check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-logs
+          path: |
+            import.log
+            boot.log
+            parse.log
+
+      - name: Upload imported project cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-import
+          path: .godot/
+          include-hidden-files: true
+          retention-days: 1
+
+  suite:
+    name: scenarios shard ${{ matrix.shard }}/4
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Godot
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.GODOT_DIR }}
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+          fail-on-cache-miss: true
+
+      - name: Restore imported project
+        uses: actions/download-artifact@v4
+        with:
+          name: godot-import
+          path: .godot/
+
+      - name: Run shard
+        run: |
+          list=$(bash tools/list_scenarios.sh ${{ matrix.shard }} "$SHARDS")
+          count=$(echo "$list" | tr ',' '\n' | grep -c .)
+          echo "shard ${{ matrix.shard }}/$SHARDS: $count scenarios"
+          set +e
+          "$GODOT_DIR/godot" --headless --fixed-fps 60 --path . \
+            -s tools/scenario_runner.gd -- --scenarios="$list" > shard.log 2>&1
+          code=$?
+          set -e
+          cat shard.log
+          fails=$(grep -c '^FAIL' shard.log || true)
+          passes=$(grep -c '^PASS' shard.log || true)
+          echo "exit=$code passed=$passes failed=$fails expected=$count"
+          if [ "$fails" -ne 0 ]; then
+            echo "::error::$fails scenario(s) failed:"; grep '^FAIL' shard.log; exit 1
+          fi
+          if [ "$code" -ne 0 ]; then
+            echo "::error::runner exited with $code"; exit 1
+          fi
+          if [ "$passes" -ne "$count" ]; then
+            echo "::error::only $passes of $count scenarios reported PASS"; exit 1
+          fi
+
+      - name: Upload shard output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenarios-shard-${{ matrix.shard }}
+          path: shard.log
