@@ -162,6 +162,7 @@ func _ready() -> void:
 	_controller_server = get_node_or_null(controller_server_path)
 	if _controller_server != null and _controller_server.has_signal("host_command"):
 		_controller_server.connect("host_command", _on_host_command)
+	_watch_for_lobby_changes()
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
 	_scoreboard = get_node_or_null(scoreboard_path) as Control
 	if _scoreboard != null:
@@ -186,7 +187,7 @@ func _process(_delta: float) -> void:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
 				_tick_pickups()
-				if lobby_enabled:
+				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
 		State.ROUND_END:
 			if Time.get_ticks_msec() >= _pause_until_msec:
@@ -1117,7 +1118,7 @@ func _is_ready(slot: int) -> bool:
 	return _controller_server != null and _controller_server.has_method("slot_ready") and _controller_server.slot_ready(slot)
 
 func _everyone_ready(roster: Array[int]) -> bool:
-	if roster.size() < min_players_to_start:
+	if roster.size() < min_players_to_start or _bots_waiting_for_a_human(roster):
 		return false
 	for slot: int in roster:
 		if not _is_ready(slot):
@@ -1249,6 +1250,8 @@ func _countdown_left() -> int:
 ## Builds the state the phones and the lobby screen show, and pushes it out
 ## only when something in it changed.
 func _publish_lobby_state() -> void:
+	_lobby_published_msec = Time.get_ticks_msec()
+	lobby_state_builds += 1
 	var roster: Array[int] = _roster()
 	var players: Array = []
 	for slot: int in roster:
@@ -1711,6 +1714,51 @@ func _show_pause_banner(on: bool) -> void:
 		_pause_layer.add_child(_pause_label)
 	_pause_layer.visible = on
 	_pause_label.visible = on
+
+# --- Host changes, solo bots, lobby publishing (issue #165) --------------------
+#
+# The host phone dropping hands its menu to the next phone at once, even while
+# paused: ControllerServer's `host_changed` republishes the lobby state, which
+# otherwise only goes out from `_process` and so stops with the tree. Solo
+# practice bots never make a ready room on their own. Mid-round the full lobby
+# state is built only when a cheap key of what changes in a round (the roster,
+# who is alive, the host, the round) has changed, and otherwise at most every
+# LOBBY_REFRESH_MSEC, not every frame.
+
+## Mid-round, the longest the phones wait for a change outside the key (a
+## nickname, a colour).
+const LOBBY_REFRESH_MSEC: int = 250
+var _lobby_published_msec: int = 0
+var _lobby_key: Array = []
+## How many times the lobby state has been built, for the scenarios.
+var lobby_state_builds: int = 0
+
+func _watch_for_lobby_changes() -> void:
+	if _controller_server != null and _controller_server.has_signal("host_changed"):
+		_controller_server.connect("host_changed", _on_host_changed)
+
+func _lobby_publish_due() -> bool:
+	var key: Array = [_roster(), _alive_slots(), _host_slot(), _round_number]
+	if key != _lobby_key:
+		_lobby_key = key
+		return true
+	return Time.get_ticks_msec() - _lobby_published_msec >= LOBBY_REFRESH_MSEC
+
+func _on_host_changed(_slot: int) -> void:
+	if lobby_enabled:
+		_publish_lobby_state()
+
+## Whether `roster` is only Solo practice bots waiting for a human: no phone
+## in it is connected, and the bots came from the host's Solo button, not
+## from `--bots=N`.
+func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
+	var director: Variant = _controller_server.get("bot_director") if _controller_server != null else null
+	if director == null or not director.has_method("needs_a_human") or not director.needs_a_human():
+		return false
+	for slot: int in roster:
+		if not _controller_server.is_virtual(slot) and _controller_server.slot_has_controller(slot):
+			return false
+	return true
 
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
 #

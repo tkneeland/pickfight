@@ -67,6 +67,10 @@ extends Node
 signal player_joined(slot: int)
 ## The host phone pressed "Solo practice" (`on`) or "Remove bots" (issue #152).
 signal solo_requested(on: bool)
+## `host_slot()` changed, to `slot` (-1 with no phone connected). Checked every
+## frame, paused or not, so a paused game still tells the phones who holds the
+## host menu when the host's phone drops (issue #165).
+signal host_changed(slot: int)
 
 ## The host phone asked for `cmd` (issue #149): "pause", "resume" or "end",
 ## with `slot` -1; or "kick", emitted after `slot` has been removed from the
@@ -242,6 +246,10 @@ var _slot_virtual: PackedByteArray = PackedByteArray()
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 ## The bots' owner, built in `_ready()` so no scene has to add it.
 var bot_director: Node = null
+## The Solo practice button is heeded only in these lobby phases (issue #165):
+## mid-match, removing the bots would leave their bodies in the round.
+const SOLO_PHASES: PackedStringArray = ["lobby", "countdown"]
+var _last_host: int = -1
 ## The join URL and QR the lobby screen shows (#120). The QR is null when
 ## `qrencode` is unavailable.
 var join_url: String = ""
@@ -313,11 +321,16 @@ func _ready() -> void:
 	bot_director = BotDirectorScript.new()
 	bot_director.name = "BotDirector"
 	bot_director.server = self
+	# Bots stop thinking while the host phone has the game paused (#165).
+	bot_director.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(bot_director)
 
 func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
+	if host_slot() != _last_host:
+		_last_host = host_slot()
+		host_changed.emit(_last_host)
 	_apply_smoothed_input(delta)
 
 ## Step every bound slot's ease and hand the result to its player (issue #113).
@@ -783,7 +796,7 @@ func _handle_text(slot: int, text: String) -> void:
 			if c is float or c is int:
 				request_color(slot, int(c))
 		"solo":
-			if slot == host_slot():
+			if slot == host_slot() and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
 				solo_requested.emit(bool(msg.get("v", false)))
 
 ## A host-menu request (issue #149). Anything from a phone that is not the host

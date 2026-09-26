@@ -72,8 +72,6 @@ const EDGE_LOOKAHEAD: float = 150.0
 const GAP_LOOKAHEAD: float = 320.0
 ## How close the lava may come below before the bot climbs instead.
 const LAVA_WORRY: float = 280.0
-## How often the lava is looked up, in seconds.
-const LAVA_LOOKUP_SEC: float = 0.5
 ## No real progress for this long and the bot vaults somewhere at random for
 ## WIGGLE_SEC, to get out of whatever it is stuck in.
 const STUCK_SEC: float = 1.6
@@ -87,7 +85,8 @@ const PICKAXE_PATH: String = "res://resources/pickaxe.tres"
 ## The `Player` this bot drives, and where its input goes.
 var player: Node2D
 var output: Callable = Callable()
-## Seeds the few random choices, so a scenario can replay a bot exactly.
+## Seeds the few random choices, so a scenario can replay a bot exactly: a
+## seed set before the bot enters the tree is kept (issue #165).
 var rng := RandomNumberGenerator.new()
 
 ## What the bot is doing, for the scenarios: "idle", "move", "attack" or
@@ -111,9 +110,17 @@ var _progress_from: Vector2 = Vector2.ZERO
 var _progress_left: float = STUCK_SEC
 var _wiggle_left: float = 0.0
 var _lava: Area2D = null
-var _lava_lookup_at: int = 0
+## Whether this life has looked for the lava yet. The stage only changes
+## between rounds, while the bot is out, so once a life is enough (#165).
+var _lava_looked_up: bool = false
+## How many times the tree has been searched for the lava, for the scenarios.
+var lava_lookups: int = 0
+## The players' bodies, which every ray ignores: gathered once a physics tick,
+## not once a ray (issue #165).
+var _rids: Array[RID] = []
+var _rids_frame: int = -1
 
-func _ready() -> void:
+func _init() -> void:
 	rng.randomize()
 
 func _physics_process(delta: float) -> void:
@@ -127,6 +134,8 @@ func think(delta: float) -> Vector2:
 	if not _alive(player):
 		mode = "idle"
 		_target = null
+		_lava = null
+		_lava_looked_up = false
 		return Vector2.ZERO
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
@@ -352,11 +361,14 @@ func _lava_worry() -> bool:
 	return top - player.global_position.y < LAVA_WORRY
 
 func _player_rids() -> Array[RID]:
-	var rids: Array[RID] = []
-	for other: Node in player.get_tree().get_nodes_in_group("players"):
-		if other is CollisionObject2D:
-			rids.append((other as CollisionObject2D).get_rid())
-	return rids
+	var frame: int = Engine.get_physics_frames()
+	if frame != _rids_frame:
+		_rids_frame = frame
+		_rids.clear()
+		for other: Node in player.get_tree().get_nodes_in_group("players"):
+			if other is CollisionObject2D:
+				_rids.append((other as CollisionObject2D).get_rid())
+	return _rids
 
 ## Whether there is ground under `point`, above the lava.
 func _over_ground(point: Vector2) -> bool:
@@ -388,9 +400,9 @@ func _track_progress(delta: float) -> void:
 func _lava_top() -> float:
 	if _lava != null and (not is_instance_valid(_lava) or not _lava.is_inside_tree()):
 		_lava = null
-	var now: int = Time.get_ticks_msec()
-	if _lava == null and now >= _lava_lookup_at:
-		_lava_lookup_at = now + int(LAVA_LOOKUP_SEC * 1000.0)
+	if _lava == null and not _lava_looked_up:
+		_lava_looked_up = true
+		lava_lookups += 1
 		for node: Node in player.get_tree().root.find_children("KillZone", "Area2D", true, false):
 			if node.has_method("is_rising"):
 				_lava = node as Area2D

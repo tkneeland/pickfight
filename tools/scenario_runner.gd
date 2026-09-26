@@ -230,6 +230,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_freed_under_victory_and_lobby",
 	"last_survivor_scores_when_falling_a_tick_later",
 	"hit_feedback_scales_with_camera_zoom",
+	"host_drop_while_paused_hands_menu_to_next_phone",
+	"solo_ignored_mid_match_and_removed_bots_leave_round",
+	"bots_stop_thinking_while_paused",
+	"solo_bots_go_when_the_last_phone_leaves",
+	"bot_upkeep_cached_and_names_unique",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1016,6 +1021,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_last_survivor_scores_when_falling_a_tick_later()
 		"hit_feedback_scales_with_camera_zoom":
 			return await _scenario_hit_feedback_scales_with_camera_zoom()
+		"host_drop_while_paused_hands_menu_to_next_phone":
+			return await _scenario_host_drop_while_paused_hands_menu_to_next_phone()
+		"solo_ignored_mid_match_and_removed_bots_leave_round":
+			return await _scenario_solo_ignored_mid_match_and_removed_bots_leave_round()
+		"bots_stop_thinking_while_paused":
+			return await _scenario_bots_stop_thinking_while_paused()
+		"solo_bots_go_when_the_last_phone_leaves":
+			return await _scenario_solo_bots_go_when_the_last_phone_leaves()
+		"bot_upkeep_cached_and_names_unique":
+			return await _scenario_bot_upkeep_cached_and_names_unique()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -15521,5 +15536,389 @@ func _scenario_hit_feedback_scales_with_camera_zoom() -> Array[String]:
 		if is_instance_valid(marker) and marker.scale.x < expected - FEEDBACK_SCALE_TOLERANCE:
 			failures.append("zoom %.2f: the popping hitmarker shrank to %.3f, under %.3f" % [zoom, marker.scale.x, expected])
 	await _teardown(holder)
+	_scenario_completed = true
+	return failures
+
+# --- Issue #165: host drop while paused, bots vs pause/solo/remove, bot upkeep --
+
+const BotScript := preload("res://scripts/Bot.gd")
+## Frames a scenario gives the server to notice a phone hung up and tell the rest.
+const HOST_DROP_TICKS: int = 30
+## A countdown long enough that a phone hanging up is noticed before it ends.
+const ORPHAN_COUNTDOWN_SEC: float = 1.5
+## The solo bots' grace with no phone connected, shortened for the scenario.
+const ORPHAN_GRACE_SEC: float = 0.6
+## How long the orphan scenario watches a room with no phone in it.
+const ORPHAN_WATCH_MSEC: int = 4000
+## A round of bots left alone this long, with nothing happening, may build the
+## lobby state about once per LOBBY_REFRESH_MSEC; every frame is far more.
+const QUIET_ROUND_FRAMES: int = 60
+const QUIET_ROUND_MAX_BUILDS: int = 12
+const BOT_SEED: int = 165
+
+## Main.tscn with bots' Flatlands, in the tree, and `count` phones joined in
+## slot order. Returns the `_new_bot_main()` dictionary plus "joined", or an
+## empty "joined" when a phone was not given its slot.
+func _bot_main_with_phones(count: int, prefix: String) -> Dictionary:
+	var built: Dictionary = _new_bot_main()
+	var rm: Node = built["rm"]
+	# Nobody may leave a round to the lava mid-scenario.
+	rm.kill_zone_grace_sec = 600.0
+	get_root().add_child(built["main"])
+	await _await_ticks(5)
+	_phone_ws_port = built["server"].ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in count:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "%s-%d" % [prefix, i], joined)
+		joined.append(peer)
+		if result["slot"] != i:
+			built["joined"] = [] as Array[WebSocketPeer]
+			built["bad_join"] = "phone %d was given slot %d" % [i + 1, result["slot"]]
+			await _close_phones(joined)
+			return built
+	built["joined"] = joined
+	return built
+
+## Poll `joined` until `condition` holds or `timeout_msec` passes.
+func _poll_until(joined: Array[WebSocketPeer], condition: Callable, timeout_msec: int) -> bool:
+	var deadline: int = Time.get_ticks_msec() + timeout_msec
+	while Time.get_ticks_msec() < deadline:
+		await _poll_phones(joined, 1)
+		if condition.call():
+			return true
+	return false
+
+## One phone's Solo practice: the host is readied and three bots join, so the
+## match starts. True once all four are in the round.
+func _start_solo_match(built: Dictionary) -> bool:
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var server: Node = built["server"]
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	return await _poll_until(joined, func() -> bool:
+		var slots: Array[int] = server.claimed_slots()
+		if slots.size() != BotDirectorScript.SOLO_PLAYERS:
+			return false
+		for slot: int in slots:
+			if not server.player_in_slot(slot).alive:
+				return false
+		return true, BOT_START_MSEC)
+
+## Issue #165 (1): the host phone drops while the game is paused. The lobby
+## state goes out from RoundManager's `_process`, which stops with the tree,
+## so the phone that is now host was never told and nobody could Resume. Now
+## ControllerServer's `host_changed` republishes it at once: the second phone
+## hears it is host, still paused, and its Resume goes through.
+func _scenario_host_drop_while_paused_hands_menu_to_next_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(2, "paused-host")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		RoundManagerScript.modifier_rolls_enabled = true
+		_scenario_completed = true
+		return failures
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var p0: RigidBody2D = server.player_in_slot(0)
+	var p1: RigidBody2D = server.player_in_slot(1)
+	if not await _poll_until(joined, func() -> bool: return p0.alive and p1.alive, BOT_START_MSEC):
+		failures.append("two ready phones never started a round (phase '%s')" % rm.lobby_phase())
+	else:
+		joined[0].send_text(JSON.stringify({"t": "host", "cmd": "pause"}))
+		await _poll_phones(joined, 10)
+		var seen: Dictionary = _latest_lobby_msg(joined[1], {})
+		if not rm.is_paused() or not paused:
+			failures.append("the host's Pause did not pause the game")
+		# The host's phone hangs up while paused.
+		joined[0].close(1000, "host phone gone")
+		await _poll_phones(joined, HOST_DROP_TICKS)
+		seen = _latest_lobby_msg(joined[1], seen)
+		print("      host dropped while paused: server host %d; phone 2 last told host %s, paused %s" % [
+			server.host_slot(), seen.get("host"), seen.get("paused")])
+		if server.host_slot() != 1:
+			failures.append("the server's host is slot %d after the host dropped, expected 1" % server.host_slot())
+		if seen.get("host") != 1.0 or seen.get("paused") != true:
+			failures.append("phone 2 was never told it is host of the paused game (last lobby state: host %s, paused %s)" % [
+				seen.get("host"), seen.get("paused")])
+		joined[1].send_text(JSON.stringify({"t": "host", "cmd": "resume"}))
+		await _poll_phones(joined, 10)
+		if rm.is_paused() or paused:
+			failures.append("the new host's Resume did not resume the game")
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+	_scenario_completed = true
+	return failures
+
+## Issue #165 (2): "Remove bots" mid-round took the bots out of the roster but
+## left their bodies standing in the round. Solo is now heeded only in the
+## lobby, and a bot sent away by any path (here the director's remove_bots(),
+## which the orphan check uses) leaves the round as a kicked phone does.
+func _scenario_solo_ignored_mid_match_and_removed_bots_leave_round() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "solo-mid")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var director: Node = server.bot_director
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+	elif not await _start_solo_match(built):
+		failures.append("Solo practice never started a four-player match (phase '%s', roster %s)" % [
+			rm.lobby_phase(), server.claimed_slots()])
+	else:
+		var bot_slots: Array[int] = server.virtual_slots()
+		joined[0].send_text(JSON.stringify({"t": "solo", "v": false}))
+		await _poll_phones(joined, 10)
+		print("      Remove bots mid-round: %d bots left, roster %s, phase '%s'" % [
+			director.bot_count(), server.claimed_slots(), rm.lobby_phase()])
+		if director.bot_count() != bot_slots.size() or server.claimed_slots().size() != BotDirectorScript.SOLO_PLAYERS:
+			failures.append("Remove bots mid-round was heeded: %d bots left of %d, roster %s" % [
+				director.bot_count(), bot_slots.size(), server.claimed_slots()])
+		var human: RigidBody2D = server.player_in_slot(0)
+		director.remove_bots()
+		var standing: Array[int] = []
+		for slot: int in bot_slots:
+			if server.player_in_slot(slot).alive:
+				standing.append(slot)
+		print("      remove_bots(): bodies still in the round %s; roster %s" % [standing, server.claimed_slots()])
+		if not standing.is_empty():
+			failures.append("removed bots' bodies stayed in the round in slots %s" % [standing])
+		if server.claimed_slots() != [0]:
+			failures.append("after remove_bots() the roster was %s, expected [0]" % [server.claimed_slots()])
+		if not human.alive:
+			failures.append("removing the bots took the human out of the round too")
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+	_scenario_completed = true
+	return failures
+
+## Issue #165 (3): BotDirector sat under ControllerServer, which runs through a
+## pause, so bots kept thinking and pushing input while the game was paused.
+## It is PAUSABLE now: no bot writes an input while paused, and they all pick
+## up again on Resume.
+func _scenario_bots_stop_thinking_while_paused() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "bots-pause")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var director: Node = server.bot_director
+	var sentinel := Vector2(7.0, 7.0)
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+	elif not await _start_solo_match(built):
+		failures.append("Solo practice never started a four-player match (phase '%s')" % rm.lobby_phase())
+	else:
+		joined[0].send_text(JSON.stringify({"t": "host", "cmd": "pause"}))
+		await _poll_phones(joined, 10)
+		if not rm.is_paused():
+			failures.append("the host's Pause did not pause the game")
+		for slot: int in director.bots:
+			director.bots[slot].last_input = sentinel
+		await _poll_phones(joined, 30)
+		var thought: Array[int] = []
+		for slot: int in director.bots:
+			if director.bots[slot].last_input != sentinel:
+				thought.append(slot)
+		print("      paused 30 frames: bots that still thought %s; director process mode %d" % [thought, director.process_mode])
+		if not thought.is_empty():
+			failures.append("bots in slots %s kept thinking while the game was paused" % [thought])
+		joined[0].send_text(JSON.stringify({"t": "host", "cmd": "resume"}))
+		await _poll_phones(joined, 10)
+		var idle: Array[int] = []
+		for slot: int in director.bots:
+			if director.bots[slot].last_input == sentinel:
+				idle.append(slot)
+		if not idle.is_empty():
+			failures.append("bots in slots %s never thought again after Resume" % [idle])
+	paused = false
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+	_scenario_completed = true
+	return failures
+
+## Issue #165 (4): Solo bots are always ready and always "connected", so once
+## the solo host left they started match after match to an empty room. Now
+## they do not make a ready lobby on their own, and after `orphan_grace_sec`
+## with no phone connected they go, mid-round included, and the room goes
+## back to an empty lobby. `--bots=N` style bots (added directly, not by the
+## Solo button) still play by themselves.
+func _scenario_solo_bots_go_when_the_last_phone_leaves() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "orphan-a")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var director: Node = server.bot_director
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		RoundManagerScript.modifier_rolls_enabled = true
+		_scenario_completed = true
+		return failures
+	rm.lobby_countdown_sec = ORPHAN_COUNTDOWN_SEC
+	director.set("orphan_grace_sec", ORPHAN_GRACE_SEC)
+
+	# In the lobby: Solo practice starts the countdown, then the phone leaves.
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "countdown", BOT_START_MSEC):
+		failures.append("Solo practice never started the countdown (phase '%s')" % rm.lobby_phase())
+	joined[0].close(1000, "solo host gone")
+	var phases: Dictionary = {}
+	var deadline: int = Time.get_ticks_msec() + ORPHAN_WATCH_MSEC
+	while Time.get_ticks_msec() < deadline:
+		await _poll_phones(joined, 1)
+		if server.host_slot() == -1:
+			phases[rm.lobby_phase()] = true
+	print("      lobby, solo host gone: phases seen %s; %d bots left, roster %s" % [
+		phases.keys(), director.bot_count(), server.claimed_slots()])
+	if phases.has("playing") or phases.has("round_end"):
+		failures.append("the bots started a match with the solo host gone (phases %s)" % [phases.keys()])
+	if director.bot_count() != 0 or not server.claimed_slots().is_empty():
+		failures.append("the solo bots stayed with no phone connected: %d bots, roster %s" % [
+			director.bot_count(), server.claimed_slots()])
+
+	# Mid-round: a new phone's solo match, then that phone leaves too.
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "orphan-b", [] as Array[WebSocketPeer])
+	joined = [peer]
+	built["joined"] = joined
+	if result["slot"] == -1:
+		failures.append("a second phone could not join the empty lobby")
+	elif not await _start_solo_match(built):
+		failures.append("the second Solo practice never started a match (phase '%s')" % rm.lobby_phase())
+	else:
+		var bot_players: Array[RigidBody2D] = []
+		for slot: int in server.virtual_slots():
+			bot_players.append(server.player_in_slot(slot))
+		joined[0].close(1000, "solo host gone mid-round")
+		var emptied: bool = await _poll_until(joined, func() -> bool:
+			return director.bot_count() == 0 and rm.lobby_phase() == "lobby" and server.claimed_slots().is_empty(),
+			ORPHAN_WATCH_MSEC)
+		var standing: int = 0
+		for player: RigidBody2D in bot_players:
+			if player.alive:
+				standing += 1
+		print("      mid-round, solo host gone: %d bots left, %d bot bodies standing, phase '%s', roster %s" % [
+			director.bot_count(), standing, rm.lobby_phase(), server.claimed_slots()])
+		if not emptied:
+			failures.append("with the solo host gone mid-round the bots played on: %d bots, phase '%s', roster %s" % [
+				director.bot_count(), rm.lobby_phase(), server.claimed_slots()])
+		if standing > 0:
+			failures.append("%d bot bodies stayed in the round after the bots went" % standing)
+
+	# Bots added directly, as `--bots=N` does, need nobody.
+	director.add_bots(2)
+	await _await_msec(int(ORPHAN_GRACE_SEC * 1000.0) * 2)
+	if director.bot_count() != 2:
+		failures.append("--bots style bots with no phone connected: %d left, expected 2" % director.bot_count())
+	var started: bool = await _await_condition(func() -> bool: return rm.lobby_phase() == "playing", BOT_START_MSEC)
+	if not started:
+		failures.append("--bots style bots no longer start a match by themselves (phase '%s')" % rm.lobby_phase())
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
+	_scenario_completed = true
+	return failures
+
+## Issue #165 (5): bot upkeep. A seed set before the bot enters the tree is
+## kept; the rays' exclusion list is built once a tick, not once a ray; a bot
+## on a stage with no kill zone looks for one once a life, not every 0.5 s;
+## "Bot N" names never repeat after a kick; and mid-round the lobby state is
+## built when something changed (a KO), not every frame.
+func _scenario_bot_upkeep_cached_and_names_unique() -> Array[String]:
+	var failures: Array[String] = []
+	# Seed and caches, on a bare player with no stage and no kill zone.
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	holder.add_child(player)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	holder.add_child(bot)
+	await _await_ticks(2)
+	if bot.rng.seed != BOT_SEED:
+		failures.append("a bot's rng seed set before it entered the tree was replaced (%d, expected %d)" % [bot.rng.seed, BOT_SEED])
+	var first: Array[RID] = bot._player_rids()
+	var second: Array[RID] = bot._player_rids()
+	if not is_same(first, second):
+		failures.append("the ray exclusion list is rebuilt for every ray, not once a tick")
+	if first.size() != get_nodes_in_group("players").size():
+		failures.append("the ray exclusion list holds %d bodies, expected %d" % [first.size(), get_nodes_in_group("players").size()])
+	await _await_msec(1200)
+	var lookups: Variant = bot.get("lava_lookups")
+	print("      bare stage: lava lookups in 1.2 s %s; player alive %s" % [lookups, player.alive])
+	if not player.alive:
+		failures.append("the bare player was not alive, so the bot never thought")
+	if lookups == null or int(lookups) > 1:
+		failures.append("the bot searched the tree for the lava %s times in one life, expected once" % [lookups])
+	holder.queue_free()
+	await _await_ticks(1)
+
+	# Names, in the real game.
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	rm.kill_zone_grace_sec = 600.0
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var director: Node = server.bot_director
+	director.add_bots(3)
+	var slots: Array[int] = server.virtual_slots()
+	server.kick(slots[0])
+	director.add_bots(1)
+	var names: Array[String] = []
+	for slot: int in server.virtual_slots():
+		names.append(server.slot_name(slot))
+	names.sort()
+	print("      bot names after a kick and an add: %s" % [names])
+	if names != ["Bot 1", "Bot 2", "Bot 3"]:
+		failures.append("bot names after a kick and an add were %s, expected Bot 1..3, no repeats" % [names])
+
+	# Lobby publishing in the bots' round.
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.virtual_slots():
+		players.append(server.player_in_slot(slot))
+	if not await _await_condition(func() -> bool: return _all_alive(players), BOT_START_MSEC):
+		failures.append("the bots' match never started (phase '%s')" % rm.lobby_phase())
+	else:
+		await _await_ticks(2)
+		var builds_from: Variant = rm.get("lobby_state_builds")
+		await _await_ticks(QUIET_ROUND_FRAMES)
+		var builds_to: Variant = rm.get("lobby_state_builds")
+		var builds: int = int(builds_to) - int(builds_from) if builds_from != null and builds_to != null else -1
+		print("      %d frames of a bots' round: lobby state built %d times" % [QUIET_ROUND_FRAMES, builds])
+		if builds < 0 or builds > QUIET_ROUND_MAX_BUILDS:
+			failures.append("the lobby state was built %d times in %d frames of a round (at most %d allowed)" % [
+				builds, QUIET_ROUND_FRAMES, QUIET_ROUND_MAX_BUILDS])
+		# A KO still reaches the phones on the next frame.
+		var victim: int = server.virtual_slots()[0]
+		if rm.lobby_phase() == "playing" and server.player_in_slot(victim).alive:
+			server.player_in_slot(victim).eliminate()
+			await process_frame
+			await process_frame
+			var alive: Array = server._lobby_state.get("alive", [])
+			if alive.has(float(victim)) or alive.has(victim):
+				failures.append("a KO in slot %d was not published by the next frame (alive %s)" % [victim, alive])
+	director.remove_bots()
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
 	_scenario_completed = true
 	return failures

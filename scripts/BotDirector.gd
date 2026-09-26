@@ -18,6 +18,14 @@ extends Node
 ## - The host phone's "Solo practice" button sends `{"t":"solo","v":true}`.
 ##   The lobby fills up to SOLO_PLAYERS with bots and the host is readied, so
 ##   the countdown starts. "Remove bots" (`v` false) sends them all away.
+##   Solo bots are there for the humans (issue #165): they do not make a
+##   ready lobby on their own (RoundManager asks `needs_a_human()`), and once
+##   no phone has been connected for `orphan_grace_sec` they all go, even
+##   mid-round. `--bots=N` bots need no human and never go by themselves.
+##
+## Paused with the rest of the game: `ControllerServer` runs through a pause,
+## but it makes this node PAUSABLE, so a bot stops thinking when the host
+## phone pauses (issue #165).
 ##
 ## Preloaded by path (CLAUDE.md), never referenced by a `class_name`.
 
@@ -34,6 +42,12 @@ static var extra_args: PackedStringArray = PackedStringArray()
 var server: Node = null
 ## slot -> the `Bot` driving it.
 var bots: Dictionary = {}
+## True while the bots came from Solo practice: they need a human to play with.
+var solo: bool = false
+## How long solo bots wait with no phone connected before they all go: long
+## enough to ride out a phone that drops and reconnects.
+@export var orphan_grace_sec: float = 10.0
+var _orphaned_for: float = 0.0
 
 func _ready() -> void:
 	if server == null:
@@ -48,6 +62,22 @@ func _ready() -> void:
 		# to be ready before a controller binds to it.
 		add_bots.call_deferred(wanted)
 
+## Solo bots with no phone connected for `orphan_grace_sec`: send them away,
+## so they do not play match after match to an empty room (issue #165).
+func _process(delta: float) -> void:
+	if not needs_a_human() or server.host_slot() != -1:
+		_orphaned_for = 0.0
+		return
+	_orphaned_for += delta
+	if _orphaned_for >= orphan_grace_sec:
+		_orphaned_for = 0.0
+		remove_bots()
+
+## Whether these bots only play alongside a human: they came from Solo
+## practice, and are still here.
+func needs_a_human() -> bool:
+	return solo and not bots.is_empty()
+
 ## The N in `--bots=N`, or 0 without the flag. Negative or junk reads as 0.
 static func bots_from_args(args: PackedStringArray) -> int:
 	var wanted: int = 0
@@ -61,7 +91,7 @@ static func bots_from_args(args: PackedStringArray) -> int:
 func add_bots(count: int) -> int:
 	var added: int = 0
 	for i in count:
-		var slot: int = server.add_virtual_controller("Bot %d" % (bots.size() + 1))
+		var slot: int = server.add_virtual_controller(_free_bot_name())
 		if slot == -1:
 			break
 		var bot: Node = BotScript.new()
@@ -73,18 +103,37 @@ func add_bots(count: int) -> int:
 		added += 1
 	return added
 
+## "Bot N" with the lowest N no bot here holds, so a name never repeats
+## after a bot is kicked (issue #165).
+func _free_bot_name() -> String:
+	var taken: PackedStringArray = PackedStringArray()
+	for slot: int in bots:
+		taken.append(server.slot_name(slot))
+	var n: int = 1
+	while taken.has("Bot %d" % n):
+		n += 1
+	return "Bot %d" % n
+
 ## Send every bot away.
 func remove_bots() -> void:
 	for slot: int in bots.keys():
 		remove_bot(slot)
+	solo = false
 
-## Send the bot in `slot` away (the host's kick lands here too).
+## Send the bot in `slot` away (the host's kick lands here too). A bot in the
+## round leaves it, the way a kicked phone's player does, rather than leaving
+## a limp body behind (issue #165).
 func remove_bot(slot: int) -> void:
 	var bot: Node = bots.get(slot)
 	bots.erase(slot)
 	if bot != null:
 		bot.queue_free()
+	var player: Node = server.player_in_slot(slot)
+	if player != null and bool(player.get("alive")) and player.has_method("leave_round"):
+		player.leave_round()
 	server.remove_virtual_controller(slot)
+	if bots.is_empty():
+		solo = false
 
 func bot_count() -> int:
 	return bots.size()
@@ -96,6 +145,7 @@ func _on_solo_requested(on: bool) -> void:
 	if not on:
 		remove_bots()
 		return
+	solo = true
 	var roster: int = server.claimed_slots().size()
 	add_bots(maxi(1, SOLO_PLAYERS - roster))
 	var host: int = server.host_slot()
