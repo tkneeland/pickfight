@@ -18,7 +18,9 @@ extends StaticBody2D
 ##   SOLID    -- normal terrain colour, collision on.
 ##   WARNING  -- entered on first player contact. Still solid (US-3: the
 ##               warning is time to react, not an instant drop), visual
-##               changes so the player sees it coming.
+##               changes so the player sees it coming. Also entered while
+##               SOLID if a player is already in the band (issue #199), so
+##               nobody can camp on a ledge that has just come back.
 ##   AWAY     -- collision off, visual dimmed. Returns to SOLID on its own
 ##               after `away_sec`; a body touching it again mid-cycle does
 ##               not restart anything -- the cycle runs to completion once
@@ -104,12 +106,24 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if not body.is_in_group("players"):
 		return
+	_start_warning()
+
+func _start_warning() -> void:
 	_state = _LedgeState.WARNING
 	_timer_remaining = warn_sec
 	_visual.color = WARNING_COLOR
 
 func _physics_process(delta: float) -> void:
 	if _state == _LedgeState.SOLID:
+		# Issue #199: `body_entered` fires once, on entry. A player who came
+		# into the band while the ledge was warning or away, and is still in
+		# it when the ledge comes back, never enters again -- so while SOLID
+		# the band is also polled, as `CollapsingFloor.gd` does, and anyone
+		# already standing there starts the next cycle.
+		for body: Node2D in _detector.get_overlapping_bodies():
+			if body.is_in_group("players"):
+				_start_warning()
+				break
 		return
 	_timer_remaining -= delta
 	if _timer_remaining > 0.0:
