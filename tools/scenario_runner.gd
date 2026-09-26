@@ -251,6 +251,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hit_feedback_pools_markers_and_numbers",
 	"roster_heads_do_not_clip_platform_in_play_sword_axe",
 	"roster_heads_do_not_clip_platform_in_play_dagger_boomstick",
+	"settings_fullscreen_follows_the_real_window",
+	"settings_slider_drag_saves_once_on_release",
+	"audio_release_out_of_tree_returns",
+	"announcer_said_capped_and_lengths_from_decode",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1101,6 +1105,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_clip_platform_in_play_sword_axe()
 		"roster_heads_do_not_clip_platform_in_play_dagger_boomstick":
 			return await _scenario_roster_heads_do_not_clip_platform_in_play_dagger_boomstick()
+		"settings_fullscreen_follows_the_real_window":
+			return await _scenario_settings_fullscreen_follows_the_real_window()
+		"settings_slider_drag_saves_once_on_release":
+			return await _scenario_settings_slider_drag_saves_once_on_release()
+		"audio_release_out_of_tree_returns":
+			return await _scenario_audio_release_out_of_tree_returns()
+		"announcer_said_capped_and_lengths_from_decode":
+			return await _scenario_announcer_said_capped_and_lengths_from_decode()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12783,6 +12795,7 @@ func _scenario_music_loops_have_no_silent_seam() -> Array[String]:
 			failures.append("%s: %.0f ms of silence at the loop seam, over %.0f" % [track, silence_sec * 1000.0, MUSIC_SEAM_MAX_SILENCE_SEC * 1000.0])
 		if cut_sec > MUSIC_SEAM_MAX_CUT_SEC:
 			failures.append("%s: the loop window cuts %.0f ms of sound" % [track, cut_sec * 1000.0])
+	failures.append_array(_music_runtime_wrap_failures(music))
 	_scenario_completed = true
 	return failures
 
@@ -17183,3 +17196,299 @@ func _scenario_roster_heads_do_not_clip_platform_in_play_dagger_boomstick() -> A
 	var failures: Array[String] = await _clip_platform_sweep([4, 5])
 	_scenario_completed = true
 	return failures
+
+
+# --- Audio and settings fixes (issue #167) ------------------------------------
+
+## How far into the file the stream's own wrap is rendered from, before its
+## end, and how much is rendered past it.
+const MUSIC_WRAP_LEAD_SEC: float = 0.02
+const MUSIC_WRAP_RENDER_SEC: float = 0.25
+
+## Issue #167, for `music_loops_have_no_silent_seam`: when a hitch lets
+## `_wrap_trimmed_loop` miss the window's end, the stream wraps by itself.
+## Both the stream Music plays (read off disk) and the imported copy an
+## exported build plays must wrap back to the track's `loop_start`, with no
+## more silence after the wrap than the seam allows. Before the fix the
+## imported copy wrapped to 0.0 and played fight_mars's 80 ms of head silence.
+func _music_runtime_wrap_failures(music: Node) -> Array[String]:
+	var failures: Array[String] = []
+	if not music.has_method("imported_stream"):
+		failures.append("Music has no imported_stream(): an exported build's tracks do not loop from loop_start")
+		return failures
+	for track: String in music.TRACKS.keys():
+		var loop_start: float = float(music.TRACKS[track].get("loop_start", 0.0))
+		var streams: Dictionary = {"runtime": music._stream_for(track)}
+		var path: String = music.DIR + String(music.TRACKS[track]["file"])
+		if ResourceLoader.exists(path):
+			streams["imported"] = music.imported_stream(track)
+		else:
+			failures.append("%s: no imported copy of %s to check" % [track, path])
+		for kind: String in streams:
+			var stream: AudioStream = streams[kind]
+			if stream == null:
+				failures.append("%s: the %s stream did not load" % [track, kind])
+				continue
+			if not bool(stream.get("loop")) or absf(float(stream.get("loop_offset")) - loop_start) > 0.0005:
+				failures.append("%s: the %s stream loops %s from %.3f s, expected from loop_start %.3f s" % [
+					track, kind, stream.get("loop"), float(stream.get("loop_offset")), loop_start])
+				continue
+			# Render across the stream's own wrap and measure the silence after it.
+			var playback: AudioStreamPlayback = stream.instantiate_playback()
+			playback.start(maxf(stream.get_length() - MUSIC_WRAP_LEAD_SEC, 0.0))
+			var frames: PackedVector2Array = playback.mix_audio(1.0, int(MUSIC_WRAP_RENDER_SEC * MUSIC_SEAM_RATE))
+			playback.stop()
+			var k: int = int(MUSIC_WRAP_LEAD_SEC * MUSIC_SEAM_RATE)
+			var silent: int = 0
+			while k + silent < frames.size() and maxf(absf(frames[k + silent].x), absf(frames[k + silent].y)) < MUSIC_SEAM_THRESHOLD:
+				silent += 1
+			var silence_sec: float = float(silent) / MUSIC_SEAM_RATE
+			print("      %s (%s): wraps to %.3f s, %.1f ms of silence after the wrap" % [track, kind, loop_start, silence_sec * 1000.0])
+			if silence_sec > MUSIC_SEAM_MAX_SILENCE_SEC:
+				failures.append("%s: the %s stream's own wrap plays %.0f ms of silence, over %.0f" % [
+					track, kind, silence_sec * 1000.0, MUSIC_SEAM_MAX_SILENCE_SEC * 1000.0])
+	return failures
+
+## Issue #167: leaving fullscreen through the OS (macOS's green button, its
+## shortcut) must not leave `Sfx.fullscreen` on. The menu shows the real
+## window, the saved setting follows it, and the next F11 goes back into
+## fullscreen instead of doing nothing. Headless has no window, so a fake one
+## stands in through `Sfx.window_mode_probe`.
+func _scenario_settings_fullscreen_follows_the_real_window() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	if not ("window_mode_probe" in sfx and "fullscreen_sync_grace_msec" in sfx):
+		_scenario_completed = true
+		return ["Sfx cannot read the real window mode (no window_mode_probe / sync_fullscreen)"]
+	var was: Dictionary = {"fullscreen": sfx.fullscreen, "path": sfx.settings_path,
+		"grace": sfx.fullscreen_sync_grace_msec}
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_fullscreen_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	sfx.settings_path = temp_path
+	sfx.persist_settings = true
+	var window: Dictionary = {"mode": DisplayServer.WINDOW_MODE_MAXIMIZED}
+	sfx.window_mode_probe = func() -> int: return int(window["mode"])
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+
+	# F11 into fullscreen; the window follows.
+	sfx.fullscreen_sync_grace_msec = 0
+	sfx.set_fullscreen(false)
+	window["mode"] = DisplayServer.WINDOW_MODE_MAXIMIZED
+	sfx.toggle_fullscreen()
+	window["mode"] = DisplayServer.WINDOW_MODE_FULLSCREEN
+	ui.refresh()
+	if not sfx.fullscreen or not ui.fullscreen_box().button_pressed:
+		failures.append("F11 into fullscreen did not stick (fullscreen %s)" % sfx.fullscreen)
+
+	# The OS takes the window out of fullscreen, which resizes it.
+	window["mode"] = DisplayServer.WINDOW_MODE_WINDOWED
+	get_root().size_changed.emit()
+	if sfx.fullscreen:
+		failures.append("the window left fullscreen through the OS, but Sfx.fullscreen stayed on")
+	if ui.fullscreen_box().button_pressed:
+		failures.append("the window left fullscreen through the OS, but the Fullscreen box stayed ticked")
+	var saved := ConfigFile.new()
+	if saved.load(temp_path) != OK or bool(saved.get_value("display", "fullscreen", true)):
+		failures.append("the saved fullscreen setting did not follow the window out of fullscreen")
+
+	# The next F11 goes back into fullscreen, not a no-op.
+	# (The fake window only moves when told to, so hold off syncing from it.)
+	sfx.fullscreen_sync_grace_msec = 60000
+	var asked: int = sfx.window_mode_requests().size()
+	var f11 := InputEventKey.new()
+	f11.physical_keycode = KEY_F11
+	f11.pressed = true
+	ui._unhandled_input(f11)
+	var requests: Array[int] = sfx.window_mode_requests()
+	if requests.size() != asked + 1 or requests.back() != DisplayServer.WINDOW_MODE_FULLSCREEN or not sfx.fullscreen:
+		failures.append("the F11 after leaving fullscreen through the OS asked for %s, expected WINDOW_MODE_FULLSCREEN" % [requests.slice(asked)])
+
+	# Entering fullscreen through the OS is picked up too, when the menu opens.
+	sfx.set_fullscreen(false)
+	sfx.fullscreen_sync_grace_msec = 0
+	window["mode"] = DisplayServer.WINDOW_MODE_FULLSCREEN
+	var was_open: bool = ui.is_open()
+	if was_open:
+		ui.toggle_panel()
+	ui.toggle_panel()
+	if not sfx.fullscreen or not ui.fullscreen_box().button_pressed:
+		failures.append("opening the menu after the OS went fullscreen did not show Fullscreen ticked")
+	if not was_open:
+		ui.toggle_panel()
+
+	# Straight after asking for a mode, a window still animating is left alone.
+	sfx.fullscreen_sync_grace_msec = 60000
+	window["mode"] = DisplayServer.WINDOW_MODE_MAXIMIZED
+	sfx.set_fullscreen(true)
+	ui.refresh()
+	if not sfx.fullscreen:
+		failures.append("a window still on its way into fullscreen turned the flag straight back off")
+
+	sfx.persist_settings = false
+	sfx.window_mode_probe = Callable()
+	sfx.fullscreen_sync_grace_msec = was["grace"]
+	sfx.set_fullscreen(was["fullscreen"])
+	sfx.settings_path = was["path"]
+	ui.refresh()
+	DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+
+## Issue #167: dragging a settings slider applies every step live but writes
+## user://audio.cfg once, when the drag ends, not on every step.
+func _scenario_settings_slider_drag_saves_once_on_release() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var music: Node = _music()
+	if sfx == null or music == null:
+		return ["the Sfx or Music autoload is missing"]
+	await physics_frame
+	var was: Dictionary = {"master": sfx.master_volume, "sfx": sfx.sfx_volume, "music": music.volume,
+		"sfx_path": sfx.settings_path, "music_path": music.settings_path}
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_drag_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	sfx.settings_path = temp_path
+	music.settings_path = temp_path
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	ui.volume_slider().set_value_no_signal(1.0)
+	ui.sfx_slider().set_value_no_signal(1.0)
+	ui.music_slider().set_value_no_signal(1.0)
+	sfx.persist_settings = true
+	music.persist_settings = true
+
+	var sliders: Dictionary = {"master": ui.volume_slider(), "sfx": ui.sfx_slider(), "music": ui.music_slider()}
+	var ends: Dictionary = {"master": 0.35, "sfx": 0.45, "music": 0.55}
+	for which: String in sliders:
+		var slider: HSlider = sliders[which]
+		slider.drag_started.emit()
+		var value: float = 1.0
+		while value > float(ends[which]) + 0.001:
+			value -= slider.step
+			slider.value = value
+			if FileAccess.file_exists(temp_path):
+				failures.append("dragging the %s slider wrote the settings file mid-drag (at %.2f)" % [which, value])
+				DirAccess.remove_absolute(temp_path)
+				break
+		var live: float = {"master": sfx.master_volume, "sfx": sfx.sfx_volume, "music": music.volume}[which]
+		if absf(live - float(ends[which])) > 0.001:
+			failures.append("mid-drag the %s volume is %.2f, not applied live to %.2f" % [which, live, ends[which]])
+		slider.drag_ended.emit(true)
+		var saved := ConfigFile.new()
+		if saved.load(temp_path) != OK:
+			failures.append("ending the %s drag saved nothing" % which)
+			continue
+		var key: Array = {"master": ["audio", "master_volume"], "sfx": ["audio", "sfx_volume"], "music": ["music", "volume"]}[which]
+		var got: float = float(saved.get_value(key[0], key[1], -1.0))
+		if absf(got - float(ends[which])) > 0.001:
+			failures.append("ending the %s drag saved %.2f, expected %.2f" % [which, got, ends[which]])
+		DirAccess.remove_absolute(temp_path)
+
+	# A change that is not a drag (the mouse wheel) still saves at once.
+	ui.volume_slider().value = 0.8
+	if not FileAccess.file_exists(temp_path):
+		failures.append("a slider change outside a drag was not saved")
+
+	sfx.persist_settings = false
+	music.persist_settings = false
+	sfx.set_master_volume(was["master"])
+	sfx.set_sfx_volume(was["sfx"])
+	music.set_volume(was["music"])
+	sfx.settings_path = was["sfx_path"]
+	music.settings_path = was["music_path"]
+	ui.refresh()
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+
+## Issue #167: `release()` on a Music or Sfx node that is not in the tree
+## cleans up and returns, rather than calling create_timer on a null tree.
+func _scenario_audio_release_out_of_tree_returns() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var log := _ReleaseErrorLog.new()
+	OS.add_logger(log)
+	for path: String in ["res://scripts/Music.gd", "res://scripts/Sfx.gd"]:
+		var node: Node = (load(path) as GDScript).new()
+		var done: Array[bool] = [false]
+		var before: int = log.count()
+		var run := func() -> void:
+			await node.release()
+			done[0] = true
+		run.call()
+		await _await_condition(func() -> bool: return done[0], 3000)
+		if not done[0]:
+			failures.append("%s release() out of the tree never returned" % path.get_file())
+		if log.count() != before:
+			failures.append("%s release() out of the tree raised %d error(s): %s" % [
+				path.get_file(), log.count() - before, log.since(before)])
+		node.free()
+	OS.remove_logger(log)
+	_scenario_completed = true
+	return failures
+
+## Issue #167: the announcer's `said` keeps only its last `SAID_MAX` lines,
+## and timing a line reads no file off disk once Sfx's decoding is done.
+func _scenario_announcer_said_capped_and_lengths_from_decode() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var announcer: Node = sfx.announcer
+	announcer.clear()
+	if not ("SAID_MAX" in announcer and announcer.has_method("_record")):
+		failures.append("the announcer's said list has no cap")
+	else:
+		var cap: int = int(announcer.SAID_MAX)
+		for i in cap * 5:
+			announcer._record(&"announce_ko" if i % 2 == 0 else &"announce_fight")
+		if announcer.said.size() != cap:
+			failures.append("after %d lines said holds %d, expected the cap %d" % [cap * 5, announcer.said.size(), cap])
+		elif announcer.said[cap - 1] != "announce_fight":
+			failures.append("said did not keep the latest line last")
+	announcer.clear()
+
+	if not (sfx.has_method("length_disk_reads") and sfx.has_method("decoding_done")):
+		failures.append("Sfx times the announcer's lines by reading each file off disk")
+	elif not await _await_condition(func() -> bool: return sfx.decoding_done(), 10000):
+		failures.append("Sfx never finished decoding")
+	else:
+		var reads: int = sfx.length_disk_reads()
+		for key: String in sfx.SOUNDS:
+			if key.begins_with("announce_") and sfx.sound_length(StringName(key)) <= 0.0:
+				failures.append("no length for %s" % key)
+		if sfx.length_disk_reads() != reads:
+			failures.append("timing the announcer's lines read %d files off disk after decoding" % (sfx.length_disk_reads() - reads))
+	_scenario_completed = true
+	return failures
+
+## Collects the errors raised while it is installed (`OS.add_logger`).
+class _ReleaseErrorLog extends Logger:
+	var _errors: PackedStringArray = PackedStringArray()
+	var _mutex := Mutex.new()
+
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String,
+			_editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		_mutex.lock()
+		_errors.append("%s (%s:%d %s)" % [rationale if rationale != "" else code, file.get_file(), line, function])
+		_mutex.unlock()
+
+	func count() -> int:
+		_mutex.lock()
+		var n: int = _errors.size()
+		_mutex.unlock()
+		return n
+
+	func since(from: int) -> PackedStringArray:
+		_mutex.lock()
+		var got: PackedStringArray = _errors.slice(from)
+		_mutex.unlock()
+		return got
