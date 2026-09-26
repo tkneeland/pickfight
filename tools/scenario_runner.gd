@@ -4229,6 +4229,23 @@ func _charge_sweep(label: String, attacker: RigidBody2D, blocker: RigidBody2D, c
 			attacker.damage = 0.0
 			blocker.damage = 0.0
 			await _await_ticks(CHARGE_SETTLE_TICKS)
+			# A flail is put back on the charge line at rest, its chain
+			# straightened out behind its head (issue #192). Ninety ticks do
+			# not bring a free chain to rest: the ball's swing pushes the body
+			# about, so the pair started the charge up to 39 px apart across
+			# the line, and at the 950 px/s the settle's fall has reached the
+			# rig is still falling when the charge sets the bodies' speed,
+			# which drags the 5 px knob off the line too. How far either went
+			# was history and float rounding, so the knobs met on 8 of 12
+			# charges on macOS and 4 on Linux CI. Same reasoning as clearing
+			# `damage` above: one charge's leftovers must not decide what the
+			# next one tests. The other weapons carry no chain and are left
+			# exactly as they were.
+			for charger: RigidBody2D in [attacker, blocker]:
+				var chain: RefCounted = charger.flail_chain()
+				if chain != null:
+					charger.teleport_to(centre - half if charger == attacker else centre + half)
+					chain.lay_out(charger.global_position - charger.weapon_head_position())
 
 			var previous_a: Array[Dictionary] = _head_circles_world(attacker)
 			var previous_b: Array[Dictionary] = _head_circles_world(blocker)
