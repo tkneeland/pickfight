@@ -20,7 +20,9 @@ extends Node
 ## ADR-0013), and a `{"t":"lobby",...}` text frame per `set_lobby_state()`
 ## (issue #120). Phone -> host text frames (#120): `{"t":"ready","v":<bool>}`
 ## and, from the host phone only, `{"t":"target","n":<int>}`; and the
-## phone's nickname, `{"t":"name","v":<string>}` (issue #121).
+## phone's nickname, `{"t":"name","v":<string>}` (issue #121); and, from the
+## host phone only, `{"t":"host","cmd":"pause"|"resume"|"end"}` and
+## `{"t":"host","cmd":"kick","slot":<int>}` (issue #149).
 ##
 ## Liveness: a phone that screen-locks or leaves Wi-Fi mid-drag stops sending
 ## without ever closing the socket, and the last frame it sent was non-zero.
@@ -52,6 +54,17 @@ extends Node
 ## A phone claimed `slot` fresh -- not a reconnect to a slot it already held.
 ## A sound hook (issue #75, ADR-0016); nothing in the game reads it.
 signal player_joined(slot: int)
+
+## The host phone asked for `cmd` (issue #149): "pause", "resume" or "end",
+## with `slot` -1; or "kick", emitted after `slot` has been removed from the
+## roster. Only ever emitted for a request from `host_slot()`. RoundManager
+## decides what each means.
+signal host_command(cmd: String, slot: int)
+
+## The close reason a kicked phone is shown, and refused with if it comes back.
+const KICKED_REASON: String = "removed by the host"
+## Commands the host phone may send besides "kick".
+const HOST_COMMANDS: PackedStringArray = ["pause", "resume", "end"]
 
 const PAGE_PATH: String = "res://controller/index.html"
 const WS_PORT_TOKEN: String = "__WS_PORT__"
@@ -195,6 +208,9 @@ const MAX_MATCH_TARGET: int = 99
 ## MAX_NAME_LENGTH. Empty until the phone sends one.
 var _slot_name: PackedStringArray = PackedStringArray()
 const MAX_NAME_LENGTH: int = 12
+## Client ids the host phone kicked (issue #149): refused for the rest of the
+## session, so a kicked page's automatic reconnect cannot walk back in.
+var _kicked_ids: PackedStringArray = PackedStringArray()
 ## The last lobby state RoundManager set, re-sent to every phone that binds.
 var _lobby_state: Dictionary = {}
 ## The join URL and QR the lobby screen shows (#120). The QR is null when
@@ -204,6 +220,8 @@ var join_qr_texture: ImageTexture = null
 
 func _ready() -> void:
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
+	# The host phone's Resume has to reach a paused game (issue #149).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
@@ -524,6 +542,11 @@ func _read_client_id(peer: WebSocketPeer) -> Variant:
 ## client that never sent one). Refuses the connection once every slot is
 ## claimed, exactly as before id-matching existed.
 func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
+	if not id.is_empty() and _kicked_ids.has(id):
+		peer.close(4001, KICKED_REASON)
+		if _log_input:
+			print("controller refused: kicked by the host")
+		return
 	if not id.is_empty():
 		for slot in _slot_peers.size():
 			if _slot_claimed[slot] == 1 and _slot_peers[slot] == null and _slot_client_id[slot] == id:
@@ -702,6 +725,48 @@ func _handle_text(slot: int, text: String) -> void:
 				_match_target = clampi(int(n), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
 				if _log_input:
 					print("slot %d set match target %d" % [slot, _match_target])
+		"host":
+			_handle_host_command(slot, msg)
+
+## A host-menu request (issue #149). Anything from a phone that is not the host
+## right now is ignored, as is an unknown command or a kick aimed at the host
+## itself or at a slot nobody holds.
+func _handle_host_command(slot: int, msg: Dictionary) -> void:
+	var cmd: String = str(msg.get("cmd", ""))
+	if slot != host_slot():
+		if _log_input:
+			print("slot %d host command '%s' ignored: not the host" % [slot, cmd])
+		return
+	if HOST_COMMANDS.has(cmd):
+		if _log_input:
+			print("slot %d host command %s" % [slot, cmd])
+		host_command.emit(cmd, -1)
+	elif cmd == "kick":
+		var target: Variant = msg.get("slot")
+		if (target is float or target is int) and kick(int(target)):
+			host_command.emit("kick", int(target))
+
+## Remove `slot` from the roster at once (issue #149): its phone is told why
+## and hung up on, its claim is dropped -- not held to the end of the round as
+## an ordinary disconnect is (ADR-0007) -- and its id is refused from now on.
+## False, doing nothing, for the host's own slot or an unclaimed one.
+func kick(slot: int) -> bool:
+	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1 or slot == host_slot():
+		return false
+	var peer: WebSocketPeer = _slot_peers[slot]
+	if peer != null:
+		peer.close(4001, KICKED_REASON)
+		_unbind(slot)
+	if not _slot_client_id[slot].is_empty() and not _kicked_ids.has(_slot_client_id[slot]):
+		_kicked_ids.append(_slot_client_id[slot])
+	_slot_claimed[slot] = 0
+	_slot_client_id[slot] = ""
+	_slot_name[slot] = ""
+	_slot_ready[slot] = 0
+	_join_order.erase(slot)
+	if _log_input:
+		print("slot %d kicked by the host" % slot)
+	return true
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).
 func slot_ready(slot: int) -> bool:

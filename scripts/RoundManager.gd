@@ -147,6 +147,8 @@ func _ready() -> void:
 	_watch_for_buzzes()
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
+	if _controller_server != null and _controller_server.has_signal("host_command"):
+		_controller_server.connect("host_command", _on_host_command)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
 	_scoreboard = get_node_or_null(scoreboard_path) as Control
 	if _scoreboard != null:
@@ -820,6 +822,8 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
+	if _paused:
+		_set_tree_paused(false)
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
@@ -1063,6 +1067,8 @@ func _publish_lobby_state() -> void:
 		"in_round": _in_round.duplicate(),
 		"alive": _alive_slots(),
 		"next": ceili(maxf(0.0, float(_pause_until_msec - Time.get_ticks_msec())) / 1000.0) if _state == State.ROUND_END else 0,
+		# Issue #149: the host phone's menu offers Resume instead of Pause.
+		"paused": _paused,
 	}
 	if state == _last_lobby_state:
 		return
@@ -1184,6 +1190,8 @@ func _build_lobby_ui() -> void:
 	right.add_child(_lobby_qr)
 	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
 	right.add_child(_lobby_url)
+	_how_to_play = _build_how_to_play()
+	right.add_child(_how_to_play)
 
 	_victory_panel = _full_screen_panel("VictoryPanel")
 	var stack := VBoxContainer.new()
@@ -1326,3 +1334,141 @@ func _tick_name_tags() -> void:
 			tag.reset_size()
 		var size: Vector2 = tag.get_minimum_size()
 		tag.position = player.global_position + Vector2(-size.x * 0.5, -NAME_TAG_RISE - size.y)
+
+# --- Host phone controls and how to play (issue #149) --------------------------
+#
+# The host phone's hidden menu (controller/index.html) sends Pause/Resume, End
+# match and Kick player; ControllerServer lets only the host's requests through
+# as `host_command`, and they are acted on here. Pause freezes the whole scene
+# tree except ControllerServer (which must keep hearing the phones) and this
+# node's pause banner; every deadline this node keeps in wall-clock msec is
+# pushed back by however long the pause lasted, so nothing expires during it.
+#
+# The lobby screen -- the shared screen, not the phones -- carries a short
+# how-to-play panel.
+
+## The lines of the lobby's how-to-play panel.
+const HOW_TO_PLAY_LINES: PackedStringArray = [
+	"Drag on your phone to swing your pick - flick it fast to hit hard",
+	"Hook the pick on a ledge and pull yourself up to climb",
+	"Touch a weapon pickup to grab a new weapon",
+	"Knock the others off the stage or into the rising lava - last one standing wins the round",
+]
+const HOW_TO_PLAY_WIDTH_PX: float = 560.0
+
+var _how_to_play: Control
+var _paused: bool = false
+var _paused_at_msec: int = 0
+var _pause_layer: CanvasLayer
+var _pause_label: Label
+
+## The lobby's how-to-play panel, or null before the lobby was ever shown.
+func how_to_play_panel() -> Control:
+	return _how_to_play
+
+## Whether the host phone has the match paused.
+func is_paused() -> bool:
+	return _paused
+
+## The PAUSED banner, or null before the first pause.
+func pause_label() -> Label:
+	return _pause_label
+
+func _build_how_to_play() -> Control:
+	var box := VBoxContainer.new()
+	box.name = "HowToPlay"
+	box.add_theme_constant_override("separation", 8)
+	box.add_child(_big_label("HOW TO PLAY", 34, LOBBY_ACCENT))
+	for line: String in HOW_TO_PLAY_LINES:
+		var label: Label = _big_label(line, 24, Color.WHITE)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.x = HOW_TO_PLAY_WIDTH_PX
+		box.add_child(label)
+	return box
+
+## Whether a match is under way: what Pause and End match act on.
+func _in_match() -> bool:
+	return lobby_enabled and (_state == State.ROUND_ACTIVE or _state == State.ROUND_END or _state == State.WAITING)
+
+func _on_host_command(cmd: String, slot: int) -> void:
+	match cmd:
+		"pause":
+			if _in_match() and not _paused:
+				_pause_match()
+		"resume":
+			if _paused:
+				_resume_match()
+		"end":
+			if _in_match():
+				_end_match()
+		"kick":
+			# Already out of the roster; out of the round too, without a death.
+			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
+				_players[slot].leave_round()
+			if lobby_enabled:
+				_publish_lobby_state()
+
+func _pause_match() -> void:
+	_paused = true
+	_paused_at_msec = Time.get_ticks_msec()
+	_set_tree_paused(true)
+	_show_pause_banner(true)
+	_publish_lobby_state()
+
+func _resume_match() -> void:
+	var paused_for: int = Time.get_ticks_msec() - _paused_at_msec
+	_pause_until_msec += paused_for
+	_next_pickup_msec += paused_for
+	_protected_until_msec += paused_for
+	if _abandoned_since_msec >= 0:
+		_abandoned_since_msec += paused_for
+	_paused = false
+	_set_tree_paused(false)
+	_show_pause_banner(false)
+	_publish_lobby_state()
+
+## The host phone ended the match early: the round in progress is wound down
+## with no winner and the room goes back to the lobby.
+func _end_match() -> void:
+	if _paused:
+		_paused = false
+		_set_tree_paused(false)
+		_show_pause_banner(false)
+	for player: Variant in _players:
+		if player != null and player.alive:
+			player.leave_round()
+	_clear_pickups()
+	_stop_kill_zone_rise()
+	_end_round_modifier()
+	_end_spawn_protection()
+	_last_winner_slot = -1
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+	_enter_lobby()
+
+func _set_tree_paused(on: bool) -> void:
+	if is_inside_tree():
+		get_tree().paused = on
+
+func _show_pause_banner(on: bool) -> void:
+	if _pause_label == null:
+		if not on:
+			return
+		_pause_layer = CanvasLayer.new()
+		_pause_layer.name = "PauseLayer"
+		_pause_layer.layer = 12
+		_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(_pause_layer)
+		var dim := ColorRect.new()
+		dim.color = Color(0.0, 0.0, 0.0, 0.45)
+		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+		dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_pause_layer.add_child(dim)
+		_pause_label = _big_label("PAUSED", 120, LOBBY_ACCENT)
+		_pause_label.name = "PauseLabel"
+		_pause_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_pause_layer.add_child(_pause_label)
+	_pause_layer.visible = on
+	_pause_label.visible = on

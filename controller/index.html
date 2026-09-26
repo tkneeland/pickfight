@@ -175,6 +175,63 @@
   }
   #name-shuffle { color: #e8ecf4; background: #2a303d; }
   #name-go { color: #0d0f14; background: #ffd933; min-width: 40vw; }
+  /* Host controls (issue #149): a small gear, on the host's phone only, that
+     opens a hidden menu. Tucked under the status line, clear of the lobby's
+     buttons. While a round is being played a tap does nothing: the gear has
+     to be held for GEAR_HOLD_MS (it lights up), and a finger landing on it
+     mid-drag is ignored, so a swing can never open it by accident. */
+  #gear {
+    position: fixed;
+    z-index: 5;
+    top: calc(env(safe-area-inset-top, 0px) + 44px);
+    right: 12px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 2px solid #59606e;
+    border-radius: 50%;
+    background: #1b1f29;
+    color: #e8ecf4;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+  }
+  #gear.show { display: flex; }
+  #gear.holding { border-color: #ffd933; box-shadow: 0 0 0 4px rgba(255, 217, 51, 0.35); }
+  #gear svg { width: 24px; height: 24px; pointer-events: none; }
+  #host-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    background: rgba(13, 15, 20, 0.97);
+    text-align: center;
+  }
+  #host-menu.show { display: flex; }
+  #host-menu-title { font-size: 26px; font-weight: 800; }
+  .menu-view { display: none; flex-direction: column; align-items: center; gap: 14px; }
+  .menu-view.show { display: flex; }
+  #host-menu button {
+    font: inherit;
+    font-size: 22px;
+    font-weight: 800;
+    min-width: 64vw;
+    padding: 16px 22px;
+    border: 0;
+    border-radius: 14px;
+    color: #e8ecf4;
+    background: #2a303d;
+  }
+  #host-menu button:disabled { opacity: 0.35; }
+  #host-menu button.primary { color: #0d0f14; background: #ffd933; }
+  #host-menu button.danger { color: #fff; background: #c62f3a; }
+  #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
 </style>
 </head>
 <body>
@@ -205,6 +262,22 @@
   <div id="name-row">
     <button id="name-shuffle" type="button">Shuffle</button>
     <button id="name-go" type="button">Let's go</button>
+  </div>
+</div>
+<button id="gear" type="button" aria-label="Host menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+<div id="host-menu">
+  <div id="host-menu-title">Host menu</div>
+  <div id="menu-main" class="menu-view">
+    <button id="menu-pause" type="button" class="primary">Pause</button>
+    <button id="menu-end" type="button" class="danger">End match</button>
+    <button id="menu-kick" type="button">Kick player</button>
+    <button id="menu-close" type="button">Close</button>
+  </div>
+  <div id="menu-kick-list" class="menu-view"></div>
+  <div id="menu-confirm" class="menu-view">
+    <div id="confirm-text"></div>
+    <button id="confirm-yes" type="button" class="danger">Yes</button>
+    <button id="confirm-no" type="button">No</button>
   </div>
 </div>
 <div id="state"></div>
@@ -470,10 +543,16 @@
   // Read off the host's latest lobby state: waiting for a slot, waiting out a
   // round it joined too late for, eliminated, or counting down to the next.
   var nextRoundAt = 0;
+  // Set once the host kicks this phone (issue #149): it stops reconnecting.
+  var kickedOut = false;
   var stateTimer = null;
   function showState() {
     var text = "";
-    if (slot < 0) {
+    if (kickedOut) {
+      text = "The host removed you from the game";
+    } else if (slot >= 0 && lobby && lobby.paused) {
+      text = "Paused by the host";
+    } else if (slot < 0) {
       text = statusEl.textContent === "connected" ? "Waiting for a free slot" : "";
     } else if (lobby && (lobby.phase === "playing" || lobby.phase === "round_end")) {
       var inRound = (lobby.in_round || []).indexOf(slot) !== -1;
@@ -543,6 +622,7 @@
     if (phase === "round_end") { nextRoundAt = Date.now() + (msg.next || 0) * 1000; }
     if (stateTimer === null) { stateTimer = setInterval(showState, 250); }
     showState();
+    refreshHostControls();
     if (phase === "playing" || phase === "round_end") { lobbyEl.className = ""; return; }
     // A drag in progress would otherwise stay held under the overlay.
     release();
@@ -586,6 +666,132 @@
   document.getElementById("target-down").addEventListener("click", function () { sendTarget(Number(targetInput.value) - 1); });
   document.getElementById("target-up").addEventListener("click", function () { sendTarget(Number(targetInput.value) + 1); });
 
+  // ---- host controls (issue #149) -------------------------------------------
+  // Only the host phone -- the one allowed to set "first to N" -- gets the
+  // gear; the host decides, and ignores the same requests from anyone else.
+  // Pause/Resume is one tap inside the menu; End match and Kick player each
+  // ask "Are you sure?" first.
+  var GEAR_HOLD_MS = 700;
+  var gearEl = document.getElementById("gear");
+  var menuEl = document.getElementById("host-menu");
+  var menuPauseBtn = document.getElementById("menu-pause");
+  var menuEndBtn = document.getElementById("menu-end");
+  var menuKickBtn = document.getElementById("menu-kick");
+  var kickListEl = document.getElementById("menu-kick-list");
+  var confirmTextEl = document.getElementById("confirm-text");
+  var confirmAction = null;
+  var gearHoldTimer = null;
+  var gearPointer = null;
+
+  function amHost() { return !!lobby && slot >= 0 && lobby.host === slot; }
+  function inMatch() { return !!lobby && (lobby.phase === "playing" || lobby.phase === "round_end"); }
+  function sendHost(cmd, extra) {
+    var msg = { t: "host", cmd: cmd };
+    if (extra) { for (var k in extra) { msg[k] = extra[k]; } }
+    sendText(msg);
+  }
+
+  function showMenuView(id) {
+    var views = menuEl.querySelectorAll(".menu-view");
+    for (var i = 0; i < views.length; i++) { views[i].classList.toggle("show", views[i].id === id); }
+  }
+  function openHostMenu() {
+    if (!amHost()) { return; }
+    release(); // a drag in progress would otherwise stay held under the menu
+    showMenuView("menu-main");
+    menuEl.classList.add("show");
+    refreshHostControls();
+  }
+  function closeHostMenu() {
+    menuEl.classList.remove("show");
+    confirmAction = null;
+  }
+  function askConfirm(text, action) {
+    confirmTextEl.textContent = text;
+    confirmAction = action;
+    showMenuView("menu-confirm");
+  }
+
+  function refreshHostControls() {
+    var host = amHost();
+    gearEl.classList.toggle("show", host);
+    if (!host) { closeHostMenu(); return; }
+    var paused = !!lobby.paused;
+    menuPauseBtn.textContent = paused ? "Resume" : "Pause";
+    menuPauseBtn.disabled = !inMatch();
+    menuEndBtn.disabled = !inMatch();
+    var others = 0;
+    for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
+    menuKickBtn.disabled = others === 0;
+  }
+
+  function showKickList() {
+    kickListEl.textContent = "";
+    for (var i = 0; i < lobby.players.length; i++) {
+      var p = lobby.players[i];
+      if (p.slot === slot) { continue; }
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "P" + (p.slot + 1) + " " + p.name;
+      b.style.boxShadow = "inset 6px 0 0 " + SLOT_COLORS[p.slot % SLOT_COLORS.length];
+      b.addEventListener("click", (function (target, name) {
+        return function () {
+          askConfirm("Are you sure? Kick " + name + " out of the game?", function () { sendHost("kick", { slot: target }); });
+        };
+      })(p.slot, p.name));
+      kickListEl.appendChild(b);
+    }
+    var back = document.createElement("button");
+    back.type = "button";
+    back.textContent = "Back";
+    back.addEventListener("click", function () { showMenuView("menu-main"); });
+    kickListEl.appendChild(back);
+    showMenuView("menu-kick-list");
+  }
+
+  // A tap opens the gear outside play; during play it must be held, and a
+  // finger that lands on it while another is dragging is ignored.
+  function cancelGearHold() {
+    if (gearHoldTimer !== null) { clearTimeout(gearHoldTimer); gearHoldTimer = null; }
+    gearPointer = null;
+    gearEl.classList.remove("holding");
+  }
+  gearEl.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (activePointer !== null || gearPointer !== null) { return; }
+    if (!(inMatch() && !lobby.paused)) { openHostMenu(); return; }
+    gearPointer = e.pointerId;
+    gearEl.classList.add("holding");
+    gearHoldTimer = setTimeout(function () { cancelGearHold(); openHostMenu(); }, GEAR_HOLD_MS);
+  });
+  gearEl.addEventListener("pointerup", cancelGearHold);
+  gearEl.addEventListener("pointercancel", cancelGearHold);
+  gearEl.addEventListener("pointerleave", cancelGearHold);
+  gearEl.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+
+  menuPauseBtn.addEventListener("click", function () {
+    if (lobby && lobby.paused) { sendHost("resume"); closeHostMenu(); }
+    else { sendHost("pause"); }
+  });
+  menuEndBtn.addEventListener("click", function () {
+    askConfirm("Are you sure? End the match for everyone?", function () { sendHost("end"); });
+  });
+  menuKickBtn.addEventListener("click", showKickList);
+  document.getElementById("menu-close").addEventListener("click", closeHostMenu);
+  document.getElementById("confirm-yes").addEventListener("click", function () {
+    var action = confirmAction;
+    closeHostMenu();
+    if (action) { action(); }
+  });
+  document.getElementById("confirm-no").addEventListener("click", function () {
+    confirmAction = null;
+    showMenuView("menu-main");
+  });
+
+  // Must match ControllerServer.KICKED_REASON: a kicked phone stops retrying.
+  var KICKED_REASON = "removed by the host";
+
   function connect() {
     setStatus("connecting");
     ws = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
@@ -617,12 +823,16 @@
     // rejoin by itself once a slot frees up or the phone wakes.
     ws.onclose = function (ev) {
       var reason = (ev && ev.reason) ? String(ev.reason) : "";
-      setStatus(reason ? (reason + " — retrying") : "reconnecting");
+      var kicked = reason === KICKED_REASON;
+      setStatus(kicked ? "Removed by the host" : (reason ? (reason + " — retrying") : "reconnecting"));
       setSlot(-1);
       lobbyEl.className = "";
+      lobby = null;
+      refreshHostControls();
       // Forget any drag that was in progress: the host has already zeroed this
       // player, and on reconnect the first frame should be "not touching".
       release();
+      if (kicked) { kickedOut = true; showState(); return; }
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
     ws.onerror = function () { /* onclose does the reconnecting */ };
