@@ -27,9 +27,21 @@ extends SceneTree
 ##   --all                run every registered scenario
 ##   --scenario=<name>    run exactly one scenario by name; unknown name fails
 ##                        loudly rather than passing silently on a typo
+##   --scenarios=<a,b,c>  run the named scenarios in the given order (empty
+##                        entries are dropped); every name must be known. CI
+##                        runs its shards this way (tools/list_scenarios.sh),
+##                        and it replays a history-dependent failure (#38, #45)
 ##   --port=<n>           scenarios that start a ControllerServer put HTTP on
 ##                        <n> and the WebSocket on <n>+1; without it the OS
 ##                        picks free ports, so parallel runs never collide (#73)
+##
+## Any other argument exits with code 2 before a scenario runs (#195).
+##
+## A `-s` run like this one never reads or writes the owner's settings file
+## (`user://audio.cfg`): Sfx and Music see a script main loop and start from
+## defaults, with saving off and `settings_path` pointed at a temp file
+## (#195). Godot still writes its own log under the user data folder; pass
+## `--log-file <path>` before `-s` to send it elsewhere, as CI does.
 ##
 ## To add a scenario: append its name to SCENARIO_NAMES, add a matching case
 ## in `_run_scenario()`, and write a `_scenario_<name>() -> Array[String]`
@@ -284,6 +296,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"roster_heads_do_not_clip_platform_in_play_new_weapons",
 	"flail_built_clear_of_neighbours",
 	"match_seed_replays_bot_match",
+	"script_run_never_touches_owner_settings",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -610,7 +623,8 @@ const ART_CONTAINMENT_TOLERANCE: float = 0.5
 ## the only way this passes is by the check not looking.
 const MISFIT_CIRCLE_OFFSET: float = 24.0
 
-## Set by `_teardown()`, which every scenario ends with. A GDScript runtime
+## Set by the `_teardown()` a scenario ends with (or by the scenario itself,
+## just before its last `return`). A GDScript runtime
 ## error inside a scenario abandons it and still resumes the caller with an
 ## empty failure list, which would otherwise be indistinguishable from a
 ## pass -- the one failure mode a test suite must never have.
@@ -624,9 +638,11 @@ var _controller_port: int = 0
 var _phone_ws_port: int = 0
 
 func _initialize() -> void:
-	_parse_args()
+	if not _parse_args():
+		quit(2)
+		return
 
-	if _scenario_filter == "" and not _run_all_flag:
+	if _scenario_filter.split(",", false).is_empty() and not _run_all_flag:
 		printerr("SCENARIO: pass --all or --scenario=<name> (known: %s)" % ", ".join(SCENARIO_NAMES))
 		quit(2)
 		return
@@ -648,7 +664,10 @@ func _initialize() -> void:
 	# `physics_frame` signal awaited inside the scenarios.
 	_run_all()
 
-func _parse_args() -> void:
+## False on an argument it does not know, which `_initialize()` exits on: a
+## typo such as `--scenaro=x` must not quietly run nothing, or everything.
+func _parse_args() -> bool:
+	var ok: bool = true
 	for arg: String in OS.get_cmdline_user_args():
 		if arg == "--all":
 			_run_all_flag = true
@@ -662,6 +681,8 @@ func _parse_args() -> void:
 			_controller_port = arg.trim_prefix("--port=").to_int()
 		else:
 			printerr("SCENARIO: unrecognized argument '%s'" % arg)
+			ok = false
+	return ok
 
 func _run_all() -> void:
 	# `_initialize()` runs before the root has entered the tree: autoloads
@@ -678,7 +699,7 @@ func _run_all() -> void:
 	# nicknames_above_players_and_on_scoreboard both depend on it).
 	await process_frame
 	await physics_frame
-	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else _scenario_filter.split(",")
+	var to_run: PackedStringArray = SCENARIO_NAMES if _run_all_flag else _scenario_filter.split(",", false)
 	var pass_count: int = 0
 	var fail_count: int = 0
 
@@ -732,15 +753,51 @@ func _run_one(name: String) -> Array[String]:
 ## every later scenario in the same process sees, and a pass would depend on
 ## the shard order. `_run_all()` snapshots these before each scenario and
 ## puts them back after it. A new static a scenario sets goes here too.
+##
+## So does engine-wide state (#195): the physics rate, the time scale, the
+## tree's pause, and the Sfx autoload's test seams and settings file. A
+## scenario that changes one and fails (or hits a SCRIPT ERROR) before it
+## switches it back would otherwise run every later scenario at the wrong
+## rate, paused, or saving settings to the wrong file.
+const SFX_RESTORED_FIELDS: PackedStringArray = [
+	"window_mode_probe", "fullscreen_sync_grace_msec", "settings_path", "persist_settings",
+]
+const MUSIC_RESTORED_FIELDS: PackedStringArray = ["settings_path", "persist_settings"]
+
 func _snapshot_statics() -> Dictionary:
-	return {
+	var snapshot: Dictionary = {
 		"modifier_rolls_enabled": RoundManagerType.modifier_rolls_enabled,
 		"bot_extra_args": BotDirectorScript.extra_args.duplicate(),
+		"physics_ticks_per_second": Engine.physics_ticks_per_second,
+		"time_scale": Engine.time_scale,
+		"paused": paused,
 	}
+	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
+	if sfx != null:
+		snapshot["sfx"] = {}
+		for field: String in SFX_RESTORED_FIELDS:
+			snapshot["sfx"][field] = sfx.get(field)
+	var music: Node = get_root().get_node_or_null(MUSIC_AUTOLOAD_PATH)
+	if music != null:
+		snapshot["music"] = {}
+		for field: String in MUSIC_RESTORED_FIELDS:
+			snapshot["music"][field] = music.get(field)
+	return snapshot
 
 func _restore_statics(snapshot: Dictionary) -> void:
 	RoundManagerType.modifier_rolls_enabled = snapshot["modifier_rolls_enabled"]
 	BotDirectorScript.extra_args = (snapshot["bot_extra_args"] as PackedStringArray).duplicate()
+	Engine.physics_ticks_per_second = snapshot["physics_ticks_per_second"]
+	Engine.time_scale = snapshot["time_scale"]
+	paused = snapshot["paused"]
+	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
+	if sfx != null and snapshot.has("sfx"):
+		for field: String in snapshot["sfx"]:
+			sfx.set(field, snapshot["sfx"][field])
+	var music: Node = get_root().get_node_or_null(MUSIC_AUTOLOAD_PATH)
+	if music != null and snapshot.has("music"):
+		for field: String in snapshot["music"]:
+			music.set(field, snapshot["music"][field])
 
 func _run_scenario(name: String) -> Array[String]:
 	match name:
@@ -1208,6 +1265,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_flail_built_clear_of_neighbours()
 		"match_seed_replays_bot_match":
 			return await _scenario_match_seed_replays_bot_match()
+		"script_run_never_touches_owner_settings":
+			return await _scenario_script_run_never_touches_owner_settings()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -1767,8 +1826,15 @@ func _spawn_player(stage: Node2D, pos: Vector2) -> RigidBody2D:
 	player.bind_controller()
 	return player
 
-func _teardown(stage: Node2D) -> void:
-	_scenario_completed = true
+## Frees a scenario's stage and marks the scenario complete. A teardown with
+## more of the scenario still to run after it -- a second stage, a loop's
+## next pass, a helper that its caller carries on after -- passes
+## `completes` false, and the scenario sets `_scenario_completed` itself
+## once it really is done (#195): otherwise a SCRIPT ERROR after that
+## mid-scenario teardown would still report PASS.
+func _teardown(stage: Node2D, completes: bool = true) -> void:
+	if completes:
+		_scenario_completed = true
 	stage.queue_free()
 	await physics_frame
 
@@ -4502,6 +4568,7 @@ func _scenario_roster_hafts_are_non_colliding() -> Array[String]:
 	if bystander_halves == 0:
 		failures.append("not one weapon on the roster left room for a bystander in its own bare-haft band, so nothing here was tested against a player at all")
 
+	_scenario_completed = true
 	return failures
 
 ## One weapon's worth of `haft_is_non_colliding`, on its own stage.
@@ -4552,7 +4619,7 @@ func _roster_haft_trial(weapon: String, stats: WeaponStatsType) -> Dictionary:
 
 	failures.append_array(await _haft_bar_half(weapon, stage, player, stats, rear))
 
-	await _teardown(stage)
+	await _teardown(stage, false)
 	return {"failures": failures, "bystander": ran_bystander}
 
 ## The haft against a player: a bystander is stood in the weapon's bare-haft
@@ -6227,7 +6294,7 @@ func _collect_stage_rotation(stage_names: PackedStringArray, seed_value: int, ro
 			p2.eliminate()
 		await _await_ticks(4)
 
-	await _teardown(stage)
+	await _teardown(stage, false)
 	return {"names": names, "failures": failures}
 
 ## ADR-0011: the same seed fed to two separate RoundManagers produces the
@@ -6245,12 +6312,14 @@ func _scenario_stage_rotation_seeded_is_deterministic() -> Array[String]:
 	failures.append_array(run_b["failures"])
 	failures.append_array(run_c["failures"])
 	if not failures.is_empty():
+		_scenario_completed = true
 		return failures
 
 	if run_a["names"] != run_b["names"]:
 		failures.append("seed 1 run twice produced different sequences: %s vs %s" % [run_a["names"], run_b["names"]])
 	if run_a["names"] == run_c["names"]:
 		failures.append("seed 1 and seed 2 produced the same sequence: %s" % [run_a["names"]])
+	_scenario_completed = true
 	return failures
 
 ## ADR-0011: round 1 is always the opener (`stage_scenes[0]`), regardless of
@@ -6266,6 +6335,7 @@ func _scenario_stage_rotation_opener_is_first_stage() -> Array[String]:
 		var names: Array[String] = run["names"]
 		if names.size() > 0 and names[0] != stage_names[0]:
 			failures.append("seed %d: round 1 was %s, expected the opener %s" % [seed_value, names[0], stage_names[0]])
+	_scenario_completed = true
 	return failures
 
 ## ADR-0011: no stage ever plays twice in a row -- exercised over 6 bags (well
@@ -6304,6 +6374,7 @@ func _scenario_stage_rotation_never_repeats_back_to_back() -> Array[String]:
 		if two_names[i] == two_names[i - 1]:
 			failures.append("2-stage roster round %d repeated round %d's stage %s" % [i, i - 1, two_names[i]])
 
+	_scenario_completed = true
 	return failures
 
 # --- Rising kill zone (issue #22, ADR-0012) ---------------------------------
@@ -9219,7 +9290,8 @@ func _scenario_seesaw_tips_toward_weight_and_levels() -> Array[String]:
 		if absf(after_deg) > SEESAW_LEVEL_TOLERANCE_DEG:
 			failures.append("%s: %d ticks after the body left, the see-saw still sat at %.2f deg" % [
 				label, SEESAW_LEVEL_TICKS, after_deg])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 
 ## Mind heads: a player standing on its own weapon on one end of a see-saw
@@ -9363,7 +9435,7 @@ func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
 			failures.append("%s: never launched" % path.get_file())
 		else:
 			rises[path.get_file()] = launch_y - peak
-		await _teardown(stage)
+		await _teardown(stage, false)
 
 	var parts: PackedStringArray = []
 	var lowest: float = INF
@@ -9376,6 +9448,7 @@ func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
 	if highest > 0.0 and (highest - lowest) / highest > PAD_ROSTER_SPREAD:
 		failures.append("launch heights ranged %.0f to %.0f px across the roster, more than %.0f%% apart" % [
 			lowest, highest, PAD_ROSTER_SPREAD * 100.0])
+	_scenario_completed = true
 	return failures
 
 # --- Issue #53: falling and breaking stage parts ----------------------------
@@ -10651,7 +10724,7 @@ func _turn_through_parked_head(stats: WeaponStatsType, label: String) -> Array[S
 		break
 	if parked == null:
 		failures.append("%s: fixture: the turn never reached %.2f rad a tick" % [label, TURN_HEAD_FAST_TURN])
-		await _teardown(stage)
+		await _teardown(stage, false)
 		return failures
 
 	for tick in TURN_HEAD_WATCH_TICKS:
@@ -10669,7 +10742,7 @@ func _turn_through_parked_head(stats: WeaponStatsType, label: String) -> Array[S
 				label, tick + 1, absf(side), gap])
 			break
 
-	await _teardown(stage)
+	await _teardown(stage, false)
 	return failures
 
 ## The blade's facing, base circle to tip circle, where the physics has them.
@@ -10851,7 +10924,8 @@ func _scenario_pad_launch_keeps_head_ahead_of_body() -> Array[String]:
 		elif worst < 0.0:
 			failures.append("ceiling edge %+.0f px: the body ran %.1f px past its own head's anchor and stayed behind it for %d ticks, with the gun still pointing up through it" % [
 				edge, -worst, behind_ticks])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 
 ## How far `player`'s head anchor is ahead of its body, along the direction
@@ -11091,7 +11165,7 @@ func _scenario_planted_head_grips_sideways_push() -> Array[String]:
 		failures.append("shove: the player never came to stand on its head (head y %.1f)" % start.y)
 	player.linear_velocity.x = GRIP_SHOVE_SPEED
 	var shove_slide: float = await _planted_slide(player, start, GRIP_SHOVE_TICKS)
-	await _teardown(stage)
+	await _teardown(stage, false)
 
 	# Push-off.
 	stage = _new_stage()
@@ -11105,13 +11179,14 @@ func _scenario_planted_head_grips_sideways_push() -> Array[String]:
 		failures.append("push-off: the head never planted on the floor (y %.1f)" % start.y)
 	player.set_input_vector(dir)
 	var push_slide: float = await _planted_slide(player, start, GRIP_PUSH_TICKS)
-	await _teardown(stage)
+	await _teardown(stage, false)
 
 	print("      planted head slide: shove %.1f px, push-off %.1f px" % [shove_slide, push_slide])
 	if shove_slide > GRIP_MAX_SLIDE:
 		failures.append("shove: the planted head slid %.1f px, expected at most %.1f" % [shove_slide, GRIP_MAX_SLIDE])
 	if push_slide > GRIP_MAX_SLIDE:
 		failures.append("push-off: the planted head slid %.1f px, expected at most %.1f" % [push_slide, GRIP_MAX_SLIDE])
+	_scenario_completed = true
 	return failures
 
 ## The pickaxe with one round HEAD_RADIUS circle for a head, drawn as one.
@@ -11192,7 +11267,8 @@ func _scenario_gripping_head_lets_go() -> Array[String]:
 			if freed_at < 0:
 				failures.append("%s: %s did not free the head within %d ticks (%.1f px off the surface)" % [
 					c[0], how, GRIP_LET_GO_TICKS, gap_of.call()])
-			await _teardown(stage)
+			await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 
 # --- Music and the settings menu (issue #118, ADR-0017) ---------------------
@@ -11385,8 +11461,11 @@ func _scenario_settings_persist_to_config_file() -> Array[String]:
 		"fullscreen": sfx.fullscreen, "music": music.volume,
 		"sfx_path": sfx.settings_path, "music_path": music.settings_path,
 	}
-	var real_path: String = ProjectSettings.globalize_path(sfx.SETTINGS_PATH)
-	var real_before: PackedByteArray = FileAccess.get_file_as_bytes(real_path) if FileAccess.file_exists(real_path) else PackedByteArray()
+	# Never read the owner's file, even to compare it (#195): the run's own
+	# settings paths must not point at it in the first place.
+	for path: String in [was["sfx_path"], was["music_path"]]:
+		if path == sfx.SETTINGS_PATH or ProjectSettings.globalize_path(path) == ProjectSettings.globalize_path(sfx.SETTINGS_PATH):
+			failures.append("this -s run started on the owner's own %s" % sfx.SETTINGS_PATH)
 	var temp_path: String = OS.get_temp_dir().path_join("pickfight_settings_%d.cfg" % OS.get_process_id())
 	if FileAccess.file_exists(temp_path):
 		DirAccess.remove_absolute(temp_path)
@@ -11453,9 +11532,6 @@ func _scenario_settings_persist_to_config_file() -> Array[String]:
 	music.settings_path = was["music_path"]
 	ui.refresh()
 	DirAccess.remove_absolute(temp_path)
-	var real_after: PackedByteArray = FileAccess.get_file_as_bytes(real_path) if FileAccess.file_exists(real_path) else PackedByteArray()
-	if real_after != real_before:
-		failures.append("the test rewrote the owner's own %s" % sfx.SETTINGS_PATH)
 	_scenario_completed = true
 	return failures
 
@@ -14148,7 +14224,7 @@ func _scenario_name_tags_on_for_every_living_player_all_round() -> Array[String]
 		if rm.name_tag(i).visible:
 			failures.append("P%d's tag stayed up once the round was over" % (i + 1))
 	await _close_phones(joined)
-	await _teardown(main)
+	await _teardown(main, false)
 
 	# No lobby at all: the tags are not a lobby feature.
 	var loop: Dictionary = _new_round_loop(10.0)
@@ -14976,7 +15052,7 @@ func _scenario_round_modifier_double_damage_applies_and_undoes() -> Array[String
 		if values[2] != values[0] or bullets[2] != bullets[0]:
 			failures.append("double damage: the round after does strike %.1f / bullet %.1f, the round before %.1f / %.1f -- not undone" % [
 				values[2], bullets[2], values[0], bullets[0]])
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	# The stage's own damage: Rockfall's falling rocks, doubled and put back.
 	var stage: Node2D = (load(DOUBLE_DAMAGE_STAGE) as PackedScene).instantiate() as Node2D
 	get_root().add_child(stage)
@@ -16076,6 +16152,7 @@ func _scenario_phone_quick_reconnect_takes_back_its_slot() -> Array[String]:
 		failures.append("setup: A holds colour %d, expected 2" % server.slot_color(0))
 		await _close_phones(phones)
 		await _teardown(stage)
+		_scenario_completed = true
 		return failures
 
 	# A is back a moment later, as a new socket; the host still has A's old one open.
@@ -16101,7 +16178,7 @@ func _scenario_phone_quick_reconnect_takes_back_its_slot() -> Array[String]:
 	if server.slot_color(0) != 2:
 		failures.append("A's saved colour was refused after the reconnect (slot 0 holds %d)" % server.slot_color(0))
 	await _close_phones(all)
-	await _teardown(stage)
+	await _teardown(stage, false)
 
 	# The page's side: it knows the reason and does not retry on it, and a
 	# late event from an old socket cannot undo the new one.
@@ -16113,6 +16190,7 @@ func _scenario_phone_quick_reconnect_takes_back_its_slot() -> Array[String]:
 		failures.append("the page still retries after being replaced, so two tabs would ping-pong")
 	if not connect_body.contains("if (sock !== ws) { return; }"):
 		failures.append("a stale socket's close can still reset the page")
+	_scenario_completed = true
 	return failures
 
 ## Issue #164, item 2, over the real socket: the host's kick names the claim it
@@ -16520,7 +16598,7 @@ func _scenario_meteor_shower_rains_across_large_stage_view() -> Array[String]:
 		if floor_y <= view.end.y:
 			failures.append("%s: meteors are dropped at y %.0f, above the view's bottom %.0f" % [
 				path.get_file(), floor_y, view.end.y])
-		await _teardown(stage)
+		await _teardown(stage, false)
 	_scenario_completed = true
 	return failures
 
@@ -16896,9 +16974,11 @@ func _free_isolated_stage(stage: Node2D) -> void:
 	else:
 		stage.queue_free()
 
-## Longest a batch of concurrent jobs may run before the scenario gives up on
-## it: far past any sweep's own length, so only a hang reaches it.
-const CONCURRENT_TIMEOUT_MSEC: int = 600000
+## Longest a batch of concurrent jobs may run (wall clock) before the scenario
+## gives up on it: well past any sweep's own length, so only a hang reaches
+## it. Three minutes, not ten (#195): a hung sweep should fail its scenario
+## long before CI's 20-minute job timeout kills the whole shard unreported.
+const CONCURRENT_TIMEOUT_MSEC: int = 180000
 
 ## Starts every job at once and waits for all of them; returns each job's
 ## result in job order. A job abandoned by a script error resumes its runner
@@ -17296,7 +17376,7 @@ func _scenario_hit_feedback_pools_markers_and_numbers() -> Array[String]:
 			failures.append("a re-used damage number was not reset: '%s', age %.2f, alpha %.2f" % [
 				number.text, number.get("age"), number.modulate.a])
 
-	await _teardown(holder)
+	await _teardown(holder, false)
 	await process_frame
 	for node: Node in pooled:
 		if is_instance_valid(node):
@@ -18872,7 +18952,7 @@ func _match_seed_bot_run(seed_value: int) -> Dictionary:
 	if not await _await_condition(func() -> bool: return started[0], MATCH_SEED_ROUND_MSEC):
 		result["error"] = "the bots' match never started (phase '%s')" % rm.lobby_phase()
 		server.bot_director.remove_bots()
-		await _teardown(main)
+		await _teardown(main, false)
 		BotDirectorScript.extra_args = PackedStringArray()
 		return result
 	result["seed"] = rm.match_seed_value()
@@ -18919,7 +18999,7 @@ func _match_seed_bot_run(seed_value: int) -> Dictionary:
 	if not result["ok"]:
 		result["error"] = "the round had %d KOs and had not ended after %d s" % [result["kos"].size(), MATCH_SEED_ROUND_MSEC / 1000]
 	server.bot_director.remove_bots()
-	await _teardown(main)
+	await _teardown(main, false)
 	await _await_ticks(2)
 	BotDirectorScript.extra_args = PackedStringArray()
 	return result
@@ -19004,5 +19084,75 @@ func _scenario_match_seed_replays_bot_match() -> Array[String]:
 				failures.append("sample %d (tick %d): player %d at %s, then %s (%.1f px apart)" % [
 					i, (i + 1) * MATCH_SEED_SAMPLE_TICKS, p, row_a[p], row_b[p], off])
 	print("      %d samples compared; worst position gap %.2f px (tolerance %.0f)" % [samples, worst, MATCH_SEED_POSITION_TOLERANCE])
+	_scenario_completed = true
+	return failures
+
+# --- Test isolation (issue #195) ---------------------------------------------
+
+## Issue #195, item 2: a `-s` run -- this runner, the probes -- never reads or
+## writes the owner's `user://audio.cfg`. Sfx and Music came up with saving
+## off and their settings file on a per-process temp path, so a saved mute or
+## fullscreen can't make an assertion hollow and nothing can save over it.
+## Read from the autoloads directly, not through `_sfx()` / `_music()`, which
+## switch saving off themselves. Also the load and save error handling: a
+## settings file that exists but will not parse is neither overwritten on
+## save nor half-applied on load.
+func _scenario_script_run_never_touches_owner_settings() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
+	var music: Node = get_root().get_node_or_null(MUSIC_AUTOLOAD_PATH)
+	if sfx == null or music == null:
+		return ["the Sfx or Music autoload is missing"]
+	await physics_frame
+	if not sfx.is_script_main_loop(self):
+		failures.append("Sfx does not see this runner as a script main loop")
+	var owner_file: String = ProjectSettings.globalize_path(sfx.SETTINGS_PATH)
+	var temp_dir: String = OS.get_temp_dir()
+	for pair: Array in [["Sfx", sfx], ["Music", music]]:
+		var node: Node = pair[1]
+		if node.persist_settings:
+			failures.append("%s starts a -s run with saving on" % pair[0])
+		var path: String = node.settings_path
+		if path == sfx.SETTINGS_PATH or ProjectSettings.globalize_path(path) == owner_file:
+			failures.append("%s's settings file is the owner's %s" % [pair[0], sfx.SETTINGS_PATH])
+		elif not path.begins_with(temp_dir):
+			failures.append("%s's settings file %s is not under the temp folder %s" % [pair[0], path, temp_dir])
+
+	# A file that will not load: saving leaves it as it is, loading keeps the
+	# values in effect.
+	var was: Dictionary = {"sfx_path": sfx.settings_path, "music_path": music.settings_path,
+		"master": sfx.master_volume, "music": music.volume}
+	var bad_path: String = temp_dir.path_join("pickfight_bad_settings_%d.cfg" % OS.get_process_id())
+	# ConfigFile shrugs off most junk; an unparseable value is what it
+	# refuses (the engine logs one "ConfigFile parse error" per load here).
+	var garbage: String = "[audio]\nmaster_volume = (((\n"
+	var file := FileAccess.open(bad_path, FileAccess.WRITE)
+	if file == null:
+		failures.append("could not write the unreadable-settings fixture at %s" % bad_path)
+	else:
+		file.store_string(garbage)
+		file.close()
+		sfx.settings_path = bad_path
+		music.settings_path = bad_path
+		sfx.persist_settings = true
+		music.persist_settings = true
+		sfx.save_settings()
+		music.save_settings()
+		sfx.persist_settings = false
+		music.persist_settings = false
+		if FileAccess.get_file_as_string(bad_path) != garbage:
+			failures.append("saving over a settings file that would not load rewrote it")
+		sfx.master_volume = 0.5
+		music.volume = 0.5
+		sfx.load_settings()
+		music.load_settings()
+		if absf(sfx.master_volume - 0.5) > 0.001 or absf(music.volume - 0.5) > 0.001:
+			failures.append("loading an unreadable settings file changed the volumes (master %.2f, music %.2f)" % [
+				sfx.master_volume, music.volume])
+		DirAccess.remove_absolute(bad_path)
+	sfx.settings_path = was["sfx_path"]
+	music.settings_path = was["music_path"]
+	sfx.set_master_volume(was["master"], false)
+	music.set_volume(was["music"], false)
 	_scenario_completed = true
 	return failures

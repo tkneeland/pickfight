@@ -249,10 +249,11 @@ var window_mode_probe: Callable = Callable()
 ## mode until they are done.
 var fullscreen_sync_grace_msec: int = 1500
 ## Where the settings are saved. The scenario suite points it at a temp file
-## when it tests saving.
+## when it tests saving. A `-s` run (the scenario runner, the probes) starts
+## with it on a temp file already, so it never touches the owner's (#195).
 var settings_path: String = SETTINGS_PATH
-## Whether volume and mute are saved to `SETTINGS_PATH` when changed. The
-## scenario suite switches it off so a test run never rewrites the owner's
+## Whether volume and mute are saved to `settings_path` when changed. Off from
+## the start in a `-s` run (#195), so a test run never rewrites the owner's
 ## settings.
 var persist_settings: bool = true
 
@@ -310,7 +311,16 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
 	_ensure_bus()
-	load_settings()
+	if is_script_main_loop(get_tree()):
+		# A `-s` run (#195): the owner's saved mute or fullscreen would make
+		# the scenarios' assertions hollow, and nothing it does may save
+		# over them. Start from the defaults, saving off, on a temp file.
+		persist_settings = false
+		settings_path = headless_settings_path()
+		_apply_master()
+		_apply_sfx_volume()
+	else:
+		load_settings()
 	_hooks = HooksScript.new()
 	_hooks.name = "Hooks"
 	_hooks.sfx = self
@@ -586,30 +596,51 @@ func _apply_window_mode() -> void:
 	_window_mode_requested_msec = Time.get_ticks_msec()
 	DisplayServer.window_set_mode(mode as DisplayServer.WindowMode)
 
+## Whether `tree` is a `-s` script's main loop (the scenario runner, a probe)
+## rather than the game's own plain SceneTree. Music asks too.
+static func is_script_main_loop(tree: SceneTree) -> bool:
+	return tree != null and tree.get_script() != null
+
+## The settings file a `-s` run uses instead of the owner's: in the OS temp
+## folder, per process, so parallel shards never share one.
+static func headless_settings_path() -> String:
+	return OS.get_temp_dir().path_join("pickfight_headless_audio_%d.cfg" % OS.get_process_id())
+
 ## Read volume, mute and fullscreen from `settings_path`. Fullscreen is only
 ## put into effect with the game's scene (`_build_settings_ui_if_in_game`),
-## so a scenario run never resizes a window.
+## so a scenario run never resizes a window. A missing file means the
+## defaults; any other load error is reported and also leaves the defaults.
 func load_settings() -> void:
 	var config := ConfigFile.new()
-	if config.load(settings_path) == OK:
+	var err: Error = config.load(settings_path)
+	if err == OK:
 		master_volume = clampf(float(config.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
 		muted = bool(config.get_value("audio", "muted", false))
 		sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
 		fullscreen = bool(config.get_value("display", "fullscreen", false))
+	elif err != ERR_FILE_NOT_FOUND:
+		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
 	_apply_sfx_volume()
 
-## Load, change and save, so `Music`'s section of the same file is kept.
+## Load, change and save, so `Music`'s section of the same file is kept. Only a
+## missing file starts from an empty config: a file that exists but will not
+## load is left alone rather than overwritten with only this section (#195).
 func _save_settings() -> void:
 	if not persist_settings:
 		return
 	var config := ConfigFile.new()
-	config.load(settings_path)
+	var err: Error = config.load(settings_path)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_warning("Sfx: not saving settings: %s would not load (%s)" % [settings_path, error_string(err)])
+		return
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("audio", "muted", muted)
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("display", "fullscreen", fullscreen)
-	config.save(settings_path)
+	err = config.save(settings_path)
+	if err != OK:
+		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])
 
 ## The on-screen volume control, built once the game's own scene is up. Also
 ## public so a scenario can build one and drive it.

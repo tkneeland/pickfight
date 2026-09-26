@@ -19,7 +19,12 @@ extends SceneTree
 ##   --demo           the game's own demo mode (random weapons, 120 Hz physics)
 ##   --random-weapons random weapons at 60 Hz
 ##   --weapon=<name>  every player holds resources/<name>.tres from the start
-##                    of every round (issue #150: eight flails)
+##                    of every round (issue #150: eight flails); an unknown
+##                    name exits with code 2 rather than timing bare heads
+##
+## Like the scenario runner, a `-s` run never reads or writes the owner's
+## `user://audio.cfg` (#195). Pass `--log-file <path>` before `-s` to keep
+## Godot's own log out of the user data folder too.
 ##
 ## Main.tscn is used as shipped except its ControllerServer, which is swapped
 ## for the scenario suite's roster stub so no sockets open and all eight slots
@@ -62,7 +67,12 @@ func _initialize() -> void:
 		elif arg == "--trace":
 			_trace_on = true
 		elif arg.begins_with("--weapon="):
-			_weapon = load("res://resources/%s.tres" % arg.trim_prefix("--weapon="))
+			var path: String = "res://resources/%s.tres" % arg.trim_prefix("--weapon=")
+			_weapon = load(path) if ResourceLoader.exists(path) else null
+			if _weapon == null:
+				printerr("PERF: no weapon at %s" % path)
+				quit(2)
+				return
 	seed(_seed)
 	_rng.seed = _seed
 	RoundManagerType.modifier_rolls_enabled = false
@@ -83,8 +93,9 @@ func _initialize() -> void:
 	# Straight into rounds: the lobby (#120) waits for phones to ready up, and
 	# the stub roster never does.
 	round_manager.lobby_enabled = false
-	# The round-end pause is wall-clock, and a probe runs many times faster
-	# than real time: shortened so the run is rounds, not scoreboards.
+	# The round-end pause runs on game time (GameClock, #182), and a probe
+	# only times the frames of a round being fought: shortened so the frames
+	# the run spends go to rounds, not scoreboards.
 	round_manager.round_end_pause_sec = 0.05
 	round_manager.round_started.connect(func() -> void:
 		_rounds += 1
@@ -193,10 +204,27 @@ func on_frame() -> void:
 		_finish()
 
 func _finish() -> void:
-	# As the scenario runner does: let the audio server let go of every sound
-	# first, or quitting reports their playbacks as leaked.
+	# As the scenario runner does (#75, #118, #168): let the audio server let
+	# go of every sound -- the music's looping tracks too -- first, and hush
+	# the announcer so a queued line cannot start a fresh voice during
+	# release()'s wait, or quitting reports their playbacks as leaked (#195).
+	# The game itself goes first: release() waits in wall time, and under
+	# --fixed-fps the match would play hundreds of frames of fresh sounds
+	# meanwhile.
+	paused = true
+	if current_scene != null:
+		current_scene.queue_free()
+	await process_frame
+	var music: Node = get_root().get_node_or_null(^"Music")
+	if music != null:
+		await music.release()
 	var sfx: Node = get_root().get_node_or_null(^"Sfx")
 	if sfx != null:
+		var announcer: Node = sfx.get_node_or_null(^"Announcer")
+		if announcer != null:
+			announcer.set_process(false)
+			if announcer.has_method("clear"):
+				announcer.call("clear")
 		await sfx.release()
 	quit(0)
 

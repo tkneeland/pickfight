@@ -96,7 +96,15 @@ var _switches: PackedStringArray = []
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_bus()
-	load_settings()
+	if get_tree().get_script() != null:
+		# A `-s` run (the scenario runner, a probe; #195): never read or
+		# write the owner's settings. Start at full volume, saving off, on a
+		# temp file (the same test as `Sfx.is_script_main_loop()`).
+		persist_settings = false
+		settings_path = OS.get_temp_dir().path_join("pickfight_headless_audio_%d.cfg" % OS.get_process_id())
+		_apply_volume()
+	else:
+		load_settings()
 	for i in 2:
 		var voice := AudioStreamPlayer.new()
 		voice.name = "Voice%d" % i
@@ -236,10 +244,15 @@ func set_volume(value: float, save: bool = true) -> void:
 func save_settings() -> void:
 	_save_settings()
 
+## Read the volume from `settings_path`. A missing file means the default;
+## any other load error is reported and also leaves the default.
 func load_settings() -> void:
 	var config := ConfigFile.new()
-	if config.load(settings_path) == OK:
+	var err: Error = config.load(settings_path)
+	if err == OK:
 		volume = clampf(float(config.get_value(SECTION, "volume", 1.0)), 0.0, 1.0)
+	elif err != ERR_FILE_NOT_FOUND:
+		push_warning("Music: could not read settings from %s (%s); using the default" % [settings_path, error_string(err)])
 	_apply_volume()
 
 func _apply_volume() -> void:
@@ -247,14 +260,21 @@ func _apply_volume() -> void:
 	if index != -1:
 		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(volume, SILENT)))
 
-## Load, change and save, so `Sfx`'s sections in the same file are kept.
+## Load, change and save, so `Sfx`'s sections in the same file are kept. Only a
+## missing file starts from an empty config: a file that exists but will not
+## load is left alone rather than overwritten with only this section (#195).
 func _save_settings() -> void:
 	if not persist_settings:
 		return
 	var config := ConfigFile.new()
-	config.load(settings_path)
+	var err: Error = config.load(settings_path)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_warning("Music: not saving settings: %s would not load (%s)" % [settings_path, error_string(err)])
+		return
 	config.set_value(SECTION, "volume", volume)
-	config.save(settings_path)
+	err = config.save(settings_path)
+	if err != OK:
+		push_warning("Music: could not save settings to %s (%s)" % [settings_path, error_string(err)])
 
 # --- Following the rounds -----------------------------------------------------
 
