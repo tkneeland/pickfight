@@ -241,6 +241,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_page_no_traps_in_play",
 	"phone_bad_frames_ignored_and_rate_limited",
 	"phone_hat_art_sent_once_on_bind",
+	"meteor_shower_rains_across_large_stage_view",
+	"hazards_report_only_damage_dealt",
+	"breakable_wall_double_damage_melee",
+	"round_modifier_draws_follow_modifier_seed",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1049,6 +1053,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_bad_frames_ignored_and_rate_limited()
 		"phone_hat_art_sent_once_on_bind":
 			return await _scenario_phone_hat_art_sent_once_on_bind()
+		"meteor_shower_rains_across_large_stage_view":
+			return await _scenario_meteor_shower_rains_across_large_stage_view()
+		"hazards_report_only_damage_dealt":
+			return await _scenario_hazards_report_only_damage_dealt()
+		"breakable_wall_double_damage_melee":
+			return await _scenario_breakable_wall_double_damage_melee()
+		"round_modifier_draws_follow_modifier_seed":
+			return await _scenario_round_modifier_draws_follow_modifier_seed()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -7613,11 +7625,11 @@ const MODIFIER_RIG_TICKS: int = 5
 ## The modifiers, spelled out rather than read from `RoundModifiers.IDS`, and
 ## the names the announcement must show for them.
 const MODIFIER_TITLES: Dictionary = {
-	"low_gravity": "LOW GRAVITY",
-	"heavy_weapons": "HEAVY WEAPONS",
-	"big_heads": "BIG HEADS",
-	"fast_lava": "FAST LAVA",
-	"slippery_floor": "SLIPPERY FLOOR",
+	"low_gravity": "Low Gravity",
+	"heavy_weapons": "Heavy Weapons",
+	"big_heads": "Big Heads",
+	"fast_lava": "Fast Lava",
+	"slippery_floor": "Slippery Floor",
 	"tiny_weapons": "Tiny Weapons",
 	"weapon_roulette": "Weapon Roulette",
 	"meteor_shower": "Meteor Shower",
@@ -16391,4 +16403,247 @@ func _scenario_phone_hat_art_sent_once_on_bind() -> Array[String]:
 		failures.append("B took A's colour (B holds %d)" % server.slot_color(1))
 	await _close_phones(phones)
 	await _teardown(stage)
+	return failures
+# --- Meteor view, honest hazard reports, wall damage, seeded draws (issue #162)
+
+## The large stages, whose view reaches past their spawns.
+const METEOR_VIEW_STAGES: PackedStringArray = [
+	"res://scenes/stages/Overpass.tscn",
+	"res://scenes/stages/Pistons.tscn",
+	"res://scenes/stages/Ziggurat.tscn",
+]
+## Meteors drawn per stage when checking where they start.
+const METEOR_VIEW_DRAWS: int = 200
+## The outermost meteor each side must start within this fraction of the
+## view's width of that edge: the outer streets get meteors too.
+const METEOR_VIEW_EDGE_FRACTION: float = 0.08
+## A meteor's radius, written down here: it must start wholly above the view.
+const METEOR_VIEW_RADIUS: float = 16.0
+
+## Issue #162: on a large stage the Meteor shower starts every meteor out of
+## sight above the camera's view, and spreads them across the whole view's
+## width, not just the spawns' span.
+func _scenario_meteor_shower_rains_across_large_stage_view() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in METEOR_VIEW_STAGES:
+		var stage: Node2D = (load(path) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		await physics_frame
+		var view: Rect2 = stage.get_view_rect()
+		var modifier: RefCounted = RoundModifiersType.create("meteor_shower")
+		var draws := RandomNumberGenerator.new()
+		draws.seed = 162
+		if "rng" in modifier:
+			modifier.rng = draws
+		modifier.apply(null, [], stage)
+		var lowest_x: float = INF
+		var highest_x: float = -INF
+		var lowest_start: float = -INF
+		var floor_y: float = INF
+		for i in METEOR_VIEW_DRAWS:
+			modifier._spawn_meteor()
+		for meteor: Node in modifier.live_meteors():
+			var at: Vector2 = (meteor as Node2D).global_position
+			lowest_x = minf(lowest_x, at.x)
+			highest_x = maxf(highest_x, at.x)
+			lowest_start = maxf(lowest_start, at.y)
+			floor_y = minf(floor_y, float(meteor.lowest_y))
+		modifier.undo()
+		var edge: float = view.size.x * METEOR_VIEW_EDGE_FRACTION
+		print("      %s: view %s; meteors start x %.0f..%.0f, lowest y %.0f, dropped past y %.0f" % [
+			path.get_file(), view, lowest_x, highest_x, lowest_start, floor_y])
+		if lowest_start > view.position.y - METEOR_VIEW_RADIUS:
+			failures.append("%s: a meteor starts at y %.0f, inside the view (top %.0f) -- it pops into being on screen" % [
+				path.get_file(), lowest_start, view.position.y])
+		if lowest_x > view.position.x + edge or highest_x < view.end.x - edge:
+			failures.append("%s: meteors start across x %.0f..%.0f only, the view spans %.0f..%.0f" % [
+				path.get_file(), lowest_x, highest_x, view.position.x, view.end.x])
+		if lowest_x < view.position.x - 0.5 or highest_x > view.end.x + 0.5:
+			failures.append("%s: meteors start across x %.0f..%.0f, outside the view %.0f..%.0f" % [
+				path.get_file(), lowest_x, highest_x, view.position.x, view.end.x])
+		if floor_y <= view.end.y:
+			failures.append("%s: meteors are dropped at y %.0f, above the view's bottom %.0f" % [
+				path.get_file(), floor_y, view.end.y])
+		await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## A hazard aimed at a player standing on the Arena's ground.
+const HAZARD_TEST_DAMAGE: float = 12.0
+const HAZARD_TEST_DROP: float = 200.0
+
+## Issue #162: a meteor or falling rock that hits a spawn-protected player
+## deals nothing and reports nothing -- no phantom damage number, no buzz --
+## and one that hits an unprotected player reports exactly what it dealt.
+func _scenario_hazards_report_only_damage_dealt() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, GROUND_TOP - PLAYER_RADIUS))
+	await _await_ticks(MODIFIER_RIG_TICKS)
+	var reports: Array[float] = []
+	player.strike_landed.connect(func(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+		reports.append(amount))
+	for protected: bool in [true, false]:
+		player.spawn_protected = protected
+		var label: String = "protected" if protected else "unprotected"
+		# Back where it started and still: the last hit's knock moved it.
+		player.teleport_to(Vector2(0, GROUND_TOP - PLAYER_RADIUS))
+		player.linear_velocity = Vector2.ZERO
+		await _await_ticks(MODIFIER_RIG_TICKS)
+		# A meteor dropped straight onto them.
+		reports.clear()
+		var before: float = player.damage
+		var meteor: Node2D = MeteorType.new()
+		meteor.setup(player.global_position + Vector2(0.0, -HAZARD_TEST_DROP), Vector2(0.0, 900.0),
+			HAZARD_TEST_DAMAGE, 650.0, METEOR_VIEW_RADIUS, 5000.0)
+		stage.add_child(meteor)
+		var meteor_ref: WeakRef = weakref(meteor)
+		var knock: float = 0.0
+		for tick in 60:
+			await physics_frame
+			if meteor_ref.get_ref() == null:
+				knock = maxf(knock, absf(player.linear_velocity.x))
+				if tick > 20:
+					break
+		# Gone and the player knocked aside: it met the player, not the floor.
+		var hit: bool = meteor_ref.get_ref() == null and knock >= METEOR_MIN_KNOCK_SPEED
+		var taken: float = player.damage - before
+		print("      meteor on a %s player: hit %s (knock %.0f px/s), took %.1f, reported %s" % [label, hit, knock, taken, reports])
+		if not hit:
+			failures.append("a meteor dropped onto a %s player never hit them" % label)
+		failures.append_array(_check_hazard_report("a meteor", label, protected, taken, reports, HAZARD_TEST_DAMAGE))
+		# A falling rock's strike, down the rock's own hit path.
+		reports.clear()
+		before = player.damage
+		var rock: Node2D = preload("res://scripts/FallingRock.gd").new()
+		rock.damage = HAZARD_TEST_DAMAGE
+		stage.add_child(rock)
+		rock.global_position = player.global_position + Vector2(0.0, -HAZARD_TEST_DROP)
+		await physics_frame
+		rock._strike(player)
+		taken = player.damage - before
+		print("      rock on a %s player: took %.1f, reported %s" % [label, taken, reports])
+		failures.append_array(_check_hazard_report("a falling rock", label, protected, taken, reports, HAZARD_TEST_DAMAGE))
+		rock.queue_free()
+		await physics_frame
+	player.spawn_protected = false
+	await _teardown(stage)
+	return failures
+
+func _check_hazard_report(what: String, label: String, protected: bool, taken: float, reports: Array[float], expected: float) -> Array[String]:
+	var failures: Array[String] = []
+	if protected:
+		if taken != 0.0:
+			failures.append("%s took %.1f off a spawn-protected player" % [what, taken])
+		if not reports.is_empty():
+			failures.append("%s hit a spawn-protected player for nothing but reported %s -- phantom damage" % [what, reports])
+	else:
+		if absf(taken - expected) > 0.001:
+			failures.append("%s took %.1f off an %s player, expected %.1f" % [what, taken, label, expected])
+		if reports.size() != 1 or absf(reports[0] - taken) > 0.001:
+			failures.append("%s dealt %.1f but reported %s" % [what, taken, reports])
+	return failures
+
+## A strike speed halfway into the scored range, so a doubled strike is
+## still under `Player.MAX_STRIKE_DAMAGE` and the ratio is exact.
+const WALL_DOUBLE_TEST_SPEED: float = 1450.0
+const WALL_DOUBLE_RATIO: float = 2.0
+
+## Issue #162: under Double Damage a swing wears a breakable wall twice as
+## hard, as a bullet already does and as the same swing hurts a player; the
+## round after, back to normal.
+func _scenario_breakable_wall_double_damage_melee() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var wall: StaticBody2D = BreakableWallScene.instantiate() as StaticBody2D
+	wall.hp = 10000.0
+	wall.position = DEEP_PARK_POSITION + Vector2(600.0, 0.0)
+	stage.add_child(wall)
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(MODIFIER_RIG_TICKS)
+	var pickaxe: Resource = load("res://resources/pickaxe.tres")
+	var plain: float = preload("res://scripts/BreakableWall.gd").strike_damage(pickaxe, WALL_DOUBLE_TEST_SPEED)
+	var modifier: RefCounted = RoundModifiersType.create("double_damage")
+	var measured: Array[float] = []
+	var on_player: Array[float] = []
+	for phase in 3:
+		if phase == 1:
+			modifier.apply(null, [attacker], null)
+		elif phase == 2:
+			modifier.undo()
+		await _await_ticks(MODIFIER_RIG_TICKS)
+		var head: RigidBody2D = null
+		for node: Node in get_nodes_in_group(WeaponHeadType.HEAD_GROUP):
+			var candidate := node as RigidBody2D
+			if candidate != null and candidate.get_collision_exceptions().has(attacker):
+				head = candidate
+		if head == null:
+			failures.append("phase %d: the attacker has no weapon head" % phase)
+			break
+		wall._take_hit(head, WALL_DOUBLE_TEST_SPEED)
+		measured.append(wall.last_hit_damage())
+		on_player.append(attacker._strike_damage(WALL_DOUBLE_TEST_SPEED))
+	if measured.size() == 3:
+		print("      wall takes plain %.1f, double damage %.1f, after %.1f; a player takes %s" % [
+			measured[0], measured[1], measured[2], on_player])
+		if plain <= 0.0 or absf(measured[0] - plain) > 0.001:
+			failures.append("a %.0f px/s swing took %.1f off the wall plainly, expected %.1f" % [WALL_DOUBLE_TEST_SPEED, measured[0], plain])
+		if absf(measured[1] - plain * WALL_DOUBLE_RATIO) > 0.001:
+			failures.append("under Double Damage a swing took %.1f off the wall, expected %.1f (bullets are doubled too)" % [measured[1], plain * WALL_DOUBLE_RATIO])
+		for i in 3:
+			if absf(measured[i] - on_player[i]) > 0.001:
+				failures.append("phase %d: a swing took %.1f off the wall but would take %.1f off a player" % [i, measured[i], on_player[i]])
+		if absf(measured[2] - plain) > 0.001:
+			failures.append("after Double Damage a swing took %.1f off the wall, expected %.1f again" % [measured[2], plain])
+	await _teardown(stage)
+	return failures
+
+## Draws per modifier compared between two runs on the same seed.
+const SEEDED_DRAWS: int = 8
+const SEEDED_TEST_SEED: int = 162
+
+## Issue #162: Weapon Roulette's picks and Meteor Shower's meteors come from
+## the round manager's seeded modifier RNG, so two runs on the same
+## `modifier_seed` draw exactly the same weapons and meteors, whatever the
+## global RNG is doing.
+func _scenario_round_modifier_draws_follow_modifier_seed() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("the round never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(MODIFIER_RIG_TICKS)
+	round_manager.modifier_seed = SEEDED_TEST_SEED
+	var runs: Array[PackedStringArray] = []
+	for run in 2:
+		# A fresh game on the same seed, with the global RNG stirred.
+		round_manager.set("_modifier_rng", null)
+		randomize()
+		var drawn := PackedStringArray()
+		var roulette: RefCounted = RoundModifiersType.create("weapon_roulette")
+		roulette.apply(round_manager, players, instance)
+		for i in SEEDED_DRAWS:
+			roulette._swap()
+			drawn.append(players[0].weapon_stats.resource_path.get_file())
+		roulette.undo()
+		var shower: RefCounted = RoundModifiersType.create("meteor_shower")
+		shower.apply(round_manager, [], instance)
+		for i in SEEDED_DRAWS:
+			shower._spawn_meteor()
+		for meteor: Node in shower.live_meteors():
+			var at: Vector2 = (meteor as Node2D).global_position
+			drawn.append("%.2f,%.2f/%.2f" % [at.x, at.y, float(meteor.velocity.x)])
+		shower.undo()
+		runs.append(drawn)
+		print("      run %d on seed %d: %s" % [run + 1, SEEDED_TEST_SEED, ", ".join(drawn)])
+	if runs[0].size() != SEEDED_DRAWS * 2:
+		failures.append("drew %d weapons and meteors, expected %d" % [runs[0].size(), SEEDED_DRAWS * 2])
+	elif runs[0] != runs[1]:
+		failures.append("two runs on modifier_seed %d drew different weapons or meteors" % SEEDED_TEST_SEED)
+	round_manager.modifier_seed = -1
+	await _teardown(loop["stage"])
 	return failures
