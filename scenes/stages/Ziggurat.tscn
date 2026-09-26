@@ -1,0 +1,138 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CollapsingFloor.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="3"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="4"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_base"]
+size = Vector2(2080, 60)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_middle"]
+size = Vector2(1520, 80)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_top"]
+size = Vector2(840, 80)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A stepped pyramid (issue #144, a large stage for five to eight players):
+; king of the hill. Three broad tiers climb to a throne that gives way under
+; whoever holds it; falling rocks knock people down the flanks; and the only
+; way out of the round, until the lava, is off the ends of the base.
+;
+; Large: the view is 2240 x 1260 (Stage.view_size), and the Main camera zooms
+; out to fit it. The base spans x = -1040..1040, 93% of that view.
+
+[node name="Ziggurat" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.16, 0.11, 0.1, 1)
+background_sky_bottom = Color(0.3, 0.22, 0.16, 1)
+background_silhouette = Color(0.14, 0.1, 0.08, 1)
+background_layers = PackedStringArray("clouds", "mountains", "rocks")
+view_size = Vector2(2240, 1260)
+
+; Three tiers, each 80 px above the one below (every weapon climbs that), and
+; a crumbling throne on top. The base runs x = -1040..1040 with open ends: the
+; only ring-out on the stage, so every fight ends with someone being walked
+; down the steps and off an edge.
+
+[node name="TierBase" type="StaticBody2D" parent="."]
+position = Vector2(0, 470)
+
+[node name="TierBaseShape" type="CollisionShape2D" parent="TierBase"]
+shape = SubResource("RectangleShape2D_base")
+
+[node name="TierBaseVisual" type="Polygon2D" parent="TierBase"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-1040, -30, 1040, -30, 1040, 30, -1040, 30)
+
+[node name="TierMiddle" type="StaticBody2D" parent="."]
+position = Vector2(0, 400)
+
+[node name="TierMiddleShape" type="CollisionShape2D" parent="TierMiddle"]
+shape = SubResource("RectangleShape2D_middle")
+
+[node name="TierMiddleVisual" type="Polygon2D" parent="TierMiddle"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-760, -40, 760, -40, 760, 40, -760, 40)
+
+[node name="TierTop" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="TierTopShape" type="CollisionShape2D" parent="TierTop"]
+shape = SubResource("RectangleShape2D_top")
+
+[node name="TierTopVisual" type="Polygon2D" parent="TierTop"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-420, -40, 420, -40, 420, 40, -420, 40)
+
+; The throne: a slab 108 px over the top tier (#53's collapsing floor, stood
+; on). Three seconds of anyone standing on it, in total, and it goes for the
+; round -- the king of the hill gets a short reign.
+
+[node name="Throne" parent="." instance=ExtResource("2")]
+position = Vector2(0, 184)
+size = Vector2(220, 24)
+stand_sec = 3.0
+warn_sec = 1.0
+
+; Two falling rocks (#53) over the middle tier's flanks, between the spawns
+; and the pickups there. Their knock goes sideways away from the column, and
+; on a staircase that is downhill: a rock does not ring anyone out, it sends
+; them a step closer to the edge.
+
+[node name="RockLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-560, -600)
+interval_sec = 5.0
+
+[node name="RockRight" parent="." instance=ExtResource("3")]
+position = Vector2(560, -600)
+interval_sec = 6.5
+
+; Spawns, mirrored: the middle tier, the base (twice a side) and the top
+; tier. None on the throne.
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-480, 300)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(480, 300)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-940, 380)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(940, 380)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-340, 220)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(340, 220)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-820, 380)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(820, 380)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("4")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points: over the throne, and on the outer end of the middle
+; tier on each side, under a rock column's reach.
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 110)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-640, 310)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(640, 310)

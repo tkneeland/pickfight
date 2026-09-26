@@ -1,0 +1,161 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="3"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="4"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_street"]
+size = Vector2(1010, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_deck"]
+size = Vector2(400, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A two-storey interchange (issue #144, a large stage for five to eight
+; players): a long street with a drain down the middle and open ends, and an
+; overpass deck above it that only the bounce pads reach. Eight players split
+; across the two levels, so there are two fights at once, and the crumbling
+; span in the middle of the deck drops whoever loiters on it onto the street
+; -- or into the drain under it.
+;
+; Large: the view is 2400 x 1350 (Stage.view_size), and the Main camera zooms
+; out to fit it. The street spans x = -1060..1060, 88% of that view.
+
+[node name="Overpass" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.05, 0.06, 0.12, 1)
+background_sky_bottom = Color(0.14, 0.13, 0.22, 1)
+background_silhouette = Color(0.07, 0.07, 0.12, 1)
+background_layers = PackedStringArray("clouds", "mountains", "city")
+view_size = Vector2(2400, 1350)
+
+; The street: two long halves, x = -1060..-50 and 50..1060, with a 100 px drain
+; between them down the middle -- twice a body's width -- and open ends. Those are the ring-outs; the deck only ever drops you onto the street.
+
+[node name="StreetLeft" type="StaticBody2D" parent="."]
+position = Vector2(-555, 440)
+
+[node name="StreetLeftShape" type="CollisionShape2D" parent="StreetLeft"]
+shape = SubResource("RectangleShape2D_street")
+
+[node name="StreetLeftVisual" type="Polygon2D" parent="StreetLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-505, -20, 505, -20, 505, 20, -505, 20)
+
+[node name="StreetRight" type="StaticBody2D" parent="."]
+position = Vector2(555, 440)
+
+[node name="StreetRightShape" type="CollisionShape2D" parent="StreetRight"]
+shape = SubResource("RectangleShape2D_street")
+
+[node name="StreetRightVisual" type="Polygon2D" parent="StreetRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-505, -20, 505, -20, 505, 20, -505, 20)
+
+; The deck: an overpass 260 px above the street, too high to hook from below.
+; Its ends (x = -580..-180 and 180..580) are solid; its middle is three
+; crumbling ledges (#18) over the drain, which give under whoever stops on
+; them and come back three seconds later.
+
+[node name="DeckLeft" type="StaticBody2D" parent="."]
+position = Vector2(-380, 172)
+
+[node name="DeckLeftShape" type="CollisionShape2D" parent="DeckLeft"]
+shape = SubResource("RectangleShape2D_deck")
+
+[node name="DeckLeftVisual" type="Polygon2D" parent="DeckLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
+
+[node name="DeckRight" type="StaticBody2D" parent="."]
+position = Vector2(380, 172)
+
+[node name="DeckRightShape" type="CollisionShape2D" parent="DeckRight"]
+shape = SubResource("RectangleShape2D_deck")
+
+[node name="DeckRightVisual" type="Polygon2D" parent="DeckRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
+
+[node name="SpanLeft" parent="." instance=ExtResource("2")]
+position = Vector2(-120, 172)
+size = Vector2(112, 24)
+
+[node name="SpanMiddle" parent="." instance=ExtResource("2")]
+position = Vector2(0, 172)
+size = Vector2(112, 24)
+
+[node name="SpanRight" parent="." instance=ExtResource("2")]
+position = Vector2(120, 172)
+size = Vector2(112, 24)
+
+; The way up: a bounce pad (#52) on each half of the street, outboard of the
+; deck's ends. 1250 px/s throws a body about 530 px, clear of the deck's top,
+; and a swing on the way up steers it on. Standing on the street is safe;
+; crossing a pad is a ride. Getting down is a step off the deck.
+
+[node name="PadLeft" parent="." instance=ExtResource("3")]
+position = Vector2(-760, 412)
+size = Vector2(120, 16)
+launch_speed = 1250.0
+
+[node name="PadRight" parent="." instance=ExtResource("3")]
+position = Vector2(760, 412)
+size = Vector2(120, 16)
+launch_speed = 1250.0
+
+; Spawns: four on the solid ends of the deck, four on the street under them,
+; mirrored. None on a crumbling span or a pad.
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-300, 110)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(300, 110)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-360, 360)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(360, 360)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-440, 110)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(440, 110)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-500, 360)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(500, 360)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 720)
+script = ExtResource("4")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points: on the crumbling middle span (stopping to take it starts
+; it crumbling), by the drain on each side of the street, and out at the
+; street's open ends, past the pads.
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 110)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-200, 370)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(200, 370)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(-900, 370)
+
+[node name="PickupSpawn4" type="Marker2D" parent="."]
+position = Vector2(900, 370)

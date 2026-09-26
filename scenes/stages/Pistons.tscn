@@ -1,0 +1,177 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="3"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bastion"]
+size = Vector2(400, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_gantry"]
+size = Vector2(220, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; A foundry floor that will not hold still (issue #144, a large stage for five
+; to eight players). Two still bastions at the ends, and between them seven
+; pistons -- #18's MovingPlatform, stood on end -- heaving up and down out of
+; step, so the ground between the two camps is a moving staircase nobody gets
+; to settle on. Height changes hands every couple of seconds: whoever is on a
+; riser has the high ground until it sinks under them.
+;
+; Large: the view is 2240 x 1260 (Stage.view_size), and the Main camera zooms
+; out to fit it. The floor spans x = -980..980, 88% of that view.
+
+[node name="Pistons" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.14, 0.09, 0.08, 1)
+background_sky_bottom = Color(0.3, 0.18, 0.12, 1)
+background_silhouette = Color(0.1, 0.08, 0.08, 1)
+background_layers = PackedStringArray("clouds", "city", "rocks")
+view_size = Vector2(2240, 1260)
+
+; The two still ends. Everyone starts here, four a side, and the open ends
+; past them (x = +-980) are the ring-out.
+
+[node name="BastionLeft" type="StaticBody2D" parent="."]
+position = Vector2(-780, 380)
+
+[node name="BastionLeftShape" type="CollisionShape2D" parent="BastionLeft"]
+shape = SubResource("RectangleShape2D_bastion")
+
+[node name="BastionLeftVisual" type="Polygon2D" parent="BastionLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)
+
+[node name="BastionRight" type="StaticBody2D" parent="."]
+position = Vector2(780, 380)
+
+[node name="BastionRightShape" type="CollisionShape2D" parent="BastionRight"]
+shape = SubResource("RectangleShape2D_bastion")
+
+[node name="BastionRightVisual" type="Polygon2D" parent="BastionRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)
+
+; The pistons: seven columns, 160 wide with 5 px seams (far narrower than a
+; body), each rising and falling 100 px between a top at y=310 and one at
+; y=410 -- 50 above and below the bastions. Neighbours start at opposite ends
+; of their stroke, and the three pairs run at different speeds (2.4 s, 3 s and
+; 1.9 s a stroke), so the floor never repeats the same shape for long: a step
+; up becomes a step down, a pit opens between two risers and closes again. A
+; 100 px step is a hook every weapon makes (Flatlands' low platform is 112).
+; Mirrored, so neither side is favoured.
+
+[node name="PistonCentre" parent="." instance=ExtResource("2")]
+position = Vector2(0, 470)
+size = Vector2(160, 320)
+travel = Vector2(0, 100)
+one_way_sec = 2.4
+
+[node name="PistonInnerLeft" parent="." instance=ExtResource("2")]
+position = Vector2(-165, 570)
+size = Vector2(160, 320)
+travel = Vector2(0, -100)
+one_way_sec = 2.4
+
+[node name="PistonInnerRight" parent="." instance=ExtResource("2")]
+position = Vector2(165, 570)
+size = Vector2(160, 320)
+travel = Vector2(0, -100)
+one_way_sec = 2.4
+
+[node name="PistonMidLeft" parent="." instance=ExtResource("2")]
+position = Vector2(-330, 470)
+size = Vector2(160, 320)
+travel = Vector2(0, 100)
+one_way_sec = 3
+
+[node name="PistonMidRight" parent="." instance=ExtResource("2")]
+position = Vector2(330, 470)
+size = Vector2(160, 320)
+travel = Vector2(0, 100)
+one_way_sec = 3
+
+[node name="PistonOuterLeft" parent="." instance=ExtResource("2")]
+position = Vector2(-495, 570)
+size = Vector2(160, 320)
+travel = Vector2(0, -100)
+one_way_sec = 1.9
+
+[node name="PistonOuterRight" parent="." instance=ExtResource("2")]
+position = Vector2(495, 570)
+size = Vector2(160, 320)
+travel = Vector2(0, -100)
+one_way_sec = 1.9
+
+; Two gantries hung over the pistons, 100 px above a piston at the top of its
+; stroke and 200 above one at the bottom: a climb that is easy or hard
+; depending on when you make it. Each carries a pickup.
+
+[node name="GantryLeft" type="StaticBody2D" parent="."]
+position = Vector2(-410, 222)
+
+[node name="GantryLeftShape" type="CollisionShape2D" parent="GantryLeft"]
+shape = SubResource("RectangleShape2D_gantry")
+
+[node name="GantryLeftVisual" type="Polygon2D" parent="GantryLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-110, -12, 110, -12, 110, 12, -110, 12)
+
+[node name="GantryRight" type="StaticBody2D" parent="."]
+position = Vector2(410, 222)
+
+[node name="GantryRightShape" type="CollisionShape2D" parent="GantryRight"]
+shape = SubResource("RectangleShape2D_gantry")
+
+[node name="GantryRightVisual" type="Polygon2D" parent="GantryRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-110, -12, 110, -12, 110, 12, -110, 12)
+
+; Spawns, all eight on the bastions (never on a piston: it moves), 70 px
+; apart, 90 px short of each outer edge. Spawn0-3 are the fair four.
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-680, 300)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(680, 300)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-820, 300)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(820, 300)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-750, 300)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(750, 300)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-890, 300)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(890, 300)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("3")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spawn points: over the centre piston (a pickup any rider at the top
+; of its stroke collects) and on the two gantries. All well clear of the
+; bastion spawns.
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 240)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-410, 160)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(410, 160)

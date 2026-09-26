@@ -223,6 +223,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_bouncy_applies_and_undoes",
 	"round_modifier_double_damage_applies_and_undoes",
 	"round_modifier_rate_about_one_in_three",
+	"large_stages_only_with_five_or_more_players",
+	"large_stage_camera_fits_view_with_eight_players",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -995,6 +997,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_modifier_double_damage_applies_and_undoes()
 		"round_modifier_rate_about_one_in_three":
 			return await _scenario_round_modifier_rate_about_one_in_three()
+		"large_stages_only_with_five_or_more_players":
+			return await _scenario_large_stages_only_with_five_or_more_players()
+		"large_stage_camera_fits_view_with_eight_players":
+			return await _scenario_large_stage_camera_fits_view_with_eight_players()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2866,6 +2872,9 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Rockfall.tscn",
 	"res://scenes/stages/Sinkhole.tscn",
 	"res://scenes/stages/Bulwark.tscn",
+	"res://scenes/stages/Pistons.tscn",
+	"res://scenes/stages/Overpass.tscn",
+	"res://scenes/stages/Ziggurat.tscn",
 ]
 
 func _scenario_stage_spawns_are_safe() -> Array[String]:
@@ -6447,10 +6456,17 @@ const FOUR_PHONE_CONNECT_MSEC: int = 3000
 ## shows the player; written down here, not read off the server.
 const NO_FREE_SLOT_REASON: String = "no free player slot"
 
-## Where the fixed Camera2D in scenes/Main.tscn looks: centred on the origin,
-## the project's 1600x900 viewport, no zoom. A spawn has to be inside it,
+## Where the Camera2D in scenes/Main.tscn looks on a normal stage: centred on
+## the origin, the project's 1600x900 viewport, no zoom. A large stage (issue
+## #144) declares a bigger view; see `_stage_view()`. A spawn has to be inside it,
 ## with the whole body on screen.
 const CAMERA_VIEW: Rect2 = Rect2(-800.0, -450.0, 1600.0, 900.0)
+
+## What the Main camera shows of `instance` (issue #144): its own view, which
+## a large stage makes bigger than CAMERA_VIEW, or CAMERA_VIEW for anything
+## that is not a stage.
+func _stage_view(instance: Node) -> Rect2:
+	return instance.get_view_rect() if instance.has_method("get_view_rect") else CAMERA_VIEW
 ## Ticks four bodies are given to land and come to rest together.
 const FOUR_SPAWN_SETTLE_TICKS: int = 90
 ## How far a settled body may sit sideways from its spawn marker and still be
@@ -6763,7 +6779,6 @@ func _scenario_four_player_winner_keeps_weapon() -> Array[String]:
 ## `stage_spawns_are_safe` checks each spawn alone; this is the crowd.
 func _scenario_stage_four_spawns_settle_together() -> Array[String]:
 	var failures: Array[String] = []
-	var inside: Rect2 = CAMERA_VIEW.grow(-PLAYER_RADIUS)
 
 	for path: String in STAGE_PATHS:
 		# As in stage_spawns_are_safe: each stage's _teardown() sets the
@@ -6774,6 +6789,9 @@ func _scenario_stage_four_spawns_settle_together() -> Array[String]:
 		var instance: Node2D = (load(path) as PackedScene).instantiate()
 		stage.add_child(instance)
 		var spawns: Array[Vector2] = instance.get_spawn_points()
+		# The stage's own view (issue #144): a large stage's camera zooms out.
+		var view: Rect2 = _stage_view(instance)
+		var inside: Rect2 = view.grow(-PLAYER_RADIUS)
 		if spawns.size() < 4:
 			failures.append("%s: declared %d spawn point(s), four players need 4" % [path, spawns.size()])
 			await _teardown(stage)
@@ -6782,8 +6800,8 @@ func _scenario_stage_four_spawns_settle_together() -> Array[String]:
 		var players: Array[RigidBody2D] = []
 		for i in 4:
 			if not inside.has_point(spawns[i]):
-				failures.append("%s spawn %d at %s: not wholly inside the fixed camera's view %s" % [
-					path, i, spawns[i], CAMERA_VIEW])
+				failures.append("%s spawn %d at %s: not wholly inside the camera's view %s" % [
+					path, i, spawns[i], view])
 			players.append(_spawn_player(stage, spawns[i]))
 		await _await_ticks(FOUR_SPAWN_SETTLE_TICKS)
 
@@ -11551,9 +11569,9 @@ func _scenario_stage_backgrounds_draw_behind_everything() -> Array[String]:
 		if layers < BACKGROUND_MIN_LAYERS or layers > BACKGROUND_MAX_LAYERS:
 			failures.append("%s: %d parallax layers, expected %d-%d" % [
 				path, layers, BACKGROUND_MIN_LAYERS, BACKGROUND_MAX_LAYERS])
-		if not background.get_sky_rect().encloses(CAMERA_VIEW):
+		if not background.get_sky_rect().encloses(_stage_view(instance)):
 			failures.append("%s: the sky %s does not cover the camera's view %s" % [
-				path, background.get_sky_rect(), CAMERA_VIEW])
+				path, background.get_sky_rect(), _stage_view(instance)])
 		var brightest: float = 0.0
 		for colour: Color in background.get_colours():
 			brightest = maxf(brightest, colour.get_luminance())
@@ -13468,7 +13486,6 @@ const EIGHT_SPAWNS: int = 8
 ## `stage_spawns_are_safe` still checks each spawn alone.
 func _scenario_every_stage_has_eight_safe_spawns() -> Array[String]:
 	var failures: Array[String] = []
-	var inside: Rect2 = CAMERA_VIEW.grow(-PLAYER_RADIUS)
 
 	for path: String in STAGE_PATHS:
 		_scenario_completed = false
@@ -13477,6 +13494,9 @@ func _scenario_every_stage_has_eight_safe_spawns() -> Array[String]:
 		var instance: Node2D = (load(path) as PackedScene).instantiate()
 		stage.add_child(instance)
 		var spawns: Array[Vector2] = instance.get_spawn_points()
+		# The stage's own view (issue #144): a large stage's camera zooms out.
+		var view: Rect2 = _stage_view(instance)
+		var inside: Rect2 = view.grow(-PLAYER_RADIUS)
 		if spawns.size() < EIGHT_SPAWNS:
 			failures.append("%s: declared %d spawn point(s), eight players need %d" % [
 				path, spawns.size(), EIGHT_SPAWNS])
@@ -13486,8 +13506,8 @@ func _scenario_every_stage_has_eight_safe_spawns() -> Array[String]:
 		var players: Array[RigidBody2D] = []
 		for i in EIGHT_SPAWNS:
 			if not inside.has_point(spawns[i]):
-				failures.append("%s spawn %d at %s: not wholly inside the fixed camera's view %s" % [
-					path, i, spawns[i], CAMERA_VIEW])
+				failures.append("%s spawn %d at %s: not wholly inside the camera's view %s" % [
+					path, i, spawns[i], view])
 			players.append(_spawn_player(stage, spawns[i]))
 		await _await_ticks(FOUR_SPAWN_SETTLE_TICKS)
 
@@ -13527,7 +13547,8 @@ const TERRAIN_MIN_VIEW_FRACTION: float = 0.8
 ## (crumbling ledges, collapsing floors, moving and rotating platforms), as
 ## authored at round start -- must reach from within 20% of the view's width
 ## of one side to the other: its leftmost and rightmost solid edges on screen
-## at least TERRAIN_MIN_VIEW_FRACTION of CAMERA_VIEW's width apart.
+## at least TERRAIN_MIN_VIEW_FRACTION of the view's width apart -- the stage's
+## own view (issue #144), which is CAMERA_VIEW for a normal stage.
 ##
 ## Asserts the extent, not the coverage: gaps, pits and drains inside that
 ## span are each stage's own ring-outs and stay legal (Pillars and Islands
@@ -13535,7 +13556,6 @@ const TERRAIN_MIN_VIEW_FRACTION: float = 0.8
 ## that satisfies the span with two slivers at the edges is visible.
 func _scenario_every_stage_terrain_spans_the_view() -> Array[String]:
 	var failures: Array[String] = []
-	var need: float = TERRAIN_MIN_VIEW_FRACTION * CAMERA_VIEW.size.x
 
 	for path: String in STAGE_PATHS:
 		_scenario_completed = false
@@ -13546,8 +13566,11 @@ func _scenario_every_stage_terrain_spans_the_view() -> Array[String]:
 		# Parts build their collision shapes in _ready().
 		await _await_ticks(2)
 
+		# Against the stage's own view (issue #144): a large stage's is wider.
+		var view: Rect2 = _stage_view(instance)
+		var need: float = TERRAIN_MIN_VIEW_FRACTION * view.size.x
 		var spans: Array[Vector2] = []
-		_collect_terrain_spans(instance, spans)
+		_collect_terrain_spans(instance, spans, view)
 		var left: float = INF
 		var right: float = -INF
 		for span: Vector2 in spans:
@@ -13556,18 +13579,18 @@ func _scenario_every_stage_terrain_spans_the_view() -> Array[String]:
 		var width: float = right - left if not spans.is_empty() else 0.0
 		var covered: float = _covered_width(spans)
 		print("      %s: terrain x %.0f..%.0f, spans %.0f px (%.0f%% of the view), %.0f%% covered" % [
-			path.get_file(), left, right, width, 100.0 * width / CAMERA_VIEW.size.x,
-			100.0 * covered / CAMERA_VIEW.size.x])
+			path.get_file(), left, right, width, 100.0 * width / view.size.x,
+			100.0 * covered / view.size.x])
 		if width < need:
 			failures.append("%s: terrain spans %.0f px of the %.0f px view, needs %.0f" % [
-				path, width, CAMERA_VIEW.size.x, need])
+				path, width, view.size.x, need])
 		await _teardown(stage)
 
 	return failures
 
 ## The on-screen x-extent of every enabled collision shape on a static body
-## (AnimatableBody2D included) under `node`, clipped to CAMERA_VIEW.
-func _collect_terrain_spans(node: Node, spans: Array[Vector2]) -> void:
+## (AnimatableBody2D included) under `node`, clipped to `view`.
+func _collect_terrain_spans(node: Node, spans: Array[Vector2], view: Rect2 = CAMERA_VIEW) -> void:
 	for child: Node in node.get_children():
 		if child.get_parent() is StaticBody2D:
 			var rect: Rect2 = Rect2()
@@ -13582,10 +13605,10 @@ func _collect_terrain_spans(node: Node, spans: Array[Vector2]) -> void:
 					for point: Vector2 in points:
 						rect = rect.expand(point)
 					found = true
-			if found and rect.intersects(CAMERA_VIEW):
-				spans.append(Vector2(maxf(rect.position.x, CAMERA_VIEW.position.x),
-					minf(rect.end.x, CAMERA_VIEW.end.x)))
-		_collect_terrain_spans(child, spans)
+			if found and rect.intersects(view):
+				spans.append(Vector2(maxf(rect.position.x, view.position.x),
+					minf(rect.end.x, view.end.x)))
+		_collect_terrain_spans(child, spans, view)
 
 ## Total width of the union of x-intervals.
 func _covered_width(spans: Array[Vector2]) -> float:
@@ -14886,5 +14909,297 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 	for id: String in counts:
 		if not MODIFIER_TITLES.has(id):
 			failures.append("rolled '%s', which is not one of the ten" % id)
+	_scenario_completed = true
+	return failures
+
+# --- Large stages (issue #144) -------------------------------------------------
+
+## Issue #144: the fewest players a round needs before it may play a large
+## stage, written down here rather than read off RoundManager.
+const LARGE_STAGE_MIN_PLAYERS: int = 5
+## How many large stages the issue asks for.
+const LARGE_STAGE_MIN_COUNT: int = 3
+## Stages dealt per player count in the selection check: many bags' worth.
+const LARGE_STAGE_DRAWS: int = 300
+## How far a camera's zoom or framing may be from the stage's view.
+const LARGE_VIEW_TOLERANCE: float = 0.5
+const LARGE_ZOOM_TOLERANCE: float = 0.001
+
+## A stub stage with two spawns and no geometry that declares `view` as its
+## `view_size` -- left at the default, it is a normal stage.
+func _make_view_stub_stage(stage_name: String, view: Vector2) -> PackedScene:
+	var root := Node2D.new()
+	root.name = stage_name
+	root.set_script(StageType)
+	if view != StageType.DEFAULT_VIEW_SIZE:
+		root.set("view_size", view)
+	for i in 2:
+		var marker := Marker2D.new()
+		marker.name = "Spawn%d" % i
+		marker.position = Vector2(-100.0 + 200.0 * i, -2000.0)
+		root.add_child(marker)
+		marker.owner = root
+	var packed := PackedScene.new()
+	packed.pack(root)
+	root.free()
+	return packed
+
+## A RoundManager outside the tree, dealing stages from `scenes` for rounds of
+## `players`, seeded the way `_ready()` would seed it.
+func _new_stage_dealer(scenes: Array[PackedScene], players: int, seed_value: int) -> Node:
+	var rm: Node = RoundManagerType.new()
+	rm.stage_scenes = scenes
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	rm.set("_rng", rng)
+	rm.set("_round_player_count", players)
+	return rm
+
+## Deals `draws` stages the way `_swap_stage()` does; returns the indices.
+func _deal_stages(rm: Node, draws: int) -> Array[int]:
+	var dealt: Array[int] = []
+	for i in draws:
+		var index: int = rm._next_stage_index()
+		rm.set("_stage_index", index)
+		dealt.append(index)
+	return dealt
+
+## Issue #144: a large stage -- one whose `view_size` is bigger than the normal
+## 1600x900 -- is only dealt to a round of five or more players, and normal
+## stages are dealt at every count. The shipped rotation holds at least three
+## large stages, each a 16:9 view (so the camera shows exactly it) and read
+## the same off the packed scene as off an instance, and every other stage
+## keeps the normal view. Then a real RoundManager's selection, over stub
+## stages: never large for two to four players; every stage, large ones
+## included, for five and eight; no stage back to back; a bag dealt for eight
+## and reached with four skips its large stages; a rotation of only large
+## stages still plays with two; and a rotation with no large stage deals
+## exactly what it dealt before, whatever the count.
+func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
+	var failures: Array[String] = []
+
+	var large_in_main: PackedStringArray = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	for path: String in rotation:
+		var scene: PackedScene = load(path)
+		var view: Vector2 = StageType.view_size_of(scene)
+		var instance: Node = scene.instantiate()
+		if instance.get("view_size") != view:
+			failures.append("%s: view_size reads %s off the packed scene but %s off an instance" % [
+				path.get_file(), view, instance.get("view_size")])
+		instance.free()
+		if StageType.is_large_view(view):
+			large_in_main.append("%s %dx%d" % [path.get_file().get_basename(), view.x, view.y])
+			if absf(view.x / view.y - 16.0 / 9.0) > 0.01:
+				failures.append("%s: large view %s is not 16:9, so the camera would show more than it" % [path.get_file(), view])
+		elif view != StageType.DEFAULT_VIEW_SIZE:
+			failures.append("%s: view %s is smaller than the normal %s" % [path.get_file(), view, StageType.DEFAULT_VIEW_SIZE])
+	print("      Main rotation: %d stages, %d large (%s)" % [rotation.size(), large_in_main.size(), ", ".join(large_in_main)])
+	if large_in_main.size() < LARGE_STAGE_MIN_COUNT:
+		failures.append("Main's rotation has %d large stage(s), expected at least %d" % [large_in_main.size(), LARGE_STAGE_MIN_COUNT])
+	if rotation.size() - large_in_main.size() < large_in_main.size():
+		failures.append("Main's rotation has fewer normal stages than large ones")
+	var defaults: Node = RoundManagerType.new()
+	if defaults.large_stage_min_players != LARGE_STAGE_MIN_PLAYERS:
+		failures.append("RoundManager.large_stage_min_players is %d, expected %d" % [defaults.large_stage_min_players, LARGE_STAGE_MIN_PLAYERS])
+	defaults.free()
+
+	var big := Vector2(2400.0, 1350.0)
+	var scenes: Array[PackedScene] = [
+		_make_view_stub_stage("NormalA", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("NormalB", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("NormalC", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("LargeA", big),
+		_make_view_stub_stage("LargeB", Vector2(900.0, 1200.0)),
+	]
+	var large_indices: Array[int] = [3, 4]
+	for count: int in [2, 3, 4, 5, 6, 8]:
+		var rm: Node = _new_stage_dealer(scenes, count, 144 + count)
+		var dealt: Array[int] = _deal_stages(rm, LARGE_STAGE_DRAWS)
+		rm.free()
+		var plays: Array[int] = [0, 0, 0, 0, 0]
+		var repeats: int = 0
+		for i in dealt.size():
+			plays[dealt[i]] += 1
+			if i > 0 and dealt[i] == dealt[i - 1]:
+				repeats += 1
+		var large_plays: int = plays[3] + plays[4]
+		print("      %d players: plays per stage %s, %d on large stages" % [count, plays, large_plays])
+		if dealt[0] != 0:
+			failures.append("%d players: opened on stage %d, not stage 0" % [count, dealt[0]])
+		if repeats > 0:
+			failures.append("%d players: a stage was dealt twice in a row %d time(s)" % [count, repeats])
+		for i in 3:
+			if plays[i] == 0:
+				failures.append("%d players: normal stage %d was never dealt" % [count, i])
+		if count < LARGE_STAGE_MIN_PLAYERS and large_plays > 0:
+			failures.append("%d players: a large stage was dealt %d time(s)" % [count, large_plays])
+		if count >= LARGE_STAGE_MIN_PLAYERS:
+			for i: int in large_indices:
+				if plays[i] == 0:
+					failures.append("%d players: large stage %d was never dealt" % [count, i])
+
+	# A bag dealt for eight, then a round of four: its large stages are skipped.
+	var shrinking: Node = _new_stage_dealer(scenes, 8, 9)
+	_deal_stages(shrinking, 2)
+	shrinking.set("_round_player_count", 4)
+	var after: Array[int] = _deal_stages(shrinking, 20)
+	shrinking.free()
+	for index: int in after:
+		if large_indices.has(index):
+			failures.append("a bag dealt for eight players still dealt large stage %d once four were left" % index)
+			break
+
+	# Nothing but large stages, and two players: the rule gives way.
+	var only_large: Array[PackedScene] = [scenes[3], scenes[4]]
+	var fallback: Node = _new_stage_dealer(only_large, 2, 5)
+	var fallback_dealt: Array[int] = _deal_stages(fallback, 6)
+	fallback.free()
+	if not (fallback_dealt.has(0) and fallback_dealt.has(1)):
+		failures.append("a rotation of only large stages dealt %s to two players, expected both" % [fallback_dealt])
+
+	# No large stage in the rotation: the player count changes nothing.
+	var normals: Array[PackedScene] = [scenes[0], scenes[1], scenes[2]]
+	var two: Node = _new_stage_dealer(normals, 2, 77)
+	var eight: Node = _new_stage_dealer(normals, 8, 77)
+	var dealt_two: Array[int] = _deal_stages(two, 30)
+	var dealt_eight: Array[int] = _deal_stages(eight, 30)
+	two.free()
+	eight.free()
+	if dealt_two != dealt_eight:
+		failures.append("with no large stage, two players were dealt %s but eight %s" % [dealt_two, dealt_eight])
+
+	_scenario_completed = true
+	return failures
+
+## Issue #144: a large stage played by eight players, under a real
+## RoundManager driving a real Camera2D the way scenes/Main.tscn wires it. The
+## camera zooms out by exactly the factor that fits the stage's view and
+## centres on it; all eight players land and stay on screen; the backdrop
+## (#117) and the lava's surface each cover everything the camera shows; and
+## the name tags (#121) are scaled back up so they read at their usual size.
+## The next round, on a normal stage with two players, puts the camera back
+## to zoom 1 on the origin.
+func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String]:
+	var failures: Array[String] = []
+	var large: PackedStringArray = []
+	for path: String in STAGE_PATHS:
+		if StageType.is_large_view(StageType.view_size_of(load(path))):
+			large.append(path)
+	if large.size() < LARGE_STAGE_MIN_COUNT:
+		failures.append("STAGE_PATHS holds %d large stage(s), expected at least %d" % [large.size(), LARGE_STAGE_MIN_COUNT])
+
+	for path: String in large:
+		_scenario_completed = false
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var camera := Camera2D.new()
+		camera.name = "Camera"
+		camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
+		holder.add_child(camera)
+		var container := Node2D.new()
+		container.name = "Container"
+		holder.add_child(container)
+		var players: Array[RigidBody2D] = []
+		var paths: Array[NodePath] = []
+		var slots: Array[int] = []
+		for i in EIGHT_SPAWNS:
+			var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+			player.name = "P%d" % i
+			player.start_in_round = false
+			holder.add_child(player)
+			players.append(player)
+			paths.append(NodePath("../P%d" % i))
+			slots.append(i)
+		var roster := _FakeRoster.new()
+		roster.name = "Roster"
+		roster.slots = slots
+		holder.add_child(roster)
+		var rm := Node.new()
+		rm.set_script(RoundManagerType)
+		rm.player_paths = paths
+		var scenes: Array[PackedScene] = [load(path) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+		rm.stage_scenes = scenes
+		rm.arena_container_path = NodePath("../Container")
+		rm.controller_server_path = NodePath("../Roster")
+		rm.camera_path = NodePath("../Camera")
+		rm.min_players_to_start = 2
+		rm.round_end_pause_sec = 0.0
+		rm.stage_title_sec = 0.0
+		await process_frame
+		camera.make_current()
+		holder.add_child(rm)
+
+		var live: bool = await _await_condition(func() -> bool:
+			return _all_alive(players) and _active_stage(container) != null, ROUND_LOOP_TIMEOUT_MSEC)
+		if not live:
+			failures.append("%s: the eight-player round never started" % path.get_file())
+			await _teardown(holder)
+			continue
+		await _await_ticks(FOUR_SPAWN_SETTLE_TICKS)
+		var instance: Node2D = _active_stage(container)
+		var view: Rect2 = instance.get_view_rect()
+		var zoom: float = StageType.zoom_for_view(view.size)
+		var shown := Rect2(camera.global_position - CAMERA_VIEW.size / camera.zoom * 0.5, CAMERA_VIEW.size / camera.zoom)
+		print("      %s: view %s, camera zoom %.3f at %s, shows %s" % [
+			path.get_file(), view.size, camera.zoom.x, camera.global_position, shown])
+		if zoom >= 1.0:
+			failures.append("%s: a large stage whose view needs zoom %.3f" % [path.get_file(), zoom])
+		if absf(camera.zoom.x - zoom) > LARGE_ZOOM_TOLERANCE or absf(camera.zoom.y - zoom) > LARGE_ZOOM_TOLERANCE:
+			failures.append("%s: camera zoom %s, expected %.3f to fit the view %s" % [path.get_file(), camera.zoom, zoom, view.size])
+		if shown.position.distance_to(view.position) > LARGE_VIEW_TOLERANCE or shown.size.distance_to(view.size) > LARGE_VIEW_TOLERANCE:
+			failures.append("%s: the camera shows %s, not the stage's view %s" % [path.get_file(), shown, view])
+		if absf(camera.get_screen_center_position().distance_to(view.get_center())) > LARGE_VIEW_TOLERANCE:
+			failures.append("%s: the screen is centred on %s, not the view's centre %s" % [
+				path.get_file(), camera.get_screen_center_position(), view.get_center()])
+
+		var on_screen: Rect2 = shown.grow(-PLAYER_RADIUS)
+		for i in players.size():
+			if not players[i].alive:
+				failures.append("%s: P%d died within %d ticks of spawning" % [path.get_file(), i + 1, FOUR_SPAWN_SETTLE_TICKS])
+			elif not on_screen.has_point(players[i].global_position):
+				failures.append("%s: P%d at %s is not wholly on screen %s" % [path.get_file(), i + 1, players[i].global_position, shown])
+
+		var background: Node2D = instance.get_background()
+		if background == null or not background.get_sky_rect().encloses(shown):
+			failures.append("%s: the backdrop %s does not cover what the camera shows %s" % [
+				path.get_file(), background.get_sky_rect() if background != null else Rect2(), shown])
+
+		var zone: Node2D = instance.get_node_or_null("KillZone") as Node2D
+		var surface: Polygon2D = zone.get_node_or_null("RisingSurface") as Polygon2D if zone != null else null
+		if surface == null:
+			failures.append("%s: no rising lava surface once the round started" % path.get_file())
+		else:
+			var lava := Rect2(surface.global_transform * surface.polygon[0], Vector2.ZERO)
+			for point: Vector2 in surface.polygon:
+				lava = lava.expand(surface.global_transform * point)
+			if lava.position.x > shown.position.x or lava.end.x < shown.end.x or lava.end.y < shown.end.y:
+				failures.append("%s: the lava %s does not reach across and below what the camera shows %s" % [
+					path.get_file(), lava, shown])
+
+		# Name tags are laid out every frame; drive one more tick to be sure.
+		rm._tick_name_tags()
+		for i in players.size():
+			var tag: Label = rm.name_tag(i)
+			if tag == null or not tag.visible:
+				failures.append("%s: P%d has no name tag showing" % [path.get_file(), i + 1])
+				continue
+			if absf(tag.scale.x - 1.0 / zoom) > LARGE_ZOOM_TOLERANCE:
+				failures.append("%s: P%d's name tag is scaled %.3f, expected %.3f to read at its usual size" % [
+					path.get_file(), i + 1, tag.scale.x, 1.0 / zoom])
+			var tag_centre: float = tag.position.x + tag.get_minimum_size().x * tag.scale.x * 0.5
+			if absf(tag_centre - players[i].global_position.x) > 1.0:
+				failures.append("%s: P%d's name tag is centred at x %.1f, the body at %.1f" % [
+					path.get_file(), i + 1, tag_centre, players[i].global_position.x])
+
+		# A normal stage and two players: back to the unzoomed view.
+		roster.slots = [0, 1]
+		rm.set("_round_player_count", 2)
+		rm._swap_stage()
+		if camera.zoom != Vector2.ONE or camera.global_position.distance_to(Vector2.ZERO) > LARGE_VIEW_TOLERANCE:
+			failures.append("%s: on a normal stage afterwards the camera stayed at zoom %s, %s" % [
+				path.get_file(), camera.zoom, camera.global_position])
+		await _teardown(holder)
+
 	_scenario_completed = true
 	return failures

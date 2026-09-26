@@ -26,6 +26,20 @@ const StageBackgroundType := preload("res://scripts/StageBackground.gd")
 
 const BACKGROUND_NODE_NAME: String = "Background"
 
+## What the Main camera shows of a normal stage (issue #144): the project's
+## 1600x900 viewport at zoom 1, centred on the stage's origin.
+const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
+
+## How much of the world the camera must show for this stage, centred on its
+## origin (issue #144). The default is the normal view; a large stage built
+## for five to eight players declares a bigger one, and RoundManager zooms the
+## Main camera out until all of it fits. Keep it 16:9 like the screen, or the
+## camera shows extra on the other axis (see `get_view_rect()`). A stage whose
+## view is bigger than the default on either axis is a large stage, which the
+## rotation only offers to rounds of `RoundManager.large_stage_min_players`
+## or more.
+@export var view_size: Vector2 = DEFAULT_VIEW_SIZE
+
 func _ready() -> void:
 	if get_node_or_null(BACKGROUND_NODE_NAME) != null:
 		return
@@ -33,10 +47,47 @@ func _ready() -> void:
 	background.name = BACKGROUND_NODE_NAME
 	var seed_value: int = background_seed if background_seed != 0 else hash(String(name))
 	background.configure(background_sky_top, background_sky_bottom, background_silhouette,
-		background_layers, seed_value)
+		background_layers, seed_value, get_view_rect().size)
 	add_child(background)
 	# First in tree order as well as lowest in z, belt and braces.
 	move_child(background, 0)
+
+## The camera zoom that fits `view` inside the default view: 1 for a normal
+## stage, under 1 for a large one. Uniform, so nothing is stretched.
+static func zoom_for_view(view: Vector2) -> float:
+	if view.x <= 0.0 or view.y <= 0.0:
+		return 1.0
+	return minf(DEFAULT_VIEW_SIZE.x / view.x, DEFAULT_VIEW_SIZE.y / view.y)
+
+## What the Main camera actually shows of this stage, in world coordinates:
+## `view_size` centred on the stage's origin, widened on one axis to the
+## screen's 16:9 when the declared size is another shape. The spawn, terrain
+## and background checks all measure against this.
+func get_view_rect() -> Rect2:
+	var shown: Vector2 = DEFAULT_VIEW_SIZE / zoom_for_view(view_size)
+	var origin: Vector2 = global_position if is_inside_tree() else position
+	return Rect2(origin - shown * 0.5, shown)
+
+## Whether this stage is bigger than the normal view (issue #144).
+func is_large() -> bool:
+	return is_large_view(view_size)
+
+static func is_large_view(view: Vector2) -> bool:
+	return view.x > DEFAULT_VIEW_SIZE.x or view.y > DEFAULT_VIEW_SIZE.y
+
+## A stage scene's `view_size`, read off its packed root without instancing
+## it, so the rotation can skip a large stage it is not going to play. A
+## scene that never sets it (every normal stage) has the default.
+static func view_size_of(scene: PackedScene) -> Vector2:
+	if scene == null:
+		return DEFAULT_VIEW_SIZE
+	var state: SceneState = scene.get_state()
+	if state.get_node_count() == 0:
+		return DEFAULT_VIEW_SIZE
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"view_size":
+			return state.get_node_property_value(0, p)
+	return DEFAULT_VIEW_SIZE
 
 ## The backdrop built in `_ready()`, or null outside the tree.
 func get_background() -> Node2D:

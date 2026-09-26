@@ -21,9 +21,13 @@ extends Node2D
 
 const Z: int = -1000
 
-## What the fixed Camera2D in scenes/Main.tscn shows (1600x900, no zoom),
-## plus a margin all round so a parallax shift or a drifting cloud never
-## shows an edge.
+## What the Camera2D in scenes/Main.tscn shows of a normal stage (1600x900,
+## no zoom), plus a margin all round so a parallax shift or a drifting cloud
+## never shows an edge. A large stage (issue #144) passes its own, bigger view
+## to `configure()`, since the camera zooms out to show all of it; the
+## backdrop is still built at this size and then scaled up by the same factor
+## the camera zooms out by, so its skyline fills a large stage's screen
+## exactly as it fills a normal one's instead of shrinking into a strip.
 const VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 const MARGIN: float = 160.0
 
@@ -48,6 +52,10 @@ var sky_bottom: Color = Color(0.2, 0.22, 0.28)
 var silhouette: Color = Color(0.13, 0.14, 0.19)
 var layer_kinds: PackedStringArray = ["clouds", "mountains", "hills"]
 var rng_seed: int = 0
+## The world area the camera shows while this backdrop's stage plays. 16:9,
+## as `Stage.get_view_rect()` gives it, so one factor scales both axes.
+var view_size: Vector2 = VIEW_SIZE
+var _scale: float = 1.0
 
 ## The layer nodes, far to near, and each one's parallax factor and drift.
 var _layers: Array[Node2D] = []
@@ -56,7 +64,9 @@ var _drift: PackedFloat32Array = []
 var _time: float = 0.0
 var _sky: Polygon2D
 
-func configure(top: Color, bottom: Color, tint: Color, kinds: PackedStringArray, seed_value: int) -> void:
+func configure(top: Color, bottom: Color, tint: Color, kinds: PackedStringArray, seed_value: int,
+		view: Vector2 = VIEW_SIZE) -> void:
+	view_size = view
 	sky_top = top
 	sky_bottom = bottom
 	silhouette = tint
@@ -69,6 +79,8 @@ func _ready() -> void:
 	# Moved in _process, off the physics tick, so it must not be physics
 	# interpolated (#108 turned that on project-wide); the layers inherit this.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_scale = maxf(view_size.x / VIEW_SIZE.x, view_size.y / VIEW_SIZE.y)
+	scale = Vector2(_scale, _scale)
 	_build()
 	_follow_view(0.0)
 
@@ -77,7 +89,7 @@ func _process(delta: float) -> void:
 
 ## The sky, in global coordinates -- what the scenario checks covers the view.
 func get_sky_rect() -> Rect2:
-	var half: Vector2 = VIEW_SIZE * 0.5 + Vector2(MARGIN, MARGIN)
+	var half: Vector2 = (VIEW_SIZE * 0.5 + Vector2(MARGIN, MARGIN)) * _scale
 	return Rect2(global_position - half, half * 2.0)
 
 ## Every colour this backdrop draws with, for the contrast check.
@@ -93,9 +105,10 @@ func get_layer_count() -> int:
 	return _layers.size()
 
 ## Centres the backdrop on what the camera sees and shifts each layer by its
-## share of how far that is from the stage's own origin. The camera in Main is
-## fixed, so in play this only ever moves the clouds; it is here so a stage
-## viewed off-centre (or a camera that moves later) still gets depth.
+## share of how far that is from the stage's own origin. The camera in Main
+## only moves between rounds, to centre on each stage's view (issue #144), so
+## in play this only ever moves the clouds; it is here so a stage viewed
+## off-centre (or a camera that moves later) still gets depth.
 func _follow_view(delta: float) -> void:
 	_time += delta
 	var stage_origin: Vector2 = get_parent().global_position if get_parent() is Node2D else Vector2.ZERO
@@ -107,7 +120,10 @@ func _follow_view(delta: float) -> void:
 	var offset: Vector2 = centre - stage_origin
 	var wrap: float = VIEW_SIZE.x + 2.0 * MARGIN
 	for i in _layers.size():
-		var shift: Vector2 = -offset * _parallax[i]
+		# In the backdrop's own (scaled) units, so a camera move shifts each
+		# layer by the same share of the screen on a large stage as on a
+		# normal one.
+		var shift: Vector2 = -offset * _parallax[i] / _scale
 		if _drift[i] != 0.0:
 			shift.x += fposmod(_time * _drift[i], wrap) - wrap
 		_layers[i].position = shift
