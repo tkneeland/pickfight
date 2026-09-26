@@ -1,6 +1,0 @@
-# Full suite: feat/issue-152-bots at 9421522, rebased on main d00dba3, 4 parallel shards
-
-boot grep exit 1 (1 = clean);      176 scenarios in 4 shards
-TOTAL 176 passed, 0 failed of      176
-
-[exited with code 0]
