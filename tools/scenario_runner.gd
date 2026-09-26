@@ -199,6 +199,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"eight_phones_join_and_play_a_round",
 	"spawns_shared_when_stage_has_fewer_than_players",
 	"controller_page_prompts_for_nickname_first",
+	"music_loops_have_no_silent_seam",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -923,6 +924,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_spawns_shared_when_stage_has_fewer_than_players()
 		"controller_page_prompts_for_nickname_first":
 			return await _scenario_controller_page_prompts_for_nickname_first()
+		"music_loops_have_no_silent_seam":
+			return await _scenario_music_loops_have_no_silent_seam()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -12699,3 +12702,56 @@ func _js_function_body(page: String, name: String) -> String:
 			if depth == 0:
 				return page.substr(open, i - open + 1)
 	return ""
+## Issue #140: every music track loops without an audible gap. Each track is
+## decoded and its loop window (Music.loop_window) is checked at the seam: the
+## silence left at the end of the window plus at its start stays under
+## MUSIC_SEAM_MAX_SILENCE_SEC, and the window cuts off almost no sound.
+const MUSIC_SEAM_RATE: int = 44100
+const MUSIC_SEAM_THRESHOLD: float = 0.003
+const MUSIC_SEAM_MAX_SILENCE_SEC: float = 0.03
+const MUSIC_SEAM_MAX_CUT_SEC: float = 0.01
+
+func _scenario_music_loops_have_no_silent_seam() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	for track: String in music.TRACKS.keys():
+		var path: String = music.DIR + String(music.TRACKS[track]["file"])
+		var stream := AudioStreamOggVorbis.load_from_file(ProjectSettings.globalize_path(path))
+		if stream == null:
+			failures.append("%s: could not load %s" % [track, path])
+			continue
+		var playback: AudioStreamPlayback = stream.instantiate_playback()
+		playback.start(0.0)
+		var frames: PackedVector2Array = playback.mix_audio(1.0, int(stream.get_length() * MUSIC_SEAM_RATE))
+		playback.stop()
+		var window: Vector2 = music.loop_window(track)
+		var first: int = int(window.x * MUSIC_SEAM_RATE)
+		var last: int = mini(int(window.y * MUSIC_SEAM_RATE), frames.size()) - 1
+		var loud := func(k: int) -> bool:
+			return maxf(absf(frames[k].x), absf(frames[k].y)) >= MUSIC_SEAM_THRESHOLD
+		var lead: int = 0
+		while first + lead <= last and not loud.call(first + lead):
+			lead += 1
+		var tail: int = 0
+		while last - tail >= first and not loud.call(last - tail):
+			tail += 1
+		var cut: int = 0
+		for k in range(0, first):
+			if loud.call(k):
+				cut += 1
+		for k in range(last + 1, frames.size()):
+			if loud.call(k):
+				cut += 1
+		var silence_sec: float = float(lead + tail) / MUSIC_SEAM_RATE
+		var cut_sec: float = float(cut) / MUSIC_SEAM_RATE
+		print("      %s: window %.3f..%.3f s of %.3f, seam silence %.1f ms, sound cut %.1f ms" % [
+			track, window.x, window.y, stream.get_length(), silence_sec * 1000.0, cut_sec * 1000.0])
+		if silence_sec > MUSIC_SEAM_MAX_SILENCE_SEC:
+			failures.append("%s: %.0f ms of silence at the loop seam, over %.0f" % [track, silence_sec * 1000.0, MUSIC_SEAM_MAX_SILENCE_SEC * 1000.0])
+		if cut_sec > MUSIC_SEAM_MAX_CUT_SEC:
+			failures.append("%s: the loop window cuts %.0f ms of sound" % [track, cut_sec * 1000.0])
+	_scenario_completed = true
+	return failures

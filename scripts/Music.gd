@@ -34,10 +34,14 @@ const DIR: String = "res://assets/music/"
 
 ## Every track, by name. `kind` is `lobby` or `fight`, and `db` is its base
 ## level. The fight rotation is every `fight` track, in this order.
+## Optional `loop_start` / `tail_trim` (seconds) cut silence off the seam of a
+## file that was not cut to loop (issue #140): playback starts, and every loop
+## comes back, at `loop_start`, and it jumps back `tail_trim` before the end.
 const TRACKS: Dictionary = {
 	"lobby": {"file": "lobby_snowfall_looped.ogg", "kind": "lobby", "db": -8.0},
 	"fight_fast": {"file": "fight_fast_fight_looped.ogg", "kind": "fight", "db": -8.0},
-	"fight_mars": {"file": "fight_nes_shooter_mars.ogg", "kind": "fight", "db": -9.0},
+	"fight_mars": {"file": "fight_nes_shooter_mars.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.08, "tail_trim": 0.075},
 }
 
 const CROSSFADE_SEC: float = 1.0
@@ -129,6 +133,7 @@ func _process(delta: float) -> void:
 		voice.volume_db = _track_db[i] + linear_to_db(maxf(_levels[i], SILENT)) + _duck_db
 		if _targets[i] == 0.0 and _levels[i] <= 0.0 and voice.playing:
 			voice.stop()
+	_wrap_trimmed_loop()
 
 # --- The API the lobby/match flow calls -------------------------------------
 
@@ -290,7 +295,32 @@ func _switch_to(track: String) -> void:
 	_levels[_active] = 0.0
 	_targets[_active] = 1.0
 	voice.volume_db = _track_db[_active] + linear_to_db(SILENT) + _duck_db
-	voice.play()
+	voice.play(loop_window(track).x)
+
+## The part of `track` that loops, as (start, end) seconds into the file. The
+## end is the file's length, less any `tail_trim`; 0 when it is not loaded.
+func loop_window(track: String) -> Vector2:
+	if not TRACKS.has(track):
+		return Vector2.ZERO
+	var info: Dictionary = TRACKS[track]
+	var stream: AudioStream = _stream_for(track)
+	var length: float = stream.get_length() if stream != null else 0.0
+	var end: float = maxf(length - float(info.get("tail_trim", 0.0)), 0.0)
+	return Vector2(float(info.get("loop_start", 0.0)), end)
+
+# A trimmed track jumps back to its loop start before its silent tail, rather
+# than letting the stream play the silence out and wrap on its own.
+func _wrap_trimmed_loop() -> void:
+	if _current == "" or not TRACKS.has(_current) or not TRACKS[_current].has("tail_trim"):
+		return
+	var voice: AudioStreamPlayer = _voices[_active]
+	if not voice.playing:
+		return
+	var window: Vector2 = loop_window(_current)
+	# The playback position only moves once per mix, so add the time since it.
+	var position: float = voice.get_playback_position() + AudioServer.get_time_since_last_mix()
+	if window.y > window.x and position >= window.y:
+		voice.seek(window.x)
 
 func _step_duck(delta: float) -> void:
 	if _duck_hold_left > 0.0:
@@ -317,6 +347,7 @@ func _stream_for(track: String) -> AudioStream:
 		var ogg := AudioStreamOggVorbis.load_from_file(ProjectSettings.globalize_path(path))
 		if ogg != null:
 			ogg.loop = true
+			ogg.loop_offset = float(TRACKS[track].get("loop_start", 0.0))
 		stream = ogg
 	elif ResourceLoader.exists(path):
 		stream = load(path) as AudioStream
