@@ -1,13 +1,13 @@
 # Issue #187: one match seed for every gameplay RNG
 
-Run on branch `feat/issue-187-match-seed`, based on main `33cb339`.
+Run on branch `feat/issue-187-match-seed`, rebased onto main `30f8587` (which includes #150, the new weapons). It was first built and run green on `33cb339`, at 220/220.
 
 ## Full suite
 
 `full-suite.txt`: every scenario in `SCENARIO_NAMES`, run as 5 parallel shards of
 `--scenarios=` under `--fixed-fps 60`.
 
-Result: **220 passed, 0 failed, 220 total**.
+Result: **232 passed, 0 failed, 232 total**.
 
 The fresh-clone boot check (`godot --headless --path <clone> --quit`) prints one
 ERROR, qrencode "Could not create child process". That is environment-only: this
@@ -22,9 +22,13 @@ stirred before each run. Both runs must give the same KO order, KO ticks within
 pickups and meteors. It also checks `--seed=N` parsing, and that the derived
 streams repeat per seed and differ per subsystem.
 
-- It passed 3 times run on its own, and once more in the full suite. Every run
-  gave KOs `[[0, 335], [2, 382]]` both times, with a worst position gap of
-  0.05 to 0.07 px.
+- On `33cb339` it passed 3 times on its own and once in the full suite. On
+  `30f8587` it passed 3 more times on its own and again in the full suite.
+  Every run gave KOs `[[0, 335], [2, 382]]` both times, with a worst position
+  gap of 0.05 to 0.22 px.
+- With #150 merged, the Weapon Roulette pool in
+  `round_modifier_draws_follow_modifier_seed` draws grapple and boomerang as
+  well. It still repeats exactly per seed.
 - Against main's gameplay scripts, it fails. The main scripts were checked out
   over the branch, and the scenario was edited to set `match_seed` duck-typed
   and skip the unit checks. Result: KO order `[[2, 355], [0, 355]]` then
@@ -36,5 +40,5 @@ between two copies of a scene in one process. The runs agree exactly until the
 first contact between two players (around tick 40). After that they differ by
 float rounding.
 
-`test-results/issue-176/` is still here. The permission policy blocked `git rm`
-of it, so it was left in place.
+`test-results/issue-150/` is still here. The permission policy blocked `git rm`
+of the previous evidence folder, so it was left in place.
