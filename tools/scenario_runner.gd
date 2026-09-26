@@ -204,6 +204,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_phone_controls_over_websocket",
 	"lobby_how_to_play_on_host_screen_only",
 	"controller_page_host_menu_is_guarded",
+	"match_stats_ko_credit_and_awards",
+	"kill_feed_credits_hits_and_awards_at_match_end",
+	"kill_feed_and_awards_fit_eight_long_names",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -938,6 +941,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_how_to_play_on_host_screen_only()
 		"controller_page_host_menu_is_guarded":
 			return await _scenario_controller_page_host_menu_is_guarded()
+		"match_stats_ko_credit_and_awards":
+			return await _scenario_match_stats_ko_credit_and_awards()
+		"kill_feed_credits_hits_and_awards_at_match_end":
+			return await _scenario_kill_feed_credits_hits_and_awards_at_match_end()
+		"kill_feed_and_awards_fit_eight_long_names":
+			return await _scenario_kill_feed_and_awards_fit_eight_long_names()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13163,4 +13172,226 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 	if not page.contains('var KICKED_REASON = "%s";' % ControllerServerScript.KICKED_REASON):
 		failures.append("the page's kick reason does not match ControllerServer.KICKED_REASON")
 	_scenario_completed = true
+	return failures
+
+# --- Kill feed, KO credit and match awards (issue #148) -------------------------
+
+const MatchStatsScript := preload("res://scripts/MatchStats.gd")
+const KillFeedScript := preload("res://scripts/KillFeed.gd")
+## Twelve characters (ControllerServer.MAX_NAME_LENGTH), wide ones.
+const LONG_NAME_148: String = "WWWWWWWWWWWW"
+
+## Issue #148, the rules on their own with a fake clock: the last hitter within
+## 3 s gets the KO, a hit 1 ms later than that is a self-KO, a victim's own
+## report (a falling rock) is no hit, two KOs within the window are a double,
+## the first credited KO is first blood, and the awards pick one player per
+## category (most KOs, most self-KOs, longest alive). A new match wipes it.
+func _scenario_match_stats_ko_credit_and_awards() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	stats.record_hit(0, 1, 20.0, 1000)
+	var ko: Dictionary = stats.record_elimination(1, 1000 + MatchStatsScript.KO_CREDIT_WINDOW_MSEC)
+	if ko["killer"] != 0 or not ko["first_blood"] or ko["streak"] != 1:
+		failures.append("a hit exactly 3 s before the KO: %s, expected slot 0's first blood" % [ko])
+	stats.record_hit(0, 2, 0.0, 2000)
+	ko = stats.record_elimination(2, 2000 + MatchStatsScript.KO_CREDIT_WINDOW_MSEC + 1)
+	if ko["killer"] != -1:
+		failures.append("a hit 3.001 s before the KO still credited slot %d" % ko["killer"])
+	stats.record_hit(3, 3, 50.0, 6000)
+	ko = stats.record_elimination(3, 6100)
+	if ko["killer"] != -1:
+		failures.append("a victim's own report (a falling rock) credited slot %d" % ko["killer"])
+	stats.end_round(9000)
+	stats.begin_round([0, 1, 2], 10000)
+	stats.record_hit(1, 0, 10.0, 10500)
+	stats.record_hit(0, 1, 0.0, 11000)
+	stats.record_hit(0, 2, 30.0, 11200)
+	var first: Dictionary = stats.record_elimination(1, 11500)
+	var second: Dictionary = stats.record_elimination(2, 12000)
+	if second["killer"] != 0 or second["streak"] != 2 or first["first_blood"] or second["first_blood"]:
+		failures.append("two KOs 0.5 s apart: %s then %s, expected a double by slot 0 and no first blood" % [first, second])
+	stats.end_round(14000)
+	print("      kos %s, self-KOs %s, alive %s" % [stats.kos, stats.self_kos, stats.survival_msec])
+	var awards: Array[Dictionary] = stats.awards([0, 1, 2, 3])
+	var picked: Dictionary = {}
+	for award: Dictionary in awards:
+		picked[award["category"]] = award
+		print("      %s: %s -> slot %d (%s)" % [award["category"], award["title"], award["slot"], award["detail"]])
+	var expected: Dictionary = {"COMBAT": [0, "3 KOs"], "CLUMSY": [2, "1 self-KO"], "SURVIVOR": [0, "0:13 alive"]}
+	for category: String in expected:
+		var want: Array = expected[category]
+		if not picked.has(category):
+			failures.append("no %s award" % category)
+		elif picked[category]["slot"] != want[0] or picked[category]["detail"] != want[1]:
+			failures.append("%s went to %s, expected slot %d with '%s'" % [category, picked[category], want[0], want[1]])
+	if awards.size() != 3:
+		failures.append("%d awards, expected 3" % awards.size())
+	stats.begin_match()
+	if not stats.awards([0, 1, 2, 3]).is_empty() or stats.total_kos != 0:
+		failures.append("a new match kept the last one's numbers")
+	_scenario_completed = true
+	return failures
+
+## Issue #148 through the real RoundManager and players: a shove (a 0-damage
+## strike) then a ring-out credits the shover; a lethal strike -- which
+## eliminates before it is reported -- credits the striker; a falling rock is a
+## self-KO. The feed names them by nickname, banners mark first blood, a
+## double KO and the last one standing, and the victory screen shows the
+## three awards under the podium.
+func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(2)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed148"
+	(loop["stage"] as Node2D).add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	rm.spawn_protection_sec = 0.0
+	roster.slots.assign([0, 1, 2])
+	roster.names = {0: "Alice", 1: "Bob", 2: "Carl"}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	var all_alive := func() -> bool: return players[0].alive and players[1].alive and players[2].alive
+	if not await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 1 never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	# A lethal strike, in Player._land_strike's order: damage (which eliminates) first, then the report.
+	players[1].take_damage(1000.0)
+	players[0].strike_landed.emit(players[1], 1000.0, players[1].global_position, true)
+	await _await_ticks(2)
+	# A falling rock reports on the victim's own strike_landed.
+	players[2].strike_landed.emit(players[2], 10.0, players[2].global_position, false)
+	players[2].eliminate()
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var lines: PackedStringArray = feed.entries()
+	print("      round 1 feed: %s" % [lines])
+	if lines != PackedStringArray(["Alice KO Bob", "Carl self-KO"]):
+		failures.append("round 1 feed read %s, expected Alice KO Bob then Carl self-KO" % [lines])
+	var feed_rect: Rect2 = feed.feed().get_global_rect()
+	if feed_rect.end.x > feed.get_global_rect().end.x or feed_rect.position.y < 192.0:
+		failures.append("the feed sits at %s, not top right under the QR code" % feed_rect)
+
+	if not await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 2 never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	# Shoves: 0-damage strikes still earn the KO when a ring-out follows.
+	players[0].strike_landed.emit(players[1], 0.0, players[1].global_position, false)
+	players[0].strike_landed.emit(players[2], 0.0, players[2].global_position, false)
+	players[1].eliminate()
+	await _await_ticks(2)
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("two wins never reached the victory screen ('%s')" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	lines = feed.entries()
+	print("      feed: %s" % [lines])
+	print("      banners: %s" % [feed.banner_log])
+	if lines.size() < 4 or lines[2] != "Alice KO Bob" or lines[3] != "Alice KO Carl":
+		failures.append("round 2 feed read %s, expected Alice KO Bob then Alice KO Carl" % [lines])
+	var want_banners := PackedStringArray(["FIRST BLOOD|Alice", "LAST ONE STANDING|Alice", "DOUBLE KO!|Alice", "LAST ONE STANDING|Alice"])
+	if feed.banner_log != want_banners:
+		failures.append("banners were %s, expected %s" % [feed.banner_log, want_banners])
+	await _await_ticks(2)
+	var row: Control = rm.awards_row()
+	if row == null or not rm.victory_panel().visible:
+		failures.append("the victory screen shows no awards")
+	else:
+		var texts: PackedStringArray = []
+		for card: Node in row.get_children():
+			var words := PackedStringArray()
+			for label: Node in card.get_children():
+				words.append((label as Label).text)
+			texts.append(" / ".join(words))
+		print("      awards: %s" % [texts])
+		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
+		if texts.size() != 3 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+			failures.append("awards read %s" % [texts])
+		if row.get_index() != rm._podium.get_index() + 1:
+			failures.append("the awards are not directly under the podium")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #148 on the real HUD (scenes/Main.tscn) with eight 12-character
+## names: a full ticker stays on screen, under the join QR code and clear of
+## the round-end scoreboard; the banner fits across the screen and misses the
+## scoreboard too; and the podium plus three wide awards fits 1600 x 900.
+func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var roster := StubLobbyRosterScript.new()
+	roster.name = "StubRoster148"
+	main.add_child(roster)
+	var rm: Node = main.get_node("RoundManager")
+	rm.controller_server_path = NodePath("../StubRoster148")
+	for slot in 8:
+		roster.slots.append(slot)
+		roster.names[slot] = LONG_NAME_148
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var feed: Control = rm.kill_feed()
+	if feed == null:
+		failures.append("Main.tscn's RoundManager has no kill feed")
+		await _teardown(main)
+		RoundManagerScript.modifier_rolls_enabled = true
+		return failures
+	var qr: Control = main.get_node("UI/JoinQrCode") as Control
+	for i in 7:
+		feed.push_ko(LONG_NAME_148, Color.WHITE, LONG_NAME_148, Color.WHITE)
+	feed.show_banner("LAST ONE STANDING", LONG_NAME_148, Color.WHITE)
+	rm._show_scoreboard()
+	await _await_ticks(3)
+	var screen := Rect2(Vector2.ZERO, SCREEN_SIZE)
+	var feed_rect: Rect2 = feed.feed().get_global_rect()
+	var board_rect: Rect2 = (main.get_node("UI/Scoreboard") as Control).get_global_rect()
+	var banner_size: Vector2 = feed.banner().get_combined_minimum_size()
+	var banner_rect := Rect2(feed.banner().get_global_rect().position, Vector2(SCREEN_SIZE.x, banner_size.y))
+	print("      feed %s (%d lines), scoreboard %s, banner %s needs %.0f px wide, QR %s" % [
+		feed_rect, feed.entries().size(), board_rect, banner_rect, banner_size.x, qr.get_global_rect()])
+	if feed.entries().size() != KillFeedScript.MAX_ENTRIES:
+		failures.append("the ticker holds %d lines, expected the cap of %d" % [feed.entries().size(), KillFeedScript.MAX_ENTRIES])
+	if not screen.encloses(feed_rect):
+		failures.append("the full ticker %s runs off the %s screen" % [feed_rect, SCREEN_SIZE])
+	if feed_rect.intersects(qr.get_global_rect()):
+		failures.append("the ticker %s overlaps the join QR code %s" % [feed_rect, qr.get_global_rect()])
+	if feed_rect.intersects(board_rect):
+		failures.append("the ticker %s overlaps the round-end scoreboard %s" % [feed_rect, board_rect])
+	if not screen.encloses(board_rect):
+		failures.append("the eight-entry scoreboard %s runs off the %s screen" % [board_rect, SCREEN_SIZE])
+	if banner_size.x > SCREEN_SIZE.x or not screen.encloses(banner_rect):
+		failures.append("the banner %s (needs %.0f px) runs off the screen" % [banner_rect, banner_size.x])
+	if banner_rect.intersects(board_rect):
+		failures.append("the banner %s overlaps the round-end scoreboard %s" % [banner_rect, board_rect])
+
+	var stats: RefCounted = rm.match_stats()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3, 4, 5, 6, 7], 0)
+	for i in 12:
+		stats.record_hit(1, 2, 44.0, i * 10)
+		stats.record_elimination(2, i * 10)
+		stats.record_elimination(3, i * 10 + 5)
+	stats.end_round(3599000)
+	rm.set("_match_winner_slot", 0)
+	rm._enter_victory()
+	await _await_ticks(3)
+	var row: Control = rm.awards_row()
+	var podium_size: Vector2 = _content_size(rm.victory_panel())
+	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
+	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
+	if row == null or row.get_child_count() != 3:
+		failures.append("the victory screen shows %s awards, expected 3" % (row.get_child_count() if row != null else 0))
+	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
+		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
+	await _teardown(main)
+	RoundManagerScript.modifier_rolls_enabled = true
 	return failures

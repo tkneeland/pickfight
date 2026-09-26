@@ -228,6 +228,7 @@ func _try_start_round() -> void:
 		_in_round.append(slot)
 		if _random_weapons and not keeps_weapon:
 			_players[slot].set_weapon_stats(load(PLAYTEST_WEAPON_PATHS[randi() % PLAYTEST_WEAPON_PATHS.size()]))
+	_ko_round_started()
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1
@@ -315,6 +316,7 @@ func _set_waiting_text(connected: int) -> void:
 ## ended with no winner once `abandoned_round_grace_sec` has passed; every
 ## survivor leaves the round the same way a winner does.
 func _check_round_end() -> void:
+	_flush_kos()
 	var alive_slots: Array[int] = []
 	for slot in _players.size():
 		var player: Variant = _players[slot]
@@ -341,6 +343,7 @@ func _check_round_end() -> void:
 	_clear_pickups()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
+	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
 	_state = State.ROUND_END
 	_pause_until_msec = Time.get_ticks_msec() + int(round_end_pause_sec * 1000.0)
@@ -364,9 +367,12 @@ func _watch_for_buzzes() -> void:
 			player.connect("eliminated", _buzz.bind(slot, "eliminated"))
 		if player.has_signal("strike_landed"):
 			player.connect("strike_landed", _on_strike_landed.bind(slot))
+		if player.has_signal("eliminated"):
+			player.connect("eliminated", _on_ko_eliminated.bind(slot))
 
 ## `attacker_slot` comes last because that is where the signal's bind puts it.
 func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
+	_ko_record_hit(victim, amount, attacker_slot)
 	if amount <= 0.0:
 		return
 	var victim_slot: int = _players.find(victim)
@@ -1016,6 +1022,7 @@ func _begin_match() -> void:
 	for slot in _scores.size():
 		_scores[slot] = 0
 	_update_score_label()
+	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
 	_lobby_panel.visible = false
@@ -1151,6 +1158,7 @@ func _refresh_victory() -> void:
 		_victory_title.add_theme_color_override("font_color", _slot_color(_match_winner_slot))
 	else:
 		_victory_title.text = "MATCH OVER"
+	_refresh_awards(slots)
 
 func _build_lobby_ui() -> void:
 	if _lobby_layer != null:
@@ -1472,3 +1480,93 @@ func _show_pause_banner(on: bool) -> void:
 		_pause_layer.add_child(_pause_label)
 	_pause_layer.visible = on
 	_pause_label.visible = on
+
+# --- Kill feed, KO credit and match awards (issue #148) ------------------------
+#
+# `MatchStats.gd` keeps the match's numbers and decides who gets each KO: the
+# last player to hit the victim within 3 s, otherwise a self-KO. `KillFeed.gd`
+# (the HUD node at `kill_feed_path`) shows each KO top right and a banner for
+# the big moments. The victory screen gets up to three awards under the podium.
+
+const MatchStatsScript := preload("res://scripts/MatchStats.gd")
+const KillFeedScript := preload("res://scripts/KillFeed.gd")
+
+## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
+## just not shown.
+@export var kill_feed_path: NodePath
+
+var _stats: RefCounted = MatchStatsScript.new()
+## Eliminations not yet credited, as [slot, msec]: `Player.eliminate()` emits
+## `eliminated` before the lethal strike's `strike_landed`, so crediting waits
+## for the end of the frame (or the next round-end check) to see that strike.
+var _pending_kos: Array = []
+
+func match_stats() -> RefCounted:
+	return _stats
+
+func kill_feed() -> Control:
+	return get_node_or_null(kill_feed_path) as Control
+
+## The victory screen's awards row, or null before any.
+func awards_row() -> Control:
+	return _podium.get_parent().get_node_or_null("Awards") as Control if _podium != null else null
+
+func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
+	_stats.record_hit(attacker_slot, _players.find(victim), amount, Time.get_ticks_msec())
+
+func _on_ko_eliminated(slot: int) -> void:
+	if _pending_kos.is_empty():
+		_flush_kos.call_deferred()
+	_pending_kos.append([slot, Time.get_ticks_msec()])
+
+func _flush_kos() -> void:
+	var pending: Array = _pending_kos
+	_pending_kos = []
+	var feed: Control = kill_feed()
+	for entry: Array in pending:
+		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1])
+		if feed == null:
+			continue
+		var victim: int = ko["victim"]
+		var killer: int = ko["killer"]
+		if killer == -1:
+			feed.push_ko("", Color.WHITE, _slot_name(victim), _slot_color(victim))
+			continue
+		feed.push_ko(_slot_name(killer), _slot_color(killer), _slot_name(victim), _slot_color(victim))
+		var streak: int = ko["streak"]
+		if streak >= 2:
+			feed.show_banner(["DOUBLE KO!", "TRIPLE KO!"][streak - 2] if streak <= 3 else "MULTI KO!", _slot_name(killer), _slot_color(killer))
+		elif ko["first_blood"]:
+			feed.show_banner("FIRST BLOOD", _slot_name(killer), _slot_color(killer))
+
+func _ko_match_started() -> void:
+	_stats.begin_match()
+	_pending_kos.clear()
+	var feed: Control = kill_feed()
+	if feed != null:
+		feed.clear()
+
+func _ko_round_started() -> void:
+	_pending_kos.clear()
+	_stats.begin_round(_in_round, Time.get_ticks_msec())
+
+## A round won by the last of three or more is a big moment; one of two
+## winning speaks for itself on the scoreboard.
+func _ko_round_ended(winner_slot: int) -> void:
+	_stats.end_round(Time.get_ticks_msec())
+	var feed: Control = kill_feed()
+	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
+		feed.show_banner("LAST ONE STANDING", _slot_name(winner_slot), _slot_color(winner_slot))
+
+func _refresh_awards(slots: Array[int]) -> void:
+	var stack: Node = _podium.get_parent()
+	var old: Node = stack.get_node_or_null("Awards")
+	if old != null:
+		stack.remove_child(old)
+		old.queue_free()
+	var awards: Array[Dictionary] = _stats.awards(slots)
+	if awards.is_empty():
+		return
+	var row: HBoxContainer = KillFeedScript.award_cards(awards, _slot_name, _slot_color)
+	stack.add_child(row)
+	stack.move_child(row, _podium.get_index() + 1)

@@ -1,0 +1,164 @@
+extends RefCounted
+
+## Per-match numbers behind the kill feed and the match awards (issue #148).
+## Pure bookkeeping: no nodes, no clock of its own. `RoundManager` feeds it
+## hits and eliminations with the time they happened (`Time.get_ticks_msec()`
+## in the game, any number a scenario likes), and asks it who gets a KO and,
+## at match end, who gets which award. Nothing is persisted: `begin_match()`
+## wipes the lot.
+##
+## KO credit: whoever last hit the victim within `KO_CREDIT_WINDOW_MSEC` of the
+## elimination gets the KO; with no such hit it is a self-KO (a ring-out, the
+## lava, a falling rock). A hit counts whether or not it did damage -- a 0-damage
+## swing still shoves, and a shove off the edge is a KO. A victim's own report
+## (a falling rock reports on the victim's own `strike_landed`) is not a hit.
+
+## How recent the last hit must be for its attacker to get the KO.
+const KO_CREDIT_WINDOW_MSEC: int = 3000
+## A second KO by the same player within this of their last is a multi-KO.
+const MULTI_KO_WINDOW_MSEC: int = 3000
+
+## Award categories, one award each at most.
+const COMBAT: String = "COMBAT"
+const CLUMSY: String = "CLUMSY"
+const SURVIVOR: String = "SURVIVOR"
+
+## slot -> number, created on first use so any roster size works.
+var kos: Dictionary = {}
+var self_kos: Dictionary = {}
+var deaths: Dictionary = {}
+var damage_dealt: Dictionary = {}
+var damage_taken: Dictionary = {}
+## Total msec each slot spent alive in rounds this match.
+var survival_msec: Dictionary = {}
+## Credited KOs this match, for "first blood".
+var total_kos: int = 0
+
+## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
+var _last_hit: Dictionary = {}
+## killer slot -> [msec of their last KO, run length].
+var _streak: Dictionary = {}
+## Slots still alive in the current round -> msec they entered it.
+var _alive_since: Dictionary = {}
+var _round_start_msec: int = 0
+
+func begin_match() -> void:
+	kos.clear()
+	self_kos.clear()
+	deaths.clear()
+	damage_dealt.clear()
+	damage_taken.clear()
+	survival_msec.clear()
+	total_kos = 0
+	_last_hit.clear()
+	_streak.clear()
+	_alive_since.clear()
+
+func begin_round(slots: Array, now_msec: int) -> void:
+	_last_hit.clear()
+	_streak.clear()
+	_alive_since.clear()
+	_round_start_msec = now_msec
+	for slot: int in slots:
+		_alive_since[slot] = now_msec
+		survival_msec[slot] = int(survival_msec.get(slot, 0))
+
+## Everyone still standing stops the survival clock here.
+func end_round(now_msec: int) -> void:
+	for slot: int in _alive_since.keys():
+		_add(survival_msec, slot, now_msec - int(_alive_since[slot]))
+	_alive_since.clear()
+
+func record_hit(attacker: int, victim: int, amount: float, now_msec: int) -> void:
+	if attacker < 0 or victim < 0 or attacker == victim:
+		return
+	_last_hit[victim] = {"attacker": attacker, "msec": now_msec}
+	if amount > 0.0:
+		_add(damage_dealt, attacker, amount)
+		_add(damage_taken, victim, amount)
+
+## Records `victim`'s elimination at `now_msec` and returns what happened:
+## {"victim", "killer" (-1 for a self-KO), "streak" (the killer's KOs in a
+## row, 1 for a lone KO), "first_blood" (the match's first credited KO)}.
+func record_elimination(victim: int, now_msec: int) -> Dictionary:
+	_add(deaths, victim, 1)
+	if _alive_since.has(victim):
+		_add(survival_msec, victim, now_msec - int(_alive_since[victim]))
+		_alive_since.erase(victim)
+	var killer: int = -1
+	var hit: Dictionary = _last_hit.get(victim, {})
+	if not hit.is_empty() and now_msec - int(hit["msec"]) <= KO_CREDIT_WINDOW_MSEC:
+		killer = int(hit["attacker"])
+	_last_hit.erase(victim)
+	var result: Dictionary = {"victim": victim, "killer": killer, "streak": 0, "first_blood": false}
+	if killer == -1:
+		_add(self_kos, victim, 1)
+		return result
+	_add(kos, killer, 1)
+	total_kos += 1
+	var run: Array = _streak.get(killer, [-MULTI_KO_WINDOW_MSEC - 1, 0])
+	var streak: int = int(run[1]) + 1 if now_msec - int(run[0]) <= MULTI_KO_WINDOW_MSEC else 1
+	_streak[killer] = [now_msec, streak]
+	result["streak"] = streak
+	result["first_blood"] = total_kos == 1
+	return result
+
+## Up to three awards, one per category, each
+## {"category", "title", "slot", "detail"}. `slots` are the players eligible
+## (the final roster); a category nobody scored in is left out.
+func awards(slots: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var best: int = _leader(slots, kos, damage_dealt, false)
+	if best != -1:
+		var n: int = int(kos[best])
+		out.append(_award(COMBAT, "Top Brawler", best, "%d KO%s" % [n, "" if n == 1 else "s"]))
+	else:
+		best = _leader(slots, damage_dealt, kos, false)
+		if best != -1:
+			out.append(_award(COMBAT, "Heavy Hitter", best, "%d damage" % roundi(float(damage_dealt[best]))))
+	best = _leader(slots, self_kos, deaths, false)
+	if best != -1:
+		var n: int = int(self_kos[best])
+		out.append(_award(CLUMSY, "Butterfingers", best, "%d self-KO%s" % [n, "" if n == 1 else "s"]))
+	else:
+		best = _leader(slots, damage_taken, deaths, false)
+		if best != -1:
+			out.append(_award(CLUMSY, "Punching Bag", best, "%d damage taken" % roundi(float(damage_taken[best]))))
+	best = _leader(slots, survival_msec, deaths, true)
+	if best != -1:
+		out.append(_award(SURVIVOR, "Hard to Kill", best, "%s alive" % _clock(int(survival_msec[best]))))
+	return out
+
+## The slot with the highest positive `primary`; ties go to the higher
+## `secondary` (or the lower, with `secondary_low`), then the lower slot.
+## -1 when nobody scored above zero.
+func _leader(slots: Array, primary: Dictionary, secondary: Dictionary, secondary_low: bool) -> int:
+	var best: int = -1
+	var ordered: Array = slots.duplicate()
+	ordered.sort()
+	for slot: int in ordered:
+		var value: float = float(primary.get(slot, 0))
+		if value <= 0.0:
+			continue
+		if best == -1:
+			best = slot
+			continue
+		var top: float = float(primary.get(best, 0))
+		if value > top:
+			best = slot
+		elif value == top:
+			var a: float = float(secondary.get(slot, 0))
+			var b: float = float(secondary.get(best, 0))
+			if (a < b) if secondary_low else (a > b):
+				best = slot
+	return best
+
+func _award(category: String, title: String, slot: int, detail: String) -> Dictionary:
+	return {"category": category, "title": title, "slot": slot, "detail": detail}
+
+func _add(table: Dictionary, slot: int, amount: Variant) -> void:
+	table[slot] = table.get(slot, 0) + amount
+
+static func _clock(msec: int) -> String:
+	var sec: int = maxi(0, msec) / 1000
+	return "%d:%02d" % [sec / 60, sec % 60]
