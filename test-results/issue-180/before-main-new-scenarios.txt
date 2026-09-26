@@ -1,0 +1,28 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+      pickaxe: rated 6000; stalled push 5995 (100%), stalled turn 5584 (93%)
+      staff: rated 5000; stalled push 4997 (100%), stalled turn 4794 (96%)
+      sword: rated 6000; stalled push 5996 (100%), stalled turn 5826 (97%)
+      axe: rated 11000; stalled push 5665 (51%), stalled turn 10059 (91%)
+      dagger: rated 5500; stalled push 5497 (100%), stalled turn 5406 (98%)
+      boomstick: rated 6000; stalled push 5999 (100%), stalled turn 5996 (100%)
+      grapple: rated 5500; stalled push 5497 (100%), stalled turn 5304 (96%)
+      flail: rated 5500; stalled push 5375 (98%), stalled turn 4865 (88%)
+      boomerang: rated 5500; stalled push 5497 (100%), stalled turn 5273 (96%)
+FAIL  stalled_drive_pushes_rated_force
+      - axe: stalled pushing out, it pushed 5665 of its rated 11000 (wanted at least 85%)
+      axe vs pickaxe (11000 vs 6000 N): axe on the left gave 2.3 px, pickaxe 27.3 px; axe on the right gave 8.4 px, pickaxe 21.0 px
+      axe vs staff (11000 vs 5000 N): axe on the left gave 4.2 px, staff 25.3 px; axe on the right gave 3.2 px, staff 31.8 px
+      axe vs sword (11000 vs 6000 N): axe on the left gave 16.4 px, sword 13.1 px; axe on the right gave 16.4 px, sword 13.2 px
+      axe vs dagger (11000 vs 5500 N): axe on the left gave 4.6 px, dagger 25.0 px; axe on the right gave 4.6 px, dagger 25.0 px
+      axe vs boomstick (11000 vs 6000 N): axe on the left gave 10.1 px, boomstick 19.5 px; axe on the right gave 10.1 px, boomstick 19.5 px
+      axe vs grapple (11000 vs 5500 N): axe on the left gave 4.6 px, grapple 25.0 px; axe on the right gave 4.6 px, grapple 25.0 px
+      axe vs flail (11000 vs 5500 N): axe on the left gave 4.5 px, flail 25.0 px; axe on the right gave 4.5 px, flail 25.0 px
+      axe vs boomerang (11000 vs 5500 N): axe on the left gave 4.6 px, boomerang 25.0 px; axe on the right gave 4.6 px, boomerang 25.0 px
+FAIL  axe_wins_clash_against_every_weapon
+      - axe vs pickaxe, axe on the right: the axe gave 8.4 px of its reach and the pickaxe 21.0 px (wanted the axe to give at least 20.0 px less)
+      - axe vs sword, axe on the left: the axe gave 16.4 px of its reach and the sword 13.1 px (wanted the axe to give at least 20.0 px less)
+      - axe vs sword, axe on the right: the axe gave 16.4 px of its reach and the sword 13.2 px (wanted the axe to give at least 20.0 px less)
+      - axe vs boomstick, axe on the left: the axe gave 10.1 px of its reach and the boomstick 19.5 px (wanted the axe to give at least 20.0 px less)
+      - axe vs boomstick, axe on the right: the axe gave 10.1 px of its reach and the boomstick 19.5 px (wanted the axe to give at least 20.0 px less)
+---
+0 passed, 2 failed, 2 total

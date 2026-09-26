@@ -1,0 +1,38 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      pickaxe: aim settles in 11 ticks, extends in 12 ticks, vaults 163.2 px, climbs the ledge 9/10 times, median 324 ticks (runs [600, 130, 475, 153, 412, 99, 324, 347, 137, 122], 600 = never)
+      staff: aim settles in 12 ticks, extends in 9 ticks, vaults 347.6 px, climbs the ledge 10/10 times, median 81 ticks (runs [90, 69, 81, 107, 80, 77, 77, 79, 82, 81], 600 = never)
+      sword: aim settles in 8 ticks, extends in 4 ticks, vaults 88.2 px, climbs the ledge 8/10 times, median 226 ticks (runs [600, 200, 600, 226, 291, 268, 175, 220, 167, 64], 600 = never)
+      axe: aim settles in 11 ticks, extends in 25 ticks, vaults 123.0 px, climbs the ledge 9/10 times, median 289 ticks (runs [196, 196, 196, 289, 334, 600, 387, 318, 194, 288], 600 = never)
+      dagger: aim settles in 7 ticks, extends in 4 ticks, vaults 119.1 px, climbs the ledge 6/10 times, median 476 ticks (runs [64, 476, 600, 171, 115, 84, 600, 69, 600, 600], 600 = never)
+      boomstick: aim settles in 8 ticks, extends in 3 ticks, vaults 86.1 px, climbs the ledge 4/10 times, median 600 ticks (runs [600, 600, 600, 125, 132, 197, 88, 600, 600, 600], 600 = never)
+      grapple: aim settles in 8 ticks, extends in 5 ticks, vaults 109.9 px, climbs the ledge 6/10 times, median 102 ticks (runs [600, 89, 74, 83, 600, 64, 77, 600, 600, 102], 600 = never)
+      flail: aim settles in 8 ticks, extends in 5 ticks, vaults 83.2 px, climbs the ledge 4/10 times, median 600 ticks (runs [59, 600, 56, 58, 600, 600, 600, 600, 600, 127], 600 = never)
+      boomerang: aim settles in 8 ticks, extends in 4 ticks, vaults 103.2 px, climbs the ledge 7/10 times, median 73 ticks (runs [73, 62, 67, 66, 66, 600, 600, 63, 600, 143], 600 = never)
+PASS  roster_traversal_is_measured
+      dagger against dagger: met -0.7 px off the midline, 18.8 px apart; gave way 23.1 px and 21.7 px
+      axe on the left: met 46.9 px off the midline, 16.2 px apart; axe gave way 26.2 px, dagger 68.0 px
+      axe on the right: met -46.9 px off the midline, 16.2 px apart; dagger gave way 68.0 px, axe 26.2 px
+PASS  heavy_weapon_wins_clash
+      equal weapons: meeting point 0.1 px off the midline, heads 17.7 px apart
+      stronger right: meeting point -25.0 px off the midline, heads 16.7 px apart
+PASS  clash_higher_drive_force_wins
+      planted head slide: shove 0.0 px, push-off 1.0 px
+PASS  planted_head_grips_sideways_push
+      wall release: pressed 8.7 px off, let go after 7 ticks
+      wall move: pressed 8.7 px off, let go after 6 ticks
+      ceiling release: pressed 8.7 px off, let go after 2 ticks
+      ceiling move: pressed 8.7 px off, let go after 1 ticks
+PASS  gripping_head_lets_go
+      pickaxe: answered a drag from 20.0 px out to 70.0 px in 5 ticks
+      staff: answered a drag from 20.0 px out to 70.0 px in 3 ticks
+      sword: answered a drag from 20.0 px out to 70.0 px in 4 ticks
+      axe: answered a drag from 27.6 px out to 70.0 px in 10 ticks
+      dagger: answered a drag from 20.0 px out to 70.0 px in 3 ticks
+      boomstick: answered a drag from 20.0 px out to 70.0 px in 3 ticks
+      grapple: answered a drag from 20.0 px out to 70.0 px in 4 ticks
+      flail: answered a drag from 19.9 px out to 70.0 px in 4 ticks
+      boomerang: answered a drag from 20.0 px out to 70.0 px in 4 ticks
+PASS  weapon_responsiveness_matches_roster
+---
+6 passed, 0 failed, 6 total
