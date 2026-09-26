@@ -283,6 +283,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"new_weapon_hits_credit_the_thrower",
 	"roster_heads_do_not_clip_platform_in_play_new_weapons",
 	"flail_built_clear_of_neighbours",
+	"match_seed_replays_bot_match",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1205,6 +1206,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_clip_platform_in_play_new_weapons()
 		"flail_built_clear_of_neighbours":
 			return await _scenario_flail_built_clear_of_neighbours()
+		"match_seed_replays_bot_match":
+			return await _scenario_match_seed_replays_bot_match()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -18802,4 +18805,187 @@ func _scenario_flail_built_clear_of_neighbours() -> Array[String]:
 	if failures.is_empty() and furthest > reach:
 		failures.append("a ball got %.0f px from its player, past the %.0f px its arm and chain reach: the chain came apart" % [furthest, reach])
 	await _teardown(stage)
+	return failures
+
+# --- Issue #187: one match seed ------------------------------------------------
+
+## The seed both replays run on.
+const MATCH_SEED_TEST_SEED: int = 187187
+## Bots in the replayed match.
+const MATCH_SEED_BOTS: int = 3
+## Budget, in game time, for the first round to start and then to end.
+const MATCH_SEED_ROUND_MSEC: int = 60000
+## Positions are sampled this often (physics ticks) through the round.
+const MATCH_SEED_SAMPLE_TICKS: int = 30
+## How far a player may be from where the other run had it at the same tick.
+## Not zero: every RNG is seeded, but Godot's physics solver is not bit-exact
+## between two copies of a scene in one process (contact order follows the
+## bodies' RIDs). Measured: the runs agree exactly until the first contact
+## between two players, then differ by float rounding (1e-5 px), which the
+## bots' decisions can grow to tens of pixels by the end of the round. A
+## seed that failed to reach any stream would differ by hundreds from the
+## first pickup or meteor on.
+const MATCH_SEED_POSITION_TOLERANCE: float = 48.0
+## A KO may land this many ticks apart between the runs, for the same reason.
+const MATCH_SEED_KO_TICK_TOLERANCE: int = 30
+
+## One short bot match on Flatlands: `--bots=3`, the lobby (which starts by
+## itself), and the first round, with Meteor Shower forced, pickups every 3 s
+## and a lava that comes quickly, so the round ends in KOs well inside the
+## budget. The global RNG is stirred first, so only the match seed can make
+## two runs agree. Returns the KO order ([slot, tick after round start]),
+## the players' positions every MATCH_SEED_SAMPLE_TICKS, the pickups dealt and
+## the meteors' spawn points.
+func _match_seed_bot_run(seed_value: int) -> Dictionary:
+	randomize()
+	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % MATCH_SEED_BOTS])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	rm.match_seed = seed_value
+	rm.forced_modifier = "meteor_shower"
+	rm.kill_zone_grace_sec = 3.0
+	rm.kill_zone_rise_sec = 6.0
+	rm.pickup_spawn_interval_sec = 3.0
+	var started: Array = [false]
+	rm.round_started.connect(func() -> void: started[0] = true)
+	get_root().add_child(main)
+	var result: Dictionary = {"ok": false, "kos": [], "samples": [], "pickups": [], "meteors": [], "seed": -1, "bot_seeds": []}
+	if not await _await_condition(func() -> bool: return started[0], MATCH_SEED_ROUND_MSEC):
+		result["error"] = "the bots' match never started (phase '%s')" % rm.lobby_phase()
+		server.bot_director.remove_bots()
+		await _teardown(main)
+		BotDirectorScript.extra_args = PackedStringArray()
+		return result
+	result["seed"] = rm.match_seed_value()
+	var slots: Array[int] = server.virtual_slots()
+	for slot: int in slots:
+		result["bot_seeds"].append(server.bot_director.bots[slot].rng.seed)
+	var players: Array[RigidBody2D] = []
+	var tick: Array = [0]
+	for slot: int in slots:
+		var player: RigidBody2D = server.player_in_slot(slot) as RigidBody2D
+		players.append(player)
+		player.eliminated.connect(func() -> void: result["kos"].append([slot, tick[0]]))
+	var seen: Dictionary = {}
+	var ticks_left: int = int(MATCH_SEED_ROUND_MSEC / 1000.0 * 60.0)
+	while ticks_left > 0:
+		ticks_left -= 1
+		await physics_frame
+		tick[0] += 1
+		var stage: Node = rm._current_stage
+		if stage != null:
+			for child: Node in stage.get_children():
+				if seen.has(child.get_instance_id()):
+					continue
+				if child.has_method("set_weapon") and child.get("weapon_stats") is Resource:
+					seen[child.get_instance_id()] = true
+					result["pickups"].append("%s@%.0f,%.0f" % [
+						(child.get("weapon_stats") as Resource).resource_path.get_file().get_basename(),
+						(child as Node2D).global_position.x, (child as Node2D).global_position.y])
+				elif child.name.begins_with("Meteor"):
+					seen[child.get_instance_id()] = true
+					result["meteors"].append("%.1f" % (child as Node2D).global_position.x)
+		if tick[0] % MATCH_SEED_SAMPLE_TICKS == 0:
+			var row: Array = []
+			for player: RigidBody2D in players:
+				row.append(player.global_position if player.alive else null)
+			result["samples"].append(row)
+		var alive: int = 0
+		for player: RigidBody2D in players:
+			if player.alive:
+				alive += 1
+		if alive <= 1:
+			result["ok"] = true
+			break
+	if not result["ok"]:
+		result["error"] = "the round had %d KOs and had not ended after %d s" % [result["kos"].size(), MATCH_SEED_ROUND_MSEC / 1000]
+	server.bot_director.remove_bots()
+	await _teardown(main)
+	await _await_ticks(2)
+	BotDirectorScript.extra_args = PackedStringArray()
+	return result
+
+## Issue #187: every gameplay RNG comes from one match seed. The same short
+## bot match run twice on the same seed -- the global RNG stirred in between --
+## has the same KO order at the same ticks, the players within
+## MATCH_SEED_POSITION_TOLERANCE of each other at every sample, and the same
+## pickups and meteors. Also: `--seed=N` parses, and the derived streams are
+## distinct per subsystem and repeat per seed.
+func _scenario_match_seed_replays_bot_match() -> Array[String]:
+	var failures: Array[String] = []
+	var parsed: Dictionary = {"--seed=42": 42, "--seed=0": 0, "--seed=x": -1, "--bots=3": -1, "--seed=": -1}
+	for arg: String in parsed:
+		var got: int = RoundManagerScript.seed_from_args(PackedStringArray([arg]))
+		if got != int(parsed[arg]):
+			failures.append("seed_from_args(['%s']) gave %d, expected %d" % [arg, got, parsed[arg]])
+	var dealer: Node = RoundManagerScript.new()
+	dealer.match_seed = MATCH_SEED_TEST_SEED
+	var first: Array[int] = []
+	for stream_name: String in ["stages", "pickups", "modifiers", "playtest_weapons"]:
+		var a: RandomNumberGenerator = dealer.rng_for(stream_name)
+		var b: RandomNumberGenerator = dealer.rng_for(stream_name)
+		var draw: int = a.randi()
+		if draw != b.randi():
+			failures.append("two '%s' streams on one seed drew differently" % stream_name)
+		if first.has(draw):
+			failures.append("the '%s' stream drew the same as another subsystem's" % stream_name)
+		first.append(draw)
+	if dealer.match_seed_value() != MATCH_SEED_TEST_SEED:
+		failures.append("match_seed %d gave match seed %d" % [MATCH_SEED_TEST_SEED, dealer.match_seed_value()])
+	dealer.free()
+
+	var runs: Array[Dictionary] = []
+	for run in 2:
+		var result: Dictionary = await _match_seed_bot_run(MATCH_SEED_TEST_SEED)
+		print("      run %d on seed %d: KOs %s after %d samples; bot seeds %s; pickups %s; meteors %s" % [
+			run + 1, result["seed"], result["kos"], result["samples"].size(), result["bot_seeds"],
+			", ".join(PackedStringArray(result["pickups"])), ", ".join(PackedStringArray(result["meteors"]))])
+		if not result["ok"]:
+			failures.append("run %d: %s" % [run + 1, result.get("error", "failed")])
+		runs.append(result)
+	if not failures.is_empty():
+		_scenario_completed = true
+		return failures
+	var a: Dictionary = runs[0]
+	var b: Dictionary = runs[1]
+	if a["seed"] != MATCH_SEED_TEST_SEED or b["seed"] != MATCH_SEED_TEST_SEED:
+		failures.append("the matches ran on seeds %d and %d, expected %d" % [a["seed"], b["seed"], MATCH_SEED_TEST_SEED])
+	if a["kos"].is_empty():
+		failures.append("the round ended with no KO, so there is no KO order to compare")
+	var order_a: Array = a["kos"].map(func(ko: Array) -> int: return ko[0])
+	var order_b: Array = b["kos"].map(func(ko: Array) -> int: return ko[0])
+	if order_a != order_b:
+		failures.append("KO order differs between two runs on one seed: %s vs %s" % [a["kos"], b["kos"]])
+	else:
+		for i in order_a.size():
+			if absi(int(a["kos"][i][1]) - int(b["kos"][i][1])) > MATCH_SEED_KO_TICK_TOLERANCE:
+				failures.append("KO %d (slot %d) came at tick %d, then %d" % [i + 1, order_a[i], a["kos"][i][1], b["kos"][i][1]])
+	if a["bot_seeds"] != b["bot_seeds"]:
+		failures.append("the bots were seeded %s, then %s" % [a["bot_seeds"], b["bot_seeds"]])
+	if a["pickups"] != b["pickups"]:
+		failures.append("the pickups differ: %s vs %s" % [a["pickups"], b["pickups"]])
+	if a["meteors"].is_empty() or a["meteors"] != b["meteors"]:
+		failures.append("the meteors differ (or none fell): %s vs %s" % [a["meteors"], b["meteors"]])
+	var worst: float = 0.0
+	var samples: int = mini(a["samples"].size(), b["samples"].size())
+	if a["samples"].size() != b["samples"].size():
+		failures.append("run 1 took %d samples, run 2 %d" % [a["samples"].size(), b["samples"].size()])
+	for i in samples:
+		var row_a: Array = a["samples"][i]
+		var row_b: Array = b["samples"][i]
+		for p in row_a.size():
+			if (row_a[p] == null) != (row_b[p] == null):
+				failures.append("sample %d: player %d is alive in one run only" % [i, p])
+				continue
+			if row_a[p] == null:
+				continue
+			var off: float = (row_a[p] as Vector2).distance_to(row_b[p] as Vector2)
+			worst = maxf(worst, off)
+			if off > MATCH_SEED_POSITION_TOLERANCE and failures.size() < MAX_FAILURES_PER_SCENARIO:
+				failures.append("sample %d (tick %d): player %d at %s, then %s (%.1f px apart)" % [
+					i, (i + 1) * MATCH_SEED_SAMPLE_TICKS, p, row_a[p], row_b[p], off])
+	print("      %d samples compared; worst position gap %.2f px (tolerance %.0f)" % [samples, worst, MATCH_SEED_POSITION_TOLERANCE])
+	_scenario_completed = true
 	return failures

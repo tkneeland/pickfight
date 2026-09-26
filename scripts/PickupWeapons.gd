@@ -42,12 +42,14 @@ static func available_weapons() -> Array[Resource]:
 
 ## One weapon drawn uniformly at random from `candidates`, never the pickaxe
 ## however it got into the list. Null when nothing eligible is offered, rather
-## than inventing a weapon.
-static func choose(candidates: Array[Resource]) -> Resource:
+## than inventing a weapon. Draws from `rng` (issue #187: the match seed's
+## pickup stream); the global RNG only when none is given.
+static func choose(candidates: Array[Resource], rng: RandomNumberGenerator = null) -> Resource:
 	var eligible: Array[Resource] = []
 	for stats: Resource in candidates:
 		if stats != null and stats.resource_path != PICKAXE_PATH:
 			eligible.append(stats)
 	if eligible.is_empty():
 		return null
-	return eligible[randi() % eligible.size()]
+	var roll: int = rng.randi() if rng != null else randi()
+	return eligible[roll % eligible.size()]

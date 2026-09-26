@@ -110,6 +110,15 @@ extends Node
 ## random every run. Its own RNG, never the rotation's, so a roll can never shift a
 ## seeded stage rotation.
 @export var modifier_seed: int = -1
+## The match seed (issue #187), the scenario seam: -1 (the default) takes
+## `--seed=N` from the command line (after `--`), or failing that picks one
+## with `randi()` at match start. Every gameplay RNG -- the stage deal, the
+## pickups, the modifier roll with Weapon Roulette and Meteor Shower, the
+## bots, `--random-weapons` and the hit-sound jitter -- is its own stream
+## derived from it (`rng_for()`), so one logged seed replays a whole match.
+## `rotation_seed` and `modifier_seed`, when set, still win for their own
+## streams, so every scenario written against them deals exactly as before.
+@export var match_seed: int = -1
 
 ## Open on the lobby and play matches ("first to N") instead of an endless
 ## round loop.
@@ -223,12 +232,6 @@ func _ready() -> void:
 	if _random_weapons:
 		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
 	_stage_rotation.demo = _demo
-	var rng := RandomNumberGenerator.new()
-	if rotation_seed == -1:
-		rng.randomize()
-	else:
-		rng.seed = rotation_seed
-	_stage_rotation.rng = rng
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_watch_for_buzzes()
@@ -246,6 +249,10 @@ func _ready() -> void:
 		_scoreboard.visible = false
 	_update_score_label()
 	_set_waiting_text(0)
+	# Without the lobby this whole session is the match. With it, a match
+	# starts at each countdown's end, which seeds (and logs) afresh; this
+	# only makes sure nothing ever draws from an unseeded stream before then.
+	_seed_match(not lobby_enabled)
 	if lobby_enabled:
 		_enter_lobby()
 
@@ -321,7 +328,7 @@ func _try_start_round() -> void:
 		_players[slot].start_round(spawn, keeps_weapon)
 		_in_round.append(slot)
 		if _random_weapons and not keeps_weapon:
-			_players[slot].set_weapon_stats(load(PLAYTEST_WEAPON_PATHS[randi() % PLAYTEST_WEAPON_PATHS.size()]))
+			_players[slot].set_weapon_stats(load(PLAYTEST_WEAPON_PATHS[_playtest_weapon_rng.randi() % PLAYTEST_WEAPON_PATHS.size()]))
 	_ko_round_started()
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
@@ -751,16 +758,24 @@ func _roll_modifier() -> String:
 		return forced_modifier
 	if not modifier_rolls_enabled or modifier_chance <= 0.0:
 		return ""
-	if _modifier_rng == null:
-		_modifier_rng = RandomNumberGenerator.new()
-		if modifier_seed == -1:
-			_modifier_rng.randomize()
-		else:
-			_modifier_rng.seed = modifier_seed
-	if _modifier_rng.randf() >= modifier_chance:
+	var draw: RandomNumberGenerator = modifier_rng()
+	if draw.randf() >= modifier_chance:
 		return ""
 	var ids: PackedStringArray = RoundModifiersScript.IDS
-	return ids[_modifier_rng.randi() % ids.size()]
+	return ids[draw.randi() % ids.size()]
+
+## The one stream the modifier roll and the modifiers' own draws (Weapon
+## Roulette's picks, Meteor Shower's meteors) share (#162), made on first use:
+## seeded from `modifier_seed` when that is set, otherwise the match seed's
+## "modifiers" stream (#187). Setting `_modifier_rng` to null starts it afresh.
+func modifier_rng() -> RandomNumberGenerator:
+	if _modifier_rng == null:
+		if modifier_seed == -1:
+			_modifier_rng = rng_for("modifiers")
+		else:
+			_modifier_rng = RandomNumberGenerator.new()
+			_modifier_rng.seed = modifier_seed
+	return _modifier_rng
 
 func _announce_modifier(title: String) -> void:
 	if _modifier_label == null:
@@ -985,6 +1000,8 @@ func _begin_match() -> void:
 	_last_winner_slot = -1
 	for slot in _scores.size():
 		_scores[slot] = 0
+	# A fresh seed for a fresh match (#187), before anything draws from it.
+	_seed_match(true)
 	# A fresh bag for a fresh match (#163), dealt for its own player count.
 	_stage_rotation.new_bag()
 	_update_score_label()
@@ -1352,3 +1369,67 @@ func _ko_round_ended(winner_slot: int) -> void:
 	var feed: Control = kill_feed()
 	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
 		feed.show_banner("LAST ONE STANDING", _slot_name(winner_slot), _slot_color(winner_slot))
+
+# --- Match seed (issue #187) ---------------------------------------------------
+#
+# One seed per match; every gameplay RNG is a stream derived from it with
+# `hash([seed, name])`, so a stream's draws never depend on how many times
+# another one drew. Cosmetic-only randomness -- Juice's dust and sparks, the
+# death burst's shards, the stage backdrops (already fixed-seeded) -- is left
+# alone: none of it touches a body. The hit-sound jitter is cosmetic too but
+# is seeded anyway, so a replay's sound log matches as well.
+
+const SEED_FLAG: String = "--seed="
+
+## The seed the current match runs on, or -1 before one is picked.
+var _match_seed: int = -1
+## `--random-weapons`' draw.
+var _playtest_weapon_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
+## The seed the current match runs on; picked now if none has been yet (a
+## RoundManager driven by hand, outside the tree).
+func match_seed_value() -> int:
+	if _match_seed == -1:
+		_seed_match(false)
+	return _match_seed
+
+## A fresh generator for the stream `stream_name` of the current match seed.
+func rng_for(stream_name: String) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([match_seed_value(), stream_name])
+	return rng
+
+## The N in `--seed=N` among `args`, or -1 without it (or with junk).
+static func seed_from_args(args: PackedStringArray) -> int:
+	var found: int = -1
+	for arg: String in args:
+		if arg.begins_with(SEED_FLAG) and arg.trim_prefix(SEED_FLAG).is_valid_int():
+			found = arg.trim_prefix(SEED_FLAG).to_int()
+	return found
+
+## Match start: settle the seed (`match_seed`, else `--seed=N`, else
+## `randi()`), give every subsystem its stream, and, with `announce`, log it
+## in one line so a playtest bug can be replayed.
+func _seed_match(announce: bool) -> void:
+	var seed_value: int = match_seed
+	if seed_value == -1:
+		seed_value = seed_from_args(OS.get_cmdline_user_args())
+	if seed_value == -1:
+		seed_value = randi()
+	_match_seed = seed_value
+	var stages: RandomNumberGenerator = rng_for("stages")
+	if rotation_seed != -1:
+		stages.seed = rotation_seed
+	_stage_rotation.rng = stages
+	_pickup_director.rng = rng_for("pickups")
+	_playtest_weapon_rng = rng_for("playtest_weapons")
+	# Remade on first use, from `modifier_seed` or this seed (`modifier_rng()`).
+	_modifier_rng = null
+	var director: Variant = _controller_server.get("bot_director") if _controller_server != null else null
+	if director != null and director.has_method("seed_bots"):
+		director.seed_bots(hash([seed_value, "bots"]))
+	var sfx: Node = get_node_or_null("/root/Sfx") if is_inside_tree() else null
+	if sfx != null and sfx.has_method("reseed"):
+		sfx.reseed(hash([seed_value, "sfx"]))
+	if announce:
+		print("RoundManager: match seed %d (replay with -- --seed=%d)" % [seed_value, seed_value])

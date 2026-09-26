@@ -262,6 +262,9 @@ var _streams: Dictionary = {}
 var _voices: Dictionary = {}
 ## name -> index of the variant played last, to avoid an immediate repeat.
 var _last_variant: Dictionary = {}
+## Pitch jitter and variant picks. Seeded from the match seed at every match
+## start (issue #187, `reseed()`): purely cosmetic, never gameplay, but seeded
+## anyway so a replayed seed also replays the sound log (`_requests`) exactly.
 var _rng := RandomNumberGenerator.new()
 var _recording: bool = false
 var _requests: Array[Dictionary] = []
@@ -296,6 +299,12 @@ var _decode_cancelled: bool = false
 var _decode_task: int = -1
 ## Whether `_streams` has been rebuilt from `_pcm` since decoding finished.
 var _streams_decoded: bool = false
+
+## Restart the jitter and variant stream from `seed_value` (issue #187): the
+## RoundManager calls this with its match seed's "sfx" stream at match start.
+func reseed(seed_value: int) -> void:
+	_rng.seed = seed_value
+	_last_variant.clear()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS

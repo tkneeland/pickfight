@@ -244,6 +244,11 @@ class RoundModifier extends RefCounted:
 		if rng != null:
 			return rng
 		var holder: Object = _round if _round != null and is_instance_valid(_round) else null
+		# Since #187 the round manager makes it itself: from `modifier_seed`
+		# when that is set, otherwise from the match seed's "modifiers" stream.
+		if holder != null and holder.has_method("modifier_rng"):
+			rng = holder.modifier_rng()
+			return rng
 		if holder != null and holder.get("_modifier_rng") is RandomNumberGenerator:
 			rng = holder.get("_modifier_rng")
 			return rng
