@@ -52,7 +52,18 @@ const BALL_DAMP: float = 0.3
 ## ball is ten times a link's mass -- and this is the stop behind the joints,
 ## not the thing that holds the ball: at ordinary swings they hold it well
 ## inside this.
+##
+## A hard stop (issue #192): the ball is held to it after every physics step
+## (`WeaponHead._hold_tether`), so however the joints solve on a given
+## platform the ball never gets further from the head than this.
 const CHAIN_STRETCH_LIMIT: float = 1.12
+## The links' backstop (issue #192): no link is ever left further than this
+## many segments from either neighbour (`_hold_links`). Loose on purpose.
+## The joints stretch a link to about twice its segment in a hard whip, and
+## holding them tighter than that changes the whip: at 1.12, the 15 rad/s whip
+## hit went from 37.5 to 44.7 and a 17-18 rad/s one to about 48. This only
+## stops a chain flying apart.
+const LINK_STRETCH_LIMIT: float = 3.0
 ## Directions tried when laying the chain out at build (`_clear_axis`), and
 ## the room left round the ball.
 const BUILD_DIRECTIONS: int = 12
@@ -85,6 +96,13 @@ var ball_shape: CollisionShape2D
 var ball_visual: Polygon2D
 ## The chain's full length, head anchor to ball centre.
 var length: float = 0.0
+## One link's share of `length`: head to first link, link to link, last link
+## to ball.
+var segment: float = 0.0
+## The direction the chain was laid out in at build. The pin anchors are
+## fixed in each body's own frame from that pose, so `lay_out` turns each
+## body by how far its new direction is from this one.
+var _build_angle: float = 0.0
 ## The ball's velocity going into this tick's step, read by `Player` for a
 ## slow contact the solver reported: see `Player._head_velocity`.
 var ball_velocity: Vector2 = Vector2.ZERO
@@ -97,10 +115,11 @@ func build(owner_player: RigidBody2D, rig: Node2D, from_head: RigidBody2D, stats
 	head = from_head
 	var count: int = maxi(0, int(stats.chain_links))
 	length = maxf(1.0, float(stats.chain_length))
-	var segment: float = length / float(count + 1)
+	segment = length / float(count + 1)
 	var previous: RigidBody2D = head
 	var at: Vector2 = head.global_position
 	axis = _clear_axis(axis, maxf(1.0, float(stats.ball_radius)))
+	_build_angle = axis.angle()
 	for i in count:
 		at += axis * segment
 		var link := RigidBody2D.new()
@@ -159,6 +178,8 @@ func build(owner_player: RigidBody2D, rig: Node2D, from_head: RigidBody2D, stats
 	var head_excludes: Array[Node] = head.get("pair_exclude")
 	head_excludes.append(ball)
 	_pin(rig, previous, ball, previous.global_position)
+	ball.tether_to = head
+	ball.tether_length = length * CHAIN_STRETCH_LIMIT
 
 ## Every body the chain adds to the rig: the links, then the ball.
 func bodies() -> Array[RigidBody2D]:
@@ -173,7 +194,7 @@ func tick(release_time: float) -> void:
 	if ball == null or not ball.is_inside_tree():
 		return
 	_cap_speeds()
-	_limit_stretch()
+	_hold_links()
 	_update_phase(release_time)
 	ball_velocity = ball.linear_velocity
 
@@ -242,19 +263,68 @@ func _cap_speeds() -> void:
 		elif v.length() > MAX_SPEED:
 			body.linear_velocity = v.limit_length(MAX_SPEED)
 
-func _limit_stretch() -> void:
-	var span: Vector2 = ball.global_position - head.global_position
+## The links' backstop (issue #192): before the step, each link is put back
+## within `LINK_STRETCH_LIMIT` segments of the body before it, walking out
+## from the head, then of the body after it, walking back in from the ball,
+## and its speed away from that neighbour is taken off. A link gone
+## non-finite goes back onto its neighbour. The links collide with nothing, so
+## moving them can put nothing inside anything. The joints do the work at
+## every ordinary swing; this only catches a chain flying apart.
+func _hold_links() -> void:
+	if links.is_empty():
+		return
+	var limit: float = segment * LINK_STRETCH_LIMIT
+	var previous: RigidBody2D = head
+	for link: RigidBody2D in links:
+		_hold_within(link, previous, limit)
+		previous = link
+	var next: RigidBody2D = ball
+	for i in range(links.size() - 1, -1, -1):
+		_hold_within(links[i], next, limit)
+		next = links[i]
+
+## Moves `body` onto the circle of `limit` round `anchor` if it is outside it,
+## taking off its speed away from the anchor.
+func _hold_within(body: RigidBody2D, anchor: RigidBody2D, limit: float) -> void:
+	var span: Vector2 = body.global_position - anchor.global_position
 	var distance: float = span.length()
-	if distance <= length * CHAIN_STRETCH_LIMIT or distance == 0.0:
+	if not span.is_finite():
+		_place(body, anchor.global_position, body.global_rotation)
+		body.linear_velocity = anchor.linear_velocity
+		return
+	if distance <= limit or distance == 0.0:
 		return
 	var out: Vector2 = span / distance
-	# Back onto the limit as well as stopped there: with only its outward
-	# speed taken off, a ball whirled fast enough still creeps out by its
-	# sideways speed every tick, and at 4000 px/s ends up three chains out.
-	ball.global_position = head.global_position + out * length * CHAIN_STRETCH_LIMIT
-	var away: float = (ball.linear_velocity - head.linear_velocity).dot(out)
+	_place(body, anchor.global_position + out * limit, body.global_rotation)
+	var away: float = (body.linear_velocity - anchor.linear_velocity).dot(out)
 	if away > 0.0:
-		ball.linear_velocity -= out * away
+		body.linear_velocity -= out * away
+
+## Lays the chain out straight from the head along `direction`, every link
+## and the ball moving at the head's speed and not turning: the chain at rest
+## in a known pose. For a fixture that must not inherit the last swing's
+## chain (the charge sweeps, issue #192); play never calls it.
+func lay_out(direction: Vector2) -> void:
+	if ball == null or direction == Vector2.ZERO:
+		return
+	direction = direction.normalized()
+	var turn: float = direction.angle() - _build_angle
+	var at: Vector2 = head.global_position
+	for body: RigidBody2D in bodies():
+		at += direction * segment
+		_place(body, at, turn)
+		body.linear_velocity = head.linear_velocity
+		body.angular_velocity = 0.0
+	ball.forget_previous_position()
+
+## Moves a body now, on the physics server as well as the node. Setting only
+## the node's transform queues a notification, and a body moved that way from
+## a scenario between steps was found back where the server had it after the
+## next step, so the move never happened.
+func _place(body: RigidBody2D, at: Vector2, rotation: float) -> void:
+	var xform := Transform2D(rotation, at)
+	body.global_transform = xform
+	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, xform)
 
 func _update_phase(release_time: float) -> void:
 	var cut_off: bool = _terrain_between(head.global_position, ball.global_position)

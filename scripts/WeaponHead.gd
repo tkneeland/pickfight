@@ -150,6 +150,13 @@ var drive_force: float = 0.0
 ## is skipped whichever of the two would have owned it.
 var pair_exclude: Array[Node] = []
 
+## A hard tether (issue #192): if set, this head is never left further than
+## `tether_length` from `tether_to` after a physics step. Only the flail's
+## ball has one, held to the head its chain hangs from (`FlailChain`); see
+## `_hold_tether` for why the joints alone cannot promise it.
+var tether_to: RigidBody2D = null
+var tether_length: float = 0.0
+
 ## What the last sweep correction stopped the head against, and how fast the
 ## head was heading into it when it did. Read and cleared by `Player`.
 ##
@@ -795,12 +802,77 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 			var onto: Dictionary = _find_head_crossing(world["fraction"])
 			if not onto.is_empty():
 				_apply_head_crossing(state, onto)
+	if tether_to != null:
+		_hold_tether(state)
 	_previous_position = state.transform.origin
 	_previous_rotation = state.transform.get_rotation()
 	_previous_shape_xforms.clear()
 	for node: CollisionShape2D in sweep_shapes:
 		_previous_shape_xforms.append(node.transform)
 	_has_previous = true
+
+## Puts a tethered head back on its tether's circle if the step carried it
+## outside, taking off its speed away from the anchor (relative to the
+## anchor's own), so the next step does not carry it straight back out
+## (issue #192).
+##
+## **Why the flail's joints are not enough.** Its chain is five 0.02 links
+## between a 0.2 head and a 0.25 ball, tied by pin joints. A
+## sequential-impulse solver converges badly on a chain whose masses differ
+## tenfold, so under a hard contact -- a ball struck into a neighbour's body,
+## two balls tangled -- the joints stretch, and by how much is decided by float
+## rounding and the order the solver visits the constraints in. The same
+## scenario held a ball 200 px from its player on macOS and let it go to 286
+## px on Linux CI.
+##
+## **Why here.** This callback runs after the physics step and before
+## anything reads the result: Godot calls it from `flush_queries`, ahead of
+## the next tick's `physics_frame` and `_physics_process`. A limit applied in
+## `_physics_process`, which is what `FlailChain` did before, acts before the
+## step, and the step itself could then carry the ball out past it by a
+## whole tick of travel.
+##
+## **Why last, after the sweeps.** A sweep seats the head where the step
+## first touched something, which can be further out than the tether allows
+## (a ball caught on a neighbour's body while its own head swings on). Held
+## first, the ball was seated straight back out there every tick and ended
+## 700 px from its player; held last, it ends every tick inside the circle.
+## The pull goes back towards the ball's own head, along its chain, and the
+## next tick's sweeps start from where it put the ball. The anchor is read
+## from the physics server, not the node, which may not have been synced from
+## this step yet.
+func _hold_tether(state: PhysicsDirectBodyState2D) -> void:
+	if tether_length <= 0.0 or not is_instance_valid(tether_to):
+		return
+	var rid: RID = tether_to.get_rid()
+	var anchor: Vector2 = (PhysicsServer2D.body_get_state(
+		rid, PhysicsServer2D.BODY_STATE_TRANSFORM) as Transform2D).origin
+	var anchor_velocity: Vector2 = PhysicsServer2D.body_get_state(
+		rid, PhysicsServer2D.BODY_STATE_LINEAR_VELOCITY)
+	if not anchor.is_finite():
+		return
+	if not anchor_velocity.is_finite():
+		anchor_velocity = Vector2.ZERO
+	var xform: Transform2D = state.transform
+	var velocity: Vector2 = state.linear_velocity
+	if not xform.origin.is_finite() or not velocity.is_finite():
+		# A solve that went non-finite: back to the anchor, at its speed, with
+		# no step to sweep.
+		xform.origin = anchor
+		state.transform = xform
+		state.linear_velocity = anchor_velocity
+		forget_previous_position()
+		return
+	var span: Vector2 = xform.origin - anchor
+	var distance: float = span.length()
+	if distance <= tether_length or distance == 0.0:
+		return
+	var out: Vector2 = span / distance
+	xform.origin = anchor + out * tether_length
+	state.transform = xform
+	var away: float = (velocity - anchor_velocity).dot(out)
+	if away > 0.0:
+		state.linear_velocity = velocity - out * away
 
 ## Whether the step carried the head through something in the world, and if
 ## so where it first touched: `{fraction, contact, normal, collider}`, or
