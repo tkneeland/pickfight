@@ -1,0 +1,969 @@
+## CI split: shard 0 of 4 (tools/list_scenarios.sh 0 4)
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+PASS  aim_angle
+PASS  body_no_rotation
+PASS  extension_tracks_drag
+PASS  release_eases_to_rest
+PASS  head_plants_terrain
+PASS  head_plants_player
+PASS  non_finite_input_rejected
+PASS  weapon_stats_are_swappable
+PASS  haft_is_non_colliding
+PASS  rig_freed_with_player
+PASS  head_does_not_tunnel_thin_platform
+      swing 0.50 rad: head 1175 px/s, damage 14.7, closest 32.8 px
+      swing 0.90 rad: head 2440 px/s, damage 45.2, closest 38.2 px
+      swing 1.30 rad: head 2844 px/s, damage 55.4, closest 38.2 px
+      creep: head 304 px/s, damage 0.0, closest 33.0 px
+PASS  head_strike_damage_scales
+PASS  body_collision_knockback_no_damage
+PASS  damage_kills
+PASS  ringout_kills_at_full_health
+PASS  ringout_then_next_round_survives
+      walked together at up to 18.1 px a tick: met at 17.5 px, still 21.5 px apart under full push
+      sent at each other at up to 22.6 px a tick: met at 17.4 px, still 17.9 px apart at the end
+PASS  heads_do_not_interpenetrate
+      equal weapons: meeting point 0.1 px off the midline, heads 17.7 px apart
+      stronger right: meeting point -29.5 px off the midline, heads 16.7 px apart
+PASS  clash_higher_drive_force_wins
+        0 deg at 600 px/s each: closest   18.8 px
+        0 deg at 1200 px/s each: closest   17.4 px
+        0 deg at 1800 px/s each: closest   17.5 px
+       45 deg at 600 px/s each: closest   41.0 px
+       45 deg at 1200 px/s each: closest   17.4 px
+       45 deg at 1800 px/s each: closest   14.5 px
+       90 deg at 600 px/s each: closest   40.7 px
+       90 deg at 1200 px/s each: closest   16.6 px
+       90 deg at 1800 px/s each: closest   17.4 px
+      135 deg at 600 px/s each: closest   24.9 px
+      135 deg at 1200 px/s each: closest   17.7 px
+      135 deg at 1800 px/s each: closest   17.5 px
+PASS  heads_do_not_tunnel_head
+PASS  damage_reddens_fill_identity_persists
+PASS  identity_colours_match_controller_page
+      pickaxe.tres: 13 circles against 26 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      staff.tres: 1 circles against 20 points of art, worst fit +0.00 px outside it (negative is inside, clear)
+      sword.tres: 23 circles against 7 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      axe.tres: 15 circles against 40 points of art, worst fit -0.05 px outside it (negative is inside, clear)
+      dagger.tres: 7 circles against 7 points of art, worst fit -0.06 px outside it (negative is inside, clear)
+      boomstick.tres: 27 circles against 12 points of art, worst fit -0.20 px outside it (negative is inside, clear)
+      grapple.tres: 3 circles against 6 points of art, worst fit -0.20 px outside it (negative is inside, clear)
+      flail.tres: 1 circles against 8 points of art, worst fit -1.01 px outside it (negative is inside, clear)
+      boomerang.tres: 1 circles against 8 points of art, worst fit -0.62 px outside it (negative is inside, clear)
+      the default head: 1 circles against 16 points of art, worst fit +0.00 px outside it (negative is inside, clear)
+      misfitted head: 1 circles against 16 points of art, worst fit +23.84 px outside it (negative is inside, clear)
+PASS  weapon_head_circles_within_art
+RoundManager: match seed 2001258180 (replay with -- --seed=2001258180)
+PASS  stage_rotates_each_round
+PASS  stage_spawns_are_safe
+RoundManager: match seed 3397570837 (replay with -- --seed=3397570837)
+PASS  waiting_expires_disconnected_claims
+RoundManager: match seed 2192251262 (replay with -- --seed=2192251262)
+PASS  abandoned_round_ends_without_winner
+RoundManager: match seed 2800647182 (replay with -- --seed=2800647182)
+PASS  round_winner_keeps_weapon
+      pickaxe: full drag settled at 150.0 px, its own max reach is 150.0 px
+      staff: full drag settled at 240.0 px, its own max reach is 240.0 px
+      sword: full drag settled at 70.0 px, its own max reach is 70.0 px
+      axe: full drag settled at 140.1 px, its own max reach is 140.0 px
+      dagger: full drag settled at 88.0 px, its own max reach is 88.0 px
+      boomstick: full drag settled at 70.0 px, its own max reach is 70.0 px
+      grapple: full drag settled at 84.0 px, its own max reach is 84.0 px
+      flail: full drag settled at 70.0 px, its own max reach is 70.0 px
+      boomerang: full drag settled at 80.0 px, its own max reach is 80.0 px
+PASS  weapon_reach_matches_roster
+      pickaxe: head arrived at 2216 px/s and took 33.3 off, its own damage is 34.0 (closest 33.2 px)
+      staff: head arrived at 2208 px/s and took 20.1 off, its own damage is 20.0 (closest 29.0 px)
+      sword: head arrived at 2221 px/s and took 40.3 off, its own damage is 40.0 (closest 80.1 px)
+      axe: head arrived at 2193 px/s and took 88.6 off, its own damage is 90.0 (closest 31.1 px)
+      dagger: head arrived at 2208 px/s and took 60.3 off, its own damage is 60.0 (closest 33.6 px)
+      boomstick: head arrived at 2211 px/s and took 8.1 off, its own damage is 8.0 (closest 95.9 px)
+      grapple: head arrived at 2205 px/s and took 12.0 off, its own damage is 12.0 (closest 31.5 px)
+      flail: head arrived at 2178 px/s and took 13.9 off, its own damage is 14.0 (closest 29.1 px)
+      boomerang: head arrived at 2205 px/s and took 12.0 off, its own damage is 12.0 (closest 28.0 px)
+PASS  weapon_damage_matches_roster
+      pickaxe: answered a drag from 20.0 px out to 70.0 px in 5 ticks
+      staff: answered a drag from 20.0 px out to 70.0 px in 3 ticks
+      sword: answered a drag from 20.0 px out to 70.0 px in 6 ticks
+      axe: answered a drag from 27.6 px out to 70.0 px in 10 ticks
+      dagger: answered a drag from 20.0 px out to 70.0 px in 4 ticks
+      boomstick: answered a drag from 20.0 px out to 70.0 px in 3 ticks
+      grapple: answered a drag from 20.0 px out to 70.0 px in 5 ticks
+      flail: answered a drag from 19.9 px out to 70.0 px in 4 ticks
+      boomerang: answered a drag from 20.0 px out to 70.0 px in 5 ticks
+PASS  weapon_responsiveness_matches_roster
+      dagger against dagger: met -0.7 px off the midline, 18.8 px apart; gave way 23.0 px and 21.7 px
+      axe on the left: met 46.9 px off the midline, 16.2 px apart; axe gave way 26.2 px, dagger 68.0 px
+      axe on the right: met -46.9 px off the midline, 16.2 px apart; dagger gave way 68.0 px, axe 26.2 px
+PASS  heavy_weapon_wins_clash
+      pickaxe   0 deg at 600 px/s each: heads closed to   -0.6 px of each other
+      sword   0 deg at 600 px/s each: crossed 40.9 px apart -- a miss, not a breach
+      sword   0 deg at 600 px/s each: heads closed to    3.0 px of each other
+      dagger   0 deg at 600 px/s each: crossed, then the correction put it back
+      dagger   0 deg at 600 px/s each: heads closed to    2.7 px of each other
+      grapple   0 deg at 600 px/s each: crossed, then the correction put it back
+      grapple   0 deg at 600 px/s each: heads closed to    0.2 px of each other
+      boomerang   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -0.5 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -5.4 px of each other
+      dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
+      grapple   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomerang   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe   0 deg at 1800 px/s each: heads closed to   -2.9 px of each other
+      sword   0 deg at 1800 px/s each: heads closed to   -0.4 px of each other
+      dagger   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      grapple   0 deg at 1800 px/s each: heads closed to   -0.8 px of each other
+      boomerang   0 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      pickaxe  45 deg at 600 px/s each: crossed 4.9 px apart -- a miss, not a breach
+      pickaxe  45 deg at 600 px/s each: heads closed to    4.9 px of each other
+      sword  45 deg at 600 px/s each: crossed, then the correction put it back
+      sword  45 deg at 600 px/s each: heads closed to   15.7 px of each other
+      dagger  45 deg at 600 px/s each: crossed 11.8 px apart -- a miss, not a breach
+      dagger  45 deg at 600 px/s each: heads closed to   11.8 px of each other
+      grapple  45 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      grapple  45 deg at 600 px/s each: heads closed to   12.3 px of each other
+      boomerang  45 deg at 600 px/s each: crossed 11.2 px apart -- a miss, not a breach
+      boomerang  45 deg at 600 px/s each: heads closed to   11.2 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -1.7 px of each other
+      sword  45 deg at 1200 px/s each: heads closed to   -1.3 px of each other
+      dagger  45 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      grapple  45 deg at 1200 px/s each: crossed 4.0 px apart -- a miss, not a breach
+      grapple  45 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      boomerang  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -0.9 px of each other
+      sword  45 deg at 1800 px/s each: crossed 33.8 px apart -- a miss, not a breach
+      sword  45 deg at 1800 px/s each: heads closed to    2.0 px of each other
+      dagger  45 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      grapple  45 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      boomerang  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  90 deg at 600 px/s each: heads closed to   -0.5 px of each other
+      sword  90 deg at 600 px/s each: crossed 17.4 px apart -- a miss, not a breach
+      sword  90 deg at 600 px/s each: heads closed to   17.4 px of each other
+      dagger  90 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
+      dagger  90 deg at 600 px/s each: heads closed to   11.7 px of each other
+      grapple  90 deg at 600 px/s each: crossed 12.1 px apart -- a miss, not a breach
+      grapple  90 deg at 600 px/s each: heads closed to   12.1 px of each other
+      boomerang  90 deg at 600 px/s each: crossed 10.4 px apart -- a miss, not a breach
+      boomerang  90 deg at 600 px/s each: heads closed to   10.4 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      sword  90 deg at 1200 px/s each: heads closed to   -0.9 px of each other
+      dagger  90 deg at 1200 px/s each: heads closed to   -0.9 px of each other
+      grapple  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomerang  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -1.0 px of each other
+      sword  90 deg at 1800 px/s each: heads closed to   -1.5 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      grapple  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      boomerang  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      pickaxe 135 deg at 600 px/s each: heads closed to   -1.5 px of each other
+      sword 135 deg at 600 px/s each: crossed 23.1 px apart -- a miss, not a breach
+      sword 135 deg at 600 px/s each: heads closed to    0.3 px of each other
+      dagger 135 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
+      dagger 135 deg at 600 px/s each: heads closed to   11.7 px of each other
+      grapple 135 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      grapple 135 deg at 600 px/s each: heads closed to   12.3 px of each other
+      boomerang 135 deg at 600 px/s each: crossed 9.8 px apart -- a miss, not a breach
+      boomerang 135 deg at 600 px/s each: heads closed to    9.8 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -0.4 px of each other
+      sword 135 deg at 1200 px/s each: heads closed to   -1.5 px of each other
+      dagger 135 deg at 1200 px/s each: heads closed to   -1.5 px of each other
+      grapple 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomerang 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -0.7 px of each other
+      sword 135 deg at 1800 px/s each: crossed 38.6 px apart -- a miss, not a breach
+      sword 135 deg at 1800 px/s each: heads closed to    1.8 px of each other
+      dagger 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      grapple 135 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      boomerang 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 600 px/s each: crossed, then the correction put it back
+      staff   0 deg at 600 px/s each: heads closed to    2.5 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -1.7 px of each other
+      boomstick   0 deg at 600 px/s each: crossed 28.6 px apart -- a miss, not a breach
+      boomstick   0 deg at 600 px/s each: heads closed to    0.0 px of each other
+      flail   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -1.3 px of each other
+      boomstick   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      flail   0 deg at 1200 px/s each: heads closed to   -0.6 px of each other
+      staff   0 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      axe   0 deg at 1800 px/s each: heads closed to   -3.1 px of each other
+      boomstick   0 deg at 1800 px/s each: heads closed to   -3.6 px of each other
+      flail   0 deg at 1800 px/s each: crossed 4.8 px apart -- a miss, not a breach
+      flail   0 deg at 1800 px/s each: heads closed to    4.8 px of each other
+      staff  45 deg at 600 px/s each: crossed 36.6 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   36.6 px of each other
+      axe  45 deg at 600 px/s each: heads closed to   -0.8 px of each other
+      boomstick  45 deg at 600 px/s each: heads closed to   -0.4 px of each other
+      flail  45 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -1.3 px of each other
+      boomstick  45 deg at 1200 px/s each: crossed 37.6 px apart -- a miss, not a breach
+      boomstick  45 deg at 1200 px/s each: heads closed to    0.6 px of each other
+      flail  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff  45 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      axe  45 deg at 1800 px/s each: heads closed to   -1.3 px of each other
+      boomstick  45 deg at 1800 px/s each: heads closed to   -3.4 px of each other
+      flail  45 deg at 1800 px/s each: heads closed to   -0.8 px of each other
+      staff  90 deg at 600 px/s each: crossed 36.4 px apart -- a miss, not a breach
+      staff  90 deg at 600 px/s each: heads closed to   36.4 px of each other
+      axe  90 deg at 600 px/s each: crossed 26.6 px apart -- a miss, not a breach
+      axe  90 deg at 600 px/s each: heads closed to   26.6 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 32.0 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to    2.5 px of each other
+      flail  90 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -2.0 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      flail  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -1.2 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -1.2 px of each other
+      flail  90 deg at 1800 px/s each: heads closed to   -0.9 px of each other
+      staff 135 deg at 600 px/s each: crossed 36.2 px apart -- a miss, not a breach
+      staff 135 deg at 600 px/s each: heads closed to   36.2 px of each other
+      axe 135 deg at 600 px/s each: heads closed to   -1.1 px of each other
+      boomstick 135 deg at 600 px/s each: crossed 25.9 px apart -- a miss, not a breach
+      boomstick 135 deg at 600 px/s each: heads closed to    4.9 px of each other
+      flail 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -1.7 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -3.3 px of each other
+      flail 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      staff 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -2.2 px of each other
+      boomstick 135 deg at 1800 px/s each: crossed 25.2 px apart -- a miss, not a breach
+      boomstick 135 deg at 1800 px/s each: heads closed to    0.7 px of each other
+      flail 135 deg at 1800 px/s each: heads closed to   -0.6 px of each other
+PASS  roster_heads_do_not_tunnel_head
+      pickaxe: head reaches 9.00 px forward and 6.36 px back on 150 px of weapon; bare haft runs 52.0 to 111.6 px
+      pickaxe: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.8 px of them, head surface no closer than 54.4 px, shoved 0.00 px
+      pickaxe: bar at 70.0 px, held 149.5 px through it, ended -4.8 px past its top surface at 36.5 px of reach
+      staff: head reaches 5.00 px forward and 0.86 px back on 240 px of weapon; bare haft runs 52.0 to 211.0 px
+      staff: bystander at 90.0 px, bodies 90.0 px apart, haft through 23.9 px of them, head surface no closer than 149.1 px, shoved 0.00 px
+      staff: bar at 70.0 px, held 239.5 px through it, ended -6.4 px past its top surface at 38.1 px of reach
+      sword: head reaches 56.10 px forward and 16.95 px back on 70 px of weapon; bare haft runs 52.0 to -10.1 px
+      sword: no bystander half -- its head leaves -10.1 px of bare haft, and two players cannot stand closer than 52.0 px
+      sword: bar at 46.1 px, held 69.5 px through it, ended -20.9 px past its top surface at 52.6 px of reach
+      axe: head reaches 17.05 px forward and 17.82 px back on 140 px of weapon; bare haft runs 52.0 to 82.6 px
+      axe: bystander at 67.3 px, bodies 68.6 px apart, haft through 14.6 px of them, head surface no closer than 54.8 px, shoved 0.00 px
+      axe: bar at 70.0 px, held 139.4 px through it, ended -17.5 px past its top surface at 49.2 px of reach
+      dagger: head reaches 9.53 px forward and 7.11 px back on 88 px of weapon; bare haft runs 52.0 to 54.5 px
+      dagger: no bystander half -- its head leaves 54.5 px of bare haft, and two players cannot stand closer than 52.0 px
+      dagger: bar at 70.0 px, held 87.5 px through it, ended -7.1 px past its top surface at 38.8 px of reach
+      boomstick: head reaches 71.80 px forward and 23.70 px back on 70 px of weapon; bare haft runs 52.0 to -25.8 px
+      boomstick: no bystander half -- its head leaves -25.8 px of bare haft, and two players cannot stand closer than 52.0 px
+      boomstick: bar at 39.3 px, held 69.6 px through it, ended -33.4 px past its top surface at 64.8 px of reach
+      grapple: head reaches 7.40 px forward and 5.80 px back on 84 px of weapon; bare haft runs 52.0 to 52.6 px
+      grapple: no bystander half -- its head leaves 52.6 px of bare haft, and two players cannot stand closer than 52.0 px
+      grapple: bar at 70.0 px, held 83.5 px through it, ended -5.8 px past its top surface at 37.5 px of reach
+      flail: head reaches 5.00 px forward and 5.00 px back on 70 px of weapon; bare haft runs 52.0 to 41.0 px
+      flail: no bystander half -- its head leaves 41.0 px of bare haft, and two players cannot stand closer than 52.0 px
+      flail: bar at 58.0 px, held 68.9 px through it, ended -6.3 px past its top surface at 38.0 px of reach
+      boomerang: head reaches 4.00 px forward and 4.00 px back on 80 px of weapon; bare haft runs 52.0 to 52.0 px
+      boomerang: no bystander half -- its head leaves 52.0 px of bare haft, and two players cannot stand closer than 52.0 px
+      boomerang: bar at 69.0 px, held 79.5 px through it, ended -4.0 px past its top surface at 35.7 px of reach
+PASS  roster_hafts_are_non_colliding
+      res://scenes/stages/Gauntlet.tscn: spawn 0 shoved left, out after 35 ticks
+      res://scenes/stages/Gale.tscn: spawn 0 shoved left, out after 35 ticks
+      res://scenes/stages/Carousel.tscn: spawn 0 shoved left, out after 35 ticks
+      res://scenes/stages/Ferry.tscn: spawn 0 shoved left, out after 39 ticks
+      res://scenes/stages/Slant.tscn: spawn 0 shoved left, out after 39 ticks
+      res://scenes/stages/Springboard.tscn: spawn 0 shoved left, out after 40 ticks
+      res://scenes/stages/Updraft.tscn: spawn 0 shoved left, out after 47 ticks
+      res://scenes/stages/Rockfall.tscn: spawn 0 shoved left, out after 50 ticks
+      res://scenes/stages/Quarry.tscn: spawn 0 shoved left, out after 51 ticks
+      res://scenes/stages/Islands.tscn: spawn 0 shoved left, out after 53 ticks
+      res://scenes/stages/Reactor.tscn: spawn 0 shoved left, out after 53 ticks
+      res://scenes/stages/Pistons.tscn: spawn 0 shoved left, out after 67 ticks
+      res://scenes/stages/Erosion.tscn: spawn 0 shoved left, out after 107 ticks
+      res://scenes/stages/Bowl.tscn: spawn 0 shoved right, out after 74 ticks
+      res://scenes/stages/Mill.tscn: spawn 1 shoved left, out after 61 ticks
+      res://scenes/stages/Sinkhole.tscn: spawn 1 shoved right, out after 52 ticks
+      res://scenes/stages/Ziggurat.tscn: spawn 2 shoved left, out after 44 ticks
+      res://scenes/stages/Bulwark.tscn: spawn 2 shoved left, out after 49 ticks
+      res://scenes/stages/Flatlands.tscn: spawn 2 shoved left, out after 58 ticks
+      res://scenes/stages/Overpass.tscn: spawn 2 shoved right, out after 73 ticks
+      res://scenes/stages/Furnace.tscn: spawn 4 shoved left, out after 20 ticks
+      res://scenes/stages/Pillars.tscn: spawn 4 shoved left, out after 53 ticks
+      res://scenes/stages/Highrise.tscn: spawn 4 shoved left, out after 54 ticks
+      res://scenes/stages/Cascade.tscn: spawn 4 shoved left, out after 91 ticks
+PASS  every_stage_can_ring_out
+PASS  hazard_zone_kills_at_full_health
+      platform moved 393.3 px, player moved 400.9 px over one patrol leg
+PASS  moving_platform_carries_player
+PASS  head_plants_moving_platform
+      phase 1: holding through the 0.80s warning delay
+      phase 2: falling away once the warning delay is over
+      phase 3: holding again after the 3.00s away delay
+PASS  crumbling_ledge_three_phases
+PASS  erosion_island_survives_full_erosion
+      pickaxe.tres: hardest possible strike deals 68.0
+      staff.tres: hardest possible strike deals 40.0
+      sword.tres: hardest possible strike deals 80.0
+      axe.tres: hardest possible strike deals 90.0
+      dagger.tres: hardest possible strike deals 90.0
+      boomstick.tres: hardest possible strike deals 16.0
+      grapple.tres: hardest possible strike deals 24.0
+      flail.tres: hardest possible strike deals 28.0
+      boomerang.tres: hardest possible strike deals 24.0
+PASS  no_single_strike_kills
+RoundManager: match seed 599119214 (replay with -- --seed=599119214)
+PASS  pickup_appears_at_round_start
+RoundManager: match seed 3789081747 (replay with -- --seed=3789081747)
+PASS  pickups_arrive_on_interval_and_cap
+PASS  pickup_weapon_is_random_never_pickaxe
+PASS  body_touch_swaps_weapon
+PASS  weapon_head_does_not_collect_pickup
+PASS  eliminated_player_cannot_collect
+RoundManager: match seed 1620422631 (replay with -- --seed=1620422631)
+PASS  pickups_cleared_at_round_end
+RoundManager: match seed 1665665576 (replay with -- --seed=1665665576)
+RoundManager: match seed 3692457583 (replay with -- --seed=3692457583)
+PASS  pickup_spawn_points_and_fallback
+      largest pickup: sword.tres, trigger radius 25.0 px
+PASS  stage_pickup_spawns_are_safe
+RoundManager: match seed 1463507354 (replay with -- --seed=1463507354)
+PASS  pickup_weapon_carries_to_winner_next_round
+PASS  pickup_drawn_with_weapon_art
+      boomerang   0 deg at 600 px/s each: crossed, then the correction put it back
+      boomerang   0 deg at 600 px/s each: heads closed to    2.2 px of each other
+      grapple   0 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      dagger   0 deg at 600 px/s each: crossed, then the correction put it back
+      dagger   0 deg at 600 px/s each: heads closed to    2.7 px of each other
+      sword   0 deg at 600 px/s each: crossed 27.2 px apart -- a miss, not a breach
+      sword   0 deg at 600 px/s each: heads closed to    4.6 px of each other
+      pickaxe   0 deg at 600 px/s each: heads closed to   -0.2 px of each other
+      boomerang   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      grapple   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger   0 deg at 1200 px/s each: heads closed to   -0.2 px of each other
+      sword   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe   0 deg at 1200 px/s each: heads closed to   -0.3 px of each other
+      boomerang   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      grapple   0 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      dagger   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      sword   0 deg at 1800 px/s each: crossed 4.3 px apart -- a miss, not a breach
+      sword   0 deg at 1800 px/s each: heads closed to   -3.2 px of each other
+      pickaxe   0 deg at 1800 px/s each: crossed 17.7 px apart -- a miss, not a breach
+      pickaxe   0 deg at 1800 px/s each: heads closed to    0.0 px of each other
+      boomerang  45 deg at 600 px/s each: crossed 10.9 px apart -- a miss, not a breach
+      boomerang  45 deg at 600 px/s each: heads closed to   10.9 px of each other
+      grapple  45 deg at 600 px/s each: crossed 12.2 px apart -- a miss, not a breach
+      grapple  45 deg at 600 px/s each: heads closed to   12.2 px of each other
+      dagger  45 deg at 600 px/s each: crossed 11.8 px apart -- a miss, not a breach
+      dagger  45 deg at 600 px/s each: heads closed to   11.8 px of each other
+      sword  45 deg at 600 px/s each: crossed 21.8 px apart -- a miss, not a breach
+      sword  45 deg at 600 px/s each: heads closed to   10.5 px of each other
+      pickaxe  45 deg at 600 px/s each: crossed 15.1 px apart -- a miss, not a breach
+      pickaxe  45 deg at 600 px/s each: heads closed to   15.1 px of each other
+      boomerang  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      grapple  45 deg at 1200 px/s each: crossed 3.9 px apart -- a miss, not a breach
+      grapple  45 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      dagger  45 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      sword  45 deg at 1200 px/s each: heads closed to   -1.3 px of each other
+      pickaxe  45 deg at 1200 px/s each: heads closed to   -1.8 px of each other
+      boomerang  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      grapple  45 deg at 1800 px/s each: heads closed to   -0.5 px of each other
+      dagger  45 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      sword  45 deg at 1800 px/s each: crossed 28.0 px apart -- a miss, not a breach
+      sword  45 deg at 1800 px/s each: heads closed to    1.6 px of each other
+      pickaxe  45 deg at 1800 px/s each: heads closed to   -0.4 px of each other
+      boomerang  90 deg at 600 px/s each: crossed 4.2 px apart -- a miss, not a breach
+      boomerang  90 deg at 600 px/s each: heads closed to    4.2 px of each other
+      grapple  90 deg at 600 px/s each: crossed 12.1 px apart -- a miss, not a breach
+      grapple  90 deg at 600 px/s each: heads closed to   12.1 px of each other
+      dagger  90 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
+      dagger  90 deg at 600 px/s each: heads closed to   11.7 px of each other
+      sword  90 deg at 600 px/s each: crossed 16.9 px apart -- a miss, not a breach
+      sword  90 deg at 600 px/s each: heads closed to   16.9 px of each other
+      pickaxe  90 deg at 600 px/s each: crossed 13.5 px apart -- a miss, not a breach
+      pickaxe  90 deg at 600 px/s each: heads closed to   13.5 px of each other
+      boomerang  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      grapple  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger  90 deg at 1200 px/s each: heads closed to   -0.9 px of each other
+      sword  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomerang  90 deg at 1800 px/s each: heads closed to   -0.1 px of each other
+      grapple  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      dagger  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      sword  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      pickaxe  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      boomerang 135 deg at 600 px/s each: crossed 9.8 px apart -- a miss, not a breach
+      boomerang 135 deg at 600 px/s each: heads closed to    9.8 px of each other
+      grapple 135 deg at 600 px/s each: crossed 12.3 px apart -- a miss, not a breach
+      grapple 135 deg at 600 px/s each: heads closed to   12.3 px of each other
+      dagger 135 deg at 600 px/s each: crossed 11.7 px apart -- a miss, not a breach
+      dagger 135 deg at 600 px/s each: heads closed to   11.7 px of each other
+      sword 135 deg at 600 px/s each: crossed 17.7 px apart -- a miss, not a breach
+      sword 135 deg at 600 px/s each: heads closed to   16.1 px of each other
+      pickaxe 135 deg at 600 px/s each: crossed 7.5 px apart -- a miss, not a breach
+      pickaxe 135 deg at 600 px/s each: heads closed to    7.5 px of each other
+      boomerang 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      grapple 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      dagger 135 deg at 1200 px/s each: heads closed to   -1.5 px of each other
+      sword 135 deg at 1200 px/s each: heads closed to   -1.4 px of each other
+      pickaxe 135 deg at 1200 px/s each: heads closed to   -1.8 px of each other
+      boomerang 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      grapple 135 deg at 1800 px/s each: heads closed to   -0.4 px of each other
+      dagger 135 deg at 1800 px/s each: heads closed to   -0.2 px of each other
+      sword 135 deg at 1800 px/s each: crossed 38.0 px apart -- a miss, not a breach
+      sword 135 deg at 1800 px/s each: heads closed to    1.9 px of each other
+      pickaxe 135 deg at 1800 px/s each: heads closed to   -0.3 px of each other
+      flail   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      boomstick   0 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      axe   0 deg at 600 px/s each: heads closed to   -1.9 px of each other
+      staff   0 deg at 600 px/s each: heads closed to   -0.5 px of each other
+      flail   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick   0 deg at 1200 px/s each: crossed 40.9 px apart -- a miss, not a breach
+      boomstick   0 deg at 1200 px/s each: heads closed to    0.0 px of each other
+      axe   0 deg at 1200 px/s each: heads closed to   -1.1 px of each other
+      staff   0 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      flail   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      boomstick   0 deg at 1800 px/s each: crossed 9.5 px apart -- a miss, not a breach
+      boomstick   0 deg at 1800 px/s each: heads closed to    0.4 px of each other
+      axe   0 deg at 1800 px/s each: heads closed to   -2.8 px of each other
+      staff   0 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      flail  45 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      boomstick  45 deg at 600 px/s each: crossed 30.4 px apart -- a miss, not a breach
+      boomstick  45 deg at 600 px/s each: heads closed to    0.3 px of each other
+      axe  45 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      staff  45 deg at 600 px/s each: crossed 36.6 px apart -- a miss, not a breach
+      staff  45 deg at 600 px/s each: heads closed to   36.6 px of each other
+      flail  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick  45 deg at 1200 px/s each: crossed 34.2 px apart -- a miss, not a breach
+      boomstick  45 deg at 1200 px/s each: heads closed to    0.3 px of each other
+      axe  45 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      staff  45 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      flail  45 deg at 1800 px/s each: heads closed to   -1.0 px of each other
+      boomstick  45 deg at 1800 px/s each: heads closed to   -2.2 px of each other
+      axe  45 deg at 1800 px/s each: heads closed to   -1.2 px of each other
+      staff  45 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      flail  90 deg at 600 px/s each: heads closed to   -1.1 px of each other
+      boomstick  90 deg at 600 px/s each: crossed 32.4 px apart -- a miss, not a breach
+      boomstick  90 deg at 600 px/s each: heads closed to    4.3 px of each other
+      axe  90 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      staff  90 deg at 600 px/s each: crossed 36.4 px apart -- a miss, not a breach
+      staff  90 deg at 600 px/s each: heads closed to   36.4 px of each other
+      flail  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      axe  90 deg at 1200 px/s each: heads closed to   -1.2 px of each other
+      staff  90 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      flail  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      boomstick  90 deg at 1800 px/s each: heads closed to   -5.5 px of each other
+      axe  90 deg at 1800 px/s each: heads closed to   -6.1 px of each other
+      staff  90 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+      flail 135 deg at 600 px/s each: heads closed to   -0.0 px of each other
+      boomstick 135 deg at 600 px/s each: crossed 34.5 px apart -- a miss, not a breach
+      boomstick 135 deg at 600 px/s each: heads closed to    0.7 px of each other
+      axe 135 deg at 600 px/s each: heads closed to   -0.1 px of each other
+      staff 135 deg at 600 px/s each: crossed 36.2 px apart -- a miss, not a breach
+      staff 135 deg at 600 px/s each: heads closed to   36.2 px of each other
+      flail 135 deg at 1200 px/s each: heads closed to   -0.0 px of each other
+      boomstick 135 deg at 1200 px/s each: heads closed to   -0.4 px of each other
+      axe 135 deg at 1200 px/s each: heads closed to   -3.0 px of each other
+      staff 135 deg at 1200 px/s each: heads closed to   -0.1 px of each other
+      flail 135 deg at 1800 px/s each: heads closed to   -0.6 px of each other
+      boomstick 135 deg at 1800 px/s each: heads closed to   -5.4 px of each other
+      axe 135 deg at 1800 px/s each: heads closed to   -1.8 px of each other
+      staff 135 deg at 1800 px/s each: heads closed to   -0.0 px of each other
+PASS  roster_heads_do_not_tunnel_head_reversed
+      2 strike(s) reported, victim on 56.6 damage, 2 marker(s), 2 number(s)
+PASS  strike_shows_hitmarker_and_number
+      5 strike(s) to eliminate, 5 marker(s)
+PASS  lethal_strike_marker_is_distinct
+PASS  slow_contact_shows_zero_not_marker
+PASS  damage_numbers_switch_off
+PASS  zero_numbers_rate_limited
+RoundManager: match seed 173708802 (replay with -- --seed=173708802)
+RoundManager: match seed 2190725822 (replay with -- --seed=2190725822)
+RoundManager: match seed 1690007936 (replay with -- --seed=1690007936)
+PASS  stage_rotation_seeded_is_deterministic
+RoundManager: match seed 349912798 (replay with -- --seed=349912798)
+RoundManager: match seed 3893554111 (replay with -- --seed=3893554111)
+RoundManager: match seed 951399850 (replay with -- --seed=951399850)
+RoundManager: match seed 1613059113 (replay with -- --seed=1613059113)
+RoundManager: match seed 1939497997 (replay with -- --seed=1939497997)
+PASS  stage_rotation_opener_is_first_stage
+RoundManager: match seed 3273961632 (replay with -- --seed=3273961632)
+RoundManager: match seed 2597235028 (replay with -- --seed=2597235028)
+RoundManager: match seed 1060396169 (replay with -- --seed=1060396169)
+PASS  stage_rotation_never_repeats_back_to_back
+---
+60 passed, 0 failed, 60 total
+## CI split: shard 3 of 4 (tools/list_scenarios.sh 3 4)
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+      Main rotation: 24 stages, 3 large (Pistons 2240x1260, Overpass 2400x1350, Ziggurat 2240x1260)
+      2 players: plays per stage [101, 100, 99, 0, 0], 0 on large stages
+      3 players: plays per stage [101, 100, 99, 0, 0], 0 on large stages
+      4 players: plays per stage [101, 99, 100, 0, 0], 0 on large stages
+      5 players: plays per stage [61, 60, 59, 60, 60], 120 on large stages
+      6 players: plays per stage [60, 60, 60, 60, 60], 120 on large stages
+      8 players: plays per stage [61, 60, 60, 60, 59], 119 on large stages
+PASS  large_stages_only_with_five_or_more_players
+RoundManager: match seed 3381862036 (replay with -- --seed=3381862036)
+      Pistons.tscn: view (2240.0, 1260.0), camera zoom 0.714 at (0.0, 0.0), shows [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]
+RoundManager: match seed 3049350437 (replay with -- --seed=3049350437)
+      Overpass.tscn: view (2400.0, 1350.0), camera zoom 0.667 at (0.0, 0.0), shows [P: (-1200.0, -675.0), S: (2400.0, 1350.0)]
+RoundManager: match seed 2923975326 (replay with -- --seed=2923975326)
+      Ziggurat.tscn: view (2240.0, 1260.0), camera zoom 0.714 at (0.0, 0.0), shows [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]
+PASS  large_stage_camera_fits_view_with_eight_players
+RoundManager: match seed 2405123481 (replay with -- --seed=2405123481)
+      slot 0 at (-60.0, 0.0), slot 2 at (60.0, 0.0); Spawn0 (-60.0, 0.0), Spawn1 (60.0, 0.0)
+PASS  gap_roster_spawns_in_roster_order
+      seed 1: 3 players [0, 5, 2, 3, 8, 7], then 7 players [11, 2, 7, 9, 8, 0, 6, 5, 3, 1, 4, 10] (first large 1 round(s) in)
+      seed 2: 3 players [0, 6, 3, 0, 4, 1], then 7 players [6, 5, 2, 4, 10, 8, 1, 3, 7, 0, 9, 11] (first large 5 round(s) in)
+      seed 3: 3 players [0, 4, 5, 3, 8, 2], then 7 players [9, 6, 3, 7, 11, 8, 0, 1, 2, 5, 10, 4] (first large 1 round(s) in)
+      seed 4: 3 players [0, 6, 4, 8, 7, 1], then 7 players [4, 0, 10, 7, 9, 5, 11, 3, 6, 8, 2, 1] (first large 3 round(s) in)
+      seed 5: 3 players [0, 2, 8, 3, 6, 4], then 7 players [9, 4, 6, 0, 1, 5, 7, 8, 10, 11, 2, 3] (first large 1 round(s) in)
+      seed 6: 3 players [0, 1, 6, 7, 8, 3], then 7 players [11, 5, 0, 4, 10, 1, 9, 3, 8, 2, 7, 6] (first large 1 round(s) in)
+      seed 7: 3 players [0, 4, 5, 6, 2, 0], then 7 players [2, 3, 6, 4, 7, 0, 11, 5, 9, 8, 10, 1] (first large 7 round(s) in)
+      seed 8: 3 players [0, 5, 1, 3, 7, 0], then 7 players [2, 8, 10, 3, 0, 5, 11, 9, 6, 7, 1, 4] (first large 3 round(s) in)
+RoundManager: match seed 73177367 (replay with -- --seed=73177367)
+      bag before a new match: 7 left; after: 0
+PASS  stage_bag_redeals_when_player_count_crosses_large
+RoundManager: match seed 1196595234 (replay with -- --seed=1196595234)
+      victory: StubA freed true; 0 stage(s) left under it; phase victory
+      lobby: StubB freed true; 0 stage(s) left under it; phase lobby
+PASS  stage_freed_under_victory_and_lobby
+RoundManager: match seed 1412514285 (replay with -- --seed=1412514285)
+      a tick apart (physics frames 290 and 291): P1 +0, P2 +1
+      the same tick (physics frames 293 and 293): P1 +0, P2 +0
+PASS  last_survivor_scores_when_falling_a_tick_later
+      zoom 1.00: marker scale 1.00, number scale 1.00, number centred at x 300.0 (hit at 300.0)
+      zoom 0.50: marker scale 2.00, number scale 2.00, number centred at x 300.0 (hit at 300.0)
+PASS  hit_feedback_scales_with_camera_zoom
+Controller page: http://172.19.6.46:54516/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54516/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15869)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1216)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1214)
+       [9] _scenario_hit_feedback_scales_with_camera_zoom (res://tools/scenario_runner.gd:15795)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15869)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1216)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1214)
+       [9] _scenario_hit_feedback_scales_with_camera_zoom (res://tools/scenario_runner.gd:15795)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+RoundManager: match seed 3749851037 (replay with -- --seed=3749851037)
+      host dropped while paused: server host 1; phone 2 last told host 1.0, paused true
+PASS  host_drop_while_paused_hands_menu_to_next_phone
+Controller page: http://172.19.6.46:54520/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54520/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15918)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1218)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1216)
+       [9] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15910)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15918)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1218)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1216)
+       [9] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15910)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+RoundManager: match seed 1006318255 (replay with -- --seed=1006318255)
+      Remove bots mid-round: 3 bots left, roster [0, 1, 2, 3], phase 'playing'
+      remove_bots(): bodies still in the round []; roster [0]
+PASS  solo_ignored_mid_match_and_removed_bots_leave_round
+Controller page: http://172.19.6.46:54523/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54523/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15963)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1220)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1218)
+       [9] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15955)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15963)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1220)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1218)
+       [9] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15955)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+RoundManager: match seed 1296995193 (replay with -- --seed=1296995193)
+      paused 30 frames: bots that still thought []; director process mode 1
+PASS  bots_stop_thinking_while_paused
+Controller page: http://172.19.6.46:54526/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54526/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:16012)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1222)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1220)
+       [9] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:16002)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:16012)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1222)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1220)
+       [9] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:16002)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+      lobby, solo host gone: phases seen ["lobby"]; 0 bots left, roster []
+RoundManager: match seed 3269943535 (replay with -- --seed=3269943535)
+      mid-round, solo host gone: 0 bots left, 0 bot bodies standing, phase 'lobby', roster []
+RoundManager: match seed 3440576861 (replay with -- --seed=3440576861)
+PASS  solo_bots_go_when_the_last_phone_leaves
+      bare stage: lava lookups in 1.2 s 1; player alive true
+Controller page: http://172.19.6.46:59413/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59413/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:16129)
+       [3] _await_ticks (res://tools/scenario_runner.gd:1896)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:16129)
+       [3] _await_ticks (res://tools/scenario_runner.gd:1896)
+      bot names after a kick and an add: ["Bot 1", "Bot 2", "Bot 3"]
+RoundManager: match seed 2172158456 (replay with -- --seed=2172158456)
+      60 frames of a bots' round: lobby state built 4 times
+PASS  bot_upkeep_cached_and_names_unique
+Controller page: http://172.19.6.46:59415/
+      A reconnected into slot 0; roster [0, 1]; old socket state 3 reason 'opened somewhere else'
+PASS  phone_quick_reconnect_takes_back_its_slot
+Controller page: http://172.19.6.46:59420/
+      stale kick of Bob's claim 2.0: roster [0, 1], Alice's socket state 1
+      End match from match 1.0 during match 2.0: commands []
+PASS  host_phone_stale_kick_and_end_are_ignored
+PASS  controller_page_stale_confirms_close
+PASS  controller_page_no_traps_in_play
+Controller page: http://172.19.6.46:59425/
+      after bad frames: ready false, name ''
+      60 names in a burst: the host kept 'n19' (limit 20/s)
+      id-less client: bound { "id": "host-assigned-1-794822852", "slot": 1.0 }
+PASS  phone_bad_frames_ignored_and_rate_limited
+Controller page: http://172.19.6.46:59430/
+      join frame 4223 bytes; 5 later looks frames of [91, 92, 92, 92, 92] bytes
+PASS  phone_hat_art_sent_once_on_bind
+      Overpass.tscn: view [P: (-1200.0, -675.0), S: (2400.0, 1350.0)]; meteors start x -1191..1195, lowest y -755, dropped past y 2675
+      Pistons.tscn: view [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]; meteors start x -1112..1116, lowest y -710, dropped past y 2630
+      Ziggurat.tscn: view [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]; meteors start x -1112..1116, lowest y -710, dropped past y 2630
+PASS  meteor_shower_rains_across_large_stage_view
+      meteor on a protected player: hit true (knock 539 px/s), took 0.0, reported []
+      rock on a protected player: took 0.0, reported []
+      meteor on a unprotected player: hit true (knock 539 px/s), took 12.0, reported [12.0]
+      rock on a unprotected player: took 12.0, reported [12.0]
+PASS  hazards_report_only_damage_dealt
+      wall takes plain 17.0, double damage 34.0, after 17.0; a player takes [17.0, 34.0, 17.0]
+PASS  breakable_wall_double_damage_melee
+RoundManager: match seed 1678245943 (replay with -- --seed=1678245943)
+      run 1 on seed 162: boomstick.tres, grapple.tres, boomerang.tres, sword.tres, staff.tres, dagger.tres, boomstick.tres, sword.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
+      run 2 on seed 162: boomstick.tres, grapple.tres, boomerang.tres, sword.tres, staff.tres, dagger.tres, boomstick.tres, sword.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
+PASS  round_modifier_draws_follow_modifier_seed
+Controller page: http://172.19.6.46:59434/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59434/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16897)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1246)
+       [4] _run_one (res://tools/scenario_runner.gd:755)
+       [5] _run_all (res://tools/scenario_runner.gd:717)
+       [6] _run_one (res://tools/scenario_runner.gd:760)
+       [7] _run_scenario (res://tools/scenario_runner.gd:1244)
+       [8] _scenario_round_modifier_draws_follow_modifier_seed (res://tools/scenario_runner.gd:16869)
+       [9] _teardown (res://tools/scenario_runner.gd:1892)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16897)
+       [3] _run_scenario (res://tools/scenario_runner.gd:1246)
+       [4] _run_one (res://tools/scenario_runner.gd:755)
+       [5] _run_all (res://tools/scenario_runner.gd:717)
+       [6] _run_one (res://tools/scenario_runner.gd:760)
+       [7] _run_scenario (res://tools/scenario_runner.gd:1244)
+       [8] _scenario_round_modifier_draws_follow_modifier_seed (res://tools/scenario_runner.gd:16869)
+       [9] _teardown (res://tools/scenario_runner.gd:1892)
+RoundManager: match seed 3881486867 (replay with -- --seed=3881486867)
+      newcomer slot 1; scores [0, 0, 0, 0, 0, 0, 0, 0]; kos {  }, damage { 0: 10.0 }, deaths { 2: 1 }, alive { 0: 0, 2: -384 }
+PASS  mid_match_joiner_starts_with_fresh_slot
+RoundManager: match seed 1587965660 (replay with -- --seed=1587965660)
+      kos { 0: 1 }, self-KOs {  }, alive { 0: 34, 1: 34 } (round took 3505 ms, 3500 of them paused)
+PASS  pause_keeps_ko_credit_and_survival_time
+PASS  juice_overflow_head_claims_trail_later
+PASS  hit_feedback_pools_markers_and_numbers
+      sword: 48 trials, 0 head crossings
+      axe: 48 trials, 0 head crossings
+PASS  roster_heads_do_not_clip_platform_in_play_sword_axe
+      dagger: 48 trials, 0 head crossings
+      boomstick: 48 trials, 0 head crossings
+PASS  roster_heads_do_not_clip_platform_in_play_dagger_boomstick
+PASS  settings_fullscreen_follows_the_real_window
+PASS  settings_slider_drag_saves_once_on_release
+PASS  audio_release_out_of_tree_returns
+PASS  announcer_said_capped_and_lengths_from_decode
+      pickaxe: aim settles in 10 ticks, extends in 12 ticks, vaults 164.3 px, climbs the ledge 9/10 times, median 192 ticks (runs [105, 494, 177, 115, 464, 192, 505, 102, 600, 110], 600 = never)
+      staff: aim settles in 10 ticks, extends in 8 ticks, vaults 405.7 px, climbs the ledge 10/10 times, median 80 ticks (runs [82, 68, 77, 146, 74, 69, 89, 72, 81, 80], 600 = never)
+      sword: aim settles in 7 ticks, extends in 4 ticks, vaults 101.2 px, climbs the ledge 3/10 times, median 600 ticks (runs [600, 600, 600, 600, 600, 152, 600, 234, 600, 53], 600 = never)
+      axe: aim settles in 11 ticks, extends in 25 ticks, vaults 125.1 px, climbs the ledge 9/10 times, median 287 ticks (runs [287, 288, 386, 193, 195, 600, 378, 194, 215, 193], 600 = never)
+      dagger: aim settles in 7 ticks, extends in 3 ticks, vaults 139.1 px, climbs the ledge 7/10 times, median 190 ticks (runs [77, 110, 48, 104, 190, 567, 600, 600, 600, 122], 600 = never)
+      boomstick: aim settles in 7 ticks, extends in 3 ticks, vaults 91.5 px, climbs the ledge 5/10 times, median 600 ticks (runs [139, 600, 600, 600, 159, 92, 83, 600, 600, 144], 600 = never)
+      grapple: aim settles in 7 ticks, extends in 4 ticks, vaults 122.5 px, climbs the ledge 6/10 times, median 174 ticks (runs [78, 600, 80, 600, 600, 174, 600, 71, 99, 76], 600 = never)
+      flail: aim settles in 7 ticks, extends in 5 ticks, vaults 92.4 px, climbs the ledge 8/10 times, median 111 ticks (runs [60, 62, 67, 75, 111, 220, 600, 600, 110, 314], 600 = never)
+      boomerang: aim settles in 7 ticks, extends in 4 ticks, vaults 115.6 px, climbs the ledge 9/10 times, median 117 ticks (runs [69, 69, 67, 70, 70, 600, 117, 125, 200, 168], 600 = never)
+PASS  roster_traversal_is_measured
+RoundManager: match seed 812084204 (replay with -- --seed=812084204)
+      time_scale 0.5: 30 ticks moved the clock 250 ms (expected 250)
+      time_scale 0.5: 1 s of spawn protection lasted 120 ticks (60 at full speed)
+      time_scale 0.5: the 1 s round-end pause lasted 120 ticks
+      paused 150 ticks: the clock moved 0 ms; spawn protection still on true
+      round-end pause across a 150-tick tree pause: held true, then 60 more ticks
+PASS  timers_follow_game_time
+PASS  harness_static_left_flipped
+PASS  harness_static_restored_for_next_scenario
+      Ferry: the bot is alive after 10 s, at (-393, 302)
+      Updraft: the bot is alive after 10 s, at (-549, 214)
+PASS  bots_survive_hazard_stages
+      hook stuck true at (-2.443175, 16.87946), 254 px above the player
+      reeled from 254 px to 44 px (closest 17), rope min 44
+      released: fell 101 px in about 20 ticks
+PASS  grapple_fires_sticks_reels_and_releases
+      hook hit: damage 6.0, victim velocity (-175.1644, 188.8047), strikes 1
+PASS  grapple_hook_hits_player_lightly
+      ball at 600 px/s took 0.0 (expected 0.0)
+      ball at 1450 px/s took 19.0 (expected 19.0)
+      ball at 2200 px/s took 38.0 (expected 38.0)
+      ball at 3700 px/s took 76.0 (expected 76.0)
+      ball at 6000 px/s took 76.0 (expected 76.0)
+      slow (4 rad/s): ball at 696 px/s, first strike took 0.0 (1 strikes)
+      whip (15 rad/s): ball at 2533 px/s, first strike took 40.9 (1 strikes)
+PASS  flail_whip_damage_scales_with_speed
+      12 whips at a 12 px slab: fastest ball 2793 px/s, 0 crossings
+PASS  flail_ball_does_not_tunnel_thin_platform
+      10 whips at a held sword: deepest the ball's path went into the blade 1.5 px
+PASS  flail_ball_does_not_clip_head
+      flew 391 px out (range 380); 2 hits on legs [0, 1], damage 28.0; back in hand true
+PASS  boomerang_hits_on_the_way_out_and_back
+      thrown at a wall 150 px away: got 143 px out, back in hand true
+      wall dropped in its way home: ghosted true, back in hand true
+PASS  boomerang_turns_at_terrain_and_ghosts_home
+      pool 8, roulette 9, drew 8 weapons; after a round: pickaxe.tres, ball <null>
+PASS  new_weapons_are_pickups_only
+      grapple: head travelled 1187 px in 5 s, launched true, modes ["move"], still holding grapple.tres
+      flail: head travelled 1335 px in 5 s, launched false, modes ["move"], still holding flail.tres
+      boomerang: head travelled 1678 px in 5 s, launched true, modes ["move"], still holding boomerang.tres
+PASS  bots_wield_new_weapons
+      boomerang: 1 strikes, lethal [true], victim alive false
+PASS  new_weapon_hits_credit_the_thrower
+      grapple: 48 trials, 0 head crossings
+      flail: 48 trials, 0 head crossings
+      boomerang: 48 trials, 0 head crossings
+PASS  roster_heads_do_not_clip_platform_in_play_new_weapons
+      4 flails 120 px apart: furthest a ball got from its player 162 px (allowed 225)
+PASS  flail_built_clear_of_neighbours
+Controller page: http://172.19.6.46:57173/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57173/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1300)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1298)
+       [9] _scenario_flail_built_clear_of_neighbours (res://tools/scenario_runner.gd:18991)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
+       [4] _run_scenario (res://tools/scenario_runner.gd:1300)
+       [5] _run_one (res://tools/scenario_runner.gd:755)
+       [6] _run_all (res://tools/scenario_runner.gd:717)
+       [7] _run_one (res://tools/scenario_runner.gd:760)
+       [8] _run_scenario (res://tools/scenario_runner.gd:1298)
+       [9] _scenario_flail_built_clear_of_neighbours (res://tools/scenario_runner.gd:18991)
+       [10] _teardown (res://tools/scenario_runner.gd:1892)
+RoundManager: match seed 187187 (replay with -- --seed=187187)
+      run 1 on seed 187187: KOs [[0, 337], [1, 345]] after 11 samples; bot seeds [3381506363, 2387411799, 1304210152]; pickups boomstick@320,152, boomstick@-320,116; meteors -281.2, -261.2, 451.0, 605.5, 684.6, 343.0, 744.9, 44.9
+Controller page: http://172.19.6.46:57175/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57175/
+   at: execute (platform/windows/os_windows.cpp:1496)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
+       [4] _match_seed_bot_run (res://tools/scenario_runner.gd:19097)
+       [5] _await_ticks (res://tools/scenario_runner.gd:1896)
+WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
+       [1] _ready (res://scripts/ControllerServer.gd:359)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
+       [4] _match_seed_bot_run (res://tools/scenario_runner.gd:19097)
+       [5] _await_ticks (res://tools/scenario_runner.gd:1896)
+RoundManager: match seed 187187 (replay with -- --seed=187187)
+      run 2 on seed 187187: KOs [[0, 337], [1, 345]] after 11 samples; bot seeds [3381506363, 2387411799, 1304210152]; pickups boomstick@320,152, boomstick@-320,116; meteors -281.2, -261.2, 451.0, 605.5, 684.6, 343.0, 744.9, 44.9
+      11 samples compared; worst position gap 0.00 px (tolerance 1)
+PASS  match_seed_replays_bot_match
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+   at: _parse (core/io/config_file.cpp:292)
+   GDScript backtrace (most recent call first):
+       [0] _save_settings (res://scripts/Sfx.gd:633)
+       [1] save_settings (res://scripts/Sfx.gd:535)
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19231)
+WARNING: Sfx: not saving settings: C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg would not load (Parse error)
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _save_settings (res://scripts/Sfx.gd:635)
+       [1] save_settings (res://scripts/Sfx.gd:535)
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19231)
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+   at: _parse (core/io/config_file.cpp:292)
+   GDScript backtrace (most recent call first):
+       [0] _save_settings (res://scripts/Music.gd:270)
+       [1] save_settings (res://scripts/Music.gd:245)
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19232)
+WARNING: Music: not saving settings: C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg would not load (Parse error)
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] _save_settings (res://scripts/Music.gd:272)
+       [1] save_settings (res://scripts/Music.gd:245)
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19232)
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+   at: _parse (core/io/config_file.cpp:292)
+   GDScript backtrace (most recent call first):
+       [0] load_settings (res://scripts/Sfx.gd:615)
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19239)
+WARNING: Sfx: could not read settings from C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg (Parse error); using the defaults
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] load_settings (res://scripts/Sfx.gd:622)
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19239)
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+   at: _parse (core/io/config_file.cpp:292)
+   GDScript backtrace (most recent call first):
+       [0] load_settings (res://scripts/Music.gd:251)
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19240)
+WARNING: Music: could not read settings from C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg (Parse error); using the default
+   at: push_warning (core/variant/variant_utility.cpp:1034)
+   GDScript backtrace (most recent call first):
+       [0] load_settings (res://scripts/Music.gd:255)
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19240)
+PASS  script_run_never_touches_owner_settings
+      longest trail per swing: [5, 5, 5] (cap 10)
+PASS  juice_trail_draws_every_swing
+PASS  settings_esc_mid_drag_saves
+      drawn top / HEIGHTS: crown 25.25/26, top_hat 35.00/35, cap 20.25/21, beanie 28.75/29, viking 34.00/34, party 40.25/41, halo 21.50/22, propeller 27.80/28
+PASS  hat_parts_stay_in_their_box
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+      3 players, seed 1234: fresh [0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 10, 1]; in one session [[0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 10, 1], [0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 10, 1], [0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 10, 1]]
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+RoundManager: match seed 1234 (replay with -- --seed=1234)
+      7 players, seed 1234: fresh [0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 17, 10]; in one session [[0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 17, 10], [0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 17, 10], [0, 14, 3, 23, 11, 0, 15, 7, 2, 22, 17, 10]]
+PASS  rematch_on_same_seed_deals_same_stages
+      lava at y 100: 0 of 40 spot draws under it or none
+      lava risen to y -400: 0 pickups left live after a tick
+PASS  pickups_skip_and_clear_under_lava
+RoundManager: match seed 3501976411 (replay with -- --seed=3501976411)
+RoundManager: match seed 476285783 (replay with -- --seed=476285783)
+      seed 200, spawn per slot by round: [[0, 1, 2, 3], [1, 2, 3, 0], [0, 1, 2, 3], [1, 2, 3, 0], [3, 0, 1, 2], [1, 2, 3, 0], [3, 0, 1, 2], [3, 0, 1, 2], [3, 0, 1, 2]]; again: [[0, 1, 2, 3], [1, 2, 3, 0], [0, 1, 2, 3], [1, 2, 3, 0], [3, 0, 1, 2], [1, 2, 3, 0], [3, 0, 1, 2], [3, 0, 1, 2], [3, 0, 1, 2]]
+PASS  spawn_places_rotate_each_round
+      winner slot 0 on 2, scores [2, 5, 3, 0]: podium [0, 1, 2, 3]
+PASS  podium_order_is_strict
+      42 banners asked for: log holds 32, first 'B10|who'
+PASS  round_flow_drift_trimmed
+      pickaxe: rated 8000; stalled push 7992 (100%), stalled turn 7561 (95%)
+      staff: rated 6700; stalled push 6696 (100%), stalled turn 6486 (97%)
+      sword: rated 8000; stalled push 7994 (100%), stalled turn 7851 (98%)
+      axe: rated 11000; stalled push 9991 (91%), stalled turn 10059 (91%)
+      dagger: rated 7300; stalled push 7296 (100%), stalled turn 7165 (98%)
+      boomstick: rated 8000; stalled push 7656 (96%), stalled turn 7880 (98%)
+      grapple: rated 7300; stalled push 7295 (100%), stalled turn 7146 (98%)
+      flail: rated 7300; stalled push 7138 (98%), stalled turn 7022 (96%)
+      boomerang: rated 7300; stalled push 7295 (100%), stalled turn 7120 (98%)
+PASS  stalled_drive_pushes_rated_force
+      axe vs pickaxe (11000 vs 8000 N): axe on the left gave 0.4 px, pickaxe 29.9 px; axe on the right gave 3.2 px, pickaxe 29.0 px
+      axe vs staff (11000 vs 6700 N): axe on the left gave 3.0 px, staff 26.2 px; axe on the right gave 3.2 px, staff 28.2 px
+      axe vs sword (11000 vs 8000 N): axe on the left gave 3.6 px, sword 25.9 px; axe on the right gave 3.6 px, sword 26.0 px
+      axe vs dagger (11000 vs 7300 N): axe on the left gave 3.3 px, dagger 26.3 px; axe on the right gave 3.3 px, dagger 26.3 px
+      axe vs boomstick (11000 vs 8000 N): axe on the left gave 3.6 px, boomstick 26.0 px; axe on the right gave 3.6 px, boomstick 26.0 px
+      axe vs grapple (11000 vs 7300 N): axe on the left gave 3.3 px, grapple 26.3 px; axe on the right gave 3.3 px, grapple 26.3 px
+      axe vs flail (11000 vs 7300 N): axe on the left gave 3.3 px, flail 26.6 px; axe on the right gave 3.2 px, flail 26.3 px
+      axe vs boomerang (11000 vs 7300 N): axe on the left gave 3.3 px, boomerang 26.3 px; axe on the right gave 3.3 px, boomerang 26.3 px
+PASS  axe_wins_clash_against_every_weapon
+---
+61 passed, 0 failed, 61 total
