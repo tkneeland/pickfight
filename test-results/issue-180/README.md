@@ -1,6 +1,6 @@
 # Issue #180 evidence
 
-Branch `feat/issue-180-stall-force-v2`, on top of main `6d4ec9d`: tkneeland's two #180 commits from #197, cherry-picked with authorship kept, plus one commit of CI fixes.
+Branch `feat/issue-180-stall-force-v2`, on top of main `6d4ec9d`: tkneeland's two #180 commits from #197, cherry-picked with authorship kept, plus two commits of CI fixes.
 
 ## What was run
 
@@ -11,7 +11,7 @@ Windows 11, Godot 4.6.2-stable, headless, `--fixed-fps 60`.
 
 Figures the fixes are about, taken from these logs:
 - `match_seed_replays_bot_match`: the two runs are identical, with a 1 px / 1 tick tolerance (was 48 px / 30 ticks).
-- `weapon_damage_matches_roster`: the flail hits at 2178 px/s in every shard order, inside the 2200 ± 50 band. Before, it read 2144 in CI shard 0; alone it read 2178, and main reads 2174.
+- `weapon_damage_matches_roster`: the flail hits at 2205 px/s, the centre of the 2200 ± 50 band. Before, it read 2144 on Linux CI and 2178 on Windows, on identical code. The strike now lays the flail's chain out at rest before the charge. Across 24 runs with jittered rig starts it read 2200-2206 with none failing; without the change the same starts gave 2131-2204 and 3 of 24 failed.
 - `heads_do_not_tunnel_head`: passes. It was also stress-tested across 112 perturbed physics histories, all passing.
 
 ## Fresh-clone boot

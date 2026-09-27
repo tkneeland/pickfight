@@ -54,14 +54,14 @@ PASS  identity_colours_match_controller_page
       the default head: 1 circles against 16 points of art, worst fit +0.00 px outside it (negative is inside, clear)
       misfitted head: 1 circles against 16 points of art, worst fit +23.84 px outside it (negative is inside, clear)
 PASS  weapon_head_circles_within_art
-RoundManager: match seed 2001258180 (replay with -- --seed=2001258180)
+RoundManager: match seed 2288397190 (replay with -- --seed=2288397190)
 PASS  stage_rotates_each_round
 PASS  stage_spawns_are_safe
-RoundManager: match seed 3397570837 (replay with -- --seed=3397570837)
+RoundManager: match seed 2582002497 (replay with -- --seed=2582002497)
 PASS  waiting_expires_disconnected_claims
-RoundManager: match seed 2192251262 (replay with -- --seed=2192251262)
+RoundManager: match seed 1973403006 (replay with -- --seed=1973403006)
 PASS  abandoned_round_ends_without_winner
-RoundManager: match seed 2800647182 (replay with -- --seed=2800647182)
+RoundManager: match seed 3974351653 (replay with -- --seed=3974351653)
 PASS  round_winner_keeps_weapon
       pickaxe: full drag settled at 150.0 px, its own max reach is 150.0 px
       staff: full drag settled at 240.0 px, its own max reach is 240.0 px
@@ -80,7 +80,7 @@ PASS  weapon_reach_matches_roster
       dagger: head arrived at 2208 px/s and took 60.3 off, its own damage is 60.0 (closest 33.6 px)
       boomstick: head arrived at 2211 px/s and took 8.1 off, its own damage is 8.0 (closest 95.9 px)
       grapple: head arrived at 2205 px/s and took 12.0 off, its own damage is 12.0 (closest 31.5 px)
-      flail: head arrived at 2178 px/s and took 13.9 off, its own damage is 14.0 (closest 29.1 px)
+      flail: head arrived at 2205 px/s and took 14.0 off, its own damage is 14.0 (closest 29.0 px)
       boomerang: head arrived at 2205 px/s and took 12.0 off, its own damage is 12.0 (closest 28.0 px)
 PASS  weapon_damage_matches_roster
       pickaxe: answered a drag from 20.0 px out to 70.0 px in 5 ticks
@@ -308,22 +308,22 @@ PASS  erosion_island_survives_full_erosion
       flail.tres: hardest possible strike deals 28.0
       boomerang.tres: hardest possible strike deals 24.0
 PASS  no_single_strike_kills
-RoundManager: match seed 599119214 (replay with -- --seed=599119214)
+RoundManager: match seed 844597236 (replay with -- --seed=844597236)
 PASS  pickup_appears_at_round_start
-RoundManager: match seed 3789081747 (replay with -- --seed=3789081747)
+RoundManager: match seed 359165926 (replay with -- --seed=359165926)
 PASS  pickups_arrive_on_interval_and_cap
 PASS  pickup_weapon_is_random_never_pickaxe
 PASS  body_touch_swaps_weapon
 PASS  weapon_head_does_not_collect_pickup
 PASS  eliminated_player_cannot_collect
-RoundManager: match seed 1620422631 (replay with -- --seed=1620422631)
+RoundManager: match seed 574137809 (replay with -- --seed=574137809)
 PASS  pickups_cleared_at_round_end
-RoundManager: match seed 1665665576 (replay with -- --seed=1665665576)
-RoundManager: match seed 3692457583 (replay with -- --seed=3692457583)
+RoundManager: match seed 2858524026 (replay with -- --seed=2858524026)
+RoundManager: match seed 3137901578 (replay with -- --seed=3137901578)
 PASS  pickup_spawn_points_and_fallback
       largest pickup: sword.tres, trigger radius 25.0 px
 PASS  stage_pickup_spawns_are_safe
-RoundManager: match seed 1463507354 (replay with -- --seed=1463507354)
+RoundManager: match seed 2353972283 (replay with -- --seed=2353972283)
 PASS  pickup_weapon_carries_to_winner_next_round
 PASS  pickup_drawn_with_weapon_art
       boomerang   0 deg at 600 px/s each: crossed, then the correction put it back
@@ -474,19 +474,19 @@ PASS  lethal_strike_marker_is_distinct
 PASS  slow_contact_shows_zero_not_marker
 PASS  damage_numbers_switch_off
 PASS  zero_numbers_rate_limited
-RoundManager: match seed 173708802 (replay with -- --seed=173708802)
-RoundManager: match seed 2190725822 (replay with -- --seed=2190725822)
-RoundManager: match seed 1690007936 (replay with -- --seed=1690007936)
+RoundManager: match seed 4222078024 (replay with -- --seed=4222078024)
+RoundManager: match seed 4116219286 (replay with -- --seed=4116219286)
+RoundManager: match seed 1869571610 (replay with -- --seed=1869571610)
 PASS  stage_rotation_seeded_is_deterministic
-RoundManager: match seed 349912798 (replay with -- --seed=349912798)
-RoundManager: match seed 3893554111 (replay with -- --seed=3893554111)
-RoundManager: match seed 951399850 (replay with -- --seed=951399850)
-RoundManager: match seed 1613059113 (replay with -- --seed=1613059113)
-RoundManager: match seed 1939497997 (replay with -- --seed=1939497997)
+RoundManager: match seed 245310079 (replay with -- --seed=245310079)
+RoundManager: match seed 1734275428 (replay with -- --seed=1734275428)
+RoundManager: match seed 1502566093 (replay with -- --seed=1502566093)
+RoundManager: match seed 3188847159 (replay with -- --seed=3188847159)
+RoundManager: match seed 3891794774 (replay with -- --seed=3891794774)
 PASS  stage_rotation_opener_is_first_stage
-RoundManager: match seed 3273961632 (replay with -- --seed=3273961632)
-RoundManager: match seed 2597235028 (replay with -- --seed=2597235028)
-RoundManager: match seed 1060396169 (replay with -- --seed=1060396169)
+RoundManager: match seed 3904543225 (replay with -- --seed=3904543225)
+RoundManager: match seed 3151852040 (replay with -- --seed=3151852040)
+RoundManager: match seed 440781613 (replay with -- --seed=440781613)
 PASS  stage_rotation_never_repeats_back_to_back
 ---
 60 passed, 0 failed, 60 total
@@ -501,14 +501,14 @@ Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
       6 players: plays per stage [60, 60, 60, 60, 60], 120 on large stages
       8 players: plays per stage [61, 60, 60, 60, 59], 119 on large stages
 PASS  large_stages_only_with_five_or_more_players
-RoundManager: match seed 3381862036 (replay with -- --seed=3381862036)
+RoundManager: match seed 967433969 (replay with -- --seed=967433969)
       Pistons.tscn: view (2240.0, 1260.0), camera zoom 0.714 at (0.0, 0.0), shows [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]
-RoundManager: match seed 3049350437 (replay with -- --seed=3049350437)
+RoundManager: match seed 840107772 (replay with -- --seed=840107772)
       Overpass.tscn: view (2400.0, 1350.0), camera zoom 0.667 at (0.0, 0.0), shows [P: (-1200.0, -675.0), S: (2400.0, 1350.0)]
-RoundManager: match seed 2923975326 (replay with -- --seed=2923975326)
+RoundManager: match seed 2037478636 (replay with -- --seed=2037478636)
       Ziggurat.tscn: view (2240.0, 1260.0), camera zoom 0.714 at (0.0, 0.0), shows [P: (-1120.0, -630.0), S: (2240.0, 1260.0)]
 PASS  large_stage_camera_fits_view_with_eight_players
-RoundManager: match seed 2405123481 (replay with -- --seed=2405123481)
+RoundManager: match seed 3482587978 (replay with -- --seed=3482587978)
       slot 0 at (-60.0, 0.0), slot 2 at (60.0, 0.0); Spawn0 (-60.0, 0.0), Spawn1 (60.0, 0.0)
 PASS  gap_roster_spawns_in_roster_order
       seed 1: 3 players [0, 5, 2, 3, 8, 7], then 7 players [11, 2, 7, 9, 8, 0, 6, 5, 3, 1, 4, 10] (first large 1 round(s) in)
@@ -519,186 +519,186 @@ PASS  gap_roster_spawns_in_roster_order
       seed 6: 3 players [0, 1, 6, 7, 8, 3], then 7 players [11, 5, 0, 4, 10, 1, 9, 3, 8, 2, 7, 6] (first large 1 round(s) in)
       seed 7: 3 players [0, 4, 5, 6, 2, 0], then 7 players [2, 3, 6, 4, 7, 0, 11, 5, 9, 8, 10, 1] (first large 7 round(s) in)
       seed 8: 3 players [0, 5, 1, 3, 7, 0], then 7 players [2, 8, 10, 3, 0, 5, 11, 9, 6, 7, 1, 4] (first large 3 round(s) in)
-RoundManager: match seed 73177367 (replay with -- --seed=73177367)
+RoundManager: match seed 1902910808 (replay with -- --seed=1902910808)
       bag before a new match: 7 left; after: 0
 PASS  stage_bag_redeals_when_player_count_crosses_large
-RoundManager: match seed 1196595234 (replay with -- --seed=1196595234)
+RoundManager: match seed 4199463584 (replay with -- --seed=4199463584)
       victory: StubA freed true; 0 stage(s) left under it; phase victory
       lobby: StubB freed true; 0 stage(s) left under it; phase lobby
 PASS  stage_freed_under_victory_and_lobby
-RoundManager: match seed 1412514285 (replay with -- --seed=1412514285)
+RoundManager: match seed 2366805482 (replay with -- --seed=2366805482)
       a tick apart (physics frames 290 and 291): P1 +0, P2 +1
       the same tick (physics frames 293 and 293): P1 +0, P2 +0
 PASS  last_survivor_scores_when_falling_a_tick_later
       zoom 1.00: marker scale 1.00, number scale 1.00, number centred at x 300.0 (hit at 300.0)
       zoom 0.50: marker scale 2.00, number scale 2.00, number centred at x 300.0 (hit at 300.0)
 PASS  hit_feedback_scales_with_camera_zoom
-Controller page: http://172.19.6.46:54516/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54516/
+Controller page: http://172.19.6.46:57918/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57918/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15869)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15881)
        [4] _run_scenario (res://tools/scenario_runner.gd:1216)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1214)
-       [9] _scenario_hit_feedback_scales_with_camera_zoom (res://tools/scenario_runner.gd:15795)
+       [9] _scenario_hit_feedback_scales_with_camera_zoom (res://tools/scenario_runner.gd:15807)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15869)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15881)
        [4] _run_scenario (res://tools/scenario_runner.gd:1216)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1214)
-       [9] _scenario_hit_feedback_scales_with_camera_zoom (res://tools/scenario_runner.gd:15795)
+       [9] _scenario_hit_feedback_scales_with_camera_zoom (res://tools/scenario_runner.gd:15807)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
-RoundManager: match seed 3749851037 (replay with -- --seed=3749851037)
+RoundManager: match seed 2371316341 (replay with -- --seed=2371316341)
       host dropped while paused: server host 1; phone 2 last told host 1.0, paused true
 PASS  host_drop_while_paused_hands_menu_to_next_phone
-Controller page: http://172.19.6.46:54520/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54520/
+Controller page: http://172.19.6.46:57922/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57922/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15918)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15930)
        [4] _run_scenario (res://tools/scenario_runner.gd:1218)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1216)
-       [9] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15910)
+       [9] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15922)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15918)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15930)
        [4] _run_scenario (res://tools/scenario_runner.gd:1218)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1216)
-       [9] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15910)
+       [9] _scenario_host_drop_while_paused_hands_menu_to_next_phone (res://tools/scenario_runner.gd:15922)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
-RoundManager: match seed 1006318255 (replay with -- --seed=1006318255)
+RoundManager: match seed 354403015 (replay with -- --seed=354403015)
       Remove bots mid-round: 3 bots left, roster [0, 1, 2, 3], phase 'playing'
       remove_bots(): bodies still in the round []; roster [0]
 PASS  solo_ignored_mid_match_and_removed_bots_leave_round
-Controller page: http://172.19.6.46:54523/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54523/
+Controller page: http://172.19.6.46:57925/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57925/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15963)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15975)
        [4] _run_scenario (res://tools/scenario_runner.gd:1220)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1218)
-       [9] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15955)
+       [9] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15967)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15963)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:15975)
        [4] _run_scenario (res://tools/scenario_runner.gd:1220)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1218)
-       [9] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15955)
+       [9] _scenario_solo_ignored_mid_match_and_removed_bots_leave_round (res://tools/scenario_runner.gd:15967)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
-RoundManager: match seed 1296995193 (replay with -- --seed=1296995193)
+RoundManager: match seed 1639587767 (replay with -- --seed=1639587767)
       paused 30 frames: bots that still thought []; director process mode 1
 PASS  bots_stop_thinking_while_paused
-Controller page: http://172.19.6.46:54526/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:54526/
+Controller page: http://172.19.6.46:57928/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57928/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:16012)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:16024)
        [4] _run_scenario (res://tools/scenario_runner.gd:1222)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1220)
-       [9] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:16002)
+       [9] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:16014)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15822)
-       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:16012)
+       [2] _bot_main_with_phones (res://tools/scenario_runner.gd:15834)
+       [3] _scenario_solo_bots_go_when_the_last_phone_leaves (res://tools/scenario_runner.gd:16024)
        [4] _run_scenario (res://tools/scenario_runner.gd:1222)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1220)
-       [9] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:16002)
+       [9] _scenario_bots_stop_thinking_while_paused (res://tools/scenario_runner.gd:16014)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
       lobby, solo host gone: phases seen ["lobby"]; 0 bots left, roster []
-RoundManager: match seed 3269943535 (replay with -- --seed=3269943535)
+RoundManager: match seed 1351378508 (replay with -- --seed=1351378508)
       mid-round, solo host gone: 0 bots left, 0 bot bodies standing, phase 'lobby', roster []
-RoundManager: match seed 3440576861 (replay with -- --seed=3440576861)
+RoundManager: match seed 3583421404 (replay with -- --seed=3583421404)
 PASS  solo_bots_go_when_the_last_phone_leaves
       bare stage: lava lookups in 1.2 s 1; player alive true
-Controller page: http://172.19.6.46:59413/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59413/
+Controller page: http://172.19.6.46:52066/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52066/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:16129)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:16141)
        [3] _await_ticks (res://tools/scenario_runner.gd:1896)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:16129)
+       [2] _scenario_bot_upkeep_cached_and_names_unique (res://tools/scenario_runner.gd:16141)
        [3] _await_ticks (res://tools/scenario_runner.gd:1896)
       bot names after a kick and an add: ["Bot 1", "Bot 2", "Bot 3"]
-RoundManager: match seed 2172158456 (replay with -- --seed=2172158456)
+RoundManager: match seed 3934983353 (replay with -- --seed=3934983353)
       60 frames of a bots' round: lobby state built 4 times
 PASS  bot_upkeep_cached_and_names_unique
-Controller page: http://172.19.6.46:59415/
+Controller page: http://172.19.6.46:52068/
       A reconnected into slot 0; roster [0, 1]; old socket state 3 reason 'opened somewhere else'
 PASS  phone_quick_reconnect_takes_back_its_slot
-Controller page: http://172.19.6.46:59420/
+Controller page: http://172.19.6.46:52073/
       stale kick of Bob's claim 2.0: roster [0, 1], Alice's socket state 1
       End match from match 1.0 during match 2.0: commands []
 PASS  host_phone_stale_kick_and_end_are_ignored
 PASS  controller_page_stale_confirms_close
 PASS  controller_page_no_traps_in_play
-Controller page: http://172.19.6.46:59425/
+Controller page: http://172.19.6.46:52078/
       after bad frames: ready false, name ''
       60 names in a burst: the host kept 'n19' (limit 20/s)
-      id-less client: bound { "id": "host-assigned-1-794822852", "slot": 1.0 }
+      id-less client: bound { "id": "host-assigned-1-3286603359", "slot": 1.0 }
 PASS  phone_bad_frames_ignored_and_rate_limited
-Controller page: http://172.19.6.46:59430/
+Controller page: http://172.19.6.46:52083/
       join frame 4223 bytes; 5 later looks frames of [91, 92, 92, 92, 92] bytes
 PASS  phone_hat_art_sent_once_on_bind
       Overpass.tscn: view [P: (-1200.0, -675.0), S: (2400.0, 1350.0)]; meteors start x -1191..1195, lowest y -755, dropped past y 2675
@@ -712,41 +712,41 @@ PASS  meteor_shower_rains_across_large_stage_view
 PASS  hazards_report_only_damage_dealt
       wall takes plain 17.0, double damage 34.0, after 17.0; a player takes [17.0, 34.0, 17.0]
 PASS  breakable_wall_double_damage_melee
-RoundManager: match seed 1678245943 (replay with -- --seed=1678245943)
+RoundManager: match seed 3093250205 (replay with -- --seed=3093250205)
       run 1 on seed 162: boomstick.tres, grapple.tres, boomerang.tres, sword.tres, staff.tres, dagger.tres, boomstick.tres, sword.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
       run 2 on seed 162: boomstick.tres, grapple.tres, boomerang.tres, sword.tres, staff.tres, dagger.tres, boomstick.tres, sword.tres, 43.54,-530.00/84.19, 277.76,-530.00/-159.61, -655.94,-530.00/-29.52, -461.30,-530.00/-105.16, 741.07,-530.00/120.91, 98.02,-530.00/-12.46, 454.73,-530.00/-162.80, -454.43,-530.00/-166.45
 PASS  round_modifier_draws_follow_modifier_seed
-Controller page: http://172.19.6.46:59434/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:59434/
+Controller page: http://172.19.6.46:52087/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:52087/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16897)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16909)
        [3] _run_scenario (res://tools/scenario_runner.gd:1246)
        [4] _run_one (res://tools/scenario_runner.gd:755)
        [5] _run_all (res://tools/scenario_runner.gd:717)
        [6] _run_one (res://tools/scenario_runner.gd:760)
        [7] _run_scenario (res://tools/scenario_runner.gd:1244)
-       [8] _scenario_round_modifier_draws_follow_modifier_seed (res://tools/scenario_runner.gd:16869)
+       [8] _scenario_round_modifier_draws_follow_modifier_seed (res://tools/scenario_runner.gd:16881)
        [9] _teardown (res://tools/scenario_runner.gd:1892)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16897)
+       [2] _scenario_mid_match_joiner_starts_with_fresh_slot (res://tools/scenario_runner.gd:16909)
        [3] _run_scenario (res://tools/scenario_runner.gd:1246)
        [4] _run_one (res://tools/scenario_runner.gd:755)
        [5] _run_all (res://tools/scenario_runner.gd:717)
        [6] _run_one (res://tools/scenario_runner.gd:760)
        [7] _run_scenario (res://tools/scenario_runner.gd:1244)
-       [8] _scenario_round_modifier_draws_follow_modifier_seed (res://tools/scenario_runner.gd:16869)
+       [8] _scenario_round_modifier_draws_follow_modifier_seed (res://tools/scenario_runner.gd:16881)
        [9] _teardown (res://tools/scenario_runner.gd:1892)
-RoundManager: match seed 3881486867 (replay with -- --seed=3881486867)
+RoundManager: match seed 125350845 (replay with -- --seed=125350845)
       newcomer slot 1; scores [0, 0, 0, 0, 0, 0, 0, 0]; kos {  }, damage { 0: 10.0 }, deaths { 2: 1 }, alive { 0: 0, 2: -384 }
 PASS  mid_match_joiner_starts_with_fresh_slot
-RoundManager: match seed 1587965660 (replay with -- --seed=1587965660)
+RoundManager: match seed 2617291425 (replay with -- --seed=2617291425)
       kos { 0: 1 }, self-KOs {  }, alive { 0: 34, 1: 34 } (round took 3505 ms, 3500 of them paused)
 PASS  pause_keeps_ko_credit_and_survival_time
 PASS  juice_overflow_head_claims_trail_later
@@ -771,7 +771,7 @@ PASS  announcer_said_capped_and_lengths_from_decode
       flail: aim settles in 7 ticks, extends in 5 ticks, vaults 92.4 px, climbs the ledge 8/10 times, median 111 ticks (runs [60, 62, 67, 75, 111, 220, 600, 600, 110, 314], 600 = never)
       boomerang: aim settles in 7 ticks, extends in 4 ticks, vaults 115.6 px, climbs the ledge 9/10 times, median 117 ticks (runs [69, 69, 67, 70, 70, 600, 117, 125, 200, 168], 600 = never)
 PASS  roster_traversal_is_measured
-RoundManager: match seed 812084204 (replay with -- --seed=812084204)
+RoundManager: match seed 1696786144 (replay with -- --seed=1696786144)
       time_scale 0.5: 30 ticks moved the clock 250 ms (expected 250)
       time_scale 0.5: 1 s of spawn protection lasted 120 ticks (60 at full speed)
       time_scale 0.5: the 1 s round-end pause lasted 120 ticks
@@ -820,104 +820,104 @@ PASS  new_weapon_hits_credit_the_thrower
 PASS  roster_heads_do_not_clip_platform_in_play_new_weapons
       4 flails 120 px apart: furthest a ball got from its player 162 px (allowed 225)
 PASS  flail_built_clear_of_neighbours
-Controller page: http://172.19.6.46:57173/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57173/
+Controller page: http://172.19.6.46:64530/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:64530/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
-       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19052)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19142)
        [4] _run_scenario (res://tools/scenario_runner.gd:1300)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1298)
-       [9] _scenario_flail_built_clear_of_neighbours (res://tools/scenario_runner.gd:18991)
+       [9] _scenario_flail_built_clear_of_neighbours (res://tools/scenario_runner.gd:19003)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
-       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19052)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19142)
        [4] _run_scenario (res://tools/scenario_runner.gd:1300)
        [5] _run_one (res://tools/scenario_runner.gd:755)
        [6] _run_all (res://tools/scenario_runner.gd:717)
        [7] _run_one (res://tools/scenario_runner.gd:760)
        [8] _run_scenario (res://tools/scenario_runner.gd:1298)
-       [9] _scenario_flail_built_clear_of_neighbours (res://tools/scenario_runner.gd:18991)
+       [9] _scenario_flail_built_clear_of_neighbours (res://tools/scenario_runner.gd:19003)
        [10] _teardown (res://tools/scenario_runner.gd:1892)
 RoundManager: match seed 187187 (replay with -- --seed=187187)
       run 1 on seed 187187: KOs [[0, 337], [1, 345]] after 11 samples; bot seeds [3381506363, 2387411799, 1304210152]; pickups boomstick@320,152, boomstick@-320,116; meteors -281.2, -261.2, 451.0, 605.5, 684.6, 343.0, 744.9, 44.9
-Controller page: http://172.19.6.46:57175/
-ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:57175/
+Controller page: http://172.19.6.46:64532/
+ERROR: Could not create child process: qrencode -o C:/Users/agage/AppData/Roaming/Godot/app_userdata/Pickfight/join_qr.png -s 8 -m 2 http://172.19.6.46:64532/
    at: execute (platform/windows/os_windows.cpp:1496)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:456)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
-       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
-       [4] _match_seed_bot_run (res://tools/scenario_runner.gd:19097)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19052)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19142)
+       [4] _match_seed_bot_run (res://tools/scenario_runner.gd:19109)
        [5] _await_ticks (res://tools/scenario_runner.gd:1896)
 WARNING: ControllerServer: qrencode unavailable or failed (exit -1) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _generate_qr_texture (res://scripts/ControllerServer.gd:458)
        [1] _ready (res://scripts/ControllerServer.gd:359)
-       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19040)
-       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19130)
-       [4] _match_seed_bot_run (res://tools/scenario_runner.gd:19097)
+       [2] _match_seed_bot_run (res://tools/scenario_runner.gd:19052)
+       [3] _scenario_match_seed_replays_bot_match (res://tools/scenario_runner.gd:19142)
+       [4] _match_seed_bot_run (res://tools/scenario_runner.gd:19109)
        [5] _await_ticks (res://tools/scenario_runner.gd:1896)
 RoundManager: match seed 187187 (replay with -- --seed=187187)
       run 2 on seed 187187: KOs [[0, 337], [1, 345]] after 11 samples; bot seeds [3381506363, 2387411799, 1304210152]; pickups boomstick@320,152, boomstick@-320,116; meteors -281.2, -261.2, 451.0, 605.5, 684.6, 343.0, 744.9, 44.9
       11 samples compared; worst position gap 0.00 px (tolerance 1)
 PASS  match_seed_replays_bot_match
-ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg:1: Expected value, got ''(''.
    at: _parse (core/io/config_file.cpp:292)
    GDScript backtrace (most recent call first):
        [0] _save_settings (res://scripts/Sfx.gd:633)
        [1] save_settings (res://scripts/Sfx.gd:535)
-       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19231)
-WARNING: Sfx: not saving settings: C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg would not load (Parse error)
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19243)
+WARNING: Sfx: not saving settings: C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg would not load (Parse error)
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _save_settings (res://scripts/Sfx.gd:635)
        [1] save_settings (res://scripts/Sfx.gd:535)
-       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19231)
-ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19243)
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg:1: Expected value, got ''(''.
    at: _parse (core/io/config_file.cpp:292)
    GDScript backtrace (most recent call first):
        [0] _save_settings (res://scripts/Music.gd:270)
        [1] save_settings (res://scripts/Music.gd:245)
-       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19232)
-WARNING: Music: not saving settings: C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg would not load (Parse error)
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19244)
+WARNING: Music: not saving settings: C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg would not load (Parse error)
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] _save_settings (res://scripts/Music.gd:272)
        [1] save_settings (res://scripts/Music.gd:245)
-       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19232)
-ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+       [2] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19244)
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg:1: Expected value, got ''(''.
    at: _parse (core/io/config_file.cpp:292)
    GDScript backtrace (most recent call first):
        [0] load_settings (res://scripts/Sfx.gd:615)
-       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19239)
-WARNING: Sfx: could not read settings from C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg (Parse error); using the defaults
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19251)
+WARNING: Sfx: could not read settings from C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg (Parse error); using the defaults
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] load_settings (res://scripts/Sfx.gd:622)
-       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19239)
-ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg:1: Expected value, got ''(''.
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19251)
+ERROR: ConfigFile parse error at C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg:1: Expected value, got ''(''.
    at: _parse (core/io/config_file.cpp:292)
    GDScript backtrace (most recent call first):
        [0] load_settings (res://scripts/Music.gd:251)
-       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19240)
-WARNING: Music: could not read settings from C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_33504.cfg (Parse error); using the default
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19252)
+WARNING: Music: could not read settings from C:/Users/agage/AppData/Local/Temp/pickfight_bad_settings_37240.cfg (Parse error); using the default
    at: push_warning (core/variant/variant_utility.cpp:1034)
    GDScript backtrace (most recent call first):
        [0] load_settings (res://scripts/Music.gd:255)
-       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19240)
+       [1] _scenario_script_run_never_touches_owner_settings (res://tools/scenario_runner.gd:19252)
 PASS  script_run_never_touches_owner_settings
       longest trail per swing: [5, 5, 5] (cap 10)
 PASS  juice_trail_draws_every_swing
@@ -938,8 +938,8 @@ PASS  rematch_on_same_seed_deals_same_stages
       lava at y 100: 0 of 40 spot draws under it or none
       lava risen to y -400: 0 pickups left live after a tick
 PASS  pickups_skip_and_clear_under_lava
-RoundManager: match seed 3501976411 (replay with -- --seed=3501976411)
-RoundManager: match seed 476285783 (replay with -- --seed=476285783)
+RoundManager: match seed 4171645154 (replay with -- --seed=4171645154)
+RoundManager: match seed 4245455366 (replay with -- --seed=4245455366)
       seed 200, spawn per slot by round: [[0, 1, 2, 3], [1, 2, 3, 0], [0, 1, 2, 3], [1, 2, 3, 0], [3, 0, 1, 2], [1, 2, 3, 0], [3, 0, 1, 2], [3, 0, 1, 2], [3, 0, 1, 2]]; again: [[0, 1, 2, 3], [1, 2, 3, 0], [0, 1, 2, 3], [1, 2, 3, 0], [3, 0, 1, 2], [1, 2, 3, 0], [3, 0, 1, 2], [3, 0, 1, 2], [3, 0, 1, 2]]
 PASS  spawn_places_rotate_each_round
       winner slot 0 on 2, scores [2, 5, 3, 0]: podium [0, 1, 2, 3]
