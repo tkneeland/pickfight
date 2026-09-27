@@ -747,11 +747,13 @@ func _run_all() -> void:
 
 ## Runs one scenario the way the run does. Every scenario starts from the
 ## harness's statics and cannot leave them changed for the next one, whatever
-## order it runs in (#179).
+## order it runs in (#179), and in a physics world of its own (#180).
 func _run_one(name: String) -> Array[String]:
 	_scenario_completed = false
 	var statics: Dictionary = _snapshot_statics()
+	var world: World2D = _fresh_physics_world()
 	var failures: Array[String] = await _run_scenario(name)
+	get_root().world_2d = world
 	_restore_statics(statics)
 	if not _scenario_completed:
 		failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
@@ -773,6 +775,27 @@ const SFX_RESTORED_FIELDS: PackedStringArray = [
 	"window_mode_probe", "fullscreen_sync_grace_msec", "settings_path", "persist_settings",
 ]
 const MUSIC_RESTORED_FIELDS: PackedStringArray = ["settings_path", "persist_settings"]
+
+## Gives the root viewport a new World2D -- a new physics space -- and returns
+## the one it had, for the caller to put back (#180).
+##
+## Godot's 2D physics is deterministic in one process only for identical
+## histories: the order the solver visits contacts in comes from the space's
+## broadphase, and a space that has had other bodies made and freed in it
+## hands out its internal slots in a different order. Two copies of one scene
+## then drift apart by float rounding from their first contact on, and a
+## chaotic scene grows that to whole pixels. Measured on
+## `match_seed_replays_bot_match` with the #180 forces: two bot matches on one
+## seed in the shared space were 1e-5 px apart at tick 37 and 240 px apart by
+## tick 150, and a scenario's numbers depended on which scenarios ran before
+## it in its shard (the flail's strike speed in `weapon_damage_matches_roster`
+## was 2178 px/s alone and 2144 px/s in CI shard 0's order). In a new space
+## the two matches are identical to the bit, and every scenario sees the
+## same physics whatever shard it runs in.
+func _fresh_physics_world() -> World2D:
+	var previous: World2D = get_root().world_2d
+	get_root().world_2d = World2D.new()
+	return previous
 
 func _snapshot_statics() -> Dictionary:
 	var snapshot: Dictionary = {
@@ -2428,6 +2451,13 @@ func _scenario_heads_do_not_tunnel_head() -> Array[String]:
 			for _t in CHARGE_TICKS:
 				attacker.linear_velocity = axis * speed
 				blocker.linear_velocity = -axis * speed
+				# And within a charge too (#180): 45 ticks of two bodies
+				# battering each other can reach the 100 of an elimination on
+				# their own -- measured in 1 of 42 perturbed physics histories
+				# on main and on this branch alike -- which froze the attacker
+				# and voided every charge after it.
+				attacker.damage = 0.0
+				blocker.damage = 0.0
 				await physics_frame
 				var relative: Vector2 = blocker.weapon_head_position() - attacker.weapon_head_position()
 				var still_alive: bool = attacker.deaths + blocker.deaths == deaths
@@ -18971,16 +19001,17 @@ const MATCH_SEED_ROUND_MSEC: int = 60000
 ## Positions are sampled this often (physics ticks) through the round.
 const MATCH_SEED_SAMPLE_TICKS: int = 30
 ## How far a player may be from where the other run had it at the same tick.
-## Not zero: every RNG is seeded, but Godot's physics solver is not bit-exact
-## between two copies of a scene in one process (contact order follows the
-## bodies' RIDs). Measured: the runs agree exactly until the first contact
-## between two players, then differ by float rounding (1e-5 px), which the
-## bots' decisions can grow to tens of pixels by the end of the round. A
-## seed that failed to reach any stream would differ by hundreds from the
-## first pickup or meteor on.
-const MATCH_SEED_POSITION_TOLERANCE: float = 48.0
+## Each run gets a physics space of its own (#180, `_fresh_physics_world`),
+## and with that the two runs are identical to the bit. In the one shared
+## space they were not: the solver's contact order follows the space's
+## history, the runs drifted apart by float rounding from the first contact
+## between two players, and the 48 px this used to allow was outgrown by 240
+## px once #180 raised the drive forces. What is left here is headroom, not
+## an expected drift. A seed that failed to reach any stream would differ by
+## hundreds from the first pickup or meteor on.
+const MATCH_SEED_POSITION_TOLERANCE: float = 1.0
 ## A KO may land this many ticks apart between the runs, for the same reason.
-const MATCH_SEED_KO_TICK_TOLERANCE: int = 30
+const MATCH_SEED_KO_TICK_TOLERANCE: int = 1
 
 ## One short bot match on Flatlands: `--bots=3`, the lobby (which starts by
 ## itself), and the first round, with Meteor Shower forced, pickups every 3 s
@@ -18991,6 +19022,9 @@ const MATCH_SEED_KO_TICK_TOLERANCE: int = 30
 ## the meteors' spawn points.
 func _match_seed_bot_run(seed_value: int) -> Dictionary:
 	randomize()
+	# Each run in a physics space of its own, as a real replay (a new process)
+	# is: see `_fresh_physics_world`.
+	var world: World2D = _fresh_physics_world()
 	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % MATCH_SEED_BOTS])
 	var built: Dictionary = _new_bot_main()
 	var main: Node = built["main"]
@@ -19010,6 +19044,7 @@ func _match_seed_bot_run(seed_value: int) -> Dictionary:
 		server.bot_director.remove_bots()
 		await _teardown(main, false)
 		BotDirectorScript.extra_args = PackedStringArray()
+		get_root().world_2d = world
 		return result
 	result["seed"] = rm.match_seed_value()
 	var slots: Array[int] = server.virtual_slots()
@@ -19058,6 +19093,7 @@ func _match_seed_bot_run(seed_value: int) -> Dictionary:
 	await _teardown(main, false)
 	await _await_ticks(2)
 	BotDirectorScript.extra_args = PackedStringArray()
+	get_root().world_2d = world
 	return result
 
 ## Issue #187: every gameplay RNG comes from one match seed. The same short

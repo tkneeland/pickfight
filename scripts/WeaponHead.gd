@@ -1147,6 +1147,22 @@ func pair_step_snapshot() -> Dictionary:
 		"shapes": _step_shape_xforms,
 	}
 
+## Where this head really ends the step, for the head that seats itself
+## against it (issue #180): where the world sweep stops it, if it does, and
+## not where the step alone would have taken it. Carried to the step's end,
+## an owner seated itself on the far side of a partner the world then held
+## back -- two heads charged together, the partner stopped on the attacker's
+## body 2% into the step -- and the pair ended the step crossed. Once this
+## head has been integrated its correction is in the server's transform and
+## the sweep finds nothing left to do; before that, the sweep is the one it
+## is about to make itself.
+func pair_step_end() -> Vector2:
+	var state: PhysicsDirectBodyState2D = PhysicsServer2D.body_get_direct_state(get_rid())
+	if state == null or not _has_previous or phased:
+		return _step_to
+	var world: Dictionary = _find_world_contact(state)
+	return state.transform.origin if world.is_empty() else Vector2(world["contact"])
+
 ## Which of two heads does the pair's one correction.
 ##
 ## It has to be one of them and the same one from either side, or the whole
@@ -1297,7 +1313,7 @@ func _find_head_crossing(held_from: float = -1.0) -> Dictionary:
 		# ended the step, so the correction leaves the pair in contact rather
 		# than in contact with where the other head used to be.
 		offset = (my_from + my_motion * fraction) - (their_from + their_motion * fraction)
-		partner_origin = theirs["to"]
+		partner_origin = other.pair_step_end()
 		partner_velocity = theirs["velocity"]
 
 	# Three separate ways there is nothing to do, and with clustered heads no
