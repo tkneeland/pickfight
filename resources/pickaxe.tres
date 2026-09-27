@@ -59,10 +59,16 @@
 ;
 ; Issue #136, more responsive: drive 24 -> 36 rad/s and 400 -> 600 px/s back
 ; to rest. The force ceiling stayed at 6000 then; issue #180 raised it to 8000
-; once a stalled drive pushed its rated force, and the axe's 11000 still wins. Extension stays 700 px/s out: every speed tried from 750 to
-; 1050 broke one of the grip scenarios (a planted head skidding in
-; planted_head_grips_sideways_push, or a head pressed into a wall not letting
-; go in gripping_head_lets_go), all of which run on the pickaxe.
+; once a stalled drive pushed its rated force, and the axe's 11000 still wins.
+;
+; Issue #181, faster and grippier -- the climbing weapon: extension 700 ->
+; 1000 px/s out (still under the sword's 1150) and grip_friction 8.0 against
+; every other head's 4.0. Swept at 8000 N, no speed from 750 to 1050 made a
+; planted head skid (planted_head_grips_sideways_push held at 0.0 px); what
+; broke at 750, 950 and 1000 was the wall case of gripping_head_lets_go,
+; where the grip had already fully yielded and the head froze on plain 1.0
+; friction. A yielded head now drops to 0.5 (Player.HEAD_YIELD_FRICTION), and
+; every speed from 700 to 1050 passes.
 
 [resource]
 script = ExtResource("1")
@@ -70,10 +76,11 @@ min_reach = 20.0
 max_reach = 150.0
 mass = 0.25
 drive_speed = 36.0
-extend_speed = 700.0
+extend_speed = 1000.0
 rest_return_speed = 600.0
 max_drive_force = 8000.0
 damage = 34.0
+grip_friction = 8.0
 sound_set = &"pickaxe"
 head_circle_offsets = PackedVector2Array(-4.32, -11.34, -2.42, -10.96, -0.52, -10.59, 1.08, -8.46, 2.68, -6.34, 3.38, -3.09, 4.08, 0.16, 3.38, 3.16, 2.68, 6.16, 1.08, 8.41, -0.52, 10.66, -2.42, 11.04, -4.32, 11.41)
 head_circle_radii = PackedFloat32Array(2, 2.9, 3.79, 4.18, 4.58, 4.51, 4.92, 4.52, 4.57, 4.17, 3.77, 2.9, 2.04)

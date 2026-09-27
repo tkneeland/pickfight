@@ -47,6 +47,12 @@ extends Resource
 ## solver path.
 @export var damage: float = 34.0
 
+## How hard a head planted on terrain bites into it (issue #110): its
+## friction while the drag still points along the haft, against terrain's
+## 1.0 (`Player._update_head_grip`). Per weapon since #181, so the pickaxe
+## can be the climbing weapon; the default is the 4.0 every head had before.
+@export var grip_friction: float = 4.0
+
 # --- Firing: a weapon that shoots as well as swings (issue #55, ADR-0014) ----
 #
 # Every default here means "does not fire", so a weapon that sets none of them

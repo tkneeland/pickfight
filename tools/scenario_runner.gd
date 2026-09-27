@@ -318,6 +318,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kicking_last_opponent_scores_nobody",
 	"solo_double_press_adds_bots_once",
 	"solo_bot_yields_slot_to_phone",
+	"grip_strength_is_per_weapon",
+	"pickaxe_wall_grip_lets_go_at_every_swept_speed",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1353,6 +1355,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_solo_double_press_adds_bots_once()
 		"solo_bot_yields_slot_to_phone":
 			return await _scenario_solo_bot_yields_slot_to_phone()
+		"grip_strength_is_per_weapon":
+			return await _scenario_grip_strength_is_per_weapon()
+		"pickaxe_wall_grip_lets_go_at_every_swept_speed":
+			return await _scenario_pickaxe_wall_grip_lets_go_at_every_swept_speed()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -2272,7 +2278,7 @@ func _scenario_ringout_then_next_round_survives() -> Array[String]:
 ##
 ## **Sent at each other**, which is what a player's thumb actually does: both
 ## commanding full reach at once, which the extension drive delivers at
-## 700 px/s each, closing the heads at about 23 px a tick against the 16 px
+## 1000 px/s each since #181 (700 before), closing the heads at about 33 px a tick against the 16 px
 ## at which they touch. This used to be described here and not asserted --
 ## the pair resolved both ways from identical code depending only on where in
 ## the step the heads landed, blocking at 10.5 px one run and stepping clean
@@ -3733,8 +3739,8 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## margin by which a higher tier has to beat a lower one. The table's steps
 ## are 21 and 14, so both sit clear of the tolerance above and well under a
 ## step.
-## A band since #45: the M tier is pickaxe 34, sword 40, dagger 60 (the
-## dagger was buffed from 45 at the hackathon playtest).
+## A band since #45: the M tier is pickaxe 34, sword 46 (40 until #181),
+## dagger 60 (the dagger was buffed from 45 at the hackathon playtest).
 ## Since #55 the S tier is a band too: boomstick 8, staff 20.
 ## The M band's own width is 26 (34 to 60), so the spread is that plus one
 ## ROSTER_DAMAGE_TOLERANCE of measurement: at 27 a pickaxe strike landing
@@ -20463,5 +20469,105 @@ func _scenario_solo_bot_yields_slot_to_phone() -> Array[String]:
 	director.remove_bots()
 	await _close_phones(joined)
 	await _teardown(main)
+	_scenario_completed = true
+	return failures
+
+
+# --- Issue #181: the pickaxe, faster and grippier -----------------------------
+
+## The grip every head had before #181, and still has unless its weapon says
+## otherwise.
+const GRIP_DEFAULT_FRICTION: float = 4.0
+## Where #181 put the pickaxe's extension: about 1000 px/s, under the sword's.
+const PICKAXE_MIN_EXTEND_SPEED: float = 950.0
+const SWORD_DAMAGE_181: float = 46.0
+## The extension speeds the #181 sweep ran the pickaxe at.
+const GRIP_SWEEP_SPEEDS: Array[float] = [750.0, 850.0, 950.0, 1000.0, 1050.0]
+
+## Issue #181: grip strength is per weapon. A bare WeaponStats and every
+## roster weapon but the pickaxe keep the 4.0 every head had before; the
+## pickaxe's is higher and it extends at about 1000 px/s, still under the
+## sword's, whose damage went 40 -> 46 to compensate. And the number is the
+## one that reaches the physics: a planted head's material carries its own
+## weapon's grip, the pickaxe's and the sword's side by side.
+func _scenario_grip_strength_is_per_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var bare: WeaponStatsType = WeaponStatsType.new()
+	if bare.get("grip_friction") == null:
+		failures.append("WeaponStats has no grip_friction")
+		_scenario_completed = true
+		return failures
+	if not is_equal_approx(bare.grip_friction, GRIP_DEFAULT_FRICTION):
+		failures.append("a bare WeaponStats grips at %.2f, expected the default %.2f" % [bare.grip_friction, GRIP_DEFAULT_FRICTION])
+	var pickaxe: WeaponStatsType = load("res://resources/pickaxe.tres")
+	var sword: WeaponStatsType = load("res://resources/sword.tres")
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var stats: WeaponStatsType = load(path)
+		if stats != pickaxe and not is_equal_approx(stats.grip_friction, GRIP_DEFAULT_FRICTION):
+			failures.append("%s grips at %.2f; only the pickaxe should differ from %.2f" % [
+				path.get_file().get_basename(), stats.grip_friction, GRIP_DEFAULT_FRICTION])
+	print("      pickaxe: grip %.2f, extends at %.0f px/s; sword: extends at %.0f px/s, damage %.0f" % [
+		pickaxe.grip_friction, pickaxe.extend_speed, sword.extend_speed, sword.damage])
+	if pickaxe.grip_friction <= GRIP_DEFAULT_FRICTION:
+		failures.append("the pickaxe grips at %.2f, not above the default %.2f" % [pickaxe.grip_friction, GRIP_DEFAULT_FRICTION])
+	if pickaxe.extend_speed < PICKAXE_MIN_EXTEND_SPEED or pickaxe.extend_speed >= sword.extend_speed:
+		failures.append("the pickaxe extends at %.0f px/s, expected %.0f or more and under the sword's %.0f" % [
+			pickaxe.extend_speed, PICKAXE_MIN_EXTEND_SPEED, sword.extend_speed])
+	if not is_equal_approx(sword.damage, SWORD_DAMAGE_181):
+		failures.append("the sword deals %.1f, expected %.1f" % [sword.damage, SWORD_DAMAGE_181])
+
+	for stats: WeaponStatsType in [pickaxe, sword]:
+		var stage: Node2D = _new_stage()
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+		player.set_weapon_stats(stats)
+		player.set_input_vector(Vector2.DOWN * 0.05)
+		await _await_ticks(LANDING_TICKS)
+		var material: PhysicsMaterial = player._head_material
+		print("      %s planted: friction %.2f, rough %s" % [stats.resource_path.get_file(), material.friction, material.rough])
+		if not material.rough or not is_equal_approx(material.friction, stats.grip_friction):
+			failures.append("%s: a head planted on the floor has friction %.2f (rough %s), expected its weapon's grip %.2f" % [
+				stats.resource_path.get_file(), material.friction, material.rough, stats.grip_friction])
+		await _teardown(stage, false)
+	_scenario_completed = true
+	return failures
+
+## Issue #181: the sweep that kept the pickaxe at 700 px/s. At 750, 950 and
+## 1000 px/s a pickaxe pressed into a wall, the body wedged behind it, did
+## not come off when the drag moved up and away: the grip had fully yielded,
+## and the head froze on plain terrain friction because the stalled
+## extension drive pressed about as hard as the angle drive turned. A
+## yielded head now drops below plain friction, so the wall case of
+## `gripping_head_lets_go` frees at every speed swept, and a planted head
+## still does not skid (`planted_head_grips_sideways_push` runs on the
+## shipped pickaxe).
+func _scenario_pickaxe_wall_grip_lets_go_at_every_swept_speed() -> Array[String]:
+	var failures: Array[String] = []
+	var ground_y: float = GROUND_TOP - PLAYER_RADIUS - 2.0
+	var moved: Vector2 = Vector2(1, -1).normalized() * 0.6
+	for speed: float in GRIP_SWEEP_SPEEDS:
+		var stats: WeaponStatsType = load("res://resources/pickaxe.tres").duplicate()
+		stats.extend_speed = speed
+		var stage: Node2D = _new_stage()
+		_add_bar(stage, Vector2(GRIP_WALL_GAP + 20.0, 180.0), Vector2(40, 200))
+		_add_bar(stage, Vector2(-PLAYER_RADIUS - 21.0, 180.0), Vector2(40, 200))
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0, ground_y))
+		player.set_weapon_stats(stats)
+		player.set_input_vector(Vector2.RIGHT)
+		await _await_ticks(GRIP_PRESS_TICKS)
+		var pressed: float = GRIP_WALL_GAP - player.weapon_head_position().x
+		if pressed > PLANT_CLEARANCE * 3.0:
+			failures.append("%.0f px/s: the head never reached the wall (%.1f px off it)" % [speed, pressed])
+		player.set_input_vector(moved)
+		var freed_at: int = -1
+		for i in GRIP_LET_GO_TICKS:
+			await physics_frame
+			if GRIP_WALL_GAP - player.weapon_head_position().x >= GRIP_LET_GO_DISTANCE:
+				freed_at = i
+				break
+		print("      %.0f px/s: pressed %.1f px off the wall, let go after %d ticks" % [speed, pressed, freed_at])
+		if freed_at < 0:
+			failures.append("%.0f px/s: moving the drag did not free the head within %d ticks (%.1f px off the wall)" % [
+				speed, GRIP_LET_GO_TICKS, GRIP_WALL_GAP - player.weapon_head_position().x])
+		await _teardown(stage, false)
 	_scenario_completed = true
 	return failures
