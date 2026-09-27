@@ -309,6 +309,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"axe_wins_clash_against_every_weapon",
 	"crumbling_ledge_retriggers_on_reform",
 	"stage_spawns_balanced_left_right",
+	"controller_page_lobby_rename_reachable",
+	"controller_page_refused_phone_waits_for_slot",
+	"controller_page_solo_button_debounced",
+	"controller_page_stale_bits_dropped",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1326,6 +1330,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_crumbling_ledge_retriggers_on_reform()
 		"stage_spawns_balanced_left_right":
 			return await _scenario_stage_spawns_balanced_left_right()
+		"controller_page_lobby_rename_reachable":
+			return await _scenario_controller_page_lobby_rename_reachable()
+		"controller_page_refused_phone_waits_for_slot":
+			return await _scenario_controller_page_refused_phone_waits_for_slot()
+		"controller_page_solo_button_debounced":
+			return await _scenario_controller_page_solo_button_debounced()
+		"controller_page_stale_bits_dropped":
+			return await _scenario_controller_page_stale_bits_dropped()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -16393,7 +16405,7 @@ func _scenario_controller_page_stale_confirms_close() -> Array[String]:
 	var failures: Array[String] = []
 	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
 	var kick_body: String = _js_function_body(page, "showKickList")
-	if not kick_body.contains('sendHost("kick", { slot: target, claim: claim, name: name })'):
+	if not kick_body.contains('sendHost("kick", { slot: target, claim: claim })'):
 		failures.append("the kick does not name the target's claim")
 	if not kick_body.contains("return claimHolder(target, claim) !== null;"):
 		failures.append("the kick confirm does not check its target still holds that claim")
@@ -19802,6 +19814,158 @@ func _scenario_stage_spawns_balanced_left_right() -> Array[String]:
 		print("      %s: %s" % [path.get_file(), " ".join(splits)])
 		instance.queue_free()
 		await physics_frame
+	_scenario_completed = true
+	return failures
+
+# --- Phone page UX (issue #194) ---------------------------------------------------
+
+## Issue #194: the controller page as shipped, with Windows line endings
+## (a CRLF checkout) folded to LF so the checks read the same everywhere.
+func _controller_page_lf_194() -> String:
+	return FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH).replace("\r\n", "\n").replace("\r", "\n")
+
+## The z-index in the CSS rule `#<id> { ... }`, or -1 when the rule has none
+## (or there is no such rule).
+func _css_z_index_194(page: String, id: String) -> int:
+	var re := RegEx.new()
+	re.compile("(?m)^\\s*#%s \\{([^}]*)\\}" % id)
+	var m: RegExMatch = re.search(page)
+	if m == null:
+		return -1
+	var z_re := RegEx.new()
+	z_re.compile("z-index:\\s*(\\d+)")
+	var z: RegExMatch = z_re.search(m.get_string(1))
+	return int(z.get_string(1)) if z != null else -1
+
+## Issue #194, item 1, read off controller/index.html as shipped (a headless run
+## has no browser, so this is the hit test in CSS terms): in the lobby a tap on
+## the nickname must reach it. The HUD holding the badge and the name is
+## stacked above the full-screen lobby card (which has no z-index and comes
+## later in the page, so it used to win), yet below the gear, the host menu and
+## the name and look cards; the HUD itself lets touches through and only the
+## name takes them; the name opens the rename prompt outside play; and the
+## lobby's content starts below the HUD instead of under it.
+func _scenario_controller_page_lobby_rename_reachable() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var hud_z: int = _css_z_index_194(page, "hud")
+	var lobby_z: int = _css_z_index_194(page, "lobby")
+	print("      z-index: hud %d, lobby %d, gear %d, host-menu %d, name-prompt %d, look-prompt %d" % [
+		hud_z, lobby_z, _css_z_index_194(page, "gear"), _css_z_index_194(page, "host-menu"),
+		_css_z_index_194(page, "name-prompt"), _css_z_index_194(page, "look-prompt")])
+	var hud_at: int = page.find('<div id="hud">')
+	var lobby_at: int = page.find('<div id="lobby">')
+	if hud_at < 0 or lobby_at < 0:
+		failures.append("the page has no #hud or #lobby")
+	elif hud_z <= lobby_z or (hud_z == lobby_z and hud_at < lobby_at):
+		failures.append("the lobby card is stacked over the HUD, so a tap on the name hits the lobby (hud z %d, lobby z %d)" % [hud_z, lobby_z])
+	for over: String in ["gear", "host-menu", "name-prompt", "look-prompt"]:
+		var z: int = _css_z_index_194(page, over)
+		if z <= hud_z:
+			failures.append("#%s (z %d) is no longer above the HUD (z %d)" % [over, z, hud_z])
+	var hud_re := RegEx.new()
+	hud_re.compile("(?m)^\\s*#hud \\{([^}]*)\\}")
+	var hud: RegExMatch = hud_re.search(page)
+	if hud == null or not hud.get_string(1).contains("pointer-events: none"):
+		failures.append("the HUD takes touches itself, so it would cover the lobby's buttons")
+	var name_re := RegEx.new()
+	name_re.compile("(?m)^\\s*#name \\{([^}]*)\\}")
+	var name_rule: RegExMatch = name_re.search(page)
+	if name_rule == null or not name_rule.get_string(1).contains("pointer-events: auto"):
+		failures.append("the name does not take touches inside the HUD")
+	var hud_end: int = page.find("</div>\n<div id=\"lobby\">", hud_at)
+	var name_at: int = page.find('<div id="name">', hud_at)
+	if name_at < 0 or hud_end < 0 or name_at > hud_end:
+		failures.append("the name is not inside the HUD")
+	if not page.contains('nameEl.addEventListener("click", openNamePrompt)'):
+		failures.append("tapping the name does not open the rename prompt")
+	var open_body: String = _js_function_body(page, "openNamePrompt")
+	if open_body.contains("lobbyEl") or open_body.contains("lobby.phase"):
+		failures.append("the rename prompt refuses to open in the lobby: %s" % open_body)
+	var lobby_re := RegEx.new()
+	lobby_re.compile("(?m)^\\s*#lobby \\{([^}]*)\\}")
+	var lobby_rule: RegExMatch = lobby_re.search(page)
+	if lobby_rule == null or not lobby_rule.get_string(1).contains("padding-top: calc(env(safe-area-inset-top, 0px) + 15vmin"):
+		failures.append("the lobby's content is not pushed below the HUD's badge and name")
+	_scenario_completed = true
+	return failures
+
+## Issue #194, item 2, read off controller/index.html as shipped: a phone the
+## host refuses (every slot taken) says "Waiting for a free slot" in the large
+## state line, and keeps saying it while it retries, instead of a blank pad.
+## Every status change redraws the state line; the close reason is remembered
+## until a slot is given and matches the one ControllerServer refuses with
+## (NO_FREE_SLOT_REASON, checked against the server over a real socket by
+## `four_phones_claim_four_slots`); any other reason is shown large
+## too; and the "Drag to swing" hint is hidden while the phone has no slot.
+func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	if not _js_function_body(page, "setStatus").contains("showState()"):
+		failures.append("a status change (connected, refused) does not redraw the state line")
+	if not page.contains('var NO_SLOT_REASON = "%s";' % NO_FREE_SLOT_REASON):
+		failures.append("the page's NO_SLOT_REASON does not match the server's refusal '%s'" % NO_FREE_SLOT_REASON)
+	var state: String = _js_function_body(page, "showState")
+	var slot_at: int = state.find("} else if (slot < 0) {")
+	var slot_arm: String = state.substr(slot_at, state.find("} else if (lobby", slot_at) - slot_at) if slot_at >= 0 else ""
+	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = "Waiting for a free slot"'):
+		failures.append("a refused phone is not told it is waiting for a free slot: %s" % slot_arm)
+	if not slot_arm.contains("} else if (closeReason) {"):
+		failures.append("any other close reason is not shown large: %s" % slot_arm)
+	var connect_body: String = _js_function_body(page, "connect")
+	var close_at: int = connect_body.find("closeReason = kicked || replaced ? \"\" : reason;")
+	var status_at: int = connect_body.find("setStatus(kicked ?")
+	if close_at < 0 or status_at < 0 or close_at > status_at:
+		failures.append("the close handler does not remember the reason before redrawing")
+	if not _js_function_body(page, "setSlot").contains('if (n >= 0) { closeReason = ""; }'):
+		failures.append("being given a slot does not forget the old refusal")
+	var hint_at: int = state.find('getElementById("hint").style.display = ')
+	var hint_line: String = state.substr(hint_at, state.find(";", hint_at) - hint_at) if hint_at >= 0 else ""
+	if not hint_line.contains("= slot >= 0 && ("):
+		failures.append("the 'Drag to swing' hint shows on a phone with no slot: %s" % hint_line)
+	_scenario_completed = true
+	return failures
+
+## Issue #194, item 3, read off controller/index.html as shipped: the host's
+## Solo button is disabled from its press until the next lobby state arrives,
+## so a double tap sends one solo frame, not bots-in then bots-out.
+func _scenario_controller_page_solo_button_debounced() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var at: int = page.find('soloBtn.addEventListener("click"')
+	var handler: String = page.substr(at, page.find("});", at) - at) if at >= 0 else ""
+	var guard_at: int = handler.find("if (soloBtn.disabled) { return; }")
+	var disable_at: int = handler.find("soloBtn.disabled = true;")
+	var send_at: int = handler.find('sendText({ t: "solo"')
+	if guard_at < 0 or disable_at < 0 or send_at < 0 or not (guard_at < disable_at and disable_at < send_at):
+		failures.append("a press does not disable the Solo button before sending: %s" % handler)
+	if not _js_function_body(page, "showSolo").contains("soloBtn.disabled = false;"):
+		failures.append("the next lobby state does not enable the Solo button again")
+	if not _js_function_body(page, "showLobby").contains("showSolo(msg, isHost)"):
+		failures.append("a lobby state does not redraw the Solo button")
+	if not page.contains("#solo-btn:disabled {"):
+		failures.append("a disabled Solo button does not look disabled")
+	_scenario_completed = true
+	return failures
+
+## Issue #194, item 4, read off controller/index.html as shipped: the kick frame
+## carries no unused name field (the confirm text still names the player), and
+## a released wake lock is forgotten so visibilitychange asks for a new one.
+func _scenario_controller_page_stale_bits_dropped() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var kick_body: String = _js_function_body(page, "showKickList")
+	if not kick_body.contains('sendHost("kick", { slot: target, claim: claim })'):
+		failures.append("the kick frame is not {slot, claim}")
+	if kick_body.contains("claim: claim, name"):
+		failures.append("the kick frame still sends the unused name")
+	if not kick_body.contains('askConfirm("Are you sure? Kick " + name'):
+		failures.append("the kick confirm no longer names the player")
+	var wake: String = _js_function_body(page, "requestWakeLock")
+	if not wake.contains('lock.addEventListener("release"') or not wake.contains("if (wakeLock === lock) { wakeLock = null; }"):
+		failures.append("a released wake lock is never cleared, so it is never asked for again: %s" % wake)
+	if not page.contains('document.visibilityState === "visible" && !wakeLock) { requestWakeLock(); }'):
+		failures.append("coming back to the page does not re-request the wake lock")
 	_scenario_completed = true
 	return failures
 
