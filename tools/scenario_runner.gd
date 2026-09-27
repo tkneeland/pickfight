@@ -2699,6 +2699,13 @@ func _creep_into(attacker: RigidBody2D, victim: RigidBody2D, centre: Vector2) ->
 ## where they started.
 func _clash(left: RigidBody2D, right: RigidBody2D, centre: Vector2) -> Dictionary:
 	var half: Vector2 = Vector2.RIGHT * CLASH_SEPARATION * 0.5
+	# From rest (#181): the second clash used to start with the left still
+	# commanded to full reach from the first, so it pushed out into the
+	# right's rebuilt rig before the walk began. At the pickaxe's 1000 px/s
+	# the two heads were already past each other when it did.
+	left.set_input_vector(Vector2.ZERO)
+	right.set_input_vector(Vector2.ZERO)
+	await _await_ticks(RELEASE_TICKS)
 	left.teleport_to(centre - half)
 	right.teleport_to(centre + half)
 	# Walked together rather than sent: a contest can only be measured once
@@ -9882,6 +9889,13 @@ const WALL_TEST_SIZE: Vector2 = Vector2(24, 100)
 ## Half-sweeps for a weak poke and a hard swing (see `_swing_at`).
 const WALL_WEAK_HALF_ANGLE: float = 0.35
 const WALL_HARD_HALF_ANGLE: float = 1.3
+## A light poke's half-sweep (#181). The light pokes used to run at the weak
+## half-sweep, and from #180 on they only passed because the head wedged
+## against the wall on the first contact and never swung again (hits at
+## 0 px/s, 0 damage). Once a yielded head could slide off, those pokes
+## landed at 1740 px/s, three contacts a swing, and broke the wall in three.
+## At 0.2 rad each poke really lands (about 1000 px/s) and the wall stands.
+const WALL_LIGHT_HALF_ANGLE: float = 0.2
 ## Most swings either kind gets to break the wall before it is given up on.
 const WALL_MAX_SWINGS: int = 10
 ## Weak pokes the wall must survive.
@@ -9981,10 +9995,12 @@ func _scenario_breakable_wall_breaks_on_weapon_hits() -> Array[String]:
 	_brace(attacker)
 
 	# Light pokes, on their own wall: it survives them, whatever they chip off.
-	var light: Dictionary = await _break_wall(stage, attacker, centre, WALL_WEAK_HALF_ANGLE, WALL_LIGHT_POKES, "light pokes")
+	var light: Dictionary = await _break_wall(stage, attacker, centre, WALL_LIGHT_HALF_ANGLE, WALL_LIGHT_POKES, "light pokes")
 	failures.append_array(light["failures"])
 	if light["broke"]:
 		failures.append("the wall broke under %d light poke(s)" % light["swings"])
+	elif light["total"] <= 0.0:
+		failures.append("the light pokes never landed a damaging hit, so they prove nothing")
 	light["wall"].queue_free()
 	await physics_frame
 
