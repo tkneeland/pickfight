@@ -313,6 +313,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_page_refused_phone_waits_for_slot",
 	"controller_page_solo_button_debounced",
 	"controller_page_stale_bits_dropped",
+	"phone_oversized_frames_dropped_cheaply",
+	"host_reload_in_lobby_keeps_host_and_colour",
+	"kicking_last_opponent_scores_nobody",
+	"solo_double_press_adds_bots_once",
+	"solo_bot_yields_slot_to_phone",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1338,6 +1343,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_controller_page_solo_button_debounced()
 		"controller_page_stale_bits_dropped":
 			return await _scenario_controller_page_stale_bits_dropped()
+		"phone_oversized_frames_dropped_cheaply":
+			return await _scenario_phone_oversized_frames_dropped_cheaply()
+		"host_reload_in_lobby_keeps_host_and_colour":
+			return await _scenario_host_reload_in_lobby_keeps_host_and_colour()
+		"kicking_last_opponent_scores_nobody":
+			return await _scenario_kicking_last_opponent_scores_nobody()
+		"solo_double_press_adds_bots_once":
+			return await _scenario_solo_double_press_adds_bots_once()
+		"solo_bot_yields_slot_to_phone":
+			return await _scenario_solo_bot_yields_slot_to_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -20198,3 +20213,255 @@ func _stats_forward_extent(stats: WeaponStatsType) -> float:
 	for i in stats.head_circle_count():
 		forward = maxf(forward, stats.head_circle_offsets[i].x + stats.head_circle_radii[i])
 	return forward
+
+# --- Issue #193: ControllerServer hardening ------------------------------------
+
+## A nickname this long took clean_name() about 0.7 s before #193.
+const OVERSIZE_NAME_193: int = 60000
+## What cleaning that nickname may cost now: the loop only sees 64 characters.
+const OVERSIZE_CLEAN_MAX_MSEC_193: float = 25.0
+## The limits #193 sets, written down here so the scenario can fail on a
+## build without them (ControllerServer's own constants would not parse there).
+const INBOUND_BUFFER_193: int = 16384
+const MAX_CLIENT_ID_193: int = 64
+## How long the reload scenario waits for the lobby to let the host's claim go.
+const RELOAD_RELEASE_MSEC_193: int = 3000
+
+## Issue #193 (1): one oversized nickname frame froze the host. clean_name()
+## built its string over the whole raw text, so a 60k-character nickname cost
+## about 0.7 s; now it only looks at the first 64 characters. Over the real
+## socket, a text frame over 1 KB is dropped unread (the name stays what it
+## was), each socket's inbound buffer is 16 KB rather than 64 KB, and a
+## 200-character client id is cut to 64. The other phone is unaffected.
+func _scenario_phone_oversized_frames_dropped_cheaply() -> Array[String]:
+	var failures: Array[String] = []
+	var long_name: String = " Bob" + "x".repeat(OVERSIZE_NAME_193)
+	var t0: int = Time.get_ticks_usec()
+	var cleaned: String = ControllerServerScript.clean_name(long_name)
+	var took_msec: float = (Time.get_ticks_usec() - t0) / 1000.0
+	print("      clean_name of %d characters: '%s' in %.1f ms" % [long_name.length(), cleaned, took_msec])
+	if cleaned != "Bobxxxxxxxxx":
+		failures.append("clean_name of the long nickname gave '%s', expected 'Bobxxxxxxxxx'" % cleaned)
+	if took_msec > OVERSIZE_CLEAN_MAX_MSEC_193:
+		failures.append("clean_name of a %d-character nickname took %.1f ms (limit %.0f)" % [
+			long_name.length(), took_msec, OVERSIZE_CLEAN_MAX_MSEC_193])
+
+	var rig: Dictionary = await _phone_rig_164(2, "Oversize193")
+	var stage: Node2D = rig["stage"]
+	var server: Node = rig["server"]
+	var a := WebSocketPeer.new()
+	var b := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	var long_id: String = "o".repeat(200)
+	var joined_ok: bool = true
+	if (await _join_phone(a, long_id, phones))["slot"] != 0:
+		failures.append("the phone with a long id did not get slot 0")
+		joined_ok = false
+	phones.append(a)
+	if (await _join_phone(b, "oversize-193-b", phones))["slot"] != 1:
+		failures.append("the second phone did not get slot 1")
+		joined_ok = false
+	phones.append(b)
+	if not joined_ok:
+		await _close_phones(phones)
+		await _teardown(stage)
+		_scenario_completed = true
+		return failures
+	var kept_id: String = server._slot_client_id[0]
+	var buffer: int = (server._slot_peers[0] as WebSocketPeer).inbound_buffer_size
+	print("      a 200-character id was kept as %d characters; inbound buffer %d bytes" % [kept_id.length(), buffer])
+	if kept_id.length() != MAX_CLIENT_ID_193:
+		failures.append("a 200-character client id was kept as %d characters, expected %d" % [kept_id.length(), MAX_CLIENT_ID_193])
+	if buffer != INBOUND_BUFFER_193:
+		failures.append("the phone's socket has a %d-byte inbound buffer, expected %d" % [buffer, INBOUND_BUFFER_193])
+
+	a.send_text(JSON.stringify({"t": "name", "v": "Alice"}))
+	await _poll_phones(phones, 10)
+	if server.slot_name(0) != "Alice":
+		failures.append("a proper nickname was not taken: '%s'" % server.slot_name(0))
+	a.send_text(JSON.stringify({"t": "name", "v": "B".repeat(2000)}))
+	await _poll_phones(phones, 10)
+	print("      after a 2 KB name frame: name '%s'" % server.slot_name(0))
+	if server.slot_name(0) != "Alice":
+		failures.append("a 2 KB name frame was acted on: name '%s'" % server.slot_name(0))
+	a.send_text(JSON.stringify({"t": "name", "v": "C".repeat(OVERSIZE_NAME_193)}))
+	await _poll_phones(phones, 20)
+	print("      after a 60 KB name frame: name '%s', phone socket state %d" % [server.slot_name(0), a.get_ready_state()])
+	if server.slot_name(0) != "Alice":
+		failures.append("a 60 KB name frame was acted on: name '%s'" % server.slot_name(0))
+	b.send_text(JSON.stringify({"t": "name", "v": "Bea"}))
+	await _poll_phones(phones, 10)
+	if server.slot_name(1) != "Bea":
+		failures.append("the other phone's nickname was lost after the flood: '%s'" % server.slot_name(1))
+	await _close_phones(phones)
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## Issue #193 (2): in the lobby a dropped phone's claim goes at once, and a
+## phone coming back used to join at the back of the order -- so a host who
+## reloaded the page lost the host menu, and its colour. Now the host phone
+## hangs up, its claim goes and the next phone is host meanwhile; it comes
+## back with the same id (sending nothing but the id) and is host again, in
+## its old slot, with its colour, hat and nickname.
+func _scenario_host_reload_in_lobby_keeps_host_and_colour() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(2, "reload-193")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "name", "v": "Hosty"}))
+	joined[0].send_text(JSON.stringify({"t": "color", "v": 5}))
+	joined[0].send_text(JSON.stringify({"t": "hat", "v": "crown"}))
+	await _poll_phones(joined, 10)
+	if server.host_slot() != 0 or server.slot_color(0) != 5 or server.slot_hat(0) != "crown" or server.slot_name(0) != "Hosty":
+		failures.append("setup: host %d, colour %d, hat '%s', name '%s'" % [
+			server.host_slot(), server.slot_color(0), server.slot_hat(0), server.slot_name(0)])
+	joined[0].close(1000, "page reload")
+	var released: bool = await _poll_until(joined, func() -> bool: return not server.claimed_slots().has(0), RELOAD_RELEASE_MSEC_193)
+	print("      host hung up in the lobby: claim released %s, host now %d, phase '%s'" % [released, server.host_slot(), rm.lobby_phase()])
+	if server.host_slot() != 1:
+		failures.append("while the host was away the host was slot %d, expected 1" % server.host_slot())
+	var back := WebSocketPeer.new()
+	var keep: Array[WebSocketPeer] = [joined[1]]
+	var result: Dictionary = await _join_phone(back, "reload-193-0", keep)
+	keep.append(back)
+	await _poll_phones(keep, 10)
+	print("      host back: slot %d, host %d, colour %d, hat '%s', name '%s'" % [
+		result["slot"], server.host_slot(), server.slot_color(result["slot"]), server.slot_hat(result["slot"]), server.slot_name(result["slot"])])
+	if result["slot"] != 0:
+		failures.append("the returning host was given slot %d, expected its old slot 0" % result["slot"])
+	if server.host_slot() != result["slot"] or result["slot"] == -1:
+		failures.append("the returning host is not host: host is slot %d" % server.host_slot())
+	if server.slot_color(0) != 5:
+		failures.append("the returning host's colour is %d, expected 5" % server.slot_color(0))
+	if server.slot_hat(0) != "crown" or server.slot_name(0) != "Hosty":
+		failures.append("the returning host came back with hat '%s', name '%s'" % [server.slot_hat(0), server.slot_name(0)])
+	await _close_phones(keep)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+
+## Issue #193 (3): kicking the last opponent mid-round handed the host the
+## round, and maybe the match. Three phones play; kicking one leaves two and
+## the round goes on; kicking the last opponent ends it with nobody scoring.
+func _scenario_kicking_last_opponent_scores_nobody() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(3, "kick-193")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var p: Array[RigidBody2D] = []
+	for i in 3:
+		p.append(server.player_in_slot(i))
+	if not await _poll_until(joined, func() -> bool: return p[0].alive and p[1].alive and p[2].alive, BOT_START_MSEC):
+		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
+	else:
+		joined[0].send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 2}))
+		await _poll_phones(joined, 10)
+		print("      kicked slot 2: phase '%s', alive %s %s %s" % [rm.lobby_phase(), p[0].alive, p[1].alive, p[2].alive])
+		if rm.lobby_phase() != "playing" or not p[0].alive or not p[1].alive:
+			failures.append("kicking one of three ended the round (phase '%s')" % rm.lobby_phase())
+		joined[0].send_text(JSON.stringify({"t": "host", "cmd": "kick", "slot": 1}))
+		await _poll_until(joined, func() -> bool: return rm.lobby_phase() != "playing", BOT_START_MSEC)
+		await _poll_phones(joined, 10)
+		print("      kicked the last opponent: phase '%s', host score %d, rounds won %s" % [rm.lobby_phase(), rm.score_of(0), wins])
+		if rm.lobby_phase() == "playing":
+			failures.append("kicking the last opponent never ended the round")
+		if rm.score_of(0) != 0 or not wins.is_empty():
+			failures.append("kicking the last opponent scored the host: score %d, rounds won %s" % [rm.score_of(0), wins])
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+
+## Issue #193 (4): two Solo presses 40 ms apart gave one human and four bots.
+## A second "on" while the Solo bots are here now adds none.
+func _scenario_solo_double_press_adds_bots_once() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "solo2-193")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var director: Node = server.bot_director
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	rm.lobby_countdown_sec = 600.0
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_phones(joined, 10)
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_phones(joined, 10)
+	print("      three Solo presses: %d bots, roster %s" % [director.bot_count(), server.claimed_slots()])
+	if director.bot_count() != BotDirectorScript.SOLO_PLAYERS - 1 or server.claimed_slots().size() != BotDirectorScript.SOLO_PLAYERS:
+		failures.append("repeated Solo presses gave %d bots and roster %s, expected %d bots" % [
+			director.bot_count(), server.claimed_slots(), BotDirectorScript.SOLO_PLAYERS - 1])
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+
+## Issue #193 (5): a phone was refused while a Solo bot sat in a slot. With
+## every slot claimed -- one phone and seven Solo bots -- a new phone in the
+## lobby now takes the newest bot's slot, and one bot fewer is left.
+func _scenario_solo_bot_yields_slot_to_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "yield-193")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var director: Node = server.bot_director
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	rm.lobby_countdown_sec = 600.0
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_until(joined, func() -> bool: return director.bot_count() > 0, BOT_START_MSEC)
+	var slots: int = server.player_paths.size()
+	director.add_bots(slots)
+	await _poll_phones(joined, 5)
+	var last_bot: int = server.virtual_slots().back() if not server.virtual_slots().is_empty() else -1
+	print("      lobby full: roster %s, bots %s, phase '%s'" % [server.claimed_slots(), server.virtual_slots(), rm.lobby_phase()])
+	if server.claimed_slots().size() != slots:
+		failures.append("setup: the lobby was not full (roster %s)" % [server.claimed_slots()])
+	var newcomer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(newcomer, "yield-193-new", joined)
+	joined.append(newcomer)
+	await _poll_phones(joined, 10)
+	print("      new phone: slot %d (reason '%s'); bots %s, roster %s" % [
+		result["slot"], result["reason"], server.virtual_slots(), server.claimed_slots()])
+	if result["slot"] != last_bot:
+		failures.append("the new phone was given slot %d (reason '%s'), expected the newest bot's slot %d" % [
+			result["slot"], result["reason"], last_bot])
+	elif server.is_virtual(last_bot) or director.bot_count() != slots - 2:
+		failures.append("after the new phone joined: slot %d virtual %s, %d bots (expected %d)" % [
+			last_bot, server.is_virtual(last_bot), director.bot_count(), slots - 2])
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures

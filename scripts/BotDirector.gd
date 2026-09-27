@@ -158,10 +158,13 @@ func bot_count() -> int:
 
 ## The host phone's Solo practice button. On: bots fill the lobby to
 ## SOLO_PLAYERS (always at least one) and the host is readied, so the match
-## starts. Off: every bot goes.
+## starts. Off: every bot goes. Issue #193: an "on" while Solo bots are
+## already here (a double press) adds none.
 func _on_solo_requested(on: bool) -> void:
 	if not on:
 		remove_bots()
+		return
+	if needs_a_human():
 		return
 	solo = true
 	var roster: int = server.claimed_slots().size()
