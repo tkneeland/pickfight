@@ -4174,6 +4174,18 @@ func _charge_strike(attacker: RigidBody2D, victim: RigidBody2D) -> Dictionary:
 	# not falling with it.
 	attacker.teleport_to(centre)
 	victim.teleport_to(centre + Vector2.RIGHT * FULL_STRIKE_RUN_UP)
+	# A flail is put back at rest with its chain laid straight out along the
+	# charge (#180), as the tunnel sweeps do for the same reason (#192). Left
+	# as the wind-up threw it, the ball carried that swing the whole run-up:
+	# the chain went on breathing against the body, the ball arrived 30 px/s
+	# under the body it rode on, and one tick's reading of it landed anywhere
+	# from 2144 (Linux CI) to 2178 (Windows) -- under the band on one
+	# platform, on identical code. Laid out, it arrives at the body's own
+	# speed, 2205, with the last ten ticks within a few px/s of it. The other
+	# weapons carry no chain and are left exactly as they were.
+	var chain: RefCounted = attacker.flail_chain()
+	if chain != null:
+		chain.lay_out(Vector2.RIGHT)
 
 	var before_damage: float = victim.damage
 	var before_deaths: int = victim.deaths
