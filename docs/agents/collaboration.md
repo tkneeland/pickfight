@@ -42,7 +42,16 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   push to `main`: import, boot check, runner parse check, then the full suite
   in 4 `--fixed-fps 60` shards (`tools/list_scenarios.sh <i> 4`). Each shard's
   output is uploaded as an artifact. Don't merge a PR whose `scenarios` check
-  is red.
+  is red. CI deletes `.godot/global_script_class_cache.cfg` after the import,
+  so a `class_name` dependency turns the boot check red, as on a fresh clone.
+- **Test isolation (#195):** a `-s` run (the runner, `perf_probe.gd`,
+  `ringout_probe.gd`) never reads or writes the owner's `user://audio.cfg`.
+  Sfx and Music start from defaults with saving off, on a temp file. Godot
+  still writes its own log under the user data folder unless you pass
+  `--log-file <path>` before `-s`. CI does, and locally that's
+  `godot --headless --fixed-fps 60 --log-file /tmp/pickfight-run.log --path . -s tools/scenario_runner.gd -- --all`.
+  `-- --scenarios=a,b,c` runs a list in order (empty entries are dropped).
+  An unknown argument exits 2.
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
 - **No pause for human review** (owner's decision, 2026-09-24), and **one

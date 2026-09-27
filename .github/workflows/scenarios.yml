@@ -10,6 +10,16 @@
 # --audio-driver flag is needed on the runner.
 # The only expected boot noise is qrencode "Could not create child process"
 # (qrencode is not installed); the greps below ignore it.
+#
+# Class cache (#195): `--import` writes .godot/global_script_class_cache.cfg,
+# which resolves `class_name` references a fresh clone cannot. It is deleted
+# straight after the import, before the boot check and before .godot/ is
+# handed to the shards, so a `class_name` dependency fails CI as it fails a
+# fresh clone (CLAUDE.md, #21).
+#
+# Logs (#195): every Godot run passes `--log-file` into $GODOT_LOG_DIR, so no
+# run writes a log under the runner's user data folder. The output that
+# matters is captured from stdout below either way.
 name: scenarios
 
 on:
@@ -24,6 +34,7 @@ concurrency:
 env:
   GODOT_VERSION: 4.6.2-stable
   GODOT_DIR: /home/runner/godot-bin
+  GODOT_LOG_DIR: /tmp/godot-logs
   SHARDS: 4
 
 jobs:
@@ -55,11 +66,22 @@ jobs:
         run: '"$GODOT_DIR/godot" --headless --version'
 
       - name: Import project
-        run: '"$GODOT_DIR/godot" --headless --path . --import 2>&1 | tee import.log'
+        run: |
+          mkdir -p "$GODOT_LOG_DIR"
+          "$GODOT_DIR/godot" --headless --log-file "$GODOT_LOG_DIR/import.log" --path . --import 2>&1 | tee import.log
+
+      - name: Delete the global class cache
+        run: |
+          # See the header: without this the boot check cannot see a
+          # class_name dependency (#195).
+          rm -f .godot/global_script_class_cache.cfg
+          if [ -e .godot/global_script_class_cache.cfg ]; then
+            echo "::error::could not delete the global class cache"; exit 1
+          fi
 
       - name: Boot check
         run: |
-          "$GODOT_DIR/godot" --headless --path . --quit > boot.log 2>&1 || true
+          "$GODOT_DIR/godot" --headless --log-file "$GODOT_LOG_DIR/boot.log" --path . --quit > boot.log 2>&1 || true
           cat boot.log
           if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' boot.log | grep -v 'Could not create child process'; then
             echo "::error::boot check found script errors"
@@ -68,7 +90,7 @@ jobs:
 
       - name: Runner parse check
         run: |
-          "$GODOT_DIR/godot" --headless --path . --check-only -s tools/scenario_runner.gd > parse.log 2>&1 || true
+          "$GODOT_DIR/godot" --headless --log-file "$GODOT_LOG_DIR/parse.log" --path . --check-only -s tools/scenario_runner.gd > parse.log 2>&1 || true
           cat parse.log
           if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' parse.log | grep -v 'Could not create child process'; then
             echo "::error::tools/scenario_runner.gd does not parse"
@@ -123,8 +145,9 @@ jobs:
           list=$(bash tools/list_scenarios.sh ${{ matrix.shard }} "$SHARDS")
           count=$(echo "$list" | tr ',' '\n' | grep -c .)
           echo "shard ${{ matrix.shard }}/$SHARDS: $count scenarios"
+          mkdir -p "$GODOT_LOG_DIR"
           set +e
-          "$GODOT_DIR/godot" --headless --fixed-fps 60 --path . \
+          "$GODOT_DIR/godot" --headless --fixed-fps 60 --log-file "$GODOT_LOG_DIR/shard.log" --path . \
             -s tools/scenario_runner.gd -- --scenarios="$list" > shard.log 2>&1
           code=$?
           set -e

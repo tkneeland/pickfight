@@ -21,6 +21,11 @@ extends SceneTree
 ## off by a rival is not counted against the stage. `first_stage_death_s` is
 ## the mean, over rounds, of the time to the round's first stage death, with a
 ## round that had none counted at the lava's grace (a lower bound).
+##
+## Every tick count converts through the physics rate the run actually has
+## (`_hz()`), not an assumed 60 (#195). Like the scenario runner, a `-s` run
+## never reads or writes the owner's `user://audio.cfg`; pass
+## `--log-file <path>` before `-s` to keep Godot's own log elsewhere too.
 const MAIN_SCENE: PackedScene = preload("res://scenes/Main.tscn")
 const StubRosterScript := preload("res://tools/stub_roster.gd")
 const RoundManagerType := preload("res://scripts/RoundManager.gd")
@@ -91,7 +96,7 @@ func _initialize() -> void:
 	_rm.lobby_enabled = false
 	var scenes: Array[PackedScene] = [load("res://scenes/stages/%s.tscn" % _stage)]
 	_rm.stage_scenes = scenes
-	_grace_ticks = int(_rm.kill_zone_grace_sec * 60.0)
+	_grace_ticks = int(_rm.kill_zone_grace_sec * _hz())
 	_rm.round_started.connect(func() -> void:
 		_close_round()
 		_rounds += 1
@@ -145,13 +150,13 @@ func _on_elim(player: RigidBody2D) -> void:
 		_round_had_elim = true
 		_first_elim_ticks.append(t)
 	var struck: int = int(_last_struck.get(player, -100000))
-	var by_stage: bool = Engine.get_physics_frames() - struck > int(STRUCK_SEC * 60.0)
+	var by_stage: bool = Engine.get_physics_frames() - struck > int(STRUCK_SEC * _hz())
 	if _verbose:
 		var modes: String = ""
 		var i: int = _players.find(player)
 		if _brain == "bot" and i >= 0 and i < _mode_log.size():
 			modes = " modes=%s" % ",".join(_mode_log[i])
-		print("ELIM round=%d t=%.1f %s at=(%.0f, %.0f) damage=%.0f %s%s" % [_rounds, t / 60.0, player.name,
+		print("ELIM round=%d t=%.1f %s at=(%.0f, %.0f) damage=%.0f %s%s" % [_rounds, t / _hz(), player.name,
 			p.x, p.y, float(player.get("damage")), "stage" if by_stage else "struck", modes])
 	if by_stage:
 		_stage_deaths += 1
@@ -169,7 +174,7 @@ func _close_round() -> void:
 func on_physics() -> void:
 	var tick: int = Engine.get_physics_frames()
 	if _start_tick < 0: _start_tick = tick
-	if tick - _start_tick >= int(_seconds * 60.0):
+	if tick - _start_tick >= int(_seconds * _hz()):
 		_report()
 		return
 	var alive: int = 0
@@ -181,7 +186,7 @@ func on_physics() -> void:
 		var player: RigidBody2D = _players[i]
 		if not player.alive: continue
 		if _brain == "bot":
-			player.set_input_vector(_smoothers[i].step(1.0 / 60.0))
+			player.set_input_vector(_smoothers[i].step(1.0 / _hz()))
 			if _verbose and tick % 10 == 0:
 				while _mode_log.size() <= i: _mode_log.append([])
 				_mode_log[i].append("%s@%.0f/%.0f" % [_brains[i].mode, player.global_position.x, player.global_position.y])
@@ -190,11 +195,12 @@ func on_physics() -> void:
 		var bot: Dictionary = _bots[i]
 		if tick >= int(bot["until"]):
 			bot["mode"] = _rng.randi() % 4
-			bot["until"] = tick + _rng.randi_range(15, 60)
+			# 15-60 ticks at 60 Hz: a quarter to a whole second at any rate.
+			bot["until"] = tick + int(_rng.randi_range(15, 60) * _hz() / 60.0)
 			bot["phase"] = _rng.randf() * TAU
 		var target: Vector2 = _nearest_enemy(player)
 		var to_enemy: float = (target - player.global_position).angle()
-		var t: float = float(tick) / 60.0
+		var t: float = float(tick) / _hz()
 		var v: Vector2 = Vector2.ZERO
 		match int(bot["mode"]):
 			0: v = Vector2.RIGHT.rotated(to_enemy + sin(t * float(bot["rate"]) + float(bot["phase"])) * 1.4)
@@ -202,6 +208,10 @@ func on_physics() -> void:
 			2: v = Vector2.RIGHT.rotated(t * float(bot["rate"]) + float(bot["phase"])) * 0.9
 			_: v = Vector2.ZERO
 		player.set_input_vector(v)
+
+## The physics rate this run steps at, as a float for tick <-> second maths.
+func _hz() -> float:
+	return float(Engine.physics_ticks_per_second)
 
 func _nearest_enemy(player: RigidBody2D) -> Vector2:
 	var best: Vector2 = player.global_position + Vector2.RIGHT
@@ -218,18 +228,33 @@ var _done: bool = false
 func _report() -> void:
 	if _done: return
 	_done = true
-	var bot_min: float = _exposure_ticks / 3600.0
+	var bot_min: float = _exposure_ticks / (_hz() * 60.0)
 	var med: float = -1.0
 	if not _first_elim_ticks.is_empty():
 		_first_elim_ticks.sort()
-		med = _first_elim_ticks[_first_elim_ticks.size() / 2] / 60.0
+		med = _first_elim_ticks[_first_elim_ticks.size() / 2] / _hz()
 	_close_round()
 	var stage_mean: float = 0.0
-	for ticks: int in _first_stage_ticks: stage_mean += ticks / 60.0
+	for ticks: int in _first_stage_ticks: stage_mean += ticks / _hz()
 	stage_mean /= maxf(_first_stage_ticks.size(), 1.0)
 	print("RINGOUT stage=%s seed=%d players=%d brain=%s rounds=%d prelava_falls=%d prelava_hazard=%d lava_elims=%d bot_min=%.1f falls_per_bot_min=%.3f median_first_elim_s=%.1f stage_deaths=%d stage_deaths_per_bot_min=%.3f first_stage_death_s=%.1f" % [
 		_stage, _seed, _player_count, _brain, _rounds, _falls, _hazard, _late, bot_min, _falls / maxf(bot_min, 0.001), med,
 		_stage_deaths, _stage_deaths / maxf(bot_min, 0.001), stage_mean])
+	# As the scenario runner does (#168, #195): release the music, hush the
+	# announcer, then release the sounds, or quitting leaks their playbacks.
+	# Stop the match first: release() waits in wall time, and under
+	# --fixed-fps the match would play on, with fresh sounds, meanwhile.
+	paused = true
+	if current_scene != null:
+		current_scene.queue_free()
+	await process_frame
+	var music: Node = get_root().get_node_or_null(^"Music")
+	if music != null: await music.release()
 	var sfx: Node = get_root().get_node_or_null(^"Sfx")
-	if sfx != null: await sfx.release()
+	if sfx != null:
+		var announcer: Node = sfx.get_node_or_null(^"Announcer")
+		if announcer != null:
+			announcer.set_process(false)
+			if announcer.has_method("clear"): announcer.call("clear")
+		await sfx.release()
 	quit(0)

@@ -10,7 +10,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-mapfile -t names < <(
+# A while-read loop, not mapfile: macOS ships bash 3.2, which has no mapfile
+# (#195).
+names=()
+while IFS= read -r name; do
+	names+=("$name")
+done < <(
 	awk '/^const SCENARIO_NAMES/{f=1;next} f&&/^\]/{exit} f' tools/scenario_runner.gd \
 		| sed -n 's/^[[:space:]]*"\([a-z0-9_]*\)",\{0,1\}[[:space:]]*$/\1/p'
 )
