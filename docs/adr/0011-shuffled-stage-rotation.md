@@ -32,7 +32,9 @@ players stop trusting the rotation to be fair over a session.
 `RoundManager._swap_stage()` now rotates stages as: **the fixed opener, then
 shuffled bags**.
 
-- Round 1 of every session plays `stage_scenes[0]`.
+- Round 1 of every session plays `stage_scenes[0]`. Amended by #200: with
+  the lobby, round 1 of every match does, since a rematch starts the rotation
+  afresh so that a logged match seed deals what it dealt at launch.
 - After the opener, stages are drawn from a shuffled bag covering the whole
   roster (`stage_scenes[0]` included), refilled with a fresh shuffle once
   exhausted.

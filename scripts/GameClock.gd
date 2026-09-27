@@ -29,10 +29,6 @@ static var _sec: float = 0.0
 static func now_msec() -> int:
 	return int(_sec * 1000.0)
 
-## Game time since start-up, in seconds.
-static func now_sec() -> float:
-	return _sec
-
 ## Moves game time on by `sec`. The autoload calls it every physics tick.
 static func advance(sec: float) -> void:
 	if sec > 0.0:

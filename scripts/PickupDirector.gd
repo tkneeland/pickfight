@@ -51,9 +51,11 @@ func start() -> void:
 	_spawn_pickup()
 	_next_pickup_msec = GameClockScript.now_msec() + int(interval_sec() * 1000.0)
 
-## Each tick of an active round: once the interval is up, add one if the
-## stage is below the cap, and start the next interval either way.
+## Each tick of an active round: free any pickup the lava has risen over
+## (#200), then, once the interval is up, add one if the stage is below the
+## cap, and start the next interval either way.
 func tick() -> void:
+	clear_submerged()
 	var now: int = GameClockScript.now_msec()
 	if now < _next_pickup_msec:
 		return
@@ -80,6 +82,28 @@ func interval_sec() -> float:
 	if roster >= _rm.crowded_roster:
 		return _rm.pickup_spawn_interval_sec * _rm.crowded_interval_scale
 	return _rm.pickup_spawn_interval_sec
+
+## Frees every pickup at or below the floor kill zone's surface (#200). A
+## pickup is an Area2D, which the zone never eliminates, so without this one
+## the lava rose over would sit out of reach and hold its place in `cap()`.
+func clear_submerged() -> void:
+	var lava: float = lava_surface_y()
+	if lava == INF:
+		return
+	for pickup: Node2D in _live_pickups():
+		if pickup.global_position.y >= lava:
+			pickup.queue_free()
+	_live_pickups()
+
+## The global y of the active stage's floor kill zone surface, or INF on a
+## stage without one.
+func lava_surface_y() -> float:
+	if _rm == null or not _rm.has_method("_floor_kill_zone"):
+		return INF
+	var zone: Node2D = _rm._floor_kill_zone()
+	if zone == null or not zone.has_method("surface_y"):
+		return INF
+	return zone.surface_y()
 
 func clear() -> void:
 	for pickup: Node2D in _live_pickups():
@@ -125,7 +149,8 @@ func _spawn_pickup() -> void:
 ## taken. Spots within PICKUP_CLEAR_OF_SPAWN_RADIUS of a player spawn are
 ## skipped while any other free spot remains; if every free spot is near a
 ## spawn, the one furthest from all spawns is used, so a stage still gets
-## its pickups (#111).
+## its pickups (#111). A spot at or below the floor kill zone's surface is
+## never used (#200).
 func free_spot() -> Variant:
 	var stage: Variant = _rm._current_stage
 	var spots: Array[Vector2] = []
@@ -135,7 +160,10 @@ func free_spot() -> Variant:
 		var origin: Vector2 = stage.global_position if stage != null else Vector2.ZERO
 		spots = [origin + FALLBACK_PICKUP_OFFSET]
 	var free: Array[Vector2] = []
+	var lava: float = lava_surface_y()
 	for spot: Vector2 in spots:
+		if spot.y >= lava:
+			continue
 		var taken: bool = false
 		for pickup: Node2D in _live_pickups():
 			if pickup.global_position.distance_to(spot) < PICKUP_SPOT_EPSILON:

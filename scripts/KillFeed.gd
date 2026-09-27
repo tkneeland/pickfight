@@ -20,6 +20,9 @@ const ENTRY_FADE_SEC: float = 1.0
 const BANNER_SEC: float = 1.8
 ## Most banners waiting at once; older ones are dropped past this.
 const MAX_QUEUED_BANNERS: int = 3
+## Most entries `banner_log` keeps (issue #200): the newest this many, so a
+## long session's log cannot grow without limit.
+const MAX_BANNER_LOG: int = 32
 ## Room kept clear for scenes/Main.tscn's JoinQrCode, which sits in the top
 ## right corner (8 to 192 px down, 12 px in).
 const FEED_TOP_PX: float = 204.0
@@ -40,7 +43,8 @@ var _banner_headline: Label
 var _banner_name: Label
 var _banner_left: float = 0.0
 var _banner_queue: Array[Dictionary] = []
-## Every banner asked for, as "HEADLINE|name", for the scenarios.
+## The banners asked for, as "HEADLINE|name", oldest first, for the
+## scenarios: the last MAX_BANNER_LOG of them.
 var banner_log: PackedStringArray = PackedStringArray()
 
 func _ready() -> void:
@@ -126,6 +130,8 @@ func push_ko(killer_name: String, killer_color: Color, victim_name: String, vict
 func show_banner(headline: String, who: String, color: Color) -> void:
 	_banner_queue.append({"headline": headline, "who": who, "color": color})
 	banner_log.append("%s|%s" % [headline, who])
+	if banner_log.size() > MAX_BANNER_LOG:
+		banner_log = banner_log.slice(banner_log.size() - MAX_BANNER_LOG)
 	while _banner_queue.size() > MAX_QUEUED_BANNERS:
 		_banner_queue.pop_front()
 	if not _banner.visible:

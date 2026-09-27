@@ -13,7 +13,7 @@ extends Node
 ## `expire_disconnected_claims()` runs.
 
 @export var player_paths: Array[NodePath] = []
-## Stages to rotate through: `stage_scenes[0]` opens every session, then
+## Stages to rotate through: `stage_scenes[0]` opens every match (#200), then
 ## shuffled bags cover the rest with no repeat back-to-back (ADR-0011).
 ## Swapped once per round, in `_swap_stage()`. Spawn points come from the
 ## active stage's `get_spawn_points()`, not from an export here. Dealt by
@@ -195,17 +195,15 @@ var _last_winner_slot: int = -1
 ## trying weapons without chasing pickups (#14). The winner still keeps what
 ## they held (ADR-0005), and pickups still spawn. Off by default: a normal
 ## launch plays exactly as designed.
-const PLAYTEST_WEAPON_PATHS: PackedStringArray = [
-	"res://resources/pickaxe.tres",
-	"res://resources/staff.tres",
-	"res://resources/sword.tres",
-	"res://resources/axe.tres",
-	"res://resources/dagger.tres",
-	"res://resources/boomstick.tres",
-	"res://resources/grapple.tres",
-	"res://resources/flail.tres",
-	"res://resources/boomerang.tres",
-]
+##
+## The list is the pickaxe then `PickupWeapons.WEAPON_PATHS` (issue #200), so
+## a weapon added to the roster there is offered here too.
+static func playtest_weapon_paths() -> PackedStringArray:
+	var paths := PackedStringArray([PickupWeaponsScript.PICKAXE_PATH])
+	paths.append_array(PickupWeaponsScript.WEAPON_PATHS)
+	return paths
+
+const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 var _random_weapons: bool = false
 ## `--demo`: a short-slot showcase. Random weapons, a fixed opening run of
 ## the stages with the most parts on show, and a quicker lava that still
@@ -318,17 +316,24 @@ func _try_start_round() -> void:
 	_swap_stage()
 	_round_number += 1
 	_in_round.clear()
+	var entering: Array[int] = []
 	for slot in roster:
-		if slot < 0 or slot >= _players.size() or _players[slot] == null:
-			continue
+		if slot >= 0 and slot < _players.size() and _players[slot] != null:
+			entering.append(slot)
+	var spawn_offset: int = spawn_rotation_offset(entering.size())
+	var weapon_paths: PackedStringArray = playtest_weapon_paths()
+	for i in entering.size():
+		var slot: int = entering[i]
 		# By place in the round, not slot number (#163): stages pair their spawns
-		# left/right, so slots 0 and 2 alone would both start on the left.
-		var spawn: Vector2 = _spawn_point(_in_round.size())
+		# left/right, so slots 0 and 2 alone would both start on the left. The
+		# places are rotated a seeded amount each round (#200), so nobody starts
+		# on the same spot every round of a stage.
+		var spawn: Vector2 = _spawn_point((i + spawn_offset) % entering.size())
 		var keeps_weapon: bool = slot == _last_winner_slot
 		_players[slot].start_round(spawn, keeps_weapon)
 		_in_round.append(slot)
 		if _random_weapons and not keeps_weapon:
-			_players[slot].set_weapon_stats(load(PLAYTEST_WEAPON_PATHS[_playtest_weapon_rng.randi() % PLAYTEST_WEAPON_PATHS.size()]))
+			_players[slot].set_weapon_stats(load(weapon_paths[_playtest_weapon_rng.randi() % weapon_paths.size()]))
 	_ko_round_started()
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
@@ -527,7 +532,17 @@ func _round_abandoned(alive_slots: Array[int]) -> bool:
 		_abandoned_since_msec = now
 	return now - _abandoned_since_msec >= int(abandoned_round_grace_sec * 1000.0)
 
-## Where the `place`-th player of a round (0-based, in roster order) starts:
+## How far round the spawn places are turned this round (issue #200): the
+## `i`-th player entering, in roster order, takes place `(i + offset) % count`.
+## Drawn from the match seed's "spawns" stream, so a replayed seed spawns
+## everyone where they spawned before. One draw a round whatever the count,
+## so the stream never depends on who was there.
+func spawn_rotation_offset(count: int) -> int:
+	var roll: int = _spawn_rng.randi()
+	return roll % count if count > 0 else 0
+
+## Where the `place`-th player of a round (0-based; the places go round the
+## roster from `spawn_rotation_offset()`, #200) starts:
 ## spawn point `place`, so the first two players of any roster take a stage's
 ## first left/right pair whatever their slot numbers (#163). On a stage with
 ## fewer spawns than players (issue #138) a spawn is shared round-robin and
@@ -985,7 +1000,8 @@ func _enter_victory() -> void:
 ## Frees the last round's stage on the way into the lobby or the victory
 ## screen (#163), so its falling rocks and collapsing floors stop running --
 ## and making sounds -- behind them. The next round instances a fresh stage
-## anyway; the rotation's `stage_index` is kept, so it still never repeats the last one.
+## anyway. The rotation's `stage_index` is kept here, and only reset by
+## `_begin_match()`.
 func _clear_stage() -> void:
 	if _current_stage != null:
 		_current_stage.queue_free()
@@ -1002,8 +1018,12 @@ func _begin_match() -> void:
 		_scores[slot] = 0
 	# A fresh seed for a fresh match (#187), before anything draws from it.
 	_seed_match(true)
-	# A fresh bag for a fresh match (#163), dealt for its own player count.
+	# A fresh bag for a fresh match (#163), dealt for its own player count,
+	# from a rotation back at its start (#200): the bag it deals avoids the
+	# stage just played, so a rematch that kept that would deal its seed a
+	# different sequence than the same seed dealt at launch.
 	_stage_rotation.new_bag()
+	_stage_rotation.stage_index = -1
 	_update_score_label()
 	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
@@ -1091,11 +1111,16 @@ func _refresh_victory() -> void:
 	for slot in _players.size():
 		if _players[slot] != null and (roster.has(slot) or slot == _match_winner_slot):
 			slots.append(slot)
-	slots.sort_custom(func(a: int, b: int) -> bool:
-		if a == _match_winner_slot or b == _match_winner_slot:
-			return a == _match_winner_slot
-		return _scores[a] > _scores[b])
+	slots.sort_custom(podium_before)
 	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
+
+## The podium's order: whether slot `a` stands before slot `b`. The match
+## winner first, then by final score. Strict (#200): never true both ways,
+## nor for a slot against itself, as `sort_custom()` needs.
+func podium_before(a: int, b: int) -> bool:
+	if a == _match_winner_slot or b == _match_winner_slot:
+		return a == _match_winner_slot and b != _match_winner_slot
+	return _scores[a] > _scores[b]
 
 ## The lobby screen, built (and added under this node) the first time
 ## anything on it is needed.
@@ -1385,6 +1410,8 @@ const SEED_FLAG: String = "--seed="
 var _match_seed: int = -1
 ## `--random-weapons`' draw.
 var _playtest_weapon_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Which way round the spawns are handed out each round (#200).
+var _spawn_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 ## The seed the current match runs on; picked now if none has been yet (a
 ## RoundManager driven by hand, outside the tree).
@@ -1423,6 +1450,7 @@ func _seed_match(announce: bool) -> void:
 	_stage_rotation.rng = stages
 	_pickup_director.rng = rng_for("pickups")
 	_playtest_weapon_rng = rng_for("playtest_weapons")
+	_spawn_rng = rng_for("spawns")
 	# Remade on first use, from `modifier_seed` or this seed (`modifier_rng()`).
 	_modifier_rng = null
 	var director: Variant = _controller_server.get("bot_director") if _controller_server != null else null

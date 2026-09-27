@@ -230,36 +230,23 @@ class RoundModifier extends RefCounted:
 		return _applied
 
 	## The random numbers a modifier draws with (issue #162): the round
-	## manager's own modifier RNG, the one `modifier_seed` seeds, so a seeded
-	## run draws the same roulette weapons and the same meteors every time.
-	## A round that was forced rather than rolled has not made that RNG yet,
-	## so it is made here exactly as `RoundManager._roll_modifier` makes it
-	## and handed back to the round manager, keeping one stream for the rolls
-	## and the draws alike. With no round manager (a scenario applying a
-	## modifier by hand) it is an unseeded RNG of the modifier's own. A
-	## scenario may also set `rng` before the first draw.
+	## manager's own modifier RNG (`RoundManager.modifier_rng()`, seeded from
+	## `modifier_seed` when set, otherwise the match seed's "modifiers"
+	## stream, #187), so a seeded run draws the same roulette weapons and the
+	## same meteors every time, from one stream for the rolls and the draws
+	## alike. With no round manager (a scenario applying a modifier by hand)
+	## it is an unseeded RNG of the modifier's own. A scenario may also set
+	## `rng` before the first draw.
 	var rng: RandomNumberGenerator
 
 	func _rng() -> RandomNumberGenerator:
 		if rng != null:
 			return rng
-		var holder: Object = _round if _round != null and is_instance_valid(_round) else null
-		# Since #187 the round manager makes it itself: from `modifier_seed`
-		# when that is set, otherwise from the match seed's "modifiers" stream.
-		if holder != null and holder.has_method("modifier_rng"):
-			rng = holder.modifier_rng()
-			return rng
-		if holder != null and holder.get("_modifier_rng") is RandomNumberGenerator:
-			rng = holder.get("_modifier_rng")
-			return rng
-		rng = RandomNumberGenerator.new()
-		var seed_value: Variant = holder.get("modifier_seed") if holder != null else null
-		if seed_value == null or int(seed_value) == -1:
-			rng.randomize()
+		if _round != null and is_instance_valid(_round) and _round.has_method("modifier_rng"):
+			rng = _round.modifier_rng()
 		else:
-			rng.seed = int(seed_value)
-		if holder != null and "_modifier_rng" in holder:
-			holder.set("_modifier_rng", rng)
+			rng = RandomNumberGenerator.new()
+			rng.randomize()
 		return rng
 
 	## The round's players that still exist; a scenario tearing its stage
@@ -492,38 +479,48 @@ class MeteorShower extends TimedModifier:
 	var _lowest_y: float = 2000.0
 
 	func _apply() -> void:
-		var points: Array[Vector2] = []
-		if _stage != null and _stage.has_method("get_spawn_points"):
-			points = _stage.get_spawn_points()
-		if points.is_empty():
-			for player: Variant in _live_players():
-				points.append(player.global_position)
-		if not points.is_empty():
-			_min_x = INF
-			_max_x = -INF
-			var high: float = INF
-			var low: float = -INF
-			for point: Vector2 in points:
-				_min_x = minf(_min_x, point.x)
-				_max_x = maxf(_max_x, point.x)
-				high = minf(high, point.y)
-				low = maxf(low, point.y)
-			_min_x -= METEOR_X_MARGIN
-			_max_x += METEOR_X_MARGIN
-			_top_y = high - METEOR_HEIGHT
-			_lowest_y = low + METEOR_DROP_BELOW
 		# A stage that says what the camera shows (issue #144) rains across
 		# all of it, from just out of sight above it (issue #162): on a large
 		# stage the spawns' span misses the outer edges, and a fixed height
 		# over the spawns is inside the view, so meteors popped into being.
+		# Every Stage.gd stage says, so the spawns' span below is only for a
+		# bare node standing in for one (issue #200).
+		var view: Rect2 = Rect2()
 		if _stage != null and is_instance_valid(_stage) and _stage.has_method("get_view_rect"):
-			var view: Rect2 = _stage.get_view_rect()
-			if view.size.x > 0.0 and view.size.y > 0.0:
-				_min_x = view.position.x
-				_max_x = view.end.x
-				_top_y = view.position.y - METEOR_VIEW_MARGIN
-				_lowest_y = maxf(_lowest_y, view.end.y + METEOR_DROP_BELOW)
+			view = _stage.get_view_rect()
+		if view.size.x > 0.0 and view.size.y > 0.0:
+			_min_x = view.position.x
+			_max_x = view.end.x
+			_top_y = view.position.y - METEOR_VIEW_MARGIN
+			_lowest_y = view.end.y + METEOR_DROP_BELOW
+		else:
+			_rain_over_spawns()
 		_start_timer(METEOR_INTERVAL_SEC, _spawn_meteor)
+
+	## Without a view to rain across: over the span of the stage's spawns (or
+	## the players, without those), a margin wider each side.
+	func _rain_over_spawns() -> void:
+		var points: Array[Vector2] = []
+		if _stage != null and is_instance_valid(_stage) and _stage.has_method("get_spawn_points"):
+			points = _stage.get_spawn_points()
+		if points.is_empty():
+			for player: Variant in _live_players():
+				points.append(player.global_position)
+		if points.is_empty():
+			return
+		_min_x = INF
+		_max_x = -INF
+		var high: float = INF
+		var low: float = -INF
+		for point: Vector2 in points:
+			_min_x = minf(_min_x, point.x)
+			_max_x = maxf(_max_x, point.x)
+			high = minf(high, point.y)
+			low = maxf(low, point.y)
+		_min_x -= METEOR_X_MARGIN
+		_max_x += METEOR_X_MARGIN
+		_top_y = high - METEOR_HEIGHT
+		_lowest_y = low + METEOR_DROP_BELOW
 
 	func _undo() -> void:
 		_stop_timer()

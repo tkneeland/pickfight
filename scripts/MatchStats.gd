@@ -42,7 +42,6 @@ var _last_hit: Dictionary = {}
 var _streak: Dictionary = {}
 ## Slots still alive in the current round -> msec they entered it.
 var _alive_since: Dictionary = {}
-var _round_start_msec: int = 0
 
 func begin_match() -> void:
 	kos.clear()
@@ -60,7 +59,6 @@ func begin_round(slots: Array, now_msec: int) -> void:
 	_last_hit.clear()
 	_streak.clear()
 	_alive_since.clear()
-	_round_start_msec = now_msec
 	for slot: int in slots:
 		_alive_since[slot] = now_msec
 		survival_msec[slot] = int(survival_msec.get(slot, 0))
@@ -94,7 +92,6 @@ func shift(msec: int) -> void:
 		_streak[killer][0] = int(_streak[killer][0]) + msec
 	for slot: int in _alive_since.keys():
 		_alive_since[slot] = int(_alive_since[slot]) + msec
-	_round_start_msec += msec
 
 func record_hit(attacker: int, victim: int, amount: float, now_msec: int) -> void:
 	if attacker < 0 or victim < 0 or attacker == victim:

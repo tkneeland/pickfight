@@ -300,6 +300,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_trail_draws_every_swing",
 	"settings_esc_mid_drag_saves",
 	"hat_parts_stay_in_their_box",
+	"rematch_on_same_seed_deals_same_stages",
+	"pickups_skip_and_clear_under_lava",
+	"spawn_places_rotate_each_round",
+	"podium_order_is_strict",
+	"round_flow_drift_trimmed",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1276,6 +1281,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_settings_esc_mid_drag_saves()
 		"hat_parts_stay_in_their_box":
 			return await _scenario_hat_parts_stay_in_their_box()
+		"rematch_on_same_seed_deals_same_stages":
+			return await _scenario_rematch_on_same_seed_deals_same_stages()
+		"pickups_skip_and_clear_under_lava":
+			return await _scenario_pickups_skip_and_clear_under_lava()
+		"spawn_places_rotate_each_round":
+			return await _scenario_spawn_places_rotate_each_round()
+		"podium_order_is_strict":
+			return await _scenario_podium_order_is_strict()
+		"round_flow_drift_trimmed":
+			return await _scenario_round_flow_drift_trimmed()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -15467,8 +15482,9 @@ const GAP_SPAWN_TOLERANCE: float = 30.0
 ## Issue #163, finding 1: players start on spawn points in roster order, not
 ## by slot number. Stages pair their spawns left/right (Flatlands: -60/+60,
 ## then -520/+520), so a roster of slots 0 and 2 -- slot 1 left -- used to put
-## both on the left, 460 px apart on the same side. Now slot 0 takes Spawn0
-## and slot 2 takes Spawn1, on either side of the middle; slot 1 stays out.
+## both on the left, 460 px apart on the same side. Now slots 0 and 2 take
+## Spawn0 and Spawn1 between them (which way round rotates by round, #200),
+## on either side of the middle; slot 1 stays out.
 func _scenario_gap_roster_spawns_in_roster_order() -> Array[String]:
 	var failures: Array[String] = []
 	var scenes: Array[PackedScene] = [load("res://scenes/stages/Flatlands.tscn") as PackedScene]
@@ -15483,12 +15499,16 @@ func _scenario_gap_roster_spawns_in_roster_order() -> Array[String]:
 	var spawns: Array[Vector2] = _active_stage(fixture["container"]).get_spawn_points()
 	print("      slot 0 at %s, slot 2 at %s; Spawn0 %s, Spawn1 %s" % [
 		players[0].global_position, players[2].global_position, spawns[0], spawns[1]])
-	for pair: Array in [[0, 0], [2, 1]]:
-		var slot: int = pair[0]
-		var spawn: Vector2 = spawns[pair[1]]
-		if absf(players[slot].global_position.x - spawn.x) > GAP_SPAWN_TOLERANCE:
-			failures.append("slot %d started at x %.0f, not on Spawn%d at x %.0f" % [
-				slot, players[slot].global_position.x, pair[1], spawn.x])
+	# Between them, not necessarily in that order: since #200 the places are
+	# rotated a seeded amount each round, so slot 0 may take Spawn1.
+	var on_pair: Dictionary = {}
+	for slot: int in [0, 2]:
+		for i in 2:
+			if absf(players[slot].global_position.x - spawns[i].x) <= GAP_SPAWN_TOLERANCE:
+				on_pair[i] = slot
+	if on_pair.size() != 2:
+		failures.append("slots 0 and 2 started at x %.0f and %.0f, not on Spawn0 (x %.0f) and Spawn1 (x %.0f) between them" % [
+			players[0].global_position.x, players[2].global_position.x, spawns[0].x, spawns[1].x])
 	if signf(players[0].global_position.x) == signf(players[2].global_position.x):
 		failures.append("slots 0 and 2 both started on the same side (x %.0f and %.0f)" % [
 			players[0].global_position.x, players[2].global_position.x])
@@ -19329,5 +19349,258 @@ func _scenario_hat_parts_stay_in_their_box() -> Array[String]:
 		if top < height - 2.0:
 			failures.append("hat '%s' reaches only %.2f px up, HEIGHTS says %.0f" % [id, top, height])
 	print("      drawn top / HEIGHTS: %s" % ", ".join(reaches))
+	_scenario_completed = true
+	return failures
+
+# --- Round flow (issue #200) ---------------------------------------------------
+
+## The seed issue #200 found dealing three different sequences.
+const REMATCH_SEED: int = 1234
+## Stages compared per match: past the opener and well into the second bag.
+const REMATCH_DEALS: int = 12
+
+## The stages a match on `REMATCH_SEED` deals, `REMATCH_DEALS` of them, the
+## way `_swap_stage()` deals them, after `_begin_match()` ran on `rm`.
+func _deal_match_stages(rm: Node, players: int) -> Array[int]:
+	rm._begin_match()
+	rm._stage_rotation.round_player_count = players
+	return _deal_stages(rm, REMATCH_DEALS)
+
+## Issue #200 (1): a logged seed replays a rematch too. The same seed deals the
+## same stages to a session's first match and to a rematch after it, however
+## the first match ended, on the shipped rotation, at a small and a large count.
+func _scenario_rematch_on_same_seed_deals_same_stages() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = []
+	for path: String in _main_rotation_paths():
+		scenes.append(load(path) as PackedScene)
+	if scenes.size() < 3:
+		failures.append("the shipped rotation has %d stages; expected several" % scenes.size())
+		_scenario_completed = true
+		return failures
+	for players: int in [3, 7]:
+		var fresh: Node = RoundManagerType.new()
+		fresh.stage_scenes = scenes
+		fresh.match_seed = REMATCH_SEED
+		var first: Array[int] = _deal_match_stages(fresh, players)
+		fresh.free()
+		var session: Node = RoundManagerType.new()
+		session.stage_scenes = scenes
+		session.match_seed = REMATCH_SEED
+		var played: Array[int] = _deal_match_stages(session, players)
+		var matches: Array = [played]
+		# Rematches after the first ran different lengths, so each starts from
+		# a different last stage.
+		for extra: int in [1, 3]:
+			_deal_stages(session, extra)
+			matches.append(_deal_match_stages(session, players))
+		session.free()
+		print("      %d players, seed %d: fresh %s; in one session %s" % [players, REMATCH_SEED, first, matches])
+		for i in matches.size():
+			if matches[i] != first:
+				failures.append("%d players: match %d of a session dealt %s, a fresh launch %s" % [
+					players, i + 1, matches[i], first])
+	_scenario_completed = true
+	return failures
+
+## The floor kill zone's surface y in the lava scenario, then where it rises to.
+const LAVA_SURFACE_Y: float = 100.0
+const LAVA_RISEN_Y: float = -400.0
+## One pickup spot above the lava's start, one under it.
+const LAVA_DRY_SPOT: Vector2 = Vector2(-300.0, -200.0)
+const LAVA_WET_SPOT: Vector2 = Vector2(300.0, 300.0)
+## Spot draws checked while one spot is under the lava.
+const LAVA_SPOT_DRAWS: int = 40
+
+## A stage with the two lava pickup spots and a floor `KillZone` whose top
+## edge sits at LAVA_SURFACE_Y, in the tree.
+func _new_lava_stage() -> Node2D:
+	var stage: Node2D = _make_pickup_stub_stage("LavaStage", PackedVector2Array([Vector2(0.0, -1400.0)]),
+		PackedVector2Array([LAVA_DRY_SPOT, LAVA_WET_SPOT])).instantiate() as Node2D
+	var zone := Area2D.new()
+	zone.name = "KillZone"
+	zone.set_script(KillZoneScript200)
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(4000.0, 200.0)
+	shape.shape = rect
+	shape.position = Vector2(0.0, 100.0)
+	zone.add_child(shape)
+	zone.position = Vector2(0.0, LAVA_SURFACE_Y)
+	stage.add_child(zone)
+	get_root().add_child(stage)
+	return stage
+
+const KillZoneScript200 := preload("res://scripts/KillZone.gd")
+
+## Issue #200 (2): pickups and the lava. A spot at or under the floor kill
+## zone's surface is never picked, none is once the lava is over every spot,
+## and a pickup the lava rises over is freed on the next tick, so it no longer
+## holds a place in the cap.
+func _scenario_pickups_skip_and_clear_under_lava() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_lava_stage()
+	var rm: Node = RoundManagerType.new()
+	rm._current_stage = stage
+	var director: Node = rm._pickup_director
+	director.rng.seed = 200
+	var zone: Node2D = stage.get_node("KillZone") as Node2D
+	var surface: float = director.lava_surface_y()
+	if absf(surface - LAVA_SURFACE_Y) > 0.5:
+		failures.append("the lava's surface read y %.1f, expected %.1f" % [surface, LAVA_SURFACE_Y])
+	var wet: int = 0
+	for i in LAVA_SPOT_DRAWS:
+		var spot: Variant = director.free_spot()
+		if spot == null or (spot as Vector2).y >= LAVA_SURFACE_Y:
+			wet += 1
+	print("      lava at y %.0f: %d of %d spot draws under it or none" % [surface, wet, LAVA_SPOT_DRAWS])
+	if wet > 0:
+		failures.append("%d of %d spot draws were under the lava or none, with a dry spot free" % [wet, LAVA_SPOT_DRAWS])
+	director._spawn_pickup()
+	var live: Array[Node2D] = director._live_pickups()
+	if live.size() != 1 or (live.size() == 1 and live[0].global_position.distance_to(LAVA_DRY_SPOT) > 1.0):
+		failures.append("the first pickup was not put on the dry spot (%d live)" % live.size())
+	zone.position.y = LAVA_RISEN_Y
+	if director.free_spot() != null:
+		failures.append("a spot was offered with the lava at y %.0f, over every spot" % LAVA_RISEN_Y)
+	director.tick()
+	var after: int = director._live_pickups().size()
+	print("      lava risen to y %.0f: %d pickups left live after a tick" % [director.lava_surface_y(), after])
+	if after != 0:
+		failures.append("%d pickups the lava rose over were still live after a tick" % after)
+	rm.free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## Rounds watched for the spawn rotation, and the seed they run on.
+const SPAWN_ROTATION_ROUNDS: int = 8
+const SPAWN_ROTATION_SEED: int = 200
+
+## Each round's spawn index per slot, for `SPAWN_ROTATION_ROUNDS` four-player
+## rounds on `SPAWN_ROTATION_SEED`; empty on a round that never started.
+func _collect_spawn_places() -> Array:
+	var loop: Dictionary = _new_roster_round(4, PICKUP_LONG_INTERVAL_SEC, 0.0, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	rm.match_seed = SPAWN_ROTATION_SEED
+	rm._seed_match(false)
+	var rounds: Array = []
+	rm.round_started.connect(func() -> void:
+		var row: Array[int] = []
+		for player: RigidBody2D in players:
+			var at: Vector2 = player.global_position
+			var nearest: int = 0
+			for i in FOUR_PLAYER_SKY_SPAWNS.size():
+				if at.distance_to(FOUR_PLAYER_SKY_SPAWNS[i]) < at.distance_to(FOUR_PLAYER_SKY_SPAWNS[nearest]):
+					nearest = i
+			row.append(nearest)
+		rounds.append(row))
+	for r in SPAWN_ROTATION_ROUNDS:
+		# Round r + 1 is on once r + 1 rows are in and everyone stands.
+		if not await _await_condition(func() -> bool: return rounds.size() > r and _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+			break
+		await _await_ticks(2)
+		for i in 3:
+			players[i].eliminate()
+		await _await_ticks(2)
+	await _teardown(loop["stage"], false)
+	await _await_ticks(2)
+	return rounds
+
+## Issue #200 (3): the spawns are handed out rotated a seeded amount each
+## round, so a slot does not start on the same spot every round of a stage.
+## Every round still puts each player on a spawn of its own, and the same
+## seed hands them out the same way again.
+func _scenario_spawn_places_rotate_each_round() -> Array[String]:
+	var failures: Array[String] = []
+	var runs: Array = []
+	for run in 2:
+		runs.append(await _collect_spawn_places())
+	var rounds: Array = runs[0]
+	print("      seed %d, spawn per slot by round: %s; again: %s" % [SPAWN_ROTATION_SEED, runs[0], runs[1]])
+	if rounds.size() < SPAWN_ROTATION_ROUNDS:
+		failures.append("only %d of %d rounds started" % [rounds.size(), SPAWN_ROTATION_ROUNDS])
+		_scenario_completed = true
+		return failures
+	for r in rounds.size():
+		var row: Array = rounds[r]
+		var distinct: Dictionary = {}
+		for spawn: int in row:
+			distinct[spawn] = true
+		if distinct.size() != row.size():
+			failures.append("round %d put two players on one spawn: %s" % [r + 1, row])
+	for slot in 4:
+		var spots: Dictionary = {}
+		for row: Array in rounds:
+			spots[row[slot]] = true
+		if spots.size() < 2:
+			failures.append("slot %d started on spawn %s in all %d rounds" % [slot, rounds[0][slot], rounds.size()])
+	if runs[0] != runs[1]:
+		failures.append("two runs on seed %d handed out spawns differently" % SPAWN_ROTATION_SEED)
+	_scenario_completed = true
+	return failures
+
+## Issue #200 (4): the podium's sort rule is a strict order -- no slot before
+## itself, never both ways round -- and puts the match winner first whatever
+## the scores, then the rest by score.
+func _scenario_podium_order_is_strict() -> Array[String]:
+	var failures: Array[String] = []
+	var rm: Node = RoundManagerType.new()
+	rm._scores = [2, 5, 3, 0] as Array[int]
+	rm._match_winner_slot = 0
+	for a in 4:
+		if rm.podium_before(a, a):
+			failures.append("slot %d stands before itself" % a)
+		for b in 4:
+			if a != b and rm.podium_before(a, b) and rm.podium_before(b, a):
+				failures.append("slots %d and %d each stand before the other" % [a, b])
+	var slots: Array[int] = [3, 2, 1, 0]
+	slots.sort_custom(rm.podium_before)
+	print("      winner slot 0 on 2, scores %s: podium %s" % [rm._scores, slots])
+	if slots != ([0, 1, 2, 3] as Array[int]):
+		failures.append("the podium read %s, expected [0, 1, 2, 3]" % [slots])
+	rm.free()
+	_scenario_completed = true
+	return failures
+
+## Issue #200 (5): the drift trimmed. The random-weapons list is the pickaxe
+## and then the pickups' own list; the kill feed's banner log keeps only its
+## last MAX_BANNER_LOG; a modifier applied by a round manager draws from that
+## round manager's modifier stream; and a meteor shower over a bare stage node
+## with no view still rains over its spawns.
+func _scenario_round_flow_drift_trimmed() -> Array[String]:
+	var failures: Array[String] = []
+	var want := PackedStringArray([PickupWeaponsScript.PICKAXE_PATH])
+	want.append_array(PickupWeaponsScript.WEAPON_PATHS)
+	if RoundManagerType.playtest_weapon_paths() != want:
+		failures.append("the random-weapons list is %s, expected %s" % [RoundManagerType.playtest_weapon_paths(), want])
+	var feed: Control = KillFeedScript.new()
+	get_root().add_child(feed)
+	var asked: int = KillFeedScript.MAX_BANNER_LOG + 10
+	for i in asked:
+		feed.show_banner("B%d" % i, "who", Color.WHITE)
+	print("      %d banners asked for: log holds %d, first '%s'" % [asked, feed.banner_log.size(), feed.banner_log[0]])
+	if feed.banner_log.size() != KillFeedScript.MAX_BANNER_LOG or feed.banner_log[0] != "B10|who":
+		failures.append("after %d banners the log holds %d starting '%s', expected the last %d" % [
+			asked, feed.banner_log.size(), feed.banner_log[0], KillFeedScript.MAX_BANNER_LOG])
+	feed.queue_free()
+	var rm: Node = RoundManagerType.new()
+	rm.match_seed = 200
+	var modifier: RefCounted = RoundModifiersType.create("double_damage")
+	modifier.apply(rm, [], null)
+	if modifier._rng() != rm.modifier_rng():
+		failures.append("a modifier applied by a round manager did not draw from its modifier stream")
+	modifier.undo()
+	rm.free()
+	var bare := Node2D.new()
+	get_root().add_child(bare)
+	var shower: RefCounted = RoundModifiersType.create("meteor_shower")
+	shower.apply(null, [], bare)
+	if not (shower._min_x < shower._max_x) or shower._top_y >= shower._lowest_y:
+		failures.append("a shower with no view or spawns rains over x %.0f..%.0f, y %.0f..%.0f" % [
+			shower._min_x, shower._max_x, shower._top_y, shower._lowest_y])
+	shower.undo()
+	await _teardown(bare)
 	_scenario_completed = true
 	return failures
