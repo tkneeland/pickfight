@@ -21,14 +21,16 @@ const LABELS: Dictionary = {
 	"beanie": "Beanie", "viking": "Viking", "party": "Party hat", "halo": "Halo",
 	"propeller": "Propeller",
 }
-## How far each hat reaches above the body's top edge, in px. A name tag sits
-## above this (RoundManager), and `hat_parts_stay_in_their_box` in the
-## scenario runner checks every part stays under it.
+## How far each hat reaches above the body's top edge, in px, outline
+## included (half of OUTLINE_WIDTH past a polygon's points, and so on). A name
+## tag sits above this (NameTags), and `hat_parts_stay_in_their_box` in the
+## scenario runner checks every drawn part, stroke and all, stays under it.
 const HEIGHTS: Dictionary = {
-	"none": 0.0, "crown": 25.0, "top_hat": 34.0, "cap": 20.0, "beanie": 28.0,
-	"viking": 34.0, "party": 40.0, "halo": 20.0, "propeller": 28.0,
+	"none": 0.0, "crown": 26.0, "top_hat": 35.0, "cap": 21.0, "beanie": 29.0,
+	"viking": 34.0, "party": 41.0, "halo": 22.0, "propeller": 28.0,
 }
-## No part reaches further than this either side of the body's centre.
+## No part, stroke included, reaches further than this either side of the
+## body's centre. Only the scenario runner reads it: it is the box's side.
 const HALF_WIDTH: float = 34.0
 
 const OUTLINE_COLOR: Color = Color(0.07, 0.07, 0.09, 1.0)

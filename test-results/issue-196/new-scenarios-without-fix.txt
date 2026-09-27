@@ -1,0 +1,17 @@
+      longest trail per swing: [5, 2, 0] (cap 10)
+FAIL  juice_trail_draws_every_swing
+      - swing 1 left a trail of 2 points, the first left 5
+      - swing 2 left a trail of 0 points, the first left 5
+FAIL  settings_esc_mid_drag_saves
+      - Esc mid-drag saved nothing: the drag's value is lost
+      - after Esc mid-drag, a slider change outside a drag was not saved
+      drawn top / HEIGHTS: crown 25.25/25, top_hat 35.00/34, cap 20.25/20, beanie 28.75/28, viking 34.00/34, party 40.25/40, halo 21.50/20, propeller 27.80/28
+FAIL  hat_parts_stay_in_their_box
+      - hat 'crown' is drawn 25.25 px up at (0.0, -24.5) (spin 0.00), over HEIGHTS 25
+      - hat 'top_hat' is drawn 35.00 px up at (15.0, -34.0) (spin 0.00), over HEIGHTS 34
+      - hat 'cap' is drawn 20.25 px up at (0.0, -19.5) (spin 0.00), over HEIGHTS 20
+      - hat 'beanie' is drawn 28.75 px up at (0.0, -28.0) (spin 0.00), over HEIGHTS 28
+      - hat 'party' is drawn 40.25 px up at (0.0, -39.5) (spin 0.00), over HEIGHTS 40
+      - hat 'halo' is drawn 21.50 px up at (0.0, -20.0) (spin 0.00), over HEIGHTS 20
+---
+0 passed, 3 failed, 3 total

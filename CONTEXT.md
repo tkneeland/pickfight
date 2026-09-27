@@ -63,6 +63,6 @@ interesting.
 
 ## Deliberately not decided
 
-- The full roster of stages beyond the eleven that exist (ADR-0008 settled the
+- The full roster of stages beyond the 24 that exist (ADR-0008 settled the
   authoring format: one `.tscn` per stage under `scenes/stages/`).
 - Art direction.

@@ -112,10 +112,14 @@ func refresh() -> void:
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
 	_toggle.text = "Settings (muted)" if sfx.muted else "Settings"
 
+## Esc can close the panel mid-drag, and the slider then never reports the
+## drag's end: finish it here and save what it left (issue #196).
 func toggle_panel() -> void:
 	_panel.visible = not _panel.visible
 	if _panel.visible:
 		refresh()
+	elif _dragging:
+		_on_drag_ended(true)
 
 func is_open() -> bool:
 	return _panel.visible

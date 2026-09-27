@@ -1,5 +1,0 @@
-user://audio.cfg (the owner's real file), before and after the full suite run:
-MD5 (~/Library/Application Support/Godot/app_userdata/Pickfight/audio.cfg) = 93e1adc6e7d5a70192380b0f93c07474
-mtime=1790452944 size=82
-MD5 (~/Library/Application Support/Godot/app_userdata/Pickfight/audio.cfg) = 93e1adc6e7d5a70192380b0f93c07474
-mtime=1790452944 size=82

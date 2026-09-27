@@ -1,9 +1,4 @@
-# psuite.sh wt195 a195 4 on de28679
-boot grep exit 1 (1 = clean);      233 scenarios in 4 shards
-TOTAL 233 passed, 0 failed of      233
-bash $S/psuite.sh $S/wt195 a195 4  486.08s user 191.91s system 256% cpu 4:24.09 total
-
-## shard 0
+== out0.txt
 PASS  aim_angle
 PASS  body_no_rotation
 PASS  extension_tracks_drag
@@ -64,8 +59,7 @@ PASS  zero_numbers_rate_limited
 PASS  stage_rotation_seeded_is_deterministic
 PASS  stage_rotation_opener_is_first_stage
 59 passed, 0 failed, 59 total
-
-## shard 1
+== out1.txt
 PASS  stage_rotation_never_repeats_back_to_back
 PASS  kill_zone_rises_after_grace
 PASS  kill_zone_holds_during_grace
@@ -126,8 +120,7 @@ PASS  sfx_lava_countdown_rise_and_sizzle
 PASS  sfx_join_sounds
 PASS  sfx_strength_scales_volume
 59 passed, 0 failed, 59 total
-
-## shard 2
+== out2.txt
 PASS  sfx_overlap_cap_holds
 PASS  sfx_weapon_sound_sets_distinct
 PASS  sfx_sound_files_exist
@@ -188,8 +181,7 @@ PASS  pickups_come_faster_and_more_with_a_crowd
 PASS  announcer_calls_the_match
 PASS  round_modifier_tiny_weapons_applies_and_undoes
 59 passed, 0 failed, 59 total
-
-## shard 3
+== out3.txt
 PASS  round_modifier_weapon_roulette_swaps_every_ten_seconds
 PASS  round_modifier_meteor_shower_hits_and_undoes
 PASS  round_modifier_bouncy_applies_and_undoes
@@ -245,5 +237,8 @@ PASS  new_weapon_hits_credit_the_thrower
 PASS  roster_heads_do_not_clip_platform_in_play_new_weapons
 PASS  flail_built_clear_of_neighbours
 PASS  match_seed_replays_bot_match
-PASS  script_run_never_touches_owner_settings
-56 passed, 0 failed, 56 total
+PASS  juice_trail_draws_every_swing
+PASS  settings_esc_mid_drag_saves
+PASS  hat_parts_stay_in_their_box
+58 passed, 0 failed, 58 total
+TOTAL 235 passed, 0 failed of 235

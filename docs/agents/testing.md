@@ -5,7 +5,7 @@ This document is the authoritative repository policy for verification commands,
 acceptance evidence, and `PASS`, `FAIL`, `BLOCKED`, and `SKIPPED` verdict
 semantics.
 
-Run surface: **local only**.
+Run surface: **local, plus GitHub Actions CI** (`.github/workflows/scenarios.yml`).
 
 Read this guide while planning acceptance criteria, Definition of Done,
 fixtures, and verification. Resolve the applicable commands and evidence rules
@@ -17,6 +17,19 @@ rereading this guide.
 | Check | Command | Coverage | When | Status |
 |---|---|---|---|---|
 | boot-check | `godot --headless --quit` | Catches GDScript parse errors and broken scene/resource references at project boot | Before opening a PR | verified |
+| runner parse check | `godot --headless --path . --check-only -s tools/scenario_runner.gd 2>&1 \| grep -E "SCRIPT ERROR\|Parse Error"` (must print nothing) | Parse errors in the scenario runner, which the boot check does not load | After editing the runner | verified |
+| scenarios | `godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenarios=<a>,<b>` (or `--scenario=<name>`) | The named scenarios against the real game | While working on them | verified |
+| full suite | `godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --all` | Every scenario in `SCENARIO_NAMES`; ends with `N passed, M failed, T total` | Before opening a PR | verified |
+| CI | `.github/workflows/scenarios.yml`, on every PR and push to main | Import, boot check and runner parse check, then the suite in 4 parallel shards (`tools/list_scenarios.sh <i> 4`), each under `--fixed-fps 60` on Linux | Automatic; should be green before merging | verified |
+
+Always pass `--fixed-fps 60` to the runner (#182/#183): every rendered frame
+is then exactly one physics tick, so timing-sensitive scenarios behave the
+same on any machine. The full suite takes a while on one process; to run it
+faster, split the names from `tools/list_scenarios.sh` into contiguous shards
+(`tools/list_scenarios.sh <i> <k>` prints shard `i` of `k` as a comma list)
+and run each shard in its own clone of the repo, as CI does. Scenarios that
+save settings point `Sfx`/`Music` at a temp file and must never write the
+real `user://audio.cfg`.
 
 `verified` means the command ran successfully here. `inferred` means configuration names it but setup did not execute it. `unavailable` is an explicit gap.
 
