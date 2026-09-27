@@ -797,7 +797,9 @@ func _head_distance() -> float:
 ## sails past the angle the player pointed at and rings around it.
 ##
 ## The torque that would take is then clamped to what the weapon can actually
-## push with: `max_drive_force` through the lever arm to the head.
+## push with: `max_drive_force` through the lever arm to the head. A head
+## blocked in the way it is being turned gets the extension drive's stall
+## floor (issue #180), so it turns into what blocks it at that full torque.
 func _drive_angle(delta: float) -> void:
 	var error: float = wrapf(weapon_angle - _haft.rotation, -PI, PI)
 	var lever: float = maxf(_head_distance(), _stats.min_reach)
@@ -806,7 +808,13 @@ func _drive_angle(delta: float) -> void:
 	var stop_limit: float = sqrt(2.0 * (max_torque / inertia) * absf(error))
 	var limit: float = minf(_stats.drive_speed, stop_limit)
 	var target_w: float = clampf(error / delta, -limit, limit)
-	var torque: float = (target_w - _haft.angular_velocity) * inertia / delta
+	# The same stall floor as the extension drive, along the way the head
+	# is being turned: see `_stalled_mass`.
+	var spin: float = target_w - _haft.angular_velocity
+	var tangent: Vector2 = Vector2.DOWN.rotated(_haft.rotation) * signf(spin)
+	var sized: float = _stalled_mass(tangent, inertia, max_torque * delta / _stats.drive_speed,
+			_haft_inertia, lever * lever)
+	var torque: float = spin * sized / delta
 	_haft.apply_torque(clampf(torque, -max_torque, max_torque))
 
 ## The groove's inner end as a hard stop for the body (issue #83).
@@ -870,6 +878,18 @@ func _hold_min_reach() -> void:
 ## could still stop from, then clamp the force to `max_drive_force`. Easing
 ## back to rest needs nothing special here, because the commanded reach is
 ## what eases (see `_update_weapon_input`).
+##
+## Blocked, the drive pushes with its full rated force (issue #180). Sized on
+## the pair's reduced mass, a head that cannot move -- planted for a vault,
+## hooked over a ledge, pressed into another head in a clash -- could only
+## ever be asked for `extend_speed * reduced_mass / delta`, however far it was
+## from where it was told to be: 300 x 0.333 x 60, about 6000, for the axe
+## rated 11000, which is why the axe used to fight a 6000 pickaxe to a dead
+## heat. So while the head is blocked in the direction the drive is pushing
+## it, the servo is sized so that a full stall -- asking for all of
+## `extend_speed` from standing -- asks for exactly `max_drive_force`. See
+## `_stalled_mass`. The speed it asks for is unchanged, so nothing is driven
+## past `extend_speed`, and a head in clear air is sized exactly as before.
 func _drive_extension(delta: float) -> void:
 	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
 	var reach: float = (_head.global_position - global_position).dot(axis)
@@ -882,9 +902,39 @@ func _drive_extension(delta: float) -> void:
 	var limit: float = minf(_stats.extend_speed, stop_limit)
 	var target_v: float = clampf(error / delta, -limit, limit)
 	var relative_v: float = (_head.linear_velocity - linear_velocity).dot(axis)
-	var force: float = clampf((target_v - relative_v) * reduced_mass / delta, -max_force, max_force)
+	var drive_mass: float = _stalled_mass(axis * signf(target_v - relative_v), reduced_mass,
+			max_force * delta / _stats.extend_speed, 0.0, 1.0)
+	var force: float = clampf((target_v - relative_v) * drive_mass / delta, -max_force, max_force)
 	_head.apply_central_force(axis * force)
 	apply_central_force(-axis * force)
+
+## What a drive sizes its servo on while its head is pushed along `push`
+## (issue #180), for the extension drive (a mass) and the angle drive (an
+## inertia: the haft's own `base` plus a mass at the end of the lever, whose
+## square is `lever_sq`).
+##
+## In clear air, `free` -- what it always used. Blocked, `stall`: the size at
+## which a full stall asks for exactly the drive's rated force. That is the
+## floor this exists to add, so a stalled head pushes its rating and not the
+## fraction of it that `free` works out to. But never above what the push
+## really moves once the head is stopped -- the body, swinging or sliding
+## against the head, plus whatever is behind the thing that stopped it -- so
+## a head that is only stopped by something loose and light is not sized past
+## the mass it is actually shoving. Sized past that, a velocity servo
+## overshoots; at or under it, it cannot.
+##
+## Only the weapons whose `free` stall push was under their rating change at
+## all: the axe (its 300 px/s over a 0.333 reduced mass) and the boomstick
+## (0.1 head). For the rest `free` already stalled out past the clamp, and
+## `stall` comes out under `free`.
+func _stalled_mass(push: Vector2, free: float, stall: float, base: float, lever_sq: float) -> float:
+	if push == Vector2.ZERO or stall <= free:
+		return free
+	var held: float = _head.mass_blocking(push)
+	if held <= 0.0:
+		return free
+	var moved: float = 1.0 / (1.0 / (_stats.mass + held) + 1.0 / mass)
+	return clampf(stall, free, maxf(free, base + moved * lever_sq))
 
 func _update_weapon_visual() -> void:
 	var pts := weapon_line.points

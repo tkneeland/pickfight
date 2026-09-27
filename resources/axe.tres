@@ -19,8 +19,8 @@
 ; Stats against the pickaxe's M/M/M baseline: the axe is power bought with
 ; time. Damage 90 -- the per-strike cap (Player.MAX_STRIKE_DAMAGE) -- so two
 ; clean hits always kill and one never does (owner's decision). Mass 0.4
-; against 0.25 and a force ceiling of 9000 against 6000, so it wins every
-; clash; 300 px/s out against 700 and 150 px/s back against 400, so it is
+; against 0.25 and a force ceiling of 11000 against 8000 (issue #180), so it
+; wins every clash (axe_wins_clash_against_every_weapon); 300 px/s out against 700 and 150 px/s back against 400, so it is
 ; still by far the slowest weapon to answer a thumb. Reach M at 140 px.
 ;
 ; Issue #90 tuned the swing. At the old drive of 9 rad/s the head could

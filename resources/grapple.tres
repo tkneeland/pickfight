@@ -20,8 +20,8 @@
 ; head while the hook is home, hidden while it is out, and colliding with
 ; nothing. It is also what the flying hook is drawn as.
 ;
-; Force ceiling 5500, under the medium weapons' 6000 (#177: a light weapon
-; at 6000 stops losing the axe clash).
+; Force ceiling 7300, under the medium weapons' 8000 (#180; 5500 against 6000
+; before). The axe still wins the clash (axe_wins_clash_against_every_weapon).
 
 [resource]
 script = ExtResource("1")
@@ -31,7 +31,7 @@ mass = 0.2
 drive_speed = 36.0
 extend_speed = 1150.0
 rest_return_speed = 800.0
-max_drive_force = 5500.0
+max_drive_force = 7300.0
 damage = 12.0
 sound_set = &"grapple"
 special = &"grapple"
