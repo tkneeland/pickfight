@@ -307,6 +307,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_flow_drift_trimmed",
 	"stalled_drive_pushes_rated_force",
 	"axe_wins_clash_against_every_weapon",
+	"crumbling_ledge_retriggers_on_reform",
+	"stage_spawns_balanced_left_right",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1320,6 +1322,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stalled_drive_pushes_rated_force()
 		"axe_wins_clash_against_every_weapon":
 			return await _scenario_axe_wins_clash_against_every_weapon()
+		"crumbling_ledge_retriggers_on_reform":
+			return await _scenario_crumbling_ledge_retriggers_on_reform()
+		"stage_spawns_balanced_left_right":
+			return await _scenario_stage_spawns_balanced_left_right()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -19677,6 +19683,125 @@ func _scenario_round_flow_drift_trimmed() -> Array[String]:
 			shower._min_x, shower._max_x, shower._top_y, shower._lowest_y])
 	shower.undo()
 	await _teardown(bare)
+	return failures
+
+# --- Stage fixes (issue #199) ------------------------------------------------
+
+## Ticks watched past a crumbling ledge's warn + away cycle for it to start a
+## second one. Well short of LEDGE_WARN_SEC, so a re-warning seen inside it
+## can only be the second cycle starting, never the second cycle ending.
+const LEDGE_RETRIGGER_EXTRA_TICKS: int = 20
+## CrumblingLedge's dimmed "away" colour, written down independently like
+## FLOOR_SOLID_COLOR / FLOOR_WARNING_COLOR (which are the ledge's too).
+const LEDGE_AWAY_COLOR: Color = Color(0.35, 0.35, 0.4, 0.25)
+
+## Issue #199 point 1: a player still standing in a crumbling ledge's band
+## when it comes back makes it crumble again. `body_entered` alone never
+## fires a second time for someone who never left, so before the fix the
+## ledge stayed SOLID under a camper forever.
+##
+## A plain static block sits exactly where the ledge is, so the player keeps
+## resting at the ledge's top surface -- in its detector band -- while the
+## ledge is away, the way a perch next to one would hold them in live play.
+## The ledge's own colour (`visual_color()`) is the observable: it must go
+## amber, then dim, then (after coming back) amber again.
+func _scenario_crumbling_ledge_retriggers_on_reform() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+
+	var ledge_position: Vector2 = Vector2(0, -300)
+	var ledge_size: Vector2 = Vector2(200, 24)
+	var support := StaticBody2D.new()
+	support.position = ledge_position
+	var support_rect := RectangleShape2D.new()
+	support_rect.size = ledge_size
+	var support_shape := CollisionShape2D.new()
+	support_shape.shape = support_rect
+	support.add_child(support_shape)
+	stage.add_child(support)
+	var ledge: StaticBody2D = CrumblingLedgeScene.instantiate() as StaticBody2D
+	ledge.position = ledge_position
+	stage.add_child(ledge)
+
+	var ledge_top: float = ledge_position.y - ledge_size.y / 2.0
+	var spawn_pos: Vector2 = Vector2(ledge_position.x, ledge_top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+	var player: RigidBody2D = _spawn_player(stage, spawn_pos)
+	player.set_input_vector(Vector2.UP)
+
+	var ticks_per_second: float = float(Engine.physics_ticks_per_second)
+	var cycle_ticks: int = int(round((LEDGE_WARN_SEC + LEDGE_AWAY_SEC) * ticks_per_second))
+	var warning: Color = FLOOR_WARNING_COLOR
+	var away: Color = LEDGE_AWAY_COLOR
+	var saw_warning: bool = false
+	var saw_away: bool = false
+	var rewarned_at: int = -1
+	for tick in cycle_ticks + LEDGE_RETRIGGER_EXTRA_TICKS:
+		await physics_frame
+		var colour: Color = ledge.visual_color()
+		if colour == warning and not saw_away:
+			saw_warning = true
+		elif colour == away and saw_warning:
+			saw_away = true
+		elif colour == warning and saw_away:
+			rewarned_at = tick
+			break
+
+	var resting: bool = player.alive and player.global_position.y + PLAYER_RADIUS <= ledge_top + PLANT_CLEARANCE
+	print("      warned %s, went away %s, re-warned at tick %d of a %d-tick cycle; player at y %.1f (ledge top %.1f)" % [
+		saw_warning, saw_away, rewarned_at, cycle_ticks, player.global_position.y, ledge_top])
+	if not resting:
+		failures.append("the player did not stay resting in the ledge's band (y %.1f, ledge top %.1f) -- the setup is broken" % [
+			player.global_position.y, ledge_top])
+	if not saw_warning or not saw_away:
+		failures.append("the first cycle never ran (warned %s, went away %s)" % [saw_warning, saw_away])
+	elif rewarned_at < 0:
+		failures.append("the ledge came back under a player standing in its band and stayed solid for %d ticks -- it can be camped" % LEDGE_RETRIGGER_EXTRA_TICKS)
+
+	await _teardown(stage)
+	return failures
+
+## Player counts the left/right spawn balance is checked for (issue #199).
+const SPAWN_BALANCE_COUNTS: Array[int] = [2, 3, 4, 8]
+## Deliberately lopsided stages, exempt from the balance check. Slant is a
+## tilted stage whose high side is the point of it.
+const SPAWN_BALANCE_EXEMPT: PackedStringArray = ["Slant.tscn"]
+
+## Issue #199 point 2: RoundManager deals `Spawn0`, `Spawn1`, ... in roster
+## order, so the first N spawns are where an N-player round starts. For 2, 3,
+## 4 and 8 players every stage but Slant puts as many of those on the left
+## of its view's centre as on the right, give or take one for an odd count.
+## Islands used to split four 3 to 1 and eight 5 to 3. #200's seeded spawn
+## rotation only permutes those first N places among the players, so the set
+## of spawns a round fills -- and this split -- is the same every round.
+func _scenario_stage_spawns_balanced_left_right() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in STAGE_PATHS:
+		if SPAWN_BALANCE_EXEMPT.has(path.get_file()):
+			print("      %s: exempt (deliberately asymmetric)" % path.get_file())
+			continue
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		get_root().add_child(instance)
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+		var centre: float = _stage_view(instance).get_center().x
+		var splits: PackedStringArray = []
+		for n: int in SPAWN_BALANCE_COUNTS:
+			if spawns.size() < n:
+				failures.append("%s: only %d spawn(s), cannot seat %d" % [path.get_file(), spawns.size(), n])
+				continue
+			var left: int = 0
+			var right: int = 0
+			for i in n:
+				if spawns[i].x < centre:
+					left += 1
+				elif spawns[i].x > centre:
+					right += 1
+			splits.append("%d:%d/%d" % [n, left, right])
+			if absi(left - right) > 1:
+				failures.append("%s: %d players split %d left, %d right of x=%.0f" % [
+					path.get_file(), n, left, right, centre])
+		print("      %s: %s" % [path.get_file(), " ".join(splits)])
+		instance.queue_free()
+		await physics_frame
 	_scenario_completed = true
 	return failures
 

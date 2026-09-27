@@ -114,14 +114,14 @@ position = Vector2(-420, 220)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(420, 220)
 
-; Spawns 2 and 3 (issue #36). Either side of IslandB's pickup, 60 px clear of it; the only other static island.
+; Spawns 2 and 3 (issue #36): Spawn2 beside IslandB's pickup, 60 px clear of it. Spawn3 on IslandD (#199: swapped with Spawn7, so two, three and four players split left/right as evenly as they can).
 [node name="Spawn2" type="Marker2D" parent="."]
 position = Vector2(-200, 220)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(-80, 220)
+position = Vector2(480, 220)
 
-; Spawns 4-7 (issue #137): eight players. One on each outer islet, and a second on IslandA and IslandD.
+; Spawns 4-7 (issue #137): eight players. One on each outer islet, a second on IslandA, and (#199) a third on IslandD, so eight split 4/4 rather than 5/3. Spawn7 sits 125 px clear of the ferry pickup at (240, 220), 55 px off Spawn1.
 [node name="Spawn4" type="Marker2D" parent="."]
 position = Vector2(-670, 220)
 
@@ -132,7 +132,7 @@ position = Vector2(670, 220)
 position = Vector2(-480, 220)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(480, 220)
+position = Vector2(365, 220)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 480)
