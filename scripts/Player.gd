@@ -1613,6 +1613,13 @@ func _head_cut_off() -> bool:
 const FLICK_TICKS: int = 8
 const FLICK_FROM: float = 0.35
 const FLICK_TO: float = 0.8
+## A flick has to go out straight (playtest 2026-09-27: swinging in a circle
+## that passed near the centre fired the grapple and threw the boomerang).
+## From the flick's lowest point to now, the straight-line distance must be at
+## least this share of the path the drag actually took. A fast loop's arc
+## scores about 0.83; a thumb flick with a slight curve (up to ~70 degrees of
+## arc) still clears it.
+const FLICK_MIN_STRAIGHTNESS: float = 0.92
 ## The most a flail ball's shove can be, however hard it was whipped.
 const BALL_KNOCKBACK_MAX: float = 700.0
 
@@ -1624,7 +1631,7 @@ var _was_launched: bool = false
 var _launch_cooldown: float = 0.0
 var _loaded_visual: Polygon2D
 var _effective_input: Vector2 = Vector2.ZERO
-var _flick_history: PackedFloat32Array = PackedFloat32Array()
+var _flick_history: PackedVector2Array = PackedVector2Array()
 var _flick_armed: bool = false
 
 ## The held weapon's `special`, or empty.
@@ -1703,8 +1710,9 @@ func _tick_launcher(delta: float) -> void:
 ## Whether this tick's drag completes a flick. Called every tick so the history
 ## stays current; a flick is spent whether or not anything could launch.
 func _detect_flick() -> bool:
-	var length: float = _effective_input.length()
-	_flick_history.append(length)
+	var input: Vector2 = _effective_input
+	var length: float = input.length()
+	_flick_history.append(input)
 	if _flick_history.size() > FLICK_TICKS:
 		_flick_history.remove_at(0)
 	if length <= FLICK_FROM:
@@ -1712,10 +1720,20 @@ func _detect_flick() -> bool:
 		return false
 	if not _flick_armed or length < FLICK_TO:
 		return false
+	var lowest_at: int = -1
 	var lowest: float = INF
-	for l: float in _flick_history:
-		lowest = minf(lowest, l)
+	for i in _flick_history.size():
+		if _flick_history[i].length() < lowest:
+			lowest = _flick_history[i].length()
+			lowest_at = i
 	if lowest > FLICK_FROM:
+		return false
+	var path: float = 0.0
+	for i in range(lowest_at, _flick_history.size() - 1):
+		path += _flick_history[i].distance_to(_flick_history[i + 1])
+	if _flick_history[lowest_at].distance_to(input) < FLICK_MIN_STRAIGHTNESS * path:
+		# A curve, not a flick: spent, so the rest of the swing cannot fire.
+		_flick_armed = false
 		return false
 	_flick_armed = false
 	return true
