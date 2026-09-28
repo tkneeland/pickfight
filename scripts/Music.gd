@@ -21,6 +21,13 @@ extends Node
 ## - **Its own volume**, on a `Music` bus that sends to Master. So the master
 ##   slider and mute (`Sfx`) still sit on top of it. The volume is saved in the
 ##   same `user://audio.cfg` as `Sfx`'s settings, in a `music` section.
+##   Playtest 2026-09-27: half by default, so the Music slider starts at its
+##   midpoint (was full). A dragged Master or SFX slider saves this section
+##   too even when the Music slider was never touched (`SfxSettings`'s shared
+##   drag-end save), so an old install's file can hold the old full-volume
+##   default with nobody having chosen it; `config_version` lets `load_settings`
+##   reset that stale default once without ever touching a value the player
+##   actually picked.
 ##
 ## **Headless.** It runs on the dummy audio driver, like `Sfx`. Tracks are read
 ## straight off disk when the raw file is there, so a fresh clone plays and
@@ -31,6 +38,19 @@ const BUS_NAME: StringName = &"Music"
 const SETTINGS_PATH: String = "user://audio.cfg"
 const SECTION: String = "music"
 const DIR: String = "res://assets/music/"
+
+## 0..1, applied to the Music bus when nothing has been saved yet.
+## Playtest 2026-09-27: half by default (was 1.0; see `OLD_DEFAULT_VOLUME`).
+const DEFAULT_VOLUME: float = 0.5
+## The default this replaced. A saved file at or below this version whose
+## volume still equals it was never a deliberate choice -- see `CONFIG_VERSION`.
+const OLD_DEFAULT_VOLUME: float = 1.0
+## Bumped by the playtest 2026-09-27 default change. `load_settings` resets a
+## saved volume that still equals `OLD_DEFAULT_VOLUME` and predates this
+## version to `DEFAULT_VOLUME`, once; `_save_settings` always stamps the
+## current version, so a value the player deliberately chose -- even
+## `OLD_DEFAULT_VOLUME` itself -- is never reset again once saved.
+const CONFIG_VERSION: int = 1
 
 ## Every track, by name. `kind` is `lobby` or `fight`, and `db` is its base
 ## level. The fight rotation is every `fight` track, in this order.
@@ -68,7 +88,7 @@ const META_WATCHED: StringName = &"_music_watched"
 
 ## 0..1, applied to the Music bus. Set it through `set_volume()` so that it
 ## reaches the bus and is saved.
-var volume: float = 1.0
+var volume: float = DEFAULT_VOLUME
 ## Whether `set_volume()` saves. The scenario suite switches this off, and
 ## points `settings_path` at a temp file when it tests saving.
 var persist_settings: bool = true
@@ -98,8 +118,8 @@ func _ready() -> void:
 	_ensure_bus()
 	if get_tree().get_script() != null:
 		# A `-s` run (the scenario runner, a probe; #195): never read or
-		# write the owner's settings. Start at full volume, saving off, on a
-		# temp file (the same test as `Sfx.is_script_main_loop()`).
+		# write the owner's settings. Start at the default volume, saving
+		# off, on a temp file (the same test as `Sfx.is_script_main_loop()`).
 		persist_settings = false
 		settings_path = OS.get_temp_dir().path_join("pickfight_headless_audio_%d.cfg" % OS.get_process_id())
 		_apply_volume()
@@ -250,7 +270,16 @@ func load_settings() -> void:
 	var config := ConfigFile.new()
 	var err: Error = config.load(settings_path)
 	if err == OK:
-		volume = clampf(float(config.get_value(SECTION, "volume", 1.0)), 0.0, 1.0)
+		volume = clampf(float(config.get_value(SECTION, "volume", DEFAULT_VOLUME)), 0.0, 1.0)
+		# Playtest 2026-09-27: half by default (was 1.0). A save from before
+		# this change can hold that old default even though nobody touched
+		# the Music slider (`SfxSettings`'s Master/SFX drag-end save writes
+		# this section too). Reset that once; a version already at
+		# `CONFIG_VERSION` means either a fresh default or a value the player
+		# chose after the reset, and is left alone either way.
+		var saved_version: int = int(config.get_value(SECTION, "config_version", 0))
+		if saved_version < CONFIG_VERSION and is_equal_approx(volume, OLD_DEFAULT_VOLUME):
+			volume = DEFAULT_VOLUME
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Music: could not read settings from %s (%s); using the default" % [settings_path, error_string(err)])
 	_apply_volume()
@@ -272,6 +301,7 @@ func _save_settings() -> void:
 		push_warning("Music: not saving settings: %s would not load (%s)" % [settings_path, error_string(err)])
 		return
 	config.set_value(SECTION, "volume", volume)
+	config.set_value(SECTION, "config_version", CONFIG_VERSION)
 	err = config.save(settings_path)
 	if err != OK:
 		push_warning("Music: could not save settings to %s (%s)" % [settings_path, error_string(err)])

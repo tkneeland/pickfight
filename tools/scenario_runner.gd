@@ -321,6 +321,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_bot_yields_slot_to_phone",
 	"grip_strength_is_per_weapon",
 	"pickaxe_wall_grip_lets_go_at_every_swept_speed",
+	"music_defaults_to_half_slider",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1362,6 +1363,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_grip_strength_is_per_weapon()
 		"pickaxe_wall_grip_lets_go_at_every_swept_speed":
 			return await _scenario_pickaxe_wall_grip_lets_go_at_every_swept_speed()
+		"music_defaults_to_half_slider":
+			return await _scenario_music_defaults_to_half_slider()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -11595,6 +11598,95 @@ func _scenario_music_tracks_exist_and_credited() -> Array[String]:
 	print("      %d tracks, %.0f KB" % [referenced.size(), total / 1024.0])
 	if total > MUSIC_MAX_TOTAL_BYTES:
 		failures.append("the music comes to %d bytes, over %d" % [total, MUSIC_MAX_TOTAL_BYTES])
+	_scenario_completed = true
+	return failures
+
+## Playtest 2026-09-27: the music was too loud by default, so `Music`'s
+## default volume is now half, not full -- the exact midpoint of the Music
+## slider's 0..1 range. A fresh `Music` node starts there, the settings menu
+## shows it there on a fresh install, and an old save that still holds the
+## old full-volume default (nobody may have chosen it -- `SfxSettings`'s
+## shared Master/SFX drag-end save writes this section too) resets to the
+## new default once; a value the player actually picked never does. This
+## runs against a temp file, never the owner's own settings.
+func _scenario_music_defaults_to_half_slider() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var music: Node = _music()
+	if sfx == null or music == null:
+		return ["the Sfx or Music autoload is missing"]
+	await physics_frame
+
+	# A fresh node, never loaded: the field default is the slider's midpoint.
+	var fresh: Node = (preload("res://scripts/Music.gd") as Script).new()
+	var midpoint: float = 0.5
+	if not is_equal_approx(fresh.volume, midpoint):
+		failures.append("a fresh Music node's volume is %.3f, expected the slider's midpoint %.2f" % [fresh.volume, midpoint])
+	fresh.free()
+
+	var was: Dictionary = {
+		"music": music.volume, "music_path": music.settings_path,
+		"music_persist": music.persist_settings,
+	}
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_music_default_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	music.settings_path = temp_path
+	music.persist_settings = false
+
+	# The settings menu shows the default at the slider's own midpoint.
+	music.set_volume(music.DEFAULT_VOLUME, false)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	ui.refresh()
+	var slider: HSlider = ui.music_slider()
+	var slider_mid: float = (slider.min_value + slider.max_value) / 2.0
+	if not is_equal_approx(music.DEFAULT_VOLUME, slider_mid):
+		failures.append("the default volume %.3f is not the slider's midpoint %.3f" % [music.DEFAULT_VOLUME, slider_mid])
+	if absf(slider.value - slider_mid) > 0.001:
+		failures.append("the Music slider shows %.2f by default, expected its midpoint %.2f" % [slider.value, slider_mid])
+
+	# An old save still at the old full-volume default -- never necessarily
+	# chosen -- migrates to the new default once.
+	var old_default := ConfigFile.new()
+	old_default.set_value(music.SECTION, "volume", music.OLD_DEFAULT_VOLUME)
+	if old_default.save(temp_path) != OK:
+		failures.append("could not write the old-default fixture at %s" % temp_path)
+	music.volume = 0.0
+	music.load_settings()
+	if not is_equal_approx(music.volume, music.DEFAULT_VOLUME):
+		failures.append("an old save at the old default %.2f did not migrate: got %.3f, expected %.3f" % [
+			music.OLD_DEFAULT_VOLUME, music.volume, music.DEFAULT_VOLUME])
+
+	# The same old-default value, but already stamped with the current config
+	# version -- meaning the player set it back deliberately -- is never
+	# reset again.
+	var chosen := ConfigFile.new()
+	chosen.set_value(music.SECTION, "volume", music.OLD_DEFAULT_VOLUME)
+	chosen.set_value(music.SECTION, "config_version", music.CONFIG_VERSION)
+	if chosen.save(temp_path) != OK:
+		failures.append("could not write the deliberate-full-volume fixture at %s" % temp_path)
+	music.volume = 0.0
+	music.load_settings()
+	if not is_equal_approx(music.volume, music.OLD_DEFAULT_VOLUME):
+		failures.append("a deliberately full-volume, already-migrated save was reset: got %.3f, expected %.3f" % [
+			music.volume, music.OLD_DEFAULT_VOLUME])
+
+	# A custom value that is not the old default is left alone either way.
+	var custom := ConfigFile.new()
+	custom.set_value(music.SECTION, "volume", 0.2)
+	if custom.save(temp_path) != OK:
+		failures.append("could not write the custom-volume fixture at %s" % temp_path)
+	music.volume = 0.0
+	music.load_settings()
+	if not is_equal_approx(music.volume, 0.2):
+		failures.append("a custom saved volume of 0.20 was changed to %.3f" % music.volume)
+
+	music.set_volume(was["music"], false)
+	music.settings_path = was["music_path"]
+	music.persist_settings = was["music_persist"]
+	ui.refresh()
+	DirAccess.remove_absolute(temp_path)
 	_scenario_completed = true
 	return failures
 
