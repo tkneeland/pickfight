@@ -3746,13 +3746,13 @@ const ROSTER_DAMAGE_TOLERANCE: float = 3.0
 ## margin by which a higher tier has to beat a lower one. The table's steps
 ## are 21 and 14, so both sit clear of the tolerance above and well under a
 ## step.
-## A band since #45: the M tier is pickaxe 34, sword 46 (40 until #181),
-## dagger 60 (the dagger was buffed from 45 at the hackathon playtest).
+## A band since #45: the M tier is pickaxe 34, sword 55 (40 until #181, 46 until the 2026-09-27 playtest),
+## dagger 70 (45, then 60 at the hackathon playtest, then 70 on 2026-09-27).
 ## Since #55 the S tier is a band too: boomstick 8, staff 20.
-## The M band's own width is 26 (34 to 60), so the spread is that plus one
+## The M band's own width is 36 (34 to 70), so the spread is that plus one
 ## ROSTER_DAMAGE_TOLERANCE of measurement: at 27 a pickaxe strike landing
 ## 0.7 under its 34 (#180, well inside its own tolerance) failed the band.
-const ROSTER_DAMAGE_SPREAD: float = 26.0 + ROSTER_DAMAGE_TOLERANCE
+const ROSTER_DAMAGE_SPREAD: float = 36.0 + ROSTER_DAMAGE_TOLERANCE
 const ROSTER_DAMAGE_TIER_MARGIN: float = 6.0
 ## How far the victim is planted from where the charge starts, and how long
 ## the charge is watched for. The run-up has to be long enough that the head
@@ -20496,7 +20496,7 @@ func _scenario_solo_bot_yields_slot_to_phone() -> Array[String]:
 const GRIP_DEFAULT_FRICTION: float = 4.0
 ## Where #181 put the pickaxe's extension: about 1000 px/s, under the sword's.
 const PICKAXE_MIN_EXTEND_SPEED: float = 950.0
-const SWORD_DAMAGE_181: float = 46.0
+const SWORD_DAMAGE_181: float = 55.0  # 46 at #181, 55 after the 2026-09-27 playtest
 ## The extension speeds the #181 sweep ran the pickaxe at.
 const GRIP_SWEEP_SPEEDS: Array[float] = [750.0, 850.0, 950.0, 1000.0, 1050.0]
 
