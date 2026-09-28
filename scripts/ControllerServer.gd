@@ -480,10 +480,23 @@ func _join_urls() -> PackedStringArray:
 ## engine's install has no QR library. `null` on any failure (tool missing,
 ## nonzero exit, unreadable output) -- the join label's text URL already
 ## covers that case, so a phone can still join by typing it.
+const QRENCODE_CANDIDATES: PackedStringArray = [
+	"/opt/homebrew/bin/qrencode", "/usr/local/bin/qrencode", "qrencode"]
+
 func _generate_qr_texture(text: String) -> ImageTexture:
 	var out_path: String = OS.get_user_data_dir() + "/join_qr.png"
 	var output: Array = []
-	var exit_code: int = OS.execute("qrencode", ["-o", out_path, "-s", "8", "-m", "2", text], output, true)
+	# An app launched from Finder gets launchd's bare PATH (/usr/bin:/bin:...),
+	# which has no Homebrew in it, so the exported macOS build never found
+	# qrencode (playtest 2026-09-27: no QR on the lobby screen). Try the
+	# Homebrew prefixes by absolute path before the bare name.
+	var exit_code: int = -1
+	for exe: String in QRENCODE_CANDIDATES:
+		if exe.begins_with("/") and not FileAccess.file_exists(exe):
+			continue
+		exit_code = OS.execute(exe, ["-o", out_path, "-s", "8", "-m", "2", text], output, true)
+		if exit_code == 0:
+			break
 	if exit_code != 0:
 		push_warning("ControllerServer: qrencode unavailable or failed (exit %d) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code" % exit_code)
 		return null

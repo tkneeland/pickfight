@@ -38,6 +38,8 @@ var _next_pickup_msec: int = 0
 ## RoundManager hands it a stream derived from the match seed; until then (a
 ## director driven by hand) it is an unseeded one of its own.
 var rng := RandomNumberGenerator.new()
+## Weapons still to come out before the draw repeats one (`_draw_weapon`).
+var _bag: Array[Resource] = []
 
 func _init(round_manager: Node = null) -> void:
 	name = "PickupDirector"
@@ -133,7 +135,7 @@ func _spawn_pickup() -> void:
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
-	var weapon: Resource = PickupWeaponsScript.choose(offered, rng)
+	var weapon: Resource = _draw_weapon(offered)
 	if weapon == null:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
@@ -143,6 +145,28 @@ func _spawn_pickup() -> void:
 	# Placed after entering the tree: a spawn, not motion (issue #108).
 	pickup.reset_physics_interpolation()
 	_pickups.append(pickup)
+
+## The next weapon from a shuffled bag of everything offered, refilled once
+## it runs dry: every weapon comes out once before any comes out twice.
+## Playtest 2026-09-27: with a uniform draw over eight weapons and a handful
+## of pickups a session, the boomerang never turned up. A weapon no longer
+## offered is skipped, and the pickaxe never goes in (PickupWeapons.choose).
+## Shuffled from `rng`, so a seeded match still draws the same sequence.
+func _draw_weapon(offered: Array[Resource]) -> Resource:
+	while not _bag.is_empty():
+		var next: Resource = _bag.pop_back()
+		if offered.has(next):
+			return next
+	for stats: Resource in offered:
+		if stats != null and stats.resource_path != PickupWeaponsScript.PICKAXE_PATH:
+			_bag.append(stats)
+	# Fisher-Yates off our own stream: Array.shuffle() uses the global RNG.
+	for i in range(_bag.size() - 1, 0, -1):
+		var j: int = rng.randi() % (i + 1)
+		var swap: Resource = _bag[i]
+		_bag[i] = _bag[j]
+		_bag[j] = swap
+	return _bag.pop_back() if not _bag.is_empty() else null
 
 ## A random declared spot with no pickup already on it, or the fallback above
 ## the stage's centre when the stage declares none. Null when every spot is
