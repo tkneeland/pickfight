@@ -322,6 +322,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grip_strength_is_per_weapon",
 	"pickaxe_wall_grip_lets_go_at_every_swept_speed",
 	"music_defaults_to_half_slider",
+	"dagger_stab_bonus_applies_only_to_stabs",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1365,6 +1366,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickaxe_wall_grip_lets_go_at_every_swept_speed()
 		"music_defaults_to_half_slider":
 			return await _scenario_music_defaults_to_half_slider()
+		"dagger_stab_bonus_applies_only_to_stabs":
+			return await _scenario_dagger_stab_bonus_applies_only_to_stabs()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -20715,5 +20718,82 @@ func _scenario_pickaxe_wall_grip_lets_go_at_every_swept_speed() -> Array[String]
 			failures.append("%.0f px/s: moving the drag did not free the head within %d ticks (%.1f px off the wall)" % [
 				speed, GRIP_LET_GO_TICKS, GRIP_WALL_GAP - player.weapon_head_position().x])
 		await _teardown(stage, false)
+	_scenario_completed = true
+	return failures
+
+## Playtest 2026-09-27: the dagger's stab_multiplier (`WeaponStats.stab_multiplier`,
+## `Player._is_stab`) is meant to make a straight stab the dagger's main
+## strategy. A wound-back drag flicked straight out at a victim standing
+## close by is a stab -- the head's velocity relative to the body points
+## mostly along the haft -- so its best hit should land well above a bare
+## strike and clearly above the same stab with the bonus switched off. The
+## rest of the roster carries no bonus at all (`stab_multiplier` defaults to
+## 1.0, and only `resources/dagger.tres` overrides it).
+func _scenario_dagger_stab_bonus_applies_only_to_stabs() -> Array[String]:
+	var failures: Array[String] = []
+
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	_spawn_player(stage, NEW_WEAPON_FLOOR_STAND + Vector2(70, 0))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(attacker, DAGGER_PATH)
+	var strikes: Array = []
+	_record_strikes(attacker, strikes)
+	attacker.set_input_vector(Vector2.LEFT * 0.2)
+	await _await_ticks(40)
+	attacker.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(30)
+	var best: float = 0.0
+	for hit: Dictionary in strikes:
+		best = maxf(best, float(hit["amount"]))
+	print("      dagger stab (x%.2f): best hit %.1f" % [stats.stab_multiplier, best])
+	if best < 72.0:
+		failures.append("a dagger stab's best hit was %.1f, expected >= 72.0" % best)
+	await _teardown(stage)
+
+	# The same stab, the same weapon, with the bonus turned off: a duplicated
+	# copy of the dagger's stats (as `_scenario_pickaxe_wall_grip_lets_go_...`
+	# duplicates the pickaxe's) so nothing else about the head changes.
+	var flat_stats: WeaponStatsType = stats.duplicate()
+	flat_stats.stab_multiplier = 1.0
+	var stage2: Node2D = _new_stage()
+	var attacker2: RigidBody2D = _spawn_player(stage2, NEW_WEAPON_FLOOR_STAND)
+	_spawn_player(stage2, NEW_WEAPON_FLOOR_STAND + Vector2(70, 0))
+	await _await_ticks(2)
+	attacker2.set_weapon_stats(flat_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var strikes2: Array = []
+	_record_strikes(attacker2, strikes2)
+	attacker2.set_input_vector(Vector2.LEFT * 0.2)
+	await _await_ticks(40)
+	attacker2.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(30)
+	var best_flat: float = 0.0
+	for hit: Dictionary in strikes2:
+		best_flat = maxf(best_flat, float(hit["amount"]))
+	print("      dagger stab (x1.00): best hit %.1f" % best_flat)
+	await _teardown(stage2)
+
+	if best_flat >= best:
+		failures.append("turning the stab multiplier off did not lower the best hit (%.1f boosted vs %.1f flat)" % [
+			best, best_flat])
+	elif best < 89.5:
+		# The 90.0 strike-damage cap (Player.MAX_STRIKE_DAMAGE) can legitimately
+		# swallow the ratio, so it is only checked once the boosted hit is
+		# clearly under it.
+		var ratio: float = best / best_flat
+		if absf(ratio - stats.stab_multiplier) > 0.1:
+			failures.append("the stab bonus scaled the hit by %.2fx, expected about %.2fx (%.1f boosted, %.1f flat)" % [
+				ratio, stats.stab_multiplier, best, best_flat])
+
+	# Every other weapon on the roster carries no stab bonus at all.
+	for path: String in WEAPON_RESOURCE_PATHS:
+		if path == DAGGER_PATH:
+			continue
+		var other: WeaponStatsType = load(path)
+		if not is_equal_approx(other.stab_multiplier, 1.0):
+			failures.append("%s has stab_multiplier %.2f, expected 1.0 -- only the dagger should differ" % [
+				path.get_file().get_basename(), other.stab_multiplier])
+
 	_scenario_completed = true
 	return failures
