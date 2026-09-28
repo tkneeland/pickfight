@@ -285,6 +285,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bots_survive_hazard_stages",
 	"grapple_fires_sticks_reels_and_releases",
 	"grapple_hook_hits_player_lightly",
+	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
 	"flail_ball_does_not_clip_head",
@@ -1289,6 +1290,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_grapple_fires_sticks_reels_and_releases()
 		"grapple_hook_hits_player_lightly":
 			return await _scenario_grapple_hook_hits_player_lightly()
+		"launcher_circle_swing_does_not_fire":
+			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
 			return await _scenario_flail_whip_damage_scales_with_speed()
 		"flail_ball_does_not_tunnel_thin_platform":
@@ -18434,6 +18437,41 @@ func _record_strikes(player: RigidBody2D, into: Array) -> Callable:
 		into.append({"victim": victim, "amount": amount, "point": point, "lethal": lethal})
 	player.strike_landed.connect(record)
 	return record
+
+## Playtest 2026-09-27: only a fast straight extension fires the grapple or
+## throws the boomerang. A quick circle swing whose loop passes near the
+## centre -- the drag's length swinging 0.1 -> 1.0 inside a flick's window --
+## fired them anyway, since the flick only looked at length. A straight flick
+## still fires.
+func _scenario_launcher_circle_swing_does_not_fire() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		var name: String = path.get_file().get_basename()
+		var stage: Node2D = _new_stage()
+		var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+		await _await_ticks(2)
+		await _equip(player, path)
+		await _await_ticks(20)
+		player.set_input_vector(Vector2.ZERO)
+		await _await_ticks(3)
+		# Three fast loops (12 ticks each) of radius 0.45 centred 0.55 out.
+		var fired: bool = false
+		for i in 36:
+			var a: float = TAU * float(i) / 12.0 + PI
+			player.set_input_vector(Vector2(0.55, 0.0) + Vector2(cos(a), sin(a)) * 0.45)
+			await physics_frame
+			if player.launched_hook() != null or player.launched_boomerang() != null:
+				failures.append("a circle swing fired the %s at tick %d; only a straight flick should" % [name, i])
+				fired = true
+				break
+		await _await_ticks(20)
+		if not fired:
+			await _flick(player, Vector2.UP)
+			if player.launched_hook() == null and player.launched_boomerang() == null:
+				failures.append("a straight flick up did not fire the %s after the circle swing" % name)
+		await _teardown(stage)
+	_scenario_completed = true
+	return failures
 
 ## The grapple: a flick fires the hook, the hook sticks in terrain, holding
 ## the drag reels the player up to it, releasing lets go and the hook comes
