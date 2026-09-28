@@ -323,6 +323,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickaxe_wall_grip_lets_go_at_every_swept_speed",
 	"music_defaults_to_half_slider",
 	"dagger_stab_bonus_applies_only_to_stabs",
+	"qr_encoder_matches_reference_matrices",
+	"join_qr_shown_without_qrencode",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1368,6 +1370,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_music_defaults_to_half_slider()
 		"dagger_stab_bonus_applies_only_to_stabs":
 			return await _scenario_dagger_stab_bonus_applies_only_to_stabs()
+		"qr_encoder_matches_reference_matrices":
+			return await _scenario_qr_encoder_matches_reference_matrices()
+		"join_qr_shown_without_qrencode":
+			return await _scenario_join_qr_shown_without_qrencode()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -20796,4 +20802,160 @@ func _scenario_dagger_stab_bonus_applies_only_to_stabs() -> Array[String]:
 				path.get_file().get_basename(), other.stab_multiplier])
 
 	_scenario_completed = true
+	return failures
+
+## Issue #214 (QR encoder scenarios below).
+const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
+const QR_FIXTURES_PATH: String = "res://tools/qr_fixtures.txt"
+const QR_FIXTURES_MIN_CASES: int = 8
+const QR_LONGEST_JOIN_URL: String = "http://255.255.255.255:65535/"
+## ControllerServer draws the join QR 8 px a module inside a 2-module quiet
+## zone, as `qrencode -s 8 -m 2` did.
+const QR_MODULE_PIXELS: int = 8
+const QR_QUIET_MODULES: int = 2
+
+## Issue #214: the join QR is encoded in-process by scripts/QrEncoder.gd, not
+## by the `qrencode` tool. A subtly wrong matrix still looks like a QR code
+## but does not scan, so every case in tools/qr_fixtures.txt -- join URLs up
+## to the longest realistic `http://255.255.255.255:65535/`, EC levels M and
+## L, and longer texts reaching multi-block versions and version information
+## -- must come out module for module the same as the reference encoder
+## (python-qrcode 8.2, see tools/gen_qr_fixtures.py), at the same version and with
+## the same mask chosen by the ISO 18004 penalty rules.
+func _scenario_qr_encoder_matches_reference_matrices() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array[Dictionary] = _load_qr_fixtures(QR_FIXTURES_PATH)
+	if cases.size() < QR_FIXTURES_MIN_CASES:
+		failures.append("expected at least %d cases in %s, found %d" % [QR_FIXTURES_MIN_CASES, QR_FIXTURES_PATH, cases.size()])
+	var saw_longest_url: bool = false
+	for case: Dictionary in cases:
+		var text: String = case["text"]
+		var ecl: int = QrEncoderScript.ECL_M if case["ecl"] == "M" else QrEncoderScript.ECL_L
+		saw_longest_url = saw_longest_url or text == QR_LONGEST_JOIN_URL
+		var qr: Dictionary = QrEncoderScript.encode(text, ecl)
+		var tag: String = "%s @%s" % [text.left(40), case["ecl"]]
+		if qr.is_empty():
+			failures.append("%s: the encoder refused it" % tag)
+			continue
+		print("      %s: version %d mask %d (reference version %d mask %d)" % [tag, qr["version"], qr["mask"], case["version"], case["mask"]])
+		if qr["version"] != case["version"]:
+			failures.append("%s: version %d, reference %d" % [tag, qr["version"], case["version"]])
+		if qr["mask"] != case["mask"]:
+			failures.append("%s: picked mask %d, reference picked %d" % [tag, qr["mask"], case["mask"]])
+		var rows: PackedStringArray = QrEncoderScript.matrix_rows(qr)
+		var want: PackedStringArray = case["rows"]
+		if rows.size() != want.size():
+			failures.append("%s: %d rows, reference %d" % [tag, rows.size(), want.size()])
+			continue
+		var wrong: int = 0
+		for y in rows.size():
+			for x in mini(rows[y].length(), want[y].length()):
+				if rows[y][x] != want[y][x]:
+					wrong += 1
+		if wrong > 0:
+			failures.append("%s: %d of %d modules differ from the reference" % [tag, wrong, want.size() * want.size()])
+		# The same text under the reference's mask, forced, must match too,
+		# so a wrong penalty cannot hide behind a right matrix or vice versa.
+		var forced: Dictionary = QrEncoderScript.encode(text, ecl, case["mask"])
+		if QrEncoderScript.matrix_rows(forced) != want:
+			failures.append("%s: forcing mask %d does not reproduce the reference" % [tag, case["mask"]])
+	if not saw_longest_url:
+		failures.append("%s has no case for the longest join URL %s" % [QR_FIXTURES_PATH, QR_LONGEST_JOIN_URL])
+	if not QrEncoderScript.encode("x".repeat(400)).is_empty():
+		failures.append("a 400-byte text should be refused (versions 1-10 only), not encoded")
+	_scenario_completed = true
+	return failures
+
+## tools/qr_fixtures.txt: a `case<TAB>ecl<TAB>version<TAB>mask<TAB>text`
+## line, the module rows, a blank line; `#` lines are comments.
+func _load_qr_fixtures(path: String) -> Array[Dictionary]:
+	var cases: Array[Dictionary] = []
+	var current: Dictionary = {}
+	for raw: String in FileAccess.get_file_as_string(path).split("\n"):
+		var line: String = raw.strip_edges(false, true)
+		if line.begins_with("#"):
+			continue
+		if line.begins_with("case\t"):
+			var parts: PackedStringArray = line.split("\t", true, 4)
+			current = {"ecl": parts[1], "version": int(parts[2]), "mask": int(parts[3]), "text": parts[4], "rows": PackedStringArray()}
+			cases.append(current)
+		elif line != "" and not current.is_empty():
+			# A PackedStringArray read out of a Dictionary is a copy.
+			var rows: PackedStringArray = current["rows"]
+			rows.append(line)
+			current["rows"] = rows
+	return cases
+
+## Issue #214: on a host with no `qrencode` (this machine and the CI runner
+## have none), Main's ControllerServer still puts a join QR on screen and on
+## the lobby screen, drawn as before: 8 px a module, a 2-module white quiet
+## zone, every module the colour QrEncoder gives for the join URL. The
+## longest realistic join URL renders too, and ControllerServer no longer
+## shells out to anything.
+func _scenario_join_qr_shown_without_qrencode() -> Array[String]:
+	var failures: Array[String] = []
+	var source: String = FileAccess.get_file_as_string("res://scripts/ControllerServer.gd")
+	for banned: String in ["QRENCODE_CANDIDATES", "OS.execute("]:
+		if source.contains(banned):
+			failures.append("ControllerServer.gd still shells out (%s)" % banned)
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	get_root().add_child(main)
+	await _await_ticks(3)
+	var url: String = server.join_url
+	if url.begins_with("http://127.0.0.1"):
+		print("      no LAN address here (%s): the on-screen QR is hidden by design; checking the longest URL only" % url)
+	else:
+		var tex: Texture2D = server.join_qr_texture
+		var rect: TextureRect = main.get_node("UI/JoinQrCode") as TextureRect
+		if tex == null:
+			failures.append("no join QR texture for %s" % url)
+		else:
+			failures.append_array(_check_qr_image(tex.get_image(), url, "join QR"))
+			if rect.texture != tex or not rect.visible:
+				failures.append("UI/JoinQrCode is not showing the join QR (visible=%s)" % rect.visible)
+		var lobby: Object = main.get_node("RoundManager").get("_lobby_screen")
+		var lobby_qr: TextureRect = lobby.get("_lobby_qr") as TextureRect if lobby != null else null
+		if lobby_qr == null or lobby_qr.texture != tex or not lobby_qr.visible:
+			failures.append("the lobby screen does not show the join QR")
+	var longest: ImageTexture = server._generate_qr_texture(QR_LONGEST_JOIN_URL)
+	if longest == null:
+		failures.append("no QR for the longest join URL %s" % QR_LONGEST_JOIN_URL)
+	else:
+		failures.append_array(_check_qr_image(longest.get_image(), QR_LONGEST_JOIN_URL, "longest URL"))
+	main.queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+
+## `image` is `text`'s QrEncoder matrix at 8 px a module inside a 2-module
+## white quiet zone: sampled at every module's centre and across the zone.
+func _check_qr_image(image: Image, text: String, tag: String) -> Array[String]:
+	var failures: Array[String] = []
+	var qr: Dictionary = QrEncoderScript.encode(text, QrEncoderScript.ECL_M)
+	var size: int = qr["size"]
+	var modules: PackedByteArray = qr["modules"]
+	var side: int = (size + 2 * QR_QUIET_MODULES) * QR_MODULE_PIXELS
+	print("      %s: %s -> version %d, %dx%d modules, %dx%d px" % [tag, text, qr["version"], size, size, image.get_width(), image.get_height()])
+	if image.get_width() != side or image.get_height() != side:
+		failures.append("%s: image is %dx%d, expected %dx%d" % [tag, image.get_width(), image.get_height(), side, side])
+		return failures
+	var wrong: int = 0
+	for y in size:
+		for x in size:
+			var px: Color = image.get_pixel((x + QR_QUIET_MODULES) * QR_MODULE_PIXELS + QR_MODULE_PIXELS / 2,
+				(y + QR_QUIET_MODULES) * QR_MODULE_PIXELS + QR_MODULE_PIXELS / 2)
+			if (px.v < 0.5) != (modules[y * size + x] != 0):
+				wrong += 1
+	if wrong > 0:
+		failures.append("%s: %d modules drawn the wrong colour" % [tag, wrong])
+	var dark_in_zone: int = 0
+	for i in side:
+		for d in QR_QUIET_MODULES * QR_MODULE_PIXELS:
+			for p: Vector2i in [Vector2i(i, d), Vector2i(i, side - 1 - d), Vector2i(d, i), Vector2i(side - 1 - d, i)]:
+				if image.get_pixelv(p).v < 0.5:
+					dark_in_zone += 1
+	if dark_in_zone > 0:
+		failures.append("%s: %d dark pixels in the quiet zone" % [tag, dark_in_zone])
 	return failures

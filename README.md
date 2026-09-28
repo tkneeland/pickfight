@@ -65,8 +65,8 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
    actually on. Wi-Fi is often set to *Public*, and allowing only *Private*
    silently blocks every phone.
 3. **Read the join URL.** It's shown in the top-left of the game window,
-   e.g. `http://192.168.1.42:8080/`, and as a QR code at the top right if
-   [`qrencode`](https://fukuchi.org/works/qrencode/) is on your PATH. If you
+   e.g. `http://192.168.1.42:8080/`, and as a QR code at the top right and
+   on the lobby screen (drawn in-game, no extra tools needed). If you
    type it in instead, every address is printed to the console; the one shown
    on screen is the best guess for your Wi-Fi.
 4. **Open it on a phone** on the same network. Prefer a 5 GHz band or the

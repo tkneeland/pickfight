@@ -131,6 +131,7 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 
 ## The hats a phone may pick (issue #151), by path (CLAUDE.md).
 const HatScript := preload("res://scripts/Hat.gd")
+const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
 
 const PAGE_PATH: String = "res://controller/index.html"
 const WS_PORT_TOKEN: String = "__WS_PORT__"
@@ -320,8 +321,9 @@ var bot_director: Node = null
 ## mid-match, removing the bots would leave their bodies in the round.
 const SOLO_PHASES: PackedStringArray = ["lobby", "countdown"]
 var _last_host: int = -1
-## The join URL and QR the lobby screen shows (#120). The QR is null when
-## `qrencode` is unavailable.
+## The join URL and QR the lobby screen shows (#120). The QR is built
+## in-process by QrEncoder.gd (#214); it is null only when no join URL was
+## found.
 var join_url: String = ""
 var join_qr_texture: ImageTexture = null
 
@@ -474,37 +476,23 @@ func _join_urls() -> PackedStringArray:
 	preferred.append_array(virtual)
 	return preferred
 
-## Shells out to `qrencode` rather than generating QR modules in GDScript:
-## the ISO 18004 module-placement/masking rules are easy to get subtly wrong
-## in a way that still looks like a QR code but does not scan, and this
-## engine's install has no QR library. `null` on any failure (tool missing,
-## nonzero exit, unreadable output) -- the join label's text URL already
-## covers that case, so a phone can still join by typing it.
-const QRENCODE_CANDIDATES: PackedStringArray = [
-	"/opt/homebrew/bin/qrencode", "/usr/local/bin/qrencode", "qrencode"]
+## The join QR, encoded in-process by scripts/QrEncoder.gd (#214) and drawn
+## 8 px a module with a 2-module quiet zone. It used to shell out to
+## `qrencode`, so a host without it (any Windows PC, a fresh Mac) showed no QR.
+## The encoder is checked module for module against a reference encoder
+## (`qr_encoder_matches_reference_matrices`), since a subtly wrong matrix still
+## looks like a QR code but does not scan. `null` only if the text is too long
+## for the encoder (far beyond any `http://<ipv4>:<port>/`) -- the join
+## label's text URL still covers that.
+const QR_MODULE_PX: int = 8
+const QR_QUIET_ZONE_MODULES: int = 2
 
 func _generate_qr_texture(text: String) -> ImageTexture:
-	var out_path: String = OS.get_user_data_dir() + "/join_qr.png"
-	var output: Array = []
-	# An app launched from Finder gets launchd's bare PATH (/usr/bin:/bin:...),
-	# which has no Homebrew in it, so the exported macOS build never found
-	# qrencode (playtest 2026-09-27: no QR on the lobby screen). Try the
-	# Homebrew prefixes by absolute path before the bare name.
-	var exit_code: int = -1
-	for exe: String in QRENCODE_CANDIDATES:
-		if exe.begins_with("/") and not FileAccess.file_exists(exe):
-			continue
-		exit_code = OS.execute(exe, ["-o", out_path, "-s", "8", "-m", "2", text], output, true)
-		if exit_code == 0:
-			break
-	if exit_code != 0:
-		push_warning("ControllerServer: qrencode unavailable or failed (exit %d) -- put qrencode on PATH (e.g. `brew install qrencode`, `apt install qrencode`, or a Windows build) to show a join QR code" % exit_code)
+	var qr: Dictionary = QrEncoderScript.encode(text, QrEncoderScript.ECL_M)
+	if qr.is_empty():
+		push_warning("ControllerServer: join URL too long for a QR code: %s" % text)
 		return null
-	var image: Image = Image.new()
-	if image.load(out_path) != OK:
-		push_warning("ControllerServer: failed to load generated QR image at %s" % out_path)
-		return null
-	return ImageTexture.create_from_image(image)
+	return ImageTexture.create_from_image(QrEncoderScript.to_image(qr, QR_MODULE_PX, QR_QUIET_ZONE_MODULES))
 
 func _process_http() -> void:
 	var now: int = Time.get_ticks_msec()

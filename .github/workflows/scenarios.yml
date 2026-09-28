@@ -8,8 +8,9 @@
 #
 # Audio: --headless already selects the Dummy audio driver, so no
 # --audio-driver flag is needed on the runner.
-# The only expected boot noise is qrencode "Could not create child process"
-# (qrencode is not installed); the greps below ignore it.
+# The boot used to print qrencode "Could not create child process" (qrencode
+# is not installed); the join QR is drawn in-game since #214, so it no longer
+# does. The greps below still ignore that line.
 #
 # Class cache (#195): `--import` writes .godot/global_script_class_cache.cfg,
 # which resolves `class_name` references a fresh clone cannot. It is deleted
