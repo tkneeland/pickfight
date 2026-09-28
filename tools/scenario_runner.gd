@@ -20803,6 +20803,7 @@ func _scenario_dagger_stab_bonus_applies_only_to_stabs() -> Array[String]:
 
 	_scenario_completed = true
 	return failures
+
 ## Issue #214 (QR encoder scenarios below).
 const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
 const QR_FIXTURES_PATH: String = "res://tools/qr_fixtures.txt"
