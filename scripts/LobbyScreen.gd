@@ -38,7 +38,7 @@ const HOW_TO_PLAY_LINES: PackedStringArray = [
 	"Drag on your phone to swing your pick. Flick fast to hit hard.",
 	"Hook the pick on a ledge and pull to climb.",
 	"Touch a weapon pickup to grab it.",
-	"Knock them off or into the lava. Last one standing wins.",
+	"Hit them till they drop, or knock them off. Last one standing wins.",
 ]
 const HOW_TO_PLAY_KINDS: Array[int] = [
 	HowToPlayDemoScript.Kind.SWING,
