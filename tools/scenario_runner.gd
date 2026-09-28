@@ -331,6 +331,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_how_to_play_demos_leak_nothing",
 	"lobby_hides_in_round_join_corner",
 	"lobby_settings_panel_clears_how_to_play_captions",
+	"flail_climbs_with_the_roster",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1392,6 +1393,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_hides_in_round_join_corner()
 		"lobby_settings_panel_clears_how_to_play_captions":
 			return await _scenario_lobby_settings_panel_clears_how_to_play_captions()
+		"flail_climbs_with_the_roster":
+			return await _scenario_flail_climbs_with_the_roster()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -18910,11 +18913,19 @@ func _scenario_flail_ball_does_not_clip_head() -> Array[String]:
 		attacker.set_input_vector(Vector2.from_angle(PI * 0.5 + rng.randf_range(-0.5, 0.5)))
 		for i in 45:
 			var from: Vector2 = ball.global_position
+			var circles_from: Array = blocker.weapon_head_circles_world()
 			await physics_frame
 			var to: Vector2 = ball.global_position
-			for c: Dictionary in blocker.weapon_head_circles_world():
-				var closest: Vector2 = Geometry2D.get_closest_point_to_segment(c["centre"], from, to)
-				var overlap: float = radius + float(c["radius"]) - closest.distance_to(c["centre"])
+			var circles_to: Array = blocker.weapon_head_circles_world()
+			# In the blade's frame (issue #228): the ball's step against where
+			# each circle was when the step began and where it ended, so a
+			# blade shoved into a ball resting on it is not counted as the
+			# ball going into the blade.
+			for k in mini(circles_from.size(), circles_to.size()):
+				var c_from: Vector2 = circles_from[k]["centre"]
+				var c_to: Vector2 = circles_to[k]["centre"]
+				var closest: Vector2 = Geometry2D.get_closest_point_to_segment(Vector2.ZERO, from - c_from, to - c_to)
+				var overlap: float = radius + float(circles_to[k]["radius"]) - closest.length()
 				deepest = maxf(deepest, overlap)
 	print("      10 whips at a held sword: deepest the ball's path went into the blade %.1f px" % deepest)
 	if deepest > 5.0:
@@ -21593,3 +21604,97 @@ func _scenario_lobby_settings_panel_clears_how_to_play_captions() -> Array[Strin
 	ui.toggle_panel()
 	await _teardown(main)
 	return failures
+# --- The flail climbs with the roster (issue #228) -----------------------------
+
+## Where the arm is held while the player stands, before the full drag: at
+## rest reach, and already on the plant ("plant"), straight up ("up") or
+## straight out to the side ("side"), so the drag either presses a planted
+## head or swings the head down onto the floor first and vaults off it.
+const FLAIL_CLIMB_STARTS: Dictionary = {
+	"plant": Vector2.ZERO,
+	"up": Vector2.UP,
+	"side": Vector2.RIGHT,
+}
+## The full drag's bearing off straight down, in degrees.
+const FLAIL_CLIMB_ANGLES: Array[float] = [-30.0, -15.0, 0.0, 15.0, 30.0]
+## How far the flail's best gain may sit off the median of the others.
+const FLAIL_CLIMB_BAND: float = 0.15
+
+## Issue #228: the flail climbs about as well as the rest of the roster.
+##
+## A weapon's **best vertical gain from a standing plant**: standing on a
+## floor with the arm at rest reach, held either on the plant or straight up
+## or out to the side (FLAIL_CLIMB_STARTS), then a full drag down at each of
+## FLAIL_CLIMB_ANGLES; how high the body gets in VAULT_TICKS, best of the
+## fifteen. The swung starts are how a player really jumps: the head comes
+## down onto the floor and the arm's turn vaults the body off it, which the
+## straight press (`roster_traversal_is_measured`'s vault) never uses.
+##
+## Before #228 the flail's best was 127.6 px against a median of 174.4 for the
+## others (the axe aside, as in `roster_traversal_is_measured`): 27% short.
+## The chain and ball were not what held it down -- the same arm with no chain
+## at all got 124.5 -- its stats were: the light weapons' 7300 drive over an
+## 85 px arm, where the sword and the boomstick vault off 8000. Asserted: the
+## flail's best is within FLAIL_CLIMB_BAND of that median. The whole table is
+## printed for the PR.
+func _scenario_flail_climbs_with_the_roster() -> Array[String]:
+	var failures: Array[String] = []
+	var bests: Dictionary = {}
+	for path: String in WEAPON_RESOURCE_PATHS:
+		var weapon: String = path.get_file().get_basename()
+		var stats: WeaponStatsType = load(path)
+		if stats == null:
+			failures.append("%s: could not be loaded" % path)
+			continue
+		var best: float = 0.0
+		var per_start: Array[String] = []
+		for start: String in FLAIL_CLIMB_STARTS:
+			var top: float = 0.0
+			for angle: float in FLAIL_CLIMB_ANGLES:
+				var drag: Vector2 = Vector2.DOWN.rotated(deg_to_rad(angle))
+				top = maxf(top, await _standing_plant_gain(stats, FLAIL_CLIMB_STARTS[start], drag))
+			per_start.append("%s %.1f" % [start, top])
+			best = maxf(best, top)
+		bests[weapon] = best
+		print("      %s: best vertical gain %.1f px (%s)" % [weapon, best, ", ".join(per_start)])
+	var others: Array[float] = []
+	for weapon: String in bests:
+		if weapon != "axe" and weapon != "flail":
+			others.append(float(bests[weapon]))
+	if not bests.has("flail") or others.is_empty():
+		failures.append("the flail or the roster it is measured against was never measured")
+		_scenario_completed = true
+		return failures
+	others.sort()
+	var median: float = others[others.size() / 2] if others.size() % 2 == 1 \
+			else (others[others.size() / 2 - 1] + others[others.size() / 2]) * 0.5
+	var ratio: float = float(bests["flail"]) / median
+	print("      flail %.1f px against a median of %.1f px for the others: ratio %.2f" % [bests["flail"], median, ratio])
+	if absf(ratio - 1.0) > FLAIL_CLIMB_BAND:
+		failures.append("the flail's best vertical gain is %.1f px, %.0f%% of the roster's median %.1f px (wanted within %.0f%%)" % [
+			bests["flail"], ratio * 100.0, median, FLAIL_CLIMB_BAND * 100.0])
+	_scenario_completed = true
+	return failures
+
+## How high the body gets (px) off a floor in VAULT_TICKS: settled standing
+## with the arm at rest reach along `held` (along `drag` when `held` is zero),
+## then a full drag along `drag`.
+func _standing_plant_gain(stats: WeaponStatsType, held: Vector2, drag: Vector2) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_add_bar(stage, Vector2(0, 20.0), Vector2(3000, 40))
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, -PLAYER_RADIUS))
+	await physics_frame
+	player.set_weapon_stats(stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	player.set_input_vector((drag if held == Vector2.ZERO else held) * 0.01)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	var rest_y: float = player.global_position.y
+	player.set_input_vector(drag)
+	var peak: float = 0.0
+	for _i in VAULT_TICKS:
+		await physics_frame
+		peak = maxf(peak, rest_y - player.global_position.y)
+	player.queue_free()
+	stage.queue_free()
+	await physics_frame
+	return peak

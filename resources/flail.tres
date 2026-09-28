@@ -18,20 +18,28 @@
 ; over 90. It also shoves the victim along its path by its momentum
 ; (speed x 0.25 x 1.2), up to 700. A slow ball does nothing.
 ;
-; Reach S (70) and the sword's drive. Force 7300, under the medium weapons'
-; 8000 (#180; 5500 against 6000 before). The ball never owns a clash correction against another head
-; (its drive is 0), so the flail blocks poorly.
+; Reach S and the sword's turn rate. The ball never owns a clash correction
+; against another head (its drive is 0), so the flail blocks poorly.
+;
+; Issue #228 (playtest 2026-09-28, "can't get anywhere vertically"): its best
+; vertical gain from a standing plant was 127.6 px against a median of 174.4
+; for the rest of the roster bar the axe (`flail_climbs_with_the_roster`).
+; Not the chain: the same arm with no chain got 124.5. The arm's turn is what
+; vaults the body off a head swung onto the floor, and it pushes with the
+; drive through the arm, so reach 85 -> 92 (still tier S), force 7300 -> 8500
+; and extension 1150 -> 1250 px/s: 160.5 px now. Force 5500 before #180,
+; then 7300.
 
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-; Playtest 2026-09-27: arm reach 70 -> 85, "a bit longer".
-max_reach = 85.0
+; Playtest 2026-09-27: arm reach 70 -> 85, "a bit longer"; #228: 92.
+max_reach = 92.0
 mass = 0.2
 drive_speed = 36.0
-extend_speed = 1150.0
+extend_speed = 1250.0
 rest_return_speed = 800.0
-max_drive_force = 7300.0
+max_drive_force = 8500.0
 damage = 14.0
 sound_set = &"flail"
 special = &"flail"
