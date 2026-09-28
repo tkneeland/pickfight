@@ -147,3 +147,19 @@ Notes:
 That is three files, about 1.6 MB in all. The `music_tracks_exist_and_credited`
 scenario fails if a track is missing, if it is not listed here with CC0, or if
 a shipped music file is unused.
+
+## QR code encoder
+
+`scripts/QrEncoder.gd` draws the lobby's join QR in-game (#214). It is a
+GDScript port written for this project, not a copy, but its structure (the
+function-pattern drawing, the codeword zigzag, Reed-Solomon block
+interleaving, the version-capacity arithmetic and the alignment-pattern
+spacing) follows Project Nayuki's **QR Code generator library**,
+https://www.nayuki.io/page/qr-code-generator-library, Copyright (c) Project
+Nayuki, released under the **MIT License**:
+https://opensource.org/licenses/MIT.
+
+Its test fixtures (`tools/qr_fixtures.txt`) were captured from
+**python-qrcode 8.2**, https://pypi.org/project/qrcode/ (BSD licence), by
+`tools/gen_qr_fixtures.py`. python-qrcode is a test-time reference only; the
+game does not ship or run it.
