@@ -49,8 +49,12 @@
     line-height: 1;
     color: #59606e;
   }
+  /* Issue #231: pinned to the top of the HUD, not to the badge's baseline,
+     which put it right across the gear on a 375-430 px phone. */
   #status {
+    align-self: flex-start;
     font-size: 14px;
+    line-height: 18px;
     opacity: 0.7;
   }
   /* Nickname (issue #121): tap to edit. The only part of the HUD that takes
@@ -214,9 +218,10 @@
   #name-shuffle { color: #e8ecf4; background: #2a303d; }
   #name-go { color: #0d0f14; background: #ffd933; min-width: 40vw; }
   /* Host controls (issue #149): a small gear, on the host's phone only, that
-     opens a hidden menu. Tucked under the status line, clear of the lobby's
-     buttons. While a round is being played a tap does nothing: the gear has
-     to be held for GEAR_HOLD_MS (it lights up), and a finger landing on it
+     opens a hidden menu. Tucked under the status line (HUD padding 12px +
+     its 18px line = 30px, so 44px leaves a gap), clear of the lobby's
+     buttons. Issue #231: a tap opens it, mid-round too -- it opens when the
+     finger lifts on it, and a finger that slides off it or lands on it
      mid-drag is ignored, so a swing can never open it by accident. */
   #gear {
     position: fixed;
@@ -236,7 +241,7 @@
     opacity: 0.8;
   }
   #gear.show { display: flex; }
-  #gear.holding { border-color: #ffd933; box-shadow: 0 0 0 4px rgba(255, 217, 51, 0.35); }
+  #gear.pressed { border-color: #ffd933; box-shadow: 0 0 0 4px rgba(255, 217, 51, 0.35); }
   #gear svg { width: 24px; height: 24px; pointer-events: none; }
   #host-menu {
     position: fixed;
@@ -601,8 +606,14 @@
     if (e.pointerId === activePointer) { release(); }
   }
 
+  // Issue #231: a touch on the host's gear or menu is never a drag or swing.
+  function onHostUi(target) {
+    var gear = document.getElementById("gear"), menu = document.getElementById("host-menu");
+    return !!target && (gear.contains(target) || menu.contains(target));
+  }
+
   canvas.addEventListener("pointerdown", function (e) {
-    if (activePointer !== null) { return; }
+    if (activePointer !== null || onHostUi(e.target)) { return; }
     canvas.setPointerCapture(e.pointerId);
     begin(e);
   });
@@ -1045,7 +1056,6 @@
   // and one player -- the kick carries the target's claim serial and End match
   // the match serial, both off the lobby state, so the host can refuse a stale
   // one, and a confirm is taken down as soon as its subject is gone.
-  var GEAR_HOLD_MS = 700;
   var gearEl = document.getElementById("gear");
   var menuEl = document.getElementById("host-menu");
   var menuPauseBtn = document.getElementById("menu-pause");
@@ -1058,7 +1068,6 @@
   var confirmValid = null;
   // The roster the kick list was drawn from, to redraw it when that changes.
   var kickListKey = "";
-  var gearHoldTimer = null;
   var gearPointer = null;
 
   function amHost() { return !!lobby && slot >= 0 && lobby.host === slot; }
@@ -1156,25 +1165,36 @@
     showMenuView("menu-kick-list");
   }
 
-  // A tap opens the gear outside play; during play it must be held, and a
-  // finger that lands on it while another is dragging is ignored.
-  function cancelGearHold() {
-    if (gearHoldTimer !== null) { clearTimeout(gearHoldTimer); gearHoldTimer = null; }
+  // Issue #231: a tap opens the menu, in the lobby and mid-round alike. Until
+  // then a round needed the gear held for 700 ms, which on a phone read as the
+  // gear doing nothing. It opens when the finger that pressed it lifts on it;
+  // one that lifts off it, or lands while another finger is dragging, is
+  // ignored, and none of it reaches the pad. touchstart's preventDefault keeps
+  // iOS from scrolling or zooming, and also swallows the click, hence pointerup.
+  function cancelGearPress() {
     gearPointer = null;
-    gearEl.classList.remove("holding");
+    gearEl.classList.remove("pressed");
   }
   gearEl.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     e.stopPropagation();
     if (activePointer !== null || gearPointer !== null) { return; }
-    if (!(inMatch() && !lobby.paused)) { openHostMenu(); return; }
     gearPointer = e.pointerId;
-    gearEl.classList.add("holding");
-    gearHoldTimer = setTimeout(function () { cancelGearHold(); openHostMenu(); }, GEAR_HOLD_MS);
+    gearEl.classList.add("pressed");
   });
-  gearEl.addEventListener("pointerup", cancelGearHold);
-  gearEl.addEventListener("pointercancel", cancelGearHold);
-  gearEl.addEventListener("pointerleave", cancelGearHold);
+  gearEl.addEventListener("pointerup", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // A touch is captured to the gear, so pointerleave never fires for a
+    // finger that slides off: check where it lifted instead.
+    var r = gearEl.getBoundingClientRect();
+    var tapped = gearPointer !== null && e.pointerId === gearPointer &&
+      e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    cancelGearPress();
+    if (tapped) { openHostMenu(); }
+  });
+  gearEl.addEventListener("pointercancel", cancelGearPress);
+  gearEl.addEventListener("pointerleave", cancelGearPress);
   gearEl.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
 
   menuPauseBtn.addEventListener("click", function () {

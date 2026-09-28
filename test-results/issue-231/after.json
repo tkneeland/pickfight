@@ -1,0 +1,236 @@
+[
+ {
+  "engine": "chromium",
+  "width": 375,
+  "errors": [],
+  "lobbyTapOpens": true,
+  "layout": {
+   "gear": [
+    319,
+    44,
+    363,
+    88
+   ],
+   "status": [
+    294,
+    12,
+    359,
+    30
+   ],
+   "overlap": false,
+   "hitAtGearCentre": "gear",
+   "statusText": "connected"
+  },
+  "slideOffOpens": false,
+  "slideOffSwings": false,
+  "playTapOpens": true,
+  "swingFramesFromTap": 0,
+  "textFramesFromTap": [],
+  "resumeLabel": "Resume",
+  "menuClosedAfterResume": true,
+  "hostCmds": [
+   "pause",
+   "resume"
+  ],
+  "dragAfterResumeSwings": true,
+  "gearMidDragIgnored": true
+ },
+ {
+  "engine": "chromium",
+  "width": 390,
+  "errors": [],
+  "lobbyTapOpens": true,
+  "layout": {
+   "gear": [
+    334,
+    44,
+    378,
+    88
+   ],
+   "status": [
+    309,
+    12,
+    374,
+    30
+   ],
+   "overlap": false,
+   "hitAtGearCentre": "gear",
+   "statusText": "connected"
+  },
+  "slideOffOpens": false,
+  "slideOffSwings": false,
+  "playTapOpens": true,
+  "swingFramesFromTap": 0,
+  "textFramesFromTap": [],
+  "resumeLabel": "Resume",
+  "menuClosedAfterResume": true,
+  "hostCmds": [
+   "pause",
+   "resume",
+   "pause",
+   "resume"
+  ],
+  "dragAfterResumeSwings": true,
+  "gearMidDragIgnored": true
+ },
+ {
+  "engine": "chromium",
+  "width": 430,
+  "errors": [],
+  "lobbyTapOpens": true,
+  "layout": {
+   "gear": [
+    374,
+    44,
+    418,
+    88
+   ],
+   "status": [
+    349,
+    12,
+    414,
+    30
+   ],
+   "overlap": false,
+   "hitAtGearCentre": "gear",
+   "statusText": "connected"
+  },
+  "slideOffOpens": false,
+  "slideOffSwings": false,
+  "playTapOpens": true,
+  "swingFramesFromTap": 0,
+  "textFramesFromTap": [],
+  "resumeLabel": "Resume",
+  "menuClosedAfterResume": true,
+  "hostCmds": [
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume"
+  ],
+  "dragAfterResumeSwings": true,
+  "gearMidDragIgnored": true
+ },
+ {
+  "engine": "webkit",
+  "width": 375,
+  "errors": [],
+  "lobbyTapOpens": true,
+  "layout": {
+   "gear": [
+    319,
+    44,
+    363,
+    88
+   ],
+   "status": [
+    294,
+    12,
+    359,
+    30
+   ],
+   "overlap": false,
+   "hitAtGearCentre": "gear",
+   "statusText": "connected"
+  },
+  "playTapOpens": true,
+  "swingFramesFromTap": 0,
+  "textFramesFromTap": [],
+  "resumeLabel": "Resume",
+  "menuClosedAfterResume": true,
+  "hostCmds": [
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume"
+  ]
+ },
+ {
+  "engine": "webkit",
+  "width": 390,
+  "errors": [],
+  "lobbyTapOpens": true,
+  "layout": {
+   "gear": [
+    334,
+    44,
+    378,
+    88
+   ],
+   "status": [
+    309,
+    12,
+    374,
+    30
+   ],
+   "overlap": false,
+   "hitAtGearCentre": "gear",
+   "statusText": "connected"
+  },
+  "playTapOpens": true,
+  "swingFramesFromTap": 0,
+  "textFramesFromTap": [],
+  "resumeLabel": "Resume",
+  "menuClosedAfterResume": true,
+  "hostCmds": [
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume"
+  ]
+ },
+ {
+  "engine": "webkit",
+  "width": 430,
+  "errors": [],
+  "lobbyTapOpens": true,
+  "layout": {
+   "gear": [
+    374,
+    44,
+    418,
+    88
+   ],
+   "status": [
+    349,
+    12,
+    414,
+    30
+   ],
+   "overlap": false,
+   "hitAtGearCentre": "gear",
+   "statusText": "connected"
+  },
+  "playTapOpens": true,
+  "swingFramesFromTap": 0,
+  "textFramesFromTap": [],
+  "resumeLabel": "Resume",
+  "menuClosedAfterResume": true,
+  "hostCmds": [
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume",
+   "pause",
+   "resume"
+  ]
+ }
+]
