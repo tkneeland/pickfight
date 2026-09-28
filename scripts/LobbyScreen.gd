@@ -38,8 +38,15 @@ const HOW_TO_PLAY_LINES: PackedStringArray = [
 	"Drag on your phone to swing your pick. Flick fast to hit hard.",
 	"Hook the pick on a ledge and pull to climb.",
 	"Touch a weapon pickup to grab it.",
-	"Hit them till they drop, or knock them off. Last one standing wins.",
+	"Hit them till they die, or knock them off. Last one standing wins.",
 ]
+## Issue #230. How much of the screen's bottom the how-to-play column keeps
+## clear: the host's Settings panel (`SfxSettings.gd`) opens upward from the
+## bottom-right corner, over this column, and covered the last caption. The
+## column centres itself in the height above this, so the open panel (its
+## volume sliders, boxes and button, about 265 px of the 900 px screen)
+## never reaches a caption.
+const SETTINGS_CORNER_RESERVE_PX: int = 280
 const HOW_TO_PLAY_KINDS: Array[int] = [
 	HowToPlayDemoScript.Kind.SWING,
 	HowToPlayDemoScript.Kind.CLIMB,
@@ -253,8 +260,14 @@ func build_panels() -> void:
 	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
 	right.add_child(_lobby_url)
 	# A column of its own, beside the QR and never over it (#219).
+	# Clear of the Settings corner below it (#230).
 	_how_to_play = _build_how_to_play()
-	columns.add_child(_how_to_play)
+	var how_to_play_slot := MarginContainer.new()
+	how_to_play_slot.name = "HowToPlaySlot"
+	how_to_play_slot.add_theme_constant_override("margin_bottom", SETTINGS_CORNER_RESERVE_PX)
+	how_to_play_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	how_to_play_slot.add_child(_how_to_play)
+	columns.add_child(how_to_play_slot)
 
 	_victory_panel = _full_screen_panel("VictoryPanel")
 	var stack := VBoxContainer.new()
@@ -285,7 +298,8 @@ func _build_how_to_play() -> Control:
 	var box := VBoxContainer.new()
 	box.name = "HowToPlay"
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 14)
+	# Tighter than it was (14 px) to make room for SETTINGS_CORNER_RESERVE_PX.
+	box.add_theme_constant_override("separation", 10)
 	box.add_child(_big_label("HOW TO PLAY", 34, LOBBY_ACCENT))
 	return box
 

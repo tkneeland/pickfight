@@ -16,9 +16,14 @@ extends CanvasLayer
 ##
 ## `Sfx` builds it once the game's own scene is running, so no scene file has
 ## to carry it. The bottom-right corner is free: the join text and scores sit
-## top-left, the QR code top-right.
+## top-left, the QR code top-right, and the lobby's how-to-play column keeps
+## clear of the open panel (issue #230, `LobbyScreen.SETTINGS_CORNER_RESERVE_PX`).
 
 const MARGIN: float = 12.0
+## The open panel's own opaque backdrop (issue #230), so nothing behind it
+## shows through its controls.
+const PANEL_BACKGROUND: Color = Color(0.1, 0.11, 0.14, 1.0)
+const PANEL_PADDING: float = 6.0
 const SLIDER_WIDTH: float = 180.0
 
 var sfx: Node
@@ -59,6 +64,11 @@ func _ready() -> void:
 	_panel = PanelContainer.new()
 	_panel.name = "Panel"
 	_panel.visible = false
+	var backdrop := StyleBoxFlat.new()
+	backdrop.bg_color = PANEL_BACKGROUND
+	backdrop.set_corner_radius_all(6)
+	backdrop.set_content_margin_all(PANEL_PADDING)
+	_panel.add_theme_stylebox_override("panel", backdrop)
 	corner.add_child(_panel)
 	var rows := VBoxContainer.new()
 	_panel.add_child(rows)
