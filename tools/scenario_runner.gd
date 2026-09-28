@@ -14612,6 +14612,14 @@ const BOT_START_MSEC: int = 8000
 const BOT_DAMAGE_MSEC: int = 40000
 ## A bot has "acted" once its player is this far from where it spawned.
 const BOT_MOVED_PX: float = 60.0
+## The flag scenario's match seed (issue #227). Unseeded, about 1 match seed
+## in 100 (4 of 400 in a sweep, e.g. 3914890213, and CI's 2067498443 on
+## Linux) has all three pickaxe bots climb for the platform pickups and never
+## meet in 40 s: no strike at all, a red shard at random. Seeded, the match
+## replays the same way every run (first strike after 3.3 s).
+const BOT_FLAG_SEED: int = 152
+## For `is_demo_node()` in the flag scenario (issue #227).
+const HowToPlayDemoScript: GDScript = preload("res://scripts/HowToPlayDemo.gd")
 
 ## Main.tscn with a real ControllerServer and RoundManager on Flatlands, for
 ## the bot scenarios. Not yet in the tree: the caller adds it.
@@ -14647,6 +14655,7 @@ func _scenario_bots_flag_fills_lobby_and_bots_fight() -> Array[String]:
 	var main: Node = built["main"]
 	var server: Node = built["server"]
 	var rm: Node = built["rm"]
+	rm.match_seed = BOT_FLAG_SEED
 	get_root().add_child(main)
 	await _await_ticks(5)
 	var director: Node = server.bot_director
@@ -14682,6 +14691,18 @@ func _scenario_bots_flag_fills_lobby_and_bots_fight() -> Array[String]:
 			marked += 1
 	if marked != BOT_FLAG_COUNT:
 		failures.append("the lobby state marks %d players as bots, expected %d" % [marked, BOT_FLAG_COUNT])
+	if rm.match_seed_value() != BOT_FLAG_SEED:
+		failures.append("the bots' match ran on seed %d, expected %d" % [rm.match_seed_value(), BOT_FLAG_SEED])
+	# Issue #227: the lobby's how-to-play demos (#219) are gone once the
+	# match is on, so no demo player is left in the "players" group for a
+	# bot's target scan to find.
+	var demo_players: int = 0
+	for other: Node in get_root().get_tree().get_nodes_in_group("players"):
+		if HowToPlayDemoScript.is_demo_node(other):
+			demo_players += 1
+	if demo_players > 0 or not rm._lobby_screen.how_to_play_demos().is_empty():
+		failures.append("%d demo players (%d demos) outlived the lobby into the bots' match" % [
+			demo_players, rm._lobby_screen.how_to_play_demos().size()])
 
 	var spawned_at: Array[Vector2] = []
 	for player: RigidBody2D in players:
