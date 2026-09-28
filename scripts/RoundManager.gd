@@ -994,6 +994,7 @@ func _enter_lobby() -> void:
 		_scoreboard.visible = false
 	_build_lobby_ui()
 	_lobby_screen.show_panel("lobby")
+	_set_join_corner_visible(false)
 	_last_lobby_state = {}
 	_tick_lobby()
 
@@ -1008,6 +1009,7 @@ func _enter_victory() -> void:
 	_build_lobby_ui()
 	_refresh_victory()
 	_lobby_screen.show_panel("victory")
+	_set_join_corner_visible(false)
 	_last_lobby_state = {}
 	_tick_lobby()
 
@@ -1044,6 +1046,7 @@ func _begin_match() -> void:
 		_controller_server.clear_ready()
 	if _lobby_screen != null and _lobby_screen.panels_built():
 		_lobby_screen.show_panel("")
+	_set_join_corner_visible(true)
 	_state = State.WAITING
 	_publish_lobby_state()
 	_try_start_round()
@@ -1146,6 +1149,13 @@ func _screen() -> CanvasLayer:
 
 func _build_lobby_ui() -> void:
 	_screen().build_panels()
+
+## The in-round join corner (issue #230) is hidden while the lobby, countdown
+## or victory screen is up -- they show their own big QR and URL, and the
+## small one bled through their backdrop -- and back for the rounds.
+func _set_join_corner_visible(on: bool) -> void:
+	if _controller_server != null and _controller_server.has_method("set_join_corner_visible"):
+		_controller_server.set_join_corner_visible(on)
 
 # --- Stage title card (issue #120) -------------------------------------------
 #

@@ -329,6 +329,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_how_to_play_demos_run_while_lobby_shows",
 	"lobby_how_to_play_demos_freed_when_lobby_hides",
 	"lobby_how_to_play_demos_leak_nothing",
+	"lobby_hides_in_round_join_corner",
+	"lobby_settings_panel_clears_how_to_play_captions",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1386,6 +1388,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_how_to_play_demos_freed_when_lobby_hides()
 		"lobby_how_to_play_demos_leak_nothing":
 			return await _scenario_lobby_how_to_play_demos_leak_nothing()
+		"lobby_hides_in_round_join_corner":
+			return await _scenario_lobby_hides_in_round_join_corner()
+		"lobby_settings_panel_clears_how_to_play_captions":
+			return await _scenario_lobby_settings_panel_clears_how_to_play_captions()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -20925,8 +20931,12 @@ func _scenario_join_qr_shown_without_qrencode() -> Array[String]:
 			failures.append("no join QR texture for %s" % url)
 		else:
 			failures.append_array(_check_qr_image(tex.get_image(), url, "join QR"))
-			if rect.texture != tex or not rect.visible:
-				failures.append("UI/JoinQrCode is not showing the join QR (visible=%s)" % rect.visible)
+			# Hidden while the lobby is up since #230, which shows the QR big
+			# itself; `lobby_hides_in_round_join_corner` sees it back in a round.
+			if rect.texture != tex:
+				failures.append("UI/JoinQrCode does not carry the join QR")
+			if rect.visible:
+				failures.append("UI/JoinQrCode shows over the lobby (#230)")
 		var lobby: Object = main.get_node("RoundManager").get("_lobby_screen")
 		var lobby_qr: TextureRect = lobby.get("_lobby_qr") as TextureRect if lobby != null else null
 		if lobby_qr == null or lobby_qr.texture != tex or not lobby_qr.visible:
@@ -21409,4 +21419,156 @@ func _scenario_lobby_how_to_play_demos_leak_nothing() -> Array[String]:
 		failures.append("the demos buzzed phones: %s" % [roster.buzzes])
 	await _teardown(stage)
 	_scenario_completed = true
+	return failures
+
+# --- Lobby polish (issue #230) -----------------------------------------------
+
+const LobbyScreenScript230 := preload("res://scripts/LobbyScreen.gd")
+## The window sizes the owner plays at, as a real window would be set.
+const LOBBY_230_RESOLUTIONS: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(1920, 1080)]
+
+## Issue #230, in the real game (scenes/Main.tscn, its real ControllerServer
+## over the real WebSocket seam): the in-round join corner -- UI/JoinLabel top
+## left and the small UI/JoinQrCode top right -- is hidden while the lobby,
+## the countdown and the victory screen are up (it bled through their
+## backdrop, under the HOW TO PLAY heading), and shows again in a round.
+func _scenario_lobby_hides_in_round_join_corner() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 230
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.round_end_pause_sec = 0.5
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var label: Label = server.join_label()
+	var qr: TextureRect = server.join_qr_rect()
+	if label == null or qr == null:
+		await _teardown(main)
+		return ["Main.tscn's ControllerServer has no join label (%s) or QR (%s)" % [label, qr]]
+	var has_qr: bool = qr.texture != null
+	if not has_qr:
+		print("      no LAN address here (%s): no QR texture, checking the label alone" % server.join_url)
+	var seen: Dictionary = {}
+	var check_hidden := func(phase: String) -> void:
+		seen[phase] = true
+		if label.is_visible_in_tree() or qr.is_visible_in_tree():
+			failures.append("%s: the in-round join corner shows (label %s, QR %s)" % [
+				phase, label.is_visible_in_tree(), qr.is_visible_in_tree()])
+	if rm.lobby_phase() != "lobby":
+		failures.append("the game did not open on the lobby (phase '%s')" % rm.lobby_phase())
+	check_hidden.call("lobby")
+
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "issue-230-%d" % i, joined)
+		if result["slot"] == -1:
+			failures.append("phone %d got no slot (closed=%s '%s')" % [i + 1, result["closed"], result["reason"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	check_hidden.call("lobby with two phones")
+
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.claimed_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var round_on := func() -> bool:
+		for peer: WebSocketPeer in joined:
+			peer.poll()
+		if rm.lobby_phase() == "countdown" and not seen.has("countdown"):
+			check_hidden.call("countdown")
+		return _all_alive(players)
+	var started: bool = await _await_condition(round_on, ROUND_LOOP_TIMEOUT_MSEC * 2)
+	if not seen.has("countdown"):
+		failures.append("the countdown was never seen (phase '%s')" % rm.lobby_phase())
+	if not started:
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+	else:
+		await _poll_phones(joined, 5)
+		print("      in a round: label %s, QR %s (texture %s)" % [label.is_visible_in_tree(), qr.is_visible_in_tree(), has_qr])
+		if not label.is_visible_in_tree():
+			failures.append("in a round: the join label is hidden")
+		if has_qr and not qr.is_visible_in_tree():
+			failures.append("in a round: the join QR is hidden")
+		if not has_qr and qr.is_visible_in_tree():
+			failures.append("in a round: the join QR shows with no texture")
+
+	rm.set("_match_winner_slot", server.claimed_slots()[0])
+	rm._enter_victory()
+	await _poll_phones(joined, 3)
+	if rm.lobby_phase() != "victory":
+		failures.append("the victory screen did not come up (phase '%s')" % rm.lobby_phase())
+	check_hidden.call("victory")
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+
+## Issue #230: in the lobby of the real game, the host's Settings panel open
+## in the bottom-right corner covers none of the how-to-play captions (it sat
+## on the fourth demo's), at 1280 x 720 and 1920 x 1080. The captions and the
+## panel are laid out on the 1600 x 900 canvas the window stretches
+## (`canvas_items`, aspect kept), so the two sizes give the same layout; both
+## are set on the root window and checked anyway. Headless, the window may
+## keep its size: the run prints what it got.
+func _scenario_lobby_settings_panel_clears_how_to_play_captions() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var how_to_play: Control = rm.how_to_play_panel()
+	var settings_panel: Control = ui.get_node_or_null(^"Corner/Panel") as Control
+	if how_to_play == null or not how_to_play.is_visible_in_tree() or settings_panel == null:
+		failures.append("no how-to-play panel (%s) or Settings panel (%s) in the lobby" % [how_to_play, settings_panel])
+		if ui.is_open():
+			ui.toggle_panel()
+		await _teardown(main)
+		return failures
+	var last_line: String = LobbyScreenScript230.HOW_TO_PLAY_LINES[LobbyScreenScript230.HOW_TO_PLAY_LINES.size() - 1]
+	if last_line != "Hit them till they die, or knock them off. Last one standing wins.":
+		failures.append("the last how-to-play line reads '%s'" % last_line)
+	var was_size: Vector2i = get_root().size
+	var screen := Rect2(Vector2.ZERO, SCREEN_SIZE)
+	for res: Vector2i in LOBBY_230_RESOLUTIONS:
+		get_root().size = res
+		await _await_ticks(3)
+		if not ui.is_open() or not settings_panel.is_visible_in_tree():
+			failures.append("%s: the Settings panel is not open" % res)
+		var panel_rect: Rect2 = settings_panel.get_global_rect()
+		var captions: Array[Node] = how_to_play.find_children("Caption", "Label", true, false)
+		if captions.size() != LobbyScreenScript230.HOW_TO_PLAY_LINES.size():
+			failures.append("%s: %d captions, expected %d" % [res, captions.size(), LobbyScreenScript230.HOW_TO_PLAY_LINES.size()])
+		var gap: float = INF
+		for caption: Node in captions:
+			var rect: Rect2 = (caption as Control).get_global_rect()
+			gap = minf(gap, panel_rect.position.y - rect.end.y)
+			if rect.intersects(panel_rect):
+				failures.append("%s: the Settings panel %s covers the caption '%s' %s" % [res, panel_rect, (caption as Label).text, rect])
+		var column: Rect2 = how_to_play.get_global_rect()
+		print("      window %s (asked %s): Settings panel %s, how-to-play column %s, %d captions, %.0f px clear above the panel" % [
+			get_root().size, res, panel_rect, column, captions.size(), gap])
+		if not screen.encloses(panel_rect) or not screen.encloses(column):
+			failures.append("%s: the Settings panel %s or the how-to-play column %s runs off the %s screen" % [res, panel_rect, column, SCREEN_SIZE])
+	get_root().size = was_size
+	ui.toggle_panel()
+	await _teardown(main)
 	return failures

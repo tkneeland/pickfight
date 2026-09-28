@@ -326,6 +326,29 @@ var _last_host: int = -1
 ## found.
 var join_url: String = ""
 var join_qr_texture: ImageTexture = null
+## Issue #230. Whether the in-round join corner (the JoinLabel top left and
+## the small JoinQrCode top right) is hidden: RoundManager hides it while the
+## lobby, countdown or victory screen is up, which show their own big QR and
+## URL, so the corner never bleeds through their backdrop.
+var _join_corner_hidden: bool = false
+
+## Shows or hides the in-round join corner (issue #230). The QR shows only
+## once it has a texture.
+func set_join_corner_visible(on: bool) -> void:
+	_join_corner_hidden = not on
+	var label: Label = join_label()
+	if label != null:
+		label.visible = on
+	var qr_rect: TextureRect = join_qr_rect()
+	if qr_rect != null:
+		qr_rect.visible = on and qr_rect.texture != null
+
+## The in-round join label and QR, or null (issue #230).
+func join_label() -> Label:
+	return get_node_or_null(join_label_path) as Label
+
+func join_qr_rect() -> TextureRect:
+	return get_node_or_null(qr_texture_path) as TextureRect
 
 func _ready() -> void:
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
@@ -390,7 +413,7 @@ func _ready() -> void:
 		else:
 			var qr_texture: ImageTexture = _generate_qr_texture(urls[0])
 			join_qr_texture = qr_texture
-			qr_rect.visible = qr_texture != null
+			qr_rect.visible = qr_texture != null and not _join_corner_hidden
 			if qr_texture != null:
 				qr_rect.texture = qr_texture
 
