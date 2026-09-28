@@ -47,6 +47,13 @@ extends Resource
 ## solver path.
 @export var damage: float = 34.0
 
+## Multiplies a strike's damage when the strike is a stab -- the head's
+## velocity relative to the wielder's body pointing mostly outward along the
+## haft (`Player._is_stab`, `Player.STAB_MIN_ALIGNMENT`). 1.0 means "no bonus",
+## which is every weapon except the dagger (`resources/dagger.tres`): a
+## fighting style built around jabbing forward rather than swinging across.
+@export var stab_multiplier: float = 1.0
+
 ## How hard a head planted on terrain bites into it (issue #110): its
 ## friction while the drag still points along the haft, against terrain's
 ## 1.0 (`Player._update_head_grip`). Per weapon since #181, so the pickaxe

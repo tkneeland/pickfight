@@ -120,6 +120,13 @@ const FULL_STRIKE_SPEED: float = 2200.0
 const MAX_STRIKE_SCALE: float = 2.0
 const MAX_STRIKE_DAMAGE: float = 90.0
 
+## How square-on a strike has to be to count as a stab (`_is_stab`): the
+## cosine of the angle between the head's velocity relative to the body and
+## the haft's outward direction. 0.8 is about 37 degrees off dead straight --
+## square enough to reject a swing carried mostly across the target, loose
+## enough that a stab thrown slightly off-line still qualifies.
+const STAB_MIN_ALIGNMENT: float = 0.8
+
 ## Colour the body fill lerps toward as `damage` climbs to `DEATH_DAMAGE`.
 ## Identity does not live here any more (ADR-0005) -- see `identity_color` --
 ## so the fill is free to just tell the damage story, including converging
@@ -1326,6 +1333,8 @@ func _land_strike(victim: Node, speed: float) -> void:
 	if not victim.alive:
 		return
 	var amount: float = _strike_damage(speed)
+	if _stats.stab_multiplier != 1.0 and _is_stab():
+		amount = minf(amount * _stats.stab_multiplier, MAX_STRIKE_DAMAGE)
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
 	var point: Vector2 = _strike_point(victim)
@@ -1333,6 +1342,22 @@ func _land_strike(victim: Node, speed: float) -> void:
 		amount = 0.0
 	victim.take_damage(amount)
 	strike_landed.emit(victim, amount, point, not victim.alive)
+
+## Whether the head's motion relative to the body is a stab: pointed mostly
+## straight out along the haft rather than across it. Read here, not off
+## `speed` in `_land_strike`, because that speed is only the component of the
+## head's swept velocity heading into the victim -- a glancing strike can
+## score high on it while the head itself moves mostly sideways. `_haft` is
+## null only while the rig is torn down, between strikes and never during one.
+func _is_stab() -> bool:
+	if _haft == null:
+		return false
+	var relative_v: Vector2 = _head_velocity - linear_velocity
+	var speed: float = relative_v.length()
+	if speed <= 0.0:
+		return false
+	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
+	return relative_v.dot(axis) / speed >= STAB_MIN_ALIGNMENT
 
 ## Where the head met `victim`: the leading edge of whichever head circle is
 ## nearest them.
