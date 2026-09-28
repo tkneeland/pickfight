@@ -24,6 +24,9 @@ extends Node2D
 ## physics interpolation is off for it; trails follow the head's *rendered*
 ## (interpolated) position, which it reconstructs from the last two ticks.
 
+## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
+const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+
 enum Kind { DUST, SPARK }
 
 ## --- Particles (dust and sparks share one pool) ---
@@ -178,7 +181,8 @@ func _watch_subtree(node: Node) -> void:
 		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
-	if node.has_meta(META_WATCHED):
+	# A lobby how-to-play demo's puppets (#219) make no sparks or shakes.
+	if node.has_meta(META_WATCHED) or HowToPlayDemoScript.is_demo_node(node):
 		return
 	if node.has_signal("strike_landed") and node.has_signal("eliminated"):
 		if node.has_signal("body_entered"):

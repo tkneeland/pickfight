@@ -326,6 +326,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"qr_encoder_matches_reference_matrices",
 	"join_qr_shown_without_qrencode",
 	"settings_toggle_clicks_mid_round",
+	"lobby_how_to_play_demos_run_while_lobby_shows",
+	"lobby_how_to_play_demos_freed_when_lobby_hides",
+	"lobby_how_to_play_demos_leak_nothing",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1377,6 +1380,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_join_qr_shown_without_qrencode()
 		"settings_toggle_clicks_mid_round":
 			return await _scenario_settings_toggle_clicks_mid_round()
+		"lobby_how_to_play_demos_run_while_lobby_shows":
+			return await _scenario_lobby_how_to_play_demos_run_while_lobby_shows()
+		"lobby_how_to_play_demos_freed_when_lobby_hides":
+			return await _scenario_lobby_how_to_play_demos_freed_when_lobby_hides()
+		"lobby_how_to_play_demos_leak_nothing":
+			return await _scenario_lobby_how_to_play_demos_leak_nothing()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13634,9 +13643,9 @@ func _scenario_lobby_how_to_play_on_host_screen_only() -> Array[String]:
 		failures.append("the lobby shows no how-to-play panel")
 	else:
 		var text: String = ""
-		for child: Node in panel.get_children():
-			if child is Label:
-				text += (child as Label).text.to_lower() + "\n"
+		# The lines are the demos' captions now (#219), a level down.
+		for child: Node in panel.find_children("*", "Label", true, false):
+			text += (child as Label).text.to_lower() + "\n"
 		print("      how to play:\n%s" % text.strip_edges().indent("        "))
 		for needed: String in ["drag", "flick", "climb", "pickup"]:
 			if not text.contains(needed):
@@ -21184,4 +21193,220 @@ func _scenario_settings_toggle_clicks_mid_round() -> Array[String]:
 	if director != null:
 		director.remove_bots()
 	await _teardown(main)
+	return failures
+
+# --- Lobby how-to-play demos (issue #219) ---------------------------------------
+
+## How long the demo scenarios watch the lobby: long enough for every demo's
+## thumb to have moved its player, and for the swing and win demos to land
+## their strikes and the win demo's KO.
+const HOWTO_DEMO_WATCH_TICKS: int = 300
+## How far a demo player's body or weapon head has to travel for it to count
+## as moving.
+const HOWTO_DEMO_MIN_TRAVEL: float = 30.0
+
+## The how-to-play demos under the lobby's panel (HowToPlayDemo.gd).
+func _howto_demos(rm: Node) -> Array[Node]:
+	var out: Array[Node] = []
+	var panel: Control = rm.how_to_play_panel()
+	if panel == null:
+		return out
+	for child: Node in panel.get_children():
+		if child.has_method("demo_players") and not child.is_queued_for_deletion():
+			out.append(child)
+	return out
+
+## Issue #219: the lobby shows four looping demos with captions. Each is a
+## SubViewport with a World2D of its own (not the match's, not another
+## demo's), a real player on it that its canned thumb moves -- body or head
+## travels -- and a caption. The lobby still fits the 1600x900 screen, and the
+## demos sit clear of the join QR and URL.
+func _scenario_lobby_how_to_play_demos_run_while_lobby_shows() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	# A join QR and URL as a networked host shows them (the stub roster has
+	# none), to keep clear of.
+	var qr: Array[Node] = rm.lobby_panel().find_children("*", "TextureRect", true, false)
+	if not qr.is_empty():
+		(qr[0] as TextureRect).texture = ImageTexture.create_from_image(Image.create(33, 33, false, Image.FORMAT_L8))
+		(qr[0] as TextureRect).visible = true
+		var url_label: Label = (qr[0] as Control).get_parent().get_child((qr[0] as Control).get_index() + 1) as Label
+		if url_label != null:
+			url_label.text = "http://192.168.100.200:8080/"
+	var demos: Array[Node] = _howto_demos(rm)
+	if demos.size() != 4:
+		failures.append("the lobby shows %d how-to-play demos, expected 4" % demos.size())
+	var worlds: Array[World2D] = [get_root().world_2d]
+	var start: Dictionary = {}
+	var travel: Dictionary = {}
+	for demo: Node in demos:
+		var viewport: SubViewport = demo.viewport()
+		if viewport == null or not viewport.is_inside_tree():
+			failures.append("%s has no stage viewport" % demo.name)
+			continue
+		if worlds.has(viewport.world_2d):
+			failures.append("%s shares a World2D with the match or another demo" % demo.name)
+		worlds.append(viewport.world_2d)
+		var caption: Label = demo.get_node_or_null("Caption") as Label
+		if caption == null or caption.text.strip_edges() == "":
+			failures.append("%s has no caption" % demo.name)
+		if demo.demo_players().is_empty():
+			failures.append("%s has no player on its stage" % demo.name)
+		travel[demo] = 0.0
+	for _i in HOWTO_DEMO_WATCH_TICKS:
+		await physics_frame
+		for demo: Node in demos:
+			var hero: RigidBody2D = demo.hero()
+			if hero == null or not is_instance_valid(hero):
+				continue
+			if not start.has(hero):
+				start[hero] = [hero.global_position, hero.weapon_head_position()]
+			var was: Array = start[hero]
+			travel[demo] = maxf(travel[demo], maxf(
+				hero.global_position.distance_to(was[0]), hero.weapon_head_position().distance_to(was[1])))
+			if hero.get_viewport() != demo.viewport():
+				failures.append("%s's player is not on its own stage" % demo.name)
+	for demo: Node in demos:
+		print("      %s: '%s', player travelled up to %.0f px, %d loops" % [
+			demo.name, (demo.get_node("Caption") as Label).text, travel[demo], demo.loops()])
+		if travel[demo] < HOWTO_DEMO_MIN_TRAVEL:
+			failures.append("%s's player barely moved (%.1f px)" % [demo.name, travel[demo]])
+	var size: Vector2 = _content_size(rm.lobby_panel())
+	print("      lobby content %s on a %s screen" % [size, SCREEN_SIZE])
+	if size.x > SCREEN_SIZE.x or size.y > SCREEN_SIZE.y:
+		failures.append("the lobby with the demos needs %s, more than the %s screen" % [size, SCREEN_SIZE])
+	if qr.is_empty() or not (qr[0] as Control).is_visible_in_tree():
+		failures.append("the lobby shows no join QR to keep clear of")
+	else:
+		var keep_clear: Rect2 = (qr[0] as Control).get_global_rect()
+		var url: Control = (qr[0] as Control).get_parent().get_child((qr[0] as Control).get_index() + 1) as Control
+		if url is Label and (url as Label).text != "":
+			keep_clear = keep_clear.merge(url.get_global_rect())
+		for demo: Node in demos:
+			var rect: Rect2 = (demo as Control).get_global_rect()
+			if rect.intersects(keep_clear):
+				failures.append("%s %s overlaps the join QR and URL %s" % [demo.name, rect, keep_clear])
+			if rect.end.x > SCREEN_SIZE.x or rect.position.x < 0.0 or rect.end.y > SCREEN_SIZE.y or rect.position.y < 0.0:
+				failures.append("%s runs off the screen: %s" % [demo.name, rect])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #219: when the lobby hides for the match, every demo -- its
+## viewport, its world's players and their weapons -- leaves the tree at once
+## and is freed, and none of its players is left in the "players" group.
+func _scenario_lobby_how_to_play_demos_freed_when_lobby_hides() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var demos: Array[Node] = _howto_demos(rm)
+	if demos.size() != 4:
+		failures.append("the lobby shows %d how-to-play demos, expected 4" % demos.size())
+	var refs: Array[WeakRef] = []
+	for demo: Node in demos:
+		refs.append(weakref(demo))
+		refs.append(weakref(demo.viewport()))
+		for p: RigidBody2D in demo.demo_players():
+			refs.append(weakref(p))
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+	if not _howto_demos(rm).is_empty():
+		failures.append("%d demos are still under the lobby once the match started" % _howto_demos(rm).size())
+	for node: Node in get_nodes_in_group("players"):
+		if node.get_viewport() != get_root():
+			failures.append("%s, off the main screen, is still in the players group" % node.name)
+	await _await_ticks(2)
+	var alive: int = 0
+	for ref: WeakRef in refs:
+		if ref.get_ref() != null:
+			alive += 1
+	print("      %d demo nodes watched, %d still allocated after the lobby hid" % [refs.size(), alive])
+	if alive > 0:
+		failures.append("%d of %d demo nodes were not freed when the lobby hid" % [alive, refs.size()])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #219: demo players are puppets. While the lobby's demos swing, strike,
+## KO and pick up weapons, nothing reaches the match: no sound is asked of Sfx,
+## no kill-feed entry, no hitmarker, no juice, no phone buzz, and no demo
+## player's strike_landed or eliminated is connected to anything (so neither
+## reaches RoundManager's scoring or stats). The demos really do strike and KO
+## over the window, or this would prove nothing.
+func _scenario_lobby_how_to_play_demos_leak_nothing() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var stage: Node2D = loop["stage"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed219"
+	stage.add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	var feedback: Node2D = HitFeedbackType.new()
+	var marks: Array[int] = [0]
+	feedback.child_entered_tree.connect(func(_child: Node) -> void: marks[0] += 1)
+	stage.add_child(feedback)
+	var juice: Node2D = JuiceScript.new()
+	stage.add_child(juice)
+	var sfx: Node = _sfx()
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if sfx != null:
+		# Nothing an earlier scenario's round left queued to say.
+		var announcer: Node = sfx.get_node_or_null(^"Announcer")
+		if announcer != null and announcer.has_method("clear"):
+			announcer.call("clear")
+		sfx.start_recording()
+	var demos: Array[Node] = _howto_demos(rm)
+	if demos.size() != 4:
+		failures.append("the lobby shows %d how-to-play demos, expected 4" % demos.size())
+	var hurt: float = 0.0
+	var kos: int = 0
+	var swapped: bool = false
+	var seen: Dictionary = {}
+	for _i in HOWTO_DEMO_WATCH_TICKS:
+		await physics_frame
+		for demo: Node in demos:
+			for p: RigidBody2D in demo.demo_players():
+				hurt = maxf(hurt, p.damage)
+				if not p.alive and not seen.has(p):
+					seen[p] = true
+					kos += 1
+				if p.weapon_stats != null and p.weapon_stats.resource_path.ends_with("sword.tres"):
+					swapped = true
+				for sig: String in ["strike_landed", "eliminated", "body_entered"]:
+					for connection: Dictionary in p.get_signal_connection_list(sig):
+						# A player listens to its own body's contacts.
+						var target: Object = (connection["callable"] as Callable).get_object()
+						if target == p or seen.has("%s:%s" % [p.get_instance_id(), sig]):
+							continue
+						seen["%s:%s" % [p.get_instance_id(), sig]] = true
+						failures.append("a demo player's %s is connected to %s" % [sig, connection["callable"]])
+	var sounds: PackedStringArray = sfx.recorded_names() if sfx != null else PackedStringArray()
+	if sfx != null:
+		sfx.stop_recording()
+	print("      demos dealt up to %.0f damage, %d KOs, pickup swap %s; sounds %s, feed %s, markers %d, buzzes %s" % [
+		hurt, kos, swapped, sounds, feed.entries(), marks[0], roster.buzzes])
+	if hurt <= 0.0 or kos == 0 or not swapped:
+		failures.append("the demos never struck (%.1f), KO'd (%d) or swapped a weapon (%s): nothing was tested" % [hurt, kos, swapped])
+	if sfx == null:
+		failures.append("no Sfx autoload to listen to")
+	elif not sounds.is_empty():
+		failures.append("the demos made sounds: %s" % sounds)
+	if not feed.entries().is_empty():
+		failures.append("the demos reached the kill feed: %s" % feed.entries())
+	if marks[0] > 0:
+		failures.append("the demos drew %d hitmarkers or damage numbers" % marks[0])
+	if juice.active_particle_count() > 0:
+		failures.append("the demos kicked up %d juice particles" % juice.active_particle_count())
+	if not roster.buzzes.is_empty():
+		failures.append("the demos buzzed phones: %s" % [roster.buzzes])
+	await _teardown(stage)
+	_scenario_completed = true
 	return failures
