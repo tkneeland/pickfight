@@ -42,6 +42,9 @@
 ; stays under the medium weapons' 6000: at 6000-7500 the dagger stopped losing
 ; to the axe head-on (heavy_weapon_wins_clash). Issue #180 let a stalled axe
 ; push its full 11000 rather than about 6000, which is what made 7300 safe.
+;
+; Playtest 2026-09-27: stabbing is the dagger's game; a straight-out stab
+; deals 1.2x (a standstill stab ~64 -> ~77).
 
 [resource]
 script = ExtResource("1")
@@ -53,6 +56,7 @@ extend_speed = 3400.0
 rest_return_speed = 1200.0
 max_drive_force = 7300.0
 damage = 70.0
+stab_multiplier = 1.2
 sound_set = &"dagger"
 head_circle_offsets = PackedVector2Array(-4.9, -0.08, -2.77, -0.08, -0.64, -0.08, 1.48, -0.08, 3.61, -0.08, 5.74, -0.08, 7.87, -0.08)
 head_circle_radii = PackedFloat32Array(2.21, 2.1, 2.01, 1.92, 1.84, 1.75, 1.66)
