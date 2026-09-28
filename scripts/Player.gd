@@ -1464,8 +1464,15 @@ func _clear_projectiles() -> void:
 ## that planted on a slippery-floor player keeps the slip that modifier gives
 ## that player's body. The grip is set from what the head touched last tick,
 ## so the first tick of a new contact runs on whatever the one before was.
+##
+## Issue #181: the full grip is per weapon (`WeaponStats.grip_friction`,
+## HEAD_GRIP_FRICTION by default), and a fully yielded head on terrain drops
+## to HEAD_YIELD_FRICTION rather than 1.0. At 1.0 the wedge above still froze
+## on plain friction whenever the stalled extension drive pressed about as
+## hard as the angle drive turned (the pickaxe at 750, 950 and 1000 px/s).
 const HEAD_GRIP_FRICTION: float = 4.0
 const HEAD_BASE_FRICTION: float = 1.0
+const HEAD_YIELD_FRICTION: float = 0.5
 const HEAD_GRIP_YIELD_START: float = 0.15
 const HEAD_GRIP_YIELD_FULL: float = 0.5
 
@@ -1481,10 +1488,12 @@ func _update_head_grip() -> void:
 			grip = 0.0
 			break
 		grip = 1.0
+	var floor_friction: float = HEAD_BASE_FRICTION
 	if grip > 0.0:
+		floor_friction = HEAD_YIELD_FRICTION
 		var error: float = absf(wrapf(weapon_angle - _haft.rotation, -PI, PI))
 		grip = 1.0 - clampf(inverse_lerp(HEAD_GRIP_YIELD_START, HEAD_GRIP_YIELD_FULL, error), 0.0, 1.0)
-	var friction: float = lerpf(HEAD_BASE_FRICTION, HEAD_GRIP_FRICTION, grip)
+	var friction: float = lerpf(floor_friction, _stats.grip_friction, grip)
 	var rough: bool = grip > 0.0
 	# Only on a change: every write re-sends the material to the server.
 	if _head_material.rough != rough:

@@ -67,6 +67,12 @@ const SWING_BELOW: float = 0.6
 ## Input length while aiming a vault, and while holding the head in the air.
 const AIM_LENGTH: float = 0.15
 const AIR_LENGTH: float = 0.3
+## Input length of a vault's push with the pickaxe (#181). The vaults were
+## tuned at its old 700 px/s, pushing to full reach; at 1000 px/s a full push
+## threw the bot off Ferry's landing and Updraft's ledge from 7 of 14 starts
+## within 45 px of the spawns. At 0.6 it survives all 14 again. Other
+## weapons still push to full reach, as before.
+const PICKAXE_PUSH_LENGTH: float = 0.6
 ## How far past full reach the anchor may be and still count as ground.
 const ANCHOR_SLACK: float = 30.0
 ## A goal this far above counts as up, and the bot vaults for height.
@@ -401,7 +407,7 @@ func _vault(delta: float) -> Vector2:
 			_phase_left = PUSH_SEC
 	if _phase == 0 or _airborne:
 		return _anchor * _anchor_length
-	return _anchor
+	return _anchor * PICKAXE_PUSH_LENGTH if _holds_pickaxe() else _anchor
 
 ## Where the head plants for the next vault. Pushing the head out through
 ## the anchor throws the body the opposite way, so the anchor is below and
