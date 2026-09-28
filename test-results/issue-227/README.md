@@ -1,8 +1,8 @@
 # Issue #227 evidence
 
-On main `f4e5982` plus this branch's fix (Windows 11, Godot 4.6.2, `--fixed-fps 60`):
+On main `56606fd` plus this branch's fix (Windows 11, Godot 4.6.2, `--fixed-fps 60`):
 
-- Full suite, 5 parallel `--scenarios=` shards: **265 passed, 0 failed, 265 total** (`full-suite.txt`).
+- Full suite, 5 parallel `--scenarios=` shards: **267 passed, 0 failed, 267 total** (`full-suite.txt`).
 - Fresh-clone boot (`godot --headless --quit`): no ERROR lines.
 
 ## Failure rate of `bots_flag_fills_lobby_and_bots_fight`
