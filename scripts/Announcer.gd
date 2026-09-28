@@ -19,6 +19,9 @@ extends Node
 ## Lines never talk over each other: they queue, and each waits for the one
 ## before to finish.
 
+## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
+const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+
 ## A second elimination this soon after the first makes one "Double KO!".
 ## It is also how long "KO!" waits before it is said.
 const DOUBLE_KO_WINDOW_SEC: float = 0.35
@@ -113,7 +116,8 @@ func _watch_subtree(node: Node) -> void:
 		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
-	if node.has_meta(META_WATCHED):
+	# A lobby how-to-play demo's puppets (#219) are never announced.
+	if node.has_meta(META_WATCHED) or HowToPlayDemoScript.is_demo_node(node):
 		return
 	if node.has_signal("strike_landed") and node.has_signal("eliminated"):
 		node.connect("eliminated", _on_eliminated)

@@ -22,6 +22,9 @@ extends Node2D
 ## re-used node is added back as the last child, as a new one would be, so
 ## `child_entered_tree` still announces every marker and number.
 
+## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
+const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+
 ## The debug switch. Damage numbers are a testing aid, not part of the game;
 ## flip this to hide them. Hitmarkers are always on.
 const SHOW_DAMAGE_NUMBERS: bool = true
@@ -93,7 +96,7 @@ func _on_node_added(node: Node) -> void:
 	_watch(node)
 
 func _watch(node: Node) -> void:
-	if not node.has_signal("strike_landed"):
+	if not node.has_signal("strike_landed") or HowToPlayDemoScript.is_demo_node(node):
 		return
 	var handler: Callable = _on_strike_landed.bind(node)
 	if not node.is_connected("strike_landed", handler):

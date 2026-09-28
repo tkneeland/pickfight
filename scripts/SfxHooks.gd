@@ -16,6 +16,9 @@ extends Node
 ## plus a signal on the part, or, for a part that already knows when it
 ## acts, one `get_node("/root/Sfx").play(...)` call in the part itself.
 
+## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
+const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+
 ## Damage that plays a weapon's hit at full strength. A committed swing does
 ## 34-60 depending on the weapon (Player._strike_damage), so a full-speed
 ## strike from any of them is at or near the top.
@@ -76,7 +79,8 @@ func _watch_subtree(node: Node) -> void:
 		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
-	if node.has_meta(META_WATCHED):
+	# A lobby how-to-play demo's puppets (#219) make no sound.
+	if node.has_meta(META_WATCHED) or HowToPlayDemoScript.is_demo_node(node):
 		return
 	if node.has_signal("strike_landed") and node.has_signal("eliminated"):
 		_watch_player(node)

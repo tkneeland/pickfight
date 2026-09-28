@@ -19,6 +19,7 @@ extends CanvasLayer
 ## the title card at the first round start, the banner at the first pause.
 
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
+const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
 const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
@@ -28,14 +29,23 @@ const PODIUM_HEIGHTS: Array[float] = [1.0, 0.72, 0.5, 0.34]
 const PODIUM_TALLEST_PX: float = 260.0
 ## A podium column's width once more than four are on it (issue #138).
 const PODIUM_CROWDED_COLUMN_PX: float = 180.0
-## The lines of the lobby's how-to-play panel.
+## How wide the lobby's status line ("Scan to join: ...") runs before it
+## wraps.
+const LOBBY_STATUS_WIDTH_PX: float = 620.0
+## The lessons of the lobby's how-to-play panel, in order, each shown by a
+## looping demo (`HowToPlayDemo.gd`, #219) with its line as the caption.
 const HOW_TO_PLAY_LINES: PackedStringArray = [
-	"Drag on your phone to swing your pick - flick it fast to hit hard",
-	"Hook the pick on a ledge and pull yourself up to climb",
-	"Touch a weapon pickup to grab a new weapon",
-	"Knock the others off the stage or into the rising lava - last one standing wins the round",
+	"Drag on your phone to swing your pick. Flick fast to hit hard.",
+	"Hook the pick on a ledge and pull to climb.",
+	"Touch a weapon pickup to grab it.",
+	"Knock them off or into the lava. Last one standing wins.",
 ]
-const HOW_TO_PLAY_WIDTH_PX: float = 560.0
+const HOW_TO_PLAY_KINDS: Array[int] = [
+	HowToPlayDemoScript.Kind.SWING,
+	HowToPlayDemoScript.Kind.CLIMB,
+	HowToPlayDemoScript.Kind.PICKUP,
+	HowToPlayDemoScript.Kind.WIN,
+]
 
 var _slot_name: Callable
 var _slot_color: Callable
@@ -90,10 +100,40 @@ func awards_row() -> Control:
 func panels_built() -> bool:
 	return _lobby_panel != null
 
+## The how-to-play demos running now: four while the lobby shows, none
+## otherwise.
+func how_to_play_demos() -> Array[Node]:
+	var out: Array[Node] = []
+	if _how_to_play != null:
+		for child: Node in _how_to_play.get_children():
+			if child.get_script() == HowToPlayDemoScript:
+				out.append(child)
+	return out
+
 ## Which full-screen panel shows: "lobby", "victory" or neither ("").
+## The how-to-play demos run only while the lobby shows: they are built
+## when it appears and freed the moment it goes (#219), so no demo body is
+## simulated behind a round or the podium.
 func show_panel(which: String) -> void:
 	_lobby_panel.visible = which == "lobby"
 	_victory_panel.visible = which == "victory"
+	if which == "lobby":
+		_start_demos()
+	else:
+		_stop_demos()
+
+func _start_demos() -> void:
+	if _how_to_play == null or not how_to_play_demos().is_empty():
+		return
+	for i in HOW_TO_PLAY_LINES.size():
+		_how_to_play.add_child(HowToPlayDemoScript.new(HOW_TO_PLAY_KINDS[i], HOW_TO_PLAY_LINES[i], i))
+
+func _stop_demos() -> void:
+	for demo: Node in how_to_play_demos():
+		# Out of the tree at once, not at the end of the frame: its bodies
+		# leave their worlds, and its players the "players" group, now.
+		_how_to_play.remove_child(demo)
+		demo.queue_free()
 
 ## Redraws the lobby from the state the phones are sent. `min_players` is
 ## how many it takes to start; `join_source` (the ControllerServer, or null)
@@ -182,7 +222,7 @@ func build_panels() -> void:
 	var columns := HBoxContainer.new()
 	columns.set_anchors_preset(Control.PRESET_FULL_RECT)
 	columns.alignment = BoxContainer.ALIGNMENT_CENTER
-	columns.add_theme_constant_override("separation", 96)
+	columns.add_theme_constant_override("separation", 48)
 	_lobby_panel.add_child(columns)
 	var left := VBoxContainer.new()
 	left.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -195,21 +235,26 @@ func build_panels() -> void:
 	_lobby_rows.add_theme_constant_override("separation", 12)
 	left.add_child(_lobby_rows)
 	_lobby_status = _big_label("", 56, LOBBY_ACCENT)
+	# Wrapped rather than one long line, so the how-to-play column fits
+	# beside the QR (#219).
+	_lobby_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lobby_status.custom_minimum_size.x = LOBBY_STATUS_WIDTH_PX
 	left.add_child(_lobby_status)
 	var right := VBoxContainer.new()
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
 	right.add_theme_constant_override("separation", 16)
 	columns.add_child(right)
 	_lobby_qr = TextureRect.new()
-	_lobby_qr.custom_minimum_size = Vector2(420, 420)
+	_lobby_qr.custom_minimum_size = Vector2(380, 380)
 	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	right.add_child(_lobby_qr)
 	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
 	right.add_child(_lobby_url)
+	# A column of its own, beside the QR and never over it (#219).
 	_how_to_play = _build_how_to_play()
-	right.add_child(_how_to_play)
+	columns.add_child(_how_to_play)
 
 	_victory_panel = _full_screen_panel("VictoryPanel")
 	var stack := VBoxContainer.new()
@@ -235,17 +280,13 @@ func _full_screen_panel(node_name: String) -> Control:
 	add_child(panel)
 	return panel
 
+## The how-to-play column: its heading, and the demos while the lobby shows.
 func _build_how_to_play() -> Control:
 	var box := VBoxContainer.new()
 	box.name = "HowToPlay"
-	box.add_theme_constant_override("separation", 8)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 14)
 	box.add_child(_big_label("HOW TO PLAY", 34, LOBBY_ACCENT))
-	for line: String in HOW_TO_PLAY_LINES:
-		var label: Label = _big_label(line, 24, Color.WHITE)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.custom_minimum_size.x = HOW_TO_PLAY_WIDTH_PX
-		box.add_child(label)
 	return box
 
 func _big_label(text: String, font_size: int, color: Color) -> Label:
