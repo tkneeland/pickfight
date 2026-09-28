@@ -65,36 +65,40 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 
 ## Announcer voice
 
-Added for issue #152. `scripts/Sfx.gd` maps each line to its file (the
-`announce_*` entries), and `scripts/Announcer.gd` decides when each is said.
+Added for issue #152 and re-voiced for issue #211. `scripts/Sfx.gd` maps each
+line to its file (the `announce_*` entries), and `scripts/Announcer.gd`
+decides when each is said.
 
-Five lines are recordings from Kenney's **Voiceover Pack: Fighter**, released
-under **CC0 1.0** (the pack's `License.txt` says so). They are shipped
-unchanged, only renamed:
+All 17 lines are **synthesised** in one voice with
+[Piper TTS](https://github.com/OHF-Voice/piper1-gpl) 1.8.0 (`piper-tts` on
+PyPI):
 
-- Page: https://kenney.nl/assets/voiceover-pack-fighter
-- Download: https://kenney.nl/media/pages/assets/voiceover-pack-fighter/6ceb77c6f1-1677589837/kenney_voiceover-pack-fighter.zip
+- Voice: **`en_US-john-medium`** (US male, 22,050 Hz)
+- Dataset: **john**, LibriVox recordings, fine-tuned from the `kristin` voice
+  (also LibriVox). LibriVox recordings are in the **public domain**.
+- Model card: https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/john/medium/MODEL_CARD
+- Model download: https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/john/medium
 
-| File | Pack file | Licence | Used for |
-|---|---|---|---|
-| `announcer/count_3.ogg` | `Audio/3.ogg` | CC0 1.0 | "3" |
-| `announcer/count_2.ogg` | `Audio/2.ogg` | CC0 1.0 | "2" |
-| `announcer/count_1.ogg` | `Audio/1.ogg` | CC0 1.0 | "1" |
-| `announcer/fight.ogg` | `Audio/fight.ogg` | CC0 1.0 | "FIGHT!" |
-| `announcer/winner.ogg` | `Audio/winner.ogg` | CC0 1.0 | "Winner!" |
+The speech engine's own licence does not cover what it speaks, and the voice
+was trained only on public-domain speech. These clips are dedicated to the
+public domain under **CC0 1.0**
+(http://creativecommons.org/publicdomain/zero/1.0/) like the rest.
 
-No CC0 recording could be found for "KO!", "Double KO!" or the modifier
-names, so those were **synthesised** for this repository. The speech engine
-is espeak-ng (voice `en-us+m3`, 140 wpm, pitch 30), run through the
-`espeakng-loader` Python wheel. Each clip was then trimmed, given a short
-two-tap echo, normalised, faded in and out, and encoded as Ogg Vorbis. The
-engine's own licence does not cover what it speaks. These clips are
-dedicated to the public domain under **CC0 1.0** like the rest.
+Settings: length_scale 0.9 (a little faster than normal), noise_scale 0.667,
+noise_w 0.8. Each clip was then trimmed of leading and trailing silence,
+peak-normalised to 0.9, given a short fade in (8 ms) and out (40 ms), and
+encoded as mono Ogg Vorbis. The level suits the `announce_*` default of
+-15 dB: the median active RMS is within 1 dB of the clips it replaced.
 
 | File | Text spoken | Licence | Used for |
 |---|---|---|---|
-| `announcer/ko.ogg` | "Kay, Oh!" | CC0 1.0 (synthesised) | "KO!" |
-| `announcer/double_ko.ogg` | "Double, Kay Oh!" | CC0 1.0 (synthesised) | "Double KO!" |
+| `announcer/count_3.ogg` | "Three!" | CC0 1.0 (synthesised) | "3" |
+| `announcer/count_2.ogg` | "Two!" | CC0 1.0 (synthesised) | "2" |
+| `announcer/count_1.ogg` | "One!" | CC0 1.0 (synthesised) | "1" |
+| `announcer/fight.ogg` | "Fight!" | CC0 1.0 (synthesised) | "FIGHT!" |
+| `announcer/ko.ogg` | "K.O.!" | CC0 1.0 (synthesised) | "KO!" |
+| `announcer/double_ko.ogg` | "Double K.O.!" | CC0 1.0 (synthesised) | "Double KO!" |
+| `announcer/winner.ogg` | "Winner!" | CC0 1.0 (synthesised) | "Winner!" |
 | `announcer/low_gravity.ogg` | "Low gravity!" | CC0 1.0 (synthesised) | modifier LOW GRAVITY |
 | `announcer/heavy_weapons.ogg` | "Heavy weapons!" | CC0 1.0 (synthesised) | modifier HEAVY WEAPONS |
 | `announcer/big_heads.ogg` | "Big heads!" | CC0 1.0 (synthesised) | modifier BIG HEADS |
@@ -106,7 +110,9 @@ dedicated to the public domain under **CC0 1.0** like the rest.
 | `announcer/bouncy.ogg` | "Bouncy!" | CC0 1.0 (synthesised) | modifier BOUNCY |
 | `announcer/double_damage.ogg` | "Double damage!" | CC0 1.0 (synthesised) | modifier DOUBLE DAMAGE |
 
-That is 17 files, about 0.23 MB in all. The last five were added for the #147 mixups.
+That is 17 files, about 0.18 MB in all. Before #211 the count, "FIGHT!" and
+"Winner!" were Kenney's Voiceover Pack: Fighter (CC0) and the rest were
+espeak-ng; none of those files are shipped any more.
 
 ## Music
 
