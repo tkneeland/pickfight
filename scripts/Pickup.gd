@@ -43,7 +43,19 @@ const MAX_ART_RADIUS: float = 25.0
 const MIN_TRIGGER_RADIUS: float = 20.0
 ## Space between the art and the edge of the backing disc.
 const BACKING_MARGIN: float = 6.0
-const BACKING_COLOR: Color = Color(1.0, 1.0, 1.0, 0.18)
+const BACKING_COLOR: Color = Color(1.0, 0.8, 0.18, 0.35)
+## Playtest 2026-09-27: a pickup read as nothing at all on a full-screen
+## host -- a 25 px grey disc on grey terrain -- and the owner reported "no
+## weapons spawning" while they were there. So each pickup also wears a gold
+## ring and a soft halo that breathes, drawn behind it and never collided
+## with: the trigger and the art keep the sizes the stages were laid out for.
+const RING_COLOR: Color = Color(1.0, 0.8, 0.18, 1.0)
+const RING_WIDTH: float = 4.0
+const HALO_COLOR: Color = Color(1.0, 0.85, 0.3, 0.3)
+## How far past the disc the halo reaches at its widest, and how often it
+## breathes.
+const HALO_REACH: float = 2.0
+const HALO_PERIOD_SEC: float = 1.2
 const ART_COLOR: Color = Color(0.95, 0.92, 0.8, 1.0)
 const BACKING_SEGMENTS: int = 24
 ## Drawn for a weapon with no art of its own: a plain diamond, reported as the
@@ -156,6 +168,34 @@ func _build() -> void:
 		disc.append(Vector2(cos(a), sin(a)) * disc_radius)
 	_backing.polygon = disc
 	_backing.color = BACKING_COLOR
+
+	var ring := Line2D.new()
+	ring.name = "Ring"
+	ring.points = disc
+	ring.closed = true
+	ring.width = RING_WIDTH
+	ring.default_color = RING_COLOR
+	add_child(ring)
+	move_child(ring, _backing.get_index() + 1)
+
+	_halo = Polygon2D.new()
+	_halo.name = "Halo"
+	_halo.polygon = disc
+	_halo.color = HALO_COLOR
+	add_child(_halo)
+	move_child(_halo, 0)
+
+var _halo: Polygon2D
+var _halo_t: float = 0.0
+
+## The halo breathes between the disc's own size and HALO_REACH times it,
+## fading as it grows. Presentational only.
+func _process(delta: float) -> void:
+	if _halo == null:
+		return
+	_halo_t = fmod(_halo_t + delta / HALO_PERIOD_SEC, 1.0)
+	_halo.scale = Vector2.ONE * lerpf(1.0, HALO_REACH, _halo_t)
+	_halo.modulate.a = 1.0 - _halo_t
 
 ## A live player's body touched the pickup: hand the weapon over and leave.
 ## Eliminated players have no collision layer to enter with, and are refused
