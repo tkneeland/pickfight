@@ -44,7 +44,8 @@ launch_range = 380.0
 launch_cooldown = 0.4
 return_speed = 1000.0
 projectile_speed = 1100.0
-projectile_damage = 14.0
+; Playtest 2026-09-27: throw damage 14 -> 24, it barely hurt.
+projectile_damage = 24.0
 projectile_knockback = 190.0
 projectile_radius = 7.0
 pickup_art = PackedVector2Array(-3, -12, 1, -12, 8, 0, 1, 12, -3, 12, 3, 0)

@@ -25,7 +25,8 @@
 [resource]
 script = ExtResource("1")
 min_reach = 20.0
-max_reach = 70.0
+; Playtest 2026-09-27: arm reach 70 -> 85, "a bit longer".
+max_reach = 85.0
 mass = 0.2
 drive_speed = 36.0
 extend_speed = 1150.0
