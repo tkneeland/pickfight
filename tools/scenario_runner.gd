@@ -332,6 +332,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_hides_in_round_join_corner",
 	"lobby_settings_panel_clears_how_to_play_captions",
 	"flail_climbs_with_the_roster",
+	"controller_page_gear_taps_open_in_play",
+	"controller_page_gear_clear_of_status",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1395,6 +1397,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_settings_panel_clears_how_to_play_captions()
 		"flail_climbs_with_the_roster":
 			return await _scenario_flail_climbs_with_the_roster()
+		"controller_page_gear_taps_open_in_play":
+			return _scenario_controller_page_gear_taps_open_in_play()
+		"controller_page_gear_clear_of_status":
+			return _scenario_controller_page_gear_clear_of_status()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13694,16 +13700,17 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 	var handler: String = page.substr(down, page.find("});", down) - down) if down >= 0 else ""
 	if not handler.contains("if (activePointer !== null"):
 		failures.append("a finger landing on the gear mid-drag is not ignored")
-	if not handler.contains("if (!(inMatch() && !lobby.paused)) { openHostMenu(); return; }") or not handler.contains("setTimeout(") or not handler.contains("GEAR_HOLD_MS"):
-		failures.append("during play the gear does not need holding to open: %s" % handler)
-	var hold_re := RegEx.new()
-	hold_re.compile("var GEAR_HOLD_MS = (\\d+);")
-	var hold: RegExMatch = hold_re.search(page)
-	if hold == null or int(hold.get_string(1)) < 400:
-		failures.append("the gear hold is missing or too short to rule out a stray touch")
-	for release_evt: String in ["pointerup", "pointercancel", "pointerleave"]:
-		if not page.contains('gearEl.addEventListener("%s", cancelGearHold)' % release_evt):
-			failures.append("lifting off the gear (%s) does not cancel the hold" % release_evt)
+	# Issue #231: a tap opens it mid-round too -- on the gear's own finger
+	# lifting on it, never on the press alone.
+	if not handler.contains("gearPointer = e.pointerId;") or handler.contains("openHostMenu()"):
+		failures.append("the gear opens on the press, not on a tap: %s" % handler)
+	var up: int = page.find('gearEl.addEventListener("pointerup"')
+	var up_handler: String = page.substr(up, page.find("});", up) - up) if up >= 0 else ""
+	if not up_handler.contains("e.pointerId === gearPointer") or not up_handler.contains("if (tapped) { openHostMenu(); }"):
+		failures.append("lifting the finger that pressed the gear does not open the menu: %s" % up_handler)
+	for release_evt: String in ["pointercancel", "pointerleave"]:
+		if not page.contains('gearEl.addEventListener("%s", cancelGearPress)' % release_evt):
+			failures.append("a finger leaving the gear (%s) does not cancel the tap" % release_evt)
 	var pause_at: int = page.find("menuPauseBtn.addEventListener(\"click\"")
 	var pause_handler: String = page.substr(pause_at, page.find("});", pause_at) - pause_at) if pause_at >= 0 else ""
 	if not pause_handler.contains('sendHost("pause")') or not pause_handler.contains('sendHost("resume")') or pause_handler.contains("askConfirm"):
@@ -21698,3 +21705,115 @@ func _standing_plant_gain(stats: WeaponStatsType, held: Vector2, drag: Vector2) 
 	stage.queue_free()
 	await physics_frame
 	return peak
+
+# --- Phone gear mid-round (issue #231) ----------------------------------------
+
+## A CSS rule's body on the controller page ("" when it has none), by its
+## exact selector at the start of a line.
+func _css_rule_231(page: String, selector: String) -> String:
+	var re := RegEx.new()
+	re.compile("(?m)^\\s*%s \\{([^}]*)\\}" % selector.replace(".", "\\."))
+	var m: RegExMatch = re.search(page)
+	return m.get_string(1) if m != null else ""
+
+## One `name: <int>px` (or plain int) out of a CSS rule body, else -1.
+func _css_px_231(rule: String, name: String) -> int:
+	var re := RegEx.new()
+	re.compile("(?:^|[;\\s])%s:\\s*([^;]+);" % name)
+	var m: RegExMatch = re.search(rule)
+	if m == null:
+		return -1
+	var num := RegEx.new()
+	num.compile("(\\d+)px\\)?\\s*$|^\\s*(\\d+)\\s*$")
+	var n: RegExMatch = num.search(m.get_string(1).strip_edges())
+	if n == null:
+		return -1
+	return int(n.get_string(1) if n.get_string(1) != "" else n.get_string(2))
+
+## Issue #231: the host phone's gear opens its menu with a plain tap mid-round
+## (it needed a 700 ms hold, which read as "does nothing"), nothing sits above
+## it or takes its touch in play, and the drag never starts from a touch on
+## the gear or the menu, so a tap on it sends no swing.
+func _scenario_controller_page_gear_taps_open_in_play() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH).replace("\r", "")
+	if page.contains("GEAR_HOLD_MS") or page.contains("gearHoldTimer"):
+		failures.append("the gear still has a hold timer")
+	var down: int = page.find('gearEl.addEventListener("pointerdown"')
+	var handler: String = page.substr(down, page.find("});", down) - down) if down >= 0 else ""
+	if handler.contains("inMatch()") or handler.contains("paused") or handler.contains("setTimeout("):
+		failures.append("the gear still behaves differently mid-round: %s" % handler)
+	if not handler.contains("e.preventDefault();") or not handler.contains("e.stopPropagation();"):
+		failures.append("the gear's press is not kept to the gear")
+	var up: int = page.find('gearEl.addEventListener("pointerup"')
+	var up_handler: String = page.substr(up, page.find("});", up) - up) if up >= 0 else ""
+	if not up_handler.contains("if (tapped) { openHostMenu(); }") or not up_handler.contains("getBoundingClientRect()"):
+		failures.append("a tap (lift on the gear) does not open the menu: %s" % up_handler)
+	var open_body: String = _js_function_body(page, "openHostMenu")
+	if open_body.contains("inMatch") or open_body.contains("inPlay") or not open_body.contains("release();"):
+		failures.append("openHostMenu() refuses mid-round or leaves a drag held: %s" % open_body)
+	# The drag ignores the gear and the menu.
+	var host_ui: String = _js_function_body(page, "onHostUi")
+	if not host_ui.contains('getElementById("gear")') or not host_ui.contains('getElementById("host-menu")') or not host_ui.contains(".contains(target)"):
+		failures.append("onHostUi() does not cover the gear and the menu: %s" % host_ui)
+	var pad: int = page.find('canvas.addEventListener("pointerdown"')
+	var pad_handler: String = page.substr(pad, page.find("});", pad) - pad) if pad >= 0 else ""
+	if not pad_handler.contains("onHostUi(e.target)") or pad_handler.find("onHostUi(e.target)") > pad_handler.find("begin(e)"):
+		failures.append("the drag starts from a touch on the gear or menu: %s" % pad_handler)
+	# Nothing above the gear in play: every layer stacked at or over it is a
+	# card play takes down, or the menu it opens; everything else that covers
+	# the screen in play lets touches through.
+	var gear_z: int = _css_px_231(_css_rule_231(page, "#gear"), "z-index")
+	if gear_z < 1:
+		failures.append("the gear has no z-index")
+	var z_re := RegEx.new()
+	z_re.compile("(?m)^\\s*(#[a-z-]+) \\{([^}]*)\\}")
+	for m: RegExMatch in z_re.search_all(page):
+		var z: int = _css_px_231(m.get_string(2), "z-index")
+		if m.get_string(1) != "#gear" and z >= gear_z and not ["#host-menu", "#name-prompt", "#look-prompt"].has(m.get_string(1)):
+			failures.append("%s (z-index %d) is stacked over the gear (%d)" % [m.get_string(1), z, gear_z])
+	for layer: String in ["#hud", "#state", "#hint", "#flash"]:
+		if not _css_rule_231(page, layer).contains("pointer-events: none;"):
+			failures.append("%s takes touches in play" % layer)
+	if not _js_function_body(page, "showLobby").contains('if (phase === "playing" || phase === "round_end") { lobbyEl.className = ""; return; }'):
+		failures.append("the lobby card is not taken down in play")
+	if not _js_function_body(page, "closePrompts").contains('lookEl.classList.remove("show")'):
+		failures.append("the look card stays up in play")
+	var close_at: int = page.find('getElementById("menu-close").addEventListener("click", closeHostMenu)')
+	var pause_at: int = page.find('menuPauseBtn.addEventListener("click"')
+	var pause_handler: String = page.substr(pause_at, page.find("});", pause_at) - pause_at) if pause_at >= 0 else ""
+	if close_at < 0 or not pause_handler.contains('sendHost("resume"); closeHostMenu();'):
+		failures.append("Close or Resume does not take the menu down and return to play")
+	_scenario_completed = true
+	return failures
+
+## Issue #231: the gear sits below the HUD's status line ("connected"), which
+## is pinned to the top of the HUD rather than the big badge's baseline, so
+## the two never overlap on a 375-430 px portrait phone.
+func _scenario_controller_page_gear_clear_of_status() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH).replace("\r", "")
+	var status: String = _css_rule_231(page, "#status")
+	var hud: String = _css_rule_231(page, "#hud")
+	var gear: String = _css_rule_231(page, "#gear")
+	if not status.contains("align-self: flex-start;"):
+		failures.append("#status follows the badge's baseline, which drops it across the gear")
+	var line: int = _css_px_231(status, "line-height")
+	var pad_re := RegEx.new()
+	pad_re.compile("padding:\\s*(\\d+)px")
+	var pad_m: RegExMatch = pad_re.search(hud)
+	var pad_top: int = int(pad_m.get_string(1)) if pad_m != null else -1
+	var gear_top: int = _css_px_231(gear, "top")
+	var hud_safe: bool = hud.contains("top: env(safe-area-inset-top, 0px);")
+	var gear_safe: bool = gear.contains("env(safe-area-inset-top, 0px)")
+	print("      status line %dpx at HUD padding %dpx; gear top %dpx (both under the safe area: %s)" % [line, pad_top, gear_top, hud_safe and gear_safe])
+	if line <= 0 or pad_top < 0 or gear_top < 0 or not hud_safe or not gear_safe:
+		failures.append("could not read the status line (%d), HUD padding (%d) or gear top (%d)" % [line, pad_top, gear_top])
+	elif gear_top < pad_top + line + 4:
+		failures.append("the gear's top (%dpx) is within 4px of the status line's bottom (%dpx)" % [gear_top, pad_top + line])
+	if _css_px_231(status, "font-size") > line:
+		failures.append("the status text is taller than its line")
+	if not _js_function_body(page, "refreshHostControls").contains('gearEl.classList.toggle("show", host)'):
+		failures.append("the gear shows on phones without a slot, whose status can run long")
+	_scenario_completed = true
+	return failures
