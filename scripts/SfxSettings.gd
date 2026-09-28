@@ -35,6 +35,9 @@ var _fullscreen: CheckBox
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
+## Whether this layer took the left press now held down, which was on the
+## toggle, so the matching release is its too (issue #216).
+var _took_press: bool = false
 
 func _ready() -> void:
 	layer = 20
@@ -83,6 +86,36 @@ func _ready() -> void:
 	_mute.toggled.connect(_on_mute_toggled)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
+
+## A left click on the toggle is taken here, in `_input`, before the GUI
+## routes it (issue #216). The owner saw the button do nothing mid-round in
+## solo practice while it worked in the lobby. Whatever stood in the way --
+## a Control above it catching the mouse, another Control holding the GUI's
+## mouse focus, or a release that never reached the button -- `_input` runs
+## ahead of all of it, on every layer, paused or not, and the click toggles
+## on the press alone. The press and its release are both marked handled, so
+## the Button never sees them and cannot toggle a second time.
+func _input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click == null or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if click.pressed:
+		if not toggle_hit(click.position):
+			return
+		_took_press = true
+		toggle_panel()
+	elif _took_press:
+		_took_press = false
+	else:
+		return
+	get_viewport().set_input_as_handled()
+
+## Whether a click at `point` (viewport coordinates, as `_input` gets them)
+## lands on the visible toggle.
+func toggle_hit(point: Vector2) -> bool:
+	if not visible or not _toggle.is_visible_in_tree():
+		return false
+	return _toggle.get_global_rect().has_point(point)
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
