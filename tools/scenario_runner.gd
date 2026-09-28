@@ -325,6 +325,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"dagger_stab_bonus_applies_only_to_stabs",
 	"qr_encoder_matches_reference_matrices",
 	"join_qr_shown_without_qrencode",
+	"settings_toggle_clicks_mid_round",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1374,6 +1375,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_qr_encoder_matches_reference_matrices()
 		"join_qr_shown_without_qrencode":
 			return await _scenario_join_qr_shown_without_qrencode()
+		"settings_toggle_clicks_mid_round":
+			return await _scenario_settings_toggle_clicks_mid_round()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -20958,4 +20961,227 @@ func _check_qr_image(image: Image, text: String, tag: String) -> Array[String]:
 					dark_in_zone += 1
 	if dark_in_zone > 0:
 		failures.append("%s: %d dark pixels in the quiet zone" % [tag, dark_in_zone])
+	return failures
+
+# --- Settings button mid-round (issue #216) ------------------------------------
+
+## Bots for the settings-click scenario: enough for a round to start by itself.
+const SETTINGS_CLICK_BOTS: int = 2
+## Wall-clock budget for the bots' round to start.
+const SETTINGS_CLICK_START_MSEC: int = 8000
+
+## A left press or release at `point`, in the root viewport's coordinates.
+func _settings_click_event(point: Vector2, pressed: bool) -> InputEventMouseButton:
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = pressed
+	click.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	click.position = point
+	click.global_position = point
+	return click
+
+## One left click at `point` through the root viewport's real input path.
+## Returns whether the press and the release were both marked handled.
+func _settings_click(point: Vector2) -> bool:
+	var root_vp: Viewport = get_root()
+	root_vp.push_input(_settings_click_event(point, true), true)
+	var press_handled: bool = root_vp.is_input_handled()
+	root_vp.push_input(_settings_click_event(point, false), true)
+	var release_handled: bool = root_vp.is_input_handled()
+	await process_frame
+	return press_handled and release_handled
+
+## The CanvasLayer a Control draws on, or null on the world canvas.
+func _canvas_layer_of(node: Node) -> CanvasLayer:
+	var at: Node = node.get_parent()
+	while at != null:
+		if at is CanvasLayer:
+			return at as CanvasLayer
+		at = at.get_parent()
+	return null
+
+## Every visible Control outside `ui` that would take a click at `point`
+## before the settings layer: it catches the mouse (STOP or PASS) and sits on
+## a CanvasLayer at or above the settings menu's own.
+func _controls_over_settings(ui: CanvasLayer, point: Vector2) -> Array[String]:
+	var found: Array[String] = []
+	var stack: Array[Node] = [get_root()]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node == ui:
+			continue
+		for child: Node in node.get_children():
+			stack.append(child)
+		if node is CanvasLayer and node != ui and (node as CanvasLayer).layer >= ui.layer:
+			found.append("%s is on layer %d, not below the settings menu's %d" % [
+				node.get_path(), (node as CanvasLayer).layer, ui.layer])
+		var control := node as Control
+		if control == null or not control.is_visible_in_tree() \
+				or control.mouse_filter == Control.MOUSE_FILTER_IGNORE:
+			continue
+		var layer: CanvasLayer = _canvas_layer_of(control)
+		if layer == null or layer.layer < ui.layer:
+			continue
+		if control.get_global_rect().has_point(point):
+			found.append("%s (mouse_filter %d, layer %d) covers the Settings button" % [
+				control.get_path(), control.mouse_filter, layer.layer])
+	return found
+
+## Issue #216: the host screen's Settings button opens and closes the panel by
+## click mid-round, at the round-end pause, while the host has the match
+## paused, and after the match goes back to the lobby -- and the panel is not
+## closed behind the host's back by any of those changes.
+##
+## A real window could not reproduce the owner's dead button (see the PR), so
+## the click no longer depends on the GUI routing it at all: `SfxSettings`
+## takes a left press on the toggle in `_input`, ahead of every Control, and
+## marks the press and its release handled. Clicks go through
+## `Viewport.push_input` in viewport coordinates, the path a real click takes
+## once the window has scaled it. The GUI tree is walked mid-round and in the
+## lobby: nothing that catches the mouse sits on a layer at or above the
+## settings menu's over the button. Before the fix, the plain clicks already
+## worked headless too; what failed was a mouse-catching Control put above the
+## menu, which swallowed the click, and a press whose release never came.
+func _scenario_settings_toggle_clicks_mid_round() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % SETTINGS_CLICK_BOTS])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	BotDirectorScript.extra_args = PackedStringArray()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(5)
+	var director: Node = server.bot_director
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.virtual_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	var started: bool = players.size() == SETTINGS_CLICK_BOTS and await _await_condition(
+		func() -> bool: return _all_alive(players), SETTINGS_CLICK_START_MSEC)
+	if not started:
+		failures.append("the bots' round never started (phase '%s')" % rm.lobby_phase())
+		if director != null:
+			director.remove_bots()
+		await _teardown(main)
+		return failures
+	await _await_ticks(10)
+
+	var toggle: Button = ui.get_node(^"Corner/Toggle") as Button
+	var centre: Vector2 = toggle.get_global_rect().get_center()
+	for problem: String in _controls_over_settings(ui, centre):
+		failures.append("mid-round: " + problem)
+
+	# Mid-round: click to open, click to close.
+	if not await _settings_click(centre):
+		failures.append("mid-round: the click on Settings was not marked handled")
+	if not ui.is_open():
+		failures.append("mid-round: clicking Settings did not open the panel")
+	await _await_ticks(5)
+	if not ui.is_open():
+		failures.append("mid-round: the panel closed by itself right after opening")
+	await _settings_click(centre)
+	if ui.is_open():
+		failures.append("mid-round: clicking Settings again did not close the panel")
+	# A click elsewhere is left alone.
+	var elsewhere: Vector2 = get_root().get_visible_rect().get_center()
+	await _settings_click(elsewhere)
+	if ui.is_open():
+		failures.append("a click in the middle of the screen opened the panel")
+
+	# Whatever might stand in the way cannot: a Control catching the mouse
+	# over the whole screen, on a layer above the menu's, does not swallow the
+	# click, and the press alone toggles, with its release left to it.
+	var cover_layer := CanvasLayer.new()
+	cover_layer.name = "Issue216Cover"
+	cover_layer.layer = ui.layer + 10
+	var cover := Control.new()
+	cover.mouse_filter = Control.MOUSE_FILTER_STOP
+	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cover_layer.add_child(cover)
+	main.add_child(cover_layer)
+	cover.size = get_root().get_visible_rect().size
+	await process_frame
+	if not cover.get_global_rect().has_point(centre):
+		failures.append("the test cover %s does not cover the Settings button" % cover.get_global_rect())
+	await _settings_click(centre)
+	if not ui.is_open():
+		failures.append("a full-screen Control above the menu swallowed the click on Settings")
+	main.remove_child(cover_layer)
+	cover_layer.free()
+	await _settings_click(centre)
+	get_root().push_input(_settings_click_event(centre, true), true)
+	if not ui.is_open():
+		failures.append("the press alone did not open the panel")
+	get_root().push_input(_settings_click_event(centre, false), true)
+	await process_frame
+	if not ui.is_open():
+		failures.append("the click's release toggled the panel a second time")
+	await _settings_click(centre)
+	if ui.is_open():
+		failures.append("the click after the press-only one did not close the panel")
+
+	# Open across the host's pause and resume, clickable while paused.
+	await _settings_click(centre)
+	rm._on_host_command("pause", server.host_slot())
+	await process_frame
+	if not rm.is_paused():
+		failures.append("the host's pause did not pause the match")
+	if not ui.is_open():
+		failures.append("pausing the match closed the settings panel")
+	await _settings_click(centre)
+	if ui.is_open():
+		failures.append("while paused: clicking Settings did not close the panel")
+	await _settings_click(centre)
+	if not ui.is_open():
+		failures.append("while paused: clicking Settings did not open the panel")
+	rm._on_host_command("resume", server.host_slot())
+	await _await_ticks(5)
+	if not ui.is_open():
+		failures.append("resuming the match closed the settings panel")
+
+	# Open across the round ending and the next one starting.
+	for player: RigidBody2D in players.slice(1):
+		player.leave_round()
+	var ended: bool = await _await_condition(
+		func() -> bool: return rm.get("_state") == RoundManagerType.State.ROUND_END, SETTINGS_CLICK_START_MSEC)
+	if not ended:
+		failures.append("the round did not end when one bot was left (state %d)" % rm.get("_state"))
+	else:
+		if not ui.is_open():
+			failures.append("the round ending closed the settings panel")
+		await _settings_click(centre)
+		if ui.is_open():
+			failures.append("round-end pause: clicking Settings did not close the panel")
+		await _settings_click(centre)
+		if not ui.is_open():
+			failures.append("round-end pause: clicking Settings did not open the panel")
+		var next: bool = await _await_condition(
+			func() -> bool: return rm.get("_state") == RoundManagerType.State.ROUND_ACTIVE, SETTINGS_CLICK_START_MSEC)
+		if not next:
+			failures.append("the next round never started (state %d)" % rm.get("_state"))
+		elif not ui.is_open():
+			failures.append("the next round starting closed the settings panel")
+
+	# Back to the lobby: still open, still clickable.
+	rm._on_host_command("end", server.host_slot())
+	await _await_ticks(5)
+	if not ui.is_open():
+		failures.append("ending the match closed the settings panel")
+	for problem: String in _controls_over_settings(ui, centre):
+		failures.append("lobby: " + problem)
+	await _settings_click(centre)
+	if ui.is_open():
+		failures.append("lobby: clicking Settings did not close the panel")
+
+	if ui.is_open():
+		ui.toggle_panel()
+	if director != null:
+		director.remove_bots()
+	await _teardown(main)
 	return failures
