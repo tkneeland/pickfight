@@ -22352,8 +22352,12 @@ func _scenario_teams_bots_fill_the_smaller_team() -> Array[String]:
 ## requests are ignored, and the phones are told the mode.
 func _scenario_teams_mode_toggle_lobby_only() -> Array[String]:
 	var failures: Array[String] = []
+	var server_script: Script = ControllerServerScript
+	var server_consts: Dictionary = server_script.get_script_constant_map()
+	if not server_consts.has("MODE_PHASES") or not server_consts.has("TEAM_PICK_PHASES"):
+		failures.append("ControllerServer has no MODE_PHASES / TEAM_PICK_PHASES")
 	for phase: String in ["playing", "round_end"]:
-		if ControllerServerScript.MODE_PHASES.has(phase) or ControllerServerScript.TEAM_PICK_PHASES.has(phase):
+		if Array(server_consts.get("MODE_PHASES", [])).has(phase) or Array(server_consts.get("TEAM_PICK_PHASES", [])).has(phase):
 			failures.append("the mode or a team pick can change in '%s'" % phase)
 	var built: Dictionary = _new_bot_main()
 	var main: Node = built["main"]
