@@ -162,6 +162,24 @@
   }
   #solo-btn:disabled { opacity: 0.5; }
   #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
+  /* Issue #236: the team picker, shown only in a Teams lobby, and the line
+     that says which team this phone is on. */
+  #team-row { font-size: 20px; display: none; align-items: center; gap: 10px; }
+  #team-row.show { display: flex; }
+  #team-row button {
+    font: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 2px solid #59606e;
+    background: #1b1f29;
+    color: #e8ecf4;
+  }
+  #team-row button.on { border-color: #e8ecf4; background: #2c3342; }
+  #team-red { color: #f24545 !important; }
+  #team-blue { color: #4d8cff !important; }
+  #team-line { font-size: 22px; font-weight: 800; display: none; }
   #target-row button, #target-input {
     font: inherit;
     font-size: 24px;
@@ -371,6 +389,12 @@
     <input id="target-input" type="number" inputmode="numeric" min="1" max="99" value="5">
     <button id="target-up" type="button">+</button>
   </div>
+  <div id="team-line"></div>
+  <div id="team-row">Team
+    <button id="team-red" type="button">Red</button>
+    <button id="team-blue" type="button">Blue</button>
+    <button id="team-auto" type="button">Auto</button>
+  </div>
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
   <button id="solo-btn" type="button">Solo practice</button>
@@ -399,6 +423,7 @@
     <button id="menu-pause" type="button" class="primary">Pause</button>
     <button id="menu-end" type="button" class="danger">End match</button>
     <button id="menu-kick" type="button">Kick player</button>
+    <button id="menu-mode" type="button">Mode: Free-for-all</button>
     <button id="menu-close" type="button">Close</button>
   </div>
   <div id="menu-kick-list" class="menu-view"></div>
@@ -645,12 +670,56 @@
   }
 
   // This phone's colour everywhere it shows: the badge, the name and the rim.
+  // Issue #236: on a team, a second rim inside it in the team's colour.
   function applyColor() {
     var color = colorOf(slot);
+    var team = myTeam();
     slotEl.style.color = color;
     nameEl.style.color = color;
-    document.body.style.boxShadow = slot < 0 ? "none" : "inset 0 0 0 6px " + color;
+    document.body.style.boxShadow = slot < 0 ? "none" : "inset 0 0 0 6px " + color +
+      (team >= 0 ? ", inset 0 0 0 16px " + TEAM_COLORS[team] : "");
   }
+
+  // ---- teams (issue #236) ---------------------------------------------------
+  // Must match Teams.gd: 0 is Red, 1 is Blue.
+  var TEAM_NAMES = ["Red", "Blue"];
+  var TEAM_COLORS = ["#f24545", "#4d8cff"];
+  // This phone's team in a Teams lobby or match, or -1 (free-for-all).
+  function myTeam() {
+    if (!lobby || !lobby.teams) { return -1; }
+    for (var i = 0; i < lobby.players.length; i++) {
+      if (lobby.players[i].slot === slot && typeof lobby.players[i].team === "number") { return lobby.players[i].team; }
+    }
+    return -1;
+  }
+  // This phone's own pick: 0, 1, or -1 for auto.
+  function myPick() {
+    for (var i = 0; lobby && i < lobby.players.length; i++) {
+      if (lobby.players[i].slot === slot && typeof lobby.players[i].pick === "number") { return lobby.players[i].pick; }
+    }
+    return -1;
+  }
+  var teamRowEl = document.getElementById("team-row");
+  var teamLineEl = document.getElementById("team-line");
+  // The picker only in a Teams lobby (or its countdown); the team line in
+  // any Teams state, in the team's colour.
+  function showTeams(msg) {
+    var team = myTeam();
+    var picking = !!msg.teams && (msg.phase === "lobby" || msg.phase === "countdown");
+    teamRowEl.classList.toggle("show", picking);
+    var pick = myPick();
+    document.getElementById("team-red").className = pick === 0 ? "on" : "";
+    document.getElementById("team-blue").className = pick === 1 ? "on" : "";
+    document.getElementById("team-auto").className = pick === -1 ? "on" : "";
+    teamLineEl.style.display = team >= 0 ? "block" : "none";
+    teamLineEl.style.color = team >= 0 ? TEAM_COLORS[team] : "";
+    teamLineEl.textContent = team >= 0 ? "You're on " + TEAM_NAMES[team] + " team" + (pick === -1 ? " (auto)" : "") : "";
+    applyColor();
+  }
+  function sendTeam(team) { sendText({ t: "team", v: team }); }
+  document.getElementById("team-red").addEventListener("click", function () { sendTeam(0); });
+  document.getElementById("team-blue").addEventListener("click", function () { sendTeam(1); });
+  document.getElementById("team-auto").addEventListener("click", function () { sendTeam(-1); });
 
   function sendName() { sendText({ t: "name", v: myName }); }
 
@@ -831,7 +900,11 @@
     document.getElementById("target-down").style.display = isHost ? "" : "none";
     document.getElementById("target-up").style.display = isHost ? "" : "none";
     if (document.activeElement !== targetInput) { targetInput.value = String(msg.target); }
-    if (phase === "victory") {
+    if (phase === "victory" && msg.teams && msg.winner_team >= 0) {
+      lobbyTitleEl.textContent = "Match over — " + TEAM_NAMES[msg.winner_team] + " team wins" +
+        (myTeam() === msg.winner_team ? " — you win!" : "");
+      readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
+    } else if (phase === "victory") {
       lobbyTitleEl.textContent = "Match over — " + (msg.winner === slot ? "you win!" :
         (msg.winner >= 0 ? slotName(msg.winner) + " wins" : "no winner"));
       readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
@@ -844,6 +917,7 @@
     lobbyInfoEl.textContent = ready + " of " + msg.players.length + " ready" +
       (msg.players.length < 2 ? " (need 2 players)" : "");
     showSolo(msg, isHost);
+    showTeams(msg);
   }
 
   // Issue #152: the host can fill the lobby with bots and start at once, or
@@ -1061,6 +1135,8 @@
   var menuPauseBtn = document.getElementById("menu-pause");
   var menuEndBtn = document.getElementById("menu-end");
   var menuKickBtn = document.getElementById("menu-kick");
+  // Issue #236: Free-for-all or Teams, only between matches.
+  var menuModeBtn = document.getElementById("menu-mode");
   var kickListEl = document.getElementById("menu-kick-list");
   var confirmTextEl = document.getElementById("confirm-text");
   var confirmAction = null;
@@ -1129,6 +1205,8 @@
     var others = 0;
     for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
     menuKickBtn.disabled = others === 0;
+    menuModeBtn.textContent = lobby.mode === "teams" ? "Mode: Teams" : "Mode: Free-for-all";
+    menuModeBtn.disabled = inMatch();
     // Issue #164: the lobby moved on under an open menu.
     if (viewShown("menu-confirm") && confirmValid && !confirmValid()) {
       confirmAction = null;
@@ -1208,6 +1286,10 @@
       function () { return inMatch() && lobby.match === match; });
   });
   menuKickBtn.addEventListener("click", showKickList);
+  menuModeBtn.addEventListener("click", function () {
+    if (inMatch()) { return; }
+    sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
+  });
   document.getElementById("menu-close").addEventListener("click", closeHostMenu);
   document.getElementById("confirm-yes").addEventListener("click", function () {
     var action = confirmAction;

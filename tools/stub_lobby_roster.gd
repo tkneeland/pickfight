@@ -34,3 +34,18 @@ var names: Dictionary = {}
 
 func slot_name(slot: int) -> String:
 	return str(names.get(slot, ""))
+
+## Teams mode (issue #236): the host's mode, each slot's team pick (0 red,
+## 1 blue; missing is "auto"), and which slots are bots.
+var teams_on: bool = false
+var team_picks: Dictionary = {}
+var bot_slots: Array[int] = []
+
+func team_mode() -> bool:
+	return teams_on
+
+func slot_team_pick(slot: int) -> int:
+	return int(team_picks.get(slot, -1))
+
+func is_virtual(slot: int) -> bool:
+	return bot_slots.has(slot)

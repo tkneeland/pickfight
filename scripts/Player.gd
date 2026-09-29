@@ -210,6 +210,10 @@ var alive: bool = true
 ## after a round places this player. While true, `take_damage()` does nothing
 ## and strikes on this player report 0. Knockback still applies.
 var spawn_protected: bool = false
+## Issue #236: the team this player fights for in a Teams match (0 red,
+## 1 blue), or -1 in free-for-all. Set by RoundManager. A teammate's hit
+## deals no damage and is not reported; knockback still applies.
+var team: int = -1
 
 ## The weapon setpoints the input vector asks for: a world angle in radians
 ## and a reach in pixels. These are what the host commands, not what the
@@ -1338,6 +1342,8 @@ func _land_strike(victim: Node, speed: float) -> void:
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
 	var point: Vector2 = _strike_point(victim)
+	if is_teammate(victim):
+		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	victim.take_damage(amount)
@@ -1444,10 +1450,16 @@ func _fire() -> void:
 func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 	if victim == self or not victim.alive:
 		return
+	if is_teammate(victim):
+		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	victim.take_damage(amount)
 	strike_landed.emit(victim, amount, point, not victim.alive)
+
+## Issue #236: whether `other` is on this player's team in a Teams match.
+func is_teammate(other: Node) -> bool:
+	return team >= 0 and other != self and other.get("team") == team
 
 ## The physics RID of this player's weapon head, or an empty RID with no live
 ## rig. A bullet reads it every tick, so its shooter's own head -- whichever
@@ -1856,6 +1868,8 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	if amount > 0.0 and victim is RigidBody2D:
 		var shove: float = minf(speed * ball.mass * float(_stats.ball_knockback), BALL_KNOCKBACK_MAX)
 		(victim as RigidBody2D).apply_central_impulse(toward * shove)
+	if is_teammate(victim):
+		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	victim.take_damage(amount)

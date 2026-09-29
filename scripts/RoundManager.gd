@@ -143,6 +143,11 @@ signal modifier_announced(title: String)
 ## 1), and the round win that wins the match.
 signal countdown_ticked(seconds_left: int)
 signal match_won(slot: int)
+## Teams mode (issue #236): a team took a round, and a team won the match.
+## A Teams match emits these instead of `match_won` (`round_won` still goes
+## out for the sound hooks, with a winning survivor's slot or -1).
+signal team_round_won(team: int)
+signal team_match_won(team: int)
 
 enum State { WAITING, ROUND_ACTIVE, ROUND_END, LOBBY, COUNTDOWN, VICTORY }
 
@@ -157,6 +162,8 @@ const StageRotationScript := preload("res://scripts/StageRotation.gd")
 const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const NameTagsScript := preload("res://scripts/NameTags.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
+## Teams mode's rules (issue #236, ADR-0018).
+const TeamsScript := preload("res://scripts/Teams.gd")
 ## Every deadline this node and its pieces keep (`*_msec`) is game time
 ## (#182), read from here: it stops while the tree is paused and runs at
 ## `Engine.time_scale`, so none of them needs pushing back after a pause.
@@ -281,7 +288,9 @@ func _process(_delta: float) -> void:
 					_controller_server.expire_disconnected_claims()
 					if _last_winner_slot != -1 and not _controller_server.claimed_slots().has(_last_winner_slot):
 						_last_winner_slot = -1
-				if _match_winner_slot != -1:
+					var claimed: Array[int] = _controller_server.claimed_slots()
+					_team_keep_weapon = _team_keep_weapon.filter(func(slot: int) -> bool: return claimed.has(slot))
+				if _match_winner_slot != -1 or _match_winner_team != -1:
 					_enter_victory()
 					return
 				_state = State.WAITING
@@ -320,6 +329,7 @@ func _try_start_round() -> void:
 	for slot in roster:
 		if slot >= 0 and slot < _players.size() and _players[slot] != null:
 			entering.append(slot)
+	_apply_teams(entering)
 	var spawn_offset: int = spawn_rotation_offset(entering.size())
 	var weapon_paths: PackedStringArray = playtest_weapon_paths()
 	for i in entering.size():
@@ -329,7 +339,7 @@ func _try_start_round() -> void:
 		# places are rotated a seeded amount each round (#200), so nobody starts
 		# on the same spot every round of a stage.
 		var spawn: Vector2 = _spawn_point((i + spawn_offset) % entering.size())
-		var keeps_weapon: bool = slot == _last_winner_slot
+		var keeps_weapon: bool = slot == _last_winner_slot or _team_keep_weapon.has(slot)
 		_players[slot].start_round(spawn, keeps_weapon)
 		_in_round.append(slot)
 		if _random_weapons and not keeps_weapon:
@@ -338,7 +348,9 @@ func _try_start_round() -> void:
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1
+	_team_keep_weapon.clear()
 	_survivor_slot = -1
+	_survivor_team = -1
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
 	_pickup_director.start()
@@ -422,6 +434,9 @@ var _kicked_this_round_check: bool = false
 func _check_round_end() -> void:
 	var after_kick: bool = _kicked_this_round_check
 	_kicked_this_round_check = false
+	if _team_mode:
+		_check_team_round_end(after_kick)
+		return
 	_flush_kos()
 	var alive_slots: Array[int] = []
 	for slot in _players.size():
@@ -484,6 +499,9 @@ func _watch_for_survivor() -> void:
 
 func _on_eliminated_check_survivor(slot: int) -> void:
 	if _state != State.ROUND_ACTIVE:
+		return
+	if _team_mode:
+		_check_team_survivor()
 		return
 	var frame: int = Engine.get_physics_frames()
 	if slot == _survivor_slot:
@@ -605,6 +623,10 @@ func _show_scoreboard() -> void:
 		var name_label: Label = entry.get_child(2) as Label if entry.get_child_count() > 2 else null
 		if name_label != null:
 			name_label.text = _slot_name(slot)
+		if _team_mode:
+			_team_scoreboard_entry(slot, score_label, name_label)
+		elif name_label != null and name_label.has_theme_color_override("font_color"):
+			name_label.remove_theme_color_override("font_color")
 	_scoreboard.visible = true
 
 ## Whether `slot` is claimed and, where the roster can say, has a phone
@@ -624,6 +646,11 @@ func _update_score_label() -> void:
 	if label == null:
 		return
 	var parts: PackedStringArray = PackedStringArray()
+	if _team_mode:
+		for team in TeamsScript.COUNT:
+			parts.append("%s: %d" % [TeamsScript.team_name(team), _team_scores[team]])
+		label.text = "  ".join(parts)
+		return
 	for slot in _scores.size():
 		if _slot_in_play(slot):
 			parts.append("P%d: %d" % [slot + 1, _scores[slot]])
@@ -987,6 +1014,7 @@ func _enter_lobby() -> void:
 	_play_lobby_music()
 	_state = State.LOBBY
 	_match_winner_slot = -1
+	_match_winner_team = -1
 	_clear_stage()
 	if _waiting_label != null:
 		_waiting_label.visible = false
@@ -1030,6 +1058,7 @@ func _begin_match() -> void:
 	_match_target = _requested_target()
 	_match_winner_slot = -1
 	_last_winner_slot = -1
+	_begin_team_match()
 	for slot in _scores.size():
 		_scores[slot] = 0
 	# A fresh seed for a fresh match (#187), before anything draws from it.
@@ -1055,12 +1084,13 @@ func _tick_lobby() -> void:
 	var roster: Array[int] = _roster()
 	match _state:
 		State.LOBBY:
-			if _everyone_ready(roster):
+			if _everyone_ready(roster) and _teams_can_start(roster):
 				_state = State.COUNTDOWN
 				_countdown_roster = roster.duplicate()
+				_countdown_teams = _team_key(roster)
 				_countdown_until_msec = GameClockScript.now_msec() + int(lobby_countdown_sec * 1000.0)
 		State.COUNTDOWN:
-			if roster != _countdown_roster or not _everyone_ready(roster):
+			if roster != _countdown_roster or not _everyone_ready(roster) or _team_key(roster) != _countdown_teams:
 				_state = State.LOBBY
 			elif GameClockScript.now_msec() >= _countdown_until_msec:
 				_begin_match()
@@ -1109,6 +1139,7 @@ func _publish_lobby_state() -> void:
 		# Issue #149: the host phone's menu offers Resume instead of Pause.
 		"paused": _paused,
 	}
+	_add_team_state(state, roster, in_lobby)
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -1126,15 +1157,20 @@ func _refresh_victory() -> void:
 	var roster: Array[int] = _roster()
 	var slots: Array[int] = []
 	for slot in _players.size():
-		if _players[slot] != null and (roster.has(slot) or slot == _match_winner_slot):
+		if _players[slot] != null and (roster.has(slot) or slot == _match_winner_slot or (_team_mode and _teams.has(slot))):
 			slots.append(slot)
 	slots.sort_custom(podium_before)
+	if _team_mode:
+		_lobby_screen.refresh_victory(slots, _scores, -1, _stats.awards(slots), _match_winner_team, _teams, _team_scores)
+		return
 	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
 
 ## The podium's order: whether slot `a` stands before slot `b`. The match
 ## winner first, then by final score. Strict (#200): never true both ways,
 ## nor for a slot against itself, as `sort_custom()` needs.
 func podium_before(a: int, b: int) -> bool:
+	if _team_mode:
+		return _team_podium_before(a, b)
 	if a == _match_winner_slot or b == _match_winner_slot:
 		return a == _match_winner_slot and b != _match_winner_slot
 	return _scores[a] > _scores[b]
@@ -1282,6 +1318,7 @@ func _end_match() -> void:
 	_end_round_modifier()
 	_end_spawn_protection()
 	_last_winner_slot = -1
+	_team_keep_weapon.clear()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
 	_enter_lobby()
@@ -1339,6 +1376,230 @@ func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 		if not _controller_server.is_virtual(slot) and _controller_server.slot_has_controller(slot):
 			return false
 	return true
+
+# --- Teams mode (issue #236, ADR-0018) -------------------------------------------
+#
+# The host phone picks Free-for-all (the default) or Teams in the lobby; the
+# mode is fixed for a whole match when its countdown runs out. In a Teams
+# match every player is on Red or Blue: each phone's own pick, then everyone
+# else balanced onto the smaller team, phones before bots (`Teams.assign()`).
+# A countdown needs both teams manned, and a changed pick or mode cancels it.
+# A round is won by the team with anyone left standing, and scores that team
+# a point; the match is first to the host's "first to N" in team points. The
+# winning team's survivors keep their weapons, as a lone winner does.
+#
+# Friendly fire is off where every weapon hit lands, `Player.is_teammate()`;
+# this node only sets each player's `team` at round start (-1 in a
+# free-for-all, so a free-for-all plays exactly as it always has). Hazards and
+# the lava hurt everyone. The kill feed, KO credit and awards stay per player.
+
+## The current match's mode, fixed at its start: true for a Teams match.
+var _team_mode: bool = false
+## slot -> team (0 red, 1 blue) for the current Teams match, kept across its
+## rounds; a player new to the match is balanced in at the next round start.
+var _teams: Dictionary = {}
+## Team round wins this match, [red, blue].
+var _team_scores: PackedInt32Array = PackedInt32Array([0, 0])
+## The team that won the match, or -1.
+var _match_winner_team: int = -1
+## The team that took the last round, or -1.
+var _last_winner_team: int = -1
+## The last round's winning survivors: they keep their weapons into the next.
+var _team_keep_weapon: Array[int] = []
+## The #163 frame race for teams: the one team left standing, recorded the
+## moment an elimination leaves only it, or -1.
+var _survivor_team: int = -1
+## The team picture a countdown started on: [mode, assignment].
+var _countdown_teams: Array = []
+
+## Whether the current match (or, between matches, the last one) is Teams.
+func team_mode() -> bool:
+	return _team_mode
+
+## `slot`'s team in the current Teams match, or -1.
+func team_of(slot: int) -> int:
+	return int(_teams.get(slot, TeamsScript.NONE)) if _team_mode else TeamsScript.NONE
+
+## `team`'s round wins this match.
+func team_score(team: int) -> int:
+	return _team_scores[team] if team >= 0 and team < TeamsScript.COUNT else 0
+
+## The team that won the match the victory screen is showing, or -1.
+func match_winner_team() -> int:
+	return _match_winner_team
+
+## Whether the host phone has chosen Teams for the next match.
+func _requested_team_mode() -> bool:
+	return _controller_server != null and _controller_server.has_method("team_mode") and bool(_controller_server.team_mode())
+
+## Who would be on which team if the match started now: the phones' picks,
+## the rest balanced (`Teams.assign()`).
+func _lobby_teams(roster: Array[int]) -> Dictionary:
+	var picks: Dictionary = {}
+	var bots: Array[int] = []
+	for slot: int in roster:
+		if _controller_server.has_method("slot_team_pick"):
+			var pick: int = int(_controller_server.slot_team_pick(slot))
+			if pick != TeamsScript.NONE:
+				picks[slot] = pick
+		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			bots.append(slot)
+	return TeamsScript.assign(roster, picks, bots)
+
+## A lobby may count down: always in a free-for-all, and in Teams only with
+## somebody on each team.
+func _teams_can_start(roster: Array[int]) -> bool:
+	return not _requested_team_mode() or TeamsScript.both_manned(_lobby_teams(roster))
+
+## What a countdown is cancelled by changing: the mode, and who is on which team.
+func _team_key(roster: Array[int]) -> Array:
+	var on: bool = _requested_team_mode()
+	return [on, _lobby_teams(roster) if on else {}]
+
+## The countdown ran out: fix the mode and the teams for the whole match.
+func _begin_team_match() -> void:
+	_team_mode = lobby_enabled and _requested_team_mode()
+	_teams = _lobby_teams(_roster()) if _team_mode else {}
+	_team_scores = PackedInt32Array([0, 0])
+	_match_winner_team = -1
+	_last_winner_team = -1
+	_team_keep_weapon.clear()
+	_survivor_team = -1
+
+## Every player's `team` for the round about to start: its team in a Teams
+## match -- anyone not on one yet (a mid-match joiner) is balanced onto the
+## smaller team first -- and -1 for everyone in a free-for-all.
+func _apply_teams(entering: Array[int]) -> void:
+	if _team_mode:
+		var bots: Array[int] = []
+		for slot: int in entering:
+			if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+				bots.append(slot)
+		_teams = TeamsScript.assign(entering, {}, bots, _teams)
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player != null and "team" in player:
+			player.team = int(_teams.get(slot, TeamsScript.NONE)) if _team_mode else TeamsScript.NONE
+
+## The distinct teams among `slots`, Red first.
+func _teams_of(slots: Array[int]) -> Array[int]:
+	var out: Array[int] = []
+	for team in TeamsScript.COUNT:
+		for slot: int in slots:
+			if int(_teams.get(slot, TeamsScript.NONE)) == team:
+				out.append(team)
+				break
+	return out
+
+## `_on_eliminated_check_survivor()` for a Teams round (#163): the moment an
+## elimination leaves one team standing it is recorded, so that team still
+## wins if its last survivors fall on a later tick of the same frame. If they
+## fall on the very tick it was recorded, the teams went down together: a draw.
+func _check_team_survivor() -> void:
+	var frame: int = Engine.get_physics_frames()
+	var standing: Array[int] = _teams_of(_alive_slots())
+	if standing.size() == 1:
+		if _survivor_team == -1:
+			_survivor_team = standing[0]
+			_survivor_frame = frame
+	elif standing.is_empty() and _survivor_team != -1 and frame == _survivor_frame:
+		_survivor_team = -1
+
+## `_check_round_end()` for a Teams round: it ends once the players still
+## standing are all on one team (or none are), and that team scores. An
+## abandoned round and a round a kick decided (#193) are won by nobody, as in
+## a free-for-all.
+func _check_team_round_end(after_kick: bool) -> void:
+	_flush_kos()
+	var alive_slots: Array[int] = _alive_slots()
+	var standing: Array[int] = _teams_of(alive_slots)
+	var winner_team: int = -1
+	if standing.size() > 1:
+		if not _round_abandoned(alive_slots):
+			return
+	elif standing.size() == 1:
+		winner_team = standing[0]
+	elif _survivor_team != -1:
+		winner_team = _survivor_team
+	_survivor_team = -1
+	if after_kick:
+		winner_team = -1
+	var winners: Array[int] = []
+	for slot: int in alive_slots:
+		if int(_teams.get(slot, TeamsScript.NONE)) == winner_team:
+			winners.append(slot)
+	if winner_team != -1:
+		_team_scores[winner_team] += 1
+		for slot: int in winners:
+			_buzz(slot, "win")
+		round_won.emit(winners[0] if not winners.is_empty() else -1)
+		team_round_won.emit(winner_team)
+	for slot: int in alive_slots:
+		if _players[slot].alive:
+			_players[slot].leave_round()
+	_update_score_label()
+	_last_winner_slot = -1
+	_last_winner_team = winner_team
+	_team_keep_weapon = winners
+	if winner_team != -1 and lobby_enabled and _team_scores[winner_team] >= _match_target:
+		_match_winner_team = winner_team
+		team_match_won.emit(winner_team)
+	_pickup_director.clear()
+	_stop_kill_zone_rise()
+	_end_round_modifier()
+	_ko_round_ended(-1)
+	_show_scoreboard()
+	_state = State.ROUND_END
+	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
+	if lobby_enabled:
+		_publish_lobby_state()
+
+## A Teams scoreboard entry: the player's team's points, and its name tagged
+## with the team, in the team's colour.
+func _team_scoreboard_entry(slot: int, score_label: Label, name_label: Label) -> void:
+	var team: int = team_of(slot)
+	if score_label != null:
+		score_label.text = str(team_score(team))
+	if name_label != null:
+		name_label.text = "%s  %s" % [_slot_name(slot), TeamsScript.team_name(team)]
+		name_label.add_theme_color_override("font_color", TeamsScript.team_color(team))
+
+## The podium's order in a Teams match: the winning team first, then Red
+## before Blue, then by slot. Strict, as `sort_custom()` needs.
+func _team_podium_before(a: int, b: int) -> bool:
+	var ta: int = team_of(a)
+	var tb: int = team_of(b)
+	var wa: bool = ta == _match_winner_team and _match_winner_team != -1
+	var wb: bool = tb == _match_winner_team and _match_winner_team != -1
+	if wa != wb:
+		return wa
+	if ta != tb:
+		return ta >= 0 and (tb < 0 or ta < tb)
+	return a < b
+
+## The lobby state's Teams fields, only while Teams is chosen or being
+## played, so a free-for-all's state is exactly what it always was: "mode"
+## "teams" while the host has Teams chosen (for the host menu), "teams" while
+## the rosters are shown as teams, each player entry's "team" (and in the
+## lobby its phone's "pick"), the team points and the winning team.
+func _add_team_state(state: Dictionary, roster: Array[int], in_lobby: bool) -> void:
+	var requested: bool = _requested_team_mode()
+	if requested:
+		state["mode"] = "teams"
+	# The lobby shows the mode chosen for the next match; a match, and the
+	# victory screen after it, the mode it was played in.
+	var showing: bool = requested if in_lobby else _team_mode
+	if not showing:
+		return
+	var teams: Dictionary = _lobby_teams(roster) if in_lobby else _teams
+	for entry: Dictionary in state["players"]:
+		var slot: int = int(entry["slot"])
+		entry["team"] = int(teams.get(slot, TeamsScript.NONE))
+		if in_lobby and _controller_server.has_method("slot_team_pick"):
+			entry["pick"] = int(_controller_server.slot_team_pick(slot))
+	state["teams"] = true
+	state["team_scores"] = [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]]
+	state["winner_team"] = _match_winner_team
 
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
 #
@@ -1407,6 +1668,10 @@ func _on_slot_claimed_fresh(slot: int) -> void:
 	if slot < 0 or slot >= _scores.size():
 		return
 	_scores[slot] = 0
+	# Issue #236: a newcomer in a freed slot is balanced onto a team afresh at
+	# the next round start, and never keeps the old occupant's weapon.
+	_teams.erase(slot)
+	_team_keep_weapon.erase(slot)
 	_stats.forget_slot(slot)
 	_pending_kos = _pending_kos.filter(func(entry: Array) -> bool: return entry[0] != slot)
 	_update_score_label()
@@ -1420,6 +1685,12 @@ func _ko_round_started() -> void:
 func _ko_round_ended(winner_slot: int) -> void:
 	_stats.end_round(GameClockScript.now_msec())
 	var feed: Control = kill_feed()
+	if _team_mode:
+		if feed != null and _last_winner_team != -1:
+			feed.show_banner("%s TEAM WINS" % TeamsScript.team_name(_last_winner_team),
+				"RED %d - %d BLUE" % [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]],
+				TeamsScript.team_color(_last_winner_team))
+		return
 	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
 		feed.show_banner("LAST ONE STANDING", _slot_name(winner_slot), _slot_color(winner_slot))
 

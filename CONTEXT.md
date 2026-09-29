@@ -36,7 +36,8 @@ round is the exception: they keep whatever they were holding.
 | **Damage** | Accumulates within a round and resets at its end. Dealt by a head striking a player, scaled by how fast the head is moving, or by a bullet from a weapon that fires, at a flat amount (ADR-0014). Another player's head in a bullet's path blocks it, and a blocked bullet deals nothing. |
 | **Knockback** | The impulse applied when two players' bodies collide above a relative-velocity threshold. Moves players; deals no damage. |
 | **Clash** | Two heads meeting. Neither passes through the other; the heavier, more forceful swing gives way last. |
-| **Round** | One stage, played until one player remains. Awards a point. |
+| **Round** | One stage, played until one player remains (in a Teams match, until one team remains). Awards a point: to that player, or in a Teams match to that team. |
+| **Team** | One of the two sides, Red and Blue, in a Teams match: the mode the host phone picks in the lobby instead of the default free-for-all, fixed for the whole match. Players pick a team on their phone or are balanced onto the smaller one; bots fill whichever team is short. Teammates cannot damage each other (they still knock each other about), hazards hurt everyone, and the round goes to the team with anyone left standing. Each player keeps their own colour and gains a team ring (ADR-0018). |
 | **Session** | The endless run of rounds, from launch to quit. Holds the roster and the score tally. |
 | **Stage** | One arena layout. Rotates every round. Declares where players spawn, where the death boundary lies, and how the camera frames it. |
 | **Rotation** | The run of stages a session cycles through, one per round: a fixed opener (`stage_scenes[0]`, round 1 of each match since #200), then shuffled bags covering the whole roster with no stage playing twice in a row (ADR-0011). |
