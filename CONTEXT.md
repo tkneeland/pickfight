@@ -46,6 +46,9 @@ round is the exception: they keep whatever they were holding.
 | **Buzz** | A short piece of feedback a player's own phone gives them: a vibration, plus a flash of the phone's screen in their colour (the only kind iOS can give). Sent by the host for four things only, each to the one phone it concerns: a round **win**, being **eliminated**, being **struck** for damage, and landing a **hit** that dealt damage (ADR-0013). |
 | **Modifier** | A twist on the rules for one round only, such as low gravity or big heads. Some rounds roll one at random, and its name is shown on screen as the round starts. It is undone when the round ends (ADR-0015). |
 | **Sound set** | The family of sounds a weapon makes: its hit, and for a weapon that fires, its shot. Each weapon has its own. How hard something happened sets how loud and how low a sound plays. Sounds play only on the host's shared screen, never on a phone (ADR-0016). |
+| **Remote seat** | A player joining from a remote PC over the internet, via a relay server. Sends relative input vectors (like a phone) and receives interpolated world snapshots. Same roster, same simulation (ADR-0019). |
+| **Room code** | A four-letter identifier, that a remote player types into the PC client's join screen to reach a host's session. Issued by the relay server. |
+| **Relay** | A headless GDScript server that forwards frames from host to remote seats and input from remote seats to host, without parsing them. Runs on a public machine to allow dynamic remote joining (ADR-0019). |
 
 ## Design intent
 
