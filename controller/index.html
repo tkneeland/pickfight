@@ -717,8 +717,14 @@
       try { localStorage.setItem(MOUSE_SENS_KEY, String(mouseSens)); } catch (err) { /* this load only */ }
     });
     document.getElementById("mouse-capture").addEventListener("click", function () {
-      if (canvas.requestPointerLock) { canvas.requestPointerLock(); }
+      if (!canvas.requestPointerLock) { return; }
+      // Chrome refuses a re-lock for about a second after an Esc exit; newer
+      // versions reject a promise, older ones fire pointerlockerror. Either
+      // way the button stays up, so the player just clicks again.
+      var req = canvas.requestPointerLock();
+      if (req && req.catch) { req.catch(function () { /* refused; button stays shown */ }); }
     });
+    document.addEventListener("pointerlockerror", onLockChange);
     document.addEventListener("pointerlockchange", onLockChange);
     document.addEventListener("mousemove", onMouseMove);
   }

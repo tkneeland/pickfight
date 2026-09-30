@@ -1,5 +1,6 @@
 // Issue #244 probe: laptop mouse drives the arm through the same code path as a
-// touch drag. Run:  NODE_PATH=/private/tmp/claude-502/pw244/node_modules node test-results/issue-244/probe.js
+// touch drag. Run:  npm install playwright (anywhere; point NODE_PATH at its node_modules),
+// then  node test-results/issue-244/probe.js  with Google Chrome installed.
 // Installed Google Chrome, headless. The host is a Playwright-routed stub
 // WebSocket (no server): it assigns slot 0 and a "playing" lobby, and records
 // the binary input frames (2 x float32 LE) the page streams.

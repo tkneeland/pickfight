@@ -1,8 +1,11 @@
 # Test results
 
-Evidence for the latest work package only: issue #214 (the join QR encoded in-game, no qrencode). See `issue-214/README.md`.
+Evidence for the latest work package only: issue #244 (laptop mouse on the controller page via Pointer Lock). See `issue-244/README.md`.
 
 Previous packages:
+- Issue #238 (room-code relay): `relay-scenarios.txt`, in `git show 0c06b7d`.
+- Issue #236 (Teams mode): `issue-236/`, in `git show 6211192`.
+- Issue #214 (the join QR encoded in-game, no qrencode): `issue-214/`, in its merge commit.
 - Issue #211 (announcer re-voiced in Piper en_US-john-medium): `issue-211/`, in `git show 4f51b61`.
 - Issue #180 (a stalled drive pushes its rated force; medium weapons to 8000; a physics world per scenario): `issue-180/`, in `git show 356c7d4`.
 - Issue #200 (round flow: seed replay across rematch, pickups under lava, spawn rotation, podium sort, dead code): `issue-200/`, in `git show 241bc8f`.
