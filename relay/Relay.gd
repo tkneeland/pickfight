@@ -11,7 +11,7 @@ extends Node
 ##
 ## Control messages (text JSON):
 ##   to host:   {"t":"room","code":"ABCD"}, {"t":"joined","peer":N}, {"t":"left","peer":N}
-##   to client: {"t":"welcome","peer":N}, {"t":"error","reason":"bad_room"|"room_full"|"host_left"}
+##   to client: {"t":"welcome","peer":N}, {"t":"error","reason":"bad_room"|"room_full"|"host_left"|"idle_timeout"}
 ##              (an error is followed by a close)
 ##
 ## Payloads (binary frames):
@@ -19,24 +19,33 @@ extends Node
 ##   host -> client: first byte is the target peer id, 0 = broadcast; the relay
 ##   strips it and forwards the rest.
 
+## Most remote clients one room seats.
 const MAX_CLIENTS: int = 8
-const CODE_LETTERS: String = "ABCDEFGHJKLMNPQRSTUVWXYZ" # no I, no O
+## Room-code alphabet: no I and no O, which read as 1 and 0.
+const CODE_LETTERS: String = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+## Room-code length.
 const CODE_LENGTH: int = 4
+## WebSocket ping interval, seconds.
 const HEARTBEAT_SEC: float = 5.0
+## How long a fresh socket may take to say host or join, seconds.
 const HANDSHAKE_TIMEOUT_SEC: float = 10.0
+## How long a refused or closed peer is polled so its last frame flushes, msec.
 const CLOSE_GRACE_MSEC: int = 150
+## Inbound buffer per peer, bytes.
 const INBOUND_BUFFER_BYTES: int = 1 << 18
 
 ## A room with no traffic for this long is closed.
-var idle_timeout_sec: float = 600.0
+@export var idle_timeout_sec: float = 600.0
 
+## A socket awaiting its hello, or a peer being flushed before it is closed.
 class Pending:
 	var peer: WebSocketPeer
 	var deadline_msec: int
-	func _init(p: WebSocketPeer, d: int) -> void:
-		peer = p
-		deadline_msec = d
+	func _init(p_peer: WebSocketPeer, p_deadline_msec: int) -> void:
+		peer = p_peer
+		deadline_msec = p_deadline_msec
 
+## One host and its remote clients, keyed by the code the host shows.
 class Room:
 	var code: String = ""
 	var host: WebSocketPeer
@@ -48,6 +57,7 @@ var _pending: Array[Pending] = []
 var _rooms: Dictionary = {} # code -> Room
 var _closing: Array[Pending] = [] # refused peers, flushed then closed
 
+## Listens on `port`; returns an Error code (OK on success).
 func start(port: int) -> int:
 	stop()
 	_server = TCPServer.new()
@@ -56,20 +66,40 @@ func start(port: int) -> int:
 		_server = null
 	return err
 
+## Closes every room and socket. Queued notices are flushed for up to
+## CLOSE_GRACE_MSEC first; no peer is left half-open afterwards.
 func stop() -> void:
 	for p: Pending in _pending:
 		p.peer.close()
+	var all: Array[WebSocketPeer] = []
+	for p: Pending in _pending:
+		all.append(p.peer)
 	_pending.clear()
-	for c: Pending in _closing:
-		c.peer.close()
-	_closing.clear()
 	for room: Room in _rooms.values():
 		_close_room(room, "host_left", false)
+		all.append(room.host)
 	_rooms.clear()
+	for c: Pending in _closing:
+		all.append(c.peer)
+	_closing.clear()
+	var deadline: int = Time.get_ticks_msec() + CLOSE_GRACE_MSEC
+	while Time.get_ticks_msec() < deadline:
+		var open: bool = false
+		for peer: WebSocketPeer in all:
+			peer.poll()
+			if peer.get_ready_state() != WebSocketPeer.STATE_CLOSED:
+				open = true
+		if not open:
+			break
+		OS.delay_msec(5)
+	for peer: WebSocketPeer in all:
+		peer.close(4000, "relay stopped")
+		peer.poll()
 	if _server != null:
 		_server.stop()
 		_server = null
 
+## Number of open rooms.
 func room_count() -> int:
 	return _rooms.size()
 
@@ -111,7 +141,7 @@ func _process(_delta: float) -> void:
 		if room.host.get_ready_state() == WebSocketPeer.STATE_CLOSED:
 			_close_room(room, "host_left", true)
 		elif now - room.last_traffic_msec > int(idle_timeout_sec * 1000.0):
-			_close_room(room, "host_left", true)
+			_close_room(room, "idle_timeout", true)
 
 ## True once the pending peer has said who it is (and has been placed or refused).
 func _read_hello(p: Pending, now: int) -> bool:
@@ -197,9 +227,14 @@ func _close_room(room: Room, reason: String, erase: bool) -> void:
 	for client: WebSocketPeer in room.clients.values():
 		if client.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			_refuse(client, reason)
+		else:
+			client.close()
 	room.clients.clear()
 	if room.host.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		room.host.close(1000, reason)
+		if reason == "idle_timeout":
+			_refuse(room.host, reason)
+		else:
+			room.host.close(1000, reason)
 	if erase:
 		_rooms.erase(room.code)
 

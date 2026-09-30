@@ -350,6 +350,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"relay_bad_code_rejected",
 	"relay_ninth_client_refused",
 	"relay_host_leave_notifies",
+	"relay_idle_timeout",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1449,6 +1450,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_ninth_client_refused()
 		"relay_host_leave_notifies":
 			return await _scenario_relay_host_leave_notifies()
+		"relay_idle_timeout":
+			return await _scenario_relay_idle_timeout()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -22582,7 +22585,7 @@ func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
 
 # --- Relay (issue #238) -------------------------------------------------------
 
-const RelayScript238 = preload("res://relay/Relay.gd")
+const RelayScript238 := preload("res://relay/Relay.gd")
 var _relay_port_next: int = 39180
 
 ## A real Relay on a free local port. Caller must `_relay_stop`.
@@ -22602,7 +22605,7 @@ func _relay_stop(relay: Node, clients: Array) -> void:
 	relay.queue_free()
 
 ## Connects, waits for OPEN, sends `hello`, and returns the peer (null on timeout).
-func _relay_connect(relay: Node, hello: Dictionary, clients: Array) -> WebSocketPeer:
+func _relay_connect(hello: Dictionary, clients: Array) -> WebSocketPeer:
 	var peer := WebSocketPeer.new()
 	if peer.connect_to_url("ws://127.0.0.1:%d" % _relay_port_next) != OK:
 		return null
@@ -22616,8 +22619,8 @@ func _relay_connect(relay: Node, hello: Dictionary, clients: Array) -> WebSocket
 			return peer
 	return null
 
-## Polls every client until `peer` has a packet; returns {"text": bool, "data": PackedByteArray}
-## or {} on timeout. JSON text is parsed into "msg".
+## Polls every client until `peer` has a packet of the wanted kind. Text returns the parsed JSON
+## Dictionary, binary returns {"data": PackedByteArray}; {} on timeout.
 func _relay_next(peer: WebSocketPeer, clients: Array, want_text: bool = true) -> Dictionary:
 	var deadline: int = Time.get_ticks_msec() + 3000
 	while Time.get_ticks_msec() < deadline:
@@ -22642,7 +22645,7 @@ func _relay_room(n: int, failures: Array[String]) -> Dictionary:
 		failures.append("no free port for the relay")
 		return {}
 	var clients: Array = []
-	var host: WebSocketPeer = await _relay_connect(relay, {"t": "host"}, clients)
+	var host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
 	var room: Dictionary = await _relay_next(host, clients) if host != null else {}
 	var out := {"relay": relay, "clients": clients, "host": host, "code": str(room.get("code", "")), "peers": []}
 	if room.get("t") != "room":
@@ -22650,7 +22653,7 @@ func _relay_room(n: int, failures: Array[String]) -> Dictionary:
 		_relay_stop(relay, clients)
 		return {}
 	for i in n:
-		var c: WebSocketPeer = await _relay_connect(relay, {"t": "join", "room": out["code"]}, clients)
+		var c: WebSocketPeer = await _relay_connect({"t": "join", "room": out["code"]}, clients)
 		var welcome: Dictionary = await _relay_next(c, clients) if c != null else {}
 		var joined: Dictionary = await _relay_next(host, clients)
 		if welcome.get("t") != "welcome" or joined.get("t") != "joined" or welcome.get("peer") != joined.get("peer"):
@@ -22670,7 +22673,7 @@ func _scenario_relay_host_gets_code() -> Array[String]:
 	re.compile("^[A-HJ-NP-Z]{4}$")
 	if re.search(code) == null:
 		failures.append("room code '%s' is not 4 letters without I or O" % code)
-	var other: WebSocketPeer = await _relay_connect(room["relay"], {"t": "host"}, room["clients"])
+	var other: WebSocketPeer = await _relay_connect({"t": "host"}, room["clients"])
 	var second: Dictionary = await _relay_next(other, room["clients"])
 	if second.get("t") != "room" or second.get("code") == code:
 		failures.append("a second host got %s, not a distinct room" % second)
@@ -22725,6 +22728,8 @@ func _scenario_relay_broadcast_two_clients() -> Array[String]:
 	var room: Dictionary = await _relay_room(2, failures)
 	if room.is_empty():
 		return failures
+	if room["peers"][0] == room["peers"][1]:
+		failures.append("the two clients are the same peer")
 	room["host"].send(PackedByteArray([0, 5, 6]))
 	for i in 2:
 		var got: Dictionary = await _relay_next(room["peers"][i], room["clients"], false)
@@ -22739,7 +22744,7 @@ func _scenario_relay_bad_code_rejected() -> Array[String]:
 	var room: Dictionary = await _relay_room(0, failures)
 	if room.is_empty():
 		return failures
-	var bad: WebSocketPeer = await _relay_connect(room["relay"], {"t": "join", "room": "ZZZZ"}, room["clients"])
+	var bad: WebSocketPeer = await _relay_connect({"t": "join", "room": "ZZZZ"}, room["clients"])
 	var err: Dictionary = await _relay_next(bad, room["clients"])
 	if err.get("t") != "error" or err.get("reason") != "bad_room":
 		failures.append("an unknown code got %s, wanted bad_room" % err)
@@ -22758,10 +22763,20 @@ func _scenario_relay_ninth_client_refused() -> Array[String]:
 	var room: Dictionary = await _relay_room(8, failures)
 	if room.is_empty():
 		return failures
-	var ninth: WebSocketPeer = await _relay_connect(room["relay"], {"t": "join", "room": room["code"]}, room["clients"])
+	var ninth: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, room["clients"])
 	var err: Dictionary = await _relay_next(ninth, room["clients"])
 	if err.get("t") != "error" or err.get("reason") != "room_full":
 		failures.append("the 9th client got %s, wanted room_full" % err)
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while ninth.get_ready_state() != WebSocketPeer.STATE_CLOSED and Time.get_ticks_msec() < deadline:
+		await process_frame
+		ninth.poll()
+	if ninth.get_ready_state() != WebSocketPeer.STATE_CLOSED:
+		failures.append("the refused 9th socket was not closed")
+	room["peers"][3].send(PackedByteArray([9, 9]))
+	var still: Dictionary = await _relay_next(room["host"], room["clients"], false)
+	if still.get("data") != PackedByteArray([4, 9, 9]):
+		failures.append("a seated client no longer round-trips after the refusal: %s" % [still.get("data")])
 	_relay_stop(room["relay"], room["clients"])
 	_scenario_completed = true
 	return failures
@@ -22776,10 +22791,29 @@ func _scenario_relay_host_leave_notifies() -> Array[String]:
 		var err: Dictionary = await _relay_next(room["peers"][i], room["clients"])
 		if err.get("t") != "error" or err.get("reason") != "host_left":
 			failures.append("client %d got %s when the host left, wanted host_left" % [i + 1, err])
-	var late: WebSocketPeer = await _relay_connect(room["relay"], {"t": "join", "room": room["code"]}, room["clients"])
+	var late: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, room["clients"])
 	var gone: Dictionary = await _relay_next(late, room["clients"])
 	if gone.get("reason") != "bad_room":
 		failures.append("the closed room's code still worked: %s" % gone)
+	_relay_stop(room["relay"], room["clients"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_idle_timeout() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(2, failures)
+	if room.is_empty():
+		return failures
+	room["relay"].idle_timeout_sec = 0.5
+	for i in 2:
+		var err: Dictionary = await _relay_next(room["peers"][i], room["clients"])
+		if err.get("t") != "error" or err.get("reason") != "idle_timeout":
+			failures.append("client %d got %s on idle, wanted idle_timeout" % [i + 1, err])
+	var host_err: Dictionary = await _relay_next(room["host"], room["clients"])
+	if host_err.get("t") != "error" or host_err.get("reason") != "idle_timeout":
+		failures.append("the host got %s on idle, wanted idle_timeout" % host_err)
+	if room["relay"].room_count() != 0:
+		failures.append("room_count is %d after idle close, wanted 0" % room["relay"].room_count())
 	_relay_stop(room["relay"], room["clients"])
 	_scenario_completed = true
 	return failures
