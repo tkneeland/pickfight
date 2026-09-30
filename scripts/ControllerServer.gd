@@ -248,7 +248,7 @@ var _awaiting_id: Array[PendingConn] = []
 # Untyped on purpose: elements are `Player` nodes and GDScript's analyser
 # would reject `set_input_vector` on a statically typed `Node`.
 var _players: Array = []
-var _slot_peers: Array[WebSocketPeer] = []
+var _slot_peers: Array = [] # WebSocketPeer (a phone) or RemoteSeat (a relay peer, #239)
 var _slot_last_packet_msec: PackedInt64Array = PackedInt64Array()
 var _smoothers: Array[InputSmoother] = []
 var _last_weapon: PackedVector2Array = PackedVector2Array()
@@ -322,6 +322,59 @@ var _last_join_rank: int = 0
 ## ignored and pruned.
 var _recent_leavers: Dictionary = {}
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
+const RelayLinkScript: GDScript = preload("res://scripts/RelayLink.gd")
+
+## Issue #239: the remote-seat protocol version. A remote client's hello must
+## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
+## this host, so it always matches).
+const PROTOCOL_VERSION: int = 1
+
+## One remote client's seat over the relay (#239): quacks like the
+## WebSocketPeer a phone slot holds, so the claim, input and text paths are
+## shared. Frames in arrive through `push()`; frames out go via the link.
+class RemoteSeat extends RefCounted:
+	const MAX_QUEUED: int = 64
+	var peer: int = 0
+	var link: Node = null
+	var open: bool = true
+	var deadline_msec: int = 0
+	var _inbox: Array = [] # [is_text, PackedByteArray]
+	var _last_was_text: bool = false
+
+	func push(kind: int, payload: PackedByteArray) -> void:
+		if open and _inbox.size() < MAX_QUEUED:
+			_inbox.append([kind == 1, payload])
+
+	func poll() -> void:
+		pass
+
+	func get_ready_state() -> int:
+		return WebSocketPeer.STATE_OPEN if open else WebSocketPeer.STATE_CLOSED
+
+	func get_available_packet_count() -> int:
+		return _inbox.size()
+
+	func get_packet() -> PackedByteArray:
+		var item: Array = _inbox.pop_front()
+		_last_was_text = item[0]
+		return item[1]
+
+	func was_string_packet() -> bool:
+		return _last_was_text
+
+	func send_text(text: String) -> void:
+		if open:
+			link.send_text_to(peer, text)
+
+	## Tells the client why, then drops the seat.
+	func close(code: int = 1000, reason: String = "") -> void:
+		if open:
+			link.send_text_to(peer, JSON.stringify({"t": "closed", "code": code, "reason": reason}))
+			open = false
+
+var relay_link: Node = null
+var _remote_seats: Dictionary = {} # relay peer id -> RemoteSeat
+var _remote_awaiting: Array[RemoteSeat] = []
 ## The bots' owner, built in `_ready()` so no scene has to add it.
 var bot_director: Node = null
 ## The Solo practice button is heeded only in these lobby phases (issue #165):
@@ -443,9 +496,17 @@ func _ready() -> void:
 	bot_director.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(bot_director)
 
+	relay_link = RelayLinkScript.new()
+	relay_link.name = "RelayLink"
+	add_child(relay_link)
+	relay_link.peer_joined.connect(_on_relay_peer_joined)
+	relay_link.peer_left.connect(_on_relay_peer_left)
+	relay_link.frame_received.connect(_on_relay_frame)
+
 func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
+	_process_remote()
 	if host_slot() != _last_host:
 		_last_host = host_slot()
 		host_changed.emit(_last_host)
@@ -673,7 +734,7 @@ func _process_websocket() -> void:
 
 	var timeout_msec: int = int(controller_timeout_sec * 1000.0)
 	for slot in _slot_peers.size():
-		var peer: WebSocketPeer = _slot_peers[slot]
+		var peer: Variant = _slot_peers[slot]
 		if peer == null:
 			continue
 		peer.poll()
@@ -697,7 +758,7 @@ func _process_websocket() -> void:
 ## the caller can keep waiting up to its own deadline; a stray non-JSON or
 ## binary packet is skipped rather than treated as a failure, since a client
 ## that only ever sends binary frames (an old cached page) should still bind.
-func _read_client_id(peer: WebSocketPeer) -> Variant:
+func _read_client_id(peer: Variant) -> Variant:
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
 		if not peer.was_string_packet():
@@ -725,7 +786,7 @@ static func _parse_json(text: String) -> Variant:
 ## lowest unclaimed slot is claimed fresh under this id -- one the host makes
 ## up if the client sent none (issue #164), so it can still be told apart and
 ## banned. Refuses the connection once every slot is claimed.
-func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
+func _bind_with_id(peer: Variant, id: String) -> void:
 	if id.is_empty():
 		_last_generated_id += 1
 		id = "host-assigned-%d-%d" % [_last_generated_id, randi()]
@@ -737,7 +798,7 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 	for slot in _slot_peers.size():
 		if _slot_claimed[slot] != 1 or _slot_virtual[slot] == 1 or _slot_client_id[slot] != id:
 			continue
-		var old: WebSocketPeer = _slot_peers[slot]
+		var old: Variant = _slot_peers[slot]
 		if old != null:
 			old.close(4002, REPLACED_REASON)
 			_unbind(slot)
@@ -767,7 +828,7 @@ func _bind_with_id(peer: WebSocketPeer, id: String) -> void:
 		print("controller refused: no free player slot")
 
 ## Claim the free `slot` fresh for a phone with client id `id` and bind `peer`.
-func _claim_for_phone(slot: int, id: String, peer: WebSocketPeer) -> void:
+func _claim_for_phone(slot: int, id: String, peer: Variant) -> void:
 	_fresh_claim(slot, id, "")
 	_attach(slot, peer)
 	_broadcast_looks(peer)
@@ -883,7 +944,7 @@ func _remember_leaver(slot: int) -> void:
 ## Bind `peer` to `slot`: the slot frame, the current lobby state, and the full
 ## looks frame -- hat drawings included, which only a newly bound phone needs
 ## (issue #164). The caller tells every other phone with `_broadcast_looks(peer)`.
-func _attach(slot: int, peer: WebSocketPeer) -> void:
+func _attach(slot: int, peer: Variant) -> void:
 	_slot_peers[slot] = peer
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
@@ -935,8 +996,8 @@ func claimed_slots() -> Array[int]:
 func send_buzz(slot: int, kind: String) -> void:
 	if not slot_has_controller(slot):
 		return
-	var peer: WebSocketPeer = _slot_peers[slot]
-	if peer == null or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not peer is WebSocketPeer or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
 	if _log_input:
@@ -965,7 +1026,7 @@ func expire_disconnected_claims() -> void:
 ## Latest value wins: drain everything queued this frame and keep only the last
 ## well-formed packet, so a burst never replays stale input. The packet sets
 ## the slot's smoothing target; `_apply_smoothed_input` applies it (#113).
-func _drain(slot: int, peer: WebSocketPeer) -> void:
+func _drain(slot: int, peer: Variant) -> void:
 	var latest: PackedByteArray = PackedByteArray()
 	var got: bool = false
 	while peer.get_available_packet_count() > 0:
@@ -1147,7 +1208,7 @@ func kick(slot: int) -> bool:
 		# A bot (issue #152): its director sends it away.
 		bot_director.remove_bot(slot)
 		return true
-	var peer: WebSocketPeer = _slot_peers[slot]
+	var peer: Variant = _slot_peers[slot]
 	if peer != null:
 		peer.close(4001, KICKED_REASON)
 		_unbind(slot)
@@ -1209,7 +1270,7 @@ func set_lobby_state(state: Dictionary) -> void:
 	if MATCH_PHASES.has(str(_lobby_state.get("phase", ""))) and not MATCH_PHASES.has(was):
 		_match_serial += 1
 	var text: String = _lobby_text()
-	for peer: WebSocketPeer in _slot_peers:
+	for peer: Variant in _slot_peers:
 		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
 
@@ -1400,9 +1461,9 @@ func looks_update_message() -> Dictionary:
 
 ## Tell every connected phone but `except` (one that has just been sent the
 ## full looks frame on binding) who wears what.
-func _broadcast_looks(except: WebSocketPeer = null) -> void:
+func _broadcast_looks(except: Variant = null) -> void:
 	var text: String = JSON.stringify(looks_update_message())
-	for peer: WebSocketPeer in _slot_peers:
+	for peer: Variant in _slot_peers:
 		if peer != null and peer != except and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
 
@@ -1459,3 +1520,81 @@ func virtual_slots() -> Array[int]:
 ## The player node in `slot`, or null.
 func player_in_slot(slot: int) -> Node:
 	return _players[slot] if slot >= 0 and slot < _players.size() else null
+
+# --- Remote seats over the relay (issue #239) --------------------------------
+
+## Connects to the relay at `url` and opens the room; returns an Error code.
+func go_online(url: String) -> int:
+	return relay_link.go_online(url)
+
+func go_offline() -> void:
+	relay_link.go_offline()
+
+## The room code the relay gave this host, or "" when not online.
+func online_room_code() -> String:
+	return relay_link.room_code()
+
+func is_online() -> bool:
+	return relay_link.link_state() == "online"
+
+func _on_relay_peer_joined(peer: int) -> void:
+	var seat := RemoteSeat.new()
+	seat.peer = peer
+	seat.link = relay_link
+	seat.deadline_msec = Time.get_ticks_msec() + int(connection_timeout_sec * 1000.0)
+	_remote_seats[peer] = seat
+	_remote_awaiting.append(seat)
+
+## A relay peer leaving is a phone socket closing: its slot is unbound and the
+## claim held (ADR-0007).
+func _on_relay_peer_left(peer: int) -> void:
+	var seat: RemoteSeat = _remote_seats.get(peer)
+	if seat == null:
+		return
+	seat.open = false
+	_remote_seats.erase(peer)
+	_remote_awaiting.erase(seat)
+
+func _on_relay_frame(peer: int, kind: int, payload: PackedByteArray) -> void:
+	var seat: RemoteSeat = _remote_seats.get(peer)
+	if seat != null:
+		seat.push(kind, payload)
+
+## The remote twin of the hello stage in `_process_websocket()`: the first text
+## frame must be `{"id": ..., "proto": PROTOCOL_VERSION}`, then the seat goes
+## through `_bind_with_id()` exactly as a phone does.
+func _process_remote() -> void:
+	for peer: int in _remote_seats.keys():
+		if not _remote_seats[peer].open:
+			_remote_seats.erase(peer)
+	var now: int = Time.get_ticks_msec()
+	for seat: RemoteSeat in _remote_awaiting.duplicate():
+		if not seat.open:
+			_remote_awaiting.erase(seat)
+			continue
+		var hello: Variant = _read_remote_hello(seat)
+		if hello != null:
+			_remote_awaiting.erase(seat)
+			if not _is_number(hello.get("proto")) or int(hello["proto"]) != PROTOCOL_VERSION:
+				seat.send_text(JSON.stringify({"t": "error", "reason": "version"}))
+				seat.open = false
+				_remote_seats.erase(seat.peer)
+				if _log_input:
+					print("remote %d refused: protocol version" % seat.peer)
+				continue
+			_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
+		elif now > seat.deadline_msec:
+			_remote_awaiting.erase(seat)
+			seat.open = false
+			_remote_seats.erase(seat.peer)
+
+## The first text frame of `seat` that is a JSON object with a string "id", or null.
+func _read_remote_hello(seat: RemoteSeat) -> Variant:
+	while seat.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = seat.get_packet()
+		if not seat.was_string_packet():
+			continue
+		var parsed: Variant = _parse_json(pkt.get_string_from_utf8())
+		if parsed is Dictionary and typeof(parsed.get("id")) == TYPE_STRING:
+			return parsed
+	return null
