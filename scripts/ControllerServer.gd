@@ -29,6 +29,13 @@ extends Node
 ## answered by a `{"t":"looks",...}` frame (see `looks_message()`).
 ## From the host phone only, `{"t":"solo","v":<bool>}` asks for bots, or
 ## for them to go (issue #152).
+## Teams mode (issue #236, ADR-0018): from the host phone only,
+## `{"t":"mode","v":"ffa"|"teams"}` picks the next match's mode, heeded only
+## outside a match (MODE_PHASES); and from any phone, `{"t":"team","v":0|1|-1}`
+## picks Red, Blue or "auto", heeded only in the lobby or countdown
+## (TEAM_PICK_PHASES). Both are additions: a page that never sends them plays
+## free-for-all exactly as before, and the lobby state's "teams" and per-player
+## "team" and "pick" fields are sent only while Teams is chosen.
 ##
 ## Hardening (issue #164): a kick may carry the `"claim"` serial the lobby
 ## state gave the target, and End match the `"match"` serial it gave the
@@ -320,6 +327,16 @@ var bot_director: Node = null
 ## The Solo practice button is heeded only in these lobby phases (issue #165):
 ## mid-match, removing the bots would leave their bodies in the round.
 const SOLO_PHASES: PackedStringArray = ["lobby", "countdown"]
+## Issue #236: the mode can change only between matches, never mid-match.
+const MODE_PHASES: PackedStringArray = ["lobby", "countdown", "victory"]
+## Issue #236: a phone picks its team in the lobby (or its countdown, which a
+## new pick cancels, as an un-ready does).
+const TEAM_PICK_PHASES: PackedStringArray = ["lobby", "countdown"]
+## Issue #236: whether the host phone chose Teams for the next match.
+var _team_mode: bool = false
+## Issue #236: each slot's team pick (0 red, 1 blue), -1 for "auto" -- the
+## default, and what a fresh or released claim goes back to.
+var _slot_team_pick: PackedInt32Array = PackedInt32Array()
 var _last_host: int = -1
 ## The join URL and QR the lobby screen shows (#120). The QR is built
 ## in-process by QrEncoder.gd (#214); it is null only when no join URL was
@@ -377,6 +394,8 @@ func _ready() -> void:
 	_slot_text_window_msec.resize(_players.size())
 	_slot_text_count.resize(_players.size())
 	_slot_join_rank.resize(_players.size())
+	_slot_team_pick.resize(_players.size())
+	_slot_team_pick.fill(-1)
 	for i in _last_weapon.size():
 		_last_weapon[i] = Vector2(NAN, NAN)
 		_smoothers.append(InputSmoother.new())
@@ -802,6 +821,7 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	_slot_client_id[slot] = id
 	_slot_name[slot] = nickname
 	_slot_ready[slot] = 0
+	_slot_team_pick[slot] = -1
 	_last_claim_serial += 1
 	_slot_claim_serial[slot] = _last_claim_serial
 	if left.is_empty():
@@ -834,6 +854,7 @@ func _release_claim(slot: int) -> void:
 	_slot_client_id[slot] = ""
 	_slot_name[slot] = ""
 	_slot_ready[slot] = 0
+	_slot_team_pick[slot] = -1
 	_slot_claim_serial[slot] = 0
 	_join_order.erase(slot)
 	_release_look(slot)
@@ -1057,6 +1078,19 @@ func _handle_text(slot: int, text: String) -> void:
 			var on: Variant = msg.get("v")
 			if slot == host_slot() and on is bool and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
 				solo_requested.emit(on)
+		"mode":
+			var mode: Variant = msg.get("v")
+			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams") and MODE_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+				_team_mode = mode == "teams"
+				if _log_input:
+					print("slot %d set mode %s" % [slot, mode])
+		"team":
+			var team: Variant = msg.get("v")
+			var phase: String = str(_lobby_state.get("phase", "lobby"))
+			if _is_number(team) and float(team) in [-1.0, 0.0, 1.0] and TEAM_PICK_PHASES.has(phase):
+				_slot_team_pick[slot] = int(team)
+				if _log_input:
+					print("slot %d picked team %d" % [slot, _slot_team_pick[slot]])
 
 ## A finite JSON number (JSON gives floats; a scenario may send ints).
 static func _is_number(v: Variant) -> bool:
@@ -1152,6 +1186,18 @@ func host_slot() -> int:
 ## The match length the host phone chose ("first to N"), 5 by default.
 func match_target() -> int:
 	return _match_target
+
+## Issue #236: whether the host phone chose Teams for the next match.
+func team_mode() -> bool:
+	return _team_mode
+
+## Issue #236: set the mode as the host phone's menu would (a test seam).
+func set_team_mode(on: bool) -> void:
+	_team_mode = on
+
+## Issue #236: `slot`'s team pick, 0 red or 1 blue, or -1 for "auto".
+func slot_team_pick(slot: int) -> int:
+	return _slot_team_pick[slot] if slot >= 0 and slot < _slot_team_pick.size() else -1
 
 ## Send the lobby state to every connected phone, and keep it for any phone
 ## that binds later. Issue #164: entering a match phase from any other phase

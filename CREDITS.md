@@ -65,11 +65,12 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 
 ## Announcer voice
 
-Added for issue #152 and re-voiced for issue #211. `scripts/Sfx.gd` maps each
+Added for issue #152 and re-voiced for issue #211; the two team lines were
+added for issue #236 in the same voice and settings. `scripts/Sfx.gd` maps each
 line to its file (the `announce_*` entries), and `scripts/Announcer.gd`
 decides when each is said.
 
-All 17 lines are **synthesised** in one voice with
+All 19 lines are **synthesised** in one voice with
 [Piper TTS](https://github.com/OHF-Voice/piper1-gpl) 1.8.0 (`piper-tts` on
 PyPI):
 
@@ -109,8 +110,10 @@ encoded as mono Ogg Vorbis. The level suits the `announce_*` default of
 | `announcer/meteor_shower.ogg` | "Meteor shower!" | CC0 1.0 (synthesised) | modifier METEOR SHOWER |
 | `announcer/bouncy.ogg` | "Bouncy!" | CC0 1.0 (synthesised) | modifier BOUNCY |
 | `announcer/double_damage.ogg` | "Double damage!" | CC0 1.0 (synthesised) | modifier DOUBLE DAMAGE |
+| `announcer/red_team_wins.ogg` | "Red team wins!" | CC0 1.0 (synthesised) | a Teams match won by Red (#236) |
+| `announcer/blue_team_wins.ogg` | "Blue team wins!" | CC0 1.0 (synthesised) | a Teams match won by Blue (#236) |
 
-That is 17 files, about 0.18 MB in all. Before #211 the count, "FIGHT!" and
+That is 19 files, about 0.16 MB in all. Before #211 the count, "FIGHT!" and
 "Winner!" were Kenney's Voiceover Pack: Fighter (CC0) and the rest were
 espeak-ng; none of those files are shipped any more.
 

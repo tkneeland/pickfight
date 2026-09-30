@@ -319,6 +319,9 @@ func _nearest_enemy() -> Node2D:
 	for other: Node in player.get_tree().get_nodes_in_group("players"):
 		if other == player or not _alive(other):
 			continue
+		# Issue #236: never a teammate in a Teams match.
+		if player.has_method("is_teammate") and player.is_teammate(other):
+			continue
 		var at: Vector2 = (other as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
 		if d < best_distance:

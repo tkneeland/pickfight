@@ -20,6 +20,7 @@ extends CanvasLayer
 
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const TeamsScript := preload("res://scripts/Teams.gd")
 
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
 const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
@@ -148,25 +149,22 @@ func _stop_demos() -> void:
 func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> void:
 	for child: Node in _lobby_rows.get_children():
 		child.queue_free()
-	for entry: Dictionary in state["players"]:
-		var slot: int = entry["slot"]
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 20)
-		var swatch := ColorRect.new()
-		swatch.custom_minimum_size = Vector2(40, 40)
-		swatch.color = _slot_color.call(slot)
-		row.add_child(swatch)
-		var tag: String = "  (host)" if slot == state["host"] else ""
-		var label := _big_label("%s%s  -  %s" % [entry["name"], tag, "READY" if entry["ready"] else "not ready"],
-			36 if state["players"].size() <= 4 else 28, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
-		row.add_child(label)
-		_lobby_rows.add_child(row)
+	var teams: bool = bool(state.get("teams", false))
+	if teams:
+		_team_rosters(state)
+	else:
+		for entry: Dictionary in state["players"]:
+			_lobby_rows.add_child(_lobby_row(state, entry, 36 if state["players"].size() <= 4 else 28))
 	_lobby_target_label.text = "First to %d" % state["target"]
+	if teams:
+		_lobby_target_label.text = "Teams  -  first to %d" % state["target"]
 	var joined: int = state["players"].size()
 	if state["phase"] == "countdown":
 		_lobby_status.text = str(state["count"])
 	elif joined < min_players:
 		_lobby_status.text = "Scan to join: %d joined (need %d)" % [joined, min_players]
+	elif teams and not both_teams_manned(state):
+		_lobby_status.text = "Both teams need a player: pick a team on your phone"
 	else:
 		_lobby_status.text = "Press Ready on your phone"
 	if join_source != null:
@@ -176,9 +174,78 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		var url: Variant = join_source.get("join_url")
 		_lobby_url.text = str(url) if url != null else ""
 
+## One lobby row: the player's swatch, name, host tag and ready state.
+func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxContainer:
+	var slot: int = entry["slot"]
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 20)
+	var swatch := ColorRect.new()
+	swatch.custom_minimum_size = Vector2(40, 40)
+	swatch.color = _slot_color.call(slot)
+	row.add_child(swatch)
+	var tag: String = "  (host)" if slot == state["host"] else ""
+	var label := _big_label("%s%s  -  %s" % [entry["name"], tag, "READY" if entry["ready"] else "not ready"],
+		font_size, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
+	row.add_child(label)
+	return row
+
+## Issue #236: a Teams lobby's two rosters side by side, Red then Blue, each
+## under its team's name in its colour; a player who has not picked a team is
+## listed where auto-balance puts them, marked "(auto)".
+func _team_rosters(state: Dictionary) -> void:
+	var columns := HBoxContainer.new()
+	columns.name = "TeamRosters"
+	columns.set_meta("team_rosters", true)
+	columns.alignment = BoxContainer.ALIGNMENT_CENTER
+	columns.add_theme_constant_override("separation", 40)
+	_lobby_rows.add_child(columns)
+	for team in TeamsScript.COUNT:
+		var column := VBoxContainer.new()
+		column.name = "%sRoster" % TeamsScript.team_name(team).capitalize()
+		column.add_theme_constant_override("separation", 8)
+		var members: Array = state["players"].filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) == team)
+		column.add_child(_big_label("%s TEAM (%d)" % [TeamsScript.team_name(team), members.size()], 40, TeamsScript.team_color(team)))
+		for entry: Dictionary in members:
+			var row: HBoxContainer = _lobby_row(state, entry, 28)
+			if int(entry.get("pick", team)) == TeamsScript.NONE:
+				row.add_child(_big_label("(auto)", 22, Color(0.8, 0.82, 0.88)))
+			column.add_child(row)
+		if members.is_empty():
+			column.add_child(_big_label("nobody yet", 26, Color(0.6, 0.62, 0.68)))
+		columns.add_child(column)
+
+## Issue #236: the lobby's two team rosters, or null outside a Teams lobby.
+## (A redraw frees the old rosters at the end of the frame, so the live one
+## is the one not queued for deletion.)
+func team_rosters() -> Control:
+	if _lobby_rows == null:
+		return null
+	for child: Node in _lobby_rows.get_children():
+		if child.has_meta("team_rosters") and not child.is_queued_for_deletion():
+			return child as Control
+	return null
+
+## Issue #236: whether a Teams lobby state has somebody on each team.
+static func both_teams_manned(state: Dictionary) -> bool:
+	var counts: Array[int] = [0, 0]
+	for entry: Dictionary in state["players"]:
+		var team: int = int(entry.get("team", -1))
+		if team >= 0 and team < TeamsScript.COUNT:
+			counts[team] += 1
+	return counts[0] > 0 and counts[1] > 0
+
+## The victory screen's title, or null before the panels are built.
+func victory_title() -> Label:
+	return _victory_title
+
 ## The podium: `slots` already in podium order (the match winner first, then
 ## by final score), each with its score from `scores`, then `awards` under it.
-func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awards: Array[Dictionary]) -> void:
+##
+## Issue #236: a Teams match passes `winner_team`, each slot's team in `teams`
+## and the team points in `team_scores`: the title names the winning team,
+## and each column shows its player's team in place of a personal score.
+func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awards: Array[Dictionary],
+		winner_team: int = -1, teams: Dictionary = {}, team_scores: PackedInt32Array = PackedInt32Array()) -> void:
 	for child: Node in _podium.get_children():
 		child.queue_free()
 	# Five to eight on the podium (issue #138) take narrower columns and smaller
@@ -191,6 +258,10 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		column.alignment = BoxContainer.ALIGNMENT_END
 		column.add_theme_constant_override("separation", 8)
 		var name_label: Label = _big_label("%s\n%d" % [_slot_name.call(slot), scores[slot]], 24 if crowded else 36, Color.WHITE)
+		if not teams.is_empty():
+			var team: int = int(teams.get(slot, TeamsScript.NONE))
+			name_label.text = "%s\n%s" % [_slot_name.call(slot), TeamsScript.team_name(team)]
+			name_label.add_theme_color_override("font_color", TeamsScript.team_color(team))
 		if crowded:
 			# A fixed column that a long name wraps inside rather than widens.
 			name_label.custom_minimum_size.x = PODIUM_CROWDED_COLUMN_PX
@@ -202,7 +273,10 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		column.add_child(block)
 		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
 		_podium.add_child(column)
-	if winner_slot != -1:
+	if winner_team != -1:
+		_victory_title.text = "%s TEAM WINS!" % TeamsScript.team_name(winner_team)
+		_victory_title.add_theme_color_override("font_color", TeamsScript.team_color(winner_team))
+	elif winner_slot != -1:
 		_victory_title.text = "%s WINS!" % _slot_name.call(winner_slot)
 		_victory_title.add_theme_color_override("font_color", _slot_color.call(winner_slot))
 	else:

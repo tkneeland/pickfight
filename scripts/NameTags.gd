@@ -14,6 +14,12 @@ extends Node2D
 ## the top of its `_process`, as it always laid the tags out; this node has no
 ## `_process` of its own. Names and colours come from RoundManager's
 ## `_slot_name` / `_slot_color`, passed in as callables.
+##
+## Teams mode (issue #236, ADR-0018): a player on a team (`Player.team` 0 or
+## 1) keeps its own colour for the name, but the tag's outline turns the
+## team's colour and a ring of it is drawn round the body, so the room can
+## tell the sides apart at a glance. In a free-for-all (`team` -1) neither is
+## drawn and the tags are exactly as they were.
 
 ## How far above the body's centre the name tag's bottom edge sits, at least.
 const NAME_TAG_RISE: float = 40.0
@@ -21,6 +27,13 @@ const NAME_TAG_RISE: float = 40.0
 const NAME_TAG_HAT_GAP: float = 6.0
 ## Gap kept between two tags stacked to clear each other.
 const NAME_TAG_STACK_GAP: float = 2.0
+## Issue #236: the team ring round a player's body (radius 24).
+const TEAM_RING_RADIUS: float = 33.0
+const TEAM_RING_WIDTH: float = 5.0
+const TEAM_OUTLINE_SIZE: int = 8
+const TeamsScript := preload("res://scripts/Teams.gd")
+## Issue #236: [centre, team] per team ring drawn this frame.
+var _rings: Array = []
 
 ## RoundManager's `_players`, one entry (or null) per slot.
 var _players: Array = []
@@ -64,6 +77,8 @@ func tick() -> void:
 	var camera: Camera2D = get_viewport().get_camera_2d()
 	if camera != null and camera.zoom.x > 0.0:
 		tag_scale = 1.0 / camera.zoom.x
+	var had_rings: bool = not _rings.is_empty()
+	_rings.clear()
 	for slot in _players.size():
 		var player: Variant = _players[slot]
 		var tag: Label = _name_tags[slot]
@@ -78,6 +93,7 @@ func tick() -> void:
 		var colour: Color = _slot_color.call(slot)
 		if tag.get_theme_color("font_color") != colour:
 			tag.add_theme_color_override("font_color", colour)
+		_mark_team(tag, player)
 		var rise: float = NAME_TAG_RISE
 		if player.has_method("hat_top"):
 			rise = maxf(rise, player.hat_top() + NAME_TAG_HAT_GAP)
@@ -100,3 +116,29 @@ func tick() -> void:
 					moved = true
 		tag.position = rect.position
 		placed.append(rect)
+	if had_rings or not _rings.is_empty():
+		queue_redraw()
+
+## Issue #236: `player`'s team, 0 or 1, or -1 in a free-for-all.
+static func team_of(player: Object) -> int:
+	var team: Variant = player.get("team") if player != null else null
+	return int(team) if team is int else TeamsScript.NONE
+
+## Issue #236: the tag's outline in the player's team colour (black with no
+## team), and a ring noted for `_draw()`.
+func _mark_team(tag: Label, player: Node2D) -> void:
+	var team: int = team_of(player)
+	var outline: Color = TeamsScript.team_color(team) if team != TeamsScript.NONE else Color(0.0, 0.0, 0.0, 1.0)
+	if tag.get_theme_color("font_outline_color") != outline:
+		tag.add_theme_color_override("font_outline_color", outline)
+		tag.add_theme_constant_override("outline_size", TEAM_OUTLINE_SIZE if team != TeamsScript.NONE else 6)
+	if team != TeamsScript.NONE:
+		_rings.append([player.global_position, team])
+
+## Issue #236: the team rings noted this frame, for the scenarios.
+func team_rings() -> Array:
+	return _rings.duplicate()
+
+func _draw() -> void:
+	for ring: Array in _rings:
+		draw_arc(to_local(ring[0]), TEAM_RING_RADIUS, 0.0, TAU, 48, TeamsScript.team_color(ring[1]), TEAM_RING_WIDTH, true)

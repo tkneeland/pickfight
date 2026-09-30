@@ -334,6 +334,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_climbs_with_the_roster",
 	"controller_page_gear_taps_open_in_play",
 	"controller_page_gear_clear_of_status",
+	"teams_pick_and_auto_balance",
+	"teams_cannot_start_with_empty_team",
+	"teams_no_friendly_damage_any_weapon",
+	"teams_round_ends_when_a_team_is_eliminated",
+	"teams_match_victory_at_n_team_wins",
+	"teams_bots_fill_the_smaller_team",
+	"teams_mode_toggle_lobby_only",
+	"teams_ffa_unchanged_when_off",
+	"controller_page_team_picker_and_mode_toggle",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1401,6 +1410,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_gear_taps_open_in_play()
 		"controller_page_gear_clear_of_status":
 			return _scenario_controller_page_gear_clear_of_status()
+		"teams_pick_and_auto_balance":
+			return await _scenario_teams_pick_and_auto_balance()
+		"teams_cannot_start_with_empty_team":
+			return await _scenario_teams_cannot_start_with_empty_team()
+		"teams_no_friendly_damage_any_weapon":
+			return await _scenario_teams_no_friendly_damage_any_weapon()
+		"teams_round_ends_when_a_team_is_eliminated":
+			return await _scenario_teams_round_ends_when_a_team_is_eliminated()
+		"teams_match_victory_at_n_team_wins":
+			return await _scenario_teams_match_victory_at_n_team_wins()
+		"teams_bots_fill_the_smaller_team":
+			return await _scenario_teams_bots_fill_the_smaller_team()
+		"teams_mode_toggle_lobby_only":
+			return await _scenario_teams_mode_toggle_lobby_only()
+		"teams_ffa_unchanged_when_off":
+			return await _scenario_teams_ffa_unchanged_when_off()
+		"controller_page_team_picker_and_mode_toggle":
+			return _scenario_controller_page_team_picker_and_mode_toggle()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -21815,5 +21842,719 @@ func _scenario_controller_page_gear_clear_of_status() -> Array[String]:
 		failures.append("the status text is taller than its line")
 	if not _js_function_body(page, "refreshHostControls").contains('gearEl.classList.toggle("show", host)'):
 		failures.append("the gear shows on phones without a slot, whose status can run long")
+	_scenario_completed = true
+	return failures
+
+# --- Teams mode (issue #236, ADR-0018) --------------------------------------------
+
+const TeamsScript236 := preload("res://scripts/Teams.gd")
+const BotScript236 := preload("res://scripts/Bot.gd")
+## The keys a free-for-all lobby state has always had, and only those.
+const FFA_LOBBY_KEYS_236: PackedStringArray = [
+	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused"]
+const FFA_PLAYER_KEYS_236: PackedStringArray = ["slot", "ready", "name", "color"]
+## How long a round-end pause the Teams round scenarios hold, to look at it.
+const TEAM_ROUND_PAUSE_SEC_236: float = 1.5
+
+## A lobby round (`_new_lobby_round`) set to Teams, with `slots` claimed and
+## the phones' `picks`, and a score label wired up.
+func _new_team_round_236(target: int, slots: Array[int], picks: Dictionary, teams_on: bool = true,
+		pause_sec: float = 0.0, scoreboard: Control = null) -> Dictionary:
+	RoundManagerScript.modifier_rolls_enabled = false
+	var loop: Dictionary = _new_lobby_round(target, pause_sec, scoreboard)
+	var roster: Node = loop["roster"]
+	roster.slots = slots
+	roster.teams_on = teams_on
+	roster.team_picks = picks
+	var label := Label.new()
+	label.name = "TeamScoreLabel"
+	(loop["stage"] as Node).add_child(label)
+	loop["round_manager"].score_label_path = NodePath("../TeamScoreLabel")
+	loop["score_label"] = label
+	return loop
+
+## slot -> team as the last lobby state told the phones, or {} with no teams.
+func _state_teams_236(state: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for entry: Dictionary in state.get("players", []):
+		if entry.has("team"):
+			out[int(entry["slot"])] = int(entry["team"])
+	return out
+
+## The last lobby frame `peer` has waiting, or {}.
+func _last_lobby_msg_236(peer: WebSocketPeer) -> Dictionary:
+	var got: Dictionary = {}
+	while peer.get_available_packet_count() > 0:
+		var pkt: PackedByteArray = peer.get_packet()
+		if not peer.was_string_packet():
+			continue
+		var msg: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+		if msg is Dictionary and msg.get("t", "") == "lobby":
+			got = msg
+	return got
+
+## Issue #236: each phone's own pick is honoured and everyone who has not
+## picked is balanced onto the smaller team, Red on a tie; the lobby state
+## tells the phones who is on which team and who picked, the lobby screen
+## shows the two rosters, and the match plays on those teams.
+func _scenario_teams_pick_and_auto_balance() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [
+		[[0, 1, 2, 3], {}, [], {0: 0, 1: 1, 2: 0, 3: 1}],
+		[[0, 1, 2, 3], {0: 1}, [], {0: 1, 1: 0, 2: 0, 3: 1}],
+		[[0, 1, 2], {0: 0, 1: 0}, [], {0: 0, 1: 0, 2: 1}],
+		[[0, 1, 2, 3, 4], {2: 1, 3: 1}, [], {0: 0, 1: 0, 2: 1, 3: 1, 4: 0}],
+	]
+	for c: Array in cases:
+		var roster_slots: Array[int] = []
+		roster_slots.assign(c[0])
+		var bots: Array[int] = []
+		bots.assign(c[2])
+		var got: Dictionary = TeamsScript236.assign(roster_slots, c[1], bots)
+		if got != c[3]:
+			failures.append("assign(%s, picks %s) gave %s, expected %s" % [c[0], c[1], got, c[3]])
+	var kept: Dictionary = TeamsScript236.assign([0, 1, 2] as Array[int], {0: 1}, [] as Array[int], {0: 0, 1: 0})
+	if kept.get(0) != 0 or kept.get(2) != 1:
+		failures.append("a slot already on a team was moved by a pick, or the newcomer not balanced: %s" % [kept])
+
+	var loop: Dictionary = _new_team_round_236(3, [0, 1, 2], {1: TeamsScript236.RED})
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var state: Dictionary = roster.last_state()
+	var expected: Dictionary = {0: 1, 1: 0, 2: 0}
+	print("      lobby state: mode %s, teams %s, players %s" % [state.get("mode"), state.get("teams"), state.get("players")])
+	if state.get("mode") != "teams" or state.get("teams") != true:
+		failures.append("a Teams lobby told the phones mode %s, teams %s" % [state.get("mode"), state.get("teams")])
+	if _state_teams_236(state) != expected:
+		failures.append("the lobby put the teams as %s, expected %s (slot 1 picked Red)" % [_state_teams_236(state), expected])
+	var picks: Dictionary = {}
+	for entry: Dictionary in state.get("players", []):
+		picks[int(entry["slot"])] = int(entry.get("pick", -99))
+	if picks != {0: -1, 1: 0, 2: -1}:
+		failures.append("the phones were told the picks %s, expected {0:-1, 1:0, 2:-1}" % [picks])
+	var rosters: Control = rm._lobby_screen.team_rosters() if rm._lobby_screen != null else null
+	if rosters == null:
+		failures.append("the Teams lobby screen showed no team rosters")
+	else:
+		var red: Node = rosters.get_node_or_null("RedRoster")
+		var blue: Node = rosters.get_node_or_null("BlueRoster")
+		if red == null or blue == null:
+			failures.append("the rosters had no Red and Blue columns: %s" % [rosters.get_children()])
+		else:
+			var red_header: String = (red.get_child(0) as Label).text
+			var blue_header: String = (blue.get_child(0) as Label).text
+			print("      rosters: '%s' with %d rows, '%s' with %d rows" % [red_header, red.get_child_count() - 1, blue_header, blue.get_child_count() - 1])
+			if red_header != "RED TEAM (2)" or blue_header != "BLUE TEAM (1)":
+				failures.append("the roster headers read '%s' and '%s'" % [red_header, blue_header])
+			if red.get_child_count() != 3 or blue.get_child_count() != 2:
+				failures.append("the rosters listed %d Red and %d Blue players, expected 2 and 1" % [
+					red.get_child_count() - 1, blue.get_child_count() - 1])
+
+	# A pick changed in the lobby moves that player, and the rest rebalance.
+	roster.team_picks = {1: TeamsScript236.RED, 0: TeamsScript236.RED}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if _state_teams_236(roster.last_state()) != {0: 0, 1: 0, 2: 1}:
+		failures.append("after slot 0 picked Red too, the teams were %s, expected {0:0, 1:0, 2:1}" % [_state_teams_236(roster.last_state())])
+
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the Teams match never started")
+	else:
+		var teams: Array = players.map(func(p: RigidBody2D) -> int: return p.team)
+		print("      in play: teams %s, team_mode %s" % [teams, rm.team_mode()])
+		if teams != [0, 0, 1] or not rm.team_mode():
+			failures.append("the match started with teams %s (team mode %s), expected [0, 0, 1]" % [teams, rm.team_mode()])
+		if rm.team_of(2) != 1 or rm.team_of(0) != 0:
+			failures.append("team_of() read %d/%d, expected 0/1" % [rm.team_of(0), rm.team_of(2)])
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #236: a Teams match cannot start while a team is empty -- everyone
+## ready on Red stays in the lobby, told why -- and a pick that empties a
+## team during the countdown calls it off.
+func _scenario_teams_cannot_start_with_empty_team() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_team_round_236(3, [0, 1], {0: TeamsScript236.RED, 1: TeamsScript236.RED})
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	await _await_msec(int(LOBBY_COUNTDOWN_SEC * 1000.0) + 500)
+	var status: String = rm._lobby_screen._lobby_status.text if rm._lobby_screen != null else ""
+	print("      both on Red, both ready: phase '%s', status '%s'" % [rm.lobby_phase(), status])
+	if rm.lobby_phase() != "lobby" or players[0].alive or players[1].alive:
+		failures.append("with Blue empty the match went to '%s'" % rm.lobby_phase())
+	if not status.begins_with("Both teams need a player"):
+		failures.append("the lobby screen said '%s', not that both teams need a player" % status)
+
+	roster.team_picks = {0: TeamsScript236.RED, 1: TeamsScript236.BLUE}
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "countdown", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("with a player on each team the countdown never started ('%s')" % rm.lobby_phase())
+	else:
+		roster.team_picks = {0: TeamsScript236.RED, 1: TeamsScript236.RED}
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if rm.lobby_phase() != "lobby":
+			failures.append("a pick that emptied Blue did not call the countdown off ('%s')" % rm.lobby_phase())
+	roster.team_picks = {0: TeamsScript236.RED}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("with slot 1 back on auto the match never started ('%s')" % rm.lobby_phase())
+	elif players[1].team != TeamsScript236.BLUE:
+		failures.append("the unpicked player went on team %d, not Blue" % players[1].team)
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #236: friendly fire is off on every weapon path -- a head strike,
+## a boomstick bullet, the flail's ball, the grapple hook and the boomerang
+## -- which neither hurts a teammate nor reports a hit (so no hitmarker and
+## no KO credit). Knockback stays: the bullet and the ball still shove a
+## teammate. The same hits hurt someone on the other team, and hazards'
+## `take_damage()` / `eliminate()` still land on anyone.
+func _scenario_teams_no_friendly_damage_any_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	if attacker.is_teammate(victim) or attacker.is_teammate(attacker):
+		failures.append("two players with no team (a free-for-all) counted as teammates")
+	attacker.team = 0
+	victim.team = 0
+	if not attacker.is_teammate(victim) or attacker.is_teammate(attacker):
+		failures.append("is_teammate() was wrong for two Red players (or for oneself)")
+	var strikes: Array = []
+	_record_strikes(attacker, strikes)
+
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	if victim.damage != 0.0 or not strikes.is_empty():
+		failures.append("a head strike on a teammate dealt %.1f and reported %d hits" % [victim.damage, strikes.size()])
+	victim.team = 1
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	if victim.damage <= 0.0 or strikes.size() != 1:
+		failures.append("the same strike on the other team dealt %.1f (%d reports)" % [victim.damage, strikes.size()])
+	victim.team = 0
+	victim.damage = 0.0
+	strikes.clear()
+	attacker.land_projectile_hit(victim, 10.0, victim.global_position)
+	if victim.damage != 0.0 or not strikes.is_empty():
+		failures.append("land_projectile_hit on a teammate dealt %.1f" % victim.damage)
+	await _teardown(stage, false)
+
+	# A real boomstick bullet into a Red teammate: shoved, not hurt.
+	stage = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var mate: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	shooter.team = 0
+	mate.team = 0
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	strikes.clear()
+	_record_strikes(shooter, strikes)
+	var hold := func() -> void:
+		mate.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+	else:
+		var start_x: float = mate.global_position.x
+		await _await_ticks(BOOMSTICK_SHOVE_TICKS * 2)
+		var shove: float = mate.global_position.x - start_x
+		print("      bullet on a teammate: damage %.2f, shoved %.1f px, reports %d" % [mate.damage, shove, strikes.size()])
+		if mate.damage != 0.0 or not strikes.is_empty():
+			failures.append("a bullet dealt a teammate %.2f (%d reports)" % [mate.damage, strikes.size()])
+		if shove < BOOMSTICK_SHOVE_MIN:
+			failures.append("a bullet shoved a teammate only %.1f px; knockback should stay" % shove)
+	await _teardown(stage, false)
+
+	# The flail's ball: no damage, but the shove still lands.
+	stage = _new_stage()
+	var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var buddy: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	await _await_ticks(2)
+	await _equip(thrower, FLAIL_PATH)
+	_brace(thrower)
+	thrower.team = 1
+	buddy.team = 1
+	buddy.linear_velocity = Vector2.ZERO
+	strikes.clear()
+	_record_strikes(thrower, strikes)
+	if thrower.flail_ball() == null:
+		failures.append("the flail was built without a ball")
+	else:
+		var toward: Vector2 = (buddy.global_position - thrower.flail_ball().global_position).normalized()
+		var before: Vector2 = buddy.linear_velocity
+		thrower._land_ball_strike(buddy, 2200.0)
+		await physics_frame
+		var push: float = (buddy.linear_velocity - before).dot(toward)
+		print("      ball on a teammate: damage %.2f, pushed %.0f px/s along the hit, reports %d" % [buddy.damage, push, strikes.size()])
+		if buddy.damage != 0.0 or not strikes.is_empty():
+			failures.append("a flail ball dealt a teammate %.2f (%d reports)" % [buddy.damage, strikes.size()])
+		if push < 20.0:
+			failures.append("a flail ball did not shove a teammate (%.0f px/s); knockback should stay" % push)
+		buddy.team = 0
+		thrower._land_ball_strike(buddy, 2200.0)
+		if buddy.damage <= 0.0:
+			failures.append("the same ball strike on the other team dealt nothing")
+	await _teardown(stage, false)
+
+	# The grapple hook and the boomerang, really thrown at a teammate.
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		var weapon: String = path.get_file().get_basename()
+		stage = _new_stage()
+		var t: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var friend: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, -20))
+		await _await_ticks(2)
+		await _equip(t, path)
+		_brace(t)
+		_brace(friend)
+		t.team = 0
+		friend.team = 0
+		strikes.clear()
+		_record_strikes(t, strikes)
+		var met: Array = [false]
+		await _flick(t, Vector2.RIGHT)
+		var thrown: Node2D = t.launched_hook() if path == GRAPPLE_PATH else t.launched_boomerang()
+		if thrown == null:
+			failures.append("%s: a flick threw nothing" % weapon)
+			await _teardown(stage, false)
+			continue
+		var closest: float = INF
+		for i in 90:
+			await physics_frame
+			if is_instance_valid(thrown):
+				closest = minf(closest, thrown.global_position.distance_to(friend.global_position))
+		print("      %s on a teammate: came within %.0f px, damage %.2f, reports %d" % [weapon, closest, friend.damage, strikes.size()])
+		if closest > PLAYER_RADIUS + 30.0:
+			failures.append("%s: never reached the teammate (closest %.0f px), so nothing was tested" % [weapon, closest])
+		if friend.damage != 0.0 or not strikes.is_empty():
+			failures.append("%s: dealt a teammate %.2f (%d reports)" % [weapon, friend.damage, strikes.size()])
+		await _teardown(stage, false)
+
+	# Hazards and the lava go straight to the victim: teams make no difference.
+	stage = _new_stage()
+	var hurt: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	hurt.team = 0
+	hurt.take_damage(30.0)
+	if hurt.damage != 30.0:
+		failures.append("a hazard's take_damage() on a Red player dealt %.1f, not 30" % hurt.damage)
+	hurt.eliminate()
+	if hurt.alive:
+		failures.append("eliminate() (the lava, the kill zone) did not take out a Red player")
+	await _teardown(stage)
+	return failures
+
+## Issue #236: a Teams round goes on while anyone on two teams is standing
+## and ends when one team is wiped out; the team left standing scores, and
+## the survivors keep their weapons, as a lone winner does. The name tags
+## wear the team colour with a ring, and the score label and scoreboard read
+## team points.
+func _scenario_teams_round_ends_when_a_team_is_eliminated() -> Array[String]:
+	var failures: Array[String] = []
+	var scoreboard: Control = _main_scoreboard()
+	var loop: Dictionary = _new_team_round_236(3, [0, 1, 2], {0: 0, 1: 1, 2: 0}, true, TEAM_ROUND_PAUSE_SEC_236, scoreboard)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var won: Array = []
+	rm.team_round_won.connect(func(team: int) -> void: won.append(team))
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the Teams round never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(3)
+	var rings: Array = rm._name_tags.team_rings() if rm._name_tags != null else []
+	var outline: Color = rm.name_tag(1).get_theme_color("font_outline_color") if rm.name_tag(1) != null else Color.BLACK
+	print("      name tags: %d team rings, Blue player's outline %s" % [rings.size(), outline])
+	if rings.size() != 3:
+		failures.append("%d team rings drawn for 3 players on teams" % rings.size())
+	if not _color_close(outline, TeamsScript236.COLORS[1], 0.01):
+		failures.append("the Blue player's name tag outline was %s, not Blue" % outline)
+	var kept: Resource = rm.pickup_weapons[0]
+	players[2].set_weapon_stats(kept)
+
+	players[0].eliminate()
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "playing":
+		failures.append("the round ended ('%s') with Red still standing" % rm.lobby_phase())
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("Blue wiped out did not end the round ('%s')" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	var label_text: String = (loop["score_label"] as Label).text
+	var red_entry: Node = scoreboard.get_child(0)
+	var blue_entry: Node = scoreboard.get_child(1)
+	var board: String = "%s %s / %s %s" % [(red_entry.get_child(1) as Label).text, (red_entry.get_child(2) as Label).text,
+		(blue_entry.get_child(1) as Label).text, (blue_entry.get_child(2) as Label).text]
+	print("      round end: scores R%d B%d, won %s, label '%s', board '%s', keep %s" % [
+		rm.team_score(0), rm.team_score(1), won, label_text, board, rm._team_keep_weapon])
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0 or won != [0]:
+		failures.append("the round went to %s, scores R%d B%d, expected Red on 1" % [won, rm.team_score(0), rm.team_score(1)])
+	if rm.score_of(2) != 0:
+		failures.append("a team win also scored the survivor a personal point (%d)" % rm.score_of(2))
+	if label_text != "RED: 1  BLUE: 0":
+		failures.append("the score label read '%s', expected 'RED: 1  BLUE: 0'" % label_text)
+	if (red_entry.get_child(1) as Label).text != "1" or not (red_entry.get_child(2) as Label).text.ends_with("RED") \
+			or (blue_entry.get_child(1) as Label).text != "0" or not (blue_entry.get_child(2) as Label).text.ends_with("BLUE"):
+		failures.append("the scoreboard read '%s', expected team points and team names" % board)
+	if rm._team_keep_weapon != [2]:
+		failures.append("the weapon keepers were %s, expected the Red survivor [2]" % [rm._team_keep_weapon])
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC + 2000):
+		failures.append("the next round never started")
+	elif players[2].weapon_stats != kept:
+		failures.append("the Red survivor did not keep its weapon into the next round")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #236: the match goes to the first team to the host's "first to N"
+## round wins: the victory screen, the phones and the announcer all name the
+## team. A rematch in Free-for-all puts everyone back on no team.
+func _scenario_teams_match_victory_at_n_team_wins() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var sfx: Node = _sfx()
+	var announcer: Node = sfx.announcer if sfx != null else null
+	if announcer != null:
+		announcer.clear()
+	var loop: Dictionary = _new_team_round_236(2, [0, 1], {})
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var match_won: Array = []
+	rm.team_match_won.connect(func(team: int) -> void: match_won.append(team))
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			await _teardown(loop["stage"])
+			return failures
+		if players[0].team != 0 or players[1].team != 1:
+			failures.append("round %d had teams %d/%d, expected Red/Blue" % [round_number + 1, players[0].team, players[1].team])
+		players[0].eliminate()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if round_number == 0 and rm.lobby_phase() == "victory":
+			failures.append("one team win of two ended the match")
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("two Blue wins never reached the victory screen ('%s')" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	var state: Dictionary = roster.last_state()
+	var title: String = rm._lobby_screen.victory_title().text if rm._lobby_screen != null and rm._lobby_screen.victory_title() != null else ""
+	print("      victory: team %d, title '%s', state winner_team %s team_scores %s winner %s" % [
+		rm.match_winner_team(), title, state.get("winner_team"), state.get("team_scores"), state.get("winner")])
+	if rm.match_winner_team() != 1 or match_won != [1] or rm.team_score(1) != 2:
+		failures.append("the match went to team %d (%s) on %d, expected Blue on 2" % [rm.match_winner_team(), match_won, rm.team_score(1)])
+	if rm.match_winner_slot() != -1:
+		failures.append("a team match also named a single winner (slot %d)" % rm.match_winner_slot())
+	if state.get("phase") != "victory" or state.get("teams") != true or int(state.get("winner_team", -1)) != 1 \
+			or state.get("team_scores") != [0, 2]:
+		failures.append("the phones were told %s, expected a Blue team victory" % [state])
+	if title != "BLUE TEAM WINS!":
+		failures.append("the victory screen said '%s', not 'BLUE TEAM WINS!'" % title)
+	if announcer != null:
+		await _await_condition(func() -> bool: return announcer.said.has("announce_blue_team_wins"), ANNOUNCER_WAIT_MSEC)
+		print("      announcer said %s" % [announcer.said])
+		if not announcer.said.has("announce_blue_team_wins"):
+			failures.append("the announcer said %s, never 'Blue team wins'" % [announcer.said])
+
+	roster.teams_on = false
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the Free-for-all rematch never started")
+	else:
+		if rm.team_mode() or players[0].team != -1 or players[1].team != -1:
+			failures.append("the Free-for-all rematch kept teams (mode %s, %d/%d)" % [rm.team_mode(), players[0].team, players[1].team])
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if roster.last_state().has("teams"):
+			failures.append("the Free-for-all rematch still told the phones about teams")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #236: bots fill whichever team the phones leave short. Two phones
+## both on Red, then the host's Solo practice: both bots go Blue, the match
+## plays that way, and a bot never picks a teammate as its target.
+func _scenario_teams_bots_fill_the_smaller_team() -> Array[String]:
+	var failures: Array[String] = []
+	var unit: Dictionary = TeamsScript236.assign([0, 1, 2, 3] as Array[int], {0: 0}, [2, 3] as Array[int])
+	if unit != {0: 0, 1: 1, 2: 0, 3: 1}:
+		failures.append("assign() with a Red pick, a phone and two bots gave %s" % [unit])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var director: Node = server.bot_director
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "teams-bots-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "mode", "v": "teams"}))
+	joined[0].send_text(JSON.stringify({"t": "team", "v": 0}))
+	joined[1].send_text(JSON.stringify({"t": "team", "v": 0}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	var bots: Array[int] = server.virtual_slots()
+	var lobby_teams: Dictionary = rm._lobby_teams(server.claimed_slots())
+	print("      bots %s, lobby teams %s" % [bots, lobby_teams])
+	if bots.size() != 2:
+		failures.append("Solo practice with two phones made %d bots" % bots.size())
+	for slot: int in bots:
+		if int(lobby_teams.get(slot, -1)) != TeamsScript236.BLUE:
+			failures.append("bot slot %d went on team %d, not the empty Blue" % [slot, int(lobby_teams.get(slot, -1))])
+	joined[1].send_text(JSON.stringify({"t": "ready", "v": true}))
+	var begun: bool = false
+	var deadline: int = Time.get_ticks_msec() + BOT_START_MSEC
+	while Time.get_ticks_msec() < deadline and not begun:
+		await _poll_phones(joined, 1)
+		begun = rm.lobby_phase() == "playing"
+	if not begun:
+		failures.append("the Teams solo match never started ('%s')" % rm.lobby_phase())
+	else:
+		for slot: int in server.claimed_slots():
+			var want: int = TeamsScript236.BLUE if bots.has(slot) else TeamsScript236.RED
+			if rm._players[slot].team != want:
+				failures.append("slot %d played on team %d, expected %d" % [slot, rm._players[slot].team, want])
+		if not bots.is_empty():
+			var brain: Node = BotScript236.new()
+			brain.player = rm._players[bots[0]]
+			var target: Node2D = brain._nearest_enemy()
+			print("      bot %d targets %s (team %s)" % [bots[0], target, target.get("team") if target != null else "-"])
+			if target == null or int(target.get("team")) != TeamsScript236.RED:
+				failures.append("a Blue bot's nearest enemy was %s, not a Red player" % target)
+			brain.free()
+	director.remove_bots()
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+
+## Issue #236, over the real socket: only the host phone picks the mode, and
+## only between matches (the lobby, its countdown, the victory screen);
+## mid-match neither the mode nor a team pick changes anything. Malformed
+## requests are ignored, and the phones are told the mode.
+func _scenario_teams_mode_toggle_lobby_only() -> Array[String]:
+	var failures: Array[String] = []
+	var server_script: Script = ControllerServerScript
+	var server_consts: Dictionary = server_script.get_script_constant_map()
+	if not server_consts.has("MODE_PHASES") or not server_consts.has("TEAM_PICK_PHASES"):
+		failures.append("ControllerServer has no MODE_PHASES / TEAM_PICK_PHASES")
+	for phase: String in ["playing", "round_end"]:
+		if Array(server_consts.get("MODE_PHASES", [])).has(phase) or Array(server_consts.get("TEAM_PICK_PHASES", [])).has(phase):
+			failures.append("the mode or a team pick can change in '%s'" % phase)
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "teams-mode-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[1].send_text(JSON.stringify({"t": "mode", "v": "teams"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.team_mode():
+		failures.append("a phone that is not the host switched on Teams")
+	for bad: Variant in [true, "TEAMS", 1, null]:
+		joined[0].send_text(JSON.stringify({"t": "mode", "v": bad}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.team_mode():
+		failures.append("a malformed mode request switched on Teams")
+	joined[0].send_text(JSON.stringify({"t": "mode", "v": "teams"}))
+	joined[1].send_text(JSON.stringify({"t": "team", "v": 1}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	for bad: Variant in [5, "0", 0.5, null]:
+		joined[1].send_text(JSON.stringify({"t": "team", "v": bad}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	if not server.team_mode():
+		failures.append("the host's Teams request was ignored in the lobby")
+	if server.slot_team_pick(1) != 1:
+		failures.append("slot 1's Blue pick read %d (a malformed pick must not change it)" % server.slot_team_pick(1))
+	var msg: Dictionary = _last_lobby_msg_236(joined[0])
+	print("      lobby frame: mode %s, teams %s, players %s" % [msg.get("mode"), msg.get("teams"), msg.get("players")])
+	if msg.get("mode") != "teams" or msg.get("teams") != true:
+		failures.append("the host phone was told mode %s, teams %s" % [msg.get("mode"), msg.get("teams")])
+
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var begun: bool = false
+	var deadline: int = Time.get_ticks_msec() + BOT_START_MSEC
+	while Time.get_ticks_msec() < deadline and not begun:
+		await _poll_phones(joined, 1)
+		begun = rm.lobby_phase() == "playing"
+	if not begun:
+		failures.append("the Teams match never started ('%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[0].send_text(JSON.stringify({"t": "mode", "v": "ffa"}))
+	joined[1].send_text(JSON.stringify({"t": "team", "v": 0}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	print("      mid-match: server mode %s, pick %d, match team mode %s, slot 1 on %d" % [
+		server.team_mode(), server.slot_team_pick(1), rm.team_mode(), rm.team_of(1)])
+	if not server.team_mode() or not rm.team_mode():
+		failures.append("the mode changed mid-match")
+	if server.slot_team_pick(1) != 1 or rm.team_of(1) != 1:
+		failures.append("a team pick mid-match changed slot 1 (pick %d, team %d)" % [server.slot_team_pick(1), rm.team_of(1)])
+
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "end"}))
+	if not await _await_condition(func() -> bool:
+			for peer: WebSocketPeer in joined:
+				peer.poll()
+			return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("End match did not go back to the lobby ('%s')" % rm.lobby_phase())
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[0].send_text(JSON.stringify({"t": "mode", "v": "ffa"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.team_mode():
+		failures.append("back in the lobby, the host could not switch to Free-for-all")
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+
+## Issue #236: with the toggle off, a free-for-all is exactly what it was.
+## The lobby state has only its old keys even with stale team picks about,
+## nobody is on a team, two phones "both on Red" still start, hits land, and
+## the score label, scoreboard and name tags read as before.
+func _scenario_teams_ffa_unchanged_when_off() -> Array[String]:
+	var failures: Array[String] = []
+	var scoreboard: Control = _main_scoreboard()
+	var loop: Dictionary = _new_team_round_236(3, [0, 1], {0: 0, 1: 0}, false, TEAM_ROUND_PAUSE_SEC_236, scoreboard)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	for state: Dictionary in roster.lobby_states:
+		var keys: Array = state.keys()
+		keys.sort()
+		var want: Array = Array(FFA_LOBBY_KEYS_236)
+		want.sort()
+		if keys != want:
+			failures.append("a free-for-all lobby state had keys %s, expected %s" % [keys, want])
+			break
+		for entry: Dictionary in state["players"]:
+			var entry_keys: Array = entry.keys()
+			entry_keys.sort()
+			var want_entry: Array = Array(FFA_PLAYER_KEYS_236)
+			want_entry.sort()
+			if entry_keys != want_entry:
+				failures.append("a free-for-all lobby player entry had keys %s" % [entry_keys])
+				break
+	if rm._lobby_screen != null and rm._lobby_screen.team_rosters() != null:
+		failures.append("a free-for-all lobby showed team rosters")
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the free-for-all match never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(3)
+	if rm.team_mode() or players[0].team != -1 or players[1].team != -1 or players[0].is_teammate(players[1]):
+		failures.append("a free-for-all put players on teams (%d, %d)" % [players[0].team, players[1].team])
+	var rings: Array = rm._name_tags.team_rings() if rm._name_tags != null else []
+	var outline: Color = rm.name_tag(0).get_theme_color("font_outline_color") if rm.name_tag(0) != null else Color.WHITE
+	if not rings.is_empty() or outline != Color(0.0, 0.0, 0.0, 1.0) or rm.name_tag(0).get_theme_constant("outline_size") != 6:
+		failures.append("free-for-all name tags had %d rings, outline %s" % [rings.size(), outline])
+	players[1].freeze = true
+	# Past spawn protection (#114), which would zero any hit.
+	players[1].spawn_protected = false
+	players[0]._land_strike(players[1], HIT_CLEAN_SPEED)
+	if players[1].damage <= 0.0:
+		failures.append("a free-for-all strike dealt nothing")
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the free-for-all round did not end")
+	var label_text: String = (loop["score_label"] as Label).text
+	var score_text: String = (scoreboard.get_child(0).get_child(1) as Label).text
+	var name_label: Label = scoreboard.get_child(0).get_child(2) as Label
+	print("      free-for-all: P1 on %d, label '%s', board '%s' '%s', state keys %s" % [
+		rm.score_of(0), label_text, score_text, name_label.text, roster.last_state().keys()])
+	if rm.score_of(0) != 1 or rm.team_score(0) != 0 or rm.team_score(1) != 0:
+		failures.append("the free-for-all win scored P1 %d, teams %d/%d" % [rm.score_of(0), rm.team_score(0), rm.team_score(1)])
+	if label_text != "P1: 1  P2: 0":
+		failures.append("the score label read '%s', expected 'P1: 1  P2: 0'" % label_text)
+	if score_text != "1" or name_label.text != rm._slot_name(0) or name_label.has_theme_color_override("font_color"):
+		failures.append("the free-for-all scoreboard read '%s' '%s'" % [score_text, name_label.text])
+	for key: String in ["mode", "teams", "team_scores", "winner_team"]:
+		if roster.last_state().has(key):
+			failures.append("a free-for-all round state had '%s'" % key)
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #236, read off controller/index.html as shipped, line endings
+## folded (a CRLF checkout reads the same): the team picker with Red, Blue
+## and Auto sending `{t:"team"}`, shown only in a Teams lobby or countdown;
+## the host menu's mode toggle sending `{t:"mode"}` and disabled in a match;
+## the phone's team colours the same as the host screen's; and the team
+## victory title.
+func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var needles: PackedStringArray = [
+		'<div id="team-row">', '<button id="team-red" type="button">Red</button>',
+		'<button id="team-blue" type="button">Blue</button>', '<button id="team-auto" type="button">Auto</button>',
+		'<div id="team-line"></div>', '<button id="menu-mode" type="button">',
+		'sendText({ t: "team", v: team });',
+		'addEventListener("click", function () { sendTeam(0); });',
+		'addEventListener("click", function () { sendTeam(1); });',
+		'addEventListener("click", function () { sendTeam(-1); });',
+		'sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });',
+		'menuModeBtn.disabled = inMatch();',
+		'" team wins"',
+		"    showTeams(msg);\n  }\n",
+	]
+	for needle: String in needles:
+		if not page.contains(needle):
+			failures.append("the page is missing %s" % needle.c_escape())
+	var show: String = _js_function_body(page, "showTeams")
+	if not show.contains('!!msg.teams && (msg.phase === "lobby" || msg.phase === "countdown")'):
+		failures.append("showTeams() does not limit the picker to a Teams lobby or countdown")
+	var mode_click: int = page.find('menuModeBtn.addEventListener("click"')
+	if mode_click < 0 or not page.substr(mode_click, 120).contains("if (inMatch()) { return; }"):
+		failures.append("the mode toggle's click is not guarded against a match in progress")
+	var re := RegEx.new()
+	re.compile('var TEAM_COLORS = \\["(#[0-9a-fA-F]{6})", "(#[0-9a-fA-F]{6})"\\];')
+	var m: RegExMatch = re.search(page)
+	if m == null:
+		failures.append("the page has no TEAM_COLORS")
+	else:
+		for team in 2:
+			var phone: Color = Color.html(m.get_string(team + 1))
+			if not _color_close(phone, TeamsScript236.COLORS[team], 0.03):
+				failures.append("the phone's %s is %s, the host screen's %s" % [
+					TeamsScript236.NAMES[team], m.get_string(team + 1), TeamsScript236.COLORS[team].to_html(false)])
+	if page.find("\r") >= 0:
+		failures.append("the folded page still had a carriage return")
+	var server_src: String = FileAccess.get_file_as_string("res://scripts/ControllerServer.gd").replace("\r\n", "\n")
+	for arm: String in ['\t\t"mode":\n', '\t\t"team":\n']:
+		if not server_src.contains(arm):
+			failures.append("ControllerServer has no %s arm" % arm.strip_edges())
 	_scenario_completed = true
 	return failures

@@ -130,6 +130,8 @@ func _on_node_added(node: Node) -> void:
 			node.connect("countdown_ticked", _on_countdown_ticked)
 		if node.has_signal("match_won"):
 			node.connect("match_won", _on_match_won)
+		if node.has_signal("team_match_won"):
+			node.connect("team_match_won", _on_team_match_won)
 	else:
 		return
 	node.set_meta(META_WATCHED, true)
@@ -153,7 +155,7 @@ func modifier_line_is(sound: StringName) -> bool:
 	var key: String = String(sound)
 	return key.begins_with("announce_") and not key in [
 		"announce_3", "announce_2", "announce_1", "announce_fight",
-		"announce_ko", "announce_double_ko", "announce_winner"]
+		"announce_ko", "announce_double_ko", "announce_winner"] and not key in TEAM_WIN_LINES
 
 func _on_modifier_announced(title: String) -> void:
 	var line: StringName = modifier_line(title)
@@ -171,3 +173,11 @@ func _on_round_won(_slot: int, round_manager: Node) -> void:
 
 func _on_match_won(_slot: int) -> void:
 	say(&"announce_winner")
+
+## Issue #236: "Red team wins!" / "Blue team wins!", by team (0 red, 1 blue).
+const TEAM_WIN_LINES: PackedStringArray = ["announce_red_team_wins", "announce_blue_team_wins"]
+
+## A Teams match won (issue #236): the winning team's line.
+func _on_team_match_won(team: int) -> void:
+	if team >= 0 and team < TEAM_WIN_LINES.size():
+		say(StringName(TEAM_WIN_LINES[team]))
