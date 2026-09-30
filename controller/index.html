@@ -83,6 +83,31 @@
     pointer-events: none;
     opacity: 0.9;
   }
+  /* Issue #244: the laptop-mouse affordance, only ever shown for a fine
+     pointer (a desktop browser) while this player is in play. */
+  #mouse-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
+    z-index: 3;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  #mouse-panel.show { display: flex; }
+  #mouse-capture {
+    font: inherit;
+    font-size: 20px;
+    font-weight: 800;
+    padding: 14px 26px;
+    border: 0;
+    border-radius: 14px;
+    color: #0d0f14;
+    background: #ffd933;
+  }
+  #mouse-sens-row { font-size: 14px; opacity: 0.85; display: flex; align-items: center; gap: 10px; }
   #hint {
     position: fixed;
     left: 0;
@@ -434,6 +459,13 @@
   </div>
 </div>
 <div id="state"></div>
+<div id="mouse-panel">
+  <button id="mouse-capture" type="button">Click to capture mouse</button>
+  <label id="mouse-sens-row" for="mouse-sens">Mouse sensitivity
+    <input id="mouse-sens" type="range" min="0.25" max="3" step="0.05" value="1">
+    <span id="mouse-sens-value">1.00x</span>
+  </label>
+</div>
 <div id="hint">Drag to swing</div>
 <script>
 (function () {
@@ -620,6 +652,8 @@
   }
 
   function release() {
+    // Issue #244: anything that drops a drag also hands the mouse back.
+    if (mouseLocked()) { document.exitPointerLock(); }
     activePointer = null;
     anchor = null;
     point = null;
@@ -629,6 +663,70 @@
 
   function releaseIfActive(e) {
     if (e.pointerId === activePointer) { release(); }
+  }
+
+  // ---- laptop mouse (issue #244) ---------------------------------------------
+  // A desktop browser (a fine pointer) can capture the mouse with the Pointer
+  // Lock API. Locked mouse movement is accumulated into `point` -- the same
+  // state a touch drag moves -- and recompute() turns it into the same unit-disc
+  // vector, so the wire frames are identical in shape (ADR-0003). Esc is the
+  // browser's own release; pointerlockchange then drops the drag.
+  var MOUSE_POINTER_ID = -244;
+  var MOUSE_SENS_KEY = "pickfight-mouse-sens";
+  var finePointer = !!(window.matchMedia && window.matchMedia("(pointer: fine)").matches);
+  var mouseSens = 1;
+  function mouseLocked() { return document.pointerLockElement === canvas; }
+
+  function onMouseMove(e) {
+    if (!mouseLocked() || !anchor || !point) { return; }
+    var nx = (point.x - anchor.x) + (e.movementX || 0) * mouseSens;
+    var ny = (point.y - anchor.y) + (e.movementY || 0) * mouseSens;
+    // Keep the pointer inside the drag disc so reversing direction is immediate.
+    var c = clampToUnitDisc(nx / dragRadiusPx, ny / dragRadiusPx);
+    point = { x: anchor.x + c[0] * dragRadiusPx, y: anchor.y + c[1] * dragRadiusPx };
+    recompute();
+  }
+
+  function onLockChange() {
+    if (mouseLocked()) {
+      activePointer = MOUSE_POINTER_ID; // no touch may start a second drag
+      anchor = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      point = { x: anchor.x, y: anchor.y };
+      recompute();
+    } else {
+      release();
+    }
+    showState();
+  }
+
+  if (finePointer) {
+    var sensEl = document.getElementById("mouse-sens");
+    var sensValueEl = document.getElementById("mouse-sens-value");
+    var setSens = function (v) {
+      v = parseFloat(v);
+      if (!isFinite(v) || v <= 0) { v = 1; }
+      mouseSens = v;
+      sensEl.value = String(v);
+      sensValueEl.textContent = v.toFixed(2) + "x";
+    };
+    var savedSens = null;
+    try { savedSens = localStorage.getItem(MOUSE_SENS_KEY); } catch (err) { /* private mode */ }
+    setSens(savedSens);
+    sensEl.addEventListener("input", function () {
+      setSens(sensEl.value);
+      try { localStorage.setItem(MOUSE_SENS_KEY, String(mouseSens)); } catch (err) { /* this load only */ }
+    });
+    document.getElementById("mouse-capture").addEventListener("click", function () {
+      if (!canvas.requestPointerLock) { return; }
+      // Chrome refuses a re-lock for about a second after an Esc exit; newer
+      // versions reject a promise, older ones fire pointerlockerror. Either
+      // way the button stays up, so the player just clicks again.
+      var req = canvas.requestPointerLock();
+      if (req && req.catch) { req.catch(function () { /* refused; button stays shown */ }); }
+    });
+    document.addEventListener("pointerlockerror", onLockChange);
+    document.addEventListener("pointerlockchange", onLockChange);
+    document.addEventListener("mousemove", onMouseMove);
   }
 
   // Issue #231: a touch on the host's gear or menu is never a drag or swing.
@@ -827,6 +925,10 @@
     // Issue #194: no "Drag to swing" on a phone that has no player to swing.
     document.getElementById("hint").style.display = slot >= 0 && ((lobby && lobby.phase === "playing" &&
       (lobby.alive || []).indexOf(slot) !== -1) || !lobby) ? "" : "none";
+    var hintShown = document.getElementById("hint").style.display === "";
+    // Issue #244: the capture affordance, for a desktop pointer only.
+    document.getElementById("mouse-panel").classList.toggle("show",
+      finePointer && hintShown && !mouseLocked());
   }
 
   function buzz(kind) {
