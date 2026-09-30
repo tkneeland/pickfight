@@ -449,6 +449,7 @@
     <button id="menu-end" type="button" class="danger">End match</button>
     <button id="menu-kick" type="button">Kick player</button>
     <button id="menu-mode" type="button">Mode: Free-for-all</button>
+    <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
   </div>
   <div id="menu-kick-list" class="menu-view"></div>
@@ -1239,6 +1240,10 @@
   var menuKickBtn = document.getElementById("menu-kick");
   // Issue #236: Free-for-all or Teams, only between matches.
   var menuModeBtn = document.getElementById("menu-mode");
+  // Issue #239: Go online, only between matches. The host says where it is
+  // in lobby.online ("off", "connecting", "online" or "unreachable") and
+  // lobby.room.
+  var menuOnlineBtn = document.getElementById("menu-online");
   var kickListEl = document.getElementById("menu-kick-list");
   var confirmTextEl = document.getElementById("confirm-text");
   var confirmAction = null;
@@ -1309,6 +1314,11 @@
     menuKickBtn.disabled = others === 0;
     menuModeBtn.textContent = lobby.mode === "teams" ? "Mode: Teams" : "Mode: Free-for-all";
     menuModeBtn.disabled = inMatch();
+    var online = lobby.online || "off";
+    menuOnlineBtn.textContent = online === "off" ? "Go online: off" :
+      online === "connecting" ? "Go online: connecting\u2026" :
+      online === "online" ? "Online: " + (lobby.room || "") : "Go online: relay unreachable";
+    menuOnlineBtn.disabled = inMatch();
     // Issue #164: the lobby moved on under an open menu.
     if (viewShown("menu-confirm") && confirmValid && !confirmValid()) {
       confirmAction = null;
@@ -1391,6 +1401,10 @@
   menuModeBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
+  });
+  menuOnlineBtn.addEventListener("click", function () {
+    if (inMatch()) { return; }
+    sendHost("online", { v: !(lobby.online && lobby.online !== "off") });
   });
   document.getElementById("menu-close").addEventListener("click", closeHostMenu);
   document.getElementById("confirm-yes").addEventListener("click", function () {

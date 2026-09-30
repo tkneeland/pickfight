@@ -358,6 +358,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_remote_rejoin_same_slot",
 	"online_phone_and_remote_share_match",
 	"online_version_mismatch_refused",
+	"online_toggle_from_host_command",
+	"online_toggle_ignored_mid_match",
+	"online_relay_url_setting_and_arg",
+	"host_pc_seat_claims_and_releases",
+	"host_pc_seat_mouse_moves_weapon",
+	"host_pc_seat_not_replaced_by_phone",
+	"host_screen_start_match_without_phone",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1473,6 +1480,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_phone_and_remote_share_match()
 		"online_version_mismatch_refused":
 			return await _scenario_online_version_mismatch_refused()
+		"online_toggle_from_host_command":
+			return await _scenario_online_toggle_from_host_command()
+		"online_toggle_ignored_mid_match":
+			return await _scenario_online_toggle_ignored_mid_match()
+		"online_relay_url_setting_and_arg":
+			return await _scenario_online_relay_url_setting_and_arg()
+		"host_pc_seat_claims_and_releases":
+			return await _scenario_host_pc_seat_claims_and_releases()
+		"host_pc_seat_mouse_moves_weapon":
+			return await _scenario_host_pc_seat_mouse_moves_weapon()
+		"host_pc_seat_not_replaced_by_phone":
+			return await _scenario_host_pc_seat_not_replaced_by_phone()
+		"host_screen_start_match_without_phone":
+			return await _scenario_host_screen_start_match_without_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -23126,4 +23147,362 @@ func _scenario_online_version_mismatch_refused() -> Array[String]:
 	if int((await _online_wait_239(rig, ok, "slot")).get("slot", -1)) != 0:
 		failures.append("a matching remote was not seated after the refusals")
 	await _online_close_239(rig)
+	return failures
+
+# --- Going online and playing on this PC from the host (issue #239, D2) --------
+
+## Points `pickfight/relay_url` at the in-process relay; returns the old value.
+func _relay_setting_239(port: int) -> Variant:
+	var old: Variant = ProjectSettings.get_setting("pickfight/relay_url")
+	ProjectSettings.set_setting("pickfight/relay_url", "ws://127.0.0.1:%d" % port)
+	return old
+
+## A ControllerServer rig like `_phone_rig_164` with a join label in the scene.
+func _label_rig_239(count: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var label := Label.new()
+	label.name = "JoinLabel239"
+	label.text = "placeholder"
+	stage.add_child(label)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "Label239P%d" % i
+		player.start_in_round = false
+		player.identity_color = FOUR_PLAYER_COLORS[i % FOUR_PLAYER_COLORS.size()]
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../Label239P%d" % i))
+	var server: Node = ControllerServerScript.new()
+	server.name = "Label239Server"
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.join_label_path = NodePath("../JoinLabel239")
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	return {"stage": stage, "server": server, "players": players, "label": label}
+
+func _wait_for_239(cond: Callable, msec: int = 3000) -> bool:
+	var deadline: int = Time.get_ticks_msec() + msec
+	while not cond.call() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	return cond.call()
+
+func _scenario_online_toggle_from_host_command() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	var rig: Dictionary = await _label_rig_239(2)
+	var server: Node = rig["server"]
+	var label: Label = rig["label"]
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	if (await _join_phone(phone, "online-host", phones))["slot"] != 0:
+		failures.append("the host phone did not get slot 0")
+	phones.append(phone)
+	var base: String = label.text
+	if server.is_online() or server.online_status() != "off":
+		failures.append("the server was online before anyone asked (%s)" % server.online_status())
+	# A non-host phone cannot turn it on.
+	var other := WebSocketPeer.new()
+	await _join_phone(other, "online-other", phones)
+	phones.append(other)
+	other.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": true}))
+	await _poll_phones(phones, 10)
+	if server.online_requested():
+		failures.append("a non-host phone turned Go online on")
+	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": true}))
+	var came_up: bool = await _wait_for_239(func() -> bool:
+		_poll_phones_once(phones)
+		return server.is_online())
+	if not came_up:
+		failures.append("the host command never took the server online (status %s)" % server.online_status())
+	else:
+		var code: String = server.online_room_code()
+		if code.length() != 4 or not label.text.contains("Online: " + code):
+			failures.append("the join label reads '%s', expected it to show 'Online: %s'" % [label.text, code])
+		var told: Dictionary = {}
+		for i in 30:
+			_poll_phones_once(phones)
+			await process_frame
+		if server.online_status() != "online":
+			failures.append("status was %s, expected online" % server.online_status())
+	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": false}))
+	await _wait_for_239(func() -> bool:
+		_poll_phones_once(phones)
+		return not server.online_requested())
+	await _online_frames_239(5)
+	if server.is_online() or server.online_room_code() != "":
+		failures.append("Go online off left the server online")
+	if label.text != base:
+		failures.append("the join label reads '%s' after going offline, expected '%s'" % [label.text, base])
+	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
+	await _close_phones(phones)
+	_relay_stop(relay, [])
+	await _teardown(rig["stage"])
+	return failures
+
+## Polls every phone socket once (no await).
+func _poll_phones_once(phones: Array[WebSocketPeer]) -> void:
+	for p: WebSocketPeer in phones:
+		p.poll()
+
+func _scenario_online_toggle_ignored_mid_match() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	var rig: Dictionary = await _label_rig_239(2)
+	var server: Node = rig["server"]
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	await _join_phone(phone, "mid-match-host", phones)
+	phones.append(phone)
+	server.set_lobby_state({"phase": "playing", "players": [{"slot": 0, "name": "", "ready": false}]})
+	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": true}))
+	await _poll_phones(phones, 20)
+	if server.online_requested() or server.relay_link.link_state() != "offline":
+		failures.append("Go online was taken mid-match (link %s)" % server.relay_link.link_state())
+	if server.apply_host_command("online", true):
+		failures.append("apply_host_command('online') returned true mid-match")
+	# Back in the lobby it works; then the match starts and it cannot be turned off.
+	server.set_lobby_state({"phase": "lobby", "players": [{"slot": 0, "name": "", "ready": false}]})
+	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": true}))
+	var came_up: bool = await _wait_for_239(func() -> bool:
+		_poll_phones_once(phones)
+		return server.is_online())
+	if not came_up:
+		failures.append("Go online was not taken in the lobby")
+	server.set_lobby_state({"phase": "playing", "players": [{"slot": 0, "name": "", "ready": false}]})
+	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": false}))
+	await _poll_phones(phones, 20)
+	if not server.is_online():
+		failures.append("Go online was turned off mid-match")
+	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
+	server.go_offline()
+	await _close_phones(phones)
+	_relay_stop(relay, [])
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_online_relay_url_setting_and_arg() -> Array[String]:
+	var failures: Array[String] = []
+	var setting: Variant = ProjectSettings.get_setting("pickfight/relay_url")
+	if setting != "ws://127.0.0.1:9080":
+		failures.append("pickfight/relay_url is %s, expected ws://127.0.0.1:9080" % [setting])
+	var none: String = ControllerServerScript.resolve_relay_url(PackedStringArray([]))
+	if none != "ws://127.0.0.1:9080":
+		failures.append("with no args the url was '%s', expected the setting" % none)
+	var over: String = ControllerServerScript.resolve_relay_url(PackedStringArray(["--demo", "--relay=wss://play.example.com"]))
+	if over != "wss://play.example.com":
+		failures.append("--relay gave '%s', expected wss://play.example.com" % over)
+	var empty: String = ControllerServerScript.resolve_relay_url(PackedStringArray(["--relay="]))
+	if empty != "ws://127.0.0.1:9080":
+		failures.append("an empty --relay= gave '%s', expected the setting" % empty)
+	ProjectSettings.set_setting("pickfight/relay_url", "wss://configured.example")
+	var configured: String = ControllerServerScript.resolve_relay_url(PackedStringArray([]))
+	var still_over: String = ControllerServerScript.resolve_relay_url(PackedStringArray(["--relay=ws://x:1"]))
+	ProjectSettings.set_setting("pickfight/relay_url", setting)
+	if configured != "wss://configured.example":
+		failures.append("a changed setting gave '%s'" % configured)
+	if still_over != "ws://x:1":
+		failures.append("--relay did not beat the setting: '%s'" % still_over)
+	_scenario_completed = true
+	return failures
+
+func _scenario_host_pc_seat_claims_and_releases() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PcSeat239")
+	var server: Node = rig["server"]
+	if server.apply_host_command("pc_seat", true) != true:
+		failures.append("the seat was refused in the lobby")
+	if server.claimed_slots() != [0]:
+		failures.append("claimed slots were %s, expected [0]" % [server.claimed_slots()])
+	if server.slot_name(0) != "Host":
+		failures.append("the seat is named '%s', expected Host" % server.slot_name(0))
+	if server.is_virtual(0) or not server.slot_has_controller(0):
+		failures.append("the seat is a bot or has no controller (virtual=%s)" % server.is_virtual(0))
+	if server.host_slot() != 0:
+		failures.append("host_slot is %d, the first seat should host" % server.host_slot())
+	# A phone takes the next slot and the seat still counts toward the cap.
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "pcseat-phone", phones)
+	phones.append(phone)
+	if got["slot"] != 1:
+		failures.append("the phone got slot %s, expected 1 beside the seat" % got["slot"])
+	# Mid-match the toggle is ignored.
+	server.set_lobby_state({"phase": "playing", "players": []})
+	if server.apply_host_command("pc_seat", false) or server.host_pc_slot() != 0:
+		failures.append("the seat was released mid-match")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	if not server.apply_host_command("pc_seat", false):
+		failures.append("the seat could not be released in the lobby")
+	if server.claimed_slots() != [1] or server.host_pc_slot() != -1 or server.slot_has_controller(0):
+		failures.append("after release claims are %s, pc slot %d" % [server.claimed_slots(), server.host_pc_slot()])
+	if server.apply_host_command("pc_seat", true) != true or server.host_pc_slot() != 0:
+		failures.append("the seat could not be claimed again (slot %d)" % server.host_pc_slot())
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_host_pc_seat_mouse_moves_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PcMouse239")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.apply_host_command("pc_seat", true)
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	await _join_phone(phone, "pcmouse-phone", phones)
+	phones.append(phone)
+	# The drag radius is 0.35 of the short window edge (controller/index.html).
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	# Half a radius right: half deflection, like a half-radius phone drag.
+	server.host_pc_mouse_motion(Vector2(radius * 0.5, 0.0))
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.5, 0.0)) > 0.01:
+		failures.append("half a radius right gave %s, expected (0.5, 0)" % players[0].input_vector)
+	var packet := PackedByteArray()
+	packet.resize(8)
+	packet.encode_float(0, 0.5)
+	packet.encode_float(4, 0.0)
+	for i in 30:
+		phone.send_text("") if false else phone.send(packet, WebSocketPeer.WRITE_MODE_BINARY)
+		await process_frame
+		phone.poll()
+	if players[1].input_vector.distance_to(players[0].input_vector) > 0.01:
+		failures.append("the phone's same vector gave %s, the mouse %s" % [players[1].input_vector, players[0].input_vector])
+	# Far past the edge clamps to the unit disc: (10.5, 10) radii -> (10.5, 10) / 14.5.
+	server.host_pc_mouse_motion(Vector2(radius * 10.0, radius * 10.0))
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.7241, 0.6897)) > 0.01:
+		failures.append("a huge drag gave %s, expected (0.7241, 0.6897)" % players[0].input_vector)
+	# Reversing is immediate because the offset stayed on the disc: one radius back in x.
+	server.host_pc_mouse_motion(Vector2(-radius, 0.0))
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(-0.2759, 0.6897)) > 0.01:
+		failures.append("one radius back gave %s, expected (-0.2759, 0.6897)" % players[0].input_vector)
+	# A real motion event, while a live match has the mouse captured.
+	server.apply_host_command("pc_seat", false)
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	var ev := InputEventMouseMotion.new()
+	ev.relative = Vector2(0.0, radius * 0.25)
+	ev.position = Vector2(10, 10)
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await _await_ticks(30)
+	# (The headless window is tiny, so the viewport rescales `relative`; only the direction is checked.)
+	if absf(players[0].input_vector.x) > 0.01 or players[0].input_vector.y < 0.2:
+		failures.append("a captured-mouse motion event straight down gave %s" % players[0].input_vector)
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_host_pc_seat_not_replaced_by_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PcBot239")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.bot_director.solo = true
+	server.bot_director.add_bots(1)
+	if server.virtual_slots() != [1]:
+		failures.append("the Solo bot is in %s, expected [1]" % [server.virtual_slots()])
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "pcbot-phone", phones)
+	phones.append(phone)
+	if got["slot"] != 1:
+		failures.append("the phone got slot %s, expected the bot's slot 1" % got["slot"])
+	if server.host_pc_slot() != 0 or server.is_virtual(0) or not server.claimed_slots().has(0):
+		failures.append("the host PC seat was replaced (slot %d, claims %s)" % [server.host_pc_slot(), server.claimed_slots()])
+	if not server.virtual_slots().is_empty():
+		failures.append("the bot stayed beside a full roster: %s" % [server.virtual_slots()])
+	# Every slot is taken by a real seat: a third phone is turned away, not given the PC's slot.
+	var third := WebSocketPeer.new()
+	var refused: Dictionary = await _join_phone(third, "pcbot-third", phones)
+	phones.append(third)
+	if refused["slot"] != -1:
+		failures.append("a third phone got slot %s with the roster full" % refused["slot"])
+	if server.host_pc_slot() != 0 or server.claimed_slots().size() != 2:
+		failures.append("the full roster changed: claims %s" % [server.claimed_slots()])
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_host_screen_start_match_without_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 239
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.round_end_pause_sec = 0.5
+	var players: Array[RigidBody2D] = []
+	for i in server.player_paths.size():
+		players.append(server.get_node(server.player_paths[i]) as RigidBody2D)
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var screen: CanvasLayer = rm.get_node("LobbyLayer")
+	var rig := {"server": server, "relay": relay, "clients": [], "code": ""}
+	# The host-screen controls exist, with no phone anywhere.
+	for id in ["online", "pc_seat", "mode", "target_down", "target_up", "start"]:
+		if screen.control_button(id) == null:
+			failures.append("the lobby screen has no '%s' control" % id)
+	if not failures.is_empty():
+		await _teardown(main)
+		_relay_stop(relay, [])
+		return failures
+	screen.control_button("pc_seat").pressed.emit()
+	screen.control_button("online").pressed.emit()
+	if not await _wait_for_239(func() -> bool: return server.is_online()):
+		failures.append("the host-screen Go online never came up (%s)" % server.online_status())
+	rig["code"] = server.online_room_code()
+	screen.refresh_controls()
+	if not screen.control_button("online").text.ends_with("on") or screen.get_node("LobbyPanel").find_child("RoomCode", true, false).text != "Online: " + rig["code"]:
+		failures.append("the lobby screen does not show the online state / room code")
+	var remote: WebSocketPeer = await _online_remote_239(rig, "start-remote")
+	var slot_msg: Dictionary = await _online_wait_239(rig, remote, "slot") if remote != null else {}
+	if int(slot_msg.get("slot", -1)) != 1:
+		failures.append("the remote was told %s, expected slot 1 beside the host PC seat" % slot_msg)
+	# Mode and first-to go through the same host-command path.
+	screen.control_button("mode").pressed.emit()
+	if not server.team_mode():
+		failures.append("the host-screen Mode control did not switch to Teams")
+	screen.control_button("mode").pressed.emit()
+	screen.control_button("target_up").pressed.emit()
+	if server.match_target() != 6 or server.team_mode():
+		failures.append("target %d / teams %s after First to + and Mode twice" % [server.match_target(), server.team_mode()])
+	await _online_frames_239(5)
+	if rm.lobby_phase() != "lobby":
+		failures.append("the lobby was in '%s' before Start" % rm.lobby_phase())
+	screen.control_button("start").pressed.emit()
+	var started: bool = await _wait_for_239(func() -> bool:
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		return players[0].alive and players[1].alive, 4000)
+	if not started:
+		failures.append("Start match never started a round (phase '%s')" % rm.lobby_phase())
+	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
+	server.apply_host_command("online", false)
+	_relay_stop(relay, rig["clients"])
+	await _teardown(main)
 	return failures

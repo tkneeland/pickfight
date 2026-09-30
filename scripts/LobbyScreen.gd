@@ -65,6 +65,7 @@ var _lobby_status: Label
 var _lobby_target_label: Label
 var _lobby_qr: TextureRect
 var _lobby_url: Label
+var _lobby_right: VBoxContainer
 var _victory_title: Label
 var _podium: HBoxContainer
 var _how_to_play: Control
@@ -322,6 +323,7 @@ func build_panels() -> void:
 	_lobby_status.custom_minimum_size.x = LOBBY_STATUS_WIDTH_PX
 	left.add_child(_lobby_status)
 	var right := VBoxContainer.new()
+	_lobby_right = right
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
 	right.add_theme_constant_override("separation", 16)
 	columns.add_child(right)
@@ -450,3 +452,113 @@ func show_pause_banner(on: bool) -> void:
 		_pause_layer.add_child(_pause_label)
 	_pause_layer.visible = on
 	_pause_label.visible = on
+
+# --- Host-screen lobby controls (issue #239) -------------------------------------
+#
+# For a PC-only match with no phone: clickable buttons and keys for Go online
+# (O), Play on this PC (P), Mode (T), First to (- and =) and Start (Enter).
+# Each calls ControllerServer.apply_host_command(), the same function the host
+# phone's menu ends up in, so nothing is decided here.
+
+const CONTROL_KEYS: Dictionary = {
+	"online": KEY_O, "pc_seat": KEY_P, "mode": KEY_T, "target_down": KEY_MINUS,
+	"target_up": KEY_EQUAL, "start": KEY_ENTER,
+}
+
+var _server: Object = null
+var _controls: Dictionary = {}
+var _room_label: Label
+var _online_status: Label
+
+## Builds the controls (once) under the QR and points them at `server`. A
+## server without `apply_host_command` (a test stub) gets none.
+func attach_controls(server: Object) -> void:
+	if _lobby_right == null or _server != null or server == null or not server.has_method("apply_host_command"):
+		return
+	_server = server
+	var box := VBoxContainer.new()
+	box.name = "HostControls"
+	box.add_theme_constant_override("separation", 8)
+	_lobby_right.add_child(box)
+	_room_label = _big_label("", 64, LOBBY_ACCENT)
+	_room_label.name = "RoomCode"
+	_room_label.visible = false
+	_lobby_right.add_child(_room_label)
+	_lobby_right.move_child(_room_label, _lobby_url.get_index() + 1)
+	var online_row := HBoxContainer.new()
+	online_row.add_theme_constant_override("separation", 12)
+	box.add_child(online_row)
+	online_row.add_child(_control_button("online", "Go online (O)"))
+	_online_status = _big_label("", 24, Color(0.8, 0.82, 0.88))
+	online_row.add_child(_online_status)
+	box.add_child(_control_button("pc_seat", "Play on this PC (P)"))
+	box.add_child(_control_button("mode", "Mode (T)"))
+	var target_row := HBoxContainer.new()
+	target_row.add_theme_constant_override("separation", 12)
+	box.add_child(target_row)
+	target_row.add_child(_control_button("target_down", "First to  -"))
+	target_row.add_child(_control_button("target_up", "+"))
+	box.add_child(_control_button("start", "Start match (Enter)"))
+	refresh_controls()
+
+func _control_button(id: String, text: String) -> Button:
+	var button := Button.new()
+	button.name = id
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 26)
+	button.pressed.connect(press_control.bind(id))
+	_controls[id] = button
+	return button
+
+## The control button `id` ("online", "pc_seat", "mode", "target_down",
+## "target_up", "start"), or null.
+func control_button(id: String) -> Button:
+	return _controls.get(id) as Button
+
+## What a click or key on control `id` does.
+func press_control(id: String) -> void:
+	if _server == null:
+		return
+	match id:
+		"online":
+			_server.apply_host_command("online", not _server.online_requested())
+		"pc_seat":
+			_server.apply_host_command("pc_seat", _server.host_pc_slot() == -1)
+		"mode":
+			_server.apply_host_command("mode", "ffa" if _server.team_mode() else "teams")
+		"target_down":
+			_server.apply_host_command("target", _server.match_target() - 1)
+		"target_up":
+			_server.apply_host_command("target", _server.match_target() + 1)
+		"start":
+			_server.apply_host_command("start")
+	refresh_controls()
+
+## Redraws the controls' captions from the server: the link state beside the
+## toggle, the room code large beside the QR.
+func refresh_controls() -> void:
+	if _server == null:
+		return
+	var status: String = _server.online_status()
+	var code: String = _server.online_room_code()
+	control_button("online").text = "Go online (O): %s" % ("on" if _server.online_requested() else "off")
+	_online_status.text = {"connecting": "connecting…", "online": "online", "unreachable": "relay unreachable"}.get(status, "")
+	_room_label.text = "Online: %s" % code
+	_room_label.visible = code != ""
+	control_button("pc_seat").text = "Play on this PC (P): %s" % ("on" if _server.host_pc_slot() != -1 else "off")
+	control_button("mode").text = "Mode (T): %s" % ("Teams" if _server.team_mode() else "Free-for-all")
+
+func _process(_delta: float) -> void:
+	if _server != null and _lobby_panel != null and _lobby_panel.visible:
+		refresh_controls()
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if _server == null or key == null or not key.pressed or key.echo or _lobby_panel == null or not _lobby_panel.visible:
+		return
+	for id: String in CONTROL_KEYS:
+		if key.physical_keycode == CONTROL_KEYS[id] or (id == "start" and key.physical_keycode == KEY_KP_ENTER):
+			press_control(id)
+			get_viewport().set_input_as_handled()
+			return

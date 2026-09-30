@@ -323,6 +323,7 @@ var _last_join_rank: int = 0
 var _recent_leavers: Dictionary = {}
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 const RelayLinkScript: GDScript = preload("res://scripts/RelayLink.gd")
+const HostMouseScript: GDScript = preload("res://scripts/HostMouse.gd")
 
 ## Issue #239: the remote-seat protocol version. A remote client's hello must
 ## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
@@ -372,6 +373,34 @@ class RemoteSeat extends RefCounted:
 			link.send_text_to(peer, JSON.stringify({"t": "closed", "code": code, "reason": reason}))
 			open = false
 
+## The host PC's own seat (issue #239, "Play on this PC"): a transport with
+## nothing on the wire. It is not a bot (`_slot_virtual` stays 0), so it is
+## never yielded or replaced; everything else treats it as a connected phone.
+class LocalSeat extends RefCounted:
+	var open: bool = true
+	var last_text: String = ""
+
+	func poll() -> void:
+		pass
+
+	func get_ready_state() -> int:
+		return WebSocketPeer.STATE_OPEN if open else WebSocketPeer.STATE_CLOSED
+
+	func get_available_packet_count() -> int:
+		return 0
+
+	func get_packet() -> PackedByteArray:
+		return PackedByteArray()
+
+	func was_string_packet() -> bool:
+		return false
+
+	func send_text(text: String) -> void:
+		last_text = text
+
+	func close(_code: int = 1000, _reason: String = "") -> void:
+		open = false
+
 var relay_link: Node = null
 var _remote_seats: Dictionary = {} # relay peer id -> RemoteSeat
 var _remote_awaiting: Array[RemoteSeat] = []
@@ -401,6 +430,8 @@ var join_qr_texture: ImageTexture = null
 ## lobby, countdown or victory screen is up, which show their own big QR and
 ## URL, so the corner never bleeds through their backdrop.
 var _join_corner_hidden: bool = false
+## The join label's text before the room code is added (issue #239).
+var _join_label_base: String = ""
 
 ## Shows or hides the in-round join corner (issue #230). The QR shows only
 ## once it has a texture.
@@ -502,11 +533,15 @@ func _ready() -> void:
 	relay_link.peer_joined.connect(_on_relay_peer_joined)
 	relay_link.peer_left.connect(_on_relay_peer_left)
 	relay_link.frame_received.connect(_on_relay_frame)
+	relay_link.room_code_changed.connect(_on_room_code_changed)
+	relay_link.link_state_changed.connect(_on_link_state_changed)
+	_join_label_base = label.text if label != null else ""
 
 func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
 	_process_remote()
+	_check_host_pc_seat()
 	if host_slot() != _last_host:
 		_last_host = host_slot()
 		host_changed.emit(_last_host)
@@ -738,6 +773,9 @@ func _process_websocket() -> void:
 		if peer == null:
 			continue
 		peer.poll()
+		if peer is LocalSeat:
+			# No socket to go silent: the host PC's seat never times out.
+			_slot_last_packet_msec[slot] = now
 		var state: int = peer.get_ready_state()
 		if state == WebSocketPeer.STATE_OPEN:
 			_drain(slot, peer)
@@ -1122,7 +1160,7 @@ func _handle_text(slot: int, text: String) -> void:
 		"target":
 			var n: Variant = msg.get("n")
 			if slot == host_slot() and _is_number(n):
-				_match_target = clampi(int(n), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
+				apply_host_command("target", n)
 				if _log_input:
 					print("slot %d set match target %d" % [slot, _match_target])
 		"host":
@@ -1141,8 +1179,8 @@ func _handle_text(slot: int, text: String) -> void:
 				solo_requested.emit(on)
 		"mode":
 			var mode: Variant = msg.get("v")
-			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams") and MODE_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
-				_team_mode = mode == "teams"
+			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams"):
+				apply_host_command("mode", mode)
 				if _log_input:
 					print("slot %d set mode %s" % [slot, mode])
 		"team":
@@ -1177,6 +1215,10 @@ func _handle_host_command(slot: int, msg: Dictionary) -> void:
 		if _log_input:
 			print("slot %d host command %s" % [slot, cmd])
 		host_command.emit(cmd, -1)
+	elif cmd == "online":
+		var on: Variant = msg.get("v")
+		if on is bool:
+			apply_host_command("online", on)
 	elif cmd == "kick":
 		var target: Variant = msg.get("slot")
 		if not _is_number(target):
@@ -1269,6 +1311,10 @@ func set_lobby_state(state: Dictionary) -> void:
 	_lobby_state["t"] = "lobby"
 	if MATCH_PHASES.has(str(_lobby_state.get("phase", ""))) and not MATCH_PHASES.has(was):
 		_match_serial += 1
+	_send_lobby_to_all()
+	_update_mouse_capture()
+
+func _send_lobby_to_all() -> void:
 	var text: String = _lobby_text()
 	for peer: Variant in _slot_peers:
 		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
@@ -1280,6 +1326,10 @@ func set_lobby_state(state: Dictionary) -> void:
 ## back so the host can tell a stale kick or End match from a current one.
 func _lobby_text() -> String:
 	_lobby_state["match"] = _match_serial
+	# Issue #239: the host menu's Go online option and the host screen's.
+	_lobby_state["online"] = online_status()
+	_lobby_state["room"] = online_room_code() if relay_link != null else ""
+	_lobby_state["pc_seat"] = _host_pc_slot != -1
 	for entry: Variant in _lobby_state.get("players", []):
 		if entry is Dictionary:
 			var slot: int = int(entry.get("slot", -1))
@@ -1598,3 +1648,190 @@ func _read_remote_hello(seat: RemoteSeat) -> Variant:
 		if parsed is Dictionary and typeof(parsed.get("id")) == TYPE_STRING:
 			return parsed
 	return null
+
+# --- Going online and playing on this PC (issue #239) ---------------------------
+#
+# Both are host powers of the lobby. The host phone's menu sends them as host
+# commands; the host screen's buttons and keys (LobbyScreen.gd) call
+# `apply_host_command()` directly -- one path, so nothing is done twice.
+
+const DEFAULT_RELAY_URL: String = "ws://127.0.0.1:9080"
+const RELAY_URL_SETTING: String = "pickfight/relay_url"
+const RELAY_ARG: String = "--relay="
+const HOST_PC_ID: String = "host-pc"
+const HOST_PC_NAME: String = "Host"
+
+var _online_requested: bool = false
+var _host_pc_slot: int = -1
+var _host_pc_seat: LocalSeat = null
+var _host_mouse: RefCounted = HostMouseScript.new()
+var _mouse_captured: bool = false
+## Esc released the mouse; a click in the window takes it back.
+var _mouse_escaped: bool = false
+
+## The relay to go online through: a `--relay=<url>` in `args` (the user args),
+## else the `pickfight/relay_url` project setting, else the local dev relay.
+static func resolve_relay_url(args: PackedStringArray) -> String:
+	for arg: String in args:
+		if arg.begins_with(RELAY_ARG) and arg.length() > RELAY_ARG.length():
+			return arg.trim_prefix(RELAY_ARG)
+	var configured: Variant = ProjectSettings.get_setting(RELAY_URL_SETTING, DEFAULT_RELAY_URL)
+	return str(configured) if configured is String and not (configured as String).is_empty() else DEFAULT_RELAY_URL
+
+## A host-screen or host-phone lobby command: "online" (bool), "pc_seat" (bool),
+## "mode" ("ffa" or "teams"), "target" (number) or "start" (forces every seat
+## ready). Returns whether it was taken; everything here is ignored outside the
+## lobby (mode and target also on the victory screen, as the phone's were).
+func apply_host_command(cmd: String, arg: Variant = null) -> bool:
+	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	match cmd:
+		"online":
+			if not arg is bool or not SOLO_PHASES.has(phase):
+				return false
+			return _set_online_requested(arg)
+		"pc_seat":
+			if not arg is bool or not SOLO_PHASES.has(phase):
+				return false
+			return _set_host_pc_seat(arg)
+		"mode":
+			if not (arg is String and (arg == "ffa" or arg == "teams")) or not MODE_PHASES.has(phase):
+				return false
+			_team_mode = arg == "teams"
+			return true
+		"target":
+			if not _is_number(arg):
+				return false
+			_match_target = clampi(int(arg), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
+			return true
+		"start":
+			if phase != "lobby":
+				return false
+			for slot: int in claimed_slots():
+				if slot_has_controller(slot):
+					_slot_ready[slot] = 1
+			host_command.emit("start", -1)
+			return true
+	return false
+
+func _set_online_requested(on: bool) -> bool:
+	if on == _online_requested:
+		return true
+	_online_requested = on
+	if on:
+		go_online(resolve_relay_url(OS.get_cmdline_user_args()))
+	else:
+		go_offline()
+	_send_lobby_to_all()
+	return true
+
+func online_requested() -> bool:
+	return _online_requested
+
+## "off", "connecting", "online" or "unreachable" (asked for and not reached).
+func online_status() -> String:
+	if not _online_requested or relay_link == null:
+		return "off"
+	match relay_link.link_state():
+		"online":
+			return "online"
+		"connecting":
+			return "connecting"
+	return "unreachable"
+
+func _on_room_code_changed(code: String) -> void:
+	var label: Label = join_label()
+	if label != null:
+		label.text = _join_label_base if code.is_empty() else "%s\nOnline: %s" % [_join_label_base, code]
+	_send_lobby_to_all()
+
+func _on_link_state_changed(_state: String) -> void:
+	_send_lobby_to_all()
+
+func host_pc_slot() -> int:
+	return _host_pc_slot
+
+func _set_host_pc_seat(on: bool) -> bool:
+	if on == (_host_pc_slot != -1):
+		return true
+	if not on:
+		_release_host_pc_seat()
+		return true
+	var slot: int = -1
+	for s in _slot_peers.size():
+		if _slot_claimed[s] != 1 and _players[s] != null:
+			slot = s
+			break
+	if slot == -1:
+		slot = _yielding_bot_slot()
+		if slot == -1:
+			return false
+		bot_director.remove_bot(slot)
+	_host_pc_seat = LocalSeat.new()
+	_host_pc_slot = slot
+	_host_mouse.reset()
+	_claim_for_phone(_rejoin_slot(HOST_PC_ID, slot), HOST_PC_ID, _host_pc_seat)
+	_host_pc_slot = _slot_peers.find(_host_pc_seat)
+	_slot_name[_host_pc_slot] = HOST_PC_NAME
+	_update_mouse_capture()
+	_send_lobby_to_all()
+	return true
+
+func _release_host_pc_seat() -> void:
+	var slot: int = _host_pc_slot
+	_host_pc_slot = -1
+	if _host_pc_seat != null:
+		_host_pc_seat.open = false
+	_host_pc_seat = null
+	if slot != -1 and _slot_claimed[slot] == 1:
+		_unbind(slot)
+		_release_claim(slot)
+		_broadcast_looks()
+	_update_mouse_capture()
+	_send_lobby_to_all()
+
+## The seat is gone from under the toggle (a kick, say): forget it.
+func _check_host_pc_seat() -> void:
+	if _host_pc_slot != -1 and (_slot_claimed[_host_pc_slot] != 1 or _slot_peers[_host_pc_slot] != _host_pc_seat):
+		_release_host_pc_seat()
+
+## The host PC player's mouse moved by `relative` pixels: the same smoothing
+## target a phone's drag packet sets.
+func host_pc_mouse_motion(relative: Vector2) -> void:
+	if _host_pc_slot == -1:
+		return
+	var edge: float = minf(get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y)
+	var v: Vector2 = _host_mouse.move(relative, HostMouseScript.drag_radius(edge))
+	_slot_last_packet_msec[_host_pc_slot] = Time.get_ticks_msec()
+	_smoothers[_host_pc_slot].push(v)
+
+func _input(event: InputEvent) -> void:
+	if _host_pc_slot == -1 and not _mouse_captured:
+		return
+	var motion := event as InputEventMouseMotion
+	if motion != null:
+		if _mouse_captured:
+			host_pc_mouse_motion(motion.relative)
+		return
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
+		_mouse_escaped = true
+		_update_mouse_capture()
+		return
+	var click := event as InputEventMouseButton
+	if click != null and click.pressed and _mouse_escaped and _host_pc_slot != -1:
+		_mouse_escaped = false
+		_update_mouse_capture()
+
+## The mouse is captured while the host PC plays a live match, and free in the
+## lobby, while paused, after Esc, and once the seat is off.
+func _update_mouse_capture() -> void:
+	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	if not MATCH_PHASES.has(phase):
+		_mouse_escaped = false
+	var want: bool = _host_pc_slot != -1 and MATCH_PHASES.has(phase) and not _mouse_escaped \
+		and not bool(_lobby_state.get("paused", false))
+	if want == _mouse_captured:
+		return
+	_mouse_captured = want
+	_host_mouse.reset()
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if want else Input.MOUSE_MODE_VISIBLE
