@@ -923,9 +923,9 @@
     stateEl.textContent = text;
     nameEl.classList.toggle("locked", inPlay());
     // Issue #194: no "Drag to swing" on a phone that has no player to swing.
-    var hintShown = slot >= 0 && ((lobby && lobby.phase === "playing" &&
-      (lobby.alive || []).indexOf(slot) !== -1) || !lobby);
-    document.getElementById("hint").style.display = hintShown ? "" : "none";
+    document.getElementById("hint").style.display = slot >= 0 && ((lobby && lobby.phase === "playing" &&
+      (lobby.alive || []).indexOf(slot) !== -1) || !lobby) ? "" : "none";
+    var hintShown = document.getElementById("hint").style.display === "";
     // Issue #244: the capture affordance, for a desktop pointer only.
     document.getElementById("mouse-panel").classList.toggle("show",
       finePointer && hintShown && !mouseLocked());
