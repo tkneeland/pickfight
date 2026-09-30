@@ -23,7 +23,7 @@ round is the exception: they keep whatever they were holding.
 |---|---|
 | **Host** | The one machine that runs the simulation and renders the shared screen everyone watches. Authoritative for all game state. |
 | **Controller** | A player's phone, running the controller web page, connected to the host over the local network. Sends input only; renders no game state. |
-| **Player** | One participant, represented in-game by a body and its weapon. Bound 1:1 to a controller. |
+| **Player** | One participant, represented in-game by a body and its weapon. Bound 1:1 to a controller or a remote seat. |
 | **Weapon** | The pole a player holds. It is their only appendage: their only means of movement, their only means of dealing damage, and their only means of blocking. Reach, weight and responsiveness differ per weapon, so a weapon changes how a player moves as much as how they fight. |
 | **Head** | The weapon's solid region — the part that strikes, blocks, and plants against geometry. Its shape and extent are per weapon: a pickaxe's is a nub at the tip, a sword's is most of the blade. |
 | **Weight** | How heavy a weapon is. Heavy weapons swing slower but win clashes and fling the body harder; light ones answer the input faster. The one stat that sets a weapon's feel. |
@@ -46,9 +46,9 @@ round is the exception: they keep whatever they were holding.
 | **Buzz** | A short piece of feedback a player's own phone gives them: a vibration, plus a flash of the phone's screen in their colour (the only kind iOS can give). Sent by the host for four things only, each to the one phone it concerns: a round **win**, being **eliminated**, being **struck** for damage, and landing a **hit** that dealt damage (ADR-0013). |
 | **Modifier** | A twist on the rules for one round only, such as low gravity or big heads. Some rounds roll one at random, and its name is shown on screen as the round starts. It is undone when the round ends (ADR-0015). |
 | **Sound set** | The family of sounds a weapon makes: its hit, and for a weapon that fires, its shot. Each weapon has its own. How hard something happened sets how loud and how low a sound plays. Sounds play only on the host's shared screen, never on a phone (ADR-0016). |
-| **Remote seat** | A player joining from a remote PC over the internet, via a relay server. Sends relative input vectors (like a phone) and receives interpolated world snapshots. Same roster, same simulation (ADR-0019). |
-| **Room code** | A four-letter identifier, that a remote player types into the PC client's join screen to reach a host's session. Issued by the relay server. |
-| **Relay** | A headless GDScript server that forwards frames from host to remote seats and input from remote seats to host, without parsing them. Runs on a public machine to allow dynamic remote joining (ADR-0019). |
+| **Remote seat** | A player joining from a remote PC over the internet, via a relay server. Sends the same relative input as a controller, but unlike a controller it renders the match, from world snapshots the host streams to it. Same roster, same single simulation on the host (ADR-0019). |
+| **Room code** | Four letters a remote player types into the game's join screen to reach a host's match. Issued by the relay (ADR-0019). |
+| **Relay** | The public server that connects a host to its remote seats by room code and passes messages between them without reading them (ADR-0019). |
 
 ## Design intent
 

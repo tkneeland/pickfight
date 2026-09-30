@@ -33,7 +33,7 @@ Host-rendered, devices-as-controllers.
   to network well.
 - The controller transport is a thin input relay, not a game protocol.
 - Remote play is out of scope. Revisiting it means swapping the transport layer;
-  the simulation code is unaffected either way. (Extended by ADR-0019.)
+  the simulation code is unaffected either way. (Amended by ADR-0019: remote PC seats over a relay.)
 - The README's gamepad-vs-keyboard question is void, superseded by ADR-0003.
 
 ## Alternatives considered

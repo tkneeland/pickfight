@@ -15,37 +15,41 @@ joining from PCs over the internet, not just same-room phones.
 
 ## Decision
 
-Remote PC players are additional seats in the same roster. They connect through
-a relay server (a 4-letter room code in the controller URL) and join the round
-pool with phones.
+Amend ADR-0001: alongside same-room phones, a match can have **remote seats**.
+These are players on their own PC, anywhere on the internet, who reach the host
+through a relay by typing a 4-letter room code into the game's join screen.
 
-- **Input:** Remote PCs send the same relative input vector as phones, driven
-  by captured mouse on the controller page, per ADR-0003.
-- **Rendering:** Remote PCs receive world snapshots streamed by the host, which
-  they interpolate and render on their own screen. Same as phones.
-- **The relay:** A headless GDScript program in `relay/` that runs on a
-  publicly-hosted machine, forwards frames from host to seats and input from
-  seats to host, and declines to parse or understand the frames — it is a dumb
-  pipe that knows only the room code and the roster.
-- **Same-room play unchanged:** Phones connect directly over the LAN as before.
-  The host remains the only authoritative simulation. ADR-0001 stands: one
-  simulation, no prediction, no replication.
+- **Input:** a remote seat sends the same relative input vector as a phone
+  (ADR-0003), built from the captured mouse. It claims a slot in the same
+  roster and follows the same claim, rejoin and disconnect rules (ADR-0007).
+  Remote seats and phones share the 8-player cap.
+- **Rendering:** unlike a phone, a remote seat renders the match. The host
+  streams it world snapshots, which it interpolates and draws. This is state
+  replication, one way only: the host stays the only simulation, and a remote
+  PC never simulates or predicts.
+- **The relay:** a headless GDScript program in `relay/` on a public machine.
+  It pairs a host with its remote seats by room code and forwards frames
+  without parsing them. A connection picks its role with its first text
+  message, `{"t":"host"}` or `{"t":"join","room":"ABCD"}`, because
+  `WebSocketPeer.accept_stream` doesn't expose the request path.
+- **Same-room play is unchanged:** phones connect directly over the LAN as
+  before, and remain input-only.
 
 ## Consequences
 
 - Remote players feel their round-trip latency as input delay. No client-side
   prediction softens it.
-- The host's upload bandwidth grows by ≤ 40 KB/s per remote seat (budgeted in
-  #240).
-- The relay must be hosted somewhere. Deployments and ops are out of scope of
-  this ADR (see #242).
-- The simulation code is unaffected. Adding or removing remote seats changes
-  only the relay and the controller page.
+- The host now serializes and streams state (#240, budget ≤ 40 KB/s per remote
+  seat) and maps relay peers to roster slots (#239). The simulation itself is
+  unchanged.
+- There is now a PC client (#241) that renders from snapshots and never runs
+  gameplay physics.
+- The relay must be hosted (#242).
 
 ## Alternatives considered
 
 **Rollback/lockstep.** Rejecting determinism. Godot's physics does not replay
-identically given the same inputs (floating-point execution order varies), so
+identically across machines given the same inputs (floating-point execution order varies), so
 lockstep would require a deterministic physics fork — large, fragile, and
 unsupported by Godot.
 
