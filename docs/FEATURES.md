@@ -86,6 +86,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Visual look and juice
 - Landing dust, head motion trails, clash sparks (#116, #196)
 - Death burst, hit feedback (#33, #168)
+- Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)
 
 ## Online
 - Room-code relay server (#238, ADR-0019)

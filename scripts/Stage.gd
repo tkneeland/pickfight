@@ -59,6 +59,7 @@ func _ready() -> void:
 	background.far_hill = mood["far"]
 	background.mid_hill = mood["mid"]
 	background.use_hill_colours = true
+	background.configure_dressing(mood, stage_index)
 	add_child(background)
 	# First in tree order as well as lowest in z, belt and braces.
 	move_child(background, 0)
