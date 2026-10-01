@@ -95,6 +95,12 @@ const SOUNDS: Dictionary = {
 	"hit_boomerang": {"files": [
 		"kenney_impact/impactWood_heavy_002.ogg",
 		"kenney_impact/impactWood_heavy_004.ogg"], "db": 0.0},
+	# The spear (issue #272). Placeholder: copies of two staff plank hits under
+	# their own names, since no two weapons may share a file. Swap for a sharper
+	# sound when art/audio is revisited.
+	"hit_spear": {"files": [
+		"kenney_impact/impactPlank_spear_000.ogg",
+		"kenney_impact/impactPlank_spear_001.ogg"], "db": 1.0},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",
