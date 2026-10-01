@@ -376,13 +376,43 @@ func _swap_stage() -> void:
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
+	var night: bool = _roll_night()
+	_current_stage.set("night", night)
 	container.add_child(_current_stage)
-	var ink: Color = PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
+	var ink: Color = PaletteScript.NIGHT["ink"] if night else PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
 	for player in _players:
 		if player != null and player.has_method("set_ink"):
 			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
+
+# --- Night stages (issue #332) -------------------------------------------------
+#
+# A stage can be played as a night variant: darkened, lit by lamps and glows,
+# purely visual. It is applied by data (`Stage.night`, set before the stage
+# enters the tree), so no stage scene is duplicated. Each round rolls it with
+# `night_chance`, from its own RNG so the modifier stream is undisturbed. The
+# roll honours `modifier_rolls_enabled` (the deterministic-run seam) and
+# `forced_night` (-1 roll, 0 never, 1 always) overrides it.
+
+## Chance, 0..1, that a round's stage is the night variant.
+@export_range(0.0, 1.0) var night_chance: float = 0.2
+## -1 roll as usual, 0 never night, 1 always night.
+@export var forced_night: int = -1
+var _night_rng: RandomNumberGenerator
+
+func _roll_night() -> bool:
+	if forced_night >= 0:
+		return forced_night == 1
+	if not modifier_rolls_enabled or night_chance <= 0.0:
+		return false
+	if _night_rng == null:
+		_night_rng = RandomNumberGenerator.new()
+		if modifier_seed >= 0:
+			_night_rng.seed = modifier_seed + 332
+		else:
+			_night_rng.randomize()
+	return _night_rng.randf() < night_chance
 
 # --- Large stages (issue #144) ------------------------------------------------
 #
