@@ -34,7 +34,7 @@ The files:
 | `kenney_impact/impactSoft_medium_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | pogo hit |
 | `kenney_impact/impactWood_light_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | fishing rod hit |
 | `kenney_impact/impactPlate_light_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | magnet hit |
-| `kenney_impact/impactPlank_umbrella_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | umbrella hit (copies of `impactPlank_medium_001`, `_002`) |
+| `kenney_impact/impactPunch_medium_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | umbrella hit |
 | `kenney_impact/impactMetal_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | dagger hit |
 | `kenney_impact/impactPunch_heavy_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | boomstick hit (a close-range strike with the gun) |
 | `kenney_scifi/explosionCrunch_000.ogg`, `_001` | Sci-fi Sounds | CC0 1.0 | boomstick shot |
