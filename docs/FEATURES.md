@@ -106,6 +106,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Exported macOS .app and Windows .exe (#119, `tools/export.sh`)
 - Release workflow builds Windows, macOS, Linux and pushes to itch.io (`.github/workflows/release.yml`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
+- In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
 
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
@@ -124,6 +125,6 @@ Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of th
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)
 - #256 Juice pass (agage-JG); #257 Richer stage dressing (tkneeland)
-- #262 In-game send-feedback button (tkneeland); #263 Content roadmap (tkneeland)
+- #263 Content roadmap (tkneeland)
 - #240 Snapshot encode/decode, #241 PC client: join by code, mouse arm (agage-JG); #242 Deploy relay, ship PC builds (tkneeland); #212 PC/online idea (tkneeland, parked)
 - #258 Steam readiness plan, #268 Switch release (tkneeland); #296, #298 Steam lobbies and invites over relay (agage-JG)

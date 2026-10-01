@@ -431,6 +431,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_ko_counts_like_any_other_ko",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"feedback_button_opens_box_and_blocks_empty",
+	"feedback_relay_builds_github_issue",
+	"feedback_missing_token_gives_503_and_offline_message",
+	"feedback_rate_limit_per_ip",
 	"sfx_hit_sets_have_no_placeholder_files",
 	"fan_pushes_body_along_its_facing",
 	"rotating_fan_push_direction_changes",
@@ -1735,6 +1739,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"feedback_button_opens_box_and_blocks_empty":
+			return await _scenario_feedback_button_opens_box_and_blocks_empty()
+		"feedback_relay_builds_github_issue":
+			return await _scenario_feedback_relay_builds_github_issue()
+		"feedback_missing_token_gives_503_and_offline_message":
+			return await _scenario_feedback_missing_token_gives_503_and_offline_message()
+		"feedback_rate_limit_per_ip":
+			return await _scenario_feedback_rate_limit_per_ip()
 		"sfx_hit_sets_have_no_placeholder_files":
 			return await _scenario_sfx_hit_sets_have_no_placeholder_files()
 		"fan_pushes_body_along_its_facing":
@@ -27790,5 +27802,154 @@ func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
 					failures.append("%s uses placeholder file %s" % [key, file])
 	if checked == 0:
 		failures.append("no hit_* files were checked")
+	_scenario_completed = true
+	return failures
+
+# --- In-game feedback (issue #262) ---------------------------------------------
+
+func _scenario_feedback_button_opens_box_and_blocks_empty() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	if not ui.is_open():
+		ui.toggle_panel()
+	if ui.feedback_open():
+		failures.append("the feedback box was open before the button was pressed")
+	ui.feedback_button().pressed.emit()
+	if not ui.feedback_open():
+		failures.append("pressing Feedback did not open the box")
+	if not ui.feedback_send_button().disabled:
+		failures.append("Send was enabled with an empty message")
+	ui.feedback_edit().text = "   \n "
+	ui.feedback_edit().text_changed.emit()
+	if not ui.feedback_send_button().disabled:
+		failures.append("Send was enabled with a blank message")
+	ui.submit_feedback()
+	if ui.feedback_status().text != "Type something first.":
+		failures.append("submitting an empty message said '%s'" % ui.feedback_status().text)
+	ui.feedback_edit().text = "Great game"
+	ui.feedback_edit().text_changed.emit()
+	if ui.feedback_send_button().disabled:
+		failures.append("Send stayed disabled with a real message")
+	ui.feedback_edit().text = ""
+	ui.toggle_panel()
+	if ui.feedback_open():
+		failures.append("closing Settings left the feedback box open")
+	_scenario_completed = true
+	return failures
+
+func _scenario_feedback_relay_builds_github_issue() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	relay.feedback_token = "tok123"
+	var seen: Array = []
+	relay.feedback_post = func(url: String, headers: PackedStringArray, body: String) -> int:
+		seen.append({"url": url, "headers": headers, "body": body})
+		return 201
+	var long_text: String = "a".repeat(2500)
+	var result: Dictionary = await relay.handle_feedback("1.1.1.1", {
+		"text": "Hello\u0001 world\nsecond line", "version": "0.3", "os": "macOS", "stage": "Ice"})
+	if result.get("status") != 200:
+		failures.append("a good message gave %s, expected 200" % [result])
+	if seen.size() != 1:
+		failures.append("expected one GitHub call, got %d" % seen.size())
+	else:
+		var call: Dictionary = seen[0]
+		if call["url"] != "https://api.github.com/repos/tkneeland/pickfight/issues":
+			failures.append("posted to %s" % call["url"])
+		if not (call["headers"] as PackedStringArray).has("Authorization: Bearer tok123"):
+			failures.append("no bearer token header: %s" % [call["headers"]])
+		var sent: Variant = JSON.parse_string(call["body"])
+		if not (sent is Dictionary):
+			failures.append("body was not JSON")
+		else:
+			if sent["labels"] != ["needs-triage", "feedback"]:
+				failures.append("labels were %s" % [sent["labels"]])
+			if sent["title"] != "Feedback: Hello world":
+				failures.append("title was '%s'" % sent["title"])
+			var expect_body: String = "Hello world\nsecond line\n\n---\nBuild: 0.3\nOS: macOS\nStage: Ice\n\n_Sent from the in-game feedback button._"
+			if sent["body"] != expect_body:
+				failures.append("body was '%s'" % sent["body"])
+	seen.clear()
+	await relay.handle_feedback("2.2.2.2", {"text": long_text})
+	var capped: Variant = JSON.parse_string(seen[0]["body"]) if seen.size() == 1 else {}
+	var head: String = str(capped.get("body", "")).split("\n")[0] if capped is Dictionary else ""
+	if head.length() != 2000:
+		failures.append("a 2500-char message was cut to %d, expected 2000" % head.length())
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_feedback_missing_token_gives_503_and_offline_message() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	relay.feedback_token = ""
+	var posts: Array = []
+	relay.feedback_post = func(_u: String, _h: PackedStringArray, _b: String) -> int:
+		posts.append(1)
+		return 201
+	var direct: Dictionary = await relay.handle_feedback("3.3.3.3", {"text": "hi"})
+	if direct.get("status") != 503:
+		failures.append("no token gave %s, expected 503" % [direct])
+	await physics_frame
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	ui.feedback_relay_url = "ws://127.0.0.1:%d" % _relay_port_next
+	if not ui.is_open():
+		ui.toggle_panel()
+	ui.feedback_button().pressed.emit()
+	ui.feedback_edit().text = "Needs more cowbell"
+	ui.feedback_edit().text_changed.emit()
+	ui.submit_feedback()
+	var deadline: int = Time.get_ticks_msec() + 5000
+	while ui.feedback_status().text == "Sending..." and Time.get_ticks_msec() < deadline:
+		await process_frame
+	if ui.feedback_status().text != "Feedback is offline right now":
+		failures.append("the client showed '%s'" % ui.feedback_status().text)
+	if not posts.is_empty():
+		failures.append("GitHub was called without a token")
+	ui.feedback_edit().text = ""
+	ui.feedback_relay_url = ""
+	ui.toggle_panel()
+	_relay_stop(relay, [])
+	_scenario_completed = true
+	return failures
+
+func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	relay.feedback_token = "tok"
+	relay.feedback_limit_per_hour = 5
+	var posts: Array = []
+	relay.feedback_post = func(_u: String, _h: PackedStringArray, _b: String) -> int:
+		posts.append(1)
+		return 201
+	for i in 5:
+		var ok: Dictionary = await relay.handle_feedback("4.4.4.4", {"text": "msg %d" % i})
+		if ok.get("status") != 200:
+			failures.append("message %d from one IP gave %s, expected 200" % [i, ok])
+	var blocked: Dictionary = await relay.handle_feedback("4.4.4.4", {"text": "one too many"})
+	if blocked.get("status") != 429:
+		failures.append("the sixth message gave %s, expected 429" % [blocked])
+	if posts.size() != 5:
+		failures.append("GitHub got %d calls, expected 5" % posts.size())
+	var other: Dictionary = await relay.handle_feedback("5.5.5.5", {"text": "different person"})
+	if other.get("status") != 200:
+		failures.append("another IP gave %s, expected 200" % [other])
+	var empty: Dictionary = await relay.handle_feedback("6.6.6.6", {"text": " \u0001 "})
+	if empty.get("status") != 400:
+		failures.append("an empty message gave %s, expected 400" % [empty])
+	relay.queue_free()
 	_scenario_completed = true
 	return failures

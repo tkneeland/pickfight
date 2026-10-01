@@ -30,6 +30,7 @@ const MARGIN: float = 12.0
 const PANEL_BACKGROUND: Color = Color(0.1, 0.11, 0.14, 1.0)
 const PANEL_PADDING: float = 6.0
 const SLIDER_WIDTH: float = 180.0
+const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 ## Height of the scrolling window-size, stage and weapon area.
 const LIST_HEIGHT: float = 130.0
@@ -58,6 +59,17 @@ var _dragging: bool = false
 ## Whether this layer took the left press now held down, which was on the
 ## toggle, so the matching release is its too (issue #216).
 var _took_press: bool = false
+
+## Feedback (issue #262): a button in the panel opens a text box whose text goes
+## to the relay, which files a GitHub issue. Empty `feedback_relay_url` means
+## the game's configured relay.
+var feedback_relay_url: String = ""
+var _feedback_button: Button
+var _feedback_box: PanelContainer
+var _feedback_edit: TextEdit
+var _feedback_send: Button
+var _feedback_status: Label
+var _feedback_sender: Node
 
 func _ready() -> void:
 	layer = 20
@@ -123,6 +135,14 @@ func _ready() -> void:
 	content.add_child(_resolution)
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
+
+	_feedback_button = Button.new()
+	_feedback_button.name = "Feedback"
+	_feedback_button.text = "Feedback"
+	_feedback_button.focus_mode = Control.FOCUS_NONE
+	toggles.add_child(_feedback_button)
+	_feedback_button.pressed.connect(toggle_feedback)
+	_build_feedback_box(corner)
 
 	_toggle = Button.new()
 	_toggle.name = "Toggle"
@@ -209,10 +229,102 @@ func refresh() -> void:
 ## drag's end: finish it here and save what it left (issue #196).
 func toggle_panel() -> void:
 	_panel.visible = not _panel.visible
+	if not _panel.visible:
+		_feedback_box.visible = false
 	if _panel.visible:
 		refresh()
 	elif _dragging:
 		_on_drag_ended(true)
+
+func toggle_feedback() -> void:
+	_feedback_box.visible = not _feedback_box.visible
+	if _feedback_box.visible:
+		_feedback_status.text = ""
+		_feedback_edit.grab_focus()
+
+func feedback_open() -> bool:
+	return _feedback_box.visible
+
+func feedback_button() -> Button:
+	return _feedback_button
+
+func feedback_edit() -> TextEdit:
+	return _feedback_edit
+
+func feedback_send_button() -> Button:
+	return _feedback_send
+
+func feedback_status() -> Label:
+	return _feedback_status
+
+## Sends the typed message to the relay. Nothing happens for an empty message
+## or while a send is still in flight. `FeedbackSender.finished` shows the result.
+func submit_feedback() -> void:
+	if _feedback_edit.text.strip_edges().is_empty():
+		_feedback_status.text = FeedbackSenderScript.message_for(400)
+		return
+	if _feedback_sender != null and _feedback_sender.is_busy():
+		return
+	if _feedback_sender == null:
+		_feedback_sender = FeedbackSenderScript.new()
+		_feedback_sender.finished.connect(_on_feedback_finished)
+		add_child(_feedback_sender)
+	var url: String = feedback_relay_url
+	if url.is_empty():
+		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
+	var stage: String = ""
+	var scene: Node = get_tree().current_scene
+	var rounds: Node = scene.get_node_or_null(^"RoundManager") if scene != null else null
+	if rounds != null and rounds.has_method("current_stage_name"):
+		stage = rounds.current_stage_name()
+	var version: String = str(ProjectSettings.get_setting("application/config/version", "dev"))
+	_feedback_status.text = "Sending..."
+	_feedback_send.disabled = true
+	_feedback_sender.send(_feedback_edit.text, url, version, OS.get_name(), stage if not stage.is_empty() else "lobby")
+
+func _on_feedback_finished(status: int) -> void:
+	_feedback_status.text = FeedbackSenderScript.message_for(status)
+	_feedback_send.disabled = _feedback_edit.text.strip_edges().is_empty()
+	if status == 200:
+		_feedback_edit.text = ""
+		_feedback_send.disabled = true
+
+func _on_feedback_text_changed() -> void:
+	_feedback_send.disabled = _feedback_edit.text.strip_edges().is_empty() \
+			or (_feedback_sender != null and _feedback_sender.is_busy())
+
+func _build_feedback_box(corner: VBoxContainer) -> void:
+	_feedback_box = PanelContainer.new()
+	_feedback_box.name = "FeedbackBox"
+	_feedback_box.visible = false
+	var backdrop := StyleBoxFlat.new()
+	backdrop.bg_color = PANEL_BACKGROUND
+	backdrop.set_corner_radius_all(6)
+	backdrop.set_content_margin_all(PANEL_PADDING)
+	_feedback_box.add_theme_stylebox_override("panel", backdrop)
+	corner.add_child(_feedback_box)
+	var col := VBoxContainer.new()
+	_feedback_box.add_child(col)
+	var title := Label.new()
+	title.text = "Send feedback to the developers"
+	col.add_child(title)
+	_feedback_edit = TextEdit.new()
+	_feedback_edit.name = "Text"
+	_feedback_edit.placeholder_text = "What would make this better?"
+	_feedback_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_feedback_edit.custom_minimum_size = Vector2(320.0, 110.0)
+	col.add_child(_feedback_edit)
+	_feedback_status = Label.new()
+	_feedback_status.name = "Status"
+	col.add_child(_feedback_status)
+	_feedback_send = Button.new()
+	_feedback_send.name = "Send"
+	_feedback_send.text = "Send"
+	_feedback_send.disabled = true
+	_feedback_send.focus_mode = Control.FOCUS_NONE
+	col.add_child(_feedback_send)
+	_feedback_edit.text_changed.connect(_on_feedback_text_changed)
+	_feedback_send.pressed.connect(submit_feedback)
 
 func is_open() -> bool:
 	return _panel.visible
