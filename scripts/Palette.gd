@@ -1,0 +1,43 @@
+extends RefCounted
+
+## The one palette every script reads (issue #255). Preloaded by path, never
+## referenced by `class_name` (see CLAUDE.md).
+##
+## Players keep ONE colorblind-safe set everywhere. The stage rotates through
+## three moods, Daylight, Dusk and Paper: each sets the sky gradient, the far
+## and mid hill colours, the platform colour, the kill zone and the ink used
+## for player outlines and eye pupils. The stages declare no family, so a
+## stage's mood is simply its index in the rotation, round-robin.
+
+const PLAYERS: Array[Color] = [
+	Color("#E69F00"), Color("#3D8FD1"), Color("#009E73"), Color("#D55E00"),
+	Color("#CC79A7"), Color("#56B4E9"), Color("#F0C400"), Color("#E8E6F0"),
+]
+
+const DAYLIGHT: Dictionary = {
+	"name": "daylight",
+	"sky_top": Color("#bfe3f0"), "sky_bottom": Color("#e6f4f7"),
+	"far": Color("#9fcbdc"), "mid": Color("#7fb6c9"),
+	"platform": Color("#2a3440"), "kill": Color("#ff4d3d"), "ink": Color("#14181d"),
+}
+const DUSK: Dictionary = {
+	"name": "dusk",
+	"sky_top": Color("#241d3a"), "sky_bottom": Color("#5a3a5e"),
+	"far": Color("#3a2c52"), "mid": Color("#4c3460"),
+	"platform": Color("#120f1d"), "kill": Color("#7cf2ff"), "ink": Color("#0b0912"),
+}
+const PAPER: Dictionary = {
+	"name": "paper",
+	"sky_top": Color("#eeeae2"), "sky_bottom": Color("#eeeae2"),
+	"far": Color("#e2ddd2"), "mid": Color("#d6d0c3"),
+	"platform": Color("#26231f"), "kill": Color("#e0402a"), "ink": Color("#26231f"),
+}
+
+const MOODS: Array[Dictionary] = [DAYLIGHT, DUSK, PAPER]
+
+## The mood for the stage at `stage_index` in the rotation. A negative or
+## unknown index (a stage loaded outside the rotation) gets Daylight.
+static func mood_for_stage(stage_index: int) -> Dictionary:
+	if stage_index < 0:
+		return DAYLIGHT
+	return MOODS[stage_index % MOODS.size()]

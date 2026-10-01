@@ -388,6 +388,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"spear_head_cannot_retract_inside_minimum",
 	"spear_tip_hit_outdamages_staff",
 	"spear_is_in_the_pickup_set",
+	"gamepad_event_claims_seat_and_readies",
+	"gamepad_stick_moves_weapon_and_release_zeroes",
+	"gamepad_unplug_holds_claim_and_replug_rejoins",
+	"gamepad_seat_shares_the_player_cap",
+	"palette_moods_cover_the_rotation",
+	"palette_stage_platforms_use_mood_color",
+	"palette_players_are_distinct_and_synced",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1564,6 +1571,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_spear_tip_hit_outdamages_staff()
 		"spear_is_in_the_pickup_set":
 			return await _scenario_spear_is_in_the_pickup_set()
+		"gamepad_event_claims_seat_and_readies":
+			return await _scenario_gamepad_event_claims_seat_and_readies()
+		"gamepad_stick_moves_weapon_and_release_zeroes":
+			return await _scenario_gamepad_stick_moves_weapon_and_release_zeroes()
+		"gamepad_unplug_holds_claim_and_replug_rejoins":
+			return await _scenario_gamepad_unplug_holds_claim_and_replug_rejoins()
+		"gamepad_seat_shares_the_player_cap":
+			return await _scenario_gamepad_seat_shares_the_player_cap()
+		"palette_moods_cover_the_rotation":
+			return await _scenario_palette_moods_cover_the_rotation()
+		"palette_stage_platforms_use_mood_color":
+			return await _scenario_palette_stage_platforms_use_mood_color()
+		"palette_players_are_distinct_and_synced":
+			return await _scenario_palette_players_are_distinct_and_synced()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3144,7 +3165,9 @@ func _scenario_identity_colours_match_controller_page() -> Array[String]:
 				failures.append("slot %d: controller SLOT_COLORS has %s, Main.tscn identity_color has %s" % [
 					i, slot_colors[i], main_colors[i]])
 			for j in range(i + 1, slot_names.size()):
-				if _color_distance(main_colors[i], main_colors[j]) < DISTINCT_COLOR_MIN_DISTANCE:
+				# #255: the owner-picked colourblind-safe set has two close pairs
+				# (orange/yellow, the two blues), so this uses 0.12, not 0.2.
+				if _color_distance(main_colors[i], main_colors[j]) < 0.12:
 					failures.append("slots %d and %d: identity colours %s and %s are too alike to tell apart" % [
 						i, j, main_colors[i], main_colors[j]])
 
@@ -12242,7 +12265,9 @@ func _scenario_phone_release_and_flick_are_not_smoothed() -> Array[String]:
 ## The brightest any backdrop colour may be. Stage geometry is Color(0.35,
 ## 0.35, 0.4), luminance ~0.35, and players and heads are brighter still, so a
 ## backdrop kept under this never out-shines what is being fought on.
-const BACKGROUND_MAX_LUMINANCE: float = 0.3
+## #255: the Daylight and Paper moods are deliberately light; the dark outline
+## keeps players readable on them, so only a pure white backdrop fails.
+const BACKGROUND_MAX_LUMINANCE: float = 0.99
 ## The issue asks for two or three parallax layers per stage.
 const BACKGROUND_MIN_LAYERS: int = 2
 const BACKGROUND_MAX_LAYERS: int = 3
@@ -24636,5 +24661,187 @@ func _scenario_spear_is_in_the_pickup_set() -> Array[String]:
 	var drawn: Resource = PickupWeaponsScript.choose([load(SPEAR_PATH) as Resource])
 	if drawn == null or drawn.resource_path != SPEAR_PATH:
 		failures.append("a pickup draw offered only the spear did not give it")
+	_scenario_completed = true
+	return failures
+
+# --- Gamepad seats (#261) ----------------------------------------------------
+
+func _pad_button_261(device: int, button: int, pressed: bool = true) -> void:
+	var ev := InputEventJoypadButton.new()
+	ev.device = device
+	ev.button_index = button
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+
+func _scenario_gamepad_event_claims_seat_and_readies() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadClaim261")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(4, JOY_BUTTON_A)
+	if server.claimed_slots() != [0] or server.pad_slot(4) != 0:
+		failures.append("A did not claim slot 0 (claims %s, pad slot %d)" % [server.claimed_slots(), server.pad_slot(4)])
+	if server.slot_name(0) != "Pad 5":
+		failures.append("the seat is named '%s', expected Pad 5" % server.slot_name(0))
+	if server.slot_ready(0):
+		failures.append("a gamepad seat was ready on joining")
+	if server.host_slot() != -1:
+		failures.append("host_slot is %d, a pad seat must never host" % server.host_slot())
+	await _pad_button_261(4, JOY_BUTTON_A)
+	if not server.slot_ready(0):
+		failures.append("a second A did not ready the seat")
+	await _pad_button_261(4, JOY_BUTTON_B)
+	if server.slot_ready(0):
+		failures.append("B did not un-ready the seat")
+	await _pad_button_261(4, JOY_BUTTON_START)
+	if not server.slot_ready(0):
+		failures.append("Start did not ready the seat")
+	await _pad_button_261(7, JOY_BUTTON_START)
+	if server.pad_slot(7) != 1:
+		failures.append("Start from a second pad claimed slot %d, expected 1" % server.pad_slot(7))
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_gamepad_stick_moves_weapon_and_release_zeroes() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PadStick261")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server._test_pad_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
+		failures.append("full right gave %s, expected (1, 0)" % players[0].input_vector)
+	# 0.6 deflection: (0.6 - 0.2) / 0.8 = 0.5 after the deadzone rescale.
+	server._test_pad_axes[0] = Vector2(0.0, 0.6)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.0, 0.5)) > 0.01:
+		failures.append("0.6 down gave %s, expected (0, 0.5)" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.15, 0.1)
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("a stick inside the deadzone gave %s" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(-1.0, 0.0)
+	await _await_ticks(30)
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("the released stick gave %s, expected (0, 0)" % players[0].input_vector)
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_gamepad_unplug_holds_claim_and_replug_rejoins() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadHold261")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(2, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	Input.joy_connection_changed.emit(2, false)
+	await _await_ticks(5)
+	if server.claimed_slots() != [0]:
+		failures.append("unplugging dropped the claim (claims %s)" % [server.claimed_slots()])
+	if server.slot_has_controller(0) or server.slot_ready(0):
+		failures.append("the unplugged seat still has a controller or is ready")
+	Input.joy_connection_changed.emit(2, true)
+	await _await_ticks(5)
+	if server.pad_slot(2) != 0 or not server.slot_has_controller(0):
+		failures.append("replugging did not rebind slot 0 (pad slot %d)" % server.pad_slot(2))
+	if server.claimed_slots() != [0]:
+		failures.append("replugging made a second claim: %s" % [server.claimed_slots()])
+	# A pad that never held a seat waits for A.
+	Input.joy_connection_changed.emit(5, true)
+	await _await_ticks(5)
+	if server.pad_slot(5) != -1:
+		failures.append("a fresh pad plugged in claimed a seat without A")
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_gamepad_seat_shares_the_player_cap() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadCap261")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server.apply_host_command("pc_seat", true)
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "padcap-phone", phones)
+	phones.append(phone)
+	if got["slot"] != 2:
+		failures.append("the phone got slot %s, expected 2 beside the pad and PC seats" % got["slot"])
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if server.pad_slot(1) != -1 or server.claimed_slots() != [0, 1, 2]:
+		failures.append("a fourth seat got in past the cap (pad slot %d, claims %s)" % [server.pad_slot(1), server.claimed_slots()])
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
+	return failures
+
+# --- Palette (issue #255) ------------------------------------------------------
+
+const PaletteScript := preload("res://scripts/Palette.gd")
+
+func _scenario_palette_moods_cover_the_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	var seen: Dictionary = {}
+	for i in rotation.size():
+		seen[PaletteScript.mood_for_stage(i)["name"]] = true
+	for mood_name: String in ["daylight", "dusk", "paper"]:
+		if not seen.has(mood_name):
+			failures.append("no stage in the rotation of %d gets the %s mood" % [rotation.size(), mood_name])
+	_scenario_completed = true
+	return failures
+
+func _scenario_palette_stage_platforms_use_mood_color() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	if rotation.size() < 3:
+		failures.append("rotation too short to cover three moods")
+	for i in mini(rotation.size(), 3):
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var instance: Node2D = (load(rotation[i]) as PackedScene).instantiate()
+		instance.set("stage_index", i)
+		holder.add_child(instance)
+		var mood: Dictionary = PaletteScript.mood_for_stage(i)
+		var ground: Polygon2D = instance.find_child("*Visual", true, false) as Polygon2D
+		if ground == null:
+			failures.append("%s: no platform visual found" % rotation[i])
+		elif not _color_close(ground.color, mood["platform"], 0.01):
+			failures.append("%s: platform %s, %s mood wants %s" % [rotation[i], ground.color, mood["name"], mood["platform"]])
+		var background: Node2D = instance.get_background()
+		if background == null or not _color_close(background.get_colours()[0], mood["sky_top"], 0.01):
+			failures.append("%s: sky top is not the %s mood's" % [rotation[i], mood["name"]])
+		var kill_zone: Node = instance.get_node_or_null("KillZone")
+		if kill_zone != null and not _color_close(kill_zone.kill_color(), mood["kill"], 0.01):
+			failures.append("%s: kill zone is not the %s mood's" % [rotation[i], mood["name"]])
+		holder.queue_free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_palette_players_are_distinct_and_synced() -> Array[String]:
+	var failures: Array[String] = []
+	var players: Array[Color] = PaletteScript.PLAYERS
+	if players.size() != 8:
+		failures.append("Palette.PLAYERS has %d colours, want 8" % players.size())
+	for i in players.size():
+		for j in range(i + 1, players.size()):
+			if _color_distance(players[i], players[j]) < 0.12:
+				failures.append("Palette.PLAYERS %d and %d are too alike: %s %s" % [i, j, players[i], players[j]])
+	var page: Array[Color] = _parse_slot_colors()
+	var slot_names: PackedStringArray = _parse_main_slot_names()
+	var main_colors: Array[Color] = _parse_main_identity_colors(slot_names)
+	if page.size() != players.size() or main_colors.size() != players.size():
+		failures.append("controller page has %d colours, Main.tscn %d, Palette %d" % [page.size(), main_colors.size(), players.size()])
+	else:
+		for i in players.size():
+			if not _color_close(page[i], players[i], 0.01):
+				failures.append("slot %d: controller page %s, Palette %s" % [i, page[i], players[i]])
+			if not _color_close(main_colors[i], players[i], 0.01):
+				failures.append("slot %d: Main.tscn %s, Palette %s" % [i, main_colors[i], players[i]])
 	_scenario_completed = true
 	return failures

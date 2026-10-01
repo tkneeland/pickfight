@@ -1170,6 +1170,14 @@ func weapon_head_visual_is_fallback() -> bool:
 ## layer and the haft one below the player, so the haft stays at the stage's
 ## own z while the body covers it. The weapon head, in the rig beside the
 ## player, is at z 0 as well, so it too is under the body.
+## The stage mood's ink for the outline and pupils (#255).
+func set_ink(colour: Color) -> void:
+	if _face != null:
+		_face.set_ink(colour)
+
+func face_ink() -> Color:
+	return _face.ink if _face != null else Color.BLACK
+
 func _build_face() -> void:
 	z_index = 1
 	weapon_line.z_index = -1

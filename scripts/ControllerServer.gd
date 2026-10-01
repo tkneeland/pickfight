@@ -407,6 +407,11 @@ class LocalSeat extends RefCounted:
 	func close(_code: int = 1000, _reason: String = "") -> void:
 		open = false
 
+## A gamepad's seat (#261): a LocalSeat for one joypad device. Unlike the host
+## PC's seat it is not auto-ready, and unplugging closes it (the claim is held).
+class PadSeat extends LocalSeat:
+	var device: int = -1
+
 ## The link to the relay that remote seats join through (#239).
 var relay_link: Node = null
 var _remote_seats: Dictionary = {} # relay peer id -> RemoteSeat
@@ -459,6 +464,7 @@ func join_qr_rect() -> TextureRect:
 	return get_node_or_null(qr_texture_path) as TextureRect
 
 func _ready() -> void:
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
 	# The host phone's Resume has to reach a paused game (issue #149).
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -569,6 +575,7 @@ func _apply_smoothed_input(delta: float) -> void:
 ## has settled back to rest -- otherwise the easing that follows a disconnect
 ## would happen entirely off the record.
 func _physics_process(_delta: float) -> void:
+	_push_pad_sticks()
 	for slot in _slot_peers.size():
 		if _slot_peers[slot] == null and not _weapon_away_from_rest(slot):
 			continue
@@ -1837,6 +1844,11 @@ func host_pc_mouse_motion(relative: Vector2) -> void:
 	_smoothers[_host_pc_slot].push(v)
 
 func _input(event: InputEvent) -> void:
+	var pad_button := event as InputEventJoypadButton
+	if pad_button != null:
+		if pad_button.pressed:
+			_pad_button_pressed(pad_button.device, pad_button.button_index)
+		return
 	if _host_pc_slot == -1 and not _mouse_captured:
 		return
 	var motion := event as InputEventMouseMotion
@@ -1870,6 +1882,85 @@ func _update_mouse_capture() -> void:
 	if not want and _host_pc_slot != -1:
 		_smoothers[_host_pc_slot].push(Vector2.ZERO)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if want else Input.MOUSE_MODE_VISIBLE
+
+# --- Gamepad seats (issue #261) ----------------------------------------------
+
+const PAD_ID_PREFIX: String = "pad-"
+const PAD_DEADZONE: float = 0.2
+## device -> PadSeat for every pad whose seat is bound.
+var _pad_seats: Dictionary = {}
+## Tests set a device's right stick here; headless has no real joypads.
+var _test_pad_axes: Dictionary = {}
+
+## The right stick of `device` as the relative vector a phone drag sends: a
+## radial deadzone, rescaled so the edge of the dead zone reads 0 and full
+## deflection 1 (ADR-0003).
+func _pad_axis(device: int) -> Vector2:
+	var raw := Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y))
+	if _test_pad_axes.has(device):
+		raw = _test_pad_axes[device]
+	var mag: float = raw.length()
+	if mag <= PAD_DEADZONE:
+		return Vector2.ZERO
+	return raw.normalized() * minf((mag - PAD_DEADZONE) / (1.0 - PAD_DEADZONE), 1.0)
+
+## The slot gamepad `device` holds right now, or -1.
+func pad_slot(device: int) -> int:
+	var seat: Variant = _pad_seats.get(device)
+	var slot: int = _slot_peers.find(seat) if seat != null else -1
+	if slot == -1 and seat != null:
+		_pad_seats.erase(device)
+	return slot
+
+func _push_pad_sticks() -> void:
+	for device: int in _pad_seats.keys():
+		var slot: int = pad_slot(device)
+		if slot == -1:
+			continue
+		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
+		_smoothers[slot].push(_pad_axis(device))
+
+## A or Start joins (in the lobby) or readies; B un-readies.
+func _pad_button_pressed(device: int, button: int) -> void:
+	var slot: int = pad_slot(device)
+	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
+		if slot == -1:
+			if SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+				_bind_pad(device)
+		else:
+			_slot_ready[slot] = 1
+	elif button == JOY_BUTTON_B and slot != -1:
+		_slot_ready[slot] = 0
+
+## Seat `device` under the id "pad-<device>": a replugged pad takes its held
+## claim back through `_bind_with_id` (ADR-0007).
+func _bind_pad(device: int) -> void:
+	var seat := PadSeat.new()
+	seat.device = device
+	_bind_with_id(seat, PAD_ID_PREFIX + str(device))
+	var slot: int = _slot_peers.find(seat)
+	if slot == -1:
+		return # full or kicked: the seat was closed
+	_pad_seats[device] = seat
+	if _slot_name[slot].is_empty():
+		_slot_name[slot] = "Pad %d" % (device + 1)
+	_send_lobby_to_all()
+
+func _on_joy_connection_changed(device: int, connected: bool) -> void:
+	if not connected:
+		var seat: Variant = _pad_seats.get(device)
+		if seat != null:
+			seat.open = false # the poll loop unbinds it and holds the claim
+			_pad_seats.erase(device)
+		return
+	# Replugged: take a held claim back; a new pad waits for A.
+	var id: String = PAD_ID_PREFIX + str(device)
+	if pad_slot(device) != -1:
+		return
+	for slot in _slot_peers.size():
+		if _slot_claimed[slot] == 1 and _slot_client_id[slot] == id and _slot_peers[slot] == null:
+			_bind_pad(device)
+			return
 
 # --- Snapshot stream to remote seats (issue #251) ----------------------------
 

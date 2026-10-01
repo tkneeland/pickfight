@@ -57,6 +57,22 @@ var _rising: bool = false
 var _grace_left: float = 0.0
 var _speed: float = 0.0
 var _surface: Polygon2D
+var _surface_color: Color = SURFACE_COLOR
+var _edge_color: Color = EDGE_COLOR
+
+## Takes the stage mood's kill colour (#255): the lava surface keeps its
+## translucency, the edge line is the colour itself.
+func set_kill_color(colour: Color) -> void:
+	_surface_color = Color(colour, SURFACE_COLOR.a)
+	_edge_color = colour
+	if _surface != null:
+		_surface.color = _surface_color
+		var edge: Node = _surface.get_node_or_null("SurfaceEdge")
+		if edge is Line2D:
+			edge.default_color = _edge_color
+
+func kill_color() -> Color:
+	return _edge_color
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -82,7 +98,7 @@ func stop_rising() -> void:
 	_rising = false
 	set_physics_process(false)
 	if _surface != null:
-		_surface.color = SURFACE_COLOR
+		_surface.color = _surface_color
 
 func is_rising() -> bool:
 	return _rising
@@ -110,7 +126,7 @@ func _physics_process(delta: float) -> void:
 				rise_countdown.emit(whole_after)
 			return
 		rise_began.emit()
-		_surface.color = SURFACE_COLOR
+		_surface.color = _surface_color
 		# Carry the leftover of the tick grace ended on into the rise, so the
 		# deadline does not slip by up to a tick.
 		delta = -_grace_left
@@ -122,10 +138,10 @@ func _physics_process(delta: float) -> void:
 
 func _update_warning() -> void:
 	if _grace_left > rise_warning_sec:
-		_surface.color = SURFACE_COLOR
+		_surface.color = _surface_color
 		return
 	var pulse: float = absf(sin(_grace_left * PI * WARNING_PULSES_PER_SEC))
-	_surface.color = Color(SURFACE_COLOR, lerpf(SURFACE_COLOR.a, WARNING_ALPHA, pulse))
+	_surface.color = Color(_surface_color, lerpf(_surface_color.a, WARNING_ALPHA, pulse))
 
 ## A translucent band from the zone's top edge down `surface_depth`, as wide
 ## as its shape, drawn by this script so no stage scene needs editing.
@@ -144,7 +160,7 @@ func _ensure_surface() -> void:
 	var right: float = offset.x + size.x * 0.5
 	_surface = Polygon2D.new()
 	_surface.name = "RisingSurface"
-	_surface.color = SURFACE_COLOR
+	_surface.color = _surface_color
 	_surface.polygon = PackedVector2Array([
 		Vector2(left, top), Vector2(right, top),
 		Vector2(right, top + surface_depth), Vector2(left, top + surface_depth)])
@@ -153,7 +169,7 @@ func _ensure_surface() -> void:
 	var edge := Line2D.new()
 	edge.name = "SurfaceEdge"
 	edge.width = EDGE_WIDTH
-	edge.default_color = EDGE_COLOR
+	edge.default_color = _edge_color
 	edge.points = PackedVector2Array([Vector2(left, top), Vector2(right, top)])
 	_surface.add_child(edge)
 

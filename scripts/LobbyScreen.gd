@@ -492,6 +492,9 @@ func attach_controls(server: Object) -> void:
 	_online_status = _big_label("", 24, Color(0.8, 0.82, 0.88))
 	online_row.add_child(_online_status)
 	box.add_child(_control_button("pc_seat", "Play on this PC (P)"))
+	var pad_hint := _big_label("Press A on a gamepad to join", 24, Color(0.8, 0.82, 0.88))
+	pad_hint.name = "GamepadHint"
+	box.add_child(pad_hint)
 	box.add_child(_control_button("mode", "Mode (T)"))
 	var target_row := HBoxContainer.new()
 	target_row.add_theme_constant_override("separation", 12)

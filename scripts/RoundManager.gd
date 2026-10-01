@@ -374,7 +374,12 @@ func _swap_stage() -> void:
 		_current_stage.queue_free()
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
+	_current_stage.set("stage_index", _stage_rotation.stage_index)
 	container.add_child(_current_stage)
+	var ink: Color = PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
+	for player in _players:
+		if player != null and player.has_method("set_ink"):
+			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
 
@@ -388,6 +393,7 @@ func _swap_stage() -> void:
 # the zoom (see `_tick_name_tags()`).
 
 const StageScript := preload("res://scripts/Stage.gd")
+const PaletteScript := preload("res://scripts/Palette.gd")
 
 func _fit_camera_to_stage() -> void:
 	var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
