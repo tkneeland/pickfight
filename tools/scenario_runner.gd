@@ -431,6 +431,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_ko_counts_like_any_other_ko",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"sfx_hit_sets_have_no_placeholder_files",
 	"fan_pushes_body_along_its_facing",
 	"rotating_fan_push_direction_changes",
 	"stage_gust_warns_then_pushes_everyone_alike",
@@ -1724,6 +1725,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"sfx_hit_sets_have_no_placeholder_files":
+			return await _scenario_sfx_hit_sets_have_no_placeholder_files()
 		"fan_pushes_body_along_its_facing":
 			return await _scenario_fan_pushes_body_along_its_facing()
 		"rotating_fan_push_direction_changes":
@@ -27456,4 +27459,27 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
 		failures.append("a snapshot with no trailer should apply and play nothing")
 	await _rc_close_241(rig)
+	return failures
+
+## No hit_* set points at a copy made under a placeholder name (#288): the
+## spear, pogo, rod and magnet once did, so a marker in a file name is a copy.
+func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var sounds: Dictionary = (sfx.get_script() as GDScript).get_script_constant_map()["SOUNDS"]
+	var checked: int = 0
+	for key: String in sounds:
+		if not key.begins_with("hit_"):
+			continue
+		for file: String in sounds[key]["files"]:
+			checked += 1
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_"]:
+				if file.contains(marker):
+					failures.append("%s uses placeholder file %s" % [key, file])
+	if checked == 0:
+		failures.append("no hit_* files were checked")
+	_scenario_completed = true
 	return failures

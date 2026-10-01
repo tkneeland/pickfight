@@ -85,6 +85,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
+- Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118)
 - Narrator/announcer, one consistent voice (#152, #211)
 
