@@ -72,6 +72,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Lobby with ready-up (#120)
 - Join URL plus in-game generated QR code (#29, #214, #230)
 - How-to-play explainer with animated demos (#149, #219)
+- First-join tip on the phone: looping drag-to-swing animation, shown once per device (#291)
+- Live lobby sandbox: seated players move, swing and fight on a stage under the lobby; nothing scores, KOs respawn, the match starts clean (#291)
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)
