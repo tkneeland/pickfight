@@ -34,6 +34,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
 - Parts: bounce pad, wind zone, rotating platform (#52)
+- Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
 

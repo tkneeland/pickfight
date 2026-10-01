@@ -419,6 +419,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_hitstop_restores_and_does_not_desync",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"fan_pushes_body_along_its_facing",
+	"rotating_fan_push_direction_changes",
+	"stage_gust_warns_then_pushes_everyone_alike",
+	"stage_gust_calm_pushes_nothing",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1659,6 +1663,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"fan_pushes_body_along_its_facing":
+			return await _scenario_fan_pushes_body_along_its_facing()
+		"rotating_fan_push_direction_changes":
+			return await _scenario_rotating_fan_push_direction_changes()
+		"stage_gust_warns_then_pushes_everyone_alike":
+			return await _scenario_stage_gust_warns_then_pushes_everyone_alike()
+		"stage_gust_calm_pushes_nothing":
+			return await _scenario_stage_gust_calm_pushes_nothing()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25846,5 +25858,135 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 	if back["slot"] != 0 or server.slot_eyes(0) != "visor" or player.eyes_id() != "visor":
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
+	await _teardown(stage)
+	return failures
+
+
+# --- Fans and stage-wide gusts (#281) ----------------------------------------
+const FanScene: PackedScene = preload("res://scenes/parts/Fan.tscn")
+const StageGustScene: PackedScene = preload("res://scenes/parts/StageGust.tscn")
+const FAN_WARNING_SEC: float = 1.5
+
+## A fan facing left pushes a body in its column left, and not right.
+func _scenario_fan_pushes_body_along_its_facing() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var fan: Node2D = FanScene.instantiate() as Node2D
+	fan.facing = Vector2.LEFT
+	fan.column_width = 600.0
+	fan.strength = WIND_STRENGTH
+	fan.position = DEEP_PARK_POSITION + Vector2(200, 0)
+	stage.add_child(fan)
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(2)
+	var vx0: float = player.linear_velocity.x
+	await _await_ticks(20)
+	var gain: float = player.linear_velocity.x - vx0
+	print("      fan facing left: vx gained %.1f px/s, push direction %s" % [gain, fan.push_direction()])
+	if fan.push_direction().distance_to(Vector2.LEFT) > 0.01:
+		failures.append("a left-facing fan reports push direction %s" % fan.push_direction())
+	if gain > -WIND_MIN_GUST_GAIN / 4.0:
+		failures.append("a left-facing fan changed the body's vx by %.1f px/s; expected a leftward push" % gain)
+	await _teardown(stage)
+	return failures
+
+## A spinning fan's air column turns: its direction a quarter second apart
+## differs by about the spin rate times the gap.
+func _scenario_rotating_fan_push_direction_changes() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var fan: Node2D = FanScene.instantiate() as Node2D
+	fan.facing = Vector2.RIGHT
+	fan.spin_deg_per_sec = 120.0
+	fan.position = DEEP_PARK_POSITION
+	stage.add_child(fan)
+	await _await_ticks(2)
+	var first: Vector2 = fan.push_direction()
+	await _await_ticks(int(Engine.physics_ticks_per_second / 4))
+	var second: Vector2 = fan.push_direction()
+	var turned: float = rad_to_deg(first.angle_to(second))
+	print("      spinning fan turned %.1f degrees in a quarter second (expected about 30)" % turned)
+	if absf(turned - 30.0) > 6.0:
+		failures.append("a 120 deg/s fan turned %.1f degrees in 0.25 s, expected about 30" % turned)
+	await _teardown(stage)
+	return failures
+
+## A stage-wide gust warns for its warning time with no push, then pushes
+## every player the same way.
+func _scenario_stage_gust_warns_then_pushes_everyone_alike() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var gust: Node2D = StageGustScene.instantiate() as Node2D
+	gust.size = WIND_ZONE_SIZE
+	gust.direction = Vector2.RIGHT
+	gust.strength = WIND_STRENGTH
+	gust.calm_sec = 0.5
+	gust.warning_sec = FAN_WARNING_SEC
+	gust.gust_sec = 0.5
+	gust.position = DEEP_PARK_POSITION + Vector2(0, WIND_ZONE_SIZE.y / 2.0 - 500.0)
+	stage.add_child(gust)
+	var a: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(-300, 0))
+	var b: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	a.set_input_vector(Vector2.UP)
+	b.set_input_vector(Vector2.UP)
+	var warning_ticks: int = 0
+	var worst_warning_gain: float = -INF
+	var gain_a: float = 0.0
+	var gain_b: float = 0.0
+	var va: float = a.linear_velocity.x
+	var vb: float = b.linear_velocity.x
+	var total: int = int(round((0.5 + FAN_WARNING_SEC + 0.5) * Engine.physics_ticks_per_second))
+	for _t in total:
+		await physics_frame
+		var da: float = a.linear_velocity.x - va
+		var db: float = b.linear_velocity.x - vb
+		va = a.linear_velocity.x
+		vb = b.linear_velocity.x
+		if gust.is_warning():
+			warning_ticks += 1
+			worst_warning_gain = maxf(worst_warning_gain, maxf(da, db))
+		elif gust.is_gusting():
+			gain_a += da
+			gain_b += db
+	var warned: float = warning_ticks / float(Engine.physics_ticks_per_second)
+	print("      warning %.2f s; gust gained a %.1f, b %.1f px/s; worst warning-tick gain %.3f" % [
+		warned, gain_a, gain_b, worst_warning_gain])
+	if absf(warned - FAN_WARNING_SEC) > 0.1:
+		failures.append("the warning lasted %.2f s, expected %.1f" % [warned, FAN_WARNING_SEC])
+	if worst_warning_gain > WIND_CALM_NOISE:
+		failures.append("a player was pushed %.2f px/s in one tick during the warning" % worst_warning_gain)
+	if gain_a < WIND_MIN_GUST_GAIN or gain_b < WIND_MIN_GUST_GAIN:
+		failures.append("the gust did not push both players right (a %.1f, b %.1f px/s)" % [gain_a, gain_b])
+	if absf(gain_a - gain_b) > 1.0:
+		failures.append("the gust pushed the players differently (a %.1f, b %.1f px/s)" % [gain_a, gain_b])
+	await _teardown(stage)
+	return failures
+
+## With no gust active (a long calm), nothing is pushed.
+func _scenario_stage_gust_calm_pushes_nothing() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var gust: Node2D = StageGustScene.instantiate() as Node2D
+	gust.size = WIND_ZONE_SIZE
+	gust.strength = WIND_STRENGTH
+	gust.calm_sec = 100.0
+	gust.position = DEEP_PARK_POSITION + Vector2(0, WIND_ZONE_SIZE.y / 2.0 - 500.0)
+	stage.add_child(gust)
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(2)
+	var worst: float = 0.0
+	var vx: float = player.linear_velocity.x
+	for _t in Engine.physics_ticks_per_second:
+		await physics_frame
+		worst = maxf(worst, absf(player.linear_velocity.x - vx))
+		vx = player.linear_velocity.x
+		if gust.is_gusting() or gust.is_warning():
+			failures.append("a long calm reported a gust or warning")
+			break
+	print("      calm: worst per-tick vx change %.3f px/s" % worst)
+	if worst > WIND_CALM_NOISE:
+		failures.append("with no gust active the body's vx still changed %.2f px/s in a tick" % worst)
 	await _teardown(stage)
 	return failures
