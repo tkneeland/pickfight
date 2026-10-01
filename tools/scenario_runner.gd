@@ -485,6 +485,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_only_nudges_pickups",
 	"ghost_cleared_at_round_end_and_never_for_bots",
+	"victory_continue_waits_for_every_human_not_bots",
+	"victory_continue_times_out",
+	"victory_host_key_returns_to_lobby",
+	"match_stats_longest_airtime_award",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1858,6 +1862,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ghost_cannot_hurt_and_only_nudges_pickups()
 		"ghost_cleared_at_round_end_and_never_for_bots":
 			return await _scenario_ghost_cleared_at_round_end_and_never_for_bots()
+		"victory_continue_waits_for_every_human_not_bots":
+			return await _scenario_victory_continue_waits_for_every_human_not_bots()
+		"victory_continue_times_out":
+			return await _scenario_victory_continue_times_out()
+		"victory_host_key_returns_to_lobby":
+			return await _scenario_victory_host_key_returns_to_lobby()
+		"match_stats_longest_airtime_award":
+			return await _scenario_match_stats_longest_airtime_award()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -13218,8 +13230,8 @@ func _scenario_lobby_ready_up_counts_down_and_starts_match() -> Array[String]:
 	return failures
 
 ## Issue #120: a match is first to N round wins, then a victory screen with a
-## podium; everyone pressing Rematch goes back through the lobby into a fresh
-## match with the scores reset.
+## podium; everyone tapping Continue goes back to the lobby (#337) and readying
+## again starts a fresh match with the scores reset.
 func _scenario_match_first_to_n_then_victory_and_rematch() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = _new_lobby_round(2)
@@ -13256,9 +13268,16 @@ func _scenario_match_first_to_n_then_victory_and_rematch() -> Array[String]:
 	if players[0].alive or players[1].alive:
 		failures.append("a round started on its own after the match was won")
 
+	# Issue #337: Continue (the phones' Ready flag on this screen) from everyone
+	# returns to the lobby with nobody ready; readying again starts the match.
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("Continue from everyone never returned to the lobby (phase '%s')" % rm.lobby_phase())
+	elif not roster.ready_slots.is_empty():
+		failures.append("the lobby inherited the Continue taps as ready flags: %s" % [roster.ready_slots])
 	roster.ready_slots = {0: true, 1: true}
 	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
-		failures.append("Rematch from everyone never started a new match")
+		failures.append("Ready after the lobby never started a new match")
 	elif rm.score_of(0) != 0 or rm.score_of(1) != 0:
 		failures.append("the rematch kept the old scores (%d, %d)" % [rm.score_of(0), rm.score_of(1)])
 	await _teardown(loop["stage"])
@@ -22994,6 +23013,9 @@ func _scenario_teams_match_victory_at_n_team_wins() -> Array[String]:
 			failures.append("the announcer said %s, never 'Blue team wins'" % [announcer.said])
 
 	roster.teams_on = false
+	# Issue #337: Continue returns to the lobby; Ready there starts the rematch.
+	roster.ready_slots = {0: true, 1: true}
+	await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC)
 	roster.ready_slots = {0: true, 1: true}
 	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("the Free-for-all rematch never started")
@@ -28352,4 +28374,110 @@ func _scenario_ghost_cleared_at_round_end_and_never_for_bots() -> Array[String]:
 	if rm.ghost_of(0) != null:
 		failures.append("the ghost survived the end of the round")
 	await _teardown(loop["stage"])
+	return failures
+
+## Issue #337: gets a two-player first-to-1 match to its victory screen.
+func _victory_loop() -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(1)
+	var players: Array[RigidBody2D] = loop["players"]
+	loop["roster"].ready_slots = {0: true, 1: true}
+	if await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		players[1].eliminate()
+	await _await_condition(func() -> bool: return loop["round_manager"].lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+	return loop
+
+## Issue #337: Continue is per human phone. A bot never has to tap; one human
+## not yet tapped keeps the victory screen up; the last tap ends it.
+func _scenario_victory_continue_waits_for_every_human_not_bots() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _victory_loop()
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	if rm.lobby_phase() != "victory":
+		failures.append("never reached the victory screen")
+		await _teardown(loop["stage"])
+		return failures
+	roster.bot_slots = [1] as Array[int]
+	roster.ready_slots = {}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "victory":
+		failures.append("the victory screen ended with the human not having tapped (bots must not count)")
+	roster.bot_slots = [] as Array[int]
+	roster.ready_slots = {0: true}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "victory":
+		failures.append("one tap of two humans ended the victory screen")
+	roster.bot_slots = [1] as Array[int]
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the only human tapping Continue (other slot a bot) never returned to the lobby")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #337: nobody taps, the victory screen gives up after its timeout.
+func _scenario_victory_continue_times_out() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(1)
+	loop["round_manager"].victory_continue_sec = 0.5
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	loop["roster"].ready_slots = {0: true, 1: true}
+	if await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("never reached the victory screen")
+	else:
+		if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("the victory screen outlived its %.1f s timeout" % rm.victory_continue_sec)
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #337: a key at the host machine skips the wait.
+func _scenario_victory_host_key_returns_to_lobby() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _victory_loop()
+	var rm: Node = loop["round_manager"]
+	if rm.lobby_phase() != "victory":
+		failures.append("never reached the victory screen")
+		await _teardown(loop["stage"])
+		return failures
+	var key := InputEventKey.new()
+	key.keycode = KEY_SPACE
+	key.pressed = true
+	rm._unhandled_key_input(key)
+	if rm.lobby_phase() != "lobby":
+		failures.append("a host keypress left the room on '%s'" % rm.lobby_phase())
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #337: the Longest airtime award goes to whoever went longest with no
+## body contact; a stretch broken by contact starts over, and under a second
+## earns nothing.
+func _scenario_match_stats_longest_airtime_award() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = load("res://scripts/MatchStats.gd").new()
+	stats.begin_match()
+	stats.begin_round([0, 1], 0)
+	# Slot 0: 0..2500 airborne, lands, then 3000..4000 airborne. Best 2.5 s.
+	for t in range(0, 2501, 100):
+		stats.note_air(0, true, t)
+	stats.note_air(0, false, 2600)
+	for t in range(3000, 4001, 100):
+		stats.note_air(0, true, t)
+	# Slot 1: only 0.5 s up.
+	for t in range(0, 501, 100):
+		stats.note_air(1, true, t)
+	stats.end_round(5000)
+	var found: Dictionary = {}
+	for award: Dictionary in stats.awards([0, 1]):
+		if award["category"] == "AIRBORNE":
+			found = award
+	if found.is_empty():
+		failures.append("no airtime award for a 2.5 s stretch")
+	else:
+		if found["slot"] != 0 or found["title"] != "Longest Airtime" or found["detail"] != "2.5s airborne":
+			failures.append("wrong airtime award: %s" % [found])
+	stats.begin_match()
+	if not stats.awards([0, 1]).is_empty():
+		failures.append("begin_match kept the old airtime")
+	_scenario_completed = true
 	return failures

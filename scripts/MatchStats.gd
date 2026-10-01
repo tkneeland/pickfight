@@ -24,6 +24,10 @@ const MULTI_KO_WINDOW_MSEC: int = 3000
 const COMBAT: String = "COMBAT"
 const CLUMSY: String = "CLUMSY"
 const SURVIVOR: String = "SURVIVOR"
+const AIRBORNE: String = "AIRBORNE"
+
+## The shortest airtime that earns the award (issue #337).
+const AIRTIME_MIN_MSEC: int = 1000
 
 ## slot -> number, created on first use so any roster size works.
 var kos: Dictionary = {}
@@ -38,6 +42,9 @@ var weapon_damage: Dictionary = {}
 var weapon_hits: Dictionary = {}
 ## Total msec each slot spent alive in rounds this match.
 var survival_msec: Dictionary = {}
+## Longest continuous stretch (msec) each slot went with no body contact this
+## match (issue #337).
+var longest_air_msec: Dictionary = {}
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
 
@@ -47,6 +54,8 @@ var _last_hit: Dictionary = {}
 var _streak: Dictionary = {}
 ## Slots still alive in the current round -> msec they entered it.
 var _alive_since: Dictionary = {}
+## Slot -> msec its current airborne stretch began.
+var _air_since: Dictionary = {}
 
 func begin_match() -> void:
 	kos.clear()
@@ -61,8 +70,11 @@ func begin_match() -> void:
 	_last_hit.clear()
 	_streak.clear()
 	_alive_since.clear()
+	_air_since.clear()
+	longest_air_msec.clear()
 
 func begin_round(slots: Array, now_msec: int) -> void:
+	_air_since.clear()
 	_last_hit.clear()
 	_streak.clear()
 	_alive_since.clear()
@@ -72,6 +84,7 @@ func begin_round(slots: Array, now_msec: int) -> void:
 
 ## Everyone still standing stops the survival clock here.
 func end_round(now_msec: int) -> void:
+	_air_since.clear()
 	for slot: int in _alive_since.keys():
 		_add(survival_msec, slot, now_msec - int(_alive_since[slot]))
 	_alive_since.clear()
@@ -80,7 +93,7 @@ func end_round(now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, _streak, _alive_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	for victim: int in _last_hit.keys():
@@ -99,6 +112,20 @@ func shift(msec: int) -> void:
 		_streak[killer][0] = int(_streak[killer][0]) + msec
 	for slot: int in _alive_since.keys():
 		_alive_since[slot] = int(_alive_since[slot]) + msec
+	for slot: int in _air_since.keys():
+		_air_since[slot] = int(_air_since[slot]) + msec
+
+## One sample of whether `slot` is touching nothing (issue #337), taken each
+## frame while it is alive in a round. Cheap: a start time per airborne slot and
+## a best per slot. The stretch ends on the first grounded sample, the slot's
+## elimination or the round's end.
+func note_air(slot: int, airborne: bool, now_msec: int) -> void:
+	if not airborne:
+		_air_since.erase(slot)
+		return
+	if not _air_since.has(slot):
+		_air_since[slot] = now_msec
+	longest_air_msec[slot] = maxi(int(longest_air_msec.get(slot, 0)), now_msec - int(_air_since[slot]))
 
 ## `weapon` names the attacker's weapon and `real` is false for a bot; only a
 ## real player's damaging hit with a named weapon joins the balance tallies.
@@ -118,6 +145,7 @@ func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon
 ## row, 1 for a lone KO), "first_blood" (the match's first credited KO)}.
 func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	_add(deaths, victim, 1)
+	_air_since.erase(victim)
 	if _alive_since.has(victim):
 		_add(survival_msec, victim, now_msec - int(_alive_since[victim]))
 		_alive_since.erase(victim)
@@ -163,6 +191,17 @@ func awards(slots: Array) -> Array[Dictionary]:
 	best = _leader(slots, survival_msec, deaths, true)
 	if best != -1:
 		out.append(_award(SURVIVOR, "Hard to Kill", best, "%s alive" % _clock(int(survival_msec[best]))))
+	best = _leader(slots, _air_scores(), kos, false)
+	if best != -1:
+		out.append(_award(AIRBORNE, "Longest Airtime", best, "%.1fs airborne" % (float(longest_air_msec[best]) / 1000.0)))
+	return out
+
+## `longest_air_msec`, without the stretches too short to earn the award.
+func _air_scores() -> Dictionary:
+	var out: Dictionary = {}
+	for slot: int in longest_air_msec:
+		if int(longest_air_msec[slot]) >= AIRTIME_MIN_MSEC:
+			out[slot] = longest_air_msec[slot]
 	return out
 
 ## The slot with the highest positive `primary`; ties go to the higher

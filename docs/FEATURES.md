@@ -43,10 +43,10 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Match flow and scoring
 - Endless round loop over the live roster (ADR-0004, ADR-0007)
-- Matches: first to N rounds, host picks N; victory podium (#120)
+- Matches: first to N rounds, host picks N; victory podium (#120); each phone taps Continue and the room returns to the lobby once every human has (bots excluded), after 30 s, or on a host keypress (#337)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
-- Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
+- Kill feed, KO credit, match awards (#148), including Longest airtime, the longest stretch with no body contact (#337); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Scoreboard shown at round end (#5)
 - KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
