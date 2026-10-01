@@ -70,6 +70,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Bots and solo practice
 - Bots via `--bots=N` flag and Solo practice button (#152)
 - Bots read stage hazards; bots yield to phones (#176, #193)
+- Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)

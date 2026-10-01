@@ -46,6 +46,8 @@ const RotatingPlatformScript: GDScript = preload("res://scripts/RotatingPlatform
 const BouncePadScript: GDScript = preload("res://scripts/BouncePad.gd")
 const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
 const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
+const SpikesScript: GDScript = preload("res://scripts/Spikes.gd")
+const SawScript: GDScript = preload("res://scripts/Saw.gd")
 
 ## Player.LAYER_WORLD: terrain and bodies. Heads are on their own layer, so
 ## the rays below never see one.
@@ -209,6 +211,13 @@ var lava_lookups: int = 0
 var _hazard_rects: Array[Rect2] = []
 var _rocks: Array[Node2D] = []
 var _pads: Array[Node2D] = []
+## Issue #313: saws (their zone moves, so it is rebuilt each tick from where
+## the blade is now) and stage gusts (found by duck typing, so a gust part that
+## lands later is handled without Bot knowing its script).
+var _saws: Array[Node2D] = []
+var _gusts: Array[Node2D] = []
+## Off, the bot ignores spikes and saws; for scenarios that compare.
+var avoid_damage_hazards: bool = true
 ## The hazard rectangles plus the columns under any rock now warning or
 ## falling: built once a physics tick.
 var _danger: Array[Rect2] = []
@@ -240,6 +249,8 @@ func think(delta: float) -> Vector2:
 		_hazard_rects.clear()
 		_rocks.clear()
 		_pads.clear()
+		_saws.clear()
+		_gusts.clear()
 		_danger_frame = -1
 		_pad_route = false
 		return Vector2.ZERO
@@ -493,6 +504,10 @@ func _travel_side() -> float:
 			if _edge_room(side, ahead, true) < ahead:
 				return 0.0
 		return side
+	# Upwind of a gust that is warning or blowing (issue #313).
+	var gust: float = _gust_side()
+	if gust != 0.0:
+		side = gust
 	var safe: float = _safe_side(side)
 	_held_at_edge = side != 0.0 and safe == 0.0
 	if safe == 0.0:
@@ -693,6 +708,10 @@ func _danger_rects() -> Array[Rect2]:
 	_lava_top()
 	_danger.clear()
 	_danger.append_array(_hazard_rects)
+	for saw: Node2D in _saws:
+		if is_instance_valid(saw) and saw.is_inside_tree():
+			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
+			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
 	for rock: Node2D in _rocks:
 		if not is_instance_valid(rock) or not rock.is_inside_tree():
 			continue
@@ -823,6 +842,8 @@ func _read_stage() -> void:
 	_hazard_rects.clear()
 	_rocks.clear()
 	_pads.clear()
+	_saws.clear()
+	_gusts.clear()
 	_danger_frame = -1
 	if _lava == null or _lava.get_parent() == null:
 		return
@@ -836,6 +857,14 @@ func _read_stage() -> void:
 			_rocks.append(node as Node2D)
 		elif script == BouncePadScript:
 			_pads.append(node as Node2D)
+		elif avoid_damage_hazards and script == SpikesScript:
+			var spikes := node as Node2D
+			var size: Vector2 = (spikes.get("size") as Vector2) * spikes.global_scale.abs()
+			_hazard_rects.append(Rect2(spikes.global_position - size * 0.5, size).grow(HAZARD_MARGIN + BODY_RADIUS))
+		elif avoid_damage_hazards and script == SawScript:
+			_saws.append(node as Node2D)
+		elif node is Node2D and node.has_method("is_warning") and node.has_method("gust_direction"):
+			_gusts.append(node as Node2D)
 
 ## A zone's rectangle shape in world space (unrotated, as stages place them).
 func _zone_rect(zone: Area2D) -> Rect2:
@@ -853,3 +882,22 @@ func _lava_top_offset() -> float:
 			var shape := child as CollisionShape2D
 			return shape.position.y - (shape.shape as RectangleShape2D).size.y * 0.5
 	return -20.0
+
+## Issue #313: the side that is upwind of a stage gust now warning or blowing,
+## or 0. A gust part is found by duck typing: `is_warning()` and
+## `gust_direction()` (a Vector2 or a float along x), and, where it has one,
+## `is_active()`. A bot already fleeing a danger keeps to that.
+func _gust_side() -> float:
+	for gust: Node2D in _gusts:
+		if not is_instance_valid(gust) or not gust.is_inside_tree():
+			continue
+		var live: bool = bool(gust.call("is_warning"))
+		if not live and gust.has_method("is_active"):
+			live = bool(gust.call("is_active"))
+		if not live:
+			continue
+		var dir: Variant = gust.call("gust_direction")
+		var x: float = (dir as Vector2).x if dir is Vector2 else float(dir)
+		if absf(x) > 0.01:
+			return -signf(x)
+	return 0.0
