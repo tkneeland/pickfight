@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The shield (issue #275): a broad defensive head that blocks hits and knocks
+; attackers back. Low damage output focused on control through knockback.
+;
+; A large flat head, 56 px wide and 32 px tall, designed to intercept incoming
+; attacks. It swings slowly (drive 24 rad/s, extend 600 px/s) but has enough
+; mass to hold a position and deflect. The head is twelve circles arranged in
+; a grid to cover the broad face, allowing it to block multiple simultaneous
+; strikes. Low damage (20) encourages using it for control rather than kills;
+; knockback is moderate (same force ceiling as the pickaxe, 8000) so a
+; well-planted shield stops lighter attacks cold.
+;
+; Reach M (140 px) like the pickaxe to keep the broad head manageable. Heavy
+; mass (0.4) makes it slow but stable. Force ceiling 8000, but the heavy weight
+; and slow responsiveness make it feel heavier than weapons with that cap.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 140.0
+mass = 0.4
+drive_speed = 24.0
+extend_speed = 600.0
+rest_return_speed = 500.0
+max_drive_force = 8000.0
+damage = 20.0
+sound_set = &"pickaxe"
+head_circle_offsets = PackedVector2Array(-20, -12, -10, -12, 0, -12, 10, -12, 20, -12, -20, 0, -10, 0, 0, 0, 10, 0, 20, 0, -20, 12, -10, 12, 0, 12, 10, 12, 20, 12)
+head_circle_radii = PackedFloat32Array(6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.5, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0)
+art_outline = PackedVector2Array(-28, -16, 28, -16, 28, 16, -28, 16)

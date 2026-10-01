@@ -285,6 +285,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bots_survive_hazard_stages",
 	"grapple_fires_sticks_reels_and_releases",
 	"grapple_hook_hits_player_lightly",
+	"shield_is_broad_and_low_damage",
+	"shield_blocks_incoming_hits",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -1361,6 +1363,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_grapple_fires_sticks_reels_and_releases()
 		"grapple_hook_hits_player_lightly":
 			return await _scenario_grapple_hook_hits_player_lightly()
+		"shield_is_broad_and_low_damage":
+			return await _scenario_shield_is_broad_and_low_damage()
+		"shield_blocks_incoming_hits":
+			return await _scenario_shield_blocks_incoming_hits()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -18739,7 +18745,8 @@ func _scenario_bots_survive_hazard_stages() -> Array[String]:
 const GRAPPLE_PATH: String = "res://resources/grapple.tres"
 const FLAIL_PATH: String = "res://resources/flail.tres"
 const BOOMERANG_PATH: String = "res://resources/boomerang.tres"
-const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH]
+const SHIELD_PATH: String = "res://resources/shield.tres"
+const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH, SHIELD_PATH]
 ## The arena's ground top (its floor is 40 tall, centred at y 320) and where a
 ## player stands on it.
 const NEW_WEAPON_FLOOR_STAND: Vector2 = Vector2(0, 274)
@@ -18917,6 +18924,60 @@ func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 		failures.append("the hook's hit was not reported as the thrower's strike_landed")
 	if is_instance_valid(hook) and hook.is_stuck():
 		failures.append("the hook stuck to a player")
+	await _teardown(stage)
+	return failures
+
+## The shield has a broad collision area and low damage output.
+func _scenario_shield_is_broad_and_low_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, 0))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(wielder, SHIELD_PATH)
+	_brace(wielder)
+	victim.freeze = true
+	var strikes: Array = []
+	_record_strikes(wielder, strikes)
+	# Swing a basic melee swing with the shield
+	wielder.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(60)
+	var hit: bool = victim.damage > 0.0
+	print("      shield hit: damage %.1f (expected max %.1f)" % [victim.damage, stats.damage])
+	if not hit:
+		failures.append("the shield never hit a nearby player")
+	elif victim.damage > stats.damage + 0.5:
+		failures.append("the shield dealt %.1f damage, more than its %.1f" % [victim.damage, stats.damage])
+	# Check that it has multiple collision circles (broad)
+	var circle_count: int = stats.head_circle_count()
+	print("      shield circles: %d" % circle_count)
+	if circle_count < 10:
+		failures.append("the shield has only %d collision circles; it should be broad with many" % circle_count)
+	await _teardown(stage)
+	return failures
+
+## The shield can block incoming attacks by planting.
+func _scenario_shield_blocks_incoming_hits() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var defender: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(-200, 0))
+	await _await_ticks(2)
+	await _equip(defender, SHIELD_PATH)
+	var stats: WeaponStatsType = await _equip(attacker, PICKAXE_PATH)
+	_brace(defender)
+	attacker.freeze = false
+	attacker.linear_velocity = Vector2.ZERO
+	var pre_damage: float = defender.damage
+	# Attacker swings toward defender with the pickaxe
+	attacker.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(60)
+	var damage_taken: float = defender.damage - pre_damage
+	var defender_moved: float = absf(defender.global_position.x - DEEP_PARK_POSITION.x)
+	print("      defender damage: %.1f, movement: %.0f px" % [damage_taken, defender_moved])
+	if damage_taken > stats.damage + 20.0:
+		failures.append("the shield wielder took %.1f damage from a pickaxe swing; the pickaxe (%.1f) is heavier but shield should resist" % [
+			damage_taken, stats.damage])
 	await _teardown(stage)
 	return failures
 
