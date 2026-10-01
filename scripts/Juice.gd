@@ -79,6 +79,26 @@ const TRAIL_COLOR: Color = Color(1.0, 1.0, 1.0, 0.55)
 ## not swung: its trail is cut rather than streaked across the stage.
 const TRAIL_MAX_JUMP: float = 160.0
 
+## --- Screen shake ---
+## Damage threshold above which a strike causes screen shake.
+const SHAKE_DAMAGE_MIN: float = 20.0
+## Maximum damage for shake scaling.
+const SHAKE_DAMAGE_MAX: float = 100.0
+## Screen shake intensity at max damage.
+const SHAKE_INTENSITY_MAX: float = 3.0
+## Duration of screen shake in seconds.
+const SHAKE_DURATION: float = 0.15
+## Elimination shake intensity.
+const SHAKE_INTENSITY_ELIMINATION: float = 5.0
+## Elimination shake duration.
+const SHAKE_DURATION_ELIMINATION: float = 0.25
+
+## --- Hit-stop ---
+## Damage threshold for hit-stop frames.
+const HITSTOP_DAMAGE_MIN: float = 40.0
+## Frames to pause on a heavy hit.
+const HITSTOP_FRAMES: int = 3
+
 const META_WATCHED: StringName = &"_juice_watched"
 const PRUNE_AT: int = 256
 const PRUNE_AFTER_FRAMES: int = 600
@@ -120,6 +140,13 @@ var _clock: float = 0.0
 ## Redraw once more after the last effect ends, to clear it.
 var _drew_last_frame: bool = false
 
+## --- Shake and hit-stop state ---
+var _shake_time: float = 0.0
+var _shake_intensity: float = 0.0
+var _camera: Camera2D = null
+var _hitstop_frames: int = 0
+var _disable_shake: bool = false
+
 func _ready() -> void:
 	z_index = 95
 	# Animated per rendered frame; nothing here for interpolation to blend,
@@ -145,6 +172,9 @@ func _ready() -> void:
 	_t_born.resize(MAX_TRAILS * TRAIL_POINTS)
 	get_tree().node_added.connect(_on_node_added)
 	_watch_subtree(get_tree().root)
+
+	# Find camera for shake effects
+	_camera = get_tree().root.find_child("Camera2D", false, false) as Camera2D
 
 # --- Read-only hooks for the scenario suite -----------------------------------
 
@@ -187,6 +217,8 @@ func _on_node_added(node: Node) -> void:
 	if node.has_signal("strike_landed") and node.has_signal("eliminated"):
 		if node.has_signal("body_entered"):
 			node.connect("body_entered", _on_player_touched.bind(node))
+		node.connect("strike_landed", _on_strike_landed.bind(node))
+		node.connect("eliminated", _on_player_eliminated.bind(node))
 		_players.append(node)
 	elif node.has_signal("struck_world") and node.has_signal("clashed"):
 		# A head that left the tree and came back is re-watched, and is
@@ -245,6 +277,11 @@ func _serve_waiting() -> void:
 # --- Per tick -------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	# Handle hit-stop: skip physics updates for a few frames
+	if _hitstop_frames > 0:
+		_hitstop_frames -= 1
+		return
+
 	if _velocity_before.size() > _players.size() * 4 + 16:
 		_velocity_before.clear()
 	var i: int = _players.size() - 1
@@ -289,6 +326,20 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
+
+	# Update and apply screen shake
+	if _shake_time > 0.0 and _camera != null:
+		var progress: float = 1.0 - (_shake_time / SHAKE_DURATION) if _shake_intensity > 0.0 else 1.0
+		var offset: Vector2 = Vector2(
+			randf_range(-_shake_intensity, _shake_intensity),
+			randf_range(-_shake_intensity, _shake_intensity)
+		) * (1.0 - progress * progress)
+		_camera.offset = offset
+		_shake_time -= delta
+		if _shake_time <= 0.0:
+			_camera.offset = Vector2.ZERO
+			_shake_intensity = 0.0
+
 	var busy: bool = _step_particles(delta)
 	var frac: float = Engine.get_physics_interpolation_fraction() \
 		if get_tree().physics_interpolation else 1.0
@@ -377,6 +428,28 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 		var angle: float = TAU * float(i) / float(count) + _rng.randf_range(-0.35, 0.35)
 		var vel := Vector2.RIGHT.rotated(angle) * _rng.randf_range(SPARK_SPEED_MIN, SPARK_SPEED_MAX) * (0.7 + 0.5 * strength)
 		_emit(Kind.SPARK, point, vel, SPARK_LIFETIME * _rng.randf_range(0.7, 1.15))
+
+## Strike landed: apply screen shake and hit-stop based on damage.
+func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool) -> void:
+	if not _disable_shake and amount >= SHAKE_DAMAGE_MIN:
+		var strength: float = clampf((amount - SHAKE_DAMAGE_MIN) / (SHAKE_DAMAGE_MAX - SHAKE_DAMAGE_MIN), 0.0, 1.0)
+		_apply_shake(SHAKE_INTENSITY_MAX * strength, SHAKE_DURATION)
+	if amount >= HITSTOP_DAMAGE_MIN:
+		_apply_hitstop(HITSTOP_FRAMES)
+
+## Player eliminated: apply strong screen shake.
+func _on_player_eliminated(player: Node) -> void:
+	if not _disable_shake:
+		_apply_shake(SHAKE_INTENSITY_ELIMINATION, SHAKE_DURATION_ELIMINATION)
+
+## Apply screen shake effect.
+func _apply_shake(intensity: float, duration: float) -> void:
+	_shake_intensity = max(_shake_intensity, intensity)
+	_shake_time = max(_shake_time, duration)
+
+## Apply hit-stop (frame freeze) effect.
+func _apply_hitstop(frames: int) -> void:
+	_hitstop_frames = max(_hitstop_frames, frames)
 
 ## Writes one particle into the next pool slot, overwriting the oldest when
 ## the pool is full. Never allocates.
