@@ -36,6 +36,33 @@ const LANDING_FULL_SPEED: float = 900.0
 ## A hit of at least this much damage squashes as well as squints.
 const BIG_HIT: float = 25.0
 
+## Selectable eye styles (issue #297). "round" is the original and the default.
+const EYE_ROUND := "round"
+const EYE_IDS: Array[String] = ["round", "sleepy", "angry", "wide", "dot", "visor"]
+const EYE_LABELS := {
+	"round": "Round", "sleepy": "Sleepy", "angry": "Angry",
+	"wide": "Wide", "dot": "Dot", "visor": "Visor",
+}
+
+var eyes_style: String = EYE_ROUND
+
+func set_eyes(id: String) -> void:
+	eyes_style = id if EYE_IDS.has(id) else EYE_ROUND
+	queue_redraw()
+
+## Where each pupil is drawn, in this node's frame (left eye first): the eye's
+## centre pushed toward `look` by the style's reach. The draw uses this too.
+func pupil_centers(look: Vector2) -> Array[Vector2]:
+	var reach: float = LOOK_REACH
+	match eyes_style:
+		"wide":
+			reach = 3.0
+		"dot":
+			reach = 2.0
+		"visor":
+			reach = 3.0
+	return [Vector2(-EYE_X, EYE_Y) + look * reach, Vector2(EYE_X, EYE_Y) + look * reach]
+
 var _player: RigidBody2D
 var _squash_nodes: Array[Node2D] = []
 var _hat: Node2D
@@ -129,16 +156,42 @@ func _draw() -> void:
 	draw_rect(Rect2(-inset, -inset, inset * 2.0, inset * 2.0), ink, false, OUTLINE_WIDTH)
 	var state: String = eye_state()
 	var look: Vector2 = look_dir()
+	var pupils: Array[Vector2] = pupil_centers(look)
+	var open_eyes: bool = state != "dead" and state != "squint" and state != "blink"
+	var mark: Color = Color.WHITE if eyes_style == "visor" else ink
+	if eyes_style == "visor":
+		draw_rect(Rect2(-EYE_X - 9.0, EYE_Y - 5.5, EYE_X * 2.0 + 18.0, 11.0), ink)
+	var idx: int = 0
 	for sx: float in [-EYE_X, EYE_X]:
 		var c := Vector2(sx, EYE_Y)
-		match state:
-			"dead":
+		var pc: Vector2 = pupils[idx]
+		idx += 1
+		if not open_eyes:
+			if state == "dead":
 				var r: float = EYE_RADIUS * 0.8
-				draw_line(c + Vector2(-r, -r), c + Vector2(r, r), ink, 2.5)
-				draw_line(c + Vector2(-r, r), c + Vector2(r, -r), ink, 2.5)
-			"squint", "blink":
-				var w: float = EYE_RADIUS
-				draw_line(c + Vector2(-w, 0.0), c + Vector2(w, 0.0), ink, 2.5)
+				draw_line(c + Vector2(-r, -r), c + Vector2(r, r), mark, 2.5)
+				draw_line(c + Vector2(-r, r), c + Vector2(r, -r), mark, 2.5)
+			else:
+				draw_line(c + Vector2(-EYE_RADIUS, 0.0), c + Vector2(EYE_RADIUS, 0.0), mark, 2.5)
+			continue
+		match eyes_style:
+			"dot":
+				draw_circle(pc, 4.0, ink)
+			"visor":
+				draw_circle(pc, 2.5, Color.WHITE)
+			"wide":
+				draw_circle(c, 8.0, Color.WHITE)
+				draw_arc(c, 8.0, 0.0, TAU, 20, ink, 1.5)
+				draw_circle(pc, 2.5, ink)
 			_:
 				draw_circle(c, EYE_RADIUS, Color.WHITE)
-				draw_circle(c + look * LOOK_REACH, PUPIL_RADIUS, ink)
+				draw_circle(pc, PUPIL_RADIUS, ink)
+				if eyes_style == "sleepy":
+					var lid := PackedVector2Array()
+					for k in 9:
+						var a: float = PI + PI * float(k) / 8.0
+						lid.append(c + Vector2(cos(a), sin(a)) * (EYE_RADIUS + 0.5))
+					draw_colored_polygon(lid, ink)
+				elif eyes_style == "angry":
+					var dir: float = 1.0 if sx < 0.0 else -1.0
+					draw_line(c + Vector2(-dir * 8.0, -9.0), c + Vector2(dir * 7.0, -4.0), ink, 3.0)

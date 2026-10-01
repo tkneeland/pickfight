@@ -1229,6 +1229,18 @@ func set_hat(id: String) -> void:
 	if _hat != null:
 		_hat.set_hat(id)
 
+## Eye style (issue #297), one of PlayerFace.gd's EYE_IDS; anything else is round.
+func set_eyes(id: String) -> void:
+	if _face != null:
+		_face.set_eyes(id)
+
+func eyes_id() -> String:
+	return _face.eyes_style if _face != null else "round"
+
+## The face node, for a scenario to read the pupils from.
+func face_node() -> Node2D:
+	return _face
+
 func hat_id() -> String:
 	return _hat.hat_id if _hat != null else HatScript.NONE
 
