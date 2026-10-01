@@ -47,6 +47,12 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## or more.
 @export var view_size: Vector2 = DEFAULT_VIEW_SIZE
 
+## Optional per-stage adjustment of the pickup pool (#310): weapon file stem
+## (for example "umbrella") -> copies in the pickup bag. The base rate is 2 and
+## a theme match adds 4; any listed weapon is set to the given count (at least
+## 1, so it can still appear). Empty means just the derived theme.
+@export var weapon_weight_overrides: Dictionary = {}
+
 func _ready() -> void:
 	if get_node_or_null(BACKGROUND_NODE_NAME) != null:
 		return
