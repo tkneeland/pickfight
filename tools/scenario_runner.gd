@@ -474,6 +474,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_sudden_death_hit_eliminates_victim",
 	"mode_hot_potato_tags_fuses_and_reseeds",
 	"mode_handlers_gone_after_round_and_edge_cases",
+	"balance_log_tallies_real_players_per_weapon",
+	"balance_log_survives_unwritable_path",
+	"new_stages_are_in_rotation_and_load",
+	"new_stages_hazards_clear_of_spawns",
 	"comfort_reduced_shake_lowers_camera_amplitude",
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
@@ -1832,6 +1836,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_hot_potato_tags_fuses_and_reseeds()
 		"mode_handlers_gone_after_round_and_edge_cases":
 			return await _scenario_mode_handlers_gone_after_round_and_edge_cases()
+		"balance_log_tallies_real_players_per_weapon":
+			return await _scenario_balance_log_tallies_real_players_per_weapon()
+		"balance_log_survives_unwritable_path":
+			return await _scenario_balance_log_survives_unwritable_path()
+		"new_stages_are_in_rotation_and_load":
+			return await _scenario_new_stages_are_in_rotation_and_load()
+		"new_stages_hazards_clear_of_spawns":
+			return await _scenario_new_stages_hazards_clear_of_spawns()
 		"comfort_reduced_shake_lowers_camera_amplitude":
 			return await _scenario_comfort_reduced_shake_lowers_camera_amplitude()
 		"comfort_reduce_flash_suppresses_flash":
@@ -3771,6 +3783,9 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Quarry.tscn",
 	"res://scenes/stages/Mill.tscn",
 	"res://scenes/stages/Reactor.tscn",
+	"res://scenes/stages/Footbridge.tscn",
+	"res://scenes/stages/Gantry.tscn",
+	"res://scenes/stages/Vent.tscn",
 ]
 
 func _scenario_stage_spawns_are_safe() -> Array[String]:
@@ -27524,6 +27539,153 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	await _rc_close_241(rig)
 	return failures
 
+## Issue #316: real players' damaging hits are tallied per weapon; bot hits,
+## 0-damage swings and hits with no named weapon are not; the line is appended
+## to a file and reads back as JSON.
+func _scenario_balance_log_tallies_real_players_per_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	stats.record_hit(0, 1, 12.5, 10, "pickaxe", true)
+	stats.record_hit(2, 1, 50.0, 20, "axe", true)
+	stats.record_hit(3, 1, 99.0, 30, "axe", false)
+	stats.record_hit(0, 1, 0.0, 40, "pickaxe", true)
+	var line: String = stats.balance_log_line(1234)
+	var parsed: Variant = JSON.parse_string(line)
+	if not parsed is Dictionary:
+		return ["balance log line is not JSON: '%s'" % line]
+	var weapons: Dictionary = parsed["weapons"]
+	if not is_equal_approx(float(weapons.get("pickaxe", {}).get("damage", -1)), 42.5) or int(weapons["pickaxe"]["hits"]) != 2:
+		failures.append("pickaxe tally wrong: %s" % [weapons.get("pickaxe")])
+	if not is_equal_approx(float(weapons.get("axe", {}).get("damage", -1)), 50.0) or int(weapons["axe"]["hits"]) != 1:
+		failures.append("axe tally should hold only the real player's hit: %s" % [weapons.get("axe")])
+	var path: String = "user://balance_stats_scenario_316.jsonl"
+	DirAccess.remove_absolute(path)
+	if not (MatchStatsScript.append_line(path, line) and MatchStatsScript.append_line(path, line)):
+		failures.append("append_line failed on a writable path")
+	var text: String = FileAccess.get_file_as_string(path)
+	if text.strip_edges().split("\n").size() != 2 or JSON.parse_string(text.split("\n")[0]) == null:
+		failures.append("log file should hold two readable JSON lines, got '%s'" % text)
+	DirAccess.remove_absolute(path)
+	stats.begin_match()
+	if stats.balance_log_line(1) != "":
+		failures.append("a new match should start with empty tallies")
+	_scenario_completed = true
+	return failures
+
+## Issue #316: an unwritable log path is a quiet false, never an error.
+func _scenario_balance_log_survives_unwritable_path() -> Array[String]:
+	var failures: Array[String] = []
+	if MatchStatsScript.append_line("user://no_such_dir_316/deeper/log.jsonl", "{}"):
+		failures.append("append_line claimed success on an unwritable path")
+	if MatchStatsScript.append_line("user://x_316.jsonl", ""):
+		failures.append("append_line should skip an empty line")
+	_scenario_completed = true
+	return failures
+
+# --- New stages built around the new parts (issue #315)
+
+const NEW_STAGES_315: PackedStringArray = [
+	"res://scenes/stages/Footbridge.tscn",
+	"res://scenes/stages/Gantry.tscn",
+	"res://scenes/stages/Vent.tscn",
+]
+## Existing stages that gained a part in #315, with the node it added.
+const SPRINKLED_STAGES_315: Dictionary = {
+	"res://scenes/stages/Gauntlet.tscn": "MiddleSpikes",
+	"res://scenes/stages/Islands.tscn": "HighSaw",
+	"res://scenes/stages/Flatlands.tscn": "PerchLedge",
+}
+## How far a hazard's footprint is grown before asking whether a spawn is in it.
+const HAZARD_SPAWN_MARGIN_315: float = 40.0
+
+## The new stages are in Main's rotation and in the swept STAGE_PATHS, load,
+## carry the parts they are built around, and the stages that got a sprinkled
+## part still have it.
+func _scenario_new_stages_are_in_rotation_and_load() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation: Array = main_scene.get_node("RoundManager").stage_scenes
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in rotation:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	var expected_parts: Dictionary = {
+		"res://scenes/stages/Footbridge.tscn": ["Ledge0", "LipSpikesLeft", "Overhead"],
+		"res://scenes/stages/Gantry.tscn": ["Crane", "CraneSaw", "LipSpikesLeft"],
+		"res://scenes/stages/Vent.tscn": ["CentreFan", "Gust", "SpikesLeft", "PerchLeft"],
+	}
+	for path: String in NEW_STAGES_315:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		for part_name: String in expected_parts[path]:
+			if instance.get_node_or_null(part_name) == null:
+				failures.append("%s lacks its part '%s'" % [path, part_name])
+		if instance.get_spawn_points().size() < 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		instance.free()
+	for path: String in SPRINKLED_STAGES_315:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		if instance.get_node_or_null(SPRINKLED_STAGES_315[path]) == null:
+			failures.append("%s lost its sprinkled part '%s'" % [path, SPRINKLED_STAGES_315[path]])
+		instance.free()
+	await _teardown(Node2D.new())
+	return failures
+
+## No damage part (spikes, saw) in a new or sprinkled stage, over its whole
+## travel, comes within HAZARD_SPAWN_MARGIN_315 of any spawn point. The stage
+## spawn sweeps already prove spawns are reachable and survivable.
+func _scenario_new_stages_hazards_clear_of_spawns() -> Array[String]:
+	var failures: Array[String] = []
+	var paths: Array[String] = []
+	paths.append_array(NEW_STAGES_315)
+	for path: String in SPRINKLED_STAGES_315:
+		paths.append(path)
+	for path: String in paths:
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		holder.add_child(instance)
+		await _await_ticks(2)
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+		var hazards: int = 0
+		for node: Node in _descendants_315(instance):
+			if not (node is Area2D) or node.get("damage") == null:
+				continue
+			hazards += 1
+			var travel: Vector2 = node.get("travel") if node.get("travel") != null else Vector2.ZERO
+			for child: Node in node.get_children():
+				var box := Rect2()
+				if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+					var size: Vector2 = ((child as CollisionShape2D).shape as RectangleShape2D).size
+					box = Rect2(node.global_position - size / 2.0, size)
+				elif child is CollisionShape2D and (child as CollisionShape2D).shape is CircleShape2D:
+					var r: float = ((child as CollisionShape2D).shape as CircleShape2D).radius
+					box = Rect2(node.global_position - Vector2(r, r), Vector2(r, r) * 2.0)
+				else:
+					continue
+				box = box.merge(Rect2(box.position + travel, box.size))
+				box = box.grow(HAZARD_SPAWN_MARGIN_315)
+				for i in spawns.size():
+					if box.has_point(spawns[i]):
+						failures.append("%s: hazard '%s' comes within %.0f px of spawn %d" % [
+							path, node.name, HAZARD_SPAWN_MARGIN_315, i])
+		if hazards == 0 and NEW_STAGES_315.has(path):
+			failures.append("%s: found no damage hazards to check" % path)
+		await _teardown(holder)
+	return failures
+
+func _descendants_315(root: Node) -> Array[Node]:
+	var out: Array[Node] = []
+	for child in root.get_children():
+		out.append(child)
+		out.append_array(_descendants_315(child))
+	return out
+
 ## Issue #317: the Settings panel's "Screen shake" box drives the real camera:
 ## shake on moves it, shake off holds it at zero.
 func _scenario_comfort_reduced_shake_lowers_camera_amplitude() -> Array[String]:
@@ -27925,7 +28087,7 @@ func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
 			continue
 		for file: String in sounds[key]["files"]:
 			checked += 1
-			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_"]:
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_"]:
 				if file.contains(marker):
 					failures.append("%s uses placeholder file %s" % [key, file])
 	if checked == 0:

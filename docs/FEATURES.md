@@ -31,7 +31,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
-- 24 rotating stages (#8, #17, #19, #51, #54, #143); shuffled bag rotation (#20, ADR-0011)
+- 27 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
@@ -114,6 +114,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
 - Screenshot capture tools for stages and damage numbers
+- Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316)
 
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
