@@ -431,6 +431,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_ko_counts_like_any_other_ko",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"sfx_hit_sets_have_no_placeholder_files",
 	"fan_pushes_body_along_its_facing",
 	"rotating_fan_push_direction_changes",
 	"stage_gust_warns_then_pushes_everyone_alike",
@@ -458,6 +459,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"windy_stage_favours_umbrella_pickups",
 	"themed_pool_keeps_every_enabled_weapon",
 	"themed_pool_never_draws_a_disabled_weapon",
+	"bot_stops_before_spikes",
+	"bot_dodges_moving_saw",
+	"bot_braces_for_gust_warning",
+	"hazard_death_credits_last_hitter_within_window",
+	"hazard_death_after_window_gives_no_credit",
+	"ring_out_after_recent_hit_credits_hitter",
+	"direct_weapon_ko_credit_unchanged",
 	"mode_king_of_the_hill_scores_and_wins",
 	"mode_sudden_death_hit_eliminates_victim",
 	"mode_hot_potato_tags_fuses_and_reseeds",
@@ -1727,6 +1735,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"sfx_hit_sets_have_no_placeholder_files":
+			return await _scenario_sfx_hit_sets_have_no_placeholder_files()
 		"fan_pushes_body_along_its_facing":
 			return await _scenario_fan_pushes_body_along_its_facing()
 		"rotating_fan_push_direction_changes":
@@ -1781,6 +1791,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_themed_pool_keeps_every_enabled_weapon()
 		"themed_pool_never_draws_a_disabled_weapon":
 			return await _scenario_themed_pool_never_draws_a_disabled_weapon()
+		"bot_stops_before_spikes":
+			return await _scenario_bot_stops_before_spikes()
+		"bot_dodges_moving_saw":
+			return await _scenario_bot_dodges_moving_saw()
+		"bot_braces_for_gust_warning":
+			return await _scenario_bot_braces_for_gust_warning()
+		"hazard_death_credits_last_hitter_within_window":
+			return await _scenario_hazard_death_credits_last_hitter_within_window()
+		"hazard_death_after_window_gives_no_credit":
+			return await _scenario_hazard_death_after_window_gives_no_credit()
+		"ring_out_after_recent_hit_credits_hitter":
+			return await _scenario_ring_out_after_recent_hit_credits_hitter()
+		"direct_weapon_ko_credit_unchanged":
+			return await _scenario_direct_weapon_ko_credit_unchanged()
 		"mode_king_of_the_hill_scores_and_wins":
 			return await _scenario_mode_king_of_the_hill_scores_and_wins()
 		"mode_sudden_death_hit_eliminates_victim":
@@ -27539,5 +27563,232 @@ func _scenario_themed_pool_never_draws_a_disabled_weapon() -> Array[String]:
 	var tally: Dictionary = _weapon_theme_tally(_weapon_theme_director(true, 7), offered, offered.size() * WEAPON_THEME_BAGS)
 	if tally.has("umbrella"):
 		failures.append("a disabled umbrella was drawn %d times on a windy stage" % tally["umbrella"])
+	_scenario_completed = true
+	return failures
+
+# --- Bots avoid spikes, saws and gusts (issue #313) ---------------------------
+
+## A bot on the arena floor with a rival across a hazard; returns [stage,
+## player, bot]. The bot's output goes straight to the player.
+func _bot313(avoid: bool, bot_x: float, rival_x: float) -> Array:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274))
+	_spawn_player(stage, Vector2(rival_x, 274))
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.avoid_damage_hazards = avoid
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	return [stage, player, bot]
+
+## A bot whose rival is across a row of spikes comes to a stop short of them
+## and takes no hit over ten seconds.
+func _scenario_bot_stops_before_spikes() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var spikes2: Area2D = SpikesScene.instantiate() as Area2D
+	spikes2.position = Vector2(0, 286)
+	made[0].get_child(0).add_child(spikes2)  # beside the lava, where stages put parts
+	var player: RigidBody2D = made[1]
+	var max_x: float = -INF
+	for tick in 600:
+		await physics_frame
+		max_x = maxf(max_x, player.global_position.x)
+	print("      bot got as far as x=%.0f, spikes hit %d times, damage %.0f" % [max_x, spikes2.hit_count(), player.damage])
+	if spikes2.hit_count() > 0:
+		failures.append("the bot walked into the spikes %d times" % spikes2.hit_count())
+	if max_x > -spikes2.size.x * 0.5:
+		failures.append("the bot reached x=%.0f, past the spikes' left edge" % max_x)
+	await _teardown(made[0])
+	return failures
+
+## A saw patrolling the floor between a bot and its rival: the bot is hit with
+## avoidance off and not at all with it on, over ten seconds.
+func _scenario_bot_dodges_moving_saw() -> Array[String]:
+	var failures: Array[String] = []
+	var hits: Dictionary = {}
+	for avoid: bool in [false, true]:
+		var made: Array = _bot313(avoid, -300.0, 450.0)
+		var saw: Area2D = SawScene.instantiate() as Area2D
+		saw.position = Vector2(70, 272)
+		saw.travel = Vector2(160, 0)
+		saw.one_way_sec = 2.0
+		made[0].get_child(0).add_child(saw)
+		await _await_ticks(600)
+		hits[avoid] = saw.hit_count()
+		await _teardown(made[0], false)
+	print("      saw hits: avoidance off %d, on %d" % [hits[false], hits[true]])
+	if hits[false] == 0:
+		failures.append("the fixture is empty: the saw never hit the bot with avoidance off")
+	elif hits[true] != 0:
+		failures.append("the bot was hit by the saw %d times with avoidance on (%d off)" % [hits[true], hits[false]])
+	_scenario_completed = true
+	return failures
+
+## No StageGust part exists on this base (#281 has not landed), so the
+## reaction is checked against a duck-typed stand-in: a gust warning from the
+## left makes a bot at rest move upwind, away from the downwind edge.
+func _scenario_bot_braces_for_gust_warning() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 0.0, 450.0)
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	var gust := Node2D.new()
+	gust.set_script(load("res://tools/gust_standin.gd"))
+	made[0].get_child(0).add_child(gust)
+	bot._lava_looked_up = false
+	await _await_ticks(30)
+	bot._lava_looked_up = false
+	gust.warning = true
+	gust.direction = Vector2.RIGHT
+	bot._lava_looked_up = false
+	bot._lava = null
+	await _await_ticks(2)
+	var side: float = bot._gust_side()
+	print("      gust side for a rightward warning: %.0f" % side)
+	if side != -1.0:
+		failures.append("a rightward gust warning gave side %.0f, expected -1 (upwind)" % side)
+	gust.warning = false
+	if bot._gust_side() != 0.0:
+		failures.append("the bot still reacts after the gust warning ended")
+	await _teardown(made[0])
+	return failures
+## Issue #311: a hazard or ring-out death is credited to whoever last hit the
+## victim within 3 s. A three-player round with a real KillFeed; returns the
+## rig, started and past spawn protection.
+func _ko311_rig() -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(2)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed311"
+	(loop["stage"] as Node2D).add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	rm.spawn_protection_sec = 0.0
+	roster.slots.assign([0, 1, 2])
+	roster.names = {0: "Alice", 1: "Bob", 2: "Carl"}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	var all_alive := func() -> bool: return players[0].alive and players[1].alive and players[2].alive
+	loop["started"] = await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC)
+	loop["feed"] = feed
+	await _await_ticks(2)
+	return loop
+
+## Spikes touched by `victim` with enough damage to kill, as the real hazard does.
+func _ko311_spikes_kill(loop: Dictionary, victim: RigidBody2D) -> void:
+	var spikes: Area2D = SpikesScene.instantiate() as Area2D
+	(loop["stage"] as Node2D).add_child(spikes)
+	spikes.damage = 1000.0
+	spikes._hurt(victim)
+
+func _scenario_hazard_death_credits_last_hitter_within_window() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	# Bob hits Alice, 1.5 s later Alice touches lethal spikes.
+	players[1].strike_landed.emit(players[0], 10.0, players[0].global_position, false)
+	GameClockScript.advance(1.5)
+	_ko311_spikes_kill(loop, players[0])
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Bob KO Alice"]):
+		failures.append("feed read %s, expected Bob KO Alice" % [lines])
+	var stats: RefCounted = loop["round_manager"].match_stats()
+	if stats.kos.get(1, 0) != 1 or stats.self_kos.has(0):
+		failures.append("Bob's KO was not counted: kos %s, self-KOs %s" % [stats.kos, stats.self_kos])
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_hazard_death_after_window_gives_no_credit() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	players[1].strike_landed.emit(players[0], 10.0, players[0].global_position, false)
+	GameClockScript.advance(3.5)
+	_ko311_spikes_kill(loop, players[0])
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Alice self-KO"]):
+		failures.append("feed read %s, expected Alice self-KO" % [lines])
+	var stats: RefCounted = loop["round_manager"].match_stats()
+	if stats.kos.has(1) or stats.self_kos.get(0, 0) != 1:
+		failures.append("a stale hit still got credit: kos %s, self-KOs %s" % [stats.kos, stats.self_kos])
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_ring_out_after_recent_hit_credits_hitter() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	players[2].strike_landed.emit(players[0], 0.0, players[0].global_position, false)
+	GameClockScript.advance(2.0)
+	players[0].eliminate()
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Carl KO Alice"]):
+		failures.append("feed read %s, expected Carl KO Alice" % [lines])
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_direct_weapon_ko_credit_unchanged() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	players[1].take_damage(1000.0)
+	players[0].strike_landed.emit(players[1], 1000.0, players[1].global_position, true)
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Alice KO Bob"]):
+		failures.append("feed read %s, expected Alice KO Bob" % [lines])
+	await _teardown(loop["stage"])
+	return failures
+
+## No hit_* set points at a copy made under a placeholder name (#288): the
+## spear, pogo, rod and magnet once did, so a marker in a file name is a copy.
+func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var sounds: Dictionary = (sfx.get_script() as GDScript).get_script_constant_map()["SOUNDS"]
+	var checked: int = 0
+	for key: String in sounds:
+		if not key.begins_with("hit_"):
+			continue
+		for file: String in sounds[key]["files"]:
+			checked += 1
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_"]:
+				if file.contains(marker):
+					failures.append("%s uses placeholder file %s" % [key, file])
+	if checked == 0:
+		failures.append("no hit_* files were checked")
 	_scenario_completed = true
 	return failures
