@@ -22651,7 +22651,7 @@ var _relay_port_next: int = 39180
 ## A real Relay on a free local port. Caller must `_relay_stop`.
 func _relay_start() -> Node:
 	var relay: Node = RelayScript238.new()
-	root.add_child(relay)
+	get_root().add_child(relay)
 	for i in 50:
 		_relay_port_next += 1
 		if relay.start(_relay_port_next) == OK:
