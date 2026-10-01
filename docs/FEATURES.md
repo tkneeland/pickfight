@@ -77,6 +77,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Bots via `--bots=N` flag and Solo practice button (#152)
 - Bots read stage hazards; bots yield to phones (#176, #193)
 - Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
+- Bots hunt deliberately: they pick the rival cheapest to reach (a rival high up on a ledge is the last chosen) and stick with it, never a teammate, and a bot hooked on a ledge by its own pickaxe sweeps the head off it instead of hanging there (#302)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)

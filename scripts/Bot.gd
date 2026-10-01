@@ -163,6 +163,20 @@ const MOMENTUM_SEC: float = 0.3
 ## rock back onto it.
 const PERCHED_SPEED: float = 40.0
 const PERCH_FLING: Vector2 = Vector2(0.8, -0.6)
+## Issue #302: a bot aiming its head down, at rest, with the head well above
+## its body has the head hooked on top of a ledge and the body hanging below
+## it. After HOOKED_SEC of that it sweeps the head out sideways, off the
+## ledge, for UNHOOK_SEC.
+## Issue #302: height above the bot beyond which a rival counts as that much
+## farther away, once per pixel over it, times CLIMB_COST: a vault only lifts
+## a bot so far, so a rival up on a high ledge is the last to be hunted.
+const FREE_CLIMB: float = 100.0
+const CLIMB_COST: float = 4.0
+## A new rival takes over from the one being hunted only when this much closer.
+const RETARGET_RATIO: float = 0.7
+const HOOKED_SEC: float = 0.5
+const UNHOOK_SEC: float = 0.6
+const HOOKED_HEAD_ABOVE: float = 40.0
 
 ## The `Player` this bot drives, and where its input goes.
 var player: Node2D
@@ -225,6 +239,9 @@ var _danger_frame: int = -1
 ## True while the bot is heading for a bounce pad on purpose, so the pad
 ## counts as ground to walk onto.
 var _pad_route: bool = false
+var _hooked_for: float = 0.0
+var _unhook_left: float = 0.0
+var _unhook_side: float = 1.0
 ## The players' bodies, which every ray ignores: gathered once a physics tick,
 ## not once a ray (issue #165).
 var _rids: Array[RID] = []
@@ -260,7 +277,11 @@ func think(delta: float) -> Vector2:
 		_choose_goal()
 	_track_progress(delta)
 	if mode == "attack" and _alive(_target):
+		_hooked_for = 0.0
 		return _swing(delta)
+	var unhook: Vector2 = _unhook(delta)
+	if unhook != Vector2.ZERO:
+		return unhook
 	return _vault(delta)
 
 # --- Choosing a goal -------------------------------------------------------------
@@ -324,9 +345,12 @@ func _choose_goal() -> void:
 ## nearest at all: it waits at the edge for that one.
 func _nearest_enemy() -> Node2D:
 	var best: Node2D = null
-	var best_distance: float = INF
+	var best_cost: float = INF
 	var walkable: Node2D = null
-	var walkable_distance: float = INF
+	var walkable_cost: float = INF
+	var current: Node2D = null
+	var current_cost: float = INF
+	var current_walkable: bool = false
 	for other: Node in player.get_tree().get_nodes_in_group("players"):
 		if other == player or not _alive(other):
 			continue
@@ -334,14 +358,32 @@ func _nearest_enemy() -> Node2D:
 		if player.has_method("is_teammate") and player.is_teammate(other):
 			continue
 		var at: Vector2 = (other as Node2D).global_position
-		var d: float = player.global_position.distance_to(at)
-		if d < best_distance:
-			best_distance = d
-			best = other
-		if d < walkable_distance and _walkable_to(at.x):
-			walkable_distance = d
-			walkable = other
-	return walkable if walkable != null else best
+		var cost: float = _hunt_cost(at)
+		var reachable: bool = _walkable_to(at.x)
+		if other == _target:
+			current = other as Node2D
+			current_cost = cost
+			current_walkable = reachable
+		if cost < best_cost:
+			best_cost = cost
+			best = other as Node2D
+		if cost < walkable_cost and reachable:
+			walkable_cost = cost
+			walkable = other as Node2D
+	var pick: Node2D = walkable if walkable != null else best
+	var pick_cost: float = walkable_cost if walkable != null else best_cost
+	# Stick with the rival being hunted unless another is clearly better
+	# (issue #302): swapping on every think tick is dithering.
+	if current != null and current != pick and (current_walkable or walkable == null) \
+			and pick_cost > current_cost * RETARGET_RATIO:
+		return current
+	return pick
+
+## How costly a rival at `at` is to hunt (issue #302): the distance, plus
+## extra for every pixel it is up above what a vault can reach.
+func _hunt_cost(at: Vector2) -> float:
+	var above: float = maxf(player.global_position.y - at.y - FREE_CLIMB, 0.0)
+	return player.global_position.distance_to(at) + above * CLIMB_COST
 
 ## The nearest pickup with solid ground under it and either side of it: one
 ## over open air, a hazard, a pad or ground that will not last is bait.
@@ -408,6 +450,32 @@ func _swing(delta: float) -> Vector2:
 	return Vector2.RIGHT.rotated(angle) * length
 
 # --- Moving --------------------------------------------------------------------
+
+## Issue #302: the head hooked over a ledge's top with the body dangling
+## beneath it holds the bot there for good, because every anchor it plants
+## is downwards, into the ledge the head is already resting on. Sweep the
+## head out sideways, towards the goal, to slide it off.
+func _unhook(delta: float) -> Vector2:
+	if _unhook_left > 0.0:
+		_unhook_left -= delta
+		return Vector2(_unhook_side, 0.0)
+	var body := player as RigidBody2D
+	if body == null or not player.has_method("weapon_head_position"):
+		return Vector2.ZERO
+	var head: Vector2 = player.weapon_head_position()
+	var hooked: bool = body.linear_velocity.length() < PERCHED_SPEED and last_input.y > 0.0 \
+			and head.y < player.global_position.y - HOOKED_HEAD_ABOVE
+	if not hooked:
+		_hooked_for = 0.0
+		return Vector2.ZERO
+	_hooked_for += delta
+	if _hooked_for < HOOKED_SEC:
+		return Vector2.ZERO
+	_hooked_for = 0.0
+	_unhook_left = UNHOOK_SEC
+	var side: float = signf(goal.x - player.global_position.x)
+	_unhook_side = side if side != 0.0 else (-1.0 if rng.randf() < 0.5 else 1.0)
+	return Vector2(_unhook_side, 0.0)
 
 ## Vault towards `goal`: aim short at an anchor, then push out through it.
 func _vault(delta: float) -> Vector2:

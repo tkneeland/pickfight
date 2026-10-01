@@ -502,6 +502,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_only_nudges_pickups",
 	"ghost_cleared_at_round_end_and_never_for_bots",
+	"bot_prefers_reachable_target_and_strikes",
+	"bot_never_idles_while_opponent_alive",
+	"bot_hunts_enemy_team_never_teammate",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1915,6 +1918,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ghost_cannot_hurt_and_only_nudges_pickups()
 		"ghost_cleared_at_round_end_and_never_for_bots":
 			return await _scenario_ghost_cleared_at_round_end_and_never_for_bots()
+		"bot_prefers_reachable_target_and_strikes":
+			return await _scenario_bot_prefers_reachable_target_and_strikes()
+		"bot_never_idles_while_opponent_alive":
+			return await _scenario_bot_never_idles_while_opponent_alive()
+		"bot_hunts_enemy_team_never_teammate":
+			return await _scenario_bot_hunts_enemy_team_never_teammate()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -28861,6 +28870,86 @@ func _scenario_ghost_cleared_at_round_end_and_never_for_bots() -> Array[String]:
 	if rm.ghost_of(0) != null:
 		failures.append("the ghost survived the end of the round")
 	await _teardown(loop["stage"])
+	return failures
+
+
+## Issue #302: bot hunting. A bot at `bot_x` on the arena floor and one
+## stationary rival per entry of `rivals` (positions). Runs `ticks` physics
+## ticks. Returns {damage: [per rival], idle: ticks the live bot sat still
+## without attacking, targets: every rival index it ever targeted}.
+func _hunt302(rivals: Array, ticks: int, bot_x: float, teams: Array = []) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274.0))
+	var others: Array[RigidBody2D] = []
+	for at: Vector2 in rivals:
+		others.append(_spawn_player(stage, at))
+	if not teams.is_empty():
+		player.team = teams[0]
+		for k in others.size():
+			others[k].team = teams[k + 1]
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var idle: int = 0
+	var targets: Dictionary = {}
+	var mark: Vector2 = player.global_position
+	for t in ticks:
+		await physics_frame
+		if not player.alive:
+			break
+		if bot._target != null and others.has(bot._target):
+			targets[others.find(bot._target)] = true
+		if t % 60 == 59:
+			var rival_alive: bool = false
+			for other: RigidBody2D in others:
+				rival_alive = rival_alive or other.alive
+			if rival_alive and bot.mode != "attack" and player.global_position.distance_to(mark) < 30.0:
+				idle += 60
+			mark = player.global_position
+	var damage: Array = []
+	for other: RigidBody2D in others:
+		damage.append(other.damage)
+	var alive: bool = player.alive
+	await _teardown(stage, false)
+	return {"damage": damage, "idle": idle, "targets": targets.keys(), "alive": alive}
+
+## An unreachable rival sits on the high platform nearer than a rival on the
+## floor: the bot takes the one it can reach, closes in and lands a strike.
+func _scenario_bot_prefers_reachable_target_and_strikes() -> Array[String]:
+	var failures: Array[String] = []
+	var got: Dictionary = await _hunt302([Vector2(320, 20), Vector2(-420, 274)], 900, 100.0)
+	print("      damage per rival %s, targeted %s" % [got["damage"], got["targets"]])
+	if got["damage"][1] <= 0.0:
+		failures.append("the bot never landed a strike on the rival it could reach (damage %s)" % [got["damage"]])
+	_scenario_completed = true
+	return failures
+
+## With a lone rival alive on the floor the bot is not still for long.
+func _scenario_bot_never_idles_while_opponent_alive() -> Array[String]:
+	var failures: Array[String] = []
+	var got: Dictionary = await _hunt302([Vector2(-100, 274)], 900, -500.0)
+	print("      idle ticks %d, damage %s" % [got["idle"], got["damage"]])
+	if got["idle"] > 120:
+		failures.append("the bot sat still for %d ticks with a rival alive" % got["idle"])
+	if got["damage"][0] <= 0.0:
+		failures.append("the bot never hit the lone rival")
+	_scenario_completed = true
+	return failures
+
+## A teammate stands nearer than the enemy: the bot never targets it.
+func _scenario_bot_hunts_enemy_team_never_teammate() -> Array[String]:
+	var failures: Array[String] = []
+	var got: Dictionary = await _hunt302([Vector2(60, 274), Vector2(-420, 274)], 900, 0.0, [0, 0, 1])
+	print("      damage %s, targeted %s" % [got["damage"], got["targets"]])
+	if got["targets"].has(0):
+		failures.append("the bot targeted its teammate")
+	if got["damage"][0] > 0.0:
+		failures.append("the bot hurt its teammate (%.0f)" % got["damage"][0])
+	if got["damage"][1] <= 0.0:
+		failures.append("the bot never hit the enemy")
+	_scenario_completed = true
 	return failures
 
 # --- Onboarding: first-join tip and the live lobby sandbox (issue #291) ---------
