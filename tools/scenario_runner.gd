@@ -368,6 +368,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pc_seat_does_not_block_victory_exit",
 	"host_pc_seat_never_becomes_host_player",
 	"online_toggle_refused_from_remote_host",
+	"snapshot_encode_decode",
+	"snapshot_quantization_tolerance",
+	"snapshot_delta_encode",
+	"remote_client_scene_loads",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1503,6 +1507,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pc_seat_never_becomes_host_player()
 		"online_toggle_refused_from_remote_host":
 			return await _scenario_online_toggle_refused_from_remote_host()
+		"snapshot_encode_decode":
+			return await _scenario_snapshot_encode_decode()
+		"snapshot_quantization_tolerance":
+			return await _scenario_snapshot_quantization_tolerance()
+		"snapshot_delta_encode":
+			return await _scenario_snapshot_delta_encode()
+		"remote_client_scene_loads":
+			return await _scenario_remote_client_scene_loads()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -22866,6 +22878,289 @@ func _scenario_relay_idle_timeout() -> Array[String]:
 	if room["relay"].room_count() != 0:
 		failures.append("room_count is %d after idle close, wanted 0" % room["relay"].room_count())
 	_relay_stop(room["relay"], room["clients"])
+	_scenario_completed = true
+	return failures
+
+# --- Snapshot encode/decode (issue #240) ----------------------------------
+
+func _scenario_snapshot_encode_decode() -> Array[String]:
+	var failures: Array[String] = []
+	var SnapshotScript = preload("res://scripts/Snapshot.gd")
+
+	var world = {
+		"is_full_snapshot": true,
+		"stage_id": 5,
+		"static_stage_bodies": [
+			{"position": Vector2(100, 200), "rotation": 0.5, "linear_velocity": Vector2(0, 0)},
+		],
+		"players": [
+			{
+				"player_id": 1,
+				"body": {"position": Vector2(50, 100), "rotation": 0.0, "linear_velocity": Vector2(10, -5)},
+				"weapon": {"head_position": Vector2(70, 80), "head_rotation": 1.5, "head_shape_index": 0},
+				"color": 1,
+				"name": "Alice",
+				"team": 0,
+				"damage": 25,
+				"state": 0,
+			},
+			{
+				"player_id": 2,
+				"body": {"position": Vector2(150, 150), "rotation": 1.0, "linear_velocity": Vector2(-5, 10)},
+				"weapon": {"head_position": Vector2(170, 130), "head_rotation": 0.5, "head_shape_index": 1},
+				"color": 2,
+				"name": "Bob",
+				"team": 1,
+				"damage": 50,
+				"state": 1,
+			},
+		],
+		"projectiles": [
+			{
+				"projectile_id": 1,
+				"position": Vector2(200, 200),
+				"velocity": Vector2(100, 0),
+				"weapon_type": 3,
+			},
+		],
+		"pickups": [
+			{
+				"pickup_id": 1,
+				"position": Vector2(300, 300),
+				"weapon_type": 2,
+			},
+		],
+		"flail": {
+			"flail_id": 1,
+			"ball_position": Vector2(250, 250),
+			"ball_velocity": Vector2(50, 50),
+		},
+		"grapple": {
+			"grapple_id": 1,
+			"hook_position": Vector2(280, 280),
+			"rope_end": Vector2(320, 320),
+		},
+		"modifiers": [
+			{"modifier_id": 1, "name": "low_gravity"},
+		],
+		"round_phase": 1,
+		"timer_ms": 45000,
+		"scores": {1: 10, 2: 15},
+		"kill_feed": [
+			{"text": "Alice eliminated Bob"},
+		],
+		"kill_zone_height": 500,
+		"announcer_text": "Final round!",
+	}
+
+	var encoded = SnapshotScript.encode(world)
+	if encoded.is_empty():
+		failures.append("encode returned empty bytes")
+		return failures
+
+	var decoded = SnapshotScript.decode(encoded)
+
+	if decoded.get("stage_id") != 5:
+		failures.append("stage_id mismatch: got %s, wanted 5" % decoded.get("stage_id"))
+
+	var players = decoded.get("players", [])
+	if players.size() != 2:
+		failures.append("player count: got %d, wanted 2" % players.size())
+	elif players[0].get("name") != "Alice":
+		failures.append("player 0 name: got %s, wanted Alice" % players[0].get("name"))
+	elif players[0].get("damage") != 25:
+		failures.append("player 0 damage: got %d, wanted 25" % players[0].get("damage"))
+	elif players[1].get("name") != "Bob":
+		failures.append("player 1 name: got %s, wanted Bob" % players[1].get("name"))
+
+	var projectiles = decoded.get("projectiles", [])
+	if projectiles.size() != 1:
+		failures.append("projectile count: got %d, wanted 1" % projectiles.size())
+	elif projectiles[0].get("projectile_id") != 1:
+		failures.append("projectile id: got %d, wanted 1" % projectiles[0].get("projectile_id"))
+
+	var pickups = decoded.get("pickups", [])
+	if pickups.size() != 1:
+		failures.append("pickup count: got %d, wanted 1" % pickups.size())
+
+	var flail = decoded.get("flail", {})
+	if flail.is_empty():
+		failures.append("flail was empty")
+	elif flail.get("flail_id") != 1:
+		failures.append("flail id: got %d, wanted 1" % flail.get("flail_id"))
+
+	var grapple = decoded.get("grapple", {})
+	if grapple.is_empty():
+		failures.append("grapple was empty")
+	elif grapple.get("grapple_id") != 1:
+		failures.append("grapple id: got %d, wanted 1" % grapple.get("grapple_id"))
+
+	var modifiers = decoded.get("modifiers", [])
+	if modifiers.size() != 1:
+		failures.append("modifier count: got %d, wanted 1" % modifiers.size())
+	elif modifiers[0].get("name") != "low_gravity":
+		failures.append("modifier name: got %s, wanted low_gravity" % modifiers[0].get("name"))
+
+	var scores = decoded.get("scores", {})
+	if scores.get(1) != 10:
+		failures.append("player 1 score: got %s, wanted 10" % scores.get(1))
+	if scores.get(2) != 15:
+		failures.append("player 2 score: got %s, wanted 15" % scores.get(2))
+
+	var timer_ms = decoded.get("timer_ms")
+	if timer_ms != 45000:
+		failures.append("timer_ms: got %d, wanted 45000" % timer_ms)
+
+	var kill_zone = decoded.get("kill_zone_height")
+	if kill_zone != 500:
+		failures.append("kill_zone_height: got %d, wanted 500" % kill_zone)
+
+	var announcer = decoded.get("announcer_text")
+	if announcer != "Final round!":
+		failures.append("announcer_text: got %s, wanted 'Final round!'" % announcer)
+
+	_scenario_completed = true
+	return failures
+
+func _scenario_snapshot_quantization_tolerance() -> Array[String]:
+	var failures: Array[String] = []
+	var SnapshotScript = preload("res://scripts/Snapshot.gd")
+
+	var positions = [
+		Vector2(0, 0),
+		Vector2(1000, -500),
+		Vector2(-1000, 1500),
+		Vector2(32767, -32768),
+		Vector2(0.1, 0.9),
+		Vector2(99.9, -99.1),
+	]
+
+	for pos in positions:
+		var world = {
+			"is_full_snapshot": true,
+			"stage_id": 1,
+			"static_stage_bodies": [],
+			"players": [{
+				"player_id": 1,
+				"body": {"position": pos, "rotation": 0.0, "linear_velocity": Vector2.ZERO},
+				"weapon": {"head_position": pos, "head_rotation": 0.0, "head_shape_index": 0},
+				"color": 0,
+				"name": "Test",
+				"team": 0,
+				"damage": 0,
+				"state": 0,
+			}],
+			"projectiles": [],
+			"pickups": [],
+			"flail": {},
+			"grapple": {},
+			"modifiers": [],
+			"round_phase": 0,
+			"timer_ms": 0,
+			"scores": {},
+			"kill_feed": [],
+			"kill_zone_height": 0,
+			"announcer_text": "",
+		}
+
+		var encoded = SnapshotScript.encode(world)
+		var decoded = SnapshotScript.decode(encoded)
+		var players = decoded.get("players", [])
+		if players.is_empty():
+			failures.append("no players decoded for position %s" % pos)
+			continue
+
+		var decoded_pos = players[0].get("body", {}).get("position", Vector2.ZERO)
+		var diff = (decoded_pos - pos).length()
+		if diff > 1.0:
+			failures.append("position %s quantized to %s (diff %.2f px, wanted ≤ 1)" % [pos, decoded_pos, diff])
+
+	_scenario_completed = true
+	return failures
+
+func _scenario_snapshot_delta_encode() -> Array[String]:
+	var failures: Array[String] = []
+	var SnapshotScript = preload("res://scripts/Snapshot.gd")
+
+	var world = {
+		"is_full_snapshot": false,
+		"delta_entities": [
+			{
+				"type": SnapshotScript.TYPE_PLAYER,
+				"id": 1,
+				"position": Vector2(100, 100),
+				"rotation": 0.5,
+				"linear_velocity": Vector2(10, 0),
+				"head_position": Vector2(120, 80),
+				"head_rotation": 0.3,
+				"head_shape_index": 0,
+				"damage": 30,
+				"state": 0,
+			},
+			{
+				"type": SnapshotScript.TYPE_PROJECTILE,
+				"id": 1,
+				"position": Vector2(200, 200),
+				"velocity": Vector2(100, 0),
+			},
+			{
+				"type": SnapshotScript.TYPE_TIMER,
+				"id": 0,
+				"timer_ms": 30000,
+			},
+		],
+	}
+
+	var encoded = SnapshotScript.encode(world)
+	var decoded = SnapshotScript.decode(encoded)
+
+	if not decoded.get("is_full_snapshot", false):
+		var deltas = decoded.get("delta_entities", [])
+		if deltas.size() != 3:
+			failures.append("delta entities count: got %d, wanted 3" % deltas.size())
+		else:
+			if deltas[0].get("id") != 1:
+				failures.append("first delta id: got %d, wanted 1" % deltas[0].get("id"))
+			if deltas[1].get("type") != SnapshotScript.TYPE_PROJECTILE:
+				failures.append("second delta type: got %d, wanted TYPE_PROJECTILE" % deltas[1].get("type"))
+			if deltas[2].get("timer_ms") != 30000:
+				failures.append("timer_ms: got %d, wanted 30000" % deltas[2].get("timer_ms"))
+
+	_scenario_completed = true
+	return failures
+
+func _scenario_remote_client_scene_loads() -> Array[String]:
+	var failures: Array[String] = []
+	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
+	
+	if RemoteClientScene == null:
+		failures.append("RemoteClient.tscn failed to load")
+		return failures
+	
+	var client = RemoteClientScene.instantiate()
+	if client == null:
+		failures.append("RemoteClient scene failed to instantiate")
+		return failures
+
+	root.add_child(client)
+	await _await_ticks(2)
+	
+	if not client.is_node_ready():
+		failures.append("RemoteClient scene not ready after instantiation")
+	
+	if client.state != client.State.JOINING:
+		failures.append("RemoteClient initial state should be JOINING, got %d" % client.state)
+	
+	if client.websocket != null:
+		failures.append("RemoteClient should not have websocket before joining")
+	
+	var ui_children = client.ui_root.get_child_count()
+	if ui_children < 1:
+		failures.append("RemoteClient UI should have at least 1 child, has %d" % ui_children)
+	
+	client.queue_free()
+	await _await_ticks(1)
+	
 	_scenario_completed = true
 	return failures
 
