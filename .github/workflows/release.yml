@@ -1,0 +1,92 @@
+# Builds the PC releases (Windows, macOS, Linux) and pushes them to itch.io (#242).
+# Unsigned builds; one build serves both host and client.
+# Push needs the secret BUTLER_API_KEY and the variable ITCH_TARGET (user/game).
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+env:
+  GODOT_VERSION: 4.6.2-stable
+  GODOT_DIR: /home/runner/godot-bin
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GODOT_DIR }}
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Install Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$GODOT_DIR"
+          curl -fsSL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d "$GODOT_DIR"
+          mv "$GODOT_DIR/Godot_v${GODOT_VERSION}_linux.x86_64" "$GODOT_DIR/godot"
+          chmod +x "$GODOT_DIR/godot"
+
+      - name: Cache export templates
+        id: tpl-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          key: godot-templates-${{ env.GODOT_VERSION }}
+
+      - name: Install export templates
+        if: steps.tpl-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o /tmp/templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION%-stable}.stable"
+          mkdir -p "$dir"
+          unzip -q /tmp/templates.tpz -d /tmp/tpl
+          mv /tmp/tpl/templates/* "$dir/"
+
+      - name: Import project
+        run: '"$GODOT_DIR/godot" --headless --path . --import'
+
+      - name: Export builds
+        run: |
+          mkdir -p build/windows build/macos build/linux dist
+          "$GODOT_DIR/godot" --headless --path . --export-release "Windows" build/windows/Pickfight.exe
+          "$GODOT_DIR/godot" --headless --path . --export-release "macOS" build/macos/Pickfight.zip
+          "$GODOT_DIR/godot" --headless --path . --export-release "Linux" build/linux/pickfight.x86_64
+          chmod +x build/linux/pickfight.x86_64
+          (cd build/windows && zip -qr ../../dist/pickfight-windows.zip .)
+          (cd build/macos && zip -qr ../../dist/pickfight-mac.zip .)
+          (cd build/linux && zip -qr ../../dist/pickfight-linux.zip .)
+          ls -l dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pickfight-builds
+          path: dist/*.zip
+
+      - name: Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+        run: |
+          if [ -z "$BUTLER_API_KEY" ] || [ -z "$ITCH_TARGET" ]; then
+            echo "BUTLER_API_KEY secret or ITCH_TARGET variable not set; skipping itch push."
+            exit 0
+          fi
+          curl -fsSL -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q /tmp/butler.zip -d /tmp/butler
+          chmod +x /tmp/butler/butler
+          version="${GITHUB_REF_NAME}"
+          /tmp/butler/butler push dist/pickfight-windows.zip "$ITCH_TARGET:windows" --userversion "$version"
+          /tmp/butler/butler push dist/pickfight-mac.zip "$ITCH_TARGET:mac" --userversion "$version"
+          /tmp/butler/butler push dist/pickfight-linux.zip "$ITCH_TARGET:linux" --userversion "$version"
