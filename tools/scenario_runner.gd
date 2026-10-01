@@ -404,6 +404,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"moving_platform_follows_path_and_returns",
 	"moving_platform_rider_is_not_dropped",
 	"moving_platform_uses_mood_color",
+
+	"juice_strike_shakes_real_camera",
+	"juice_shake_disabled_by_setting",
+	"juice_hitstop_restores_and_does_not_desync",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1613,6 +1617,13 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_moving_platform_rider_is_not_dropped()
 		"moving_platform_uses_mood_color":
 			return await _scenario_moving_platform_uses_mood_color()
+
+		"juice_strike_shakes_real_camera":
+			return await _scenario_juice_strike_shakes_real_camera()
+		"juice_shake_disabled_by_setting":
+			return await _scenario_juice_shake_disabled_by_setting()
+		"juice_hitstop_restores_and_does_not_desync":
+			return await _scenario_juice_hitstop_restores_and_does_not_desync()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25163,4 +25174,246 @@ func _scenario_moving_platform_uses_mood_color() -> Array[String]:
 		if not _color_close(platform.platform_color(), mood["platform"], 0.01):
 			failures.append("%s mood: moving platform %s, want %s" % [mood["name"], platform.platform_color(), mood["platform"]])
 		await _teardown(stage)
+	return failures
+
+# --- Juice wiring: shake, the setting, hit-stop (issue #256) ---------------
+
+## A stand-in attacker for Juice: it carries the two signals Juice recognises a
+## player by (`strike_landed` with its four arguments, and `eliminated`), so a
+## scenario can fire either at an exact damage.
+const JUICE_EMITTER_SOURCE: String = "extends Node2D\nsignal strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool)\nsignal eliminated\nvar linear_velocity: Vector2 = Vector2.ZERO\nvar alive: bool = true\n"
+## Counts physics ticks it was actually processed on (a paused tree does not
+## run it), and snapshots the probe body and the engine frame on tick `target`.
+const JUICE_COUNTER_SOURCE: String = "extends Node\nvar ticks: int = 0\nvar target: int = 0\nvar probe: RigidBody2D\nvar snap: Vector2 = Vector2.ZERO\nvar snap_vel: Vector2 = Vector2.ZERO\nvar frame_at_target: int = -1\nfunc _physics_process(_d: float) -> void:\n\tticks += 1\n\tif ticks == target:\n\t\tsnap = probe.global_position\n\t\tsnap_vel = probe.linear_velocity\n\t\tframe_at_target = Engine.get_physics_frames()\n"
+const JUICE_SHAKE_WATCH_FRAMES: int = 24
+
+func _juice_emitter(stage: Node2D) -> Node2D:
+	var script := GDScript.new()
+	script.source_code = JUICE_EMITTER_SOURCE
+	script.reload()
+	var emitter := Node2D.new()
+	emitter.set_script(script)
+	stage.add_child(emitter)
+	return emitter
+
+func _juice_camera(stage: Node2D) -> Camera2D:
+	var camera := Camera2D.new()
+	stage.add_child(camera)
+	camera.make_current()
+	return camera
+
+## Largest offset magnitude `camera` showed over `frames` rendered frames.
+func _juice_peak_offset(camera: Camera2D, frames: int) -> float:
+	var peak: float = 0.0
+	for _i in frames:
+		await process_frame
+		peak = maxf(peak, camera.offset.length())
+	return peak
+
+## A heavy strike moves the real current camera (found through the viewport,
+## not by name), a light one does not, the offset returns to zero, the longer
+## elimination shake outlasts the strike's, and the tree is not left paused.
+func _scenario_juice_strike_shakes_real_camera() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var shake_was: bool = bool(sfx.get("screen_shake"))
+	sfx.screen_shake = true
+	var stage: Node2D = _new_stage()
+	var camera: Camera2D = _juice_camera(stage)
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(3)
+
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MIN * 0.5, Vector2.ZERO, false)
+	var light: float = await _juice_peak_offset(camera, 6)
+	print("      light strike peak offset %.2f px" % light)
+	if light > 0.0:
+		failures.append("a %.0f-damage strike shook the camera by %.2f px" % [JuiceScript.SHAKE_DAMAGE_MIN * 0.5, light])
+
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MAX, Vector2.ZERO, false)
+	var heavy: float = await _juice_peak_offset(camera, 6)
+	print("      heavy strike peak offset %.2f px" % heavy)
+	if heavy <= 0.0:
+		failures.append("a %.0f-damage strike left the real camera's offset at zero" % JuiceScript.SHAKE_DAMAGE_MAX)
+	if heavy > JuiceScript.SHAKE_INTENSITY_MAX * 1.001:
+		failures.append("strike shake %.2f px passed SHAKE_INTENSITY_MAX %.1f" % [heavy, JuiceScript.SHAKE_INTENSITY_MAX])
+	await _juice_wait(JuiceScript.SHAKE_DURATION + 0.2)
+	if camera.offset != Vector2.ZERO:
+		failures.append("camera offset %s after the shake ended" % camera.offset)
+
+	# An elimination shakes harder and longer: still moving once a strike's
+	# shake would be over.
+	emitter.eliminated.emit()
+	await _juice_wait(JuiceScript.SHAKE_DURATION + 0.03)
+	var late: float = await _juice_peak_offset(camera, 3)
+	print("      elimination offset just past SHAKE_DURATION: %.2f px" % late)
+	if late <= 0.0:
+		failures.append("the elimination shake ended with the strike's duration, not its own %.2f s" % JuiceScript.SHAKE_DURATION_ELIMINATION)
+	await _juice_wait(JuiceScript.SHAKE_DURATION_ELIMINATION + 0.2)
+	if camera.offset != Vector2.ZERO:
+		failures.append("camera offset %s after the elimination shake ended" % camera.offset)
+
+	# A shake cut short by the juice leaving the tree puts the camera back.
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MAX, Vector2.ZERO, false)
+	await _juice_peak_offset(camera, 3)
+	juice.queue_free()
+	await _await_ticks(2)
+	if camera.offset != Vector2.ZERO:
+		failures.append("camera offset %s after Juice left the tree mid-shake" % camera.offset)
+	if get_root().get_tree().paused:
+		failures.append("the tree is still paused after the hit-stop and Juice's exit")
+	sfx.screen_shake = shake_was
+	await _teardown(stage)
+	return failures
+
+## With "Screen shake" off the camera never moves, on a strike or a kill, and
+## the setting is the saved one: it round-trips through a settings file, and
+## this test only ever points Sfx at a temp file (#195).
+func _scenario_juice_shake_disabled_by_setting() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var shake_was: bool = bool(sfx.get("screen_shake"))
+	var stage: Node2D = _new_stage()
+	var camera: Camera2D = _juice_camera(stage)
+	var _juice_node: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(3)
+
+	sfx.set_screen_shake(false)
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MAX, Vector2.ZERO, false)
+	emitter.eliminated.emit()
+	var off: float = await _juice_peak_offset(camera, JUICE_SHAKE_WATCH_FRAMES)
+	print("      shake off: peak offset %.2f px" % off)
+	if off != 0.0:
+		failures.append("camera moved %.2f px with screen shake turned off" % off)
+	await _juice_wait(JuiceScript.SHAKE_DURATION_ELIMINATION + 0.1)
+	sfx.set_screen_shake(true)
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MAX, Vector2.ZERO, false)
+	var on: float = await _juice_peak_offset(camera, 6)
+	if on <= 0.0:
+		failures.append("turning screen shake back on did not bring the shake back")
+	await _juice_wait(JuiceScript.SHAKE_DURATION + 0.2)
+
+	# Persistence, on a temp file only.
+	var was: Dictionary = {"path": sfx.settings_path, "persist": sfx.persist_settings}
+	var path: String = OS.get_temp_dir().path_join("pickfight_shake_setting_%d.cfg" % OS.get_process_id())
+	if path == sfx.SETTINGS_PATH or ProjectSettings.globalize_path(path) == ProjectSettings.globalize_path(sfx.SETTINGS_PATH):
+		failures.append("the scenario's settings file is the owner's")
+	else:
+		sfx.settings_path = path
+		sfx.persist_settings = true
+		sfx.set_screen_shake(false)
+		sfx.screen_shake = true
+		sfx.load_settings()
+		if sfx.screen_shake:
+			failures.append("screen shake off was not remembered in the settings file")
+		sfx.set_screen_shake(true)
+		sfx.screen_shake = false
+		sfx.load_settings()
+		if not sfx.screen_shake:
+			failures.append("screen shake on was not remembered in the settings file")
+		sfx.persist_settings = false
+		sfx.settings_path = was["path"]
+		DirAccess.remove_absolute(path)
+	sfx.persist_settings = was["persist"]
+	sfx.screen_shake = shake_was
+	await _teardown(stage)
+	return failures
+
+## Builds a probe body flying free under a tick counter and a Juice, optionally
+## fires a heavy strike once the counter passes tick 5, and runs until the
+## counter has served `ticks`. Returns what the counter saw, and the physics
+## frames it took.
+func _juice_hitstop_run(strike: bool, ticks: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var probe := RigidBody2D.new()
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 10.0
+	shape.shape = circle
+	probe.add_child(shape)
+	stage.add_child(probe)
+	probe.global_position = JUICE_ORIGIN
+	probe.linear_velocity = Vector2(310.0, -420.0)
+	var script := GDScript.new()
+	script.source_code = JUICE_COUNTER_SOURCE
+	script.reload()
+	var counter := Node.new()
+	counter.set_script(script)
+	counter.set("probe", probe)
+	counter.set("target", ticks)
+	stage.add_child(counter)
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	var start_frame: int = Engine.get_physics_frames()
+	var fired: bool = false
+	var guard: int = 0
+	while int(counter.get("ticks")) < ticks and guard < ticks * 4:
+		await physics_frame
+		guard += 1
+		if strike and not fired and int(counter.get("ticks")) >= 5:
+			fired = true
+			emitter.strike_landed.emit(emitter, JuiceScript.HITSTOP_DAMAGE_MIN + 20.0, Vector2.ZERO, false)
+	var result: Dictionary = {
+		"pos": counter.get("snap"), "vel": counter.get("snap_vel"),
+		"frames": int(counter.get("frame_at_target")) - start_frame,
+	}
+	# Let any freeze run out, and see the tree come back.
+	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
+	result["paused_after"] = get_root().get_tree().paused
+	result["frozen_after"] = bool(juice.is_frozen())
+	stage.queue_free()
+	await physics_frame
+	return result
+
+## A heavy hit freezes the game for exactly HITSTOP_FRAMES ticks and then
+## restores it; the freeze costs the simulation nothing (a body that had the
+## same number of simulated ticks is where a run without the hit has it); and
+## Juice leaving the tree mid-freeze never leaves the game paused.
+func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
+	var failures: Array[String] = []
+	var ticks: int = 40
+	var plain: Dictionary = await _juice_hitstop_run(false, ticks)
+	var stopped: Dictionary = await _juice_hitstop_run(true, ticks)
+	print("      no hit: %d frames, body at %s; hit: %d frames, body at %s" % [
+		plain["frames"], plain["pos"], stopped["frames"], stopped["pos"]])
+	var gap: float = (plain["pos"] as Vector2).distance_to(stopped["pos"])
+	var vgap: float = (plain["vel"] as Vector2).distance_to(stopped["vel"])
+	if gap > 0.001 or vgap > 0.001:
+		failures.append("after %d simulated ticks the body is %.4f px / %.4f px/s from where a run without the hit has it" % [ticks, gap, vgap])
+	var extra: int = int(stopped["frames"]) - int(plain["frames"])
+	if extra != JuiceScript.HITSTOP_FRAMES:
+		failures.append("the hit froze the game for %d ticks, expected HITSTOP_FRAMES %d" % [extra, JuiceScript.HITSTOP_FRAMES])
+	if bool(stopped["paused_after"]) or bool(stopped["frozen_after"]):
+		failures.append("the game was left frozen after the hit-stop (paused %s, frozen %s)" % [stopped["paused_after"], stopped["frozen_after"]])
+	if bool(plain["paused_after"]):
+		failures.append("the tree was paused in the run with no hit")
+
+	# A light hit freezes nothing.
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(2)
+	emitter.strike_landed.emit(emitter, JuiceScript.HITSTOP_DAMAGE_MIN * 0.5, Vector2.ZERO, false)
+	if get_root().get_tree().paused or juice.is_frozen():
+		failures.append("a %.0f-damage hit froze the game" % (JuiceScript.HITSTOP_DAMAGE_MIN * 0.5))
+
+	# A heavy one freezes; Juice leaving mid-freeze takes the pause with it.
+	emitter.strike_landed.emit(emitter, JuiceScript.HITSTOP_DAMAGE_MIN + 20.0, Vector2.ZERO, false)
+	if not juice.is_frozen() or not get_root().get_tree().paused:
+		failures.append("a heavy hit did not freeze the game")
+	juice.free()
+	if get_root().get_tree().paused:
+		failures.append("the game stayed paused after Juice left the tree mid-freeze")
+
+	# A pause someone else holds is not Juice's to take or lift.
+	get_root().get_tree().paused = true
+	var other: Node2D = _juice(stage)
+	var emitter2: Node2D = _juice_emitter(stage)
+	emitter2.strike_landed.emit(emitter2, JuiceScript.HITSTOP_DAMAGE_MIN + 20.0, Vector2.ZERO, false)
+	if other.is_frozen():
+		failures.append("Juice took over a pause it did not set")
+	get_root().get_tree().paused = false
+	await _teardown(stage)
 	return failures
