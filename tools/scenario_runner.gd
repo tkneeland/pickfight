@@ -368,6 +368,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pc_seat_does_not_block_victory_exit",
 	"host_pc_seat_never_becomes_host_player",
 	"online_toggle_refused_from_remote_host",
+	"pc_client_joins_and_renders",
+	"pc_client_mouse_moves_player",
+	"pc_client_disconnect_returns_to_join",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1503,6 +1506,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pc_seat_never_becomes_host_player()
 		"online_toggle_refused_from_remote_host":
 			return await _scenario_online_toggle_refused_from_remote_host()
+		"pc_client_joins_and_renders":
+			return await _scenario_pc_client_joins_and_renders()
+		"pc_client_mouse_moves_player":
+			return await _scenario_pc_client_mouse_moves_player()
+		"pc_client_disconnect_returns_to_join":
+			return await _scenario_pc_client_disconnect_returns_to_join()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -23610,4 +23619,128 @@ func _scenario_online_toggle_refused_from_remote_host() -> Array[String]:
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	server.apply_host_command("online", false)
 	await _online_close_239(rig)
+	return failures
+
+# --- PC client (issue #241) -------------------------------------------------
+
+func _scenario_pc_client_joins_and_renders() -> Array[String]:
+	var failures: Array[String] = []
+	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
+
+	if RemoteClientScene == null:
+		failures.append("RemoteClient.tscn failed to load")
+		return failures
+
+	var client = RemoteClientScene.instantiate()
+	if client == null:
+		failures.append("RemoteClient scene failed to instantiate")
+		return failures
+
+	root.add_child(client)
+	await _await_ticks(2)
+
+	if not client.is_node_ready():
+		failures.append("RemoteClient scene not ready after instantiation")
+
+	if client.state != client.State.JOINING:
+		failures.append("RemoteClient initial state should be JOINING, got %d" % client.state)
+
+	if client.websocket != null:
+		failures.append("RemoteClient should not have websocket before joining")
+
+	var ui_children = client.ui_root.get_child_count()
+	if ui_children < 1:
+		failures.append("RemoteClient UI should have at least 1 child, has %d" % ui_children)
+
+	client.queue_free()
+	await _await_ticks(1)
+
+	_scenario_completed = true
+	return failures
+
+func _scenario_pc_client_mouse_moves_player() -> Array[String]:
+	var failures: Array[String] = []
+
+	var rig: Dictionary = await _phone_rig_164(1, "PCClient241")
+	if rig.is_empty():
+		failures.append("could not set up host rig")
+		return failures
+
+	var server: Node = rig["server"]
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for relay")
+		return failures
+
+	if server.go_online("ws://127.0.0.1:%d" % _relay_port_next) != OK:
+		failures.append("host go_online failed")
+		return failures
+
+	await _await_ticks(3)
+
+	if not server.is_online():
+		failures.append("host never came online")
+		return failures
+
+	var room_code: String = server.online_room_code()
+	if room_code.is_empty():
+		failures.append("host has no room code")
+		return failures
+
+	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
+	var client = RemoteClientScene.instantiate()
+	root.add_child(client)
+
+	client.relay_url = "ws://127.0.0.1:%d" % _relay_port_next
+	client.room_code = room_code
+	client.player_name = "PCClient"
+
+	await _await_ticks(2)
+
+	if client.state == client.State.JOINING:
+		client._connect_to_relay()
+		await _await_ticks(5)
+
+	if client.state != client.State.PLAYING:
+		failures.append("client failed to enter PLAYING state")
+
+	if client.player_id < 0:
+		failures.append("client has no player_id")
+
+	client.queue_free()
+	_relay_stop(relay, [])
+	server.apply_host_command("online", false)
+	await _teardown(rig["stage"])
+
+	_scenario_completed = true
+	return failures
+
+func _scenario_pc_client_disconnect_returns_to_join() -> Array[String]:
+	var failures: Array[String] = []
+
+	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
+	var client = RemoteClientScene.instantiate()
+	root.add_child(client)
+
+	client.relay_url = "ws://localhost:9999"
+	client.room_code = "TEST"
+	client.player_name = "TestClient"
+
+	await _await_ticks(2)
+
+	if client.state == client.State.JOINING:
+		client._connect_to_relay()
+		await _await_ticks(3)
+
+	if client.state != client.State.JOINING:
+		failures.append("client should return to JOINING after connection failure")
+
+	var ui_children = client.ui_root.get_child_count()
+	if ui_children < 1:
+		failures.append("UI should be rebuilt after disconnect")
+
+	client.queue_free()
+	await _await_ticks(1)
+
+	_scenario_completed = true
 	return failures
