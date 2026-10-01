@@ -353,6 +353,7 @@ func _try_start_round() -> void:
 	_survivor_team = -1
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
+	_start_game_mode()
 	_pickup_director.start()
 	_start_kill_zone_rise()
 	_start_spawn_protection()
@@ -809,6 +810,7 @@ func _start_round_modifier() -> void:
 
 ## Round end: put back everything the modifier changed and drop its name.
 func _end_round_modifier() -> void:
+	_end_game_mode()
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
@@ -878,6 +880,7 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
+	_end_game_mode()
 	if _paused:
 		_set_tree_paused(false)
 	if _modifier != null:
@@ -1611,7 +1614,9 @@ func _add_team_state(state: Dictionary, roster: Array[int], in_lobby: bool) -> v
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
 #
 # `MatchStats.gd` keeps the match's numbers and decides who gets each KO: the
-# last player to hit the victim within 3 s, otherwise a self-KO. `KillFeed.gd`
+# last player to hit the victim within 3 s, otherwise a self-KO. That holds for
+# a hazard (spikes, saws, lava, kill zone) death too, since those report on the
+# victim's own `strike_landed` and never overwrite the last hitter (#311). `KillFeed.gd`
 # (the HUD node at `kill_feed_path`) shows each KO top right and a banner for
 # the big moments. The victory screen gets up to three awards under the podium.
 
@@ -1634,7 +1639,11 @@ func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
-	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec())
+	var victim_slot: int = _players.find(victim)
+	# Issue #311: a teammate never earns the KO for a teammate's death.
+	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
+		return
+	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec())
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _pending_kos.is_empty():
@@ -1767,3 +1776,39 @@ func _seed_match(announce: bool) -> void:
 		sfx.reseed(hash([seed_value, "sfx"]))
 	if announce:
 		print("RoundManager: match seed %d (replay with -- --seed=%d)" % [seed_value, seed_value])
+
+# --- Game modes (issues #276-#278) -------------------------------------------------
+# An optional rules layer over each round (`GameModes.gd`): King of the Hill,
+# Sudden Death or Hot Potato. "" (the default) is the classic round. The mode
+# node lives under this manager for one round and is torn down wherever the
+# round's modifier is (`_end_round_modifier()`), so it never leaks into the next.
+
+const GameModesScript := preload("res://scripts/GameModes.gd")
+## A `GameModes` id every round plays under, or "" for none. Host-set seam.
+@export var game_mode: String = ""
+var _game_mode_node: Node = null
+
+## The id of the mode on the current round, or "" for none.
+func active_game_mode_id() -> String:
+	return game_mode if _game_mode_node != null else ""
+
+## The current round's mode node, or null.
+func game_mode_node() -> Node:
+	return _game_mode_node
+
+func _start_game_mode() -> void:
+	_end_game_mode()
+	_game_mode_node = GameModesScript.create(game_mode)
+	if _game_mode_node == null:
+		if game_mode != "":
+			push_warning("RoundManager: unknown game mode '%s'" % game_mode)
+		return
+	add_child(_game_mode_node)
+	_game_mode_node.setup(self)
+	_game_mode_node.start_round(_in_round.duplicate())
+
+func _end_game_mode() -> void:
+	if _game_mode_node != null:
+		_game_mode_node.end_round()
+		_game_mode_node.queue_free()
+		_game_mode_node = null
