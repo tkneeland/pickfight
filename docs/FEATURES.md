@@ -57,7 +57,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Six eye styles (round, sleepy, angry, wide, dot, visor) picked in the same phone picker as hats and colour; pupils still track the weapon; kept per seat through reconnects (#297)
 - Hats (crown, top hat, cap, beanie, viking, party, halo, propeller) and colour picker on the phone (#151)
 - Squares have eyes that track the weapon head, blink and squint; arm drawn in front/behind body (#254, #91)
-- One cohesive colour palette (#255)
+- One cohesive colour palette (#255); the eight default slot colours are checked to stay distinguishable under protanopia, deuteranopia and tritanopia (#330)
 
 ## Controllers and input
 - Phone browser controller page over LAN, served by the host (#1, ADR-0002)

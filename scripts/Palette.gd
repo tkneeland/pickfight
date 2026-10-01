@@ -13,7 +13,7 @@ extends RefCounted
 
 const PLAYERS: Array[Color] = [
 	Color("#E69F00"), Color("#3D8FD1"), Color("#009E73"), Color("#D55E00"),
-	Color("#CC79A7"), Color("#56B4E9"), Color("#F0C400"), Color("#E8E6F0"),
+	Color("#CC79A7"), Color("#56B4E9"), Color("#F5E24A"), Color("#E8E6F0"),
 ]
 
 const DAYLIGHT: Dictionary = {

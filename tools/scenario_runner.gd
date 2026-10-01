@@ -478,6 +478,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"default_colours_are_colour_blind_distinguishable",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1837,6 +1838,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"default_colours_are_colour_blind_distinguishable":
+			return _scenario_default_colours_are_colour_blind_distinguishable()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -28070,5 +28073,50 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 	if empty.get("status") != 400:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+# --- Colour-blind distinguishability of the default slot colours (#330) -------
+# Machado et al. 2009, severity 1.0, applied to LINEAR sRGB. Distance is CIE76
+# dE in Lab (D65). Threshold 11.5: about 5 JND-ish steps for flat fills viewed
+# on a shared screen; the weakest pair after the fix is ~12.0 (tritanopia).
+const CVD_MIN_DELTA_E := 11.5
+const CVD_MATRICES := {
+	"normal": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+	"protanopia": [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+	"deuteranopia": [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
+	"tritanopia": [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.303900]],
+}
+
+func _cvd_lab(c: Color, m: Array) -> Vector3:
+	var lin := [c.srgb_to_linear().r, c.srgb_to_linear().g, c.srgb_to_linear().b]
+	var o: Array[float] = []
+	for r in 3:
+		o.append(clampf(m[r][0] * lin[0] + m[r][1] * lin[1] + m[r][2] * lin[2], 0.0, 1.0))
+	var x: float = 0.4124 * o[0] + 0.3576 * o[1] + 0.1805 * o[2]
+	var y: float = 0.2126 * o[0] + 0.7152 * o[1] + 0.0722 * o[2]
+	var z: float = 0.0193 * o[0] + 0.1192 * o[1] + 0.9505 * o[2]
+	var f := func(t: float) -> float:
+		return pow(t, 1.0 / 3.0) if t > 0.008856 else 7.787 * t + 16.0 / 116.0
+	var fx: float = f.call(x / 0.95047)
+	var fy: float = f.call(y)
+	var fz: float = f.call(z / 1.08883)
+	return Vector3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+
+func _scenario_default_colours_are_colour_blind_distinguishable() -> Array[String]:
+	var failures: Array[String] = []
+	var players: Array[Color] = PaletteScript.PLAYERS
+	if players.size() != 8:
+		failures.append("expected 8 default colours, got %d" % players.size())
+	for vision in CVD_MATRICES:
+		var labs: Array[Vector3] = []
+		for c in players:
+			labs.append(_cvd_lab(c, CVD_MATRICES[vision]))
+		for i in labs.size():
+			for j in range(i + 1, labs.size()):
+				var de: float = labs[i].distance_to(labs[j])
+				if de < CVD_MIN_DELTA_E:
+					failures.append("%s: slots %d (#%s) and %d (#%s) only dE %.1f apart, need %.1f" % [
+						vision, i, players[i].to_html(false), j, players[j].to_html(false), de, CVD_MIN_DELTA_E])
 	_scenario_completed = true
 	return failures
