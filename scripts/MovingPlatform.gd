@@ -30,6 +30,10 @@ extends AnimatableBody2D
 ## until something calls `start()`. Nothing in the stage rotation calls it
 ## yet; it exists so a stage can place a platform that waits for a cue.
 @export var starts_moving: bool = true
+## Optional loop path: offsets from the authored position. When non-empty the
+## platform ignores `travel` and cycles origin -> each point -> origin, taking
+## `one_way_sec` per leg, instead of ping-ponging.
+@export var loop_points: PackedVector2Array = PackedVector2Array()
 
 ## The authored position, read once in `_ready()`. Never recomputed from the
 ## current position -- doing so would let floating-point drift or an
@@ -39,6 +43,8 @@ var _origin: Vector2
 var _moving: bool = false
 var _heading_to_far: bool = true
 var _leg_elapsed: float = 0.0
+var _leg_index: int = 0
+var _visual: Polygon2D
 
 func _ready() -> void:
 	sync_to_physics = true
@@ -63,8 +69,17 @@ func _ready() -> void:
 		Vector2(-half.x, half.y),
 	])
 	add_child(visual)
+	_visual = visual
 
 	_moving = starts_moving
+
+## Recolours the platform; Stage.gd calls this with the mood's platform colour.
+func set_platform_color(color: Color) -> void:
+	if _visual != null:
+		_visual.color = color
+
+func platform_color() -> Color:
+	return _visual.color if _visual != null else Color.BLACK
 
 ## Starts the patrol for a platform authored with `starts_moving = false`.
 ## Safe to call more than once; a platform already moving just keeps going.
@@ -77,6 +92,16 @@ func _physics_process(delta: float) -> void:
 
 	var duration: float = maxf(one_way_sec, 0.001)
 	_leg_elapsed += delta
+	if not loop_points.is_empty():
+		while _leg_elapsed >= duration:
+			_leg_elapsed -= duration
+			_leg_index = (_leg_index + 1) % (loop_points.size() + 1)
+		var count: int = loop_points.size() + 1
+		var from: Vector2 = Vector2.ZERO if _leg_index == 0 else loop_points[_leg_index - 1]
+		var next: int = (_leg_index + 1) % count
+		var to: Vector2 = Vector2.ZERO if next == 0 else loop_points[next - 1]
+		global_position = _origin + from.lerp(to, _leg_elapsed / duration)
+		return
 	while _leg_elapsed >= duration:
 		_leg_elapsed -= duration
 		_heading_to_far = not _heading_to_far
