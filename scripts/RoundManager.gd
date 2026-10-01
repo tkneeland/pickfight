@@ -270,6 +270,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_tick_spawn_protection()
+	_tick_ghosts()
 	_tick_name_tags()
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
@@ -360,6 +361,7 @@ func _try_start_round() -> void:
 	_survivor_team = -1
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
+	_start_game_mode()
 	_pickup_director.start()
 	_start_kill_zone_rise()
 	_start_spawn_protection()
@@ -816,6 +818,7 @@ func _start_round_modifier() -> void:
 
 ## Round end: put back everything the modifier changed and drop its name.
 func _end_round_modifier() -> void:
+	_end_game_mode()
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
@@ -885,6 +888,7 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
+	_end_game_mode()
 	if _paused:
 		_set_tree_paused(false)
 	if _modifier != null:
@@ -1041,6 +1045,7 @@ func _enter_lobby() -> void:
 	_tick_lobby()
 
 func _enter_victory() -> void:
+	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
 	_state = State.VICTORY
 	_end_lobby_sandbox()
@@ -1221,6 +1226,10 @@ func _set_join_corner_visible(on: bool) -> void:
 ## The title card label, or null before any round has started.
 func stage_title_label() -> Label:
 	return _lobby_screen.stage_title_label() if _lobby_screen != null else null
+
+## Name of the stage in play, or "" in the lobby (issue #262, feedback context).
+func current_stage_name() -> String:
+	return str(_current_stage.name) if _current_stage != null else ""
 
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
@@ -1623,7 +1632,9 @@ func _add_team_state(state: Dictionary, roster: Array[int], in_lobby: bool) -> v
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
 #
 # `MatchStats.gd` keeps the match's numbers and decides who gets each KO: the
-# last player to hit the victim within 3 s, otherwise a self-KO. `KillFeed.gd`
+# last player to hit the victim within 3 s, otherwise a self-KO. That holds for
+# a hazard (spikes, saws, lava, kill zone) death too, since those report on the
+# victim's own `strike_landed` and never overwrite the last hitter (#311). `KillFeed.gd`
 # (the HUD node at `kill_feed_path`) shows each KO top right and a banner for
 # the big moments. The victory screen gets up to three awards under the podium.
 
@@ -1645,10 +1656,24 @@ func kill_feed() -> Control:
 func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
+## Where the per-match balance tallies are appended (issue #316).
+var balance_log_path: String = "user://balance_stats.jsonl"
+
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	if _sandbox_active:
 		return
-	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec())
+	var victim_slot: int = _players.find(victim)
+	# Issue #311: a teammate never earns the KO for a teammate's death.
+	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
+		return
+	var weapon: String = ""
+	var real: bool = true
+	if amount > 0.0 and attacker_slot >= 0 and attacker_slot < _players.size() and _players[attacker_slot] != null:
+		var stats: Variant = _players[attacker_slot].get("weapon_stats")
+		if stats != null and stats.resource_path != "":
+			weapon = stats.resource_path.get_file().get_basename()
+		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
+	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _sandbox_active:
@@ -1869,3 +1894,82 @@ func _tick_lobby_sandbox(roster: Array[int]) -> void:
 		_sandbox_respawn_at.erase(slot)
 		_sandbox_seated[slot] = true
 		player.start_round(_spawn_point(roster.find(slot)), false)
+
+# --- Game modes (issues #276-#278) -------------------------------------------------
+# An optional rules layer over each round (`GameModes.gd`): King of the Hill,
+# Sudden Death or Hot Potato. "" (the default) is the classic round. The mode
+# node lives under this manager for one round and is torn down wherever the
+# round's modifier is (`_end_round_modifier()`), so it never leaks into the next.
+
+const GameModesScript := preload("res://scripts/GameModes.gd")
+## A `GameModes` id every round plays under, or "" for none. Host-set seam.
+@export var game_mode: String = ""
+var _game_mode_node: Node = null
+
+## The id of the mode on the current round, or "" for none.
+func active_game_mode_id() -> String:
+	return game_mode if _game_mode_node != null else ""
+
+## The current round's mode node, or null.
+func game_mode_node() -> Node:
+	return _game_mode_node
+
+func _start_game_mode() -> void:
+	_end_game_mode()
+	_game_mode_node = GameModesScript.create(game_mode)
+	if _game_mode_node == null:
+		if game_mode != "":
+			push_warning("RoundManager: unknown game mode '%s'" % game_mode)
+		return
+	add_child(_game_mode_node)
+	_game_mode_node.setup(self)
+	_game_mode_node.start_round(_in_round.duplicate())
+
+func _end_game_mode() -> void:
+	if _game_mode_node != null:
+		_game_mode_node.end_round()
+		_game_mode_node.queue_free()
+		_game_mode_node = null
+
+# --- Ghosts of KO'd players (issue #324) ---------------------------------------
+
+const GhostScript := preload("res://scripts/Ghost.gd")
+## slot -> its Ghost node, for human players knocked out this round.
+var _ghosts: Dictionary = {}
+
+## The ghost for `slot`, or null.
+func ghost_of(slot: int) -> Node2D:
+	return _ghosts.get(slot) as Node2D
+
+## A knocked-out human gets a ghost the rest of the round; bots never do.
+## Everything is gone the moment the round is no longer active.
+func _tick_ghosts() -> void:
+	if _state != State.ROUND_ACTIVE or _current_stage == null:
+		if not _ghosts.is_empty():
+			_clear_ghosts()
+		return
+	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
+	for slot in _in_round:
+		var player: Variant = _players[slot]
+		if player == null or player.alive or not claimed.has(slot):
+			continue
+		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		if _ghosts.has(slot) and is_instance_valid(_ghosts[slot]):
+			continue
+		var view: Rect2
+		if _current_stage.has_method("get_view_rect"):
+			view = _current_stage.get_view_rect()
+		else:
+			view = Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+		var ghost: Node2D = GhostScript.new()
+		ghost.name = "Ghost%d" % slot
+		_current_stage.add_child(ghost)
+		ghost.setup(player, slot, player.global_position, view, player.identity_color)
+		_ghosts[slot] = ghost
+
+func _clear_ghosts() -> void:
+	for ghost: Variant in _ghosts.values():
+		if is_instance_valid(ghost):
+			(ghost as Node).queue_free()
+	_ghosts.clear()

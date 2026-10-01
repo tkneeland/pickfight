@@ -462,8 +462,9 @@ func show_pause_banner(on: bool) -> void:
 
 const CONTROL_KEYS: Dictionary = {
 	"online": KEY_O, "pc_seat": KEY_P, "mode": KEY_T, "target_down": KEY_MINUS,
-	"target_up": KEY_EQUAL, "start": KEY_ENTER,
+	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
 }
+const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 
 var _server: Object = null
 var _controls: Dictionary = {}
@@ -502,6 +503,7 @@ func attach_controls(server: Object) -> void:
 	target_row.add_child(_control_button("target_down", "First to  -"))
 	target_row.add_child(_control_button("target_up", "+"))
 	box.add_child(_control_button("start", "Start match (Enter)"))
+	box.add_child(_control_button("join", "Join online game (J)"))
 	refresh_controls()
 
 func _control_button(id: String, text: String) -> Button:
@@ -536,7 +538,19 @@ func press_control(id: String) -> void:
 			_server.apply_host_command("target", _server.match_target() + 1)
 		"start":
 			_server.apply_host_command("start")
+		"join":
+			# Issue #241: leave this host's lobby for the PC client's join
+			# screen. Only while nobody is seated, so a click cannot end a
+			# match someone is in.
+			if _can_join_online():
+				get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE)
+				return
 	refresh_controls()
+
+func _can_join_online() -> bool:
+	if _server == null or not _server.has_method("claimed_slots"):
+		return false
+	return _server.claimed_slots().is_empty() and _server.host_pc_slot() == -1 and not _server.online_requested()
 
 ## Redraws the controls' captions from the server: the link state beside the
 ## toggle, the room code large beside the QR.
@@ -551,6 +565,7 @@ func refresh_controls() -> void:
 	_room_label.visible = code != ""
 	control_button("pc_seat").text = "Play on this PC (P): %s" % ("on" if _server.host_pc_slot() != -1 else "off")
 	control_button("mode").text = "Mode (T): %s" % ("Teams" if _server.team_mode() else "Free-for-all")
+	control_button("join").disabled = not _can_join_online()
 
 func _process(_delta: float) -> void:
 	if _server != null and _lobby_panel != null and _lobby_panel.visible:

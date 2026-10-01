@@ -509,9 +509,12 @@ func teleport_to(pos: Vector2) -> void:
 ## weapon's damage and hands over the result. A no-op once eliminated: an
 ## eliminated player's head has no collision layer to be struck through, but
 ## nothing here should rely on that alone.
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, point: Vector2 = Vector2.INF) -> void:
 	if amount <= 0.0 or not alive or spawn_protected:
 		return
+	# An open umbrella's canopy takes a hit that lands on its face (issue #269).
+	if point != Vector2.INF and canopy_open() and canopy_faces(point):
+		amount *= CANOPY_BLOCK_FACTOR
 	damage += amount
 	if _face != null:
 		_face.on_hit(amount)
@@ -1427,7 +1430,7 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount)
+	victim.take_damage(amount, point)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
@@ -1535,7 +1538,7 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount)
+	victim.take_damage(amount, point)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
@@ -1807,6 +1810,8 @@ func _tick_special(delta: float) -> void:
 	match _stats.special:
 		&"flail":
 			_tick_flail()
+		&"umbrella":
+			_tick_umbrella()
 		&"magnet":
 			pass
 		&"grapple", &"boomerang":
@@ -1962,9 +1967,48 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount)
+	victim.take_damage(amount, point)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
+# --- Umbrella (issue #269) ---------------------------------------------------
+#
+# Held with the aim up, the umbrella is open: the canopy slows the fall, the
+# wind zone pushes the holder harder, and a hit that lands on the canopy's face
+# is mostly turned. Pointed anywhere else it is a short poker and does none of
+# this. All of it keys on `WeaponStats.special == &"umbrella"`.
+
+## How far from straight up the aim may be, as the cosine, and still count as
+## held overhead (about 45 degrees).
+const CANOPY_OVERHEAD_COS: float = 0.7
+## The fastest an open canopy lets the body fall, in px/s.
+const CANOPY_FALL_CAP: float = 140.0
+## How much harder a wind zone pushes a body under an open canopy.
+const CANOPY_WIND_MULTIPLIER: float = 4.0
+## Share of a hit's damage that gets through the canopy face.
+const CANOPY_BLOCK_FACTOR: float = 0.25
+## A hit is on the face when it comes from within this cosine of the aim.
+const CANOPY_FACE_COS: float = 0.3
+
+## Whether an umbrella is in hand and held overhead.
+func canopy_open() -> bool:
+	if _stats == null or _stats.special != &"umbrella" or not _rig_is_live():
+		return false
+	var offset: Vector2 = _head.global_position - global_position
+	return offset.length() > 1.0 and offset.normalized().y <= -CANOPY_OVERHEAD_COS
+
+## Whether `point` (world) is on the side of the body the open canopy covers.
+func canopy_faces(point: Vector2) -> bool:
+	var aim: Vector2 = (_head.global_position - global_position).normalized()
+	var to_point: Vector2 = point - global_position
+	return to_point.length() > 0.0 and aim.dot(to_point.normalized()) >= CANOPY_FACE_COS
+
+## What a wind zone multiplies its push on this body by.
+func wind_multiplier() -> float:
+	return CANOPY_WIND_MULTIPLIER if canopy_open() else 1.0
+
+func _tick_umbrella() -> void:
+	if canopy_open() and linear_velocity.y > CANOPY_FALL_CAP:
+		linear_velocity.y = CANOPY_FALL_CAP
 # --- Pogo (issue #271) --------------------------------------------------------
 #
 # A head touching terrain bounces the player a little, by itself. Pushing the

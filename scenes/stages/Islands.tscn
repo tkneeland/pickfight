@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Saw.tscn" id="saw315"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
@@ -148,3 +149,8 @@ position = Vector2(-140, 252)
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(240, 220)
 
+; Saw (issue #315): patrols x=-100..100 at y=120, above the spawns (y=220) and clear of IslandB's spawn at x=-200.
+[node name="HighSaw" parent="." instance=ExtResource("saw315")]
+position = Vector2(-100, 120)
+travel = Vector2(200, 0)
+one_way_sec = 2.5

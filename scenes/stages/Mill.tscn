@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Saw.tscn" id="saw"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CollapsingFloor.tscn" id="4"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
@@ -83,6 +84,12 @@ position = Vector2(0, 300)
 rotation = 1.5708
 size = Vector2(400, 20)
 spin_deg_per_sec = 22.0
+
+; Saw (issue #282): patrols across the gap above the sails, x=-150..150.
+[node name="PitSaw" parent="." instance=ExtResource("saw")]
+position = Vector2(-150, 170)
+travel = Vector2(300, 0)
+one_way_sec = 2.5
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-390, 270)
