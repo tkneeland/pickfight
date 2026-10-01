@@ -32,6 +32,11 @@ var self_kos: Dictionary = {}
 var deaths: Dictionary = {}
 var damage_dealt: Dictionary = {}
 var damage_taken: Dictionary = {}
+## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
+## this match. Bots and self-hits are left out. Written once per match by
+## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
+var weapon_damage: Dictionary = {}
+var weapon_hits: Dictionary = {}
 ## Total msec each slot spent alive in rounds this match.
 var survival_msec: Dictionary = {}
 ## Weapon pickups grabbed this match (issue #325), and per slot which weapon
@@ -54,6 +59,8 @@ func begin_match() -> void:
 	deaths.clear()
 	damage_dealt.clear()
 	damage_taken.clear()
+	weapon_damage.clear()
+	weapon_hits.clear()
 	survival_msec.clear()
 	pickups.clear()
 	weapon_grabs.clear()
@@ -100,11 +107,16 @@ func shift(msec: int) -> void:
 	for slot: int in _alive_since.keys():
 		_alive_since[slot] = int(_alive_since[slot]) + msec
 
-func record_hit(attacker: int, victim: int, amount: float, now_msec: int) -> void:
+## `weapon` names the attacker's weapon and `real` is false for a bot; only a
+## real player's damaging hit with a named weapon joins the balance tallies.
+func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon: String = "", real: bool = true) -> void:
 	if attacker < 0 or victim < 0 or attacker == victim:
 		return
 	_last_hit[victim] = {"attacker": attacker, "msec": now_msec}
 	if amount > 0.0:
+		if real and weapon != "":
+			_add(weapon_damage, weapon, amount)
+			_add(weapon_hits, weapon, 1)
 		_add(damage_dealt, attacker, amount)
 		_add(damage_taken, victim, amount)
 
@@ -232,9 +244,31 @@ func _leader(slots: Array, primary: Dictionary, secondary: Dictionary, secondary
 func _award(category: String, title: String, slot: int, detail: String) -> Dictionary:
 	return {"category": category, "title": title, "slot": slot, "detail": detail}
 
-func _add(table: Dictionary, slot: int, amount: Variant) -> void:
+func _add(table: Dictionary, slot: Variant, amount: Variant) -> void:
 	table[slot] = table.get(slot, 0) + amount
 
 static func _clock(msec: int) -> String:
 	var sec: int = maxi(0, msec) / 1000
 	return "%d:%02d" % [sec / 60, sec % 60]
+
+## One JSON line for the balance log: {"t": unix time, "weapons": {id: {"damage", "hits"}}}.
+## Empty when no real player landed a damaging hit this match.
+func balance_log_line(unix_time: int) -> String:
+	if weapon_damage.is_empty():
+		return ""
+	var weapons: Dictionary = {}
+	for id: String in weapon_damage:
+		weapons[id] = {"damage": snappedf(float(weapon_damage[id]), 0.1), "hits": int(weapon_hits.get(id, 0))}
+	return JSON.stringify({"t": unix_time, "weapons": weapons})
+
+## Appends `line` to `path`. False (never an error) when it cannot be written.
+static func append_line(path: String, line: String) -> bool:
+	if line == "":
+		return false
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
+	if file == null:
+		return false
+	file.seek_end()
+	file.store_line(line)
+	file.close()
+	return true

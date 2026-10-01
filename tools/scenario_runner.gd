@@ -417,6 +417,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
+	"plunger_sticks_to_player_and_drags_them",
+	"plunger_surface_stick_hangs_without_reeling_in",
+	"plunger_hard_yank_detaches",
+	"plunger_is_in_the_pickup_set",
 	"host_settings_disabled_stage_never_rotates_in",
 	"host_settings_disabled_weapon_never_spawns",
 	"host_settings_refuse_last_stage_and_weapon",
@@ -474,6 +478,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_sudden_death_hit_eliminates_victim",
 	"mode_hot_potato_tags_fuses_and_reseeds",
 	"mode_handlers_gone_after_round_and_edge_cases",
+	"balance_log_tallies_real_players_per_weapon",
+	"balance_log_survives_unwritable_path",
 	"new_stages_are_in_rotation_and_load",
 	"new_stages_hazards_clear_of_spawns",
 	"comfort_reduced_shake_lowers_camera_amplitude",
@@ -482,6 +488,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_settings_persist_across_reload",
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"victory_stat_table_fits_eight_players",
+	"pickups_skip_occupied_spots",
+	"replay_buffer_bounded_and_saves_clip",
+	"ghost_hidden_until_touch_then_fades",
+	"ghost_cannot_hurt_and_only_nudges_pickups",
+	"ghost_cleared_at_round_end_and_never_for_bots",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -780,6 +791,9 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/spear.tres",
 	"res://resources/pogo.tres",
 	"res://resources/fishing_rod.tres",
+	# The plunger (#270) is left out on purpose: roster_traversal_is_measured
+	# wants every roster weapon to vault an 80 px ledge, and the plunger sticks
+	# and hangs rather than planting. It has its own plunger_* scenarios.
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
 ]
@@ -1719,6 +1733,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
+		"plunger_sticks_to_player_and_drags_them":
+			return await _scenario_plunger_sticks_to_player_and_drags_them()
+		"plunger_surface_stick_hangs_without_reeling_in":
+			return await _scenario_plunger_surface_stick_hangs_without_reeling_in()
+		"plunger_hard_yank_detaches":
+			return await _scenario_plunger_hard_yank_detaches()
+		"plunger_is_in_the_pickup_set":
+			return await _scenario_plunger_is_in_the_pickup_set()
 		"host_settings_disabled_stage_never_rotates_in":
 			return await _scenario_host_settings_disabled_stage_never_rotates_in()
 		"host_settings_disabled_weapon_never_spawns":
@@ -1833,6 +1855,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_hot_potato_tags_fuses_and_reseeds()
 		"mode_handlers_gone_after_round_and_edge_cases":
 			return await _scenario_mode_handlers_gone_after_round_and_edge_cases()
+		"balance_log_tallies_real_players_per_weapon":
+			return await _scenario_balance_log_tallies_real_players_per_weapon()
+		"balance_log_survives_unwritable_path":
+			return await _scenario_balance_log_survives_unwritable_path()
 		"new_stages_are_in_rotation_and_load":
 			return await _scenario_new_stages_are_in_rotation_and_load()
 		"new_stages_hazards_clear_of_spawns":
@@ -1849,6 +1875,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
+		"pickups_skip_occupied_spots":
+			return await _scenario_pickups_skip_occupied_spots()
+		"replay_buffer_bounded_and_saves_clip":
+			return await _scenario_replay_buffer_bounded_and_saves_clip()
+		"ghost_hidden_until_touch_then_fades":
+			return await _scenario_ghost_hidden_until_touch_then_fades()
+		"ghost_cannot_hurt_and_only_nudges_pickups":
+			return await _scenario_ghost_cannot_hurt_and_only_nudges_pickups()
+		"ghost_cleared_at_round_end_and_never_for_bots":
+			return await _scenario_ghost_cleared_at_round_end_and_never_for_bots()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25906,6 +25942,127 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
+# --- Plunger (issue #270) ----------------------------------------------------
+
+const PLUNGER_PATH: String = "res://resources/plunger.tres"
+
+## Holder under a bar, head thrust up into the bar's underside until it sticks.
+## Returns {"stage", "holder", "bar"}; the holder is hanging from the plunger.
+func _plunger_hang_setup() -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var bar: StaticBody2D = _add_bar(stage, DEEP_PARK_POSITION, Vector2(240, 24))
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, 60))
+	await _await_ticks(2)
+	await _equip(holder, PLUNGER_PATH)
+	holder.set_input_vector(Vector2.UP)
+	await _await_condition(func() -> bool: return holder.plunger_attached(), 4000)
+	return {"stage": stage, "holder": holder, "bar": bar}
+
+## A plunger hit on an opponent attaches it, and moving the holder drags them.
+func _scenario_plunger_sticks_to_player_and_drags_them() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
+	await _await_ticks(2)
+	await _equip(holder, PLUNGER_PATH)
+	# Free of gravity so the drag is the only thing moving either body.
+	holder.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	holder.set_input_vector(Vector2.RIGHT)
+	var stuck: bool = await _await_condition(func() -> bool: return holder.plunger_attached(), 4000)
+	if not stuck or holder.plunger_target() != victim:
+		failures.append("a plunger hit on an opponent did not attach to them (target %s)" % holder.plunger_target())
+		await _teardown(stage)
+		return failures
+	if victim.damage <= 0.0:
+		failures.append("plunging the opponent did no damage")
+	if victim.damage > 20.0:
+		failures.append("the plunger hit took %.1f off, not a light hit" % victim.damage)
+	var before: float = victim.global_position.x
+	var holder_before: float = holder.global_position.x
+	for i in 40:
+		holder.linear_velocity = Vector2(-150, 0)
+		await physics_frame
+	print("      plunger: holder moved %.1f px left" % (holder_before - holder.global_position.x))
+	var dragged: float = before - victim.global_position.x
+	print("      plunger: victim dragged %.1f px left, still attached %s, damage %.1f" % [dragged, holder.plunger_attached(), victim.damage])
+	if dragged < 10.0:
+		failures.append("moving the holder dragged the stuck opponent only %.1f px" % dragged)
+	if not holder.plunger_attached():
+		failures.append("a moderate pull popped the plunger off the opponent")
+	await _teardown(stage)
+	return failures
+
+## Stuck to a surface the holder hangs, and the distance to the anchor never
+## shrinks: no reel-in, even with the drag held the whole time.
+func _scenario_plunger_surface_stick_hangs_without_reeling_in() -> Array[String]:
+	var failures: Array[String] = []
+	var setup: Dictionary = await _plunger_hang_setup()
+	var stage: Node2D = setup["stage"]
+	var holder: RigidBody2D = setup["holder"]
+	if not holder.plunger_attached() or holder.plunger_target() != setup["bar"]:
+		failures.append("the plunger did not stick to the bar above")
+		await _teardown(stage)
+		return failures
+	var anchor: Vector2 = holder.plunger_anchor()
+	# Let the stick's own momentum settle (the head overshoots the rope's end
+	# a little); from there the rope must only ever hold or lengthen.
+	await _await_ticks(60)
+	var start: float = (holder.global_position - anchor).length()
+	var shortest: float = start
+	var longest: float = start
+	for i in 180:
+		await physics_frame
+		var d: float = (holder.global_position - anchor).length()
+		shortest = minf(shortest, d)
+		longest = maxf(longest, d)
+	var end: float = (holder.global_position - anchor).length()
+	print("      plunger hang: rope %.1f once settled, shortest %.1f, longest %.1f, end %.1f, attached %s" % [start, shortest, longest, end, holder.plunger_attached()])
+	if not holder.plunger_attached():
+		failures.append("the plunger let go of a surface under the holder's own weight")
+	if shortest < start - 4.0:
+		failures.append("the rope shrank from %.1f to %.1f px: the plunger reeled the holder in" % [start, shortest])
+	if end < start - 4.0:
+		failures.append("after hanging 3 s the holder was %.1f px from the anchor, closer than the %.1f once settled" % [end, start])
+	if holder.global_position.y <= anchor.y:
+		failures.append("the holder did not hang below the anchor")
+	await _teardown(stage)
+	return failures
+
+## A hard pull on a stuck plunger pops it free.
+func _scenario_plunger_hard_yank_detaches() -> Array[String]:
+	var failures: Array[String] = []
+	var setup: Dictionary = await _plunger_hang_setup()
+	var stage: Node2D = setup["stage"]
+	var holder: RigidBody2D = setup["holder"]
+	if not holder.plunger_attached():
+		failures.append("the plunger did not stick to the bar above")
+		await _teardown(stage)
+		return failures
+	for i in 30:
+		holder.linear_velocity = Vector2(0, 1800)
+		await physics_frame
+		if not holder.plunger_attached():
+			break
+	print("      plunger yank: attached after the yank %s" % holder.plunger_attached())
+	if holder.plunger_attached():
+		failures.append("a hard yank did not pop the plunger free")
+	await _teardown(stage)
+	return failures
+
+func _scenario_plunger_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(PLUNGER_PATH):
+		failures.append("the plunger is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == PLUNGER_PATH
+	if not found:
+		failures.append("the plunger is not among the loaded pickup weapons")
+	_scenario_completed = true
+	return failures
+
 ## Issue #294: a stage the host switched off never comes up in the rotation,
 ## however many rounds are dealt, while the others all still do.
 func _scenario_host_settings_disabled_stage_never_rotates_in() -> Array[String]:
@@ -27530,6 +27687,51 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	await _rc_close_241(rig)
 	return failures
 
+## Issue #316: real players' damaging hits are tallied per weapon; bot hits,
+## 0-damage swings and hits with no named weapon are not; the line is appended
+## to a file and reads back as JSON.
+func _scenario_balance_log_tallies_real_players_per_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	stats.record_hit(0, 1, 12.5, 10, "pickaxe", true)
+	stats.record_hit(2, 1, 50.0, 20, "axe", true)
+	stats.record_hit(3, 1, 99.0, 30, "axe", false)
+	stats.record_hit(0, 1, 0.0, 40, "pickaxe", true)
+	var line: String = stats.balance_log_line(1234)
+	var parsed: Variant = JSON.parse_string(line)
+	if not parsed is Dictionary:
+		return ["balance log line is not JSON: '%s'" % line]
+	var weapons: Dictionary = parsed["weapons"]
+	if not is_equal_approx(float(weapons.get("pickaxe", {}).get("damage", -1)), 42.5) or int(weapons["pickaxe"]["hits"]) != 2:
+		failures.append("pickaxe tally wrong: %s" % [weapons.get("pickaxe")])
+	if not is_equal_approx(float(weapons.get("axe", {}).get("damage", -1)), 50.0) or int(weapons["axe"]["hits"]) != 1:
+		failures.append("axe tally should hold only the real player's hit: %s" % [weapons.get("axe")])
+	var path: String = "user://balance_stats_scenario_316.jsonl"
+	DirAccess.remove_absolute(path)
+	if not (MatchStatsScript.append_line(path, line) and MatchStatsScript.append_line(path, line)):
+		failures.append("append_line failed on a writable path")
+	var text: String = FileAccess.get_file_as_string(path)
+	if text.strip_edges().split("\n").size() != 2 or JSON.parse_string(text.split("\n")[0]) == null:
+		failures.append("log file should hold two readable JSON lines, got '%s'" % text)
+	DirAccess.remove_absolute(path)
+	stats.begin_match()
+	if stats.balance_log_line(1) != "":
+		failures.append("a new match should start with empty tallies")
+	_scenario_completed = true
+	return failures
+
+## Issue #316: an unwritable log path is a quiet false, never an error.
+func _scenario_balance_log_survives_unwritable_path() -> Array[String]:
+	var failures: Array[String] = []
+	if MatchStatsScript.append_line("user://no_such_dir_316/deeper/log.jsonl", "{}"):
+		failures.append("append_line claimed success on an unwritable path")
+	if MatchStatsScript.append_line("user://x_316.jsonl", ""):
+		failures.append("append_line should skip an empty line")
+	_scenario_completed = true
+	return failures
+
 # --- New stages built around the new parts (issue #315)
 
 const NEW_STAGES_315: PackedStringArray = [
@@ -28033,7 +28235,7 @@ func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
 			continue
 		for file: String in sounds[key]["files"]:
 			checked += 1
-			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_"]:
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_", "_plunger_"]:
 				if file.contains(marker):
 					failures.append("%s uses placeholder file %s" % [key, file])
 	if checked == 0:
@@ -28267,4 +28469,192 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
+	return failures
+
+## Issue #333: a pickup never spawns on a spot a living player is standing on.
+## A lone occupied spot yields nothing, with two the empty one is chosen, and
+## once the player leaves (or dies) the spot is usable again.
+func _scenario_pickups_skip_occupied_spots() -> Array[String]:
+	var failures: Array[String] = []
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("OccupiedStage", spawns, PackedVector2Array([spot_a])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var player := Node2D.new()
+	get_root().add_child(player)
+	player.global_position = spot_a + Vector2(10, 0)
+	rm._players = [player]
+	var director: Node = rm._pickup_director
+	if director.free_spot() != null:
+		failures.append("a spot was offered with a player standing on the only one")
+	var stage2: Node2D = _make_pickup_stub_stage("OccupiedStage2", spawns, PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage2)
+	rm._current_stage = stage2
+	var wrong: int = 0
+	for i in 20:
+		var got: Variant = director.free_spot()
+		if got == null or (got as Vector2).distance_to(spot_b) > 1.0:
+			wrong += 1
+	if wrong > 0:
+		failures.append("%d of 20 draws were not the unoccupied spot" % wrong)
+	player.global_position = spot_a + Vector2(0, -200)
+	var seen_a: bool = false
+	for i in 40:
+		var got: Variant = director.free_spot()
+		if got != null and (got as Vector2).distance_to(spot_a) < 1.0:
+			seen_a = true
+	if not seen_a:
+		failures.append("the spot was not usable again after the player left")
+	rm.free()
+	player.queue_free()
+	await _teardown(stage)
+	await _teardown(stage2)
+	_scenario_completed = true
+	return failures
+## #329: the replay ring never exceeds its cap and a clip lands on disk.
+func _scenario_replay_buffer_bounded_and_saves_clip() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	var scratch := "user://scenario_clips_329"
+	rb.clips_dir = scratch
+	if rb.save_clip("empty") != "":
+		failures.append("an empty buffer saved a clip")
+	for i in 500:
+		var img := Image.create(320, 180, false, Image.FORMAT_RGBA8)
+		img.fill(Color(float(i % 255) / 255.0, 0.0, 0.0))
+		rb.push_frame(img)
+	if rb.frame_count() != 120:
+		failures.append("ring holds %d frames after 500 pushes, expected 120" % rb.frame_count())
+	if script.memory_cap_bytes() != 13271040:
+		failures.append("memory cap %d, expected 13271040" % script.memory_cap_bytes())
+	var dir: String = rb.save_and_toast()
+	var abs_dir := ProjectSettings.globalize_path(dir)
+	var files := DirAccess.get_files_at(abs_dir) if dir != "" else PackedStringArray()
+	if files.size() != 120:
+		failures.append("clip has %d files, expected 120" % files.size())
+	elif Image.load_from_file(abs_dir + "/frame_0000.png").get_size() != Vector2i(256, 144):
+		failures.append("saved frame is not 256x144")
+	if not rb.toast_text().contains("clip_"):
+		failures.append("toast does not show the path: '%s'" % rb.toast_text())
+	for f in files:
+		DirAccess.remove_absolute(abs_dir + "/" + f)
+	DirAccess.remove_absolute(abs_dir)
+	rb.queue_free()
+	_scenario_completed = true
+	return failures
+
+## A four-player round with player 0 knocked out; returns the loop dict.
+func _ghost_round() -> Dictionary:
+	var loop: Dictionary = _new_roster_round(4, PICKUP_LONG_INTERVAL_SEC, 0.0, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	await _await_ticks(4)
+	players[0].eliminate()
+	await _await_ticks(4)
+	return loop
+
+func _scenario_ghost_hidden_until_touch_then_fades() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("a KO'd human got no ghost node")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(30)
+	if ghost.is_shown():
+		failures.append("an idle KO'd player's ghost was visible")
+	players[0].set_input_vector(Vector2(1.0, 0.0))
+	await _await_ticks(15)
+	if not ghost.is_shown():
+		failures.append("the ghost was not visible 0.25 s after touch input")
+	var x0: float = ghost.global_position.x
+	await _await_ticks(30)
+	if ghost.global_position.x <= x0 + 10.0:
+		failures.append("the ghost did not follow the touch (x %.1f -> %.1f)" % [x0, ghost.global_position.x])
+	players[0].set_input_vector(Vector2.ZERO)
+	await _await_ticks(60)
+	if not ghost.is_shown():
+		failures.append("the ghost vanished 1.0 s after input stopped; it should linger until ~1.5 s")
+	await _await_ticks(60)
+	if ghost.is_shown():
+		failures.append("the ghost was still visible 2 s after input stopped")
+	print("      ghost alpha after 2 s idle: %.3f" % ghost.alpha())
+	if players[1].alive and rm.ghost_of(1) != null:
+		failures.append("a living player got a ghost")
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_ghost_cannot_hurt_and_only_nudges_pickups() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	if ghost is CollisionObject2D or ghost.find_children("*", "CollisionObject2D", true, false).size() > 0:
+		failures.append("the ghost carries a collision object")
+	var health_before: float = players[1].damage
+	ghost.global_position = players[1].global_position
+	players[0].set_input_vector(Vector2(1.0, 0.0))
+	await _await_ticks(90)
+	if players[1].damage != health_before or not players[1].alive:
+		failures.append("a ghost sitting on a player changed their health (%.1f -> %.1f)" % [health_before, players[1].damage])
+	var pickup_scene: PackedScene = load("res://scenes/Pickup.tscn")
+	var pickup: Area2D = pickup_scene.instantiate() as Area2D
+	pickup.set_weapon(_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = ghost.global_position + Vector2(20.0, 0.0)
+	var start: Vector2 = pickup.global_position
+	await _await_ticks(60)
+	var moved: float = pickup.global_position.distance_to(start)
+	print("      pickup nudged %.1f px in 1 s of ghost contact (ghost moved far more)" % moved)
+	if moved < 1.0:
+		failures.append("the ghost did not nudge a pickup it was carrying along")
+	await _await_ticks(600)
+	var drift: float = pickup.global_position.distance_to(start)
+	if drift > 61.0:
+		failures.append("a pickup was pushed %.1f px; the cap is 60" % drift)
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_ghost_cleared_at_round_end_and_never_for_bots() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if rm.ghost_of(0) == null:
+		failures.append("no ghost to clear")
+	# Slot 2 is a bot: the roster says so, and it must never ghost.
+	var roster: Node = preload("res://tools/stub_lobby_roster.gd").new()
+	roster.slots = [0, 1, 2, 3] as Array[int]
+	roster.bot_slots = [2] as Array[int]
+	loop["stage"].add_child(roster)
+	rm._controller_server = roster
+	rm.round_end_pause_sec = 60.0
+	players[2].eliminate()
+	await _await_ticks(4)
+	if rm.ghost_of(2) != null:
+		failures.append("a bot got a ghost")
+	if rm._state != rm.State.ROUND_ACTIVE or rm.ghost_of(0) == null:
+		failures.append("control: the round should still be on with the human's ghost out")
+	players[3].eliminate()
+	await _await_ticks(10)
+	# Player 1 is the last one standing, so the round is over.
+	print("      state %d (ROUND_END is %d), ghosts %s" % [rm._state, rm.State.ROUND_END, rm._ghosts.keys()])
+	if rm._state != rm.State.ROUND_END:
+		failures.append("the round did not end")
+	if rm.ghost_of(0) != null:
+		failures.append("the ghost survived the end of the round")
+	await _teardown(loop["stage"])
 	return failures

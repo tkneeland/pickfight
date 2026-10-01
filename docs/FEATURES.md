@@ -27,6 +27,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
+- Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152); never spawn on a spot a living player is standing on, another free spot is used instead (#333)
+- Plunger: sticks to players (drag them) and surfaces (hang and swing, never reels you in); a hard yank pops it free (#270)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
@@ -49,6 +51,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Victory screen stats (#325): a per-player table under the awards (KOs, damage dealt and taken, self-KOs, weapon pickups, favourite weapon) and a "Magpie" award for the most weapon pickups
 - Scoreboard shown at round end (#5)
+- KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
 
 ## Players, cosmetics and identity
@@ -114,6 +117,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
 - Screenshot capture tools for stages and damage numbers
+- Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence in `user://clips/` with a toast showing the path (#329, ADR-0020)
+- Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316)
 
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.

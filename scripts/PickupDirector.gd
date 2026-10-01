@@ -29,6 +29,9 @@ const GameClockScript := preload("res://scripts/GameClock.gd")
 const FALLBACK_PICKUP_OFFSET: Vector2 = Vector2(0.0, -200.0)
 ## Two pickups within this of each other are on the same spot.
 const PICKUP_SPOT_EPSILON: float = 8.0
+## A spot is occupied while a living player's body is within this of it: the
+## pickup's largest touch radius (25) plus a body's reach plus a margin (#333).
+const PICKUP_OCCUPIED_RADIUS: float = 60.0
 ## A pickup spot this close to a player spawn is skipped (#111, owner
 ## playtest: players spawned on a drop and took it before moving). About a
 ## body width plus the largest pickup's trigger, with room to spare, so a
@@ -196,7 +199,8 @@ func draw_weapon(offered: Array[Resource]) -> Resource:
 ## skipped while any other free spot remains; if every free spot is near a
 ## spawn, the one furthest from all spawns is used, so a stage still gets
 ## its pickups (#111). A spot at or below the floor kill zone's surface is
-## never used (#200).
+## never used (#200). A spot a living player is standing on is skipped too, so
+## a weapon is not swapped out from under its holder; null when all are (#333).
 func free_spot() -> Variant:
 	var stage: Variant = _rm._current_stage
 	var spots: Array[Vector2] = []
@@ -215,6 +219,8 @@ func free_spot() -> Variant:
 			if pickup.global_position.distance_to(spot) < PICKUP_SPOT_EPSILON:
 				taken = true
 				break
+		if not taken and _player_on(spot):
+			taken = true
 		if not taken:
 			free.append(spot)
 	if free.is_empty():
@@ -230,6 +236,19 @@ func free_spot() -> Variant:
 		if _distance_to_nearest_spawn(spot) > _distance_to_nearest_spawn(best):
 			best = spot
 	return best
+
+## Whether a living player stands on or hovers over `spot`, close enough that
+## a pickup spawned there would swap their weapon under them (#333). Only the
+## body triggers a swap (ADR-0009), so only bodies count.
+func _player_on(spot: Vector2) -> bool:
+	for player: Variant in _rm._players:
+		if player == null or not is_instance_valid(player):
+			continue
+		if player.get("alive") == false:
+			continue
+		if (player as Node2D).global_position.distance_to(spot) < PICKUP_OCCUPIED_RADIUS:
+			return true
+	return false
 
 ## How far `spot` is from the nearest player spawn on the current stage; INF
 ## when the stage declares none.
