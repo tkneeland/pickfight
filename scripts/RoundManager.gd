@@ -264,6 +264,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_tick_spawn_protection()
 	_tick_name_tags()
+	_tick_damage_bars()
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
 			_tick_lobby()
@@ -549,6 +550,17 @@ func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bo
 	if victim_slot != -1:
 		_buzz(victim_slot, "struck")
 	_buzz(attacker_slot, "hit")
+
+## Phone damage bars (issue #331): every claimed slot's phone is told its
+## player's damage fraction each tick; `send_damage` drops the unchanged and
+## throttles the rest. A fresh round's 0 damage resets the bar the same way.
+func _tick_damage_bars() -> void:
+	if _controller_server == null or not _controller_server.has_method("send_damage"):
+		return
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player != null:
+			_controller_server.send_damage(slot, player.damage / player.DEATH_DAMAGE)
 
 ## A roster that cannot buzz (a test stub without `send_buzz`) is skipped.
 func _buzz(slot: int, kind: String) -> void:

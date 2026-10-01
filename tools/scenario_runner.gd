@@ -480,6 +480,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"damage_bar_sends_fraction_on_change",
+	"damage_bar_throttles_and_resets"
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1843,6 +1845,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"damage_bar_sends_fraction_on_change":
+			return await _scenario_damage_bar_sends_fraction_on_change()
+		"damage_bar_throttles_and_resets":
+			return await _scenario_damage_bar_throttles_and_resets()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -28181,5 +28187,90 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 	if empty.get("status") != 400:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+# --- Issue #331: phone damage bar ---------------------------------------------
+
+## A server with three players and the host PC seated, so its frames land in
+## `LocalSeat.last_text`. Returns [stage, server, seat, slot].
+const DAMAGE_WAIT_MSEC: int = 150
+
+func _wait_real_msec(msec: int) -> void:
+	var deadline: int = Time.get_ticks_msec() + msec
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+
+func _damage_bar_fixture() -> Array:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var paths: Array[NodePath] = []
+	for i in 3:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "DmgP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		paths.append(NodePath("../DmgP%d" % i))
+	var server: Node = ControllerServerScript.new()
+	server.name = "DmgServer"
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	server._set_host_pc_seat(true)
+	return [stage, server, server._host_pc_seat, server.host_pc_slot()]
+
+func _scenario_damage_bar_sends_fraction_on_change() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var seat: Variant = fx[2]
+	var slot: int = fx[3]
+	if slot < 0:
+		failures.append("the host PC seat was not granted a slot")
+	else:
+		seat.last_text = ""
+		server.send_damage(slot, 0.42)
+		var msg: Variant = JSON.parse_string(seat.last_text)
+		if not msg is Dictionary or msg.get("t") != "dmg" or absf(float(msg.get("v", -1.0)) - 0.42) > 0.001:
+			failures.append("expected a dmg frame of 0.42, got '%s'" % seat.last_text)
+		seat.last_text = ""
+		await _wait_real_msec(DAMAGE_WAIT_MSEC)
+		server.send_damage(slot, 0.42)
+		if seat.last_text != "":
+			failures.append("an unchanged fraction was sent again: '%s'" % seat.last_text)
+		server.send_damage(slot, 7.0)
+		var over: Variant = JSON.parse_string(seat.last_text)
+		if not over is Dictionary or float(over.get("v", -1.0)) != 1.0:
+			failures.append("a fraction above 1 should clamp to 1.0, got '%s'" % seat.last_text)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+
+func _scenario_damage_bar_throttles_and_resets() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var seat: Variant = fx[2]
+	var slot: int = fx[3]
+	server.send_damage(slot, 0.2)
+	seat.last_text = ""
+	server.send_damage(slot, 0.3)  # inside the throttle gap: held back
+	if seat.last_text != "":
+		failures.append("a change inside the throttle gap was sent: '%s'" % seat.last_text)
+	await _wait_real_msec(DAMAGE_WAIT_MSEC)  # the throttle runs on wall time
+	server.send_damage(slot, 0.3)
+	var held: Variant = JSON.parse_string(seat.last_text)
+	if not held is Dictionary or absf(float(held.get("v", -1.0)) - 0.3) > 0.001:
+		failures.append("the held-back change never went out, got '%s'" % seat.last_text)
+	await _wait_real_msec(DAMAGE_WAIT_MSEC)
+	server.send_damage(slot, 0.0)  # respawn / new round
+	var reset: Variant = JSON.parse_string(seat.last_text)
+	if not reset is Dictionary or float(reset.get("v", -1.0)) != 0.0:
+		failures.append("the reset to 0 was not sent, got '%s'" % seat.last_text)
+	fx[0].queue_free()
+	await _await_ticks(2)
 	_scenario_completed = true
 	return failures
