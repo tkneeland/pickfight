@@ -77,6 +77,10 @@ func tick() -> void:
 	var camera: Camera2D = get_viewport().get_camera_2d()
 	if camera != null and camera.zoom.x > 0.0:
 		tag_scale = 1.0 / camera.zoom.x
+	# Comfort option (#317): bigger tags for a far-off couch.
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx != null:
+		tag_scale *= float(sfx.get("ui_scale"))
 	var had_rings: bool = not _rings.is_empty()
 	_rings.clear()
 	for slot in _players.size():

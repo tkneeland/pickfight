@@ -459,6 +459,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_sudden_death_hit_eliminates_victim",
 	"mode_hot_potato_tags_fuses_and_reseeds",
 	"mode_handlers_gone_after_round_and_edge_cases",
+	"comfort_reduced_shake_lowers_camera_amplitude",
+	"comfort_reduce_flash_suppresses_flash",
+	"comfort_ui_scale_enlarges_name_tags",
+	"comfort_settings_persist_across_reload",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1780,6 +1784,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_hot_potato_tags_fuses_and_reseeds()
 		"mode_handlers_gone_after_round_and_edge_cases":
 			return await _scenario_mode_handlers_gone_after_round_and_edge_cases()
+		"comfort_reduced_shake_lowers_camera_amplitude":
+			return await _scenario_comfort_reduced_shake_lowers_camera_amplitude()
+		"comfort_reduce_flash_suppresses_flash":
+			return await _scenario_comfort_reduce_flash_suppresses_flash()
+		"comfort_ui_scale_enlarges_name_tags":
+			return await _scenario_comfort_ui_scale_enlarges_name_tags()
+		"comfort_settings_persist_across_reload":
+			return await _scenario_comfort_settings_persist_across_reload()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -27456,4 +27468,111 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
 		failures.append("a snapshot with no trailer should apply and play nothing")
 	await _rc_close_241(rig)
+	return failures
+
+## Issue #317: the Settings panel's "Screen shake" box drives the real camera:
+## shake on moves it, shake off holds it at zero.
+func _scenario_comfort_reduced_shake_lowers_camera_amplitude() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var shake_was: bool = bool(sfx.get("screen_shake"))
+	var stage: Node2D = _new_stage()
+	var camera: Camera2D = _juice_camera(stage)
+	var _juice_node: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await _await_ticks(3)
+	ui.shake_box().button_pressed = true
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MAX, Vector2.ZERO, false)
+	var full: float = await _juice_peak_offset(camera, 6)
+	await _juice_wait(JuiceScript.SHAKE_DURATION + 0.2)
+	ui.shake_box().button_pressed = false
+	emitter.strike_landed.emit(emitter, JuiceScript.SHAKE_DAMAGE_MAX, Vector2.ZERO, false)
+	var reduced: float = await _juice_peak_offset(camera, 6)
+	print("      shake peak: on %.2f px, off %.2f px" % [full, reduced])
+	if full <= 0.0:
+		failures.append("shake box ticked but the camera did not move")
+	if reduced >= full:
+		failures.append("shake box unticked did not lower the shake (%.2f vs %.2f)" % [reduced, full])
+	sfx.screen_shake = shake_was
+	await _teardown(stage)
+	return failures
+
+## Issue #317: with "Reduce flashes" the elimination burst's white flash is
+## gone and a bounce pad launch no longer lerps toward its flash colour.
+func _scenario_comfort_reduce_flash_suppresses_flash() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	var burst: Node2D = (load("res://scripts/DeathBurst.gd") as GDScript).new()
+	get_root().add_child(burst)
+	sfx.set_reduce_flash(false)
+	var normal: float = burst.flash_alpha()
+	sfx.set_reduce_flash(true)
+	var reduced: float = burst.flash_alpha()
+	print("      burst flash alpha: normal %.2f, reduced %.2f" % [normal, reduced])
+	if normal <= 0.0:
+		failures.append("the burst had no flash at its start with flashes on")
+	if reduced != 0.0:
+		failures.append("the burst still flashed (%.2f) with Reduce flashes on" % reduced)
+	burst.queue_free()
+	sfx.reduce_flash = flash_was
+	_scenario_completed = true
+	return failures
+
+## Issue #317: the name tag size setting enlarges the real tags in play.
+func _scenario_comfort_ui_scale_enlarges_name_tags() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var scale_was: float = float(sfx.get("ui_scale"))
+	var loop: Dictionary = _new_lobby_round(2, 1.0, _main_scoreboard())
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		sfx.ui_scale = scale_was
+		await _teardown(loop["stage"])
+		return failures
+	sfx.set_ui_scale(1.0)
+	await _await_ticks(3)
+	var base: float = rm.name_tag(0).scale.x
+	sfx.set_ui_scale(2.0)
+	await _await_ticks(3)
+	var big: float = rm.name_tag(0).scale.x
+	print("      tag scale: 1x -> %.2f, 2x -> %.2f" % [base, big])
+	if absf(big - base * 2.0) > 0.01:
+		failures.append("2x tag size drew scale %.2f, expected %.2f" % [big, base * 2.0])
+	sfx.ui_scale = scale_was
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #317: the three comfort options round-trip a settings file (a temp
+## one, never the owner's).
+func _scenario_comfort_settings_persist_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"path": sfx.settings_path, "persist": sfx.persist_settings,
+		"shake": sfx.screen_shake, "flash": sfx.reduce_flash, "scale": sfx.ui_scale}
+	var path: String = OS.get_temp_dir().path_join("pickfight_comfort_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_screen_shake(false)
+	sfx.set_reduce_flash(true)
+	sfx.set_ui_scale(1.5)
+	sfx.screen_shake = true
+	sfx.reduce_flash = false
+	sfx.ui_scale = 1.0
+	sfx.load_settings()
+	if sfx.screen_shake or not sfx.reduce_flash or not is_equal_approx(sfx.ui_scale, 1.5):
+		failures.append("comfort options not remembered: shake %s flash %s scale %s" % [sfx.screen_shake, sfx.reduce_flash, sfx.ui_scale])
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	sfx.persist_settings = was["persist"]
+	sfx.screen_shake = was["shake"]
+	sfx.reduce_flash = was["flash"]
+	sfx.ui_scale = was["scale"]
+	_scenario_completed = true
 	return failures
