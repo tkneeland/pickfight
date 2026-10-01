@@ -380,6 +380,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"snapshot_capture_matches_live_round",
 	"snapshot_stream_reaches_remote_client",
 	"snapshot_nothing_captured_without_remote_seats",
+	"snapshot_kill_sound_reaches_remote_client",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1539,6 +1540,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_snapshot_stream_reaches_remote_client()
 		"snapshot_nothing_captured_without_remote_seats":
 			return await _scenario_snapshot_nothing_captured_without_remote_seats()
+		"snapshot_kill_sound_reaches_remote_client":
+			return await _scenario_snapshot_kill_sound_reaches_remote_client()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -24206,7 +24209,9 @@ func _snap_pump_251(rig: Dictionary, peer: WebSocketPeer, frames: Array, msec: i
 		while peer.get_available_packet_count() > 0:
 			var pkt: PackedByteArray = peer.get_packet()
 			if pkt.size() > 1 and pkt[0] == 2:
-				frames.append({"msec": _game_msec(), "bytes": pkt.size(), "snapshot": SnapshotScript251.decode(pkt.slice(1))})
+				var split: Dictionary = SnapshotCaptureScript251.split_sound_trailer(pkt.slice(1))
+				frames.append({"msec": _game_msec(), "bytes": pkt.size(), "snapshot": SnapshotScript251.decode(split["snapshot"]),
+					"events": split["events"], "track": split["track"]})
 		if until.is_valid() and until.call():
 			return
 
@@ -24299,5 +24304,69 @@ func _scenario_snapshot_nothing_captured_without_remote_seats() -> Array[String]
 		failures.append("%d captures with no remote seat bound" % (SnapshotCaptureScript251.capture_count - before))
 	if server.snapshot_frames_sent != 0:
 		failures.append("%d frames sent with no remote seat bound" % server.snapshot_frames_sent)
+	await _snap_close_251(rig)
+	return failures
+
+## A KO during a streamed round: the next frames carry the "eliminated" sound
+## at the victim's position, and every frame names the music track.
+func _scenario_snapshot_kill_sound_reaches_remote_client() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(7)
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var relay: Node = _relay_start()
+	if relay == null:
+		await _teardown(built["main"])
+		return ["no free port for the relay"]
+	var rig: Dictionary = {"main": built["main"], "server": server, "relay": relay, "clients": []}
+	if server.go_online("ws://127.0.0.1:%d" % _relay_port_next) != OK or not await _wait_for_239(func() -> bool: return server.is_online()):
+		failures.append("host never came online")
+		await _snap_close_251(rig)
+		return failures
+	rig["code"] = server.online_room_code()
+	var remote: WebSocketPeer = await _online_remote_239(rig, "sound-remote")
+	if remote == null:
+		failures.append("the remote client could not join the room")
+		await _snap_close_251(rig)
+		return failures
+	var frames: Array = []
+	_online_send_239(remote, 1, JSON.stringify({"t": "ready", "v": true}).to_utf8_buffer())
+	await _snap_pump_251(rig, remote, frames, 20000, func() -> bool: return int(rm.get("_state")) == 1)
+	if int(rm.get("_state")) != 1:
+		failures.append("the round never started")
+		await _snap_close_251(rig)
+		return failures
+	await _snap_pump_251(rig, remote, frames, 500)
+	var victim: RigidBody2D = null
+	for slot: int in server.virtual_slots():
+		var candidate: RigidBody2D = server.player_in_slot(slot) as RigidBody2D
+		if candidate.alive:
+			victim = candidate
+			break
+	if victim == null:
+		failures.append("no live bot to eliminate")
+		await _snap_close_251(rig)
+		return failures
+	var where: Vector2 = victim.global_position
+	frames.clear()
+	victim.eliminate()
+	var seen: Callable = func() -> bool:
+		for f: Dictionary in frames:
+			for ev: Dictionary in f["events"]:
+				if ev["name"] == "eliminated":
+					return true
+		return false
+	await _snap_pump_251(rig, remote, frames, 500, seen)
+	var found: Dictionary = {}
+	for f: Dictionary in frames:
+		for ev: Dictionary in f["events"]:
+			if ev["name"] == "eliminated" and ev["position"] is Vector2 and found.is_empty():
+				found = ev
+	if found.is_empty():
+		failures.append("no 'eliminated' sound event reached the client within 500 ms of the KO")
+	else:
+		_snap_near_251(failures, "the KO sound's position", found["position"], where)
+	if frames.is_empty() or str(frames[0]["track"]) != str(get_root().get_node("Music").current_track()):
+		failures.append("frame track '%s', live music track '%s'" % [frames[0]["track"] if not frames.is_empty() else "<no frame>", get_root().get_node("Music").current_track()])
 	await _snap_close_251(rig)
 	return failures

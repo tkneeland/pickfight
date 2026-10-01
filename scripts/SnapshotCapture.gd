@@ -207,3 +207,90 @@ static func _kill_zone_height(rm: Node) -> int:
 static func _announcer_text(rm: Node) -> String:
 	var label: Label = rm.modifier_label()
 	return label.text if label != null and label.is_visible_in_tree() else ""
+
+# --- Sound trailer (issue #251) --------------------------------------------------
+#
+# `Snapshot.gd` has no sound field, so each streamed frame carries one after
+# its own bytes. Layout of a frame's payload (after the relay envelope's
+# KIND_SNAPSHOT byte), all integers big-endian:
+#
+#   [Snapshot.encode() bytes][trailer]
+#
+#   trailer = events, track, size, magic
+#     events: u8 count (at most MAX_SOUND_EVENTS), then per event:
+#               u8 name length, name (UTF-8: an `Sfx.SOUNDS` key),
+#               u8 has_position (0/1), if 1: i16 x, i16 y (world px, truncated),
+#               u8 strength (0..255 = 0.0..1.0)
+#     track:  u8 length, UTF-8 key of the playing music track ("" = silence)
+#     size:   u16, the byte count of events + track
+#     magic:  2 bytes, 0x53 0x58 ("SX")
+#
+# Events are the sounds played since the previous frame. A client reads the
+# trailer from the END of the packet (`split_sound_trailer()` does it) and
+# hands the remaining prefix to `Snapshot.decode()`. A packet without the
+# magic is a plain snapshot.
+
+const MAX_SOUND_EVENTS: int = 32
+const TRAILER_MAGIC: PackedByteArray = [0x53, 0x58]
+
+## `events` as [{"name": String, "position": Vector2 or null, "strength": float}].
+static func encode_sound_trailer(events: Array, track: String) -> PackedByteArray:
+	var body := PackedByteArray()
+	var count: int = mini(events.size(), MAX_SOUND_EVENTS)
+	body.append(count)
+	for i in count:
+		var ev: Dictionary = events[i]
+		var name_bytes: PackedByteArray = String(ev["name"]).to_utf8_buffer().slice(0, 255)
+		body.append(name_bytes.size())
+		body.append_array(name_bytes)
+		var pos: Variant = ev.get("position")
+		body.append(1 if pos is Vector2 else 0)
+		if pos is Vector2:
+			for v: float in [pos.x, pos.y]:
+				var q: int = int(clampf(v, -32768.0, 32767.0)) & 0xFFFF
+				body.append(q >> 8)
+				body.append(q & 0xFF)
+		body.append(clampi(roundi(float(ev.get("strength", 1.0)) * 255.0), 0, 255))
+	var track_bytes: PackedByteArray = track.to_utf8_buffer().slice(0, 255)
+	body.append(track_bytes.size())
+	body.append_array(track_bytes)
+	var out := body.duplicate()
+	out.append(body.size() >> 8)
+	out.append(body.size() & 0xFF)
+	out.append_array(TRAILER_MAGIC)
+	return out
+
+## Splits a streamed payload into {"snapshot": PackedByteArray for
+## `Snapshot.decode()`, "events": Array (as `encode_sound_trailer()` takes),
+## "track": String}. No trailer: the whole packet is the snapshot, no events.
+static func split_sound_trailer(packet: PackedByteArray) -> Dictionary:
+	var n: int = packet.size()
+	var none: Dictionary = {"snapshot": packet, "events": [], "track": ""}
+	if n < 5 or packet[n - 2] != TRAILER_MAGIC[0] or packet[n - 1] != TRAILER_MAGIC[1]:
+		return none
+	var size: int = (packet[n - 4] << 8) | packet[n - 3]
+	var start: int = n - 4 - size
+	if start < 0:
+		return none
+	var at: int = start
+	var events: Array = []
+	var count: int = packet[at]
+	at += 1
+	for i in count:
+		var name_len: int = packet[at]
+		var ev_name: String = packet.slice(at + 1, at + 1 + name_len).get_string_from_utf8()
+		at += 1 + name_len
+		var position: Variant = null
+		if packet[at] == 1:
+			position = Vector2(_i16(packet, at + 1), _i16(packet, at + 3))
+			at += 4
+		at += 1
+		events.append({"name": ev_name, "position": position, "strength": packet[at] / 255.0})
+		at += 1
+	var track_len: int = packet[at]
+	var track: String = packet.slice(at + 1, at + 1 + track_len).get_string_from_utf8()
+	return {"snapshot": packet.slice(0, start), "events": events, "track": track}
+
+static func _i16(bytes: PackedByteArray, at: int) -> int:
+	var v: int = (bytes[at] << 8) | bytes[at + 1]
+	return v - 65536 if v > 32767 else v

@@ -1898,7 +1898,9 @@ func _stream_snapshots(delta: float) -> void:
 		_snapshot_bound.clear()
 		_snapshot_accum = 0.0
 		_snapshot_frame = 0
+		_listen_for_sounds(false)
 		return
+	_listen_for_sounds(true)
 	var fresh: bool = false
 	for seat: RemoteSeat in bound:
 		fresh = fresh or not _snapshot_bound.has(seat)
@@ -1917,5 +1919,32 @@ func _stream_snapshots(delta: float) -> void:
 	var frame: Dictionary = world if full else SnapshotCaptureScript.delta(world, _snapshot_previous)
 	_snapshot_previous = world
 	_snapshot_frame = 1 if full else _snapshot_frame + 1
-	relay_link.send_to(0, RelayLinkScript.KIND_SNAPSHOT, SnapshotScript.encode(frame))
+	var payload: PackedByteArray = SnapshotScript.encode(frame)
+	payload.append_array(SnapshotCaptureScript.encode_sound_trailer(_snapshot_sounds, _music_track()))
+	_snapshot_sounds.clear()
+	relay_link.send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
 	snapshot_frames_sent += 1
+
+var _snapshot_sounds: Array = [] # sounds played since the last frame (see SnapshotCapture's trailer)
+var _sound_source: Node = null
+
+## Records the Sfx autoload's plays while a remote seat is bound, and only then.
+func _listen_for_sounds(on: bool) -> void:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx == null or on == (_sound_source != null):
+		return
+	if on:
+		sfx.played.connect(_on_sound_played)
+		_sound_source = sfx
+	else:
+		sfx.played.disconnect(_on_sound_played)
+		_sound_source = null
+		_snapshot_sounds.clear()
+
+func _on_sound_played(sound: StringName, position: Variant, strength: float) -> void:
+	if _snapshot_sounds.size() < SnapshotCaptureScript.MAX_SOUND_EVENTS:
+		_snapshot_sounds.append({"name": String(sound), "position": position, "strength": strength})
+
+func _music_track() -> String:
+	var music: Node = get_node_or_null("/root/Music")
+	return music.current_track() if music != null else ""
