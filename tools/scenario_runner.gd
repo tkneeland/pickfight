@@ -285,6 +285,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bots_survive_hazard_stages",
 	"grapple_fires_sticks_reels_and_releases",
 	"grapple_hook_hits_player_lightly",
+	"fishing_rod_fires_sticks_reels_and_releases",
+	"fishing_rod_hook_hits_player_lightly",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -1365,6 +1367,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_grapple_fires_sticks_reels_and_releases()
 		"grapple_hook_hits_player_lightly":
 			return await _scenario_grapple_hook_hits_player_lightly()
+		"fishing_rod_fires_sticks_reels_and_releases":
+			return await _scenario_fishing_rod_fires_sticks_reels_and_releases()
+		"fishing_rod_hook_hits_player_lightly":
+			return await _scenario_fishing_rod_hook_hits_player_lightly()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -18761,7 +18767,8 @@ func _scenario_bots_survive_hazard_stages() -> Array[String]:
 const GRAPPLE_PATH: String = "res://resources/grapple.tres"
 const FLAIL_PATH: String = "res://resources/flail.tres"
 const BOOMERANG_PATH: String = "res://resources/boomerang.tres"
-const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH]
+const FISHING_ROD_PATH: String = "res://resources/fishing_rod.tres"
+const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH, FISHING_ROD_PATH]
 ## The arena's ground top (its floor is 40 tall, centred at y 320) and where a
 ## player stands on it.
 const NEW_WEAPON_FLOOR_STAND: Vector2 = Vector2(0, 274)
@@ -18916,6 +18923,98 @@ func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
 	await _await_ticks(2)
 	var stats: WeaponStatsType = await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	victim.freeze = true
+	var strikes: Array = []
+	_record_strikes(shooter, strikes)
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		return failures
+	victim.freeze = false
+	victim.linear_velocity = Vector2.ZERO
+	var hit: bool = await _await_condition(func() -> bool: return victim.damage > 0.0 or not is_instance_valid(hook) or hook.is_going_home(), 1000)
+	await physics_frame
+	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
+	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
+		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
+	if victim.linear_velocity.x >= -50.0:
+		failures.append("the hook did not tug its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
+	if strikes.is_empty() or strikes[0]["victim"] != victim:
+		failures.append("the hook's hit was not reported as the thrower's strike_landed")
+	if is_instance_valid(hook) and hook.is_stuck():
+		failures.append("the hook stuck to a player")
+	await _teardown(stage)
+	return failures
+
+## The fishing rod fires a hook on a line (same as grapple, different stats).
+func _scenario_fishing_rod_fires_sticks_reels_and_releases() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var ceiling: StaticBody2D = _add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(player, FISHING_ROD_PATH)
+	await _await_ticks(20)
+	if not player.special_loaded():
+		failures.append("the fishing rod was not drawn loaded before it was fired")
+
+	# A flick fires the hook.
+	await _flick(player, Vector2.UP)
+	var hook: Node2D = player.launched_hook()
+	if hook == null:
+		failures.append("a flick straight up did not fire the hook")
+		await _teardown(stage)
+		return failures
+	if player.special_loaded():
+		failures.append("the launcher still drew its hook while the hook was out")
+	var stuck: bool = await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
+	var start_distance: float = (hook.global_position - player.global_position).length() if is_instance_valid(hook) else 0.0
+	print("      hook stuck %s at %s, %.0f px above the player" % [stuck, hook.global_position if is_instance_valid(hook) else Vector2.ZERO, start_distance])
+	if not stuck:
+		failures.append("the hook never stuck in the platform above")
+		await _teardown(stage)
+		return failures
+
+	# Held: reel in.
+	var closest: float = start_distance
+	for i in 90:
+		await physics_frame
+		closest = minf(closest, (hook.global_position - player.global_position).length())
+	var hanging: float = (hook.global_position - player.global_position).length()
+	print("      reeled from %.0f px to %.0f px (closest %.0f), rope min %.0f" % [start_distance, hanging, closest, stats.reel_min_length])
+	if closest > stats.reel_min_length + 20.0:
+		failures.append("holding the drag reeled the player only to %.0f px of the hook (from %.0f); it should haul them up to about %.0f" % [
+			closest, start_distance, stats.reel_min_length])
+
+	# Released: the hook lets go and comes home.
+	player.set_input_vector(Vector2.ZERO)
+	await physics_frame
+	if is_instance_valid(hook) and not hook.is_going_home():
+		failures.append("releasing the drag did not let go of the platform")
+	var home: bool = await _await_condition(func() -> bool: return player.launched_hook() == null, 1000)
+	if not home:
+		failures.append("the released hook never got home")
+	await _await_ticks(2)
+	if not player.special_loaded():
+		failures.append("the hook came home but the launcher was not drawn loaded again")
+	await _await_ticks(int(stats.launch_cooldown * 60.0) + 2)
+	if not player.special_ready():
+		failures.append("the launcher was still not ready %.2f s after its hook came home" % stats.launch_cooldown)
+
+	await _teardown(stage)
+	return failures
+
+## The fishing rod hook that meets a player: a light hit, credited to the thrower, and a tug.
+func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(shooter, FISHING_ROD_PATH)
 	_brace(shooter)
 	victim.freeze = true
 	var strikes: Array = []
