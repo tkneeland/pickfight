@@ -248,6 +248,9 @@ var sfx_volume: float = 1.0
 ## window leaves or enters fullscreen some other way (the OS's own button or
 ## shortcut; issue #167).
 var fullscreen: bool = false
+## Whether `Juice` shakes the camera on a heavy hit or a kill (#256). On by
+## default; set through `set_screen_shake()` and remembered with the rest.
+var screen_shake: bool = true
 ## What `sync_fullscreen()` reads the window mode from: a Callable returning a
 ## `DisplayServer.WINDOW_MODE_*`, or an empty one for the real window. The
 ## scenarios point it at a fake window, as headless has none.
@@ -543,6 +546,11 @@ func set_sfx_volume(value: float, save: bool = true) -> void:
 	if save:
 		_save_settings()
 
+## Turn the camera shake (#256) on or off, and remember the choice.
+func set_screen_shake(value: bool) -> void:
+	screen_shake = value
+	_save_settings()
+
 ## Write the current settings to `settings_path` (when `persist_settings`).
 func save_settings() -> void:
 	_save_settings()
@@ -631,6 +639,7 @@ func load_settings() -> void:
 		muted = bool(config.get_value("audio", "muted", false))
 		sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
 		fullscreen = bool(config.get_value("display", "fullscreen", false))
+		screen_shake = bool(config.get_value("display", "screen_shake", true))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -651,6 +660,7 @@ func _save_settings() -> void:
 	config.set_value("audio", "muted", muted)
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("display", "fullscreen", fullscreen)
+	config.set_value("display", "screen_shake", screen_shake)
 	err = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])

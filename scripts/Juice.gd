@@ -80,10 +80,14 @@ const TRAIL_COLOR: Color = Color(1.0, 1.0, 1.0, 0.55)
 const TRAIL_MAX_JUMP: float = 160.0
 
 ## --- Screen shake ---
-## Damage threshold above which a strike causes screen shake.
+## Damage threshold above which a strike causes screen shake. Real strike
+## damage runs 0..`Player.MAX_STRIKE_DAMAGE` (90): a full-speed pickaxe swing
+## (34) and every heavier weapon clear it, a staff tap (20 at most) does not
+## shake the room.
 const SHAKE_DAMAGE_MIN: float = 20.0
-## Maximum damage for shake scaling.
-const SHAKE_DAMAGE_MAX: float = 100.0
+## Damage at which the shake is at full strength: the most a strike can deal
+## (`Player.MAX_STRIKE_DAMAGE`), so the top of the scale is reachable.
+const SHAKE_DAMAGE_MAX: float = 90.0
 ## Screen shake intensity at max damage.
 const SHAKE_INTENSITY_MAX: float = 3.0
 ## Duration of screen shake in seconds.
@@ -94,9 +98,12 @@ const SHAKE_INTENSITY_ELIMINATION: float = 5.0
 const SHAKE_DURATION_ELIMINATION: float = 0.25
 
 ## --- Hit-stop ---
-## Damage threshold for hit-stop frames.
+## Damage threshold for hit-stop: reached by the axe, spear, dagger and
+## sword at full speed (90, 75, 70, 55), never by the pickaxe (34).
 const HITSTOP_DAMAGE_MIN: float = 40.0
-## Frames to pause on a heavy hit.
+## Physics ticks the whole game freezes for on a heavy hit. Counted in ticks,
+## never wall-clock, so a run under `--fixed-fps 60` freezes exactly this many
+## ticks on any machine.
 const HITSTOP_FRAMES: int = 3
 
 const META_WATCHED: StringName = &"_juice_watched"
@@ -142,10 +149,16 @@ var _drew_last_frame: bool = false
 
 ## --- Shake and hit-stop state ---
 var _shake_time: float = 0.0
+var _shake_duration: float = SHAKE_DURATION
 var _shake_intensity: float = 0.0
-var _camera: Camera2D = null
+## The camera the shake last moved, so its offset can be put back even after
+## the viewport's current camera changed.
+var _shaken_camera: Camera2D = null
+## Ticks of freeze still to serve; > 0 only while this node holds the pause.
 var _hitstop_frames: int = 0
-var _disable_shake: bool = false
+## Whether this node, not anyone else, set `SceneTree.paused` for a hit-stop.
+## It only ever lifts a pause it set itself.
+var _froze: bool = false
 
 func _ready() -> void:
 	z_index = 95
@@ -155,7 +168,12 @@ func _ready() -> void:
 	# Before every game node, so a body's velocity is read before the step
 	# that may land it, and heads' positions right after the last step.
 	process_physics_priority = -100
-	_rng.randomize()
+	# Hit-stop freezes the tree, and this node must keep counting ticks through
+	# it (and keep animating the shake).
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Cosmetic-only randomness (see `RoundManager`'s match-seed note): a fixed
+	# seed keeps a run repeatable, and never touches the global RNG.
+	_rng.seed = 0x1D1CE
 	_p_pos.resize(MAX_PARTICLES)
 	_p_vel.resize(MAX_PARTICLES)
 	_p_age.resize(MAX_PARTICLES)
@@ -173,8 +191,10 @@ func _ready() -> void:
 	get_tree().node_added.connect(_on_node_added)
 	_watch_subtree(get_tree().root)
 
-	# Find camera for shake effects
-	_camera = get_tree().root.find_child("Camera2D", false, false) as Camera2D
+## Restore everything this node changes outside itself, so a scene change or
+## a removed Juice never leaves the game paused or the camera off-centre.
+func _exit_tree() -> void:
+	_reset_effects()
 
 # --- Read-only hooks for the scenario suite -----------------------------------
 
@@ -217,9 +237,16 @@ func _on_node_added(node: Node) -> void:
 	if node.has_signal("strike_landed") and node.has_signal("eliminated"):
 		if node.has_signal("body_entered"):
 			node.connect("body_entered", _on_player_touched.bind(node))
-		node.connect("strike_landed", _on_strike_landed.bind(node))
+		# `strike_landed(victim, amount, point, lethal)` is handled as it
+		# comes: no bind, the handler takes exactly those four.
+		node.connect("strike_landed", _on_strike_landed)
 		node.connect("eliminated", _on_player_eliminated.bind(node))
 		_players.append(node)
+	elif node.has_signal("round_started") and node.has_signal("round_won"):
+		# The round loop: a new round or a finished one is a cut, so any
+		# shake or freeze in flight ends with it (a stage change).
+		node.connect("round_started", _reset_effects)
+		node.connect("round_won", func(_slot: int) -> void: _reset_effects())
 	elif node.has_signal("struck_world") and node.has_signal("clashed"):
 		# A head that left the tree and came back is re-watched, and is
 		# already connected.
@@ -277,10 +304,13 @@ func _serve_waiting() -> void:
 # --- Per tick -------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	# Handle hit-stop: skip physics updates for a few frames
-	if _hitstop_frames > 0:
-		_hitstop_frames -= 1
-		return
+	# Hit-stop: the tree is paused for `_hitstop_frames` ticks (this node runs
+	# through a pause), counted down here, one per physics tick.
+	if _froze:
+		if _hitstop_frames > 0:
+			_hitstop_frames -= 1
+			return
+		_end_hitstop()
 
 	if _velocity_before.size() > _players.size() * 4 + 16:
 		_velocity_before.clear()
@@ -327,18 +357,19 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	_clock += delta
 
-	# Update and apply screen shake
-	if _shake_time > 0.0 and _camera != null:
-		var progress: float = 1.0 - (_shake_time / SHAKE_DURATION) if _shake_intensity > 0.0 else 1.0
-		var offset: Vector2 = Vector2(
-			randf_range(-_shake_intensity, _shake_intensity),
-			randf_range(-_shake_intensity, _shake_intensity)
-		) * (1.0 - progress * progress)
-		_camera.offset = offset
+	# Update and apply screen shake, against this shake's own duration.
+	if _shake_time > 0.0:
+		if not is_instance_valid(_shaken_camera):
+			_shaken_camera = get_viewport().get_camera_2d()
+		if _shaken_camera != null:
+			var progress: float = 1.0 - (_shake_time / maxf(_shake_duration, 0.0001))
+			_shaken_camera.offset = Vector2(
+				_rng.randf_range(-_shake_intensity, _shake_intensity),
+				_rng.randf_range(-_shake_intensity, _shake_intensity)
+			) * (1.0 - progress * progress)
 		_shake_time -= delta
 		if _shake_time <= 0.0:
-			_camera.offset = Vector2.ZERO
-			_shake_intensity = 0.0
+			_clear_shake()
 
 	var busy: bool = _step_particles(delta)
 	var frac: float = Engine.get_physics_interpolation_fraction() \
@@ -430,26 +461,72 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 		_emit(Kind.SPARK, point, vel, SPARK_LIFETIME * _rng.randf_range(0.7, 1.15))
 
 ## Strike landed: apply screen shake and hit-stop based on damage.
-func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool) -> void:
-	if not _disable_shake and amount >= SHAKE_DAMAGE_MIN:
+func _on_strike_landed(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+	if _shake_enabled() and amount >= SHAKE_DAMAGE_MIN:
 		var strength: float = clampf((amount - SHAKE_DAMAGE_MIN) / (SHAKE_DAMAGE_MAX - SHAKE_DAMAGE_MIN), 0.0, 1.0)
 		_apply_shake(SHAKE_INTENSITY_MAX * strength, SHAKE_DURATION)
 	if amount >= HITSTOP_DAMAGE_MIN:
 		_apply_hitstop(HITSTOP_FRAMES)
 
 ## Player eliminated: apply strong screen shake.
-func _on_player_eliminated(player: Node) -> void:
-	if not _disable_shake:
+func _on_player_eliminated(_player: Node) -> void:
+	if _shake_enabled():
 		_apply_shake(SHAKE_INTENSITY_ELIMINATION, SHAKE_DURATION_ELIMINATION)
 
-## Apply screen shake effect.
-func _apply_shake(intensity: float, duration: float) -> void:
-	_shake_intensity = max(_shake_intensity, intensity)
-	_shake_time = max(_shake_time, duration)
+## The saved "Screen shake" setting (`Sfx.screen_shake`, remembered in
+## `user://audio.cfg` like the other display settings, #256). On when there is
+## no `Sfx` autoload to ask.
+func _shake_enabled() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx == null or bool(sfx.get("screen_shake"))
 
-## Apply hit-stop (frame freeze) effect.
+## Apply screen shake effect. A new shake never shortens or weakens one still
+## running; it keeps the longer of the two, with that one's own duration.
+func _apply_shake(intensity: float, duration: float) -> void:
+	var left: float = maxf(_shake_time, 0.0)
+	if duration >= left:
+		_shake_duration = duration
+		_shake_time = duration
+	_shake_intensity = maxf(_shake_intensity if left > 0.0 else 0.0, intensity)
+
+## Stop shaking and put the camera back where the shake found it.
+func _clear_shake() -> void:
+	if is_instance_valid(_shaken_camera):
+		_shaken_camera.offset = Vector2.ZERO
+	_shaken_camera = null
+	_shake_time = 0.0
+	_shake_intensity = 0.0
+
+## Freeze the whole game for `frames` physics ticks by pausing the tree; this
+## node runs through the pause (PROCESS_MODE_ALWAYS) and counts the ticks. A
+## pause someone else holds (the lobby's) is left alone, and lifted by no one
+## but its owner. Nothing here reads the clock, so it is exact under
+## `--fixed-fps 60` and the freeze costs the simulation nothing: the physics
+## server is inactive while paused, so bodies resume where they stopped.
 func _apply_hitstop(frames: int) -> void:
-	_hitstop_frames = max(_hitstop_frames, frames)
+	if not _froze:
+		if get_tree().paused:
+			return
+		get_tree().paused = true
+		_froze = true
+	_hitstop_frames = maxi(_hitstop_frames, frames)
+
+func _end_hitstop() -> void:
+	_hitstop_frames = 0
+	if _froze:
+		_froze = false
+		if is_inside_tree():
+			get_tree().paused = false
+
+## Ends any freeze and shake: a round started or ended, or this node is
+## leaving the tree.
+func _reset_effects() -> void:
+	_end_hitstop()
+	_clear_shake()
+
+## Whether a hit-stop freeze is in effect (for the scenario suite).
+func is_frozen() -> bool:
+	return _froze
 
 ## Writes one particle into the next pool slot, overwriting the oldest when
 ## the pool is full. Never allocates.
