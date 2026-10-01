@@ -395,6 +395,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"palette_moods_cover_the_rotation",
 	"palette_stage_platforms_use_mood_color",
 	"palette_players_are_distinct_and_synced",
+	"moving_platform_follows_path_and_returns",
+	"moving_platform_rider_is_not_dropped",
+	"moving_platform_uses_mood_color",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1585,6 +1588,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_palette_stage_platforms_use_mood_color()
 		"palette_players_are_distinct_and_synced":
 			return await _scenario_palette_players_are_distinct_and_synced()
+		"moving_platform_follows_path_and_returns":
+			return await _scenario_moving_platform_follows_path_and_returns()
+		"moving_platform_rider_is_not_dropped":
+			return await _scenario_moving_platform_rider_is_not_dropped()
+		"moving_platform_uses_mood_color":
+			return await _scenario_moving_platform_uses_mood_color()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -24844,4 +24853,82 @@ func _scenario_palette_players_are_distinct_and_synced() -> Array[String]:
 			if not _color_close(main_colors[i], players[i], 0.01):
 				failures.append("slot %d: Main.tscn %s, Palette %s" % [i, main_colors[i], players[i]])
 	_scenario_completed = true
+	return failures
+
+## Issue #279: a back-and-forth platform reaches its far end and comes home;
+## a loop platform visits each loop point and comes home.
+func _scenario_moving_platform_follows_path_and_returns() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var ping: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	ping.travel = Vector2(300, 0)
+	ping.one_way_sec = 1.0
+	ping.position = Vector2(0, 300)
+	stage.add_child(ping)
+	var loop: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	loop.loop_points = PackedVector2Array([Vector2(200, 0), Vector2(200, 100)])
+	loop.one_way_sec = 1.0
+	loop.position = Vector2(0, -300)
+	stage.add_child(loop)
+	var tps: int = Engine.physics_ticks_per_second
+	await _await_ticks(tps)
+	if ping.global_position.distance_to(Vector2(300, 300)) > 8.0:
+		failures.append("ping-pong platform at %s after one leg, want (300, 300)" % ping.global_position)
+	if loop.global_position.distance_to(Vector2(200, -300)) > 8.0:
+		failures.append("loop platform at %s after one leg, want (200, -300)" % loop.global_position)
+	await _await_ticks(tps)
+	if ping.global_position.distance_to(Vector2(0, 300)) > 8.0:
+		failures.append("ping-pong platform at %s after two legs, want home (0, 300)" % ping.global_position)
+	if loop.global_position.distance_to(Vector2(200, -200)) > 8.0:
+		failures.append("loop platform at %s after two legs, want (200, -200)" % loop.global_position)
+	await _await_ticks(tps)
+	if loop.global_position.distance_to(Vector2(0, -300)) > 8.0:
+		failures.append("loop platform at %s after three legs, want home (0, -300)" % loop.global_position)
+	await _teardown(stage)
+	return failures
+
+## Issue #279: a player resting on a platform riding a loop is carried and
+## stays on top of it for a whole circuit.
+func _scenario_moving_platform_rider_is_not_dropped() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var platform: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+	platform.starts_moving = false
+	platform.loop_points = PackedVector2Array([Vector2(150, 0), Vector2(150, 0)])
+	platform.one_way_sec = 1.0
+	platform.position = Vector2(0, 300)
+	stage.add_child(platform)
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+	platform.start()
+	var worst_gap: float = 0.0
+	for i in 3 * Engine.physics_ticks_per_second:
+		await physics_frame
+		worst_gap = maxf(worst_gap, platform.global_position.y - player.global_position.y)
+		if player.global_position.y > platform.global_position.y:
+			failures.append("player fell through the platform at tick %d" % i)
+			break
+	print("      rider stayed above platform; largest centre gap %.1f px" % worst_gap)
+	if absf(player.global_position.x - platform.global_position.x) > 100.0:
+		failures.append("player ended %.1f px off the platform centre" % (player.global_position.x - platform.global_position.x))
+	await _teardown(stage)
+	return failures
+
+## Issue #279: under a Stage the platform takes the mood's platform colour.
+func _scenario_moving_platform_uses_mood_color() -> Array[String]:
+	var failures: Array[String] = []
+	for i in 3:
+		var stage := Node2D.new()
+		stage.set_script(StageType)
+		stage.set("stage_index", i)
+		var platform: AnimatableBody2D = MovingPlatformScene.instantiate() as AnimatableBody2D
+		stage.add_child(platform)
+		get_root().add_child(stage)
+		var mood: Dictionary = PaletteScript.mood_for_stage(i)
+		if not _color_close(platform.platform_color(), mood["platform"], 0.01):
+			failures.append("%s mood: moving platform %s, want %s" % [mood["name"], platform.platform_color(), mood["platform"]])
+		await _teardown(stage)
 	return failures
