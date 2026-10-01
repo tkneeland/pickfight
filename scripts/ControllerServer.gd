@@ -36,6 +36,12 @@ extends Node
 ## (TEAM_PICK_PHASES). Both are additions: a page that never sends them plays
 ## free-for-all exactly as before, and the lobby state's "teams" and per-player
 ## "team" and "pick" fields are sent only while Teams is chosen.
+## Online play (issue #239, ADR-0019): from the host phone only, a local one,
+## `{"t":"host","cmd":"online","v":<bool>}` opens or closes the relay room
+## (a remote seat's request is ignored), heeded only in the lobby. The lobby
+## state then carries "online" (the link status: "off", "connecting", "online"
+## or "unreachable"), "room" (the relay's room code, "" when not online) and
+## "pc_seat" (whether the host PC plays from its own mouse).
 ##
 ## Hardening (issue #164): a kick may carry the `"claim"` serial the lobby
 ## state gave the target, and End match the `"match"` serial it gave the
@@ -248,7 +254,7 @@ var _awaiting_id: Array[PendingConn] = []
 # Untyped on purpose: elements are `Player` nodes and GDScript's analyser
 # would reject `set_input_vector` on a statically typed `Node`.
 var _players: Array = []
-var _slot_peers: Array = [] # WebSocketPeer (a phone) or RemoteSeat (a relay peer, #239)
+var _slot_peers: Array = [] # WebSocketPeer (a phone), RemoteSeat (a relay peer, #239) or LocalSeat (the host PC, #239)
 var _slot_last_packet_msec: PackedInt64Array = PackedInt64Array()
 var _smoothers: Array[InputSmoother] = []
 var _last_weapon: PackedVector2Array = PackedVector2Array()
@@ -344,7 +350,7 @@ class RemoteSeat extends RefCounted:
 
 	func push(kind: int, payload: PackedByteArray) -> void:
 		if open and _inbox.size() < MAX_QUEUED:
-			_inbox.append([kind == 1, payload])
+			_inbox.append([kind == RelayLinkScript.KIND_TEXT, payload])
 
 	func poll() -> void:
 		pass
@@ -401,6 +407,7 @@ class LocalSeat extends RefCounted:
 	func close(_code: int = 1000, _reason: String = "") -> void:
 		open = false
 
+## The link to the relay that remote seats join through (#239).
 var relay_link: Node = null
 var _remote_seats: Dictionary = {} # relay peer id -> RemoteSeat
 var _remote_awaiting: Array[RemoteSeat] = []
@@ -1180,8 +1187,7 @@ func _handle_text(slot: int, text: String) -> void:
 		"mode":
 			var mode: Variant = msg.get("v")
 			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams"):
-				apply_host_command("mode", mode)
-				if _log_input:
+				if apply_host_command("mode", mode) and _log_input:
 					print("slot %d set mode %s" % [slot, mode])
 		"team":
 			var team: Variant = msg.get("v")
@@ -1217,7 +1223,10 @@ func _handle_host_command(slot: int, msg: Dictionary) -> void:
 		host_command.emit(cmd, -1)
 	elif cmd == "online":
 		var on: Variant = msg.get("v")
-		if on is bool:
+		if _slot_peers[slot] is RemoteSeat:
+			if _log_input:
+				print("slot %d host command 'online' ignored: a remote host cannot change the relay" % slot)
+		elif on is bool:
 			apply_host_command("online", on)
 	elif cmd == "kick":
 		var target: Variant = msg.get("slot")
@@ -1264,7 +1273,7 @@ func kick(slot: int) -> bool:
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).
 func slot_ready(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1)
+	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or slot == _host_pc_slot)
 
 ## Mark `slot` ready or not, as its phone's Ready button would: Solo
 ## practice readies the host (issue #152).
@@ -1279,10 +1288,10 @@ func clear_ready() -> void:
 		_slot_ready[slot] = 0
 
 ## The host phone's slot: the earliest-joined claimed slot with a controller
-## connected right now, or -1 with no phones at all.
+## connected right now (never the host-PC seat), or -1 with no phones at all.
 func host_slot() -> int:
 	for slot: int in _join_order:
-		if _slot_peers[slot] != null:
+		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat:
 			return slot
 	return -1
 
@@ -1577,6 +1586,7 @@ func player_in_slot(slot: int) -> Node:
 func go_online(url: String) -> int:
 	return relay_link.go_online(url)
 
+## Leaves the relay and closes the room.
 func go_offline() -> void:
 	relay_link.go_offline()
 
@@ -1584,6 +1594,7 @@ func go_offline() -> void:
 func online_room_code() -> String:
 	return relay_link.room_code()
 
+## Whether the relay link is up and the room open.
 func is_online() -> bool:
 	return relay_link.link_state() == "online"
 
@@ -1635,7 +1646,7 @@ func _process_remote() -> void:
 			_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
 		elif now > seat.deadline_msec:
 			_remote_awaiting.erase(seat)
-			seat.open = false
+			seat.close(1008, "no hello")
 			_remote_seats.erase(seat.peer)
 
 ## The first text frame of `seat` that is a JSON object with a string "id", or null.
@@ -1680,8 +1691,9 @@ static func resolve_relay_url(args: PackedStringArray) -> String:
 
 ## A host-screen or host-phone lobby command: "online" (bool), "pc_seat" (bool),
 ## "mode" ("ffa" or "teams"), "target" (number) or "start" (forces every seat
-## ready). Returns whether it was taken; everything here is ignored outside the
-## lobby (mode and target also on the victory screen, as the phone's were).
+## ready). Returns whether it was taken. "online", "pc_seat" and "start" are
+## heeded only in the lobby (SOLO_PHASES / "lobby"); "mode" and "target" also
+## on the victory screen (MODE_PHASES), as the phone's were.
 func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 	var phase: String = str(_lobby_state.get("phase", "lobby"))
 	match cmd:
@@ -1699,7 +1711,7 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			_team_mode = arg == "teams"
 			return true
 		"target":
-			if not _is_number(arg):
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false
 			_match_target = clampi(int(arg), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
 			return true
@@ -1714,7 +1726,7 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 	return false
 
 func _set_online_requested(on: bool) -> bool:
-	if on == _online_requested:
+	if on == _online_requested and not (on and relay_link.link_state() == RelayLinkScript.STATE_ERROR):
 		return true
 	_online_requested = on
 	if on:
@@ -1724,6 +1736,7 @@ func _set_online_requested(on: bool) -> bool:
 	_send_lobby_to_all()
 	return true
 
+## Whether the host asked to be online (the link may still be coming up).
 func online_requested() -> bool:
 	return _online_requested
 
@@ -1747,6 +1760,7 @@ func _on_room_code_changed(code: String) -> void:
 func _on_link_state_changed(_state: String) -> void:
 	_send_lobby_to_all()
 
+## The slot the host PC's own seat holds, or -1 when "Play on this PC" is off.
 func host_pc_slot() -> int:
 	return _host_pc_slot
 
@@ -1816,6 +1830,7 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
 		_update_mouse_capture()
+		get_viewport().set_input_as_handled()
 		return
 	var click := event as InputEventMouseButton
 	if click != null and click.pressed and _mouse_escaped and _host_pc_slot != -1:
@@ -1834,4 +1849,6 @@ func _update_mouse_capture() -> void:
 		return
 	_mouse_captured = want
 	_host_mouse.reset()
+	if not want and _host_pc_slot != -1:
+		_smoothers[_host_pc_slot].push(Vector2.ZERO)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if want else Input.MOUSE_MODE_VISIBLE

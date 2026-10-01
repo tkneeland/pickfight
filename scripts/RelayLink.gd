@@ -56,9 +56,11 @@ func go_offline() -> void:
 	_drop_room()
 	_set_state(STATE_OFFLINE)
 
+## The room code the relay gave this host, or "" when there is no room.
 func room_code() -> String:
 	return _room_code
 
+## "offline", "connecting", "online" or "error" (the STATE_ constants).
 func link_state() -> String:
 	return _state
 
@@ -77,6 +79,7 @@ func send_to(peer: int, kind: int, payload: PackedByteArray) -> void:
 	frame.append_array(payload)
 	_socket.send(frame, WebSocketPeer.WRITE_MODE_BINARY)
 
+## Sends `text` to relay peer `peer` as a KIND_TEXT envelope.
 func send_text_to(peer: int, text: String) -> void:
 	send_to(peer, KIND_TEXT, text.to_utf8_buffer())
 
