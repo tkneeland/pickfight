@@ -486,6 +486,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"night_variant_applies_by_data",
+	"night_keeps_key_nodes_lit",
+	"night_lamps_steady_with_reduce_flash",
+	"night_roll_respects_forced_and_disabled",
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
@@ -1871,6 +1875,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"night_variant_applies_by_data":
+			return await _scenario_night_variant_applies_by_data()
+		"night_keeps_key_nodes_lit":
+			return await _scenario_night_keeps_key_nodes_lit()
+		"night_lamps_steady_with_reduce_flash":
+			return await _scenario_night_lamps_steady_with_reduce_flash()
+		"night_roll_respects_forced_and_disabled":
+			return await _scenario_night_roll_respects_forced_and_disabled()
 		"match_stats_rows_favourite_weapon_and_magpie":
 			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
 		"victory_stat_table_fits_eight_players":
@@ -28392,6 +28404,136 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
+## Issue #332: a stage becomes its night variant by data alone.
+func _night_stage(night: bool, scene: String = "Bowl") -> Node2D:
+	var stage: Node2D = (load("res://scenes/stages/%s.tscn" % scene) as PackedScene).instantiate() as Node2D
+	stage.set("night", night)
+	get_root().add_child(stage)
+	return stage
+
+func _scenario_night_variant_applies_by_data() -> Array[String]:
+	var failures: Array[String] = []
+	var day: Node2D = _night_stage(false)
+	var night: Node2D = _night_stage(true)
+	await process_frame
+	if day.get_node_or_null("NightLighting") != null:
+		failures.append("a day stage had night lighting")
+	var lighting: Node2D = night.get_node_or_null("NightLighting") as Node2D
+	if lighting == null:
+		failures.append("the night stage had no NightLighting")
+	else:
+		var tint: Color = lighting.modulate_node.color
+		var lum: float = 0.299 * tint.r + 0.587 * tint.g + 0.114 * tint.b
+		print("      night tint luminance %.2f, lamps %d" % [lum, lighting.lamps.size()])
+		if lum < 0.35:
+			failures.append("the night tint is too dark to read (%.2f)" % lum)
+		if lighting.lamps.is_empty():
+			failures.append("the night stage had no lamps")
+	var night_sky: Color = night.get_background().sky_top
+	if night_sky != Color("#0a0d1f"):
+		failures.append("the night backdrop used sky %s, expected the Night mood" % night_sky)
+	if night.get_background().dress_far != night.mood["dress_far"]:
+		failures.append("the parallax dressing did not use night colours")
+	if day.get_background().sky_top == night_sky:
+		failures.append("the day stage had the night sky")
+	day.free()
+	night.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_night_keeps_key_nodes_lit() -> Array[String]:
+	var failures: Array[String] = []
+	var night: Node2D = _night_stage(true, "Gauntlet")
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	get_root().add_child(player)
+	player.global_position = DEEP_PARK_POSITION
+	player.bind_controller()
+	var pickup := Node2D.new()
+	pickup.add_to_group("pickups")
+	get_root().add_child(pickup)
+	for _i in 3:
+		await physics_frame
+	var lighting: Node2D = night.get_node("NightLighting") as Node2D
+	var glow: PointLight2D = player.get_node_or_null("NightGlow") as PointLight2D
+	if glow == null or glow.energy <= 0.0 or not glow.visible:
+		failures.append("the player has no visible glow")
+	if not lighting.head_glows.has(player.get_instance_id()):
+		failures.append("the weapon head has no glow")
+	var pickup_glow: PointLight2D = pickup.get_node_or_null("NightGlow") as PointLight2D
+	if pickup_glow == null or pickup_glow.energy <= 0.0:
+		failures.append("the pickup has no glow")
+	var hazards: int = 0
+	var lit_hazards: int = 0
+	var stack: Array[Node] = [night]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node.has_method("set_hazard_color") and node is Node2D:
+			hazards += 1
+			if node.get_node_or_null("NightGlow") != null:
+				lit_hazards += 1
+		stack.append_array(node.get_children())
+	print("      hazards %d, lit %d" % [hazards, lit_hazards])
+	if hazards == 0:
+		failures.append("the test stage had no hazards to check")
+	if hazards != lit_hazards:
+		failures.append("%d of %d hazards had no glow" % [hazards - lit_hazards, hazards])
+	player.queue_free()
+	pickup.queue_free()
+	night.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_night_lamps_steady_with_reduce_flash() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	var night: Node2D = _night_stage(true)
+	var lighting: Node2D = night.get_node("NightLighting") as Node2D
+	sfx.set_reduce_flash(false)
+	var seen: Dictionary = {}
+	for _i in 30:
+		await process_frame
+		seen[snappedf(lighting.lamps[0].energy, 0.001)] = true
+	if seen.size() < 2:
+		failures.append("the lamp never flickered with flashes on")
+	sfx.set_reduce_flash(true)
+	await process_frame
+	var steady: float = lighting.lamps[0].energy
+	for _i in 30:
+		await process_frame
+		if not is_equal_approx(lighting.lamps[0].energy, steady):
+			failures.append("the lamp flickered with Reduce flashes on")
+			break
+	sfx.reduce_flash = flash_was
+	night.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_night_roll_respects_forced_and_disabled() -> Array[String]:
+	var failures: Array[String] = []
+	var rm := Node.new()
+	rm.set_script(RoundManagerType)
+	rm.forced_night = 1
+	if not rm._roll_night():
+		failures.append("forced_night 1 did not give night")
+	rm.forced_night = 0
+	rm.night_chance = 1.0
+	if rm._roll_night():
+		failures.append("forced_night 0 gave night")
+	rm.forced_night = -1
+	if rm._roll_night():
+		failures.append("a roll happened with modifier rolls disabled")
+	RoundManagerType.modifier_rolls_enabled = true
+	rm.modifier_seed = 5
+	if not rm._roll_night():
+		failures.append("chance 1.0 did not roll night")
+	rm.night_chance = 0.0
+	if rm._roll_night():
+		failures.append("chance 0 rolled night")
+	RoundManagerType.modifier_rolls_enabled = false
+	rm.free()
+	_scenario_completed = true
+	return failures
 ## Issue #325: the per-player stat rows carry KOs, damage and self-KOs, the
 ## favourite weapon is the one grabbed most, and the most pickups earn "Magpie".
 func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
