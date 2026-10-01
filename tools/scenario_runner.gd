@@ -24085,6 +24085,8 @@ func _scenario_online_host_reclaim_with_wrong_token_gets_fresh_code() -> Array[S
 	if remote.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		failures.append("the old room's client was closed: the room was hijacked")
 	await _online_close_239(rig)
+	return failures
+
 # --- Snapshot capture and stream (issue #251) ----------------------------------
 
 const SnapshotScript251 := preload("res://scripts/Snapshot.gd")
