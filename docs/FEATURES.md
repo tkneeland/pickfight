@@ -22,6 +22,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
 - Spear: long reach, weak up close (#272)
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy; a short poker otherwise (#269)
+- Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
@@ -35,6 +36,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
 - Parts: bounce pad, wind zone, rotating platform (#52)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
+- Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
 
 ## Match flow and scoring
@@ -50,6 +52,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Up to 8 players (#36, #138)
 - Player picks own nickname on first join; rename in lobby (#139, #121, #194)
 - Always-on name tags (#151)
+- Six eye styles (round, sleepy, angry, wide, dot, visor) picked in the same phone picker as hats and colour; pupils still track the weapon; kept per seat through reconnects (#297)
 - Hats (crown, top hat, cap, beanie, viking, party, halo, propeller) and colour picker on the phone (#151)
 - Squares have eyes that track the weapon head, blink and squint; arm drawn in front/behind body (#254, #91)
 - One cohesive colour palette (#255)
@@ -108,6 +111,7 @@ Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of th
 - #288 Real per-weapon hit sounds (tkneeland)
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)
 - #271 Pogo stick, #270 Plunger (tkneeland)
+- #270 Plunger, #269 Umbrella (tkneeland)
 - #275 Shield, #274 Magnet, #273 Fishing rod (agage-JG)
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)

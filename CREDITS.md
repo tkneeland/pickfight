@@ -32,6 +32,7 @@ The files:
 | `kenney_impact/impactPlank_medium_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | staff hit |
 | `kenney_impact/impactPlank_umbrella_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | umbrella hit (copies of `impactPlank_medium_001`, `_002`) |
 | `kenney_impact/impactPlank_spear_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | spear hit (copies of `impactPlank_medium_001`, `_002`) |
+| `kenney_impact/impactTin_pogo_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | pogo stomp (copies of `impactTin_medium_000`, `_001`) |
 | `kenney_impact/impactMetal_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | dagger hit |
 | `kenney_impact/impactPunch_heavy_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | boomstick hit (a close-range strike with the gun) |
 | `kenney_scifi/explosionCrunch_000.ogg`, `_001` | Sci-fi Sounds | CC0 1.0 | boomstick shot |
@@ -64,6 +65,7 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 | `kenney_impact/impactWood_heavy_002.ogg`, `_003`, `_004` | Impact Sounds | CC0 1.0 | collapsing floor collapse; boomerang hit (`_002`, `_004`); flail hit (`_003`) |
 | `kenney_impact/impactGeneric_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | breakable wall hit; grapple hit |
 | `kenney_impact/impactGeneric_rod_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | fishing rod hit (copies of `impactGeneric_light_000`, `_001`) |
+| `kenney_impact/impactTin_magnet_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | magnet hit (copies of `impactTin_medium_000`, `_001`) |
 | `kenney_impact/impactPlate_heavy_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | breakable wall break; flail hit |
 
 ## Announcer voice

@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The pogo stick (issue #271, content grill #263): not a weapon you swing but
+; a way of moving that hurts what it lands on. The head bounces the player a
+; little by itself whenever it touches the ground; pushing it into the ground
+; charges it, and letting go launches the player away from the head's aim.
+; Damage comes only from a stomp -- head or body coming down on someone from
+; above -- so swinging it sideways does nothing (Player._tick_pogo).
+;
+; `min_reach` 45 puts the head past the 24 px body, so it meets the ground
+; before the feet do. `damage` is the stomp at a full launch's speed.
+
+[resource]
+script = ExtResource("1")
+min_reach = 45.0
+max_reach = 110.0
+mass = 0.3
+drive_speed = 22.0
+extend_speed = 900.0
+rest_return_speed = 500.0
+max_drive_force = 6500.0
+damage = 45.0
+sound_set = &"pogo"
+special = &"pogo"
+pogo_bounce_speed = 320.0
+pogo_launch_speed = 1100.0
+pogo_charge_time = 0.6
+head_circle_offsets = PackedVector2Array(3, 0, 8, 0)
+head_circle_radii = PackedFloat32Array(4, 4)
+art_outline = PackedVector2Array(-2, 4.5, 8, 4.5, 12, 2.5, 12.5, 0, 12, -2.5, 8, -4.5, -2, -4.5)
