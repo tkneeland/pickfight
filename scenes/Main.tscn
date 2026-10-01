@@ -42,9 +42,8 @@ current = true
 [node name="Arena" type="Node2D" parent="."]
 
 ; identity_color is paired with SLOT_COLORS in controller/index.html: slot 0
-; must match Player1 (blue), slot 1 Player2 (orange), slot 2 Player3 (green)
-; slot 3 Player4 (magenta), slot 4 Player5 (yellow), slot 5 Player6 (cyan),
-; slot 6 Player7 (violet) and slot 7 Player8 (red). The phone tints its
+; must match Player1 to Player8, in order, and both must match
+; Palette.PLAYERS in scripts/Palette.gd (#255). The phone tints its
 ; "P1"-"P8" badge from that
 ; list, which is how a player finds the
 ; outline, weapon and scoreboard icon that are theirs on the shared screen
@@ -57,13 +56,13 @@ current = true
 [node name="Player1" parent="." instance=ExtResource("2")]
 position = Vector2(-100, 0)
 debug_source = 0
-identity_color = Color(0.15, 0.4, 1, 1)
+identity_color = Color(0.901961, 0.623529, 0, 1)
 start_in_round = false
 
 [node name="Player2" parent="." instance=ExtResource("2")]
 position = Vector2(100, 0)
 debug_source = 0
-identity_color = Color(1, 0.55, 0.1, 1)
+identity_color = Color(0.239216, 0.560784, 0.819608, 1)
 start_in_round = false
 
 ; Players 3 and 4 (issue #36; ADR-0007's four-player roster). Green and
@@ -72,13 +71,13 @@ start_in_round = false
 [node name="Player3" parent="." instance=ExtResource("2")]
 position = Vector2(-300, 0)
 debug_source = 0
-identity_color = Color(0.12, 0.85, 0.55, 1)
+identity_color = Color(0, 0.619608, 0.45098, 1)
 start_in_round = false
 
 [node name="Player4" parent="." instance=ExtResource("2")]
 position = Vector2(300, 0)
 debug_source = 0
-identity_color = Color(1, 0.32, 0.82, 1)
+identity_color = Color(0.835294, 0.368627, 0, 1)
 start_in_round = false
 
 ; Players 5 to 8 (issue #138, the cap raised to eight). Yellow, cyan, violet
@@ -88,25 +87,25 @@ start_in_round = false
 [node name="Player5" parent="." instance=ExtResource("2")]
 position = Vector2(-500, 0)
 debug_source = 0
-identity_color = Color(1, 0.86, 0.1, 1)
+identity_color = Color(0.8, 0.47451, 0.654902, 1)
 start_in_round = false
 
 [node name="Player6" parent="." instance=ExtResource("2")]
 position = Vector2(500, 0)
 debug_source = 0
-identity_color = Color(0.1, 0.82, 1, 1)
+identity_color = Color(0.337255, 0.705882, 0.913725, 1)
 start_in_round = false
 
 [node name="Player7" parent="." instance=ExtResource("2")]
 position = Vector2(-700, 0)
 debug_source = 0
-identity_color = Color(0.6, 0.35, 1, 1)
+identity_color = Color(0.941176, 0.768627, 0, 1)
 start_in_round = false
 
 [node name="Player8" parent="." instance=ExtResource("2")]
 position = Vector2(700, 0)
 debug_source = 0
-identity_color = Color(0.92, 0.16, 0.2, 1)
+identity_color = Color(0.909804, 0.901961, 0.941176, 1)
 start_in_round = false
 
 ; Hitmarkers and debug damage numbers (issue #33), drawn in world space

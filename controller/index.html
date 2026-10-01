@@ -480,9 +480,7 @@
   var DRAG_RADIUS_FRACTION = 0.35;
   var RECONNECT_DELAY_MS = 1000;
   // Must stay in sync with each Player's identity_color in scenes/Main.tscn:
-  // slot 0 = Player1 blue, slot 1 = Player2 orange, slot 2 = Player3 green,
-  // slot 3 = Player4 magenta, slot 4 = Player5 yellow, slot 5 = Player6 cyan,
-  // slot 6 = Player7 violet, slot 7 = Player8 red (issue #138). The host paints that same colour on each
+  // slot N = PlayerN+1, and both match Palette.PLAYERS in scripts/Palette.gd (#255). The host paints that same colour on each
   // player's persistent outline and weapon head (ADR-0005)
   // -- not the body fill, which reddens with damage -- so changing a colour
   // here means changing the matching identity_color there. Since issue #151
@@ -490,7 +488,7 @@
   // "looks" frame -- sent right behind the slot frame -- says which colour the
   // player actually holds (colorOf()). The scenario
   // identity_colours_match_controller_page keeps this list and Main.tscn in step.
-  var SLOT_COLORS = ["#2666ff", "#ff8c1a", "#1fd98c", "#ff52d1", "#ffdb1a", "#1ad1ff", "#9959ff", "#eb2933"];
+  var SLOT_COLORS = ["#e69f00", "#3d8fd1", "#009e73", "#d55e00", "#cc79a7", "#56b4e9", "#f0c400", "#e8e6f0"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector

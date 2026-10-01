@@ -5,6 +5,13 @@ extends Node2D
 ## Preloaded by path everywhere it's used -- see CLAUDE.md's `class_name` rule.
 
 const StageBackgroundType := preload("res://scripts/StageBackground.gd")
+const PaletteScript := preload("res://scripts/Palette.gd")
+
+## This stage's index in the rotation, set by RoundManager before the stage
+## enters the tree; it picks the palette mood (#255). -1 means Daylight.
+var stage_index: int = -1
+## The palette mood applied in `_ready()`.
+var mood: Dictionary = {}
 
 ## The stage's backdrop (issue #117): a gradient sky and parallax
 ## silhouettes, built by `StageBackground.gd` when the stage enters the tree
@@ -46,11 +53,28 @@ func _ready() -> void:
 	var background: Node2D = StageBackgroundType.new()
 	background.name = BACKGROUND_NODE_NAME
 	var seed_value: int = background_seed if background_seed != 0 else hash(String(name))
-	background.configure(background_sky_top, background_sky_bottom, background_silhouette,
+	mood = PaletteScript.mood_for_stage(stage_index)
+	background.configure(mood["sky_top"], mood["sky_bottom"], background_silhouette,
 		background_layers, seed_value, get_view_rect().size)
+	background.far_hill = mood["far"]
+	background.mid_hill = mood["mid"]
+	background.use_hill_colours = true
 	add_child(background)
 	# First in tree order as well as lowest in z, belt and braces.
 	move_child(background, 0)
+	_tint_bodies(self)
+	var kill_zone: Node = get_node_or_null("KillZone")
+	if kill_zone != null and kill_zone.has_method("set_kill_color"):
+		kill_zone.set_kill_color(mood["kill"])
+
+## Recolours every static platform or stage-body visual: the Polygon2Ds under
+## a plain StaticBody2D (no script, so breakables, ledges and pads keep their
+## own colours) take the mood's platform colour.
+func _tint_bodies(node: Node) -> void:
+	for child in node.get_children():
+		if child is Polygon2D and node.get_class() == "StaticBody2D" and node.get_script() == null:
+			(child as Polygon2D).color = mood["platform"]
+		_tint_bodies(child)
 
 ## The camera zoom that fits `view` inside the default view: 1 for a normal
 ## stage, under 1 for a large one. Uniform, so nothing is stretched.

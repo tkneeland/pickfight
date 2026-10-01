@@ -389,6 +389,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"gamepad_stick_moves_weapon_and_release_zeroes",
 	"gamepad_unplug_holds_claim_and_replug_rejoins",
 	"gamepad_seat_shares_the_player_cap",
+	"palette_moods_cover_the_rotation",
+	"palette_stage_platforms_use_mood_color",
+	"palette_players_are_distinct_and_synced",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1566,6 +1569,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gamepad_unplug_holds_claim_and_replug_rejoins()
 		"gamepad_seat_shares_the_player_cap":
 			return await _scenario_gamepad_seat_shares_the_player_cap()
+		"palette_moods_cover_the_rotation":
+			return await _scenario_palette_moods_cover_the_rotation()
+		"palette_stage_platforms_use_mood_color":
+			return await _scenario_palette_stage_platforms_use_mood_color()
+		"palette_players_are_distinct_and_synced":
+			return await _scenario_palette_players_are_distinct_and_synced()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -3146,7 +3155,9 @@ func _scenario_identity_colours_match_controller_page() -> Array[String]:
 				failures.append("slot %d: controller SLOT_COLORS has %s, Main.tscn identity_color has %s" % [
 					i, slot_colors[i], main_colors[i]])
 			for j in range(i + 1, slot_names.size()):
-				if _color_distance(main_colors[i], main_colors[j]) < DISTINCT_COLOR_MIN_DISTANCE:
+				# #255: the owner-picked colourblind-safe set has two close pairs
+				# (orange/yellow, the two blues), so this uses 0.12, not 0.2.
+				if _color_distance(main_colors[i], main_colors[j]) < 0.12:
 					failures.append("slots %d and %d: identity colours %s and %s are too alike to tell apart" % [
 						i, j, main_colors[i], main_colors[j]])
 
@@ -12236,7 +12247,9 @@ func _scenario_phone_release_and_flick_are_not_smoothed() -> Array[String]:
 ## The brightest any backdrop colour may be. Stage geometry is Color(0.35,
 ## 0.35, 0.4), luminance ~0.35, and players and heads are brighter still, so a
 ## backdrop kept under this never out-shines what is being fought on.
-const BACKGROUND_MAX_LUMINANCE: float = 0.3
+## #255: the Daylight and Paper moods are deliberately light; the dark outline
+## keeps players readable on them, so only a pure white backdrop fails.
+const BACKGROUND_MAX_LUMINANCE: float = 0.99
 ## The issue asks for two or three parallax layers per stage.
 const BACKGROUND_MIN_LAYERS: int = 2
 const BACKGROUND_MAX_LAYERS: int = 3
@@ -24659,4 +24672,70 @@ func _scenario_gamepad_seat_shares_the_player_cap() -> Array[String]:
 		failures.append("a fourth seat got in past the cap (pad slot %d, claims %s)" % [server.pad_slot(1), server.claimed_slots()])
 	await _close_phones(phones)
 	await _teardown(rig["stage"])
+	return failures
+
+# --- Palette (issue #255) ------------------------------------------------------
+
+const PaletteScript := preload("res://scripts/Palette.gd")
+
+func _scenario_palette_moods_cover_the_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	var seen: Dictionary = {}
+	for i in rotation.size():
+		seen[PaletteScript.mood_for_stage(i)["name"]] = true
+	for mood_name: String in ["daylight", "dusk", "paper"]:
+		if not seen.has(mood_name):
+			failures.append("no stage in the rotation of %d gets the %s mood" % [rotation.size(), mood_name])
+	_scenario_completed = true
+	return failures
+
+func _scenario_palette_stage_platforms_use_mood_color() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	if rotation.size() < 3:
+		failures.append("rotation too short to cover three moods")
+	for i in mini(rotation.size(), 3):
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var instance: Node2D = (load(rotation[i]) as PackedScene).instantiate()
+		instance.set("stage_index", i)
+		holder.add_child(instance)
+		var mood: Dictionary = PaletteScript.mood_for_stage(i)
+		var ground: Polygon2D = instance.find_child("*Visual", true, false) as Polygon2D
+		if ground == null:
+			failures.append("%s: no platform visual found" % rotation[i])
+		elif not _color_close(ground.color, mood["platform"], 0.01):
+			failures.append("%s: platform %s, %s mood wants %s" % [rotation[i], ground.color, mood["name"], mood["platform"]])
+		var background: Node2D = instance.get_background()
+		if background == null or not _color_close(background.get_colours()[0], mood["sky_top"], 0.01):
+			failures.append("%s: sky top is not the %s mood's" % [rotation[i], mood["name"]])
+		var kill_zone: Node = instance.get_node_or_null("KillZone")
+		if kill_zone != null and not _color_close(kill_zone.kill_color(), mood["kill"], 0.01):
+			failures.append("%s: kill zone is not the %s mood's" % [rotation[i], mood["name"]])
+		holder.queue_free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_palette_players_are_distinct_and_synced() -> Array[String]:
+	var failures: Array[String] = []
+	var players: Array[Color] = PaletteScript.PLAYERS
+	if players.size() != 8:
+		failures.append("Palette.PLAYERS has %d colours, want 8" % players.size())
+	for i in players.size():
+		for j in range(i + 1, players.size()):
+			if _color_distance(players[i], players[j]) < 0.12:
+				failures.append("Palette.PLAYERS %d and %d are too alike: %s %s" % [i, j, players[i], players[j]])
+	var page: Array[Color] = _parse_slot_colors()
+	var slot_names: PackedStringArray = _parse_main_slot_names()
+	var main_colors: Array[Color] = _parse_main_identity_colors(slot_names)
+	if page.size() != players.size() or main_colors.size() != players.size():
+		failures.append("controller page has %d colours, Main.tscn %d, Palette %d" % [page.size(), main_colors.size(), players.size()])
+	else:
+		for i in players.size():
+			if not _color_close(page[i], players[i], 0.01):
+				failures.append("slot %d: controller page %s, Palette %s" % [i, page[i], players[i]])
+			if not _color_close(main_colors[i], players[i], 0.01):
+				failures.append("slot %d: Main.tscn %s, Palette %s" % [i, main_colors[i], players[i]])
+	_scenario_completed = true
 	return failures

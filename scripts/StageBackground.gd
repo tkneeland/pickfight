@@ -50,6 +50,12 @@ const CLOUD_LIGHTEN: float = 0.07
 var sky_top: Color = Color(0.1, 0.12, 0.2)
 var sky_bottom: Color = Color(0.2, 0.22, 0.28)
 var silhouette: Color = Color(0.13, 0.14, 0.19)
+## Far and mid hill colours from the stage's palette mood (#255); when
+## `use_hill_colours` is set the terrain layers blend far to near between them
+## instead of from the sky towards `silhouette`.
+var far_hill: Color = Color.BLACK
+var mid_hill: Color = Color.BLACK
+var use_hill_colours: bool = false
 var layer_kinds: PackedStringArray = ["clouds", "mountains", "hills"]
 var rng_seed: int = 0
 ## The world area the camera shows while this backdrop's stage plays. 16:9,
@@ -153,6 +159,8 @@ func _build() -> void:
 		layer.name = "Layer%d_%s" % [i, kinds[i]]
 		add_child(layer)
 		var colour: Color = sky_bottom.lerp(silhouette, lerpf(FAR_TINT, NEAR_TINT, t))
+		if use_hill_colours:
+			colour = far_hill.lerp(mid_hill, t)
 		var drift: float = 0.0
 		match kinds[i]:
 			"clouds":
