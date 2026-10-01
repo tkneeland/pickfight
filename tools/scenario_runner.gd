@@ -23141,8 +23141,8 @@ func _scenario_remote_client_scene_loads() -> Array[String]:
 	if client == null:
 		failures.append("RemoteClient scene failed to instantiate")
 		return failures
-	
-	get_tree().root.add_child(client)
+
+	root.add_child(client)
 	await _await_ticks(2)
 	
 	if not client.is_node_ready():
