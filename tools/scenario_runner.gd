@@ -377,6 +377,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"snapshot_quantization_tolerance",
 	"snapshot_delta_encode",
 	"remote_client_scene_loads",
+	"snapshot_capture_matches_live_round",
+	"snapshot_stream_reaches_remote_client",
+	"snapshot_nothing_captured_without_remote_seats",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1530,6 +1533,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_snapshot_delta_encode()
 		"remote_client_scene_loads":
 			return await _scenario_remote_client_scene_loads()
+		"snapshot_capture_matches_live_round":
+			return await _scenario_snapshot_capture_matches_live_round()
+		"snapshot_stream_reaches_remote_client":
+			return await _scenario_snapshot_stream_reaches_remote_client()
+		"snapshot_nothing_captured_without_remote_seats":
+			return await _scenario_snapshot_nothing_captured_without_remote_seats()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -24073,4 +24082,222 @@ func _scenario_online_host_reclaim_with_wrong_token_gets_fresh_code() -> Array[S
 	if remote.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		failures.append("the old room's client was closed: the room was hijacked")
 	await _online_close_239(rig)
+# --- Snapshot capture and stream (issue #251) ----------------------------------
+
+const SnapshotScript251 := preload("res://scripts/Snapshot.gd")
+const SnapshotCaptureScript251 := preload("res://scripts/SnapshotCapture.gd")
+## Bytes per second per client the stream may cost with 8 players.
+const SNAPSHOT_BUDGET_BPS_251: int = 40 * 1024
+
+## Main.tscn with `bots` bots, added to the tree.
+func _snap_main_251(bots: int) -> Dictionary:
+	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % bots])
+	var built: Dictionary = _new_bot_main()
+	get_root().add_child(built["main"])
+	await _await_ticks(5)
+	return built
+
+func _snap_close_251(rig: Dictionary) -> void:
+	rig["server"].go_offline()
+	_relay_stop(rig["relay"], rig["clients"])
+	await _teardown(rig["main"])
+
+func _snap_angle_off_251(a: float, b: float) -> float:
+	return absf(wrapf(a - b, -PI, PI))
+
+func _snap_near_251(failures: Array[String], what: String, got: Vector2, want: Vector2) -> void:
+	if absf(got.x - want.x) > 1.0 or absf(got.y - want.y) > 1.0:
+		failures.append("%s decoded %s, live %s (tolerance 1 px)" % [what, got, want])
+
+## Capture, encode and decode in one tick, so nothing moves between the live
+## world and the decoded one.
+func _scenario_snapshot_capture_matches_live_round() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(8)
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var slots: Array[int] = server.virtual_slots()
+	var players: Array[RigidBody2D] = []
+	for slot: int in slots:
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	if slots.size() != 8 or not await _await_condition(func() -> bool: return _all_alive(players), BOT_START_MSEC):
+		failures.append("the 8-bot round never started (%d bots)" % slots.size())
+		await _teardown(built["main"])
+		return failures
+	await _await_ticks(90)
+	var world: Dictionary = SnapshotCaptureScript251.capture(rm)
+	var decoded: Dictionary = SnapshotScript251.decode(SnapshotScript251.encode(world))
+	if not decoded.get("is_full_snapshot", false):
+		failures.append("the capture did not decode as a full snapshot")
+	var dec_players: Array = decoded.get("players", [])
+	if dec_players.size() != 8:
+		failures.append("decoded %d players, expected 8" % dec_players.size())
+	for entry: Dictionary in dec_players:
+		var slot: int = entry["player_id"]
+		var live: RigidBody2D = server.player_in_slot(slot) as RigidBody2D
+		if live == null:
+			failures.append("decoded player %d has no live twin" % slot)
+			continue
+		_snap_near_251(failures, "player %d position" % slot, entry["body"]["position"], live.global_position)
+		_snap_near_251(failures, "player %d velocity" % slot, entry["body"]["linear_velocity"], live.linear_velocity)
+		_snap_near_251(failures, "player %d head" % slot, entry["weapon"]["head_position"], live.weapon_head_position())
+		if _snap_angle_off_251(entry["body"]["rotation"], live.global_rotation) > 0.001:
+			failures.append("player %d rotation %f, live %f" % [slot, entry["body"]["rotation"], live.global_rotation])
+		var head: Node2D = live.get("_head")
+		if head != null and _snap_angle_off_251(entry["weapon"]["head_rotation"], head.global_rotation) > 0.001:
+			failures.append("player %d head rotation %f, live %f" % [slot, entry["weapon"]["head_rotation"], head.global_rotation])
+		if entry["name"] != server.slot_name(slot):
+			failures.append("player %d name '%s', live '%s'" % [slot, entry["name"], server.slot_name(slot)])
+		if entry["damage"] != int(live.damage):
+			failures.append("player %d damage %d, live %f" % [slot, entry["damage"], live.damage])
+		if entry["state"] != (1 if live.alive else 0) + (1 if live.alive and live.spawn_protected else 0):
+			failures.append("player %d state %d, live alive=%s protected=%s" % [slot, entry["state"], live.alive, live.spawn_protected])
+		if entry["team"] != (live.team & 0xFF) or entry["color"] != slot:
+			failures.append("player %d team/color %d/%d, live %d/%d" % [slot, entry["team"], entry["color"], live.team & 0xFF, slot])
+	var tree: SceneTree = get_root().get_tree()
+	if decoded["projectiles"].size() != tree.get_nodes_in_group("projectiles").size():
+		failures.append("decoded %d projectiles, live %d" % [decoded["projectiles"].size(), tree.get_nodes_in_group("projectiles").size()])
+	if decoded["pickups"].size() != tree.get_nodes_in_group("pickups").size():
+		failures.append("decoded %d pickups, live %d" % [decoded["pickups"].size(), tree.get_nodes_in_group("pickups").size()])
+	for pickup: Node2D in tree.get_nodes_in_group("pickups"):
+		var found: bool = false
+		for entry: Dictionary in decoded["pickups"]:
+			if absf(entry["position"].x - pickup.global_position.x) <= 1.0 and absf(entry["position"].y - pickup.global_position.y) <= 1.0:
+				found = true
+		if not found:
+			failures.append("pickup at %s missing from the decoded snapshot" % pickup.global_position)
+	if decoded["stage_id"] != rm.get("_stage_rotation").stage_index:
+		failures.append("stage_id %d, live %d" % [decoded["stage_id"], rm.get("_stage_rotation").stage_index])
+	if decoded["round_phase"] != 1:
+		failures.append("round_phase %d, expected 1 (a round in play)" % decoded["round_phase"])
+	var bodies: int = mini(255, rm.get("_current_stage").find_children("*", "StaticBody2D", true, false).size())
+	if decoded["static_stage_bodies"].size() != bodies:
+		failures.append("decoded %d stage bodies, live %d" % [decoded["static_stage_bodies"].size(), bodies])
+	var zone: Node2D = rm.call("_floor_kill_zone")
+	if zone != null and decoded["kill_zone_height"] != int(zone.surface_y()):
+		failures.append("kill_zone_height %d, live %f" % [decoded["kill_zone_height"], zone.surface_y()])
+	for slot: int in slots:
+		if decoded["scores"].get(slot) != rm.score_of(slot):
+			failures.append("score of %d was %s, live %d" % [slot, decoded["scores"].get(slot), rm.score_of(slot)])
+	# The next tick's delta carries the players as they are then.
+	await _await_ticks(3)
+	var next_world: Dictionary = SnapshotCaptureScript251.capture(rm)
+	var frame: Dictionary = SnapshotScript251.decode(SnapshotScript251.encode(SnapshotCaptureScript251.delta(next_world, world)))
+	var moved: int = 0
+	for entity: Dictionary in frame.get("delta_entities", []):
+		if entity["type"] == SnapshotScript251.TYPE_PLAYER:
+			moved += 1
+			var live: RigidBody2D = server.player_in_slot(entity["id"]) as RigidBody2D
+			_snap_near_251(failures, "delta player %d position" % entity["id"], entity["position"], live.global_position)
+	if frame.get("is_full_snapshot", true) or moved == 0:
+		failures.append("the delta frame was full=%s with %d moved players" % [frame.get("is_full_snapshot"), moved])
+	await _teardown(built["main"])
+	return failures
+
+## Everything pumped from `peer` while polling the relay clients: each kind-2
+## envelope as {"msec", "bytes" (whole packet), "snapshot" (decoded)}. Stops at
+## `msec` of game time or when `until` (if valid) holds.
+func _snap_pump_251(rig: Dictionary, peer: WebSocketPeer, frames: Array, msec: int, until: Callable = Callable()) -> void:
+	var deadline: int = _game_msec() + msec
+	while _game_msec() < deadline:
+		await physics_frame
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		while peer.get_available_packet_count() > 0:
+			var pkt: PackedByteArray = peer.get_packet()
+			if pkt.size() > 1 and pkt[0] == 2:
+				frames.append({"msec": _game_msec(), "bytes": pkt.size(), "snapshot": SnapshotScript251.decode(pkt.slice(1))})
+		if until.is_valid() and until.call():
+			return
+
+## A real host with 7 bots and one remote client over an in-process relay.
+func _scenario_snapshot_stream_reaches_remote_client() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(7)
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var relay: Node = _relay_start()
+	if relay == null:
+		await _teardown(built["main"])
+		return ["no free port for the relay"]
+	var rig: Dictionary = {"main": built["main"], "server": server, "relay": relay, "clients": []}
+	if server.go_online("ws://127.0.0.1:%d" % _relay_port_next) != OK or not await _wait_for_239(func() -> bool: return server.is_online()):
+		failures.append("host never came online")
+		await _snap_close_251(rig)
+		return failures
+	rig["code"] = server.online_room_code()
+	var remote: WebSocketPeer = await _online_remote_239(rig, "snapshot-remote")
+	if remote == null:
+		failures.append("the remote client could not join the room")
+		await _snap_close_251(rig)
+		return failures
+	var frames: Array = []
+	var hello_msec: int = _game_msec()
+	await _snap_pump_251(rig, remote, frames, 3000, func() -> bool: return not frames.is_empty())
+	if frames.is_empty():
+		failures.append("no snapshot reached the remote client")
+		await _snap_close_251(rig)
+		return failures
+	if not frames[0]["snapshot"].get("is_full_snapshot", false):
+		failures.append("the first frame was a delta, expected a full snapshot")
+	var first_ms: int = frames[0]["msec"] - hello_msec
+	if first_ms > 1000:
+		failures.append("the first full snapshot took %d ms after binding, expected <= 1000" % first_ms)
+	_online_send_239(remote, 1, JSON.stringify({"t": "ready", "v": true}).to_utf8_buffer())
+	await _snap_pump_251(rig, remote, frames, 20000, func() -> bool: return int(rm.get("_state")) == 1)
+	if int(rm.get("_state")) != 1:
+		failures.append("the round never started")
+		await _snap_close_251(rig)
+		return failures
+	await _snap_pump_251(rig, remote, frames, 1000) # drain the backlog the client did not poll
+	frames.clear()
+	const WINDOW_MSEC: int = 3000
+	await _snap_pump_251(rig, remote, frames, WINDOW_MSEC)
+	var total: int = 0
+	var fulls: int = 0
+	for f: Dictionary in frames:
+		total += f["bytes"]
+		if f["snapshot"].get("is_full_snapshot", false):
+			fulls += 1
+			if f["snapshot"]["players"].size() != 8:
+				failures.append("a full snapshot carried %d players, expected 8" % f["snapshot"]["players"].size())
+	var hz: float = frames.size() * 1000.0 / WINDOW_MSEC
+	var bytes_per_sec: int = int(total * 1000.0 / WINDOW_MSEC)
+	print("      %d frames in %d ms (%.1f Hz), %d full" % [frames.size(), WINDOW_MSEC, hz, fulls])
+	print("      bandwidth_bytes_per_sec=%d" % bytes_per_sec)
+	if hz < 25.0 or hz > 35.0:
+		failures.append("the stream ran at %.1f Hz, expected about 30" % hz)
+	if fulls < 2 or fulls > 4:
+		failures.append("%d full snapshots in 3 s, expected about 3" % fulls)
+	if bytes_per_sec > SNAPSHOT_BUDGET_BPS_251:
+		failures.append("%d bytes/s per client exceeds the %d budget" % [bytes_per_sec, SNAPSHOT_BUDGET_BPS_251])
+	await _snap_close_251(rig)
+	return failures
+
+## Online with nobody bound: the host neither captures nor sends.
+func _scenario_snapshot_nothing_captured_without_remote_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(2)
+	var server: Node = built["server"]
+	var relay: Node = _relay_start()
+	if relay == null:
+		await _teardown(built["main"])
+		return ["no free port for the relay"]
+	var rig: Dictionary = {"main": built["main"], "server": server, "relay": relay, "clients": []}
+	if server.go_online("ws://127.0.0.1:%d" % _relay_port_next) != OK or not await _wait_for_239(func() -> bool: return server.is_online()):
+		failures.append("host never came online")
+		await _snap_close_251(rig)
+		return failures
+	var before: int = SnapshotCaptureScript251.capture_count
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.virtual_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	if not await _await_condition(func() -> bool: return _all_alive(players), BOT_START_MSEC):
+		failures.append("the bots' round never started")
+	await _await_ticks(120)
+	if SnapshotCaptureScript251.capture_count != before:
+		failures.append("%d captures with no remote seat bound" % (SnapshotCaptureScript251.capture_count - before))
+	if server.snapshot_frames_sent != 0:
+		failures.append("%d frames sent with no remote seat bound" % server.snapshot_frames_sent)
+	await _snap_close_251(rig)
 	return failures
