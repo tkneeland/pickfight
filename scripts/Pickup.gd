@@ -210,4 +210,6 @@ func _on_body_entered(body: Node) -> void:
 	# the rig rebuild itself, which is the part the physics server would
 	# refuse while it is still flushing the query that fired this signal.
 	body.set_weapon_stats(weapon_stats)
+	if body.has_signal("weapon_picked_up"):
+		body.weapon_picked_up.emit(weapon_stats.resource_path.get_file().get_basename().capitalize())
 	queue_free()

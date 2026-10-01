@@ -539,6 +539,8 @@ func _watch_for_buzzes() -> void:
 			player.connect("strike_landed", _on_strike_landed.bind(slot))
 		if player.has_signal("eliminated"):
 			player.connect("eliminated", _on_ko_eliminated.bind(slot))
+		if player.has_signal("weapon_picked_up"):
+			player.connect("weapon_picked_up", _on_weapon_picked_up.bind(slot))
 
 ## `attacker_slot` comes last because that is where the signal's bind puts it.
 func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
@@ -1170,9 +1172,15 @@ func _refresh_victory() -> void:
 			slots.append(slot)
 	slots.sort_custom(podium_before)
 	if _team_mode:
-		_lobby_screen.refresh_victory(slots, _scores, -1, _stats.awards(slots), _match_winner_team, _teams, _team_scores)
+		_lobby_screen.refresh_victory(slots, _scores, -1, _all_awards(slots), _match_winner_team, _teams, _team_scores, _stats.stat_rows(slots))
 		return
-	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
+	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _all_awards(slots), -1, {}, PackedInt32Array(), _stats.stat_rows(slots))
+
+## The core awards plus the extra superlatives (issue #325).
+func _all_awards(slots: Array[int]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = _stats.awards(slots)
+	out.append_array(_stats.extra_awards(slots))
+	return out
 
 ## The podium's order: whether slot `a` stands before slot `b`. The match
 ## winner first, then by final score. Strict (#200): never true both ways,
@@ -1648,6 +1656,9 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
 		return
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec())
+
+func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
+	_stats.record_pickup(slot, weapon_name)
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _pending_kos.is_empty():

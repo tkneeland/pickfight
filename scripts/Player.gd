@@ -203,6 +203,10 @@ signal strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool)
 ## emitted by `leave_round()`: finishing a round alive is not an elimination.
 signal eliminated
 
+## This player took a weapon off a stage pickup (issue #325); `RoundManager`
+## counts it for the match stats. Carries the weapon's name, e.g. "Hammer".
+signal weapon_picked_up(weapon_name: String)
+
 ## Whether this player is in play. False from elimination (damage or a
 ## ring-out) until `start_round()` brings them back for the next round --
 ## there is no mid-round respawn (ADR-0004): a round is over the same body
