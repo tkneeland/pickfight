@@ -617,7 +617,7 @@ func _ground_kind(collider: Object) -> int:
 		return FOOT_NONE
 	var script: Script = collider.get_script()
 	if script == CrumblingLedgeScript:
-		return FOOT_UNSTABLE if collider.call("visual_color") == CrumblingLedgeScript.SOLID_COLOR else FOOT_NONE
+		return FOOT_UNSTABLE if collider.call("is_solid") else FOOT_NONE
 	if script == CollapsingFloorScript:
 		return FOOT_UNSTABLE if collider.call("state_name") == "solid" else FOOT_NONE
 	if script == RotatingPlatformScript:
