@@ -408,6 +408,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
+	"spikes_deal_damage_and_knock_back",
+	"hazard_contact_hits_once_per_cooldown",
+	"saw_travels_along_its_path",
+	"hazard_ko_counts_like_any_other_ko",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1624,6 +1628,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
+		"spikes_deal_damage_and_knock_back":
+			return await _scenario_spikes_deal_damage_and_knock_back()
+		"hazard_contact_hits_once_per_cooldown":
+			return await _scenario_hazard_contact_hits_once_per_cooldown()
+		"saw_travels_along_its_path":
+			return await _scenario_saw_travels_along_its_path()
+		"hazard_ko_counts_like_any_other_ko":
+			return await _scenario_hazard_ko_counts_like_any_other_ko()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25415,5 +25427,134 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 	if other.is_frozen():
 		failures.append("Juice took over a pause it did not set")
 	get_root().get_tree().paused = false
+	await _teardown(stage)
+	return failures
+
+# --- Spikes and saw damage hazards (issue #282)
+
+const SpikesScene: PackedScene = preload("res://scenes/parts/Spikes.tscn")
+const SawScene: PackedScene = preload("res://scenes/parts/Saw.tscn")
+## The set damage of a hazard touch, written here from the issue's design
+## (a big chunk, 40 of the 100 that eliminates).
+const HAZARD_DAMAGE: float = 40.0
+const HAZARD_WATCH_TICKS: int = 90
+
+## Drops a player (sideways of centre, weapon held up) onto a spikes part.
+func _hazard_spikes_with_player(stage: Node2D, side_offset: float) -> Array:
+	var spikes: Area2D = SpikesScene.instantiate() as Area2D
+	spikes.position = PART_POSITION
+	stage.add_child(spikes)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(side_offset, -90))
+	player.set_input_vector(Vector2.UP)
+	return [spikes, player]
+
+## Touching the spikes deals the set damage and throws the player away.
+func _scenario_spikes_deal_damage_and_knock_back() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var made: Array = _hazard_spikes_with_player(stage, 30.0)
+	var spikes: Area2D = made[0]
+	var player: RigidBody2D = made[1]
+	var start_x: float = player.global_position.x
+	var hit_tick: int = -1
+	var velocity_after: Vector2 = Vector2.ZERO
+	for tick in HAZARD_WATCH_TICKS:
+		await physics_frame
+		if spikes.hit_count() > 0:
+			hit_tick = tick
+			velocity_after = player.linear_velocity
+			break
+	if hit_tick < 0:
+		failures.append("the player fell onto the spikes and was never hit")
+	else:
+		print("      hit on tick %d, velocity after %s" % [hit_tick, velocity_after])
+		if not is_equal_approx(player.damage, HAZARD_DAMAGE):
+			failures.append("touch dealt %.1f damage, expected %.1f" % [player.damage, HAZARD_DAMAGE])
+		if velocity_after.y > -200.0:
+			failures.append("knockback did not throw the player up, velocity %s" % velocity_after)
+		if velocity_after.x <= 0.0 or player.global_position.x < start_x:
+			failures.append("knockback did not push away from the spikes' centre toward the player's side, velocity %s" % velocity_after)
+	await _teardown(stage)
+	return failures
+
+## One continuous contact within the cooldown deals damage only once: the
+## player is held inside the spikes for a third of a second, well under the
+## cooldown, then released after the cooldown to be hit again.
+func _scenario_hazard_contact_hits_once_per_cooldown() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var made: Array = _hazard_spikes_with_player(stage, 0.0)
+	var spikes: Area2D = made[0]
+	var player: RigidBody2D = made[1]
+	player.global_position = PART_POSITION
+	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
+	for tick in ticks_held:
+		player.global_position = PART_POSITION
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if spikes.hit_count() != 1:
+		failures.append("%d hits in %d ticks of one contact, expected exactly 1" % [spikes.hit_count(), ticks_held])
+	if not is_equal_approx(player.damage, HAZARD_DAMAGE):
+		failures.append("damage %.1f after one contact, expected %.1f" % [player.damage, HAZARD_DAMAGE])
+	var past_cooldown: int = int(spikes.hit_cooldown_sec * 60.0) + 10
+	for tick in past_cooldown:
+		player.global_position = PART_POSITION
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if spikes.hit_count() < 2:
+		failures.append("still inside after the cooldown, the player was never hit again")
+	await _teardown(stage)
+	return failures
+
+## A saw moves along its path: out to the end of `travel`, and back.
+func _scenario_saw_travels_along_its_path() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var saw: Area2D = SawScene.instantiate() as Area2D
+	saw.position = PART_POSITION
+	saw.travel = Vector2(300, 0)
+	saw.one_way_sec = 1.0
+	stage.add_child(saw)
+	var spin_start: float = 0.0
+	var max_x: float = -INF
+	var min_x: float = INF
+	var x_after_return: float = INF
+	for tick in 150:
+		await physics_frame
+		max_x = maxf(max_x, saw.position.x)
+		min_x = minf(min_x, saw.position.x)
+		if tick == 119:
+			x_after_return = saw.position.x
+	print("      saw x ranged %.1f .. %.1f; x after a full loop %.1f" % [min_x, max_x, x_after_return])
+	if max_x - PART_POSITION.x < 290.0:
+		failures.append("the saw only travelled to x=%.1f, expected about %.1f" % [max_x, PART_POSITION.x + 300.0])
+	if absf(x_after_return - PART_POSITION.x) > 15.0:
+		failures.append("the saw did not come back after a full loop, x=%.1f" % x_after_return)
+	if saw.blade_rotation() == spin_start:
+		failures.append("the blade did not spin")
+	await _teardown(stage)
+	return failures
+
+## A hazard KO counts like any other KO: the player is out, a death is
+## counted and `eliminated` fires, the same as a weapon KO.
+func _scenario_hazard_ko_counts_like_any_other_ko() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var made: Array = _hazard_spikes_with_player(stage, 0.0)
+	var player: RigidBody2D = made[1]
+	player.damage = 100.0 - HAZARD_DAMAGE / 2.0
+	var eliminated: Array = [0]
+	player.eliminated.connect(func(): eliminated[0] += 1)
+	var lethal_reports: Array = []
+	player.strike_landed.connect(func(_v, _a, _p, lethal): lethal_reports.append(lethal))
+	await _await_ticks(HAZARD_WATCH_TICKS)
+	if player.alive:
+		failures.append("the player survived a touch that took them past 100 damage")
+	if player.deaths != 1:
+		failures.append("deaths is %d, expected 1" % player.deaths)
+	if eliminated[0] != 1:
+		failures.append("eliminated fired %d times, expected once" % eliminated[0])
+	if lethal_reports != [true]:
+		failures.append("strike_landed reports %s, expected one lethal report" % [lethal_reports])
 	await _teardown(stage)
 	return failures
