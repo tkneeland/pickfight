@@ -19,7 +19,7 @@ round loop for up to eight phone-controlled players across 24 rotating
 stages, some built around moving platforms, crumbling ledges, falling rocks,
 wind and hazard walls; the largest stages only come up when enough players
 are in the round. Eleven weapons exist (pickaxe, staff, sword, axe, dagger,
-boomstick, grappling hook, flail, boomerang, spear and fishing rod); everything but the pickaxe
+boomstick, grappling hook, flail, boomerang, spear, fishing rod and magnet); everything but the pickaxe
 is found as a pickup on the stage. Art is still flat placeholder shapes.
 
 ## How it plays
@@ -195,7 +195,7 @@ scenes/parts/   reusable stage parts: MovingPlatform, RotatingPlatform,
                 FallingRock, WindZone, Hazard
 scripts/     GDScript sources (among them Player, WeaponHead, WeaponStats,
              ControllerServer, RoundManager, Stage, Bot, Sfx, Music, Juice)
-resources/   weapon stat resources, one .tres per weapon (eleven)
+resources/   weapon stat resources, one .tres per weapon (twelve)
 controller/  the single-file controller web page served to phones
 tools/       headless test fixtures (scenario_runner, ws_probe_client,
              capture_damage_screenshots) and export.sh

@@ -287,6 +287,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_hook_hits_player_lightly",
 	"fishing_rod_fires_sticks_reels_and_releases",
 	"fishing_rod_hook_hits_player_lightly",
+	"magnet_pulls_nearby_players",
+	"magnet_pulls_weapon_heads",
+	"magnet_pushes_with_negative_force",
+	"magnet_ignores_wielder_dead_and_dropped",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -397,6 +401,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"palette_moods_cover_the_rotation",
 	"palette_stage_platforms_use_mood_color",
 	"palette_players_are_distinct_and_synced",
+	"pogo_head_gives_small_bounce_on_ground_contact",
+	"pogo_charged_release_launches_higher_than_bounce",
+	"pogo_downward_stomp_damages_opponent",
+	"pogo_sideways_hit_does_no_damage",
+	"pogo_is_in_the_pickup_set",
 	"crumbling_ledge_break_drops_player",
 	"crumbling_ledge_respawn_collides_again",
 	"crumbling_ledge_takes_mood_platform_color",
@@ -412,6 +421,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_contact_hits_once_per_cooldown",
 	"saw_travels_along_its_path",
 	"hazard_ko_counts_like_any_other_ko",
+	"eye_styles_render_and_track_aim",
+	"phone_eye_style_reaches_player_and_survives_reconnect",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -708,7 +719,9 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/flail.tres",
 	"res://resources/boomerang.tres",
 	"res://resources/spear.tres",
+	"res://resources/pogo.tres",
 	"res://resources/fishing_rod.tres",
+	"res://resources/magnet.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -1387,6 +1400,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_fishing_rod_fires_sticks_reels_and_releases()
 		"fishing_rod_hook_hits_player_lightly":
 			return await _scenario_fishing_rod_hook_hits_player_lightly()
+		"magnet_pulls_nearby_players":
+			return await _scenario_magnet_pulls_nearby_players()
+		"magnet_pulls_weapon_heads":
+			return await _scenario_magnet_pulls_weapon_heads()
+		"magnet_pushes_with_negative_force":
+			return await _scenario_magnet_pushes_with_negative_force()
+		"magnet_ignores_wielder_dead_and_dropped":
+			return await _scenario_magnet_ignores_wielder_dead_and_dropped()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -1607,6 +1628,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_palette_stage_platforms_use_mood_color()
 		"palette_players_are_distinct_and_synced":
 			return await _scenario_palette_players_are_distinct_and_synced()
+		"pogo_head_gives_small_bounce_on_ground_contact":
+			return await _scenario_pogo_head_gives_small_bounce_on_ground_contact()
+		"pogo_charged_release_launches_higher_than_bounce":
+			return await _scenario_pogo_charged_release_launches_higher_than_bounce()
+		"pogo_downward_stomp_damages_opponent":
+			return await _scenario_pogo_downward_stomp_damages_opponent()
+		"pogo_sideways_hit_does_no_damage":
+			return await _scenario_pogo_sideways_hit_does_no_damage()
+		"pogo_is_in_the_pickup_set":
+			return await _scenario_pogo_is_in_the_pickup_set()
 		"crumbling_ledge_break_drops_player":
 			return await _scenario_crumbling_ledge_break_drops_player()
 		"crumbling_ledge_respawn_collides_again":
@@ -1636,6 +1667,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_saw_travels_along_its_path()
 		"hazard_ko_counts_like_any_other_ko":
 			return await _scenario_hazard_ko_counts_like_any_other_ko()
+		"eye_styles_render_and_track_aim":
+			return await _scenario_eye_styles_render_and_track_aim()
+		"phone_eye_style_reaches_player_and_survives_reconnect":
+			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -4151,6 +4186,10 @@ func _scenario_weapon_damage_matches_roster() -> Array[String]:
 
 	var observed: Dictionary = {}
 	for path: String in WEAPON_RESOURCE_PATHS:
+		# The pogo hurts only by a stomp from above (issue #271), so a sideways charge
+		# deals nothing by design. Its own scenarios cover its damage.
+		if path == "res://resources/pogo.tres":
+			continue
 		var weapon: String = path.get_file().get_basename()
 		var stats: WeaponStatsType = load(path)
 		if stats == null:
@@ -4968,6 +5007,10 @@ func _scenario_roster_hafts_are_non_colliding() -> Array[String]:
 		# The spear rests 90 px out (issue #272), past this trial's bystander and bar fixtures (sized for a haft that starts at the body), so
 		# it cannot be asked for it. Its own scenarios cover its reach.
 		if path == "res://resources/spear.tres":
+			continue
+		# The pogo rests 45 px out and bounces the player off any ground its head meets (issue #271),
+		# so this trial's fixtures shove it about. Its own scenarios cover it.
+		if path == "res://resources/pogo.tres":
 			continue
 		var weapon: String = path.get_file().get_basename()
 		var stats: WeaponStatsType = load(path)
@@ -18389,6 +18432,10 @@ const VAULT_TICKS: int = 120
 func _scenario_roster_traversal_is_measured() -> Array[String]:
 	var failures: Array[String] = []
 	for path: String in WEAPON_RESOURCE_PATHS:
+		# The pogo gets up a ledge by bouncing, not by planting the head and hauling (issue #271), and its
+		# head bounces the player off whatever it plants on, so the plant-and-climb trial cannot ask it.
+		if path == "res://resources/pogo.tres":
+			continue
 		var weapon: String = path.get_file().get_basename()
 		var stats: WeaponStatsType = load(path)
 		if stats == null:
@@ -18813,7 +18860,8 @@ const GRAPPLE_PATH: String = "res://resources/grapple.tres"
 const FLAIL_PATH: String = "res://resources/flail.tres"
 const BOOMERANG_PATH: String = "res://resources/boomerang.tres"
 const FISHING_ROD_PATH: String = "res://resources/fishing_rod.tres"
-const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH, FISHING_ROD_PATH]
+const MAGNET_PATH: String = "res://resources/magnet.tres"
+const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH, FISHING_ROD_PATH, MAGNET_PATH]
 ## The arena's ground top (its floor is 40 tall, centred at y 320) and where a
 ## player stands on it.
 const NEW_WEAPON_FLOOR_STAND: Vector2 = Vector2(0, 274)
@@ -19083,6 +19131,169 @@ func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 		failures.append("the hook's hit was not reported as the thrower's strike_landed")
 	if is_instance_valid(hook) and hook.is_stuck():
 		failures.append("the hook stuck to a player")
+	await _teardown(stage)
+	return failures
+
+const MAGNET_SCRIPT_PATH: String = "res://scripts/Magnet.gd"
+const PICKAXE_PATH_MAGNET_CONTROL: String = "res://resources/pickaxe.tres"
+## Where the magnet trials park their victims, as offsets from the wielder:
+## one near, one far on the other side, one beyond the 300 px field.
+const MAGNET_NEAR: Vector2 = Vector2(150, 0)
+const MAGNET_FAR: Vector2 = Vector2(-250, 0)
+const MAGNET_OUTSIDE: Vector2 = Vector2(450, 0)
+const MAGNET_TRIAL_TICKS: int = 30
+
+## One magnet trial: a braced wielder holding `wielder_stats` and a free pickaxe
+## player at each of the three offsets, run for MAGNET_TRIAL_TICKS. Returns each
+## victim's x displacement. Run once with a pickaxe wielder it is the control: it
+## says what gravity, the arena and the solver do to the victims with no magnet,
+## so the magnet's effect is read off the difference.
+func _magnet_trial(wielder_stats: Resource) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victims: Array[RigidBody2D] = []
+	for offset: Vector2 in [MAGNET_NEAR, MAGNET_FAR, MAGNET_OUTSIDE]:
+		victims.append(_spawn_player(stage, DEEP_PARK_POSITION + offset))
+	await _await_ticks(2)
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	var starts: Array[float] = []
+	for victim: RigidBody2D in victims:
+		victim.linear_velocity = Vector2.ZERO
+		starts.append(victim.global_position.x)
+	await _await_ticks(MAGNET_TRIAL_TICKS)
+	var moved: Array[float] = []
+	for i in victims.size():
+		moved.append(victims[i].global_position.x - starts[i])
+	await _teardown(stage, false)
+	return moved
+
+## The magnet pulls players toward the wielder, harder the nearer they are, and
+## not at all beyond its range. Read against a control run with a pickaxe, so a
+## magnet that does nothing fails every check.
+func _scenario_magnet_pulls_nearby_players() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: WeaponStatsType = load(MAGNET_PATH)
+	var control: Array[float] = await _magnet_trial(load(PICKAXE_PATH_MAGNET_CONTROL))
+	var pulled: Array[float] = await _magnet_trial(stats)
+	# Toward the wielder is -x for the near and outside victims, +x for the far one.
+	var near_gain: float = control[0] - pulled[0]
+	var far_gain: float = pulled[1] - control[1]
+	var outside_gain: float = absf(pulled[2] - control[2])
+	print("      control dx %s, magnet dx %s -> near %.1f px, far %.1f px, outside %.1f px" % [control, pulled, near_gain, far_gain, outside_gain])
+	if near_gain < 20.0:
+		failures.append("the near victim (150 px) moved only %.1f px more toward the wielder than the no-magnet control; the pull should move it at least 20" % near_gain)
+	if far_gain < 3.0:
+		failures.append("the far victim (250 px, inside the %.0f px field) moved only %.1f px more toward the wielder than the control" % [stats.launch_range, far_gain])
+	if near_gain <= far_gain:
+		failures.append("the pull does not fall off with distance: near %.1f px, far %.1f px" % [near_gain, far_gain])
+	if outside_gain > 1.0:
+		failures.append("a victim beyond the %.0f px field (450 px) still moved %.1f px against the control" % [stats.launch_range, outside_gain])
+	_scenario_completed = true
+	return failures
+
+## A negative `reel_force` pushes instead of pulls: the near victim goes away
+## from the wielder, against the same control.
+func _scenario_magnet_pushes_with_negative_force() -> Array[String]:
+	var failures: Array[String] = []
+	var repel: WeaponStatsType = (load(MAGNET_PATH) as WeaponStatsType).duplicate()
+	repel.reel_force = -absf(repel.reel_force)
+	var control: Array[float] = await _magnet_trial(load(PICKAXE_PATH_MAGNET_CONTROL))
+	var pushed: Array[float] = await _magnet_trial(repel)
+	var near_gain: float = pushed[0] - control[0]
+	print("      near victim pushed %.1f px away from the wielder beyond the control" % near_gain)
+	if near_gain < 20.0:
+		failures.append("a negative reel_force moved the near victim only %.1f px away from the wielder; it should push at least 20" % near_gain)
+	_scenario_completed = true
+	return failures
+
+## The magnet pulls other players' weapon heads: a grapple head on a braced body
+## is dragged toward the magnet, compared with the same head under a pickaxe.
+func _scenario_magnet_pulls_weapon_heads() -> Array[String]:
+	var failures: Array[String] = []
+	var offsets: Array[float] = []
+	for path: String in [PICKAXE_PATH_MAGNET_CONTROL, MAGNET_PATH]:
+		var stage: Node2D = _new_stage()
+		var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var other: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(-200, 0))
+		await _await_ticks(2)
+		await _equip(wielder, path)
+		# A deliberately weak arm (the stock drive would hold the head against any nudge), so
+		# the head is free to be dragged along its groove and the pull shows.
+		var weak_arm: WeaponStatsType = (load(GRAPPLE_PATH) as WeaponStatsType).duplicate()
+		weak_arm.max_drive_force = 40.0
+		other.set_weapon_stats(weak_arm)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		_brace(wielder)
+		_brace(other)
+		other.set_input_vector(Vector2.ZERO)
+		await _await_ticks(MAGNET_TRIAL_TICKS)
+		# How far the other's head sits from its own braced body, along +x
+		# (toward the wielder, who is to its right); the magnet should drag it out.
+		offsets.append(other.weapon_head_position().x - other.global_position.x)
+		await _teardown(stage, false)
+	var drag: float = offsets[1] - offsets[0]
+	print("      head x offset from its body: control %.1f px, magnet %.1f px (dragged %.1f px toward the wielder)" % [offsets[0], offsets[1], drag])
+	if drag < 3.0:
+		failures.append("the magnet dragged the other player's weapon head only %.1f px toward the wielder against the control" % drag)
+	_scenario_completed = true
+	return failures
+
+## The field leaves its own wielder and the wielder's head alone, does not move a
+## dead player, and goes when the weapon does.
+func _scenario_magnet_ignores_wielder_dead_and_dropped() -> Array[String]:
+	var failures: Array[String] = []
+	# Unbraced wielder alone: with nobody to pull, the field must not shove its own
+	# body or head, so the wielder ends where it does with the field off.
+	var ends: Array[Vector2] = []
+	var head_offsets: Array[Vector2] = []
+	# The control is the same magnet with its field switched off (force 0), so
+	# the weapon's own mass and reach are the same in both runs.
+	for field_on: bool in [false, true]:
+		var solo_stage: Node2D = _new_stage()
+		var solo: RigidBody2D = _spawn_player(solo_stage, DEEP_PARK_POSITION)
+		await _await_ticks(2)
+		var solo_stats: WeaponStatsType = (load(MAGNET_PATH) as WeaponStatsType).duplicate()
+		if not field_on:
+			solo_stats.reel_force = 0.0
+		solo.set_weapon_stats(solo_stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		solo.set_input_vector(Vector2.RIGHT * 0.5)
+		await _await_ticks(MAGNET_TRIAL_TICKS)
+		ends.append(solo.global_position)
+		head_offsets.append(solo.weapon_head_position() - solo.global_position)
+		await _teardown(solo_stage, false)
+	print("      wielder end: control %s, magnet %s; head offset: control %s, magnet %s" % [ends[0], ends[1], head_offsets[0], head_offsets[1]])
+	if ends[0].distance_to(ends[1]) > 1.0:
+		failures.append("the magnet moved its own wielder (%.1f px off the field-off control)" % ends[0].distance_to(ends[1]))
+	if head_offsets[0].distance_to(head_offsets[1]) > 1.0:
+		failures.append("the magnet moved its own wielder's head (%.1f px off the field-off control)" % head_offsets[0].distance_to(head_offsets[1]))
+
+	# A dead player inside the field does not move; dropping the magnet removes it.
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var dead: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_NEAR)
+	await _await_ticks(2)
+	await _equip(wielder, MAGNET_PATH)
+	_brace(wielder)
+	dead.eliminate()
+	await _await_ticks(2)
+	var parked: Vector2 = dead.global_position
+	await _await_ticks(MAGNET_TRIAL_TICKS)
+	if dead.global_position.distance_to(parked) > 0.5:
+		failures.append("a dead player inside the field moved %.1f px" % dead.global_position.distance_to(parked))
+	var has_field: Callable = func() -> bool:
+		for child: Node in wielder.get_children():
+			if child.get_script() != null and child.get_script().resource_path == MAGNET_SCRIPT_PATH:
+				return true
+		return false
+	if not has_field.call():
+		failures.append("a magnet wielder has no magnet field node")
+	await _equip(wielder, PICKAXE_PATH_MAGNET_CONTROL)
+	await _await_ticks(2)
+	if has_field.call():
+		failures.append("the magnet field is still on the player after the weapon was swapped away")
 	await _teardown(stage)
 	return failures
 
@@ -19493,7 +19704,8 @@ func _scenario_bots_wield_new_weapons() -> Array[String]:
 			failures.append("%s: the bot's player ended up holding %s" % [weapon, player.weapon_stats.resource_path])
 		if travelled < 400.0:
 			failures.append("%s: driven by a bot, the head moved only %.0f px in 5 s" % [weapon, travelled])
-		if path != FLAIL_PATH and not launched:
+		# The flail and the magnet launch nothing: their effect is the ball and the field.
+		if path != FLAIL_PATH and path != MAGNET_PATH and not launched:
 			failures.append("%s: a bot never launched it in 5 s" % weapon)
 		bot.queue_free()
 		stage.queue_free()
@@ -24990,6 +25202,117 @@ func _scenario_palette_players_are_distinct_and_synced() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
+# --- Pogo stick (issue #271) -------------------------------------------------
+
+const POGO_PATH: String = "res://resources/pogo.tres"
+## Written down independently of the resource: a small bounce rises at about
+## this, in px/s, and a pogo's launch rises well above it.
+const POGO_SMALL_BOUNCE_MIN: float = 200.0
+const POGO_SMALL_BOUNCE_MAX: float = 600.0
+
+## Stands a pogo on the arena floor aimed straight down (`pull` long) for
+## `hold` ticks, then lets go; returns how high, in px, it rose above the
+## floor stand, and the fastest upward speed it reached.
+func _pogo_hop(pull: float, hold: int) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	await _equip(player, POGO_PATH)
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	var rest_y: float = player.global_position.y
+	var top: float = rest_y
+	var fastest: float = 0.0
+	player.set_input_vector(Vector2.DOWN * pull)
+	await _await_ticks(hold)
+	player.set_input_vector(Vector2.ZERO)
+	for _t in 90:
+		await physics_frame
+		top = minf(top, player.global_position.y)
+		fastest = maxf(fastest, -player.linear_velocity.y)
+	await _teardown(stage)
+	return {"rise": rest_y - top, "speed": fastest}
+
+## A pogo head meeting the ground gives a small bounce with no push at all.
+func _scenario_pogo_head_gives_small_bounce_on_ground_contact() -> Array[String]:
+	var failures: Array[String] = []
+	var hop: Dictionary = await _pogo_hop(0.05, 0)
+	print("      pogo uncharged bounce: rose %.1f px, fastest %.0f px/s up" % [hop["rise"], hop["speed"]])
+	if hop["speed"] < POGO_SMALL_BOUNCE_MIN:
+		failures.append("the pogo's ground contact gave only %.0f px/s up, no automatic bounce" % hop["speed"])
+	if hop["speed"] > POGO_SMALL_BOUNCE_MAX:
+		failures.append("the pogo's automatic bounce was %.0f px/s up, not a small one" % hop["speed"])
+	return failures
+
+## Pushing the head into the ground and letting go launches higher than the
+## bounce the same pogo gives untouched.
+func _scenario_pogo_charged_release_launches_higher_than_bounce() -> Array[String]:
+	var failures: Array[String] = []
+	var bounce: Dictionary = await _pogo_hop(0.05, 0)
+	var launch: Dictionary = await _pogo_hop(1.0, 45)
+	print("      pogo bounce rose %.1f px; charged launch rose %.1f px" % [bounce["rise"], launch["rise"]])
+	if launch["rise"] < bounce["rise"] * 2.0 or launch["rise"] < 40.0:
+		failures.append("the charged launch rose %.1f px, not clearly above the %.1f px bounce" % [launch["rise"], bounce["rise"]])
+	return failures
+
+## A pogo coming down on an opponent from above, moving down, hurts them.
+func _scenario_pogo_downward_stomp_damages_opponent() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(attacker, POGO_PATH)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2.DOWN * 160.0)
+	await physics_frame
+	_brace(victim)
+	attacker.set_input_vector(Vector2.DOWN * 0.3)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	attacker.teleport_to(DEEP_PARK_POSITION)
+	victim.teleport_to(DEEP_PARK_POSITION + Vector2.DOWN * 160.0)
+	var before: float = victim.damage
+	for _t in 40:
+		attacker.linear_velocity = Vector2.DOWN * 1000.0
+		await physics_frame
+		if victim.damage > before:
+			break
+	print("      pogo stomp took %.1f off" % (victim.damage - before))
+	if victim.damage <= before:
+		failures.append("a pogo coming down on an opponent from above did no damage")
+	await _teardown(stage)
+	return failures
+
+## A pogo run into someone sideways, at the speed that kills with a sword,
+## does nothing.
+func _scenario_pogo_sideways_hit_does_no_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	await _equip(attacker, POGO_PATH)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2.RIGHT * FULL_STRIKE_RUN_UP)
+	await physics_frame
+	_brace(victim)
+	var hit: Dictionary = await _charge_strike(attacker, victim)
+	print("      pogo sideways charge: took %.1f off (reached %s, closest %.0f px)" % [hit["damage"], hit["landed"], hit["closest"]])
+	if hit["damage"] > 0.0:
+		failures.append("a pogo hit sideways took %.1f off, it should do none" % hit["damage"])
+	if hit["closest"] > 80.0:
+		failures.append("the sideways charge never reached the victim (closest %.0f px)" % hit["closest"])
+	await _teardown(stage)
+	return failures
+
+## The pogo is something a pickup can hand out, and it is not the starting weapon.
+func _scenario_pogo_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(POGO_PATH):
+		failures.append("the pogo is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == POGO_PATH
+	if not found:
+		failures.append("the pogo is not among the loaded pickup weapons")
+	_scenario_completed = true
+	return failures
 # --- Crumbling ledge as a stage hazard (issue #280) ---------------------------
 
 ## Finds every crumbling ledge under `node` by its public `is_solid` seam.
@@ -25556,5 +25879,113 @@ func _scenario_hazard_ko_counts_like_any_other_ko() -> Array[String]:
 		failures.append("eliminated fired %d times, expected once" % eliminated[0])
 	if lethal_reports != [true]:
 		failures.append("strike_landed reports %s, expected one lethal report" % [lethal_reports])
+	await _teardown(stage)
+	return failures
+
+## Issue #297: every eye style draws without error through every eye state, its
+## pupils move toward wherever the aim points, and an unknown id falls back to
+## round.
+func _scenario_eye_styles_render_and_track_aim() -> Array[String]:
+	var failures: Array[String] = []
+	var FaceScript: GDScript = load("res://scripts/PlayerFace.gd")
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "EyeP0"
+	stage.add_child(player)
+	player.global_position = PARK_POSITION
+	await _await_ticks(5)
+	var face: Node2D = player.face_node()
+	if face == null:
+		failures.append("the player has no face")
+		await _teardown(stage)
+		return failures
+	if player.eyes_id() != "round":
+		failures.append("a fresh player's eyes are '%s', expected round" % player.eyes_id())
+	if FaceScript.EYE_IDS.size() < 5:
+		failures.append("only %d eye styles" % FaceScript.EYE_IDS.size())
+	for id: String in FaceScript.EYE_IDS:
+		player.set_eyes(id)
+		if player.eyes_id() != id:
+			failures.append("set_eyes('%s') left '%s'" % [id, player.eyes_id()])
+		var right: Array[Vector2] = face.pupil_centers(Vector2.RIGHT)
+		var left: Array[Vector2] = face.pupil_centers(Vector2.LEFT)
+		var down: Array[Vector2] = face.pupil_centers(Vector2.DOWN)
+		var up: Array[Vector2] = face.pupil_centers(Vector2.UP)
+		for k in 2:
+			if right[k].x <= left[k].x + 1.0 or down[k].y <= up[k].y + 1.0:
+				failures.append("style '%s' pupil %d does not follow the aim" % [id, k])
+		print("      style %s: pupil right %s left %s" % [id, right[0], left[0]])
+		await _await_ticks(2)
+		face.on_hit(1.0)
+		await _await_ticks(2)
+		face.start_squash(0.1, 1.0)
+		await _await_ticks(2)
+		if face.squash_scale().is_equal_approx(Vector2.ONE):
+			failures.append("style '%s' lost the squash" % id)
+	player.set_eyes("no-such-eyes")
+	if player.eyes_id() != "round":
+		failures.append("an unknown style gave '%s', expected round" % player.eyes_id())
+	await _teardown(stage)
+	return failures
+
+## Issue #297: a phone's eye pick reaches its player over the real socket the
+## way the hat does (unknown ids ignored), is offered in the looks frame, and
+## comes back with the seat after a reconnect.
+func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "EyeSP0"
+	stage.add_child(player)
+	player.global_position = PARK_POSITION
+	var server: Node = ControllerServerScript.new()
+	server.name = "EyeServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../EyeSP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "eye-phone-0", [] as Array[WebSocketPeer])
+	if result["slot"] != 0:
+		failures.append("the phone got slot %d" % result["slot"])
+		await _teardown(stage)
+		return failures
+	await _poll_phones([peer] as Array[WebSocketPeer], 5)
+	var looks: Dictionary = _drain_looks(peer, {})
+	var offered: Array = []
+	for entry: Dictionary in looks.get("eyes", []):
+		offered.append(entry["id"])
+	if offered.size() < 5 or not offered.has("round"):
+		failures.append("the phone was offered eye styles %s" % [offered])
+	peer.send_text(JSON.stringify({"t": "eyes", "v": "angry"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	looks = _drain_looks(peer, looks)
+	if server.slot_eyes(0) != "angry" or player.eyes_id() != "angry":
+		failures.append("angry did not reach the player (host '%s', player '%s')" % [server.slot_eyes(0), player.eyes_id()])
+	var told: Array = looks.get("looks", [])
+	if told.size() != 1 or told[0].get("eyes") != "angry":
+		failures.append("the phone was told looks %s, expected angry eyes" % [told])
+	peer.send_text(JSON.stringify({"t": "eyes", "v": "bogus"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if player.eyes_id() != "angry":
+		failures.append("an unknown eye id changed the eyes to '%s'" % player.eyes_id())
+	peer.send_text(JSON.stringify({"t": "eyes", "v": "visor"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if player.eyes_id() != "visor":
+		failures.append("visor did not reach the player")
+	# Reconnect with the same id: the seat keeps its eyes.
+	peer.close()
+	await _await_ticks(20)
+	var again := WebSocketPeer.new()
+	var back: Dictionary = await _join_phone(again, "eye-phone-0", [] as Array[WebSocketPeer])
+	await _poll_phones([again] as Array[WebSocketPeer], 10)
+	print("      reconnected into slot %s, eyes '%s'" % [back["slot"], server.slot_eyes(0)])
+	if back["slot"] != 0 or server.slot_eyes(0) != "visor" or player.eyes_id() != "visor":
+		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
+	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
 	return failures

@@ -61,6 +61,7 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const FlailChainScript := preload("res://scripts/FlailChain.gd")
 const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
 const BoomerangScript := preload("res://scripts/Boomerang.gd")
+const MagnetScript := preload("res://scripts/Magnet.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
 ## deltas, and 300 sixtieths of a second may sum to a hair under 5 s.
 const FIRE_CLOCK_EPSILON: float = 0.000001
@@ -768,6 +769,9 @@ func _clear_rig() -> void:
 		return
 	if _flail != null:
 		_flail.retire()
+	if _magnet != null:
+		_magnet.retire()
+		_magnet = null
 	# Joints first: a half-freed rig that still constrains the body would
 	# drag the player around for the rest of the frame.
 	if _pin != null:
@@ -1229,6 +1233,18 @@ func set_hat(id: String) -> void:
 	if _hat != null:
 		_hat.set_hat(id)
 
+## Eye style (issue #297), one of PlayerFace.gd's EYE_IDS; anything else is round.
+func set_eyes(id: String) -> void:
+	if _face != null:
+		_face.set_eyes(id)
+
+func eyes_id() -> String:
+	return _face.eyes_style if _face != null else "round"
+
+## The face node, for a scenario to read the pupils from.
+func face_node() -> Node2D:
+	return _face
+
 func hat_id() -> String:
 	return _hat.hat_id if _hat != null else HatScript.NONE
 
@@ -1326,6 +1342,7 @@ func _update_keyboard_vector(delta: float) -> Vector2:
 func _on_body_entered(body: Node) -> void:
 	if body == self or not body.is_in_group("players"):
 		return
+	_pogo_body_stomp(body)
 	var rel_vel: Vector2 = linear_velocity - body.linear_velocity
 	if rel_vel.length() > knockback_threshold:
 		var dir: Vector2 = (body.global_position - global_position).normalized()
@@ -1355,6 +1372,11 @@ func _score_swept_strike() -> void:
 	var struck: Node = hit as Node
 	if struck == null or struck == self or not struck.is_in_group("players"):
 		return
+	if _stats.special == &"pogo":
+		speed = _stomp_speed(struck, _head.global_position)
+		if speed > 0.0:
+			_land_strike(struck, speed, true)
+		return
 	_land_strike(struck, speed)
 
 ## This weapon's head touched something slowly enough for the solver to be
@@ -1372,6 +1394,11 @@ func _on_head_hit(body: Node) -> void:
 	var to_body: Vector2 = body.global_position - _head.global_position
 	if to_body.length_squared() == 0.0:
 		return
+	if _stats.special == &"pogo":
+		var stomp: float = _stomp_speed(body, _head.global_position)
+		if stomp > 0.0:
+			_land_strike(body, stomp, true)
+		return
 	# Only the part of the head's motion heading into the player counts, so
 	# that a head skimming past somebody at speed is not scored as if it had
 	# swung into them.
@@ -1380,10 +1407,17 @@ func _on_head_hit(body: Node) -> void:
 ## Both strike paths end here: score the speed, hand the damage over, and
 ## report the strike for `strike_landed`. Nothing is reported for a victim
 ## already out of play, or a contact too slow to have been a swing at all.
-func _land_strike(victim: Node, speed: float) -> void:
+func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 	if not victim.alive:
 		return
 	var amount: float = _strike_damage(speed)
+	if stomp:
+		# One stomp is one hit: the head, the body and the sweep all see the
+		# same landing within a few ticks.
+		if _stomp_lock > 0.0:
+			return
+		_stomp_lock = POGO_STOMP_LOCK
+		amount = _stomp_damage(speed)
 	if _stats.stab_multiplier != 1.0 and _is_stab():
 		amount = minf(amount * _stats.stab_multiplier, MAX_STRIKE_DAMAGE)
 	if amount <= 0.0 and speed <= knockback_threshold:
@@ -1710,6 +1744,7 @@ const BALL_KNOCKBACK_MAX: float = 700.0
 var _flail: FlailChainScript
 var _hook: Node2D
 var _boomerang: Node2D
+var _magnet: MagnetScript
 ## Whether a hook or boomerang was out on the last tick, so its return is seen.
 var _was_launched: bool = false
 var _launch_cooldown: float = 0.0
@@ -1756,6 +1791,10 @@ func _build_special(axis: Vector2) -> void:
 			_flail = FlailChainScript.new()
 			_flail.build(self, _rig, _head, _stats, axis, identity_color)
 			_flail.ball.body_entered.connect(_on_ball_hit)
+		&"magnet":
+			_magnet = MagnetScript.new()
+			_magnet.setup(self, _stats)
+			add_child(_magnet)
 		&"grapple", &"boomerang":
 			if _stats.loaded_art.size() >= 3:
 				_loaded_visual = Polygon2D.new()
@@ -1768,8 +1807,12 @@ func _tick_special(delta: float) -> void:
 	match _stats.special:
 		&"flail":
 			_tick_flail()
+		&"magnet":
+			pass
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
+		&"pogo":
+			_tick_pogo(delta)
 
 func _tick_launcher(delta: float) -> void:
 	var flicked: bool = _detect_flick()
@@ -1921,3 +1964,95 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 		amount = 0.0
 	victim.take_damage(amount)
 	strike_landed.emit(victim, amount, point, not victim.alive)
+
+# --- Pogo (issue #271) --------------------------------------------------------
+#
+# A head touching terrain bounces the player a little, by itself. Pushing the
+# head into the ground charges it; letting go launches the player away from
+# where the head was aimed. Damage comes only from a stomp: the player or the
+# head coming down on an opponent from above, moving downward. A pogo swung
+# into someone sideways does nothing (`_land_strike` is only reached with
+# `stomp` for a pogo).
+
+## How far down a pogo has to be moving, in px/s, for landing on someone to
+## be a stomp rather than a touch.
+const POGO_STOMP_MIN_SPEED: float = 250.0
+## Pause after a bounce or launch before the next automatic bounce, so one
+## ground contact is one bounce rather than one per tick.
+const POGO_REBOUND_COOLDOWN: float = 0.25
+## How far out the drag has to be to count as pushing into the ground.
+const POGO_PUSH_FROM: float = 0.8
+## How far below the pogo's body a victim's centre must be for a body landing
+## on them to be from above.
+const POGO_STOMP_BELOW: float = 12.0
+
+## Seconds after a stomp lands before the next can.
+const POGO_STOMP_LOCK: float = 0.5
+
+var _stomp_lock: float = 0.0
+var _pogo_charge: float = 0.0
+var _pogo_cooldown: float = 0.0
+var _pogo_aim: Vector2 = Vector2.DOWN
+
+## How charged the pogo is, 0 to 1.
+func pogo_charge() -> float:
+	if _stats == null or _stats.pogo_charge_time <= 0.0:
+		return 0.0
+	return clampf(_pogo_charge / _stats.pogo_charge_time, 0.0, 1.0)
+
+func _pogo_grounded() -> bool:
+	for body: Node2D in _head.get_colliding_bodies():
+		if not body.is_in_group("players") and not (body is WeaponHeadType):
+			return true
+	return false
+
+func _tick_pogo(delta: float) -> void:
+	_pogo_cooldown = maxf(0.0, _pogo_cooldown - delta)
+	_stomp_lock = maxf(0.0, _stomp_lock - delta)
+	var grounded: bool = _pogo_grounded()
+	var pushing: bool = _effective_input.length() >= POGO_PUSH_FROM
+	if pushing:
+		_pogo_aim = _effective_input.normalized()
+		if grounded:
+			_pogo_charge = minf(_pogo_charge + delta, _stats.pogo_charge_time)
+		return
+	if _pogo_charge > 0.0:
+		if grounded:
+			_pogo_launch(lerpf(_stats.pogo_bounce_speed, _stats.pogo_launch_speed, pogo_charge()))
+		_pogo_charge = 0.0
+		return
+	if grounded and _pogo_cooldown <= 0.0:
+		_pogo_launch(_stats.pogo_bounce_speed)
+
+## Sends the player away from the head's aim at `speed`, replacing their
+## velocity along that direction rather than adding to it.
+func _pogo_launch(speed: float) -> void:
+	var direction: Vector2 = -_pogo_aim
+	if _effective_input != Vector2.ZERO and _effective_input.length() < POGO_PUSH_FROM:
+		direction = -_effective_input.normalized()
+	linear_velocity = direction * speed
+	_pogo_cooldown = POGO_REBOUND_COOLDOWN
+
+## The downward speed, px/s, this pogo is landing on `victim` with from `from`
+## (the head, or the body), or 0 when it is not a stomp: the victim is not
+## below, or the pogo is not moving down fast enough.
+func _stomp_speed(victim: Node2D, from: Vector2) -> float:
+	if victim.global_position.y <= from.y + POGO_STOMP_BELOW:
+		return 0.0
+	var speed: float = maxf(_head_velocity.y, linear_velocity.y)
+	return speed if speed >= POGO_STOMP_MIN_SPEED else 0.0
+
+## Damage of a stomp: the pogo's `damage` for one at its launch speed, in
+## proportion below and a little over above, capped like every strike.
+func _stomp_damage(speed: float) -> float:
+	if _stats.pogo_launch_speed <= 0.0:
+		return 0.0
+	return minf(_stats.damage * minf(speed / _stats.pogo_launch_speed, MAX_STRIKE_SCALE), MAX_STRIKE_DAMAGE)
+
+## The pogo's body landing on `body` from above is a stomp.
+func _pogo_body_stomp(body: Node) -> void:
+	if _stats == null or _stats.special != &"pogo" or not _rig_is_live():
+		return
+	var speed: float = _stomp_speed(body, global_position)
+	if speed > 0.0:
+		_land_strike(body, speed, true)
