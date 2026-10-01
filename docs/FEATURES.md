@@ -49,6 +49,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
 - Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Scoreboard shown at round end (#5)
+- KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
 
 ## Players, cosmetics and identity
@@ -114,6 +115,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
 - Screenshot capture tools for stages and damage numbers
+- Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence in `user://clips/` with a toast showing the path (#329, ADR-0020)
+- Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316)
 
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
