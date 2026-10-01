@@ -219,7 +219,7 @@ func _update_flash(delta: float) -> void:
 		return
 	_flash_remaining = maxf(0.0, _flash_remaining - delta)
 	var t: float = _flash_remaining / _FLASH_SEC
-	_body_poly.color = PAD_COLOR.lerp(FLASH_COLOR, t)
+	_body_poly.color = PAD_COLOR if _reduce_flash() else PAD_COLOR.lerp(FLASH_COLOR, t)
 	_visual.scale = Vector2(1.0, lerpf(1.0, _SQUASH_SCALE, t))
 
 ## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
@@ -228,3 +228,9 @@ func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
 	var sfx: Node = get_node_or_null(^"/root/Sfx")
 	if sfx != null:
 		sfx.play(sound, at, strength)
+
+## Comfort option (#317): the saved "Reduce flashes" setting, off when there is
+## no `Sfx` autoload to ask.
+func _reduce_flash() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx != null and bool(sfx.get("reduce_flash"))

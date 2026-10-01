@@ -1,0 +1,108 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Saw.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Spikes.tscn" id="5"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_430"]
+size = Vector2(430, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Gantry (issue #315): a factory crane. A MovingPlatform (#279) is the only
+; floor across the 580 px chasm; it shuttles bank to bank in 3 s, stopping
+; 20 px short of either lip. A Saw (#282) patrols vertically over its middle,
+; and a Spikes row (#282) sits on each bank's inner lip. Spawns are on the
+; banks, clear of every hazard.
+[node name="Gantry" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.11, 0.11, 0.12, 1)
+background_sky_bottom = Color(0.24, 0.22, 0.2, 1)
+background_silhouette = Color(0.09, 0.09, 0.1, 1)
+background_layers = PackedStringArray("clouds", "city", "city")
+
+[node name="BankLeft" type="StaticBody2D" parent="."]
+position = Vector2(-505, 320)
+
+[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
+shape = SubResource("RectangleShape2D_430")
+
+[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
+
+[node name="BankRight" type="StaticBody2D" parent="."]
+position = Vector2(505, 320)
+
+[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
+shape = SubResource("RectangleShape2D_430")
+
+[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
+
+[node name="Crane" parent="." instance=ExtResource("3")]
+position = Vector2(-170, 312)
+size = Vector2(200, 24)
+travel = Vector2(340, 0)
+one_way_sec = 3.0
+
+[node name="CraneSaw" parent="." instance=ExtResource("4")]
+position = Vector2(0, 60)
+travel = Vector2(0, 140)
+one_way_sec = 2.0
+
+[node name="LipSpikesLeft" parent="." instance=ExtResource("5")]
+position = Vector2(-310, 286)
+size = Vector2(36, 28)
+
+[node name="LipSpikesRight" parent="." instance=ExtResource("5")]
+position = Vector2(310, 286)
+size = Vector2(36, 28)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-520, 250)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(520, 250)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-370, 250)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(370, 250)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-600, 250)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(600, 250)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-445, 250)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(445, 250)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-200, 264)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(200, 264)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(-330, 200)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(330, 200)
+

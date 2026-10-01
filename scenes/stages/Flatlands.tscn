@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="ledge315"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Spikes.tscn" id="spikes"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
@@ -114,3 +115,7 @@ position = Vector2(-320, 116)
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(320, 152)
 
+; Crumbling ledge (issue #315): a perch up on the left, clear of every spawn drop line.
+[node name="PerchLedge" parent="." instance=ExtResource("ledge315")]
+position = Vector2(-400, 170)
+size = Vector2(100, 24)
