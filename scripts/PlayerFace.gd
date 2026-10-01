@@ -1,0 +1,137 @@
+extends Node2D
+## The player square's face (issue #254): a crisp dark outline, two dot eyes
+## that look toward the weapon head, blinks, a squint on a hit, X eyes once
+## eliminated, and a squash and stretch on landings and big hits.
+##
+## Drawing only. Nothing here touches the player's physics body, collision
+## shapes or gameplay; the squash is a visual scale on the visual nodes. Its
+## randomness comes from its own RandomNumberGenerator, seeded per player, so
+## it never advances the global (gameplay) generator.
+
+const HALF: float = 24.0
+const OUTLINE_WIDTH: float = 2.0
+const OUTLINE_COLOR := Color(0.07, 0.07, 0.09)
+const EYE_X: float = 9.0
+const EYE_Y: float = -5.0
+const EYE_RADIUS: float = 6.0
+const PUPIL_RADIUS: float = 3.0
+const LOOK_REACH: float = 2.5
+const BLINK_MIN: float = 2.0
+const BLINK_MAX: float = 5.0
+const BLINK_LENGTH: float = 0.12
+const SQUINT_LENGTH: float = 0.2
+const MAX_SQUASH: float = 0.15
+const SQUASH_RECOVERY: float = 0.15
+## A landing squashes when the fall speed (px/s) at the previous tick was at
+## least this and the body has since lost most of it.
+const LANDING_SPEED: float = 350.0
+const LANDING_FULL_SPEED: float = 900.0
+## A hit of at least this much damage squashes as well as squints.
+const BIG_HIT: float = 25.0
+
+var _player: RigidBody2D
+var _squash_nodes: Array[Node2D] = []
+var _hat: Node2D
+var _rng := RandomNumberGenerator.new()
+var _blink_in: float = 3.0
+var _blink_left: float = 0.0
+var _squint_left: float = 0.0
+var _squash: float = 0.0
+var _squash_left: float = 0.0
+var _squash_dir: float = 1.0
+var _prev_vy: float = 0.0
+
+## `visuals` are the player's drawn nodes that squash with the face; `hat` is
+## moved so it stays on the squashed head.
+func setup(player: RigidBody2D, visuals: Array[Node2D], hat: Node2D) -> void:
+	_player = player
+	_squash_nodes = visuals
+	_hat = hat
+	# Seeded from the player's slot name, never from the global generator.
+	_rng.seed = hash("eyes:%s" % player.name) ^ player.get_instance_id()
+	_blink_in = _rng.randf_range(BLINK_MIN, BLINK_MAX)
+
+func _physics_process(delta: float) -> void:
+	if _player == null:
+		return
+	var vy: float = _player.linear_velocity.y
+	if _player.alive:
+		if _prev_vy >= LANDING_SPEED and vy < _prev_vy * 0.5:
+			var strength: float = clampf(_prev_vy / LANDING_FULL_SPEED, 0.3, 1.0)
+			start_squash(MAX_SQUASH * strength, 1.0)
+	_prev_vy = vy
+	_blink_in -= delta
+	if _blink_in <= 0.0:
+		_blink_left = BLINK_LENGTH
+		_blink_in = _rng.randf_range(BLINK_MIN, BLINK_MAX)
+	_blink_left = maxf(0.0, _blink_left - delta)
+	_squint_left = maxf(0.0, _squint_left - delta)
+	if _squash_left > 0.0:
+		_squash_left = maxf(0.0, _squash_left - delta)
+	_apply_squash()
+	queue_redraw()
+
+## A hit: squint for SQUINT_LENGTH, and squash too when it is a big one.
+func on_hit(amount: float) -> void:
+	_squint_left = SQUINT_LENGTH
+	if amount >= BIG_HIT:
+		start_squash(MAX_SQUASH, -1.0)
+
+## `amount` is clamped to MAX_SQUASH. `dir` 1 squashes (wide and short, a
+## landing), -1 stretches (tall and thin, a hit).
+func start_squash(amount: float, dir: float) -> void:
+	_squash = minf(absf(amount), MAX_SQUASH)
+	_squash_dir = dir
+	_squash_left = SQUASH_RECOVERY
+
+## The current visual scale factor, for the scenario: Vector2.ONE at rest.
+func squash_scale() -> Vector2:
+	var t: float = _squash_left / SQUASH_RECOVERY
+	var a: float = _squash * t * t
+	return Vector2(1.0 + a * _squash_dir, 1.0 - a * _squash_dir)
+
+func _apply_squash() -> void:
+	var s: Vector2 = squash_scale()
+	# Scaled about the feet, so a landing stays planted on the floor.
+	var pos := Vector2(0.0, HALF * (1.0 - s.y))
+	for n: Node2D in _squash_nodes:
+		n.scale = s
+		n.position = pos
+	scale = s
+	position = pos
+	if _hat != null:
+		_hat.position.y = HALF - 2.0 * HALF * s.y
+
+## "dead", "squint", "blink" or "open".
+func eye_state() -> String:
+	if _player != null and not _player.alive:
+		return "dead"
+	if _squint_left > 0.0:
+		return "squint"
+	if _blink_left > 0.0:
+		return "blink"
+	return "open"
+
+## Unit vector from the player toward the weapon head (the weapon's aim when
+## the head is not built).
+func look_dir() -> Vector2:
+	return _player.eye_look_dir() if _player != null else Vector2.RIGHT
+
+func _draw() -> void:
+	var inset: float = HALF - OUTLINE_WIDTH * 0.5
+	draw_rect(Rect2(-inset, -inset, inset * 2.0, inset * 2.0), OUTLINE_COLOR, false, OUTLINE_WIDTH)
+	var state: String = eye_state()
+	var look: Vector2 = look_dir()
+	for sx: float in [-EYE_X, EYE_X]:
+		var c := Vector2(sx, EYE_Y)
+		match state:
+			"dead":
+				var r: float = EYE_RADIUS * 0.8
+				draw_line(c + Vector2(-r, -r), c + Vector2(r, r), OUTLINE_COLOR, 2.5)
+				draw_line(c + Vector2(-r, r), c + Vector2(r, -r), OUTLINE_COLOR, 2.5)
+			"squint", "blink":
+				var w: float = EYE_RADIUS
+				draw_line(c + Vector2(-w, 0.0), c + Vector2(w, 0.0), OUTLINE_COLOR, 2.5)
+			_:
+				draw_circle(c, EYE_RADIUS, Color.WHITE)
+				draw_circle(c + look * LOOK_REACH, PUPIL_RADIUS, OUTLINE_COLOR)

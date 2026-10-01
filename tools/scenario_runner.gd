@@ -368,6 +368,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pc_seat_does_not_block_victory_exit",
 	"host_pc_seat_never_becomes_host_player",
 	"online_toggle_refused_from_remote_host",
+	"eyes_arm_and_weapon_draw_behind_body",
+	"eyes_follow_weapon_head",
+	"eyes_blink_squint_and_x",
+	"eyes_squash_is_visual_and_capped",
 	"relay_host_reclaims_room_with_token",
 	"relay_reclaim_with_wrong_token_gets_fresh_room",
 	"online_host_blip_reclaims_room_and_seat",
@@ -1516,6 +1520,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pc_seat_never_becomes_host_player()
 		"online_toggle_refused_from_remote_host":
 			return await _scenario_online_toggle_refused_from_remote_host()
+		"eyes_arm_and_weapon_draw_behind_body":
+			return await _scenario_eyes_arm_and_weapon_draw_behind_body()
+		"eyes_follow_weapon_head":
+			return await _scenario_eyes_follow_weapon_head()
+		"eyes_blink_squint_and_x":
+			return await _scenario_eyes_blink_squint_and_x()
+		"eyes_squash_is_visual_and_capped":
+			return await _scenario_eyes_squash_is_visual_and_capped()
 		"relay_host_reclaims_room_with_token":
 			return await _scenario_relay_host_reclaims_room_with_token()
 		"relay_reclaim_with_wrong_token_gets_fresh_room":
@@ -11333,8 +11345,9 @@ func _scenario_arm_draws_over_identity_outline() -> Array[String]:
 		var arm_z: int = arm.z_index + (player.z_index if arm.z_as_relative else 0)
 		var outline_z: int = outline.z_index + (player.z_index if outline.z_as_relative else 0)
 		print("      arm z=%d idx=%d, outline z=%d idx=%d" % [arm_z, arm.get_index(), outline_z, outline.get_index()])
-		if arm_z < outline_z or (arm_z == outline_z and arm.get_index() < outline.get_index()):
-			failures.append("the arm draws under the outline (arm z=%d idx=%d, outline z=%d idx=%d)" % [arm_z, arm.get_index(), outline_z, outline.get_index()])
+		# #254 reversed this: the arm now draws behind the body and outline.
+		if arm_z > outline_z or (arm_z == outline_z and arm.get_index() > outline.get_index()):
+			failures.append("the arm draws over the outline (arm z=%d idx=%d, outline z=%d idx=%d)" % [arm_z, arm.get_index(), outline_z, outline.get_index()])
 		var body_visual: CanvasItem = player.get_node("Body")
 		if body_visual.get_index() > outline.get_index():
 			failures.append("the body fill now draws over the outline")
@@ -23932,6 +23945,153 @@ func _scenario_online_toggle_refused_from_remote_host() -> Array[String]:
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	server.apply_host_command("online", false)
 	await _online_close_239(rig)
+	return failures
+
+# --- Eyes, outline and squash (issue #254) ------------------------------------
+
+## Effective draw z of a canvas item: its own z plus its ancestors' while
+## relative.
+func _abs_z_254(item: CanvasItem) -> int:
+	var z: int = 0
+	var n: Node = item
+	while n is CanvasItem:
+		z += (n as CanvasItem).z_index
+		if not (n as CanvasItem).z_as_relative:
+			break
+		n = n.get_parent()
+	return z
+
+func _scenario_eyes_arm_and_weapon_draw_behind_body() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var body: CanvasItem = player.get_node("Body")
+	var arm: CanvasItem = player.get_node("Haft")
+	var face: CanvasItem = player.get_node_or_null("Face")
+	if face == null:
+		failures.append("the player has no Face node")
+	else:
+		if face.get_index() < body.get_index():
+			failures.append("the face draws under the body fill")
+		if _abs_z_254(face) != _abs_z_254(body):
+			failures.append("face and body are on different z")
+	var body_z: int = _abs_z_254(body)
+	var arm_z: int = _abs_z_254(arm)
+	if arm_z > body_z or (arm_z == body_z and arm.get_index() > body.get_index()):
+		failures.append("the arm is not below the body (arm z=%d idx=%d, body z=%d idx=%d)" % [arm_z, arm.get_index(), body_z, body.get_index()])
+	var head_visual: CanvasItem = player._head_visual
+	if head_visual == null:
+		failures.append("no weapon head visual")
+	else:
+		var head_z: int = _abs_z_254(head_visual)
+		if head_z >= body_z:
+			failures.append("the weapon head is not below the body (head z=%d, body z=%d)" % [head_z, body_z])
+		# Still at or above the stage's own layer (z 0), so it is not buried.
+		if head_z < 0 or arm_z < 0:
+			failures.append("the weapon or arm drew below the stage layer (head z=%d, arm z=%d)" % [head_z, arm_z])
+	await _teardown(stage)
+	return failures
+
+func _scenario_eyes_follow_weapon_head() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	for target: Vector2 in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]:
+		player.input_vector = target
+		await _await_ticks(90)
+		var head_dir: Vector2 = (player._head.global_position - player.global_position).normalized()
+		var look: Vector2 = player.eye_look_dir()
+		if look.dot(head_dir) < 0.98:
+			failures.append("aiming %s the eyes look %s but the weapon head is toward %s" % [target, look, head_dir])
+		if absf(look.length() - 1.0) > 0.01:
+			failures.append("eye_look_dir is not a unit vector: %s" % look)
+	player.input_vector = Vector2.ZERO
+	await _teardown(stage)
+	return failures
+
+func _scenario_eyes_blink_squint_and_x() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	# Blinks: over 12 s of fixed ticks the open/blink states are both seen,
+	# and no gap between blink starts is shorter than 2 s.
+	var starts: Array[float] = []
+	var was_blinking: bool = false
+	var t: float = 0.0
+	for i: int in 720:
+		await _await_ticks(1)
+		t += 1.0 / 60.0
+		var blinking: bool = player.eye_state() == "blink"
+		if blinking and not was_blinking:
+			starts.append(t)
+		was_blinking = blinking
+	if starts.size() < 2:
+		failures.append("expected at least 2 blinks in 12 s, saw %d" % starts.size())
+	for i: int in range(1, starts.size()):
+		var gap: float = starts[i] - starts[i - 1]
+		if gap < 1.9 or gap > 5.2:
+			failures.append("blink gap %.2f s is outside 2-5 s" % gap)
+	# Squint on a hit, for about 0.2 s.
+	player.take_damage(5.0)
+	if player.eye_state() != "squint":
+		failures.append("eyes did not squint on a hit (state %s)" % player.eye_state())
+	await _await_ticks(6)
+	if player.eye_state() != "squint":
+		failures.append("squint ended before 0.1 s (state %s)" % player.eye_state())
+	await _await_ticks(15)
+	if player.eye_state() == "squint":
+		failures.append("eyes still squinting after 0.35 s")
+	player.eliminate()
+	if player.eye_state() != "dead":
+		failures.append("eliminated eyes are %s, expected dead (X)" % player.eye_state())
+	await _teardown(stage)
+	return failures
+
+func _scenario_eyes_squash_is_visual_and_capped() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var mass0: float = player.mass
+	var shape: CollisionShape2D = player.get_node("CollisionShape2D")
+	var radius0: float = (shape.shape as CircleShape2D).radius
+	var scale0: Vector2 = player.scale
+	if player.squash_scale() != Vector2.ONE:
+		failures.append("squash is not at rest on a fresh player: %s" % player.squash_scale())
+	player.take_damage(40.0)
+	var peak: float = 0.0
+	var rest_at: int = -1
+	for i: int in 30:
+		await _await_ticks(1)
+		var s: Vector2 = player.squash_scale()
+		peak = maxf(peak, maxf(absf(s.x - 1.0), absf(s.y - 1.0)))
+		if rest_at < 0 and s == Vector2.ONE:
+			rest_at = i
+	if peak <= 0.01:
+		failures.append("a big hit did not squash or stretch (peak %.3f)" % peak)
+	if peak > 0.1501:
+		failures.append("squash peak %.3f exceeds 15%%" % peak)
+	if rest_at < 0 or rest_at > 11:
+		failures.append("squash did not ease back within 0.15 s (rest at tick %d)" % rest_at)
+	if player.scale != scale0 or player.mass != mass0 or (shape.shape as CircleShape2D).radius != radius0:
+		failures.append("squash touched the physics body (scale/mass/collision radius changed)")
+	# A landing: drop from height and see a squash on arrival.
+	player.global_position = Vector2(0.0, -1200.0)
+	player.linear_velocity = Vector2.ZERO
+	var landed_peak: float = 0.0
+	for i: int in 240:
+		await _await_ticks(1)
+		var s2: Vector2 = player.squash_scale()
+		landed_peak = maxf(landed_peak, absf(s2.y - 1.0))
+	print("      landing squash peak %.3f" % landed_peak)
+	if landed_peak <= 0.01:
+		failures.append("a hard landing did not squash")
+	if landed_peak > 0.1501:
+		failures.append("landing squash %.3f exceeds 15%%" % landed_peak)
+	await _teardown(stage)
 	return failures
 
 # --- Host reconnect window (issue #249) ---------------------------------------

@@ -56,6 +56,7 @@ const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
 const DeathBurstScript := preload("res://scripts/DeathBurst.gd")
 const HatScript := preload("res://scripts/Hat.gd")
+const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 ## The three special weapons (issue #150). See "Special weapons" at the end.
 const FlailChainScript := preload("res://scripts/FlailChain.gd")
 const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
@@ -267,6 +268,7 @@ var _identity_outline: Line2D
 ## What this player wears on its head (issue #151): a `Hat.gd` child sitting
 ## on the body's top edge. Built once in `_ready()`, bare until `set_hat()`.
 var _hat: HatScript
+var _face: Node2D
 
 ## Firing (issue #55, ADR-0014): seconds since the held weapon last fired, or
 ## since it was put in this player's hands, and the bullets this player has
@@ -296,6 +298,7 @@ func _ready() -> void:
 	_style_haft()
 	_build_identity_outline()
 	_build_hat()
+	_build_face()
 	if not start_in_round:
 		# A round loop owns this player: stay out of play, inert and
 		# unbuilt, until it calls start_round(). _build_rig() below checks
@@ -509,6 +512,8 @@ func take_damage(amount: float) -> void:
 	if amount <= 0.0 or not alive or spawn_protected:
 		return
 	damage += amount
+	if _face != null:
+		_face.on_hit(amount)
 	if damage >= DEATH_DAMAGE:
 		eliminate()
 
@@ -1159,6 +1164,40 @@ func weapon_head_visual_is_fallback() -> bool:
 # child of the body, so it rides every swing (the body never rotates), hides
 # with the body at an elimination and comes back with it at the next spawn;
 # nothing here has to re-attach it.
+
+## Issue #254: the face (outline, eyes) goes last, over the body and hat; the
+## arm goes first, under them. The whole player draws one z above the stage's
+## layer and the haft one below the player, so the haft stays at the stage's
+## own z while the body covers it. The weapon head, in the rig beside the
+## player, is at z 0 as well, so it too is under the body.
+func _build_face() -> void:
+	z_index = 1
+	weapon_line.z_index = -1
+	var face: Node2D = PlayerFaceScript.new()
+	face.name = "Face"
+	add_child(face)
+	move_child(weapon_line, 0)
+	move_child(face, get_child_count() - 1)
+	var visuals: Array[Node2D] = [body_visual, _identity_outline]
+	face.setup(self, visuals, _hat)
+	_face = face
+
+## Unit vector from this player toward its weapon head, which is where the
+## eyes look. Falls back to the weapon's aim while there is no head.
+func eye_look_dir() -> Vector2:
+	if _head != null and is_instance_valid(_head):
+		var d: Vector2 = _head.global_position - global_position
+		if d.length() > 1.0:
+			return d.normalized()
+	return Vector2.from_angle(weapon_angle)
+
+## Current eye state ("open", "blink", "squint", "dead") for the scenarios.
+func eye_state() -> String:
+	return _face.eye_state() if _face != null else "open"
+
+## Current visual squash and stretch scale (Vector2.ONE at rest).
+func squash_scale() -> Vector2:
+	return _face.squash_scale() if _face != null else Vector2.ONE
 
 func _build_hat() -> void:
 	var hat: HatScript = HatScript.new()
