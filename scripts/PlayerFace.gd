@@ -11,6 +11,13 @@ extends Node2D
 const HALF: float = 24.0
 const OUTLINE_WIDTH: float = 2.0
 const OUTLINE_COLOR := Color(0.07, 0.07, 0.09)
+
+## Outline and pupil ink; the stage mood's ink once a stage loads (#255).
+var ink: Color = OUTLINE_COLOR
+
+func set_ink(colour: Color) -> void:
+	ink = colour
+	queue_redraw()
 const EYE_X: float = 9.0
 const EYE_Y: float = -5.0
 const EYE_RADIUS: float = 6.0
@@ -119,7 +126,7 @@ func look_dir() -> Vector2:
 
 func _draw() -> void:
 	var inset: float = HALF - OUTLINE_WIDTH * 0.5
-	draw_rect(Rect2(-inset, -inset, inset * 2.0, inset * 2.0), OUTLINE_COLOR, false, OUTLINE_WIDTH)
+	draw_rect(Rect2(-inset, -inset, inset * 2.0, inset * 2.0), ink, false, OUTLINE_WIDTH)
 	var state: String = eye_state()
 	var look: Vector2 = look_dir()
 	for sx: float in [-EYE_X, EYE_X]:
@@ -127,11 +134,11 @@ func _draw() -> void:
 		match state:
 			"dead":
 				var r: float = EYE_RADIUS * 0.8
-				draw_line(c + Vector2(-r, -r), c + Vector2(r, r), OUTLINE_COLOR, 2.5)
-				draw_line(c + Vector2(-r, r), c + Vector2(r, -r), OUTLINE_COLOR, 2.5)
+				draw_line(c + Vector2(-r, -r), c + Vector2(r, r), ink, 2.5)
+				draw_line(c + Vector2(-r, r), c + Vector2(r, -r), ink, 2.5)
 			"squint", "blink":
 				var w: float = EYE_RADIUS
-				draw_line(c + Vector2(-w, 0.0), c + Vector2(w, 0.0), OUTLINE_COLOR, 2.5)
+				draw_line(c + Vector2(-w, 0.0), c + Vector2(w, 0.0), ink, 2.5)
 			_:
 				draw_circle(c, EYE_RADIUS, Color.WHITE)
-				draw_circle(c + look * LOOK_REACH, PUPIL_RADIUS, OUTLINE_COLOR)
+				draw_circle(c + look * LOOK_REACH, PUPIL_RADIUS, ink)
