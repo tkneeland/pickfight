@@ -419,6 +419,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_hitstop_restores_and_does_not_desync",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"stage_dressing_layers_use_mood_colours",
+	"stage_dressing_has_no_collision",
+	"stage_dressing_layout_follows_stage_index",
+	"stage_dressing_moves_slower_than_camera",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1659,6 +1663,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"stage_dressing_layers_use_mood_colours":
+			return await _scenario_stage_dressing_layers_use_mood_colours()
+		"stage_dressing_has_no_collision":
+			return await _scenario_stage_dressing_has_no_collision()
+		"stage_dressing_layout_follows_stage_index":
+			return await _scenario_stage_dressing_layout_follows_stage_index()
+		"stage_dressing_moves_slower_than_camera":
+			return await _scenario_stage_dressing_moves_slower_than_camera()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25847,4 +25859,106 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	return failures
+
+# --- Stage dressing (issue #257) ----------------------------------------------
+
+## A rotation stage at `index` under a fresh holder, frame-settled. Returns the
+## holder; its first child is the stage.
+func _dressed_stage(index: int) -> Node2D:
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var instance: Node2D = (load(STAGE_PATHS[0]) as PackedScene).instantiate()
+	instance.stage_index = index
+	holder.add_child(instance)
+	await _await_ticks(2)
+	return holder
+
+func _scenario_stage_dressing_layers_use_mood_colours() -> Array[String]:
+	var failures: Array[String] = []
+	var palette = load("res://scripts/Palette.gd")
+	for index in 3:
+		var holder: Node2D = await _dressed_stage(index)
+		var stage: Node2D = holder.get_child(0)
+		var mood: Dictionary = palette.mood_for_stage(index)
+		var layers: Array = stage.get_background().get_dressing_layers()
+		if layers.size() != 3:
+			failures.append("mood %s: %d dressing layers, expected 3" % [mood["name"], layers.size()])
+		var keys: Array = ["dress_sky", "dress_far", "dress_mid"]
+		for i in mini(layers.size(), 3):
+			var polys: int = 0
+			for child: Node in layers[i].get_children():
+				polys += 1
+				if (child as Polygon2D).color != mood[keys[i]]:
+					failures.append("mood %s layer %d has colour %s, expected %s" % [mood["name"], i, (child as Polygon2D).color, mood[keys[i]]])
+					break
+			if polys == 0:
+				failures.append("mood %s layer %d has no shapes" % [mood["name"], i])
+		print("      %s: %d dressing layers" % [mood["name"], layers.size()])
+		await _teardown(holder, index == 2)
+	return failures
+
+func _scenario_stage_dressing_has_no_collision() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = await _dressed_stage(1)
+	var background: Node2D = holder.get_child(0).get_background()
+	var stack: Array[Node] = []
+	for layer: Node2D in background.get_dressing_layers():
+		stack.append(layer)
+	var seen: int = 0
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		seen += 1
+		if node is CollisionObject2D or node is CollisionShape2D or node is CollisionPolygon2D:
+			failures.append("dressing node %s collides" % node.name)
+		stack.append_array(node.get_children())
+	if seen < 10:
+		failures.append("only %d dressing nodes found" % seen)
+	print("      %d dressing nodes, none collide" % seen)
+	await _teardown(holder)
+	return failures
+
+func _scenario_stage_dressing_layout_follows_stage_index() -> Array[String]:
+	var failures: Array[String] = []
+	var signatures: Dictionary = {}
+	for index in [0, 1, 3, 0]:
+		var holder: Node2D = await _dressed_stage(index)
+		var sig: int = holder.get_child(0).get_background().get_dressing_signature()
+		if signatures.has(index) and signatures[index] != sig:
+			failures.append("stage index %d laid out differently the second time" % index)
+		signatures[index] = sig
+		await _teardown(holder, false)
+	var distinct: Dictionary = {}
+	for index: int in signatures:
+		distinct[signatures[index]] = true
+	if distinct.size() != signatures.size():
+		failures.append("stage indices %s do not all differ: %s" % [signatures.keys(), signatures])
+	_scenario_completed = true
+	return failures
+
+func _scenario_stage_dressing_moves_slower_than_camera() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = await _dressed_stage(0)
+	var camera := Camera2D.new()
+	holder.add_child(camera)
+	camera.make_current()
+	await _await_ticks(3)
+	var layers: Array[Node2D] = holder.get_child(0).get_background().get_dressing_layers()
+	var before: Array[float] = []
+	for layer in layers:
+		before.append(layer.global_position.y)
+	var start: float = camera.get_screen_center_position().y
+	camera.position.y += 400.0
+	await _await_ticks(3)
+	var moved: float = camera.get_screen_center_position().y - start
+	if moved < 399.0:
+		failures.append("the camera only moved %.1f" % moved)
+	for i in layers.size():
+		var shift: float = absf(layers[i].global_position.y - before[i])
+		print("      layer %d followed %.0f of the camera's %.0f px" % [i, shift, moved])
+		if shift >= moved:
+			failures.append("dressing layer %d moved %.1f px, not slower than the camera's %.1f" % [i, shift, moved])
+	if layers.size() != 3:
+		failures.append("%d dressing layers" % layers.size())
+	await _teardown(holder)
 	return failures
