@@ -106,6 +106,10 @@ const SOUNDS: Dictionary = {
 	"hit_fishing_rod": {"files": [
 		"kenney_impact/impactGeneric_rod_000.ogg",
 		"kenney_impact/impactGeneric_rod_001.ogg"], "db": -2.0},
+	# The magnet (issue #274). Placeholder: copies of two tin hits under their own names.
+	"hit_magnet": {"files": [
+		"kenney_impact/impactTin_magnet_000.ogg",
+		"kenney_impact/impactTin_magnet_001.ogg"], "db": 0.0},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",

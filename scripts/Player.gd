@@ -770,7 +770,7 @@ func _clear_rig() -> void:
 	if _flail != null:
 		_flail.retire()
 	if _magnet != null:
-		_magnet.queue_free()
+		_magnet.retire()
 		_magnet = null
 	# Joints first: a half-freed rig that still constrains the body would
 	# drag the player around for the rest of the frame.

@@ -4,11 +4,16 @@
 
 ; The magnet (issue #274): a passive weapon that pulls nearby players and
 ; weapon heads toward the wielder. The magnet creates a continuous attraction
-; field around the wielder, pulling nearby objects inward. No swing bonus or
-; damage - the effect is disruption through movement control.
+; field around the wielder, pulling nearby objects inward. The field itself
+; does no damage; the head still hits as an ordinary melee weapon.
 ;
-; Pulls nearby players and weapon heads within 300 px at 3000 force. Light
-; weapon, reach M, damage M (30), with moderate drive. The head is a chunky
+; Pulls other players' bodies and weapon heads within `launch_range` (300 px)
+; toward the wielder, hardest up close and fading to nothing at the edge:
+; `reel_force` (1200) times the fraction of the range left, applied as an
+; impulse each physics tick (scripts/Magnet.gd). A negative `reel_force` would
+; push instead of pull; the shipped magnet pulls. It never moves its own
+; wielder, the wielder's head, dead players, pickups or bullets.
+; Medium weapon, reach M, damage M (30), with moderate drive. The head is a chunky
 ; block suitable for blocking and clashing. The magnet's main power is pulling
 ; enemies into unfavorable positions, making it useful for control and setup
 ; rather than raw damage.
@@ -26,10 +31,10 @@ extend_speed = 900.0
 rest_return_speed = 650.0
 max_drive_force = 8000.0
 damage = 30.0
-sound_set = &"pickaxe"
+sound_set = &"magnet"
 special = &"magnet"
 launch_range = 300.0
-reel_force = 3000.0
+reel_force = 1200.0
 head_circle_offsets = PackedVector2Array(-2, -2, 2, -2, 0, 0, -2, 2, 2, 2)
 head_circle_radii = PackedFloat32Array(3.5, 3.5, 4.0, 3.5, 3.5)
 art_outline = PackedVector2Array(-8, -8, 8, -8, 8, 8, -8, 8)
