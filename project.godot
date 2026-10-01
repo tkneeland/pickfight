@@ -17,7 +17,7 @@ config/icon="res://icon.svg"
 
 [pickfight]
 
-relay_url="ws://127.0.0.1:9080"
+relay_url="wss://pickfight-relay.fly.dev"
 
 [autoload]
 

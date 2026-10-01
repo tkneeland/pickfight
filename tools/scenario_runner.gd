@@ -23304,16 +23304,16 @@ func _scenario_online_toggle_ignored_mid_match() -> Array[String]:
 func _scenario_online_relay_url_setting_and_arg() -> Array[String]:
 	var failures: Array[String] = []
 	var setting: Variant = ProjectSettings.get_setting("pickfight/relay_url")
-	if setting != "ws://127.0.0.1:9080":
-		failures.append("pickfight/relay_url is %s, expected ws://127.0.0.1:9080" % [setting])
+	if setting != "wss://pickfight-relay.fly.dev":
+		failures.append("pickfight/relay_url is %s, expected wss://pickfight-relay.fly.dev" % [setting])
 	var none: String = ControllerServerScript.resolve_relay_url(PackedStringArray([]))
-	if none != "ws://127.0.0.1:9080":
+	if none != "wss://pickfight-relay.fly.dev":
 		failures.append("with no args the url was '%s', expected the setting" % none)
 	var over: String = ControllerServerScript.resolve_relay_url(PackedStringArray(["--demo", "--relay=wss://play.example.com"]))
 	if over != "wss://play.example.com":
 		failures.append("--relay gave '%s', expected wss://play.example.com" % over)
 	var empty: String = ControllerServerScript.resolve_relay_url(PackedStringArray(["--relay="]))
-	if empty != "ws://127.0.0.1:9080":
+	if empty != "wss://pickfight-relay.fly.dev":
 		failures.append("an empty --relay= gave '%s', expected the setting" % empty)
 	ProjectSettings.set_setting("pickfight/relay_url", "wss://configured.example")
 	var configured: String = ControllerServerScript.resolve_relay_url(PackedStringArray([]))
