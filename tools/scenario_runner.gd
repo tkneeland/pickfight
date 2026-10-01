@@ -451,6 +451,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"mode_king_of_the_hill_scores_and_wins",
+	"mode_sudden_death_hit_eliminates_victim",
+	"mode_hot_potato_tags_fuses_and_reseeds",
+	"mode_handlers_gone_after_round_and_edge_cases",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1756,6 +1760,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"mode_king_of_the_hill_scores_and_wins":
+			return await _scenario_mode_king_of_the_hill_scores_and_wins()
+		"mode_sudden_death_hit_eliminates_victim":
+			return await _scenario_mode_sudden_death_hit_eliminates_victim()
+		"mode_hot_potato_tags_fuses_and_reseeds":
+			return await _scenario_mode_hot_potato_tags_fuses_and_reseeds()
+		"mode_handlers_gone_after_round_and_edge_cases":
+			return await _scenario_mode_handlers_gone_after_round_and_edge_cases()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -26288,6 +26300,292 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+# --- Game modes (issues #276-#278) ---------------------------------------------
+#
+# King of the Hill, Sudden Death and Hot Potato, driven through the real
+# `RoundManager` (`game_mode`) with the stub roster. Strikes are emitted on the
+# striker's own `strike_landed`, exactly as `Player` does.
+
+const GameModesType := preload("res://scripts/GameModes.gd")
+const MODE_SPAWNS: Array[Vector2] = [Vector2(-300.0, -600.0), Vector2(0.0, -600.0), Vector2(300.0, -600.0)]
+
+## A RoundManager of `count` players (stub roster) playing `mode`, held at
+## ROUND_END for 30 s once a round finishes so the mode's teardown is observable.
+func _mode_rig(count: int, mode: String, seed_value: int = 7) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var spawns: Array[Vector2] = []
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in count:
+		spawns.append(MODE_SPAWNS[i])
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [_make_stub_stage("ModeStage", spawns)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = mode
+	rm.match_seed = seed_value
+	stage.add_child(rm)
+	return {"stage": stage, "rm": rm, "players": players, "roster": roster}
+
+func _mode_started(rig: Dictionary) -> bool:
+	var rm: Node = rig["rm"]
+	if not await _await_condition(func() -> bool: return rm.game_mode_node() != null, 3000):
+		return false
+	for player: RigidBody2D in rig["players"]:
+		if not player.alive:
+			return false
+	return true
+
+## How many of `player`'s `strike_landed` handlers belong to `owner_node`.
+func _mode_handlers_on(player: Node, owner_node: Variant) -> int:
+	if not is_instance_valid(owner_node):
+		return 0
+	var n: int = 0
+	for conn: Dictionary in player.strike_landed.get_connections():
+		if (conn["callable"] as Callable).get_object() == owner_node:
+			n += 1
+	return n
+
+func _count_alive(players: Array[RigidBody2D]) -> int:
+	var n: int = 0
+	for p in players:
+		if p.alive:
+			n += 1
+	return n
+
+func _scenario_mode_king_of_the_hill_scores_and_wins() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	if rm.active_game_mode_id() != GameModesType.KING_OF_THE_HILL:
+		failures.append("active_game_mode_id is '%s'" % rm.active_game_mode_id())
+	# Let the round's deferred setup (spawn placement) finish first.
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	# Two players inside together: nobody banks anything.
+	players[0].teleport_to(hill.hill_position + Vector2(0.0, 40.0))
+	players[1].teleport_to(hill.hill_position + Vector2(0.0, -40.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(3)
+	var snapshot: Dictionary = hill.hold_time.duplicate()
+	await _await_ticks(10)
+	if hill.hold_time != snapshot:
+		failures.append("two players inside scored: %s then %s" % [snapshot, hill.hold_time])
+	# One alone: banks time, without touching the match tally.
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(15)
+	hill.seconds_to_win = hill.hold_of(1) + 0.3
+	if hill.hold_of(1) <= 0.1:
+		failures.append("the lone occupant banked %f s after 15 ticks" % hill.hold_of(1))
+	for s in 3:
+		if rm.score_of(s) != 0:
+			failures.append("the match tally moved before the round ended: slot %d has %d" % [s, rm.score_of(s)])
+	if not await _await_condition(func() -> bool: return not players[0].alive and not players[2].alive, 3000):
+		failures.append("the occupant never reached the hold target")
+	await _await_ticks(5)
+	# The winner is put out of play at round end (`leave_round()`), so the proof
+	# the others were eliminated is that slot 1 alone scored the round.
+	if rm.score_of(1) != 1 or rm.score_of(0) != 0 or rm.score_of(2) != 0:
+		failures.append("the round was not scored once to slot 1: %d %d %d" % [rm.score_of(0), rm.score_of(1), rm.score_of(2)])
+	if rm.game_mode_node() != null:
+		failures.append("the hill outlived the round")
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_mode_sudden_death_hit_eliminates_victim() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.SUDDEN_DEATH)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	for p in players:
+		if _mode_handlers_on(p, mode) != 1:
+			failures.append("%s has %d mode handlers, want 1" % [p.name, _mode_handlers_on(p, mode)])
+	players[0].strike_landed.emit(players[1], 0.0, Vector2.ZERO, false)
+	if not players[1].alive:
+		failures.append("a 0-damage strike eliminated the victim")
+	players[0].strike_landed.emit(players[1], 10.0, Vector2.ZERO, false)
+	if players[1].alive:
+		failures.append("the victim of a damaging hit survived")
+	if not players[0].alive:
+		failures.append("the striker was eliminated instead of the victim")
+	players[0].strike_landed.emit(players[2], 5.0, Vector2.ZERO, true)
+	await _await_ticks(5)
+	if players[2].alive:
+		failures.append("the second victim survived")
+	if rm.score_of(0) != 1:
+		failures.append("the last one standing scored %d, want 1" % rm.score_of(0))
+	for p in players:
+		if _mode_handlers_on(p, mode) != 0:
+			failures.append("%s still has %d handlers after the round" % [p.name, _mode_handlers_on(p, mode)])
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_mode_hot_potato_tags_fuses_and_reseeds() -> Array[String]:
+	var failures: Array[String] = []
+	var its: Array[int] = []
+	for run in 2:
+		var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO, 99)
+		var rm: Node = rig["rm"]
+		var players: Array[RigidBody2D] = rig["players"]
+		if not await _mode_started(rig):
+			failures.append("the Hot Potato round never started")
+			await _teardown(rig["stage"], false)
+			continue
+		var mode: Node = rm.game_mode_node()
+		its.append(mode.it_slot)
+		if mode.it_slot < 0 or mode.it_slot > 2:
+			failures.append("no valid 'it' at round start: %d" % mode.it_slot)
+			await _teardown(rig["stage"], false)
+			continue
+		if run == 0:
+			mode.fuse_sec = 5.0
+			mode.fuse_left = 5.0
+			mode.tag_cooldown_sec = 0.5
+			mode._cooldown_left = 0.0
+			var it: int = mode.it_slot
+			var others: Array[int] = []
+			for s in 3:
+				if s != it:
+					others.append(s)
+			# A hit by someone who is not "it" passes nothing.
+			players[others[0]].strike_landed.emit(players[others[1]], 10.0, Vector2.ZERO, false)
+			if mode.it_slot != it:
+				failures.append("a hit by a non-'it' moved the tag")
+			await _await_ticks(60)
+			if absf(float(mode.it_time[it]) - 1.0) > 0.35:
+				failures.append("'it' held for %f s of ticks, want about 1.0 (float accumulation)" % float(mode.it_time[it]))
+			# "It" hits another player: the victim becomes "it".
+			players[it].strike_landed.emit(players[others[0]], 10.0, Vector2.ZERO, false)
+			if mode.it_slot != others[0] or mode.tag_count != 1:
+				failures.append("the tag did not pass to the victim: it=%d tags=%d" % [mode.it_slot, mode.tag_count])
+			# The tag-back cooldown: the old 'it' cannot be hit straight back.
+			players[others[0]].strike_landed.emit(players[it], 10.0, Vector2.ZERO, false)
+			if mode.it_slot != others[0]:
+				failures.append("the tag was returned inside the cooldown")
+			await _await_ticks(40)
+			# 0-damage swings tag nobody.
+			players[others[0]].strike_landed.emit(players[others[1]], 0.0, Vector2.ZERO, false)
+			if mode.it_slot != others[0]:
+				failures.append("a 0-damage hit passed the tag")
+			# The fuse: the holder is eliminated and the tag moves on.
+			var holder: int = mode.it_slot
+			if not await _await_condition(func() -> bool: return not players[holder].alive, 8000):
+				failures.append("the fuse never eliminated 'it'")
+			else:
+				await _await_ticks(3)
+				if mode.it_slot == holder:
+					failures.append("the tag stayed on an eliminated player")
+		await _teardown(rig["stage"], false)
+	if its.size() == 2 and its[0] != its[1]:
+		failures.append("the same match seed picked different 'it': %s" % its)
+	_scenario_completed = true
+	return failures
+
+func _scenario_mode_handlers_gone_after_round_and_edge_cases() -> Array[String]:
+	var failures: Array[String] = []
+	# Hot Potato: a mid-round elimination of "it" reassigns, the round ends,
+	# and every handler goes with it.
+	var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	var it: int = mode.it_slot
+	players[it].eliminate()
+	await _await_ticks(3)
+	if mode.it_slot == it or (mode.it_slot == -1 and _count_alive(players) > 1):
+		failures.append("'it' was eliminated but the tag was not reassigned (it=%d)" % mode.it_slot)
+	for p in players:
+		if p.alive and _mode_handlers_on(p, mode) != 1:
+			failures.append("%s has %d handlers mid-round, want 1" % [p.name, _mode_handlers_on(p, mode)])
+	for p in players:
+		p.eliminate()
+	await _await_ticks(5)
+	for p in players:
+		if _mode_handlers_on(p, mode) != 0:
+			failures.append("%s still has %d Hot Potato handlers after the round" % [p.name, _mode_handlers_on(p, mode)])
+	if is_instance_valid(mode) and (mode.connected_count() != 0 or mode.it_slot != -1):
+		failures.append("Hot Potato kept state after the round")
+	await _teardown(rig["stage"], false)
+
+	# Leaving the tree mid-round (a teardown) disconnects Sudden Death too.
+	rig = _mode_rig(2, GameModesType.SUDDEN_DEATH)
+	rm = rig["rm"]
+	players = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+	else:
+		var held: Node = rm.game_mode_node()
+		if _mode_handlers_on(players[0], held) != 1:
+			failures.append("Sudden Death was not connected before the RoundManager left the tree")
+		rm.get_parent().remove_child(rm)
+		if _mode_handlers_on(players[0], held) != 0 or held.connected_count() != 0:
+			failures.append("leaving the tree left Sudden Death handlers connected")
+		rm.free()
+	await _teardown(rig["stage"], false)
+
+	# Edge cases: no mode, an unknown mode, and empty or out-of-range rosters.
+	rig = _mode_rig(2, "")
+	if await _await_condition(func() -> bool: return rig["players"][0].alive, 3000):
+		if rig["rm"].game_mode_node() != null or rig["rm"].active_game_mode_id() != "":
+			failures.append("the classic round got a mode")
+	await _teardown(rig["stage"], false)
+	for id: String in GameModesType.IDS:
+		var bare: Node = GameModesType.create(id)
+		get_root().add_child(bare)
+		var empty_rm := RoundManagerScript.new()
+		get_root().add_child(empty_rm)
+		bare.setup(empty_rm)
+		var none: Array[int] = []
+		bare.start_round(none)
+		var out_of_range: Array[int] = [5]
+		bare.start_round(out_of_range)
+		await _await_ticks(3)
+		bare.end_round()
+		bare.end_round()
+		bare.queue_free()
+		empty_rm.queue_free()
+	if GameModesType.create("nonsense") != null or GameModesType.create("") != null:
+		failures.append("GameModes.create returned a node for an unknown id")
+	await _await_ticks(2)
+	_scenario_completed = true
 	return failures
 
 # --- Stage dressing (issue #257) ----------------------------------------------
