@@ -30,6 +30,7 @@ The files:
 | `kenney_rpg/chop.ogg` | RPG Audio | CC0 1.0 | axe hit |
 | `kenney_impact/impactWood_heavy_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | axe hit |
 | `kenney_impact/impactPlank_medium_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | staff hit |
+| `kenney_impact/impactPlank_umbrella_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | umbrella hit (copies of `impactPlank_medium_001`, `_002`) |
 | `kenney_impact/impactPlank_spear_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | spear hit (copies of `impactPlank_medium_001`, `_002`) |
 | `kenney_impact/impactMetal_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | dagger hit |
 | `kenney_impact/impactPunch_heavy_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | boomstick hit (a close-range strike with the gun) |
