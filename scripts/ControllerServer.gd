@@ -783,6 +783,9 @@ func _process_websocket() -> void:
 		if peer is LocalSeat:
 			# No socket to go silent: the host PC's seat never times out.
 			_slot_last_packet_msec[slot] = now
+		elif peer is RemoteSeat and relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
+			# The host's own link is down, not the player's: pause the clock (#249).
+			_slot_last_packet_msec[slot] = now
 		var state: int = peer.get_ready_state()
 		if state == WebSocketPeer.STATE_OPEN:
 			_drain(slot, peer)
@@ -1629,7 +1632,10 @@ func _process_remote() -> void:
 		if not _remote_seats[peer].open:
 			_remote_seats.erase(peer)
 	var now: int = Time.get_ticks_msec()
+	var reconnecting: bool = relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING
 	for seat: RemoteSeat in _remote_awaiting.duplicate():
+		if reconnecting:
+			seat.deadline_msec = now + int(connection_timeout_sec * 1000.0)
 		if not seat.open:
 			_remote_awaiting.erase(seat)
 			continue
@@ -1747,17 +1753,28 @@ func online_status() -> String:
 	match relay_link.link_state():
 		"online":
 			return "online"
-		"connecting":
+		"connecting", "reconnecting":
 			return "connecting"
 	return "unreachable"
 
-func _on_room_code_changed(code: String) -> void:
-	var label: Label = join_label()
-	if label != null:
-		label.text = _join_label_base if code.is_empty() else "%s\nOnline: %s" % [_join_label_base, code]
+func _on_room_code_changed(_code: String) -> void:
+	_refresh_join_label()
 	_send_lobby_to_all()
 
+func _refresh_join_label() -> void:
+	var label: Label = join_label()
+	var code: String = relay_link.room_code()
+	if label == null:
+		return
+	if code.is_empty():
+		label.text = _join_label_base
+	elif relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
+		label.text = "%s\nOnline: %s (reconnecting...)" % [_join_label_base, code]
+	else:
+		label.text = "%s\nOnline: %s" % [_join_label_base, code]
+
 func _on_link_state_changed(_state: String) -> void:
+	_refresh_join_label()
 	_send_lobby_to_all()
 
 ## The slot the host PC's own seat holds, or -1 when "Play on this PC" is off.
