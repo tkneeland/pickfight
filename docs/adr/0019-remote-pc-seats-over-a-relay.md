@@ -60,3 +60,5 @@ many networks (CGNAT, campus Wi-Fi) can't forward a port at all. The relay and r
 **Steam networking.** Valve's transport and lobby server. Rejected: the game
 is too new to assume every player has Steam, and the relay is simpler to
 reason about and deploy.
+
+The host machine can also take a seat of its own (the host-PC seat, played with its mouse and toggled on the host screen); it shares the roster but never becomes the host player.
