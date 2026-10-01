@@ -1796,6 +1796,11 @@ func _seed_match(announce: bool) -> void:
 
 const LOBBY_PANEL_SANDBOX_ALPHA: float = 0.6
 
+## A global off switch for the sandbox, in the way of `modifier_rolls_enabled`:
+## the scenario suite turns it off for every scenario that reads a player being
+## `alive` in the lobby as "a round has started", and on for its own.
+static var lobby_sandbox_allowed: bool = true
+
 var _sandbox_active: bool = false
 ## Slots that have been spawned into this sandbox, and slot -> game msec a
 ## fallen one comes back at.
@@ -1810,7 +1815,7 @@ func _start_lobby_sandbox() -> void:
 	_sandbox_active = false
 	_sandbox_seated.clear()
 	_sandbox_respawn_at.clear()
-	if not lobby_sandbox or stage_scenes.is_empty():
+	if not lobby_sandbox or not lobby_sandbox_allowed or stage_scenes.is_empty():
 		return
 	var container: Node = get_node_or_null(arena_container_path)
 	if container == null:

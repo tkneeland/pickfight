@@ -872,6 +872,9 @@ func _run_one(name: String) -> Array[String]:
 	_scenario_completed = false
 	var statics: Dictionary = _snapshot_statics()
 	var world: World2D = _fresh_physics_world()
+	# Issue #291: the lobby sandbox makes lobby players live, which older
+	# scenarios read as "a round started"; only its own scenarios run with it.
+	RoundManagerScript.lobby_sandbox_allowed = name.begins_with("lobby_sandbox_")
 	var failures: Array[String] = await _run_scenario(name)
 	get_root().world_2d = world
 	_restore_statics(statics)
@@ -22327,7 +22330,7 @@ func _scenario_controller_page_gear_taps_open_in_play() -> Array[String]:
 	z_re.compile("(?m)^\\s*(#[a-z-]+) \\{([^}]*)\\}")
 	for m: RegExMatch in z_re.search_all(page):
 		var z: int = _css_px_231(m.get_string(2), "z-index")
-		if m.get_string(1) != "#gear" and z >= gear_z and not ["#host-menu", "#name-prompt", "#look-prompt"].has(m.get_string(1)):
+		if m.get_string(1) != "#gear" and z >= gear_z and not ["#host-menu", "#name-prompt", "#look-prompt", "#tip"].has(m.get_string(1)):
 			failures.append("%s (z-index %d) is stacked over the gear (%d)" % [m.get_string(1), z, gear_z])
 	for layer: String in ["#hud", "#state", "#hint", "#flash"]:
 		if not _css_rule_231(page, layer).contains("pointer-events: none;"):
