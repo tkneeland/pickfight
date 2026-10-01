@@ -111,6 +111,11 @@ const SOUNDS: Dictionary = {
 	"hit_fishing_rod": {"files": [
 		"kenney_impact/impactGeneric_rod_000.ogg",
 		"kenney_impact/impactGeneric_rod_001.ogg"], "db": -2.0},
+	# The umbrella (issue #269). Placeholder: copies of two staff plank hits
+	# under their own names, since no two weapons may share a file.
+	"hit_umbrella": {"files": [
+		"kenney_impact/impactPlank_umbrella_000.ogg",
+		"kenney_impact/impactPlank_umbrella_001.ogg"], "db": -2.0},
 	# The magnet (issue #274). Placeholder: copies of two tin hits under their own names.
 	"hit_magnet": {"files": [
 		"kenney_impact/impactTin_magnet_000.ogg",
