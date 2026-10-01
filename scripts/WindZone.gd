@@ -174,7 +174,8 @@ func _physics_process(delta: float) -> void:
 		for body: Node2D in get_overlapping_bodies():
 			if body is RigidBody2D and body.is_in_group("players"):
 				var rb := body as RigidBody2D
-				rb.apply_central_force(push * rb.mass)
+				var catch_wind: float = rb.wind_multiplier() if rb.has_method("wind_multiplier") else 1.0
+				rb.apply_central_force(push * rb.mass * catch_wind)
 	queue_redraw()
 
 func _draw() -> void:

@@ -1,8 +1,9 @@
 # Test results
 
-Evidence for the latest work package only: issue #244 (laptop mouse on the controller page via Pointer Lock). See `issue-244/README.md`.
+Evidence for the latest work package only: issue #241 (the Online 4/5 PC client). See `issue-241/README.md`.
 
 Previous packages:
+- Issue #244 (laptop mouse on the controller page via Pointer Lock): `issue-244/`, in `git show d6f6520`.
 - Issue #238 (room-code relay): `relay-scenarios.txt`, in `git show 0c06b7d`.
 - Issue #236 (Teams mode): `issue-236/`, in `git show 6211192`.
 - Issue #214 (the join QR encoded in-game, no qrencode): `issue-214/`, in its merge commit.
