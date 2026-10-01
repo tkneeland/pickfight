@@ -18,6 +18,10 @@ read and follow `docs/agents/collaboration.md`.
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Feature inventory
+
+`docs/FEATURES.md` lists everything already shipped. Read it before grilling the owner, proposing features, filing tickets, or planning, and frame questions as extensions of what exists — never ask about a feature it lists as shipped. Any PR that adds, removes or changes a player-facing feature updates `docs/FEATURES.md` in the same PR; integrators check this at review.
+
 <!-- atlas-v3:guidance:start -->
 ## Workspace framing
 
