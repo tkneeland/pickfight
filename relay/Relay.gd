@@ -7,10 +7,14 @@ extends Node
 ## path, so the role is chosen by the FIRST TEXT message after the socket opens
 ## (the documented fallback to `/host` and `/join?room=CODE`):
 ##   {"t":"host"}                     -> a new room
+##   {"t":"host","room":"ABCD","token":"..."} -> reclaim a room whose host socket
+##        dropped within `host_grace_sec` (issue #249); a wrong token, an unknown
+##        room or an expired window opens a fresh room instead.
 ##   {"t":"join","room":"ABCD"}       -> join an existing room
 ##
 ## Control messages (text JSON):
-##   to host:   {"t":"room","code":"ABCD"}, {"t":"joined","peer":N}, {"t":"left","peer":N}
+##   to host:   {"t":"room","code":"ABCD","token":"<16 hex>"} (a reclaim adds
+##              "peers":[ids] and is followed by a "joined" per current peer), {"t":"joined","peer":N}, {"t":"left","peer":N}
 ##   to client: {"t":"welcome","peer":N}, {"t":"error","reason":"bad_room"|"room_full"|"host_left"|"idle_timeout"}
 ##              (an error is followed by a close)
 ##
@@ -34,6 +38,11 @@ const CLOSE_GRACE_MSEC: int = 150
 ## Inbound buffer per peer, bytes.
 const INBOUND_BUFFER_BYTES: int = 1 << 18
 
+## How long a room waits for its host to reclaim it after the host's socket
+## drops abnormally (no close frame, or any code but 1000), seconds. A host
+## that hangs up cleanly (code 1000) still closes the room at once.
+@export var host_grace_sec: float = 15.0
+
 ## A room with no traffic for this long is closed.
 @export var idle_timeout_sec: float = 600.0
 
@@ -51,6 +60,9 @@ class Room:
 	var host: WebSocketPeer
 	var clients: Dictionary = {} # peer id (int) -> WebSocketPeer
 	var last_traffic_msec: int = 0
+	var token: String = ""
+	## When the host socket was lost, msec; 0 while the host is present.
+	var host_gone_msec: int = 0
 
 var _server: TCPServer = null
 var _pending: Array[Pending] = []
@@ -138,7 +150,13 @@ func _process(_delta: float) -> void:
 	for room: Room in _rooms.values():
 		_pump_room(room, now)
 	for room: Room in _rooms.values():
-		if room.host.get_ready_state() == WebSocketPeer.STATE_CLOSED:
+		if room.host_gone_msec == 0 and room.host.get_ready_state() == WebSocketPeer.STATE_CLOSED:
+			if host_grace_sec > 0.0 and room.host.get_close_code() != 1000:
+				room.host_gone_msec = now
+			else:
+				_close_room(room, "host_left", true)
+				continue
+		if room.host_gone_msec != 0 and now - room.host_gone_msec > int(host_grace_sec * 1000.0):
 			_close_room(room, "host_left", true)
 		elif now - room.last_traffic_msec > int(idle_timeout_sec * 1000.0):
 			_close_room(room, "idle_timeout", true)
@@ -154,7 +172,8 @@ func _read_hello(p: Pending, now: int) -> bool:
 			continue
 		match str(msg.get("t", "")):
 			"host":
-				_open_room(p.peer, now)
+				if not _reclaim_room(p.peer, msg, now):
+					_open_room(p.peer, now)
 				return true
 			"join":
 				_join_room(p.peer, str(msg.get("room", "")).to_upper(), now)
@@ -167,7 +186,24 @@ func _open_room(peer: WebSocketPeer, now: int) -> void:
 	room.host = peer
 	room.last_traffic_msec = now
 	_rooms[room.code] = room
-	_send_json(peer, {"t": "room", "code": room.code})
+	room.token = _new_token()
+	_send_json(peer, {"t": "room", "code": room.code, "token": room.token})
+
+## Gives the room back to a host that proves it with the room's token. False
+## when there is nothing to reclaim (wrong token, unknown room, host present).
+func _reclaim_room(peer: WebSocketPeer, msg: Dictionary, now: int) -> bool:
+	var room: Room = _rooms.get(str(msg.get("room", "")).to_upper())
+	if room == null or room.host_gone_msec == 0 or room.token == "" \
+			or str(msg.get("token", "")) != room.token:
+		return false
+	room.host = peer
+	room.host_gone_msec = 0
+	room.last_traffic_msec = now
+	var ids: Array = room.clients.keys()
+	_send_json(peer, {"t": "room", "code": room.code, "token": room.token, "peers": ids})
+	for id: int in ids:
+		_send_json(peer, {"t": "joined", "peer": id})
+	return true
 
 func _join_room(peer: WebSocketPeer, code: String, now: int) -> void:
 	var room: Room = _rooms.get(code)
@@ -237,6 +273,12 @@ func _close_room(room: Room, reason: String, erase: bool) -> void:
 			room.host.close(1000, reason)
 	if erase:
 		_rooms.erase(room.code)
+
+func _new_token() -> String:
+	var token: String = ""
+	for i in 8:
+		token += "%02x" % (randi() % 256)
+	return token
 
 func _new_code() -> String:
 	while true:

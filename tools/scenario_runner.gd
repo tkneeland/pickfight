@@ -368,6 +368,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pc_seat_does_not_block_victory_exit",
 	"host_pc_seat_never_becomes_host_player",
 	"online_toggle_refused_from_remote_host",
+	"relay_host_reclaims_room_with_token",
+	"relay_reclaim_with_wrong_token_gets_fresh_room",
+	"online_host_blip_reclaims_room_and_seat",
+	"online_host_blip_past_window_closes_seats",
+	"online_host_reclaim_with_wrong_token_gets_fresh_code",
 	"snapshot_encode_decode",
 	"snapshot_quantization_tolerance",
 	"snapshot_delta_encode",
@@ -1507,6 +1512,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pc_seat_never_becomes_host_player()
 		"online_toggle_refused_from_remote_host":
 			return await _scenario_online_toggle_refused_from_remote_host()
+		"relay_host_reclaims_room_with_token":
+			return await _scenario_relay_host_reclaims_room_with_token()
+		"relay_reclaim_with_wrong_token_gets_fresh_room":
+			return await _scenario_relay_reclaim_with_wrong_token_gets_fresh_room()
+		"online_host_blip_reclaims_room_and_seat":
+			return await _scenario_online_host_blip_reclaims_room_and_seat()
+		"online_host_blip_past_window_closes_seats":
+			return await _scenario_online_host_blip_past_window_closes_seats()
+		"online_host_reclaim_with_wrong_token_gets_fresh_code":
+			return await _scenario_online_host_reclaim_with_wrong_token_gets_fresh_code()
 		"snapshot_encode_decode":
 			return await _scenario_snapshot_encode_decode()
 		"snapshot_quantization_tolerance":
@@ -23904,5 +23919,158 @@ func _scenario_online_toggle_refused_from_remote_host() -> Array[String]:
 		failures.append("a remote host turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	server.apply_host_command("online", false)
+	await _online_close_239(rig)
+	return failures
+
+# --- Host reconnect window (issue #249) ---------------------------------------
+
+func _scenario_relay_host_reclaims_room_with_token() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(1, failures)
+	if room.is_empty():
+		return failures
+	var relay: Node = room["relay"]
+	var clients: Array = room["clients"]
+	relay.host_grace_sec = 0.6
+	# The room message at creation carries the token (_relay_room drained it), so ask a fresh host.
+	var probe: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var probe_room: Dictionary = await _relay_next(probe, clients)
+	var re := RegEx.new()
+	re.compile("^[0-9a-f]{16}$")
+	if re.search(str(probe_room.get("token", ""))) == null:
+		failures.append("room message token was '%s', wanted 16 hex chars" % probe_room.get("token", ""))
+	# An abnormal drop holds the room; the client stays and is not told the host left.
+	room["host"].close(4001, "blip")
+	await _online_frames_239(20)
+	for c: WebSocketPeer in clients:
+		c.poll()
+	if room["peers"][0].get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the client was closed while the room waited for its host")
+	if relay.room_count() != 2:
+		failures.append("room_count %d while a host was away, wanted 2" % relay.room_count())
+	# Past the window the clients get the existing close.
+	var err: Dictionary = await _relay_next(room["peers"][0], clients)
+	if err.get("t") != "error" or err.get("reason") != "host_left":
+		failures.append("the client got %s when the window expired, wanted host_left" % err)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_reclaim_with_wrong_token_gets_fresh_room() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	relay.host_grace_sec = 5.0
+	var clients: Array = []
+	var host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var made: Dictionary = await _relay_next(host, clients)
+	var code: String = str(made.get("code", ""))
+	var token: String = str(made.get("token", ""))
+	var guest: WebSocketPeer = await _relay_connect({"t": "join", "room": code}, clients)
+	await _relay_next(guest, clients)
+	host.close(4001, "blip")
+	await _online_frames_239(20)
+	var thief: WebSocketPeer = await _relay_connect({"t": "host", "room": code, "token": "0000000000000000"}, clients)
+	var stolen: Dictionary = await _relay_next(thief, clients)
+	if stolen.get("t") != "room" or stolen.get("code") == code:
+		failures.append("a wrong token got %s, wanted a fresh room" % stolen)
+	var owner: WebSocketPeer = await _relay_connect({"t": "host", "room": code, "token": token}, clients)
+	var back: Dictionary = await _relay_next(owner, clients)
+	if back.get("code") != code or back.get("token") != token:
+		failures.append("the right token got %s, wanted the same room %s back" % [back, code])
+	var joined: Dictionary = await _relay_next(owner, clients)
+	if joined.get("t") != "joined" or int(joined.get("peer", 0)) != 1:
+		failures.append("the reclaiming host was told %s, wanted joined peer 1" % joined)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+## One remote seat bound to slot 0 of a rig whose relay and host both wait `grace` seconds.
+func _blip_rig_249(grace: float, failures: Array[String]) -> Dictionary:
+	var rig: Dictionary = await _online_rig_239(2, failures)
+	if rig.is_empty():
+		return {}
+	rig["relay"].host_grace_sec = grace
+	rig["server"].relay_link.host_grace_sec = grace
+	var remote: WebSocketPeer = await _online_remote_239(rig, "blip-remote")
+	var slot_msg: Dictionary = await _online_wait_239(rig, remote, "slot") if remote != null else {}
+	if int(slot_msg.get("slot", -1)) != 0:
+		failures.append("remote was told %s, expected slot 0" % slot_msg)
+	rig["remote"] = remote
+	return rig
+
+func _scenario_online_host_blip_reclaims_room_and_seat() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _blip_rig_249(5.0, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var remote: WebSocketPeer = rig["remote"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var code: String = rig["code"]
+	server.relay_link.drop_socket_for_test()
+	if not await _wait_for_239(func() -> bool: return server.relay_link.link_state() == "reconnecting"):
+		failures.append("link state was %s after the drop, wanted reconnecting" % server.relay_link.link_state())
+	if not server.slot_has_controller(0):
+		failures.append("the remote seat was closed while reconnecting")
+	if not await _wait_for_239(func() -> bool: return server.is_online(), 6000):
+		failures.append("the host never came back online")
+	if server.online_room_code() != code:
+		failures.append("room code was '%s' after the reclaim, wanted '%s'" % [server.online_room_code(), code])
+	if not server.slot_has_controller(0) or server.claimed_slots() != [0]:
+		failures.append("the seat was not kept on slot 0 (claimed %s)" % [server.claimed_slots()])
+	var packet := PackedByteArray()
+	packet.resize(8)
+	packet.encode_float(0, 0.5)
+	packet.encode_float(4, -0.25)
+	for i in 30:
+		_online_send_239(remote, 0, packet)
+		await process_frame
+		remote.poll()
+	await _online_frames_239(10)
+	if players[0].input_vector.distance_to(Vector2(0.5, -0.25)) > 0.01:
+		failures.append("remote input after the reclaim was %s, wanted (0.5, -0.25)" % players[0].input_vector)
+	await _online_close_239(rig)
+	return failures
+
+func _scenario_online_host_blip_past_window_closes_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _blip_rig_249(0.3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.relay_link.drop_socket_for_test()
+	if not await _wait_for_239(func() -> bool: return server.relay_link.link_state() == "error", 4000):
+		failures.append("link state was %s past the window, wanted error" % server.relay_link.link_state())
+	if not await _wait_for_239(func() -> bool: return not server.slot_has_controller(0)):
+		failures.append("the seat was still bound past the window")
+	if server.claimed_slots() != [0]:
+		failures.append("the claim was not held per ADR-0007 (claimed %s)" % [server.claimed_slots()])
+	if server.online_room_code() != "":
+		failures.append("room code '%s' survived the window" % server.online_room_code())
+	await _online_close_239(rig)
+	return failures
+
+func _scenario_online_host_reclaim_with_wrong_token_gets_fresh_code() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _blip_rig_249(5.0, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var remote: WebSocketPeer = rig["remote"]
+	var code: String = rig["code"]
+	server.relay_link._token = "0000000000000000"
+	server.relay_link.drop_socket_for_test()
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != code, 6000):
+		failures.append("the host did not get a fresh code (state %s, code '%s')" % [server.relay_link.link_state(), server.online_room_code()])
+	if not await _wait_for_239(func() -> bool: return not server.slot_has_controller(0)):
+		failures.append("the old remote seat was carried into the fresh room")
+	if rig["relay"].room_count() != 2:
+		failures.append("room_count %d, wanted the old room kept beside the fresh one" % rig["relay"].room_count())
+	for c: WebSocketPeer in rig["clients"]:
+		c.poll()
+	if remote.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the old room's client was closed: the room was hijacked")
 	await _online_close_239(rig)
 	return failures
