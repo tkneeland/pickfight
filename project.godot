@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Pickfight"
-run/main_scene="res://scenes/Main.tscn"
+run/main_scene="res://scenes/Boot.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
