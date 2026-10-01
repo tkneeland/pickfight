@@ -482,6 +482,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_only_nudges_pickups",
 	"ghost_cleared_at_round_end_and_never_for_bots",
@@ -1852,6 +1853,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"replay_buffer_bounded_and_saves_clip":
+			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
 			return await _scenario_ghost_hidden_until_touch_then_fades()
 		"ghost_cannot_hurt_and_only_nudges_pickups":
@@ -28241,6 +28244,40 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 	if empty.get("status") != 400:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+## #329: the replay ring never exceeds its cap and a clip lands on disk.
+func _scenario_replay_buffer_bounded_and_saves_clip() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	var scratch := "user://scenario_clips_329"
+	rb.clips_dir = scratch
+	if rb.save_clip("empty") != "":
+		failures.append("an empty buffer saved a clip")
+	for i in 500:
+		var img := Image.create(320, 180, false, Image.FORMAT_RGBA8)
+		img.fill(Color(float(i % 255) / 255.0, 0.0, 0.0))
+		rb.push_frame(img)
+	if rb.frame_count() != 120:
+		failures.append("ring holds %d frames after 500 pushes, expected 120" % rb.frame_count())
+	if script.memory_cap_bytes() != 13271040:
+		failures.append("memory cap %d, expected 13271040" % script.memory_cap_bytes())
+	var dir: String = rb.save_and_toast()
+	var abs_dir := ProjectSettings.globalize_path(dir)
+	var files := DirAccess.get_files_at(abs_dir) if dir != "" else PackedStringArray()
+	if files.size() != 120:
+		failures.append("clip has %d files, expected 120" % files.size())
+	elif Image.load_from_file(abs_dir + "/frame_0000.png").get_size() != Vector2i(256, 144):
+		failures.append("saved frame is not 256x144")
+	if not rb.toast_text().contains("clip_"):
+		failures.append("toast does not show the path: '%s'" % rb.toast_text())
+	for f in files:
+		DirAccess.remove_absolute(abs_dir + "/" + f)
+	DirAccess.remove_absolute(abs_dir)
+	rb.queue_free()
 	_scenario_completed = true
 	return failures
 

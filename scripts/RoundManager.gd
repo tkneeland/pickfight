@@ -227,7 +227,20 @@ func _init() -> void:
 	_pickup_director = PickupDirectorScript.new(self)
 	add_child(_pickup_director)
 
+const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
+var _replay: Node
+
+## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
+		_replay.save_and_toast()
+		get_viewport().set_input_as_handled()
+
 func _ready() -> void:
+	_replay = ReplayBufferScript.new()
+	_replay.name = "ReplayBuffer"
+	add_child(_replay)
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
 	# editor's Play button (project.godot `editor/run/main_run_args`).
 	_demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_args().has("--demo")
