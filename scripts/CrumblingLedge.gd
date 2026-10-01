@@ -51,6 +51,9 @@ const _DETECTOR_ABOVE: float = 10.0
 const _DETECTOR_BELOW: float = 2.0
 
 var _state: _LedgeState = _LedgeState.SOLID
+## The colour of the ledge when whole; `Stage` swaps in the stage mood's platform
+## colour through `set_platform_color()`. The away colour follows it.
+var _solid_color: Color = SOLID_COLOR
 var _timer_remaining: float = 0.0
 var _collision_shape: CollisionShape2D
 var _visual: Polygon2D
@@ -101,6 +104,27 @@ func _ready() -> void:
 func visual_color() -> Color:
 	return _visual.color
 
+## True while the ledge is whole and not yet warning (collision on, no cycle
+## running). Bot reads this rather than comparing against SOLID_COLOR, which
+## the mood tint no longer guarantees.
+func is_solid() -> bool:
+	return _state == _LedgeState.SOLID
+
+## Takes the stage mood's platform colour (#280), as `Stage._tint_bodies` hands
+## it to every part that has this method. The warning amber is left alone.
+func set_platform_color(color: Color) -> void:
+	_solid_color = Color(color, 1.0)
+	if _visual == null:
+		return
+	match _state:
+		_LedgeState.SOLID:
+			_visual.color = _solid_color
+		_LedgeState.AWAY:
+			_visual.color = _away_color()
+
+func _away_color() -> Color:
+	return Color(_solid_color, AWAY_COLOR.a)
+
 func _on_body_entered(body: Node) -> void:
 	if _state != _LedgeState.SOLID:
 		return
@@ -132,7 +156,7 @@ func _physics_process(delta: float) -> void:
 		_LedgeState.WARNING:
 			_state = _LedgeState.AWAY
 			_timer_remaining = away_sec
-			_visual.color = AWAY_COLOR
+			_visual.color = _away_color()
 			# Toggling collision from inside a physics callback has to be
 			# deferred -- doing it synchronously here crashes with "flushing
 			# queries" mid-step. Deferred is correct either way, so it is
@@ -140,5 +164,5 @@ func _physics_process(delta: float) -> void:
 			_collision_shape.set_deferred("disabled", true)
 		_LedgeState.AWAY:
 			_state = _LedgeState.SOLID
-			_visual.color = SOLID_COLOR
+			_visual.color = _solid_color
 			_collision_shape.set_deferred("disabled", false)
