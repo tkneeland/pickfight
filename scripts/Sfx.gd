@@ -101,6 +101,11 @@ const SOUNDS: Dictionary = {
 	"hit_spear": {"files": [
 		"kenney_impact/impactPlank_spear_000.ogg",
 		"kenney_impact/impactPlank_spear_001.ogg"], "db": 1.0},
+	# The pogo stick (issue #271). Placeholder: copies of two bullet-impact tin
+	# hits under their own names, since no two weapons may share a file.
+	"hit_pogo": {"files": [
+		"kenney_impact/impactTin_pogo_000.ogg",
+		"kenney_impact/impactTin_pogo_001.ogg"], "db": 0.0},
 	# The fishing rod (issue #273). Placeholder: copies of two grapple hits under
 	# their own names, since no two weapons may share a file.
 	"hit_fishing_rod": {"files": [
