@@ -419,6 +419,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_hitstop_restores_and_does_not_desync",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"sfx_hit_sets_have_no_placeholder_files",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1659,6 +1660,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"sfx_hit_sets_have_no_placeholder_files":
+			return await _scenario_sfx_hit_sets_have_no_placeholder_files()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25847,4 +25850,27 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	return failures
+
+## No hit_* set points at a copy made under a placeholder name (#288): the
+## spear, pogo, rod and magnet once did, so a marker in a file name is a copy.
+func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var sounds: Dictionary = (sfx.get_script() as GDScript).get_script_constant_map()["SOUNDS"]
+	var checked: int = 0
+	for key: String in sounds:
+		if not key.begins_with("hit_"):
+			continue
+		for file: String in sounds[key]["files"]:
+			checked += 1
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_", "_plunger_"]:
+				if file.contains(marker):
+					failures.append("%s uses placeholder file %s" % [key, file])
+	if checked == 0:
+		failures.append("no hit_* files were checked")
+	_scenario_completed = true
 	return failures
