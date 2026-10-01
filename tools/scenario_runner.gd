@@ -395,6 +395,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"palette_moods_cover_the_rotation",
 	"palette_stage_platforms_use_mood_color",
 	"palette_players_are_distinct_and_synced",
+	"pogo_head_gives_small_bounce_on_ground_contact",
+	"pogo_charged_release_launches_higher_than_bounce",
+	"pogo_downward_stomp_damages_opponent",
+	"pogo_sideways_hit_does_no_damage",
+	"pogo_is_in_the_pickup_set",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -691,6 +696,7 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/flail.tres",
 	"res://resources/boomerang.tres",
 	"res://resources/spear.tres",
+	"res://resources/pogo.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -1585,6 +1591,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_palette_stage_platforms_use_mood_color()
 		"palette_players_are_distinct_and_synced":
 			return await _scenario_palette_players_are_distinct_and_synced()
+		"pogo_head_gives_small_bounce_on_ground_contact":
+			return await _scenario_pogo_head_gives_small_bounce_on_ground_contact()
+		"pogo_charged_release_launches_higher_than_bounce":
+			return await _scenario_pogo_charged_release_launches_higher_than_bounce()
+		"pogo_downward_stomp_damages_opponent":
+			return await _scenario_pogo_downward_stomp_damages_opponent()
+		"pogo_sideways_hit_does_no_damage":
+			return await _scenario_pogo_sideways_hit_does_no_damage()
+		"pogo_is_in_the_pickup_set":
+			return await _scenario_pogo_is_in_the_pickup_set()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -4100,6 +4116,10 @@ func _scenario_weapon_damage_matches_roster() -> Array[String]:
 
 	var observed: Dictionary = {}
 	for path: String in WEAPON_RESOURCE_PATHS:
+		# The pogo hurts only by a stomp from above (issue #271), so a sideways charge
+		# deals nothing by design. Its own scenarios cover its damage.
+		if path == "res://resources/pogo.tres":
+			continue
 		var weapon: String = path.get_file().get_basename()
 		var stats: WeaponStatsType = load(path)
 		if stats == null:
@@ -4917,6 +4937,10 @@ func _scenario_roster_hafts_are_non_colliding() -> Array[String]:
 		# The spear rests 90 px out (issue #272), past this trial's bystander and bar fixtures (sized for a haft that starts at the body), so
 		# it cannot be asked for it. Its own scenarios cover its reach.
 		if path == "res://resources/spear.tres":
+			continue
+		# The pogo rests 45 px out and bounces the player off any ground its head meets (issue #271),
+		# so this trial's fixtures shove it about. Its own scenarios cover it.
+		if path == "res://resources/pogo.tres":
 			continue
 		var weapon: String = path.get_file().get_basename()
 		var stats: WeaponStatsType = load(path)
@@ -18338,6 +18362,10 @@ const VAULT_TICKS: int = 120
 func _scenario_roster_traversal_is_measured() -> Array[String]:
 	var failures: Array[String] = []
 	for path: String in WEAPON_RESOURCE_PATHS:
+		# The pogo gets up a ledge by bouncing, not by planting the head and hauling (issue #271), and its
+		# head bounces the player off whatever it plants on, so the plant-and-climb trial cannot ask it.
+		if path == "res://resources/pogo.tres":
+			continue
 		var weapon: String = path.get_file().get_basename()
 		var stats: WeaponStatsType = load(path)
 		if stats == null:
@@ -24843,5 +24871,117 @@ func _scenario_palette_players_are_distinct_and_synced() -> Array[String]:
 				failures.append("slot %d: controller page %s, Palette %s" % [i, page[i], players[i]])
 			if not _color_close(main_colors[i], players[i], 0.01):
 				failures.append("slot %d: Main.tscn %s, Palette %s" % [i, main_colors[i], players[i]])
+	_scenario_completed = true
+	return failures
+
+# --- Pogo stick (issue #271) -------------------------------------------------
+
+const POGO_PATH: String = "res://resources/pogo.tres"
+## Written down independently of the resource: a small bounce rises at about
+## this, in px/s, and a pogo's launch rises well above it.
+const POGO_SMALL_BOUNCE_MIN: float = 200.0
+const POGO_SMALL_BOUNCE_MAX: float = 600.0
+
+## Stands a pogo on the arena floor aimed straight down (`pull` long) for
+## `hold` ticks, then lets go; returns how high, in px, it rose above the
+## floor stand, and the fastest upward speed it reached.
+func _pogo_hop(pull: float, hold: int) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	await _equip(player, POGO_PATH)
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	var rest_y: float = player.global_position.y
+	var top: float = rest_y
+	var fastest: float = 0.0
+	player.set_input_vector(Vector2.DOWN * pull)
+	await _await_ticks(hold)
+	player.set_input_vector(Vector2.ZERO)
+	for _t in 90:
+		await physics_frame
+		top = minf(top, player.global_position.y)
+		fastest = maxf(fastest, -player.linear_velocity.y)
+	await _teardown(stage)
+	return {"rise": rest_y - top, "speed": fastest}
+
+## A pogo head meeting the ground gives a small bounce with no push at all.
+func _scenario_pogo_head_gives_small_bounce_on_ground_contact() -> Array[String]:
+	var failures: Array[String] = []
+	var hop: Dictionary = await _pogo_hop(0.05, 0)
+	print("      pogo uncharged bounce: rose %.1f px, fastest %.0f px/s up" % [hop["rise"], hop["speed"]])
+	if hop["speed"] < POGO_SMALL_BOUNCE_MIN:
+		failures.append("the pogo's ground contact gave only %.0f px/s up, no automatic bounce" % hop["speed"])
+	if hop["speed"] > POGO_SMALL_BOUNCE_MAX:
+		failures.append("the pogo's automatic bounce was %.0f px/s up, not a small one" % hop["speed"])
+	return failures
+
+## Pushing the head into the ground and letting go launches higher than the
+## bounce the same pogo gives untouched.
+func _scenario_pogo_charged_release_launches_higher_than_bounce() -> Array[String]:
+	var failures: Array[String] = []
+	var bounce: Dictionary = await _pogo_hop(0.05, 0)
+	var launch: Dictionary = await _pogo_hop(1.0, 45)
+	print("      pogo bounce rose %.1f px; charged launch rose %.1f px" % [bounce["rise"], launch["rise"]])
+	if launch["rise"] < bounce["rise"] * 2.0 or launch["rise"] < 40.0:
+		failures.append("the charged launch rose %.1f px, not clearly above the %.1f px bounce" % [launch["rise"], bounce["rise"]])
+	return failures
+
+## A pogo coming down on an opponent from above, moving down, hurts them.
+func _scenario_pogo_downward_stomp_damages_opponent() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(attacker, POGO_PATH)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2.DOWN * 160.0)
+	await physics_frame
+	_brace(victim)
+	attacker.set_input_vector(Vector2.DOWN * 0.3)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	attacker.teleport_to(DEEP_PARK_POSITION)
+	victim.teleport_to(DEEP_PARK_POSITION + Vector2.DOWN * 160.0)
+	var before: float = victim.damage
+	for _t in 40:
+		attacker.linear_velocity = Vector2.DOWN * 1000.0
+		await physics_frame
+		if victim.damage > before:
+			break
+	print("      pogo stomp took %.1f off" % (victim.damage - before))
+	if victim.damage <= before:
+		failures.append("a pogo coming down on an opponent from above did no damage")
+	await _teardown(stage)
+	return failures
+
+## A pogo run into someone sideways, at the speed that kills with a sword,
+## does nothing.
+func _scenario_pogo_sideways_hit_does_no_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	await _equip(attacker, POGO_PATH)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2.RIGHT * FULL_STRIKE_RUN_UP)
+	await physics_frame
+	_brace(victim)
+	var hit: Dictionary = await _charge_strike(attacker, victim)
+	print("      pogo sideways charge: took %.1f off (reached %s, closest %.0f px)" % [hit["damage"], hit["landed"], hit["closest"]])
+	if hit["damage"] > 0.0:
+		failures.append("a pogo hit sideways took %.1f off, it should do none" % hit["damage"])
+	if hit["closest"] > 80.0:
+		failures.append("the sideways charge never reached the victim (closest %.0f px)" % hit["closest"])
+	await _teardown(stage)
+	return failures
+
+## The pogo is something a pickup can hand out, and it is not the starting weapon.
+func _scenario_pogo_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(POGO_PATH):
+		failures.append("the pogo is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == POGO_PATH
+	if not found:
+		failures.append("the pogo is not among the loaded pickup weapons")
 	_scenario_completed = true
 	return failures
