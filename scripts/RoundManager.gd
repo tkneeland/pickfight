@@ -125,6 +125,13 @@ extends Node
 @export var lobby_enabled: bool = false
 ## Length of the 3-2-1 countdown once everyone is ready.
 @export var lobby_countdown_sec: float = 3.0
+## Issue #291: seated players are live in the lobby, on a sandbox stage. They
+## move, swing and hit each other, but nothing counts and a KO respawns after
+## `lobby_respawn_sec`. Off by default: a fixture without a stage to stand on
+## keeps its players inert in the lobby, as it always was.
+@export var lobby_sandbox: bool = false
+@export var lobby_respawn_sec: float = 1.5
+@export var lobby_sandbox_stage_index: int = 0
 
 ## How long the stage name takes to sweep across. 0 turns it off.
 @export var stage_title_sec: float = 1.1
@@ -227,7 +234,20 @@ func _init() -> void:
 	_pickup_director = PickupDirectorScript.new(self)
 	add_child(_pickup_director)
 
+const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
+var _replay: Node
+
+## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
+		_replay.save_and_toast()
+		get_viewport().set_input_as_handled()
+
 func _ready() -> void:
+	_replay = ReplayBufferScript.new()
+	_replay.name = "ReplayBuffer"
+	add_child(_replay)
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
 	# editor's Play button (project.godot `editor/run/main_run_args`).
 	_demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_args().has("--demo")
@@ -377,13 +397,43 @@ func _swap_stage() -> void:
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
+	var night: bool = _roll_night()
+	_current_stage.set("night", night)
 	container.add_child(_current_stage)
-	var ink: Color = PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
+	var ink: Color = PaletteScript.NIGHT["ink"] if night else PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
 	for player in _players:
 		if player != null and player.has_method("set_ink"):
 			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
+
+# --- Night stages (issue #332) -------------------------------------------------
+#
+# A stage can be played as a night variant: darkened, lit by lamps and glows,
+# purely visual. It is applied by data (`Stage.night`, set before the stage
+# enters the tree), so no stage scene is duplicated. Each round rolls it with
+# `night_chance`, from its own RNG so the modifier stream is undisturbed. The
+# roll honours `modifier_rolls_enabled` (the deterministic-run seam) and
+# `forced_night` (-1 roll, 0 never, 1 always) overrides it.
+
+## Chance, 0..1, that a round's stage is the night variant.
+@export_range(0.0, 1.0) var night_chance: float = 0.2
+## -1 roll as usual, 0 never night, 1 always night.
+@export var forced_night: int = -1
+var _night_rng: RandomNumberGenerator
+
+func _roll_night() -> bool:
+	if forced_night >= 0:
+		return forced_night == 1
+	if not modifier_rolls_enabled or night_chance <= 0.0:
+		return false
+	if _night_rng == null:
+		_night_rng = RandomNumberGenerator.new()
+		if modifier_seed >= 0:
+			_night_rng.seed = modifier_seed + 332
+		else:
+			_night_rng.randomize()
+	return _night_rng.randf() < night_chance
 
 # --- Large stages (issue #144) ------------------------------------------------
 #
@@ -540,6 +590,8 @@ func _watch_for_buzzes() -> void:
 			player.connect("strike_landed", _on_strike_landed.bind(slot))
 		if player.has_signal("eliminated"):
 			player.connect("eliminated", _on_ko_eliminated.bind(slot))
+		if player.has_signal("weapon_picked_up"):
+			player.connect("weapon_picked_up", _on_weapon_picked_up.bind(slot))
 
 ## `attacker_slot` comes last because that is where the signal's bind puts it.
 func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
@@ -1033,6 +1085,7 @@ func _enter_lobby() -> void:
 	_build_lobby_ui()
 	_lobby_screen.show_panel("lobby")
 	_set_join_corner_visible(false)
+	_start_lobby_sandbox()
 	_last_lobby_state = {}
 	_tick_lobby()
 
@@ -1040,6 +1093,7 @@ func _enter_victory() -> void:
 	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
 	_state = State.VICTORY
+	_end_lobby_sandbox()
 	_clear_stage()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
@@ -1066,6 +1120,7 @@ func _clear_stage() -> void:
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
 ## victory screen's Rematch needs pressing afresh), and the first round.
 func _begin_match() -> void:
+	_end_lobby_sandbox()
 	_match_target = _requested_target()
 	_match_winner_slot = -1
 	_last_winner_slot = -1
@@ -1093,6 +1148,8 @@ func _begin_match() -> void:
 
 func _tick_lobby() -> void:
 	var roster: Array[int] = _roster()
+	if _sandbox_active and (_state == State.LOBBY or _state == State.COUNTDOWN):
+		_tick_lobby_sandbox(roster)
 	match _state:
 		State.LOBBY:
 			if _everyone_ready(roster) and _teams_can_start(roster):
@@ -1172,9 +1229,15 @@ func _refresh_victory() -> void:
 			slots.append(slot)
 	slots.sort_custom(podium_before)
 	if _team_mode:
-		_lobby_screen.refresh_victory(slots, _scores, -1, _stats.awards(slots), _match_winner_team, _teams, _team_scores)
+		_lobby_screen.refresh_victory(slots, _scores, -1, _all_awards(slots), _match_winner_team, _teams, _team_scores, _stats.stat_rows(slots))
 		return
-	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
+	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _all_awards(slots), -1, {}, PackedInt32Array(), _stats.stat_rows(slots))
+
+## The core awards plus the extra superlatives (issue #325).
+func _all_awards(slots: Array[int]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = _stats.awards(slots)
+	out.append_array(_stats.extra_awards(slots))
+	return out
 
 ## The podium's order: whether slot `a` stands before slot `b`. The match
 ## winner first, then by final score. Strict (#200): never true both ways,
@@ -1648,6 +1711,8 @@ func awards_row() -> Control:
 var balance_log_path: String = "user://balance_stats.jsonl"
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
+	if _sandbox_active:
+		return
 	var victim_slot: int = _players.find(victim)
 	# Issue #311: a teammate never earns the KO for a teammate's death.
 	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
@@ -1661,7 +1726,12 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
+func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
+	_stats.record_pickup(slot, weapon_name)
+
 func _on_ko_eliminated(slot: int) -> void:
+	if _sandbox_active:
+		return
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()
 	_pending_kos.append([slot, GameClockScript.now_msec()])
@@ -1792,6 +1862,92 @@ func _seed_match(announce: bool) -> void:
 		sfx.reseed(hash([seed_value, "sfx"]))
 	if announce:
 		print("RoundManager: match seed %d (replay with -- --seed=%d)" % [seed_value, seed_value])
+
+# --- Lobby sandbox (issue #291) ------------------------------------------------
+#
+# With `lobby_sandbox` the lobby runs a stage under its (translucent) panel and
+# every seated player is spawned on it, live: they can move, swing and hit each
+# other while waiting. None of it counts: hits and KOs are not recorded (no
+# stats, kill feed or awards), scores are never touched, a KO respawns the
+# player after `lobby_respawn_sec`, and the start of a match frees the stage
+# and sends everyone back to inert, so `_try_start_round()` begins from the
+# same state it always did. It draws nothing from the match RNG streams.
+
+const LOBBY_PANEL_SANDBOX_ALPHA: float = 0.6
+
+## A global off switch for the sandbox, in the way of `modifier_rolls_enabled`:
+## the scenario suite turns it off for every scenario that reads a player being
+## `alive` in the lobby as "a round has started", and on for its own.
+static var lobby_sandbox_allowed: bool = true
+
+var _sandbox_active: bool = false
+## Slots that have been spawned into this sandbox, and slot -> game msec a
+## fallen one comes back at.
+var _sandbox_seated: Dictionary = {}
+var _sandbox_respawn_at: Dictionary = {}
+
+## Whether the lobby sandbox is running (scenarios read it).
+func lobby_sandbox_active() -> bool:
+	return _sandbox_active
+
+func _start_lobby_sandbox() -> void:
+	_sandbox_active = false
+	_sandbox_seated.clear()
+	_sandbox_respawn_at.clear()
+	if not lobby_sandbox or not lobby_sandbox_allowed or stage_scenes.is_empty():
+		return
+	var container: Node = get_node_or_null(arena_container_path)
+	if container == null:
+		return
+	var index: int = clampi(lobby_sandbox_stage_index, 0, stage_scenes.size() - 1)
+	_current_stage = stage_scenes[index].instantiate()
+	_current_stage.set("stage_index", index)
+	container.add_child(_current_stage)
+	var ink: Color = PaletteScript.mood_for_stage(index)["ink"]
+	for player in _players:
+		if player != null:
+			player.leave_round()
+			if player.has_method("set_ink"):
+				player.set_ink(ink)
+	_stage_spawn_points = _current_stage.get_spawn_points()
+	_fit_camera_to_stage()
+	var panel: Control = lobby_panel()
+	if panel is ColorRect:
+		(panel as ColorRect).color.a = LOBBY_PANEL_SANDBOX_ALPHA
+	_sandbox_active = true
+
+func _end_lobby_sandbox() -> void:
+	if not _sandbox_active:
+		return
+	_sandbox_active = false
+	_sandbox_seated.clear()
+	_sandbox_respawn_at.clear()
+	for player in _players:
+		if player != null:
+			player.leave_round()
+	_clear_stage()
+
+func _tick_lobby_sandbox(roster: Array[int]) -> void:
+	var now: int = GameClockScript.now_msec()
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player == null:
+			continue
+		if not roster.has(slot):
+			player.leave_round()
+			_sandbox_seated.erase(slot)
+			_sandbox_respawn_at.erase(slot)
+			continue
+		if player.alive:
+			continue
+		if _sandbox_seated.has(slot):
+			if not _sandbox_respawn_at.has(slot):
+				_sandbox_respawn_at[slot] = now + int(lobby_respawn_sec * 1000.0)
+			if now < int(_sandbox_respawn_at[slot]):
+				continue
+		_sandbox_respawn_at.erase(slot)
+		_sandbox_seated[slot] = true
+		player.start_round(_spawn_point(roster.find(slot)), false)
 
 # --- Game modes (issues #276-#278) -------------------------------------------------
 # An optional rules layer over each round (`GameModes.gd`): King of the Hill,
