@@ -72,6 +72,8 @@ func _ready() -> void:
 ## own colours) take the mood's platform colour.
 func _tint_bodies(node: Node) -> void:
 	for child in node.get_children():
+		if child.has_method("set_platform_color"):
+			child.set_platform_color(mood["platform"])
 		if child is Polygon2D and node.get_class() == "StaticBody2D" and node.get_script() == null:
 			(child as Polygon2D).color = mood["platform"]
 		_tint_bodies(child)
