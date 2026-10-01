@@ -17,6 +17,10 @@ extends Node
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const WeaponThemesScript := preload("res://scripts/WeaponThemes.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+
+## Which pickup weapons the host switched off (#294); a scenario hands in its own.
+var settings: RefCounted = HostSettingsScript.shared()
 ## Game time (#182), not wall clock: the interval stops for a pause and runs
 ## at `Engine.time_scale`.
 const GameClockScript := preload("res://scripts/GameClock.gd")
@@ -39,7 +43,7 @@ var _next_pickup_msec: int = 0
 ## RoundManager hands it a stream derived from the match seed; until then (a
 ## director driven by hand) it is an unseeded one of its own.
 var rng := RandomNumberGenerator.new()
-## Weapons still to come out before the draw repeats one (`_draw_weapon`).
+## Weapons still to come out before the draw repeats one (`draw_weapon`).
 var _bag: Array[Resource] = []
 
 func _init(round_manager: Node = null) -> void:
@@ -138,6 +142,7 @@ func _spawn_pickup() -> void:
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
+	offered = _switched_on(offered)
 	var weapon: Resource = draw_weapon(offered)
 	if weapon == null:
 		return
@@ -148,6 +153,15 @@ func _spawn_pickup() -> void:
 	# Placed after entering the tree: a spawn, not motion (issue #108).
 	pickup.reset_physics_interpolation()
 	_pickups.append(pickup)
+
+## `offered` without the weapons the host switched off (#294). Left whole if
+## that would leave nothing, which the settings do not allow anyway.
+func _switched_on(offered: Array[Resource]) -> Array[Resource]:
+	var kept: Array[Resource] = []
+	for stats: Resource in offered:
+		if stats != null and settings.is_weapon_enabled(HostSettingsScript.name_of(stats.resource_path)):
+			kept.append(stats)
+	return kept if not kept.is_empty() else offered
 
 ## The next weapon from a shuffled bag of everything offered, refilled once
 ## it runs dry: every weapon comes out before the bag is dealt again.

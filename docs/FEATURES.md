@@ -36,6 +36,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
 - Parts: bounce pad, wind zone, rotating platform (#52)
+- Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
 - Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
@@ -78,6 +79,10 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)
+- Window size option for windowed mode (#294)
+- Stage on/off list: the rotation skips switched-off stages (#294)
+- Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
@@ -108,7 +113,6 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
 - #297 Cosmetics: eye styles (tkneeland)
-- #294 Host settings menu: volume, display, stage and weapon toggles (tkneeland)
 - #291 Onboarding: first-join tip on phone, live lobby sandbox (tkneeland)
 - #288 Real per-weapon hit sounds (tkneeland)
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)

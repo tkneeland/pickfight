@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Fan.tscn" id="9"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_shoulder"]
 size = Vector2(220, 40)
@@ -93,6 +94,17 @@ max_tilt_deg = 20.0
 [node name="Spinner" parent="." instance=ExtResource("3")]
 position = Vector2(0, 140)
 spin_deg_per_sec = 25.0
+
+; Issue #281: a fan on the pit floor between the hub and the left seesaw,
+; blowing up and swinging +-30 degrees. Its column starts above the pit (clear
+; of every spawn) and lifts a player crossing the gap, slightly less than gravity.
+[node name="PitFan" parent="." instance=ExtResource("9")]
+position = Vector2(-235, 330)
+facing = Vector2(0, -1)
+column_length = 200.0
+strength = 1300.0
+sweep_deg = 30.0
+sweep_sec = 5.0
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-765, 250)

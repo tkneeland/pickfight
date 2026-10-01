@@ -15,9 +15,19 @@ extends RefCounted
 ## own exports of the same meaning.
 
 const StageScript := preload("res://scripts/Stage.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
-## The rotation: RoundManager's `stage_scenes` (the same array).
-var scenes: Array[PackedScene] = []
+## Which stages the host switched off (#294); a scenario hands in its own.
+var settings: RefCounted = HostSettingsScript.shared()
+## The rotation: RoundManager's `stage_scenes` (the same array). Setting it
+## tells `settings` which stages exist.
+var scenes: Array[PackedScene] = []:
+	set(value):
+		scenes = value
+		var names := PackedStringArray()
+		for scene: PackedScene in value:
+			names.append(HostSettingsScript.name_of(scene.resource_path))
+		settings.known_stages = names
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5
 ## `--demo`: play the rotation straight through in order, no bags.
@@ -57,10 +67,22 @@ func stage_is_large(index: int) -> bool:
 ## rotation with no stage the round may play (say, only large stages and two
 ## players) ignores the rule rather than play nothing.
 func stage_allowed(index: int) -> bool:
+	if not _stage_enabled(index):
+		return false
 	if round_player_count >= large_stage_min_players or not stage_is_large(index):
 		return true
 	for i in scenes.size():
 		if not stage_is_large(i):
+			return false
+	return true
+
+## Whether the host left `scenes[index]` switched on (#294). A rotation with
+## every stage off (the settings refuse that) ignores the switches.
+func _stage_enabled(index: int) -> bool:
+	if settings.is_stage_enabled(HostSettingsScript.name_of(scenes[index].resource_path)):
+		return true
+	for scene: PackedScene in scenes:
+		if settings.is_stage_enabled(HostSettingsScript.name_of(scene.resource_path)):
 			return false
 	return true
 

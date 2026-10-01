@@ -417,6 +417,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
+	"host_settings_disabled_stage_never_rotates_in",
+	"host_settings_disabled_weapon_never_spawns",
+	"host_settings_refuse_last_stage_and_weapon",
+	"host_settings_persist_across_reload",
 	"umbrella_overhead_slows_the_fall",
 	"umbrella_catches_more_wind_than_pickaxe",
 	"umbrella_canopy_face_reduces_a_hit",
@@ -427,6 +431,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_ko_counts_like_any_other_ko",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"fan_pushes_body_along_its_facing",
+	"rotating_fan_push_direction_changes",
+	"stage_gust_warns_then_pushes_everyone_alike",
+	"stage_gust_calm_pushes_nothing",
 	"stage_dressing_layers_use_mood_colours",
 	"stage_dressing_has_no_collision",
 	"stage_dressing_layout_follows_stage_index",
@@ -450,6 +458,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"windy_stage_favours_umbrella_pickups",
 	"themed_pool_keeps_every_enabled_weapon",
 	"themed_pool_never_draws_a_disabled_weapon",
+	"mode_king_of_the_hill_scores_and_wins",
+	"mode_sudden_death_hit_eliminates_victim",
+	"mode_hot_potato_tags_fuses_and_reseeds",
+	"mode_handlers_gone_after_round_and_edge_cases",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1687,6 +1699,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
+		"host_settings_disabled_stage_never_rotates_in":
+			return await _scenario_host_settings_disabled_stage_never_rotates_in()
+		"host_settings_disabled_weapon_never_spawns":
+			return await _scenario_host_settings_disabled_weapon_never_spawns()
+		"host_settings_refuse_last_stage_and_weapon":
+			return await _scenario_host_settings_refuse_last_stage_and_weapon()
+		"host_settings_persist_across_reload":
+			return await _scenario_host_settings_persist_across_reload()
 		"umbrella_overhead_slows_the_fall":
 			return await _scenario_umbrella_overhead_slows_the_fall()
 		"umbrella_catches_more_wind_than_pickaxe":
@@ -1707,6 +1727,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"fan_pushes_body_along_its_facing":
+			return await _scenario_fan_pushes_body_along_its_facing()
+		"rotating_fan_push_direction_changes":
+			return await _scenario_rotating_fan_push_direction_changes()
+		"stage_gust_warns_then_pushes_everyone_alike":
+			return await _scenario_stage_gust_warns_then_pushes_everyone_alike()
+		"stage_gust_calm_pushes_nothing":
+			return await _scenario_stage_gust_calm_pushes_nothing()
 		"stage_dressing_layers_use_mood_colours":
 			return await _scenario_stage_dressing_layers_use_mood_colours()
 		"stage_dressing_has_no_collision":
@@ -1753,6 +1781,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_themed_pool_keeps_every_enabled_weapon()
 		"themed_pool_never_draws_a_disabled_weapon":
 			return await _scenario_themed_pool_never_draws_a_disabled_weapon()
+		"mode_king_of_the_hill_scores_and_wins":
+			return await _scenario_mode_king_of_the_hill_scores_and_wins()
+		"mode_sudden_death_hit_eliminates_victim":
+			return await _scenario_mode_sudden_death_hit_eliminates_victim()
+		"mode_hot_potato_tags_fuses_and_reseeds":
+			return await _scenario_mode_hot_potato_tags_fuses_and_reseeds()
+		"mode_handlers_gone_after_round_and_edge_cases":
+			return await _scenario_mode_handlers_gone_after_round_and_edge_cases()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25807,6 +25843,137 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
+## Issue #294: a stage the host switched off never comes up in the rotation,
+## however many rounds are dealt, while the others all still do.
+func _scenario_host_settings_disabled_stage_never_rotates_in() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	var rotation: RefCounted = (load("res://scripts/StageRotation.gd") as GDScript).new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = []
+	for i in 5:
+		var scene: PackedScene = _make_stub_stage("HostStub%d" % i, [Vector2.ZERO])
+		scene.take_over_path("res://virtual/HostStub%d.tscn" % i)
+		scenes.append(scene)
+	rotation.scenes = scenes
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 7
+	# The opener (index 0) and one more are off.
+	if not settings.set_stage_enabled("HostStub0", false) or not settings.set_stage_enabled("HostStub3", false):
+		failures.append("switching off two of five stages was refused")
+	var seen: Dictionary = {}
+	for _round in 200:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[index] = true
+	if seen.has(0) or seen.has(3):
+		failures.append("a disabled stage came up in the rotation: %s" % [seen.keys()])
+	for wanted: int in [1, 2, 4]:
+		if not seen.has(wanted):
+			failures.append("enabled stage %d never came up in 200 rounds" % wanted)
+	_scenario_completed = true
+	return failures
+
+## Issue #294: a pickup weapon the host switched off is never spawned as a
+## pickup, over many draws through the real director.
+func _scenario_host_settings_disabled_weapon_never_spawns() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	var pool: Array[Resource] = PickupWeaponsScript.available_weapons()
+	var off_names: PackedStringArray = ["sword", "axe", "dagger"]
+	for weapon_name: String in off_names:
+		if not settings.set_weapon_enabled(weapon_name, false):
+			failures.append("switching off %s was refused" % weapon_name)
+	var loop: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	round_manager.pickup_weapons = pool
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+	var director: Node = round_manager._pickup_director
+	director.settings = settings
+	var seen: Dictionary = {}
+	for _draw in 120:
+		director.clear()
+		director._spawn_pickup()
+		for pickup: Node2D in director._live_pickups():
+			seen[(pickup.weapon_stats as Resource).resource_path.get_file().get_basename()] = true
+	for weapon_name: String in off_names:
+		if seen.has(weapon_name):
+			failures.append("disabled weapon %s spawned as a pickup" % weapon_name)
+	if seen.size() < pool.size() - off_names.size():
+		failures.append("only %d of the %d enabled weapons ever spawned: %s" % [seen.size(), pool.size() - off_names.size(), seen.keys()])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #294: the last enabled stage and the last enabled pickup weapon
+## refuse to switch off, and stay on.
+func _scenario_host_settings_refuse_last_stage_and_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	settings.known_stages = PackedStringArray(["Alpha", "Beta"])
+	if not settings.set_stage_enabled("Alpha", false):
+		failures.append("switching off one of two stages was refused")
+	if settings.set_stage_enabled("Beta", false):
+		failures.append("the last enabled stage was allowed to switch off")
+	if not settings.is_stage_enabled("Beta") or settings.is_stage_enabled("Alpha"):
+		failures.append("the stage switches ended in the wrong state")
+	var weapons: PackedStringArray = settings.known_weapons()
+	var refused: int = 0
+	for weapon_name: String in weapons:
+		if not settings.set_weapon_enabled(weapon_name, false):
+			refused += 1
+	if refused != 1:
+		failures.append("expected exactly the last weapon to be refused, %d were" % refused)
+	var still_on: int = 0
+	for weapon_name: String in weapons:
+		if settings.is_weapon_enabled(weapon_name):
+			still_on += 1
+	if still_on != 1:
+		failures.append("expected one weapon left on, found %d" % still_on)
+	_scenario_completed = true
+	return failures
+
+## Issue #294: the choices survive a reload of the store from its file, and
+## the other settings sharing the file are kept.
+func _scenario_host_settings_persist_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pickfight_host_settings_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var seed_file := ConfigFile.new()
+	seed_file.set_value("audio", "master_volume", 0.4)
+	seed_file.save(path)
+	var script: GDScript = load("res://scripts/HostSettings.gd") as GDScript
+	var first: RefCounted = script.new()
+	first.path = path
+	first.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma"])
+	first.set_stage_enabled("Beta", false)
+	first.set_weapon_enabled("spear", false)
+	first.set_resolution(Vector2i(1600, 900))
+	var second: RefCounted = script.new()
+	second.path = path
+	second.known_stages = first.known_stages
+	second.load_settings()
+	if second.is_stage_enabled("Beta") or not second.is_stage_enabled("Alpha"):
+		failures.append("the disabled stage did not survive a reload")
+	if second.is_weapon_enabled("spear") or not second.is_weapon_enabled("sword"):
+		failures.append("the disabled weapon did not survive a reload")
+	if second.resolution != Vector2i(1600, 900):
+		failures.append("the resolution came back as %s" % [second.resolution])
+	var check := ConfigFile.new()
+	check.load(path)
+	if not is_equal_approx(float(check.get_value("audio", "master_volume", -1.0)), 0.4):
+		failures.append("saving the host settings dropped the audio section")
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+
 # --- Umbrella (issue #269) ---------------------------------------------------
 
 const UMBRELLA_PATH: String = "res://resources/umbrella.tres"
@@ -26153,6 +26320,422 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 	if back["slot"] != 0 or server.slot_eyes(0) != "visor" or player.eyes_id() != "visor":
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+# --- Game modes (issues #276-#278) ---------------------------------------------
+#
+# King of the Hill, Sudden Death and Hot Potato, driven through the real
+# `RoundManager` (`game_mode`) with the stub roster. Strikes are emitted on the
+# striker's own `strike_landed`, exactly as `Player` does.
+
+const GameModesType := preload("res://scripts/GameModes.gd")
+const MODE_SPAWNS: Array[Vector2] = [Vector2(-300.0, -600.0), Vector2(0.0, -600.0), Vector2(300.0, -600.0)]
+
+## A RoundManager of `count` players (stub roster) playing `mode`, held at
+## ROUND_END for 30 s once a round finishes so the mode's teardown is observable.
+func _mode_rig(count: int, mode: String, seed_value: int = 7) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var spawns: Array[Vector2] = []
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in count:
+		spawns.append(MODE_SPAWNS[i])
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [_make_stub_stage("ModeStage", spawns)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = mode
+	rm.match_seed = seed_value
+	stage.add_child(rm)
+	return {"stage": stage, "rm": rm, "players": players, "roster": roster}
+
+func _mode_started(rig: Dictionary) -> bool:
+	var rm: Node = rig["rm"]
+	if not await _await_condition(func() -> bool: return rm.game_mode_node() != null, 3000):
+		return false
+	for player: RigidBody2D in rig["players"]:
+		if not player.alive:
+			return false
+	return true
+
+## How many of `player`'s `strike_landed` handlers belong to `owner_node`.
+func _mode_handlers_on(player: Node, owner_node: Variant) -> int:
+	if not is_instance_valid(owner_node):
+		return 0
+	var n: int = 0
+	for conn: Dictionary in player.strike_landed.get_connections():
+		if (conn["callable"] as Callable).get_object() == owner_node:
+			n += 1
+	return n
+
+func _count_alive(players: Array[RigidBody2D]) -> int:
+	var n: int = 0
+	for p in players:
+		if p.alive:
+			n += 1
+	return n
+
+func _scenario_mode_king_of_the_hill_scores_and_wins() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	if rm.active_game_mode_id() != GameModesType.KING_OF_THE_HILL:
+		failures.append("active_game_mode_id is '%s'" % rm.active_game_mode_id())
+	# Let the round's deferred setup (spawn placement) finish first.
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	# Two players inside together: nobody banks anything.
+	players[0].teleport_to(hill.hill_position + Vector2(0.0, 40.0))
+	players[1].teleport_to(hill.hill_position + Vector2(0.0, -40.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(3)
+	var snapshot: Dictionary = hill.hold_time.duplicate()
+	await _await_ticks(10)
+	if hill.hold_time != snapshot:
+		failures.append("two players inside scored: %s then %s" % [snapshot, hill.hold_time])
+	# One alone: banks time, without touching the match tally.
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(15)
+	hill.seconds_to_win = hill.hold_of(1) + 0.3
+	if hill.hold_of(1) <= 0.1:
+		failures.append("the lone occupant banked %f s after 15 ticks" % hill.hold_of(1))
+	for s in 3:
+		if rm.score_of(s) != 0:
+			failures.append("the match tally moved before the round ended: slot %d has %d" % [s, rm.score_of(s)])
+	if not await _await_condition(func() -> bool: return not players[0].alive and not players[2].alive, 3000):
+		failures.append("the occupant never reached the hold target")
+	await _await_ticks(5)
+	# The winner is put out of play at round end (`leave_round()`), so the proof
+	# the others were eliminated is that slot 1 alone scored the round.
+	if rm.score_of(1) != 1 or rm.score_of(0) != 0 or rm.score_of(2) != 0:
+		failures.append("the round was not scored once to slot 1: %d %d %d" % [rm.score_of(0), rm.score_of(1), rm.score_of(2)])
+	if rm.game_mode_node() != null:
+		failures.append("the hill outlived the round")
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_mode_sudden_death_hit_eliminates_victim() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.SUDDEN_DEATH)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	for p in players:
+		if _mode_handlers_on(p, mode) != 1:
+			failures.append("%s has %d mode handlers, want 1" % [p.name, _mode_handlers_on(p, mode)])
+	players[0].strike_landed.emit(players[1], 0.0, Vector2.ZERO, false)
+	if not players[1].alive:
+		failures.append("a 0-damage strike eliminated the victim")
+	players[0].strike_landed.emit(players[1], 10.0, Vector2.ZERO, false)
+	if players[1].alive:
+		failures.append("the victim of a damaging hit survived")
+	if not players[0].alive:
+		failures.append("the striker was eliminated instead of the victim")
+	players[0].strike_landed.emit(players[2], 5.0, Vector2.ZERO, true)
+	await _await_ticks(5)
+	if players[2].alive:
+		failures.append("the second victim survived")
+	if rm.score_of(0) != 1:
+		failures.append("the last one standing scored %d, want 1" % rm.score_of(0))
+	for p in players:
+		if _mode_handlers_on(p, mode) != 0:
+			failures.append("%s still has %d handlers after the round" % [p.name, _mode_handlers_on(p, mode)])
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_mode_hot_potato_tags_fuses_and_reseeds() -> Array[String]:
+	var failures: Array[String] = []
+	var its: Array[int] = []
+	for run in 2:
+		var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO, 99)
+		var rm: Node = rig["rm"]
+		var players: Array[RigidBody2D] = rig["players"]
+		if not await _mode_started(rig):
+			failures.append("the Hot Potato round never started")
+			await _teardown(rig["stage"], false)
+			continue
+		var mode: Node = rm.game_mode_node()
+		its.append(mode.it_slot)
+		if mode.it_slot < 0 or mode.it_slot > 2:
+			failures.append("no valid 'it' at round start: %d" % mode.it_slot)
+			await _teardown(rig["stage"], false)
+			continue
+		if run == 0:
+			mode.fuse_sec = 5.0
+			mode.fuse_left = 5.0
+			mode.tag_cooldown_sec = 0.5
+			mode._cooldown_left = 0.0
+			var it: int = mode.it_slot
+			var others: Array[int] = []
+			for s in 3:
+				if s != it:
+					others.append(s)
+			# A hit by someone who is not "it" passes nothing.
+			players[others[0]].strike_landed.emit(players[others[1]], 10.0, Vector2.ZERO, false)
+			if mode.it_slot != it:
+				failures.append("a hit by a non-'it' moved the tag")
+			await _await_ticks(60)
+			if absf(float(mode.it_time[it]) - 1.0) > 0.35:
+				failures.append("'it' held for %f s of ticks, want about 1.0 (float accumulation)" % float(mode.it_time[it]))
+			# "It" hits another player: the victim becomes "it".
+			players[it].strike_landed.emit(players[others[0]], 10.0, Vector2.ZERO, false)
+			if mode.it_slot != others[0] or mode.tag_count != 1:
+				failures.append("the tag did not pass to the victim: it=%d tags=%d" % [mode.it_slot, mode.tag_count])
+			# The tag-back cooldown: the old 'it' cannot be hit straight back.
+			players[others[0]].strike_landed.emit(players[it], 10.0, Vector2.ZERO, false)
+			if mode.it_slot != others[0]:
+				failures.append("the tag was returned inside the cooldown")
+			await _await_ticks(40)
+			# 0-damage swings tag nobody.
+			players[others[0]].strike_landed.emit(players[others[1]], 0.0, Vector2.ZERO, false)
+			if mode.it_slot != others[0]:
+				failures.append("a 0-damage hit passed the tag")
+			# The fuse: the holder is eliminated and the tag moves on.
+			var holder: int = mode.it_slot
+			if not await _await_condition(func() -> bool: return not players[holder].alive, 8000):
+				failures.append("the fuse never eliminated 'it'")
+			else:
+				await _await_ticks(3)
+				if mode.it_slot == holder:
+					failures.append("the tag stayed on an eliminated player")
+		await _teardown(rig["stage"], false)
+	if its.size() == 2 and its[0] != its[1]:
+		failures.append("the same match seed picked different 'it': %s" % its)
+	_scenario_completed = true
+	return failures
+
+func _scenario_mode_handlers_gone_after_round_and_edge_cases() -> Array[String]:
+	var failures: Array[String] = []
+	# Hot Potato: a mid-round elimination of "it" reassigns, the round ends,
+	# and every handler goes with it.
+	var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	var it: int = mode.it_slot
+	players[it].eliminate()
+	await _await_ticks(3)
+	if mode.it_slot == it or (mode.it_slot == -1 and _count_alive(players) > 1):
+		failures.append("'it' was eliminated but the tag was not reassigned (it=%d)" % mode.it_slot)
+	for p in players:
+		if p.alive and _mode_handlers_on(p, mode) != 1:
+			failures.append("%s has %d handlers mid-round, want 1" % [p.name, _mode_handlers_on(p, mode)])
+	for p in players:
+		p.eliminate()
+	await _await_ticks(5)
+	for p in players:
+		if _mode_handlers_on(p, mode) != 0:
+			failures.append("%s still has %d Hot Potato handlers after the round" % [p.name, _mode_handlers_on(p, mode)])
+	if is_instance_valid(mode) and (mode.connected_count() != 0 or mode.it_slot != -1):
+		failures.append("Hot Potato kept state after the round")
+	await _teardown(rig["stage"], false)
+
+	# Leaving the tree mid-round (a teardown) disconnects Sudden Death too.
+	rig = _mode_rig(2, GameModesType.SUDDEN_DEATH)
+	rm = rig["rm"]
+	players = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+	else:
+		var held: Node = rm.game_mode_node()
+		if _mode_handlers_on(players[0], held) != 1:
+			failures.append("Sudden Death was not connected before the RoundManager left the tree")
+		rm.get_parent().remove_child(rm)
+		if _mode_handlers_on(players[0], held) != 0 or held.connected_count() != 0:
+			failures.append("leaving the tree left Sudden Death handlers connected")
+		rm.free()
+	await _teardown(rig["stage"], false)
+
+	# Edge cases: no mode, an unknown mode, and empty or out-of-range rosters.
+	rig = _mode_rig(2, "")
+	if await _await_condition(func() -> bool: return rig["players"][0].alive, 3000):
+		if rig["rm"].game_mode_node() != null or rig["rm"].active_game_mode_id() != "":
+			failures.append("the classic round got a mode")
+	await _teardown(rig["stage"], false)
+	for id: String in GameModesType.IDS:
+		var bare: Node = GameModesType.create(id)
+		get_root().add_child(bare)
+		var empty_rm := RoundManagerScript.new()
+		get_root().add_child(empty_rm)
+		bare.setup(empty_rm)
+		var none: Array[int] = []
+		bare.start_round(none)
+		var out_of_range: Array[int] = [5]
+		bare.start_round(out_of_range)
+		await _await_ticks(3)
+		bare.end_round()
+		bare.end_round()
+		bare.queue_free()
+		empty_rm.queue_free()
+	if GameModesType.create("nonsense") != null or GameModesType.create("") != null:
+		failures.append("GameModes.create returned a node for an unknown id")
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+
+
+# --- Fans and stage-wide gusts (#281) ----------------------------------------
+const FanScene: PackedScene = preload("res://scenes/parts/Fan.tscn")
+const StageGustScene: PackedScene = preload("res://scenes/parts/StageGust.tscn")
+const FAN_WARNING_SEC: float = 1.5
+
+## A fan facing left pushes a body in its column left, and not right.
+func _scenario_fan_pushes_body_along_its_facing() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var fan: Node2D = FanScene.instantiate() as Node2D
+	fan.facing = Vector2.LEFT
+	fan.column_width = 600.0
+	fan.strength = WIND_STRENGTH
+	fan.position = DEEP_PARK_POSITION + Vector2(200, 0)
+	stage.add_child(fan)
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(2)
+	var vx0: float = player.linear_velocity.x
+	await _await_ticks(20)
+	var gain: float = player.linear_velocity.x - vx0
+	print("      fan facing left: vx gained %.1f px/s, push direction %s" % [gain, fan.push_direction()])
+	if fan.push_direction().distance_to(Vector2.LEFT) > 0.01:
+		failures.append("a left-facing fan reports push direction %s" % fan.push_direction())
+	if gain > -WIND_MIN_GUST_GAIN / 4.0:
+		failures.append("a left-facing fan changed the body's vx by %.1f px/s; expected a leftward push" % gain)
+	await _teardown(stage)
+	return failures
+
+## A spinning fan's air column turns: its direction a quarter second apart
+## differs by about the spin rate times the gap.
+func _scenario_rotating_fan_push_direction_changes() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var fan: Node2D = FanScene.instantiate() as Node2D
+	fan.facing = Vector2.RIGHT
+	fan.spin_deg_per_sec = 120.0
+	fan.position = DEEP_PARK_POSITION
+	stage.add_child(fan)
+	await _await_ticks(2)
+	var first: Vector2 = fan.push_direction()
+	await _await_ticks(int(Engine.physics_ticks_per_second / 4))
+	var second: Vector2 = fan.push_direction()
+	var turned: float = rad_to_deg(first.angle_to(second))
+	print("      spinning fan turned %.1f degrees in a quarter second (expected about 30)" % turned)
+	if absf(turned - 30.0) > 6.0:
+		failures.append("a 120 deg/s fan turned %.1f degrees in 0.25 s, expected about 30" % turned)
+	await _teardown(stage)
+	return failures
+
+## A stage-wide gust warns for its warning time with no push, then pushes
+## every player the same way.
+func _scenario_stage_gust_warns_then_pushes_everyone_alike() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var gust: Node2D = StageGustScene.instantiate() as Node2D
+	gust.size = WIND_ZONE_SIZE
+	gust.direction = Vector2.RIGHT
+	gust.strength = WIND_STRENGTH
+	gust.calm_sec = 0.5
+	gust.warning_sec = FAN_WARNING_SEC
+	gust.gust_sec = 0.5
+	gust.position = DEEP_PARK_POSITION + Vector2(0, WIND_ZONE_SIZE.y / 2.0 - 500.0)
+	stage.add_child(gust)
+	var a: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(-300, 0))
+	var b: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	a.set_input_vector(Vector2.UP)
+	b.set_input_vector(Vector2.UP)
+	var warning_ticks: int = 0
+	var worst_warning_gain: float = -INF
+	var gain_a: float = 0.0
+	var gain_b: float = 0.0
+	var va: float = a.linear_velocity.x
+	var vb: float = b.linear_velocity.x
+	var total: int = int(round((0.5 + FAN_WARNING_SEC + 0.5) * Engine.physics_ticks_per_second))
+	for _t in total:
+		await physics_frame
+		var da: float = a.linear_velocity.x - va
+		var db: float = b.linear_velocity.x - vb
+		va = a.linear_velocity.x
+		vb = b.linear_velocity.x
+		if gust.is_warning():
+			warning_ticks += 1
+			worst_warning_gain = maxf(worst_warning_gain, maxf(da, db))
+		elif gust.is_gusting():
+			gain_a += da
+			gain_b += db
+	var warned: float = warning_ticks / float(Engine.physics_ticks_per_second)
+	print("      warning %.2f s; gust gained a %.1f, b %.1f px/s; worst warning-tick gain %.3f" % [
+		warned, gain_a, gain_b, worst_warning_gain])
+	if absf(warned - FAN_WARNING_SEC) > 0.1:
+		failures.append("the warning lasted %.2f s, expected %.1f" % [warned, FAN_WARNING_SEC])
+	if worst_warning_gain > WIND_CALM_NOISE:
+		failures.append("a player was pushed %.2f px/s in one tick during the warning" % worst_warning_gain)
+	if gain_a < WIND_MIN_GUST_GAIN or gain_b < WIND_MIN_GUST_GAIN:
+		failures.append("the gust did not push both players right (a %.1f, b %.1f px/s)" % [gain_a, gain_b])
+	if absf(gain_a - gain_b) > 1.0:
+		failures.append("the gust pushed the players differently (a %.1f, b %.1f px/s)" % [gain_a, gain_b])
+	await _teardown(stage)
+	return failures
+
+## With no gust active (a long calm), nothing is pushed.
+func _scenario_stage_gust_calm_pushes_nothing() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var gust: Node2D = StageGustScene.instantiate() as Node2D
+	gust.size = WIND_ZONE_SIZE
+	gust.strength = WIND_STRENGTH
+	gust.calm_sec = 100.0
+	gust.position = DEEP_PARK_POSITION + Vector2(0, WIND_ZONE_SIZE.y / 2.0 - 500.0)
+	stage.add_child(gust)
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(2)
+	var worst: float = 0.0
+	var vx: float = player.linear_velocity.x
+	for _t in Engine.physics_ticks_per_second:
+		await physics_frame
+		worst = maxf(worst, absf(player.linear_velocity.x - vx))
+		vx = player.linear_velocity.x
+		if gust.is_gusting() or gust.is_warning():
+			failures.append("a long calm reported a gust or warning")
+			break
+	print("      calm: worst per-tick vx change %.3f px/s" % worst)
+	if worst > WIND_CALM_NOISE:
+		failures.append("with no gust active the body's vx still changed %.2f px/s in a tick" % worst)
 	await _teardown(stage)
 	return failures
 
