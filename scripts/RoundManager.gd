@@ -227,7 +227,20 @@ func _init() -> void:
 	_pickup_director = PickupDirectorScript.new(self)
 	add_child(_pickup_director)
 
+const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
+var _replay: Node
+
+## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
+		_replay.save_and_toast()
+		get_viewport().set_input_as_handled()
+
 func _ready() -> void:
+	_replay = ReplayBufferScript.new()
+	_replay.name = "ReplayBuffer"
+	add_child(_replay)
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
 	# editor's Play button (project.godot `editor/run/main_run_args`).
 	_demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_args().has("--demo")
@@ -263,6 +276,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_tick_spawn_protection()
+	_tick_ghosts()
 	_tick_name_tags()
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
@@ -1036,6 +1050,7 @@ func _enter_lobby() -> void:
 	_tick_lobby()
 
 func _enter_victory() -> void:
+	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
 	_state = State.VICTORY
 	_clear_stage()
@@ -1642,12 +1657,22 @@ func kill_feed() -> Control:
 func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
+## Where the per-match balance tallies are appended (issue #316).
+var balance_log_path: String = "user://balance_stats.jsonl"
+
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	var victim_slot: int = _players.find(victim)
 	# Issue #311: a teammate never earns the KO for a teammate's death.
 	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
 		return
-	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec())
+	var weapon: String = ""
+	var real: bool = true
+	if amount > 0.0 and attacker_slot >= 0 and attacker_slot < _players.size() and _players[attacker_slot] != null:
+		var stats: Variant = _players[attacker_slot].get("weapon_stats")
+		if stats != null and stats.resource_path != "":
+			weapon = stats.resource_path.get_file().get_basename()
+		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
+	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _pending_kos.is_empty():
@@ -1816,3 +1841,46 @@ func _end_game_mode() -> void:
 		_game_mode_node.end_round()
 		_game_mode_node.queue_free()
 		_game_mode_node = null
+
+# --- Ghosts of KO'd players (issue #324) ---------------------------------------
+
+const GhostScript := preload("res://scripts/Ghost.gd")
+## slot -> its Ghost node, for human players knocked out this round.
+var _ghosts: Dictionary = {}
+
+## The ghost for `slot`, or null.
+func ghost_of(slot: int) -> Node2D:
+	return _ghosts.get(slot) as Node2D
+
+## A knocked-out human gets a ghost the rest of the round; bots never do.
+## Everything is gone the moment the round is no longer active.
+func _tick_ghosts() -> void:
+	if _state != State.ROUND_ACTIVE or _current_stage == null:
+		if not _ghosts.is_empty():
+			_clear_ghosts()
+		return
+	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
+	for slot in _in_round:
+		var player: Variant = _players[slot]
+		if player == null or player.alive or not claimed.has(slot):
+			continue
+		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		if _ghosts.has(slot) and is_instance_valid(_ghosts[slot]):
+			continue
+		var view: Rect2
+		if _current_stage.has_method("get_view_rect"):
+			view = _current_stage.get_view_rect()
+		else:
+			view = Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+		var ghost: Node2D = GhostScript.new()
+		ghost.name = "Ghost%d" % slot
+		_current_stage.add_child(ghost)
+		ghost.setup(player, slot, player.global_position, view, player.identity_color)
+		_ghosts[slot] = ghost
+
+func _clear_ghosts() -> void:
+	for ghost: Variant in _ghosts.values():
+		if is_instance_valid(ghost):
+			(ghost as Node).queue_free()
+	_ghosts.clear()
