@@ -419,6 +419,22 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_hitstop_restores_and_does_not_desync",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"remote_client_join_entry_in_lobby",
+	"remote_client_joins_host_and_takes_a_slot",
+	"remote_client_mouse_moves_player",
+	"remote_client_sensitivity_scales_the_vector",
+	"remote_client_puppets_track_host",
+	"remote_client_deltas_apply_onto_last_full_snapshot",
+	"remote_client_renders_stage_projectiles_and_pickups",
+	"remote_client_interpolates_100ms_behind",
+	"remote_client_esc_menu_resume_and_leave",
+	"remote_client_bad_code_returns_to_join",
+	"remote_client_unreachable_relay_returns_to_join",
+	"remote_client_join_timeout_and_cancel",
+	"remote_client_host_leaves_returns_to_join",
+	"remote_client_socket_drop_returns_to_join",
+	"remote_client_kick_and_version_return_to_join",
+	"remote_client_plays_stream_sound_and_music",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1659,6 +1675,38 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"remote_client_join_entry_in_lobby":
+			return await _scenario_remote_client_join_entry_in_lobby()
+		"remote_client_joins_host_and_takes_a_slot":
+			return await _scenario_remote_client_joins_host_and_takes_a_slot()
+		"remote_client_mouse_moves_player":
+			return await _scenario_remote_client_mouse_moves_player()
+		"remote_client_sensitivity_scales_the_vector":
+			return await _scenario_remote_client_sensitivity_scales_the_vector()
+		"remote_client_puppets_track_host":
+			return await _scenario_remote_client_puppets_track_host()
+		"remote_client_deltas_apply_onto_last_full_snapshot":
+			return await _scenario_remote_client_deltas_apply_onto_last_full_snapshot()
+		"remote_client_renders_stage_projectiles_and_pickups":
+			return await _scenario_remote_client_renders_stage_projectiles_and_pickups()
+		"remote_client_interpolates_100ms_behind":
+			return await _scenario_remote_client_interpolates_100ms_behind()
+		"remote_client_esc_menu_resume_and_leave":
+			return await _scenario_remote_client_esc_menu_resume_and_leave()
+		"remote_client_bad_code_returns_to_join":
+			return await _scenario_remote_client_bad_code_returns_to_join()
+		"remote_client_unreachable_relay_returns_to_join":
+			return await _scenario_remote_client_unreachable_relay_returns_to_join()
+		"remote_client_join_timeout_and_cancel":
+			return await _scenario_remote_client_join_timeout_and_cancel()
+		"remote_client_host_leaves_returns_to_join":
+			return await _scenario_remote_client_host_leaves_returns_to_join()
+		"remote_client_socket_drop_returns_to_join":
+			return await _scenario_remote_client_socket_drop_returns_to_join()
+		"remote_client_kick_and_version_return_to_join":
+			return await _scenario_remote_client_kick_and_version_return_to_join()
+		"remote_client_plays_stream_sound_and_music":
+			return await _scenario_remote_client_plays_stream_sound_and_music()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -23560,41 +23608,6 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
-func _scenario_remote_client_scene_loads() -> Array[String]:
-	var failures: Array[String] = []
-	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
-	
-	if RemoteClientScene == null:
-		failures.append("RemoteClient.tscn failed to load")
-		return failures
-	
-	var client = RemoteClientScene.instantiate()
-	if client == null:
-		failures.append("RemoteClient scene failed to instantiate")
-		return failures
-
-	root.add_child(client)
-	await _await_ticks(2)
-	
-	if not client.is_node_ready():
-		failures.append("RemoteClient scene not ready after instantiation")
-	
-	if client.state != client.State.JOINING:
-		failures.append("RemoteClient initial state should be JOINING, got %d" % client.state)
-	
-	if client.websocket != null:
-		failures.append("RemoteClient should not have websocket before joining")
-	
-	var ui_children = client.ui_root.get_child_count()
-	if ui_children < 1:
-		failures.append("RemoteClient UI should have at least 1 child, has %d" % ui_children)
-	
-	client.queue_free()
-	await _await_ticks(1)
-	
-	_scenario_completed = true
-	return failures
-
 # --- Remote seats over the relay (issue #239) ---------------------------------
 
 ## A real ControllerServer (`count` slots) that has gone online to a real in-process
@@ -25847,4 +25860,630 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	return failures
+
+# --- PC client (issue #241) ----------------------------------------------------------
+
+const RemoteClientScene241: PackedScene = preload("res://scenes/RemoteClient.tscn")
+const RemoteClientScript241 := preload("res://scripts/RemoteClient.gd")
+const RcState241 := RemoteClientScript241.State
+const RcKind241 := RemoteClientScript241.PuppetScript.Kind
+
+## A client with nothing saved to disk, pointed at the in-process relay (or `url`).
+func _rc_client_241(rig: Dictionary, url: String = "") -> Node:
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	client.relay_url = url if not url.is_empty() else "ws://127.0.0.1:%d" % _relay_port_next
+	get_root().add_child(client)
+	await process_frame
+	rig["nodes"].append(client)
+	return client
+
+## Main with `bots` bots, online through a real relay. {} on failure.
+func _rc_rig_241(bots: int, failures: Array[String]) -> Dictionary:
+	var built: Dictionary = await _snap_main_251(bots)
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		await _teardown(built["main"])
+		return {}
+	var rig: Dictionary = {"main": built["main"], "server": built["server"], "rm": built["rm"], "relay": relay, "clients": [], "nodes": [], "code": ""}
+	var server: Node = built["server"]
+	if server.go_online("ws://127.0.0.1:%d" % _relay_port_next) != OK or not await _wait_for_239(func() -> bool: return server.is_online()):
+		failures.append("host never came online")
+		await _snap_close_251(rig)
+		return {}
+	rig["code"] = server.online_room_code()
+	return rig
+
+func _rc_close_241(rig: Dictionary) -> void:
+	for node: Node in rig["nodes"]:
+		if is_instance_valid(node):
+			node.queue_free()
+	if rig.has("main"):
+		await _snap_close_251(rig)
+		return
+	if rig.get("relay") != null:
+		_relay_stop(rig["relay"], [])
+	_scenario_completed = true
+	await physics_frame
+
+func _rc_joined_241(rig: Dictionary, client: Node, failures: Array[String], display_name: String = "Tester") -> bool:
+	client.join(rig["code"], display_name)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 5000):
+		failures.append("the client never joined (state %d, '%s')" % [client.state, client.status_text])
+		return false
+	return true
+
+## Readies the client and waits for the host's round to be in play.
+func _rc_start_round_241(rig: Dictionary, client: Node, failures: Array[String]) -> bool:
+	client._ready_button.button_pressed = true
+	var rm: Node = rig["rm"]
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 20000):
+		failures.append("the round never started (state %d)" % int(rm.get("_state")))
+		return false
+	return true
+
+## A client that failed must be on the join screen, idle, with a plain message.
+func _rc_expect_join_screen_241(client: Node, failures: Array[String], what: String, wants: String) -> void:
+	if client.state != RcState241.JOIN:
+		failures.append("%s: state %d, expected the join screen" % [what, client.state])
+	if not client.join_screen_visible():
+		failures.append("%s: the join screen is hidden" % what)
+	if client._socket != null:
+		failures.append("%s: a socket is still open" % what)
+	if client.mouse_captured or client.menu_visible() or client.lobby_visible():
+		failures.append("%s: capture/menu/lobby left over" % what)
+	if client._join_button.disabled:
+		failures.append("%s: the Join button is still disabled" % what)
+	if not wants.is_empty() and not client.status_text.contains(wants):
+		failures.append("%s: message '%s' lacks '%s'" % [what, client.status_text, wants])
+	if client.status_text.contains("[") or client._status_label.text != client.status_text:
+		failures.append("%s: message is not plain Label text ('%s' / '%s')" % [what, client.status_text, client._status_label.text])
+
+func _rc_world_241(stage_id: int, phase: int, p0: Vector2 = Vector2(0, 0), p1: Vector2 = Vector2(100, 0)) -> Dictionary:
+	var players: Array = []
+	for i in 2:
+		var at: Vector2 = p0 if i == 0 else p1
+		players.append({"player_id": i, "body": {"position": at, "rotation": 0.5, "linear_velocity": Vector2.ZERO},
+			"weapon": {"head_position": at + Vector2(60, 0), "head_rotation": 0.0, "head_shape_index": 1},
+			"color": i, "name": "P%d" % i, "team": 0, "damage": 10 * i, "state": 1})
+	return {"is_full_snapshot": true, "stage_id": stage_id, "static_stage_bodies": [], "players": players,
+		"projectiles": [{"projectile_id": 7, "position": Vector2(10, 10), "velocity": Vector2(5, 0), "weapon_type": 5}],
+		"pickups": [{"pickup_id": 9, "position": Vector2(50, -40), "weapon_type": 3}],
+		"flail": {}, "grapple": {}, "modifiers": [], "round_phase": phase, "timer_ms": 0,
+		"scores": {0: 2, 1: 1}, "kill_feed": [{"text": "P0 knocked out P1"}], "kill_zone_height": 800, "announcer_text": "Low gravity"}
+
+func _rc_codec_241(frame: Dictionary) -> Dictionary:
+	return SnapshotScript251.decode(SnapshotScript251.encode(frame))
+
+func _scenario_remote_client_scene_loads() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	if client.state != RcState241.JOIN or client._socket != null:
+		failures.append("a fresh client should sit on the join screen with no socket")
+	if not client.join_screen_visible() or client.lobby_visible() or client.menu_visible():
+		failures.append("only the join screen should show at first")
+	if client._room_edit.max_length != RemoteClientScript241.CODE_LENGTH or client._name_edit.max_length != ControllerServerScript.MAX_NAME_LENGTH:
+		failures.append("room code max_length %d / name max_length %d" % [client._room_edit.max_length, client._name_edit.max_length])
+	client._room_edit.text = "ioab1cde"
+	client._room_edit.text_changed.emit("ioab1cde")
+	if client._room_edit.text != "ABCD":
+		failures.append("typing 'ioab1cde' left '%s' in the code field; I, O, 1 and the fifth letter go" % client._room_edit.text)
+	if RemoteClientScript241.normalize_code("ioab1c") != "ABC" or RemoteClientScript241.code_is_complete("ABC") or not RemoteClientScript241.code_is_complete("ABCD"):
+		failures.append("normalize_code / code_is_complete are wrong")
+	if RemoteClientScript241.CODE_LETTERS.contains("I") or RemoteClientScript241.CODE_LETTERS.contains("O"):
+		failures.append("the code alphabet holds I or O")
+	if RemoteClientScript241.CODE_LETTERS != RelayScript238.CODE_LETTERS or RemoteClientScript241.CODE_LENGTH != RelayScript238.CODE_LENGTH:
+		failures.append("the client's code alphabet differs from the relay's")
+	if client.join("AB", "x") or client.state != RcState241.JOIN or not client.status_text.contains("4-letter"):
+		failures.append("a short code must be refused on the join screen (status '%s')" % client.status_text)
+	if client.relay_url != "ws://127.0.0.1:1":
+		failures.append("relay_url was overwritten")
+	var fresh: Node = RemoteClientScene241.instantiate()
+	fresh.settings_path = ""
+	get_root().add_child(fresh)
+	await process_frame
+	rig["nodes"].append(fresh)
+	if fresh.relay_url != ControllerServerScript.resolve_relay_url(OS.get_cmdline_user_args()):
+		failures.append("the default relay url '%s' is not resolve_relay_url's" % fresh.relay_url)
+	var main_node: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var expected: PackedStringArray = PackedStringArray()
+	for scene: PackedScene in main_node.get_node("RoundManager").stage_scenes:
+		expected.append(scene.resource_path)
+	main_node.free()
+	if RemoteClientScript241.stage_paths() != expected or expected.is_empty():
+		failures.append("stage_paths() is not Main's rotation of %d stages" % expected.size())
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_join_entry_in_lobby() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(0)
+	var server: Node = built["server"]
+	var screen: CanvasLayer = built["rm"].get_node("LobbyLayer")
+	var button: Button = screen.control_button("join")
+	if button == null:
+		failures.append("the lobby screen has no Join online game control")
+	else:
+		screen.refresh_controls()
+		if button.disabled:
+			failures.append("Join online game is disabled with nobody seated")
+		if not ResourceLoader.exists(screen.REMOTE_CLIENT_SCENE) or screen.CONTROL_KEYS.get("join") != KEY_J:
+			failures.append("the join control's scene or key is wrong")
+		server.apply_host_command("pc_seat", true)
+		screen.refresh_controls()
+		if not button.disabled:
+			failures.append("Join online game stays enabled once the host PC is seated; a click would end that match")
+	if ProjectSettings.get_setting("application/run/main_scene") != MAIN_SCENE_PATH:
+		failures.append("the main scene is %s, not Main" % ProjectSettings.get_setting("application/run/main_scene"))
+	await _teardown(built["main"])
+	return failures
+
+func _scenario_remote_client_joins_host_and_takes_a_slot() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	client.join(rig["code"], "Tester")
+	var first_socket: Variant = client._socket
+	if client.state != RcState241.CONNECTING or not client._join_button.disabled or not client._cancel_button.visible:
+		failures.append("a join in progress should disable Join and offer Cancel")
+	if client.join(rig["code"], "Again") or client._socket != first_socket:
+		failures.append("a second Join while connecting must be refused and open no second socket")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 5000):
+		failures.append("the client never joined (state %d, '%s')" % [client.state, client.status_text])
+		await _rc_close_241(rig)
+		return failures
+	await _wait_for_239(func() -> bool: return server.slot_name(client.slot) == "Tester")
+	if client.slot < 0 or not server.slot_has_controller(client.slot) or server.slot_name(client.slot) != "Tester":
+		failures.append("slot %d, controller %s, name '%s'" % [client.slot, server.slot_has_controller(client.slot), server.slot_name(client.slot)])
+	if client.join_screen_visible() or not client.mouse_captured:
+		failures.append("after joining the join screen should be gone and the mouse captured")
+	if not await _wait_for_239(func() -> bool: return client.full_frames_applied > 0, 3000):
+		failures.append("no full snapshot reached the client after it bound")
+	if not await _wait_for_239(func() -> bool: return client.input_frames_sent > 10):
+		failures.append("the client sends no input frames while idle (the host would time its seat out)")
+	if not await _wait_for_239(func() -> bool: return client.lobby_visible()):
+		failures.append("the lobby panel never showed (lobby %s)" % [client.lobby])
+	elif client._host_row.visible != (client.slot == int(client.lobby.get("host", -1))):
+		failures.append("the host menu shows for slot %d but the host is %s" % [client.slot, client.lobby.get("host")])
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_mouse_moves_player() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	client.mouse_motion(Vector2(4000, 0))
+	if not await _await_condition(func() -> bool: return player.input_vector.x > 0.9, 3000, true):
+		failures.append("host-side input after a rightward mouse sweep is %s" % player.input_vector)
+	elif absf(player.input_vector.y) > 0.1:
+		failures.append("a horizontal sweep produced y %.2f" % player.input_vector.y)
+	client.mouse_motion(Vector2(-8000, 0))
+	if not await _await_condition(func() -> bool: return player.input_vector.x < -0.9, 3000, true):
+		failures.append("reversing the mouse did not reverse the input at once (%s)" % player.input_vector)
+	client.mouse_motion(Vector2(8000, 4000))
+	if not await _await_condition(func() -> bool: return player.input_vector.y > 0.3 and player.input_vector.x > player.input_vector.y, 3000, true):
+		failures.append("a down-right sweep gave %s" % player.input_vector)
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_sensitivity_scales_the_vector() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.set_sensitivity(1.0)
+	client.mouse_motion(Vector2(10, 0))
+	var base: float = client.input_vector.x
+	client._mouse.reset()
+	client.set_sensitivity(2.0)
+	client.mouse_motion(Vector2(10, 0))
+	var doubled: float = client.input_vector.x
+	if base <= 0.0 or absf(doubled / base - 2.0) > 0.01:
+		failures.append("sensitivity 2 gave %.4f against %.4f at 1" % [doubled, base])
+	client.mouse_motion(Vector2(100000, 0))
+	if client.input_vector.length() > 1.0001:
+		failures.append("the vector left the unit disc: %s" % client.input_vector)
+	client.set_sensitivity(1000.0)
+	if client.sensitivity() > 5.0:
+		failures.append("sensitivity is not clamped (%f)" % client.sensitivity())
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_puppets_track_host() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var in_round: Array = rm.get("_in_round").duplicate()
+	var history: Array = [] # [wall msec, {slot: Vector2}]
+	var end: int = Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < end:
+		await physics_frame
+		var at: Dictionary = {}
+		for slot: int in in_round:
+			at[slot] = (server.player_in_slot(slot) as RigidBody2D).global_position
+		history.append([Time.get_ticks_msec(), at])
+	var players_drawn: int = client.puppet_count(RcKind241.PLAYER)
+	if players_drawn != in_round.size() or in_round.size() != 8:
+		failures.append("%d puppets for a round of %d players" % [players_drawn, in_round.size()])
+	var worst: float = 0.0
+	for slot: int in in_round:
+		var puppet: Node2D = client.player_puppet(slot)
+		if puppet == null:
+			failures.append("no puppet for slot %d" % slot)
+			continue
+		var nearest: float = INF
+		for entry: Array in history:
+			if Time.get_ticks_msec() - int(entry[0]) <= 1000:
+				nearest = minf(nearest, puppet.position.distance_to(entry[1][slot]))
+		worst = maxf(worst, nearest)
+		if nearest > 20.0:
+			failures.append("the puppet of slot %d is %.1f px from anywhere the host player was in the last second" % [slot, nearest])
+	print("      worst puppet distance from the host's recent path: %.2f px (tolerance 20)" % worst)
+	var stage_now: int = int(rm.get("_stage_rotation").stage_index)
+	if not client.has_stage() or client.stage_id() != stage_now:
+		failures.append("client stage %d, host stage %d" % [client.stage_id(), stage_now])
+	if client.frames_applied <= client.full_frames_applied + 5 or client.full_frames_applied < 1:
+		failures.append("%d frames applied, %d of them full: deltas are not arriving" % [client.frames_applied, client.full_frames_applied])
+	var world: Dictionary = client.world()
+	for key: String in ["players", "projectiles", "pickups"]:
+		if not world.has(key):
+			failures.append("the client's world lost its '%s' after deltas" % key)
+	if world.get("players", []).size() != 8:
+		failures.append("world holds %d players after deltas" % world.get("players", []).size())
+	var live_scores: Dictionary = world.get("scores", {})
+	for slot: int in in_round:
+		if int(live_scores.get(slot, -1)) != rm.score_of(slot):
+			failures.append("score of slot %d: client %s, host %d" % [slot, live_scores.get(slot), rm.score_of(slot)])
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_deltas_apply_onto_last_full_snapshot() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var base: Dictionary = _rc_world_241(0, 1)
+	client.apply_snapshot(_rc_codec_241(base))
+	if client.frames_applied != 1 or client.world().is_empty():
+		failures.append("the first full snapshot was not applied")
+	var moved: Dictionary = _rc_world_241(0, 1, Vector2(30, 5))
+	moved["scores"] = {0: 3, 1: 1}
+	var delta: Dictionary = _rc_codec_241(SnapshotCaptureScript251.delta(moved, base))
+	if delta.get("is_full_snapshot", true):
+		failures.append("the fixture delta decoded as a full snapshot")
+	client.apply_snapshot(delta)
+	var world: Dictionary = client.world()
+	if world["players"].size() != 2 or world["projectiles"].size() != 1 or world["pickups"].size() != 1:
+		failures.append("a delta replaced the world: %d players, %d projectiles, %d pickups" % [world["players"].size(), world["projectiles"].size(), world["pickups"].size()])
+	else:
+		if world["players"][0]["body"]["position"] != Vector2(30, 5) or world["players"][0]["weapon"]["head_position"] != Vector2(90, 5):
+			failures.append("the delta did not move player 0 (%s)" % [world["players"][0]])
+		if world["players"][1]["body"]["position"] != Vector2(100, 0) or world["players"][1]["name"] != "P1":
+			failures.append("the delta disturbed player 1 (%s)" % [world["players"][1]])
+		if world["players"][0]["name"] != "P0" or world["players"][0]["color"] != 0:
+			failures.append("the delta dropped player 0's name or colour")
+	if int(world["scores"].get(0, -1)) != 3 or int(world["scores"].get(1, -1)) != 1:
+		failures.append("scores %s after a delta that changed player 0's to 3" % [world["scores"]])
+	if world["kill_feed"].size() != 1 or world["announcer_text"] != "Low gravity" or world["stage_id"] != 0:
+		failures.append("a delta dropped the full snapshot's kill feed, announcer or stage")
+	# A delta naming a player the full never held changes nothing.
+	client.apply_snapshot({"is_full_snapshot": false, "delta_entities": [{"type": SnapshotScript251.TYPE_PLAYER, "id": 77, "position": Vector2.ZERO}]})
+	if client.world()["players"].size() != 2:
+		failures.append("a delta for an unknown player added or removed one")
+	# A delta before any full snapshot has nothing to apply to.
+	var other: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	other.apply_snapshot(delta)
+	if other.frames_applied != 0 or not other.world().is_empty():
+		failures.append("a delta with no full snapshot before it was applied")
+	# Malformed bytes are dropped, never thrown.
+	other.receive_snapshot_packet(PackedByteArray())
+	other.receive_snapshot_packet(PackedByteArray([0]))
+	if other.frames_applied != 0:
+		failures.append("empty or 1-byte packets were applied")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_renders_stage_projectiles_and_pickups() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var paths: PackedStringArray = RemoteClientScript241.stage_paths()
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1)))
+	client._render()
+	if not client.has_stage() or client.stage_id() != 0 or client._stage_holder.get_child_count() != 1 or client._stage_holder.get_child(0).scene_file_path != paths[0]:
+		failures.append("stage 0 was not loaded from the snapshot")
+	var counts: Array[int] = [client.puppet_count(RcKind241.PLAYER), client.puppet_count(RcKind241.PROJECTILE), client.puppet_count(RcKind241.PICKUP)]
+	if counts != [2, 1, 1]:
+		failures.append("puppets (players, projectiles, pickups): %s, expected [2, 1, 1]" % [counts])
+	var pickup: Node2D = client._puppets.get("pick9")
+	if pickup == null or pickup.label != RemoteClientScript241._weapon_name(3) or pickup.label.is_empty():
+		failures.append("pickup puppet label is '%s'" % [pickup.label if pickup != null else "<none>"])
+	var puppet: Node2D = client.player_puppet(1)
+	if puppet == null or puppet.position != Vector2(100, 0) or puppet.damage != 10 or puppet.label != "P1":
+		failures.append("player 1 puppet is wrong")
+	if client._stage != null and client._camera.global_position.distance_to(client._stage.get_view_rect().get_center()) > 1.0:
+		failures.append("the camera does not frame the stage (at %s)" % client._camera.global_position)
+	var hud_text: String = client._feed_label.text + client._banner_label.text
+	if not hud_text.contains("knocked out") or not hud_text.contains("Low gravity") or client._score_box.get_child_count() != 2:
+		failures.append("HUD shows feed/banner '%s' and %d score rows" % [hud_text, client._score_box.get_child_count()])
+	var first_stage: Node = client._stage
+	var other_index: int = mini(3, paths.size() - 1)
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(other_index, 1)))
+	await process_frame
+	if client.stage_id() != other_index or client._stage_holder.get_child_count() != 1 or client._stage_holder.get_child(0).scene_file_path != paths[other_index] or (is_instance_valid(first_stage) and first_stage.is_inside_tree()):
+		failures.append("a new stage_id did not swap the stage (now %d, %d children)" % [client.stage_id(), client._stage_holder.get_child_count()])
+	# Outside a round (the lobby), the stage and puppets go.
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(other_index, 0)))
+	client._render()
+	await process_frame
+	if client.has_stage() or client._stage_holder.get_child_count() != 0 or client.puppet_count(RcKind241.PLAYER) != 0:
+		failures.append("the stage or puppets stayed on screen outside a round")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_interpolates_100ms_behind() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var base: Dictionary = _rc_world_241(0, 1, Vector2(0, 0))
+	client.apply_snapshot(_rc_codec_241(base))
+	var wait_until: int = Time.get_ticks_msec() + 200
+	while Time.get_ticks_msec() < wait_until:
+		await process_frame
+	var moved: Dictionary = _rc_world_241(0, 1, Vector2(100, 0))
+	client.apply_snapshot(_rc_codec_241(SnapshotCaptureScript251.delta(moved, base)))
+	if client._samples.size() != 2:
+		failures.append("expected two samples, have %d" % client._samples.size())
+		await _rc_close_241(rig)
+		return failures
+	var t_a: int = client._samples[0]["t"]
+	var t_b: int = client._samples[1]["t"]
+	var between: int = 0
+	for _i in 4:
+		var wait_more: int = Time.get_ticks_msec() + 15
+		while Time.get_ticks_msec() < wait_more:
+			await process_frame
+		var now: int = Time.get_ticks_msec()
+		client._render()
+		var want: float = clampf(float(now - RemoteClientScript241.INTERP_MSEC - t_a) / float(t_b - t_a), 0.0, 1.0) * 100.0
+		var got: float = client.player_puppet(0).position.x
+		if want > 5.0 and want < 95.0:
+			between += 1
+		if absf(got - want) > 8.0:
+			failures.append("rendered x %.1f, expected %.1f from the 100 ms-late blend" % [got, want])
+	if between == 0:
+		failures.append("no render fell between the two samples, so interpolation was not exercised")
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1, Vector2(900, 0))))
+	client._render()
+	if client.player_puppet(0).position != Vector2(900, 0):
+		failures.append("a full snapshot must snap the puppet, not glide it (x %.1f)" % client.player_puppet(0).position.x)
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_esc_menu_resume_and_leave() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	var player: RigidBody2D = server.player_in_slot(slot) as RigidBody2D
+	client.mouse_motion(Vector2(4000, 0))
+	await _await_condition(func() -> bool: return player.input_vector.x > 0.9, 3000, true)
+	client.toggle_menu()
+	if not client.menu_visible() or client.mouse_captured or client.input_vector != Vector2.ZERO:
+		failures.append("Esc should show the menu, free the mouse and clear the vector")
+	var sent: int = client.input_frames_sent
+	if not await _await_condition(func() -> bool: return player.input_vector == Vector2.ZERO and client.input_frames_sent > sent + 5, 3000, true):
+		failures.append("in the menu the host should read (0,0) from a seat that keeps sending (input %s)" % player.input_vector)
+	client.mouse_motion(Vector2(4000, 0))
+	client.resume()
+	if client.menu_visible() or not client.mouse_captured:
+		failures.append("Resume should hide the menu and recapture the mouse")
+	client.toggle_menu()
+	client.leave()
+	_rc_expect_join_screen_241(client, failures, "Leave", "")
+	if not await _wait_for_239(func() -> bool: return not server.slot_has_controller(slot)):
+		failures.append("the host still holds a controller on slot %d after Leave" % slot)
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_bad_code_returns_to_join() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var rig: Dictionary = {"nodes": [], "relay": relay}
+	var client: Node = await _rc_client_241(rig)
+	client.join("ZZZZ", "Tester")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN and not client.status_text.is_empty()):
+		failures.append("a code with no room never returned to the join screen (state %d, '%s')" % [client.state, client.status_text])
+	_rc_expect_join_screen_241(client, failures, "bad code", "No room")
+	if not client.join("ZZZZ", "Tester"):
+		failures.append("after a failure Join must work again")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_unreachable_relay_returns_to_join() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:%d" % (_relay_port_next + 900))
+	client.join_timeout_msec = 3000
+	client.join("ABCD", "Tester")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN and not client.status_text.is_empty(), 6000):
+		failures.append("an unreachable relay never returned to the join screen (state %d)" % client.state)
+	_rc_expect_join_screen_241(client, failures, "unreachable relay", "Could not reach")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_join_timeout_and_cancel() -> Array[String]:
+	var failures: Array[String] = []
+	# A listener that never speaks WebSocket: the connect succeeds, nothing answers.
+	var silent := TCPServer.new()
+	var port: int = _relay_port_next + 1300
+	while silent.listen(port) != OK and port < _relay_port_next + 1400:
+		port += 1
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:%d" % port)
+	client.join_timeout_msec = 700
+	client.join("ABCD", "Tester")
+	if client.state != RcState241.CONNECTING:
+		failures.append("the join did not start")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("a join the relay never answers did not time out")
+	_rc_expect_join_screen_241(client, failures, "no handshake", "Could not reach")
+	# A room whose host never answers the hello: joined, then timed out waiting.
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+	else:
+		rig["relay"] = relay
+		var raw: Array = []
+		var host: WebSocketPeer = await _relay_connect({"t": "host"}, raw)
+		var room: Dictionary = await _relay_next(host, raw) if host != null else {}
+		if room.get("t") != "room":
+			failures.append("the fake host got no room: %s" % [room])
+		else:
+			client.relay_url = "ws://127.0.0.1:%d" % _relay_port_next
+			client.join_timeout_msec = 1200
+			client.join(str(room["code"]), "Tester")
+			if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+				failures.append("a join the host never answers did not time out")
+			_rc_expect_join_screen_241(client, failures, "silent host", "Timed out")
+		for peer: WebSocketPeer in raw:
+			peer.close()
+	client.join_timeout_msec = 60000
+	client.relay_url = "ws://127.0.0.1:%d" % port
+	client.join("ABCD", "Tester")
+	await _await_ticks(5)
+	client.cancel()
+	_rc_expect_join_screen_241(client, failures, "cancel", "")
+	if not client.join("ABCD", "Tester"):
+		failures.append("Join must be possible again after Cancel")
+	client.cancel()
+	silent.stop()
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_host_leaves_returns_to_join() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	rig["server"].go_offline()
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("the client stayed in the match after the host left")
+	_rc_expect_join_screen_241(client, failures, "host left", "Host left")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_socket_drop_returns_to_join() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	client._socket.close(4001, "test drop")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("a dropped socket left the client in the match")
+	_rc_expect_join_screen_241(client, failures, "socket drop", "Lost the connection")
+	var client2: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client2, failures):
+		await _rc_close_241(rig)
+		return failures
+	rig["relay"].stop()
+	if not await _wait_for_239(func() -> bool: return client2.state == RcState241.JOIN, 4000):
+		failures.append("a relay that went away left the client in the match")
+	_rc_expect_join_screen_241(client2, failures, "relay gone", "")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_kick_and_version_return_to_join() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	# The first to join is the room's host, whom `kick` refuses: kick a second seat.
+	var second: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, second, failures, "Second"):
+		await _rc_close_241(rig)
+		return failures
+	if not server.kick(second.slot):
+		failures.append("the host refused to kick slot %d" % second.slot)
+	if not await _wait_for_239(func() -> bool: return second.state == RcState241.JOIN, 4000):
+		failures.append("a kicked client stayed in the match")
+	_rc_expect_join_screen_241(second, failures, "kick", "removed")
+	if client.state != RcState241.PLAYING:
+		failures.append("kicking the second seat dropped the first")
+	var old: Node = await _rc_client_241(rig)
+	old.protocol_version = 99
+	old.itch_url = "https://example.test/pickfight"
+	old.join(rig["code"], "Old")
+	if not await _wait_for_239(func() -> bool: return old.state == RcState241.JOIN and not old.status_text.is_empty(), 4000):
+		failures.append("a protocol mismatch never returned to the join screen")
+	_rc_expect_join_screen_241(old, failures, "version mismatch", "Update your game")
+	if not old._update_link.visible or old._update_link.uri != "https://example.test/pickfight":
+		failures.append("the update link is not offered on a version mismatch")
+	await _rc_close_241(rig)
+	return failures
+
+func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var packet: PackedByteArray = SnapshotScript251.encode(_rc_world_241(0, 1))
+	packet.append_array(SnapshotCaptureScript251.encode_sound_trailer([
+		{"name": "hit", "position": Vector2(10, 20), "strength": 0.5},
+		{"name": "eliminated", "position": null, "strength": 1.0}], "lobby"))
+	client.receive_snapshot_packet(packet)
+	if client.frames_applied != 1:
+		failures.append("a snapshot with a sound trailer was not applied (%d frames)" % client.frames_applied)
+	if client.sounds_played != ["hit", "eliminated"]:
+		failures.append("sounds heard: %s, expected [hit, eliminated]" % [client.sounds_played])
+	if client.last_track != "lobby":
+		failures.append("the host's track '%s' was not followed" % client.last_track)
+	var silent: PackedByteArray = SnapshotScript251.encode(_rc_world_241(0, 1))
+	silent.append_array(SnapshotCaptureScript251.encode_sound_trailer([], ""))
+	client.receive_snapshot_packet(silent)
+	if client.last_track != "" or client.sounds_played.size() != 2:
+		failures.append("an empty trailer should stop the music and add no sounds (track '%s')" % client.last_track)
+	var bare: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	bare.receive_snapshot_packet(SnapshotScript251.encode(_rc_world_241(0, 1)))
+	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
+		failures.append("a snapshot with no trailer should apply and play nothing")
+	await _rc_close_241(rig)
 	return failures
