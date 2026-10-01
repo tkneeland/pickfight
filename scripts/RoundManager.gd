@@ -1185,6 +1185,7 @@ func _screen() -> CanvasLayer:
 
 func _build_lobby_ui() -> void:
 	_screen().build_panels()
+	_lobby_screen.attach_controls(_controller_server)
 
 ## The in-round join corner (issue #230) is hidden while the lobby, countdown
 ## or victory screen is up -- they show their own big QR and URL, and the
