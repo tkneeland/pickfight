@@ -549,6 +549,7 @@ func _process(delta: float) -> void:
 	_process_websocket()
 	_process_remote()
 	_check_host_pc_seat()
+	_stream_snapshots(delta)
 	if host_slot() != _last_host:
 		_last_host = host_slot()
 		host_changed.emit(_last_host)
@@ -782,6 +783,9 @@ func _process_websocket() -> void:
 		peer.poll()
 		if peer is LocalSeat:
 			# No socket to go silent: the host PC's seat never times out.
+			_slot_last_packet_msec[slot] = now
+		elif peer is RemoteSeat and relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
+			# The host's own link is down, not the player's: pause the clock (#249).
 			_slot_last_packet_msec[slot] = now
 		var state: int = peer.get_ready_state()
 		if state == WebSocketPeer.STATE_OPEN:
@@ -1629,7 +1633,10 @@ func _process_remote() -> void:
 		if not _remote_seats[peer].open:
 			_remote_seats.erase(peer)
 	var now: int = Time.get_ticks_msec()
+	var reconnecting: bool = relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING
 	for seat: RemoteSeat in _remote_awaiting.duplicate():
+		if reconnecting:
+			seat.deadline_msec = now + int(connection_timeout_sec * 1000.0)
 		if not seat.open:
 			_remote_awaiting.erase(seat)
 			continue
@@ -1747,17 +1754,28 @@ func online_status() -> String:
 	match relay_link.link_state():
 		"online":
 			return "online"
-		"connecting":
+		"connecting", "reconnecting":
 			return "connecting"
 	return "unreachable"
 
-func _on_room_code_changed(code: String) -> void:
-	var label: Label = join_label()
-	if label != null:
-		label.text = _join_label_base if code.is_empty() else "%s\nOnline: %s" % [_join_label_base, code]
+func _on_room_code_changed(_code: String) -> void:
+	_refresh_join_label()
 	_send_lobby_to_all()
 
+func _refresh_join_label() -> void:
+	var label: Label = join_label()
+	var code: String = relay_link.room_code()
+	if label == null:
+		return
+	if code.is_empty():
+		label.text = _join_label_base
+	elif relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
+		label.text = "%s\nOnline: %s (reconnecting...)" % [_join_label_base, code]
+	else:
+		label.text = "%s\nOnline: %s" % [_join_label_base, code]
+
 func _on_link_state_changed(_state: String) -> void:
+	_refresh_join_label()
 	_send_lobby_to_all()
 
 ## The slot the host PC's own seat holds, or -1 when "Play on this PC" is off.
@@ -1852,3 +1870,81 @@ func _update_mouse_capture() -> void:
 	if not want and _host_pc_slot != -1:
 		_smoothers[_host_pc_slot].push(Vector2.ZERO)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if want else Input.MOUSE_MODE_VISIBLE
+
+# --- Snapshot stream to remote seats (issue #251) ----------------------------
+
+const SnapshotScript: GDScript = preload("res://scripts/Snapshot.gd")
+const SnapshotCaptureScript: GDScript = preload("res://scripts/SnapshotCapture.gd")
+const SNAPSHOT_HZ: float = 30.0
+## A full snapshot every this many frames (about a second); deltas between.
+const SNAPSHOT_FULL_EVERY: int = 30
+
+## Frames sent since the first of this stream (diagnostic, for scenarios).
+var snapshot_frames_sent: int = 0
+var _snapshot_accum: float = 0.0
+var _snapshot_frame: int = 0
+var _snapshot_bound: Dictionary = {} # RemoteSeat -> true, the seats already sent a full frame
+var _snapshot_previous: Dictionary = {}
+
+## Streams the world to the remote seats at 30 Hz while at least one is bound;
+## a seat that just bound gets a full snapshot at once. Captures nothing, and
+## costs one loop over the seats, when none is bound.
+func _stream_snapshots(delta: float) -> void:
+	var bound: Array = []
+	for seat: RemoteSeat in _remote_seats.values():
+		if seat.open and _slot_peers.has(seat):
+			bound.append(seat)
+	if bound.is_empty():
+		_snapshot_bound.clear()
+		_snapshot_accum = 0.0
+		_snapshot_frame = 0
+		_listen_for_sounds(false)
+		return
+	_listen_for_sounds(true)
+	var fresh: bool = false
+	for seat: RemoteSeat in bound:
+		fresh = fresh or not _snapshot_bound.has(seat)
+	_snapshot_bound.clear()
+	for seat: RemoteSeat in bound:
+		_snapshot_bound[seat] = true
+	_snapshot_accum = minf(_snapshot_accum + delta, 2.0 / SNAPSHOT_HZ)
+	if not fresh and _snapshot_accum < 1.0 / SNAPSHOT_HZ:
+		return
+	_snapshot_accum = maxf(0.0, _snapshot_accum - 1.0 / SNAPSHOT_HZ)
+	var round_manager: Node = get_parent().get_node_or_null("RoundManager") if get_parent() != null else null
+	if round_manager == null or not round_manager.has_method("score_of"):
+		return
+	var world: Dictionary = SnapshotCaptureScript.capture(round_manager)
+	var full: bool = fresh or _snapshot_frame % SNAPSHOT_FULL_EVERY == 0
+	var frame: Dictionary = world if full else SnapshotCaptureScript.delta(world, _snapshot_previous)
+	_snapshot_previous = world
+	_snapshot_frame = 1 if full else _snapshot_frame + 1
+	var payload: PackedByteArray = SnapshotScript.encode(frame)
+	payload.append_array(SnapshotCaptureScript.encode_sound_trailer(_snapshot_sounds, _music_track()))
+	_snapshot_sounds.clear()
+	relay_link.send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
+	snapshot_frames_sent += 1
+
+var _snapshot_sounds: Array = [] # sounds played since the last frame (see SnapshotCapture's trailer)
+var _sound_source: Node = null
+
+## Records the Sfx autoload's plays while a remote seat is bound, and only then.
+func _listen_for_sounds(on: bool) -> void:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx == null or on == (_sound_source != null):
+		return
+	if on:
+		sfx.played.connect(_on_sound_played)
+		_sound_source = sfx
+	else:
+		sfx.played.disconnect(_on_sound_played)
+		_sound_source = null
+		_snapshot_sounds.clear()
+
+func _on_sound_played(sound: StringName, position: Variant, strength: float) -> void:
+	if _snapshot_sounds.size() < SnapshotCaptureScript.MAX_SOUND_EVENTS:
+		_snapshot_sounds.append({"name": String(sound), "position": position, "strength": strength})
+
+func _music_track() -> String:
+	var music: Node = get_node_or_null("/root/Music")
+	return music.current_track() if music != null else ""

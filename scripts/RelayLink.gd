@@ -11,11 +11,17 @@ extends Node
 ## Envelope kinds (the first payload byte).
 const KIND_INPUT: int = 0
 const KIND_TEXT: int = 1
+## Host to clients: one world snapshot frame (`Snapshot.gd`), issue #251.
+const KIND_SNAPSHOT: int = 2
 ## Link states, as `link_state_changed` reports them.
 const STATE_OFFLINE: String = "offline"
 const STATE_CONNECTING: String = "connecting"
 const STATE_ONLINE: String = "online"
 const STATE_ERROR: String = "error"
+## The socket dropped and the host is reclaiming its room (issue #249).
+const STATE_RECONNECTING: String = "reconnecting"
+## Seconds between reclaim attempts; the last repeats until the window ends.
+const RECONNECT_BACKOFF_SEC: Array[float] = [0.5, 1.0, 2.0, 4.0]
 
 ## The relay gave the host a (new) room code; "" when the room is gone.
 signal room_code_changed(code: String)
@@ -32,27 +38,48 @@ var _state: String = STATE_OFFLINE
 var _room_code: String = ""
 var _peers: Dictionary = {} # relay peer id (int) -> true
 var _sent_host: bool = false
+var _url: String = ""
+## The secret the relay gave with the room; proves this host may reclaim it.
+var _token: String = ""
+## How long the host keeps trying to reclaim; matches the relay's host_grace_sec.
+var host_grace_sec: float = 15.0
+var _reconnect_deadline_msec: int = 0
+var _next_attempt_msec: int = 0
+var _attempt: int = 0
 
 ## Connects to the relay at `url` (ws://host:port); returns an Error code.
 ## Online once the relay answers with the room code.
 func go_online(url: String) -> int:
 	go_offline()
-	var socket := WebSocketPeer.new()
-	socket.inbound_buffer_size = 1 << 18
-	var err: int = socket.connect_to_url(url)
+	_url = url
+	var err: int = _open_socket()
 	if err != OK:
 		_set_state(STATE_ERROR)
 		return err
-	_socket = socket
-	_sent_host = false
 	_set_state(STATE_CONNECTING)
 	return OK
+
+func _open_socket() -> int:
+	var socket := WebSocketPeer.new()
+	socket.inbound_buffer_size = 1 << 18
+	var err: int = socket.connect_to_url(_url)
+	if err != OK:
+		return err
+	_socket = socket
+	_sent_host = false
+	return OK
+
+## Test hook: kills only this host's socket, as a network blip would.
+func drop_socket_for_test() -> void:
+	if _socket != null:
+		_socket.close(4001, "test drop")
 
 ## Hangs up; every remote client is reported gone.
 func go_offline() -> void:
 	if _socket != null:
 		_socket.close()
 		_socket = null
+	_token = ""
 	_drop_room()
 	_set_state(STATE_OFFLINE)
 
@@ -84,6 +111,14 @@ func send_text_to(peer: int, text: String) -> void:
 	send_to(peer, KIND_TEXT, text.to_utf8_buffer())
 
 func _process(_delta: float) -> void:
+	if _state == STATE_RECONNECTING:
+		var now: int = Time.get_ticks_msec()
+		if now > _reconnect_deadline_msec:
+			_give_up()
+			return
+		if _socket == null and now >= _next_attempt_msec:
+			if _open_socket() != OK:
+				_schedule_attempt()
 	if _socket == null:
 		return
 	_socket.poll()
@@ -91,7 +126,11 @@ func _process(_delta: float) -> void:
 	if ready_state == WebSocketPeer.STATE_OPEN:
 		if not _sent_host:
 			_sent_host = true
-			_socket.send_text(JSON.stringify({"t": "host"}))
+			var hello: Dictionary = {"t": "host"}
+			if _state == STATE_RECONNECTING:
+				hello["room"] = _room_code
+				hello["token"] = _token
+			_socket.send_text(JSON.stringify(hello))
 		while _socket != null and _socket.get_available_packet_count() > 0:
 			var pkt: PackedByteArray = _socket.get_packet()
 			if _socket.was_string_packet():
@@ -100,8 +139,33 @@ func _process(_delta: float) -> void:
 				_handle_frame(pkt)
 	elif ready_state == WebSocketPeer.STATE_CLOSED:
 		_socket = null
-		_drop_room()
-		_set_state(STATE_ERROR)
+		if _state == STATE_ONLINE and _token != "":
+			_state_reconnecting()
+		elif _state == STATE_RECONNECTING:
+			_schedule_attempt()
+		else:
+			_drop_room()
+			_set_state(STATE_ERROR)
+
+func _state_reconnecting() -> void:
+	_reconnect_deadline_msec = Time.get_ticks_msec() + int(host_grace_sec * 1000.0)
+	_attempt = -1
+	_set_state(STATE_RECONNECTING)
+	_schedule_attempt()
+
+func _schedule_attempt() -> void:
+	_attempt += 1
+	var delay: float = RECONNECT_BACKOFF_SEC[mini(_attempt, RECONNECT_BACKOFF_SEC.size() - 1)]
+	_next_attempt_msec = Time.get_ticks_msec() + int(delay * 1000.0)
+
+## The grace window ran out: today's behaviour, the room is gone.
+func _give_up() -> void:
+	if _socket != null:
+		_socket.close()
+		_socket = null
+	_token = ""
+	_drop_room()
+	_set_state(STATE_ERROR)
 
 func _handle_control(text: String) -> void:
 	var json := JSON.new()
@@ -110,8 +174,23 @@ func _handle_control(text: String) -> void:
 	var msg: Dictionary = json.data
 	match str(msg.get("t", "")):
 		"room":
-			_room_code = str(msg.get("code", ""))
-			room_code_changed.emit(_room_code)
+			var code: String = str(msg.get("code", ""))
+			_token = str(msg.get("token", ""))
+			if _state == STATE_RECONNECTING and code == _room_code:
+				# Reclaimed: keep the peers the relay still lists, drop the rest.
+				var still: Array = msg.get("peers", [])
+				for id: int in _peers.keys():
+					if not still.has(id) and not still.has(float(id)):
+						_peers.erase(id)
+						peer_left.emit(id)
+			else:
+				if _state == STATE_RECONNECTING:
+					# A fresh room: the old one is gone with everyone in it.
+					for id: int in _peers.keys():
+						peer_left.emit(id)
+					_peers.clear()
+				_room_code = code
+				room_code_changed.emit(_room_code)
 			_set_state(STATE_ONLINE)
 		"joined":
 			var id: int = int(msg.get("peer", 0))
@@ -126,6 +205,7 @@ func _handle_control(text: String) -> void:
 			if _socket != null:
 				_socket.close()
 				_socket = null
+			_token = ""
 			_drop_room()
 			_set_state(STATE_ERROR)
 
