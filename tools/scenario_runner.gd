@@ -480,6 +480,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"pickups_skip_occupied_spots",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1843,6 +1844,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"pickups_skip_occupied_spots":
+			return await _scenario_pickups_skip_occupied_spots()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -28181,5 +28184,50 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 	if empty.get("status") != 400:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+## Issue #333: a pickup never spawns on a spot a living player is standing on.
+## A lone occupied spot yields nothing, with two the empty one is chosen, and
+## once the player leaves (or dies) the spot is usable again.
+func _scenario_pickups_skip_occupied_spots() -> Array[String]:
+	var failures: Array[String] = []
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("OccupiedStage", spawns, PackedVector2Array([spot_a])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var player := Node2D.new()
+	get_root().add_child(player)
+	player.global_position = spot_a + Vector2(10, 0)
+	rm._players = [player]
+	var director: Node = rm._pickup_director
+	if director.free_spot() != null:
+		failures.append("a spot was offered with a player standing on the only one")
+	var stage2: Node2D = _make_pickup_stub_stage("OccupiedStage2", spawns, PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage2)
+	rm._current_stage = stage2
+	var wrong: int = 0
+	for i in 20:
+		var got: Variant = director.free_spot()
+		if got == null or (got as Vector2).distance_to(spot_b) > 1.0:
+			wrong += 1
+	if wrong > 0:
+		failures.append("%d of 20 draws were not the unoccupied spot" % wrong)
+	player.global_position = spot_a + Vector2(0, -200)
+	var seen_a: bool = false
+	for i in 40:
+		var got: Variant = director.free_spot()
+		if got != null and (got as Vector2).distance_to(spot_a) < 1.0:
+			seen_a = true
+	if not seen_a:
+		failures.append("the spot was not usable again after the player left")
+	rm.free()
+	player.queue_free()
+	await _teardown(stage)
+	await _teardown(stage2)
 	_scenario_completed = true
 	return failures
