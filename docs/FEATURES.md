@@ -35,6 +35,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
 - Parts: bounce pad, wind zone, rotating platform (#52)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
+- Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
 
 ## Match flow and scoring
