@@ -27,6 +27,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
+- Plunger: sticks to players (drag them) and surfaces (hang and swing, never reels you in); a hard yank pops it free (#270)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
