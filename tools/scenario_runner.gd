@@ -693,6 +693,7 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/flail.tres",
 	"res://resources/boomerang.tres",
 	"res://resources/spear.tres",
+	"res://resources/fishing_rod.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -18953,7 +18954,7 @@ func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 func _scenario_fishing_rod_fires_sticks_reels_and_releases() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
-	var ceiling: StaticBody2D = _add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	_add_bar(stage, Vector2(0, 0), Vector2(240, 24))
 	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
 	await _await_ticks(2)
 	var stats: WeaponStatsType = await _equip(player, FISHING_ROD_PATH)
