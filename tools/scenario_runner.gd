@@ -23636,7 +23636,7 @@ func _scenario_pc_client_joins_and_renders() -> Array[String]:
 		failures.append("RemoteClient scene failed to instantiate")
 		return failures
 
-	root.add_child(client)
+	get_root().add_child(client)
 	await _await_ticks(2)
 
 	if not client.is_node_ready():
@@ -23689,7 +23689,7 @@ func _scenario_pc_client_mouse_moves_player() -> Array[String]:
 
 	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
 	var client = RemoteClientScene.instantiate()
-	root.add_child(client)
+	get_root().add_child(client)
 
 	client.relay_url = "ws://127.0.0.1:%d" % _relay_port_next
 	client.room_code = room_code
@@ -23720,7 +23720,7 @@ func _scenario_pc_client_disconnect_returns_to_join() -> Array[String]:
 
 	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
 	var client = RemoteClientScene.instantiate()
-	root.add_child(client)
+	get_root().add_child(client)
 
 	client.relay_url = "ws://localhost:9999"
 	client.room_code = "TEST"
