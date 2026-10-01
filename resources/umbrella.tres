@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The umbrella (issue #269). Closed -- pointed anywhere but up -- it is a short,
+; light poker: low damage, reach under the pickaxe's. Held overhead (aim within
+; about 45 degrees of straight up) the canopy is open, and Player.canopy_open()
+; makes it slow the fall, catch wind zones and turn hits on its face. Those
+; effects live in Player.gd under `special = &"umbrella"`; there is no gust push.
+;
+; The head is a small dome: two circles for the canopy's crown, a third for the
+; ferrule. Head-local space as every other weapon's, +X along the haft.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 150.0
+mass = 0.15
+drive_speed = 36.0
+extend_speed = 900.0
+rest_return_speed = 600.0
+max_drive_force = 7000.0
+damage = 12.0
+sound_set = &"umbrella"
+special = &"umbrella"
+head_circle_offsets = PackedVector2Array(2, 0, 6, -6, 6, 6)
+head_circle_radii = PackedFloat32Array(3, 4, 4)
+art_outline = PackedVector2Array(-2, -4, 1, -11, 11, -11, 11, 11, 1, 11, -2, 4)
