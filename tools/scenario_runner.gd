@@ -447,6 +447,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"bot_stops_before_spikes",
+	"bot_dodges_moving_saw",
+	"bot_braces_for_gust_warning",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1744,6 +1747,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"bot_stops_before_spikes":
+			return await _scenario_bot_stops_before_spikes()
+		"bot_dodges_moving_saw":
+			return await _scenario_bot_dodges_moving_saw()
+		"bot_braces_for_gust_warning":
+			return await _scenario_bot_braces_for_gust_warning()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -26873,4 +26882,93 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
 		failures.append("a snapshot with no trailer should apply and play nothing")
 	await _rc_close_241(rig)
+	return failures
+
+# --- Bots avoid spikes, saws and gusts (issue #313) ---------------------------
+
+## A bot on the arena floor with a rival across a hazard; returns [stage,
+## player, bot]. The bot's output goes straight to the player.
+func _bot313(avoid: bool, bot_x: float, rival_x: float) -> Array:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274))
+	_spawn_player(stage, Vector2(rival_x, 274))
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.avoid_damage_hazards = avoid
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	return [stage, player, bot]
+
+## A bot whose rival is across a row of spikes comes to a stop short of them
+## and takes no hit over ten seconds.
+func _scenario_bot_stops_before_spikes() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var spikes2: Area2D = SpikesScene.instantiate() as Area2D
+	spikes2.position = Vector2(0, 286)
+	made[0].get_child(0).add_child(spikes2)  # beside the lava, where stages put parts
+	var player: RigidBody2D = made[1]
+	var max_x: float = -INF
+	for tick in 600:
+		await physics_frame
+		max_x = maxf(max_x, player.global_position.x)
+	print("      bot got as far as x=%.0f, spikes hit %d times, damage %.0f" % [max_x, spikes2.hit_count(), player.damage])
+	if spikes2.hit_count() > 0:
+		failures.append("the bot walked into the spikes %d times" % spikes2.hit_count())
+	if max_x > -spikes2.size.x * 0.5:
+		failures.append("the bot reached x=%.0f, past the spikes' left edge" % max_x)
+	await _teardown(made[0])
+	return failures
+
+## A saw patrolling the floor between a bot and its rival: the bot is hit with
+## avoidance off and not at all with it on, over ten seconds.
+func _scenario_bot_dodges_moving_saw() -> Array[String]:
+	var failures: Array[String] = []
+	var hits: Dictionary = {}
+	for avoid: bool in [false, true]:
+		var made: Array = _bot313(avoid, -300.0, 450.0)
+		var saw: Area2D = SawScene.instantiate() as Area2D
+		saw.position = Vector2(70, 272)
+		saw.travel = Vector2(160, 0)
+		saw.one_way_sec = 2.0
+		made[0].get_child(0).add_child(saw)
+		await _await_ticks(600)
+		hits[avoid] = saw.hit_count()
+		await _teardown(made[0], false)
+	print("      saw hits: avoidance off %d, on %d" % [hits[false], hits[true]])
+	if hits[false] == 0:
+		failures.append("the fixture is empty: the saw never hit the bot with avoidance off")
+	elif hits[true] != 0:
+		failures.append("the bot was hit by the saw %d times with avoidance on (%d off)" % [hits[true], hits[false]])
+	_scenario_completed = true
+	return failures
+
+## No StageGust part exists on this base (#281 has not landed), so the
+## reaction is checked against a duck-typed stand-in: a gust warning from the
+## left makes a bot at rest move upwind, away from the downwind edge.
+func _scenario_bot_braces_for_gust_warning() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 0.0, 450.0)
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	var gust := Node2D.new()
+	gust.set_script(load("res://tools/gust_standin.gd"))
+	made[0].get_child(0).add_child(gust)
+	bot._lava_looked_up = false
+	await _await_ticks(30)
+	bot._lava_looked_up = false
+	gust.warning = true
+	gust.direction = Vector2.RIGHT
+	bot._lava_looked_up = false
+	bot._lava = null
+	await _await_ticks(2)
+	var side: float = bot._gust_side()
+	print("      gust side for a rightward warning: %.0f" % side)
+	if side != -1.0:
+		failures.append("a rightward gust warning gave side %.0f, expected -1 (upwind)" % side)
+	gust.warning = false
+	if bot._gust_side() != 0.0:
+		failures.append("the bot still reacts after the gust warning ended")
+	await _teardown(made[0])
 	return failures
