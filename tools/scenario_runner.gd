@@ -354,6 +354,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"snapshot_encode_decode",
 	"snapshot_quantization_tolerance",
 	"snapshot_delta_encode",
+	"remote_client_scene_loads",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1461,6 +1462,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_snapshot_quantization_tolerance()
 		"snapshot_delta_encode":
 			return await _scenario_snapshot_delta_encode()
+		"remote_client_scene_loads":
+			return await _scenario_remote_client_scene_loads()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -23072,5 +23075,40 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 			if deltas[2].get("timer_ms") != 30000:
 				failures.append("timer_ms: got %d, wanted 30000" % deltas[2].get("timer_ms"))
 
+	_scenario_completed = true
+	return failures
+
+func _scenario_remote_client_scene_loads() -> Array[String]:
+	var failures: Array[String] = []
+	var RemoteClientScene = preload("res://scenes/RemoteClient.tscn")
+	
+	if RemoteClientScene == null:
+		failures.append("RemoteClient.tscn failed to load")
+		return failures
+	
+	var client = RemoteClientScene.instantiate()
+	if client == null:
+		failures.append("RemoteClient scene failed to instantiate")
+		return failures
+	
+	get_tree().root.add_child(client)
+	await _await_ticks(2)
+	
+	if not client.is_node_ready():
+		failures.append("RemoteClient scene not ready after instantiation")
+	
+	if client.state != client.State.JOINING:
+		failures.append("RemoteClient initial state should be JOINING, got %d" % client.state)
+	
+	if client.websocket != null:
+		failures.append("RemoteClient should not have websocket before joining")
+	
+	var ui_children = client.ui_root.get_child_count()
+	if ui_children < 1:
+		failures.append("RemoteClient UI should have at least 1 child, has %d" % ui_children)
+	
+	client.queue_free()
+	await _await_ticks(1)
+	
 	_scenario_completed = true
 	return failures
