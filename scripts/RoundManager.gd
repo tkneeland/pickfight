@@ -1611,7 +1611,9 @@ func _add_team_state(state: Dictionary, roster: Array[int], in_lobby: bool) -> v
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
 #
 # `MatchStats.gd` keeps the match's numbers and decides who gets each KO: the
-# last player to hit the victim within 3 s, otherwise a self-KO. `KillFeed.gd`
+# last player to hit the victim within 3 s, otherwise a self-KO. That holds for
+# a hazard (spikes, saws, lava, kill zone) death too, since those report on the
+# victim's own `strike_landed` and never overwrite the last hitter (#311). `KillFeed.gd`
 # (the HUD node at `kill_feed_path`) shows each KO top right and a banner for
 # the big moments. The victory screen gets up to three awards under the podium.
 
@@ -1634,7 +1636,11 @@ func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
-	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec())
+	var victim_slot: int = _players.find(victim)
+	# Issue #311: a teammate never earns the KO for a teammate's death.
+	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
+		return
+	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec())
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _pending_kos.is_empty():

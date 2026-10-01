@@ -447,6 +447,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"hazard_death_credits_last_hitter_within_window",
+	"hazard_death_after_window_gives_no_credit",
+	"ring_out_after_recent_hit_credits_hitter",
+	"direct_weapon_ko_credit_unchanged",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1744,6 +1748,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"hazard_death_credits_last_hitter_within_window":
+			return await _scenario_hazard_death_credits_last_hitter_within_window()
+		"hazard_death_after_window_gives_no_credit":
+			return await _scenario_hazard_death_after_window_gives_no_credit()
+		"ring_out_after_recent_hit_credits_hitter":
+			return await _scenario_ring_out_after_recent_hit_credits_hitter()
+		"direct_weapon_ko_credit_unchanged":
+			return await _scenario_direct_weapon_ko_credit_unchanged()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -26873,4 +26885,120 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
 		failures.append("a snapshot with no trailer should apply and play nothing")
 	await _rc_close_241(rig)
+	return failures
+
+## Issue #311: a hazard or ring-out death is credited to whoever last hit the
+## victim within 3 s. A three-player round with a real KillFeed; returns the
+## rig, started and past spawn protection.
+func _ko311_rig() -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(2)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed311"
+	(loop["stage"] as Node2D).add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	rm.spawn_protection_sec = 0.0
+	roster.slots.assign([0, 1, 2])
+	roster.names = {0: "Alice", 1: "Bob", 2: "Carl"}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	var all_alive := func() -> bool: return players[0].alive and players[1].alive and players[2].alive
+	loop["started"] = await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC)
+	loop["feed"] = feed
+	await _await_ticks(2)
+	return loop
+
+## Spikes touched by `victim` with enough damage to kill, as the real hazard does.
+func _ko311_spikes_kill(loop: Dictionary, victim: RigidBody2D) -> void:
+	var spikes: Area2D = SpikesScene.instantiate() as Area2D
+	(loop["stage"] as Node2D).add_child(spikes)
+	spikes.damage = 1000.0
+	spikes._hurt(victim)
+
+func _scenario_hazard_death_credits_last_hitter_within_window() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	# Bob hits Alice, 1.5 s later Alice touches lethal spikes.
+	players[1].strike_landed.emit(players[0], 10.0, players[0].global_position, false)
+	GameClockScript.advance(1.5)
+	_ko311_spikes_kill(loop, players[0])
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Bob KO Alice"]):
+		failures.append("feed read %s, expected Bob KO Alice" % [lines])
+	var stats: RefCounted = loop["round_manager"].match_stats()
+	if stats.kos.get(1, 0) != 1 or stats.self_kos.has(0):
+		failures.append("Bob's KO was not counted: kos %s, self-KOs %s" % [stats.kos, stats.self_kos])
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_hazard_death_after_window_gives_no_credit() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	players[1].strike_landed.emit(players[0], 10.0, players[0].global_position, false)
+	GameClockScript.advance(3.5)
+	_ko311_spikes_kill(loop, players[0])
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Alice self-KO"]):
+		failures.append("feed read %s, expected Alice self-KO" % [lines])
+	var stats: RefCounted = loop["round_manager"].match_stats()
+	if stats.kos.has(1) or stats.self_kos.get(0, 0) != 1:
+		failures.append("a stale hit still got credit: kos %s, self-KOs %s" % [stats.kos, stats.self_kos])
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_ring_out_after_recent_hit_credits_hitter() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	players[2].strike_landed.emit(players[0], 0.0, players[0].global_position, false)
+	GameClockScript.advance(2.0)
+	players[0].eliminate()
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Carl KO Alice"]):
+		failures.append("feed read %s, expected Carl KO Alice" % [lines])
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_direct_weapon_ko_credit_unchanged() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ko311_rig()
+	if not loop["started"]:
+		failures.append("round never started")
+		await _teardown(loop["stage"])
+		return failures
+	var players: Array[RigidBody2D] = loop["players"]
+	var feed: Control = loop["feed"]
+	players[1].take_damage(1000.0)
+	players[0].strike_landed.emit(players[1], 1000.0, players[1].global_position, true)
+	await _await_ticks(3)
+	var lines: PackedStringArray = feed.entries()
+	print("      feed: %s" % [lines])
+	if lines != PackedStringArray(["Alice KO Bob"]):
+		failures.append("feed read %s, expected Alice KO Bob" % [lines])
+	await _teardown(loop["stage"])
 	return failures
