@@ -1210,6 +1210,10 @@ func _set_join_corner_visible(on: bool) -> void:
 func stage_title_label() -> Label:
 	return _lobby_screen.stage_title_label() if _lobby_screen != null else null
 
+## Name of the stage in play, or "" in the lobby (issue #262, feedback context).
+func current_stage_name() -> String:
+	return str(_current_stage.name) if _current_stage != null else ""
+
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return

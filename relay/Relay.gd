@@ -11,6 +11,12 @@ extends Node
 ##        dropped within `host_grace_sec` (issue #249); a wrong token, an unknown
 ##        room or an expired window opens a fresh room instead.
 ##   {"t":"join","room":"ABCD"}       -> join an existing room
+##   {"t":"feedback","text":"...","version":"..","os":"..","stage":".."}
+##        -> files a GitHub issue (issue #262) and answers one
+##        {"t":"feedback_result","status":N} before closing: 200 filed, 400 empty,
+##        429 rate limited, 502 GitHub refused, 503 no GITHUB_FEEDBACK_TOKEN.
+##        Godot's `accept_stream` cannot serve a plain HTTP POST, so the
+##        endpoint rides the same TLS WebSocket the game already reaches.
 ##
 ## Control messages (text JSON):
 ##   to host:   {"t":"room","code":"ABCD","token":"<16 hex>"} (a reclaim adds
@@ -45,6 +51,28 @@ const INBOUND_BUFFER_BYTES: int = 1 << 18
 
 ## A room with no traffic for this long is closed.
 @export var idle_timeout_sec: float = 600.0
+
+## GitHub issue creation endpoint for feedback (issue #262).
+const FEEDBACK_URL: String = "https://api.github.com/repos/tkneeland/pickfight/issues"
+const FEEDBACK_LABELS: Array = ["needs-triage", "feedback"]
+const FEEDBACK_MAX_CHARS: int = 2000
+const FEEDBACK_FIELD_MAX_CHARS: int = 80
+const FEEDBACK_WINDOW_MSEC: int = 3600 * 1000
+## How long a feedback socket may wait for GitHub, msec.
+const FEEDBACK_REPLY_MSEC: int = 20000
+
+## Feedback filings allowed per IP per hour.
+@export var feedback_limit_per_hour: int = 5
+
+## The GitHub token, from the environment. Never sent to a client. Empty means
+## feedback is offline (503).
+var feedback_token: String = OS.get_environment("GITHUB_FEEDBACK_TOKEN")
+
+## Makes the GitHub call: (url: String, headers: PackedStringArray, body: String)
+## -> HTTP status int. Replaceable so a test captures the request offline.
+var feedback_post: Callable = Callable()
+
+var _feedback_times: Dictionary = {} # ip -> Array[int] of msec
 
 ## A socket awaiting its hello, or a peer being flushed before it is closed.
 class Pending:
@@ -175,10 +203,88 @@ func _read_hello(p: Pending, now: int) -> bool:
 				if not _reclaim_room(p.peer, msg, now):
 					_open_room(p.peer, now)
 				return true
+			"feedback":
+				_start_feedback(p, msg, now)
+				return true
 			"join":
 				_join_room(p.peer, str(msg.get("room", "")).to_upper(), now)
 				return true
 	return false
+
+## Keeps the peer polled in `_closing` while GitHub answers, then replies.
+func _start_feedback(p: Pending, msg: Dictionary, now: int) -> void:
+	var closing := Pending.new(p.peer, now + FEEDBACK_REPLY_MSEC)
+	_closing.append(closing)
+	var ip: String = p.peer.get_connected_host()
+	var result: Dictionary = await handle_feedback(ip, msg)
+	_send_json(p.peer, {"t": "feedback_result", "status": int(result["status"])})
+	closing.deadline_msec = Time.get_ticks_msec() + CLOSE_GRACE_MSEC
+
+## Files one piece of feedback. Returns {"status": int}. Statuses: 503 no token,
+## 400 empty after cleaning, 429 over the per-IP limit, 502 GitHub failed, 200 filed.
+func handle_feedback(ip: String, msg: Dictionary) -> Dictionary:
+	if feedback_token.is_empty():
+		return {"status": 503}
+	var text: String = clean_feedback_text(str(msg.get("text", "")), FEEDBACK_MAX_CHARS, true)
+	if text.strip_edges().is_empty():
+		return {"status": 400}
+	var now: int = Time.get_ticks_msec()
+	var times: Array = _feedback_times.get(ip, [])
+	times = times.filter(func(t: int) -> bool: return now - t < FEEDBACK_WINDOW_MSEC)
+	if times.size() >= feedback_limit_per_hour:
+		_feedback_times[ip] = times
+		return {"status": 429}
+	times.append(now)
+	_feedback_times[ip] = times
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + feedback_token,
+		"Accept: application/vnd.github+json",
+		"X-GitHub-Api-Version: 2022-11-28",
+		"User-Agent: pickfight-relay",
+		"Content-Type: application/json",
+	])
+	var status: int = int(await _post(FEEDBACK_URL, headers, JSON.stringify(build_feedback_issue(msg))))
+	return {"status": 200 if status >= 200 and status < 300 else 502}
+
+## The GitHub issue body for a feedback message.
+func build_feedback_issue(msg: Dictionary) -> Dictionary:
+	var text: String = clean_feedback_text(str(msg.get("text", "")), FEEDBACK_MAX_CHARS, true).strip_edges()
+	var first_line: String = text.split("\n")[0].strip_edges()
+	if first_line.length() > 60:
+		first_line = first_line.substr(0, 60) + "..."
+	var body: String = "%s\n\n---\nBuild: %s\nOS: %s\nStage: %s\n\n_Sent from the in-game feedback button._" % [
+		text,
+		clean_feedback_text(str(msg.get("version", "")), FEEDBACK_FIELD_MAX_CHARS, false),
+		clean_feedback_text(str(msg.get("os", "")), FEEDBACK_FIELD_MAX_CHARS, false),
+		clean_feedback_text(str(msg.get("stage", "")), FEEDBACK_FIELD_MAX_CHARS, false)]
+	return {"title": "Feedback: " + first_line, "body": body, "labels": FEEDBACK_LABELS}
+
+## Caps the length and drops control characters; newlines survive when `multiline`.
+static func clean_feedback_text(text: String, max_chars: int, multiline: bool) -> String:
+	var out: String = ""
+	for i in text.length():
+		var code: int = text.unicode_at(i)
+		var is_newline: bool = code == 10 or code == 13
+		if code < 32 or code == 127 or (code >= 0x80 and code < 0xA0):
+			if not (multiline and is_newline):
+				continue
+		out += String.chr(code)
+		if out.length() >= max_chars:
+			break
+	return out
+
+func _post(url: String, headers: PackedStringArray, body: String) -> Variant:
+	if feedback_post.is_valid():
+		return await feedback_post.call(url, headers, body)
+	var http := HTTPRequest.new()
+	http.timeout = 15.0
+	add_child(http)
+	if http.request(url, headers, HTTPClient.METHOD_POST, body) != OK:
+		http.queue_free()
+		return 0
+	var result: Array = await http.request_completed
+	http.queue_free()
+	return result[1] if result[0] == HTTPRequest.RESULT_SUCCESS else 0
 
 func _open_room(peer: WebSocketPeer, now: int) -> void:
 	var room := Room.new()
