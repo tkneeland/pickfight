@@ -447,6 +447,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"windy_stage_favours_umbrella_pickups",
+	"themed_pool_keeps_every_enabled_weapon",
+	"themed_pool_never_draws_a_disabled_weapon",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1744,6 +1747,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"windy_stage_favours_umbrella_pickups":
+			return await _scenario_windy_stage_favours_umbrella_pickups()
+		"themed_pool_keeps_every_enabled_weapon":
+			return await _scenario_themed_pool_keeps_every_enabled_weapon()
+		"themed_pool_never_draws_a_disabled_weapon":
+			return await _scenario_themed_pool_never_draws_a_disabled_weapon()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -26873,4 +26882,79 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
 		failures.append("a snapshot with no trailer should apply and play nothing")
 	await _rc_close_241(rig)
+	return failures
+
+## Issue #310: weapon-theme scenarios. A director whose round manager is a
+## bare node holding only the stage, drawing from a seeded stream.
+const WeaponThemeDirectorScript := preload("res://scripts/PickupDirector.gd")
+const WeaponThemePickupWeapons := preload("res://scripts/PickupWeapons.gd")
+const WEAPON_THEME_BAGS: int = 60
+
+func _weapon_theme_director(windy: bool, seed_value: int) -> Node:
+	var rm_script := GDScript.new()
+	rm_script.source_code = "extends Node\nvar _current_stage = null\n"
+	rm_script.reload()
+	var rm: Node = rm_script.new()
+	var stage := Node2D.new()
+	if windy:
+		stage.add_child((load("res://scenes/parts/WindZone.tscn") as PackedScene).instantiate())
+	rm._current_stage = stage
+	rm.add_child(stage)
+	root.add_child(rm)
+	var director: Node = WeaponThemeDirectorScript.new(rm)
+	director.rng.seed = seed_value
+	rm.add_child(director)
+	return director
+
+## Draws `count` weapons and tallies them by file stem.
+func _weapon_theme_tally(director: Node, offered: Array[Resource], count: int) -> Dictionary:
+	var tally: Dictionary = {}
+	for i in count:
+		var weapon: Resource = director.draw_weapon(offered)
+		var stem: String = weapon.resource_path.get_file().get_basename()
+		tally[stem] = int(tally.get(stem, 0)) + 1
+	return tally
+
+func _scenario_windy_stage_favours_umbrella_pickups() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = WeaponThemePickupWeapons.available_weapons()
+	var draws: int = offered.size() * WEAPON_THEME_BAGS
+	var windy: Dictionary = _weapon_theme_tally(_weapon_theme_director(true, 310), offered, draws)
+	var calm: Dictionary = _weapon_theme_tally(_weapon_theme_director(false, 310), offered, draws)
+	var base_rate: float = 1.0 / float(offered.size())
+	var windy_rate: float = float(windy.get("umbrella", 0)) / float(draws)
+	var calm_rate: float = float(calm.get("umbrella", 0)) / float(draws)
+	if windy_rate < base_rate * 1.5:
+		failures.append("umbrella drawn %.3f of the time on a windy stage, base rate %.3f" % [windy_rate, base_rate])
+	if calm_rate > base_rate * 1.2 or calm_rate < base_rate * 0.8:
+		failures.append("umbrella drawn %.3f of the time on a stage with no wind, expected about %.3f" % [calm_rate, base_rate])
+	var again: Dictionary = _weapon_theme_tally(_weapon_theme_director(true, 310), offered, draws)
+	if again != windy:
+		failures.append("the same seed drew a different windy sequence")
+	_scenario_completed = true
+	return failures
+
+func _scenario_themed_pool_keeps_every_enabled_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = WeaponThemePickupWeapons.available_weapons()
+	var tally: Dictionary = _weapon_theme_tally(_weapon_theme_director(true, 7), offered, offered.size() * WEAPON_THEME_BAGS)
+	for stats: Resource in offered:
+		var stem: String = stats.resource_path.get_file().get_basename()
+		if int(tally.get(stem, 0)) == 0:
+			failures.append("%s never appeared on a windy stage" % stem)
+	if tally.has("pickaxe"):
+		failures.append("the pickaxe was drawn")
+	_scenario_completed = true
+	return failures
+
+func _scenario_themed_pool_never_draws_a_disabled_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = []
+	for stats: Resource in WeaponThemePickupWeapons.available_weapons():
+		if not stats.resource_path.ends_with("umbrella.tres"):
+			offered.append(stats)
+	var tally: Dictionary = _weapon_theme_tally(_weapon_theme_director(true, 7), offered, offered.size() * WEAPON_THEME_BAGS)
+	if tally.has("umbrella"):
+		failures.append("a disabled umbrella was drawn %d times on a windy stage" % tally["umbrella"])
+	_scenario_completed = true
 	return failures

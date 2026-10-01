@@ -16,6 +16,7 @@ extends Node
 ## did; this node has no `_process` of its own.
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const WeaponThemesScript := preload("res://scripts/WeaponThemes.gd")
 ## Game time (#182), not wall clock: the interval stops for a pause and runs
 ## at `Engine.time_scale`.
 const GameClockScript := preload("res://scripts/GameClock.gd")
@@ -50,6 +51,8 @@ func _init(round_manager: Node = null) -> void:
 ## start the interval from now.
 func start() -> void:
 	clear()
+	# The bag is dealt per stage (#310): a new stage has a new theme.
+	_bag.clear()
 	_spawn_pickup()
 	_next_pickup_msec = GameClockScript.now_msec() + int(interval_sec() * 1000.0)
 
@@ -135,7 +138,7 @@ func _spawn_pickup() -> void:
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
-	var weapon: Resource = _draw_weapon(offered)
+	var weapon: Resource = draw_weapon(offered)
 	if weapon == null:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
@@ -147,19 +150,24 @@ func _spawn_pickup() -> void:
 	_pickups.append(pickup)
 
 ## The next weapon from a shuffled bag of everything offered, refilled once
-## it runs dry: every weapon comes out once before any comes out twice.
+## it runs dry: every weapon comes out before the bag is dealt again.
 ## Playtest 2026-09-27: with a uniform draw over eight weapons and a handful
-## of pickups a session, the boomerang never turned up. A weapon no longer
-## offered is skipped, and the pickaxe never goes in (PickupWeapons.choose).
-## Shuffled from `rng`, so a seeded match still draws the same sequence.
-func _draw_weapon(offered: Array[Resource]) -> Resource:
+## of pickups a session, the boomerang never turned up. The stage's theme
+## (#310, WeaponThemes) puts extra copies of the weapons that suit it in the
+## bag, but every offered weapon keeps at least one. A weapon no longer
+## offered is skipped, and the pickaxe never goes in. Shuffled from `rng`, so
+## a seeded match still draws the same sequence.
+func draw_weapon(offered: Array[Resource]) -> Resource:
 	while not _bag.is_empty():
 		var next: Resource = _bag.pop_back()
 		if offered.has(next):
 			return next
+	var stage: Variant = _rm._current_stage if _rm != null else null
+	var copies: Dictionary = WeaponThemesScript.copies_for(stage, offered)
 	for stats: Resource in offered:
-		if stats != null and stats.resource_path != PickupWeaponsScript.PICKAXE_PATH:
-			_bag.append(stats)
+		if copies.has(stats):
+			for i in int(copies[stats]):
+				_bag.append(stats)
 	# Fisher-Yates off our own stream: Array.shuffle() uses the global RNG.
 	for i in range(_bag.size() - 1, 0, -1):
 		var j: int = rng.randi() % (i + 1)
