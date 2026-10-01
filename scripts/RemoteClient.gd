@@ -104,6 +104,11 @@ func _on_relay_message(msg: Dictionary) -> void:
 	match msg_type:
 		"hello":
 			player_id = msg.get("id", -1)
+			if player_id >= 0 and state == State.JOINING:
+				var hello_msg = {"id": player_id, "proto": 1}
+				_send_json(hello_msg)
+				state = State.PLAYING
+				_on_join_success()
 		"error":
 			var reason = msg.get("reason", "unknown")
 			_show_error("Error: %s" % reason)
@@ -184,36 +189,36 @@ func _connect_to_relay() -> void:
 
 	if websocket.get_state() == WebSocketPeer.STATE_OPEN:
 		var join_msg = {"t": "join", "room": room_code}
-		websocket.send_text(JSON.stringify(join_msg))
-
-		await get_tree().create_timer(0.5).timeout
-		if websocket.get_state() == WebSocketPeer.STATE_OPEN:
-			var hello_msg = {"id": player_id, "proto": 1}
-			websocket.send_text(JSON.stringify(hello_msg))
-			state = State.PLAYING
-			_on_join_success()
-		else:
-			_show_error("Failed to connect to relay")
-			_close_and_reconnect()
+		_send_json(join_msg)
 	else:
 		_show_error("Could not reach relay at %s" % relay_url)
 		_close_and_reconnect()
+
+func _send_json(msg: Dictionary) -> void:
+	if websocket == null or websocket.get_state() != WebSocketPeer.STATE_OPEN:
+		return
+	var text_bytes = JSON.stringify(msg).to_utf8_buffer()
+	var payload = PackedByteArray()
+	payload.append(1)
+	payload.append_array(text_bytes)
+	websocket.send(payload)
 
 func _send_input() -> void:
 	if websocket == null or websocket.get_state() != WebSocketPeer.STATE_OPEN:
 		return
 
-	var input_bytes = PackedByteArray()
-	input_bytes.append(0)
-
+	var input_payload = PackedByteArray()
 	var x = int(clamp(input_vector.x * 32767, -32768, 32767))
 	var y = int(clamp(input_vector.y * 32767, -32768, 32767))
-	input_bytes.append((x >> 8) & 0xFF)
-	input_bytes.append(x & 0xFF)
-	input_bytes.append((y >> 8) & 0xFF)
-	input_bytes.append(y & 0xFF)
+	input_payload.append((x >> 8) & 0xFF)
+	input_payload.append(x & 0xFF)
+	input_payload.append((y >> 8) & 0xFF)
+	input_payload.append(y & 0xFF)
 
-	websocket.send(input_bytes)
+	var frame = PackedByteArray()
+	frame.append(0)
+	frame.append_array(input_payload)
+	websocket.send(frame)
 
 func _capture_mouse() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
