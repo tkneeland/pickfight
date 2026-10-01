@@ -189,7 +189,7 @@ resolved and no longer applies.
 ```
 scenes/      .tscn scene files (Main, Player; Arena is the scenario
              suite's physics fixture)
-scenes/stages/  the 24 rotating stages, one .tscn each (ADR-0008)
+scenes/stages/  the 27 rotating stages, one .tscn each (ADR-0008)
 scenes/parts/   reusable stage parts: MovingPlatform, RotatingPlatform,
                 CrumblingLedge, CollapsingFloor, BreakableWall, BouncePad,
                 FallingRock, WindZone, Hazard
