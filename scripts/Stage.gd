@@ -74,6 +74,8 @@ func _tint_bodies(node: Node) -> void:
 	for child in node.get_children():
 		if child is Polygon2D and node.get_class() == "StaticBody2D" and node.get_script() == null:
 			(child as Polygon2D).color = mood["platform"]
+		if child.has_method("set_platform_color"):
+			child.call("set_platform_color", mood["platform"])
 		_tint_bodies(child)
 
 ## The camera zoom that fits `view` inside the default view: 1 for a normal

@@ -395,6 +395,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"palette_moods_cover_the_rotation",
 	"palette_stage_platforms_use_mood_color",
 	"palette_players_are_distinct_and_synced",
+	"crumbling_ledge_break_drops_player",
+	"crumbling_ledge_respawn_collides_again",
+	"crumbling_ledge_takes_mood_platform_color",
+	"crumbling_ledge_whole_after_round_reset",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1585,6 +1589,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_palette_stage_platforms_use_mood_color()
 		"palette_players_are_distinct_and_synced":
 			return await _scenario_palette_players_are_distinct_and_synced()
+		"crumbling_ledge_break_drops_player":
+			return await _scenario_crumbling_ledge_break_drops_player()
+		"crumbling_ledge_respawn_collides_again":
+			return await _scenario_crumbling_ledge_respawn_collides_again()
+		"crumbling_ledge_takes_mood_platform_color":
+			return await _scenario_crumbling_ledge_takes_mood_platform_color()
+		"crumbling_ledge_whole_after_round_reset":
+			return await _scenario_crumbling_ledge_whole_after_round_reset()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -24843,5 +24855,125 @@ func _scenario_palette_players_are_distinct_and_synced() -> Array[String]:
 				failures.append("slot %d: controller page %s, Palette %s" % [i, page[i], players[i]])
 			if not _color_close(main_colors[i], players[i], 0.01):
 				failures.append("slot %d: Main.tscn %s, Palette %s" % [i, main_colors[i], players[i]])
+	_scenario_completed = true
+	return failures
+
+# --- Crumbling ledge as a stage hazard (issue #280) ---------------------------
+
+## Finds every crumbling ledge under `node` by its public `is_solid` seam.
+func _crumble_ledges_under(node: Node) -> Array[StaticBody2D]:
+	var found: Array[StaticBody2D] = []
+	for child in node.get_children():
+		if child is StaticBody2D and child.has_method("is_solid"):
+			found.append(child as StaticBody2D)
+		found.append_array(_crumble_ledges_under(child))
+	return found
+
+## A player stands on a lone ledge; after the warning the ledge breaks and the
+## player ends up well below where the ledge was.
+func _scenario_crumbling_ledge_break_drops_player() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var ledge: StaticBody2D = CrumblingLedgeScene.instantiate() as StaticBody2D
+	ledge.position = Vector2(0, -300)
+	stage.add_child(ledge)
+	var ledge_top: float = -300.0 - 12.0
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, ledge_top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP))
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+	if player.global_position.y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+		failures.append("player never rested on the ledge")
+	if ledge.is_solid():
+		failures.append("standing on the ledge did not start its crumble")
+	var warn_ticks: int = int(round(LEDGE_WARN_SEC * float(Engine.physics_ticks_per_second)))
+	await _await_ticks(warn_ticks + LEDGE_FALL_CONFIRM_TICKS + 30)
+	if player.global_position.y < ledge_top + 24.0 + PLAYER_RADIUS:
+		failures.append("player still at y %.1f after the ledge should have broken (top %.1f)" % [player.global_position.y, ledge_top])
+	await _teardown(stage)
+	return failures
+
+## After the away time the broken ledge holds a fresh player again.
+func _scenario_crumbling_ledge_respawn_collides_again() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var ledge: StaticBody2D = CrumblingLedgeScene.instantiate() as StaticBody2D
+	ledge.position = Vector2(0, -300)
+	stage.add_child(ledge)
+	var ledge_top: float = -300.0 - 12.0
+	var spawn_pos := Vector2(0, ledge_top - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+	var player: RigidBody2D = _spawn_player(stage, spawn_pos)
+	player.set_input_vector(Vector2.UP)
+	var tps: float = float(Engine.physics_ticks_per_second)
+	await _await_ticks(int(round((LEDGE_WARN_SEC + 0.5) * tps)))
+	if ledge.is_solid():
+		failures.append("ledge had not broken after its warning")
+	var shape: CollisionShape2D = ledge.get_node("CollisionShape2D") as CollisionShape2D
+	if not shape.disabled:
+		failures.append("broken ledge still collides")
+	await _await_ticks(int(round((LEDGE_AWAY_SEC + 0.5) * tps)))
+	if shape.disabled:
+		failures.append("ledge never respawned its collision")
+	player.start_round(spawn_pos)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(LEDGE_SETTLE_TICKS)
+	if player.global_position.y + PLAYER_RADIUS > ledge_top + PLANT_CLEARANCE:
+		failures.append("respawned ledge did not hold a player: y %.1f, top %.1f" % [player.global_position.y, ledge_top])
+	await _teardown(stage)
+	return failures
+
+## A ledge placed on a stage shows that stage's mood platform colour, in each
+## of the three moods.
+func _scenario_crumbling_ledge_takes_mood_platform_color() -> Array[String]:
+	var failures: Array[String] = []
+	for i in 3:
+		var holder := Node2D.new()
+		get_root().add_child(holder)
+		var instance: Node2D = (load("res://scenes/stages/Erosion.tscn") as PackedScene).instantiate()
+		instance.set("stage_index", i)
+		holder.add_child(instance)
+		var mood: Dictionary = PaletteScript.mood_for_stage(i)
+		var ledges: Array[StaticBody2D] = _crumble_ledges_under(instance)
+		if ledges.is_empty():
+			failures.append("Erosion has no crumbling ledge")
+		for ledge in ledges:
+			if not _color_close(ledge.visual_color(), mood["platform"], 0.01):
+				failures.append("%s: ledge %s, %s mood wants %s" % [ledge.name, ledge.visual_color(), mood["name"], mood["platform"]])
+		holder.queue_free()
+	await physics_frame
+	_scenario_completed = true
+	return failures
+
+## RoundManager frees the old stage and instantiates a fresh one each round;
+## a ledge broken in one round is whole, solid and mood-coloured in the next.
+func _scenario_crumbling_ledge_whole_after_round_reset() -> Array[String]:
+	var failures: Array[String] = []
+	var scene: PackedScene = load("res://scenes/stages/Erosion.tscn") as PackedScene
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var first: Node2D = scene.instantiate()
+	first.set("stage_index", 1)
+	holder.add_child(first)
+	var ledge: StaticBody2D = first.get_node("LedgeA") as StaticBody2D
+	var spawn_pos := Vector2(ledge.position.x, ledge.position.y - 12.0 - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+	var player: RigidBody2D = _spawn_player(holder, spawn_pos)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(int(round((LEDGE_WARN_SEC + 0.5) * float(Engine.physics_ticks_per_second))))
+	if ledge.is_solid():
+		failures.append("setup: the ledge never started crumbling")
+	player.queue_free()
+	first.queue_free()
+	await physics_frame
+	var second: Node2D = scene.instantiate()
+	second.set("stage_index", 1)
+	holder.add_child(second)
+	var fresh: StaticBody2D = second.get_node("LedgeA") as StaticBody2D
+	var shape: CollisionShape2D = fresh.get_node("CollisionShape2D") as CollisionShape2D
+	if not fresh.is_solid() or shape.disabled:
+		failures.append("next round's ledge is not whole (solid %s, collision disabled %s)" % [fresh.is_solid(), shape.disabled])
+	var mood: Dictionary = PaletteScript.mood_for_stage(1)
+	if not _color_close(fresh.visual_color(), mood["platform"], 0.01):
+		failures.append("next round's ledge is %s, not the mood's %s" % [fresh.visual_color(), mood["platform"]])
+	holder.queue_free()
+	await physics_frame
 	_scenario_completed = true
 	return failures
