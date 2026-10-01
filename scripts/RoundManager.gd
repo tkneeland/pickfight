@@ -1036,6 +1036,7 @@ func _enter_lobby() -> void:
 	_tick_lobby()
 
 func _enter_victory() -> void:
+	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
 	_state = State.VICTORY
 	_clear_stage()
@@ -1636,8 +1637,18 @@ func kill_feed() -> Control:
 func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
+## Where the per-match balance tallies are appended (issue #316).
+var balance_log_path: String = "user://balance_stats.jsonl"
+
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
-	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec())
+	var weapon: String = ""
+	var real: bool = true
+	if amount > 0.0 and attacker_slot >= 0 and attacker_slot < _players.size() and _players[attacker_slot] != null:
+		var stats: Variant = _players[attacker_slot].get("weapon_stats")
+		if stats != null and stats.resource_path != "":
+			weapon = stats.resource_path.get_file().get_basename()
+		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
+	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec(), weapon, real)
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _pending_kos.is_empty():

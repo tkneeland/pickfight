@@ -459,6 +459,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_sudden_death_hit_eliminates_victim",
 	"mode_hot_potato_tags_fuses_and_reseeds",
 	"mode_handlers_gone_after_round_and_edge_cases",
+	"balance_log_tallies_real_players_per_weapon",
+	"balance_log_survives_unwritable_path",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1780,6 +1782,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_hot_potato_tags_fuses_and_reseeds()
 		"mode_handlers_gone_after_round_and_edge_cases":
 			return await _scenario_mode_handlers_gone_after_round_and_edge_cases()
+		"balance_log_tallies_real_players_per_weapon":
+			return await _scenario_balance_log_tallies_real_players_per_weapon()
+		"balance_log_survives_unwritable_path":
+			return await _scenario_balance_log_survives_unwritable_path()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -27456,4 +27462,49 @@ func _scenario_remote_client_plays_stream_sound_and_music() -> Array[String]:
 	if bare.frames_applied != 1 or not bare.sounds_played.is_empty():
 		failures.append("a snapshot with no trailer should apply and play nothing")
 	await _rc_close_241(rig)
+	return failures
+
+## Issue #316: real players' damaging hits are tallied per weapon; bot hits,
+## 0-damage swings and hits with no named weapon are not; the line is appended
+## to a file and reads back as JSON.
+func _scenario_balance_log_tallies_real_players_per_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	stats.record_hit(0, 1, 12.5, 10, "pickaxe", true)
+	stats.record_hit(2, 1, 50.0, 20, "axe", true)
+	stats.record_hit(3, 1, 99.0, 30, "axe", false)
+	stats.record_hit(0, 1, 0.0, 40, "pickaxe", true)
+	var line: String = stats.balance_log_line(1234)
+	var parsed: Variant = JSON.parse_string(line)
+	if not parsed is Dictionary:
+		return ["balance log line is not JSON: '%s'" % line]
+	var weapons: Dictionary = parsed["weapons"]
+	if not is_equal_approx(float(weapons.get("pickaxe", {}).get("damage", -1)), 42.5) or int(weapons["pickaxe"]["hits"]) != 2:
+		failures.append("pickaxe tally wrong: %s" % [weapons.get("pickaxe")])
+	if not is_equal_approx(float(weapons.get("axe", {}).get("damage", -1)), 50.0) or int(weapons["axe"]["hits"]) != 1:
+		failures.append("axe tally should hold only the real player's hit: %s" % [weapons.get("axe")])
+	var path: String = "user://balance_stats_scenario_316.jsonl"
+	DirAccess.remove_absolute(path)
+	if not (MatchStatsScript.append_line(path, line) and MatchStatsScript.append_line(path, line)):
+		failures.append("append_line failed on a writable path")
+	var text: String = FileAccess.get_file_as_string(path)
+	if text.strip_edges().split("\n").size() != 2 or JSON.parse_string(text.split("\n")[0]) == null:
+		failures.append("log file should hold two readable JSON lines, got '%s'" % text)
+	DirAccess.remove_absolute(path)
+	stats.begin_match()
+	if stats.balance_log_line(1) != "":
+		failures.append("a new match should start with empty tallies")
+	_scenario_completed = true
+	return failures
+
+## Issue #316: an unwritable log path is a quiet false, never an error.
+func _scenario_balance_log_survives_unwritable_path() -> Array[String]:
+	var failures: Array[String] = []
+	if MatchStatsScript.append_line("user://no_such_dir_316/deeper/log.jsonl", "{}"):
+		failures.append("append_line claimed success on an unwritable path")
+	if MatchStatsScript.append_line("user://x_316.jsonl", ""):
+		failures.append("append_line should skip an empty line")
+	_scenario_completed = true
 	return failures
