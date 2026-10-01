@@ -53,6 +53,9 @@ var _sfx_slider: HSlider
 var _music_slider: HSlider
 var _mute: CheckBox
 var _fullscreen: CheckBox
+var _shake_box: CheckBox
+var _flash_box: CheckBox
+var _scale_button: OptionButton
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -133,6 +136,13 @@ func _ready() -> void:
 	for size: Vector2i in HostSettingsScript.RESOLUTIONS:
 		_resolution.add_item("Window: default" if size == Vector2i.ZERO else "Window: %d x %d" % [size.x, size.y])
 	content.add_child(_resolution)
+	_shake_box = _add_box(content, "ScreenShake", "Screen shake")
+	_flash_box = _add_box(content, "ReduceFlash", "Reduce flashes")
+	_scale_button = OptionButton.new()
+	_scale_button.name = "TagSize"
+	for option: float in sfx.UI_SCALES:
+		_scale_button.add_item("Name tags: %sx" % str(option))
+	content.add_child(_scale_button)
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
 
@@ -161,6 +171,9 @@ func _ready() -> void:
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
 	_resolution.item_selected.connect(_on_resolution_selected)
+	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
+	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
+	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
 	_more.toggled.connect(func(pressed: bool) -> void: _more_area.visible = pressed)
 	apply_resolution()
 
@@ -221,6 +234,9 @@ func refresh() -> void:
 	_mute.set_pressed_no_signal(sfx.muted)
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
 	_toggle.text = "Settings (muted)" if sfx.muted else "Settings"
+	_shake_box.set_pressed_no_signal(sfx.screen_shake)
+	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
+	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
 	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
@@ -348,6 +364,15 @@ func fullscreen_box() -> CheckBox:
 ## so the lobby's how-to-play column keeps its room above the panel.
 func more_box() -> CheckBox:
 	return _more
+
+func shake_box() -> CheckBox:
+	return _shake_box
+
+func flash_box() -> CheckBox:
+	return _flash_box
+
+func tag_size_button() -> OptionButton:
+	return _scale_button
 
 func resolution_button() -> OptionButton:
 	return _resolution

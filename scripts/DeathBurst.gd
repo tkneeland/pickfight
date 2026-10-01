@@ -29,6 +29,15 @@ func _ready() -> void:
 		var angle: float = TAU * float(i) / float(SHARD_COUNT) + rng.randf_range(-0.2, 0.2)
 		_shards.append(Vector2.RIGHT.rotated(angle) * rng.randf_range(SHARD_SPEED_MIN, SHARD_SPEED_MAX))
 
+## Alpha of the white flash at the start of the burst right now (0 once it is
+## over, or always with "Reduce flashes" on, #317). Observable for scenarios.
+func flash_alpha() -> float:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx != null and bool(sfx.get("reduce_flash")):
+		return 0.0
+	var t: float = clampf(_age / DURATION, 0.0, 1.0)
+	return 0.8 * (1.0 - t * 4.0) if t < 0.25 else 0.0
+
 func _process(delta: float) -> void:
 	_age += delta
 	if _age >= DURATION:
@@ -41,8 +50,8 @@ func _draw() -> void:
 	var ease_out: float = 1.0 - pow(1.0 - t, 3.0)
 	var fade: Color = Color(colour, 1.0 - t)
 	# Flash, then ring.
-	if t < 0.25:
-		draw_circle(Vector2.ZERO, RING_START * (1.0 + t * 4.0), Color(1, 1, 1, 0.8 * (1.0 - t * 4.0)))
+	if flash_alpha() > 0.0:
+		draw_circle(Vector2.ZERO, RING_START * (1.0 + t * 4.0), Color(1, 1, 1, flash_alpha()))
 	draw_arc(Vector2.ZERO, lerpf(RING_START, RING_END, ease_out), 0.0, TAU, 48, fade, lerpf(10.0, 1.5, t), true)
 	for velocity: Vector2 in _shards:
 		var tip: Vector2 = velocity * _age * (1.0 - 0.5 * t)

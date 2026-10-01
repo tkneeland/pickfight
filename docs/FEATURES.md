@@ -83,6 +83,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Window size option for windowed mode (#294)
 - Stage on/off list: the rotation skips switched-off stages (#294)
 - Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 
 ## Audio

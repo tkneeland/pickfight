@@ -266,6 +266,13 @@ var fullscreen: bool = false
 ## Whether `Juice` shakes the camera on a heavy hit or a kill (#256). On by
 ## default; set through `set_screen_shake()` and remembered with the rest.
 var screen_shake: bool = true
+## Comfort option (#317): when on, the white/bright flashes (elimination burst,
+## bounce pad, breaking wall) are not drawn. Off by default.
+var reduce_flash: bool = false
+## Comfort option (#317): how much bigger the name tags over players' heads
+## are drawn. One of `UI_SCALES`; 1.0 by default.
+const UI_SCALES: Array[float] = [1.0, 1.5, 2.0]
+var ui_scale: float = 1.0
 ## What `sync_fullscreen()` reads the window mode from: a Callable returning a
 ## `DisplayServer.WINDOW_MODE_*`, or an empty one for the real window. The
 ## scenarios point it at a fake window, as headless has none.
@@ -566,6 +573,25 @@ func set_screen_shake(value: bool) -> void:
 	screen_shake = value
 	_save_settings()
 
+## Turn the bright flashes (#317) off or on, and remember the choice.
+func set_reduce_flash(value: bool) -> void:
+	reduce_flash = value
+	_save_settings()
+
+## Pick the name tag size (#317): snaps to the nearest of `UI_SCALES`.
+func set_ui_scale(value: float) -> void:
+	ui_scale = _nearest_ui_scale(value)
+	_save_settings()
+
+static func _nearest_ui_scale(value: float) -> float:
+	var best: float = 1.0
+	if not is_finite(value):
+		return best
+	for option: float in UI_SCALES:
+		if absf(option - value) < absf(best - value):
+			best = option
+	return best
+
 ## Write the current settings to `settings_path` (when `persist_settings`).
 func save_settings() -> void:
 	_save_settings()
@@ -655,6 +681,8 @@ func load_settings() -> void:
 		sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
 		fullscreen = bool(config.get_value("display", "fullscreen", false))
 		screen_shake = bool(config.get_value("display", "screen_shake", true))
+		reduce_flash = bool(config.get_value("display", "reduce_flash", false))
+		ui_scale = _nearest_ui_scale(float(config.get_value("display", "ui_scale", 1.0)))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -676,6 +704,8 @@ func _save_settings() -> void:
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("display", "fullscreen", fullscreen)
 	config.set_value("display", "screen_shake", screen_shake)
+	config.set_value("display", "reduce_flash", reduce_flash)
+	config.set_value("display", "ui_scale", ui_scale)
 	err = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])
