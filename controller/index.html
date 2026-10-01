@@ -338,8 +338,8 @@
   #look-prompt.show { display: flex; }
   #look-title { font-size: 26px; font-weight: 800; }
   .look-label { font-size: 15px; opacity: 0.7; }
-  #hat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(92vw, 420px); }
-  #hat-grid button {
+  #hat-grid, #eyes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(92vw, 420px); }
+  #hat-grid button, #eyes-grid button {
     font: inherit;
     font-size: 14px;
     font-weight: 700;
@@ -353,8 +353,8 @@
     align-items: center;
     gap: 2px;
   }
-  #hat-grid button.on { border-color: #ffd933; background: #2a303d; }
-  #hat-grid canvas { width: 72px; height: 56px; pointer-events: none; }
+  #hat-grid button.on, #eyes-grid button.on { border-color: #ffd933; background: #2a303d; }
+  #hat-grid canvas, #eyes-grid canvas { width: 72px; height: 56px; pointer-events: none; }
   #color-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: min(92vw, 420px); }
   #color-row button {
     position: relative;
@@ -437,6 +437,8 @@
   <div id="look-title">Pick your look</div>
   <div class="look-label">Hat</div>
   <div id="hat-grid"></div>
+  <div class="look-label">Eyes</div>
+  <div id="eyes-grid"></div>
   <div class="look-label" id="color-label">Colour: first come, first served</div>
   <div id="color-row"></div>
   <button id="look-go" type="button">Done</button>
@@ -1059,11 +1061,13 @@
   // player wears. A colour another player holds is shown taken; it frees up
   // when that player leaves the game.
   var HAT_KEY = "pickfight-hat";
+  var EYES_KEY = "pickfight-eyes";
   var COLOR_KEY = "pickfight-color";
   var LOOK_CHOSEN_KEY = "pickfight-look-chosen";
   var HAT_OUTLINE = "#121217";
   var lookEl = document.getElementById("look-prompt");
   var hatGridEl = document.getElementById("hat-grid");
+  var eyesGridEl = document.getElementById("eyes-grid");
   var colorRowEl = document.getElementById("color-row");
   var looks = null;
 
@@ -1088,6 +1092,8 @@
   function sendLook() {
     var hat = stored(HAT_KEY);
     if (hat) { sendText({ t: "hat", v: hat }); }
+    var eyes = stored(EYES_KEY);
+    if (eyes) { sendText({ t: "eyes", v: eyes }); }
     var color = stored(COLOR_KEY);
     if (color !== null && color !== "" && isFinite(Number(color))) { sendText({ t: "color", v: Number(color) }); }
   }
@@ -1098,6 +1104,7 @@
     if (looks) {
       if (!msg.palette) { msg.palette = looks.palette; }
       if (!msg.hats) { msg.hats = looks.hats; }
+      if (!msg.eyes) { msg.eyes = looks.eyes; }
       if (!msg.art) { msg.art = looks.art; }
     }
     looks = msg;
@@ -1168,6 +1175,40 @@
     }
   }
 
+  // An eye-style preview: a body in `tint` with eyes `id` looking right,
+  // mirroring PlayerFace.gd (issue #297).
+  function drawEyes(canvas, id, tint) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = 72, h = 56;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var c = canvas.getContext("2d");
+    c.setTransform(dpr * 1.1, 0, 0, dpr * 1.1, dpr * w / 2, dpr * h / 2);
+    c.fillStyle = tint;
+    c.strokeStyle = HAT_OUTLINE;
+    c.lineWidth = 2;
+    c.fillRect(-24, -24, 48, 48);
+    c.strokeRect(-24, -24, 48, 48);
+    c.fillStyle = HAT_OUTLINE;
+    if (id === "visor") { c.fillRect(-27, -10.5, 54, 11); }
+    [-9, 9].forEach(function (x) {
+      var y = -5, reach = id === "wide" ? 3 : (id === "visor" ? 3 : 2.5);
+      function disc(cx, cy, r, col) { c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fillStyle = col; c.fill(); }
+      if (id === "dot") { disc(x + 2, y, 4, HAT_OUTLINE); return; }
+      if (id === "visor") { disc(x + reach, y, 2.5, "#fff"); return; }
+      var r = id === "wide" ? 8 : 6;
+      disc(x, y, r, "#fff");
+      if (id === "wide") { c.strokeStyle = HAT_OUTLINE; c.lineWidth = 1.5; c.stroke(); }
+      disc(x + reach, y, id === "wide" ? 2.5 : 3, HAT_OUTLINE);
+      if (id === "sleepy") { c.beginPath(); c.arc(x, y, 6.5, Math.PI, 0); c.closePath(); c.fillStyle = HAT_OUTLINE; c.fill(); }
+      if (id === "angry") {
+        var d = x < 0 ? 1 : -1;
+        c.beginPath(); c.moveTo(x - d * 8, y - 9); c.lineTo(x + d * 7, y - 4);
+        c.strokeStyle = HAT_OUTLINE; c.lineWidth = 3; c.stroke();
+      }
+    });
+  }
+
   function renderLookPrompt() {
     var mine = lookOf(slot) || { hat: stored(HAT_KEY) || "none", color: -1 };
     var tint = colorOf(slot);
@@ -1193,6 +1234,30 @@
         };
       })(hats[i].id));
       hatGridEl.appendChild(b);
+    }
+    var myEyes = mine.eyes || stored(EYES_KEY) || "round";
+    var styles = (looks && looks.eyes) || [{ id: "round", label: "Round" }];
+    eyesGridEl.textContent = "";
+    for (var e = 0; e < styles.length; e++) {
+      var eb = document.createElement("button");
+      eb.type = "button";
+      eb.className = styles[e].id === myEyes ? "on" : "";
+      var ep = document.createElement("canvas");
+      eb.appendChild(ep);
+      var el = document.createElement("span");
+      el.textContent = styles[e].label;
+      eb.appendChild(el);
+      drawEyes(ep, styles[e].id, tint);
+      eb.addEventListener("click", (function (id) {
+        return function () {
+          store(EYES_KEY, id);
+          sendText({ t: "eyes", v: id });
+          var look = lookOf(slot);
+          if (look) { look.eyes = id; }
+          renderLookPrompt();
+        };
+      })(styles[e].id));
+      eyesGridEl.appendChild(eb);
     }
     colorRowEl.textContent = "";
     var palette = (looks && looks.palette) || [];

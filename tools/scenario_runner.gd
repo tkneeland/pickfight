@@ -417,6 +417,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
+	"eye_styles_render_and_track_aim",
+	"phone_eye_style_reaches_player_and_survives_reconnect",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1653,6 +1655,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
+		"eye_styles_render_and_track_aim":
+			return await _scenario_eye_styles_render_and_track_aim()
+		"phone_eye_style_reaches_player_and_survives_reconnect":
+			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25732,5 +25738,113 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 	if other.is_frozen():
 		failures.append("Juice took over a pause it did not set")
 	get_root().get_tree().paused = false
+	await _teardown(stage)
+	return failures
+
+## Issue #297: every eye style draws without error through every eye state, its
+## pupils move toward wherever the aim points, and an unknown id falls back to
+## round.
+func _scenario_eye_styles_render_and_track_aim() -> Array[String]:
+	var failures: Array[String] = []
+	var FaceScript: GDScript = load("res://scripts/PlayerFace.gd")
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "EyeP0"
+	stage.add_child(player)
+	player.global_position = PARK_POSITION
+	await _await_ticks(5)
+	var face: Node2D = player.face_node()
+	if face == null:
+		failures.append("the player has no face")
+		await _teardown(stage)
+		return failures
+	if player.eyes_id() != "round":
+		failures.append("a fresh player's eyes are '%s', expected round" % player.eyes_id())
+	if FaceScript.EYE_IDS.size() < 5:
+		failures.append("only %d eye styles" % FaceScript.EYE_IDS.size())
+	for id: String in FaceScript.EYE_IDS:
+		player.set_eyes(id)
+		if player.eyes_id() != id:
+			failures.append("set_eyes('%s') left '%s'" % [id, player.eyes_id()])
+		var right: Array[Vector2] = face.pupil_centers(Vector2.RIGHT)
+		var left: Array[Vector2] = face.pupil_centers(Vector2.LEFT)
+		var down: Array[Vector2] = face.pupil_centers(Vector2.DOWN)
+		var up: Array[Vector2] = face.pupil_centers(Vector2.UP)
+		for k in 2:
+			if right[k].x <= left[k].x + 1.0 or down[k].y <= up[k].y + 1.0:
+				failures.append("style '%s' pupil %d does not follow the aim" % [id, k])
+		print("      style %s: pupil right %s left %s" % [id, right[0], left[0]])
+		await _await_ticks(2)
+		face.on_hit(1.0)
+		await _await_ticks(2)
+		face.start_squash(0.1, 1.0)
+		await _await_ticks(2)
+		if face.squash_scale().is_equal_approx(Vector2.ONE):
+			failures.append("style '%s' lost the squash" % id)
+	player.set_eyes("no-such-eyes")
+	if player.eyes_id() != "round":
+		failures.append("an unknown style gave '%s', expected round" % player.eyes_id())
+	await _teardown(stage)
+	return failures
+
+## Issue #297: a phone's eye pick reaches its player over the real socket the
+## way the hat does (unknown ids ignored), is offered in the looks frame, and
+## comes back with the seat after a reconnect.
+func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "EyeSP0"
+	stage.add_child(player)
+	player.global_position = PARK_POSITION
+	var server: Node = ControllerServerScript.new()
+	server.name = "EyeServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../EyeSP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "eye-phone-0", [] as Array[WebSocketPeer])
+	if result["slot"] != 0:
+		failures.append("the phone got slot %d" % result["slot"])
+		await _teardown(stage)
+		return failures
+	await _poll_phones([peer] as Array[WebSocketPeer], 5)
+	var looks: Dictionary = _drain_looks(peer, {})
+	var offered: Array = []
+	for entry: Dictionary in looks.get("eyes", []):
+		offered.append(entry["id"])
+	if offered.size() < 5 or not offered.has("round"):
+		failures.append("the phone was offered eye styles %s" % [offered])
+	peer.send_text(JSON.stringify({"t": "eyes", "v": "angry"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	looks = _drain_looks(peer, looks)
+	if server.slot_eyes(0) != "angry" or player.eyes_id() != "angry":
+		failures.append("angry did not reach the player (host '%s', player '%s')" % [server.slot_eyes(0), player.eyes_id()])
+	var told: Array = looks.get("looks", [])
+	if told.size() != 1 or told[0].get("eyes") != "angry":
+		failures.append("the phone was told looks %s, expected angry eyes" % [told])
+	peer.send_text(JSON.stringify({"t": "eyes", "v": "bogus"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if player.eyes_id() != "angry":
+		failures.append("an unknown eye id changed the eyes to '%s'" % player.eyes_id())
+	peer.send_text(JSON.stringify({"t": "eyes", "v": "visor"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if player.eyes_id() != "visor":
+		failures.append("visor did not reach the player")
+	# Reconnect with the same id: the seat keeps its eyes.
+	peer.close()
+	await _await_ticks(20)
+	var again := WebSocketPeer.new()
+	var back: Dictionary = await _join_phone(again, "eye-phone-0", [] as Array[WebSocketPeer])
+	await _poll_phones([again] as Array[WebSocketPeer], 10)
+	print("      reconnected into slot %s, eyes '%s'" % [back["slot"], server.slot_eyes(0)])
+	if back["slot"] != 0 or server.slot_eyes(0) != "visor" or player.eyes_id() != "visor":
+		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
+	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
 	return failures
