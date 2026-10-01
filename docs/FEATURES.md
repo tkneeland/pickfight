@@ -25,6 +25,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
+- Plunger: sticks to players (drag them) and surfaces (hang and swing, never reels you in); a hard yank pops it free (#270)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
 
 ## Stages and stage parts

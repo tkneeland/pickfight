@@ -106,6 +106,11 @@ const SOUNDS: Dictionary = {
 	"hit_fishing_rod": {"files": [
 		"kenney_impact/impactGeneric_rod_000.ogg",
 		"kenney_impact/impactGeneric_rod_001.ogg"], "db": -2.0},
+	# The plunger (issue #270). Placeholder: copies of two soft impacts under
+	# their own names, since no two weapons may share a file.
+	"hit_plunger": {"files": [
+		"kenney_impact/impactSoft_plunger_000.ogg",
+		"kenney_impact/impactSoft_plunger_001.ogg"], "db": -1.0},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",
