@@ -18,6 +18,10 @@ read and follow `docs/agents/collaboration.md`.
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Feature inventory
+
+`docs/FEATURES.md` lists everything already shipped. Read it before grilling the owner, proposing features, filing tickets, or planning, and frame questions as extensions of what exists — never ask about a feature it lists as shipped. Any PR that adds, removes or changes a player-facing feature updates `docs/FEATURES.md` in the same PR; integrators check this at review.
+
 <!-- atlas-v3:guidance:start -->
 ## Workspace framing
 
@@ -34,7 +38,7 @@ repository keeps its own base SHA, branch, verification result, and pull request
 
 ## Repository framing
 
-**pickfight** — A same-room multiplayer platform fighter combining Stick Fight's scrappy physics combat with Getting Over It's pole/hammer movement scheme. One host machine simulates and renders the shared screen; each player drives their arm from their own phone browser over the LAN. Early prototype at playtest stage: up to eight phone-controlled players, an endless round loop over 24 rotating stages built from reusable parts, and nine weapons (the pickaxe everyone starts with, plus eight handed out as on-stage pickups, ADR-0009); art is placeholder.
+**pickfight** — A same-room multiplayer platform fighter combining Stick Fight's scrappy physics combat with Getting Over It's pole/hammer movement scheme. One host machine simulates and renders the shared screen; each player drives their arm from their own phone browser over the LAN. Early prototype at playtest stage: up to eight phone-controlled players, an endless round loop over 24 rotating stages built from reusable parts, and eleven weapons (the pickaxe everyone starts with, plus ten handed out as on-stage pickups, ADR-0009); art is placeholder.
 
 ### Structure
 

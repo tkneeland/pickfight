@@ -18,6 +18,7 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/boomerang.tres",
 	"res://resources/spear.tres",
 	"res://resources/pogo.tres",
+	"res://resources/fishing_rod.tres",
 ]
 
 ## The weapons as `available_weapons()` first loaded them, held for the

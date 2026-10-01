@@ -70,6 +70,7 @@ the dispatcher; don't reorder), `CONTEXT.md`.
 
 - New ADRs: take the next free number when you open the PR. If the other dev
   took it first, renumber yours during rebase.
+- Every PR that changes a player-facing feature updates `docs/FEATURES.md`; the integrator checks it before merging.
 - Anything both agents must know goes in the repo (CLAUDE.md, ADRs,
   `docs/agents/*`), through a PR, never only in one person's Claude memory.
 - Don't reopen settled decisions (ADRs, CLAUDE.md "settled" items) in your
