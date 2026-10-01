@@ -73,6 +73,10 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)
+- Window size option for windowed mode (#294)
+- Stage on/off list: the rotation skips switched-off stages (#294)
+- Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
@@ -102,7 +106,6 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
 - #297 Cosmetics: eye styles (tkneeland)
-- #294 Host settings menu: volume, display, stage and weapon toggles (tkneeland)
 - #291 Onboarding: first-join tip on phone, live lobby sandbox (tkneeland)
 - #288 Real per-weapon hit sounds (tkneeland)
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)

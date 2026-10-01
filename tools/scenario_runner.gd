@@ -408,6 +408,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
+	"host_settings_disabled_stage_never_rotates_in",
+	"host_settings_disabled_weapon_never_spawns",
+	"host_settings_refuse_last_stage_and_weapon",
+	"host_settings_persist_across_reload",
 ]
 
 const ANGLE_TOLERANCE: float = 0.01
@@ -1624,6 +1628,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
+		"host_settings_disabled_stage_never_rotates_in":
+			return await _scenario_host_settings_disabled_stage_never_rotates_in()
+		"host_settings_disabled_weapon_never_spawns":
+			return await _scenario_host_settings_disabled_weapon_never_spawns()
+		"host_settings_refuse_last_stage_and_weapon":
+			return await _scenario_host_settings_refuse_last_stage_and_weapon()
+		"host_settings_persist_across_reload":
+			return await _scenario_host_settings_persist_across_reload()
 		_:
 			return ["unknown scenario '%s'" % name]
 
@@ -25416,4 +25428,135 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 		failures.append("Juice took over a pause it did not set")
 	get_root().get_tree().paused = false
 	await _teardown(stage)
+	return failures
+
+## Issue #294: a stage the host switched off never comes up in the rotation,
+## however many rounds are dealt, while the others all still do.
+func _scenario_host_settings_disabled_stage_never_rotates_in() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	var rotation: RefCounted = (load("res://scripts/StageRotation.gd") as GDScript).new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = []
+	for i in 5:
+		var scene: PackedScene = _make_stub_stage("HostStub%d" % i, [Vector2.ZERO])
+		scene.take_over_path("res://virtual/HostStub%d.tscn" % i)
+		scenes.append(scene)
+	rotation.scenes = scenes
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 7
+	# The opener (index 0) and one more are off.
+	if not settings.set_stage_enabled("HostStub0", false) or not settings.set_stage_enabled("HostStub3", false):
+		failures.append("switching off two of five stages was refused")
+	var seen: Dictionary = {}
+	for _round in 200:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[index] = true
+	if seen.has(0) or seen.has(3):
+		failures.append("a disabled stage came up in the rotation: %s" % [seen.keys()])
+	for wanted: int in [1, 2, 4]:
+		if not seen.has(wanted):
+			failures.append("enabled stage %d never came up in 200 rounds" % wanted)
+	_scenario_completed = true
+	return failures
+
+## Issue #294: a pickup weapon the host switched off is never spawned as a
+## pickup, over many draws through the real director.
+func _scenario_host_settings_disabled_weapon_never_spawns() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	var pool: Array[Resource] = PickupWeaponsScript.available_weapons()
+	var off_names: PackedStringArray = ["sword", "axe", "dagger"]
+	for weapon_name: String in off_names:
+		if not settings.set_weapon_enabled(weapon_name, false):
+			failures.append("switching off %s was refused" % weapon_name)
+	var loop: Dictionary = _new_pickup_round(PICKUP_LONG_INTERVAL_SEC, PICKUP_CAP, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	round_manager.pickup_weapons = pool
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+	var director: Node = round_manager._pickup_director
+	director.settings = settings
+	var seen: Dictionary = {}
+	for _draw in 120:
+		director.clear()
+		director._spawn_pickup()
+		for pickup: Node2D in director._live_pickups():
+			seen[(pickup.weapon_stats as Resource).resource_path.get_file().get_basename()] = true
+	for weapon_name: String in off_names:
+		if seen.has(weapon_name):
+			failures.append("disabled weapon %s spawned as a pickup" % weapon_name)
+	if seen.size() < pool.size() - off_names.size():
+		failures.append("only %d of the %d enabled weapons ever spawned: %s" % [seen.size(), pool.size() - off_names.size(), seen.keys()])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #294: the last enabled stage and the last enabled pickup weapon
+## refuse to switch off, and stay on.
+func _scenario_host_settings_refuse_last_stage_and_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	settings.known_stages = PackedStringArray(["Alpha", "Beta"])
+	if not settings.set_stage_enabled("Alpha", false):
+		failures.append("switching off one of two stages was refused")
+	if settings.set_stage_enabled("Beta", false):
+		failures.append("the last enabled stage was allowed to switch off")
+	if not settings.is_stage_enabled("Beta") or settings.is_stage_enabled("Alpha"):
+		failures.append("the stage switches ended in the wrong state")
+	var weapons: PackedStringArray = settings.known_weapons()
+	var refused: int = 0
+	for weapon_name: String in weapons:
+		if not settings.set_weapon_enabled(weapon_name, false):
+			refused += 1
+	if refused != 1:
+		failures.append("expected exactly the last weapon to be refused, %d were" % refused)
+	var still_on: int = 0
+	for weapon_name: String in weapons:
+		if settings.is_weapon_enabled(weapon_name):
+			still_on += 1
+	if still_on != 1:
+		failures.append("expected one weapon left on, found %d" % still_on)
+	_scenario_completed = true
+	return failures
+
+## Issue #294: the choices survive a reload of the store from its file, and
+## the other settings sharing the file are kept.
+func _scenario_host_settings_persist_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pickfight_host_settings_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var seed_file := ConfigFile.new()
+	seed_file.set_value("audio", "master_volume", 0.4)
+	seed_file.save(path)
+	var script: GDScript = load("res://scripts/HostSettings.gd") as GDScript
+	var first: RefCounted = script.new()
+	first.path = path
+	first.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma"])
+	first.set_stage_enabled("Beta", false)
+	first.set_weapon_enabled("spear", false)
+	first.set_resolution(Vector2i(1600, 900))
+	var second: RefCounted = script.new()
+	second.path = path
+	second.known_stages = first.known_stages
+	second.load_settings()
+	if second.is_stage_enabled("Beta") or not second.is_stage_enabled("Alpha"):
+		failures.append("the disabled stage did not survive a reload")
+	if second.is_weapon_enabled("spear") or not second.is_weapon_enabled("sword"):
+		failures.append("the disabled weapon did not survive a reload")
+	if second.resolution != Vector2i(1600, 900):
+		failures.append("the resolution came back as %s" % [second.resolution])
+	var check := ConfigFile.new()
+	check.load(path)
+	if not is_equal_approx(float(check.get_value("audio", "master_volume", -1.0)), 0.4):
+		failures.append("saving the host settings dropped the audio section")
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
 	return failures
