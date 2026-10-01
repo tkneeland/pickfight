@@ -263,6 +263,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_tick_spawn_protection()
+	_tick_ghosts()
 	_tick_name_tags()
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
@@ -1827,3 +1828,46 @@ func _end_game_mode() -> void:
 		_game_mode_node.end_round()
 		_game_mode_node.queue_free()
 		_game_mode_node = null
+
+# --- Ghosts of KO'd players (issue #324) ---------------------------------------
+
+const GhostScript := preload("res://scripts/Ghost.gd")
+## slot -> its Ghost node, for human players knocked out this round.
+var _ghosts: Dictionary = {}
+
+## The ghost for `slot`, or null.
+func ghost_of(slot: int) -> Node2D:
+	return _ghosts.get(slot) as Node2D
+
+## A knocked-out human gets a ghost the rest of the round; bots never do.
+## Everything is gone the moment the round is no longer active.
+func _tick_ghosts() -> void:
+	if _state != State.ROUND_ACTIVE or _current_stage == null:
+		if not _ghosts.is_empty():
+			_clear_ghosts()
+		return
+	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
+	for slot in _in_round:
+		var player: Variant = _players[slot]
+		if player == null or player.alive or not claimed.has(slot):
+			continue
+		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		if _ghosts.has(slot) and is_instance_valid(_ghosts[slot]):
+			continue
+		var view: Rect2
+		if _current_stage.has_method("get_view_rect"):
+			view = _current_stage.get_view_rect()
+		else:
+			view = Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+		var ghost: Node2D = GhostScript.new()
+		ghost.name = "Ghost%d" % slot
+		_current_stage.add_child(ghost)
+		ghost.setup(player, slot, player.global_position, view, player.identity_color)
+		_ghosts[slot] = ghost
+
+func _clear_ghosts() -> void:
+	for ghost: Variant in _ghosts.values():
+		if is_instance_valid(ghost):
+			(ghost as Node).queue_free()
+	_ghosts.clear()
