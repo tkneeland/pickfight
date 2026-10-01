@@ -27916,7 +27916,7 @@ func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
 			continue
 		for file: String in sounds[key]["files"]:
 			checked += 1
-			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_"]:
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_"]:
 				if file.contains(marker):
 					failures.append("%s uses placeholder file %s" % [key, file])
 	if checked == 0:
