@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="WeaponStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
+
+; The magnet (issue #274): a passive weapon that pulls nearby players and
+; weapon heads toward the wielder. The magnet creates a continuous attraction
+; field around the wielder, pulling nearby objects inward. No swing bonus or
+; damage - the effect is disruption through movement control.
+;
+; Pulls nearby players and weapon heads within 300 px at 3000 force. Light
+; weapon, reach M, damage M (30), with moderate drive. The head is a chunky
+; block suitable for blocking and clashing. The magnet's main power is pulling
+; enemies into unfavorable positions, making it useful for control and setup
+; rather than raw damage.
+;
+; Force ceiling 8000, same as medium weapons, so it wins mid-tier clashes but
+; the sword still has the longer reach for setup.
+
+[resource]
+script = ExtResource("1")
+min_reach = 20.0
+max_reach = 140.0
+mass = 0.3
+drive_speed = 32.0
+extend_speed = 900.0
+rest_return_speed = 650.0
+max_drive_force = 8000.0
+damage = 30.0
+sound_set = &"pickaxe"
+special = &"magnet"
+launch_range = 300.0
+reel_force = 3000.0
+head_circle_offsets = PackedVector2Array(-2, -2, 2, -2, 0, 0, -2, 2, 2, 2)
+head_circle_radii = PackedFloat32Array(3.5, 3.5, 4.0, 3.5, 3.5)
+art_outline = PackedVector2Array(-8, -8, 8, -8, 8, 8, -8, 8)

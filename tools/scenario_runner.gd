@@ -287,6 +287,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_hook_hits_player_lightly",
 	"fishing_rod_fires_sticks_reels_and_releases",
 	"fishing_rod_hook_hits_player_lightly",
+	"magnet_pulls_nearby_players",
+	"magnet_pulls_weapon_heads",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -1372,6 +1374,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_fishing_rod_fires_sticks_reels_and_releases()
 		"fishing_rod_hook_hits_player_lightly":
 			return await _scenario_fishing_rod_hook_hits_player_lightly()
+		"magnet_pulls_nearby_players":
+			return await _scenario_magnet_pulls_nearby_players()
+		"magnet_pulls_weapon_heads":
+			return await _scenario_magnet_pulls_weapon_heads()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -18769,7 +18775,8 @@ const GRAPPLE_PATH: String = "res://resources/grapple.tres"
 const FLAIL_PATH: String = "res://resources/flail.tres"
 const BOOMERANG_PATH: String = "res://resources/boomerang.tres"
 const FISHING_ROD_PATH: String = "res://resources/fishing_rod.tres"
-const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH, FISHING_ROD_PATH]
+const MAGNET_PATH: String = "res://resources/magnet.tres"
+const NEW_WEAPON_PATHS: PackedStringArray = [GRAPPLE_PATH, FLAIL_PATH, BOOMERANG_PATH, FISHING_ROD_PATH, MAGNET_PATH]
 ## The arena's ground top (its floor is 40 tall, centred at y 320) and where a
 ## player stands on it.
 const NEW_WEAPON_FLOOR_STAND: Vector2 = Vector2(0, 274)
@@ -19039,6 +19046,49 @@ func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 		failures.append("the hook's hit was not reported as the thrower's strike_landed")
 	if is_instance_valid(hook) and hook.is_stuck():
 		failures.append("the hook stuck to a player")
+	await _teardown(stage)
+	return failures
+
+## The magnet pulls nearby players toward the wielder continuously.
+func _scenario_magnet_pulls_nearby_players() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(250, 0))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(wielder, MAGNET_PATH)
+	_brace(wielder)
+	victim.freeze = false
+	victim.linear_velocity = Vector2.ZERO
+	await _await_ticks(30)
+	var pulled: bool = victim.global_position.x < DEEP_PARK_POSITION.x + 250.0
+	print("      victim pulled: %s (moved from %.0f to %.0f)" % [pulled, DEEP_PARK_POSITION.x + 250.0, victim.global_position.x])
+	if not pulled:
+		failures.append("the magnet did not pull a nearby player toward the wielder")
+	var distance: float = (victim.global_position - wielder.global_position).length()
+	if distance > float(stats.launch_range):
+		failures.append("the pulled player stopped beyond the magnet's range (distance %.0f, range %.0f)" % [distance, stats.launch_range])
+	await _teardown(stage)
+	return failures
+
+## The magnet pulls nearby weapon heads toward the wielder.
+func _scenario_magnet_pulls_weapon_heads() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var other: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(250, 0))
+	await _await_ticks(2)
+	await _equip(wielder, MAGNET_PATH)
+	var stats: WeaponStatsType = await _equip(other, GRAPPLE_PATH)
+	_brace(wielder)
+	other.freeze = true
+	await _await_ticks(30)
+	var head_pos: Vector2 = other.weapon_head_position()
+	var distance_to_magnet: float = (head_pos - wielder.global_position).length()
+	var distance_to_other: float = (head_pos - other.global_position).length()
+	print("      head distance from magnet: %.0f px, from wielder: %.0f px" % [distance_to_magnet, distance_to_other])
+	if distance_to_magnet > 300.0:
+		failures.append("the magnet did not pull a nearby weapon head (distance %.0f px)" % distance_to_magnet)
 	await _teardown(stage)
 	return failures
 

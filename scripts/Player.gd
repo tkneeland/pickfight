@@ -61,6 +61,7 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const FlailChainScript := preload("res://scripts/FlailChain.gd")
 const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
 const BoomerangScript := preload("res://scripts/Boomerang.gd")
+const MagnetScript := preload("res://scripts/Magnet.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
 ## deltas, and 300 sixtieths of a second may sum to a hair under 5 s.
 const FIRE_CLOCK_EPSILON: float = 0.000001
@@ -768,6 +769,9 @@ func _clear_rig() -> void:
 		return
 	if _flail != null:
 		_flail.retire()
+	if _magnet != null:
+		_magnet.queue_free()
+		_magnet = null
 	# Joints first: a half-freed rig that still constrains the body would
 	# drag the player around for the rest of the frame.
 	if _pin != null:
@@ -1710,6 +1714,7 @@ const BALL_KNOCKBACK_MAX: float = 700.0
 var _flail: FlailChainScript
 var _hook: Node2D
 var _boomerang: Node2D
+var _magnet: MagnetScript
 ## Whether a hook or boomerang was out on the last tick, so its return is seen.
 var _was_launched: bool = false
 var _launch_cooldown: float = 0.0
@@ -1756,6 +1761,10 @@ func _build_special(axis: Vector2) -> void:
 			_flail = FlailChainScript.new()
 			_flail.build(self, _rig, _head, _stats, axis, identity_color)
 			_flail.ball.body_entered.connect(_on_ball_hit)
+		&"magnet":
+			_magnet = MagnetScript.new()
+			_magnet.setup(self, _stats)
+			add_child(_magnet)
 		&"grapple", &"boomerang":
 			if _stats.loaded_art.size() >= 3:
 				_loaded_visual = Polygon2D.new()
@@ -1768,6 +1777,8 @@ func _tick_special(delta: float) -> void:
 	match _stats.special:
 		&"flail":
 			_tick_flail()
+		&"magnet":
+			pass
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
 
