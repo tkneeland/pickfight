@@ -435,6 +435,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hazard_ko_counts_like_any_other_ko",
 	"eye_styles_render_and_track_aim",
 	"phone_eye_style_reaches_player_and_survives_reconnect",
+	"controller_page_has_once_per_device_tip",
+	"lobby_sandbox_seated_player_moves",
+	"lobby_sandbox_ko_does_not_score_and_respawns",
+	"lobby_sandbox_match_start_resets_state",
 	"feedback_button_opens_box_and_blocks_empty",
 	"feedback_relay_builds_github_issue",
 	"feedback_missing_token_gives_503_and_offline_message",
@@ -951,6 +955,9 @@ func _run_one(name: String) -> Array[String]:
 	_scenario_completed = false
 	var statics: Dictionary = _snapshot_statics()
 	var world: World2D = _fresh_physics_world()
+	# Issue #291: the lobby sandbox makes lobby players live, which older
+	# scenarios read as "a round started"; only its own scenarios run with it.
+	RoundManagerScript.lobby_sandbox_allowed = name.begins_with("lobby_sandbox_")
 	var failures: Array[String] = await _run_scenario(name)
 	get_root().world_2d = world
 	_restore_statics(statics)
@@ -1774,6 +1781,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_eye_styles_render_and_track_aim()
 		"phone_eye_style_reaches_player_and_survives_reconnect":
 			return await _scenario_phone_eye_style_reaches_player_and_survives_reconnect()
+		"controller_page_has_once_per_device_tip":
+			return await _scenario_controller_page_has_once_per_device_tip()
+		"lobby_sandbox_seated_player_moves":
+			return await _scenario_lobby_sandbox_seated_player_moves()
+		"lobby_sandbox_ko_does_not_score_and_respawns":
+			return await _scenario_lobby_sandbox_ko_does_not_score_and_respawns()
+		"lobby_sandbox_match_start_resets_state":
+			return await _scenario_lobby_sandbox_match_start_resets_state()
 		"feedback_button_opens_box_and_blocks_empty":
 			return await _scenario_feedback_button_opens_box_and_blocks_empty()
 		"feedback_relay_builds_github_issue":
@@ -22566,7 +22581,7 @@ func _scenario_controller_page_gear_taps_open_in_play() -> Array[String]:
 	z_re.compile("(?m)^\\s*(#[a-z-]+) \\{([^}]*)\\}")
 	for m: RegExMatch in z_re.search_all(page):
 		var z: int = _css_px_231(m.get_string(2), "z-index")
-		if m.get_string(1) != "#gear" and z >= gear_z and not ["#host-menu", "#name-prompt", "#look-prompt"].has(m.get_string(1)):
+		if m.get_string(1) != "#gear" and z >= gear_z and not ["#host-menu", "#name-prompt", "#look-prompt", "#tip"].has(m.get_string(1)):
 			failures.append("%s (z-index %d) is stacked over the gear (%d)" % [m.get_string(1), z, gear_z])
 	for layer: String in ["#hud", "#state", "#hint", "#flash"]:
 		if not _css_rule_231(page, layer).contains("pointer-events: none;"):
@@ -28845,5 +28860,155 @@ func _scenario_ghost_cleared_at_round_end_and_never_for_bots() -> Array[String]:
 		failures.append("the round did not end")
 	if rm.ghost_of(0) != null:
 		failures.append("the ghost survived the end of the round")
+	await _teardown(loop["stage"])
+	return failures
+
+# --- Onboarding: first-join tip and the live lobby sandbox (issue #291) ---------
+
+## The lobby fixture of `_new_lobby_round()` with the sandbox on: slots 0 and 1
+## seated, a third player nobody has claimed.
+func _new_sandbox_lobby_291(respawn_sec: float) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "LobbyContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	var spawns := PackedVector2Array()
+	for i in 3:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "LobbyP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../LobbyP%d" % i))
+		spawns.append(FOUR_PLAYER_SKY_SPAWNS[i])
+	var roster := StubLobbyRosterScript.new()
+	roster.name = "LobbyRoster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "LobbyRoundManager"
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = [_make_pickup_stub_stage("LobbyStage", spawns, PICKUP_STUB_POINTS)]
+	round_manager.arena_container_path = NodePath("../LobbyContainer")
+	round_manager.controller_server_path = NodePath("../LobbyRoster")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
+	round_manager.lobby_enabled = true
+	round_manager.lobby_sandbox = true
+	round_manager.lobby_respawn_sec = respawn_sec
+	round_manager.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	stage.add_child(round_manager)
+	return {"stage": stage, "players": players, "roster": roster, "round_manager": round_manager}
+
+func _scenario_controller_page_has_once_per_device_tip() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	for needle: String in ['id="tip"', "Drag anywhere to swing your pick", ">Got it<", "@keyframes tip-swing", "pickfight-tip-seen"]:
+		if not page.contains(needle):
+			failures.append("the controller page has no '%s'" % needle)
+	var stores := 0
+	for line: String in page.split("\n"):
+		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")):
+			stores += 1
+			if not line.contains("try {"):
+				failures.append("a tip localStorage access is not inside try/catch: %s" % line.strip_edges())
+	if stores < 2:
+		failures.append("the tip is not both read and written in localStorage (%d accesses)" % stores)
+	var re := RegEx.new()
+	re.compile("(?m)^\\s*#tip \\{([^}]*)\\}")
+	var rule: RegExMatch = re.search(page)
+	if rule == null or not rule.get_string(1).contains("display: none"):
+		failures.append("the tip is not hidden until shown")
+	_scenario_completed = true
+	return failures
+
+func _scenario_lobby_sandbox_seated_player_moves() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_sandbox_lobby_291(1.5)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "lobby":
+		failures.append("the session opened in '%s', expected the lobby" % rm.lobby_phase())
+	if not rm.lobby_sandbox_active() or not players[0].alive or not players[1].alive:
+		failures.append("the seated players were not live in the lobby")
+	if players[2].alive:
+		failures.append("an unseated player was spawned into the lobby")
+	players[0].bind_controller()
+	players[0].set_input_vector(Vector2(1.0, 0.0))
+	await _await_ticks(45)
+	var right: float = players[0].weapon_head_position().x - players[0].global_position.x
+	players[0].set_input_vector(Vector2(-1.0, 0.0))
+	await _await_ticks(45)
+	var left: float = players[0].weapon_head_position().x - players[0].global_position.x
+	print("      head offset x: %.1f dragging right, %.1f dragging left" % [right, left])
+	if right - left < 20.0:
+		failures.append("dragging right then left moved the pick only %.1f px in the lobby" % (right - left))
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_lobby_sandbox_ko_does_not_score_and_respawns() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_sandbox_lobby_291(0.3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	players[0].take_damage(1000.0)
+	await _await_ticks(3)
+	if players[0].alive:
+		failures.append("the lobby KO did not eliminate the player")
+	var stats: RefCounted = rm.match_stats()
+	if rm.score_of(0) != 0 or rm.score_of(1) != 0:
+		failures.append("a lobby KO changed the scores (%d, %d)" % [rm.score_of(0), rm.score_of(1)])
+	if stats.total_kos != 0 or not stats.deaths.is_empty():
+		failures.append("a lobby KO was recorded in the match stats")
+	var ticks := 0
+	while not players[0].alive and ticks < 300:
+		await _await_ticks(1)
+		ticks += 1
+	if not players[0].alive:
+		failures.append("the KO'd player never respawned in the lobby")
+	elif players[0].damage != 0.0:
+		failures.append("the respawned player kept %.1f damage" % players[0].damage)
+	if rm.lobby_phase() != "lobby":
+		failures.append("a lobby KO moved the session to '%s'" % rm.lobby_phase())
+	print("      respawned after %d ticks" % ticks)
+	await _teardown(loop["stage"])
+	return failures
+
+func _scenario_lobby_sandbox_match_start_resets_state() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_sandbox_lobby_291(30.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	players[0].take_damage(40.0)
+	players[1].take_damage(1000.0)
+	await _await_ticks(3)
+	if players[1].alive or players[0].damage < 39.0:
+		failures.append("the lobby fight did not leave one hurt and one down")
+	roster.ready_slots = {0: true, 1: true}
+	var ticks := 0
+	while rm.lobby_phase() != "playing" and ticks < 300:
+		await _await_ticks(1)
+		ticks += 1
+	if rm.lobby_phase() != "playing":
+		failures.append("the match never started (phase '%s')" % rm.lobby_phase())
+	if rm.lobby_sandbox_active():
+		failures.append("the sandbox is still running in the match")
+	if not players[0].alive or not players[1].alive:
+		failures.append("the match did not start with everyone alive")
+	if players[0].damage != 0.0:
+		failures.append("the lobby's %.1f damage carried into the match" % players[0].damage)
+	if rm.score_of(0) != 0 or rm.score_of(1) != 0:
+		failures.append("the match started on scores (%d, %d)" % [rm.score_of(0), rm.score_of(1)])
+	var stats: RefCounted = rm.match_stats()
+	if stats.total_kos != 0 or not stats.deaths.is_empty() or not stats.damage_taken.is_empty():
+		failures.append("the lobby fight carried into the match stats")
 	await _teardown(loop["stage"])
 	return failures

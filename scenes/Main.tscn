@@ -330,5 +330,6 @@ score_label_path = NodePath("../UI/ScoreLabel")
 waiting_label_path = NodePath("../UI/WaitingLabel")
 scoreboard_path = NodePath("../UI/Scoreboard")
 lobby_enabled = true
+lobby_sandbox = true
 kill_feed_path = NodePath("../UI/KillFeed")
 camera_path = NodePath("../Camera2D")
