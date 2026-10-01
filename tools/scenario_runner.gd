@@ -486,6 +486,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"match_stats_rows_favourite_weapon_and_magpie",
+	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
@@ -1869,6 +1871,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"match_stats_rows_favourite_weapon_and_magpie":
+			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
+		"victory_stat_table_fits_eight_players":
+			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
 			return await _scenario_pickups_skip_occupied_spots()
 		"replay_buffer_bounded_and_saves_clip":
@@ -28384,6 +28390,85 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+
+## Issue #325: the per-player stat rows carry KOs, damage and self-KOs, the
+## favourite weapon is the one grabbed most, and the most pickups earn "Magpie".
+func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2], 0)
+	stats.record_hit(0, 1, 30.0, 100)
+	stats.record_elimination(1, 200)
+	stats.record_elimination(2, 300)
+	stats.record_pickup(0, "Hammer")
+	stats.record_pickup(0, "Spear")
+	stats.record_pickup(0, "Spear")
+	stats.record_pickup(1, "Axe")
+	var rows: Array[Dictionary] = stats.stat_rows([2, 0])
+	if rows.size() != 2 or rows[0]["slot"] != 2 or rows[1]["slot"] != 0:
+		failures.append("rows not in the asked slot order: %s" % [rows])
+	elif rows[1]["kos"] != 1 or rows[1]["damage_dealt"] != 30 or rows[1]["pickups"] != 3 or rows[1]["weapon"] != "Spear":
+		failures.append("slot 0 row %s, expected 1 KO, 30 dealt, 3 pickups, Spear" % [rows[1]])
+	elif rows[0]["self_kos"] != 1 or rows[0]["weapon"] != "":
+		failures.append("slot 2 row %s, expected 1 self-KO and no weapon" % [rows[0]])
+	var extra: Array[Dictionary] = stats.extra_awards([0, 1, 2])
+	if extra.size() != 1 or extra[0]["title"] != "Magpie" or extra[0]["slot"] != 0 or extra[0]["detail"] != "3 pickups":
+		failures.append("extra awards %s, expected Magpie for slot 0 with 3 pickups" % [extra])
+	stats.forget_slot(0)
+	if stats.favourite_weapon(0) != "" or stats.pickups.has(0):
+		failures.append("forget_slot left slot 0's pickups behind")
+	stats.begin_match()
+	if not stats.extra_awards([0, 1]).is_empty():
+		failures.append("begin_match left pickups behind")
+	_scenario_completed = true
+	return failures
+
+## Issue #325: the victory screen's stats table lists every player and, with
+## eight long names, still fits the screen together with the podium and awards.
+func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var roster := StubLobbyRosterScript.new()
+	roster.name = "StubRoster325"
+	main.add_child(roster)
+	var rm: Node = main.get_node("RoundManager")
+	rm.controller_server_path = NodePath("../StubRoster325")
+	for slot in 8:
+		roster.slots.append(slot)
+		roster.names[slot] = LONG_NAME_148
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var stats: RefCounted = rm.match_stats()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3, 4, 5, 6, 7], 0)
+	for i in 12:
+		stats.record_hit(1, 2, 44.0, i * 10)
+		stats.record_elimination(2, i * 10)
+		stats.record_elimination(3, i * 10 + 5)
+	stats.record_pickup(4, "Hammer")
+	stats.end_round(3599000)
+	rm.set("_match_winner_slot", 0)
+	rm._enter_victory()
+	await _await_ticks(3)
+	var table: Control = rm._lobby_screen.stats_table()
+	var content: Vector2 = _content_size(rm.victory_panel())
+	print("      victory with stat table needs %.0f x %.0f px" % [content.x, content.y])
+	var lines: int = 0
+	if table != null:
+		for column: Node in table.get_children():
+			lines += column.get_child_count()
+	if lines != 8:
+		failures.append("the stats table has %d lines, expected 8" % lines)
+	var row: Control = rm.awards_row()
+	if row == null or row.get_child_count() != 4:
+		failures.append("expected 4 award cards (3 core + Magpie), got %s" % (row.get_child_count() if row != null else 0))
+	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
+		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
+	await _teardown(main)
 	return failures
 
 ## Issue #333: a pickup never spawns on a spot a living player is standing on.
