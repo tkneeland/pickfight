@@ -385,6 +385,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"snapshot_stream_reaches_remote_client",
 	"snapshot_nothing_captured_without_remote_seats",
 	"snapshot_kill_sound_reaches_remote_client",
+	"gamepad_event_claims_seat_and_readies",
+	"gamepad_stick_moves_weapon_and_release_zeroes",
+	"gamepad_unplug_holds_claim_and_replug_rejoins",
+	"gamepad_seat_shares_the_player_cap",
 	"palette_moods_cover_the_rotation",
 	"palette_stage_platforms_use_mood_color",
 	"palette_players_are_distinct_and_synced",
@@ -1557,6 +1561,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_snapshot_nothing_captured_without_remote_seats()
 		"snapshot_kill_sound_reaches_remote_client":
 			return await _scenario_snapshot_kill_sound_reaches_remote_client()
+		"gamepad_event_claims_seat_and_readies":
+			return await _scenario_gamepad_event_claims_seat_and_readies()
+		"gamepad_stick_moves_weapon_and_release_zeroes":
+			return await _scenario_gamepad_stick_moves_weapon_and_release_zeroes()
+		"gamepad_unplug_holds_claim_and_replug_rejoins":
+			return await _scenario_gamepad_unplug_holds_claim_and_replug_rejoins()
+		"gamepad_seat_shares_the_player_cap":
+			return await _scenario_gamepad_seat_shares_the_player_cap()
 		"palette_moods_cover_the_rotation":
 			return await _scenario_palette_moods_cover_the_rotation()
 		"palette_stage_platforms_use_mood_color":
@@ -24546,6 +24558,121 @@ func _scenario_snapshot_kill_sound_reaches_remote_client() -> Array[String]:
 	await _snap_close_251(rig)
 	return failures
 
+# --- Gamepad seats (#261) ----------------------------------------------------
+
+func _pad_button_261(device: int, button: int, pressed: bool = true) -> void:
+	var ev := InputEventJoypadButton.new()
+	ev.device = device
+	ev.button_index = button
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+
+func _scenario_gamepad_event_claims_seat_and_readies() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadClaim261")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(4, JOY_BUTTON_A)
+	if server.claimed_slots() != [0] or server.pad_slot(4) != 0:
+		failures.append("A did not claim slot 0 (claims %s, pad slot %d)" % [server.claimed_slots(), server.pad_slot(4)])
+	if server.slot_name(0) != "Pad 5":
+		failures.append("the seat is named '%s', expected Pad 5" % server.slot_name(0))
+	if server.slot_ready(0):
+		failures.append("a gamepad seat was ready on joining")
+	if server.host_slot() != -1:
+		failures.append("host_slot is %d, a pad seat must never host" % server.host_slot())
+	await _pad_button_261(4, JOY_BUTTON_A)
+	if not server.slot_ready(0):
+		failures.append("a second A did not ready the seat")
+	await _pad_button_261(4, JOY_BUTTON_B)
+	if server.slot_ready(0):
+		failures.append("B did not un-ready the seat")
+	await _pad_button_261(4, JOY_BUTTON_START)
+	if not server.slot_ready(0):
+		failures.append("Start did not ready the seat")
+	await _pad_button_261(7, JOY_BUTTON_START)
+	if server.pad_slot(7) != 1:
+		failures.append("Start from a second pad claimed slot %d, expected 1" % server.pad_slot(7))
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_gamepad_stick_moves_weapon_and_release_zeroes() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PadStick261")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server._test_pad_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
+		failures.append("full right gave %s, expected (1, 0)" % players[0].input_vector)
+	# 0.6 deflection: (0.6 - 0.2) / 0.8 = 0.5 after the deadzone rescale.
+	server._test_pad_axes[0] = Vector2(0.0, 0.6)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.0, 0.5)) > 0.01:
+		failures.append("0.6 down gave %s, expected (0, 0.5)" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.15, 0.1)
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("a stick inside the deadzone gave %s" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(-1.0, 0.0)
+	await _await_ticks(30)
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("the released stick gave %s, expected (0, 0)" % players[0].input_vector)
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_gamepad_unplug_holds_claim_and_replug_rejoins() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadHold261")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(2, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	Input.joy_connection_changed.emit(2, false)
+	await _await_ticks(5)
+	if server.claimed_slots() != [0]:
+		failures.append("unplugging dropped the claim (claims %s)" % [server.claimed_slots()])
+	if server.slot_has_controller(0) or server.slot_ready(0):
+		failures.append("the unplugged seat still has a controller or is ready")
+	Input.joy_connection_changed.emit(2, true)
+	await _await_ticks(5)
+	if server.pad_slot(2) != 0 or not server.slot_has_controller(0):
+		failures.append("replugging did not rebind slot 0 (pad slot %d)" % server.pad_slot(2))
+	if server.claimed_slots() != [0]:
+		failures.append("replugging made a second claim: %s" % [server.claimed_slots()])
+	# A pad that never held a seat waits for A.
+	Input.joy_connection_changed.emit(5, true)
+	await _await_ticks(5)
+	if server.pad_slot(5) != -1:
+		failures.append("a fresh pad plugged in claimed a seat without A")
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_gamepad_seat_shares_the_player_cap() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadCap261")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server.apply_host_command("pc_seat", true)
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "padcap-phone", phones)
+	phones.append(phone)
+	if got["slot"] != 2:
+		failures.append("the phone got slot %s, expected 2 beside the pad and PC seats" % got["slot"])
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if server.pad_slot(1) != -1 or server.claimed_slots() != [0, 1, 2]:
+		failures.append("a fourth seat got in past the cap (pad slot %d, claims %s)" % [server.pad_slot(1), server.claimed_slots()])
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
+	return failures
 
 # --- Palette (issue #255) ------------------------------------------------------
 
