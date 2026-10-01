@@ -131,7 +131,7 @@ func get_colours() -> Array[Color]:
 func configure_dressing(mood: Dictionary, stage_index: int) -> void:
 	dressing_enabled = true
 	dressing_index = maxi(stage_index, 0)
-	dressing_stars = mood.get("name", "") == "dusk"
+	dressing_stars = mood.get("name", "") in ["dusk", "night"]
 	dress_sky = mood["dress_sky"]
 	dress_far = mood["dress_far"]
 	dress_mid = mood["dress_mid"]

@@ -38,6 +38,16 @@ const PAPER: Dictionary = {
 	"platform": Color("#26231f"), "kill": Color("#e0402a"), "ink": Color("#26231f"),
 }
 
+## Night variant (#332): the dusk look pushed darker, with stars. Not in the
+## round-robin `MOODS`; a stage with `night` set uses it in place of its own.
+const NIGHT: Dictionary = {
+	"name": "night",
+	"sky_top": Color("#0a0d1f"), "sky_bottom": Color("#1c2547"),
+	"far": Color("#1a2140"), "mid": Color("#232b4f"),
+	"dress_sky": Color("#c8d2ff"), "dress_far": Color("#161c38"), "dress_mid": Color("#1d2444"),
+	"platform": Color("#2b3350"), "kill": Color("#ff6a4d"), "ink": Color("#0b0d18"),
+}
+
 const MOODS: Array[Dictionary] = [DAYLIGHT, DUSK, PAPER]
 
 ## The mood for the stage at `stage_index` in the rotation. A negative or

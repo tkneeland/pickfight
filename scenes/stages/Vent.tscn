@@ -1,0 +1,108 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Fan.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/StageGust.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Spikes.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="6"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1440"]
+size = Vector2(1440, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Vent (issue #315): one long floor with air doing the work. A sweeping Fan
+; (#281) mid-floor lifts anyone crossing the centre, a stage-wide StageGust
+; (#281) shoves everyone right every ~11 s after a 1.5 s warning, and two
+; Spikes rows (#282) flank the fan. Two CrumblingLedges (#18) up high give
+; somewhere to hook. Spawns are on the outer floor, clear of the spikes.
+[node name="Vent" type="Node2D"]
+script = ExtResource("1")
+background_sky_top = Color(0.09, 0.12, 0.14, 1)
+background_sky_bottom = Color(0.2, 0.26, 0.28, 1)
+background_silhouette = Color(0.08, 0.1, 0.12, 1)
+background_layers = PackedStringArray("clouds", "hills", "clouds")
+
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("RectangleShape2D_1440")
+
+[node name="FloorVisual" type="Polygon2D" parent="Floor"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
+
+[node name="CentreFan" parent="." instance=ExtResource("3")]
+position = Vector2(0, 300)
+facing = Vector2(0, -1)
+column_length = 220.0
+strength = 1300.0
+sweep_deg = 20.0
+sweep_sec = 5.0
+
+[node name="Gust" parent="." instance=ExtResource("4")]
+position = Vector2(0, 0)
+calm_sec = 8.0
+
+[node name="SpikesLeft" parent="." instance=ExtResource("5")]
+position = Vector2(-200, 286)
+size = Vector2(72, 28)
+
+[node name="SpikesRight" parent="." instance=ExtResource("5")]
+position = Vector2(200, 286)
+size = Vector2(72, 28)
+
+[node name="PerchLeft" parent="." instance=ExtResource("6")]
+position = Vector2(-300, 170)
+size = Vector2(200, 24)
+
+[node name="PerchRight" parent="." instance=ExtResource("6")]
+position = Vector2(300, 170)
+size = Vector2(200, 24)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-520, 250)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(520, 250)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-370, 250)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(370, 250)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-600, 250)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(600, 250)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-445, 250)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(445, 250)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 250)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-300, 120)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(300, 120)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(-100, 270)
+
