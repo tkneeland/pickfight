@@ -144,6 +144,8 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 
 ## The hats a phone may pick (issue #151), by path (CLAUDE.md).
 const HatScript := preload("res://scripts/Hat.gd")
+## The eye styles a phone may pick (issue #297), by path (CLAUDE.md).
+const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
 
 const PAGE_PATH: String = "res://controller/index.html"
@@ -296,6 +298,8 @@ var _kicked_ids: PackedStringArray = PackedStringArray()
 ## it holds, as an index into `_palette`; -1 for an unclaimed slot. No two
 ## claimed slots ever hold the same colour.
 var _slot_hat: PackedStringArray = PackedStringArray()
+## Each claimed slot's eye style (issue #297), a `PlayerFace.gd` EYE_IDS entry.
+var _slot_eyes: PackedStringArray = PackedStringArray()
 var _slot_color: PackedInt32Array = PackedInt32Array()
 ## The colours on offer: each player's `identity_color` as the scene set it,
 ## so colour i is slot i's automatic colour. Transparent for a missing player.
@@ -481,9 +485,11 @@ func _ready() -> void:
 	_slot_ready.resize(_players.size())
 	_slot_name.resize(_players.size())
 	_slot_hat.resize(_players.size())
+	_slot_eyes.resize(_players.size())
 	_slot_color.resize(_players.size())
 	for i in _players.size():
 		_slot_hat[i] = HatScript.NONE
+		_slot_eyes[i] = PlayerFaceScript.EYE_ROUND
 		_slot_color[i] = -1
 		_palette.append(_players[i].identity_color if _players[i] != null else Color(0, 0, 0, 0))
 	_slot_virtual.resize(_players.size())
@@ -956,6 +962,7 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 		if nickname.is_empty():
 			_slot_name[slot] = str(left["name"])
 		_slot_hat[slot] = str(left["hat"])
+		_slot_eyes[slot] = str(left.get("eyes", PlayerFaceScript.EYE_ROUND))
 		if _color_free(int(left["color"]), slot):
 			_slot_color[slot] = int(left["color"])
 		_apply_look(slot)
@@ -995,7 +1002,7 @@ func _remember_leaver(slot: int) -> void:
 		_recent_leavers.erase(oldest)
 	_recent_leavers[id] = {
 		"rank": _slot_join_rank[slot], "slot": slot, "color": _slot_color[slot],
-		"hat": _slot_hat[slot], "name": _slot_name[slot], "msec": now}
+		"hat": _slot_hat[slot], "eyes": _slot_eyes[slot], "name": _slot_name[slot], "msec": now}
 
 ## Bind `peer` to `slot`: the slot frame, the current lobby state, and the full
 ## looks frame -- hat drawings included, which only a newly bound phone needs
@@ -1187,6 +1194,10 @@ func _handle_text(slot: int, text: String) -> void:
 			var hat: Variant = msg.get("v")
 			if hat is String:
 				set_slot_hat(slot, hat)
+		"eyes":
+			var eyes: Variant = msg.get("v")
+			if eyes is String:
+				set_slot_eyes(slot, eyes)
 		"color":
 			var c: Variant = msg.get("v")
 			if _is_number(c):
@@ -1426,6 +1437,7 @@ static func clean_name(text: String) -> String:
 ## A fresh claim of `slot`: bare-headed, in its automatic colour.
 func _claim_look(slot: int) -> void:
 	_slot_hat[slot] = HatScript.NONE
+	_slot_eyes[slot] = PlayerFaceScript.EYE_ROUND
 	_slot_color[slot] = -1
 	var colour: int = slot if _color_free(slot, slot) else -1
 	if colour == -1:
@@ -1440,10 +1452,12 @@ func _claim_look(slot: int) -> void:
 ## to its own scene colour, bare-headed, for whoever claims the slot next.
 func _release_look(slot: int) -> void:
 	_slot_hat[slot] = HatScript.NONE
+	_slot_eyes[slot] = PlayerFaceScript.EYE_ROUND
 	_slot_color[slot] = -1
 	var player: Variant = _players[slot]
 	if player != null and player.has_method("set_identity_color"):
 		player.set_hat(HatScript.NONE)
+		player.set_eyes(PlayerFaceScript.EYE_ROUND)
 		player.set_identity_color(_palette[slot])
 
 ## Whether colour `index` could be worn by `slot`: a real colour that no other
@@ -1461,6 +1475,7 @@ func _apply_look(slot: int) -> void:
 	if player == null or not player.has_method("set_identity_color"):
 		return
 	player.set_hat(_slot_hat[slot])
+	player.set_eyes(_slot_eyes[slot])
 	if _slot_color[slot] >= 0:
 		player.set_identity_color(_palette[_slot_color[slot]])
 
@@ -1475,6 +1490,19 @@ func set_slot_hat(slot: int, id: String) -> bool:
 		print("slot %d hat %s" % [slot, id])
 	_broadcast_looks()
 	return true
+
+## `slot` wears eye style `id`, one of `PlayerFace.gd`'s EYE_IDS (issue #297).
+## Same path as the hat: unknown id or unclaimed slot is ignored.
+func set_slot_eyes(slot: int, id: String) -> bool:
+	if slot < 0 or slot >= _slot_eyes.size() or _slot_claimed[slot] != 1 or not PlayerFaceScript.EYE_IDS.has(id):
+		return false
+	_slot_eyes[slot] = id
+	_apply_look(slot)
+	_broadcast_looks()
+	return true
+
+func slot_eyes(slot: int) -> String:
+	return _slot_eyes[slot] if slot >= 0 and slot < _slot_eyes.size() else PlayerFaceScript.EYE_ROUND
 
 ## `slot` asks for colour `index`: granted if no other claimed slot holds it.
 ## Every phone is told the outcome either way, so the asker sees a refusal.
@@ -1517,6 +1545,10 @@ func looks_message() -> Dictionary:
 	var msg: Dictionary = looks_update_message()
 	msg["palette"] = palette
 	msg["hats"] = hats
+	var eyes_list: Array = []
+	for id: String in PlayerFaceScript.EYE_IDS:
+		eyes_list.append({"id": id, "label": PlayerFaceScript.EYE_LABELS.get(id, id)})
+	msg["eyes"] = eyes_list
 	msg["art"] = _hat_art
 	return msg
 
@@ -1526,7 +1558,7 @@ func looks_update_message() -> Dictionary:
 	var looks: Array = []
 	for slot in _slot_claimed.size():
 		if _slot_claimed[slot] == 1:
-			looks.append({"slot": slot, "color": _slot_color[slot], "hat": _slot_hat[slot]})
+			looks.append({"slot": slot, "color": _slot_color[slot], "hat": _slot_hat[slot], "eyes": _slot_eyes[slot]})
 	return {"t": "looks", "looks": looks}
 
 ## Tell every connected phone but `except` (one that has just been sent the

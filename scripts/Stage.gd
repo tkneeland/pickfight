@@ -47,6 +47,12 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## or more.
 @export var view_size: Vector2 = DEFAULT_VIEW_SIZE
 
+## Optional per-stage adjustment of the pickup pool (#310): weapon file stem
+## (for example "umbrella") -> copies in the pickup bag. The base rate is 2 and
+## a theme match adds 4; any listed weapon is set to the given count (at least
+## 1, so it can still appear). Empty means just the derived theme.
+@export var weapon_weight_overrides: Dictionary = {}
+
 func _ready() -> void:
 	if get_node_or_null(BACKGROUND_NODE_NAME) != null:
 		return
@@ -59,6 +65,7 @@ func _ready() -> void:
 	background.far_hill = mood["far"]
 	background.mid_hill = mood["mid"]
 	background.use_hill_colours = true
+	background.configure_dressing(mood, stage_index)
 	add_child(background)
 	# First in tree order as well as lowest in z, belt and braces.
 	move_child(background, 0)
@@ -74,6 +81,8 @@ func _tint_bodies(node: Node) -> void:
 	for child in node.get_children():
 		if child.has_method("set_platform_color"):
 			child.set_platform_color(mood["platform"])
+		if child.has_method("set_hazard_color"):
+			child.set_hazard_color(mood["kill"])
 		if child is Polygon2D and node.get_class() == "StaticBody2D" and node.get_script() == null:
 			(child as Polygon2D).color = mood["platform"]
 		_tint_bodies(child)

@@ -21,20 +21,25 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Staff, sword, dagger (#13)
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
 - Spear: long reach, weak up close (#272)
+- Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy; a short poker otherwise (#269)
+- Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
 - Plunger: sticks to players (drag them) and surfaces (hang and swing, never reels you in); a hard yank pops it free (#270)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
+- Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
-- 24 rotating stages (#8, #17, #19, #51, #54, #143); shuffled bag rotation (#20, ADR-0011)
+- 27 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
 - Parts: bounce pad, wind zone, rotating platform (#52)
+- Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
+- Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
 
 ## Match flow and scoring
@@ -42,7 +47,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Matches: first to N rounds, host picks N; victory podium (#120)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
-- Kill feed, KO credit, match awards (#148)
+- Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Scoreboard shown at round end (#5)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
 
@@ -50,6 +55,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Up to 8 players (#36, #138)
 - Player picks own nickname on first join; rename in lobby (#139, #121, #194)
 - Always-on name tags (#151)
+- Six eye styles (round, sleepy, angry, wide, dot, visor) picked in the same phone picker as hats and colour; pupils still track the weapon; kept per seat through reconnects (#297)
 - Hats (crown, top hat, cap, beanie, viking, party, halo, propeller) and colour picker on the phone (#151)
 - Squares have eyes that track the weapon head, blink and squint; arm drawn in front/behind body (#254, #91)
 - One cohesive colour palette (#255)
@@ -66,6 +72,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Bots and solo practice
 - Bots via `--bots=N` flag and Solo practice button (#152)
 - Bots read stage hazards; bots yield to phones (#176, #193)
+- Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)
@@ -74,15 +81,22 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)
+- Window size option for windowed mode (#294)
+- Stage on/off list: the rotation skips switched-off stages (#294)
+- Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
+- The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
+- Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118)
 - Narrator/announcer, one consistent voice (#152, #211)
 
 ## Visual look and juice
 - Landing dust, head motion trails, clash sparks (#116, #196)
 - Death burst, hit feedback (#33, #168)
+- Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)
 
 ## Online
 - Room-code relay server (#238, ADR-0019)
@@ -94,6 +108,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Exported macOS .app and Windows .exe (#119, `tools/export.sh`)
 - Release workflow builds Windows, macOS, Linux and pushes to itch.io (`.github/workflows/release.yml`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
+- In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
 
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
@@ -103,15 +118,15 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
 - #297 Cosmetics: eye styles (tkneeland)
-- #294 Host settings menu: volume, display, stage and weapon toggles (tkneeland)
 - #291 Onboarding: first-join tip on phone, live lobby sandbox (tkneeland)
 - #288 Real per-weapon hit sounds (tkneeland)
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)
-- #271 Pogo stick, #270 Plunger, #269 Umbrella (tkneeland)
+- #271 Pogo stick, #270 Plunger (tkneeland)
+- #270 Plunger, #269 Umbrella (tkneeland)
 - #275 Shield, #274 Magnet, #273 Fishing rod (agage-JG)
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)
 - #256 Juice pass (agage-JG); #257 Richer stage dressing (tkneeland)
-- #262 In-game send-feedback button (tkneeland); #263 Content roadmap (tkneeland)
+- #263 Content roadmap (tkneeland)
 - #240 Snapshot encode/decode, #241 PC client: join by code, mouse arm (agage-JG); #242 Deploy relay, ship PC builds (tkneeland); #212 PC/online idea (tkneeland, parked)
 - #258 Steam readiness plan, #268 Switch release (tkneeland); #296, #298 Steam lobbies and invites over relay (agage-JG)

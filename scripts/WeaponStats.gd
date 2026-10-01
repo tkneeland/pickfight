@@ -105,6 +105,10 @@ extends Resource
 ##                   in to where it stuck; releasing lets go.
 ##   &"flail"     -- a ball hangs off the head on a chain of real jointed
 ##                   links and hits by its own momentum.
+##   &"umbrella"  -- held overhead (aim up) the canopy caps the fall, catches
+##                   wind zones and turns hits on its face (Player.canopy_open).
+##   &"pogo"      -- the head bounces the player off the ground; only a
+##                   stomp from above does damage.
 ##   &"boomerang" -- a flick throws the boomerang, which arcs out and comes
 ##                   back, hitting on both legs.
 ## The head on the arm is always a real head as well (it plants, climbs and
@@ -136,6 +140,16 @@ extends Resource
 @export var reel_speed: float = 0.0
 @export var reel_force: float = 0.0
 @export var reel_min_length: float = 40.0
+
+## Pogo (issue #271): the head bounces the player off the ground. A head
+## touching terrain gives an automatic small bounce (`pogo_bounce_speed`, px/s);
+## pushing it into the ground charges it for up to `pogo_charge_time` seconds,
+## and letting go launches the player away from the head at up to
+## `pogo_launch_speed`. A pogo deals damage only to someone it lands on from
+## above (a stomp), at `damage` for a stomp at `pogo_launch_speed`.
+@export var pogo_bounce_speed: float = 0.0
+@export var pogo_launch_speed: float = 0.0
+@export var pogo_charge_time: float = 0.0
 
 ## Boomerang: its top speed on the way back to the thrower (px/s).
 @export var return_speed: float = 0.0

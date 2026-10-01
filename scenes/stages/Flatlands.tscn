@@ -1,7 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="ledge315"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Spikes.tscn" id="spikes"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
 size = Vector2(1440, 40)
@@ -46,6 +48,11 @@ shape = SubResource("RectangleShape2D_ground")
 [node name="GroundVisual" type="Polygon2D" parent="Ground"]
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
+
+; Spikes (issue #282): a short row on the right of the floor, clear of every spawn.
+[node name="FloorSpikes" parent="." instance=ExtResource("spikes")]
+position = Vector2(400, 286)
+size = Vector2(72, 28)
 
 [node name="PlatformLeft" type="StaticBody2D" parent="."]
 position = Vector2(-320, 164)
@@ -108,3 +115,7 @@ position = Vector2(-320, 116)
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(320, 152)
 
+; Crumbling ledge (issue #315): a perch up on the left, clear of every spawn drop line.
+[node name="PerchLedge" parent="." instance=ExtResource("ledge315")]
+position = Vector2(-400, 170)
+size = Vector2(100, 24)
