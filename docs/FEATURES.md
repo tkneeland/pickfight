@@ -28,6 +28,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
+- Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
 - 27 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
@@ -45,7 +46,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Matches: first to N rounds, host picks N; victory podium (#120)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
-- Kill feed, KO credit, match awards (#148)
+- Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Scoreboard shown at round end (#5)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
 
@@ -70,6 +71,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Bots and solo practice
 - Bots via `--bots=N` flag and Solo practice button (#152)
 - Bots read stage hazards; bots yield to phones (#176, #193)
+- Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)
@@ -81,10 +83,12 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Window size option for windowed mode (#294)
 - Stage on/off list: the rotation skips switched-off stages (#294)
 - Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
+- Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118)
 - Narrator/announcer, one consistent voice (#152, #211)
 
@@ -103,6 +107,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Exported macOS .app and Windows .exe (#119, `tools/export.sh`)
 - Release workflow builds Windows, macOS, Linux and pushes to itch.io (`.github/workflows/release.yml`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
+- In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
 
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
@@ -121,6 +126,6 @@ Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of th
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)
 - #256 Juice pass (agage-JG); #257 Richer stage dressing (tkneeland)
-- #262 In-game send-feedback button (tkneeland); #263 Content roadmap (tkneeland)
+- #263 Content roadmap (tkneeland)
 - #240 Snapshot encode/decode, #241 PC client: join by code, mouse arm (agage-JG); #242 Deploy relay, ship PC builds (tkneeland); #212 PC/online idea (tkneeland, parked)
 - #258 Steam readiness plan, #268 Switch release (tkneeland); #296, #298 Steam lobbies and invites over relay (agage-JG)

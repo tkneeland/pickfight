@@ -95,31 +95,26 @@ const SOUNDS: Dictionary = {
 	"hit_boomerang": {"files": [
 		"kenney_impact/impactWood_heavy_002.ogg",
 		"kenney_impact/impactWood_heavy_004.ogg"], "db": 0.0},
-	# The spear (issue #272). Placeholder: copies of two staff plank hits under
-	# their own names, since no two weapons may share a file. Swap for a sharper
-	# sound when art/audio is revisited.
+	# Spear (#272): a dull wooden thunk, a pierce. Pogo (#271): a soft thump.
+	# Fishing rod (#273): a light wooden snap. Magnet (#274): a clanky plate tap.
+	# All four are own files (#288), never copies under a placeholder name.
 	"hit_spear": {"files": [
-		"kenney_impact/impactPlank_spear_000.ogg",
-		"kenney_impact/impactPlank_spear_001.ogg"], "db": 1.0},
-	# The pogo stick (issue #271). Placeholder: copies of two bullet-impact tin
-	# hits under their own names, since no two weapons may share a file.
+		"kenney_impact/impactWood_medium_000.ogg",
+		"kenney_impact/impactWood_medium_001.ogg"], "db": 1.0},
 	"hit_pogo": {"files": [
-		"kenney_impact/impactTin_pogo_000.ogg",
-		"kenney_impact/impactTin_pogo_001.ogg"], "db": 0.0},
-	# The fishing rod (issue #273). Placeholder: copies of two grapple hits under
-	# their own names, since no two weapons may share a file.
+		"kenney_impact/impactSoft_medium_000.ogg",
+		"kenney_impact/impactSoft_medium_001.ogg"], "db": 1.0},
 	"hit_fishing_rod": {"files": [
-		"kenney_impact/impactGeneric_rod_000.ogg",
-		"kenney_impact/impactGeneric_rod_001.ogg"], "db": -2.0},
-	# The umbrella (issue #269). Placeholder: copies of two staff plank hits
-	# under their own names, since no two weapons may share a file.
+		"kenney_impact/impactWood_light_000.ogg",
+		"kenney_impact/impactWood_light_001.ogg"], "db": -2.0},
+	# The umbrella (issue #269): a dull fabric thwack (#306).
 	"hit_umbrella": {"files": [
-		"kenney_impact/impactPlank_umbrella_000.ogg",
-		"kenney_impact/impactPlank_umbrella_001.ogg"], "db": -2.0},
-	# The magnet (issue #274). Placeholder: copies of two tin hits under their own names.
+		"kenney_impact/impactPunch_medium_000.ogg",
+		"kenney_impact/impactPunch_medium_001.ogg"], "db": -2.0},
+	# The magnet (issue #274).
 	"hit_magnet": {"files": [
-		"kenney_impact/impactTin_magnet_000.ogg",
-		"kenney_impact/impactTin_magnet_001.ogg"], "db": 0.0},
+		"kenney_impact/impactPlate_light_000.ogg",
+		"kenney_impact/impactPlate_light_001.ogg"], "db": -1.0},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",
@@ -270,6 +265,13 @@ var fullscreen: bool = false
 ## Whether `Juice` shakes the camera on a heavy hit or a kill (#256). On by
 ## default; set through `set_screen_shake()` and remembered with the rest.
 var screen_shake: bool = true
+## Comfort option (#317): when on, the white/bright flashes (elimination burst,
+## bounce pad, breaking wall) are not drawn. Off by default.
+var reduce_flash: bool = false
+## Comfort option (#317): how much bigger the name tags over players' heads
+## are drawn. One of `UI_SCALES`; 1.0 by default.
+const UI_SCALES: Array[float] = [1.0, 1.5, 2.0]
+var ui_scale: float = 1.0
 ## What `sync_fullscreen()` reads the window mode from: a Callable returning a
 ## `DisplayServer.WINDOW_MODE_*`, or an empty one for the real window. The
 ## scenarios point it at a fake window, as headless has none.
@@ -570,6 +572,25 @@ func set_screen_shake(value: bool) -> void:
 	screen_shake = value
 	_save_settings()
 
+## Turn the bright flashes (#317) off or on, and remember the choice.
+func set_reduce_flash(value: bool) -> void:
+	reduce_flash = value
+	_save_settings()
+
+## Pick the name tag size (#317): snaps to the nearest of `UI_SCALES`.
+func set_ui_scale(value: float) -> void:
+	ui_scale = _nearest_ui_scale(value)
+	_save_settings()
+
+static func _nearest_ui_scale(value: float) -> float:
+	var best: float = 1.0
+	if not is_finite(value):
+		return best
+	for option: float in UI_SCALES:
+		if absf(option - value) < absf(best - value):
+			best = option
+	return best
+
 ## Write the current settings to `settings_path` (when `persist_settings`).
 func save_settings() -> void:
 	_save_settings()
@@ -659,6 +680,8 @@ func load_settings() -> void:
 		sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
 		fullscreen = bool(config.get_value("display", "fullscreen", false))
 		screen_shake = bool(config.get_value("display", "screen_shake", true))
+		reduce_flash = bool(config.get_value("display", "reduce_flash", false))
+		ui_scale = _nearest_ui_scale(float(config.get_value("display", "ui_scale", 1.0)))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -680,6 +703,8 @@ func _save_settings() -> void:
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("display", "fullscreen", fullscreen)
 	config.set_value("display", "screen_shake", screen_shake)
+	config.set_value("display", "reduce_flash", reduce_flash)
+	config.set_value("display", "ui_scale", ui_scale)
 	err = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])
