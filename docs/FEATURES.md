@@ -30,7 +30,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
 
 ## Stages and stage parts
-- 24 rotating stages (#8, #17, #19, #51, #54, #143); shuffled bag rotation (#20, ADR-0011)
+- 27 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
