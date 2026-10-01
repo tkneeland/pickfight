@@ -417,6 +417,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
+	"plunger_sticks_to_player_and_drags_them",
+	"plunger_surface_stick_hangs_without_reeling_in",
+	"plunger_hard_yank_detaches",
+	"plunger_is_in_the_pickup_set",
 	"host_settings_disabled_stage_never_rotates_in",
 	"host_settings_disabled_weapon_never_spawns",
 	"host_settings_refuse_last_stage_and_weapon",
@@ -486,6 +490,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"default_colours_are_colour_blind_distinguishable",
+	"night_variant_applies_by_data",
+	"night_keeps_key_nodes_lit",
+	"night_lamps_steady_with_reduce_flash",
+	"night_roll_respects_forced_and_disabled",
+	"match_stats_rows_favourite_weapon_and_magpie",
+	"victory_stat_table_fits_eight_players",
+	"pickups_skip_occupied_spots",
+	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_only_nudges_pickups",
 	"ghost_cleared_at_round_end_and_never_for_bots",
@@ -787,6 +800,9 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/spear.tres",
 	"res://resources/pogo.tres",
 	"res://resources/fishing_rod.tres",
+	# The plunger (#270) is left out on purpose: roster_traversal_is_measured
+	# wants every roster weapon to vault an 80 px ledge, and the plunger sticks
+	# and hangs rather than planting. It has its own plunger_* scenarios.
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
 ]
@@ -1729,6 +1745,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
+		"plunger_sticks_to_player_and_drags_them":
+			return await _scenario_plunger_sticks_to_player_and_drags_them()
+		"plunger_surface_stick_hangs_without_reeling_in":
+			return await _scenario_plunger_surface_stick_hangs_without_reeling_in()
+		"plunger_hard_yank_detaches":
+			return await _scenario_plunger_hard_yank_detaches()
+		"plunger_is_in_the_pickup_set":
+			return await _scenario_plunger_is_in_the_pickup_set()
 		"host_settings_disabled_stage_never_rotates_in":
 			return await _scenario_host_settings_disabled_stage_never_rotates_in()
 		"host_settings_disabled_weapon_never_spawns":
@@ -1867,6 +1891,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"default_colours_are_colour_blind_distinguishable":
+			return _scenario_default_colours_are_colour_blind_distinguishable()
+		"night_variant_applies_by_data":
+			return await _scenario_night_variant_applies_by_data()
+		"night_keeps_key_nodes_lit":
+			return await _scenario_night_keeps_key_nodes_lit()
+		"night_lamps_steady_with_reduce_flash":
+			return await _scenario_night_lamps_steady_with_reduce_flash()
+		"night_roll_respects_forced_and_disabled":
+			return await _scenario_night_roll_respects_forced_and_disabled()
+		"match_stats_rows_favourite_weapon_and_magpie":
+			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
+		"victory_stat_table_fits_eight_players":
+			return await _scenario_victory_stat_table_fits_eight_players()
+		"pickups_skip_occupied_spots":
+			return await _scenario_pickups_skip_occupied_spots()
+		"replay_buffer_bounded_and_saves_clip":
+			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
 			return await _scenario_ghost_hidden_until_touch_then_fades()
 		"ghost_cannot_hurt_and_only_nudges_pickups":
@@ -25930,6 +25972,127 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 	await _teardown(stage)
 	return failures
 
+# --- Plunger (issue #270) ----------------------------------------------------
+
+const PLUNGER_PATH: String = "res://resources/plunger.tres"
+
+## Holder under a bar, head thrust up into the bar's underside until it sticks.
+## Returns {"stage", "holder", "bar"}; the holder is hanging from the plunger.
+func _plunger_hang_setup() -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var bar: StaticBody2D = _add_bar(stage, DEEP_PARK_POSITION, Vector2(240, 24))
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, 60))
+	await _await_ticks(2)
+	await _equip(holder, PLUNGER_PATH)
+	holder.set_input_vector(Vector2.UP)
+	await _await_condition(func() -> bool: return holder.plunger_attached(), 4000)
+	return {"stage": stage, "holder": holder, "bar": bar}
+
+## A plunger hit on an opponent attaches it, and moving the holder drags them.
+func _scenario_plunger_sticks_to_player_and_drags_them() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
+	await _await_ticks(2)
+	await _equip(holder, PLUNGER_PATH)
+	# Free of gravity so the drag is the only thing moving either body.
+	holder.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	holder.set_input_vector(Vector2.RIGHT)
+	var stuck: bool = await _await_condition(func() -> bool: return holder.plunger_attached(), 4000)
+	if not stuck or holder.plunger_target() != victim:
+		failures.append("a plunger hit on an opponent did not attach to them (target %s)" % holder.plunger_target())
+		await _teardown(stage)
+		return failures
+	if victim.damage <= 0.0:
+		failures.append("plunging the opponent did no damage")
+	if victim.damage > 20.0:
+		failures.append("the plunger hit took %.1f off, not a light hit" % victim.damage)
+	var before: float = victim.global_position.x
+	var holder_before: float = holder.global_position.x
+	for i in 40:
+		holder.linear_velocity = Vector2(-150, 0)
+		await physics_frame
+	print("      plunger: holder moved %.1f px left" % (holder_before - holder.global_position.x))
+	var dragged: float = before - victim.global_position.x
+	print("      plunger: victim dragged %.1f px left, still attached %s, damage %.1f" % [dragged, holder.plunger_attached(), victim.damage])
+	if dragged < 10.0:
+		failures.append("moving the holder dragged the stuck opponent only %.1f px" % dragged)
+	if not holder.plunger_attached():
+		failures.append("a moderate pull popped the plunger off the opponent")
+	await _teardown(stage)
+	return failures
+
+## Stuck to a surface the holder hangs, and the distance to the anchor never
+## shrinks: no reel-in, even with the drag held the whole time.
+func _scenario_plunger_surface_stick_hangs_without_reeling_in() -> Array[String]:
+	var failures: Array[String] = []
+	var setup: Dictionary = await _plunger_hang_setup()
+	var stage: Node2D = setup["stage"]
+	var holder: RigidBody2D = setup["holder"]
+	if not holder.plunger_attached() or holder.plunger_target() != setup["bar"]:
+		failures.append("the plunger did not stick to the bar above")
+		await _teardown(stage)
+		return failures
+	var anchor: Vector2 = holder.plunger_anchor()
+	# Let the stick's own momentum settle (the head overshoots the rope's end
+	# a little); from there the rope must only ever hold or lengthen.
+	await _await_ticks(60)
+	var start: float = (holder.global_position - anchor).length()
+	var shortest: float = start
+	var longest: float = start
+	for i in 180:
+		await physics_frame
+		var d: float = (holder.global_position - anchor).length()
+		shortest = minf(shortest, d)
+		longest = maxf(longest, d)
+	var end: float = (holder.global_position - anchor).length()
+	print("      plunger hang: rope %.1f once settled, shortest %.1f, longest %.1f, end %.1f, attached %s" % [start, shortest, longest, end, holder.plunger_attached()])
+	if not holder.plunger_attached():
+		failures.append("the plunger let go of a surface under the holder's own weight")
+	if shortest < start - 4.0:
+		failures.append("the rope shrank from %.1f to %.1f px: the plunger reeled the holder in" % [start, shortest])
+	if end < start - 4.0:
+		failures.append("after hanging 3 s the holder was %.1f px from the anchor, closer than the %.1f once settled" % [end, start])
+	if holder.global_position.y <= anchor.y:
+		failures.append("the holder did not hang below the anchor")
+	await _teardown(stage)
+	return failures
+
+## A hard pull on a stuck plunger pops it free.
+func _scenario_plunger_hard_yank_detaches() -> Array[String]:
+	var failures: Array[String] = []
+	var setup: Dictionary = await _plunger_hang_setup()
+	var stage: Node2D = setup["stage"]
+	var holder: RigidBody2D = setup["holder"]
+	if not holder.plunger_attached():
+		failures.append("the plunger did not stick to the bar above")
+		await _teardown(stage)
+		return failures
+	for i in 30:
+		holder.linear_velocity = Vector2(0, 1800)
+		await physics_frame
+		if not holder.plunger_attached():
+			break
+	print("      plunger yank: attached after the yank %s" % holder.plunger_attached())
+	if holder.plunger_attached():
+		failures.append("a hard yank did not pop the plunger free")
+	await _teardown(stage)
+	return failures
+
+func _scenario_plunger_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(PLUNGER_PATH):
+		failures.append("the plunger is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == PLUNGER_PATH
+	if not found:
+		failures.append("the plunger is not among the loaded pickup weapons")
+	_scenario_completed = true
+	return failures
+
 ## Issue #294: a stage the host switched off never comes up in the rotation,
 ## however many rounds are dealt, while the others all still do.
 func _scenario_host_settings_disabled_stage_never_rotates_in() -> Array[String]:
@@ -28102,7 +28265,7 @@ func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
 			continue
 		for file: String in sounds[key]["files"]:
 			checked += 1
-			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_"]:
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_", "_plunger_"]:
 				if file.contains(marker):
 					failures.append("%s uses placeholder file %s" % [key, file])
 	if checked == 0:
@@ -28256,6 +28419,337 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 	if empty.get("status") != 400:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+# --- Colour-blind distinguishability of the default slot colours (#330) -------
+# Machado et al. 2009, severity 1.0, applied to LINEAR sRGB. Distance is CIE76
+# dE in Lab (D65). Threshold 11.5: about 5 JND-ish steps for flat fills viewed
+# on a shared screen; the weakest pair after the fix is ~12.0 (tritanopia).
+const CVD_MIN_DELTA_E := 11.5
+const CVD_MATRICES := {
+	"normal": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+	"protanopia": [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+	"deuteranopia": [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
+	"tritanopia": [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.303900]],
+}
+
+func _cvd_lab(c: Color, m: Array) -> Vector3:
+	var lin := [c.srgb_to_linear().r, c.srgb_to_linear().g, c.srgb_to_linear().b]
+	var o: Array[float] = []
+	for r in 3:
+		o.append(clampf(m[r][0] * lin[0] + m[r][1] * lin[1] + m[r][2] * lin[2], 0.0, 1.0))
+	var x: float = 0.4124 * o[0] + 0.3576 * o[1] + 0.1805 * o[2]
+	var y: float = 0.2126 * o[0] + 0.7152 * o[1] + 0.0722 * o[2]
+	var z: float = 0.0193 * o[0] + 0.1192 * o[1] + 0.9505 * o[2]
+	var f := func(t: float) -> float:
+		return pow(t, 1.0 / 3.0) if t > 0.008856 else 7.787 * t + 16.0 / 116.0
+	var fx: float = f.call(x / 0.95047)
+	var fy: float = f.call(y)
+	var fz: float = f.call(z / 1.08883)
+	return Vector3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+
+func _scenario_default_colours_are_colour_blind_distinguishable() -> Array[String]:
+	var failures: Array[String] = []
+	var players: Array[Color] = PaletteScript.PLAYERS
+	if players.size() != 8:
+		failures.append("expected 8 default colours, got %d" % players.size())
+	for vision in CVD_MATRICES:
+		var labs: Array[Vector3] = []
+		for c in players:
+			labs.append(_cvd_lab(c, CVD_MATRICES[vision]))
+		for i in labs.size():
+			for j in range(i + 1, labs.size()):
+				var de: float = labs[i].distance_to(labs[j])
+				if de < CVD_MIN_DELTA_E:
+					failures.append("%s: slots %d (#%s) and %d (#%s) only dE %.1f apart, need %.1f" % [
+						vision, i, players[i].to_html(false), j, players[j].to_html(false), de, CVD_MIN_DELTA_E])
+	_scenario_completed = true
+	return failures
+## Issue #332: a stage becomes its night variant by data alone.
+func _night_stage(night: bool, scene: String = "Bowl") -> Node2D:
+	var stage: Node2D = (load("res://scenes/stages/%s.tscn" % scene) as PackedScene).instantiate() as Node2D
+	stage.set("night", night)
+	get_root().add_child(stage)
+	return stage
+
+func _scenario_night_variant_applies_by_data() -> Array[String]:
+	var failures: Array[String] = []
+	var day: Node2D = _night_stage(false)
+	var night: Node2D = _night_stage(true)
+	await process_frame
+	if day.get_node_or_null("NightLighting") != null:
+		failures.append("a day stage had night lighting")
+	var lighting: Node2D = night.get_node_or_null("NightLighting") as Node2D
+	if lighting == null:
+		failures.append("the night stage had no NightLighting")
+	else:
+		var tint: Color = lighting.modulate_node.color
+		var lum: float = 0.299 * tint.r + 0.587 * tint.g + 0.114 * tint.b
+		print("      night tint luminance %.2f, lamps %d" % [lum, lighting.lamps.size()])
+		if lum < 0.35:
+			failures.append("the night tint is too dark to read (%.2f)" % lum)
+		if lighting.lamps.is_empty():
+			failures.append("the night stage had no lamps")
+	var night_sky: Color = night.get_background().sky_top
+	if night_sky != Color("#0a0d1f"):
+		failures.append("the night backdrop used sky %s, expected the Night mood" % night_sky)
+	if night.get_background().dress_far != night.mood["dress_far"]:
+		failures.append("the parallax dressing did not use night colours")
+	if day.get_background().sky_top == night_sky:
+		failures.append("the day stage had the night sky")
+	day.free()
+	night.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_night_keeps_key_nodes_lit() -> Array[String]:
+	var failures: Array[String] = []
+	var night: Node2D = _night_stage(true, "Gauntlet")
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	get_root().add_child(player)
+	player.global_position = DEEP_PARK_POSITION
+	player.bind_controller()
+	var pickup := Node2D.new()
+	pickup.add_to_group("pickups")
+	get_root().add_child(pickup)
+	for _i in 3:
+		await physics_frame
+	var lighting: Node2D = night.get_node("NightLighting") as Node2D
+	var glow: PointLight2D = player.get_node_or_null("NightGlow") as PointLight2D
+	if glow == null or glow.energy <= 0.0 or not glow.visible:
+		failures.append("the player has no visible glow")
+	if not lighting.head_glows.has(player.get_instance_id()):
+		failures.append("the weapon head has no glow")
+	var pickup_glow: PointLight2D = pickup.get_node_or_null("NightGlow") as PointLight2D
+	if pickup_glow == null or pickup_glow.energy <= 0.0:
+		failures.append("the pickup has no glow")
+	var hazards: int = 0
+	var lit_hazards: int = 0
+	var stack: Array[Node] = [night]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node.has_method("set_hazard_color") and node is Node2D:
+			hazards += 1
+			if node.get_node_or_null("NightGlow") != null:
+				lit_hazards += 1
+		stack.append_array(node.get_children())
+	print("      hazards %d, lit %d" % [hazards, lit_hazards])
+	if hazards == 0:
+		failures.append("the test stage had no hazards to check")
+	if hazards != lit_hazards:
+		failures.append("%d of %d hazards had no glow" % [hazards - lit_hazards, hazards])
+	player.queue_free()
+	pickup.queue_free()
+	night.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_night_lamps_steady_with_reduce_flash() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	var night: Node2D = _night_stage(true)
+	var lighting: Node2D = night.get_node("NightLighting") as Node2D
+	sfx.set_reduce_flash(false)
+	var seen: Dictionary = {}
+	for _i in 30:
+		await process_frame
+		seen[snappedf(lighting.lamps[0].energy, 0.001)] = true
+	if seen.size() < 2:
+		failures.append("the lamp never flickered with flashes on")
+	sfx.set_reduce_flash(true)
+	await process_frame
+	var steady: float = lighting.lamps[0].energy
+	for _i in 30:
+		await process_frame
+		if not is_equal_approx(lighting.lamps[0].energy, steady):
+			failures.append("the lamp flickered with Reduce flashes on")
+			break
+	sfx.reduce_flash = flash_was
+	night.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_night_roll_respects_forced_and_disabled() -> Array[String]:
+	var failures: Array[String] = []
+	var rm := Node.new()
+	rm.set_script(RoundManagerType)
+	rm.forced_night = 1
+	if not rm._roll_night():
+		failures.append("forced_night 1 did not give night")
+	rm.forced_night = 0
+	rm.night_chance = 1.0
+	if rm._roll_night():
+		failures.append("forced_night 0 gave night")
+	rm.forced_night = -1
+	if rm._roll_night():
+		failures.append("a roll happened with modifier rolls disabled")
+	RoundManagerType.modifier_rolls_enabled = true
+	rm.modifier_seed = 5
+	if not rm._roll_night():
+		failures.append("chance 1.0 did not roll night")
+	rm.night_chance = 0.0
+	if rm._roll_night():
+		failures.append("chance 0 rolled night")
+	RoundManagerType.modifier_rolls_enabled = false
+	rm.free()
+	_scenario_completed = true
+	return failures
+## Issue #325: the per-player stat rows carry KOs, damage and self-KOs, the
+## favourite weapon is the one grabbed most, and the most pickups earn "Magpie".
+func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2], 0)
+	stats.record_hit(0, 1, 30.0, 100)
+	stats.record_elimination(1, 200)
+	stats.record_elimination(2, 300)
+	stats.record_pickup(0, "Hammer")
+	stats.record_pickup(0, "Spear")
+	stats.record_pickup(0, "Spear")
+	stats.record_pickup(1, "Axe")
+	var rows: Array[Dictionary] = stats.stat_rows([2, 0])
+	if rows.size() != 2 or rows[0]["slot"] != 2 or rows[1]["slot"] != 0:
+		failures.append("rows not in the asked slot order: %s" % [rows])
+	elif rows[1]["kos"] != 1 or rows[1]["damage_dealt"] != 30 or rows[1]["pickups"] != 3 or rows[1]["weapon"] != "Spear":
+		failures.append("slot 0 row %s, expected 1 KO, 30 dealt, 3 pickups, Spear" % [rows[1]])
+	elif rows[0]["self_kos"] != 1 or rows[0]["weapon"] != "":
+		failures.append("slot 2 row %s, expected 1 self-KO and no weapon" % [rows[0]])
+	var extra: Array[Dictionary] = stats.extra_awards([0, 1, 2])
+	if extra.size() != 1 or extra[0]["title"] != "Magpie" or extra[0]["slot"] != 0 or extra[0]["detail"] != "3 pickups":
+		failures.append("extra awards %s, expected Magpie for slot 0 with 3 pickups" % [extra])
+	stats.forget_slot(0)
+	if stats.favourite_weapon(0) != "" or stats.pickups.has(0):
+		failures.append("forget_slot left slot 0's pickups behind")
+	stats.begin_match()
+	if not stats.extra_awards([0, 1]).is_empty():
+		failures.append("begin_match left pickups behind")
+	_scenario_completed = true
+	return failures
+
+## Issue #325: the victory screen's stats table lists every player and, with
+## eight long names, still fits the screen together with the podium and awards.
+func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var roster := StubLobbyRosterScript.new()
+	roster.name = "StubRoster325"
+	main.add_child(roster)
+	var rm: Node = main.get_node("RoundManager")
+	rm.controller_server_path = NodePath("../StubRoster325")
+	for slot in 8:
+		roster.slots.append(slot)
+		roster.names[slot] = LONG_NAME_148
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var stats: RefCounted = rm.match_stats()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3, 4, 5, 6, 7], 0)
+	for i in 12:
+		stats.record_hit(1, 2, 44.0, i * 10)
+		stats.record_elimination(2, i * 10)
+		stats.record_elimination(3, i * 10 + 5)
+	stats.record_pickup(4, "Hammer")
+	stats.end_round(3599000)
+	rm.set("_match_winner_slot", 0)
+	rm._enter_victory()
+	await _await_ticks(3)
+	var table: Control = rm._lobby_screen.stats_table()
+	var content: Vector2 = _content_size(rm.victory_panel())
+	print("      victory with stat table needs %.0f x %.0f px" % [content.x, content.y])
+	var lines: int = 0
+	if table != null:
+		for column: Node in table.get_children():
+			lines += column.get_child_count()
+	if lines != 8:
+		failures.append("the stats table has %d lines, expected 8" % lines)
+	var row: Control = rm.awards_row()
+	if row == null or row.get_child_count() != 4:
+		failures.append("expected 4 award cards (3 core + Magpie), got %s" % (row.get_child_count() if row != null else 0))
+	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
+		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
+	await _teardown(main)
+	return failures
+
+## Issue #333: a pickup never spawns on a spot a living player is standing on.
+## A lone occupied spot yields nothing, with two the empty one is chosen, and
+## once the player leaves (or dies) the spot is usable again.
+func _scenario_pickups_skip_occupied_spots() -> Array[String]:
+	var failures: Array[String] = []
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("OccupiedStage", spawns, PackedVector2Array([spot_a])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var player := Node2D.new()
+	get_root().add_child(player)
+	player.global_position = spot_a + Vector2(10, 0)
+	rm._players = [player]
+	var director: Node = rm._pickup_director
+	if director.free_spot() != null:
+		failures.append("a spot was offered with a player standing on the only one")
+	var stage2: Node2D = _make_pickup_stub_stage("OccupiedStage2", spawns, PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage2)
+	rm._current_stage = stage2
+	var wrong: int = 0
+	for i in 20:
+		var got: Variant = director.free_spot()
+		if got == null or (got as Vector2).distance_to(spot_b) > 1.0:
+			wrong += 1
+	if wrong > 0:
+		failures.append("%d of 20 draws were not the unoccupied spot" % wrong)
+	player.global_position = spot_a + Vector2(0, -200)
+	var seen_a: bool = false
+	for i in 40:
+		var got: Variant = director.free_spot()
+		if got != null and (got as Vector2).distance_to(spot_a) < 1.0:
+			seen_a = true
+	if not seen_a:
+		failures.append("the spot was not usable again after the player left")
+	rm.free()
+	player.queue_free()
+	await _teardown(stage)
+	await _teardown(stage2)
+	_scenario_completed = true
+	return failures
+## #329: the replay ring never exceeds its cap and a clip lands on disk.
+func _scenario_replay_buffer_bounded_and_saves_clip() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	var scratch := "user://scenario_clips_329"
+	rb.clips_dir = scratch
+	if rb.save_clip("empty") != "":
+		failures.append("an empty buffer saved a clip")
+	for i in 500:
+		var img := Image.create(320, 180, false, Image.FORMAT_RGBA8)
+		img.fill(Color(float(i % 255) / 255.0, 0.0, 0.0))
+		rb.push_frame(img)
+	if rb.frame_count() != 120:
+		failures.append("ring holds %d frames after 500 pushes, expected 120" % rb.frame_count())
+	if script.memory_cap_bytes() != 13271040:
+		failures.append("memory cap %d, expected 13271040" % script.memory_cap_bytes())
+	var dir: String = rb.save_and_toast()
+	var abs_dir := ProjectSettings.globalize_path(dir)
+	var files := DirAccess.get_files_at(abs_dir) if dir != "" else PackedStringArray()
+	if files.size() != 120:
+		failures.append("clip has %d files, expected 120" % files.size())
+	elif Image.load_from_file(abs_dir + "/frame_0000.png").get_size() != Vector2i(256, 144):
+		failures.append("saved frame is not 256x144")
+	if not rb.toast_text().contains("clip_"):
+		failures.append("toast does not show the path: '%s'" % rb.toast_text())
+	for f in files:
+		DirAccess.remove_absolute(abs_dir + "/" + f)
+	DirAccess.remove_absolute(abs_dir)
+	rb.queue_free()
 	_scenario_completed = true
 	return failures
 

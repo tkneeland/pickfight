@@ -6,6 +6,7 @@ extends Node2D
 
 const StageBackgroundType := preload("res://scripts/StageBackground.gd")
 const PaletteScript := preload("res://scripts/Palette.gd")
+const NightLightingType := preload("res://scripts/NightLighting.gd")
 
 ## This stage's index in the rotation, set by RoundManager before the stage
 ## enters the tree; it picks the palette mood (#255). -1 means Daylight.
@@ -53,13 +54,17 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## 1, so it can still appear). Empty means just the derived theme.
 @export var weapon_weight_overrides: Dictionary = {}
 
+## Night variant (#332): set before the stage enters the tree. The stage then
+## uses the Night palette mood and adds a `NightLighting` child. Visual only.
+var night: bool = false
+
 func _ready() -> void:
 	if get_node_or_null(BACKGROUND_NODE_NAME) != null:
 		return
 	var background: Node2D = StageBackgroundType.new()
 	background.name = BACKGROUND_NODE_NAME
 	var seed_value: int = background_seed if background_seed != 0 else hash(String(name))
-	mood = PaletteScript.mood_for_stage(stage_index)
+	mood = PaletteScript.NIGHT if night else PaletteScript.mood_for_stage(stage_index)
 	background.configure(mood["sky_top"], mood["sky_bottom"], background_silhouette,
 		background_layers, seed_value, get_view_rect().size)
 	background.far_hill = mood["far"]
@@ -73,6 +78,13 @@ func _ready() -> void:
 	var kill_zone: Node = get_node_or_null("KillZone")
 	if kill_zone != null and kill_zone.has_method("set_kill_color"):
 		kill_zone.set_kill_color(mood["kill"])
+	if night:
+		var lighting: Node2D = NightLightingType.new()
+		add_child(lighting)
+		var lamp_points: Array[Vector2] = []
+		for spawn in get_spawn_points():
+			lamp_points.append(spawn + Vector2(0.0, -220.0))
+		lighting.setup(lamp_points)
 
 ## Recolours every static platform or stage-body visual: the Polygon2Ds under
 ## a plain StaticBody2D (no script, so breakables, ledges and pads keep their

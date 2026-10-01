@@ -234,7 +234,20 @@ func _init() -> void:
 	_pickup_director = PickupDirectorScript.new(self)
 	add_child(_pickup_director)
 
+const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
+var _replay: Node
+
+## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
+		_replay.save_and_toast()
+		get_viewport().set_input_as_handled()
+
 func _ready() -> void:
+	_replay = ReplayBufferScript.new()
+	_replay.name = "ReplayBuffer"
+	add_child(_replay)
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
 	# editor's Play button (project.godot `editor/run/main_run_args`).
 	_demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_args().has("--demo")
@@ -384,13 +397,43 @@ func _swap_stage() -> void:
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
+	var night: bool = _roll_night()
+	_current_stage.set("night", night)
 	container.add_child(_current_stage)
-	var ink: Color = PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
+	var ink: Color = PaletteScript.NIGHT["ink"] if night else PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
 	for player in _players:
 		if player != null and player.has_method("set_ink"):
 			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
+
+# --- Night stages (issue #332) -------------------------------------------------
+#
+# A stage can be played as a night variant: darkened, lit by lamps and glows,
+# purely visual. It is applied by data (`Stage.night`, set before the stage
+# enters the tree), so no stage scene is duplicated. Each round rolls it with
+# `night_chance`, from its own RNG so the modifier stream is undisturbed. The
+# roll honours `modifier_rolls_enabled` (the deterministic-run seam) and
+# `forced_night` (-1 roll, 0 never, 1 always) overrides it.
+
+## Chance, 0..1, that a round's stage is the night variant.
+@export_range(0.0, 1.0) var night_chance: float = 0.2
+## -1 roll as usual, 0 never night, 1 always night.
+@export var forced_night: int = -1
+var _night_rng: RandomNumberGenerator
+
+func _roll_night() -> bool:
+	if forced_night >= 0:
+		return forced_night == 1
+	if not modifier_rolls_enabled or night_chance <= 0.0:
+		return false
+	if _night_rng == null:
+		_night_rng = RandomNumberGenerator.new()
+		if modifier_seed >= 0:
+			_night_rng.seed = modifier_seed + 332
+		else:
+			_night_rng.randomize()
+	return _night_rng.randf() < night_chance
 
 # --- Large stages (issue #144) ------------------------------------------------
 #
@@ -547,6 +590,8 @@ func _watch_for_buzzes() -> void:
 			player.connect("strike_landed", _on_strike_landed.bind(slot))
 		if player.has_signal("eliminated"):
 			player.connect("eliminated", _on_ko_eliminated.bind(slot))
+		if player.has_signal("weapon_picked_up"):
+			player.connect("weapon_picked_up", _on_weapon_picked_up.bind(slot))
 
 ## `attacker_slot` comes last because that is where the signal's bind puts it.
 func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
@@ -1184,9 +1229,15 @@ func _refresh_victory() -> void:
 			slots.append(slot)
 	slots.sort_custom(podium_before)
 	if _team_mode:
-		_lobby_screen.refresh_victory(slots, _scores, -1, _stats.awards(slots), _match_winner_team, _teams, _team_scores)
+		_lobby_screen.refresh_victory(slots, _scores, -1, _all_awards(slots), _match_winner_team, _teams, _team_scores, _stats.stat_rows(slots))
 		return
-	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
+	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _all_awards(slots), -1, {}, PackedInt32Array(), _stats.stat_rows(slots))
+
+## The core awards plus the extra superlatives (issue #325).
+func _all_awards(slots: Array[int]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = _stats.awards(slots)
+	out.append_array(_stats.extra_awards(slots))
+	return out
 
 ## The podium's order: whether slot `a` stands before slot `b`. The match
 ## winner first, then by final score. Strict (#200): never true both ways,
@@ -1674,6 +1725,9 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 			weapon = stats.resource_path.get_file().get_basename()
 		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
+
+func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
+	_stats.record_pickup(slot, weapon_name)
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _sandbox_active:
