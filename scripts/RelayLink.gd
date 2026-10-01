@@ -11,6 +11,8 @@ extends Node
 ## Envelope kinds (the first payload byte).
 const KIND_INPUT: int = 0
 const KIND_TEXT: int = 1
+## Host to clients: one world snapshot frame (`Snapshot.gd`), issue #251.
+const KIND_SNAPSHOT: int = 2
 ## Link states, as `link_state_changed` reports them.
 const STATE_OFFLINE: String = "offline"
 const STATE_CONNECTING: String = "connecting"

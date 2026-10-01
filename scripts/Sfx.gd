@@ -363,6 +363,10 @@ func release() -> void:
 
 # --- Playing ----------------------------------------------------------------
 
+## A known sound was asked for (issue #251): the host streams these to remote
+## clients, which play them locally. `position` is a Vector2 or null.
+signal played(sound: StringName, position: Variant, strength: float)
+
 ## Play `sound` (a key of `SOUNDS`). `position` is a world position for a sound
 ## to pan by, or null to play it flat; `strength` 0..1 is how hard the thing
 ## that made it was. Unknown names warn once and do nothing.
@@ -373,6 +377,7 @@ func play(sound: StringName, position: Variant = null, strength: float = 1.0) ->
 			_warned[key] = true
 			push_warning("Sfx: no sound named '%s'" % key)
 		return
+	played.emit(sound, position, strength)
 	var spec: Dictionary = SOUNDS[key]
 	var s: float = clampf(strength, 0.0, 1.0) if is_finite(strength) else 1.0
 	var volume_db: float = volume_db_for(key, s)
