@@ -28,6 +28,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
+- Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
 - 24 rotating stages (#8, #17, #19, #51, #54, #143); shuffled bag rotation (#20, ADR-0011)
