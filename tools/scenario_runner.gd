@@ -464,6 +464,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"snapshot_truncated_frames_decode_empty",
+	"snapshot_hostile_counts_and_versions_rejected",
+	"snapshot_counts_clamp_without_wrapping",
+	"snapshot_nan_and_bad_types_encode_safely",
+	"snapshot_quantization_rounds_to_nearest",
+	"snapshot_delta_applied_equals_full_of_same_tick",
 	"windy_stage_favours_umbrella_pickups",
 	"themed_pool_keeps_every_enabled_weapon",
 	"themed_pool_never_draws_a_disabled_weapon",
@@ -531,6 +537,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_hot_potato_it_chases_the_nearest_rival",
 	"bot_hot_potato_keeps_away_from_it",
 	"bot_sudden_death_plays_as_classic",
+	"streamer_mode_hides_room_code_and_qr_when_on",
+	"streamer_mode_shows_room_code_and_qr_when_off",
+	"streamer_mode_setting_persists_across_reload",
+	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
@@ -538,6 +548,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"demo_build_mode_picker_only_slice_modes",
 	"demo_build_end_card_follows_victory",
 	"demo_build_off_leaves_full_game_unchanged",
+	"stock_plays_the_picked_stage_every_round",
+	"stock_random_pick_is_an_enabled_stage_held_all_match",
+	"stock_never_rolls_a_modifier",
+	"stock_stage_pick_persists_and_reaches_the_host_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1858,6 +1872,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"snapshot_truncated_frames_decode_empty":
+			return await _scenario_snapshot_truncated_frames_decode_empty()
+		"snapshot_hostile_counts_and_versions_rejected":
+			return await _scenario_snapshot_hostile_counts_and_versions_rejected()
+		"snapshot_counts_clamp_without_wrapping":
+			return await _scenario_snapshot_counts_clamp_without_wrapping()
+		"snapshot_nan_and_bad_types_encode_safely":
+			return await _scenario_snapshot_nan_and_bad_types_encode_safely()
+		"snapshot_quantization_rounds_to_nearest":
+			return await _scenario_snapshot_quantization_rounds_to_nearest()
+		"snapshot_delta_applied_equals_full_of_same_tick":
+			return await _scenario_snapshot_delta_applied_equals_full_of_same_tick()
 		"windy_stage_favours_umbrella_pickups":
 			return await _scenario_windy_stage_favours_umbrella_pickups()
 		"themed_pool_keeps_every_enabled_weapon":
@@ -1992,6 +2018,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_hot_potato_keeps_away_from_it()
 		"bot_sudden_death_plays_as_classic":
 			return await _scenario_bot_sudden_death_plays_as_classic()
+		"streamer_mode_hides_room_code_and_qr_when_on":
+			return await _scenario_streamer_mode_hides_room_code_and_qr_when_on()
+		"streamer_mode_shows_room_code_and_qr_when_off":
+			return await _scenario_streamer_mode_shows_room_code_and_qr_when_off()
+		"streamer_mode_setting_persists_across_reload":
+			return await _scenario_streamer_mode_setting_persists_across_reload()
+		"streamer_mode_host_phone_receives_room_code":
+			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
 		"demo_build_flag_defines_the_slice":
@@ -2006,6 +2040,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_demo_build_end_card_follows_victory()
 		"demo_build_off_leaves_full_game_unchanged":
 			return await _scenario_demo_build_off_leaves_full_game_unchanged()
+		"stock_plays_the_picked_stage_every_round":
+			return await _scenario_stock_plays_the_picked_stage_every_round()
+		"stock_random_pick_is_an_enabled_stage_held_all_match":
+			return await _scenario_stock_random_pick_is_an_enabled_stage_held_all_match()
+		"stock_never_rolls_a_modifier":
+			return await _scenario_stock_never_rolls_a_modifier()
+		"stock_stage_pick_persists_and_reaches_the_host_phone":
+			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -22375,6 +22417,9 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 		Vector2(32767, -32768),
 		Vector2(0.1, 0.9),
 		Vector2(99.9, -99.1),
+		Vector2(0.9, 0.9),
+		Vector2(-0.9, -0.9),
+		Vector2(0.5, -0.5),
 	]
 	for pos in positions:
 		var world = {
@@ -22411,6 +22456,8 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 			continue
 		var decoded_pos = players[0].get("body", {}).get("position", Vector2.ZERO)
 		var diff = (decoded_pos - pos).length()
+		if absf(decoded_pos.x - pos.x) > 0.5 or absf(decoded_pos.y - pos.y) > 0.5:
+			failures.append("position %s quantized to %s (diff %.2f px, wanted <= 0.5 per axis)" % [pos, decoded_pos, diff])
 		if diff > 1.0:
 			failures.append("position %s quantized to %s (diff %.2f px, wanted ≤ 1)" % [pos, decoded_pos, diff])
 	_scenario_completed = true
@@ -25076,6 +25123,254 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+# --- Snapshot hardening (issue #240 follow-up) ---------------------------------
+const SnapshotScript240 := preload("res://scripts/Snapshot.gd")
+const SnapshotCaptureScript240 := preload("res://scripts/SnapshotCapture.gd")
+func _snap_player_240(id: int, pos: Vector2) -> Dictionary:
+	return {
+		"player_id": id,
+		"body": {"position": pos, "rotation": 0.5, "linear_velocity": Vector2(3, -4)},
+		"weapon": {"head_position": pos + Vector2(20, 0), "head_rotation": 1.0, "head_shape_index": 2},
+		"color": id, "name": "P%d" % id, "team": 0, "damage": 10, "state": 1,
+	}
+func _snap_world_240() -> Dictionary:
+	return {
+		"is_full_snapshot": true,
+		"stage_id": 3,
+		"static_stage_bodies": [{"position": Vector2(10, 20), "rotation": 0.2, "linear_velocity": Vector2.ZERO}],
+		"players": [_snap_player_240(1, Vector2(100, 200)), _snap_player_240(2, Vector2(300, 200))],
+		"projectiles": [{"projectile_id": 7, "position": Vector2(50, 60), "velocity": Vector2(5, 6), "weapon_type": 2}],
+		"pickups": [{"pickup_id": 9, "position": Vector2(70, 80), "weapon_type": 3}],
+		"flail": {"flail_id": 1, "ball_position": Vector2(11, 12), "ball_velocity": Vector2(1, 2)},
+		"grapple": {"grapple_id": 2, "hook_position": Vector2(21, 22), "rope_end": Vector2(23, 24)},
+		"modifiers": [{"modifier_id": 1, "name": "low_gravity"}],
+		"round_phase": 1, "timer_ms": 5000, "scores": {1: 3, 2: 4},
+		"kill_feed": [{"text": "A beat B"}], "kill_zone_height": 600, "announcer_text": "Go",
+	}
+func _scenario_snapshot_truncated_frames_decode_empty() -> Array[String]:
+	var failures: Array[String] = []
+	var full: PackedByteArray = SnapshotScript240.encode(_snap_world_240())
+	if SnapshotScript240.decode(full).is_empty():
+		failures.append("the intact full frame did not decode")
+	var delta_world: Dictionary = {"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript240.TYPE_PLAYER, "id": 1, "body": {"position": Vector2(1, 2)}},
+		{"type": SnapshotScript240.TYPE_KILL_FEED, "id": 0, "text": "x"},
+		{"type": SnapshotScript240.TYPE_TIMER, "id": 0, "timer_ms": 9}]}
+	var delta: PackedByteArray = SnapshotScript240.encode(delta_world)
+	if SnapshotScript240.decode(delta).is_empty():
+		failures.append("the intact delta frame did not decode")
+	for frame: PackedByteArray in [full, delta]:
+		for n in frame.size():
+			if not SnapshotScript240.decode(frame.slice(0, n)).is_empty():
+				failures.append("a %d-byte prefix of a %d-byte frame decoded to a non-empty result" % [n, frame.size()])
+				break
+	var trailed: PackedByteArray = full.duplicate()
+	trailed.append_array(PackedByteArray([1, 2, 3]))
+	if SnapshotScript240.decode(trailed).is_empty():
+		failures.append("trailing bytes (the sound trailer) broke decode")
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_hostile_counts_and_versions_rejected() -> Array[String]:
+	var failures: Array[String] = []
+	var v: int = SnapshotScript240.FORMAT_VERSION
+	var hostile: Dictionary = {
+		"unknown version, full": PackedByteArray([0x80 | (v + 1), 0, 1]),
+		"unknown version, delta": PackedByteArray([v + 1, 0]),
+		"version 0 (pre-version frame)": PackedByteArray([0x00, 0]),
+		"255 stage bodies, no data": PackedByteArray([0x80 | v, 0, 1, 255]),
+		"255 players, no data": PackedByteArray([0x80 | v, 0, 1, 0, 255]),
+		"255 delta entities, no data": PackedByteArray([v, 255]),
+		"unknown delta type": PackedByteArray([v, 1, 0x7F, 0, 1, 0, 0]),
+		"modifier type with no body": PackedByteArray([v, 1, SnapshotScript240.TYPE_MODIFIER, 0, 1]),
+	}
+	for label: String in hostile:
+		if not SnapshotScript240.decode(hostile[label]).is_empty():
+			failures.append("%s decoded to a non-empty result" % label)
+	# A frame whose score count claims 65535 entries it does not carry.
+	var world: Dictionary = _snap_world_240()
+	world["scores"] = {}
+	world["kill_feed"] = []
+	world["announcer_text"] = ""
+	var bytes: PackedByteArray = SnapshotScript240.encode(world)
+	# tail after the score count: kill feed count (1) + kill zone (2) + announcer length (1)
+	var count_at: int = bytes.size() - 4 - 2
+	bytes[count_at] = 0xFF
+	bytes[count_at + 1] = 0xFF
+	if not SnapshotScript240.decode(bytes).is_empty():
+		failures.append("a 65535 score count with no scores decoded to a non-empty result")
+	# Random garbage must never raise (a script error fails the run).
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 240
+	for i in 300:
+		var junk := PackedByteArray()
+		for j in rng.randi_range(0, 80):
+			junk.append(rng.randi() & 0xFF)
+		SnapshotScript240.decode(junk)
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_counts_clamp_without_wrapping() -> Array[String]:
+	var failures: Array[String] = []
+	var world: Dictionary = _snap_world_240()
+	var many_players: Array = []
+	var many_bodies: Array = []
+	var many_projectiles: Array = []
+	for i in 300:
+		many_players.append(_snap_player_240(i, Vector2(i, i)))
+		many_bodies.append({"position": Vector2(i, i), "rotation": 0.0, "linear_velocity": Vector2.ZERO})
+		many_projectiles.append({"projectile_id": i, "position": Vector2.ZERO, "velocity": Vector2.ZERO, "weapon_type": 1})
+	world["players"] = many_players
+	world["static_stage_bodies"] = many_bodies
+	world["projectiles"] = many_projectiles
+	var kills: Array = []
+	for i in 300:
+		kills.append({"text": "k%d" % i})
+	world["kill_feed"] = kills
+	var scores: Dictionary = {}
+	for i in 70000:
+		scores[i] = i
+	world["scores"] = scores
+	var decoded: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(world))
+	if decoded.is_empty():
+		failures.append("an over-full world did not decode (the count and the loop disagreed)")
+		_scenario_completed = true
+		return failures
+	for key: String in ["players", "static_stage_bodies", "projectiles", "kill_feed"]:
+		if decoded[key].size() != 255:
+			failures.append("%s decoded %d entries, wanted the 255 clamp" % [key, decoded[key].size()])
+	if decoded["scores"].size() != 65535:
+		failures.append("scores decoded %d entries, wanted the 65535 clamp" % decoded["scores"].size())
+	# Over-range scalar fields clamp, they do not wrap.
+	var p: Dictionary = _snap_player_240(1, Vector2.ZERO)
+	p["damage"] = 70000
+	p["team"] = 300
+	p["color"] = -3
+	p["state"] = 256
+	var odd: Dictionary = _snap_world_240()
+	var no_team: Dictionary = _snap_player_240(2, Vector2.ZERO)
+	no_team["team"] = -1
+	odd["players"] = [p, no_team]
+	odd["timer_ms"] = 5000000000
+	odd["kill_zone_height"] = -40.0
+	var back: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(odd))
+	if back.is_empty():
+		failures.append("the over-range world did not decode")
+	else:
+		var q: Dictionary = back["players"][0]
+		if q["damage"] != 65535 or q["team"] != 255 or q["color"] != 0 or q["state"] != 255:
+			failures.append("scalars did not clamp: damage %s team %s color %s state %s" % [q["damage"], q["team"], q["color"], q["state"]])
+		if back["players"][1]["team"] != 255:
+			failures.append("team -1 (no team) decoded as %s, wanted 255" % back["players"][1]["team"])
+		if back["timer_ms"] != 4294967295:
+			failures.append("timer_ms %s, wanted the u32 clamp" % back["timer_ms"])
+		if back["kill_zone_height"] != 0:
+			failures.append("negative kill_zone_height decoded as %s, wanted 0" % back["kill_zone_height"])
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_nan_and_bad_types_encode_safely() -> Array[String]:
+	var failures: Array[String] = []
+	var p: Dictionary = _snap_player_240(1, Vector2(NAN, INF))
+	p["body"]["rotation"] = NAN
+	p["body"]["linear_velocity"] = Vector2(-INF, NAN)
+	p["weapon"]["head_rotation"] = INF
+	p["damage"] = NAN
+	p["team"] = 2.7
+	p["name"] = 12345
+	p["weapon"]["head_position"] = "not a vector"
+	var world: Dictionary = _snap_world_240()
+	world["players"] = [p, "not a dict"]
+	world["timer_ms"] = NAN
+	world["stage_id"] = -5.5
+	world["scores"] = {1: NAN, 2: -4, 3: 1.5e30}
+	var decoded: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(world))
+	if decoded.is_empty():
+		failures.append("a NaN/INF/bad-typed world did not decode")
+		_scenario_completed = true
+		return failures
+	var q: Dictionary = decoded["players"][0]
+	var pos: Vector2 = q["body"]["position"]
+	if pos != Vector2(0, 32767):
+		failures.append("NaN/INF position decoded %s, wanted (0, 32767)" % pos)
+	if q["body"]["linear_velocity"] != Vector2(-32768, 0):
+		failures.append("-INF/NaN velocity decoded %s, wanted (-32768, 0)" % q["body"]["linear_velocity"])
+	if not is_finite(q["body"]["rotation"]) or not is_finite(q["weapon"]["head_rotation"]):
+		failures.append("a NaN rotation decoded non-finite")
+	if q["damage"] != 0 or q["team"] != 3 or q["name"] != "":
+		failures.append("damage %s team %s name '%s', wanted 0, 3, ''" % [q["damage"], q["team"], q["name"]])
+	if decoded["timer_ms"] != 0 or decoded["stage_id"] != 0:
+		failures.append("timer_ms %s stage_id %s, wanted 0, 0" % [decoded["timer_ms"], decoded["stage_id"]])
+	if decoded["scores"] != {1: 0, 2: 0, 3: 65535}:
+		failures.append("scores decoded %s" % decoded["scores"])
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_quantization_rounds_to_nearest() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [
+		[Vector2(0.9, 0.9), Vector2(1, 1)], [Vector2(0.4, 0.49), Vector2(0, 0)],
+		[Vector2(-0.9, -0.9), Vector2(-1, -1)], [Vector2(-0.4, 2.6), Vector2(0, 3)],
+		[Vector2(40000, -40000), Vector2(32767, -32768)],
+	]
+	for c: Array in cases:
+		var world: Dictionary = _snap_world_240()
+		world["players"] = [_snap_player_240(1, c[0])]
+		var got: Vector2 = SnapshotScript240.decode(SnapshotScript240.encode(world))["players"][0]["body"]["position"]
+		if got != c[1]:
+			failures.append("%s decoded %s, wanted %s" % [c[0], got, c[1]])
+	# Worst case over many fractional values: at most half a pixel per axis.
+	var worst: float = 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 200:
+		var pos := Vector2(rng.randf_range(-3000, 3000), rng.randf_range(-3000, 3000))
+		var world: Dictionary = _snap_world_240()
+		world["players"] = [_snap_player_240(1, pos)]
+		var got: Vector2 = SnapshotScript240.decode(SnapshotScript240.encode(world))["players"][0]["body"]["position"]
+		worst = maxf(worst, maxf(absf(got.x - pos.x), absf(got.y - pos.y)))
+	print("snapshot quantization worst per-axis error over 200 samples: %.4f px" % worst)
+	if worst > 0.5001:
+		failures.append("worst per-axis position error %.4f px, wanted <= 0.5" % worst)
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_delta_applied_equals_full_of_same_tick() -> Array[String]:
+	var failures: Array[String] = []
+	var tick_a: Dictionary = _snap_world_240()
+	var tick_b: Dictionary = _snap_world_240()
+	tick_b["players"][0]["body"]["position"] = Vector2(111.4, 205.6)
+	tick_b["players"][0]["weapon"]["head_rotation"] = 2.2
+	tick_b["players"][0]["damage"] = 40
+	tick_b["players"][1]["state"] = 0
+	tick_b["projectiles"][0]["position"] = Vector2(55, 66)
+	tick_b["pickups"][0]["position"] = Vector2(71, 81)
+	tick_b["flail"]["ball_position"] = Vector2(15, 16)
+	tick_b["grapple"]["rope_end"] = Vector2(30, 31)
+	tick_b["timer_ms"] = 4967
+	tick_b["scores"][2] = 5
+	tick_b["kill_zone_height"] = 590
+	var delta_bytes: PackedByteArray = SnapshotScript240.encode(SnapshotCaptureScript240.delta(tick_b, tick_a))
+	var delta: Dictionary = SnapshotScript240.decode(delta_bytes)
+	if delta.is_empty() or delta.get("is_full_snapshot", true):
+		failures.append("the delta frame did not decode as a delta")
+		_scenario_completed = true
+		return failures
+	var base: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(tick_a))
+	var base_copy: Dictionary = base.duplicate(true)
+	var applied: Dictionary = SnapshotScript240.apply_delta(base, delta)
+	var want: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(tick_b))
+	for key: String in want:
+		if applied.get(key) != want[key]:
+			failures.append("%s: delta-applied %s, full snapshot of the same tick %s" % [key, applied.get(key), want[key]])
+	if applied != want:
+		failures.append("the delta-applied snapshot does not equal the full snapshot of the same tick")
+	if base != base_copy:
+		failures.append("apply_delta changed the snapshot it was given")
+	# The two delta types the encoder used to drop.
+	var extra: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript240.TYPE_MODIFIER, "id": 1, "name": "big_heads"},
+		{"type": SnapshotScript240.TYPE_KILL_FEED, "id": 0, "text": "C beat D"}]}))
+	var with_extra: Dictionary = SnapshotScript240.apply_delta(base, extra)
+	if with_extra["modifiers"][0]["name"] != "big_heads" or with_extra["kill_feed"].back()["text"] != "C beat D":
+		failures.append("TYPE_MODIFIER / TYPE_KILL_FEED deltas did not apply: %s %s" % [with_extra["modifiers"], with_extra["kill_feed"]])
 	_scenario_completed = true
 	return failures
 # --- Game modes (issues #276-#278) ---------------------------------------------
@@ -28614,6 +28909,127 @@ func _scenario_bot_sudden_death_plays_as_classic() -> Array[String]:
 		failures.append("the bot never hunted the rival in Sudden Death")
 	await _teardown(rig["stage"])
 	return failures
+## Issue #369: streamer mode. A real Main scene taken online to an in-process
+## relay, its lobby screen and join corner read with "Hide room code" `hide`.
+const STREAMER_HIDDEN_TEXT_369: String = "Code hidden: see host phone"
+func _streamer_rig_369(hide: bool, failures: Array[String]) -> Dictionary:
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		return {}
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	_sfx().set_hide_room_code(hide)
+	var rig := {"main": main, "server": server, "relay": relay, "old_setting": old_setting, "code": ""}
+	server.apply_host_command("online", true)
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the host never came online")
+	rig["code"] = server.online_room_code()
+	await _await_ticks(5)
+	return rig
+func _streamer_close_369(rig: Dictionary) -> void:
+	_sfx().set_hide_room_code(false)
+	ProjectSettings.set_setting("pickfight/relay_url", rig["old_setting"])
+	rig["server"].apply_host_command("online", false)
+	_relay_stop(rig["relay"], [])
+	await _teardown(rig["main"])
+func _scenario_streamer_mode_hides_room_code_and_qr_when_on() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var lobby: Object = rig["main"].get_node("RoundManager").get("_lobby_screen")
+	var room: Label = lobby.get("_room_label") as Label
+	var url: Label = lobby.get("_lobby_url") as Label
+	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
+	if room.visible and room.text.contains(rig["code"]):
+		failures.append("the lobby still shows the room code '%s'" % room.text)
+	if qr.visible:
+		failures.append("the lobby still shows the join QR")
+	if url.text != STREAMER_HIDDEN_TEXT_369:
+		failures.append("the lobby URL line reads '%s', wanted the hidden notice" % url.text)
+	var corner: Label = server.join_label()
+	if corner.text.contains(rig["code"]) or corner.text.contains(server.join_url):
+		failures.append("the in-round join label still shows the code or URL: '%s'" % corner.text)
+	var corner_qr: TextureRect = server.join_qr_rect()
+	server.set_join_corner_visible(true)
+	if corner_qr.visible:
+		failures.append("the in-round join QR shows with the room code hidden")
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_shows_room_code_and_qr_when_off() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(false, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var lobby: Object = rig["main"].get_node("RoundManager").get("_lobby_screen")
+	var room: Label = lobby.get("_room_label") as Label
+	var url: Label = lobby.get("_lobby_url") as Label
+	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
+	if not room.visible or room.text != "Online: " + rig["code"]:
+		failures.append("the lobby does not show the room code (visible %s, '%s')" % [room.visible, room.text])
+	if url.text != server.join_url:
+		failures.append("the lobby URL line reads '%s', wanted %s" % [url.text, server.join_url])
+	if server.join_qr_texture != null and not qr.visible:
+		failures.append("the lobby hides the join QR with streamer mode off")
+	var corner: Label = server.join_label()
+	if not corner.text.contains("Online: " + rig["code"]):
+		failures.append("the in-round join label lost the code: '%s'" % corner.text)
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_setting_persists_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx.get("hide_room_code") != false:
+		failures.append("Hide room code is not off by default")
+	var was: Dictionary = {"path": sfx.settings_path, "persist": sfx.persist_settings, "hide": sfx.get("hide_room_code")}
+	var path: String = OS.get_temp_dir().path_join("pickfight_streamer_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_hide_room_code(true)
+	sfx.hide_room_code = false
+	sfx.load_settings()
+	if sfx.hide_room_code != true:
+		failures.append("Hide room code not remembered after a reload")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	sfx.persist_settings = was["persist"]
+	sfx.hide_room_code = was["hide"]
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_host_phone_receives_room_code() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(true, failures)
+	if rig.is_empty():
+		return failures
+	var phones: Array[WebSocketPeer] = []
+	var host := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(host, "streamer-host", phones)
+	phones.append(host)
+	if joined["slot"] != 0:
+		failures.append("the host phone got slot %s" % joined["slot"])
+	var lobby: Dictionary = {}
+	for i in 30:
+		await process_frame
+		lobby = _latest_lobby_msg(host, lobby)
+	if lobby.get("room", "") != rig["code"]:
+		failures.append("the host phone was told room '%s', wanted '%s'" % [lobby.get("room", ""), rig["code"]])
+	await _close_phones(phones)
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
 ## Issue #359: the lobby is the title screen, and it shows the wordmark: a
 ## visible "Logo" TextureRect with a loaded texture, as wide as the 1600 px
 ## logo art. The victory screen carries a smaller one, and its podium blocks
@@ -28641,13 +29057,11 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
 	return failures
-
 # --- Issue #361: the Steam Next Fest demo build ----------------------------
 const DemoBuildScript361 := preload("res://scripts/DemoBuild.gd")
 const HostSettingsScriptDemo361 := preload("res://scripts/HostSettings.gd")
 const StageRotationScript361 := preload("res://scripts/StageRotation.gd")
 const GameModesScript361 := preload("res://scripts/GameModes.gd")
-
 func _real_stage_scenes_361() -> Array[PackedScene]:
 	var scenes: Array[PackedScene] = []
 	var names: PackedStringArray = DirAccess.get_files_at("res://scenes/stages")
@@ -28656,12 +29070,10 @@ func _real_stage_scenes_361() -> Array[PackedScene]:
 		if file.ends_with(".tscn"):
 			scenes.append(load("res://scenes/stages/" + file) as PackedScene)
 	return scenes
-
 func _fresh_settings_361() -> RefCounted:
 	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
 	settings.persist = false
 	return settings
-
 ## The flag picks the slice: forced on, the slice is about 6 stages, the
 ## pickaxe plus 4 pickup weapons, and Classic plus King of the Hill; every
 ## named item is a real file. Forced off, everything is in.
@@ -28692,7 +29104,6 @@ func _scenario_demo_build_flag_defines_the_slice() -> Array[String]:
 	DemoBuildScript361.forced = -1
 	_scenario_completed = true
 	return failures
-
 ## Demo on: 200 rounds over all of the game's stages deal only the slice's
 ## stages, all of them, and the settings can neither list nor enable others.
 func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
@@ -28725,7 +29136,6 @@ func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
 	DemoBuildScript361.forced = -1
 	_scenario_completed = true
 	return failures
-
 ## Demo on: the pickup pool holds only the slice's weapons (never the
 ## pickaxe), draws from it only ever give those, and the settings list and
 ## allow only them.
@@ -28760,7 +29170,6 @@ func _scenario_demo_build_only_slice_weapons_spawn() -> Array[String]:
 	DemoBuildScript361.forced = -1
 	_scenario_completed = true
 	return failures
-
 ## Demo on: the picker offers Classic and King of the Hill only, and the
 ## controller server refuses every other mode.
 func _scenario_demo_build_mode_picker_only_slice_modes() -> Array[String]:
@@ -28788,7 +29197,6 @@ func _scenario_demo_build_mode_picker_only_slice_modes() -> Array[String]:
 	DemoBuildScript361.forced = -1
 	await _teardown(main)
 	return failures
-
 ## Demo on: the victory screen is followed by the end card, with the logo and
 ## the wishlist line; a second continue returns to the lobby. Demo off: no end
 ## card, the victory screen goes straight to the lobby.
@@ -28827,7 +29235,6 @@ func _scenario_demo_build_end_card_follows_victory() -> Array[String]:
 	DemoBuildScript361.forced = -1
 	await _teardown(loop["stage"])
 	return failures
-
 ## Demo off: the full game is as it was. Every stage rotates, all fourteen
 ## pickup weapons are in the pool, all five modes are on offer and pickable,
 ## and the victory screen goes straight to the lobby with no end card.
@@ -28870,4 +29277,151 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 		failures.append("the end card showed with the demo off")
 	DemoBuildScript361.forced = -1
 	await _teardown(loop["stage"])
+	return failures
+## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
+func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = disabled
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var rm: Node = rig["rm"]
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rm.stage_scenes = _named_stub_stages(["StageA", "StageB", "StageC"], spawns)
+	settings.stock_stage = pick
+	return rig
+## Stub stages whose `resource_path` carries their name, as the rotation and
+## the host settings identify a stage by its file's base name.
+func _named_stub_stages(names: Array[String], spawns: Array[Vector2]) -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	for stage_name: String in names:
+		var scene: PackedScene = _make_stub_stage(stage_name, spawns)
+		scene.resource_path = "res://tools/stub_stages/%s.tscn" % stage_name
+		scenes.append(scene)
+	return scenes
+const StageRotationScript := preload("res://scripts/StageRotation.gd")
+func _stock_stage_reset() -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = PackedStringArray()
+	settings.stock_stage = ""
+	_stock_settings(3, 480)
+## The stage names RoundManager plays over `rounds` consecutive rounds.
+func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
+	var names: Array[String] = []
+	for _r in rounds:
+		rm.call("_swap_stage")
+		names.append(str(rm.get("_current_stage").get_meta("stub_stage_name")))
+	return names
+func _scenario_stock_plays_the_picked_stage_every_round() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("StageB")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	var names: Array[String] = _stock_stage_names(rm, 6)
+	for n: String in names:
+		if n != "StageB":
+			failures.append("Stock played %s; the pick was StageB (all rounds: %s)" % [n, names])
+			break
+	# Another mode keeps rotating: not the same stage six times in a row.
+	rm.game_mode = ""
+	rm.call("_begin_match")
+	var party: Array[String] = _stock_stage_names(rm, 6)
+	if party.count(party[0]) == party.size():
+		failures.append("Classic kept playing %s; the rotation was meant to run" % party[0])
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[String]:
+	var failures: Array[String] = []
+	var seen: Dictionary = {}
+	for _attempt in 3:
+		var rig: Dictionary = _stock_stage_rig("", PackedStringArray(["StageA"]))
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		var names: Array[String] = _stock_stage_names(rm, 4)
+		if names.has("StageA"):
+			failures.append("Random picked the switched-off StageA: %s" % [names])
+		if names.count(names[0]) != names.size():
+			failures.append("Random changed stage inside one match: %s" % [names])
+		seen[names[0]] = true
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	if seen.is_empty():
+		failures.append("Random never picked a stage")
+	# A pick the host switched off falls back to an enabled stage.
+	var rig2: Dictionary = _stock_stage_rig("StageC", PackedStringArray(["StageC"]))
+	rig2["rm"].set_process(false)
+	var fallback: Array[String] = _stock_stage_names(rig2["rm"], 2)
+	if fallback.has("StageC"):
+		failures.append("a switched-off pick was still played: %s" % [fallback])
+	_stock_stage_reset()
+	await _teardown(rig2["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_never_rolls_a_modifier() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	rm.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	for _i in 40:
+		var rolled: String = rm.call("_roll_modifier")
+		if rolled != "":
+			failures.append("Stock rolled the modifier '%s'" % rolled)
+			break
+	rm.forced_modifier = "double_damage"
+	if rm.call("_roll_modifier") != "":
+		failures.append("a forced modifier was still rolled in Stock")
+	rm.forced_modifier = ""
+	rm.game_mode = ""
+	var any: bool = false
+	for _i in 40:
+		if rm.call("_roll_modifier") != "":
+			any = true
+	if not any:
+		failures.append("Classic rolled no modifier at chance 1.0; the check proves nothing")
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stock_stage_375.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	fresh.known_stages = PackedStringArray(["StageA", "StageB"])
+	if fresh.stock_stage != "":
+		failures.append("the default pick was '%s', want Random" % fresh.stock_stage)
+	if fresh.set_stock_stage("Nowhere") or fresh.stock_stage != "":
+		failures.append("an unknown stage was accepted")
+	if not fresh.set_stock_stage("StageB"):
+		failures.append("a known stage was refused")
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.stock_stage != "StageB":
+		failures.append("reloaded pick '%s', want StageB" % reloaded.stock_stage)
+	DirAccess.remove_absolute(path)
+	# The host phone's message reaches the shared settings.
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.known_stages = PackedStringArray(["StageA", "StageB"])
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stock_stage", "StageA") or shared.stock_stage != "StageA":
+		failures.append("the host command did not set StageA")
+	if server.apply_host_command("stock_stage", "Nowhere") or shared.stock_stage != "StageA":
+		failures.append("the host command took an unknown stage")
+	server.free()
+	# The picker lists enabled stages only (no competitive stage exists yet).
+	var rotation: RefCounted = StageRotationScript.new()
+	rotation.settings = StockSettingsScript.new()
+	rotation.settings.persist = false
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rotation.scenes = _named_stub_stages(["StageA", "StageB"], spawns)
+	rotation.settings.set_stage_enabled("StageA", false)
+	var rows: Array = rotation.picker_rows()
+	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
+		failures.append("the picker rows were %s" % [rows])
+	_stock_stage_reset()
+	_scenario_completed = true
 	return failures

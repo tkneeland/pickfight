@@ -23,7 +23,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Item | Placeholder | Who |
 |---|---|---|
 | Release date | Decided 2026-10-01: store page public by about December 2026; a demo in **Steam Next Fest, Feb 22 - Mar 1 2027 (registration by Jan 10 2027)**; Early Access launch about March 2027. Demo is a slice: about 6 stages, 5 weapons, Classic plus one mode, 8 players. Early Access bar: everything ticketed as of October 2026. Steam wants the store page public ahead of release (**verify**: about 2 weeks minimum "Coming soon") and a wait after paperwork/fee (**verify**: about 30 days). Work backwards from these. | owner |
-| Launch price per region | Decided 2026-10-01: **$7.99 USD** base (only the host buys; phones join free), 10-15% launch discount; Steam suggests regional prices (**verify**); launch discount (**verify** typical 10-20%) | owner |
+| Launch price per region | Decided 2026-10-01: **$7.99 USD** in Early Access, rising to **$9.99** at 1.0 (only the host buys; phones join free), 10-15% launch discount; Steam suggests regional prices (**verify**); launch discount (**verify** typical 10-20%) | owner |
 | Final name / trademark check | "Pickfight" | owner |
 | Early Access vs 1.0 | Decided 2026-10-01: **Early Access** | owner |
 | Publisher entity (individual vs company) | Decided 2026-10-01: the owner as an individual, with a revenue split agreed privately with Austin; drives tax/bank forms and macOS/Windows signing identity | owner |
