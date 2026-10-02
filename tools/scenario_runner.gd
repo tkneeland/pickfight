@@ -623,6 +623,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"round_never_shows_join_corner",
 	"host_pad_start_pauses_and_resumes_other_pads_do_not",
+	"host_pad_start_and_host_phone_share_one_pause",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2264,6 +2265,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_never_shows_join_corner()
 		"host_pad_start_pauses_and_resumes_other_pads_do_not":
 			return await _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not()
+		"host_pad_start_and_host_phone_share_one_pause":
+			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32528,6 +32531,77 @@ func _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not() -> Array[St
 		failures.append("paused: Start from the host's pad did not resume (paused %s, tree %s)" % [rm.is_paused(), paused])
 	if rm.lobby_phase() != "playing" and rm.lobby_phase() != "round_end":
 		failures.append("the match left play (phase '%s')" % rm.lobby_phase())
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## Issue #430 review: the host pad's Start and the host phone's Pause and
+## Resume drive one pause. A phone pause is resumed by the host pad's Start,
+## a pad pause by the phone's Resume, and a pad pause landing on the round-end
+## screen holds it there (its game-time wait does not run out) until the pad
+## resumes it. Pad 0 is unseated here: the host's controller need not be a
+## player.
+func _scenario_host_pad_start_and_host_phone_share_one_pause() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(2, "issue-430-shared-pause")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		return failures
+	rm.round_end_pause_sec = 2.0
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var p0: RigidBody2D = server.player_in_slot(0)
+	var p1: RigidBody2D = server.player_in_slot(1)
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "playing" and p0.alive and p1.alive, BOT_START_MSEC):
+		failures.append("two ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "pause"}))
+	await _poll_phones(joined, 10)
+	if not rm.is_paused() or not paused:
+		failures.append("the host phone's Pause did not pause the game")
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("the host pad's Start did not resume the host phone's pause")
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused() or not paused:
+		failures.append("the host pad's Start did not pause the game")
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "resume"}))
+	await _poll_phones(joined, 10)
+	if rm.is_paused() or paused:
+		failures.append("the host phone's Resume did not resume the host pad's pause")
+	if server.pad_slot(0) != -1:
+		failures.append("the host pad's Start mid-match seated it in slot %d" % server.pad_slot(0))
+	p1.eliminate()
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never ended (phase '%s')" % rm.lobby_phase())
+		paused = false
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused() or not paused:
+		failures.append("round end: the host pad's Start did not pause the game")
+	# 3 s of frames, past the 2 s round-end wait: frozen, it must not run out.
+	await _poll_phones(joined, 180)
+	print("      round end paused by the pad: phase after 180 frames '%s', paused %s" % [rm.lobby_phase(), rm.is_paused()])
+	if rm.lobby_phase() != "round_end":
+		failures.append("round end: paused, the round-end wait still ran out (phase '%s')" % rm.lobby_phase())
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("round end: the host pad's Start did not resume")
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() != "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round end: resumed, the round end never moved on")
 	paused = false
 	await _close_phones(joined)
 	await _teardown(main)
