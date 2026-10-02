@@ -1274,7 +1274,7 @@ func _begin_match() -> void:
 		_controller_server.clear_ready()
 	if _lobby_screen != null and _lobby_screen.panels_built():
 		_lobby_screen.show_panel("")
-	_set_join_corner_visible(true)
+	_set_join_corner_visible(false) # lobby only (#430)
 	_state = State.WAITING
 	_publish_lobby_state()
 	_try_start_round()
@@ -1329,6 +1329,9 @@ func _publish_lobby_state() -> void:
 		var ping: int = _slot_ping(slot)
 		if ping >= 0:
 			players[-1]["ping"] = ping
+	if _controller_server != null and _controller_server.has_method("pad_tip_pending"):
+		for entry: Dictionary in players:
+			entry["tip"] = _controller_server.pad_tip_pending(int(entry["slot"]))
 	var in_lobby: bool = _state == State.LOBBY or _state == State.COUNTDOWN
 	var state: Dictionary = {
 		"phase": lobby_phase(),

@@ -298,6 +298,8 @@ func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxCon
 		var ping_label := _big_label(ping_text(int(entry["ping"])), maxi(font_size - 8, 18), ping_color(int(entry["ping"])))
 		ping_label.name = "Ping"
 		row.add_child(ping_label)
+	if bool(entry.get("tip", false)):
+		row.add_child(_big_label(tr("LOBBY_PAD_TIP"), 22, Color(0.8, 0.82, 0.88)))
 	return row
 
 ## Issue #446: a remote seat's round trip as text, and the colour it is shown
