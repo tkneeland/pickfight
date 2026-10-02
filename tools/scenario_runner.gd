@@ -625,6 +625,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pad_start_pauses_and_resumes_other_pads_do_not",
 	"host_pad_start_and_host_phone_share_one_pause",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"rotation_deals_ctf_and_soccer_only_their_own_stages",
+	"juice_hitstop_never_lifts_a_host_pause",
+	"mode_award_categories_are_translated",
+	"ctf_a_kicked_player_waiting_to_respawn_stays_out",
+	"hot_potato_first_it_varies_across_a_matchs_rounds",
 	"online_host_left_reaches_client_and_shows_screen",
 	"online_late_remote_joiner_enters_next_round_with_fresh_score",
 	"online_ping_reaches_lobby_and_scoreboard_with_warning",
@@ -2286,6 +2291,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"rotation_deals_ctf_and_soccer_only_their_own_stages":
+			return await _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages()
+		"juice_hitstop_never_lifts_a_host_pause":
+			return await _scenario_juice_hitstop_never_lifts_a_host_pause()
+		"mode_award_categories_are_translated":
+			return await _scenario_mode_award_categories_are_translated()
+		"ctf_a_kicked_player_waiting_to_respawn_stays_out":
+			return await _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out()
+		"hot_potato_first_it_varies_across_a_matchs_rounds":
+			return await _scenario_hot_potato_first_it_varies_across_a_matchs_rounds()
 		"online_host_left_reaches_client_and_shows_screen":
 			return await _scenario_online_host_left_reaches_client_and_shows_screen()
 		"online_late_remote_joiner_enters_next_round_with_fresh_score":
@@ -32773,6 +32788,154 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 	get_root().size = original
 	await _await_ticks(1)
 	return failures
+## Review sweep b: Capture the Flag and Soccer can only end on a stage with their
+## bases or goals, so their rotation deals only the stages whose `mode_weights`
+## name the mode -- even when the host switched those off -- while every other
+## mode still deals the rest.
+func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var own: Dictionary = {"capture_the_flag": ["Bastion", "Stronghold"], "soccer": ["Pitch", "Cage", "Dunes"]}
+	for mode_id: String in own.keys():
+		for switched_off: bool in [false, true]:
+			var settings: RefCounted = _fresh_settings_361()
+			var rotation: RefCounted = StageRotationScript361.new()
+			rotation.settings = settings
+			rotation.scenes = scenes
+			rotation.round_player_count = 8
+			rotation.mode_id = mode_id
+			rotation.rng = RandomNumberGenerator.new()
+			rotation.rng.seed = 21
+			if switched_off:
+				for stage_name: String in own[mode_id]:
+					settings.set_stage_enabled(stage_name, false)
+			var seen: Dictionary = {}
+			for _round in 60:
+				var index: int = rotation.next_stage_index()
+				rotation.stage_index = index
+				seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+			for stage_name: Variant in seen.keys():
+				if not (own[mode_id] as Array).has(str(stage_name)):
+					failures.append("%s dealt %s (own stages %s, switched off: %s)" % [mode_id, stage_name, own[mode_id], switched_off])
+			if seen.is_empty():
+				failures.append("%s dealt no stage" % mode_id)
+	var classic: RefCounted = StageRotationScript361.new()
+	classic.settings = _fresh_settings_361()
+	classic.scenes = scenes
+	classic.round_player_count = 8
+	classic.rng = RandomNumberGenerator.new()
+	classic.rng.seed = 21
+	var classic_seen: Dictionary = {}
+	for _round in 60:
+		var index: int = classic.next_stage_index()
+		classic.stage_index = index
+		classic_seen[index] = true
+	if classic_seen.size() < 20:
+		failures.append("Classic dealt only %d stages in 60 rounds" % classic_seen.size())
+	_scenario_completed = true
+	return failures
+## Review sweep b: the host pausing during a hit-stop keeps the game paused once
+## the hit-stop runs out; that pause is the host's to lift, not Juice's.
+func _scenario_juice_hitstop_never_lifts_a_host_pause() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var host := Node.new()
+	var script := GDScript.new()
+	script.source_code = "extends Node\nvar paused: bool = false\nfunc is_paused() -> bool:\n\treturn paused\n"
+	script.reload()
+	host.set_script(script)
+	stage.add_child(host)
+	host.add_to_group("round_manager")
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(2)
+	emitter.strike_landed.emit(emitter, JuiceScript.HITSTOP_DAMAGE_MIN + 20.0, Vector2.ZERO, false)
+	if not juice.is_frozen():
+		failures.append("a heavy hit did not freeze the game")
+	# The host's Pause lands mid-freeze, as RoundManager._pause_match() does it.
+	host.set("paused", true)
+	get_root().get_tree().paused = true
+	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
+	if juice.is_frozen():
+		failures.append("the hit-stop never ran out")
+	if not get_root().get_tree().paused:
+		failures.append("the hit-stop ending lifted the host's pause")
+	get_root().get_tree().paused = false
+	await _teardown(stage)
+	return failures
+## Review sweep b: every mode award's category has a translation, so the victory
+## panel never shows a raw AWARD_CATEGORY_ key.
+func _scenario_mode_award_categories_are_translated() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = load("res://scripts/MatchStats.gd").new()
+	stats.begin_match()
+	stats.record_hill_hold(0, 5.0)
+	stats.record_tags_passed(0, 2)
+	stats.record_lives_left(0, 1)
+	stats.record_goals(0, 1)
+	stats.record_captures(0, 1)
+	var slots: Array = [0, 1]
+	for mode_id: String in ["king_of_the_hill", "hot_potato", "stock", "soccer", "capture_the_flag"]:
+		var awards: Array[Dictionary] = stats.mode_awards(slots, mode_id)
+		if awards.is_empty():
+			failures.append("%s gave no mode award" % mode_id)
+		for award: Dictionary in awards:
+			var key: String = "AWARD_CATEGORY_" + str(award["category"])
+			if TranslationServer.translate(key) == key:
+				failures.append("%s: %s has no translation" % [mode_id, key])
+	_scenario_completed = true
+	return failures
+## Review sweep b: a Capture the Flag player the host kicks while they wait to
+## respawn stays out of the round, rather than coming back on a slot nobody holds.
+func _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	var kicked: RigidBody2D = rig["players"][1]
+	kicked.eliminate()
+	await _await_ticks(2)
+	if not mode.is_pending(1):
+		failures.append("the KO'd player was not waiting to respawn")
+	(rig["roster"].slots as Array).erase(1)
+	rm.call("_on_host_command", "kick", 1)
+	await _await_ticks(int(mode.respawn_sec * 60.0) + 30)
+	if kicked.alive:
+		failures.append("the kicked player respawned into the round")
+	if mode.is_pending(1):
+		failures.append("the kicked player is still waiting to respawn")
+	await _teardown(rig["stage"])
+	return failures
+
+## Review sweep b: Hot Potato's first "it" is drawn from one match-long stream, so
+## the rounds of a match do not all hand the tag to the same player first (#187:
+## still the match seed's, so a seed replays the same picks).
+func _scenario_hot_potato_first_it_varies_across_a_matchs_rounds() -> Array[String]:
+	var failures: Array[String] = []
+	var picks: Array[Array] = []
+	for _run in 2:
+		var rig: Dictionary = _mode_rig(4, GameModesType.HOT_POTATO)
+		if not await _mode_started(rig):
+			failures.append("the Hot Potato round never started")
+			await _teardown(rig["stage"])
+			return failures
+		var rm: Node = rig["rm"]
+		var firsts: Array[int] = [int(rm.game_mode_node().it_slot)]
+		for _round in 5:
+			rm.call("_start_game_mode")
+			firsts.append(int(rm.game_mode_node().it_slot))
+		picks.append(firsts)
+		await _teardown(rig["stage"], false)
+	print("      first \"it\" per round: %s, replayed: %s" % [picks[0], picks[1]])
+	if picks[0].count(picks[0][0]) == picks[0].size():
+		failures.append("every round of the match made slot %d \"it\" first: %s" % [picks[0][0], picks[0]])
+	if picks[0] != picks[1]:
+		failures.append("the same match seed picked differently: %s vs %s" % [picks[0], picks[1]])
+	_scenario_completed = true
+	return failures
+
 ## Issue #446: the host's room closing, here by the host socket closing
 ## cleanly (the host quitting), reaches a real client, which shows the
 ## "Host left" message on its join screen. No migration: it stays there.
