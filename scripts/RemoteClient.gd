@@ -104,6 +104,12 @@ var _stage_id: int = -1
 var _stage: Node = null
 var _puppets: Dictionary = {} # key (String) -> RemotePuppet
 var _hud_signature: String = ""
+## Issue #459: after a dropped connection mid-match the client rejoins by
+## itself, every REJOIN_RETRY_MSEC, until the host's seat hold would have run
+## out (wall clock here; the host counts it in game time). 0 when not rejoining.
+const REJOIN_RETRY_MSEC: int = 1500
+var _rejoin_until_msec: int = 0
+var _rejoin_next_msec: int = 0
 
 var _camera: Camera2D
 var _world_root: Node2D
@@ -195,6 +201,8 @@ static func reason_text(reason: String) -> String:
 			return TranslationServer.translate("JOIN_ERR_NO_SLOT")
 		"no hello":
 			return TranslationServer.translate("JOIN_ERR_NO_HELLO")
+		"couch match", "room closed": # #435: ControllerServer.COUCH_MATCH_REASON, ROOM_CLOSED_REASON
+			return TranslationServer.translate("JOIN_ERR_COUCH" if reason == "couch match" else "JOIN_ERR_ROOM_CLOSED")
 	return TranslationServer.translate("JOIN_ERR_DISCONNECTED") % reason.left(60)
 
 # --- Lifecycle -------------------------------------------------------------------
@@ -221,12 +229,37 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if _socket != null:
 		_poll_socket()
+	_tick_rejoin()
 	if state == State.PLAYING:
 		_render()
 
 func _physics_process(_delta: float) -> void:
 	if state == State.PLAYING:
+		_pad_input()
 		_send_input()
+
+## #435: a gamepad's right stick drives the arm too, as a gamepad seat's does on
+## the host (#261). While the stick is out it sets the vector; let go, and the
+## arm rests until the stick or the mouse moves again.
+var test_pad_stick: Variant = null # a Vector2 here stands in for a real pad (headless has none)
+var _pad_driving: bool = false
+
+func _pad_input() -> void:
+	var stick := Vector2.ZERO
+	if test_pad_stick is Vector2:
+		stick = ControllerServerScript.stick_vector(test_pad_stick)
+	else:
+		for device: int in Input.get_connected_joypads():
+			stick = ControllerServerScript.stick_vector(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)))
+			if stick != Vector2.ZERO:
+				break
+	if stick != Vector2.ZERO:
+		input_vector = stick
+		_pad_driving = true
+	elif _pad_driving:
+		_pad_driving = false
+		_mouse.reset()
+		input_vector = Vector2.ZERO
 
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
@@ -302,18 +335,24 @@ func _poll_socket() -> void:
 		_on_socket_closed()
 		return
 	if _socket != null and state == State.CONNECTING and Time.get_ticks_msec() > _deadline_msec:
+		var until: int = _rejoin_until_msec
 		if _phase == Phase.OPENING:
 			_return_to_join(tr("JOIN_RELAY_NO_ANSWER") % relay_url)
 		else:
 			_return_to_join(tr("JOIN_TIMEOUT"))
+		_keep_rejoining(until)
 
 func _on_socket_closed() -> void:
 	if state == State.PLAYING:
 		_return_to_join(tr("JOIN_LOST"))
-	elif _phase == Phase.OPENING:
+		_keep_rejoining(Time.get_ticks_msec() + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
+		return
+	var until: int = _rejoin_until_msec
+	if _phase == Phase.OPENING:
 		_return_to_join(tr("JOIN_RELAY_UNREACHABLE") % relay_url)
 	else:
 		_return_to_join(tr("JOIN_CLOSED_EARLY"))
+	_keep_rejoining(until)
 
 ## The relay's own TEXT messages: welcome or error.
 func _on_relay_text(text: String) -> void:
@@ -346,6 +385,7 @@ func _on_host_text(text: String) -> void:
 	var msg: Dictionary = _parse_object(text)
 	if msg.has("slot") and msg.get("slot") is float and state == State.CONNECTING:
 		slot = int(msg["slot"])
+		_rejoin_until_msec = 0
 		_set_state(State.PLAYING)
 		_send_json({"t": "name", "v": player_name})
 		for pick: Dictionary in CosmeticsPickerScript.pick_messages(saved_pick):
@@ -377,6 +417,7 @@ static func _parse_object(text: String) -> Dictionary:
 	return json.data
 
 func _return_to_join(message: String, show_update_link: bool = false) -> void:
+	_rejoin_until_msec = 0
 	if _socket != null:
 		_socket.close()
 		_socket = null
@@ -1244,3 +1285,33 @@ func _on_cosmetic_picked(kind: String, value: Variant) -> void:
 	saved_pick = CosmeticsPickerScript.clean_pick(saved_pick)
 	_save_settings()
 	_send_json({"t": kind, "v": value})
+# --- Rejoining a held seat (issue #459) ------------------------------------------
+
+## Whether the client is retrying its way back into the match it dropped from.
+func rejoining() -> bool:
+	return _rejoin_until_msec > Time.get_ticks_msec()
+
+## After a network failure, keep retrying the same room until `until` (wall
+## msec); a refusal (kick, no slot, room gone) goes through `_return_to_join()`
+## alone and so ends the retries.
+func _keep_rejoining(until: int) -> void:
+	if until <= Time.get_ticks_msec() or room_code.is_empty():
+		return
+	_rejoin_until_msec = until
+	_rejoin_next_msec = Time.get_ticks_msec() + REJOIN_RETRY_MSEC
+	var lost: String = tr("JOIN_LOST") if status_text.is_empty() else status_text
+	_set_status(lost + " " + tr("JOIN_REJOINING"))
+
+func _tick_rejoin() -> void:
+	if _rejoin_until_msec == 0 or state != State.JOIN:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now >= _rejoin_until_msec:
+		_rejoin_until_msec = 0
+		_set_status(tr("JOIN_LOST"))
+		return
+	if now < _rejoin_next_msec:
+		return
+	var until: int = _rejoin_until_msec
+	if not join(room_code, player_name):
+		_keep_rejoining(until)

@@ -253,14 +253,15 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	if teams:
 		_lobby_target_label.text = tr("LOBBY_TEAMS_FIRST_TO") % state["target"]
 	var joined: int = state["players"].size()
+	var online: bool = _online_kind(join_source)
 	if state["phase"] == "countdown":
 		_lobby_status.text = str(state["count"])
 	elif joined < min_players:
-		_lobby_status.text = tr("LOBBY_SCAN_TO_JOIN") % [joined, min_players]
+		_lobby_status.text = (tr("LOBBY_ONLINE_WAITING") if online else tr("LOBBY_SCAN_TO_JOIN")) % [joined, min_players]
 	elif teams and not both_teams_manned(state):
 		_lobby_status.text = tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
 	else:
-		_lobby_status.text = tr("LOBBY_PRESS_READY")
+		_lobby_status.text = tr("LOBBY_PRESS_READY_ONLINE") if online else tr("LOBBY_PRESS_READY")
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
 		_lobby_qr.texture = qr as Texture2D
@@ -282,6 +283,11 @@ func _apply_streamer_mode(join_source: Object) -> void:
 		_lobby_url.text = str(join_source.get("join_url"))
 	if _room_label != null and hidden:
 		_room_label.visible = false
+	# #435: an Online match has no QR and no LAN join URL; a Couch one gets them back.
+	var online: bool = _online_kind(join_source)
+	_lobby_url.visible = not online
+	if online:
+		_lobby_qr.visible = false
 
 ## One lobby row: the player's swatch, name, host tag and ready state.
 func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxContainer:
@@ -703,13 +709,13 @@ func show_pause_banner(on: bool) -> void:
 
 # --- Host-screen lobby controls (issue #239) -------------------------------------
 #
-# For a PC-only match with no phone: clickable buttons and keys for Go online
-# (O), Play on this PC (P), Mode (T), First to (- and =) and Start (Enter).
+# For a PC-only match with no phone: clickable buttons and keys for the match
+# kind (O, Couch or Online, #435), Mode (T), First to (- and =) and Start (Enter).
 # Each calls ControllerServer.apply_host_command(), the same function the host
 # phone's menu ends up in, so nothing is decided here.
 
 const CONTROL_KEYS: Dictionary = {
-	"online": KEY_O, "pc_seat": KEY_P, "mode": KEY_T, "target_down": KEY_MINUS,
+	"online": KEY_O, "mode": KEY_T, "target_down": KEY_MINUS,
 	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
 }
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
@@ -742,14 +748,13 @@ func attach_controls(server: Object) -> void:
 	var online_row := HBoxContainer.new()
 	online_row.add_theme_constant_override("separation", 12)
 	box.add_child(online_row)
-	online_row.add_child(_control_button("online", tr("HOST_GO_ONLINE")))
+	online_row.add_child(_control_button("online", tr("HOST_MATCH_KIND_STATE") % tr("MATCH_COUCH")))
 	_online_status = _big_label("", 24, Color(0.8, 0.82, 0.88))
 	online_row.add_child(_online_status)
 	_room_label = _big_label("", ROOM_CODE_FONT_SIZE, LOBBY_ACCENT)
 	_room_label.name = "RoomCode"
 	_room_label.visible = false
 	online_row.add_child(_room_label)
-	box.add_child(_control_button("pc_seat", tr("HOST_PLAY_ON_PC")))
 	var pad_hint := _big_label(tr("HOST_GAMEPAD_HINT"), 24, Color(0.8, 0.82, 0.88))
 	pad_hint.name = "GamepadHint"
 	box.add_child(pad_hint)
@@ -764,6 +769,7 @@ func attach_controls(server: Object) -> void:
 	var start_button: Button = _control_button("start", tr("HOST_START_MATCH"))
 	start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	target_row.add_child(start_button)
+	_build_title_and_notice()
 	refresh_controls()
 
 func _control_button(id: String, text: String) -> Button:
@@ -787,9 +793,8 @@ func press_control(id: String) -> void:
 		return
 	match id:
 		"online":
-			_server.apply_host_command("online", not _server.online_requested())
-		"pc_seat":
-			_server.apply_host_command("pc_seat", _server.host_pc_slot() == -1)
+			# #435: Couch <-> Online (Solo flips to Couch). The room opens with Online.
+			_server.apply_host_command("kind", "local" if _online_kind(_server) else "online")
 		"mode":
 			_server.apply_host_command("mode", "ffa" if _server.team_mode() else "teams")
 		"target_down":
@@ -828,14 +833,14 @@ func refresh_controls() -> void:
 		return
 	var status: String = _server.online_status()
 	var code: String = _server.online_room_code()
-	control_button("online").text = tr("HOST_GO_ONLINE_STATE") % (tr("ON") if _server.online_requested() else tr("OFF"))
+	control_button("online").text = tr("HOST_MATCH_KIND_STATE") % match_kind_text(_server)
 	_online_status.text = {"connecting": tr("ONLINE_CONNECTING"), "online": tr("ONLINE_ONLINE"), "unreachable": tr("ONLINE_UNREACHABLE")}.get(status, "")
 	_room_label.text = tr("ONLINE_ROOM") % code
 	_room_label.visible = code != "" and not (_server.has_method("room_code_hidden") and _server.room_code_hidden())
 	# The code says "online" already; the status stays for connecting or a blip.
 	_online_status.visible = not (_room_label.visible and status == "online")
 	_apply_streamer_mode(_server)
-	control_button("pc_seat").text = tr("HOST_PLAY_ON_PC_STATE") % (tr("ON") if _server.host_pc_slot() != -1 else tr("OFF"))
+	_refresh_kind_notice()
 	control_button("mode").text = tr("HOST_MODE_STATE") % (tr("MODE_TEAMS") if _server.team_mode() else tr("MODE_FFA"))
 	control_button("join").disabled = not _can_join_online()
 	_join_blocked.visible = control_button("join").disabled
@@ -872,7 +877,7 @@ func _input(event: InputEvent) -> void:
 		_pad_active = true
 	elif event is InputEventKey or event is InputEventMouseButton:
 		_pad_active = false
-	if _server == null or _lobby_panel == null or not _lobby_panel.visible:
+	if _server == null or _lobby_panel == null or not _lobby_panel.visible or title_visible():
 		return
 	if PadMenuScript.pressed(event, JOY_BUTTON_Y):
 		set_pad_menu(not _pad_menu_open)
@@ -883,12 +888,12 @@ func _input(event: InputEvent) -> void:
 
 ## Opens or closes the gamepad-driven host menu: the lobby control buttons
 ## become focusable and take focus (first enabled one), or give it back.
-const PAD_ORDER: Array[String] = ["online", "pc_seat", "mode", "target_down", "target_up", "start", "join"] # focus lands on Go online first, as before
+const PAD_ORDER: Array[String] = ["online", "mode", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
 
 ## Explicit D-pad links: down the column, with First-to's minus and plus side
 ## by side. Geometric neighbours skip the small minus button.
 func _chain_pad_focus() -> void:
-	var column: Array[String] = ["join", "online", "pc_seat", "mode", "target_down"]
+	var column: Array[String] = ["join", "online", "mode", "target_down"]
 	var buttons: Array[Button] = []
 	for id: String in column:
 		buttons.append(_controls[id])
@@ -934,13 +939,133 @@ func _exit_tree() -> void:
 	if _pad_menu_open:
 		_pad_menu_open = false
 		PadMenuScript.set_open("lobby", false)
+	PadMenuScript.set_open("title", false)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if _server == null or key == null or not key.pressed or key.echo or _lobby_panel == null or not _lobby_panel.visible:
+		return
+	if title_visible():
+		for kind: String in TITLE_KEYS:
+			if key.physical_keycode == TITLE_KEYS[kind]:
+				press_title(kind)
+				get_viewport().set_input_as_handled()
 		return
 	for id: String in CONTROL_KEYS:
 		if key.physical_keycode == CONTROL_KEYS[id] or (id == "start" and key.physical_keycode == KEY_KP_ENTER):
 			press_control(id)
 			get_viewport().set_input_as_handled()
 			return
+
+# --- Title screen: Couch, Online or Solo (#435, ADR-0021) ---------------------------
+#
+# Over the lobby at launch: the host picks the match kind before anyone joins.
+# Couch is the Local match (phones, the controller page, gamepads), Online is
+# remote seats with the host's own mouse seat, and Solo is Online with the room
+# closed and three bots. Click, the keys C, O and S, or the D-pad and A. While it
+# shows, PadMenu keeps A from seating a gamepad. A `-s` run (the scenarios) starts
+# with it closed, so a scenario that does not pick drives the lobby as before.
+
+const TITLE_KINDS: Array[String] = ["local", "online", "solo"]
+const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S}
+const TITLE_BUTTON_FONT_SIZE: int = 40
+
+var _title_panel: Control
+var _title_buttons: Dictionary = {}
+var _kind_notice: Label
+
+## The title screen's panel, or null before the controls were attached.
+func title_panel() -> Control:
+	return _title_panel
+
+func title_visible() -> bool:
+	return _title_panel != null and _title_panel.visible
+
+## The title button for "local", "online" or "solo", or null.
+func title_button(kind: String) -> Button:
+	return _title_buttons.get(kind) as Button
+
+## Shows or hides the title screen; showing it puts focus on Couch.
+func show_title(on: bool) -> void:
+	if _title_panel == null:
+		return
+	_title_panel.visible = on
+	PadMenuScript.set_open("title", on)
+	if on:
+		(_title_buttons["local"] as Button).grab_focus()
+	else:
+		var focused: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+		if focused != null and _title_panel.is_ancestor_of(focused):
+			focused.release_focus()
+
+## What picking `kind` on the title screen does: that match kind, then the lobby.
+func press_title(kind: String) -> void:
+	if _server == null or not TITLE_KINDS.has(kind):
+		return
+	_server.apply_host_command("kind", kind)
+	show_title(false)
+	refresh_controls()
+
+## Whether `source` (the ControllerServer) runs an Online match.
+static func _online_kind(source: Object) -> bool:
+	return source != null and source.has_method("match_kind") and source.match_kind() == "online"
+
+## The match kind as the player reads it: Couch, Online or Solo.
+static func match_kind_text(source: Object) -> String:
+	if not _online_kind(source):
+		return TranslationServer.translate("MATCH_COUCH")
+	if source.has_method("room_closed") and source.room_closed():
+		return TranslationServer.translate("MATCH_SOLO")
+	return TranslationServer.translate("MATCH_ONLINE")
+
+func _build_title_and_notice() -> void:
+	_kind_notice = _big_label("", 28, LOBBY_ACCENT)
+	_kind_notice.name = "KindNotice"
+	_kind_notice.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_kind_notice.offset_top = 12.0
+	_kind_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_kind_notice.visible = false
+	_lobby_panel.add_child(_kind_notice)
+	_title_panel = ColorRect.new()
+	_title_panel.name = "TitlePanel"
+	(_title_panel as ColorRect).color = LOBBY_BACKGROUND
+	_title_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_title_panel.visible = false
+	_lobby_panel.add_child(_title_panel)
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 18)
+	_title_panel.add_child(box)
+	box.add_child(_logo_rect("Logo", LOGO_LOBBY_SIZE))
+	box.add_child(_big_label(tr("TITLE_PICK"), 36, Color.WHITE))
+	var labels: Dictionary = {"local": ["TITLE_COUCH", "TITLE_COUCH_HINT"], "online": ["TITLE_ONLINE", "TITLE_ONLINE_HINT"],
+		"solo": ["TITLE_SOLO", "TITLE_SOLO_HINT"]}
+	var previous: Button = null
+	for kind: String in TITLE_KINDS:
+		var button := Button.new()
+		button.name = "Title_" + kind
+		button.text = tr(labels[kind][0])
+		button.custom_minimum_size = Vector2(420, 0)
+		button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		button.add_theme_font_size_override("font_size", TITLE_BUTTON_FONT_SIZE)
+		button.pressed.connect(press_title.bind(kind))
+		box.add_child(button)
+		box.add_child(_big_label(tr(labels[kind][1]), 22, Color(0.8, 0.82, 0.88)))
+		_title_buttons[kind] = button
+		if previous != null:
+			previous.focus_neighbor_bottom = previous.get_path_to(button)
+			button.focus_neighbor_top = button.get_path_to(previous)
+		previous = button
+	if is_inside_tree() and get_tree().get_script() == null and _server.has_method("match_kind") and _server.match_kind() == "":
+		show_title(true) # the game, not a `-s` script (see Sfx.is_script_main_loop)
+
+## The "N players were dropped" line after a kind switch, while the server says so.
+func _refresh_kind_notice() -> void:
+	if _kind_notice == null:
+		return
+	var notice: Dictionary = _server.kind_drop_notice() if _server.has_method("kind_drop_notice") else {}
+	_kind_notice.visible = not notice.is_empty()
+	if not notice.is_empty():
+		var key: String = "LOBBY_KIND_DROPPED_PHONES" if notice["kind"] == "online" else "LOBBY_KIND_DROPPED_REMOTE"
+		_kind_notice.text = tr(key) % int(notice["count"])

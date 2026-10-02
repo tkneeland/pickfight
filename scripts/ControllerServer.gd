@@ -102,8 +102,9 @@ signal host_changed(slot: int)
 
 ## The host phone asked for `cmd` (issue #149): "pause", "resume" or "end",
 ## with `slot` -1; or "kick", emitted after `slot` has been removed from the
-## roster. Only ever emitted for a request from `host_slot()`. RoundManager
-## decides what each means.
+## roster. Only ever emitted for a request from `host_slot()`, except "kick"
+## for a dropped remote seat whose hold lapsed mid-match (issue #459), which
+## leaves the roster the same way. RoundManager decides what each means.
 signal host_command(cmd: String, slot: int)
 
 ## A phone tapped "Steal a life" (Stock in Teams, #354). RoundManager forwards
@@ -598,6 +599,7 @@ func _process(delta: float) -> void:
 	_process_remote()
 	_ping_remote_seats()
 	_check_host_pc_seat()
+	_lapse_remote_holds()
 	_stream_snapshots(delta)
 	if host_slot() != _last_host:
 		_last_host = host_slot()
@@ -889,6 +891,8 @@ func _bind_with_id(peer: Variant, id: String) -> void:
 	if id.is_empty():
 		_last_generated_id += 1
 		id = "host-assigned-%d-%d" % [_last_generated_id, randi()]
+	if _refused_by_match_kind(peer):
+		return # #435: a phone in an Online match, a remote seat in a Couch one
 	if _kicked_ids.has(id):
 		peer.close(4001, KICKED_REASON)
 		if _log_input:
@@ -1019,6 +1023,8 @@ func _release_claim(slot: int) -> void:
 	_slot_claim_serial[slot] = 0
 	_join_order.erase(slot)
 	_release_look(slot)
+	_remote_claim.erase(slot)
+	_remote_dropped_msec.erase(slot)
 
 ## Note what `slot`'s claim holds before it is released, so its phone gets
 ## it back if it returns within REJOIN_GRACE_MSEC (issue #193). Not for a bot,
@@ -1056,6 +1062,7 @@ func _attach(slot: int, peer: Variant) -> void:
 	_slot_text_window_msec[slot] = 0
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
+	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
 		peer.send_text(_lobby_text())
@@ -1077,6 +1084,7 @@ func _unbind(slot: int) -> void:
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
+	_note_remote_drop(slot)
 	if _log_input:
 		print("slot %d unbound" % slot)
 
@@ -1163,10 +1171,11 @@ func slot_has_controller(slot: int) -> bool:
 ## survives a disconnect only until the end of the round it disconnected in
 ## (ADR-0007) -- an entry not reclaimed by then does not carry into the next
 ## round, and one that dropped while no round was running is not held at all.
+## Issue #459: a remote seat that dropped mid-match is kept while its hold runs.
 func expire_disconnected_claims() -> void:
 	var released: bool = false
 	for slot in _slot_claimed.size():
-		if _slot_claimed[slot] == 1 and not slot_has_controller(slot):
+		if _slot_claimed[slot] == 1 and not slot_has_controller(slot) and not remote_seat_held(slot):
 			_release_claim(slot)
 			released = true
 	if released:
@@ -1491,6 +1500,7 @@ func _lobby_text() -> String:
 	_lobby_state["online"] = online_status()
 	_lobby_state["room"] = online_room_code() if relay_link != null else ""
 	_lobby_state["pc_seat"] = _host_pc_slot != -1
+	_lobby_state["kind"] = _match_kind # #435: "local", "online" or "" (not picked)
 	for entry: Variant in _lobby_state.get("players", []):
 		if entry is Dictionary:
 			var slot: int = int(entry.get("slot", -1))
@@ -1893,13 +1903,18 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 	var phase: String = str(_lobby_state.get("phase", "lobby"))
 	match cmd:
 		"online":
-			if not arg is bool or not SOLO_PHASES.has(phase):
+			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind == KIND_LOCAL:
 				return false
+			_room_closed = _match_kind == KIND_ONLINE and not arg
 			return _set_online_requested(arg)
 		"pc_seat":
-			if not arg is bool or not SOLO_PHASES.has(phase):
-				return false
+			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind != "":
+				return false # #435: the match kind owns the host-PC seat now
 			return _set_host_pc_seat(arg)
+		"kind":
+			if not arg is String or not SOLO_PHASES.has(phase):
+				return false
+			return set_match_kind(arg)
 		"mode":
 			if not (arg is String and (arg == "ffa" or arg == "teams")) or not MODE_PHASES.has(phase):
 				return false
@@ -2114,6 +2129,10 @@ func _pad_axis(device: int) -> Vector2:
 	var raw := Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y))
 	if _test_pad_axes.has(device):
 		raw = _test_pad_axes[device]
+	return stick_vector(raw)
+
+## A raw right stick as that vector; the PC client's gamepad uses it too (#435).
+static func stick_vector(raw: Vector2) -> Vector2:
 	var mag: float = raw.length()
 	if mag <= PAD_DEADZONE:
 		return Vector2.ZERO
@@ -2421,6 +2440,194 @@ func pad_claim(slot: int) -> bool:
 ## and it is the lobby (cosmetics change in the lobby only).
 func pad_picker_shown(slot: int) -> bool:
 	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat and _slot_peers[slot].open 		and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
+# --- Couch or Online, never mixed (issue #435, ADR-0021) -------------------------
+#
+# The host picks the match kind on the title screen (LobbyScreen.gd): Couch (the
+# Local match: phones, the browser controller page, gamepads), Online (remote
+# seats, the host-PC seat always on, gamepads) or Solo (Online with the room
+# closed and bots in the empty seats). Each kind refuses the other's seats, and
+# switching kind in the lobby drops them. Until a kind is picked ("") no rule
+# applies, as before #435: the title screen always picks one in the game, and
+# scenarios that drive the server directly start there.
+
+const KIND_LOCAL: String = "local"
+const KIND_ONLINE: String = "online"
+const KIND_SOLO: String = "solo"
+## How many bots Solo seats beside the host (#435, owner's Q13).
+const SOLO_BOTS: int = 3
+## What a refused phone and a refused remote seat are told.
+const ONLINE_MATCH_REASON: String = "online match: join from the game on a computer"
+const COUCH_MATCH_REASON: String = "couch match"
+const ROOM_CLOSED_REASON: String = "room closed"
+const REFUSED_CODE: int = 4003
+## How long the lobby shows "N players were dropped" after a switch.
+const KIND_NOTICE_MSEC: int = 4000
+
+var _match_kind: String = ""
+## Solo: an Online match whose room never opens.
+var _room_closed: bool = false
+## The last switch that dropped seats: {"kind", "count", "msec"}.
+var _kind_drop: Dictionary = {}
+## Joins refused for the match kind (diagnostic, for scenarios).
+var refused_joins: int = 0
+
+## "local", "online", or "" before the host picked one.
+func match_kind() -> String:
+	return _match_kind
+
+## Whether this is Solo: an Online match with the room closed.
+func room_closed() -> bool:
+	return _match_kind == KIND_ONLINE and _room_closed
+
+## The drop notice to show right now, or {} once it has had its time.
+func kind_drop_notice() -> Dictionary:
+	if _kind_drop.is_empty() or Time.get_ticks_msec() - int(_kind_drop["msec"]) > KIND_NOTICE_MSEC:
+		return {}
+	return _kind_drop
+
+## Makes this a "local", "online" or "solo" match (see above). Returns false for
+## an unknown kind. The host command "kind" lands here, in the lobby only.
+func set_match_kind(kind: String) -> bool:
+	if not [KIND_LOCAL, KIND_ONLINE, KIND_SOLO].has(kind):
+		return false
+	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
+	var dropped: int = _drop_seats_for(target) if target != _match_kind else 0
+	_match_kind = target
+	_room_closed = kind == KIND_SOLO
+	if target == KIND_LOCAL:
+		if _host_pc_slot != -1:
+			_release_host_pc_seat()
+		_set_online_requested(false)
+		if relay_link.link_state() != RelayLinkScript.STATE_OFFLINE:
+			go_offline() # the relay is never left up in a Couch match
+	else:
+		_set_host_pc_seat(true)
+		_set_online_requested(not _room_closed)
+		if kind == KIND_SOLO:
+			bot_director.add_bots(maxi(0, SOLO_BOTS - bot_director.bot_count()))
+	if dropped > 0:
+		_kind_drop = {"kind": target, "count": dropped, "msec": Time.get_ticks_msec()}
+	_send_lobby_to_all()
+	return true
+
+## Whether `peer` may not join this kind of match; a refused peer is closed.
+func _refused_by_match_kind(peer: Variant) -> bool:
+	var reason: String = ""
+	if peer is WebSocketPeer and _match_kind == KIND_ONLINE:
+		reason = ONLINE_MATCH_REASON
+	elif peer is RemoteSeat and _match_kind == KIND_LOCAL:
+		reason = COUCH_MATCH_REASON
+	elif peer is RemoteSeat and room_closed():
+		reason = ROOM_CLOSED_REASON
+	if reason.is_empty():
+		return false
+	peer.close(REFUSED_CODE, reason)
+	refused_joins += 1
+	if _log_input:
+		print("controller refused: %s" % reason)
+	return true
+
+## Drops every seat the `target` kind refuses, and every held claim that is not a
+## gamepad's: phones going Online, remote seats going Couch. Returns how many.
+func _drop_seats_for(target: String) -> int:
+	var dropped: int = 0
+	var reason: String = ONLINE_MATCH_REASON if target == KIND_ONLINE else COUCH_MATCH_REASON
+	for slot in _slot_peers.size():
+		if _slot_claimed[slot] != 1 or _slot_virtual[slot] == 1:
+			continue
+		var peer: Variant = _slot_peers[slot]
+		if peer is LocalSeat or _slot_client_id[slot].begins_with(PAD_ID_PREFIX) or _slot_client_id[slot] == HOST_PC_ID:
+			continue
+		if peer != null and not (target == KIND_ONLINE and peer is WebSocketPeer) and not (target == KIND_LOCAL and peer is RemoteSeat):
+			continue
+		if peer != null:
+			peer.close(REFUSED_CODE, reason)
+			_unbind(slot)
+		_release_claim(slot)
+		dropped += 1
+	if target == KIND_ONLINE:
+		for conn: PendingConn in _pending + _awaiting_id:
+			conn.peer.close(REFUSED_CODE, reason)
+		_pending.clear()
+		_awaiting_id.clear()
+	else:
+		for seat: RemoteSeat in _remote_awaiting:
+			seat.close(REFUSED_CODE, reason)
+		_remote_awaiting.clear()
+	if dropped > 0:
+		_broadcast_looks()
+	return dropped
+
+# --- Holding a dropped remote seat (issue #459) -------------------------------
+#
+# A remote seat whose connection drops mid-match keeps its roster entry for
+# REMOTE_SEAT_HOLD_MSEC of game time, across round boundaries too: the body goes
+# limp as for any drop (ADR-0007), and the same client id coming back inside the
+# window reclaims the slot with its score and looks, through `_bind_with_id()`'s
+# ordinary reclaim. When the window lapses the claim is released at once, even
+# mid-round: the body leaves the round the way a kicked player's does (the
+# `host_command` "kick" signal, with no ban), and the id is not remembered as a
+# recent leaver, so a later rejoin is a fresh seat. Game time (GameClock.gd)
+# stops while the host has the match paused, so a pause never eats the window.
+# Outside a match (lobby, countdown, victory) nothing is held: ADR-0007's "no
+# round, no hold" stands, and REJOIN_GRACE_MSEC covers a quick lobby rejoin.
+
+const GameClockScript459 := preload("res://scripts/GameClock.gd")
+## How long a dropped remote seat is held mid-match, in game msec (issue #459).
+## RemoteClient.gd keeps retrying its rejoin for the same window.
+const REMOTE_SEAT_HOLD_MSEC: int = 30000
+## The hold this host applies; a scenario whose wall-clock client must outlast
+## a fast game clock raises it.
+var remote_seat_hold_msec: int = REMOTE_SEAT_HOLD_MSEC
+
+var _remote_claim: Dictionary = {} # slot -> true while its claim belongs to a remote seat
+var _remote_dropped_msec: Dictionary = {} # slot -> game msec its remote seat dropped
+
+func _note_remote_attach(slot: int, peer: Variant) -> void:
+	_remote_dropped_msec.erase(slot)
+	if peer is RemoteSeat:
+		_remote_claim[slot] = true
+	else:
+		_remote_claim.erase(slot)
+
+func _note_remote_drop(slot: int) -> void:
+	if _remote_claim.has(slot) and _slot_claimed[slot] == 1:
+		_remote_dropped_msec[slot] = GameClockScript459.now_msec()
+
+func _in_match_phase() -> bool:
+	return MATCH_PHASES.has(str(_lobby_state.get("phase", "")))
+
+## Whether `slot` is a dropped remote seat still inside its hold (issue #459).
+func remote_seat_held(slot: int) -> bool:
+	if not _remote_dropped_msec.has(slot) or not _in_match_phase():
+		return false
+	return GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]) < remote_seat_hold_msec
+
+## Game msec left on `slot`'s hold, or -1 when it is not held.
+func remote_seat_hold_left_msec(slot: int) -> int:
+	if not remote_seat_held(slot):
+		return -1
+	return remote_seat_hold_msec - (GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]))
+
+## Every frame: a held seat whose window ran out mid-match is released now.
+func _lapse_remote_holds() -> void:
+	if _remote_dropped_msec.is_empty():
+		return
+	for slot: int in _remote_dropped_msec.keys():
+		if remote_seat_held(slot):
+			continue
+		if not _in_match_phase():
+			continue # expire_disconnected_claims() decides outside a match
+		_remote_dropped_msec.erase(slot)
+		if _slot_claimed[slot] != 1 or slot_has_controller(slot):
+			continue
+		var id: String = _slot_client_id[slot]
+		_release_claim(slot)
+		_recent_leavers.erase(id)
+		_broadcast_looks()
+		if _log_input:
+			print("slot %d remote seat hold lapsed" % slot)
+		host_command.emit("kick", slot)
 
 # --- The host PC's own kick, pause and end match (issue #458) ------------------
 #
@@ -2432,6 +2639,8 @@ func pad_picker_shown(slot: int) -> bool:
 ## Whether the host PC runs the room itself and so shows those controls: an
 ## Online match (ADR-0021). For now that is Go online switched on.
 func pc_runs_room() -> bool:
+	if _match_kind != "":  # #435: a picked kind decides; unpicked keeps Go online
+		return _match_kind == KIND_ONLINE
 	return _online_requested
 
 ## Whether a match is in play or paused: what Pause and End match act on.
