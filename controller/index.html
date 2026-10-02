@@ -126,6 +126,22 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* Damage bar (issue #331): a thin strip along the very top, the player's
+     colour filling toward red as they near a KO. Never takes a touch. */
+  #dmgbar {
+    position: fixed;
+    z-index: 3;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    pointer-events: none;
+  }
+  #dmgfill {
+    height: 100%;
+    width: 0;
+    transition: width 0.1s linear;
+  }
   /* Lobby, countdown and victory (issue #120): covers the pad whenever no
      match is being played, so its buttons get the touches instead. */
   #lobby {
@@ -441,6 +457,7 @@
 <body>
 <canvas id="pad"></canvas>
 <div id="flash"></div>
+<div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="hud">
   <div id="who">
     <div id="slot">--</div>
@@ -987,6 +1004,16 @@
     // Issue #244: the capture affordance, for a desktop pointer only.
     document.getElementById("mouse-panel").classList.toggle("show",
       finePointer && hintShown && !mouseLocked());
+  }
+
+  // Damage bar (issue #331): v is 0..1 of the way to a KO. Colour blends from
+  // this phone's own colour to red as it fills; solid red in the last stretch.
+  var dmgFillEl = document.getElementById("dmgfill");
+  function showDamage(v) {
+    if (typeof v !== "number" || !(v >= 0)) { v = 0; }
+    if (v > 1) { v = 1; }
+    dmgFillEl.style.width = (v * 100) + "%";
+    dmgFillEl.style.background = v >= 0.75 ? "#ff2a2a" : (slot >= 0 ? colorOf(slot) : "#ffffff");
   }
 
   function buzz(kind) {
@@ -1598,6 +1625,7 @@
         }
         else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
+        else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }
     };
