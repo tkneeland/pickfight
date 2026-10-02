@@ -32,8 +32,8 @@ SW = 10  # outline width
 
 
 def pick_cell():
-    shaft = f'<path d="M52,70H98V200H52Z" fill="{WOOD}"/><path d="M10,196H140V240H10Z" fill="{PLAYERS[6]}"/>'
-    head = f'<path d="M0,78Q75,-48 150,78L150,118Q75,12 0,118Z" fill="{STEEL}"/>'
+    shaft = f'<path d="M52,55H98V200H52Z" fill="{WOOD}"/><path d="M10,196H140V240H10Z" fill="{PLAYERS[6]}"/>'
+    head = f'<path d="M0,80Q75,-84 150,80L150,120Q75,-20 0,120Z" fill="{STEEL}"/>'
     return head, shaft
 
 
