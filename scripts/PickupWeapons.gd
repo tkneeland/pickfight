@@ -23,7 +23,6 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/fishing_rod.tres",
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
-	"res://resources/plunger.tres",
 	"res://resources/shield.tres",
 ]
 

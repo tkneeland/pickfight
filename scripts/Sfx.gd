@@ -115,10 +115,6 @@ const SOUNDS: Dictionary = {
 	"hit_magnet": {"files": [
 		"kenney_impact/impactPlate_light_000.ogg",
 		"kenney_impact/impactPlate_light_001.ogg"], "db": -1.0},
-	# The plunger (issue #270): a squelchy rubber thwop (#306).
-	"hit_plunger": {"files": [
-		"kenney_impact/footstep_snow_000.ogg",
-		"kenney_impact/footstep_snow_001.ogg"], "db": -1.0},
 	# The shield (issue #275): a flat metal clang, own files.
 	"hit_shield": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",

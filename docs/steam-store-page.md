@@ -40,7 +40,7 @@ Bring the whole couch. Eight players share one screen, with bots to fill empty s
 Everyone starts with the pickaxe. Everything else is picked up on the stage:
 [list]
 [*] Staff, sword, dagger, axe, spear
-[*] Umbrella, pogo stick, plunger
+[*] Umbrella, pogo stick
 [*] Boomstick, grappling hook, flail, boomerang
 [/list]
 Each weapon moves differently, not just hits differently. The stage decides which weapons turn up most often.
