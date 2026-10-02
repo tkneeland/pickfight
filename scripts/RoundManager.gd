@@ -351,6 +351,7 @@ func _try_start_round() -> void:
 	if _scoreboard != null:
 		_scoreboard.visible = false
 	_stage_rotation.round_player_count = roster.size()
+	_stage_rotation.mode_id = game_mode
 	_swap_stage()
 	_round_number += 1
 	_in_round.clear()

@@ -1,0 +1,164 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
+[ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="spin"]
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_850x40"]
+size = Vector2(850, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_360x24"]
+size = Vector2(360, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_340x24"]
+size = Vector2(340, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Switchyard (issue #373, a large Hot Potato stage for five to eight players):
+; two yards either side of a 500 px gap. Each yard is a floor with a raised
+; platform above its inner end and a bounce pad on the edge that throws you onto
+; it. Across the gap a shuttle carries players over the void, a spinning slab
+; hangs below the raised bridge, and the bridge links the two yards across the
+; top. Every route is a ring: floor -> pad -> platform -> bridge -> platform ->
+; pad -> floor, or floor -> shuttle -> floor. Chasers cut the corner on the
+; shuttle; the chased go over the top.
+; 
+; Large: the view is 2240 x 1260 (Stage.view_size). Terrain spans x = -1100..1100.
+; Rotation (Stage.mode_weights): weighted 4x for Hot Potato, and in any other
+; mode dealt into a bag only 30% of the time ("_other").
+[node name="Switchyard" type="Node2D"]
+script = ExtResource("script")
+background_sky_top = Color(0.1, 0.12, 0.14, 1)
+background_sky_bottom = Color(0.2, 0.26, 0.26, 1)
+background_silhouette = Color(0.08, 0.1, 0.1, 1)
+background_layers = PackedStringArray("clouds", "city", "city")
+view_size = Vector2(2240, 1260)
+mode_weights = {"hot_potato": 4.0, "_other": 0.3}
+
+; The two yards. Spawns sit on their outer ends.
+[node name="YardLeft" type="StaticBody2D" parent="."]
+position = Vector2(-675, 400)
+
+[node name="YardLeftShape" type="CollisionShape2D" parent="YardLeft"]
+shape = SubResource("RectangleShape2D_850x40")
+
+[node name="YardLeftVisual" type="Polygon2D" parent="YardLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-425, -20, 425, -20, 425, 20, -425, 20)
+
+[node name="YardRight" type="StaticBody2D" parent="."]
+position = Vector2(675, 400)
+
+[node name="YardRightShape" type="CollisionShape2D" parent="YardRight"]
+shape = SubResource("RectangleShape2D_850x40")
+
+[node name="YardRightVisual" type="Polygon2D" parent="YardRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-425, -20, 425, -20, 425, 20, -425, 20)
+
+; Raised platforms over each yard's inner end, 270 px above the floor.
+[node name="RaisedLeft" type="StaticBody2D" parent="."]
+position = Vector2(-580, 122)
+
+[node name="RaisedLeftShape" type="CollisionShape2D" parent="RaisedLeft"]
+shape = SubResource("RectangleShape2D_360x24")
+
+[node name="RaisedLeftVisual" type="Polygon2D" parent="RaisedLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-180, -12, 180, -12, 180, 12, -180, 12)
+
+[node name="RaisedRight" type="StaticBody2D" parent="."]
+position = Vector2(580, 122)
+
+[node name="RaisedRightShape" type="CollisionShape2D" parent="RaisedRight"]
+shape = SubResource("RectangleShape2D_360x24")
+
+[node name="RaisedRightVisual" type="Polygon2D" parent="RaisedRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-180, -12, 180, -12, 180, 12, -180, 12)
+
+; The bridge across the top, 160 above the raised platforms.
+[node name="Bridge" type="StaticBody2D" parent="."]
+position = Vector2(0, -38)
+
+[node name="BridgeShape" type="CollisionShape2D" parent="Bridge"]
+shape = SubResource("RectangleShape2D_340x24")
+
+[node name="BridgeVisual" type="Polygon2D" parent="Bridge"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-170, -12, 170, -12, 170, 12, -170, 12)
+
+; The pads: up beside the raised platform, with the bridge in reach on the way down.
+[node name="PadLeft" parent="." instance=ExtResource("pad")]
+position = Vector2(-330, 372)
+size = Vector2(100, 16)
+
+[node name="PadRight" parent="." instance=ExtResource("pad")]
+position = Vector2(330, 372)
+size = Vector2(100, 16)
+
+; The shuttle: floor level, edge to edge across the gap in 2.5 s.
+[node name="Shuttle" parent="." instance=ExtResource("mp")]
+position = Vector2(-190, 380)
+size = Vector2(140, 24)
+travel = Vector2(380, 0)
+one_way_sec = 2.5
+
+; A slab turning in the middle of the gap, above the shuttle's path.
+[node name="Spinner" parent="." instance=ExtResource("spin")]
+position = Vector2(0, 220)
+size = Vector2(220, 20)
+spin_deg_per_sec = 40.0
+
+; Spawns, all eight on the yards' outer ends, 70 px apart.
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-1050, 320)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(1050, 320)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-980, 320)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(980, 320)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-910, 320)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(910, 320)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-840, 320)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(840, 320)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("kz")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spots: over the bridge, on each raised platform and by the spinner.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, -100)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-580, 50)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(580, 50)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(0, 150)
+
+[node name="PickupSpawn4" type="Marker2D" parent="."]
+position = Vector2(-400, 330)
+
