@@ -1,0 +1,69 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1440x40"]
+size = Vector2(1440, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_8000x40"]
+size = Vector2(8000, 40)
+
+; Competitive (issue #376): one flat floor, no platforms, no hazards, nothing that
+; moves. Left-right mirror symmetric about x=0. The only way out of the round
+; is off either open end, so every fight is spacing and the swing.
+
+[node name="FinalDestination" type="Node2D"]
+script = ExtResource("1")
+competitive = true
+background_sky_top = Color(0.1, 0.12, 0.22, 1)
+background_sky_bottom = Color(0.2, 0.18, 0.3, 1)
+background_silhouette = Color(0.12, 0.14, 0.2, 1)
+background_layers = PackedStringArray("clouds", "mountains")
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="GroundShape" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("RectangleShape2D_1440x40")
+
+[node name="GroundVisual" type="Polygon2D" parent="Ground"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-60, 0)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(60, 0)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-150, 0)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(150, 0)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-250, 0)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(250, 0)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-350, 0)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(350, 0)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_8000x40")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-200, 250)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(200, 250)

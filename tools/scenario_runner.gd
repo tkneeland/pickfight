@@ -542,10 +542,28 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"streamer_mode_setting_persists_across_reload",
 	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
+	"competitive_stages_load_rotate_and_are_flagged",
+	"competitive_stages_are_left_right_symmetric",
+	"competitive_stages_have_no_hazards_or_moving_parts",
+	"round_modifier_gale_pushes_players_and_undoes",
+	"demo_build_flag_defines_the_slice",
+	"demo_build_rotation_only_slice_stages",
+	"demo_build_only_slice_weapons_spawn",
+	"demo_build_mode_picker_only_slice_modes",
+	"demo_build_end_card_follows_victory",
+	"demo_build_off_leaves_full_game_unchanged",
 	"stock_plays_the_picked_stage_every_round",
 	"stock_random_pick_is_an_enabled_stage_held_all_match",
 	"stock_never_rolls_a_modifier",
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
+	"hot_potato_stages_load_and_are_in_rotation",
+	"hot_potato_draws_its_stages_more_often",
+	"pseudo_locale_changes_lobby_and_mode_text",
+	"every_tr_key_is_in_strings_csv",
+	"koth_stages_load_and_are_in_rotation",
+	"koth_hill_starts_on_first_hill_spot",
+	"koth_moving_hill_warns_then_moves",
+	"koth_stage_without_spots_uses_spawn_centre",
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
@@ -844,8 +862,6 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	# and hangs rather than planting. It has its own plunger_* scenarios.
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
-	# The shield (#275) is left out: its tall plate head fails the roster's haft-
-	# crossing and head-tunnelling sweeps. It has its own shield_* scenarios.
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
@@ -2027,6 +2043,26 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"competitive_stages_load_rotate_and_are_flagged":
+			return await _scenario_competitive_stages_load_rotate_and_are_flagged()
+		"competitive_stages_are_left_right_symmetric":
+			return await _scenario_competitive_stages_are_left_right_symmetric()
+		"competitive_stages_have_no_hazards_or_moving_parts":
+			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
+		"round_modifier_gale_pushes_players_and_undoes":
+			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
+		"demo_build_flag_defines_the_slice":
+			return await _scenario_demo_build_flag_defines_the_slice()
+		"demo_build_rotation_only_slice_stages":
+			return await _scenario_demo_build_rotation_only_slice_stages()
+		"demo_build_only_slice_weapons_spawn":
+			return await _scenario_demo_build_only_slice_weapons_spawn()
+		"demo_build_mode_picker_only_slice_modes":
+			return await _scenario_demo_build_mode_picker_only_slice_modes()
+		"demo_build_end_card_follows_victory":
+			return await _scenario_demo_build_end_card_follows_victory()
+		"demo_build_off_leaves_full_game_unchanged":
+			return await _scenario_demo_build_off_leaves_full_game_unchanged()
 		"stock_plays_the_picked_stage_every_round":
 			return await _scenario_stock_plays_the_picked_stage_every_round()
 		"stock_random_pick_is_an_enabled_stage_held_all_match":
@@ -2035,6 +2071,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_never_rolls_a_modifier()
 		"stock_stage_pick_persists_and_reaches_the_host_phone":
 			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
+		"hot_potato_stages_load_and_are_in_rotation":
+			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
+		"hot_potato_draws_its_stages_more_often":
+			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"pseudo_locale_changes_lobby_and_mode_text":
+			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
+		"every_tr_key_is_in_strings_csv":
+			return await _scenario_every_tr_key_is_in_strings_csv()
+		"koth_stages_load_and_are_in_rotation":
+			return await _scenario_koth_stages_load_and_are_in_rotation()
+		"koth_hill_starts_on_first_hill_spot":
+			return await _scenario_koth_hill_starts_on_first_hill_spot()
+		"koth_moving_hill_warns_then_moves":
+			return await _scenario_koth_moving_hill_warns_then_moves()
+		"koth_stage_without_spots_uses_spawn_centre":
+			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
 		"shield_blocks_a_hit_on_its_face":
 			return await _scenario_shield_blocks_a_hit_on_its_face()
 		"shield_bash_knocks_back_harder_than_pickaxe":
@@ -3780,6 +3832,17 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Footbridge.tscn",
 	"res://scenes/stages/Gantry.tscn",
 	"res://scenes/stages/Vent.tscn",
+	"res://scenes/stages/FinalDestination.tscn",
+	"res://scenes/stages/Battlefield.tscn",
+	"res://scenes/stages/Pocket.tscn",
+	"res://scenes/stages/Colosseum.tscn",
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -8062,6 +8125,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"meteor_shower": "Meteor Shower",
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
+	"gale": "Gale",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -13407,10 +13471,10 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("Pause/Resume is not a single tap in the menu: %s" % pause_handler)
 	var end_at: int = page.find("menuEndBtn.addEventListener(\"click\"")
 	var end_handler: String = page.substr(end_at, page.find("});", end_at) - end_at) if end_at >= 0 else ""
-	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end", { match: match'):
+	if not end_handler.contains('askConfirm(t("CONFIRM_END")') or not end_handler.contains('sendHost("end", { match: match'):
 		failures.append("End match does not ask 'Are you sure?' before sending: %s" % end_handler)
 	var kick_body: String = _js_function_body(page, "showKickList")
-	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK"') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
 		failures.append("Kick player does not ask 'Are you sure?' before sending")
 	if not kick_body.contains("if (p.slot === slot) { continue; }"):
 		failures.append("the kick list offers the host itself")
@@ -15018,7 +15082,7 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 			failures.append("'%s' cannot be created" % id)
 	for id: String in counts:
 		if not MODIFIER_TITLES.has(id):
-			failures.append("rolled '%s', which is not one of the ten" % id)
+			failures.append("rolled '%s', which is not one of the eleven" % id)
 	_scenario_completed = true
 	return failures
 # --- Large stages (issue #144) -------------------------------------------------
@@ -19764,7 +19828,7 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 	var state: String = _js_function_body(page, "showState")
 	var slot_at: int = state.find("} else if (slot < 0) {")
 	var slot_arm: String = state.substr(slot_at, state.find("} else if (lobby", slot_at) - slot_at) if slot_at >= 0 else ""
-	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = "Waiting for a free slot"'):
+	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = t("STATE_WAITING_SLOT")'):
 		failures.append("a refused phone is not told it is waiting for a free slot: %s" % slot_arm)
 	if not slot_arm.contains("} else if (closeReason) {"):
 		failures.append("any other close reason is not shown large: %s" % slot_arm)
@@ -19813,7 +19877,7 @@ func _scenario_controller_page_stale_bits_dropped() -> Array[String]:
 		failures.append("the kick frame is not {slot, claim}")
 	if kick_body.contains("claim: claim, name"):
 		failures.append("the kick frame still sends the unused name")
-	if not kick_body.contains('askConfirm("Are you sure? Kick " + name'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK", name)'):
 		failures.append("the kick confirm no longer names the player")
 	var wake: String = _js_function_body(page, "requestWakeLock")
 	if not wake.contains('lock.addEventListener("release"') or not wake.contains("if (wakeLock === lock) { wakeLock = null; }"):
@@ -22025,7 +22089,7 @@ func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
 		'addEventListener("click", function () { sendTeam(-1); });',
 		'sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });',
 		'menuModeBtn.disabled = inMatch();',
-		'" team wins"',
+		' team wins"',
 		"    showTeams(msg);\n  }\n",
 	]
 	for needle: String in needles:
@@ -29050,7 +29114,392 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
 	return failures
-
+## Issue #376: the four competitive stages.
+const COMPETITIVE_STAGES_376: PackedStringArray = [
+	"res://scenes/stages/FinalDestination.tscn",
+	"res://scenes/stages/Battlefield.tscn",
+	"res://scenes/stages/Pocket.tscn",
+	"res://scenes/stages/Colosseum.tscn",
+]
+const COMPETITIVE_SYMMETRY_TOLERANCE_376: float = 3.0
+## Each competitive stage loads, is in Main's rotation and in STAGE_PATHS, and
+## is flagged `competitive`; no other stage is; exactly one (the large
+## Colosseum) is large, so the rotation holds it back from small rounds.
+func _scenario_competitive_stages_load_rotate_and_are_flagged() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in COMPETITIVE_STAGES_376:
+		var scene := load(path) as PackedScene
+		if scene == null:
+			failures.append("%s does not load" % path)
+			continue
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var instance: Node2D = scene.instantiate()
+		if not instance.competitive:
+			failures.append("%s is not flagged competitive" % path)
+		if instance.get_spawn_points().size() < 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		var want_large: bool = path.ends_with("Colosseum.tscn")
+		if instance.is_large() != want_large:
+			failures.append("%s is_large() is %s, wanted %s" % [path, instance.is_large(), want_large])
+		instance.free()
+	for path: String in STAGE_PATHS:
+		if COMPETITIVE_STAGES_376.has(path):
+			continue
+		var other: Node2D = (load(path) as PackedScene).instantiate()
+		if other.competitive:
+			failures.append("%s is flagged competitive but is not one of the four" % path)
+		other.free()
+	await _teardown(Node2D.new())
+	return failures
+## Mirrors every point about x=0 and finds it again, to a few px: platform
+## and ground bodies (with their shape size), spawns and pickup spawns.
+func _scenario_competitive_stages_are_left_right_symmetric() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in COMPETITIVE_STAGES_376:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var items: Array[Array] = []
+		for child in instance.get_children():
+			if child is StaticBody2D:
+				var shape := (child.get_node(NodePath(String(child.name) + "Shape")) as CollisionShape2D).shape as RectangleShape2D
+				items.append([child.position, shape.size, "body " + String(child.name)])
+			elif child is Marker2D:
+				items.append([child.position, Vector2.ZERO, "marker " + String(child.name)])
+		if items.is_empty():
+			failures.append("%s has no geometry" % path)
+		for item: Array in items:
+			var mirrored := Vector2(-item[0].x, item[0].y)
+			var found: bool = false
+			for other: Array in items:
+				if other[0].distance_to(mirrored) <= COMPETITIVE_SYMMETRY_TOLERANCE_376 \
+						and other[1].distance_to(item[1]) <= COMPETITIVE_SYMMETRY_TOLERANCE_376:
+					found = true
+					break
+			if not found:
+				failures.append("%s: %s at %s has no mirror image" % [path, item[2], item[0]])
+		instance.free()
+	await _teardown(Node2D.new())
+	return failures
+## Nothing in a competitive stage may hurt or move: no scripted node besides
+## the stage root and its KillZone, no AnimatableBody2D or other body type than
+## StaticBody2D, and no Area2D besides the KillZone.
+func _scenario_competitive_stages_have_no_hazards_or_moving_parts() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in COMPETITIVE_STAGES_376:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var stack: Array[Node] = [instance]
+		while not stack.is_empty():
+			var node: Node = stack.pop_back()
+			stack.append_array(node.get_children())
+			if node == instance or node.name == &"KillZone":
+				continue
+			if node.get_script() != null:
+				failures.append("%s: %s carries a script" % [path, node.name])
+			if node is Area2D or node is AnimatableBody2D or node is RigidBody2D or node is CharacterBody2D:
+				failures.append("%s: %s is a %s" % [path, node.name, node.get_class()])
+			if node is StaticBody2D and node.scene_file_path != "":
+				failures.append("%s: %s is an instanced part" % [path, node.name])
+		for hazard_name: String in ["Spikes", "Saw", "Lava", "Fan", "Ledge", "Moving"]:
+			if instance.find_child("*" + hazard_name + "*", true, false) != null:
+				failures.append("%s has a node named like a %s" % [path, hazard_name])
+		instance.free()
+	await _teardown(Node2D.new())
+	return failures
+# --- Gale round modifier (#312) ------------------------------------------------
+## Ticks a gale round is watched for: past the calm, the warning and the gust
+## (4 s calm from a 2 s head start, 1.5 s warning, 2 s gust), with room to spare.
+const GALE_WATCH_TICKS: int = 480
+## Fastest sideways speed a gale must give a still body: well under what
+## 1500 px/s^2 for two seconds does, well over any noise.
+const GALE_MIN_SPEED: float = 300.0
+## Gale: announced as "Gale"; the round has one gust over the stage that warns
+## before it pushes a player in clear air along its own direction, and the
+## round after has neither the gust nor any push.
+func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
+	var players: Array[RigidBody2D] = loop["players"]
+	var gusts: Array = []
+	var extra: Array[String] = []
+	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
+		var gust: Node2D = instance.get_node_or_null("GaleGust") as Node2D
+		gusts.append(gust)
+		var player: RigidBody2D = players[0]
+		var before_gravity: float = player.gravity_scale
+		# Held in clear air inside the zone, with no gravity to confuse a
+		# sideways reading, and no input.
+		player.gravity_scale = 0.0
+		player.set_input_vector(Vector2.ZERO)
+		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -900.0)
+		player.teleport_to(start)
+		player.linear_velocity = Vector2.ZERO
+		var best: float = 0.0
+		var warned_without_push: bool = false
+		for tick in GALE_WATCH_TICKS:
+			await physics_frame
+			var vx: float = player.linear_velocity.x
+			if gust != null:
+				if gust.is_warning() and absf(vx) < 1.0:
+					warned_without_push = true
+				var along: float = vx * gust.push_direction().x
+				if along > best:
+					best = along
+				# Enough shown: stop before the body is carried off the stage.
+				if best >= GALE_MIN_SPEED * 1.5:
+					break
+		player.gravity_scale = before_gravity
+		player.linear_velocity = Vector2.ZERO
+		if gust != null and not warned_without_push:
+			extra.append("the gale never showed a warning before pushing")
+		return best
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 1 and gusts[1] == null:
+			found.append("the gale round has no GaleGust on its stage")
+		elif round_index != 1 and gusts[round_index] != null:
+			found.append("round %d has a gust though it is not a gale round" % (round_index + 1))
+		elif round_index == 2 and gusts[1] != null and is_instance_valid(gusts[1]) and gusts[1].is_inside_tree():
+			found.append("the gale's gust is still in the tree after its round ended")
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "gale", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] > 5.0 or values[2] > 5.0:
+			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
+		if values[1] < GALE_MIN_SPEED:
+			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
+	await _teardown(loop["stage"])
+	return failures
+# --- Issue #361: the Steam Next Fest demo build ----------------------------
+const DemoBuildScript361 := preload("res://scripts/DemoBuild.gd")
+const HostSettingsScriptDemo361 := preload("res://scripts/HostSettings.gd")
+const StageRotationScript361 := preload("res://scripts/StageRotation.gd")
+const GameModesScript361 := preload("res://scripts/GameModes.gd")
+func _real_stage_scenes_361() -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	var names: PackedStringArray = DirAccess.get_files_at("res://scenes/stages")
+	names.sort()
+	for file: String in names:
+		if file.ends_with(".tscn"):
+			scenes.append(load("res://scenes/stages/" + file) as PackedScene)
+	return scenes
+func _fresh_settings_361() -> RefCounted:
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	return settings
+## The flag picks the slice: forced on, the slice is about 6 stages, the
+## pickaxe plus 4 pickup weapons, and Classic plus King of the Hill; every
+## named item is a real file. Forced off, everything is in.
+func _scenario_demo_build_flag_defines_the_slice() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 0
+	if DemoBuildScript361.is_active():
+		failures.append("the demo is on with the flag forced off")
+	DemoBuildScript361.forced = 1
+	if not DemoBuildScript361.is_active():
+		failures.append("the demo is off with the flag forced on")
+	if DemoBuildScript361.STAGES.size() != 6 or DemoBuildScript361.WEAPONS.size() != 4:
+		failures.append("the slice is %d stages and %d pickup weapons, expected 6 and 4" % [
+			DemoBuildScript361.STAGES.size(), DemoBuildScript361.WEAPONS.size()])
+	if DemoBuildScript361.WEAPONS.has("pickaxe"):
+		failures.append("the pickaxe is listed as a pickup weapon; everyone starts with it")
+	if DemoBuildScript361.MODES != PackedStringArray(["", "king_of_the_hill"]):
+		failures.append("the demo's modes are %s" % [DemoBuildScript361.MODES])
+	for stage_name: String in DemoBuildScript361.STAGES:
+		if not ResourceLoader.exists("res://scenes/stages/%s.tscn" % stage_name):
+			failures.append("demo stage %s has no scene" % stage_name)
+	for weapon_name: String in DemoBuildScript361.WEAPONS:
+		if not ResourceLoader.exists("res://resources/%s.tres" % weapon_name):
+			failures.append("demo weapon %s has no resource" % weapon_name)
+	if DemoBuildScript361.stage_in_slice("Gauntlet") or DemoBuildScript361.weapon_in_slice("axe") \
+			or DemoBuildScript361.mode_in_slice("stock"):
+		failures.append("something outside the slice reads as in it")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+## Demo on: 200 rounds over all of the game's stages deal only the slice's
+## stages, all of them, and the settings can neither list nor enable others.
+func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var settings: RefCounted = _fresh_settings_361()
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	rotation.scenes = scenes
+	rotation.round_player_count = 8
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 11
+	var seen: Dictionary = {}
+	for _round in 200:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+	print("      %d stages loaded, dealt %s" % [scenes.size(), seen.keys()])
+	for stage_name: Variant in seen.keys():
+		if not DemoBuildScript361.STAGES.has(str(stage_name)):
+			failures.append("%s came up in the demo's rotation" % stage_name)
+	for stage_name: String in DemoBuildScript361.STAGES:
+		if not seen.has(stage_name):
+			failures.append("demo stage %s never came up" % stage_name)
+	if settings.known_stages.size() != DemoBuildScript361.STAGES.size():
+		failures.append("the settings list %d stages, expected %d" % [settings.known_stages.size(), DemoBuildScript361.STAGES.size()])
+	if settings.set_stage_enabled("Gauntlet", true) or settings.is_stage_enabled("Gauntlet"):
+		failures.append("the settings enabled a stage outside the slice")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+## Demo on: the pickup pool holds only the slice's weapons (never the
+## pickaxe), draws from it only ever give those, and the settings list and
+## allow only them.
+func _scenario_demo_build_only_slice_weapons_spawn() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var pool: Array[Resource] = PickupWeaponsScript.available_weapons()
+	var stems: PackedStringArray = []
+	for stats: Resource in pool:
+		stems.append(HostSettingsScriptDemo361.name_of(stats.resource_path))
+	stems.sort()
+	var wanted: PackedStringArray = DemoBuildScript361.WEAPONS.duplicate()
+	wanted.sort()
+	if stems != wanted:
+		failures.append("the demo's pickup pool is %s, expected %s" % [stems, wanted])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var drawn: Dictionary = {}
+	for _i in 200:
+		var weapon: Resource = PickupWeaponsScript.choose(PickupWeaponsScript.available_weapons(), rng)
+		drawn[HostSettingsScriptDemo361.name_of(weapon.resource_path)] = true
+	for stem: Variant in drawn.keys():
+		if not DemoBuildScript361.WEAPONS.has(str(stem)):
+			failures.append("%s was handed out as a pickup" % stem)
+	var settings: RefCounted = _fresh_settings_361()
+	if HostSettingsScriptDemo361.known_weapons().size() != DemoBuildScript361.WEAPONS.size():
+		failures.append("the settings list %d weapons" % HostSettingsScriptDemo361.known_weapons().size())
+	if settings.set_weapon_enabled("axe", true) or settings.is_weapon_enabled("axe"):
+		failures.append("the settings enabled a weapon outside the slice")
+	if not settings.is_weapon_enabled("sword"):
+		failures.append("a slice weapon is off by default")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+## Demo on: the picker offers Classic and King of the Hill only, and the
+## controller server refuses every other mode.
+func _scenario_demo_build_mode_picker_only_slice_modes() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	HostSettingsScriptDemo361.shared().game_mode = ""
+	var names: Array[String] = []
+	for row: Variant in GameModesScript361.picker_rows():
+		names.append(str((row as Dictionary).get("name")))
+	if names != ["Classic", "King of the Hill"]:
+		failures.append("the demo's picker rows were %s" % [names])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	for refused: String in ["sudden_death", "hot_potato", "stock"]:
+		if server.set_game_mode(refused) or server.game_mode() != "":
+			failures.append("the demo accepted the %s mode" % refused)
+	if not server.set_game_mode("king_of_the_hill") or server.game_mode() != "king_of_the_hill":
+		failures.append("the demo refused King of the Hill")
+	if not server.set_game_mode("") or server.game_mode() != "":
+		failures.append("the demo refused Classic")
+	HostSettingsScriptDemo361.shared().game_mode = ""
+	DemoBuildScript361.forced = -1
+	await _teardown(main)
+	return failures
+## Demo on: the victory screen is followed by the end card, with the logo and
+## the wishlist line; a second continue returns to the lobby. Demo off: no end
+## card, the victory screen goes straight to the lobby.
+func _scenario_demo_build_end_card_follows_victory() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var screen: Node = rm._lobby_screen
+	rm._enter_victory()
+	await _await_ticks(3)
+	if screen.end_card_panel() == null or screen.end_card_panel().visible:
+		failures.append("the end card is up during the victory screen")
+	rm._leave_victory()
+	await _await_ticks(3)
+	var card: Control = screen.end_card_panel()
+	if card == null or not card.visible:
+		failures.append("the end card did not show after the victory screen")
+	else:
+		if screen.victory_panel().visible:
+			failures.append("the victory screen is still up behind the end card")
+		var text: Label = card.find_child("EndCardText", true, false) as Label
+		if text == null or not text.text.contains("Wishlist the full game on Steam") \
+				or not text.text.contains("Thanks for playing the Pickfight demo!"):
+			failures.append("the end card text is %s" % (text.text if text != null else "missing"))
+		var logo: TextureRect = card.find_child("Logo", true, false) as TextureRect
+		if logo == null or logo.texture == null:
+			failures.append("the end card has no logo")
+	if rm.lobby_phase() != "victory":
+		failures.append("the match left the victory state under the end card: %s" % rm.lobby_phase())
+	rm._leave_victory()
+	await _await_ticks(3)
+	if rm.lobby_phase() != "lobby" or (card != null and card.visible):
+		failures.append("dismissing the end card did not return to the lobby (%s)" % rm.lobby_phase())
+	DemoBuildScript361.forced = -1
+	await _teardown(loop["stage"])
+	return failures
+## Demo off: the full game is as it was. Every stage rotates, all fourteen
+## pickup weapons are in the pool, all five modes are on offer and pickable,
+## and the victory screen goes straight to the lobby with no end card.
+func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 0
+	var settings: RefCounted = _fresh_settings_361()
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	rotation.scenes = scenes
+	rotation.round_player_count = 8
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 11
+	var seen: Dictionary = {}
+	for _round in 400:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[index] = true
+	if seen.size() != scenes.size():
+		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
+	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
+		failures.append("the settings lost stages with the demo off")
+	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
+			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
+		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
+	if GameModesScript361.picker_rows().size() != 5 or not GameModesScript361.is_valid("stock"):
+		failures.append("the mode picker lost modes with the demo off")
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm._enter_victory()
+	await _await_ticks(3)
+	rm._leave_victory()
+	await _await_ticks(3)
+	if rm.lobby_phase() != "lobby":
+		failures.append("the victory screen did not go straight to the lobby: %s" % rm.lobby_phase())
+	var card: Control = rm._lobby_screen.end_card_panel()
+	if card != null and card.visible:
+		failures.append("the end card showed with the demo off")
+	DemoBuildScript361.forced = -1
+	await _teardown(loop["stage"])
+	return failures
 ## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
 func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
 	var settings: RefCounted = StockSettingsScript.shared()
@@ -29198,7 +29647,369 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	_stock_stage_reset()
 	_scenario_completed = true
 	return failures
-
+## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
+func _i18n_catalogue_367() -> Dictionary:
+	var out: Dictionary = {}
+	var file: FileAccess = FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	if file == null:
+		return out
+	file.get_csv_line()
+	while not file.eof_reached():
+		var row: PackedStringArray = file.get_csv_line()
+		if row.size() >= 2 and not row[0].is_empty():
+			out[row[0]] = row[1]
+	return out
+## Issue #367: a pseudo-locale ("xx", made here from the catalogue) must change
+## a lobby label and a mode name, and English must read as before.
+func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if TranslationServer.translate("LOBBY_PRESS_READY") != "Press Ready on your phone":
+		failures.append("English lobby text reads '%s'" % TranslationServer.translate("LOBBY_PRESS_READY"))
+	if GameModesType.display_name(GameModesType.KING_OF_THE_HILL) != "King of the Hill":
+		failures.append("English mode name reads '%s'" % GameModesType.display_name(GameModesType.KING_OF_THE_HILL))
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var mode_name: String = GameModesType.display_name(GameModesType.KING_OF_THE_HILL)
+	if mode_name != "[xx] King of the Hill":
+		failures.append("the mode name did not change in the pseudo-locale: '%s'" % mode_name)
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var how_to_play: Control = rm.how_to_play_panel()
+	if how_to_play == null:
+		failures.append("no how-to-play panel in the lobby")
+	else:
+		var texts: PackedStringArray = PackedStringArray()
+		for label: Node in how_to_play.find_children("*", "Label", true, false):
+			texts.append((label as Label).text)
+		print("      lobby labels in xx: %s" % ", ".join(texts))
+		if not texts.has("[xx] HOW TO PLAY"):
+			failures.append("the lobby's how-to-play title did not change: %s" % ", ".join(texts))
+	await _teardown(main)
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	return failures
+## Issue #367: every key a source file asks for (`tr("KEY")`, the static
+## `TranslationServer.translate("KEY")`) is in the catalogue, and so is every
+## key built from an id (modes, modifiers, teams, stages, award categories).
+func _scenario_every_tr_key_is_in_strings_csv() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if catalogue.size() < 100:
+		failures.append("only %d catalogue keys" % catalogue.size())
+	var pattern := RegEx.new()
+	pattern.compile("(?:\\btr|TranslationServer\\.translate)\\(\"([A-Z][A-Z0-9_]*)\"(?!\\s*\\+)")
+	var used: int = 0
+	for file_name: String in DirAccess.get_files_at("res://scripts"):
+		if not file_name.ends_with(".gd"):
+			continue
+		var text: String = FileAccess.get_file_as_string("res://scripts/" + file_name)
+		for found: RegExMatch in pattern.search_all(text):
+			used += 1
+			if not catalogue.has(found.get_string(1)):
+				failures.append("%s uses missing key %s" % [file_name, found.get_string(1)])
+	print("      %d literal keys used, %d in the catalogue" % [used, catalogue.size()])
+	if used < 100:
+		failures.append("only %d tr() calls found, the scan is not reading the sources" % used)
+	var built: PackedStringArray = PackedStringArray()
+	for row: Dictionary in GameModesType.TABLE:
+		var id: String = (str(row["id"]) if row["id"] != "" else "classic").to_upper()
+		built.append("MODE_%s_NAME" % id)
+		built.append("MODE_%s_RULE" % id)
+	for id: String in RoundModifiersScript.IDS:
+		built.append("MODIFIER_" + RoundModifiersScript.title_of(id).to_upper().replace(" ", "_"))
+	for team_name: String in ["RED", "BLUE"]:
+		built.append("TEAM_" + team_name)
+	for category: String in ["COMBAT", "CLUMSY", "SURVIVOR", "AIRBORNE", "COLLECTOR"]:
+		built.append("AWARD_CATEGORY_" + category)
+	for i in LobbyScreenScript230.HOW_TO_PLAY_LINES.size():
+		built.append("HOW_TO_PLAY_LINE_%d" % (i + 1))
+		if catalogue.get("HOW_TO_PLAY_LINE_%d" % (i + 1), "") != LobbyScreenScript230.HOW_TO_PLAY_LINES[i]:
+			failures.append("how-to-play line %d differs from its catalogue entry" % (i + 1))
+	for list_name: String in ["STAGES", "WEAPONS"]:
+		built.append("SETTINGS_%s_LIST" % list_name)
+	for stage_file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if stage_file.ends_with(".tscn"):
+			built.append("STAGE_" + stage_file.get_basename().to_upper())
+	for key: String in built:
+		if not catalogue.has(key):
+			failures.append("built key %s is missing" % key)
+	_scenario_completed = true
+	return failures
+# --- Hot Potato stages (issue #373)
+const HOT_POTATO_STAGES_373: PackedStringArray = [
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
+]
+## The three chase-loop stages are in Main's rotation and the swept STAGE_PATHS,
+## load as large stages with eight spawns, and weigh 4 for Hot Potato and 0.3 in
+## every other mode.
+func _scenario_hot_potato_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation: Array = main_scene.get_node("RoundManager").stage_scenes
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in rotation:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in HOT_POTATO_STAGES_373:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_pickup_spawn_points().size() < 3:
+			failures.append("%s declares %d pickup spots, wants 3 or more" % [path, instance.get_pickup_spawn_points().size()])
+		if not instance.is_large():
+			failures.append("%s is not a large stage" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["hot_potato", "", "king_of_the_hill", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "hot_potato" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	if not is_equal_approx(StageType.mode_weight_of(load("res://scenes/stages/Flatlands.tscn"), "hot_potato"), 1.0):
+		failures.append("a stage with no mode_weights should weigh 1.0")
+	_scenario_completed = true
+	return failures
+## Hot Potato deals its three stages about four times as often as a stage that
+## is not favoured, other modes leave the odds alone, and the same seed deals
+## the same sequence. Counted over 900 seeded draws of a full table.
+func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation_script: GDScript = load("res://scripts/StageRotation.gd")
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var scenes: Array[PackedScene] = []
+	scenes.assign(main_scene.get_node("RoundManager").stage_scenes)
+	main_scene.free()
+	var favoured: Array[int] = []
+	for i in scenes.size():
+		if HOT_POTATO_STAGES_373.has(scenes[i].resource_path):
+			favoured.append(i)
+	var counts: Dictionary = {}
+	var sequences: Dictionary = {}
+	var classic_counts: Dictionary = {}
+	for mode_id: String in ["hot_potato", "", "hot_potato"]:
+		var rotation: RefCounted = rotation_script.new()
+		rotation.scenes = scenes
+		rotation.round_player_count = 8
+		rotation.mode_id = mode_id
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 373
+		rotation.rng = rng
+		var hits: int = 0
+		var seq: Array[int] = []
+		for _round in 900:
+			var index: int = rotation.next_stage_index()
+			if seq.size() > 0 and seq[-1] == index:
+				failures.append("mode '%s' dealt stage %d twice in a row" % [mode_id, index])
+				break
+			rotation.stage_index = index
+			seq.append(index)
+			if mode_id == "":
+				classic_counts[index] = int(classic_counts.get(index, 0)) + 1
+			if favoured.has(index):
+				hits += 1
+		if counts.has(mode_id):
+			if sequences[mode_id] != seq:
+				failures.append("the same seed dealt two different sequences for '%s'" % mode_id)
+		counts[mode_id] = hits
+		sequences[mode_id] = seq
+	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
+	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
+	if counts["hot_potato"] < 240:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 240" % counts["hot_potato"])
+	var others: int = 0
+	for i in scenes.size():
+		if not favoured.has(i):
+			others += int(classic_counts.get(i, 0))
+	var equal_weight_share: float = float(others) / float(scenes.size() - favoured.size())
+	print("      classic: an equal-weight stage averaged %.1f draws, the three Hot Potato stages %.1f each" % [equal_weight_share, float(counts[""]) / 3.0])
+	if float(counts[""]) / 3.0 > 0.5 * equal_weight_share:
+		failures.append("classic dealt each Hot Potato stage %.1f times, an equal-weight stage %.1f: wants under half" % [float(counts[""]) / 3.0, equal_weight_share])
+	if counts[""] == 0:
+		failures.append("classic should still deal them now and then, dealt none in 900")
+	if counts["hot_potato"] < 2 * counts[""]:
+		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
+	_scenario_completed = true
+	return failures
+# --- King of the Hill stages (issue #377)
+const KOTH_STAGES_377: PackedStringArray = [
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
+]
+## The four hill stages load, are in Main's rotation and STAGE_PATHS, have eight
+## spawns and hill spots, and weigh 4 for King of the Hill and 0.3 elsewhere.
+## Summit and Mesa hold the hill still; Relay and Roundabout move it.
+func _scenario_koth_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in KOTH_STAGES_377:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_hill_spots().is_empty():
+			failures.append("%s declares no hill spots" % path)
+		var moving: bool = path.ends_with("Relay.tscn") or path.ends_with("Roundabout.tscn")
+		if instance.hill_moves != moving:
+			failures.append("%s hill_moves is %s, wants %s" % [path, instance.hill_moves, moving])
+		if moving and instance.get_hill_spots().size() < 3:
+			failures.append("%s moves the hill between fewer than 3 spots" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["king_of_the_hill", "", "hot_potato", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "king_of_the_hill" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## Starts a King of the Hill round on the stage at `path` and returns its rig.
+func _koth_stage_rig(path: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 3:
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load(path)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = GameModesType.KING_OF_THE_HILL
+	rm.match_seed = 7
+	stage.add_child(rm)
+	return {"stage": stage, "rm": rm, "players": players, "roster": roster}
+## On each hill stage the hill starts exactly on the stage's first hill spot.
+func _scenario_koth_hill_starts_on_first_hill_spot() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in KOTH_STAGES_377:
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"])
+			continue
+		await _await_ticks(5)
+		var rm: Node = rig["rm"]
+		var hill: Node = rm.game_mode_node()
+		var spots: Array[Vector2] = (load(path) as PackedScene).instantiate().get_hill_spots()
+		if spots.is_empty() or not hill.hill_position.is_equal_approx(spots[0]):
+			failures.append("%s: hill at %s, first spot is %s" % [path, hill.hill_position, spots])
+		await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## On Relay the hill sits still until the warning, warns for the last stretch
+## (the ring on the next spot), then hops to the second spot; a fixed stage
+## (Summit) never warns or moves however long the round runs.
+func _scenario_koth_moving_hill_warns_then_moves() -> Array[String]:
+	var failures: Array[String] = []
+	var relay_spots: Array[Vector2] = (load("res://scenes/stages/Relay.tscn") as PackedScene).instantiate().get_hill_spots()
+	var rig: Dictionary = _koth_stage_rig("res://scenes/stages/Relay.tscn")
+	if not await _mode_started(rig):
+		failures.append("the Relay round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	hill.seconds_to_win = 1000.0
+	hill.hill_move_interval = 2.0
+	hill.hill_warn_sec = 1.0
+	hill._since_move = 0.0
+	if hill.hill_warning:
+		failures.append("the hill warned before its time")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("Relay's hill did not start on spot 0: %s" % hill.hill_position)
+	await _await_ticks(70)
+	if not hill.hill_warning:
+		failures.append("no warning 1.17 s into a 2 s interval with a 1 s warning")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("the hill moved during its warning")
+	if not hill.next_hill_position().is_equal_approx(relay_spots[1]):
+		failures.append("the warning points at %s, wants %s" % [hill.next_hill_position(), relay_spots[1]])
+	await _await_ticks(60)
+	if not hill.hill_position.is_equal_approx(relay_spots[1]):
+		failures.append("the hill is at %s after the interval, wants spot 1 %s" % [hill.hill_position, relay_spots[1]])
+	if hill.hill_warning:
+		failures.append("the warning stayed on after the move")
+	await _teardown(rig["stage"])
+	var fixed: Dictionary = _koth_stage_rig("res://scenes/stages/Summit.tscn")
+	if not await _mode_started(fixed):
+		failures.append("the Summit round never started")
+		await _teardown(fixed["stage"])
+		return failures
+	await _await_ticks(5)
+	var still: Node = fixed["rm"].game_mode_node()
+	still.seconds_to_win = 1000.0
+	still.hill_move_interval = 1.0
+	still.hill_warn_sec = 0.5
+	var start: Vector2 = still.hill_position
+	await _await_ticks(120)
+	if still.hill_warning or not still.hill_position.is_equal_approx(start):
+		failures.append("Summit's fixed hill warned or moved")
+	await _teardown(fixed["stage"])
+	_scenario_completed = true
+	return failures
+## A stage with no hill spots (the stub stage) still puts the hill at the centre
+## of its spawn points.
+func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	var sum := Vector2.ZERO
+	for i in 3:
+		sum += MODE_SPAWNS[i]
+	var want: Vector2 = sum / 3.0
+	if not hill.hill_position.is_equal_approx(want):
+		failures.append("hill at %s, wants the spawn centre %s" % [hill.hill_position, want])
+	if hill.hill_moves or not hill.hill_spots.is_empty():
+		failures.append("a stage with no spots reports spots or a moving hill")
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
 # --- Shield (issue #275) -----------------------------------------------------
 
 const SHIELD_PATH: String = "res://resources/shield.tres"

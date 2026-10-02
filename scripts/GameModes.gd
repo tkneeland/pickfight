@@ -72,7 +72,7 @@ static func entry(id: String) -> Dictionary:
 
 ## Whether `id` is a pickable mode (Classic included).
 static func is_valid(id: String) -> bool:
-	return not entry(id).is_empty()
+	return not entry(id).is_empty() and DemoBuildScript.mode_in_slice(id)
 
 static func display_name(id: String) -> String:
 	return str(entry(id).get("name", "Classic"))
@@ -102,9 +102,12 @@ static func bans_modifier(id: String, modifier_id: String) -> bool:
 static func picker_rows() -> Array:
 	var rows: Array = []
 	for row: Dictionary in TABLE:
+		if not DemoBuildScript.mode_in_slice(row["id"]):  # the demo's slice (#361)
+			continue
 		rows.append({"id": row["id"], "name": row["name"], "ffa_only": row["ffa_only"]})
 	return rows
 
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const KingOfTheHillScript := preload("res://scripts/KingOfTheHill.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const HotPotatoScript := preload("res://scripts/HotPotato.gd")

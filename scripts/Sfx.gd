@@ -219,6 +219,8 @@ const SOUNDS: Dictionary = {
 	"announce_meteor_shower": {"files": ["announcer/meteor_shower.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_bouncy": {"files": ["announcer/bouncy.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_double_damage": {"files": ["announcer/double_damage.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	# No recorded voice clip for Gale yet: the wind-up sound stands in (#312).
+	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 }
 
 const DEFAULT_OVERLAP: int = 3
