@@ -655,6 +655,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_demo_and_full_refuse_each_other",
 	"telemetry_toggle_defaults_on_and_persists",
 	"telemetry_off_sends_no_record_on_still_does",
+	"shield_head_is_wide_and_shield_shaped",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2360,6 +2361,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_toggle_defaults_on_and_persists()
 		"telemetry_off_sends_no_record_on_still_does":
 			return await _scenario_telemetry_off_sends_no_record_on_still_does()
+		"shield_head_is_wide_and_shield_shaped":
+			return await _scenario_shield_head_is_wide_and_shield_shaped()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -34007,5 +34010,36 @@ func _scenario_telemetry_off_sends_no_record_on_still_does() -> Array[String]:
 		failures.append("sharing on did not send")
 	if StatsSenderScript372.should_send(_telemetry_settings_372(false), false, PackedStringArray()):
 		failures.append("sharing off still sent")
+	_scenario_completed = true
+	return failures
+
+# --- Shield shape (issue #465) -----------------------------------------------
+const SHIELD_MIN_WIDTH_465: float = 48.0
+## The shield head collides as a convex polygon at least 48 px across (it was
+## 36), not as a rectangle or a column of circles.
+func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	var shape: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
+	if shape == null:
+		failures.append("the shield head has no convex polygon collision shape")
+		_scenario_completed = true
+		return failures
+	var low: float = INF
+	var high: float = -INF
+	for point: Vector2 in shape.points:
+		low = minf(low, point.y)
+		high = maxf(high, point.y)
+	var width: float = high - low
+	print("      shield collision width %.1f px, %d points" % [width, shape.points.size()])
+	if width < SHIELD_MIN_WIDTH_465:
+		failures.append("shield collision is %.1f px wide, expected at least %.0f" % [width, SHIELD_MIN_WIDTH_465])
+	var xs := {}
+	for point: Vector2 in shape.points:
+		xs[snappedf(point.x, 0.1)] = true
+	if shape.points.size() <= 4 or xs.size() <= 2:
+		failures.append("shield collision is a plain rectangle (%d points)" % shape.points.size())
 	_scenario_completed = true
 	return failures
