@@ -16,6 +16,7 @@ extends RefCounted
 
 const StageScript := preload("res://scripts/Stage.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 ## Which stages the host switched off (#294); a scenario hands in its own.
 var settings: RefCounted = HostSettingsScript.shared()
@@ -26,7 +27,9 @@ var scenes: Array[PackedScene] = []:
 		scenes = value
 		var names := PackedStringArray()
 		for scene: PackedScene in value:
-			names.append(HostSettingsScript.name_of(scene.resource_path))
+			var stage_name: String = HostSettingsScript.name_of(scene.resource_path)
+			if DemoBuildScript.stage_in_slice(stage_name):  # the demo's slice (#361)
+				names.append(stage_name)
 		settings.known_stages = names
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5

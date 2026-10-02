@@ -21,6 +21,7 @@ extends RefCounted
 
 const SfxScript := preload("res://scripts/Sfx.gd")
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const SETTINGS_PATH: String = "user://audio.cfg"
 const SECTION: String = "host"
@@ -76,23 +77,28 @@ static func name_of(resource_path: String) -> String:
 static func known_weapons() -> PackedStringArray:
 	var names := PackedStringArray()
 	for weapon_path: String in PickupWeaponsScript.WEAPON_PATHS:
-		names.append(name_of(weapon_path))
+		if DemoBuildScript.weapon_in_slice(name_of(weapon_path)):  # the demo's slice (#361)
+			names.append(name_of(weapon_path))
 	return names
 
 func is_stage_enabled(stage_name: String) -> bool:
-	return not disabled_stages.has(stage_name)
+	return not disabled_stages.has(stage_name) and DemoBuildScript.stage_in_slice(stage_name)
 
 func is_weapon_enabled(weapon_name: String) -> bool:
-	return not disabled_weapons.has(weapon_name)
+	return not disabled_weapons.has(weapon_name) and DemoBuildScript.weapon_in_slice(weapon_name)
 
 ## Returns false (changing nothing) when this would switch off the last
 ## enabled stage.
 func set_stage_enabled(stage_name: String, enabled: bool) -> bool:
+	if enabled and not DemoBuildScript.stage_in_slice(stage_name):
+		return false  # outside the demo's slice (#361)
 	return _set_enabled(disabled_stages, known_stages, stage_name, enabled)
 
 ## Returns false (changing nothing) when this would switch off the last
 ## enabled pickup weapon.
 func set_weapon_enabled(weapon_name: String, enabled: bool) -> bool:
+	if enabled and not DemoBuildScript.weapon_in_slice(weapon_name):
+		return false  # outside the demo's slice (#361)
 	return _set_enabled(disabled_weapons, known_weapons(), weapon_name, enabled)
 
 func set_stock_lives(lives: int) -> void:

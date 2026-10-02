@@ -127,6 +127,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Builds and distribution
 - Exported macOS .app and Windows .exe (#119, `tools/export.sh`)
 - Release workflow builds Windows, macOS, Linux and pushes to itch.io (`.github/workflows/release.yml`)
+- Steam Next Fest demo build: the "demo" feature tag (Demo macOS/Windows/Linux export presets, `tools/export.sh demo`) or `--demo-build` limits the game to 6 stages, the pickaxe plus 4 pickup weapons and Classic plus King of the Hill, hides the rest from Settings, and ends each match on a "Wishlist the full game on Steam" card with the logo (#361, `scripts/DemoBuild.gd`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
 - In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
 
