@@ -45,7 +45,8 @@ HOST_FIRST_TO_DOWN,First to  -
 HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
 HOST_GO_ONLINE,Go online (O)
 HOST_GO_ONLINE_STATE,Go online (O): %s
-HOST_JOIN_ONLINE,Join online game (J)
+HOST_JOIN_BLOCKED,Off while players are in your lobby
+HOST_JOIN_ONLINE,Join someone else's game (J)
 HOST_MODE,Mode (T)
 HOST_MODE_STATE,Mode (T): %s
 HOST_PLAY_ON_PC,Play on this PC (P)
@@ -74,16 +75,23 @@ JOIN_ERR_ROOM_FULL,That room is full.
 JOIN_ERR_VERSION,Update your game: this version does not match the host's.
 JOIN_JOINING_ROOM,Joining room %s...
 JOIN_LEAVE_MATCH,Leave match
+JOIN_LOBBY_TITLE,Lobby
 JOIN_LOST,Lost the connection to the host.
 JOIN_MOUSE_SENS,Mouse sensitivity
+JOIN_NAME_PLACEHOLDER,Player
 JOIN_ON_PHONE,Join on your phone:
+JOIN_PAUSED,Paused
 JOIN_PAUSE_MATCH,Pause match
+JOIN_PLAYER_READY,%s  ready
 JOIN_READY,Ready
 JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).
 JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.
 JOIN_RESUME,Resume
 JOIN_RESUME_MATCH,Resume match
 JOIN_ROOM_CODE_LABEL,Room code (from the host's screen)
+JOIN_ROOM_OVER,Room %s  match over
+JOIN_ROOM_STARTING,Room %s  starting in %d
+JOIN_ROOM_TITLE,Room %s
 JOIN_TIMEOUT,Timed out waiting for the host. Check the code and try again.
 JOIN_TITLE,Join online game
 JOIN_UPDATE_LINK,Get the latest version

@@ -624,6 +624,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_never_shows_join_corner",
 	"host_pad_start_pauses_and_resumes_other_pads_do_not",
 	"host_pad_start_and_host_phone_share_one_pause",
+	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"sound_trailer_split_survives_hostile_bytes",
+	"remote_client_lobby_text_follows_the_locale",
+	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2267,6 +2271,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not()
 		"host_pad_start_and_host_phone_share_one_pause":
 			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
+		"lobby_worst_state_fits_and_join_by_code_is_reachable":
+			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"sound_trailer_split_survives_hostile_bytes":
+			return await _scenario_sound_trailer_split_survives_hostile_bytes()
+		"remote_client_lobby_text_follows_the_locale":
+			return await _scenario_remote_client_lobby_text_follows_the_locale()
+		"lobby_pad_menu_lets_go_when_the_lobby_leaves":
+			return await _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -26250,8 +26262,9 @@ func _scenario_remote_client_join_entry_in_lobby() -> Array[String]:
 			failures.append("the join control's scene or key is wrong")
 		server.apply_host_command("pc_seat", true)
 		screen.refresh_controls()
-		if not button.disabled:
-			failures.append("Join online game stays enabled once the host PC is seated; a click would end that match")
+		# The host PC's own seat ends nobody else's match (#425 playtest); another seat turning Join off is checked in lobby_worst_state_fits_and_join_by_code_is_reachable.
+		if button.disabled:
+			failures.append("Join someone else's game is off with only the host PC's own seat taken")
 	if ProjectSettings.get_setting("application/run/main_scene") != MAIN_SCENE_PATH:
 		failures.append("the main scene is %s, not Main" % ProjectSettings.get_setting("application/run/main_scene"))
 	await _teardown(built["main"])
@@ -32605,4 +32618,239 @@ func _scenario_host_pad_start_and_host_phone_share_one_pause() -> Array[String]:
 	paused = false
 	await _close_phones(joined)
 	await _teardown(main)
+	return failures
+
+# --- Lobby worst state and joining by room code (#425 playtest) --------------
+## The window sizes the lobby must fit: the design canvas, 1080p and the Deck.
+const LOBBY_RESOLUTIONS_425B: Array[Vector2i] = [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]
+## Every pair of visible text, button and QR rects in the lobby's QR column that overlap.
+func _lobby_overlaps_425b(screen: CanvasLayer) -> Array[String]:
+	var failures: Array[String] = []
+	var right: Control = screen.lobby_panel().find_child("JoinQr", true, false).get_parent() as Control
+	var leaves: Array[Control] = []
+	for node: Node in right.find_children("*", "Control", true, false):
+		var control: Control = node as Control
+		if not control.is_visible_in_tree() or not (control is Label or control is BaseButton or control is TextureRect):
+			continue
+		if control is Label and (control as Label).text.is_empty():
+			continue
+		leaves.append(control)
+	for i in leaves.size():
+		for j in range(i + 1, leaves.size()):
+			var a: Rect2 = leaves[i].get_global_rect().grow(-1.0)
+			var b: Rect2 = leaves[j].get_global_rect().grow(-1.0)
+			if a.intersects(b):
+				failures.append("%s %s overlaps %s %s" % [leaves[i].name, a, leaves[j].name, b])
+	return failures
+## The owner's playtest of #425: with Go online on, the 64 px room code under
+## the URL pushed Start and Join off a 1080p window, and Join, the only way to
+## type someone else's room code, sat last and silently grey. In the worst
+## state (online with the code showing, Play on this PC on, eight seated) every
+## lobby control is inside the window at 1600x900, 1920x1080 and 1280x800, no
+## two overlap, the text stays at 16 design px or more, and Join heads the host
+## controls: on while only the host's own seat is taken, off with a caption
+## saying why once someone else sits down.
+func _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var join: Button = screen.control_button("join")
+	var blocked: Label = screen.lobby_panel().find_child("JoinBlocked", true, false) as Label
+	var code_label: Label = screen.lobby_panel().find_child("RoomCode", true, false) as Label
+	if join == null or blocked == null or code_label == null:
+		failures.append("missing lobby nodes: join %s, JoinBlocked %s, RoomCode %s" % [join != null, blocked != null, code_label != null])
+	else:
+		failures.append_array(await _lobby_worst_state_checks_425b(rig, join, blocked, code_label))
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
+	_relay_stop(relay, [])
+	return failures
+func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Label, code_label: Label) -> Array[String]:
+	var failures: Array[String] = []
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	if not join.text.contains("someone else") or not join.text.contains("(J)"):
+		failures.append("the join control reads '%s', not a Join someone else's game (J) label" % join.text)
+	if join.get_global_rect().position.y >= screen.control_button("online").get_global_rect().position.y:
+		failures.append("Join %s is not above Go online %s at the top of the host controls" % [join.get_global_rect(), screen.control_button("online").get_global_rect()])
+	server.apply_host_command("pc_seat", true)
+	server.apply_host_command("online", true)
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != "", 5000):
+		failures.append("Go online never came up (%s)" % server.online_status())
+	await _await_ticks(2)
+	if join.disabled or blocked.visible:
+		failures.append("Join is off (caption shown %s) with only the host PC seated and online on; leaving ends nobody's match" % blocked.visible)
+	# The D-pad reaches Join and Start from the host menu.
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	var focus: Control = get_root().gui_get_focus_owner()
+	var seen: Dictionary = _focus_reach_368(focus) if focus != null else {}
+	for id in ["join", "online", "pc_seat", "mode", "target_down", "target_up", "start"]:
+		if not seen.has(id):
+			failures.append("the D-pad never reaches '%s' (saw %s)" % [id, seen.keys()])
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	# A second player (a gamepad seat): now leaving would end a lobby someone is in.
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	await _await_ticks(2)
+	if server.pad_slot(0) == -1:
+		failures.append("A did not seat the gamepad")
+	elif not join.disabled or not blocked.is_visible_in_tree() or blocked.text.is_empty():
+		failures.append("with a gamepad seated Join is disabled %s, caption shown %s ('%s')" % [join.disabled, blocked.is_visible_in_tree(), blocked.text])
+	screen.press_control("join")
+	await _await_ticks(2)
+	if not is_instance_valid(rig["main"]) or not (rig["main"] as Node).is_inside_tree():
+		failures.append("J left the lobby while another player was seated")
+		return failures
+	# Eight seated, drawn twice in case the round loop republished the real roster in between.
+	screen.refresh_lobby(_lobby_state_425(8), 2, server)
+	await _await_ticks(2)
+	screen.refresh_lobby(_lobby_state_425(8), 2, server)
+	await _await_ticks(2)
+	if not code_label.is_visible_in_tree() or not code_label.text.contains(server.online_room_code()):
+		failures.append("the room code is not showing ('%s', visible %s)" % [code_label.text, code_label.is_visible_in_tree()])
+	var qr: Control = screen.lobby_panel().find_child("JoinQr", true, false) as Control
+	failures.append_array(_lobby_rects_425(screen, qr))
+	failures.append_array(_lobby_overlaps_425b(screen))
+	var right: Control = qr.get_parent() as Control
+	for node: Node in right.find_children("*", "Control", true, false):
+		if node is Label or node is BaseButton:
+			var font_px: int = (node as Control).get_theme_font_size("font_size")
+			if (node as Control).is_visible_in_tree() and font_px < 16:
+				failures.append("%s is %d design px, below 16" % [node.name, font_px])
+	var original: Vector2i = get_root().size
+	var watched: Array[Control] = [code_label, blocked]
+	for id in ["join", "online", "pc_seat", "mode", "target_down", "target_up", "start"]:
+		watched.append(screen.control_button(id))
+	for res: Vector2i in LOBBY_RESOLUTIONS_425B:
+		get_root().size = res
+		await _await_ticks(2)
+		var to_px: Transform2D = get_root().get_final_transform()
+		var window := Rect2(Vector2.ZERO, Vector2(res))
+		for control: Control in watched:
+			var px: Rect2 = to_px * control.get_global_rect()
+			if not window.encloses(px):
+				failures.append("at %s %s %s is outside the window" % [res, control.name, px])
+		print("      %s: QR %s, room code %s, Join %s, Start %s, column bottom %.0f of %d px" % [res, to_px * qr.get_global_rect(),
+			to_px * code_label.get_global_rect(), to_px * join.get_global_rect(), to_px * screen.control_button("start").get_global_rect(),
+			(to_px * right.get_global_rect()).end.y, res.y])
+	get_root().size = original
+	await _await_ticks(1)
+	return failures
+## Review sweep: a hostile or truncated sound trailer must split as a plain
+## snapshot (the whole packet, no events, no track), never read past the packet.
+func _trailer_review(prefix: Array, body: Array) -> PackedByteArray:
+	var out := PackedByteArray(prefix)
+	out.append_array(PackedByteArray(body))
+	out.append_array(PackedByteArray([body.size() >> 8, body.size() & 0xFF, 0x53, 0x58]))
+	return out
+func _scenario_sound_trailer_split_survives_hostile_bytes() -> Array[String]:
+	var failures: Array[String] = []
+	var head := PackedByteArray([0x81, 7])
+	var good: PackedByteArray = head.duplicate()
+	good.append_array(SnapshotCaptureScript240.encode_sound_trailer([{"name": "hit", "position": Vector2(10, -20), "strength": 1.0}], "lobby"))
+	var split: Variant = SnapshotCaptureScript240.split_sound_trailer(good)
+	if not split is Dictionary or (split["events"] as Array).size() != 1 or split["track"] != "lobby" or split["snapshot"] != head \
+			or (split["events"][0] as Dictionary)["position"] != Vector2(10, -20):
+		failures.append("a well-formed trailer no longer splits: %s" % str(split))
+	var lost_byte: PackedByteArray = good.duplicate()
+	lost_byte.remove_at(lost_byte.size() - 5)
+	var hostile: Dictionary = {
+		"count 5, no events": _trailer_review([0x81, 7], [5]),
+		"name runs past the trailer": _trailer_review([0x81, 7], [1, 3, 0x61]),
+		"position with no coordinates": _trailer_review([0x81, 7], [1, 0, 1]),
+		"track runs past the trailer": _trailer_review([0x81, 7], [0, 9]),
+		"empty body": _trailer_review([0x81, 7], []),
+		"bytes after the track": _trailer_review([0x81, 7], [0, 0, 7]),
+		"one body byte lost": lost_byte,
+	}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 251
+	for i in 200:
+		var junk := PackedByteArray()
+		for b in rng.randi_range(0, 40):
+			junk.append(rng.randi_range(0, 255))
+		junk.append_array(PackedByteArray([0, rng.randi_range(0, 12), 0x53, 0x58]))
+		var got: Variant = SnapshotCaptureScript240.split_sound_trailer(junk)
+		if not got is Dictionary or not got["snapshot"] is PackedByteArray or junk.slice(0, (got["snapshot"] as PackedByteArray).size()) != got["snapshot"]:
+			failures.append("random packet %d split as %s" % [i, str(got)])
+			break
+	for label: String in hostile:
+		var packet: PackedByteArray = hostile[label]
+		var got: Variant = SnapshotCaptureScript240.split_sound_trailer(packet)
+		if not got is Dictionary:
+			failures.append("%s: split returned %s" % [label, str(got)])
+		elif got["snapshot"] != packet or not (got["events"] as Array).is_empty() or got["track"] != "":
+			failures.append("%s: split as %s, not a plain snapshot" % [label, str(got)])
+	_scenario_completed = true
+	return failures
+## Review sweep: the PC client's lobby and pause text follows the locale like
+## the host's lobby (#367). A pseudo-locale "xx" marks every catalogue string.
+func _rc_untranslated_review(client: Node) -> PackedStringArray:
+	var out := PackedStringArray()
+	for node: Node in client.find_children("*", "", true, false):
+		if not (node is Label or node is BaseButton) or not node.is_inside_tree():
+			continue
+		var text: String = str(node.get("text"))
+		if text.is_empty() or text == "-" or text == "+" or text.begins_with("[xx] "):
+			continue
+		out.append("%s '%s'" % [node.name, text])
+	return out
+func _scenario_remote_client_lobby_text_follows_the_locale() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var rig: Dictionary = {"nodes": []}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var before: PackedStringArray = _rc_untranslated_review(client)
+	if not before.is_empty():
+		failures.append("untranslated before any lobby: %s" % ", ".join(before))
+	client.room_code = "ABCD"
+	client.slot = 0
+	client.lobby = {"phase": "countdown", "count": 3, "host": 0, "mode": "teams", "target": 5, "paused": false,
+		"players": [{"name": "Ann", "slot": 0, "ready": true, "color": "ff0000"}]}
+	client.state = RcState241.PLAYING
+	client._refresh_lobby()
+	await process_frame
+	var titles: PackedStringArray = PackedStringArray([client._lobby_title.text])
+	var during: PackedStringArray = _rc_untranslated_review(client)
+	if not during.is_empty():
+		failures.append("untranslated in a countdown lobby: %s" % ", ".join(during))
+	if client._lobby_title.text != "[xx] Room ABCD  starting in 3":
+		failures.append("countdown title reads '%s'" % client._lobby_title.text)
+	client.lobby["phase"] = "victory"
+	client._refresh_lobby()
+	titles.append(client._lobby_title.text)
+	if client._lobby_title.text != "[xx] Room ABCD  match over":
+		failures.append("victory title reads '%s'" % client._lobby_title.text)
+	print("      lobby titles in xx: %s" % " | ".join(titles))
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD  match over":
+		failures.append("English victory title reads '%s'" % client._lobby_title.text)
+	await _rc_close_241(rig)
+	return failures
+## Review sweep: Join swaps Main for the PC client under an open pad menu. The
+## lobby must let go of PadMenu as it leaves, or A and B stay ignored (#368).
+func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	rig["screen"].set_pad_menu(true)
+	if not PadMenuScript368.is_open():
+		failures.append("the pad menu never opened; the check is void")
+	await _teardown(rig["main"])
+	await process_frame
+	if PadMenuScript368.is_open():
+		failures.append("PadMenu still reports a menu open after the lobby left the tree")
+	PadMenuScript368.reset()
 	return failures

@@ -656,12 +656,15 @@ const CONTROL_KEYS: Dictionary = {
 	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
 }
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
+## The online room code, on Go online's own row (#425 playtest): at 64 px under the URL it pushed Start and Join off a 900 px screen.
+const ROOM_CODE_FONT_SIZE: int = 26
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 
 var _server: Object = null
 var _controls: Dictionary = {}
 var _room_label: Label
 var _online_status: Label
+var _join_blocked: Label
 
 ## Builds the controls (once) under the QR and points them at `server`. A
 ## server without `apply_host_command` (a test stub) gets none.
@@ -671,19 +674,24 @@ func attach_controls(server: Object) -> void:
 	_server = server
 	var box := VBoxContainer.new()
 	box.name = "HostControls"
-	box.add_theme_constant_override("separation", 8)
+	box.add_theme_constant_override("separation", 6) # was 8: the Join caption's room (#425 playtest)
 	_lobby_right.add_child(box)
-	_room_label = _big_label("", 64, LOBBY_ACCENT)
-	_room_label.name = "RoomCode"
-	_room_label.visible = false
-	_lobby_right.add_child(_room_label)
-	_lobby_right.move_child(_room_label, _lobby_url.get_index() + 1)
+	# First, not last (#425 playtest): the way into someone else's room code, with why it is off when it is.
+	box.add_child(_control_button("join", tr("HOST_JOIN_ONLINE")))
+	_join_blocked = _big_label(tr("HOST_JOIN_BLOCKED"), DECK_MIN_FONT_SIZE, Color(0.8, 0.82, 0.88))
+	_join_blocked.name = "JoinBlocked"
+	_join_blocked.visible = false
+	box.add_child(_join_blocked)
 	var online_row := HBoxContainer.new()
 	online_row.add_theme_constant_override("separation", 12)
 	box.add_child(online_row)
 	online_row.add_child(_control_button("online", tr("HOST_GO_ONLINE")))
 	_online_status = _big_label("", 24, Color(0.8, 0.82, 0.88))
 	online_row.add_child(_online_status)
+	_room_label = _big_label("", ROOM_CODE_FONT_SIZE, LOBBY_ACCENT)
+	_room_label.name = "RoomCode"
+	_room_label.visible = false
+	online_row.add_child(_room_label)
 	box.add_child(_control_button("pc_seat", tr("HOST_PLAY_ON_PC")))
 	var pad_hint := _big_label(tr("HOST_GAMEPAD_HINT"), 24, Color(0.8, 0.82, 0.88))
 	pad_hint.name = "GamepadHint"
@@ -699,7 +707,6 @@ func attach_controls(server: Object) -> void:
 	var start_button: Button = _control_button("start", tr("HOST_START_MATCH"))
 	start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	target_row.add_child(start_button)
-	box.add_child(_control_button("join", tr("HOST_JOIN_ONLINE")))
 	refresh_controls()
 
 func _control_button(id: String, text: String) -> Button:
@@ -736,9 +743,12 @@ func press_control(id: String) -> void:
 			_server.apply_host_command("start")
 		"join":
 			# Issue #241: leave this host's lobby for the PC client's join
-			# screen. Only while nobody is seated, so a click cannot end a
-			# match someone is in.
+			# screen. Only while nobody but the host's own seat (and bots) is
+			# in it, so a click cannot end a match someone is in. An open
+			# room is closed on the way out.
 			if _can_join_online():
+				if _server.online_requested():
+					_server.apply_host_command("online", false)
 				get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE)
 				return
 	refresh_controls()
@@ -746,10 +756,16 @@ func press_control(id: String) -> void:
 func _can_join_online() -> bool:
 	if _server == null or not _server.has_method("claimed_slots"):
 		return false
-	return _server.claimed_slots().is_empty() and _server.host_pc_slot() == -1 and not _server.online_requested()
+	var own: Array[int] = [_server.host_pc_slot()]
+	if _server.has_method("virtual_slots"):
+		own.append_array(_server.virtual_slots())
+	for slot: int in _server.claimed_slots():
+		if not own.has(slot):
+			return false
+	return true
 
-## Redraws the controls' captions from the server: the link state beside the
-## toggle, the room code large beside the QR.
+## Redraws the controls' captions from the server: the link state and the
+## room code beside the toggle, and why Join is off when it is.
 func refresh_controls() -> void:
 	if _server == null:
 		return
@@ -759,10 +775,13 @@ func refresh_controls() -> void:
 	_online_status.text = {"connecting": tr("ONLINE_CONNECTING"), "online": tr("ONLINE_ONLINE"), "unreachable": tr("ONLINE_UNREACHABLE")}.get(status, "")
 	_room_label.text = tr("ONLINE_ROOM") % code
 	_room_label.visible = code != "" and not (_server.has_method("room_code_hidden") and _server.room_code_hidden())
+	# The code says "online" already; the status stays for connecting or a blip.
+	_online_status.visible = not (_room_label.visible and status == "online")
 	_apply_streamer_mode(_server)
 	control_button("pc_seat").text = tr("HOST_PLAY_ON_PC_STATE") % (tr("ON") if _server.host_pc_slot() != -1 else tr("OFF"))
 	control_button("mode").text = tr("HOST_MODE_STATE") % (tr("MODE_TEAMS") if _server.team_mode() else tr("MODE_FFA"))
 	control_button("join").disabled = not _can_join_online()
+	_join_blocked.visible = control_button("join").disabled
 	# No keyboard glyph while a gamepad is the active input (#368).
 	control_button("start").text = tr("HOST_START_MATCH_PAD") if _pad_active else tr("HOST_START_MATCH")
 
@@ -805,12 +824,12 @@ func _input(event: InputEvent) -> void:
 
 ## Opens or closes the gamepad-driven host menu: the lobby control buttons
 ## become focusable and take focus (first enabled one), or give it back.
-const PAD_ORDER: Array[String] = ["online", "pc_seat", "mode", "target_down", "target_up", "start", "join"]
+const PAD_ORDER: Array[String] = ["online", "pc_seat", "mode", "target_down", "target_up", "start", "join"] # focus lands on Go online first, as before
 
 ## Explicit D-pad links: down the column, with First-to's minus and plus side
 ## by side. Geometric neighbours skip the small minus button.
 func _chain_pad_focus() -> void:
-	var column: Array[String] = ["online", "pc_seat", "mode", "target_down", "join"]
+	var column: Array[String] = ["join", "online", "pc_seat", "mode", "target_down"]
 	var buttons: Array[Button] = []
 	for id: String in column:
 		buttons.append(_controls[id])
@@ -824,13 +843,12 @@ func _chain_pad_focus() -> void:
 	down.focus_neighbor_right = down.get_path_to(up)
 	up.focus_neighbor_left = up.get_path_to(down)
 	up.focus_neighbor_top = up.get_path_to(_controls["mode"])
-	up.focus_neighbor_bottom = up.get_path_to(_controls["join"])
-	# Start sits right of the plus (#425): left goes back to it, up to Mode, down to Join.
+	# Start sits right of the plus (#425): left goes back to it, up to Mode.
+	# Join heads the column now, so the bottom row has nothing below it.
 	var start: Button = _controls["start"]
 	up.focus_neighbor_right = up.get_path_to(start)
 	start.focus_neighbor_left = start.get_path_to(up)
 	start.focus_neighbor_top = start.get_path_to(_controls["mode"])
-	start.focus_neighbor_bottom = start.get_path_to(_controls["join"])
 
 func set_pad_menu(on: bool) -> void:
 	if on == _pad_menu_open or _server == null:
@@ -850,6 +868,13 @@ func set_pad_menu(on: bool) -> void:
 		var focused: Control = get_viewport().gui_get_focus_owner()
 		if focused != null:
 			focused.release_focus()
+
+## Join swaps Main for the PC client under an open pad menu: let go of
+## PadMenu on the way out, or the seat code would ignore A and B from then on.
+func _exit_tree() -> void:
+	if _pad_menu_open:
+		_pad_menu_open = false
+		PadMenuScript.set_open("lobby", false)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
