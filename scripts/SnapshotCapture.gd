@@ -272,22 +272,40 @@ static func split_sound_trailer(packet: PackedByteArray) -> Dictionary:
 	var start: int = n - 4 - size
 	if start < 0:
 		return none
+	# Every read stays inside the trailer body [start, end); a body that does
+	# not parse to exactly its end is not a trailer, so the whole packet is
+	# handed on as a plain snapshot (Snapshot.decode() rejects junk itself).
+	var end: int = n - 4
 	var at: int = start
 	var events: Array = []
+	if at >= end:
+		return none
 	var count: int = packet[at]
 	at += 1
 	for i in count:
+		if at >= end:
+			return none
 		var name_len: int = packet[at]
+		if at + 1 + name_len + 1 > end:
+			return none
 		var ev_name: String = packet.slice(at + 1, at + 1 + name_len).get_string_from_utf8()
 		at += 1 + name_len
 		var position: Variant = null
 		if packet[at] == 1:
+			if at + 5 > end:
+				return none
 			position = Vector2(_i16(packet, at + 1), _i16(packet, at + 3))
 			at += 4
 		at += 1
+		if at >= end:
+			return none
 		events.append({"name": ev_name, "position": position, "strength": packet[at] / 255.0})
 		at += 1
+	if at >= end:
+		return none
 	var track_len: int = packet[at]
+	if at + 1 + track_len != end:
+		return none
 	var track: String = packet.slice(at + 1, at + 1 + track_len).get_string_from_utf8()
 	return {"snapshot": packet.slice(0, start), "events": events, "track": track}
 

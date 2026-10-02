@@ -454,8 +454,10 @@ var join_qr_texture: ImageTexture = null
 ## Issue #230. Whether the in-round join corner (the JoinLabel top left and
 ## the small JoinQrCode top right) is hidden: RoundManager hides it while the
 ## lobby, countdown or victory screen is up, which show their own big QR and
-## URL, so the corner never bleeds through their backdrop.
-var _join_corner_hidden: bool = false
+## URL, so the corner never bleeds through their backdrop. Issue #430: the
+## join QR and room code show in the lobby only, so the corner starts hidden
+## and RoundManager never shows it in a round either.
+var _join_corner_hidden: bool = true
 ## The join label's text before the room code is added (issue #239).
 var _join_label_base: String = ""
 
@@ -552,6 +554,7 @@ func _ready() -> void:
 		# address is already printed to the console for the rare case the
 		# first one isn't the room's network.
 		label.text = tr("JOIN_ON_PHONE") + "\n" + (urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
+		label.visible = not _join_corner_hidden
 
 	var qr_rect: TextureRect = get_node_or_null(qr_texture_path) as TextureRect
 	if qr_rect != null:
@@ -1088,6 +1091,9 @@ func send_buzz(slot: int, kind: String) -> void:
 	if not slot_has_controller(slot):
 		return
 	var peer: Variant = _slot_peers[slot]
+	if peer is PadSeat and peer.open:
+		_rumble_pad(peer.device, kind)
+		return
 	if peer == null or not peer is WebSocketPeer or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
@@ -1106,8 +1112,8 @@ var _damage_sent_msec: Array[int] = []
 ## last frame and at least `DAMAGE_SEND_GAP_MSEC` has passed; a change held back
 ## by the throttle goes out on a later call, so callers just report every tick.
 func send_damage(slot: int, fraction: float) -> void:
-	if not slot_has_controller(slot):
-		return
+	if not slot_has_controller(slot) or _slot_peers[slot] is PadSeat:
+		return # a gamepad has no screen for the bar (#442)
 	var percent: int = roundi(clampf(fraction, 0.0, 1.0) * 100.0)
 	if percent == _damage_sent[slot]:
 		return
@@ -2091,14 +2097,28 @@ func _push_pad_sticks() -> void:
 		var slot: int = pad_slot(device)
 		if slot == -1:
 			continue
+		if _pad_axis(device) != Vector2.ZERO:
+			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 		_smoothers[slot].push(_pad_axis(device))
 
-## A or Start joins (in the lobby) or readies; B un-readies.
+## Issue #430: the host's controller, whose Start pauses and resumes a match.
+## Joypad 0: the Steam Deck's own built-in controls (docs/steam-deck-readiness.md
+## D16), and a PC host's first pad. Seated or not, it never makes its seat host.
+const HOST_PAD_DEVICE: int = 0
+
+## A or Start joins (in the lobby) or readies; B un-readies. Issue #430: in a
+## match (or paused), Start from the host's pad sends the host phone's Pause or
+## Resume, and from any other pad does nothing.
 func _pad_button_pressed(device: int, button: int) -> void:
 	if PadMenuScript.is_open():
 		return # a host menu owns A and B right now (#368)
 	var slot: int = pad_slot(device)
+	var paused: bool = bool(_lobby_state.get("paused", false))
+	if button == JOY_BUTTON_START and (paused or MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby")))):
+		if device == HOST_PAD_DEVICE:
+			host_command.emit("resume" if paused else "pause", -1)
+		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
 			if SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
@@ -2110,10 +2130,12 @@ func _pad_button_pressed(device: int, button: int) -> void:
 
 ## Seat `device` under the id "pad-<device>": a replugged pad takes its held
 ## claim back through `_bind_with_id` (ADR-0007).
-func _bind_pad(device: int) -> void:
+func _bind_pad(device: int, id: String = "") -> void:
 	var seat := PadSeat.new()
 	seat.device = device
-	_bind_with_id(seat, PAD_ID_PREFIX + str(device))
+	if id.is_empty():
+		id = _pad_claim_id(device)
+	_bind_with_id(seat, id)
 	var slot: int = _slot_peers.find(seat)
 	if slot == -1:
 		return # full or kicked: the seat was closed
@@ -2130,13 +2152,75 @@ func _on_joy_connection_changed(device: int, connected: bool) -> void:
 			_pad_seats.erase(device)
 		return
 	# Replugged: take a held claim back; a new pad waits for A.
-	var id: String = PAD_ID_PREFIX + str(device)
 	if pad_slot(device) != -1:
 		return
+	var held_id: String = _held_pad_claim_id(device)
+	if not held_id.is_empty():
+		_bind_pad(device, held_id)
+
+## Gamepad parity (#442). A pad's claim id is "pad-<device>" plus its GUID when
+## the OS reports one, so a replug on another port still finds its own seat, and
+## a different pad that lands on the same index does not take it.
+var _pad_guids: Dictionary = {} # claim id -> GUID of the pad that holds it
+## Tests set a device's GUID here; headless has no real joypads.
+var _test_pad_guids: Dictionary = {}
+## Claim ids whose pad has already been told "right stick swings".
+var _pad_tip_done: Dictionary = {}
+## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios).
+var pad_rumbles: Array = []
+
+func _pad_guid(device: int) -> String:
+	if _test_pad_guids.has(device):
+		return str(_test_pad_guids[device])
+	if not Input.get_connected_joypads().has(device):
+		return ""
+	return Input.get_joy_guid(device)
+
+func _pad_claim_id(device: int) -> String:
+	var guid: String = _pad_guid(device)
+	var id: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
+	_pad_guids[id] = guid
+	return id
+
+## The claim id of a held (unplugged) pad seat that `device` should take back:
+## the same GUID (the same index first), else the same index with no GUID.
+func _held_pad_claim_id(device: int) -> String:
+	var guid: String = _pad_guid(device)
+	var own: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
+	var found: String = ""
 	for slot in _slot_peers.size():
-		if _slot_claimed[slot] == 1 and _slot_client_id[slot] == id and _slot_peers[slot] == null:
-			_bind_pad(device)
-			return
+		var id: String = str(_slot_client_id[slot])
+		if _slot_claimed[slot] != 1 or _slot_peers[slot] != null or not id.begins_with(PAD_ID_PREFIX):
+			continue
+		if id == own:
+			return id
+		if not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
+			found = id
+	return found
+
+## Whether the "right stick swings" hint should show on `slot`'s lobby card.
+func pad_tip_pending(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat \
+		and not _pad_tip_done.has(str(_slot_client_id[slot]))
+
+## A buzz as controller rumble (ADR-0013): the same kinds, a pulse each.
+func _rumble_pad(device: int, kind: String) -> void:
+	var weak: float = 0.4
+	var strong: float = 0.4
+	var seconds: float = 0.15
+	match kind:
+		"win":
+			strong = 1.0
+			seconds = 0.5
+		"eliminated":
+			strong = 0.9
+			seconds = 0.35
+		"hit":
+			weak = 0.7
+			strong = 0.0
+			seconds = 0.1
+	Input.start_joy_vibration(device, weak, strong, seconds)
+	pad_rumbles.append({"device": device, "kind": kind})
 
 # --- Snapshot stream to remote seats (issue #251) ----------------------------
 

@@ -14,7 +14,7 @@ Honesty rules for this copy:
 Limit is about 300 characters. This is 261.
 
 ```
-Same-room party platform fighter. Your weapon is your arm: swing a pickaxe, hook onto walls and knock your friends off the stage. Up to 8 players, each on their own phone. Scan a QR code, no app to install. Only the host buys the game.
+Same-room party platform fighter. Your weapon is your arm: swing a pickaxe, hook onto walls and knock your friends off the stage. Up to 8 players. In a room, each plays on their own phone or a gamepad: scan a QR code, no app to install. Online, each plays on their own PC. Only the host buys the game.
 ```
 
 ## 2. Long description (Steam BBCode)
@@ -24,7 +24,7 @@ Same-room party platform fighter. Your weapon is your arm: swing a pickaxe, hook
 Pickfight is a same-room party platform fighter. Think Stick Fight's scrappy physics combat crossed with Getting Over It's pole-and-hammer movement. You drag your thumb, your arm swings, and you haul yourself around the stage with it. You fight with the same arm.
 
 [h2]Only one person buys the game[/h2]
-The host runs Pickfight on a PC or Mac and puts it on the big screen. Everyone else scans a QR code and plays from their own phone browser. No app install, no account, no extra controllers. Laptop browsers and gamepads work too. If your friends are not in the room, online play works through a room code.
+The host runs Pickfight on a PC or Mac and puts it on the big screen. Everyone else scans a QR code and plays from their own phone browser. No app install, no account, no extra controllers. Laptop browsers and gamepads work too. If your friends are not in the room, online play works through a room code, but online players need their own copy of the game and play with a mouse or gamepad. Phones work in the room only.
 
 [h2]Up to 8 players[/h2]
 Bring the whole couch. Eight players share one screen, with bots to fill empty seats or to practice solo.
@@ -58,7 +58,7 @@ Moving and rotating platforms, crumbling ledges, bounce pads, wind zones and fan
 [/list]
 
 [h2]Make it yours[/h2]
-Pick a nickname, a colour, a hat and a pair of eyes. Fallen players come back as a floaty ghost and can still nudge things from their phone.
+Pick a nickname, a colour, a hat and a pair of eyes. Fallen players come back as a floaty ghost and can still nudge things from their phone or gamepad.
 
 [h2]Built to be comfortable[/h2]
 Screen shake and flashing can be turned off, name tags can be enlarged, and the default player colours are checked for the common kinds of colour blindness. Stages and weapons can be switched on or off in the host's settings.

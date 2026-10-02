@@ -294,6 +294,8 @@ func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxCon
 	var label := _big_label("%s%s  -  %s" % [entry["name"], tag, tr("LOBBY_READY") if entry["ready"] else tr("LOBBY_NOT_READY")],
 		font_size, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
 	row.add_child(label)
+	if bool(entry.get("tip", false)):
+		row.add_child(_big_label(tr("LOBBY_PAD_TIP"), 22, Color(0.8, 0.82, 0.88)))
 	return row
 
 ## Issue #236: a Teams lobby's two rosters side by side, Red then Blue, each
@@ -868,6 +870,13 @@ func set_pad_menu(on: bool) -> void:
 		var focused: Control = get_viewport().gui_get_focus_owner()
 		if focused != null:
 			focused.release_focus()
+
+## Join swaps Main for the PC client under an open pad menu: let go of
+## PadMenu on the way out, or the seat code would ignore A and B from then on.
+func _exit_tree() -> void:
+	if _pad_menu_open:
+		_pad_menu_open = false
+		PadMenuScript.set_open("lobby", false)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
