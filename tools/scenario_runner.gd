@@ -34482,9 +34482,9 @@ func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictio
 	stage.add_child(ArenaScene.instantiate())
 	rig["bar"] = _add_bar(stage, bar_at, Vector2(240, 24))
 	var players: Array[RigidBody2D] = rig["players"]
-	players[0].global_position = stand_at
-	players[1].global_position = stand_at + Vector2(1500, 0)
-	await _await_ticks(2)
+	players[0].start_round(stand_at)
+	players[1].start_round(stand_at + Vector2(1500, 0))
+	await _await_ticks(6)
 	return rig
 
 func _key_463(keycode: Key) -> void:
@@ -34547,12 +34547,14 @@ func _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger() -> Array[
 	var server: Node = rig["server"]
 	var players: Array[RigidBody2D] = rig["players"]
 	var holder: RigidBody2D = players[0]
+	# Deep above the arena: no gravity, or the holder falls away from the bar.
+	holder.gravity_scale = 0.0
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
 	await _equip(holder, PLUNGER_PATH)
 	server._test_pad_axes[0] = Vector2(0.0, -1.0)
 	if not await _await_condition(func() -> bool: return holder.plunger_attached(), 4000):
-		failures.append("the pad's stick up did not stick the plunger to the bar")
+		failures.append("the pad's stick up did not stick the plunger to the bar (slot %d vec %s pos %s)" % [server.pad_slot(0), holder.input_vector, holder.global_position])
 		await _teardown(rig["stage"])
 		return failures
 	await _await_ticks(60)
@@ -34566,8 +34568,21 @@ func _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger() -> Array[
 	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, false)
 	if server.slot_released(0):
 		failures.append("letting go of LB left the pad released")
-	if not await _await_condition(func() -> bool: return holder.plunger_attached(), 4000):
-		failures.append("the plunger did not stick again after LB was let go")
+	# The stick swings back to rest and out again to plunge a second time.
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(60)
+	holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
+	holder.linear_velocity = Vector2.ZERO
+	await _await_ticks(2)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	var pinned_attach := func() -> bool:
+		if holder.plunger_attached():
+			return true
+		holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
+		holder.linear_velocity = Vector2.ZERO
+		return false
+	if not await _await_condition(pinned_attach, 4000):
+		failures.append("the plunger did not stick again after LB was let go (pos %s vec %s rel %s drag %s len %s)" % [holder.global_position, holder.input_vector, holder.input_released, holder.get("_drag_released"), holder.weapon_length])
 	# A stick click toggles, like Space.
 	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, true)
 	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, false)
@@ -34619,6 +34634,8 @@ func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> 
 	var rig: Dictionary = await _phone_rig_164(1, "PhoneRelease463")
 	var server: Node = rig["server"]
 	var players: Array[RigidBody2D] = rig["players"]
+	players[0].start_round(Vector2(0, 274))
+	await _await_ticks(6)
 	var phones: Array[WebSocketPeer] = []
 	var phone := WebSocketPeer.new()
 	await _join_phone(phone, "phone-release-463", phones)
@@ -34633,7 +34650,7 @@ func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> 
 		phone.poll()
 	await _await_ticks(10)
 	if server.slot_released(0) or players[0].input_released or bool(players[0].get("_drag_released")):
-		failures.append("a held phone drag counted as released")
+		failures.append("a held phone drag counted as released (%s %s %s vec %s)" % [server.slot_released(0), players[0].input_released, players[0].get("_drag_released"), players[0].input_vector])
 	packet.encode_float(0, 0.0)
 	for i in 20:
 		phone.send(packet, WebSocketPeer.WRITE_MODE_BINARY)
