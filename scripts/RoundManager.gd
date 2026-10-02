@@ -168,6 +168,7 @@ enum State { WAITING, ROUND_ACTIVE, ROUND_END, LOBBY, COUNTDOWN, VICTORY }
 ## - NameTags (Node2D child): the nicknames over players' heads.
 ## - LobbyScreen (CanvasLayer child): lobby, podium, title card, pause banner.
 const StageRotationScript := preload("res://scripts/StageRotation.gd")
+const StatsSenderScript := preload("res://scripts/StatsSender.gd")
 const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const NameTagsScript := preload("res://scripts/NameTags.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
@@ -405,6 +406,7 @@ func _swap_stage() -> void:
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
+	_match_stages.append(stage_scenes[_stage_rotation.stage_index].resource_path.get_file().get_basename())
 	var night: bool = _roll_night()
 	_current_stage.set("night", night)
 	container.add_child(_current_stage)
@@ -1179,6 +1181,7 @@ func _enter_victory() -> void:
 	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
 	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
+	send_telemetry()
 	_play_lobby_music()
 	_state = State.VICTORY
 	_end_lobby_sandbox()
@@ -1210,6 +1213,8 @@ func _clear_stage() -> void:
 func _begin_match() -> void:
 	_end_lobby_sandbox()
 	_match_target = _requested_target()
+	_match_stages.clear()
+	_match_started_msec = GameClockScript.now_msec()
 	_match_winner_slot = -1
 	_last_winner_slot = -1
 	_begin_team_match()
@@ -1817,6 +1822,40 @@ func kill_feed() -> Control:
 ## The victory screen's awards row, or null before any.
 func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
+
+## Stages played this match and when it began (game clock), for the anonymous
+## match record (issue #372).
+var _match_stages: Array[String] = []
+var _match_started_msec: int = 0
+## Where the record goes; empty means the game's configured relay.
+var telemetry_relay_url: String = ""
+
+## Sends this match's anonymous record to the relay (issue #372), fire and
+## forget. Returns whether a send started: false with sharing off, in a scripted
+## or `--bots` run, or when no real player landed a damaging hit.
+func send_telemetry() -> bool:
+	var host: RefCounted = HostSettingsScript.shared()
+	if not StatsSenderScript.should_send(host, StatsSenderScript.is_scripted(get_tree(), PackedStringArray()), OS.get_cmdline_user_args()):
+		return false
+	var winners: Array = []
+	if _team_mode:
+		for slot: int in _teams:
+			if int(_teams[slot]) == _match_winner_team:
+				winners.append(slot)
+	elif _match_winner_slot != -1:
+		winners.append(_match_winner_slot)
+	var length_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
+	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners)
+	if record.is_empty():
+		return false
+	var url: String = telemetry_relay_url
+	if url.is_empty():
+		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
+	var sender: Node = StatsSenderScript.new()
+	sender.finished.connect(func(_status: int) -> void: sender.queue_free())
+	add_child(sender)
+	sender.send(record, url)
+	return true
 
 ## Where the per-match balance tallies are appended (issue #316).
 var balance_log_path: String = "user://balance_stats.jsonl"

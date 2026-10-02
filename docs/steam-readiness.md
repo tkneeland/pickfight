@@ -50,6 +50,8 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | 2.6 | Legal links: privacy policy URL (the game talks to our relay and files feedback issues, so say so), support contact | owner | none | todo |
 | 2.7 | Submit store page for Valve review, then set "Coming soon" public | owner | 2.1-2.6, 1.3 | todo |
 
+**Telemetry (for the privacy policy, 2.6; #372).** On by default, with an opt-out toggle in Settings ("Send anonymous match stats") and a one-time first-launch notice on the host screen. At the end of each match the host sends one record to our relay: per-weapon damage, hits and KOs by human players (bots and the lobby sandbox excluded), the game mode, the stage names, the format (free-for-all or teams), the match length, and the winning weapon. It contains no nickname, player colour, device or Steam identifier, or any other player ID. The relay does not store or log the sender's IP address; it keeps only a salted hash in memory to rate-limit, which is lost on restart, and rounds the stored timestamp to the hour. The data is used only to balance weapons, modes and stages. If anything ever needs an identifier, switch to opt-in. The policy text should say all of this and mention the toggle.
+
 Capsule sizes to **verify** against the current Steamworks "Store graphical assets" page:
 
 | Asset | Size |

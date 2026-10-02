@@ -41,6 +41,11 @@ var damage_taken: Dictionary = {}
 ## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
 var weapon_damage: Dictionary = {}
 var weapon_hits: Dictionary = {}
+## Telemetry (issue #372): weapon id -> KOs credited with that weapon's last
+## hit, and slot -> weapon id -> landed hits, to name the winner's weapon. Real
+## players only, like the tallies above; the slot keys never leave the host.
+var weapon_kos: Dictionary = {}
+var slot_weapon_hits: Dictionary = {}
 ## Total msec each slot spent alive in rounds this match.
 var survival_msec: Dictionary = {}
 ## Longest continuous stretch (msec) each slot went with no body contact this
@@ -70,6 +75,8 @@ func begin_match() -> void:
 	damage_taken.clear()
 	weapon_damage.clear()
 	weapon_hits.clear()
+	weapon_kos.clear()
+	slot_weapon_hits.clear()
 	survival_msec.clear()
 	pickups.clear()
 	weapon_grabs.clear()
@@ -103,6 +110,7 @@ func forget_slot(slot: int) -> void:
 	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
+	slot_weapon_hits.erase(slot)
 	for victim: int in _last_hit.keys():
 		if int(_last_hit[victim]["attacker"]) == slot:
 			_last_hit.erase(victim)
@@ -139,11 +147,14 @@ func note_air(slot: int, airborne: bool, now_msec: int) -> void:
 func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon: String = "", real: bool = true) -> void:
 	if attacker < 0 or victim < 0 or attacker == victim:
 		return
-	_last_hit[victim] = {"attacker": attacker, "msec": now_msec}
+	_last_hit[victim] = {"attacker": attacker, "msec": now_msec, "weapon": weapon if real else ""}
 	if amount > 0.0:
 		if real and weapon != "":
 			_add(weapon_damage, weapon, amount)
 			_add(weapon_hits, weapon, 1)
+			var by_weapon: Dictionary = slot_weapon_hits.get(attacker, {})
+			by_weapon[weapon] = int(by_weapon.get(weapon, 0)) + 1
+			slot_weapon_hits[attacker] = by_weapon
 		_add(damage_dealt, attacker, amount)
 		_add(damage_taken, victim, amount)
 
@@ -166,6 +177,8 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 		_add(self_kos, victim, 1)
 		return result
 	_add(kos, killer, 1)
+	if str(hit.get("weapon", "")) != "":
+		_add(weapon_kos, str(hit["weapon"]), 1)
 	total_kos += 1
 	var run: Array = _streak.get(killer, [-MULTI_KO_WINDOW_MSEC - 1, 0])
 	var streak: int = int(run[1]) + 1 if now_msec - int(run[0]) <= MULTI_KO_WINDOW_MSEC else 1
@@ -299,6 +312,20 @@ func balance_log_line(unix_time: int) -> String:
 	for id: String in weapon_damage:
 		weapons[id] = {"damage": snappedf(float(weapon_damage[id]), 0.1), "hits": int(weapon_hits.get(id, 0))}
 	return JSON.stringify({"t": unix_time, "weapons": weapons})
+
+## The weapon landing the most hits among `slots` ("" when none landed one);
+## the first reached wins a tie. Names the match winner's weapon for telemetry.
+func best_weapon_of(slots: Array) -> String:
+	var totals: Dictionary = {}
+	for slot: int in slots:
+		var by_weapon: Dictionary = slot_weapon_hits.get(slot, {})
+		for weapon: String in by_weapon:
+			totals[weapon] = int(totals.get(weapon, 0)) + int(by_weapon[weapon])
+	var best: String = ""
+	for weapon: String in totals:
+		if best == "" or int(totals[weapon]) > int(totals[best]):
+			best = weapon
+	return best
 
 ## Appends `line` to `path`. False (never an error) when it cannot be written.
 static func append_line(path: String, line: String) -> bool:
