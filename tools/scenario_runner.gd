@@ -624,6 +624,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
 	"rotation_deals_ctf_and_soccer_only_their_own_stages",
 	"juice_hitstop_never_lifts_a_host_pause",
+	"mode_award_categories_are_translated",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2267,6 +2268,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages()
 		"juice_hitstop_never_lifts_a_host_pause":
 			return await _scenario_juice_hitstop_never_lifts_a_host_pause()
+		"mode_award_categories_are_translated":
+			return await _scenario_mode_award_categories_are_translated()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32573,4 +32576,26 @@ func _scenario_juice_hitstop_never_lifts_a_host_pause() -> Array[String]:
 		failures.append("the hit-stop ending lifted the host's pause")
 	get_root().get_tree().paused = false
 	await _teardown(stage)
+	return failures
+## Review sweep b: every mode award's category has a translation, so the victory
+## panel never shows a raw AWARD_CATEGORY_ key.
+func _scenario_mode_award_categories_are_translated() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = load("res://scripts/MatchStats.gd").new()
+	stats.begin_match()
+	stats.record_hill_hold(0, 5.0)
+	stats.record_tags_passed(0, 2)
+	stats.record_lives_left(0, 1)
+	stats.record_goals(0, 1)
+	stats.record_captures(0, 1)
+	var slots: Array = [0, 1]
+	for mode_id: String in ["king_of_the_hill", "hot_potato", "stock", "soccer", "capture_the_flag"]:
+		var awards: Array[Dictionary] = stats.mode_awards(slots, mode_id)
+		if awards.is_empty():
+			failures.append("%s gave no mode award" % mode_id)
+		for award: Dictionary in awards:
+			var key: String = "AWARD_CATEGORY_" + str(award["category"])
+			if TranslationServer.translate(key) == key:
+				failures.append("%s: %s has no translation" % [mode_id, key])
+	_scenario_completed = true
 	return failures
