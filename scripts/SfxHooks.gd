@@ -39,6 +39,10 @@ const LAND_FULL_SPEED: float = 1400.0
 ## a body bouncing on two touching tiles is one sound, not one a tick.
 const HEAD_COOLDOWN_FRAMES: int = 5
 const LAND_COOLDOWN_FRAMES: int = 10
+## Voice grunts (#290): the number of voices (one per slot), and the quiet
+## gap between one victim's hit grunts.
+const VOICE_COUNT: int = 8
+const GRUNT_HIT_COOLDOWN_FRAMES: int = 30
 const PRUNE_AT: int = 256
 const PRUNE_AFTER_FRAMES: int = 600
 ## Where a landing sounds from: the bottom of the body, not its middle.
@@ -110,16 +114,44 @@ func _watch_player(player: Node) -> void:
 ## Every strike that dealt damage, sword swing or bullet, sounds as the
 ## attacker's weapon. A 0-damage contact is silent: it is a nudge, and a head
 ## dragged along someone would otherwise chatter.
-func _on_strike_landed(_victim: Node, amount: float, point: Vector2, _lethal: bool, attacker: Node) -> void:
+func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool, attacker: Node) -> void:
 	if amount <= 0.0:
 		return
 	var sound: String = "hit_%s" % _sound_set(attacker)
 	if not sfx.has_sound(sound):
 		sound = "hit_pickaxe"
 	sfx.play(sound, point, amount / HIT_FULL_DAMAGE)
+	# The victim's grunt (#290); a lethal blow gets the KO grunt instead.
+	if not lethal:
+		_grunt(&"grunt_hit_", victim, point, GRUNT_HIT_COOLDOWN_FRAMES)
 
 func _on_eliminated(player: Node) -> void:
 	sfx.play(&"eliminated", player.global_position, 1.0)
+	_grunt(&"grunt_ko_", player, player.global_position, 0)
+
+## Voice grunts (#290): one voice per player slot, kept quiet in the table so
+## they sit under the weapon sounds. `prefix` is `grunt_hit_` or `grunt_ko_`.
+## A victim grunts at most once per `frames` physics frames, so a flurry of
+## blows is not a stream of "hnh".
+func _grunt(prefix: StringName, victim: Node, point: Vector2, frames: int) -> void:
+	if victim == null or not is_instance_valid(victim) or not victim.is_in_group("players"):
+		return
+	var sound := StringName("%s%d" % [prefix, voice_slot(victim)])
+	if not sfx.has_sound(sound):
+		return
+	if frames > 0 and not _off_cooldown(victim, frames, "grunt"):
+		return
+	sfx.play(sound, point, 1.0)
+
+## Which of the eight voices `player` speaks with: the number in its `PlayerN`
+## node name (so a slot keeps its voice every round), else the order the
+## player was first seen in. Always 0..VOICE_COUNT-1.
+func voice_slot(player: Node) -> int:
+	var name_text: String = String(player.name)
+	if name_text.begins_with("Player") and name_text.substr(6).is_valid_int():
+		return posmod(name_text.substr(6).to_int() - 1, VOICE_COUNT)
+	var index: int = _players.find(player)
+	return posmod(index if index != -1 else 0, VOICE_COUNT)
 
 ## A body meeting anything that is not another player, moving down fast
 ## enough to be a landing. Judged on the velocity it had going into the step:
@@ -225,8 +257,9 @@ func _sound_set(player: Variant) -> String:
 				return String(set_name)
 	return "pickaxe"
 
-func _off_cooldown(source: Node, frames: int) -> bool:
-	var id: int = source.get_instance_id()
+func _off_cooldown(source: Node, frames: int, channel: String = "") -> bool:
+	# A separate `channel` keeps a source's grunt from muting its other sounds.
+	var id: int = source.get_instance_id() if channel == "" else hash([source.get_instance_id(), channel])
 	var now: int = Engine.get_physics_frames()
 	if _last_frame.has(id) and now - int(_last_frame[id]) < frames:
 		return false

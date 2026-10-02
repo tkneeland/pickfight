@@ -232,6 +232,26 @@ const SOUNDS: Dictionary = {
 	"announce_hill_taken": {"files": ["announcer/hill_taken.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	# No recorded voice clip for Gale yet: the wind-up sound stands in (#312).
 	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
+	# --- Player voice grunts (#290): one voice per slot, placeholder synthesis ---
+	# Kept well under the weapon sounds (their `db` is about 0, these -15/-13),
+	# and placed on the fighter. `voice` keeps each slot's pitch fixed, so a slot
+	# is always recognisably itself. `SfxHooks` says when; CREDITS.md the source.
+	"grunt_hit_0": {"files": ["voice/hit_0_0.ogg", "voice/hit_0_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_1": {"files": ["voice/hit_1_0.ogg", "voice/hit_1_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_2": {"files": ["voice/hit_2_0.ogg", "voice/hit_2_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_3": {"files": ["voice/hit_3_0.ogg", "voice/hit_3_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_4": {"files": ["voice/hit_4_0.ogg", "voice/hit_4_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_5": {"files": ["voice/hit_5_0.ogg", "voice/hit_5_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_6": {"files": ["voice/hit_6_0.ogg", "voice/hit_6_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_hit_7": {"files": ["voice/hit_7_0.ogg", "voice/hit_7_1.ogg"], "db": -15.0, "overlap": 2, "voice": true},
+	"grunt_ko_0": {"files": ["voice/ko_0.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_1": {"files": ["voice/ko_1.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_2": {"files": ["voice/ko_2.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_3": {"files": ["voice/ko_3.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_4": {"files": ["voice/ko_4.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_5": {"files": ["voice/ko_5.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_6": {"files": ["voice/ko_6.ogg"], "db": -13.0, "overlap": 1, "voice": true},
+	"grunt_ko_7": {"files": ["voice/ko_7.ogg"], "db": -13.0, "overlap": 1, "voice": true},
 }
 
 const DEFAULT_OVERLAP: int = 3
