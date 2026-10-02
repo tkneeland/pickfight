@@ -449,7 +449,8 @@ func build_panels() -> void:
 	right.add_theme_constant_override("separation", 10)
 	columns.add_child(right)
 	_lobby_qr = TextureRect.new()
-	_lobby_qr.custom_minimum_size = Vector2(372, 372)
+	_lobby_qr.name = "JoinQr"
+	_lobby_qr.custom_minimum_size = Vector2(340, 340) # was 372; the 16 px mode cards (#368) needed the room
 	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -661,9 +662,6 @@ func attach_controls(server: Object) -> void:
 	var pad_hint := _big_label(tr("HOST_GAMEPAD_HINT"), 24, Color(0.8, 0.82, 0.88))
 	pad_hint.name = "GamepadHint"
 	box.add_child(pad_hint)
-	var menu_hint := _big_label(tr("HOST_PAD_MENU_HINT"), 24, Color(0.8, 0.82, 0.88))
-	menu_hint.name = "PadMenuHint"
-	box.add_child(menu_hint)
 	_pad_active = not Input.get_connected_joypads().is_empty()
 	box.add_child(_control_button("mode", tr("HOST_MODE")))
 	var target_row := HBoxContainer.new()

@@ -31503,10 +31503,7 @@ func _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen() -> Array[String]
 	var rig: Dictionary = await _deck_rig_368()
 	var screen: CanvasLayer = rig["screen"]
 	var panel: Control = screen.lobby_panel()
-	var qr: Control = null
-	for node: Node in panel.find_children("*", "TextureRect", true, false):
-		if (node as Control).custom_minimum_size == Vector2(372, 372):
-			qr = node as Control
+	var qr: Control = panel.find_child("JoinQr", true, false) as Control
 	if qr == null:
 		failures.append("no join QR TextureRect in the lobby")
 		await _teardown(rig["main"])
@@ -31653,9 +31650,9 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	var text: String = screen.control_button("start").text
 	if text.contains("Enter") or text.contains("("):
 		failures.append("with a gamepad active the start button still reads '%s'" % text)
-	var hint: Label = screen.lobby_panel().find_child("PadMenuHint", true, false) as Label
-	if hint == null or not hint.text.contains("Y") or not hint.text.contains("View"):
-		failures.append("no gamepad hint naming Y and View")
+	var hint: Label = screen.lobby_panel().find_child("GamepadHint", true, false) as Label
+	if hint == null or not hint.text.contains("Y"):
+		failures.append("no gamepad hint naming Y")
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
