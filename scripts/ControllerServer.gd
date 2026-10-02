@@ -480,6 +480,9 @@ func _ready() -> void:
 	_last_weapon.resize(_players.size())
 	_steady_frames.resize(_players.size())
 	_bound_once.resize(_players.size())
+	_damage_sent.resize(_players.size())
+	_damage_sent.fill(-1)
+	_damage_sent_msec.resize(_players.size())
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
@@ -1009,6 +1012,7 @@ func _remember_leaver(slot: int) -> void:
 ## (issue #164). The caller tells every other phone with `_broadcast_looks(peer)`.
 func _attach(slot: int, peer: Variant) -> void:
 	_slot_peers[slot] = peer
+	_damage_sent[slot] = -1  # a newly bound page has no bar yet: the next call sends it
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
@@ -1065,6 +1069,33 @@ func send_buzz(slot: int, kind: String) -> void:
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
 	if _log_input:
 		print("slot %d buzz %s" % [slot, kind])
+
+## Minimum gap between two `dmg` frames to one seat, and the steps (percent)
+## the bar is sent in. Cheap by construction (issue #331): only on change.
+const DAMAGE_SEND_GAP_MSEC: int = 100
+var _damage_sent: Array[int] = []  # last percent sent per slot, -1 = nothing yet
+var _damage_sent_msec: Array[int] = []
+
+## Tell the phone on `slot` how close its player is to a KO (issue #331): one
+## `{"t":"dmg","v":<0..1>}` frame, which the page draws as a bar. `fraction` is
+## damage / DEATH_DAMAGE. Sent only when the rounded percent changed since the
+## last frame and at least `DAMAGE_SEND_GAP_MSEC` has passed; a change held back
+## by the throttle goes out on a later call, so callers just report every tick.
+func send_damage(slot: int, fraction: float) -> void:
+	if not slot_has_controller(slot):
+		return
+	var percent: int = roundi(clampf(fraction, 0.0, 1.0) * 100.0)
+	if percent == _damage_sent[slot]:
+		return
+	var now: int = Time.get_ticks_msec()
+	if _damage_sent[slot] != -1 and now - _damage_sent_msec[slot] < DAMAGE_SEND_GAP_MSEC:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_damage_sent[slot] = percent
+	_damage_sent_msec[slot] = now
+	peer.send_text(JSON.stringify({"t": "dmg", "v": percent / 100.0}))
 
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round

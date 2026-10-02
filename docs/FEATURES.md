@@ -69,6 +69,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Phone browser controller page over LAN, served by the host (#1, ADR-0002)
 - Multi-touch, drag smoothing against Wi-Fi jitter (#29, #113)
 - Phone buzz feedback, e.g. on round win (#34, ADR-0013)
+- Phone damage bar: a thin strip showing how close you are to KO, turning red near the end; phone only, resets each round (#331)
 - Laptop browser as a controller with pointer-lock mouse (#244)
 - Gamepad seats: right stick drives the arm, no phone needed (#261)
 - Host phone controls: pause, end, kick, settings (#149, #216, #231)
