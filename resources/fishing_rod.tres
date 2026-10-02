@@ -4,7 +4,6 @@
 
 ; The fishing rod (issue #273): a light launcher that fires a hook on a line.
 ; Lighter and faster than the grapple, with shorter range and less power.
-; A versatile traversal and combat tool for hooking players or terrain.
 ;
 ; Flick the drag to fire: the hook flies straight out along the flick at
 ; 1800 px/s for up to 400 px. If it meets terrain it sticks there, and while
@@ -13,13 +12,13 @@
 ; reels home and can fire again 0.25 s after it arrives. A hook that meets
 ; a player takes 4 off them and tugs them 250 toward the thrower, then comes
 ; home. The launcher itself swings as a light melee weapon: reach S, damage S (8),
-; with a light drive suited to quick flicks.
+; with a quick, light drive: faster than the grapple's (42 against 36) but weaker.
 ;
 ; The head is the launcher grip, a thin shape drawn as `art_outline` and filled
 ; by two circles. The hook sitting in it is `loaded_art`: drawn over the head
 ; while the hook is home, hidden while it is out, and colliding with nothing.
 ;
-; Force ceiling 6500, lighter than the grapple to reflect quick responsiveness.
+; Force ceiling 6500, under the grapple's 7300.
 
 [resource]
 script = ExtResource("1")

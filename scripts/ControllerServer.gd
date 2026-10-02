@@ -2238,6 +2238,9 @@ func _pad_button_pressed(device: int, button: int) -> void:
 		if device == HOST_PAD_DEVICE:
 			host_command.emit("resume" if paused else "pause", -1)
 		return
+	# Issue #441: in the lobby the D-pad and bumpers drive the seat's cosmetics picker.
+	if slot != -1 and pad_picker_shown(slot) and cosmetics_picker.pad_button(self, slot, button):
+		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
 			if SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
@@ -2474,6 +2477,34 @@ func slot_ping_msec(slot: int) -> int:
 		return -1
 	return _slot_peers[slot].rtt_msec
 
+# --- In-game cosmetics picker (issue #441, ADR-0021) --------------------------
+#
+# The shared picker model is CosmeticsPicker.gd; these are what its layouts read.
+
+const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
+## Each pad seat's picker cursor (the model's per-seat state).
+var cosmetics_picker: RefCounted = CosmeticsPickerScript.new()
+
+## Whether colour `index` could be worn by `slot` now: the phone's own rule.
+func color_free(index: int, slot: int) -> bool:
+	return _color_free(index, slot)
+
+## How many colours are on offer, and colour `index` (white for none).
+func palette_size() -> int:
+	return _palette.size()
+
+func palette_color(index: int) -> Color:
+	return _palette[index] if index >= 0 and index < _palette.size() else Color.WHITE
+
+## Whether `slot` is a gamepad's claim, plugged in or held (#442): its lobby
+## card carries the picker.
+func pad_claim(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_client_id.size() and _slot_claimed[slot] == 1 		and str(_slot_client_id[slot]).begins_with(PAD_ID_PREFIX)
+
+## Whether `slot`'s gamepad picker shows: a gamepad holds the seat right now
+## and it is the lobby (cosmetics change in the lobby only).
+func pad_picker_shown(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat and _slot_peers[slot].open 		and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 # --- Couch or Online, never mixed (issue #435, ADR-0021) -------------------------
 #
 # The host picks the match kind on the title screen (LobbyScreen.gd): Couch (the

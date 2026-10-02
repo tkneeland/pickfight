@@ -29,6 +29,8 @@ const FALLBACK_LAYER_WORLD: int = 1
 const FALLBACK_LAYER_HEAD: int = 2
 ## Closer than this to the wielder the direction is too noisy to use.
 const MIN_DISTANCE: float = 8.0
+## Most colliders one field query reports. Stage terrain on the world layer
+## inside the field counts toward it as well as players and heads.
 const MAX_RESULTS: int = 32
 
 var wielder: RigidBody2D

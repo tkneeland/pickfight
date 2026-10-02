@@ -1988,8 +1988,6 @@ func _tick_special(delta: float) -> void:
 			_tick_flail()
 		&"umbrella":
 			_tick_umbrella()
-		&"magnet":
-			pass
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
 		&"plunger":

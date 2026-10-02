@@ -29,6 +29,8 @@ const PaletteScript: GDScript = preload("res://scripts/Palette.gd")
 const PickupWeaponsScript: GDScript = preload("res://scripts/PickupWeapons.gd")
 const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
+const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
+const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
@@ -85,6 +87,12 @@ var last_track: String = ""
 ## The drag vector the next input frame carries.
 var input_vector: Vector2 = Vector2.ZERO
 var input_frames_sent: int = 0
+## Issue #441: this player's hat, eyes and colour, saved in their own copy and
+## sent on join ({"hat", "eyes", "color"}, see CosmeticsPicker.clean_pick).
+var saved_pick: Dictionary = CosmeticsPickerScript.clean_pick({})
+## Issue #441: the host's last full `looks` frame (palette, hats, eyes, looks).
+var looks: Dictionary = {}
+var _cosmetics_panel: Control
 
 var _socket: WebSocketPeer = null
 var _phase: int = Phase.OPENING
@@ -400,6 +408,8 @@ func _on_host_text(text: String) -> void:
 		_rejoin_until_msec = 0
 		_set_state(State.PLAYING)
 		_send_json({"t": "name", "v": player_name})
+		for pick: Dictionary in CosmeticsPickerScript.pick_messages(saved_pick):
+			_send_json(pick) # issue #441: the saved look goes on at join
 		_set_captured(true)
 		_show_playing()
 		return
@@ -410,6 +420,8 @@ func _on_host_text(text: String) -> void:
 		"hud":
 			hud = msg
 			_refresh_extras()
+		"looks":
+			_on_looks(msg)
 		"ping":
 			_send_json({"t": "pong", "n": msg.get("n", 0)})
 		"release":
@@ -830,6 +842,7 @@ func _load_settings() -> void:
 	if config.load(settings_path) != OK:
 		return
 	player_name = str(config.get_value(SECTION, "name", ""))
+	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)
 	if (sens is float or sens is int) and is_finite(float(sens)):
@@ -843,6 +856,7 @@ func _save_settings() -> void:
 	config.set_value(SECTION, "name", player_name)
 	config.set_value(SECTION, "id", client_id)
 	config.set_value(SECTION, "sensitivity", _mouse.sensitivity)
+	CosmeticsPickerScript.write_pick(config, SECTION, saved_pick)
 	config.save(settings_path)
 
 static func _random_id() -> String:
@@ -1005,7 +1019,14 @@ func _build_lobby_panel() -> void:
 	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28)
 	box.add_child(_lobby_title)
 	_lobby_list = VBoxContainer.new()
-	box.add_child(_lobby_list)
+	# Issue #441: the cosmetics panel sits beside the player list.
+	var beside := HBoxContainer.new()
+	beside.add_theme_constant_override("separation", 20)
+	box.add_child(beside)
+	beside.add_child(_lobby_list)
+	_cosmetics_panel = CosmeticsPanelScript.new()
+	_cosmetics_panel.picked.connect(_on_cosmetic_picked)
+	beside.add_child(_cosmetics_panel)
 	_ready_button = Button.new()
 	_ready_button.name = "Ready"
 	_ready_button.toggle_mode = true
@@ -1151,6 +1172,7 @@ func _refresh_lobby() -> void:
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
+	_cosmetics_panel.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
 
 func _refresh_hud() -> void:
 	if _hud == null:
@@ -1262,6 +1284,34 @@ func mode_text() -> String:
 			return ("%s  " % clock if not clock.is_empty() else "") + "  ".join(bits)
 	return ""
 
+# --- Cosmetics picker (issue #441) ------------------------------------------------
+
+## The mouse panel in this lobby, shown until the player readies up.
+func cosmetics_panel() -> Control:
+	return _cosmetics_panel
+
+func _own_ready() -> bool:
+	for entry: Variant in lobby.get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+			return bool(entry.get("ready", false))
+	return false
+
+## A `looks` frame: the full one (with the palette) on binding, then updates.
+func _on_looks(msg: Dictionary) -> void:
+	if msg.has("palette"):
+		looks = msg.duplicate(true)
+		_cosmetics_panel.set_catalog(msg)
+	elif msg.get("looks") is Array:
+		looks["looks"] = msg["looks"]
+	if msg.get("looks") is Array:
+		_cosmetics_panel.set_looks(msg["looks"], slot)
+
+## A click on the panel: tell the host (the phone's own frame) and save it.
+func _on_cosmetic_picked(kind: String, value: Variant) -> void:
+	saved_pick[kind] = value
+	saved_pick = CosmeticsPickerScript.clean_pick(saved_pick)
+	_save_settings()
+	_send_json({"t": kind, "v": value})
 # --- Rejoining a held seat (issue #459) ------------------------------------------
 
 ## Whether the client is retrying its way back into the match it dropped from.
