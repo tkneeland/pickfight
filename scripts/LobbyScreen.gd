@@ -20,11 +20,18 @@ extends CanvasLayer
 
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const GameModesScript := preload("res://scripts/GameModes.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
 const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
 const GAME_TITLE: String = "PICKFIGHT"
+## The wordmark (#359). Loaded as the imported texture where an import exists;
+## a fresh clone has no import cache, so it falls back to rasterising the SVG.
+const LOGO_PATH: String = "res://art/logo/logo.svg"
+const LOGO_LOBBY_SIZE: Vector2 = Vector2(560, 140)
+const LOGO_VICTORY_SIZE: Vector2 = Vector2(320, 80)
+const PODIUM_INK: Color = Color("#14181d")
 ## Podium block heights by place, as a fraction of the tallest.
 const PODIUM_HEIGHTS: Array[float] = [1.0, 0.72, 0.5, 0.34]
 const PODIUM_TALLEST_PX: float = 260.0
@@ -69,9 +76,12 @@ var _lobby_right: VBoxContainer
 var _victory_title: Label
 var _podium: HBoxContainer
 var _how_to_play: Control
+var _lobby_logo: TextureRect
+var _victory_logo: TextureRect
 
 var _title_layer: CanvasLayer
 var _title_label: Label
+var _title_rule_label: Label
 var _title_tween: Tween
 
 var _pause_layer: CanvasLayer
@@ -93,9 +103,44 @@ func victory_panel() -> Control:
 func how_to_play_panel() -> Control:
 	return _how_to_play
 
+## The wordmark on the lobby, or null before the lobby was ever built.
+func lobby_logo() -> TextureRect:
+	return _lobby_logo
+
+## The wordmark on the victory screen, or null before it was ever built.
+func victory_logo() -> TextureRect:
+	return _victory_logo
+
+## The logo as a texture: the imported resource when there is one, else the
+## SVG rasterised at 1600x400.
+static func load_logo_texture() -> Texture2D:
+	if ResourceLoader.exists(LOGO_PATH):
+		var imported: Texture2D = load(LOGO_PATH) as Texture2D
+		if imported != null:
+			return imported
+	var image := Image.new()
+	if image.load_svg_from_string(FileAccess.get_file_as_string(LOGO_PATH), 1.0) != OK:
+		return null
+	return ImageTexture.create_from_image(image)
+
+func _logo_rect(node_name: String, size: Vector2) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.name = node_name
+	rect.texture = load_logo_texture()
+	rect.custom_minimum_size = size
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
+
 ## The title card label, or null before any round has started.
 func stage_title_label() -> Label:
 	return _title_label
+
+## The line under the stage title naming the game mode and its rule (#352).
+func stage_title_rule_label() -> Label:
+	return _title_rule_label
 
 ## The PAUSED banner, or null before the first pause.
 func pause_label() -> Label:
@@ -108,6 +153,15 @@ func awards_row() -> Control:
 ## Whether the lobby and victory panels exist yet.
 func panels_built() -> bool:
 	return _lobby_panel != null
+
+## The lobby's mode cards, its how-to-play explainer's game-mode lines (#352), one per `GameModes.TABLE` row.
+func mode_cards() -> Array[Label]:
+	var out: Array[Label] = []
+	if _lobby_right != null and _lobby_right.has_node("ModeCards"):
+		for child: Node in _lobby_right.get_node("ModeCards").get_children():
+			if child.has_meta("mode_card"):
+				out.append(child as Label)
+	return out
 
 ## The how-to-play demos running now: four while the lobby shows, none
 ## otherwise.
@@ -171,9 +225,23 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
 		_lobby_qr.texture = qr as Texture2D
-		_lobby_qr.visible = qr != null
 		var url: Variant = join_source.get("join_url")
 		_lobby_url.text = str(url) if url != null else ""
+	_apply_streamer_mode(join_source)
+
+## Streamer mode (#369): with "Hide room code" on, the join QR, URL and online
+## room code give way to a notice; the host phone's menu still has the code.
+func _apply_streamer_mode(join_source: Object) -> void:
+	if join_source == null:
+		return
+	var hidden: bool = join_source.has_method("room_code_hidden") and join_source.room_code_hidden()
+	_lobby_qr.visible = join_source.get("join_qr_texture") != null and not hidden
+	if hidden:
+		_lobby_url.text = join_source.ROOM_CODE_HIDDEN_TEXT
+	elif _lobby_url.text == join_source.ROOM_CODE_HIDDEN_TEXT:
+		_lobby_url.text = str(join_source.get("join_url"))
+	if _room_label != null and hidden:
+		_room_label.visible = false
 
 ## One lobby row: the player's swatch, name, host tag and ready state.
 func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxContainer:
@@ -269,8 +337,17 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 			name_label.custom_minimum_size.x = PODIUM_CROWDED_COLUMN_PX
 			name_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		column.add_child(name_label)
-		var block := ColorRect.new()
-		block.color = _slot_color.call(slot)
+		var block := Panel.new()
+		block.add_theme_stylebox_override("panel", _podium_block_style(_slot_color.call(slot)))
+		var cap := ColorRect.new()
+		cap.color = Color(1.0, 1.0, 1.0, 0.25)
+		cap.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		cap.offset_left = 5.0
+		cap.offset_right = -5.0
+		cap.offset_top = 5.0
+		cap.offset_bottom = 21.0
+		cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		block.add_child(cap)
 		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * (0.55 if not stat_rows.is_empty() else 1.0) * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
 		column.add_child(block)
 		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
@@ -285,6 +362,15 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		_victory_title.text = "MATCH OVER"
 	_refresh_awards(awards)
 	_refresh_stat_table(stat_rows)
+
+## A podium block in the flat style: the player's colour, a hard ink outline,
+## square corners.
+func _podium_block_style(color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.set_border_width_all(5)
+	style.border_color = PODIUM_INK
+	return style
 
 ## The victory screen's per-player stats table, or null before any.
 func stats_table() -> Control:
@@ -329,7 +415,8 @@ func build_panels() -> void:
 	left.alignment = BoxContainer.ALIGNMENT_CENTER
 	left.add_theme_constant_override("separation", 24)
 	columns.add_child(left)
-	left.add_child(_big_label(GAME_TITLE, 120, LOBBY_ACCENT))
+	_lobby_logo = _logo_rect("Logo", LOGO_LOBBY_SIZE)
+	left.add_child(_lobby_logo)
 	_lobby_target_label = _big_label("First to 5", 44, Color.WHITE)
 	left.add_child(_lobby_target_label)
 	_lobby_rows = VBoxContainer.new()
@@ -354,6 +441,16 @@ func build_panels() -> void:
 	right.add_child(_lobby_qr)
 	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
 	right.add_child(_lobby_url)
+	# One card per game mode (#352), from `GameModes.TABLE`, under the QR:
+	# the how-to-play column is already as tall as the screen allows.
+	var cards := VBoxContainer.new()
+	cards.name = "ModeCards"
+	cards.add_theme_constant_override("separation", 0)
+	right.add_child(cards)
+	for row: Dictionary in GameModesScript.TABLE:
+		var card: Label = _big_label("%s: %s" % [row["name"], row["rule"]], 12, Color(0.8, 0.82, 0.88))
+		card.set_meta("mode_card", true)
+		cards.add_child(card)
 	# A column of its own, beside the QR and never over it (#219).
 	# Clear of the Settings corner below it (#230).
 	_how_to_play = _build_how_to_play()
@@ -370,6 +467,11 @@ func build_panels() -> void:
 	stack.alignment = BoxContainer.ALIGNMENT_CENTER
 	stack.add_theme_constant_override("separation", 32)
 	_victory_panel.add_child(stack)
+	# A corner overlay, outside the stack so it never costs the podium height.
+	_victory_logo = _logo_rect("Logo", LOGO_VICTORY_SIZE)
+	_victory_logo.position = Vector2(24, 16)
+	_victory_logo.size = LOGO_VICTORY_SIZE
+	_victory_panel.add_child(_victory_logo)
 	_victory_title = _big_label("", 110, LOBBY_ACCENT)
 	stack.add_child(_victory_title)
 	_podium = HBoxContainer.new()
@@ -414,7 +516,7 @@ func _big_label(text: String, font_size: int, color: Color) -> Label:
 # start, below the modifier banner so the two never overlap.
 
 ## Sweeps `text` across the screen over `duration` seconds.
-func show_stage_title(text: String, duration: float) -> void:
+func show_stage_title(text: String, duration: float, rule: String = "") -> void:
 	if _title_label == null:
 		_title_layer = CanvasLayer.new()
 		_title_layer.name = "StageTitleLayer"
@@ -428,11 +530,24 @@ func show_stage_title(text: String, duration: float) -> void:
 		_title_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
 		_title_label.add_theme_constant_override("outline_size", 14)
 		_title_layer.add_child(_title_label)
+		# A child of the title, so the sweep carries it along.
+		_title_rule_label = Label.new()
+		_title_rule_label.name = "StageTitleRule"
+		_title_rule_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_title_rule_label.add_theme_font_size_override("font_size", 32)
+		_title_rule_label.add_theme_color_override("font_color", LOBBY_ACCENT)
+		_title_rule_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
+		_title_rule_label.add_theme_constant_override("outline_size", 8)
+		_title_label.add_child(_title_rule_label)
 	_title_label.text = text
 	_title_label.reset_size()
+	_title_rule_label.text = rule
+	_title_rule_label.visible = rule != ""
+	_title_rule_label.reset_size()
 	var screen: Vector2 = get_viewport().get_visible_rect().size
 	var width: float = _title_label.get_minimum_size().x
 	var middle: float = (screen.x - width) * 0.5
+	_title_rule_label.position = Vector2((width - _title_rule_label.get_minimum_size().x) * 0.5, 96.0)
 	_title_label.position = Vector2(screen.x, screen.y * 0.36)
 	_title_label.visible = true
 	if _title_tween != null:
@@ -581,7 +696,8 @@ func refresh_controls() -> void:
 	control_button("online").text = "Go online (O): %s" % ("on" if _server.online_requested() else "off")
 	_online_status.text = {"connecting": "connecting…", "online": "online", "unreachable": "relay unreachable"}.get(status, "")
 	_room_label.text = "Online: %s" % code
-	_room_label.visible = code != ""
+	_room_label.visible = code != "" and not (_server.has_method("room_code_hidden") and _server.room_code_hidden())
+	_apply_streamer_mode(_server)
 	control_button("pc_seat").text = "Play on this PC (P): %s" % ("on" if _server.host_pc_slot() != -1 else "off")
 	control_button("mode").text = "Mode (T): %s" % ("Teams" if _server.team_mode() else "Free-for-all")
 	control_button("join").disabled = not _can_join_online()

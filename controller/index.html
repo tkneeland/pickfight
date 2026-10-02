@@ -142,6 +142,35 @@
     width: 0;
     transition: width 0.1s linear;
   }
+  /* Stock lives (issue #354): "♥ N" beside the damage bar, and the Steal a
+     life button on an eliminated Teams player's phone. */
+  #lives {
+    position: fixed;
+    z-index: 3;
+    top: 8px;
+    right: 10px;
+    display: none;
+    color: #ff5a6a;
+    font: 700 20px sans-serif;
+    pointer-events: none;
+  }
+  #menu-stock-lives[hidden], #menu-stock-time[hidden], #menu-stockstages[hidden] { display: none !important; }
+  #menu-stockstages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #host-menu #menu-stockstages button { padding: 8px 4px; font-size: 13px; }
+  #host-menu #menu-stockstages button.on { color: #0d0f14; background: #ffd933; }
+  #host-menu #menu-stockstages button.comp { border-color: #ffd933; }
+  #lives.show { display: block; }
+  #steal {
+    position: fixed;
+    z-index: 4;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    display: none;
+    padding: 14px 22px;
+    font: 700 20px sans-serif;
+  }
+  #steal.show { display: block; }
   /* Lobby, countdown and victory (issue #120): covers the pad whenever no
      match is being played, so its buttons get the touches instead. */
   #lobby {
@@ -331,6 +360,9 @@
     background: #2a303d;
   }
   #host-menu button:disabled { opacity: 0.35; }
+  /* Issue #352: the game-mode picker, one button per mode, the chosen one lit. */
+  #menu-gamemodes { display: flex; flex-direction: column; gap: 8px; }
+  #host-menu #menu-gamemodes button.on { color: #0d0f14; background: #ffd933; }
   #host-menu button.primary { color: #0d0f14; background: #ffd933; }
   #host-menu button.danger { color: #fff; background: #c62f3a; }
   #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
@@ -458,6 +490,8 @@
 <canvas id="pad"></canvas>
 <div id="flash"></div>
 <div id="dmgbar"><div id="dmgfill"></div></div>
+<div id="lives"></div>
+<button id="steal" type="button">Steal a life</button>
 <div id="hud">
   <div id="who">
     <div id="slot">--</div>
@@ -523,7 +557,11 @@
     <button id="menu-pause" type="button" class="primary">Pause</button>
     <button id="menu-end" type="button" class="danger">End match</button>
     <button id="menu-kick" type="button">Kick player</button>
-    <button id="menu-mode" type="button">Mode: Free-for-all</button>
+    <button id="menu-mode" type="button">Format: Free-for-all</button>
+    <div id="menu-gamemodes"></div>
+    <button id="menu-stock-lives" type="button" hidden>Lives: 3</button>
+    <button id="menu-stock-time" type="button" hidden>Time: 8 min</button>
+    <div id="menu-stockstages" hidden></div>
     <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
   </div>
@@ -1016,6 +1054,17 @@
     dmgFillEl.style.background = v >= 0.75 ? "#ff2a2a" : (slot >= 0 ? colorOf(slot) : "#ffffff");
   }
 
+  // Stock lives (issue #354): {t:"lives", v:N, steal:bool}; N < 0 hides both.
+  var livesEl = document.getElementById("lives");
+  var stealBtn = document.getElementById("steal");
+  function showLives(msg) {
+    var n = typeof msg.v === "number" ? msg.v : -1;
+    livesEl.classList.toggle("show", n >= 0);
+    livesEl.textContent = "\u2665 " + n;
+    stealBtn.classList.toggle("show", n >= 0 && !!msg.steal);
+  }
+  stealBtn.addEventListener("click", function () { sendText({ t: "steal" }); });
+
   function buzz(kind) {
     var b = BUZZ[kind];
     if (!b || slot < 0) { return; }
@@ -1408,6 +1457,10 @@
   var menuKickBtn = document.getElementById("menu-kick");
   // Issue #236: Free-for-all or Teams, only between matches.
   var menuModeBtn = document.getElementById("menu-mode");
+  // Stock lobby controls (issue #354), shown only while the lobby carries lobby.stock.
+  var menuStockLivesBtn = document.getElementById("menu-stock-lives");
+  var menuStockTimeBtn = document.getElementById("menu-stock-time");
+  var STOCK_TIMES = [120, 300, 480, 900, 0];
   // Issue #239: Go online, only between matches. The host says where it is
   // in lobby.online ("off", "connecting", "online" or "unreachable") and
   // lobby.room.
@@ -1480,8 +1533,17 @@
     var others = 0;
     for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
     menuKickBtn.disabled = others === 0;
-    menuModeBtn.textContent = lobby.mode === "teams" ? "Mode: Teams" : "Mode: Free-for-all";
+    menuModeBtn.textContent = lobby.mode === "teams" ? "Format: Teams" : "Format: Free-for-all";
     menuModeBtn.disabled = inMatch();
+    refreshGameModes();
+    refreshStockStages();
+    var stock = lobby.stock;
+    menuStockLivesBtn.hidden = menuStockTimeBtn.hidden = !stock;
+    if (stock) {
+      menuStockLivesBtn.textContent = "Lives: " + stock.lives;
+      menuStockTimeBtn.textContent = "Time: " + (stock.time > 0 ? (stock.time / 60) + " min" : "no limit");
+      menuStockLivesBtn.disabled = menuStockTimeBtn.disabled = inMatch();
+    }
     var online = lobby.online || "off";
     menuOnlineBtn.textContent = online === "off" ? "Go online: off" :
       online === "connecting" ? "Go online: connecting\u2026" :
@@ -1566,9 +1628,82 @@
       function () { return inMatch() && lobby.match === match; });
   });
   menuKickBtn.addEventListener("click", showKickList);
+  // Issue #352: the game-mode picker. The host lists the modes (lobby.game_modes,
+  // from GameModes.TABLE) and which is chosen (lobby.game_mode, "" is Classic);
+  // one the Teams format rules out is greyed out.
+  var gameModesEl = document.getElementById("menu-gamemodes");
+  var gameModesKey = "";
+  function refreshGameModes() {
+    var rows = lobby.game_modes || [];
+    var key = JSON.stringify(rows);
+    if (key !== gameModesKey) {
+      gameModesKey = key;
+      gameModesEl.innerHTML = "";
+      rows.forEach(function (row) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.id = row.id;
+        btn.textContent = row.name;
+        btn.addEventListener("click", function () {
+          if (inMatch() || btn.disabled) { return; }
+          sendText({ t: "gamemode", v: row.id });
+        });
+        gameModesEl.appendChild(btn);
+      });
+    }
+    var teams = lobby.mode === "teams";
+    var chosen = lobby.game_mode || "";
+    rows.forEach(function (row, i) {
+      var btn = gameModesEl.children[i];
+      btn.className = row.id === chosen ? "on" : "";
+      btn.disabled = inMatch() || (teams && !!row.ffa_only);
+    });
+  }
   menuModeBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
+  });
+  // Issue #375: a Stock match is played on one stage, picked from a grid
+  // (lobby.stock.stages, competitive first, plus a Random tile; stock.stage
+  // "" is Random).
+  var stockStagesEl = document.getElementById("menu-stockstages");
+  function refreshStockStages() {
+    var stock = lobby.stock;
+    stockStagesEl.hidden = !stock;
+    if (!stock) { return; }
+    var tiles = [{ name: "", label: "Random", comp: false }];
+    (stock.stages || []).forEach(function (row) {
+      tiles.push({ name: row.name, label: row.name, comp: !!row.competitive });
+    });
+    // Competitive stages come first, then Random, then the rest.
+    var comps = tiles.filter(function (t) { return t.comp; });
+    var others = tiles.filter(function (t) { return !t.comp; });
+    tiles = comps.concat(others);
+    var key = JSON.stringify([tiles, stock.stage || "", inMatch()]);
+    if (key === stockStagesEl.dataset.key) { return; }
+    stockStagesEl.dataset.key = key;
+    stockStagesEl.innerHTML = "";
+    tiles.forEach(function (t) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = t.label;
+      btn.className = (t.name === (stock.stage || "") ? "on " : "") + (t.comp ? "comp" : "");
+      btn.disabled = inMatch();
+      btn.addEventListener("click", function () {
+        if (inMatch()) { return; }
+        sendText({ t: "stock", stage: t.name });
+      });
+      stockStagesEl.appendChild(btn);
+    });
+  }
+  menuStockLivesBtn.addEventListener("click", function () {
+    if (inMatch() || !lobby.stock) { return; }
+    sendText({ t: "stock", lives: lobby.stock.lives >= 10 ? 1 : lobby.stock.lives + 1 });
+  });
+  menuStockTimeBtn.addEventListener("click", function () {
+    if (inMatch() || !lobby.stock) { return; }
+    var i = STOCK_TIMES.indexOf(lobby.stock.time);
+    sendText({ t: "stock", time: STOCK_TIMES[(i + 1) % STOCK_TIMES.length] });
   });
   menuOnlineBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
@@ -1626,6 +1761,7 @@
         else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "dmg") { showDamage(msg.v); }
+        else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }
     };

@@ -464,6 +464,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"snapshot_truncated_frames_decode_empty",
+	"snapshot_hostile_counts_and_versions_rejected",
+	"snapshot_counts_clamp_without_wrapping",
+	"snapshot_nan_and_bad_types_encode_safely",
+	"snapshot_quantization_rounds_to_nearest",
+	"snapshot_delta_applied_equals_full_of_same_tick",
 	"windy_stage_favours_umbrella_pickups",
 	"themed_pool_keeps_every_enabled_weapon",
 	"themed_pool_never_draws_a_disabled_weapon",
@@ -511,11 +517,35 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_hunts_enemy_team_never_teammate",
 	"bot_does_not_overshoot_lone_rival_off_stage",
 	"bot_aggression_rises_as_opponents_dwindle",
+	"mode_picker_host_only_and_in_lobby_state",
+	"mode_hot_potato_is_ffa_only",
+	"mode_choice_persists_with_host_settings",
+	"mode_choice_holds_for_whole_match",
+	"mode_king_of_the_hill_teams_hold_together",
+	"mode_rise_follows_the_mode",
+	"mode_banned_modifiers_never_rolled",
+	"mode_title_card_and_how_to_play_cards",
+	"stock_settings_defaults_clamp_persist_and_steal_message",
+	"stock_lost_life_respawns_farthest_protected_and_reset",
+	"stock_out_of_lives_is_eliminated_and_ghosted",
+	"stock_has_no_rise",
+	"stock_teams_steal_a_life_and_team_loss",
+	"stock_timeout_most_lives_wins_tie_overtime",
+	"stock_lives_shown_as_pips_and_on_phone",
 	"bot_king_of_the_hill_heads_for_the_hill",
 	"bot_king_of_the_hill_fights_whoever_holds_it",
 	"bot_hot_potato_it_chases_the_nearest_rival",
 	"bot_hot_potato_keeps_away_from_it",
 	"bot_sudden_death_plays_as_classic",
+	"streamer_mode_hides_room_code_and_qr_when_on",
+	"streamer_mode_shows_room_code_and_qr_when_off",
+	"streamer_mode_setting_persists_across_reload",
+	"streamer_mode_host_phone_receives_room_code",
+	"lobby_and_victory_show_the_logo",
+	"stock_plays_the_picked_stage_every_round",
+	"stock_random_pick_is_an_enabled_stage_held_all_match",
+	"stock_never_rolls_a_modifier",
+	"stock_stage_pick_persists_and_reaches_the_host_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1836,6 +1866,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"snapshot_truncated_frames_decode_empty":
+			return await _scenario_snapshot_truncated_frames_decode_empty()
+		"snapshot_hostile_counts_and_versions_rejected":
+			return await _scenario_snapshot_hostile_counts_and_versions_rejected()
+		"snapshot_counts_clamp_without_wrapping":
+			return await _scenario_snapshot_counts_clamp_without_wrapping()
+		"snapshot_nan_and_bad_types_encode_safely":
+			return await _scenario_snapshot_nan_and_bad_types_encode_safely()
+		"snapshot_quantization_rounds_to_nearest":
+			return await _scenario_snapshot_quantization_rounds_to_nearest()
+		"snapshot_delta_applied_equals_full_of_same_tick":
+			return await _scenario_snapshot_delta_applied_equals_full_of_same_tick()
 		"windy_stage_favours_umbrella_pickups":
 			return await _scenario_windy_stage_favours_umbrella_pickups()
 		"themed_pool_keeps_every_enabled_weapon":
@@ -1930,6 +1972,36 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_does_not_overshoot_lone_rival_off_stage()
 		"bot_aggression_rises_as_opponents_dwindle":
 			return await _scenario_bot_aggression_rises_as_opponents_dwindle()
+		"mode_picker_host_only_and_in_lobby_state":
+			return await _scenario_mode_picker_host_only_and_in_lobby_state()
+		"mode_hot_potato_is_ffa_only":
+			return await _scenario_mode_hot_potato_is_ffa_only()
+		"mode_choice_persists_with_host_settings":
+			return await _scenario_mode_choice_persists_with_host_settings()
+		"mode_choice_holds_for_whole_match":
+			return await _scenario_mode_choice_holds_for_whole_match()
+		"mode_king_of_the_hill_teams_hold_together":
+			return await _scenario_mode_king_of_the_hill_teams_hold_together()
+		"mode_rise_follows_the_mode":
+			return await _scenario_mode_rise_follows_the_mode()
+		"mode_banned_modifiers_never_rolled":
+			return await _scenario_mode_banned_modifiers_never_rolled()
+		"mode_title_card_and_how_to_play_cards":
+			return await _scenario_mode_title_card_and_how_to_play_cards()
+		"stock_settings_defaults_clamp_persist_and_steal_message":
+			return await _scenario_stock_settings_defaults_clamp_persist_and_steal_message()
+		"stock_lost_life_respawns_farthest_protected_and_reset":
+			return await _scenario_stock_lost_life_respawns_farthest_protected_and_reset()
+		"stock_out_of_lives_is_eliminated_and_ghosted":
+			return await _scenario_stock_out_of_lives_is_eliminated_and_ghosted()
+		"stock_has_no_rise":
+			return await _scenario_stock_has_no_rise()
+		"stock_teams_steal_a_life_and_team_loss":
+			return await _scenario_stock_teams_steal_a_life_and_team_loss()
+		"stock_timeout_most_lives_wins_tie_overtime":
+			return await _scenario_stock_timeout_most_lives_wins_tie_overtime()
+		"stock_lives_shown_as_pips_and_on_phone":
+			return await _scenario_stock_lives_shown_as_pips_and_on_phone()
 		"bot_king_of_the_hill_heads_for_the_hill":
 			return await _scenario_bot_king_of_the_hill_heads_for_the_hill()
 		"bot_king_of_the_hill_fights_whoever_holds_it":
@@ -1940,6 +2012,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_hot_potato_keeps_away_from_it()
 		"bot_sudden_death_plays_as_classic":
 			return await _scenario_bot_sudden_death_plays_as_classic()
+		"streamer_mode_hides_room_code_and_qr_when_on":
+			return await _scenario_streamer_mode_hides_room_code_and_qr_when_on()
+		"streamer_mode_shows_room_code_and_qr_when_off":
+			return await _scenario_streamer_mode_shows_room_code_and_qr_when_off()
+		"streamer_mode_setting_persists_across_reload":
+			return await _scenario_streamer_mode_setting_persists_across_reload()
+		"streamer_mode_host_phone_receives_room_code":
+			return await _scenario_streamer_mode_host_phone_receives_room_code()
+		"lobby_and_victory_show_the_logo":
+			return await _scenario_lobby_and_victory_show_the_logo()
+		"stock_plays_the_picked_stage_every_round":
+			return await _scenario_stock_plays_the_picked_stage_every_round()
+		"stock_random_pick_is_an_enabled_stage_held_all_match":
+			return await _scenario_stock_random_pick_is_an_enabled_stage_held_all_match()
+		"stock_never_rolls_a_modifier":
+			return await _scenario_stock_never_rolls_a_modifier()
+		"stock_stage_pick_persists_and_reaches_the_host_phone":
+			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -22309,6 +22399,9 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 		Vector2(32767, -32768),
 		Vector2(0.1, 0.9),
 		Vector2(99.9, -99.1),
+		Vector2(0.9, 0.9),
+		Vector2(-0.9, -0.9),
+		Vector2(0.5, -0.5),
 	]
 	for pos in positions:
 		var world = {
@@ -22345,6 +22438,8 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 			continue
 		var decoded_pos = players[0].get("body", {}).get("position", Vector2.ZERO)
 		var diff = (decoded_pos - pos).length()
+		if absf(decoded_pos.x - pos.x) > 0.5 or absf(decoded_pos.y - pos.y) > 0.5:
+			failures.append("position %s quantized to %s (diff %.2f px, wanted <= 0.5 per axis)" % [pos, decoded_pos, diff])
 		if diff > 1.0:
 			failures.append("position %s quantized to %s (diff %.2f px, wanted ≤ 1)" % [pos, decoded_pos, diff])
 	_scenario_completed = true
@@ -25010,6 +25105,254 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+# --- Snapshot hardening (issue #240 follow-up) ---------------------------------
+const SnapshotScript240 := preload("res://scripts/Snapshot.gd")
+const SnapshotCaptureScript240 := preload("res://scripts/SnapshotCapture.gd")
+func _snap_player_240(id: int, pos: Vector2) -> Dictionary:
+	return {
+		"player_id": id,
+		"body": {"position": pos, "rotation": 0.5, "linear_velocity": Vector2(3, -4)},
+		"weapon": {"head_position": pos + Vector2(20, 0), "head_rotation": 1.0, "head_shape_index": 2},
+		"color": id, "name": "P%d" % id, "team": 0, "damage": 10, "state": 1,
+	}
+func _snap_world_240() -> Dictionary:
+	return {
+		"is_full_snapshot": true,
+		"stage_id": 3,
+		"static_stage_bodies": [{"position": Vector2(10, 20), "rotation": 0.2, "linear_velocity": Vector2.ZERO}],
+		"players": [_snap_player_240(1, Vector2(100, 200)), _snap_player_240(2, Vector2(300, 200))],
+		"projectiles": [{"projectile_id": 7, "position": Vector2(50, 60), "velocity": Vector2(5, 6), "weapon_type": 2}],
+		"pickups": [{"pickup_id": 9, "position": Vector2(70, 80), "weapon_type": 3}],
+		"flail": {"flail_id": 1, "ball_position": Vector2(11, 12), "ball_velocity": Vector2(1, 2)},
+		"grapple": {"grapple_id": 2, "hook_position": Vector2(21, 22), "rope_end": Vector2(23, 24)},
+		"modifiers": [{"modifier_id": 1, "name": "low_gravity"}],
+		"round_phase": 1, "timer_ms": 5000, "scores": {1: 3, 2: 4},
+		"kill_feed": [{"text": "A beat B"}], "kill_zone_height": 600, "announcer_text": "Go",
+	}
+func _scenario_snapshot_truncated_frames_decode_empty() -> Array[String]:
+	var failures: Array[String] = []
+	var full: PackedByteArray = SnapshotScript240.encode(_snap_world_240())
+	if SnapshotScript240.decode(full).is_empty():
+		failures.append("the intact full frame did not decode")
+	var delta_world: Dictionary = {"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript240.TYPE_PLAYER, "id": 1, "body": {"position": Vector2(1, 2)}},
+		{"type": SnapshotScript240.TYPE_KILL_FEED, "id": 0, "text": "x"},
+		{"type": SnapshotScript240.TYPE_TIMER, "id": 0, "timer_ms": 9}]}
+	var delta: PackedByteArray = SnapshotScript240.encode(delta_world)
+	if SnapshotScript240.decode(delta).is_empty():
+		failures.append("the intact delta frame did not decode")
+	for frame: PackedByteArray in [full, delta]:
+		for n in frame.size():
+			if not SnapshotScript240.decode(frame.slice(0, n)).is_empty():
+				failures.append("a %d-byte prefix of a %d-byte frame decoded to a non-empty result" % [n, frame.size()])
+				break
+	var trailed: PackedByteArray = full.duplicate()
+	trailed.append_array(PackedByteArray([1, 2, 3]))
+	if SnapshotScript240.decode(trailed).is_empty():
+		failures.append("trailing bytes (the sound trailer) broke decode")
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_hostile_counts_and_versions_rejected() -> Array[String]:
+	var failures: Array[String] = []
+	var v: int = SnapshotScript240.FORMAT_VERSION
+	var hostile: Dictionary = {
+		"unknown version, full": PackedByteArray([0x80 | (v + 1), 0, 1]),
+		"unknown version, delta": PackedByteArray([v + 1, 0]),
+		"version 0 (pre-version frame)": PackedByteArray([0x00, 0]),
+		"255 stage bodies, no data": PackedByteArray([0x80 | v, 0, 1, 255]),
+		"255 players, no data": PackedByteArray([0x80 | v, 0, 1, 0, 255]),
+		"255 delta entities, no data": PackedByteArray([v, 255]),
+		"unknown delta type": PackedByteArray([v, 1, 0x7F, 0, 1, 0, 0]),
+		"modifier type with no body": PackedByteArray([v, 1, SnapshotScript240.TYPE_MODIFIER, 0, 1]),
+	}
+	for label: String in hostile:
+		if not SnapshotScript240.decode(hostile[label]).is_empty():
+			failures.append("%s decoded to a non-empty result" % label)
+	# A frame whose score count claims 65535 entries it does not carry.
+	var world: Dictionary = _snap_world_240()
+	world["scores"] = {}
+	world["kill_feed"] = []
+	world["announcer_text"] = ""
+	var bytes: PackedByteArray = SnapshotScript240.encode(world)
+	# tail after the score count: kill feed count (1) + kill zone (2) + announcer length (1)
+	var count_at: int = bytes.size() - 4 - 2
+	bytes[count_at] = 0xFF
+	bytes[count_at + 1] = 0xFF
+	if not SnapshotScript240.decode(bytes).is_empty():
+		failures.append("a 65535 score count with no scores decoded to a non-empty result")
+	# Random garbage must never raise (a script error fails the run).
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 240
+	for i in 300:
+		var junk := PackedByteArray()
+		for j in rng.randi_range(0, 80):
+			junk.append(rng.randi() & 0xFF)
+		SnapshotScript240.decode(junk)
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_counts_clamp_without_wrapping() -> Array[String]:
+	var failures: Array[String] = []
+	var world: Dictionary = _snap_world_240()
+	var many_players: Array = []
+	var many_bodies: Array = []
+	var many_projectiles: Array = []
+	for i in 300:
+		many_players.append(_snap_player_240(i, Vector2(i, i)))
+		many_bodies.append({"position": Vector2(i, i), "rotation": 0.0, "linear_velocity": Vector2.ZERO})
+		many_projectiles.append({"projectile_id": i, "position": Vector2.ZERO, "velocity": Vector2.ZERO, "weapon_type": 1})
+	world["players"] = many_players
+	world["static_stage_bodies"] = many_bodies
+	world["projectiles"] = many_projectiles
+	var kills: Array = []
+	for i in 300:
+		kills.append({"text": "k%d" % i})
+	world["kill_feed"] = kills
+	var scores: Dictionary = {}
+	for i in 70000:
+		scores[i] = i
+	world["scores"] = scores
+	var decoded: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(world))
+	if decoded.is_empty():
+		failures.append("an over-full world did not decode (the count and the loop disagreed)")
+		_scenario_completed = true
+		return failures
+	for key: String in ["players", "static_stage_bodies", "projectiles", "kill_feed"]:
+		if decoded[key].size() != 255:
+			failures.append("%s decoded %d entries, wanted the 255 clamp" % [key, decoded[key].size()])
+	if decoded["scores"].size() != 65535:
+		failures.append("scores decoded %d entries, wanted the 65535 clamp" % decoded["scores"].size())
+	# Over-range scalar fields clamp, they do not wrap.
+	var p: Dictionary = _snap_player_240(1, Vector2.ZERO)
+	p["damage"] = 70000
+	p["team"] = 300
+	p["color"] = -3
+	p["state"] = 256
+	var odd: Dictionary = _snap_world_240()
+	var no_team: Dictionary = _snap_player_240(2, Vector2.ZERO)
+	no_team["team"] = -1
+	odd["players"] = [p, no_team]
+	odd["timer_ms"] = 5000000000
+	odd["kill_zone_height"] = -40.0
+	var back: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(odd))
+	if back.is_empty():
+		failures.append("the over-range world did not decode")
+	else:
+		var q: Dictionary = back["players"][0]
+		if q["damage"] != 65535 or q["team"] != 255 or q["color"] != 0 or q["state"] != 255:
+			failures.append("scalars did not clamp: damage %s team %s color %s state %s" % [q["damage"], q["team"], q["color"], q["state"]])
+		if back["players"][1]["team"] != 255:
+			failures.append("team -1 (no team) decoded as %s, wanted 255" % back["players"][1]["team"])
+		if back["timer_ms"] != 4294967295:
+			failures.append("timer_ms %s, wanted the u32 clamp" % back["timer_ms"])
+		if back["kill_zone_height"] != 0:
+			failures.append("negative kill_zone_height decoded as %s, wanted 0" % back["kill_zone_height"])
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_nan_and_bad_types_encode_safely() -> Array[String]:
+	var failures: Array[String] = []
+	var p: Dictionary = _snap_player_240(1, Vector2(NAN, INF))
+	p["body"]["rotation"] = NAN
+	p["body"]["linear_velocity"] = Vector2(-INF, NAN)
+	p["weapon"]["head_rotation"] = INF
+	p["damage"] = NAN
+	p["team"] = 2.7
+	p["name"] = 12345
+	p["weapon"]["head_position"] = "not a vector"
+	var world: Dictionary = _snap_world_240()
+	world["players"] = [p, "not a dict"]
+	world["timer_ms"] = NAN
+	world["stage_id"] = -5.5
+	world["scores"] = {1: NAN, 2: -4, 3: 1.5e30}
+	var decoded: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(world))
+	if decoded.is_empty():
+		failures.append("a NaN/INF/bad-typed world did not decode")
+		_scenario_completed = true
+		return failures
+	var q: Dictionary = decoded["players"][0]
+	var pos: Vector2 = q["body"]["position"]
+	if pos != Vector2(0, 32767):
+		failures.append("NaN/INF position decoded %s, wanted (0, 32767)" % pos)
+	if q["body"]["linear_velocity"] != Vector2(-32768, 0):
+		failures.append("-INF/NaN velocity decoded %s, wanted (-32768, 0)" % q["body"]["linear_velocity"])
+	if not is_finite(q["body"]["rotation"]) or not is_finite(q["weapon"]["head_rotation"]):
+		failures.append("a NaN rotation decoded non-finite")
+	if q["damage"] != 0 or q["team"] != 3 or q["name"] != "":
+		failures.append("damage %s team %s name '%s', wanted 0, 3, ''" % [q["damage"], q["team"], q["name"]])
+	if decoded["timer_ms"] != 0 or decoded["stage_id"] != 0:
+		failures.append("timer_ms %s stage_id %s, wanted 0, 0" % [decoded["timer_ms"], decoded["stage_id"]])
+	if decoded["scores"] != {1: 0, 2: 0, 3: 65535}:
+		failures.append("scores decoded %s" % decoded["scores"])
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_quantization_rounds_to_nearest() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [
+		[Vector2(0.9, 0.9), Vector2(1, 1)], [Vector2(0.4, 0.49), Vector2(0, 0)],
+		[Vector2(-0.9, -0.9), Vector2(-1, -1)], [Vector2(-0.4, 2.6), Vector2(0, 3)],
+		[Vector2(40000, -40000), Vector2(32767, -32768)],
+	]
+	for c: Array in cases:
+		var world: Dictionary = _snap_world_240()
+		world["players"] = [_snap_player_240(1, c[0])]
+		var got: Vector2 = SnapshotScript240.decode(SnapshotScript240.encode(world))["players"][0]["body"]["position"]
+		if got != c[1]:
+			failures.append("%s decoded %s, wanted %s" % [c[0], got, c[1]])
+	# Worst case over many fractional values: at most half a pixel per axis.
+	var worst: float = 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 200:
+		var pos := Vector2(rng.randf_range(-3000, 3000), rng.randf_range(-3000, 3000))
+		var world: Dictionary = _snap_world_240()
+		world["players"] = [_snap_player_240(1, pos)]
+		var got: Vector2 = SnapshotScript240.decode(SnapshotScript240.encode(world))["players"][0]["body"]["position"]
+		worst = maxf(worst, maxf(absf(got.x - pos.x), absf(got.y - pos.y)))
+	print("snapshot quantization worst per-axis error over 200 samples: %.4f px" % worst)
+	if worst > 0.5001:
+		failures.append("worst per-axis position error %.4f px, wanted <= 0.5" % worst)
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_delta_applied_equals_full_of_same_tick() -> Array[String]:
+	var failures: Array[String] = []
+	var tick_a: Dictionary = _snap_world_240()
+	var tick_b: Dictionary = _snap_world_240()
+	tick_b["players"][0]["body"]["position"] = Vector2(111.4, 205.6)
+	tick_b["players"][0]["weapon"]["head_rotation"] = 2.2
+	tick_b["players"][0]["damage"] = 40
+	tick_b["players"][1]["state"] = 0
+	tick_b["projectiles"][0]["position"] = Vector2(55, 66)
+	tick_b["pickups"][0]["position"] = Vector2(71, 81)
+	tick_b["flail"]["ball_position"] = Vector2(15, 16)
+	tick_b["grapple"]["rope_end"] = Vector2(30, 31)
+	tick_b["timer_ms"] = 4967
+	tick_b["scores"][2] = 5
+	tick_b["kill_zone_height"] = 590
+	var delta_bytes: PackedByteArray = SnapshotScript240.encode(SnapshotCaptureScript240.delta(tick_b, tick_a))
+	var delta: Dictionary = SnapshotScript240.decode(delta_bytes)
+	if delta.is_empty() or delta.get("is_full_snapshot", true):
+		failures.append("the delta frame did not decode as a delta")
+		_scenario_completed = true
+		return failures
+	var base: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(tick_a))
+	var base_copy: Dictionary = base.duplicate(true)
+	var applied: Dictionary = SnapshotScript240.apply_delta(base, delta)
+	var want: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(tick_b))
+	for key: String in want:
+		if applied.get(key) != want[key]:
+			failures.append("%s: delta-applied %s, full snapshot of the same tick %s" % [key, applied.get(key), want[key]])
+	if applied != want:
+		failures.append("the delta-applied snapshot does not equal the full snapshot of the same tick")
+	if base != base_copy:
+		failures.append("apply_delta changed the snapshot it was given")
+	# The two delta types the encoder used to drop.
+	var extra: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript240.TYPE_MODIFIER, "id": 1, "name": "big_heads"},
+		{"type": SnapshotScript240.TYPE_KILL_FEED, "id": 0, "text": "C beat D"}]}))
+	var with_extra: Dictionary = SnapshotScript240.apply_delta(base, extra)
+	if with_extra["modifiers"][0]["name"] != "big_heads" or with_extra["kill_feed"].back()["text"] != "C beat D":
+		failures.append("TYPE_MODIFIER / TYPE_KILL_FEED deltas did not apply: %s %s" % [with_extra["modifiers"], with_extra["kill_feed"]])
 	_scenario_completed = true
 	return failures
 # --- Game modes (issues #276-#278) ---------------------------------------------
@@ -27761,7 +28104,657 @@ func _scenario_bot_aggression_rises_as_opponents_dwindle() -> Array[String]:
 		failures.append("with one opponent left the bot should fight a rival 60 px off, was '%s'" % lone)
 	_scenario_completed = true
 	return failures
-
+const HostSettingsScript352 := preload("res://scripts/HostSettings.gd")
+# --- Issue #352: the lobby mode picker and the modes' wiring ---------------------
+## Two phones join a real server; returns the peers (host first), or [] on failure.
+func _mode_picker_join(server: Node, failures: Array[String]) -> Array[WebSocketPeer]:
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "mode-picker-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	return joined
+## AC1: only the host phone picks the game mode, malformed picks change nothing,
+## and the lobby state carries the choice and the picker's rows (Classic first).
+func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var joined: Array[WebSocketPeer] = await _mode_picker_join(server, failures)
+	if not failures.is_empty():
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[1].send_text(JSON.stringify({"t": "gamemode", "v": "sudden_death"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.game_mode() != "":
+		failures.append("a phone that is not the host picked '%s'" % server.game_mode())
+	for bad: Variant in [true, 3, null, "nonsense", "KING_OF_THE_HILL"]:
+		joined[0].send_text(JSON.stringify({"t": "gamemode", "v": bad}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.game_mode() != "":
+		failures.append("a malformed pick changed the mode to '%s'" % server.game_mode())
+	joined[0].send_text(JSON.stringify({"t": "gamemode", "v": "king_of_the_hill"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	if server.game_mode() != "king_of_the_hill":
+		failures.append("the host's pick was ignored, mode '%s'" % server.game_mode())
+	var msg: Dictionary = _last_lobby_msg_236(joined[0])
+	var rows: Array = msg.get("game_modes", [])
+	var names: Array[String] = []
+	for row: Variant in rows:
+		names.append(str((row as Dictionary).get("name")))
+	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
+	if msg.get("game_mode") != "king_of_the_hill":
+		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
+	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock"]:
+		failures.append("the picker rows were %s" % [names])
+	HostSettingsScript352.shared().game_mode = ""
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## AC2: Hot Potato is Free-for-all only: refused while Teams is on, and
+## switching Teams on with it chosen falls back to Classic. Every other mode
+## combines with either format.
+func _scenario_mode_hot_potato_is_ffa_only() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("gamemode", "hot_potato") or server.game_mode() != "hot_potato":
+		failures.append("Hot Potato was refused in a free-for-all")
+	if not server.apply_host_command("mode", "teams"):
+		failures.append("Teams could not be switched on")
+	if server.game_mode() != "":
+		failures.append("Teams on with Hot Potato chosen left '%s', not Classic" % server.game_mode())
+	if server.apply_host_command("gamemode", "hot_potato") or server.game_mode() == "hot_potato":
+		failures.append("Hot Potato was accepted while Teams is on")
+	for id: String in ["king_of_the_hill", "sudden_death", ""]:
+		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
+			failures.append("'%s' was refused with Teams on" % id)
+	server.apply_host_command("mode", "ffa")
+	for id: String in ["hot_potato", "king_of_the_hill", "sudden_death", ""]:
+		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
+			failures.append("'%s' was refused in a free-for-all" % id)
+	server.apply_host_command("gamemode", "king_of_the_hill")
+	server.apply_host_command("mode", "teams")
+	if server.game_mode() != "king_of_the_hill":
+		failures.append("switching to Teams dropped King of the Hill to '%s'" % server.game_mode())
+	server.free()
+	HostSettingsScript352.shared().game_mode = ""
+	_scenario_completed = true
+	return failures
+## AC1: the choice is saved with the other host settings and read back.
+func _scenario_mode_choice_persists_with_host_settings() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://scenario_mode_persist.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var first: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	first.path = path
+	first.set_stage_enabled("Flatlands", true)
+	first.set_game_mode("sudden_death")
+	var second: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	second.path = path
+	second.load_settings()
+	if second.game_mode != "sudden_death":
+		failures.append("the saved mode read back as '%s'" % second.game_mode)
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = "user://scenario_mode_persist_missing.cfg"
+	fresh.load_settings()
+	if fresh.game_mode != "":
+		failures.append("a fresh install defaults to '%s', not Classic" % fresh.game_mode)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_scenario_completed = true
+	return failures
+## AC1: the mode chosen when the countdown runs out holds for the whole match;
+## a later pick (refused mid-match) does not change it.
+func _scenario_mode_choice_holds_for_whole_match() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var joined: Array[WebSocketPeer] = await _mode_picker_join(server, failures)
+	if not failures.is_empty():
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[0].send_text(JSON.stringify({"t": "gamemode", "v": "sudden_death"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var begun: bool = false
+	var deadline: int = Time.get_ticks_msec() + BOT_START_MSEC
+	while Time.get_ticks_msec() < deadline and not begun:
+		await _poll_phones(joined, 1)
+		begun = rm.lobby_phase() == "playing"
+	if not begun:
+		failures.append("the match never started ('%s')" % rm.lobby_phase())
+	else:
+		await _await_ticks(10)
+		if rm.game_mode != "sudden_death" or rm.active_game_mode_id() != "sudden_death":
+			failures.append("the round played '%s' / '%s', not Sudden Death" % [rm.game_mode, rm.active_game_mode_id()])
+		joined[0].send_text(JSON.stringify({"t": "gamemode", "v": "king_of_the_hill"}))
+		await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+		if server.game_mode() != "sudden_death" or rm.game_mode != "sudden_death":
+			failures.append("a mid-match pick changed the mode: server '%s', round '%s'" % [server.game_mode(), rm.game_mode])
+	HostSettingsScript352.shared().game_mode = ""
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## AC3: in a Teams King of the Hill, any number of teammates inside hold the
+## hill together for their team, a mix of colours inside contests and freezes
+## it, and hold time banks per team; the winning team's rivals are put out (three players: two Red, one Blue).
+func _scenario_mode_king_of_the_hill_teams_hold_together() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	# Red is slots 0 and 1, Blue slot 2, fixed before the round starts.
+	rm._team_mode = true
+	rm._teams = {0: 0, 1: 0, 2: 1}
+	if not await _mode_started(rig):
+		failures.append("the Teams King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	var away: Array[Vector2] = [Vector2(-900.0, -600.0), Vector2(-700.0, -600.0), Vector2(700.0, -600.0)]
+	for i in 3:
+		players[i].teleport_to(away[i])
+	# Whatever a spawn near the hill banked before the move is not under test.
+	await _await_ticks(3)
+	for team: int in [0, 1]:
+		hill.team_hold[team] = 0.0
+	for slot: int in [0, 1, 2]:
+		hill.hold_time[slot] = 0.0
+	# Both Red teammates inside: Red banks, once for the team, not per player.
+	players[0].teleport_to(hill.hill_position + Vector2(0.0, 40.0))
+	players[1].teleport_to(hill.hill_position + Vector2(0.0, -40.0))
+	await _await_ticks(20)
+	var red: float = hill.team_hold_of(0)
+	if red <= 0.1:
+		failures.append("two Red teammates inside banked %f s for Red" % red)
+	if hill.team_hold_of(1) != 0.0 or hill.hold_of(0) != 0.0 or hill.hold_of(1) != 0.0:
+		failures.append("time went to Blue or to a single player: blue %f, p0 %f" % [hill.team_hold_of(1), hill.hold_of(0)])
+	# A Blue player steps in: contested, everyone's clock frozen.
+	players[2].teleport_to(hill.hill_position + Vector2(40.0, 0.0))
+	await _await_ticks(3)
+	var frozen: float = hill.team_hold_of(0)
+	await _await_ticks(15)
+	if hill.team_hold_of(0) != frozen or hill.team_hold_of(1) != 0.0:
+		failures.append("a mixed hill still banked: red %f -> %f, blue %f" % [frozen, hill.team_hold_of(0), hill.team_hold_of(1)])
+	# Blue leaves; Red resumes from where it was, and reaching the target wins it.
+	players[2].teleport_to(away[2])
+	await _await_ticks(15)
+	if hill.team_hold_of(0) <= frozen + 0.1:
+		failures.append("Red did not resume banking after the contest: %f vs %f" % [hill.team_hold_of(0), frozen])
+	hill.seconds_to_win = hill.team_hold_of(0) + 0.3
+	if not await _await_condition(func() -> bool: return not players[2].alive, 3000):
+		failures.append("Red reached the target but Blue was not eliminated")
+	await _await_ticks(5)
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
+		failures.append("the round scored red %d blue %d, expected 1-0" % [rm.team_score(0), rm.team_score(1)])
+	await _teardown(rig["stage"])
+	return failures
+## AC4: the Rise per mode, from one table: on in Classic, off in King of the
+## Hill and Hot Potato, and in Sudden Death after half the grace period at 1.5x
+## the speed. Checked on the timing a round arms the zone with, and live.
+func _scenario_mode_rise_follows_the_mode() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "res://scenes/stages/Flatlands.tscn"
+	var loop: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
+	var stage: Node = loop["stage"]
+	var rm: Node = stage.get_child(stage.get_child_count() - 1)
+	var timing_classic: Dictionary = rm.kill_zone_rise_timing("")
+	var timing_sd: Dictionary = rm.kill_zone_rise_timing("sudden_death")
+	if not timing_classic["rises"] or absf(timing_classic["grace_sec"] - 40.0) > 0.001 or absf(timing_classic["rise_sec"] - 60.0) > 0.001:
+		failures.append("Classic timing changed: %s" % [timing_classic])
+	if not timing_sd["rises"] or absf(timing_sd["grace_sec"] - 20.0) > 0.001 or absf(timing_sd["rise_sec"] - 40.0) > 0.001:
+		failures.append("Sudden Death should be 20 s grace and 40 s to climb (1.5x), was %s" % [timing_sd])
+	for id: String in ["king_of_the_hill", "hot_potato"]:
+		if rm.kill_zone_rise_timing(id)["rises"]:
+			failures.append("%s has a rise" % id)
+	# Live: Classic and Sudden Death arm the zone, King of the Hill does not.
+	rm.game_mode = "king_of_the_hill"
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("the King of the Hill round never started")
+		await _teardown(stage)
+		return failures
+	await _await_ticks(5)
+	if (instance.get_node("KillZone") as Node2D).is_rising():
+		failures.append("the zone is rising in King of the Hill")
+	await _teardown(stage)
+	var classic: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
+	var classic_stage: Node2D = await _await_live_stage(classic)
+	if classic_stage == null:
+		failures.append("the Classic round never started")
+	elif not (classic_stage.get_node("KillZone") as Node2D).is_rising():
+		failures.append("the zone is not rising in Classic")
+	await _teardown(classic["stage"])
+	var sudden: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
+	var sd_stage: Node = sudden["stage"]
+	sd_stage.get_child(sd_stage.get_child_count() - 1).game_mode = "sudden_death"
+	var sd_instance: Node2D = await _await_live_stage(sudden)
+	if sd_instance == null:
+		failures.append("the Sudden Death round never started")
+	elif not (sd_instance.get_node("KillZone") as Node2D).is_rising():
+		failures.append("the zone is not rising in Sudden Death")
+	await _teardown(sudden["stage"])
+	return failures
+## AC5: a banned modifier is never rolled in its mode (and never forced), while
+## Classic still rolls it.
+func _scenario_mode_banned_modifiers_never_rolled() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, "")
+	var rm: Node = rig["rm"]
+	await _await_ticks(5)
+	var was_enabled: bool = RoundManagerScript.modifier_rolls_enabled
+	RoundManagerScript.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	var bans: Dictionary = {
+		"sudden_death": "double_damage", "hot_potato": "weapon_roulette", "king_of_the_hill": "meteor_shower"}
+	var classic_seen: Dictionary = {}
+	for i in 400:
+		classic_seen[rm._roll_modifier()] = true
+	for id: String in bans:
+		rm.game_mode = id
+		var seen: Dictionary = {}
+		for i in 400:
+			seen[rm._roll_modifier()] = true
+		if seen.has(bans[id]):
+			failures.append("%s rolled the banned %s" % [id, bans[id]])
+		if seen.size() < 8:
+			failures.append("%s rolled only %d kinds of modifier" % [id, seen.size()])
+		if not classic_seen.has(bans[id]):
+			failures.append("Classic never rolled %s in 400 rolls" % bans[id])
+		rm.forced_modifier = bans[id]
+		if rm._roll_modifier() != "":
+			failures.append("%s let the banned %s be forced" % [id, bans[id]])
+		rm.forced_modifier = ""
+	rm.game_mode = ""
+	rm.forced_modifier = "double_damage"
+	if rm._roll_modifier() != "double_damage":
+		failures.append("Classic no longer honours a forced modifier")
+	RoundManagerScript.modifier_rolls_enabled = was_enabled
+	await _teardown(rig["stage"])
+	return failures
+## AC6: the stage title card names the mode and gives its one-line rule, and the
+## lobby's how-to-play panel has one card per mode.
+func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.HOT_POTATO)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(3)
+	var rule: Label = rm.stage_title_rule_label()
+	if rule == null or not rule.visible:
+		failures.append("the title card has no mode line")
+	else:
+		print("      title card mode line: '%s'" % rule.text)
+		if not rule.text.begins_with("Hot Potato") or rule.text.length() <= len("Hot Potato: "):
+			failures.append("the mode line is '%s'" % rule.text)
+	await _teardown(rig["stage"])
+	var loop: Dictionary = _new_lobby_round(2)
+	var lobby_rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
+	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock"]
+	if cards.size() != want.size():
+		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
+	else:
+		for i in want.size():
+			if not cards[i].text.begins_with(want[i]):
+				failures.append("card %d reads '%s', expected it to start '%s'" % [i, cards[i].text, want[i]])
+	await _teardown(loop["stage"])
+	return failures
+# --- Stock mode (issue #354) ---------------------------------------------------
+const StockSettingsScript := preload("res://scripts/HostSettings.gd")
+func _stock_settings(lives: int, limit: int) -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.set_stock_lives(lives)
+	settings.set_stock_time_limit(limit)
+## A Stock round of `count` players (3 at most); `teams` puts them on teams.
+func _stock_rig(count: int, lives: int, limit: int, teams: Dictionary = {}) -> Dictionary:
+	_stock_settings(lives, limit)
+	var rig: Dictionary = _mode_rig(count, GameModesType.STOCK)
+	if not teams.is_empty():
+		rig["rm"]._team_mode = true
+		rig["rm"]._teams = teams
+	return rig
+## The running Stock mode with a short respawn, or null if the round never started.
+func _stock_started(rig: Dictionary) -> Node:
+	if not await _mode_started(rig):
+		return null
+	var mode: Node = rig["rm"].game_mode_node()
+	mode.respawn_sec = 0.3
+	return mode
+func _stock_finish(rig: Dictionary) -> void:
+	_stock_settings(3, 480)
+	await _teardown(rig["stage"])
+## Knocks `player` out and waits for it to come back (it must have a life left).
+func _stock_lose_life(player: RigidBody2D) -> bool:
+	player.eliminate()
+	return await _await_condition(func() -> bool: return player.alive, 3000)
+func _scenario_stock_settings_defaults_clamp_persist_and_steal_message() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stock_settings_354.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	if fresh.stock_lives != 3 or fresh.stock_time_limit != 480:
+		failures.append("defaults were %d lives, %d s; want 3 and 480" % [fresh.stock_lives, fresh.stock_time_limit])
+	fresh.set_stock_lives(0)
+	if fresh.stock_lives != 1:
+		failures.append("0 lives was kept as %d, want clamped to 1" % fresh.stock_lives)
+	fresh.set_stock_lives(99)
+	if fresh.stock_lives != 10:
+		failures.append("99 lives was kept as %d, want clamped to 10" % fresh.stock_lives)
+	fresh.set_stock_lives(7)
+	for seconds: int in [120, 300, 900, 0]:
+		if not fresh.set_stock_time_limit(seconds) or fresh.stock_time_limit != seconds:
+			failures.append("the %d s limit was refused" % seconds)
+	if fresh.set_stock_time_limit(77) or fresh.stock_time_limit != 0:
+		failures.append("a 77 s limit, not on offer, was accepted")
+	fresh.set_stock_time_limit(300)
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.stock_lives != 7 or reloaded.stock_time_limit != 300:
+		failures.append("reloaded %d lives, %d s; want 7 and 300" % [reloaded.stock_lives, reloaded.stock_time_limit])
+	DirAccess.remove_absolute(path)
+	# The host phone's controls and a phone's "Steal a life" tap reach the server.
+	_stock_settings(3, 480)
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stock_lives", 5) or StockSettingsScript.shared().stock_lives != 5:
+		failures.append("the host command did not set 5 lives")
+	if not server.apply_host_command("stock_time", 900) or StockSettingsScript.shared().stock_time_limit != 900:
+		failures.append("the host command did not set the 900 s limit")
+	if server.apply_host_command("stock_time", 61):
+		failures.append("a time limit not on offer was taken")
+	var steals: Array[int] = []
+	server.steal_requested.connect(func(slot: int) -> void: steals.append(slot))
+	server._handle_text(2, JSON.stringify({"t": "steal"}))
+	if steals != [2]:
+		failures.append("a steal tap from slot 2 emitted %s" % [steals])
+	server.free()
+	_stock_settings(3, 480)
+	_scenario_completed = true
+	return failures
+func _scenario_stock_lost_life_respawns_farthest_protected_and_reset() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 2, 0)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	if mode.lives_of(0) != 2:
+		failures.append("a player started with %d lives, want 2" % mode.lives_of(0))
+	players[0].set_weapon_stats(load("res://resources/axe.tres"))
+	players[0].damage = 50.0
+	players[0].eliminate()
+	await _await_ticks(3)
+	if players[0].alive or not mode.is_pending(0) or mode.lives_of(0) != 1:
+		failures.append("after one loss: alive %s, pending %s, lives %d" % [players[0].alive, mode.is_pending(0), mode.lives_of(0)])
+	if not players[1].alive or not players[2].alive or rm.score_of(1) + rm.score_of(2) != 0:
+		failures.append("the round ended when a player still had a life")
+	if rm.ghost_of(0) != null:
+		failures.append("a player with a life left got a ghost")
+	if not await _await_condition(func() -> bool: return players[0].alive, 3000):
+		failures.append("the player never respawned")
+		await _stock_finish(rig)
+		return failures
+	# Whichever spawn it took, no other spawn may be farther from the nearest rival.
+	var gaps: Array[float] = []
+	for spawn: Vector2 in MODE_SPAWNS:
+		var gap: float = INF
+		for other in [1, 2]:
+			gap = minf(gap, spawn.distance_to(players[other].global_position))
+		gaps.append(gap)
+	var chosen: int = -1
+	for k in MODE_SPAWNS.size():
+		if absf(players[0].global_position.x - MODE_SPAWNS[k].x) < 1.0:
+			chosen = k
+	if chosen == -1 or gaps[chosen] < gaps.max() - 0.01:
+		failures.append("respawned at x %.1f; gaps to the nearest rival per spawn were %s" % [players[0].global_position.x, gaps])
+	if players[0].damage != 0.0:
+		failures.append("damage was %.1f after respawn, want 0" % players[0].damage)
+	if players[0].weapon_stats.resource_path != "res://resources/pickaxe.tres":
+		failures.append("respawned holding %s, want the pickaxe" % players[0].weapon_stats.resource_path)
+	if not players[0].spawn_protected:
+		failures.append("the respawned player had no spawn protection")
+	var before: float = players[0].damage
+	players[0].take_damage(30.0)
+	if players[0].damage != before:
+		failures.append("a protected respawn took damage")
+	var roster: Node = rig["roster"]
+	var last_damage: float = -1.0
+	for entry: Array in roster.damage_sent:
+		if entry[0] == 0:
+			last_damage = float(entry[1])
+	if last_damage != 0.0:
+		failures.append("the phone's damage bar was last told %.2f, want 0" % last_damage)
+	await _await_msec(1500)
+	if players[0].spawn_protected:
+		failures.append("spawn protection never ended")
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_out_of_lives_is_eliminated_and_ghosted() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 1, 0)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	players[0].eliminate()
+	await _await_ticks(6)
+	if players[0].alive or mode.is_pending(0) or mode.lives_of(0) != 0:
+		failures.append("out of lives: alive %s, pending %s, lives %d" % [players[0].alive, mode.is_pending(0), mode.lives_of(0)])
+	await _await_msec(600)
+	if players[0].alive:
+		failures.append("a player with no lives left came back")
+	if rm.ghost_of(0) == null:
+		failures.append("the player out of lives got no KO ghost")
+	if mode.can_steal(0):
+		failures.append("a free-for-all player could steal a life")
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm.score_of(2) == 1, 3000):
+		failures.append("the last player with a life did not win the round")
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_has_no_rise() -> Array[String]:
+	var failures: Array[String] = []
+	_stock_settings(3, 0)
+	var path: String = "res://scenes/stages/Flatlands.tscn"
+	var loop: Dictionary = _new_rising_round(PackedStringArray([path]), RISE_TEST_GRACE_SEC, RISE_TEST_RISE_SEC)
+	var stage: Node2D = loop["stage"]
+	stage.get_child(stage.get_child_count() - 1).game_mode = GameModesType.STOCK
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("the Stock round never started on %s" % path)
+		await _stock_finish({"stage": stage})
+		return failures
+	var authored_y: float = _authored_kill_zone_y(path)
+	await _await_msec(int((RISE_TEST_GRACE_SEC + RISE_TEST_RISE_SEC) * 1000.0) + 500)
+	var zone: Node2D = instance.get_node("KillZone")
+	if absf(zone.position.y - authored_y) > 0.5:
+		failures.append("the kill zone rose in Stock: y %.1f, authored %.1f" % [zone.position.y, authored_y])
+	await _stock_finish({"stage": stage})
+	return failures
+func _scenario_stock_teams_steal_a_life_and_team_loss() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var roster: Node = rig["roster"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[0])
+	players[0].eliminate()
+	await _await_ticks(4)
+	if mode.lives_of(0) != 0 or players[0].alive:
+		failures.append("slot 0 should be out after two losses of two lives")
+	if rm.lobby_phase() == "round_end" or rm.score_of(1) != 0:
+		failures.append("the round ended with team Red's slot 1 still on two lives")
+	if not mode.can_steal(0):
+		failures.append("an eliminated player with a 2-life team-mate could not steal")
+	if mode.can_steal(2):
+		failures.append("a player on a one-player team could steal")
+	var told: Array = []
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 0:
+			told = entry
+	if told != [0, 0, true]:
+		failures.append("slot 0's phone was last told %s, want [0, 0, true]" % [told])
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	if mode.lives_of(1) != 1 or mode.lives_of(0) != 1 or not players[0].alive:
+		failures.append("after the steal: slot 1 has %d, slot 0 has %d, alive %s" % [mode.lives_of(1), mode.lives_of(0), players[0].alive])
+	if players[0].damage != 0.0 or not players[0].spawn_protected:
+		failures.append("the stealer came back with damage %.1f, protected %s" % [players[0].damage, players[0].spawn_protected])
+	if mode.can_steal(0) or mode.steal_life(0):
+		failures.append("a living player stole a life")
+	# Blue's only player has two lives; losing both loses the team's round.
+	await _stock_lose_life(players[2])
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
+		failures.append("Blue out of lives did not give Red the round (Red %d, Blue %d)" % [rm.team_score(0), rm.team_score(1)])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_timeout_most_lives_wins_tie_overtime() -> Array[String]:
+	var failures: Array[String] = []
+	# Individual: lives 3 / 2 / 1 -- the one with 3 wins when time is up.
+	var rig: Dictionary = _stock_rig(3, 3, 120)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	await _stock_lose_life(players[2])
+	await _stock_lose_life(players[2])
+	mode.time_left = 125.0
+	await _await_ticks(2)
+	if mode.clock_text() != "2:05" or mode.clock_pulsing():
+		failures.append("clock read '%s', pulsing %s; want 2:05, not pulsing" % [mode.clock_text(), mode.clock_pulsing()])
+	mode.time_left = 9.5
+	await _await_ticks(2)
+	if not mode.clock_pulsing():
+		failures.append("the clock did not pulse in the last 10 s")
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+		failures.append("the player with most lives did not win at the timeout")
+	await _stock_finish(rig)
+	# A tie: 3 / 2 / 3 -- slots 0 and 2 play a one-hit overtime, slot 1 is out.
+	rig = _stock_rig(3, 3, 120)
+	rm = rig["rm"]
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the tie round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+		failures.append("a tie at the timeout did not start an overtime")
+	else:
+		await _await_ticks(4)
+		if players[1].alive or not players[0].alive or not players[2].alive:
+			failures.append("overtime: alive %s %s %s, want only slots 0 and 2" % [players[0].alive, players[1].alive, players[2].alive])
+		if mode.clock_text() != "OVERTIME":
+			failures.append("the clock read '%s' in overtime" % mode.clock_text())
+		players[0].strike_landed.emit(players[2], 5.0, Vector2.ZERO, false)
+		if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+			failures.append("one hit in overtime did not decide the round")
+		if players[2].alive:
+			failures.append("the overtime victim came back (a respawn in a one-hit overtime)")
+	await _stock_finish(rig)
+	# Teams: a team's lives add up. Red 3 + 3 beats Blue 3 though slot 0 ties slot 2.
+	rig = _stock_rig(3, 3, 120, {0: 0, 1: 0, 2: 1})
+	rm = rig["rm"]
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Teams timeout round never started")
+		await _stock_finish(rig)
+		return failures
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
+		failures.append("the team with more lives in total did not win (Red %d, Blue %d)" % [rm.team_score(0), rm.team_score(1)])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_lives_shown_as_pips_and_on_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 3, 0)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var roster: Node = rig["roster"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	await _await_ticks(6)
+	var pips: Array = rm._name_tags.pip_counts() if rm._name_tags != null else []
+	if pips.size() != 3 or pips.any(func(entry: Array) -> bool: return entry[1] != 3):
+		failures.append("pips under the name tags were %s, want three players on 3" % [pips])
+	var told: Array = []
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 1:
+			told = entry
+	if told != [1, 3, false]:
+		failures.append("slot 1's phone was last told %s, want [1, 3, false]" % [told])
+	await _stock_lose_life(players[1])
+	await _await_ticks(6)
+	pips = rm._name_tags.pip_counts()
+	var slot1: Array = pips.filter(func(entry: Array) -> bool: return entry[0] == 1)
+	if slot1.size() != 1 or slot1[0][1] != 2:
+		failures.append("after a loss slot 1's pips were %s, want 2" % [slot1])
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 1:
+			told = entry
+	if told != [1, 2, false]:
+		failures.append("after a loss slot 1's phone was told %s, want [1, 2, false]" % [told])
+	rm._end_game_mode()
+	var hidden: Array = []
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 1:
+			hidden = entry
+	if hidden != [1, -1, false]:
+		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [hidden])
+	await _stock_finish(rig)
+	return failures
 ## Issue #353: a mode rig of `count` players with a bot driving the last one.
 ## Every player is put on the arena floor at `at[i]`, and the mode is held
 ## open (a huge hill goal or fuse) so the round does not end under the probe.
@@ -27897,4 +28890,300 @@ func _scenario_bot_sudden_death_plays_as_classic() -> Array[String]:
 	if rival.damage <= 0.0:
 		failures.append("the bot never hunted the rival in Sudden Death")
 	await _teardown(rig["stage"])
+	return failures
+## Issue #369: streamer mode. A real Main scene taken online to an in-process
+## relay, its lobby screen and join corner read with "Hide room code" `hide`.
+const STREAMER_HIDDEN_TEXT_369: String = "Code hidden: see host phone"
+func _streamer_rig_369(hide: bool, failures: Array[String]) -> Dictionary:
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		return {}
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	_sfx().set_hide_room_code(hide)
+	var rig := {"main": main, "server": server, "relay": relay, "old_setting": old_setting, "code": ""}
+	server.apply_host_command("online", true)
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the host never came online")
+	rig["code"] = server.online_room_code()
+	await _await_ticks(5)
+	return rig
+func _streamer_close_369(rig: Dictionary) -> void:
+	_sfx().set_hide_room_code(false)
+	ProjectSettings.set_setting("pickfight/relay_url", rig["old_setting"])
+	rig["server"].apply_host_command("online", false)
+	_relay_stop(rig["relay"], [])
+	await _teardown(rig["main"])
+func _scenario_streamer_mode_hides_room_code_and_qr_when_on() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var lobby: Object = rig["main"].get_node("RoundManager").get("_lobby_screen")
+	var room: Label = lobby.get("_room_label") as Label
+	var url: Label = lobby.get("_lobby_url") as Label
+	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
+	if room.visible and room.text.contains(rig["code"]):
+		failures.append("the lobby still shows the room code '%s'" % room.text)
+	if qr.visible:
+		failures.append("the lobby still shows the join QR")
+	if url.text != STREAMER_HIDDEN_TEXT_369:
+		failures.append("the lobby URL line reads '%s', wanted the hidden notice" % url.text)
+	var corner: Label = server.join_label()
+	if corner.text.contains(rig["code"]) or corner.text.contains(server.join_url):
+		failures.append("the in-round join label still shows the code or URL: '%s'" % corner.text)
+	var corner_qr: TextureRect = server.join_qr_rect()
+	server.set_join_corner_visible(true)
+	if corner_qr.visible:
+		failures.append("the in-round join QR shows with the room code hidden")
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_shows_room_code_and_qr_when_off() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(false, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var lobby: Object = rig["main"].get_node("RoundManager").get("_lobby_screen")
+	var room: Label = lobby.get("_room_label") as Label
+	var url: Label = lobby.get("_lobby_url") as Label
+	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
+	if not room.visible or room.text != "Online: " + rig["code"]:
+		failures.append("the lobby does not show the room code (visible %s, '%s')" % [room.visible, room.text])
+	if url.text != server.join_url:
+		failures.append("the lobby URL line reads '%s', wanted %s" % [url.text, server.join_url])
+	if server.join_qr_texture != null and not qr.visible:
+		failures.append("the lobby hides the join QR with streamer mode off")
+	var corner: Label = server.join_label()
+	if not corner.text.contains("Online: " + rig["code"]):
+		failures.append("the in-round join label lost the code: '%s'" % corner.text)
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_setting_persists_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx.get("hide_room_code") != false:
+		failures.append("Hide room code is not off by default")
+	var was: Dictionary = {"path": sfx.settings_path, "persist": sfx.persist_settings, "hide": sfx.get("hide_room_code")}
+	var path: String = OS.get_temp_dir().path_join("pickfight_streamer_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_hide_room_code(true)
+	sfx.hide_room_code = false
+	sfx.load_settings()
+	if sfx.hide_room_code != true:
+		failures.append("Hide room code not remembered after a reload")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	sfx.persist_settings = was["persist"]
+	sfx.hide_room_code = was["hide"]
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_host_phone_receives_room_code() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(true, failures)
+	if rig.is_empty():
+		return failures
+	var phones: Array[WebSocketPeer] = []
+	var host := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(host, "streamer-host", phones)
+	phones.append(host)
+	if joined["slot"] != 0:
+		failures.append("the host phone got slot %s" % joined["slot"])
+	var lobby: Dictionary = {}
+	for i in 30:
+		await process_frame
+		lobby = _latest_lobby_msg(host, lobby)
+	if lobby.get("room", "") != rig["code"]:
+		failures.append("the host phone was told room '%s', wanted '%s'" % [lobby.get("room", ""), rig["code"]])
+	await _close_phones(phones)
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+## Issue #359: the lobby is the title screen, and it shows the wordmark: a
+## visible "Logo" TextureRect with a loaded texture, as wide as the 1600 px
+## logo art. The victory screen carries a smaller one, and its podium blocks
+## are flat panels in the player's colour.
+func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var screen: Node = rm._lobby_screen
+	var logo: TextureRect = screen.lobby_logo()
+	if logo == null:
+		failures.append("the lobby has no logo node")
+	else:
+		if not logo.is_visible_in_tree():
+			failures.append("the lobby's logo is not visible")
+		if logo.texture == null:
+			failures.append("the lobby's logo has no texture loaded")
+		else:
+			print("      lobby logo texture %s" % logo.texture.get_size())
+			if logo.texture.get_width() < 1000:
+				failures.append("the logo texture is only %d px wide" % logo.texture.get_width())
+	var victory_logo: TextureRect = screen.victory_logo()
+	if victory_logo == null or victory_logo.texture == null:
+		failures.append("the victory screen has no logo with a texture")
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
+func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = disabled
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var rm: Node = rig["rm"]
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rm.stage_scenes = _named_stub_stages(["StageA", "StageB", "StageC"], spawns)
+	settings.stock_stage = pick
+	return rig
+## Stub stages whose `resource_path` carries their name, as the rotation and
+## the host settings identify a stage by its file's base name.
+func _named_stub_stages(names: Array[String], spawns: Array[Vector2]) -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	for stage_name: String in names:
+		var scene: PackedScene = _make_stub_stage(stage_name, spawns)
+		scene.resource_path = "res://tools/stub_stages/%s.tscn" % stage_name
+		scenes.append(scene)
+	return scenes
+const StageRotationScript := preload("res://scripts/StageRotation.gd")
+func _stock_stage_reset() -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = PackedStringArray()
+	settings.stock_stage = ""
+	_stock_settings(3, 480)
+## The stage names RoundManager plays over `rounds` consecutive rounds.
+func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
+	var names: Array[String] = []
+	for _r in rounds:
+		rm.call("_swap_stage")
+		names.append(str(rm.get("_current_stage").get_meta("stub_stage_name")))
+	return names
+func _scenario_stock_plays_the_picked_stage_every_round() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("StageB")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	var names: Array[String] = _stock_stage_names(rm, 6)
+	for n: String in names:
+		if n != "StageB":
+			failures.append("Stock played %s; the pick was StageB (all rounds: %s)" % [n, names])
+			break
+	# Another mode keeps rotating: not the same stage six times in a row.
+	rm.game_mode = ""
+	rm.call("_begin_match")
+	var party: Array[String] = _stock_stage_names(rm, 6)
+	if party.count(party[0]) == party.size():
+		failures.append("Classic kept playing %s; the rotation was meant to run" % party[0])
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[String]:
+	var failures: Array[String] = []
+	var seen: Dictionary = {}
+	for _attempt in 3:
+		var rig: Dictionary = _stock_stage_rig("", PackedStringArray(["StageA"]))
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		var names: Array[String] = _stock_stage_names(rm, 4)
+		if names.has("StageA"):
+			failures.append("Random picked the switched-off StageA: %s" % [names])
+		if names.count(names[0]) != names.size():
+			failures.append("Random changed stage inside one match: %s" % [names])
+		seen[names[0]] = true
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	if seen.is_empty():
+		failures.append("Random never picked a stage")
+	# A pick the host switched off falls back to an enabled stage.
+	var rig2: Dictionary = _stock_stage_rig("StageC", PackedStringArray(["StageC"]))
+	rig2["rm"].set_process(false)
+	var fallback: Array[String] = _stock_stage_names(rig2["rm"], 2)
+	if fallback.has("StageC"):
+		failures.append("a switched-off pick was still played: %s" % [fallback])
+	_stock_stage_reset()
+	await _teardown(rig2["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_never_rolls_a_modifier() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	rm.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	for _i in 40:
+		var rolled: String = rm.call("_roll_modifier")
+		if rolled != "":
+			failures.append("Stock rolled the modifier '%s'" % rolled)
+			break
+	rm.forced_modifier = "double_damage"
+	if rm.call("_roll_modifier") != "":
+		failures.append("a forced modifier was still rolled in Stock")
+	rm.forced_modifier = ""
+	rm.game_mode = ""
+	var any: bool = false
+	for _i in 40:
+		if rm.call("_roll_modifier") != "":
+			any = true
+	if not any:
+		failures.append("Classic rolled no modifier at chance 1.0; the check proves nothing")
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stock_stage_375.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	fresh.known_stages = PackedStringArray(["StageA", "StageB"])
+	if fresh.stock_stage != "":
+		failures.append("the default pick was '%s', want Random" % fresh.stock_stage)
+	if fresh.set_stock_stage("Nowhere") or fresh.stock_stage != "":
+		failures.append("an unknown stage was accepted")
+	if not fresh.set_stock_stage("StageB"):
+		failures.append("a known stage was refused")
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.stock_stage != "StageB":
+		failures.append("reloaded pick '%s', want StageB" % reloaded.stock_stage)
+	DirAccess.remove_absolute(path)
+	# The host phone's message reaches the shared settings.
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.known_stages = PackedStringArray(["StageA", "StageB"])
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stock_stage", "StageA") or shared.stock_stage != "StageA":
+		failures.append("the host command did not set StageA")
+	if server.apply_host_command("stock_stage", "Nowhere") or shared.stock_stage != "StageA":
+		failures.append("the host command took an unknown stage")
+	server.free()
+	# The picker lists enabled stages only (no competitive stage exists yet).
+	var rotation: RefCounted = StageRotationScript.new()
+	rotation.settings = StockSettingsScript.new()
+	rotation.settings.persist = false
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rotation.scenes = _named_stub_stages(["StageA", "StageB"], spawns)
+	rotation.settings.set_stage_enabled("StageA", false)
+	var rows: Array = rotation.picker_rows()
+	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
+		failures.append("the picker rows were %s" % [rows])
+	_stock_stage_reset()
+	_scenario_completed = true
 	return failures
