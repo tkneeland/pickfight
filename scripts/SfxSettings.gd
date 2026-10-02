@@ -275,7 +275,9 @@ func refresh() -> void:
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
-	_notice.visible = not host.telemetry_notice_seen
+	# Issue #461: the owner wants telemetry unnoticed by default, so the #372
+	# first-launch notice never shows; the Settings toggle is the only control.
+	_notice.visible = false
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))

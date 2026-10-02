@@ -30751,7 +30751,8 @@ func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
 				failures.append("unticking the box left sharing on")
 	_scenario_completed = true
 	return failures
-## Issue #372: the first-launch notice shows until dismissed or acted on, then never.
+## Issue #372, amended by #461: the first-launch notice never shows, on a
+## fresh settings file or after, and sharing stays on by default.
 func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -30760,41 +30761,15 @@ func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	await physics_frame
 	var ui: CanvasLayer = sfx.build_settings_ui()
 	await physics_frame
-	var path: String = OS.get_temp_dir().path_join("pf_372_notice_%d.cfg" % OS.get_process_id())
-	DirAccess.remove_absolute(path)
-	var host: RefCounted = HostSettingsScript372.new()
-	host.path = path
-	ui.host = host
+	var fresh: RefCounted = HostSettingsScript372.new()
+	fresh.persist = false
+	ui.host = fresh
 	ui.refresh()
 	var notice: Control = ui.telemetry_notice()
-	if notice == null or not notice.visible:
-		failures.append("the notice was not shown on first launch")
-	elif ui.telemetry_notice_label().text != "Pickfight sends anonymous match stats to help balance the game":
-		failures.append("notice text was '%s'" % ui.telemetry_notice_label().text)
-	ui.telemetry_dismiss_button().pressed.emit()
-	if notice.visible:
-		failures.append("the notice stayed after Dismiss")
-	if not host.share_stats:
-		failures.append("Dismiss turned sharing off")
-	var again: RefCounted = HostSettingsScript372.new()
-	again.path = path
-	again.load_settings()
-	if not again.telemetry_notice_seen:
-		failures.append("the dismissal did not persist")
-	ui.host = again
-	ui.refresh()
-	if notice.visible:
-		failures.append("the notice came back on the next launch")
-	DirAccess.remove_absolute(path)
-	var second: RefCounted = HostSettingsScript372.new()
-	second.persist = false
-	ui.host = second
-	ui.refresh()
-	if not notice.visible:
-		failures.append("a fresh settings file should show the notice again")
-	ui.telemetry_turn_off_button().pressed.emit()
-	if notice.visible or second.share_stats or not second.telemetry_notice_seen:
-		failures.append("Turn off should hide the notice, switch sharing off and mark it seen")
+	if notice != null and notice.visible:
+		failures.append("the first-launch notice showed on a fresh settings file (#461: never)")
+	if not fresh.share_stats:
+		failures.append("sharing should default to on")
 	_scenario_completed = true
 	return failures
 func _telemetry_relay_record_372() -> Dictionary:
@@ -32259,6 +32234,7 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	await _teardown(rig["main"])
 	return failures
 func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[String]:
+	# Amended by #461: the notice never shows, so View opens the panel as usual.
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
 	if sfx == null:
@@ -32270,20 +32246,8 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 	var was_seen: bool = ui.host.telemetry_notice_seen
 	ui.host.telemetry_notice_seen = false
 	ui.refresh()
-	if not ui.telemetry_notice().visible:
-		failures.append("the notice is not showing")
-	await _pad_tap_368(0, JOY_BUTTON_BACK)
-	if ui.is_open():
-		failures.append("View opened the panel while the notice was up; it should focus the notice")
-	if get_root().gui_get_focus_owner() != ui.telemetry_dismiss_button():
-		failures.append("View did not focus the notice's OK button (focus is %s)" % get_root().gui_get_focus_owner())
-	await _pad_tap_368(0, JOY_BUTTON_A)
 	if ui.telemetry_notice().visible:
-		failures.append("A did not dismiss the notice")
-	if PadMenuScript368.is_open():
-		failures.append("the gamepad menu stayed open after the notice went")
-	if ui.telemetry_dismiss_button().focus_mode != Control.FOCUS_NONE:
-		failures.append("the notice buttons stayed focusable")
+		failures.append("the first-launch notice showed (#461: never)")
 	ui.host.telemetry_notice_seen = was_seen
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
