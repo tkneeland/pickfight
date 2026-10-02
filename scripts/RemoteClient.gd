@@ -179,6 +179,8 @@ static func reason_text(reason: String) -> String:
 			return TranslationServer.translate("JOIN_ERR_NO_SLOT")
 		"no hello":
 			return TranslationServer.translate("JOIN_ERR_NO_HELLO")
+		"couch match", "room closed": # #435: ControllerServer.COUCH_MATCH_REASON, ROOM_CLOSED_REASON
+			return TranslationServer.translate("JOIN_ERR_COUCH" if reason == "couch match" else "JOIN_ERR_ROOM_CLOSED")
 	return TranslationServer.translate("JOIN_ERR_DISCONNECTED") % reason.left(60)
 
 # --- Lifecycle -------------------------------------------------------------------
@@ -210,7 +212,31 @@ func _process(_delta: float) -> void:
 
 func _physics_process(_delta: float) -> void:
 	if state == State.PLAYING:
+		_pad_input()
 		_send_input()
+
+## #435: a gamepad's right stick drives the arm too, as a gamepad seat's does on
+## the host (#261). While the stick is out it sets the vector; let go, and the
+## arm rests until the stick or the mouse moves again.
+var test_pad_stick: Variant = null # a Vector2 here stands in for a real pad (headless has none)
+var _pad_driving: bool = false
+
+func _pad_input() -> void:
+	var stick := Vector2.ZERO
+	if test_pad_stick is Vector2:
+		stick = ControllerServerScript.stick_vector(test_pad_stick)
+	else:
+		for device: int in Input.get_connected_joypads():
+			stick = ControllerServerScript.stick_vector(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)))
+			if stick != Vector2.ZERO:
+				break
+	if stick != Vector2.ZERO:
+		input_vector = stick
+		_pad_driving = true
+	elif _pad_driving:
+		_pad_driving = false
+		_mouse.reset()
+		input_vector = Vector2.ZERO
 
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:

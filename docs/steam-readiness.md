@@ -13,7 +13,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Price | $4.99 |
 | Name | "Pickfight" (one word); open to change. 2026-10-01 search found no Steam title named Pickfight or Pick Fight; nearest is "Pickup n' Fight" on itch (free, small). Re-check at name lock. |
 | Language | English only at launch; keep user-facing strings in one place for later translation (#258 grill) |
-| Playing without a phone | Gamepad (right stick = arm, relative vector) plus the host-PC mouse seat; no shared keyboard |
+| Playing without a phone | Gamepad (right stick = arm, relative vector) in either match kind; in an Online or Solo match the host-PC mouse seat is claimed by itself (#435: no "Play on this PC" toggle); no shared keyboard |
 | Online | Keep Fly relay and room codes for itch; Steam builds add Steam lobbies and friend invites over the same relay (#298) |
 | macOS signing | At Steam launch; friends use right-click, Open until then |
 | Achievements | Low priority |
