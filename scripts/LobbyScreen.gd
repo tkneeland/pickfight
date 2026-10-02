@@ -60,6 +60,11 @@ const HOW_TO_PLAY_LINES: PackedStringArray = [
 ## volume sliders, boxes and button, about 265 px of the 900 px screen)
 ## never reaches a caption.
 const SETTINGS_CORNER_RESERVE_PX: int = 280
+## The lobby's mode-card grid (#425): this many rows, this wide, each card this tall, so the QR above never shrinks for a new card.
+const MODE_GRID_ROWS: int = 4
+const MODE_GRID_WIDTH_PX: float = 436.0
+const MODE_CARD_HEIGHT_PX: float = 49.0
+const MODE_CARD_GAP_PX: int = 8
 const HOW_TO_PLAY_KINDS: Array[int] = [
 	HowToPlayDemoScript.Kind.SWING,
 	HowToPlayDemoScript.Kind.CLIMB,
@@ -78,6 +83,7 @@ var _lobby_target_label: Label
 var _lobby_qr: TextureRect
 var _lobby_url: Label
 var _lobby_right: VBoxContainer
+var _mode_grid: GridContainer
 var _victory_title: Label
 var _podium: HBoxContainer
 var _how_to_play: Control
@@ -173,6 +179,24 @@ func mode_cards() -> Array[Label]:
 			if child.has_meta("mode_card"):
 				out.append(child as Label)
 	return out
+
+## Adds one mode card to the lobby's grid (#425). The grid keeps `MODE_GRID_ROWS` rows and opens
+## a column when the rows are full, so an added card never makes the column above it taller.
+func append_mode_card(text: String) -> Label:
+	var card: Label = _big_label(text, DECK_MIN_FONT_SIZE, Color(0.8, 0.82, 0.88))
+	card.set_meta("mode_card", true)
+	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card.max_lines_visible = 2
+	card.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	card.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_mode_grid.add_child(card)
+	var columns: int = maxi(1, ceili(float(_mode_grid.get_child_count()) / float(MODE_GRID_ROWS)))
+	_mode_grid.columns = columns
+	# The grid is as wide as it was for two columns, so a third column narrows the cards instead of the room around it.
+	var width: float = floorf((MODE_GRID_WIDTH_PX - MODE_CARD_GAP_PX * (columns - 1)) / columns)
+	for each: Node in _mode_grid.get_children():
+		(each as Label).custom_minimum_size = Vector2(width, MODE_CARD_HEIGHT_PX)
+	return card
 
 ## The how-to-play demos running now: four while the lobby shows, none
 ## otherwise.
@@ -450,7 +474,7 @@ func build_panels() -> void:
 	columns.add_child(right)
 	_lobby_qr = TextureRect.new()
 	_lobby_qr.name = "JoinQr"
-	_lobby_qr.custom_minimum_size = Vector2(320, 320) # was 372; the 16 px mode cards (#368) and the CTF card (#403) needed the room
+	_lobby_qr.custom_minimum_size = Vector2(340, 340) # 372, then 320 for the 16 px mode cards (#368) and CTF (#403); the card grid (#425) frees the room
 	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -459,14 +483,15 @@ func build_panels() -> void:
 	right.add_child(_lobby_url)
 	# One card per game mode (#352), from `GameModes.TABLE`, under the QR:
 	# the how-to-play column is already as tall as the screen allows.
-	var cards := VBoxContainer.new()
-	cards.name = "ModeCards"
-	cards.add_theme_constant_override("separation", 0)
-	right.add_child(cards)
+	_mode_grid = GridContainer.new()
+	_mode_grid.name = "ModeCards"
+	_mode_grid.add_theme_constant_override("h_separation", MODE_CARD_GAP_PX)
+	_mode_grid.add_theme_constant_override("v_separation", 0)
+	# Fixed height for the rows (#425): a new card fills a free cell or opens a new column, so it never pushes the QR.
+	_mode_grid.custom_minimum_size.y = MODE_GRID_ROWS * MODE_CARD_HEIGHT_PX
+	right.add_child(_mode_grid)
 	for row: Dictionary in GameModesScript.TABLE:
-		var card: Label = _big_label("%s: %s" % [GameModesScript.display_name(row["id"]), GameModesScript.rule_line(row["id"])], DECK_MIN_FONT_SIZE, Color(0.8, 0.82, 0.88))
-		card.set_meta("mode_card", true)
-		cards.add_child(card)
+		append_mode_card("%s: %s" % [GameModesScript.display_name(row["id"]), GameModesScript.rule_line(row["id"])])
 	# A column of its own, beside the QR and never over it (#219).
 	# Clear of the Settings corner below it (#230).
 	_how_to_play = _build_how_to_play()
@@ -630,6 +655,7 @@ const CONTROL_KEYS: Dictionary = {
 	"online": KEY_O, "pc_seat": KEY_P, "mode": KEY_T, "target_down": KEY_MINUS,
 	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
 }
+const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 
 var _server: Object = null
@@ -669,7 +695,10 @@ func attach_controls(server: Object) -> void:
 	box.add_child(target_row)
 	target_row.add_child(_control_button("target_down", tr("HOST_FIRST_TO_DOWN")))
 	target_row.add_child(_control_button("target_up", "+"))
-	box.add_child(_control_button("start", tr("HOST_START_MATCH")))
+	# Start shares the First-to row (#425), which buys the room for the mode-card grid and the 340 px QR.
+	var start_button: Button = _control_button("start", tr("HOST_START_MATCH"))
+	start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	target_row.add_child(start_button)
 	box.add_child(_control_button("join", tr("HOST_JOIN_ONLINE")))
 	refresh_controls()
 
@@ -678,7 +707,7 @@ func _control_button(id: String, text: String) -> Button:
 	button.name = id
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 26)
+	button.add_theme_font_size_override("font_size", CONTROL_BUTTON_FONT_SIZE)
 	button.pressed.connect(press_control.bind(id))
 	_controls[id] = button
 	return button
@@ -781,7 +810,7 @@ const PAD_ORDER: Array[String] = ["online", "pc_seat", "mode", "target_down", "t
 ## Explicit D-pad links: down the column, with First-to's minus and plus side
 ## by side. Geometric neighbours skip the small minus button.
 func _chain_pad_focus() -> void:
-	var column: Array[String] = ["online", "pc_seat", "mode", "target_down", "start", "join"]
+	var column: Array[String] = ["online", "pc_seat", "mode", "target_down", "join"]
 	var buttons: Array[Button] = []
 	for id: String in column:
 		buttons.append(_controls[id])
@@ -795,7 +824,13 @@ func _chain_pad_focus() -> void:
 	down.focus_neighbor_right = down.get_path_to(up)
 	up.focus_neighbor_left = up.get_path_to(down)
 	up.focus_neighbor_top = up.get_path_to(_controls["mode"])
-	up.focus_neighbor_bottom = up.get_path_to(_controls["start"])
+	up.focus_neighbor_bottom = up.get_path_to(_controls["join"])
+	# Start sits right of the plus (#425): left goes back to it, up to Mode, down to Join.
+	var start: Button = _controls["start"]
+	up.focus_neighbor_right = up.get_path_to(start)
+	start.focus_neighbor_left = start.get_path_to(up)
+	start.focus_neighbor_top = start.get_path_to(_controls["mode"])
+	start.focus_neighbor_bottom = start.get_path_to(_controls["join"])
 
 func set_pad_menu(on: bool) -> void:
 	if on == _pad_menu_open or _server == null:
