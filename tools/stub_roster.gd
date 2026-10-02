@@ -31,3 +31,19 @@ var buzzes: Array = []
 
 func send_buzz(slot: int, kind: String) -> void:
 	buzzes.append([slot, kind])
+
+## Every `send_lives()` call as `[slot, lives, can_steal]` (Stock, #354), and
+## `send_damage()` as `[slot, fraction]`, for the scenarios.
+var lives_sent: Array = []
+var damage_sent: Array = []
+
+func send_lives(slot: int, lives: int, can_steal: bool) -> void:
+	lives_sent.append([slot, lives, can_steal])
+
+func send_damage(slot: int, fraction: float) -> void:
+	for i in range(damage_sent.size() - 1, -1, -1):
+		if damage_sent[i][0] == slot:
+			if is_equal_approx(float(damage_sent[i][1]), fraction):
+				return
+			break
+	damage_sent.append([slot, fraction])

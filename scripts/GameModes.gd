@@ -14,12 +14,14 @@ extends RefCounted
 const KING_OF_THE_HILL: String = "king_of_the_hill"
 const SUDDEN_DEATH: String = "sudden_death"
 const HOT_POTATO: String = "hot_potato"
+const STOCK: String = "stock"
 
-const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO]
+const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO, STOCK]
 
 const KingOfTheHillScript := preload("res://scripts/KingOfTheHill.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const HotPotatoScript := preload("res://scripts/HotPotato.gd")
+const StockScript := preload("res://scripts/Stock.gd")
 
 ## A fresh mode node for `id`, or null for "" or an unknown id.
 static func create(id: String) -> Node:
@@ -30,4 +32,6 @@ static func create(id: String) -> Node:
 			return SuddenDeathScript.new()
 		HOT_POTATO:
 			return HotPotatoScript.new()
+		STOCK:
+			return StockScript.new()
 	return null
