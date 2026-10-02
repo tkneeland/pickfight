@@ -159,10 +159,17 @@ func _refill_bag(avoid: int) -> void:
 		bag.assign(rare_dropped)
 	_add_weighted_copies()
 	if bag.size() > 1 and bag[0] == avoid:
-		var swap_with: int = 1 + rng.randi() % (bag.size() - 1)
-		var tmp: int = bag[0]
-		bag[0] = bag[swap_with]
-		bag[swap_with] = tmp
+		# Weighted copies (#373) mean `avoid` can sit at other positions too, so
+		# only swap with one holding a different stage (#377).
+		var swaps: Array[int] = []
+		for pos in range(1, bag.size()):
+			if bag[pos] != avoid:
+				swaps.append(pos)
+		if not swaps.is_empty():
+			var swap_with: int = swaps[rng.randi() % swaps.size()]
+			var tmp: int = bag[0]
+			bag[0] = bag[swap_with]
+			bag[swap_with] = tmp
 
 ## Stages favoured by this mode (#373; a rarer one is thinned in `_refill_bag`): a stage whose `mode_weights` entry for
 ## `mode_id` rounds to n > 1 is dealt n times per bag instead of once. The

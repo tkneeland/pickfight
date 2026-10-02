@@ -24,6 +24,17 @@ var winner_slot: int = -1
 var team_hold: Dictionary = {}
 ## The team that reached `seconds_to_win`, or -1.
 var winner_team: int = -1
+## Moving hill (#377): on a stage with `hill_moves`, the hill hops to the next
+## of the stage's hill spots every `hill_move_interval` seconds, and
+## `hill_warning` is true for the last `hill_warn_sec` before it does, with a
+## ring drawn on the spot it is heading for.
+var hill_move_interval: float = 30.0
+var hill_warn_sec: float = 3.0
+var hill_warning: bool = false
+var hill_spots: Array[Vector2] = []
+var hill_moves: bool = false
+var _spot_index: int = 0
+var _since_move: float = 0.0
 var _won: bool = false
 var _slots: Array[int] = []
 var _active: bool = false
@@ -40,6 +51,7 @@ func start_round(slots: Array[int]) -> void:
 	team_hold.clear()
 	for slot: int in _slots:
 		hold_time[slot] = 0.0
+	_load_stage_hill()
 	if hill_position == Vector2.ZERO and round_manager != null:
 		var points: Array[Vector2] = round_manager._stage_spawn_points
 		if not points.is_empty():
@@ -49,6 +61,40 @@ func start_round(slots: Array[int]) -> void:
 			hill_position = sum / float(points.size())
 	_active = true
 	queue_redraw()
+
+## Reads the stage's hill spots (#377): the hill starts on the first. A stage
+## with none leaves `hill_position` to the spawn-centre fallback.
+func _load_stage_hill() -> void:
+	hill_spots.clear()
+	hill_moves = false
+	hill_warning = false
+	_spot_index = 0
+	_since_move = 0.0
+	var stage: Variant = round_manager.get("_current_stage") if round_manager != null else null
+	if stage == null or not is_instance_valid(stage) or not (stage as Object).has_method("get_hill_spots"):
+		return
+	hill_spots = stage.get_hill_spots()
+	hill_moves = bool(stage.hill_moves) and hill_spots.size() > 1
+	if hill_position == Vector2.ZERO and not hill_spots.is_empty():
+		hill_position = hill_spots[0]
+
+## The spot the hill hops to next, or `hill_position` if it does not move.
+func next_hill_position() -> Vector2:
+	if not hill_moves:
+		return hill_position
+	return hill_spots[(_spot_index + 1) % hill_spots.size()]
+
+func _tick_moving_hill(delta: float) -> void:
+	_since_move += delta
+	if _since_move >= hill_move_interval:
+		_spot_index = (_spot_index + 1) % hill_spots.size()
+		hill_position = hill_spots[_spot_index]
+		_since_move = 0.0
+		hill_warning = false
+		queue_redraw()
+	elif _since_move >= hill_move_interval - hill_warn_sec:
+		hill_warning = true
+		queue_redraw()
 
 func end_round() -> void:
 	_active = false
@@ -85,6 +131,8 @@ func _player(slot: int) -> Variant:
 func _physics_process(delta: float) -> void:
 	if not _active or round_manager == null or _won:
 		return
+	if hill_moves:
+		_tick_moving_hill(delta)
 	var inside: Array[int] = occupants()
 	if _teams_round():
 		_tick_teams(inside, delta)
@@ -126,3 +174,7 @@ func _draw() -> void:
 	var colour := Color(1.0, 0.85, 0.2)
 	draw_circle(to_local(hill_position), hill_radius, Color(colour, 0.15))
 	draw_arc(to_local(hill_position), hill_radius, 0.0, TAU, 48, Color(colour, 0.8), 3.0)
+	if hill_warning:
+		var pulse: float = 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.012)
+		var warn := Color(1.0, 0.35, 0.2)
+		draw_arc(to_local(next_hill_position()), hill_radius, 0.0, TAU, 48, Color(warn, 0.4 + 0.5 * pulse), 4.0)
