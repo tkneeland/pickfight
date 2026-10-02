@@ -472,7 +472,6 @@ func set_join_corner_visible(on: bool) -> void:
 
 ## What the shared screen shows in place of the room code, URL and QR in
 ## streamer mode (#369).
-const ROOM_CODE_HIDDEN_TEXT: String = "Code hidden: see host phone"
 
 ## Streamer mode (#369): the host's saved "Hide room code" setting.
 func room_code_hidden() -> bool:
@@ -552,7 +551,7 @@ func _ready() -> void:
 		# One URL only: the label sits directly above the score line, and every
 		# address is already printed to the console for the rare case the
 		# first one isn't the room's network.
-		label.text = "Join on your phone:\n" + (urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
+		label.text = tr("JOIN_ON_PHONE") + "\n" + (urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
 
 	var qr_rect: TextureRect = get_node_or_null(qr_texture_path) as TextureRect
 	if qr_rect != null:
@@ -1298,6 +1297,8 @@ func _handle_text(slot: int, text: String) -> void:
 					apply_host_command("stock_lives", msg.get("lives"))
 				if _is_number(msg.get("time")):
 					apply_host_command("stock_time", msg.get("time"))
+				if msg.get("stage") is String:
+					apply_host_command("stock_stage", msg.get("stage"))
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -1878,6 +1879,10 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 				settings.set_stock_lives(int(arg))
 				return true
 			return settings.set_stock_time_limit(int(arg))
+		"stock_stage":
+			if not arg is String or not MODE_PHASES.has(phase):
+				return false
+			return HostSettingsScript.shared().set_stock_stage(arg)
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false
@@ -1941,13 +1946,13 @@ func _refresh_join_label() -> void:
 	if label == null:
 		return
 	if room_code_hidden():
-		label.text = ROOM_CODE_HIDDEN_TEXT
+		label.text = tr("ROOM_CODE_HIDDEN")
 	elif code.is_empty():
 		label.text = _join_label_base
 	elif relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
-		label.text = "%s\nOnline: %s (reconnecting...)" % [_join_label_base, code]
+		label.text = "%s\n%s" % [_join_label_base, tr("ONLINE_ROOM_RECONNECTING") % code]
 	else:
-		label.text = "%s\nOnline: %s" % [_join_label_base, code]
+		label.text = "%s\n%s" % [_join_label_base, tr("ONLINE_ROOM") % code]
 
 func _on_link_state_changed(_state: String) -> void:
 	_refresh_join_label()

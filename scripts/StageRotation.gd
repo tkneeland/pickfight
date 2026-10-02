@@ -16,6 +16,7 @@ extends RefCounted
 
 const StageScript := preload("res://scripts/Stage.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 ## Which stages the host switched off (#294); a scenario hands in its own.
 var settings: RefCounted = HostSettingsScript.shared()
@@ -26,7 +27,9 @@ var scenes: Array[PackedScene] = []:
 		scenes = value
 		var names := PackedStringArray()
 		for scene: PackedScene in value:
-			names.append(HostSettingsScript.name_of(scene.resource_path))
+			var stage_name: String = HostSettingsScript.name_of(scene.resource_path)
+			if DemoBuildScript.stage_in_slice(stage_name):  # the demo's slice (#361)
+				names.append(stage_name)
 		settings.known_stages = names
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5
@@ -36,6 +39,11 @@ var demo: bool = false
 ## rotations given the same seed produce the same sequence (ADR-0011) --
 ## `Array.shuffle()` can't do that, since it always draws from the global RNG.
 var rng: RandomNumberGenerator
+## The `GameModes` id the round being started plays under ("" for classic);
+## a stage's `mode_weights` for it say how often it is dealt (#373).
+var mode_id: String = ""
+## What `mode_id` was when `bag` was dealt: a mode change re-deals the bag.
+var _bag_mode: String = ""
 ## The index into `scenes` last played. Starts at -1 so the first
 ## `next_stage_index()` call is recognized as the opener rather than the seam
 ## between two bags. The caller stores each pick here.
@@ -49,6 +57,40 @@ var round_player_count: int = 0
 var _bag_large_eligible: bool = false
 ## `Stage.view_size_of()` per stage scene, so a scene's state is read once.
 var _large_stage_cache: Dictionary = {}
+
+## The stage a Stock match is pinned to (#375): an index into `scenes`, or -1
+## for the ordinary rotation. RoundManager resolves it once per match.
+var pinned: int = -1
+
+## The stage index for `stage_name` (a base name) when it exists and is
+## enabled, otherwise a random allowed one (the Random tile, or a pick the host
+## has since switched off). Draws from `rng`.
+func resolve_pin(stage_name: String) -> int:
+	if stage_name != "":
+		for i in scenes.size():
+			if HostSettingsScript.name_of(scenes[i].resource_path) == stage_name and _stage_enabled(i):
+				return i
+	var options: Array[int] = []
+	for i in scenes.size():
+		if stage_allowed(i):
+			options.append(i)
+	if options.is_empty():
+		return 0
+	var pick: int = rng.randi() if rng != null else randi()
+	return options[pick % options.size()]
+
+## The host phone's Stock stage grid (#375): every enabled stage as
+## {name, competitive}, competitive ones first, the rest in rotation order.
+func picker_rows() -> Array:
+	var comp: Array = []
+	var rest: Array = []
+	for i in scenes.size():
+		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
+		if not _stage_enabled(i):
+			continue
+		var is_comp: bool = StageScript.competitive_of(scenes[i])
+		(comp if is_comp else rest).append({"name": stage_name, "competitive": is_comp})
+	return comp + rest
 
 ## Throws away what is left of the bag, so the next deal starts a fresh one
 ## for its own player count (a new match, #163).
@@ -99,6 +141,8 @@ func _stage_enabled(index: int) -> bool:
 ## however many rounds of seven it had left. A new match deals afresh too
 ## (`new_bag()`).
 func next_stage_index() -> int:
+	if pinned >= 0 and pinned < scenes.size():
+		return pinned
 	if demo:
 		var next: int = stage_index
 		for _i in scenes.size():
@@ -112,6 +156,8 @@ func next_stage_index() -> int:
 				return i
 		return 0
 	if _bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage():
+		bag.clear()
+	if _bag_mode != mode_id:
 		bag.clear()
 	# A fresh bag always holds an allowed stage, so this ends within one bag's
 	# worth of skips and one refill.
@@ -136,14 +182,55 @@ func _refill_bag(avoid: int) -> void:
 	# draws exactly the order it drew before issue #144.
 	bag = []
 	_bag_large_eligible = _large_stages_eligible()
+	_bag_mode = mode_id
+	var rare_dropped: Array[int] = []
 	for index: int in _shuffled_indices():
-		if stage_allowed(index):
-			bag.append(index)
+		if not stage_allowed(index):
+			continue
+		# A stage weighing under 1 is dealt into the bag with that probability
+		# (#373); a weight of 1 or more draws nothing.
+		var weight: float = StageScript.mode_weight_of(scenes[index], mode_id)
+		if weight < 1.0 and rng.randf() >= weight:
+			rare_dropped.append(index)
+			continue
+		bag.append(index)
+	if bag.is_empty():
+		bag.assign(rare_dropped)
+	_add_weighted_copies()
 	if bag.size() > 1 and bag[0] == avoid:
-		var swap_with: int = 1 + rng.randi() % (bag.size() - 1)
-		var tmp: int = bag[0]
-		bag[0] = bag[swap_with]
-		bag[swap_with] = tmp
+		# Weighted copies (#373) mean `avoid` can sit at other positions too, so
+		# only swap with one holding a different stage (#377).
+		var swaps: Array[int] = []
+		for pos in range(1, bag.size()):
+			if bag[pos] != avoid:
+				swaps.append(pos)
+		if not swaps.is_empty():
+			var swap_with: int = swaps[rng.randi() % swaps.size()]
+			var tmp: int = bag[0]
+			bag[0] = bag[swap_with]
+			bag[swap_with] = tmp
+
+## Stages favoured by this mode (#373; a rarer one is thinned in `_refill_bag`): a stage whose `mode_weights` entry for
+## `mode_id` rounds to n > 1 is dealt n times per bag instead of once. The
+## extras go in at positions drawn from `rng`, never next to the same stage.
+## Nothing is drawn when no allowed stage is favoured, so every other mode's
+## sequence is exactly what it was.
+func _add_weighted_copies() -> void:
+	var extras: Array[int] = []
+	for index: int in bag.duplicate():
+		var copies: int = roundi(StageScript.mode_weight_of(scenes[index], mode_id))
+		for _c in range(1, copies):
+			extras.append(index)
+	for index: int in extras:
+		var candidates: Array[int] = []
+		for pos in bag.size() + 1:
+			var before: int = bag[pos - 1] if pos > 0 else -1
+			var after: int = bag[pos] if pos < bag.size() else -1
+			if before != index and after != index:
+				candidates.append(pos)
+		if candidates.is_empty():
+			candidates.append(bag.size())
+		bag.insert(candidates[rng.randi() % candidates.size()], index)
 
 ## Whether this round's player count may play large stages (issue #144).
 func _large_stages_eligible() -> bool:

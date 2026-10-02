@@ -28,6 +28,7 @@ const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
 const GAME_TITLE: String = "PICKFIGHT"
 ## The wordmark (#359). Loaded as the imported texture where an import exists;
 ## a fresh clone has no import cache, so it falls back to rasterising the SVG.
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const LOGO_PATH: String = "res://art/logo/logo.svg"
 const LOGO_LOBBY_SIZE: Vector2 = Vector2(560, 140)
 const LOGO_VICTORY_SIZE: Vector2 = Vector2(320, 80)
@@ -78,6 +79,7 @@ var _podium: HBoxContainer
 var _how_to_play: Control
 var _lobby_logo: TextureRect
 var _victory_logo: TextureRect
+var _end_card_panel: Control
 
 var _title_layer: CanvasLayer
 var _title_label: Label
@@ -98,6 +100,11 @@ func lobby_panel() -> Control:
 
 func victory_panel() -> Control:
 	return _victory_panel
+
+## The demo build's "wishlist the full game" card (#361), shown after the
+## victory screen; hidden otherwise.
+func end_card_panel() -> Control:
+	return _end_card_panel
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
@@ -180,6 +187,8 @@ func how_to_play_demos() -> Array[Node]:
 func show_panel(which: String) -> void:
 	_lobby_panel.visible = which == "lobby"
 	_victory_panel.visible = which == "victory"
+	if _end_card_panel != null:
+		_end_card_panel.visible = which == "end_card"
 	if which == "lobby":
 		_start_demos()
 	else:
@@ -189,7 +198,7 @@ func _start_demos() -> void:
 	if _how_to_play == null or not how_to_play_demos().is_empty():
 		return
 	for i in HOW_TO_PLAY_LINES.size():
-		_how_to_play.add_child(HowToPlayDemoScript.new(HOW_TO_PLAY_KINDS[i], HOW_TO_PLAY_LINES[i], i))
+		_how_to_play.add_child(HowToPlayDemoScript.new(HOW_TO_PLAY_KINDS[i], tr("HOW_TO_PLAY_LINE_%d" % (i + 1)), i))
 
 func _stop_demos() -> void:
 	for demo: Node in how_to_play_demos():
@@ -210,18 +219,18 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	else:
 		for entry: Dictionary in state["players"]:
 			_lobby_rows.add_child(_lobby_row(state, entry, 36 if state["players"].size() <= 4 else 28))
-	_lobby_target_label.text = "First to %d" % state["target"]
+	_lobby_target_label.text = tr("LOBBY_FIRST_TO") % state["target"]
 	if teams:
-		_lobby_target_label.text = "Teams  -  first to %d" % state["target"]
+		_lobby_target_label.text = tr("LOBBY_TEAMS_FIRST_TO") % state["target"]
 	var joined: int = state["players"].size()
 	if state["phase"] == "countdown":
 		_lobby_status.text = str(state["count"])
 	elif joined < min_players:
-		_lobby_status.text = "Scan to join: %d joined (need %d)" % [joined, min_players]
+		_lobby_status.text = tr("LOBBY_SCAN_TO_JOIN") % [joined, min_players]
 	elif teams and not both_teams_manned(state):
-		_lobby_status.text = "Both teams need a player: pick a team on your phone"
+		_lobby_status.text = tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
 	else:
-		_lobby_status.text = "Press Ready on your phone"
+		_lobby_status.text = tr("LOBBY_PRESS_READY")
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
 		_lobby_qr.texture = qr as Texture2D
@@ -234,11 +243,12 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 func _apply_streamer_mode(join_source: Object) -> void:
 	if join_source == null:
 		return
+	var hidden_text: String = tr("ROOM_CODE_HIDDEN")
 	var hidden: bool = join_source.has_method("room_code_hidden") and join_source.room_code_hidden()
 	_lobby_qr.visible = join_source.get("join_qr_texture") != null and not hidden
 	if hidden:
-		_lobby_url.text = join_source.ROOM_CODE_HIDDEN_TEXT
-	elif _lobby_url.text == join_source.ROOM_CODE_HIDDEN_TEXT:
+		_lobby_url.text = hidden_text
+	elif _lobby_url.text == hidden_text:
 		_lobby_url.text = str(join_source.get("join_url"))
 	if _room_label != null and hidden:
 		_room_label.visible = false
@@ -252,8 +262,8 @@ func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxCon
 	swatch.custom_minimum_size = Vector2(40, 40)
 	swatch.color = _slot_color.call(slot)
 	row.add_child(swatch)
-	var tag: String = "  (host)" if slot == state["host"] else ""
-	var label := _big_label("%s%s  -  %s" % [entry["name"], tag, "READY" if entry["ready"] else "not ready"],
+	var tag: String = tr("LOBBY_HOST_TAG") if slot == state["host"] else ""
+	var label := _big_label("%s%s  -  %s" % [entry["name"], tag, tr("LOBBY_READY") if entry["ready"] else tr("LOBBY_NOT_READY")],
 		font_size, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
 	row.add_child(label)
 	return row
@@ -273,14 +283,14 @@ func _team_rosters(state: Dictionary) -> void:
 		column.name = "%sRoster" % TeamsScript.team_name(team).capitalize()
 		column.add_theme_constant_override("separation", 8)
 		var members: Array = state["players"].filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) == team)
-		column.add_child(_big_label("%s TEAM (%d)" % [TeamsScript.team_name(team), members.size()], 40, TeamsScript.team_color(team)))
+		column.add_child(_big_label(tr("LOBBY_TEAM_HEADER") % [TeamsScript.team_name(team), members.size()], 40, TeamsScript.team_color(team)))
 		for entry: Dictionary in members:
 			var row: HBoxContainer = _lobby_row(state, entry, 28)
 			if int(entry.get("pick", team)) == TeamsScript.NONE:
-				row.add_child(_big_label("(auto)", 22, Color(0.8, 0.82, 0.88)))
+				row.add_child(_big_label(tr("LOBBY_AUTO"), 22, Color(0.8, 0.82, 0.88)))
 			column.add_child(row)
 		if members.is_empty():
-			column.add_child(_big_label("nobody yet", 26, Color(0.6, 0.62, 0.68)))
+			column.add_child(_big_label(tr("LOBBY_NOBODY_YET"), 26, Color(0.6, 0.62, 0.68)))
 		columns.add_child(column)
 
 ## Issue #236: the lobby's two team rosters, or null outside a Teams lobby.
@@ -353,13 +363,13 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
 		_podium.add_child(column)
 	if winner_team != -1:
-		_victory_title.text = "%s TEAM WINS!" % TeamsScript.team_name(winner_team)
+		_victory_title.text = tr("VICTORY_TEAM_WINS") % TeamsScript.team_name(winner_team)
 		_victory_title.add_theme_color_override("font_color", TeamsScript.team_color(winner_team))
 	elif winner_slot != -1:
-		_victory_title.text = "%s WINS!" % _slot_name.call(winner_slot)
+		_victory_title.text = tr("VICTORY_WINS") % _slot_name.call(winner_slot)
 		_victory_title.add_theme_color_override("font_color", _slot_color.call(winner_slot))
 	else:
-		_victory_title.text = "MATCH OVER"
+		_victory_title.text = tr("VICTORY_MATCH_OVER")
 	_refresh_awards(awards)
 	_refresh_stat_table(stat_rows)
 
@@ -417,7 +427,7 @@ func build_panels() -> void:
 	columns.add_child(left)
 	_lobby_logo = _logo_rect("Logo", LOGO_LOBBY_SIZE)
 	left.add_child(_lobby_logo)
-	_lobby_target_label = _big_label("First to 5", 44, Color.WHITE)
+	_lobby_target_label = _big_label(tr("LOBBY_FIRST_TO") % 5, 44, Color.WHITE)
 	left.add_child(_lobby_target_label)
 	_lobby_rows = VBoxContainer.new()
 	_lobby_rows.add_theme_constant_override("separation", 12)
@@ -448,7 +458,7 @@ func build_panels() -> void:
 	cards.add_theme_constant_override("separation", 0)
 	right.add_child(cards)
 	for row: Dictionary in GameModesScript.TABLE:
-		var card: Label = _big_label("%s: %s" % [row["name"], row["rule"]], 12, Color(0.8, 0.82, 0.88))
+		var card: Label = _big_label("%s: %s" % [GameModesScript.display_name(row["id"]), GameModesScript.rule_line(row["id"])], 12, Color(0.8, 0.82, 0.88))
 		card.set_meta("mode_card", true)
 		cards.add_child(card)
 	# A column of its own, beside the QR and never over it (#219).
@@ -478,7 +488,23 @@ func build_panels() -> void:
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
 	_podium.add_theme_constant_override("separation", 40)
 	stack.add_child(_podium)
-	stack.add_child(_big_label("Tap Continue on your phone", 40, Color.WHITE))
+	stack.add_child(_big_label(tr("VICTORY_TAP_CONTINUE"), 40, Color.WHITE))
+	_build_end_card()
+
+## The demo build's end card (#361): logo over the thank-you and wishlist line.
+func _build_end_card() -> void:
+	_end_card_panel = _full_screen_panel("EndCardPanel")
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 40)
+	_end_card_panel.add_child(box)
+	var logo: TextureRect = _logo_rect("Logo", LOGO_LOBBY_SIZE)
+	logo.custom_minimum_size = LOGO_LOBBY_SIZE
+	box.add_child(logo)
+	var text: Label = _big_label(DemoBuildScript.end_card_text(), 64, LOBBY_ACCENT)
+	text.name = "EndCardText"
+	box.add_child(text)
 
 func _full_screen_panel(node_name: String) -> Control:
 	var panel := ColorRect.new()
@@ -497,7 +523,7 @@ func _build_how_to_play() -> Control:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	# Tighter than it was (14 px) to make room for SETTINGS_CORNER_RESERVE_PX.
 	box.add_theme_constant_override("separation", 10)
-	box.add_child(_big_label("HOW TO PLAY", 34, LOBBY_ACCENT))
+	box.add_child(_big_label(tr("HOW_TO_PLAY_TITLE"), 34, LOBBY_ACCENT))
 	return box
 
 func _big_label(text: String, font_size: int, color: Color) -> Label:
@@ -579,7 +605,7 @@ func show_pause_banner(on: bool) -> void:
 		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 		dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_pause_layer.add_child(dim)
-		_pause_label = _big_label("PAUSED", 120, LOBBY_ACCENT)
+		_pause_label = _big_label(tr("PAUSED"), 120, LOBBY_ACCENT)
 		_pause_label.name = "PauseLabel"
 		_pause_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -623,21 +649,21 @@ func attach_controls(server: Object) -> void:
 	var online_row := HBoxContainer.new()
 	online_row.add_theme_constant_override("separation", 12)
 	box.add_child(online_row)
-	online_row.add_child(_control_button("online", "Go online (O)"))
+	online_row.add_child(_control_button("online", tr("HOST_GO_ONLINE")))
 	_online_status = _big_label("", 24, Color(0.8, 0.82, 0.88))
 	online_row.add_child(_online_status)
-	box.add_child(_control_button("pc_seat", "Play on this PC (P)"))
-	var pad_hint := _big_label("Press A on a gamepad to join", 24, Color(0.8, 0.82, 0.88))
+	box.add_child(_control_button("pc_seat", tr("HOST_PLAY_ON_PC")))
+	var pad_hint := _big_label(tr("HOST_GAMEPAD_HINT"), 24, Color(0.8, 0.82, 0.88))
 	pad_hint.name = "GamepadHint"
 	box.add_child(pad_hint)
-	box.add_child(_control_button("mode", "Mode (T)"))
+	box.add_child(_control_button("mode", tr("HOST_MODE")))
 	var target_row := HBoxContainer.new()
 	target_row.add_theme_constant_override("separation", 12)
 	box.add_child(target_row)
-	target_row.add_child(_control_button("target_down", "First to  -"))
+	target_row.add_child(_control_button("target_down", tr("HOST_FIRST_TO_DOWN")))
 	target_row.add_child(_control_button("target_up", "+"))
-	box.add_child(_control_button("start", "Start match (Enter)"))
-	box.add_child(_control_button("join", "Join online game (J)"))
+	box.add_child(_control_button("start", tr("HOST_START_MATCH")))
+	box.add_child(_control_button("join", tr("HOST_JOIN_ONLINE")))
 	refresh_controls()
 
 func _control_button(id: String, text: String) -> Button:
@@ -693,13 +719,13 @@ func refresh_controls() -> void:
 		return
 	var status: String = _server.online_status()
 	var code: String = _server.online_room_code()
-	control_button("online").text = "Go online (O): %s" % ("on" if _server.online_requested() else "off")
-	_online_status.text = {"connecting": "connecting…", "online": "online", "unreachable": "relay unreachable"}.get(status, "")
-	_room_label.text = "Online: %s" % code
+	control_button("online").text = tr("HOST_GO_ONLINE_STATE") % (tr("ON") if _server.online_requested() else tr("OFF"))
+	_online_status.text = {"connecting": tr("ONLINE_CONNECTING"), "online": tr("ONLINE_ONLINE"), "unreachable": tr("ONLINE_UNREACHABLE")}.get(status, "")
+	_room_label.text = tr("ONLINE_ROOM") % code
 	_room_label.visible = code != "" and not (_server.has_method("room_code_hidden") and _server.room_code_hidden())
 	_apply_streamer_mode(_server)
-	control_button("pc_seat").text = "Play on this PC (P): %s" % ("on" if _server.host_pc_slot() != -1 else "off")
-	control_button("mode").text = "Mode (T): %s" % ("Teams" if _server.team_mode() else "Free-for-all")
+	control_button("pc_seat").text = tr("HOST_PLAY_ON_PC_STATE") % (tr("ON") if _server.host_pc_slot() != -1 else tr("OFF"))
+	control_button("mode").text = tr("HOST_MODE_STATE") % (tr("MODE_TEAMS") if _server.team_mode() else tr("MODE_FFA"))
 	control_button("join").disabled = not _can_join_online()
 
 func _process(_delta: float) -> void:

@@ -25,6 +25,9 @@ const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const GameClockScript := preload("res://scripts/GameClock.gd")
 
+## An announcer line for the mode (#370); the Announcer listens for it.
+signal callout(sound: StringName)
+
 ## Seconds from losing a life to coming back.
 var respawn_sec: float = 1.5
 ## Seconds left on the clock; meaningful only when `time_limit_sec` > 0.
@@ -72,6 +75,7 @@ func start_round(slots: Array[int]) -> void:
 	_active = true
 	_build_hud()
 	_update_clock()
+	callout.emit(&"announce_stock")
 
 func end_round() -> void:
 	_active = false
@@ -120,6 +124,8 @@ func _on_eliminated(slot: int) -> void:
 	lives[slot] = 0 if overtime else maxi(int(lives.get(slot, 0)) - 1, 0)
 	if int(lives[slot]) > 0:
 		_pending[slot] = respawn_sec
+	if int(lives[slot]) == 1 and not overtime:
+		callout.emit(&"announce_last_life")
 	# Counted here, after the lives are, so a player about to come back is
 	# never taken for the last one down.
 	round_manager._record_survivor(slot)
@@ -219,6 +225,7 @@ func steal_life(slot: int) -> bool:
 	lives[donor] = int(lives[donor]) - 1
 	lives[slot] = 1
 	_respawn(slot)
+	callout.emit(&"announce_stolen")
 	return true
 
 # --- Time limit and overtime ---------------------------------------------------
@@ -255,9 +262,11 @@ func _timeout() -> void:
 		tied_units[_team(slot) if _team(slot) != -1 else slot] = true
 	if tied_units.size() > 1:
 		_overtime_mode = SuddenDeathScript.new()
+		_overtime_mode.announce_start = false
 		add_child(_overtime_mode)
 		_overtime_mode.setup(round_manager)
 		_overtime_mode.start_round(tied)
+		callout.emit(&"announce_overtime")
 	else:
 		overtime = false
 		time_limit_sec = 0.0
@@ -285,7 +294,7 @@ func _build_hud() -> void:
 ## The countdown's text: "m:ss", "OVERTIME" in a tie-break, nothing with no limit.
 func clock_text() -> String:
 	if overtime:
-		return "OVERTIME"
+		return tr("OVERTIME")
 	if time_limit_sec <= 0.0:
 		return ""
 	var whole: int = ceili(time_left)

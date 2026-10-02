@@ -132,9 +132,17 @@ func _on_node_added(node: Node) -> void:
 			node.connect("match_won", _on_match_won)
 		if node.has_signal("team_match_won"):
 			node.connect("team_match_won", _on_team_match_won)
+	elif node.has_signal("callout"):
+		# Game-mode nodes (#370): King of the Hill, Hot Potato, Sudden Death, Stock.
+		node.connect("callout", _on_callout)
 	else:
 		return
 	node.set_meta(META_WATCHED, true)
+
+## A game mode's own line (#370): "King of the Hill!", "Last life!" and so on.
+func _on_callout(sound: StringName) -> void:
+	if sfx != null and sfx.has_sound(String(sound)):
+		say(sound)
 
 func _on_countdown_ticked(seconds_left: int) -> void:
 	if seconds_left >= 1 and seconds_left <= 3:

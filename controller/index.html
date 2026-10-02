@@ -154,7 +154,11 @@
     font: 700 20px sans-serif;
     pointer-events: none;
   }
-  #menu-stock-lives[hidden], #menu-stock-time[hidden] { display: none !important; }
+  #menu-stock-lives[hidden], #menu-stock-time[hidden], #menu-stockstages[hidden] { display: none !important; }
+  #menu-stockstages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #host-menu #menu-stockstages button { padding: 8px 4px; font-size: 13px; }
+  #host-menu #menu-stockstages button.on { color: #0d0f14; background: #ffd933; }
+  #host-menu #menu-stockstages button.comp { border-color: #ffd933; }
   #lives.show { display: block; }
   #steal {
     position: fixed;
@@ -557,6 +561,7 @@
     <div id="menu-gamemodes"></div>
     <button id="menu-stock-lives" type="button" hidden>Lives: 3</button>
     <button id="menu-stock-time" type="button" hidden>Time: 8 min</button>
+    <div id="menu-stockstages" hidden></div>
     <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
   </div>
@@ -579,6 +584,175 @@
 <script>
 (function () {
   "use strict";
+
+  // ---- text (issue #367) ----------------------------------------------------
+  // Every visible string lives here, keyed like the host's translations/
+  // strings.csv, so a language is one more table. English only for now. Markup
+  // text is swapped in below; `{0}`, `{1}` in a value
+  // are replaced by the extra arguments of t().
+  var STRINGS = {
+      "STEAL_LIFE": "Steal a life",
+      "LOBBY_TITLE": "Lobby",
+      "PHONE_FIRST_TO": "First to",
+      "PHONE_TEAM": "Team",
+      "PHONE_TEAM_RED": "Red",
+      "PHONE_TEAM_BLUE": "Blue",
+      "PHONE_TEAM_AUTO": "Auto",
+      "PHONE_READY": "Ready",
+      "PHONE_HAT_AND_COLOUR": "Hat & colour",
+      "PHONE_SOLO_PRACTICE": "Solo practice",
+      "PHONE_PICK_NAME": "Pick your name",
+      "PHONE_NAME_INFO": "Up to 12 letters. It shows above your fighter.",
+      "PHONE_SHUFFLE": "Shuffle",
+      "PHONE_LETS_GO": "Let's go",
+      "PHONE_PICK_LOOK": "Pick your look",
+      "PHONE_LOOK_HAT": "Hat",
+      "PHONE_LOOK_EYES": "Eyes",
+      "PHONE_LOOK_COLOUR": "Colour: first come, first served",
+      "PHONE_DONE": "Done",
+      "PHONE_TIP_TEXT": "Drag anywhere to swing your pick",
+      "PHONE_GOT_IT": "Got it",
+      "PHONE_HOST_MENU": "Host menu",
+      "PHONE_PAUSE": "Pause",
+      "PHONE_END_MATCH": "End match",
+      "PHONE_KICK_PLAYER": "Kick player",
+      "PHONE_FORMAT_FFA": "Format: Free-for-all",
+      "PHONE_LIVES": "Lives: 3",
+      "PHONE_TIME": "Time: 8 min",
+      "PHONE_GO_ONLINE_OFF": "Go online: off",
+      "PHONE_CLOSE": "Close",
+      "PHONE_YES": "Yes",
+      "PHONE_NO": "No",
+      "PHONE_MOUSE_CAPTURE": "Click to capture mouse",
+      "PHONE_MOUSE_SENS": "Mouse sensitivity",
+      "PHONE_HINT_DRAG": "Drag to swing",
+      "TEAM_LINE": "You're on {0} team",
+      "TEAM_LINE_AUTO": " (auto)",
+      "STATE_KICKED": "The host removed you from the game",
+      "STATE_REPLACED": "This controller was opened somewhere else. Reload the page to play here.",
+      "STATE_PAUSED": "Paused by the host",
+      "STATE_WAITING_SLOT": "Waiting for a free slot",
+      "STATE_REASON_RECONNECTING": "{0} — reconnecting…",
+      "STATE_NEXT_ROUND_IN": "Next round in {0}…",
+      "STATE_WAITING_ROUND": "Waiting for the next round",
+      "STATE_ELIMINATED": "Eliminated — next round soon",
+      "VICTORY_TEAM_WINS": "Match over — {0} team wins",
+      "VICTORY_YOU_WIN_SUFFIX": " — you win!",
+      "VICTORY_YOU_WIN": "Match over — you win!",
+      "VICTORY_PLAYER_WINS": "Match over — {0} wins",
+      "VICTORY_NO_WINNER": "Match over — no winner",
+      "READY_WAITING_OTHERS": "Waiting for the others",
+      "READY_CONTINUE": "Continue",
+      "LOBBY_GET_READY": "Get ready",
+      "LOBBY_READY_WAITING": "Ready — waiting for the others",
+      "LOBBY_IN_LOBBY": "In the lobby",
+      "LOBBY_YOU_ARE_HOST": " (you're host)",
+      "READY_TAP_CANCEL": "Ready! (tap to cancel)",
+      "LOBBY_N_READY": "{0} of {1} ready",
+      "LOBBY_NEED_2": " (need 2 players)",
+      "SOLO_REMOVE_BOTS": "Remove bots",
+      "HAT_NONE": "None",
+      "HAT_CROWN": "Crown",
+      "HAT_TOP_HAT": "Top hat",
+      "HAT_CAP": "Cap",
+      "HAT_BEANIE": "Beanie",
+      "HAT_VIKING": "Viking",
+      "HAT_PARTY": "Party hat",
+      "HAT_HALO": "Halo",
+      "HAT_PROPELLER": "Propeller",
+      "EYES_ROUND": "Round",
+      "EYES_SLEEPY": "Sleepy",
+      "EYES_ANGRY": "Angry",
+      "EYES_WIDE": "Wide",
+      "EYES_DOT": "Dot",
+      "EYES_VISOR": "Visor",
+      "COLOUR_TAKEN_BY": "Taken by {0}",
+      "COLOUR_YOURS": "Your colour",
+      "COLOUR_FREE": "Free",
+      "COLOUR_YOU": "You",
+      "PHONE_RESUME": "Resume",
+      "PHONE_FORMAT_TEAMS": "Format: Teams",
+      "MENU_LIVES": "Lives: {0}",
+      "MENU_TIME_MIN": "Time: {0} min",
+      "MENU_TIME_NONE": "Time: no limit",
+      "MENU_ONLINE_CONNECTING": "Go online: connecting…",
+      "ONLINE_ROOM": "Online: {0}",
+      "MENU_ONLINE_UNREACHABLE": "Go online: relay unreachable",
+      "KICK_ROW": "P{0} {1}",
+      "CONFIRM_KICK": "Are you sure? Kick {0} out of the game?",
+      "CONFIRM_END": "Are you sure? End the match for everyone?",
+      "PHONE_BACK": "Back",
+      "MODE_CLASSIC_NAME": "Classic",
+      "MODE_KING_OF_THE_HILL_NAME": "King of the Hill",
+      "MODE_HOT_POTATO_NAME": "Hot Potato",
+      "MODE_SUDDEN_DEATH_NAME": "Sudden Death",
+      "MODE_STOCK_NAME": "Stock",
+      "STATUS_CONNECTING": "connecting",
+      "STATUS_CONNECTED": "connected",
+      "STATUS_KICKED": "Removed by the host",
+      "STATUS_REPLACED": "Opened somewhere else",
+      "STATUS_RETRYING": "{0} — retrying",
+      "STATUS_RECONNECTING": "reconnecting",
+      "PHONE_STOCK_RANDOM": "Random"
+  };
+  function t(key) {
+    var text = Object.prototype.hasOwnProperty.call(STRINGS, key) ? STRINGS[key] : key;
+    for (var i = 1; i < arguments.length; i++) { text = text.split("{" + (i - 1) + "}").join(String(arguments[i])); }
+    return text;
+  }
+  // A label the host sent (hats, eyes, game modes) by id: the table's version
+  // when it has one, the host's own wording when it does not.
+  function tId(prefix, id, suffix, fallback) {
+    var key = prefix + String(id === "" ? "classic" : id).toUpperCase() + suffix;
+    return Object.prototype.hasOwnProperty.call(STRINGS, key) ? STRINGS[key] : fallback;
+  }
+  // The markup's own wording is the English fallback; this swaps the first
+  // run of text in each element for its table entry.
+  var MARKUP_TEXT = {
+      "STEAL_LIFE": "#steal",
+      "LOBBY_TITLE": "#lobby-title",
+      "PHONE_FIRST_TO": "#target-row",
+      "PHONE_TEAM": "#team-row",
+      "PHONE_TEAM_RED": "#team-red",
+      "PHONE_TEAM_BLUE": "#team-blue",
+      "PHONE_TEAM_AUTO": "#team-auto",
+      "PHONE_READY": "#ready-btn",
+      "PHONE_HAT_AND_COLOUR": "#look-btn",
+      "PHONE_SOLO_PRACTICE": "#solo-btn",
+      "PHONE_PICK_NAME": "#name-prompt-title",
+      "PHONE_NAME_INFO": "#name-prompt-info",
+      "PHONE_SHUFFLE": "#name-shuffle",
+      "PHONE_LETS_GO": "#name-go",
+      "PHONE_PICK_LOOK": "#look-title",
+      "PHONE_LOOK_HAT": "#look-prompt > .look-label:nth-child(2)",
+      "PHONE_LOOK_EYES": "#look-prompt > .look-label:nth-child(4)",
+      "PHONE_LOOK_COLOUR": "#color-label",
+      "PHONE_DONE": "#look-go",
+      "PHONE_TIP_TEXT": "#tip-text",
+      "PHONE_GOT_IT": "#tip-go",
+      "PHONE_HOST_MENU": "#host-menu-title",
+      "PHONE_PAUSE": "#menu-pause",
+      "PHONE_END_MATCH": "#menu-end",
+      "PHONE_KICK_PLAYER": "#menu-kick",
+      "PHONE_FORMAT_FFA": "#menu-mode",
+      "PHONE_LIVES": "#menu-stock-lives",
+      "PHONE_TIME": "#menu-stock-time",
+      "PHONE_GO_ONLINE_OFF": "#menu-online",
+      "PHONE_CLOSE": "#menu-close",
+      "PHONE_YES": "#confirm-yes",
+      "PHONE_NO": "#confirm-no",
+      "PHONE_MOUSE_CAPTURE": "#mouse-capture",
+      "PHONE_MOUSE_SENS": "#mouse-sens-row",
+      "PHONE_HINT_DRAG": "#hint"
+  };
+  (function () {
+    Object.keys(MARKUP_TEXT).forEach(function (key) {
+      var el = document.querySelector(MARKUP_TEXT[key]);
+      for (var n = el ? el.firstChild : null; n; n = n.nextSibling) {
+        if (n.nodeType === 3 && n.nodeValue.trim() !== "") { n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), t(key)); break; }
+      }
+    });
+  })();
 
   // ---- tunables -----------------------------------------------------------
   // ADR-0003 expects the drag radius to need feel-tuning. It is a fraction of
@@ -887,7 +1061,7 @@
 
   // ---- teams (issue #236) ---------------------------------------------------
   // Must match Teams.gd: 0 is Red, 1 is Blue.
-  var TEAM_NAMES = ["Red", "Blue"];
+  var TEAM_NAMES = [t("PHONE_TEAM_RED"), t("PHONE_TEAM_BLUE")];
   var TEAM_COLORS = ["#f24545", "#4d8cff"];
   // This phone's team in a Teams lobby or match, or -1 (free-for-all).
   function myTeam() {
@@ -918,7 +1092,7 @@
     document.getElementById("team-auto").className = pick === -1 ? "on" : "";
     teamLineEl.style.display = team >= 0 ? "block" : "none";
     teamLineEl.style.color = team >= 0 ? TEAM_COLORS[team] : "";
-    teamLineEl.textContent = team >= 0 ? "You're on " + TEAM_NAMES[team] + " team" + (pick === -1 ? " (auto)" : "") : "";
+    teamLineEl.textContent = team >= 0 ? t("TEAM_LINE", TEAM_NAMES[team]) + (pick === -1 ? t("TEAM_LINE_AUTO") : "") : "";
     applyColor();
   }
   function sendTeam(team) { sendText({ t: "team", v: team }); }
@@ -1005,27 +1179,27 @@
   function showState() {
     var text = "";
     if (kickedOut) {
-      text = "The host removed you from the game";
+      text = t("STATE_KICKED");
     } else if (replacedOut) {
-      text = "This controller was opened somewhere else. Reload the page to play here.";
+      text = t("STATE_REPLACED");
     } else if (slot >= 0 && lobby && lobby.paused) {
-      text = "Paused by the host";
+      text = t("STATE_PAUSED");
     } else if (slot < 0) {
-      if (statusEl.textContent === "connected" || closeReason === NO_SLOT_REASON) {
-        text = "Waiting for a free slot";
+      if (statusEl.textContent === t("STATUS_CONNECTED") || closeReason === NO_SLOT_REASON) {
+        text = t("STATE_WAITING_SLOT");
       } else if (closeReason) {
-        text = closeReason.charAt(0).toUpperCase() + closeReason.slice(1) + " — reconnecting…";
+        text = t("STATE_REASON_RECONNECTING", closeReason.charAt(0).toUpperCase() + closeReason.slice(1));
       }
     } else if (lobby && (lobby.phase === "playing" || lobby.phase === "round_end")) {
       var inRound = (lobby.in_round || []).indexOf(slot) !== -1;
       var alive = (lobby.alive || []).indexOf(slot) !== -1;
       if (lobby.phase === "round_end") {
         var left = Math.max(1, Math.ceil((nextRoundAt - Date.now()) / 1000));
-        text = "Next round in " + left + "…";
+        text = t("STATE_NEXT_ROUND_IN", left);
       } else if (!inRound) {
-        text = "Waiting for the next round";
+        text = t("STATE_WAITING_ROUND");
       } else if (!alive) {
-        text = "Eliminated — next round soon";
+        text = t("STATE_ELIMINATED");
       }
     }
     stateEl.textContent = text;
@@ -1132,21 +1306,21 @@
     document.getElementById("target-up").style.display = isHost ? "" : "none";
     if (document.activeElement !== targetInput) { targetInput.value = String(msg.target); }
     if (phase === "victory" && msg.teams && msg.winner_team >= 0) {
-      lobbyTitleEl.textContent = "Match over — " + TEAM_NAMES[msg.winner_team] + " team wins" +
-        (myTeam() === msg.winner_team ? " — you win!" : "");
-      readyBtn.textContent = amReady ? "Waiting for the others" : "Continue";
+      lobbyTitleEl.textContent = t("VICTORY_TEAM_WINS", TEAM_NAMES[msg.winner_team]) +
+        (myTeam() === msg.winner_team ? t("VICTORY_YOU_WIN_SUFFIX") : "");
+      readyBtn.textContent = amReady ? t("READY_WAITING_OTHERS") : t("READY_CONTINUE");
     } else if (phase === "victory") {
-      lobbyTitleEl.textContent = "Match over — " + (msg.winner === slot ? "you win!" :
-        (msg.winner >= 0 ? slotName(msg.winner) + " wins" : "no winner"));
-      readyBtn.textContent = amReady ? "Waiting for the others" : "Continue";
+      lobbyTitleEl.textContent = msg.winner === slot ? t("VICTORY_YOU_WIN") :
+        (msg.winner >= 0 ? t("VICTORY_PLAYER_WINS", slotName(msg.winner)) : t("VICTORY_NO_WINNER"));
+      readyBtn.textContent = amReady ? t("READY_WAITING_OTHERS") : t("READY_CONTINUE");
     } else {
-      lobbyTitleEl.textContent = phase === "countdown" ? "Get ready" :
-        (amReady ? "Ready — waiting for the others" : "In the lobby") + (isHost ? " (you're host)" : "");
-      readyBtn.textContent = amReady ? "Ready! (tap to cancel)" : "Ready";
+      lobbyTitleEl.textContent = phase === "countdown" ? t("LOBBY_GET_READY") :
+        (amReady ? t("LOBBY_READY_WAITING") : t("LOBBY_IN_LOBBY")) + (isHost ? t("LOBBY_YOU_ARE_HOST") : "");
+      readyBtn.textContent = amReady ? t("READY_TAP_CANCEL") : t("PHONE_READY");
     }
     readyBtn.className = amReady ? "on" : "";
-    lobbyInfoEl.textContent = ready + " of " + msg.players.length + " ready" +
-      (msg.players.length < 2 ? " (need 2 players)" : "");
+    lobbyInfoEl.textContent = t("LOBBY_N_READY", ready, msg.players.length) +
+      (msg.players.length < 2 ? t("LOBBY_NEED_2") : "");
     showSolo(msg, isHost);
     showTeams(msg);
   }
@@ -1159,7 +1333,7 @@
     haveBots = false;
     for (var i = 0; i < msg.players.length; i++) { if (msg.players[i].bot) { haveBots = true; } }
     soloBtn.style.display = isHost && msg.phase === "lobby" ? "block" : "none";
-    soloBtn.textContent = haveBots ? "Remove bots" : "Solo practice";
+    soloBtn.textContent = haveBots ? t("SOLO_REMOVE_BOTS") : t("PHONE_SOLO_PRACTICE");
     soloBtn.disabled = false;
   }
   // Issue #194: one press per lobby state -- a double tap must not add the
@@ -1370,7 +1544,7 @@
       var preview = document.createElement("canvas");
       b.appendChild(preview);
       var label = document.createElement("span");
-      label.textContent = hats[i].label;
+      label.textContent = tId("HAT_", hats[i].id, "", hats[i].label);
       b.appendChild(label);
       drawHat(preview, hats[i].id, tint);
       b.addEventListener("click", (function (id) {
@@ -1394,7 +1568,7 @@
       var ep = document.createElement("canvas");
       eb.appendChild(ep);
       var el = document.createElement("span");
-      el.textContent = styles[e].label;
+      el.textContent = tId("EYES_", styles[e].id, "", styles[e].label);
       eb.appendChild(el);
       drawEyes(ep, styles[e].id, tint);
       eb.addEventListener("click", (function (id) {
@@ -1422,8 +1596,8 @@
       sw.style.background = palette[k];
       sw.className = holder >= 0 ? "taken" : (k === mine.color ? "on" : "");
       sw.disabled = holder >= 0;
-      sw.setAttribute("aria-label", holder >= 0 ? "Taken by " + slotName(holder) : (k === mine.color ? "Your colour" : "Free"));
-      sw.textContent = k === mine.color ? "You" : "";
+      sw.setAttribute("aria-label", holder >= 0 ? t("COLOUR_TAKEN_BY", slotName(holder)) : (k === mine.color ? t("COLOUR_YOURS") : t("COLOUR_FREE")));
+      sw.textContent = k === mine.color ? t("COLOUR_YOU") : "";
       sw.addEventListener("click", (function (index) {
         return function () {
           store(COLOR_KEY, String(index));
@@ -1522,26 +1696,27 @@
     gearEl.classList.toggle("show", host);
     if (!host) { closeHostMenu(); return; }
     var paused = !!lobby.paused;
-    menuPauseBtn.textContent = paused ? "Resume" : "Pause";
+    menuPauseBtn.textContent = paused ? t("PHONE_RESUME") : t("PHONE_PAUSE");
     menuPauseBtn.disabled = !inMatch();
     menuEndBtn.disabled = !inMatch();
     var others = 0;
     for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
     menuKickBtn.disabled = others === 0;
-    menuModeBtn.textContent = lobby.mode === "teams" ? "Format: Teams" : "Format: Free-for-all";
+    menuModeBtn.textContent = lobby.mode === "teams" ? t("PHONE_FORMAT_TEAMS") : t("PHONE_FORMAT_FFA");
     menuModeBtn.disabled = inMatch();
     refreshGameModes();
+    refreshStockStages();
     var stock = lobby.stock;
     menuStockLivesBtn.hidden = menuStockTimeBtn.hidden = !stock;
     if (stock) {
-      menuStockLivesBtn.textContent = "Lives: " + stock.lives;
-      menuStockTimeBtn.textContent = "Time: " + (stock.time > 0 ? (stock.time / 60) + " min" : "no limit");
+      menuStockLivesBtn.textContent = t("MENU_LIVES", stock.lives);
+      menuStockTimeBtn.textContent = stock.time > 0 ? t("MENU_TIME_MIN", stock.time / 60) : t("MENU_TIME_NONE");
       menuStockLivesBtn.disabled = menuStockTimeBtn.disabled = inMatch();
     }
     var online = lobby.online || "off";
-    menuOnlineBtn.textContent = online === "off" ? "Go online: off" :
-      online === "connecting" ? "Go online: connecting\u2026" :
-      online === "online" ? "Online: " + (lobby.room || "") : "Go online: relay unreachable";
+    menuOnlineBtn.textContent = online === "off" ? t("PHONE_GO_ONLINE_OFF") :
+      online === "connecting" ? t("MENU_ONLINE_CONNECTING") :
+      online === "online" ? t("ONLINE_ROOM", lobby.room || "") : t("MENU_ONLINE_UNREACHABLE");
     menuOnlineBtn.disabled = inMatch();
     // Issue #164: the lobby moved on under an open menu.
     if (viewShown("menu-confirm") && confirmValid && !confirmValid()) {
@@ -1560,11 +1735,11 @@
       if (p.slot === slot) { continue; }
       var b = document.createElement("button");
       b.type = "button";
-      b.textContent = "P" + (p.slot + 1) + " " + p.name;
+      b.textContent = t("KICK_ROW", p.slot + 1, p.name);
       b.style.boxShadow = "inset 6px 0 0 " + colorOf(p.slot);
       b.addEventListener("click", (function (target, name, claim) {
         return function () {
-          askConfirm("Are you sure? Kick " + name + " out of the game?",
+          askConfirm(t("CONFIRM_KICK", name),
             function () { sendHost("kick", { slot: target, claim: claim }); },
             function () { return claimHolder(target, claim) !== null; });
         };
@@ -1573,7 +1748,7 @@
     }
     var back = document.createElement("button");
     back.type = "button";
-    back.textContent = "Back";
+    back.textContent = t("PHONE_BACK");
     back.addEventListener("click", function () { showMenuView("menu-main"); });
     kickListEl.appendChild(back);
     showMenuView("menu-kick-list");
@@ -1617,7 +1792,7 @@
   });
   menuEndBtn.addEventListener("click", function () {
     var match = lobby.match;
-    askConfirm("Are you sure? End the match for everyone?",
+    askConfirm(t("CONFIRM_END"),
       function () { sendHost("end", { match: match }); },
       function () { return inMatch() && lobby.match === match; });
   });
@@ -1637,7 +1812,7 @@
         var btn = document.createElement("button");
         btn.type = "button";
         btn.dataset.id = row.id;
-        btn.textContent = row.name;
+        btn.textContent = tId("MODE_", row.id, "_NAME", row.name);
         btn.addEventListener("click", function () {
           if (inMatch() || btn.disabled) { return; }
           sendText({ t: "gamemode", v: row.id });
@@ -1657,6 +1832,39 @@
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
   });
+  // Issue #375: a Stock match is played on one stage, picked from a grid
+  // (lobby.stock.stages, competitive first, plus a Random tile; stock.stage
+  // "" is Random).
+  var stockStagesEl = document.getElementById("menu-stockstages");
+  function refreshStockStages() {
+    var stock = lobby.stock;
+    stockStagesEl.hidden = !stock;
+    if (!stock) { return; }
+    var tiles = [{ name: "", label: t("PHONE_STOCK_RANDOM"), comp: false }];
+    (stock.stages || []).forEach(function (row) {
+      tiles.push({ name: row.name, label: row.name, comp: !!row.competitive });
+    });
+    // Competitive stages come first, then Random, then the rest.
+    var comps = tiles.filter(function (t) { return t.comp; });
+    var others = tiles.filter(function (t) { return !t.comp; });
+    tiles = comps.concat(others);
+    var key = JSON.stringify([tiles, stock.stage || "", inMatch()]);
+    if (key === stockStagesEl.dataset.key) { return; }
+    stockStagesEl.dataset.key = key;
+    stockStagesEl.innerHTML = "";
+    tiles.forEach(function (t) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = t.label;
+      btn.className = (t.name === (stock.stage || "") ? "on " : "") + (t.comp ? "comp" : "");
+      btn.disabled = inMatch();
+      btn.addEventListener("click", function () {
+        if (inMatch()) { return; }
+        sendText({ t: "stock", stage: t.name });
+      });
+      stockStagesEl.appendChild(btn);
+    });
+  }
   menuStockLivesBtn.addEventListener("click", function () {
     if (inMatch() || !lobby.stock) { return; }
     sendText({ t: "stock", lives: lobby.stock.lives >= 10 ? 1 : lobby.stock.lives + 1 });
@@ -1693,7 +1901,7 @@
   var NO_SLOT_REASON = "no free player slot";
 
   function connect() {
-    setStatus("connecting");
+    setStatus(t("STATUS_CONNECTING"));
     // Every handler checks it still belongs to the current socket: a late
     // event from an old one must not undo the new one's state.
     var sock = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
@@ -1705,7 +1913,7 @@
       // id-await stage (ControllerServer._process_websocket) has our id to
       // match before it ever needs to fall back to binding us as new.
       sock.send(JSON.stringify({ id: CLIENT_ID }));
-      setStatus("connected");
+      setStatus(t("STATUS_CONNECTED"));
     };
     sock.onmessage = function (ev) {
       if (sock !== ws || typeof ev.data !== "string") { return; }
@@ -1738,8 +1946,8 @@
       var kicked = reason === KICKED_REASON;
       var replaced = reason === REPLACED_REASON;
       closeReason = kicked || replaced ? "" : reason;
-      setStatus(kicked ? "Removed by the host" : (replaced ? "Opened somewhere else" :
-        (reason ? (reason + " — retrying") : "reconnecting")));
+      setStatus(kicked ? t("STATUS_KICKED") : (replaced ? t("STATUS_REPLACED") :
+        (reason ? t("STATUS_RETRYING", reason) : t("STATUS_RECONNECTING"))));
       setSlot(-1);
       lobbyEl.className = "";
       lookEl.classList.remove("show");

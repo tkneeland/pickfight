@@ -1,0 +1,108 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_2080x40"]
+size = Vector2(2080, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_320x24"]
+size = Vector2(320, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_8000x40"]
+size = Vector2(8000, 40)
+
+; Competitive (issue #376): a large stage for five to eight players (view
+; 2240 x 1260, the Main camera zooms out to fit; the rotation offers it only to
+; rounds of RoundManager.large_stage_min_players or more). A wide floor with
+; three floating platforms, mirror symmetric about x=0, no hazards, nothing
+; that moves.
+
+[node name="Colosseum" type="Node2D"]
+script = ExtResource("1")
+competitive = true
+background_sky_top = Color(0.12, 0.12, 0.2, 1)
+background_sky_bottom = Color(0.24, 0.2, 0.26, 1)
+background_silhouette = Color(0.12, 0.14, 0.2, 1)
+background_layers = PackedStringArray("clouds", "mountains")
+view_size = Vector2(2240, 1260)
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(0, 470)
+
+[node name="GroundShape" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("RectangleShape2D_2080x40")
+
+[node name="GroundVisual" type="Polygon2D" parent="Ground"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-1040, -20, 1040, -20, 1040, 20, -1040, 20)
+
+[node name="PlatformLeft" type="StaticBody2D" parent="."]
+position = Vector2(-560, 350)
+
+[node name="PlatformLeftShape" type="CollisionShape2D" parent="PlatformLeft"]
+shape = SubResource("RectangleShape2D_320x24")
+
+[node name="PlatformLeftVisual" type="Polygon2D" parent="PlatformLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -12, 160, -12, 160, 12, -160, 12)
+
+[node name="PlatformRight" type="StaticBody2D" parent="."]
+position = Vector2(560, 350)
+
+[node name="PlatformRightShape" type="CollisionShape2D" parent="PlatformRight"]
+shape = SubResource("RectangleShape2D_320x24")
+
+[node name="PlatformRightVisual" type="Polygon2D" parent="PlatformRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -12, 160, -12, 160, 12, -160, 12)
+
+[node name="PlatformTop" type="StaticBody2D" parent="."]
+position = Vector2(0, 250)
+
+[node name="PlatformTopShape" type="CollisionShape2D" parent="PlatformTop"]
+shape = SubResource("RectangleShape2D_320x24")
+
+[node name="PlatformTopVisual" type="Polygon2D" parent="PlatformTop"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -12, 160, -12, 160, 12, -160, 12)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-220, 300)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(220, 300)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-330, 300)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(330, 300)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-800, 300)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(800, 300)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-920, 300)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(920, 300)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_8000x40")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-560, 298)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(560, 298)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(0, 198)

@@ -1,0 +1,207 @@
+keys,en
+AWARD_BUTTERFINGERS,Butterfingers
+AWARD_CATEGORY_AIRBORNE,AIRBORNE
+AWARD_CATEGORY_CLUMSY,CLUMSY
+AWARD_CATEGORY_COLLECTOR,COLLECTOR
+AWARD_CATEGORY_COMBAT,COMBAT
+AWARD_CATEGORY_SURVIVOR,SURVIVOR
+AWARD_HARD_TO_KILL,Hard to Kill
+AWARD_HEAVY_HITTER,Heavy Hitter
+AWARD_LONGEST_AIRTIME,Longest Airtime
+AWARD_MAGPIE,Magpie
+AWARD_PUNCHING_BAG,Punching Bag
+AWARD_TOP_BRAWLER,Top Brawler
+BANNER_DOUBLE_KO,DOUBLE KO!
+BANNER_FIRST_BLOOD,FIRST BLOOD
+BANNER_LAST_ONE_STANDING,LAST ONE STANDING
+BANNER_MULTI_KO,MULTI KO!
+BANNER_TEAM_SCORE,RED %d - %d BLUE
+BANNER_TEAM_WINS,%s TEAM WINS
+BANNER_TRIPLE_KO,TRIPLE KO!
+DEMO_END_CARD,"Thanks for playing the Pickfight demo!
+Wishlist the full game on Steam"
+DETAIL_AIRBORNE,%.1fs airborne
+DETAIL_ALIVE,%s alive
+DETAIL_DAMAGE,%d damage
+DETAIL_DAMAGE_TAKEN,%d damage taken
+DETAIL_KO_MANY,%d KOs
+DETAIL_KO_ONE,%d KO
+DETAIL_PICKUP_MANY,%d pickups
+DETAIL_PICKUP_ONE,%d pickup
+DETAIL_SELF_KO_MANY,%d self-KOs
+DETAIL_SELF_KO_ONE,%d self-KO
+FEEDBACK_EMPTY,Type something first.
+FEEDBACK_FAILED,Could not send feedback. Try again later.
+FEEDBACK_OFFLINE,Feedback is offline right now
+FEEDBACK_PLACEHOLDER,What would make this better?
+FEEDBACK_RATE_LIMITED,Too much feedback for now. Try again later.
+FEEDBACK_SEND,Send
+FEEDBACK_SENDING,Sending...
+FEEDBACK_SENT,Thanks! Feedback sent.
+FEEDBACK_TITLE,Send feedback to the developers
+FEED_KO,KO
+FEED_SELF_KO,self-KO
+HOST_FIRST_TO_DOWN,First to  -
+HOST_GAMEPAD_HINT,Press A on a gamepad to join
+HOST_GO_ONLINE,Go online (O)
+HOST_GO_ONLINE_STATE,Go online (O): %s
+HOST_JOIN_ONLINE,Join online game (J)
+HOST_MODE,Mode (T)
+HOST_MODE_STATE,Mode (T): %s
+HOST_PLAY_ON_PC,Play on this PC (P)
+HOST_PLAY_ON_PC_STATE,Play on this PC (P): %s
+HOST_START_MATCH,Start match (Enter)
+HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.
+HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.
+HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.
+HOW_TO_PLAY_LINE_4,"Hit them till they die, or knock them off. Last one standing wins."
+HOW_TO_PLAY_TITLE,HOW TO PLAY
+JOIN_BUTTON,Join
+JOIN_CANCEL,Cancel
+JOIN_CLOSED_EARLY,The connection closed before the match was joined.
+JOIN_CONNECTING,Connecting to the relay...
+JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.
+JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.
+JOIN_ERR_DISCONNECTED,Disconnected: %s
+JOIN_ERR_ELSEWHERE,You joined from somewhere else.
+JOIN_ERR_HOST_LEFT,Host left.
+JOIN_ERR_IDLE,The room closed after sitting idle.
+JOIN_ERR_NO_HELLO,The host did not accept the join in time.
+JOIN_ERR_NO_SLOT,That match has no free player slot.
+JOIN_ERR_REMOVED,The host removed you from the match.
+JOIN_ERR_ROOM_FULL,That room is full.
+JOIN_ERR_VERSION,Update your game: this version does not match the host's.
+JOIN_JOINING_ROOM,Joining room %s...
+JOIN_LEAVE_MATCH,Leave match
+JOIN_LOST,Lost the connection to the host.
+JOIN_MOUSE_SENS,Mouse sensitivity
+JOIN_ON_PHONE,Join on your phone:
+JOIN_PAUSE_MATCH,Pause match
+JOIN_READY,Ready
+JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).
+JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.
+JOIN_RESUME,Resume
+JOIN_RESUME_MATCH,Resume match
+JOIN_ROOM_CODE_LABEL,Room code (from the host's screen)
+JOIN_TIMEOUT,Timed out waiting for the host. Check the code and try again.
+JOIN_TITLE,Join online game
+JOIN_UPDATE_LINK,Get the latest version
+JOIN_WAITING,Waiting for the host...
+JOIN_WAITING_HOST,"Joined room %s, waiting for the host..."
+JOIN_YOUR_NAME,Your name
+LOBBY_AUTO,(auto)
+LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone
+LOBBY_FIRST_TO,First to %d
+LOBBY_HOST_TAG,  (host)
+LOBBY_NOBODY_YET,nobody yet
+LOBBY_NOT_READY,not ready
+LOBBY_PRESS_READY,Press Ready on your phone
+LOBBY_READY,READY
+LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d)
+LOBBY_TEAMS_FIRST_TO,Teams  -  first to %d
+LOBBY_TEAM_HEADER,%s TEAM (%d)
+MODE_CLASSIC_NAME,Classic
+MODE_CLASSIC_RULE,Last one standing wins.
+MODE_FFA,Free-for-all
+MODE_HOT_POTATO_NAME,Hot Potato
+MODE_HOT_POTATO_RULE,Do not hold the tag when the fuse ends.
+MODE_KING_OF_THE_HILL_NAME,King of the Hill
+MODE_KING_OF_THE_HILL_RULE,Hold the hill alone to win.
+MODE_STOCK_NAME,Stock
+MODE_STOCK_RULE,Lose all your lives and you are out.
+MODE_SUDDEN_DEATH_NAME,Sudden Death
+MODE_SUDDEN_DEATH_RULE,One hit and you are out.
+MODE_TEAMS,Teams
+MODIFIER_BIG_HEADS,Big Heads
+MODIFIER_BOUNCY,Bouncy
+MODIFIER_DOUBLE_DAMAGE,Double Damage
+MODIFIER_FAST_LAVA,Fast Lava
+MODIFIER_GALE,Gale
+MODIFIER_HEAVY_WEAPONS,Heavy Weapons
+MODIFIER_LOW_GRAVITY,Low Gravity
+MODIFIER_METEOR_SHOWER,Meteor Shower
+MODIFIER_SLIPPERY_FLOOR,Slippery Floor
+MODIFIER_TINY_WEAPONS,Tiny Weapons
+MODIFIER_WEAPON_ROULETTE,Weapon Roulette
+OFF,off
+ON,on
+ONLINE_CONNECTING,connecting…
+ONLINE_ONLINE,online
+ONLINE_ROOM,Online: %s
+ONLINE_ROOM_RECONNECTING,Online: %s (reconnecting...)
+ONLINE_UNREACHABLE,relay unreachable
+OVERTIME,OVERTIME
+PAUSED,PAUSED
+PHONE_STOCK_RANDOM,Random
+REPLAY_NOTHING,Replay: nothing recorded yet
+REPLAY_SAVED,Replay saved: %s
+ROOM_CODE_HIDDEN,Code hidden: see host phone
+SCORE_PLAYER,P%d: %d
+SCORE_TEAM,%s: %d
+SETTINGS,Settings
+SETTINGS_FEEDBACK,Feedback
+SETTINGS_FULLSCREEN,Full (F11)
+SETTINGS_HIDE_ROOM_CODE,Hide room code
+SETTINGS_MASTER_VOLUME,Master volume
+SETTINGS_MORE_OPTIONS,More options
+SETTINGS_MUSIC,Music
+SETTINGS_MUTE,Mute (M)
+SETTINGS_MUTED,Settings (muted)
+SETTINGS_NAME_TAGS,Name tags: %sx
+SETTINGS_REDUCE_FLASHES,Reduce flashes
+SETTINGS_SCREEN_SHAKE,Screen shake
+SETTINGS_SFX,Sound effects
+SETTINGS_STAGES_LIST,Stages (untick to skip)
+SETTINGS_WEAPONS_LIST,Weapons (untick to skip)
+SETTINGS_WINDOW_DEFAULT,Window: default
+SETTINGS_WINDOW_SIZE,Window: %d x %d
+STAGE_BATTLEFIELD,Battlefield
+STAGE_BOWL,Bowl
+STAGE_BULWARK,Bulwark
+STAGE_CAROUSEL,Carousel
+STAGE_CASCADE,Cascade
+STAGE_COLOSSEUM,Colosseum
+STAGE_EROSION,Erosion
+STAGE_FERRY,Ferry
+STAGE_FINALDESTINATION,Final Destination
+STAGE_FLATLANDS,Flatlands
+STAGE_FOOTBRIDGE,Footbridge
+STAGE_FURNACE,Furnace
+STAGE_GALE,Gale
+STAGE_GANTRY,Gantry
+STAGE_GAUNTLET,Gauntlet
+STAGE_HIGHRISE,Highrise
+STAGE_ISLANDS,Islands
+STAGE_MILL,Mill
+STAGE_OVERPASS,Overpass
+STAGE_PILLARS,Pillars
+STAGE_PISTONS,Pistons
+STAGE_POCKET,Pocket
+STAGE_QUARRY,Quarry
+STAGE_REACTOR,Reactor
+STAGE_ROCKFALL,Rockfall
+STAGE_SINKHOLE,Sinkhole
+STAGE_SLANT,Slant
+STAGE_SPRINGBOARD,Springboard
+STAGE_UPDRAFT,Updraft
+STAGE_VENT,Vent
+STAGE_ZIGGURAT,Ziggurat
+STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s
+TEAM_BLUE,BLUE
+TEAM_RED,RED
+VICTORY_MATCH_OVER,MATCH OVER
+VICTORY_TAP_CONTINUE,Tap Continue on your phone
+VICTORY_TEAM_WINS,%s TEAM WINS!
+VICTORY_WINS,%s WINS!
+WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d)
+STAGE_RACETRACK,Racetrack
+STAGE_SWITCHYARD,Switchyard
+STAGE_ORBIT,Orbit
+SETTINGS_SHARE_STATS,Send anonymous match stats
+TELEMETRY_NOTICE,Pickfight sends anonymous match stats to help balance the game
+TELEMETRY_TURN_OFF,Turn off
+TELEMETRY_OK,OK
+STAGE_MESA,Mesa
+STAGE_RELAY,Relay
+STAGE_ROUNDABOUT,Roundabout
+STAGE_SUMMIT,Summit

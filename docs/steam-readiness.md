@@ -28,6 +28,18 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Early Access vs 1.0 | Decided 2026-10-01: **Early Access** | owner |
 | Publisher entity (individual vs company) | Decided 2026-10-01: the owner as an individual, with a revenue split agreed privately with Austin; drives tax/bank forms and macOS/Windows signing identity | owner |
 
+## Demo contents (#361)
+
+The Next Fest demo is the same game with a content slice, chosen by one flag: the "demo" feature tag (the `Demo macOS`, `Demo Windows` and `Demo Linux` export presets, `tools/export.sh demo`) or `--demo-build` on the command line. The slice lives in `scripts/DemoBuild.gd`. It limits the stage rotation, the pickup weapon pool and the host phone's mode picker; the Settings panel lists only slice items and can't switch on anything outside it. Up to 8 players, no time cap. After a match's victory screen the demo shows an end card with the logo: "Thanks for playing the Pickfight demo! Wishlist the full game on Steam".
+
+| Part | Picks | Why |
+|---|---|---|
+| Stages (6) | Flatlands, Highrise, Pillars, Islands, Bowl, Springboard | Plant-and-swing reads best on stages with something to plant on. Flatlands opens every match and teaches the controls on flat ground; Highrise is vertical, Pillars and Islands make gaps to cross with the pole, Bowl suits King of the Hill, Springboard adds bounce pads. None is a large-view stage (those need 5+ players, and a demo table often has two), and none has heavy hazards, so the hook is the fighting. |
+| Weapons (5) | Pickaxe (everyone starts with it), sword, boomstick, grapple, flail | Four very different feels for a first match: a plain melee swing, a ranged shot, a pull-yourself-around tool that is the closest thing to Getting Over It, and a physics chain. Axe, dagger and the rest are held back for the full game. |
+| Modes (2) | Classic, King of the Hill | Classic is the core loop; King of the Hill gives a reason to stay in one spot and fight over it. Hot Potato, Sudden Death and Stock stay in the full game. |
+
+`--demo` on its own is the older showcase mode (random weapons, 120 Hz physics), not this; `--demo-build` is the demo.
+
 ## Checklist (in order)
 
 ### 1. Steamworks account and app

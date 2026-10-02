@@ -54,6 +54,22 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## 1, so it can still appear). Empty means just the derived theme.
 @export var weapon_weight_overrides: Dictionary = {}
 
+## Optional per-stage weight in the stage rotation (#373): `GameModes` id ->
+## weight. A mode not listed takes the "_other" entry, or 1.0 without one. The
+## rotation deals a stage `round(weight)` copies in each bag while that mode is
+## playing, so 4.0 makes it about four times as likely; a weight w below 1
+## puts it in a bag with probability w, so 0.3 is rare. Read off the packed
+## scene by `mode_weight_of()`.
+@export var mode_weights: Dictionary = {}
+## Whether this is a no-frills competitive stage (#376): symmetrical, no
+## hazards, no moving parts. The Stock stage picker (#375) lists these first.
+@export var competitive: bool = false
+
+## King of the Hill (#377): whether the hill hops between this stage's
+## `get_hill_spots()` every ~30 s (with a warning) instead of staying on the
+## first. Stages without hill spots leave the hill at the spawns' centre.
+@export var hill_moves: bool = false
+
 ## Night variant (#332): set before the stage enters the tree. The stage then
 ## uses the Night palette mood and adds a `NightLighting` child. Visual only.
 var night: bool = false
@@ -136,6 +152,32 @@ static func view_size_of(scene: PackedScene) -> Vector2:
 			return state.get_node_property_value(0, p)
 	return DEFAULT_VIEW_SIZE
 
+## A stage scene's rotation weight for `mode_id` (#373), read off its packed
+## root like `view_size_of()`; 1.0 when the scene lists none for that mode.
+static func mode_weight_of(scene: PackedScene, mode_id: String) -> float:
+	if scene == null:
+		return 1.0
+	var state: SceneState = scene.get_state()
+	if state.get_node_count() == 0:
+		return 1.0
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"mode_weights":
+			var weights: Dictionary = state.get_node_property_value(0, p)
+			return float(weights.get(mode_id, weights.get("_other", 1.0)))
+	return 1.0
+## Whether a stage scene is flagged `competitive` (issue #375), read off its
+## packed root like `view_size_of`. Defaults to false: no stage sets it yet.
+static func competitive_of(scene: PackedScene) -> bool:
+	if scene == null:
+		return false
+	var state: SceneState = scene.get_state()
+	if state.get_node_count() == 0:
+		return false
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"competitive":
+			return bool(state.get_node_property_value(0, p))
+	return false
+
 ## The backdrop built in `_ready()`, or null outside the tree.
 func get_background() -> Node2D:
 	return get_node_or_null(BACKGROUND_NODE_NAME) as Node2D
@@ -153,6 +195,12 @@ func get_background() -> Node2D:
 ## position is the best answer there is.
 func get_spawn_points() -> Array[Vector2]:
 	return _marker_points("Spawn")
+
+## Where the King of the Hill hill may sit (#377): `Marker2D` children named
+## `HillSpot0`, `HillSpot1`, ... The first is where it starts. A stage may
+## declare none, and the hill then sits at the centre of the spawns.
+func get_hill_spots() -> Array[Vector2]:
+	return _marker_points("HillSpot")
 
 ## Where pickups may appear (issue #14, ADR-0009): `Marker2D` children named
 ## `PickupSpawn0`, `PickupSpawn1`, ..., collected the same way as player

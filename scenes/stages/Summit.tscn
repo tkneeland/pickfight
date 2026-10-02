@@ -1,0 +1,147 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+
+[sub_resource type="RectangleShape2D" id="R_200x24"]
+size = Vector2(200, 24)
+
+[sub_resource type="RectangleShape2D" id="R_320x24"]
+size = Vector2(320, 24)
+
+[sub_resource type="RectangleShape2D" id="R_1500x40"]
+size = Vector2(1500, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Summit (issue #377, a King of the Hill stage): a stepped tower in the middle
+; of a wide floor. The hill is fixed on top of the tower; side platforms and two
+; bounce pads give four approaches. (Stage.hill_spots: HillSpot0.)
+; Rotation (Stage.mode_weights): weighted 4x for King of the Hill, and in any
+; other mode dealt into a bag only 30% of the time ("_other").
+
+[node name="Summit" type="Node2D"]
+script = ExtResource("script")
+background_sky_top = Color(0.14, 0.12, 0.2, 1)
+background_sky_bottom = Color(0.26, 0.22, 0.3, 1)
+background_silhouette = Color(0.1, 0.1, 0.12, 1)
+background_layers = PackedStringArray("clouds", "mountains", "hills")
+mode_weights = {"king_of_the_hill": 4.0, "_other": 0.3}
+hill_moves = false
+
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(0, 400)
+
+[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("R_1500x40")
+
+[node name="FloorVisual" type="Polygon2D" parent="Floor"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)
+
+[node name="Tower" type="StaticBody2D" parent="."]
+position = Vector2(0, 180)
+
+[node name="TowerShape" type="CollisionShape2D" parent="Tower"]
+shape = SubResource("R_320x24")
+
+[node name="TowerVisual" type="Polygon2D" parent="Tower"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-160, -12, 160, -12, 160, 12, -160, 12)
+
+[node name="StepLeft" type="StaticBody2D" parent="."]
+position = Vector2(-330, 290)
+
+[node name="StepLeftShape" type="CollisionShape2D" parent="StepLeft"]
+shape = SubResource("R_200x24")
+
+[node name="StepLeftVisual" type="Polygon2D" parent="StepLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="StepRight" type="StaticBody2D" parent="."]
+position = Vector2(330, 290)
+
+[node name="StepRightShape" type="CollisionShape2D" parent="StepRight"]
+shape = SubResource("R_200x24")
+
+[node name="StepRightVisual" type="Polygon2D" parent="StepRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="HighLeft" type="StaticBody2D" parent="."]
+position = Vector2(-580, 170)
+
+[node name="HighLeftShape" type="CollisionShape2D" parent="HighLeft"]
+shape = SubResource("R_200x24")
+
+[node name="HighLeftVisual" type="Polygon2D" parent="HighLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="HighRight" type="StaticBody2D" parent="."]
+position = Vector2(580, 170)
+
+[node name="HighRightShape" type="CollisionShape2D" parent="HighRight"]
+shape = SubResource("R_200x24")
+
+[node name="HighRightVisual" type="Polygon2D" parent="HighRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="PadLeft" parent="." instance=ExtResource("pad")]
+position = Vector2(-200, 372)
+size = Vector2(100, 16)
+
+[node name="PadRight" parent="." instance=ExtResource("pad")]
+position = Vector2(200, 372)
+size = Vector2(100, 16)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-700, 320)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(700, 320)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-620, 320)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(620, 320)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-540, 320)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(540, 320)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-460, 320)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(460, 320)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("kz")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="HillSpot0" type="Marker2D" parent="."]
+position = Vector2(0, 110)
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 100)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-580, 100)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(580, 100)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(0, 330)
