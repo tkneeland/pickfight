@@ -681,6 +681,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pc_space_tap_throws_boomerang_on_key_up",
 	"remote_client_space_hold_releases_and_tap_throws_boomerang",
 	"gamepad_bumper_tap_throws_boomerang_and_hold_releases",
+	"flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple",
+	"flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple",
+	"flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host",
+	"phone_seat_flick_still_launches_grapple_and_boomerang",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2438,6 +2442,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang()
 		"gamepad_bumper_tap_throws_boomerang_and_hold_releases":
 			return await _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases()
+		"flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple":
+			return await _scenario_flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple()
+		"flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple":
+			return await _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple()
+		"flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host":
+			return await _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host()
+		"phone_seat_flick_still_launches_grapple_and_boomerang":
+			return await _scenario_phone_seat_flick_still_launches_grapple_and_boomerang()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -34836,15 +34848,18 @@ func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Arr
 	await _await_ticks(20)
 	var size: Vector2 = get_root().get_visible_rect().size
 	var radius: float = 0.35 * minf(size.x, size.y)
-	# A flick straight up from rest, then the mouse stays out there.
+	# Issue #487: a mouse flick no longer fires; the mouse goes out there and a
+	# Space tap fires the hook along it.
 	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(20)
+	await _tap_485(KEY_SPACE)
 	var hook: Node2D = null
 	var fired: bool = await _await_condition(func() -> bool: return player.launched_hook() != null, 1000)
 	if fired:
 		hook = player.launched_hook()
 	var stuck: bool = fired and await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
 	if not stuck:
-		failures.append("the mouse flick did not fire and stick the hook (fired %s)" % fired)
+		failures.append("the Space tap did not fire and stick the hook (fired %s)" % fired)
 	else:
 		await _await_ticks(30)
 		if player.launched_hook() == null:
@@ -35269,3 +35284,163 @@ func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[
 		failures.append("a bumper tap did not throw the boomerang on key-up")
 	await _teardown(rig["stage"])
 	return failures
+
+
+# --- No flick launches on button seats (issue #487, ADR-0022 amendment 3) ---
+
+## Whether `player`'s launcher is out (a hook or a boomerang).
+func _launcher_out_487(player: RigidBody2D) -> bool:
+	return player.launched_hook() != null or player.launched_boomerang() != null
+
+## A fast flick on the host PC seat launches neither the grapple nor the
+## boomerang; a Space tap fires the grapple along the aim, a second tap (hook
+## out) retracts it.
+func _scenario_flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcFlick487")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	if player.flick_launch_enabled:
+		failures.append("the host PC seat still has flick launches enabled")
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		await _await_ticks(20)
+		server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+		await _await_ticks(40)
+		if player.input_vector.length() < 0.5:
+			failures.append("%s: the mouse flick did not reach the player (vec %s)" % [path.get_file(), player.input_vector])
+		if _launcher_out_487(player):
+			failures.append("%s: a mouse flick launched on the PC seat" % path.get_file())
+		server.host_pc_mouse_motion(Vector2(0.0, radius * 3.0))
+		await _await_ticks(30)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(30)
+	var start_y: float = player.global_position.y
+	await _tap_485(KEY_SPACE)
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("a Space tap did not fire the grapple")
+	else:
+		await _await_ticks(10)
+		var hook: Node2D = player.launched_hook()
+		if hook != null and hook.global_position.y > start_y - 20.0:
+			failures.append("the hook did not fly along the aim (y %s from %s)" % [hook.global_position.y, start_y])
+		if server.slot_released(0):
+			failures.append("the firing tap left the seat released")
+		await _tap_485(KEY_SPACE)
+		if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
+			failures.append("a second Space tap did not retract the hook")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## A pad's flick launches nothing; a bumper tap fires the grapple.
+func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadFlick487")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	if player.flick_launch_enabled:
+		failures.append("a gamepad seat still has flick launches enabled")
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		server._test_pad_axes[0] = Vector2.ZERO
+		await _await_ticks(30)
+		server._test_pad_axes[0] = Vector2(0.0, -1.0)
+		await _await_ticks(30)
+		if player.input_vector.length() < 0.5:
+			failures.append("%s: the stick flick did not reach the player (vec %s)" % [path.get_file(), player.input_vector])
+		if _launcher_out_487(player):
+			failures.append("%s: a stick flick launched on the pad seat" % path.get_file())
+	await _equip(player, GRAPPLE_PATH)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, true)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, false)
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("a bumper tap did not fire the grapple")
+	await _teardown(rig["stage"])
+	return failures
+
+## An Online client's flick launches nothing on the host; its Space tap fires
+## the grapple there.
+func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	if player.flick_launch_enabled:
+		failures.append("a remote seat still has flick launches enabled")
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		client.mouse_motion(Vector2(0, -2000))
+		await _await_ticks(40)
+		if player.input_vector.length() < 0.5:
+			failures.append("%s: the client flick did not reach the host player (vec %s)" % [path.get_file(), player.input_vector])
+		if _launcher_out_487(player):
+			failures.append("%s: a client flick launched on the host" % path.get_file())
+		client.mouse_motion(Vector2(0, 4000))
+		await _await_ticks(40)
+	await _equip(player, GRAPPLE_PATH)
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = true
+	client._input(ev)
+	client._input(_space_up_485())
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 3000, true):
+		failures.append("a client Space tap never fired the host-side grapple (vec %s)" % player.input_vector)
+	await _rc_close_241(rig)
+	return failures
+
+## A phone has no button, so its flick still launches the grapple and the
+## boomerang (issue #487 leaves phones unchanged).
+func _scenario_phone_seat_flick_still_launches_grapple_and_boomerang() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PhoneFlick487")
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "flick-phone-487", [] as Array[WebSocketPeer])
+	if joined["slot"] != 0:
+		failures.append("the phone was not given slot 0")
+		await _teardown(rig["stage"])
+		return failures
+	if not player.flick_launch_enabled:
+		failures.append("a phone seat lost flick launches")
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		await _send_until_input_reaches(peer, player, Vector2.ZERO)
+		await _await_ticks(10)
+		var fired: bool = false
+		var deadline: int = Time.get_ticks_msec() + 1500
+		while Time.get_ticks_msec() < deadline and not fired:
+			peer.put_packet(_packet_for_487(Vector2(0.0, -1.0)))
+			await process_frame
+			peer.poll()
+			fired = _launcher_out_487(player)
+		if not fired:
+			failures.append("%s: a phone flick did not launch" % path.get_file())
+	peer.close()
+	await _teardown(rig["stage"])
+	return failures
+
+func _packet_for_487(v: Vector2) -> PackedByteArray:
+	var pkt := PackedByteArray()
+	pkt.resize(8)
+	pkt.encode_float(0, v.x)
+	pkt.encode_float(4, v.y)
+	return pkt

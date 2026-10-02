@@ -432,6 +432,12 @@ func set_input_vector(v: Vector2) -> void:
 ## released, whatever the flag says.
 var input_released: bool = false
 
+## Issue #487: whether a flick launches the grapple or the boomerang. Phones
+## (no button) keep it; seats with an action button (host PC, Online client,
+## gamepad) turn it off, since a mouse's fast drags are how you swing, and the
+## action tap launches instead. ControllerServer sets it as a seat binds.
+var flick_launch_enabled: bool = true
+
 func set_input_released(released: bool) -> void:
 	input_released = released
 
@@ -2012,7 +2018,7 @@ func _tick_launcher(delta: float) -> void:
 		_launch_cooldown = maxf(0.0, _launch_cooldown - delta)
 	# Not from a phased head (issue #115): a ghost scores nothing and grips
 	# nothing, and it may be inside the slab it was trapped under.
-	if flicked and _launch_cooldown <= 0.0 and not _head.phased:
+	if flicked and flick_launch_enabled and _launch_cooldown <= 0.0 and not _head.phased:
 		_launch_special()
 
 ## Whether this tick's drag completes a flick. Called every tick so the history
@@ -2050,12 +2056,14 @@ func _detect_flick() -> bool:
 ## boomerang the way a flick does -- same readiness, same launch -- and reports
 ## whether it did, so the caller toggles release only when it did not.
 func try_action_throw() -> bool:
-	if _stats == null or _stats.special != &"boomerang" or not alive:
+	if _stats == null or not alive:
+		return false
+	if _stats.special != &"boomerang" and not (_stats.special == &"grapple" and not flick_launch_enabled):
 		return false
 	if not special_ready() or _head == null or _head.phased:
 		return false
 	_launch_special()
-	return launched_boomerang() != null
+	return launched_boomerang() != null or launched_hook() != null
 
 func _launch_special() -> void:
 	var host: Node = get_parent()

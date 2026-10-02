@@ -91,3 +91,16 @@ throws), so a tap is not lost between packets; and byte 8, the held flag, is
 set while a shoulder is down or while Space or L3/R3 has been down past 0.25 s.
 The host still owns the toggle and the throw: on a count change it throws the
 boomerang, else toggles. Eight- and nine-byte frames still mean no press.
+
+## Amendment 3 (issue #487): button seats do not flick-launch
+
+A seat with an action button (host PC, Online client, gamepad) no longer
+launches the grapple or the boomerang by flick: on a mouse, fast drags are how
+you swing, so flick launches misfired. `Player.flick_launch_enabled` (default
+true) is set false by `ControllerServer._attach()` for `LocalSeat` (host PC and
+`PadSeat`) and `RemoteSeat` peers, true for phones, and reset to true on unbind;
+bots never bind a seat and keep it. The action tap launches instead: the
+boomerang as before (#481), and now the grapple, fired along the arm's aim when
+ready and not out through the same `_launch_special()`. A tap while the hook is
+out is not a launch, so it falls through to the release toggle and retracts.
+Holds are unchanged, and so is every other weapon. Phones are unchanged.
