@@ -21,6 +21,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Staff, sword, dagger (#13)
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
 - Spear: long reach, weak up close (#272)
+- Shield: blocks hits landing on its face; a bash does little damage but big knockback (#275)
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy; a short poker otherwise (#269)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
@@ -62,6 +63,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Night stages (#332): about 1 round in 5 plays its stage as a night variant, applied by data (`Stage.night`, rolled per round by `RoundManager.night_chance`, from its own RNG; off with the modifier-roll seam, `forced_night` overrides). Darker Night palette with stars, lamps over the spawns, and a soft glow on players, weapon heads, pickups and hazards. Visual only. Lighting is `CanvasModulate` plus shadowless `PointLight2D` (works with the Compatibility renderer); lamps hold steady with Reduce flashes on
 - Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Victory screen stats (#325): a per-player table under the awards (KOs, damage dealt and taken, self-KOs, weapon pickups, favourite weapon) and a "Magpie" award for the most weapon pickups
+- Mode awards (#355): the victory screen adds one award for the mode played, only in that mode: "Longest Hold" (most seconds alone on the hill, King of the Hill; individual holds only, so none in Teams), "Hot Hands" (most tags passed on, Hot Potato), "Survivor" (most lives left, summed over the match's rounds, Stock). Classic and Sudden Death add none. Each mode node hands its round numbers to `MatchStats` through `report_stats()` when the round ends
 - Scoreboard shown at round end (#5)
 - KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
@@ -114,7 +116,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
-- Music: lobby and fight tracks (#118)
+- Music: lobby and fight tracks (#118); six more CC0 fight tracks join the rotation, eight in all, each loop-trimmed so it repeats without a gap (#289)
 - Narrator/announcer, one consistent voice (#152, #211)
 - Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
@@ -154,7 +156,7 @@ Not shipped; do not treat as existing.
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)
 - #271 Pogo stick, #270 Plunger (tkneeland)
 - #270 Plunger, #269 Umbrella (tkneeland)
-- #275 Shield, #274 Magnet, #273 Fishing rod (agage-JG)
+- #274 Magnet, #273 Fishing rod (agage-JG)
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)
 - #256 Juice pass (agage-JG); #257 Richer stage dressing (tkneeland)

@@ -1360,6 +1360,7 @@ func _refresh_victory() -> void:
 func _all_awards(slots: Array[int]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = _stats.awards(slots)
 	out.append_array(_stats.extra_awards(slots))
+	out.append_array(_stats.mode_awards(slots, game_mode))
 	return out
 
 ## The podium's order: whether slot `a` stands before slot `b`. The match
@@ -2204,6 +2205,9 @@ func lives_of(slot: int) -> int:
 
 func _end_game_mode() -> void:
 	if _game_mode_node != null:
+		# The mode's per-round numbers go into the match's stats (#355).
+		if _game_mode_node.has_method("report_stats"):
+			_game_mode_node.report_stats(_stats)
 		_game_mode_node.end_round()
 		_game_mode_node.queue_free()
 		_game_mode_node = null

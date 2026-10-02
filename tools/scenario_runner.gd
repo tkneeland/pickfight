@@ -558,6 +558,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
 	"hot_potato_stages_load_and_are_in_rotation",
 	"hot_potato_draws_its_stages_more_often",
+	"music_every_fight_track_loads_and_rotates",
 	"mode_awards_go_to_the_right_player_only_in_their_mode",
 	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"pseudo_locale_changes_lobby_and_mode_text",
@@ -566,9 +567,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_hill_starts_on_first_hill_spot",
 	"koth_moving_hill_warns_then_moves",
 	"koth_stage_without_spots_uses_spawn_centre",
+	"shield_blocks_a_hit_on_its_face",
+	"shield_bash_knocks_back_harder_than_pickaxe",
+	"shield_is_in_the_pickup_set",
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
+	"mode_awards_go_to_the_right_player_only_in_their_mode",
+	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"telemetry_record_has_no_identifying_fields",
 	"telemetry_not_sent_when_off_or_scripted",
 	"telemetry_notice_shows_once",
@@ -2082,6 +2088,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
 		"hot_potato_draws_its_stages_more_often":
 			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"music_every_fight_track_loads_and_rotates":
+			return await _scenario_music_every_fight_track_loads_and_rotates()
 		"mode_awards_go_to_the_right_player_only_in_their_mode":
 			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
 		"mode_awards_reach_the_victory_awards_through_the_round_manager":
@@ -2098,12 +2106,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_moving_hill_warns_then_moves()
 		"koth_stage_without_spots_uses_spawn_centre":
 			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
+		"shield_blocks_a_hit_on_its_face":
+			return await _scenario_shield_blocks_a_hit_on_its_face()
+		"shield_bash_knocks_back_harder_than_pickaxe":
+			return await _scenario_shield_bash_knocks_back_harder_than_pickaxe()
+		"shield_is_in_the_pickup_set":
+			return await _scenario_shield_is_in_the_pickup_set()
 		"announcer_calls_each_mode_at_round_start":
 			return await _scenario_announcer_calls_each_mode_at_round_start()
 		"announcer_calls_hill_taken_when_the_hill_changes_hands":
 			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
 		"announcer_calls_last_life_stolen_and_overtime_in_stock":
 			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
+		"mode_awards_go_to_the_right_player_only_in_their_mode":
+			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
+		"mode_awards_reach_the_victory_awards_through_the_round_manager":
+			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
 		"telemetry_record_has_no_identifying_fields":
 			return await _scenario_telemetry_record_has_no_identifying_fields()
 		"telemetry_not_sent_when_off_or_scripted":
@@ -11373,7 +11391,7 @@ const MUSIC_AUTOLOAD_PATH: NodePath = ^"Music"
 const MUSIC_DIR: String = "res://assets/music/"
 const MUSIC_CREDITS_PATH: String = "res://CREDITS.md"
 ## The shipped music, all together, stays under this.
-const MUSIC_MAX_TOTAL_BYTES: int = 2 * 1024 * 1024
+const MUSIC_MAX_TOTAL_BYTES: int = 12 * 1024 * 1024
 ## Past a crossfade, with room to spare.
 const MUSIC_SETTLE_MSEC: int = 2500
 const MUSIC_DUCK_TIMEOUT_MSEC: int = 3000
@@ -11405,8 +11423,8 @@ func _scenario_music_lobby_and_fight_switching() -> Array[String]:
 	elif AudioServer.get_bus_send(AudioServer.get_bus_index(&"Music")) != &"Master":
 		failures.append("the Music bus does not send to Master")
 	var fights: PackedStringArray = music.fight_tracks()
-	if fights.size() < 1 or fights.size() > 2:
-		failures.append("there are %d fight tracks, expected 1 or 2" % fights.size())
+	if fights.size() < 1:
+		failures.append("there are no fight tracks")
 	music.play_lobby()
 	if music.current_kind() != "lobby" or not music.is_playing():
 		failures.append("play_lobby() left '%s' (%s), not the lobby track playing" % [
@@ -29868,6 +29886,43 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
 	return failures
+# --- Every fight track loads, loops and gets a turn (issue #289) ---------------
+## The fight rotation hands each fight track out in turn. Asking for fight music
+## again and again, with a stop between, must reach every one of them, and each
+## must play as a real looping stream of a sensible length.
+const MUSIC_MIN_FIGHT_TRACKS: int = 8
+const MUSIC_MIN_TRACK_SEC: float = 20.0
+func _scenario_music_every_fight_track_loads_and_rotates() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	var fights: PackedStringArray = music.fight_tracks()
+	print("      %d fight tracks" % fights.size())
+	if fights.size() < MUSIC_MIN_FIGHT_TRACKS:
+		failures.append("only %d fight tracks, expected at least %d" % [fights.size(), MUSIC_MIN_FIGHT_TRACKS])
+	var heard: Dictionary = {}
+	for i in fights.size():
+		music.stop()
+		music.play_fight()
+		await physics_frame
+		var stream: AudioStream = null
+		for child: Node in music.get_children():
+			if child is AudioStreamPlayer and (child as AudioStreamPlayer).playing:
+				stream = (child as AudioStreamPlayer).stream
+		var track: String = music.switches()[music.switches().size() - 1]
+		heard[track] = true
+		if not (stream is AudioStreamOggVorbis) or not (stream as AudioStreamOggVorbis).loop:
+			failures.append("%s does not play as a loop" % track)
+		elif stream.get_length() < MUSIC_MIN_TRACK_SEC:
+			failures.append("%s is only %.1f s long" % [track, stream.get_length()])
+	for track: String in fights:
+		if not heard.has(track):
+			failures.append("the fight rotation never reached %s in %d turns" % [track, fights.size()])
+	music.stop()
+	_scenario_completed = true
+	return failures
 ## Issue #355: the mode awards, from MatchStats alone. Each goes to the slot
 ## with the most of its number, only in its own mode; Classic and Sudden Death
 ## get none, and a new match wipes them.
@@ -30151,6 +30206,96 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 	if hill.hill_moves or not hill.hill_spots.is_empty():
 		failures.append("a stage with no spots reports spots or a moving hill")
 	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+# --- Shield (issue #275) -----------------------------------------------------
+const SHIELD_PATH: String = "res://resources/shield.tres"
+## A hit on the face the shield points at is mostly blocked; one from behind it
+## lands in full, and so does one on a pickaxe held the same way.
+func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
+	attacker.gravity_scale = 0.0
+	var damage_taken := func(point: Vector2) -> float:
+		var before: float = player.damage
+		player.take_damage(20.0, point, attacker)
+		return player.damage - before
+	attacker.global_position = player.global_position + Vector2(150, 0)
+	attacker.linear_velocity = Vector2.ZERO
+	var on_face: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
+	await physics_frame
+	var pushed_face: float = attacker.linear_velocity.x
+	attacker.global_position = player.global_position + Vector2(-150, 0)
+	attacker.linear_velocity = Vector2.ZERO
+	var behind: float = damage_taken.call(player.global_position + Vector2.LEFT * 40.0)
+	await physics_frame
+	var pushed_behind: float = attacker.linear_velocity.length()
+	print("      attacker pushed: face block %.0f px/s, hit from behind %.0f px/s" % [pushed_face, pushed_behind])
+	if pushed_face < 200.0:
+		failures.append("a face block pushed the attacker %.0f px/s away, expected a clear shove" % pushed_face)
+	# The attacker drifts a little on its own (its arm settling); a block must clearly beat that.
+	if pushed_behind > pushed_face * 0.4:
+		failures.append("a hit from behind pushed the attacker %.0f px/s against %.0f for a block; only a block should" % [pushed_behind, pushed_face])
+	print("      20-damage hit: on the shield face %.1f, from behind %.1f" % [on_face, behind])
+	if on_face > 5.0:
+		failures.append("a hit on the shield face took %.1f of 20, expected it blocked" % on_face)
+	if behind < 20.0:
+		failures.append("a hit from behind the shield took %.1f of 20, expected all of it" % behind)
+	await _equip(player, PICKAXE_STARTER_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var pickaxe: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
+	if pickaxe < 20.0:
+		failures.append("a pickaxe holder took %.1f of 20 on the same side; only the shield blocks" % pickaxe)
+	await _teardown(stage)
+	return failures
+## Bashes `path` into a neighbour and returns [victim damage, victim speed].
+func _shield_bash_result(path: String) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
+	await _await_ticks(2)
+	await _equip(holder, path)
+	holder.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	var strikes: Array = []
+	_record_strikes(holder, strikes)
+	holder.set_input_vector(Vector2.RIGHT)
+	await _await_condition(func() -> bool: return not strikes.is_empty(), 4000)
+	var fastest: float = 0.0
+	for i in 6:
+		fastest = maxf(fastest, victim.linear_velocity.length())
+		await physics_frame
+	var result: Array[float] = [victim.damage, fastest]
+	await _teardown(stage, false)
+	return result
+## A shield bash shoves harder than a pickaxe swing and does less damage.
+func _scenario_shield_bash_knocks_back_harder_than_pickaxe() -> Array[String]:
+	var failures: Array[String] = []
+	var shield: Array[float] = await _shield_bash_result(SHIELD_PATH)
+	var pickaxe: Array[float] = await _shield_bash_result(PICKAXE_STARTER_PATH)
+	print("      bash: shield dmg %.1f speed %.0f; pickaxe dmg %.1f speed %.0f" % [shield[0], shield[1], pickaxe[0], pickaxe[1]])
+	if shield[1] < pickaxe[1] * 1.5:
+		failures.append("the shield bash moved the victim %.0f px/s, not clearly more than the pickaxe's %.0f" % [shield[1], pickaxe[1]])
+	if shield[0] >= pickaxe[0]:
+		failures.append("the shield bash did %.1f damage, not less than the pickaxe's %.1f" % [shield[0], pickaxe[0]])
+	_scenario_completed = true
+	return failures
+## The shield is something a pickup can hand out.
+func _scenario_shield_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(SHIELD_PATH):
+		failures.append("the shield is not in the pickup weapon paths")
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == SHIELD_PATH
+	if not found:
+		failures.append("the shield is not among the loaded pickup weapons")
 	_scenario_completed = true
 	return failures
 # --- Issue #370: announcer callouts for modes ----------------------------------

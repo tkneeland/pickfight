@@ -24,6 +24,7 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
 	"res://resources/plunger.tres",
+	"res://resources/shield.tres",
 ]
 
 ## The weapons as `available_weapons()` first loaded them, held for the

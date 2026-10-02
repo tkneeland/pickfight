@@ -107,6 +107,9 @@ extends Resource
 ##                   links and hits by its own momentum.
 ##   &"umbrella"  -- held overhead (aim up) the canopy caps the fall, catches
 ##                   wind zones and turns hits on its face (Player.canopy_open).
+##   &"shield"    -- a hit landing on the side the shield faces is mostly
+##                   blocked, and a strike with it shoves its victim hard
+##                   (Player.shield_blocks).
 ##   &"pogo"      -- the head bounces the player off the ground; only a
 ##                   stomp from above does damage.
 ##   &"boomerang" -- a flick throws the boomerang, which arcs out and comes

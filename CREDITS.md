@@ -66,6 +66,7 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 | `kenney_rpg/creak1.ogg`, `creak2.ogg`, `creak3.ogg` | RPG Audio | CC0 1.0 | collapsing floor warning |
 | `kenney_impact/impactWood_heavy_002.ogg`, `_003`, `_004` | Impact Sounds | CC0 1.0 | collapsing floor collapse; boomerang hit (`_002`, `_004`); flail hit (`_003`) |
 | `kenney_impact/impactGeneric_light_000.ogg`, `_001`, `_002` | Impact Sounds | CC0 1.0 | breakable wall hit; grapple hit |
+| `kenney_impact/impactPlate_shield_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | shield hit (copies of `impactPlate_heavy_000`, `_001`) |
 | `kenney_impact/footstep_snow_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | plunger hit |
 | `kenney_impact/impactPlate_heavy_000.ogg`, `_001` | Impact Sounds | CC0 1.0 | breakable wall break; flail hit |
 
@@ -147,6 +148,12 @@ maps each one to its use.
 | `assets/music/lobby_snowfall_looped.ogg` | Snowfall (Looped ver.) | Kistol | CC0 1.0 | https://opengameart.org/content/snowfall | https://opengameart.org/sites/default/files/Snowfall%20%28Looped%20ver.%29_0.ogg | lobby and menu (chill) |
 | `assets/music/fight_fast_fight_looped.ogg` | Fast fight / battle music (looped) | Ville Nousiainen; loop edit by XCVG | CC0 1.0 | https://opengameart.org/content/fast-fight-battle-music-looped | https://opengameart.org/sites/default/files/fight_looped.ogg | fight, first in the rotation |
 | `assets/music/fight_nes_shooter_mars.ogg` | Mars, from "NES Shooter Music (5 tracks, 3 jingles)" | SketchyLogic | CC0 1.0 | https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles | https://opengameart.org/sites/default/files/Mars.ogg | fight, second in the rotation |
+| `assets/music/fight_chiptunes_action_level1.ogg` | Level 1, from "5 Chiptunes (Action)" | SubspaceAudio | CC0 1.0 | https://opengameart.org/content/5-chiptunes-action | https://opengameart.org/sites/default/files/audio_preview/level1.mp3.ogg | fight rotation |
+| `assets/music/fight_chiptunes_action_level2.ogg` | Level 2, from "5 Chiptunes (Action)" | SubspaceAudio | CC0 1.0 | https://opengameart.org/content/5-chiptunes-action | https://opengameart.org/sites/default/files/audio_preview/level2.mp3.ogg | fight rotation |
+| `assets/music/fight_chiptunes_action_level3.ogg` | Level 3, from "5 Chiptunes (Action)" | SubspaceAudio | CC0 1.0 | https://opengameart.org/content/5-chiptunes-action | https://opengameart.org/sites/default/files/audio_preview/level3.mp3.ogg | fight rotation |
+| `assets/music/fight_boss_battle_2_8bit.ogg` | Boss Battle #2 ["8 bit"] | nene | CC0 1.0 | https://opengameart.org/content/boss-battle-2-8-bit | https://opengameart.org/sites/default/files/audio_preview/boss_battle_%232.mp3.ogg | fight rotation |
+| `assets/music/fight_battle_theme_a.ogg` | Battle Theme A | cynicmusic | CC0 1.0 | https://opengameart.org/content/battle-theme-a | https://opengameart.org/sites/default/files/audio_preview/battleThemeA_0.mp3.ogg | fight rotation |
+| `assets/music/fight_battle_theme_wolfgang.ogg` | Battle Theme | Wolfgang_ | CC0 1.0 | https://opengameart.org/content/battle-theme-0 | https://opengameart.org/sites/default/files/audio_preview/Battle.mp3.ogg | fight rotation |
 
 Notes:
 
@@ -161,7 +168,9 @@ Notes:
   credit, for a link to http://soundcloud.com/mutkanto.
 - Credit for Snowfall: "Music by Kistol, but credit is not required."
 
-That is three files, about 1.6 MB in all. The `music_tracks_exist_and_credited`
+Issue #289 added the last six rows. Each page gives CC0 as its only licence (checked 2026-10-01). As with Mars, the OGG is the Vorbis copy OpenGameArt serves for the page's player, not a re-encode. The first ones are loop-trimmed in `Music.TRACKS` (`loop_start`, `tail_trim`) so the seam has almost no silence.
+
+That is nine files, about 9 MB in all. The `music_tracks_exist_and_credited`
 scenario fails if a track is missing, if it is not listed here with CC0, or if
 a shipped music file is unused.
 
