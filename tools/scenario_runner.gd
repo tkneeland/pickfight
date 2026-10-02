@@ -849,6 +849,7 @@ const SLOT_COLOR_TOLERANCE: float = 0.01
 ## be true of the whole roster rather than of whichever weapon `Player.tscn`
 ## happens to ship with, so a sixth weapon is covered by adding it here.
 const WEAPON_RESOURCE_PATHS: PackedStringArray = [
+	"res://resources/shield.tres",
 	"res://resources/pickaxe.tres",
 	"res://resources/staff.tres",
 	"res://resources/sword.tres",
@@ -868,7 +869,6 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	# and hangs rather than planting. It has its own plunger_* scenarios.
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
-	"res://resources/shield.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
