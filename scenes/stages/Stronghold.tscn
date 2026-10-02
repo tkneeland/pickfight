@@ -103,7 +103,7 @@ polygon = PackedVector2Array(-80.0, -70.0, 80.0, -70.0, 80.0, 70.0, -80.0, 70.0)
 
 ; Low ledges to vault from onto the bridge.
 [node name="LedgeLeft" type="StaticBody2D" parent="."]
-position = Vector2(-250, 190)
+position = Vector2(-220, 190)
 
 [node name="LedgeLeftShape" type="CollisionShape2D" parent="LedgeLeft"]
 shape = SubResource("RectangleShape2D_140x20")
@@ -113,7 +113,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-70.0, -10.0, 70.0, -10.0, 70.0, 10.0, -70.0, 10.0)
 
 [node name="LedgeRight" type="StaticBody2D" parent="."]
-position = Vector2(250, 190)
+position = Vector2(220, 190)
 
 [node name="LedgeRightShape" type="CollisionShape2D" parent="LedgeRight"]
 shape = SubResource("RectangleShape2D_140x20")
@@ -171,35 +171,35 @@ position = Vector2(640.0, 140)
 
 ; Eight spawns, alternating left and right like every stage; Capture the Flag sends each team to its own side (Red left, Blue right).
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-520, 225)
+position = Vector2(-500, 225)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(520, 225)
+position = Vector2(500, 225)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-470, 225)
+position = Vector2(-440, 225)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(470, 225)
+position = Vector2(440, 225)
 
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-420, 225)
-
-[node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(420, 225)
-
-[node name="Spawn6" type="Marker2D" parent="."]
 position = Vector2(-380, 225)
 
-[node name="Spawn7" type="Marker2D" parent="."]
+[node name="Spawn5" type="Marker2D" parent="."]
 position = Vector2(380, 225)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-320, 225)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(320, 225)
 
 ; Pickups on the ledges and over the middle.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-250, 140)
+position = Vector2(-220, 140)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(250, 140)
+position = Vector2(220, 140)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
 position = Vector2(0, 10)
