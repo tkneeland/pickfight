@@ -10579,7 +10579,10 @@ func _scenario_sfx_strength_scales_volume() -> Array[String]:
 	attacker.strike_landed.emit(victim, 6.0, victim.global_position, false)
 	attacker.strike_landed.emit(victim, 54.0, victim.global_position, false)
 	sfx.stop_recording()
-	var hits: Array[Dictionary] = sfx.recorded()
+	var hits: Array[Dictionary] = []
+	for requested: Dictionary in sfx.recorded():
+		if not String(requested["name"]).begins_with("grunt_"):	# the victim's voice (#290)
+			hits.append(requested)
 	if hits.size() != 2:
 		failures.append("two damaging strikes asked for %d sounds" % hits.size())
 	else:
