@@ -160,6 +160,10 @@ const PAGE_PATH: String = "res://controller/index.html"
 const WS_PORT_TOKEN: String = "__WS_PORT__"
 const MAX_HEADER_BYTES: int = 8192
 const PACKET_SIZE: int = 8
+## Issue #463, ADR-0022: a client that is holding "released" (a PC client after
+## a Space tap, say) appends one byte, nonzero, to the vector packet. A packet
+## without it -- every phone, every older client -- means not released.
+const RELEASE_PACKET_SIZE: int = 9
 ## Every `kind` `send_buzz()` is sent with, strongest first; the controller
 ## page has a vibration pattern and a flash for each.
 const BUZZ_KINDS: PackedStringArray = ["win", "eliminated", "struck", "hit"]
@@ -518,6 +522,10 @@ func _ready() -> void:
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
+	_slot_release_remote.resize(_players.size())
+	_slot_release_toggle.resize(_players.size())
+	_slot_release_held.resize(_players.size())
+	_slot_was_alive.resize(_players.size())
 	_slot_name.resize(_players.size())
 	_slot_hat.resize(_players.size())
 	_slot_eyes.resize(_players.size())
@@ -606,12 +614,48 @@ func _process(delta: float) -> void:
 		host_changed.emit(_last_host)
 	_apply_smoothed_input(delta)
 
+## Issue #463, ADR-0022: per slot, the "released" a controller reports besides
+## its vector. `remote` is the flag byte of a remote client's packet; `toggle`
+## is a host-side Space tap or stick click that flips it; `held` is a shoulder
+## button held down. Any one of the three releases the slot's weapon.
+var _slot_release_remote: PackedByteArray = PackedByteArray()
+var _slot_release_toggle: PackedByteArray = PackedByteArray()
+var _slot_release_held: PackedByteArray = PackedByteArray()
+var _slot_was_alive: PackedByteArray = PackedByteArray()
+
+func _clear_release(slot: int) -> void:
+	_slot_release_remote[slot] = 0
+	_slot_release_toggle[slot] = 0
+	_slot_release_held[slot] = 0
+
+## Whether `slot` is letting go right now (a test seam, like `pad_slot`).
+func slot_released(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_release_toggle.size() \
+		and (_slot_release_remote[slot] == 1 or _slot_release_toggle[slot] == 1 or _slot_release_held[slot] == 1)
+
+func _toggle_release(slot: int) -> void:
+	if slot >= 0 and slot < _slot_release_toggle.size():
+		_slot_release_toggle[slot] = 1 - _slot_release_toggle[slot]
+
+## A fresh round or a respawn starts not released (ADR-0022); a remote client
+## holds its own toggle, so it is told to clear it.
+func _reset_release_on_respawn(slot: int) -> void:
+	var now_alive: int = 1 if _players[slot].alive else 0
+	if now_alive == 1 and _slot_was_alive[slot] == 0:
+		_slot_release_toggle[slot] = 0
+		_slot_release_remote[slot] = 0
+		if _slot_peers[slot] is RemoteSeat:
+			_slot_peers[slot].send_text(JSON.stringify({"t": "release", "v": false}))
+	_slot_was_alive[slot] = now_alive
+
 ## Step every bound slot's ease and hand the result to its player (issue #113).
 func _apply_smoothed_input(delta: float) -> void:
 	for slot in _slot_peers.size():
 		if (_slot_peers[slot] == null and _slot_virtual[slot] == 0) or _players[slot] == null:
 			continue
+		_reset_release_on_respawn(slot)
 		_players[slot].set_input_vector(_smoothers[slot].step(delta))
+		_players[slot].set_input_released(slot_released(slot))
 
 ## Weapon diagnostics run on the physics tick because that is the rate the weapon is
 ## actually integrated at, which makes "held steady for N frames" meaningful.
@@ -1079,6 +1123,8 @@ func _unbind(slot: int) -> void:
 	_slot_peers[slot] = null
 	_smoothers[slot].reset()
 	_slot_ready[slot] = 0
+	_clear_release(slot)
+	_slot_was_alive[slot] = 0
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	if _players[slot] != null:
@@ -1195,7 +1241,7 @@ func _drain(slot: int, peer: Variant) -> void:
 			if _take_text_budget(slot) and pkt.size() <= MAX_TEXT_FRAME_BYTES:
 				_handle_text(slot, pkt.get_string_from_utf8())
 			continue
-		if pkt.size() != PACKET_SIZE:
+		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE:
 			continue
 		latest = pkt
 		got = true
@@ -1204,6 +1250,7 @@ func _drain(slot: int, peer: Variant) -> void:
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	var v: Vector2 = Vector2(latest.decode_float(0), latest.decode_float(4))
 	_smoothers[slot].push(v)
+	_slot_release_remote[slot] = 1 if latest.size() == RELEASE_PACKET_SIZE and latest[PACKET_SIZE] != 0 else 0
 	if _log_input:
 		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])
 
@@ -2073,6 +2120,7 @@ func host_pc_mouse_motion(relative: Vector2) -> void:
 func _input(event: InputEvent) -> void:
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null:
+		_pad_release_button(pad_button.device, pad_button.button_index, pad_button.pressed)
 		if pad_button.pressed:
 			_pad_button_pressed(pad_button.device, pad_button.button_index)
 		return
@@ -2084,6 +2132,12 @@ func _input(event: InputEvent) -> void:
 			host_pc_mouse_motion(motion.relative)
 		return
 	var key := event as InputEventKey
+	# Issue #463, ADR-0022: a Space tap is the host PC's finger lifting (and
+	# touching again), since a mouse never sends a zero vector.
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
+			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+		_toggle_release(_host_pc_slot)
+		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
 		_update_mouse_capture()
@@ -2161,6 +2215,17 @@ func _push_pad_sticks() -> void:
 ## D16), and a PC host's first pad. Seated or not, it never makes its seat host.
 const HOST_PAD_DEVICE: int = 0
 
+## Issue #463, ADR-0022: either shoulder button held lets the pad's weapon go;
+## clicking either stick toggles it, like Space on a PC.
+func _pad_release_button(device: int, button: int, pressed: bool) -> void:
+	var slot: int = pad_slot(device)
+	if slot == -1:
+		return
+	if button == JOY_BUTTON_LEFT_SHOULDER or button == JOY_BUTTON_RIGHT_SHOULDER:
+		_slot_release_held[slot] = 1 if pressed else 0
+	elif pressed and (button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK):
+		_toggle_release(slot)
+
 ## A or Start joins (in the lobby) or readies; B un-readies. Issue #430: in a
 ## match (or paused), Start from the host's pad sends the host phone's Pause or
 ## Resume, and from any other pad does nothing.
@@ -2172,6 +2237,9 @@ func _pad_button_pressed(device: int, button: int) -> void:
 	if button == JOY_BUTTON_START and (paused or MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby")))):
 		if device == HOST_PAD_DEVICE:
 			host_command.emit("resume" if paused else "pause", -1)
+		return
+	# Issue #441: in the lobby the D-pad and bumpers drive the seat's cosmetics picker.
+	if slot != -1 and pad_picker_shown(slot) and cosmetics_picker.pad_button(self, slot, button):
 		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
@@ -2409,6 +2477,34 @@ func slot_ping_msec(slot: int) -> int:
 		return -1
 	return _slot_peers[slot].rtt_msec
 
+# --- In-game cosmetics picker (issue #441, ADR-0021) --------------------------
+#
+# The shared picker model is CosmeticsPicker.gd; these are what its layouts read.
+
+const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
+## Each pad seat's picker cursor (the model's per-seat state).
+var cosmetics_picker: RefCounted = CosmeticsPickerScript.new()
+
+## Whether colour `index` could be worn by `slot` now: the phone's own rule.
+func color_free(index: int, slot: int) -> bool:
+	return _color_free(index, slot)
+
+## How many colours are on offer, and colour `index` (white for none).
+func palette_size() -> int:
+	return _palette.size()
+
+func palette_color(index: int) -> Color:
+	return _palette[index] if index >= 0 and index < _palette.size() else Color.WHITE
+
+## Whether `slot` is a gamepad's claim, plugged in or held (#442): its lobby
+## card carries the picker.
+func pad_claim(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_client_id.size() and _slot_claimed[slot] == 1 		and str(_slot_client_id[slot]).begins_with(PAD_ID_PREFIX)
+
+## Whether `slot`'s gamepad picker shows: a gamepad holds the seat right now
+## and it is the lobby (cosmetics change in the lobby only).
+func pad_picker_shown(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat and _slot_peers[slot].open 		and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 # --- Couch or Online, never mixed (issue #435, ADR-0021) -------------------------
 #
 # The host picks the match kind on the title screen (LobbyScreen.gd): Couch (the

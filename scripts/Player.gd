@@ -425,12 +425,23 @@ func set_input_vector(v: Vector2) -> void:
 		return
 	input_vector = v.limit_length(1.0)
 
+## Issue #463, ADR-0022: an explicit "released" state beside the vector. A
+## phone's finger lift is a zero vector, but a mouse never sends one, so a PC or
+## gamepad player lets go with a button (Space tap, shoulder hold, stick click)
+## and the controller layer sets this flag. A zero vector still counts as
+## released, whatever the flag says.
+var input_released: bool = false
+
+func set_input_released(released: bool) -> void:
+	input_released = released
+
 func bind_controller() -> void:
 	has_controller = true
 
 func unbind_controller() -> void:
 	has_controller = false
 	input_vector = Vector2.ZERO
+	input_released = false
 
 ## Where the weapon's head actually is this tick, in world space. This is the
 ## weapon's live geometry -- the observable a player judges aim and reach by,
@@ -603,6 +614,7 @@ func _go_inert() -> void:
 func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	alive = true
 	damage = 0.0
+	input_released = false
 	if not keeps_weapon:
 		_assign_weapon_stats(DEFAULT_WEAPON_STATS)
 	freeze = false
@@ -1339,7 +1351,7 @@ func set_identity_color(colour: Color) -> void:
 func _update_weapon_input(delta: float) -> void:
 	var effective_vector: Vector2 = _get_effective_vector(delta)
 	_effective_input = effective_vector
-	_drag_released = effective_vector == Vector2.ZERO
+	_drag_released = effective_vector == Vector2.ZERO or (has_controller and input_released)
 	if effective_vector != Vector2.ZERO:
 		weapon_angle = effective_vector.angle()
 		weapon_length = lerp(_stats.min_reach, _stats.max_reach, effective_vector.length())
@@ -1976,8 +1988,6 @@ func _tick_special(delta: float) -> void:
 			_tick_flail()
 		&"umbrella":
 			_tick_umbrella()
-		&"magnet":
-			pass
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
 		&"plunger":

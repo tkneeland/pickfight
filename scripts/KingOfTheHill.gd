@@ -14,6 +14,7 @@ var round_manager: Node
 ## Where the hill is, in world space. Left at ZERO, `start_round()` puts it at
 ## the centre of the stage's spawn points.
 var hill_position: Vector2 = Vector2.ZERO
+## Radius, px, of the hill: a live player whose centre is within it is on it.
 var hill_radius: float = 110.0
 ## How far below the spawn centre to look for floor, and how far above it a
 ## standing player's centre sits.

@@ -659,6 +659,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_remote_seat_held_30s_keeps_slot_score_and_looks",
 	"online_remote_seat_frees_after_30s_for_a_fresh_seat",
 	"remote_client_rejoins_its_held_seat_by_itself",
+	"cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them",
+	"cosmetics_colour_taken_by_phone_is_skipped_by_pad_and_reverse",
+	"cosmetics_no_picker_in_lobby_without_gamepad_seats",
+	"cosmetics_online_saved_pick_arrives_on_join",
 	"online_host_kicks_remote_seat_from_lobby_row",
 	"online_host_esc_menu_pauses_kicks_and_ends_match",
 	"online_demo_joins_demo_and_full_joins_full",
@@ -666,6 +670,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_toggle_defaults_on_and_persists",
 	"telemetry_off_sends_no_record_on_still_does",
 	"shield_head_is_wide_and_shield_shaped",
+	"pc_space_tap_retracts_grapple_while_mouse_vector_is_held",
+	"gamepad_shoulder_hold_and_stick_click_release_plunger",
+	"remote_client_space_tap_releases_on_host",
+	"phone_packet_without_release_flag_keeps_zero_vector_release",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2379,6 +2387,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_remote_seat_frees_after_30s_for_a_fresh_seat()
 		"remote_client_rejoins_its_held_seat_by_itself":
 			return await _scenario_remote_client_rejoins_its_held_seat_by_itself()
+		"cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them":
+			return await _scenario_cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them()
+		"cosmetics_colour_taken_by_phone_is_skipped_by_pad_and_reverse":
+			return await _scenario_cosmetics_colour_taken_by_phone_is_skipped_by_pad_and_reverse()
+		"cosmetics_no_picker_in_lobby_without_gamepad_seats":
+			return await _scenario_cosmetics_no_picker_in_lobby_without_gamepad_seats()
+		"cosmetics_online_saved_pick_arrives_on_join":
+			return await _scenario_cosmetics_online_saved_pick_arrives_on_join()
 		"online_host_kicks_remote_seat_from_lobby_row":
 			return await _scenario_online_host_kicks_remote_seat_from_lobby_row()
 		"online_host_esc_menu_pauses_kicks_and_ends_match":
@@ -2393,6 +2409,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_off_sends_no_record_on_still_does()
 		"shield_head_is_wide_and_shield_shaped":
 			return await _scenario_shield_head_is_wide_and_shield_shaped()
+		"pc_space_tap_retracts_grapple_while_mouse_vector_is_held":
+			return await _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held()
+		"gamepad_shoulder_hold_and_stick_click_release_plunger":
+			return await _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger()
+		"remote_client_space_tap_releases_on_host":
+			return await _scenario_remote_client_space_tap_releases_on_host()
+		"phone_packet_without_release_flag_keeps_zero_vector_release":
+			return await _scenario_phone_packet_without_release_flag_keeps_zero_vector_release()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -18642,6 +18666,13 @@ func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
 	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
 		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
+	# "Lightly" is a real hit, but a lighter one than the grapple's: a rod whose
+	# hook does no damage at all must not pass the check above by matching 0.
+	var grapple_damage: float = (load(GRAPPLE_PATH) as WeaponStatsType).projectile_damage
+	if victim.damage <= 0.0 or stats.projectile_damage <= 0.0:
+		failures.append("the hook did no damage to the player it met (%.1f)" % victim.damage)
+	elif stats.projectile_damage >= grapple_damage:
+		failures.append("the fishing rod's hook does %.1f, not less than the grapple's %.1f" % [stats.projectile_damage, grapple_damage])
 	if victim.linear_velocity.x >= -50.0:
 		failures.append("the hook did not tug its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
 	if strikes.is_empty() or strikes[0]["victim"] != victim:
@@ -22777,6 +22808,9 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 	var announcer = decoded.get("announcer_text")
 	if announcer != "Final round!":
 		failures.append("announcer_text: got %s, wanted 'Final round!'" % announcer)
+	# Every field, not only the sample above: kill-feed text, colours, rotations,
+	# velocities, weapon types and the round phase all ride the same frame.
+	failures.append_array(_snap_mismatches_240(decoded, world, "snapshot"))
 	_scenario_completed = true
 	return failures
 func _scenario_snapshot_quantization_tolerance() -> Array[String]:
@@ -22837,47 +22871,60 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 func _scenario_snapshot_delta_encode() -> Array[String]:
 	var failures: Array[String] = []
 	var SnapshotScript = preload("res://scripts/Snapshot.gd")
+	# A player delta carries its pose in "body" and "weapon" sub-dictionaries, as
+	# SnapshotCapture.delta builds it; decode flattens them into the entity.
 	var world = {
 		"is_full_snapshot": false,
 		"delta_entities": [
 			{
 				"type": SnapshotScript.TYPE_PLAYER,
 				"id": 1,
-				"position": Vector2(100, 100),
-				"rotation": 0.5,
-				"linear_velocity": Vector2(10, 0),
-				"head_position": Vector2(120, 80),
-				"head_rotation": 0.3,
-				"head_shape_index": 0,
+				"body": {"position": Vector2(100, 100), "rotation": 0.5, "linear_velocity": Vector2(10, -4)},
+				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2},
 				"damage": 30,
-				"state": 0,
+				"state": 1,
 			},
 			{
 				"type": SnapshotScript.TYPE_PROJECTILE,
 				"id": 1,
 				"position": Vector2(200, 200),
-				"velocity": Vector2(100, 0),
+				"velocity": Vector2(100, -20),
 			},
 			{
 				"type": SnapshotScript.TYPE_TIMER,
 				"id": 0,
 				"timer_ms": 30000,
 			},
+			{"type": SnapshotScript.TYPE_PICKUP, "id": 4, "position": Vector2(-30, 60)},
+			{"type": SnapshotScript.TYPE_FLAIL, "id": 2, "pos1": Vector2(11, 12), "pos2": Vector2(-13, 14)},
+			{"type": SnapshotScript.TYPE_GRAPPLE, "id": 3, "pos1": Vector2(21, 22), "pos2": Vector2(23, -24)},
+			{"type": SnapshotScript.TYPE_MODIFIER, "id": 5, "name": "low_gravity"},
+			{"type": SnapshotScript.TYPE_SCORES, "id": 2, "score": 7},
+			{"type": SnapshotScript.TYPE_KILL_FEED, "id": 0, "text": "Alice eliminated Bob"},
+			{"type": SnapshotScript.TYPE_KILL_ZONE, "id": 0, "height": 480},
 		],
 	}
 	var encoded = SnapshotScript.encode(world)
 	var decoded = SnapshotScript.decode(encoded)
-	if not decoded.get("is_full_snapshot", false):
-		var deltas = decoded.get("delta_entities", [])
-		if deltas.size() != 3:
-			failures.append("delta entities count: got %d, wanted 3" % deltas.size())
-		else:
-			if deltas[0].get("id") != 1:
-				failures.append("first delta id: got %d, wanted 1" % deltas[0].get("id"))
-			if deltas[1].get("type") != SnapshotScript.TYPE_PROJECTILE:
-				failures.append("second delta type: got %d, wanted TYPE_PROJECTILE" % deltas[1].get("type"))
-			if deltas[2].get("timer_ms") != 30000:
-				failures.append("timer_ms: got %d, wanted 30000" % deltas[2].get("timer_ms"))
+	if decoded.is_empty():
+		failures.append("decode rejected the delta frame")
+	elif decoded.get("is_full_snapshot", true):
+		failures.append("the delta frame decoded as a full snapshot")
+	var want: Array = [
+		{"type": SnapshotScript.TYPE_PLAYER, "id": 1, "position": Vector2(100, 100), "rotation": 0.5,
+			"linear_velocity": Vector2(10, -4), "head_position": Vector2(120, 80), "head_rotation": 0.3,
+			"head_shape_index": 2, "damage": 30, "state": 1},
+		{"type": SnapshotScript.TYPE_PROJECTILE, "id": 1, "position": Vector2(200, 200), "velocity": Vector2(100, -20)},
+		{"type": SnapshotScript.TYPE_TIMER, "id": 0, "timer_ms": 30000},
+		{"type": SnapshotScript.TYPE_PICKUP, "id": 4, "position": Vector2(-30, 60)},
+		{"type": SnapshotScript.TYPE_FLAIL, "id": 2, "pos1": Vector2(11, 12), "pos2": Vector2(-13, 14)},
+		{"type": SnapshotScript.TYPE_GRAPPLE, "id": 3, "pos1": Vector2(21, 22), "pos2": Vector2(23, -24)},
+		{"type": SnapshotScript.TYPE_MODIFIER, "id": 5, "name": "low_gravity"},
+		{"type": SnapshotScript.TYPE_SCORES, "id": 2, "score": 7},
+		{"type": SnapshotScript.TYPE_KILL_FEED, "id": 0, "text": "Alice eliminated Bob"},
+		{"type": SnapshotScript.TYPE_KILL_ZONE, "id": 0, "height": 480},
+	]
+	failures.append_array(_snap_mismatches_240(decoded.get("delta_entities", []), want, "delta_entities"))
 	_scenario_completed = true
 	return failures
 # --- Remote seats over the relay (issue #239) ---------------------------------
@@ -25925,6 +25972,9 @@ func _scenario_mode_hot_potato_tags_fuses_and_reseeds() -> Array[String]:
 			players[it].strike_landed.emit(players[others[0]], 10.0, Vector2.ZERO, false)
 			if mode.it_slot != others[0] or mode.tag_count != 1:
 				failures.append("the tag did not pass to the victim: it=%d tags=%d" % [mode.it_slot, mode.tag_count])
+			# The new "it" gets a full fuse, not what was left of the old one's.
+			if absf(mode.fuse_left - mode.fuse_sec) > 0.001:
+				failures.append("the tag left the fuse at %.2f s, not a fresh %.2f s" % [mode.fuse_left, mode.fuse_sec])
 			# The tag-back cooldown: the old 'it' cannot be hit straight back.
 			players[others[0]].strike_landed.emit(players[it], 10.0, Vector2.ZERO, false)
 			if mode.it_slot != others[0]:
@@ -25967,6 +26017,15 @@ func _scenario_mode_handlers_gone_after_round_and_edge_cases() -> Array[String]:
 	for p in players:
 		if p.alive and _mode_handlers_on(p, mode) != 1:
 			failures.append("%s has %d handlers mid-round, want 1" % [p.name, _mode_handlers_on(p, mode)])
+	# The checks after the round below run once RoundManager has freed the mode,
+	# when a freed node has no handlers to count. End the round on the live node
+	# first so a handler end_round leaves behind is still visible.
+	mode.end_round()
+	for p in players:
+		if _mode_handlers_on(p, mode) != 0:
+			failures.append("%s still has %d Hot Potato handlers after end_round" % [p.name, _mode_handlers_on(p, mode)])
+	if mode.connected_count() != 0 or mode.it_slot != -1:
+		failures.append("Hot Potato kept state after end_round (connected %d, it %d)" % [mode.connected_count(), mode.it_slot])
 	for p in players:
 		p.eliminate()
 	await _await_ticks(5)
@@ -34148,6 +34207,229 @@ func _hold_rig_459(id: String, failures: Array[String]) -> Dictionary:
 	rig["remote"] = remote
 	rig["slot"] = slot
 	return rig
+# --- In-game cosmetics picker (issue #441) ----------------------------------------
+const CosmeticsPickerScript441 := preload("res://scripts/CosmeticsPicker.gd")
+const CosmeticsPanelScript441 := preload("res://scripts/OnlineCosmeticsPanel.gd")
+const PadPickerCardScript441 := preload("res://scripts/PadPickerCard.gd")
+## The visible gamepad picker cards under `root` (a redraw's old rows excluded).
+func _pad_cards_441(root: Node) -> Array[Control]:
+	var out: Array[Control] = []
+	for node: Node in root.find_children("PadPicker*", "", true, false):
+		if node is Control and not node.is_queued_for_deletion() and (node as Control).is_visible_in_tree():
+			out.append(node as Control)
+	return out
+## The slot a client id holds, or -1.
+func _slot_of_id_441(server: Node, id: String) -> int:
+	for slot in server._slot_client_id.size():
+		if server._slot_client_id[slot] == id and server._slot_claimed[slot] == 1:
+			return slot
+	return -1
+## Acceptance: a pad seat cycles hat, colour and eyes with the D-pad and
+## bumpers, and its body shows each pick. Outside the lobby the bumpers do nothing.
+func _scenario_cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Pick441")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(3)
+	if slot != 0 or not server.pad_picker_shown(slot):
+		failures.append("the pad seat %d does not show its picker" % slot)
+		await _teardown(rig["stage"])
+		return failures
+	var body: RigidBody2D = players[slot]
+	server.request_color(slot, 0)
+	var card: Control = PadPickerCardScript441.new(server, slot)
+	rig["stage"].add_child(card)
+	await process_frame
+	if card.selected_row() != "hat":
+		failures.append("the cursor starts on '%s', expected hat" % card.selected_row())
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_hat(slot) != "crown" or body.hat_id() != "crown":
+		failures.append("RB on the hat row gave hat '%s', body '%s'; expected crown" % [server.slot_hat(slot), body.hat_id()])
+	await _pad_button_261(3, JOY_BUTTON_LEFT_SHOULDER)
+	await _pad_button_261(3, JOY_BUTTON_LEFT_SHOULDER)
+	if server.slot_hat(slot) != "propeller":
+		failures.append("LB twice from crown gave '%s', expected propeller (wrapping)" % server.slot_hat(slot))
+	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_color(slot) != 1 or body.identity_color != server.palette_color(1):
+		failures.append("RB on the colour row gave colour %d, body %s; expected 1 (%s)" % [server.slot_color(slot), body.identity_color, server.palette_color(1)])
+	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_eyes(slot) != "sleepy" or body.eyes_id() != "sleepy":
+		failures.append("RB on the eyes row gave eyes '%s', body '%s'; expected sleepy" % [server.slot_eyes(slot), body.eyes_id()])
+	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
+	if card.selected_row() != "eyes":
+		failures.append("D-pad down past the last row left the cursor on '%s'" % card.selected_row())
+	await process_frame
+	var shown: Dictionary = card.shown_look()
+	if not card.visible or shown["hat"] != CosmeticsPickerScript441.label_of("hat", "propeller") or shown["eyes"] != CosmeticsPickerScript441.label_of("eyes", "sleepy") or shown["color"] != server.palette_color(1):
+		failures.append("the card shows %s (visible %s), not the seat's look" % [shown, card.visible])
+	if server.slot_ready(slot):
+		failures.append("picking readied the seat")
+	await _pad_button_261(3, JOY_BUTTON_A)
+	if not server.slot_ready(slot):
+		failures.append("A did not ready the seat beside the picker")
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	await process_frame
+	if server.pad_picker_shown(slot) or card.visible:
+		failures.append("the picker still shows mid-round")
+	if server.slot_eyes(slot) != "sleepy":
+		failures.append("RB mid-round changed the eyes to '%s'" % server.slot_eyes(slot))
+	await _teardown(rig["stage"])
+	return failures
+## Acceptance: a colour a phone wears is skipped by a pad cycling, a phone
+## cannot take the pad's colour, and the mouse panel greys out a taken colour.
+func _scenario_cosmetics_colour_taken_by_phone_is_skipped_by_pad_and_reverse() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Taken441")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(2, JOY_BUTTON_A)
+	var pad: int = server.pad_slot(2)
+	server._bind_with_id(ControllerServerScript.LocalSeat.new(), "phone-441")
+	var phone: int = _slot_of_id_441(server, "phone-441")
+	if pad == -1 or phone == -1:
+		failures.append("seating failed (pad %d, phone %d)" % [pad, phone])
+		await _teardown(rig["stage"])
+		return failures
+	server.request_color(pad, 0)
+	server._handle_text(phone, '{"t":"color","v":1}')
+	if server.slot_color(phone) != 1:
+		failures.append("the phone could not take free colour 1 (has %d)" % server.slot_color(phone))
+	await _pad_button_261(2, JOY_BUTTON_DPAD_DOWN)
+	await _pad_button_261(2, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_color(pad) != 2:
+		failures.append("RB from colour 0 gave %d; expected 2, skipping the phone's 1" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_RIGHT_SHOULDER)
+	await _pad_button_261(2, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_color(pad) != 0:
+		failures.append("RB from 3 gave %d; expected to wrap to 0" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_LEFT_SHOULDER)
+	if server.slot_color(pad) != 3:
+		failures.append("LB from 0 gave %d; expected 3" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_LEFT_SHOULDER)
+	if server.slot_color(pad) != 2:
+		failures.append("LB from 3 gave %d; expected 2" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_LEFT_SHOULDER)
+	if server.slot_color(pad) != 0:
+		failures.append("LB from 2 gave %d; expected 0, skipping the phone's 1" % server.slot_color(pad))
+	# The reverse: the phone asks for the pad's colour and is refused.
+	server._handle_text(phone, '{"t":"color","v":0}')
+	if server.slot_color(phone) != 1 or server.slot_color(pad) != 0:
+		failures.append("the phone took the pad's colour (phone %d, pad %d)" % [server.slot_color(phone), server.slot_color(pad)])
+	# The mouse panel, seen from the phone's seat, greys out the pad's colour.
+	var panel: Control = CosmeticsPanelScript441.new()
+	rig["stage"].add_child(panel)
+	panel.set_catalog(server.looks_message())
+	panel.set_looks(server.looks_update_message()["looks"], phone)
+	var b0: Button = panel.color_button(0)
+	var b2: Button = panel.color_button(2)
+	if b0 == null or b2 == null:
+		failures.append("the panel has no colour swatches (%d palette entries)" % panel.palette.size())
+	else:
+		if not panel.color_taken(0) or not b0.disabled:
+			failures.append("the pad's colour 0 is not greyed for the phone (taken %s, disabled %s)" % [panel.color_taken(0), b0.disabled])
+		if panel.color_taken(1) or panel.color_button(1).disabled:
+			failures.append("the phone's own colour 1 is greyed")
+		if panel.color_taken(2) or b2.disabled:
+			failures.append("free colour 2 is greyed")
+		if not panel.color_taken(5):
+			failures.append("colour 5 (no body in a four-player rig) is not greyed")
+		var emitted: Array = []
+		panel.picked.connect(func(kind: String, value: Variant) -> void: emitted.append([kind, value]))
+		panel.pick_color(0)
+		panel.pick_color(2)
+		if emitted != [["color", 2]]:
+			failures.append("panel picks emitted %s, expected only colour 2" % [emitted])
+	await _teardown(rig["stage"])
+	return failures
+## Acceptance: a lobby with no gamepad seat shows no picker; a pad's card shows
+## on its seat's row, on screen, and goes when the pad is unplugged.
+func _scenario_cosmetics_no_picker_in_lobby_without_gamepad_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	server._bind_with_id(ControllerServerScript.LocalSeat.new(), "phone-441-lobby")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if _slot_of_id_441(server, "phone-441-lobby") == -1:
+		failures.append("the phone seat did not claim a slot")
+	var cards: Array[Control] = _pad_cards_441(screen)
+	if not cards.is_empty():
+		failures.append("a phone-only lobby shows %d picker card(s)" % cards.size())
+	await _pad_tap_368(1, JOY_BUTTON_A)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var pad: int = server.pad_slot(1)
+	cards = _pad_cards_441(screen)
+	if pad == -1:
+		failures.append("A did not seat the gamepad")
+	elif cards.size() != 1:
+		failures.append("one pad seat shows %d picker cards" % cards.size())
+	else:
+		var rect: Rect2 = cards[0].get_global_rect()
+		if not Rect2(Vector2.ZERO, SCREEN_SIZE).grow(1.0).encloses(rect):
+			failures.append("the picker card %s is off the %s screen" % [rect, SCREEN_SIZE])
+		if cards[0].get("slot") != pad:
+			failures.append("the card is for slot %s, the pad holds %d" % [cards[0].get("slot"), pad])
+		for node: Node in cards[0].find_children("*", "Label", true, false):
+			if (node as Label).get_theme_font_size("font_size") < 16:
+				failures.append("picker label %s is below 16 px" % node.name)
+	Input.joy_connection_changed.emit(1, false)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	cards = _pad_cards_441(screen)
+	if not cards.is_empty():
+		failures.append("an unplugged pad's picker still shows")
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Acceptance: an Online client's saved pick is on its body as soon as it joins,
+## and the mouse panel (beside the player list until ready) changes it and saves it.
+func _scenario_cosmetics_online_saved_pick_arrives_on_join() -> Array[String]:
+	var failures: Array[String] = []
+	# The pick round-trips through the client's settings file format.
+	var config := ConfigFile.new()
+	CosmeticsPickerScript441.write_pick(config, "remote_client", {"hat": "viking", "eyes": "angry", "color": 5})
+	var read_back: Dictionary = CosmeticsPickerScript441.read_pick(config, "remote_client")
+	if read_back != {"hat": "viking", "eyes": "angry", "color": 5}:
+		failures.append("a saved pick read back as %s" % [read_back])
+	if CosmeticsPickerScript441.clean_pick({"hat": "nope", "eyes": 3, "color": "x"}) != {"hat": "none", "eyes": "round", "color": -1}:
+		failures.append("a junk pick was not cleaned to bare, round, automatic")
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	client.saved_pick = {"hat": "viking", "eyes": "angry", "color": 5}
+	if not await _rc_joined_241(rig, client, failures, "Picker"):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	if not await _wait_for_239(func() -> bool: return server.slot_hat(slot) == "viking" and server.slot_eyes(slot) == "angry" and server.slot_color(slot) == 5, 5000):
+		failures.append("the saved pick did not arrive: slot %d wears %s / %s / colour %d" % [slot, server.slot_hat(slot), server.slot_eyes(slot), server.slot_color(slot)])
+	var panel: Control = client.cosmetics_panel()
+	if not await _wait_for_239(func() -> bool: return panel.palette.size() > 0 and panel.preview_look().get("hat") == "viking", 5000):
+		failures.append("the panel never got the palette and the client's look (palette %d, preview %s)" % [panel.palette.size(), panel.preview_look()])
+	if not panel.is_visible_in_tree():
+		failures.append("the panel is hidden in the lobby before the client readies")
+	for entry: Variant in server.looks_update_message()["looks"]:
+		if int(entry["slot"]) != slot and int(entry["color"]) >= 0 and not panel.color_taken(int(entry["color"])):
+			failures.append("slot %d's colour %d is not greyed on the client's panel" % [entry["slot"], entry["color"]])
+	if panel.color_taken(5):
+		failures.append("the client's own colour 5 is greyed on its panel")
+	panel.pick_hat("crown")
+	if not await _wait_for_239(func() -> bool: return server.slot_hat(slot) == "crown", 5000):
+		failures.append("a panel click did not reach the host (hat '%s')" % server.slot_hat(slot))
+	if client.saved_pick.get("hat") != "crown":
+		failures.append("the click was not saved in the client's pick (%s)" % [client.saved_pick])
+	client._ready_button.button_pressed = true
+	if not await _wait_for_239(func() -> bool: return not panel.is_visible_in_tree(), 5000):
+		failures.append("the panel still shows after the client readied")
+	await _rc_close_241(rig)
+	return failures
 # --- Online host controls on the PC (issue #458) ------------------------------
 ## An Online host (Go online on, its own seat on) with `bots` bots and one
 ## remote PC client joined through a real relay; no phone anywhere. {} on failure.
@@ -34428,6 +34710,42 @@ func _scenario_telemetry_off_sends_no_record_on_still_does() -> Array[String]:
 		failures.append("sharing off still sent")
 	_scenario_completed = true
 	return failures
+# --- Snapshot field-by-field comparison (#240 quality pass) -------------------
+## One line per field where `got` differs from `want`: numbers and Vector2s
+## within 0.001 (the wire's pixel rounding and 16-bit rotation are well inside
+## that for the whole values the scenarios send), dictionaries with exactly the
+## same keys, arrays of the same length.
+func _snap_mismatches_240(got: Variant, want: Variant, path: String) -> Array[String]:
+	var failures: Array[String] = []
+	var numeric: Array[int] = [TYPE_INT, TYPE_FLOAT]
+	if want is Dictionary:
+		if not got is Dictionary:
+			failures.append("%s: got %s, wanted a dictionary" % [path, got])
+			return failures
+		for key: Variant in want:
+			if not got.has(key):
+				failures.append("%s.%s is missing" % [path, key])
+			else:
+				failures.append_array(_snap_mismatches_240(got[key], want[key], "%s.%s" % [path, key]))
+		for key: Variant in got:
+			if not want.has(key):
+				failures.append("%s.%s was not sent" % [path, key])
+	elif want is Array:
+		if not got is Array or got.size() != want.size():
+			failures.append("%s: got %s, wanted %s" % [path, got, want])
+			return failures
+		for i in want.size():
+			failures.append_array(_snap_mismatches_240(got[i], want[i], "%s[%d]" % [path, i]))
+	elif want is Vector2:
+		if not got is Vector2 or (got as Vector2).distance_to(want) > 0.001:
+			failures.append("%s: got %s, wanted %s" % [path, got, want])
+	elif numeric.has(typeof(want)):
+		if not numeric.has(typeof(got)) or absf(float(got) - float(want)) > 0.001:
+			failures.append("%s: got %s, wanted %s" % [path, got, want])
+	elif typeof(got) != typeof(want) or got != want:
+		failures.append("%s: got %s, wanted %s" % [path, got, want])
+	return failures
+
 
 # --- Shield shape (issue #465) -----------------------------------------------
 const SHIELD_MIN_WIDTH_465: float = 48.0
@@ -34458,4 +34776,195 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 	if shape.points.size() <= 4 or xs.size() <= 2:
 		failures.append("shield collision is a plain rectangle (%d points)" % shape.points.size())
 	_scenario_completed = true
+	return failures
+
+# --- Explicit release input (issue #463, ADR-0022) ---------------------------
+
+## A phone rig on a real arena, with a bar at `bar_at` and slot 0's player
+## parked at `stand_at`; slot 1's player is moved out of the way.
+func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictionary:
+	var rig: Dictionary = await _phone_rig_164(2, tag)
+	var stage: Node2D = rig["stage"]
+	stage.add_child(ArenaScene.instantiate())
+	rig["bar"] = _add_bar(stage, bar_at, Vector2(240, 24))
+	var players: Array[RigidBody2D] = rig["players"]
+	players[0].start_round(stand_at)
+	players[1].start_round(stand_at + Vector2(1500, 0))
+	await _await_ticks(6)
+	return rig
+
+func _key_463(keycode: Key) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = keycode
+	ev.keycode = keycode
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+
+## A PC seat's mouse never reports zero, so a Space tap is what lets go.
+func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcRelease463")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	# A flick straight up from rest, then the mouse stays out there.
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	var hook: Node2D = null
+	var fired: bool = await _await_condition(func() -> bool: return player.launched_hook() != null, 1000)
+	if fired:
+		hook = player.launched_hook()
+	var stuck: bool = fired and await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
+	if not stuck:
+		failures.append("the mouse flick did not fire and stick the hook (fired %s)" % fired)
+	else:
+		await _await_ticks(30)
+		if player.launched_hook() == null:
+			failures.append("the hook came home before any release")
+		if player.input_vector.length() < 0.5:
+			failures.append("the mouse vector is %s, expected it held out" % player.input_vector)
+		await _key_463(KEY_SPACE)
+		if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1000):
+			failures.append("a Space tap with the mouse held out did not retract the grapple")
+		if not server.slot_released(0):
+			failures.append("the server does not report the PC seat as released after a Space tap")
+		if player.input_vector.length() < 0.5:
+			failures.append("the Space tap disturbed the mouse vector (%s)" % player.input_vector)
+		await _key_463(KEY_SPACE)
+		await _await_ticks(3)
+		if server.slot_released(0):
+			failures.append("a second Space tap did not toggle released back off")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## A pad lets go with a shoulder held, or a stick click toggled.
+func _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(DEEP_PARK_POSITION, DEEP_PARK_POSITION + Vector2(0, 60), "PadRelease463")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var holder: RigidBody2D = players[0]
+	# Deep above the arena: no gravity, or the holder falls away from the bar.
+	holder.gravity_scale = 0.0
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _equip(holder, PLUNGER_PATH)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	if not await _await_condition(func() -> bool: return holder.plunger_attached(), 4000):
+		failures.append("the pad's stick up did not stick the plunger to the bar (slot %d vec %s pos %s)" % [server.pad_slot(0), holder.input_vector, holder.global_position])
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(60)
+	if not holder.plunger_attached():
+		failures.append("the plunger let go with the stick held and no release")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, true)
+	if not server.slot_released(0):
+		failures.append("holding LB did not mark the pad released")
+	if not await _await_condition(func() -> bool: return not holder.plunger_attached(), 1000):
+		failures.append("holding LB with the stick out did not let the plunger go")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, false)
+	if server.slot_released(0):
+		failures.append("letting go of LB left the pad released")
+	# The stick swings back to rest and out again to plunge a second time.
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(60)
+	holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
+	holder.linear_velocity = Vector2.ZERO
+	await _await_ticks(2)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	var pinned_attach := func() -> bool:
+		if holder.plunger_attached():
+			return true
+		holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
+		holder.linear_velocity = Vector2.ZERO
+		return false
+	if not await _await_condition(pinned_attach, 4000):
+		failures.append("the plunger did not stick again after LB was let go (pos %s vec %s rel %s drag %s len %s)" % [holder.global_position, holder.input_vector, holder.input_released, holder.get("_drag_released"), holder.weapon_length])
+	# A stick click toggles, like Space.
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, true)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, false)
+	if not server.slot_released(0):
+		failures.append("clicking R3 did not toggle the pad released")
+	if not await _await_condition(func() -> bool: return not holder.plunger_attached(), 1000):
+		failures.append("a toggled-on release did not let the plunger go")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, true)
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, false)
+	if server.slot_released(0):
+		failures.append("clicking L3 did not toggle the pad back to not released")
+	await _teardown(rig["stage"])
+	return failures
+
+## The Online client's Space tap reaches the host as the packet's flag byte.
+func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	client.mouse_motion(Vector2(4000, 0))
+	if not await _await_condition(func() -> bool: return player.input_vector.x > 0.9, 3000, true):
+		failures.append("the mouse sweep never reached the host (%s)" % player.input_vector)
+	if player.input_released or server.slot_released(client.slot):
+		failures.append("a remote client started out released")
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = true
+	client._input(ev)
+	if not await _await_condition(func() -> bool: return player.input_released, 3000, true):
+		failures.append("a Space tap on the client never released the host-side player")
+	if player.input_vector.x < 0.9:
+		failures.append("the Space tap disturbed the sent vector (%s)" % player.input_vector)
+	client._input(ev)
+	if not await _await_condition(func() -> bool: return not player.input_released, 3000, true):
+		failures.append("a second Space tap never un-released the host-side player")
+	await _rc_close_241(rig)
+	return failures
+
+## Phones send eight bytes and no flag: a nonzero vector is held, zero is released.
+func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(1, "PhoneRelease463")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	players[0].start_round(Vector2(0, 274))
+	await _await_ticks(6)
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	await _join_phone(phone, "phone-release-463", phones)
+	phones.append(phone)
+	var packet := PackedByteArray()
+	packet.resize(8)
+	packet.encode_float(0, 0.8)
+	packet.encode_float(4, 0.0)
+	for i in 20:
+		phone.send(packet, WebSocketPeer.WRITE_MODE_BINARY)
+		await process_frame
+		phone.poll()
+	await _await_ticks(10)
+	if server.slot_released(0) or players[0].input_released or bool(players[0].get("_drag_released")):
+		failures.append("a held phone drag counted as released (%s %s %s vec %s)" % [server.slot_released(0), players[0].input_released, players[0].get("_drag_released"), players[0].input_vector])
+	packet.encode_float(0, 0.0)
+	for i in 20:
+		phone.send(packet, WebSocketPeer.WRITE_MODE_BINARY)
+		await process_frame
+		phone.poll()
+	await _await_ticks(10)
+	if not bool(players[0].get("_drag_released")):
+		failures.append("a phone's zero vector no longer counts as released")
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
 	return failures

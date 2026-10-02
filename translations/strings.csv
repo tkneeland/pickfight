@@ -121,7 +121,7 @@ LOBBY_FIRST_TO,First to %d
 LOBBY_HOST_TAG,  (host)
 LOBBY_NOBODY_YET,nobody yet
 LOBBY_NOT_READY,not ready
-LOBBY_PAD_TIP,Right stick swings
+LOBBY_PAD_TIP,"Right stick swings, a bumper lets go"
 LOBBY_PRESS_READY,Press Ready on your phone
 LOBBY_READY,READY
 LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d)
@@ -263,4 +263,24 @@ HUD_FLAG_2,dropped
 HUD_SOCCER,Red %d - Blue %d (first to %d)
 HUD_POTATO,%s has the potato: %ds
 HUD_LIVES,%s x%d
+PICKER_PAD_HINT,D-pad row / LB RB change
+PICKER_TITLE,Your look
+PICKER_HAT,Hat
+PICKER_COLOUR,Colour
+PICKER_EYES,Eyes
+PICKER_HAT_NONE,None
+PICKER_HAT_CROWN,Crown
+PICKER_HAT_TOP_HAT,Top hat
+PICKER_HAT_CAP,Cap
+PICKER_HAT_BEANIE,Beanie
+PICKER_HAT_VIKING,Viking
+PICKER_HAT_PARTY,Party hat
+PICKER_HAT_HALO,Halo
+PICKER_HAT_PROPELLER,Propeller
+PICKER_EYES_ROUND,Round
+PICKER_EYES_SLEEPY,Sleepy
+PICKER_EYES_ANGRY,Angry
+PICKER_EYES_WIDE,Wide
+PICKER_EYES_DOT,Dot
+PICKER_EYES_VISOR,Visor
 JOIN_REJOINING,Rejoining your seat...

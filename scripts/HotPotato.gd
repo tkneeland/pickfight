@@ -25,13 +25,16 @@ var it_slot: int = -1
 var fuse_left: float = 0.0
 ## slot -> seconds spent as "it" this round (a float, never truncated).
 var it_time: Dictionary = {}
+## Tags passed this round, by everyone.
 var tag_count: int = 0
 ## slot -> tags that player passed on this round (issue #355).
 var tags_passed: Dictionary = {}
 var _cooldown_left: float = 0.0
 var _active: bool = false
 var _rng: RandomNumberGenerator
+## slot -> the Callable connected to that player's `strike_landed`.
 var _handlers: Dictionary = {}
+## slot -> the player watched this round.
 var _watched: Dictionary = {}
 
 func setup(manager: Node) -> void:
@@ -41,13 +44,7 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
-	if round_manager.has_method("match_rng"):
-		_rng = round_manager.match_rng("hot_potato")
-	elif round_manager.has_method("rng_for"):
-		_rng = round_manager.rng_for("hot_potato")
-	else:
-		_rng = RandomNumberGenerator.new()
-		_rng.seed = 278
+	_rng = round_manager.match_rng("hot_potato")
 	it_time.clear()
 	tag_count = 0
 	tags_passed.clear()
