@@ -2179,7 +2179,7 @@ func _latch_game_mode() -> void:
 	if not lobby_enabled or _controller_server == null or not _controller_server.has_method("game_mode"):
 		return
 	var picked: String = str(_controller_server.game_mode())
-	if _team_mode and GameModesScript.is_ffa_only(picked):
+	if not GameModesScript.fits_format(picked, _team_mode):
 		picked = GameModesScript.CLASSIC
 	game_mode = picked
 

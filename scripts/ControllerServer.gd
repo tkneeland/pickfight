@@ -1426,16 +1426,16 @@ func game_mode() -> String:
 ## seam). Returns false, changing nothing, for an unknown id or one the Teams
 ## format rules out.
 func set_game_mode(id: String) -> bool:
-	if not GameModesScript.is_valid(id) or (_team_mode and GameModesScript.is_ffa_only(id)):
+	if not GameModesScript.is_valid(id) or not GameModesScript.fits_format(id, _team_mode):
 		return false
 	_game_mode = id
 	HostSettingsScript.shared().set_game_mode(id)
 	return true
 
-## Teams was switched on with a Free-for-all-only mode (Hot Potato) chosen:
-## fall back to Classic.
+## The format was switched with a mode it rules out chosen (Hot Potato with
+## Teams on, Soccer with Teams off): fall back to Classic.
 func _drop_ffa_only_mode() -> void:
-	if _team_mode and GameModesScript.is_ffa_only(_game_mode):
+	if not GameModesScript.fits_format(_game_mode, _team_mode):
 		_game_mode = GameModesScript.CLASSIC
 		HostSettingsScript.shared().set_game_mode(_game_mode)
 

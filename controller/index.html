@@ -687,6 +687,7 @@
       "MODE_HOT_POTATO_NAME": "Hot Potato",
       "MODE_SUDDEN_DEATH_NAME": "Sudden Death",
       "MODE_STOCK_NAME": "Stock",
+      "MODE_SOCCER_NAME": "Soccer",
       "STATUS_CONNECTING": "connecting",
       "STATUS_CONNECTED": "connected",
       "STATUS_KICKED": "Removed by the host",
@@ -1825,7 +1826,7 @@
     rows.forEach(function (row, i) {
       var btn = gameModesEl.children[i];
       btn.className = row.id === chosen ? "on" : "";
-      btn.disabled = inMatch() || (teams && !!row.ffa_only);
+      btn.disabled = inMatch() || (teams && !!row.ffa_only) || (!teams && !!row.teams_only);
     });
   }
   menuModeBtn.addEventListener("click", function () {

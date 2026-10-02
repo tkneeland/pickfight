@@ -334,8 +334,16 @@ const HILL_HOLD_FRACTION: float = 0.6
 var _hill_node: Node = null
 var _hill_rival_inside: bool = false
 var _keep_away_from: Node2D = null
+## Soccer (#402): the mode node this tick, or null.
+var _soccer_node: Node = null
+
+## Soccer: how far behind the ball (away from the goal it attacks) a bot lines
+## up, and how far past it the bot drives.
+const SOCCER_BEHIND: float = 90.0
+const SOCCER_DRIVE: float = 160.0
 
 func _read_mode() -> void:
+	_soccer_node = null
 	_hill_node = null
 	_hill_rival_inside = false
 	_keep_away_from = null
@@ -352,6 +360,8 @@ func _read_mode() -> void:
 				if other != player and _alive(other) and _in_hill(other as Node2D) \
 						and not (player.has_method("is_teammate") and player.is_teammate(other)):
 					_hill_rival_inside = true
+		GameModesScript.SOCCER:
+			_soccer_node = node
 		GameModesScript.HOT_POTATO:
 			var it_slot: int = int(node.it_slot)
 			var me_slot: int = rm._players.find(player)
@@ -362,6 +372,20 @@ func _read_mode() -> void:
 
 func _in_hill(who: Node2D, fraction: float = 1.0) -> bool:
 	return who.global_position.distance_to(_hill_node.hill_position) <= float(_hill_node.hill_radius) * fraction
+
+## Soccer: get behind the ball on the side away from the goal this bot attacks,
+## then drive through it towards that goal.
+func _soccer_goal() -> Vector2:
+	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var team: int = _soccer_node.team_of(rm._players.find(player))
+	var ball_at: Vector2 = _soccer_node.ball.global_position
+	var aim: Vector2 = _soccer_node.attack_point(team)
+	var dir: float = signf(aim.x - ball_at.x) if aim.x != ball_at.x else 1.0
+	var me: Vector2 = player.global_position
+	var behind: bool = (me.x - ball_at.x) * dir < -BODY_RADIUS
+	if behind:
+		return Vector2(ball_at.x + dir * SOCCER_DRIVE, ball_at.y)
+	return Vector2(ball_at.x - dir * SOCCER_BEHIND, ball_at.y)
 
 ## Not "it" in Hot Potato: step away from "it" along the ground the bot can
 ## trust. `goal` is where the vault heads.
@@ -438,7 +462,9 @@ func _choose_goal() -> void:
 		return
 	mode = "move"
 	_target = null
-	if _hill_node != null:
+	if _soccer_node != null and _soccer_node.ball != null and is_instance_valid(_soccer_node.ball):
+		goal = _soccer_goal()
+	elif _hill_node != null:
 		if not _in_hill(player, HILL_HOLD_FRACTION):
 			goal = _hill_node.hill_position
 		elif enemy != null and _hill_rival_inside:

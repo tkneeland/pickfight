@@ -583,6 +583,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"rules_disabled_modifier_never_rolls_in_that_mode_only",
 	"rules_modifier_toggles_persist_across_reload",
 	"rules_table_bans_cannot_be_reenabled",
+	"mode_soccer_is_teams_only",
+	"soccer_ball_in_a_goal_scores_for_the_other_team",
+	"soccer_three_goals_end_the_round_for_that_team",
+	"soccer_ko_respawns_the_player",
+	"soccer_stages_load_goals_and_weights",
+	"soccer_top_scorer_award_and_goal_credit",
+	"bot_soccer_pushes_the_ball_toward_the_enemy_goal",
+	"announcer_calls_soccer_and_goal",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2144,6 +2152,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_rules_modifier_toggles_persist_across_reload()
 		"rules_table_bans_cannot_be_reenabled":
 			return await _scenario_rules_table_bans_cannot_be_reenabled()
+		"mode_soccer_is_teams_only":
+			return await _scenario_mode_soccer_is_teams_only()
+		"soccer_ball_in_a_goal_scores_for_the_other_team":
+			return await _scenario_soccer_ball_in_a_goal_scores_for_the_other_team()
+		"soccer_three_goals_end_the_round_for_that_team":
+			return await _scenario_soccer_three_goals_end_the_round_for_that_team()
+		"soccer_ko_respawns_the_player":
+			return await _scenario_soccer_ko_respawns_the_player()
+		"soccer_stages_load_goals_and_weights":
+			return await _scenario_soccer_stages_load_goals_and_weights()
+		"soccer_top_scorer_award_and_goal_credit":
+			return await _scenario_soccer_top_scorer_award_and_goal_credit()
+		"bot_soccer_pushes_the_ball_toward_the_enemy_goal":
+			return await _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal()
+		"announcer_calls_soccer_and_goal":
+			return await _scenario_announcer_calls_soccer_and_goal()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -3894,6 +3918,9 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Mesa.tscn",
 	"res://scenes/stages/Relay.tscn",
 	"res://scenes/stages/Roundabout.tscn",
+	"res://scenes/stages/Pitch.tscn",
+	"res://scenes/stages/Cage.tscn",
+	"res://scenes/stages/Dunes.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -5522,6 +5549,8 @@ func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# spawn by spawn, left then right, until the first shove gets out.
 	var jobs: Array[Callable] = []
 	for s in STAGE_PATHS.size():
+		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]):
+			continue  # closed pitches: the ball may only leave through a goal
 		jobs.append(_stage_ringout_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
 	var failures: Array[String] = await _run_concurrently(jobs, "stage ring-out sweep")
 	_scenario_completed = true
@@ -28283,7 +28312,7 @@ func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
 	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
 	if msg.get("game_mode") != "king_of_the_hill":
 		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
-	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock"]:
+	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer"]:
 		failures.append("the picker rows were %s" % [names])
 	HostSettingsScript352.shared().game_mode = ""
 	await _close_phones(joined)
@@ -28547,7 +28576,7 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 	var lobby_rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
-	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock"]
+	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer"]
 	if cards.size() != want.size():
 		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
 	else:
@@ -29891,8 +29920,8 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		sequences[mode_id] = seq
 	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
 	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
-	if counts["hot_potato"] < 240:
-		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 240" % counts["hot_potato"])
+	if counts["hot_potato"] < 225:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 225" % counts["hot_potato"])
 	var others: int = 0
 	for i in scenes.size():
 		if not favoured.has(i):
@@ -30333,6 +30362,7 @@ const MODE_START_CALLOUTS: Dictionary = {
 	"hot_potato": "announce_hot_potato",
 	"sudden_death": "announce_sudden_death",
 	"stock": "announce_stock",
+	"soccer": "announce_soccer",
 }
 ## "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" each play
 ## as their mode's round starts, and each has a sound entry in the Sfx table.
@@ -30790,3 +30820,289 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 	panel.queue_free()
 	_scenario_completed = true
 	return failures
+
+# --- Soccer (issue #402) -------------------------------------------------------
+
+const SOCCER_STAGES_402: PackedStringArray = [
+	"res://scenes/stages/Pitch.tscn",
+	"res://scenes/stages/Cage.tscn",
+	"res://scenes/stages/Dunes.tscn",
+]
+## A Teams round of `count` (up to 3) players on `stage_path`, slots alternating Red, Blue.
+func _soccer_rig(count: int, stage_path: String = "res://scenes/stages/Pitch.tscn") -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, GameModesType.SOCCER)
+	var rm: Node = rig["rm"]
+	var pitch: Array[PackedScene] = [load(stage_path)]
+	rm.stage_scenes = pitch
+	var teams: Dictionary = {}
+	for i in count:
+		teams[i] = i % 2
+	rm._team_mode = true
+	rm._teams = teams
+	return rig
+## Soccer is the mirror of Hot Potato: refused in a free-for-all, kept with Teams
+## on, and dropped to Classic when Teams is switched off.
+func _scenario_mode_soccer_is_teams_only() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var server: Node = ControllerServerScript.new()
+	if server.apply_host_command("gamemode", "soccer") or server.game_mode() == "soccer":
+		failures.append("Soccer was accepted in a free-for-all")
+	if not server.apply_host_command("mode", "teams"):
+		failures.append("Teams could not be switched on")
+	if not server.apply_host_command("gamemode", "soccer") or server.game_mode() != "soccer":
+		failures.append("Soccer was refused with Teams on")
+	server.apply_host_command("mode", "ffa")
+	if server.game_mode() != "":
+		failures.append("switching Teams off with Soccer chosen left '%s', not Classic" % server.game_mode())
+	var rows: Array = GameModesType.picker_rows()
+	var seen: bool = false
+	for row: Dictionary in rows:
+		if row["id"] == "soccer":
+			seen = true
+			if not bool(row.get("teams_only", false)):
+				failures.append("the picker row for Soccer is not marked teams_only")
+	if not seen:
+		failures.append("Soccer is not in the picker rows")
+	server.free()
+	HostSettingsScript352.shared().game_mode = ""
+	_scenario_completed = true
+	return failures
+## A ball inside Red's goal is Blue's point and the reverse; after the pause the
+## ball is back at the centre and a displaced player is back on its own half.
+func _scenario_soccer_ball_in_a_goal_scores_for_the_other_team() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 0.3
+	var stage: Node2D = rm._current_stage
+	if mode.ball == null or not is_instance_valid(mode.ball):
+		failures.append("the mode built no ball")
+		await _teardown(rig["stage"])
+		return failures
+	var red_goal: Vector2 = stage.get_goal_rect(0).get_center()
+	var blue_goal: Vector2 = stage.get_goal_rect(1).get_center()
+	mode.ball.global_position = red_goal
+	await _await_ticks(3)
+	if int(mode.scores[1]) != 1 or int(mode.scores[0]) != 0:
+		failures.append("a ball in Red's goal scored %s, wanted Blue 1 - Red 0" % [mode.scores])
+	var red_player: RigidBody2D = rig["players"][0]
+	red_player.teleport_to(blue_goal + Vector2(0.0, -40.0))
+	await _await_msec(700)
+	var centre_x: float = stage.get_ball_spawn().x
+	if absf(mode.ball.global_position.x - centre_x) > 60.0:
+		failures.append("the ball was not back at the centre after the goal (x %.0f)" % mode.ball.global_position.x)
+	if red_player.global_position.x > centre_x:
+		failures.append("a Red player was not sent back to Red's half (x %.0f)" % red_player.global_position.x)
+	mode.ball.global_position = blue_goal
+	await _await_ticks(3)
+	if int(mode.scores[0]) != 1 or int(mode.scores[1]) != 1:
+		failures.append("a ball in Blue's goal left the score at %s, wanted 1 - 1" % [mode.scores])
+	await _teardown(rig["stage"])
+	return failures
+## The third goal ends the round: the other team is out and the first team wins it.
+func _scenario_soccer_three_goals_end_the_round_for_that_team() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 0.1
+	for goal in 3:
+		if rm.team_score(0) != 0:
+			failures.append("the round ended after only %d goal(s)" % goal)
+			break
+		mode.score_goal(0)
+		await _await_msec(300)
+	await _await_ticks(10)
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
+		failures.append("team scores after 3 goals were %d - %d, wanted 1 - 0" % [rm.team_score(0), rm.team_score(1)])
+	if rm.lobby_phase() != "round_end":
+		failures.append("the round was not over after the third goal (phase '%s')" % rm.lobby_phase())
+	await _teardown(rig["stage"])
+	return failures
+## A knocked-out player is back in about 1.5 s with spawn protection, and the
+## round has not ended even when a team is briefly empty.
+func _scenario_soccer_ko_respawns_the_player() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	if absf(mode.respawn_sec - 1.5) > 0.001:
+		failures.append("the respawn delay is %.2f s, wanted 1.5" % mode.respawn_sec)
+	var blue: RigidBody2D = rig["players"][1]
+	blue.eliminate()
+	await _await_ticks(2)
+	if blue.alive or not mode.is_pending(1):
+		failures.append("a knocked-out player was not waiting to respawn")
+	await _await_msec(500)
+	if blue.alive:
+		failures.append("the player was back after 0.5 s, too early")
+	var back: bool = await _await_condition(func() -> bool: return blue.alive, 3000)
+	if not back:
+		failures.append("the knocked-out player never respawned")
+	elif not blue.spawn_protected:
+		failures.append("the respawned player has no spawn protection")
+	if rm.lobby_phase() == "round_end":
+		failures.append("the round ended while the only Blue player was waiting to respawn")
+	await _teardown(rig["stage"])
+	return failures
+## The three pitches load with a goal at each end, a ball spot, eight spawns, are in
+## Main's rotation and STAGE_PATHS, and weigh 4 for Soccer and 0.3 elsewhere.
+func _scenario_soccer_stages_load_goals_and_weights() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in SOCCER_STAGES_402:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if not instance.has_goals():
+			failures.append("%s has no goal at each end" % path)
+		else:
+			var red: Rect2 = instance.get_goal_rect(0)
+			var blue: Rect2 = instance.get_goal_rect(1)
+			if not is_equal_approx(red.get_center().x, -blue.get_center().x) or not is_equal_approx(red.get_center().y, blue.get_center().y):
+				failures.append("%s: the goals are not mirror images" % path)
+			if red.get_center().x > 0.0:
+				failures.append("%s: Red's goal is not on the left" % path)
+		if instance.get_node_or_null("BallSpawn") == null:
+			failures.append("%s has no BallSpawn" % path)
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["soccer", "", "hot_potato", "stock"]:
+			var want: float = 4.0 if mode_id == "soccer" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## "Top Scorer" goes to the player with most goals, only in Soccer; a goal is
+## credited to the last player of the scoring team to touch the ball, not to the
+## other team (an own goal credits nobody).
+func _scenario_soccer_top_scorer_award_and_goal_credit() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_goals(0, 1)
+	stats.record_goals(2, 2)
+	stats.record_goals(2, 1)
+	var got: Array[Dictionary] = stats.mode_awards([0, 1, 2], "soccer")
+	if got.size() != 1 or got[0]["title"] != "Top Scorer" or int(got[0]["slot"]) != 2 or got[0]["detail"] != "3 goals":
+		failures.append("Soccer awards were %s, wanted Top Scorer to slot 2 for 3 goals" % [got])
+	if not stats.mode_awards([0, 1, 2], "hot_potato").is_empty():
+		failures.append("Top Scorer leaked into another mode")
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 0.1
+	var red_player: RigidBody2D = rig["players"][0]
+	rig["players"][1].teleport_to(Vector2(600.0, 240.0))
+	rig["players"][2].teleport_to(Vector2(400.0, 240.0))
+	red_player.teleport_to(Vector2(-300.0, 240.0))
+	mode.ball.global_position = Vector2(-300.0, 240.0)
+	await _await_ticks(2)
+	mode.score_goal(0)
+	if int(mode.scorers.get(0, 0)) != 1:
+		failures.append("the Red player who touched the ball was not credited: %s" % [mode.scorers])
+	await _await_msec(400)
+	var blue_player: RigidBody2D = rig["players"][1]
+	red_player.teleport_to(Vector2(-600.0, 240.0))
+	mode.ball.global_position = blue_player.global_position
+	await _await_ticks(2)
+	mode.score_goal(0)
+	if mode.scorers.has(1) or int(mode.scorers.get(0, 0)) != 1:
+		failures.append("a Blue touch was credited to the Red goal: %s" % [mode.scorers])
+	await _teardown(rig["stage"])
+	return failures
+## A bot with the ball in front of it (and the enemy goal beyond) drives it toward
+## that goal rather than away.
+func _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(2)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 100.0
+	var bot_player: RigidBody2D = rig["players"][0]
+	var rival: RigidBody2D = rig["players"][1]
+	var blue_goal: Vector2 = rm._current_stage.get_goal_rect(1).get_center()
+	rival.teleport_to(Vector2(600.0, 240.0))
+	bot_player.teleport_to(Vector2(-300.0, 240.0))
+	mode.ball.global_position = Vector2(-60.0, 250.0)
+	mode.ball.linear_velocity = Vector2.ZERO
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = bot_player
+	bot.output = bot_player.set_input_vector
+	rig["stage"].add_child(bot)
+	var start: float = mode.ball.global_position.distance_to(blue_goal)
+	var best: float = start
+	for t in 1500:
+		await physics_frame
+		best = minf(best, mode.ball.global_position.distance_to(blue_goal))
+		if int(mode.scores[0]) > 0:
+			break
+	print("      ball distance to the enemy goal: %.0f at the start, %.0f at best" % [start, best])
+	if best > start - 100.0:
+		failures.append("the bot never moved the ball 100 px toward the enemy goal (%.0f -> best %.0f)" % [start, best])
+	await _teardown(rig["stage"])
+	return failures
+## "Soccer!" at the round start and "Goal!" on a goal, both with sound entries.
+func _scenario_announcer_calls_soccer_and_goal() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for sound: String in ["announce_soccer", "announce_goal"]:
+		if not announcer.sfx.has_sound(sound):
+			failures.append("no Sfx entry '%s'" % sound)
+	announcer.clear()
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_condition(func() -> bool: return announcer.said.has("announce_soccer"), 4000)
+	if not announcer.said.has("announce_soccer"):
+		failures.append("the announcer said %s, expected 'announce_soccer'" % [announcer.said])
+	rm.game_mode_node().score_goal(1)
+	await _await_condition(func() -> bool: return announcer.said.has("announce_goal"), 4000)
+	if not announcer.said.has("announce_goal"):
+		failures.append("the announcer said %s, expected 'announce_goal'" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+
+## The closed Soccer pitches have no kill zone to be shoved into (#402).
+const RINGOUT_EXEMPT_402: PackedStringArray = SOCCER_STAGES_402

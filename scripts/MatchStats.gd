@@ -33,6 +33,7 @@ const COLLECTOR: String = "COLLECTOR"
 const HILL: String = "HILL"
 const TAGGER: String = "TAGGER"
 const LIVES: String = "LIVES"
+const SCORER: String = "SCORER"
 ## The shortest hill hold (seconds) that earns Longest Hold.
 const HILL_MIN_SEC: float = 0.5
 const GameModesScript := preload("res://scripts/GameModes.gd")
@@ -70,6 +71,8 @@ var hill_hold_sec: Dictionary = {}
 var tags_passed: Dictionary = {}
 ## slot -> Stock lives left at the end of each round, summed.
 var lives_left: Dictionary = {}
+## slot -> Soccer goals scored this match (#402).
+var goals: Dictionary = {}
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
 
@@ -98,6 +101,7 @@ func begin_match() -> void:
 	hill_hold_sec.clear()
 	tags_passed.clear()
 	lives_left.clear()
+	goals.clear()
 	total_kos = 0
 	_last_hit.clear()
 	_streak.clear()
@@ -125,7 +129,7 @@ func end_round(now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	slot_weapon_hits.erase(slot)
@@ -249,6 +253,9 @@ func record_tags_passed(slot: int, count: int) -> void:
 func record_lives_left(slot: int, count: int) -> void:
 	_add(lives_left, slot, count)
 
+func record_goals(slot: int, count: int) -> void:
+	_add(goals, slot, count)
+
 ## The awards only `mode_id` gives (issue #355): Longest Hold (King of the
 ## Hill), Hot Hands (Hot Potato), Survivor (Stock). Classic and the other
 ## modes give none, whatever the tables hold.
@@ -272,6 +279,11 @@ func mode_awards(slots: Array, mode_id: String) -> Array[Dictionary]:
 		if best != -1:
 			var n: int = int(lives_left[best])
 			out.append(_award(LIVES, "Survivor", best, "%d li%s left" % [n, "fe" if n == 1 else "ves"]))
+	elif mode_id == GameModesScript.SOCCER:
+		var best: int = _leader(slots, goals, kos, false)
+		if best != -1:
+			var n: int = int(goals[best])
+			out.append(_award(SCORER, "Top Scorer", best, "%d goal%s" % [n, "" if n == 1 else "s"]))
 	return out
 
 ## Superlatives beyond `awards()` (issue #325): "Magpie" for the most weapon
