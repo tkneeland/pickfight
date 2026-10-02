@@ -1305,6 +1305,9 @@ func _publish_lobby_state() -> void:
 		# the lobby's swatches are redrawn in it.
 		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot),
 			"color": _slot_color(slot).to_html(false)})
+	if _controller_server != null and _controller_server.has_method("pad_tip_pending"):
+		for entry: Dictionary in players:
+			entry["tip"] = _controller_server.pad_tip_pending(int(entry["slot"]))
 	var in_lobby: bool = _state == State.LOBBY or _state == State.COUNTDOWN
 	var state: Dictionary = {
 		"phase": lobby_phase(),

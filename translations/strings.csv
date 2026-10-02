@@ -104,6 +104,7 @@ LOBBY_FIRST_TO,First to %d
 LOBBY_HOST_TAG,  (host)
 LOBBY_NOBODY_YET,nobody yet
 LOBBY_NOT_READY,not ready
+LOBBY_PAD_TIP,Right stick swings
 LOBBY_PRESS_READY,Press Ready on your phone
 LOBBY_READY,READY
 LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d)

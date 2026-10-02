@@ -625,6 +625,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pad_start_pauses_and_resumes_other_pads_do_not",
 	"host_pad_start_and_host_phone_share_one_pause",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"gamepad_all_pad_room_continues_to_lobby_after_podium",
+	"gamepad_ko_ghost_follows_right_stick",
+	"gamepad_replug_on_new_port_keeps_slot_and_cosmetics",
+	"gamepad_rumbles_on_round_win_and_has_no_damage_bar",
+	"gamepad_first_join_tip_shows_once_until_stick_swings",
 	"sound_trailer_split_survives_hostile_bytes",
 	"remote_client_lobby_text_follows_the_locale",
 	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
@@ -2273,6 +2278,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"gamepad_all_pad_room_continues_to_lobby_after_podium":
+			return await _scenario_gamepad_all_pad_room_continues_to_lobby_after_podium()
+		"gamepad_ko_ghost_follows_right_stick":
+			return await _scenario_gamepad_ko_ghost_follows_right_stick()
+		"gamepad_replug_on_new_port_keeps_slot_and_cosmetics":
+			return await _scenario_gamepad_replug_on_new_port_keeps_slot_and_cosmetics()
+		"gamepad_rumbles_on_round_win_and_has_no_damage_bar":
+			return await _scenario_gamepad_rumbles_on_round_win_and_has_no_damage_bar()
+		"gamepad_first_join_tip_shows_once_until_stick_swings":
+			return await _scenario_gamepad_first_join_tip_shows_once_until_stick_swings()
 		"sound_trailer_split_survives_hostile_bytes":
 			return await _scenario_sound_trailer_split_survives_hostile_bytes()
 		"remote_client_lobby_text_follows_the_locale":
@@ -31430,7 +31445,6 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	_scenario_completed = true
 	return failures
 # --- Capture the Flag (issue #403) ---------------------------------------------
-
 const CTF_STAGES_403: PackedStringArray = [
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
@@ -31851,7 +31865,6 @@ func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
 		failures.append("the announcer said %s, expected 'announce_captured'" % [announcer.said])
 	await _teardown(rig["stage"])
 	return failures
-
 ## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
 func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
 	var stage: Node2D = _new_stage()
@@ -32242,7 +32255,6 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
-
 # --- Lobby mode-card grid (issue #425) ---------------------------------------
 ## The lobby state `RoundManager` would publish for `count` seated phones.
 func _lobby_state_425(count: int) -> Dictionary:
@@ -32305,7 +32317,6 @@ func _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players() -> Arr
 	failures.append_array(_lobby_rects_425(screen, qr))
 	await _teardown(rig["main"])
 	return failures
-
 ## Issue #416: Reactor's hill spots sit on the floor out on the wings, clear of
 ## the molten core (two Hazards between x=-160 and 160) by more than the hill's
 ## radius, so the hill is safe to hold.
@@ -32326,7 +32337,6 @@ func _scenario_reactor_king_of_the_hill_hill_sits_off_the_hazard() -> Array[Stri
 	print("      Reactor hill spots: %s" % [spots])
 	await _teardown(stage)
 	return failures
-
 ## Issue #416: a 4-bot King of the Hill round on Reactor ends with someone
 ## banking enough hold time, not by everyone else being eliminated.
 func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time() -> Array[String]:
@@ -32619,7 +32629,6 @@ func _scenario_host_pad_start_and_host_phone_share_one_pause() -> Array[String]:
 	await _close_phones(joined)
 	await _teardown(main)
 	return failures
-
 # --- Lobby worst state and joining by room code (#425 playtest) --------------
 ## The window sizes the lobby must fit: the design canvas, 1080p and the Deck.
 const LOBBY_RESOLUTIONS_425B: Array[Vector2i] = [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]
@@ -32739,6 +32748,201 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+# --- Gamepad seat parity (#442) ------------------------------------------------
+## A real ControllerServer and RoundManager, `count` slots, first to 1.
+func _pad_loop_442(count: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "PadContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	var spawns := PackedVector2Array()
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "PadP%d" % i
+		player.start_in_round = false
+		player.identity_color = FOUR_PLAYER_COLORS[i % FOUR_PLAYER_COLORS.size()]
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../PadP%d" % i))
+		spawns.append(FOUR_PLAYER_SKY_SPAWNS[i % FOUR_PLAYER_SKY_SPAWNS.size()])
+	var server: Node = ControllerServerScript.new()
+	server.name = "PadServer"
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "PadRoundManager"
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = [_make_pickup_stub_stage("PadStage", spawns, PICKUP_STUB_POINTS)]
+	round_manager.arena_container_path = NodePath("../PadContainer")
+	round_manager.controller_server_path = NodePath("../PadServer")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
+	round_manager.pickup_weapons = [
+		_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH),
+		_make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)] as Array[Resource]
+	round_manager.lobby_enabled = true
+	round_manager.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	stage.add_child(round_manager)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	server.apply_host_command("target", 1)
+	return {"stage": stage, "server": server, "players": players, "round_manager": round_manager}
+## Two pads join, ready, and play a first-to-1 match to the podium.
+func _pad_match_442(loop: Dictionary) -> bool:
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		return false
+	players[1].eliminate()
+	return await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+func _scenario_gamepad_all_pad_room_continues_to_lobby_after_podium() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(2)
+	var rm: Node = loop["round_manager"]
+	if not await _pad_match_442(loop):
+		failures.append("two pads never played a match to the podium (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "victory":
+		failures.append("one pad of two pressing A ended the podium")
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("every pad pressing A did not return the room to the lobby (phase %s)" % rm.lobby_phase())
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_gamepad_ko_ghost_follows_right_stick() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(3)
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	for d in 3:
+		await _pad_button_261(d, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive and players[2].alive and rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the three-pad match never started (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	players[0].eliminate()
+	await _await_ticks(6)
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("a KO'd pad player got no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	server._test_pad_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(45)
+	if not ghost.is_shown():
+		failures.append("the ghost did not appear under the pad's right stick")
+	var x0: float = ghost.global_position.x
+	await _await_ticks(30)
+	if ghost.global_position.x <= x0 + 10.0:
+		failures.append("the ghost did not follow the right stick (x %.1f -> %.1f)" % [x0, ghost.global_position.x])
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_gamepad_replug_on_new_port_keeps_slot_and_cosmetics() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadGuid442")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	server._test_pad_guids[1] = "guid-aaa"
+	server._test_pad_guids[2] = "guid-bbb"
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(2)
+	server._slot_hat[slot] = "crown"
+	server._slot_color[slot] = 6
+	var name_before: String = server.slot_name(slot)
+	Input.joy_connection_changed.emit(2, false)
+	await _await_ticks(5)
+	# The same pad comes back on port 6.
+	server._test_pad_guids[6] = "guid-bbb"
+	Input.joy_connection_changed.emit(6, true)
+	await _await_ticks(5)
+	if server.pad_slot(6) != slot:
+		failures.append("the replugged pad (new port, same GUID) got slot %d, expected %d" % [server.pad_slot(6), slot])
+	if server._slot_hat[slot] != "crown" or server._slot_color[slot] != 6 or server.slot_name(slot) != name_before:
+		failures.append("the replugged pad lost its cosmetics (hat %s, colour %s, name %s)" % [server._slot_hat[slot], server._slot_color[slot], server.slot_name(slot)])
+	if server.claimed_slots().size() != 2:
+		failures.append("replug made a new claim: %s" % [server.claimed_slots()])
+	# A different pad on the held pad's old index does not steal a held seat.
+	Input.joy_connection_changed.emit(6, false)
+	await _await_ticks(5)
+	server._test_pad_guids[2] = "guid-ccc"
+	Input.joy_connection_changed.emit(2, true)
+	await _await_ticks(5)
+	if server.pad_slot(2) != -1:
+		failures.append("a different pad on the old index took the held seat")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_gamepad_rumbles_on_round_win_and_has_no_damage_bar() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(2)
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive and rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	players[1].eliminate()
+	await _await_condition(func() -> bool: return rm.lobby_phase() != "playing", ROUND_LOOP_TIMEOUT_MSEC)
+	var won: bool = false
+	for r: Dictionary in server.pad_rumbles:
+		if r["device"] == 0 and r["kind"] == "win":
+			won = true
+	if not won:
+		failures.append("the round winner's pad did not rumble 'win' (rumbles %s)" % [server.pad_rumbles])
+	var seat: Variant = server._slot_peers[0]
+	seat.last_text = ""
+	server.send_damage(0, 0.5)
+	if seat.last_text.contains("dmg"):
+		failures.append("a pad was sent a damage bar")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_gamepad_first_join_tip_shows_once_until_stick_swings() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PadTip442")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	if server.pad_tip_pending(0):
+		failures.append("tip pending for a slot with no pad")
+	await _pad_button_261(3, JOY_BUTTON_A)
+	if not server.pad_tip_pending(0):
+		failures.append("a freshly joined pad got no right-stick tip")
+	server._test_pad_axes[3] = Vector2(1.0, 0.0)
+	await _await_ticks(5)
+	server._test_pad_axes[3] = Vector2.ZERO
+	if server.pad_tip_pending(0):
+		failures.append("the tip stayed after the player swung the stick")
+	Input.joy_connection_changed.emit(3, false)
+	await _await_ticks(5)
+	Input.joy_connection_changed.emit(3, true)
+	await _await_ticks(5)
+	if server.pad_tip_pending(0):
+		failures.append("the tip came back on a replug")
+	await _teardown(rig["stage"])
 	return failures
 ## Review sweep: a hostile or truncated sound trailer must split as a plain
 ## snapshot (the whole packet, no events, no track), never read past the packet.

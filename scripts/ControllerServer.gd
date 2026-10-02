@@ -1091,6 +1091,9 @@ func send_buzz(slot: int, kind: String) -> void:
 	if not slot_has_controller(slot):
 		return
 	var peer: Variant = _slot_peers[slot]
+	if peer is PadSeat and peer.open:
+		_rumble_pad(peer.device, kind)
+		return
 	if peer == null or not peer is WebSocketPeer or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
@@ -1109,8 +1112,8 @@ var _damage_sent_msec: Array[int] = []
 ## last frame and at least `DAMAGE_SEND_GAP_MSEC` has passed; a change held back
 ## by the throttle goes out on a later call, so callers just report every tick.
 func send_damage(slot: int, fraction: float) -> void:
-	if not slot_has_controller(slot):
-		return
+	if not slot_has_controller(slot) or _slot_peers[slot] is PadSeat:
+		return # a gamepad has no screen for the bar (#442)
 	var percent: int = roundi(clampf(fraction, 0.0, 1.0) * 100.0)
 	if percent == _damage_sent[slot]:
 		return
@@ -2094,6 +2097,8 @@ func _push_pad_sticks() -> void:
 		var slot: int = pad_slot(device)
 		if slot == -1:
 			continue
+		if _pad_axis(device) != Vector2.ZERO:
+			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 		_smoothers[slot].push(_pad_axis(device))
 
@@ -2125,10 +2130,12 @@ func _pad_button_pressed(device: int, button: int) -> void:
 
 ## Seat `device` under the id "pad-<device>": a replugged pad takes its held
 ## claim back through `_bind_with_id` (ADR-0007).
-func _bind_pad(device: int) -> void:
+func _bind_pad(device: int, id: String = "") -> void:
 	var seat := PadSeat.new()
 	seat.device = device
-	_bind_with_id(seat, PAD_ID_PREFIX + str(device))
+	if id.is_empty():
+		id = _pad_claim_id(device)
+	_bind_with_id(seat, id)
 	var slot: int = _slot_peers.find(seat)
 	if slot == -1:
 		return # full or kicked: the seat was closed
@@ -2145,13 +2152,75 @@ func _on_joy_connection_changed(device: int, connected: bool) -> void:
 			_pad_seats.erase(device)
 		return
 	# Replugged: take a held claim back; a new pad waits for A.
-	var id: String = PAD_ID_PREFIX + str(device)
 	if pad_slot(device) != -1:
 		return
+	var held_id: String = _held_pad_claim_id(device)
+	if not held_id.is_empty():
+		_bind_pad(device, held_id)
+
+## Gamepad parity (#442). A pad's claim id is "pad-<device>" plus its GUID when
+## the OS reports one, so a replug on another port still finds its own seat, and
+## a different pad that lands on the same index does not take it.
+var _pad_guids: Dictionary = {} # claim id -> GUID of the pad that holds it
+## Tests set a device's GUID here; headless has no real joypads.
+var _test_pad_guids: Dictionary = {}
+## Claim ids whose pad has already been told "right stick swings".
+var _pad_tip_done: Dictionary = {}
+## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios).
+var pad_rumbles: Array = []
+
+func _pad_guid(device: int) -> String:
+	if _test_pad_guids.has(device):
+		return str(_test_pad_guids[device])
+	if not Input.get_connected_joypads().has(device):
+		return ""
+	return Input.get_joy_guid(device)
+
+func _pad_claim_id(device: int) -> String:
+	var guid: String = _pad_guid(device)
+	var id: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
+	_pad_guids[id] = guid
+	return id
+
+## The claim id of a held (unplugged) pad seat that `device` should take back:
+## the same GUID (the same index first), else the same index with no GUID.
+func _held_pad_claim_id(device: int) -> String:
+	var guid: String = _pad_guid(device)
+	var own: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
+	var found: String = ""
 	for slot in _slot_peers.size():
-		if _slot_claimed[slot] == 1 and _slot_client_id[slot] == id and _slot_peers[slot] == null:
-			_bind_pad(device)
-			return
+		var id: String = str(_slot_client_id[slot])
+		if _slot_claimed[slot] != 1 or _slot_peers[slot] != null or not id.begins_with(PAD_ID_PREFIX):
+			continue
+		if id == own:
+			return id
+		if not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
+			found = id
+	return found
+
+## Whether the "right stick swings" hint should show on `slot`'s lobby card.
+func pad_tip_pending(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat \
+		and not _pad_tip_done.has(str(_slot_client_id[slot]))
+
+## A buzz as controller rumble (ADR-0013): the same kinds, a pulse each.
+func _rumble_pad(device: int, kind: String) -> void:
+	var weak: float = 0.4
+	var strong: float = 0.4
+	var seconds: float = 0.15
+	match kind:
+		"win":
+			strong = 1.0
+			seconds = 0.5
+		"eliminated":
+			strong = 0.9
+			seconds = 0.35
+		"hit":
+			weak = 0.7
+			strong = 0.0
+			seconds = 0.1
+	Input.start_joy_vibration(device, weak, strong, seconds)
+	pad_rumbles.append({"device": device, "kind": kind})
 
 # --- Snapshot stream to remote seats (issue #251) ----------------------------
 
