@@ -186,9 +186,23 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
 		_lobby_qr.texture = qr as Texture2D
-		_lobby_qr.visible = qr != null
 		var url: Variant = join_source.get("join_url")
 		_lobby_url.text = str(url) if url != null else ""
+	_apply_streamer_mode(join_source)
+
+## Streamer mode (#369): with "Hide room code" on, the join QR, URL and online
+## room code give way to a notice; the host phone's menu still has the code.
+func _apply_streamer_mode(join_source: Object) -> void:
+	if join_source == null:
+		return
+	var hidden: bool = join_source.has_method("room_code_hidden") and join_source.room_code_hidden()
+	_lobby_qr.visible = join_source.get("join_qr_texture") != null and not hidden
+	if hidden:
+		_lobby_url.text = join_source.ROOM_CODE_HIDDEN_TEXT
+	elif _lobby_url.text == join_source.ROOM_CODE_HIDDEN_TEXT:
+		_lobby_url.text = str(join_source.get("join_url"))
+	if _room_label != null and hidden:
+		_room_label.visible = false
 
 ## One lobby row: the player's swatch, name, host tag and ready state.
 func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxContainer:
@@ -619,7 +633,8 @@ func refresh_controls() -> void:
 	control_button("online").text = "Go online (O): %s" % ("on" if _server.online_requested() else "off")
 	_online_status.text = {"connecting": "connecting…", "online": "online", "unreachable": "relay unreachable"}.get(status, "")
 	_room_label.text = "Online: %s" % code
-	_room_label.visible = code != ""
+	_room_label.visible = code != "" and not (_server.has_method("room_code_hidden") and _server.room_code_hidden())
+	_apply_streamer_mode(_server)
 	control_button("pc_seat").text = "Play on this PC (P): %s" % ("on" if _server.host_pc_slot() != -1 else "off")
 	control_button("mode").text = "Mode (T): %s" % ("Teams" if _server.team_mode() else "Free-for-all")
 	control_button("join").disabled = not _can_join_online()
