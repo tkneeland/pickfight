@@ -247,6 +247,13 @@ const THINK_SEC_AGGRESSIVE: float = 0.1
 const CLOSE_FRACTION_AGGRESSIVE: float = 0.0
 const SWING_SEC_AGGRESSIVE: float = 0.17
 const STRIKE_REACH_OFFSET: float = -25.0
+## Issue #423: a swing softens only for the way the body is already moving:
+## with less ground that way than EDGE_SWING_ROOM, less what that speed
+## carries it, to no less than EDGE_SWING_MIN of full strength. Never when a
+## strike is within reach of the target.
+const EDGE_SWING_ROOM: float = 250.0
+const EDGE_SWING_SPEED: float = 120.0
+const EDGE_SWING_MIN: float = 0.4
 ## Ground the bot wants past a rival before it will close on one (issue #302).
 const EDGE_BEYOND_ROOM: float = 160.0
 ## A head this much short of the reach it was sent to, and slower than
@@ -844,7 +851,21 @@ func _swing(delta: float) -> Vector2:
 		if actual < wanted - BLOCKED_GAP and speed < BLOCKED_SPEED:
 			wanted = maxf(actual, _min_reach())
 	var length: float = _length_for(wanted)
-	return Vector2.RIGHT.rotated(angle) * length
+	return Vector2.RIGHT.rotated(angle) * length * _edge_swing_scale(to_target.length())
+
+## Issue #423: a swing's head-plant throws the bot 500 px/s or more, and a bot
+## already carried towards a drop is thrown over it. Softer the nearer that
+## edge is (less what its speed carries it); 1.0 with EDGE_SWING_ROOM to spare, or the target in strike reach.
+func _edge_swing_scale(target_distance: float) -> float:
+	var body := player as RigidBody2D
+	if body == null or target_distance + STRIKE_REACH_OFFSET <= _reach():
+		return 1.0
+	if absf(body.linear_velocity.x) <= EDGE_SWING_SPEED:
+		return 1.0
+	var side: float = signf(body.linear_velocity.x)
+	var carry: float = absf(body.linear_velocity.x) * MOMENTUM_SEC
+	var room: float = _edge_room(side, EDGE_SWING_ROOM + carry) - carry
+	return clampf(room / EDGE_SWING_ROOM, EDGE_SWING_MIN, 1.0)
 
 ## Issue #302: a swing's head-plant can throw the bot over its rival and on
 ## towards an edge. Carried towards one faster than it can stop, it plants the

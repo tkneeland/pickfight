@@ -641,6 +641,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_hud_match_result_podium_and_leave",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
+	"bot_stays_on_stage_over_jittered_starts",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2318,6 +2319,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
 			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
+		"bot_stays_on_stage_over_jittered_starts":
+			return await _scenario_bot_stays_on_stage_over_jittered_starts()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
