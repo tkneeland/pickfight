@@ -17,6 +17,7 @@ extends RefCounted
 const StageScript := preload("res://scripts/Stage.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+const GameModesScript := preload("res://scripts/GameModes.gd")
 
 ## Which stages the host switched off (#294); a scenario hands in its own.
 var settings: RefCounted = HostSettingsScript.shared()
@@ -31,6 +32,7 @@ var scenes: Array[PackedScene] = []:
 			if DemoBuildScript.stage_in_slice(stage_name):  # the demo's slice (#361)
 				names.append(stage_name)
 		settings.known_stages = names
+		_mode_fit_id = ""
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5
 ## `--demo`: play the rotation straight through in order, no bags.
@@ -104,27 +106,51 @@ func stage_is_large(index: int) -> bool:
 		_large_stage_cache[scene] = StageScript.is_large_view(StageScript.view_size_of(scene))
 	return _large_stage_cache[scene]
 
+## `_fits_mode()` per index for `_mode_fit_id`, worked out once per mode.
+var _mode_fit_id: String = ""
+var _mode_fit := PackedByteArray()
+
+## Whether `scenes[index]` can host `mode_id`. A mode with `own_stages`
+## (Soccer, Capture the Flag) plays only the stages whose `mode_weights` name
+## it: anywhere else there is no goal or base, and its round could never end.
+## A rotation with none of them ignores this rather than play nothing.
+func _fits_mode(index: int) -> bool:
+	if not GameModesScript.needs_own_stages(mode_id):
+		return true
+	if _mode_fit_id != mode_id or _mode_fit.size() != scenes.size():
+		_mode_fit_id = mode_id
+		_mode_fit.resize(scenes.size())
+		var any: bool = false
+		for i in scenes.size():
+			var fits: bool = StageScript.names_mode(scenes[i], mode_id)
+			_mode_fit[i] = 1 if fits else 0
+			any = any or fits
+		if not any:
+			_mode_fit.fill(1)
+	return _mode_fit[index] == 1
+
 ## Whether the round being started may play `scenes[index]`: any normal
 ## stage, and a large one only with `large_stage_min_players` or more. A
 ## rotation with no stage the round may play (say, only large stages and two
 ## players) ignores the rule rather than play nothing.
 func stage_allowed(index: int) -> bool:
-	if not _stage_enabled(index):
+	if not _fits_mode(index) or not _stage_enabled(index):
 		return false
 	if round_player_count >= large_stage_min_players or not stage_is_large(index):
 		return true
 	for i in scenes.size():
-		if not stage_is_large(i):
+		if _fits_mode(i) and not stage_is_large(i):
 			return false
 	return true
 
 ## Whether the host left `scenes[index]` switched on (#294). A rotation with
-## every stage off (the settings refuse that) ignores the switches.
+## every stage off (the settings refuse that) ignores the switches, and so
+## does an `own_stages` mode with all of its own stages off.
 func _stage_enabled(index: int) -> bool:
 	if settings.is_stage_enabled(HostSettingsScript.name_of(scenes[index].resource_path)):
 		return true
-	for scene: PackedScene in scenes:
-		if settings.is_stage_enabled(HostSettingsScript.name_of(scene.resource_path)):
+	for i in scenes.size():
+		if _fits_mode(i) and settings.is_stage_enabled(HostSettingsScript.name_of(scenes[i].resource_path)):
 			return false
 	return true
 

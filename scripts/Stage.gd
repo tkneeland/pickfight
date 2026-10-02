@@ -165,6 +165,16 @@ static func mode_weight_of(scene: PackedScene, mode_id: String) -> float:
 			var weights: Dictionary = state.get_node_property_value(0, p)
 			return float(weights.get(mode_id, weights.get("_other", 1.0)))
 	return 1.0
+## Whether a stage scene's `mode_weights` name `mode_id` itself (not only
+## through "_other"): a stage built for that mode.
+static func names_mode(scene: PackedScene, mode_id: String) -> bool:
+	if scene == null or scene.get_state().get_node_count() == 0:
+		return false
+	var state: SceneState = scene.get_state()
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"mode_weights":
+			return (state.get_node_property_value(0, p) as Dictionary).has(mode_id)
+	return false
 ## Whether a stage scene is flagged `competitive` (issue #375), read off its
 ## packed root like `view_size_of`. Defaults to false: no stage sets it yet.
 static func competitive_of(scene: PackedScene) -> bool:

@@ -41,7 +41,9 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
-	if round_manager.has_method("rng_for"):
+	if round_manager.has_method("match_rng"):
+		_rng = round_manager.match_rng("hot_potato")
+	elif round_manager.has_method("rng_for"):
 		_rng = round_manager.rng_for("hot_potato")
 	else:
 		_rng = RandomNumberGenerator.new()

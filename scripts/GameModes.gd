@@ -34,6 +34,9 @@ const CLASSIC: String = ""
 ## - no_modifiers: optional; true means no modifier is ever rolled (Stock, #375).
 ## - ffa_only: not playable in the Teams format.
 ## - teams_only: optional; true means playable only in the Teams format (Soccer, #402).
+## - own_stages: optional; true means the mode is dealt only the stages whose
+##   `mode_weights` name it (`StageRotation`): elsewhere there is no goal or
+##   base, and nothing could end the round (Soccer, Capture the Flag).
 const TABLE: Array[Dictionary] = [
 	{
 		"id": CLASSIC, "name": "Classic", "rule": "Last one standing wins.",
@@ -68,13 +71,13 @@ const TABLE: Array[Dictionary] = [
 		"id": SOCCER, "name": "Soccer",
 		"rule": "First team to 3 goals wins.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
-		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true,
+		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "own_stages": true,
 	},
 	{
 		"id": CAPTURE_THE_FLAG, "name": "Capture the Flag",
 		"rule": "First team to 2 captures wins.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
-		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true,
+		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "own_stages": true,
 	},
 ]
 
@@ -112,6 +115,10 @@ static func is_ffa_only(id: String) -> bool:
 
 static func is_teams_only(id: String) -> bool:
 	return bool(entry(id).get("teams_only", false))
+
+## Whether `id` plays only on the stages whose `mode_weights` name it.
+static func needs_own_stages(id: String) -> bool:
+	return bool(entry(id).get("own_stages", false))
 
 ## Whether `id` can be played in the format (`teams` true for Teams).
 static func fits_format(id: String, teams: bool) -> bool:
