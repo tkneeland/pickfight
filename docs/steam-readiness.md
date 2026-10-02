@@ -22,11 +22,11 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 
 | Item | Placeholder | Who |
 |---|---|---|
-| Release date | TBD. Steam wants the store page public ahead of release (**verify**: about 2 weeks minimum "Coming soon") and a wait after paperwork/fee (**verify**: about 30 days). Work backwards from these. | owner |
-| Launch price per region | $4.99 USD base; Steam suggests regional prices (**verify**); launch discount (**verify** typical 10-20%) | owner |
+| Release date | Decided 2026-10-01: store page up ASAP, a free demo for the next Steam Next Fest, then the Early Access launch. Steam wants the store page public ahead of release (**verify**: about 2 weeks minimum "Coming soon") and a wait after paperwork/fee (**verify**: about 30 days). Work backwards from these. | owner |
+| Launch price per region | Decided 2026-10-01: **$7.99 USD** base (only the host buys; phones join free), 10-15% launch discount; Steam suggests regional prices (**verify**); launch discount (**verify** typical 10-20%) | owner |
 | Final name / trademark check | "Pickfight" | owner |
-| Early Access vs 1.0 | Not decided | owner |
-| Publisher entity (individual vs company) | Not decided; drives tax/bank forms and macOS/Windows signing identity | owner |
+| Early Access vs 1.0 | Decided 2026-10-01: **Early Access** | owner |
+| Publisher entity (individual vs company) | Decided 2026-10-01: the owner as an individual, with a revenue split agreed privately with Austin; drives tax/bank forms and macOS/Windows signing identity | owner |
 
 ## Checklist (in order)
 
