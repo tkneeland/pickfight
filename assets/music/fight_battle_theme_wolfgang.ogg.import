@@ -2,12 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
-path="res://.godot/imported/fight_battle_theme_wolfgang.ogg-0.oggvorbisstr"
+uid="uid://b84bp1ubgpnnh"
+path="res://.godot/imported/fight_battle_theme_wolfgang.ogg-7c405574d17c41f175b94ae207742058.oggvorbisstr"
 
 [deps]
 
 source_file="res://assets/music/fight_battle_theme_wolfgang.ogg"
-dest_files=["res://.godot/imported/fight_battle_theme_wolfgang.ogg-0.oggvorbisstr"]
+dest_files=["res://.godot/imported/fight_battle_theme_wolfgang.ogg-7c405574d17c41f175b94ae207742058.oggvorbisstr"]
 
 [params]
 

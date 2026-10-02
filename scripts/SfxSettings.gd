@@ -31,6 +31,7 @@ const PANEL_BACKGROUND: Color = Color(0.1, 0.11, 0.14, 1.0)
 const PANEL_PADDING: float = 6.0
 const SLIDER_WIDTH: float = 180.0
 const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
+const NOTICE_TEXT: String = "Pickfight sends anonymous match stats to help balance the game"
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 ## Height of the scrolling window-size, stage and weapon area.
 const LIST_HEIGHT: float = 130.0
@@ -55,6 +56,13 @@ var _mute: CheckBox
 var _fullscreen: CheckBox
 var _shake_box: CheckBox
 var _flash_box: CheckBox
+## Anonymous match stats (issue #372): the Settings toggle and the one-time
+## first-launch notice with its two buttons.
+var _stats_box: CheckBox
+var _notice: PanelContainer
+var _notice_label: Label
+var _notice_off: Button
+var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _scale_button: OptionButton
 ## Whether a slider is being dragged. A drag applies every step live and
@@ -139,6 +147,7 @@ func _ready() -> void:
 	content.add_child(_resolution)
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
+	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
@@ -162,7 +171,9 @@ func _ready() -> void:
 	_toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
 	corner.add_child(_toggle)
 
+	_build_telemetry_notice()
 	refresh()
+	_stats_box.toggled.connect(func(pressed: bool) -> void: host.set_share_stats(pressed))
 	_slider.value_changed.connect(_on_volume_changed)
 	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
 	_music_slider.value_changed.connect(_on_music_volume_changed)
@@ -239,6 +250,8 @@ func refresh() -> void:
 	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
+	_stats_box.set_pressed_no_signal(host.share_stats)
+	_notice.visible = not host.telemetry_notice_seen
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
@@ -371,6 +384,59 @@ func more_box() -> CheckBox:
 
 func shake_box() -> CheckBox:
 	return _shake_box
+
+func stats_box() -> CheckBox:
+	return _stats_box
+
+func telemetry_notice() -> Control:
+	return _notice
+
+func telemetry_notice_label() -> Label:
+	return _notice_label
+
+func telemetry_turn_off_button() -> Button:
+	return _notice_off
+
+func telemetry_dismiss_button() -> Button:
+	return _notice_ok
+
+## The first-launch notice (issue #372), top centre of the host screen. Either
+## button marks it seen for good; "Turn off" also switches sharing off.
+func _build_telemetry_notice() -> void:
+	_notice = PanelContainer.new()
+	_notice.name = "TelemetryNotice"
+	_notice.anchor_left = 0.5
+	_notice.anchor_right = 0.5
+	_notice.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_notice.offset_top = MARGIN
+	var backdrop := StyleBoxFlat.new()
+	backdrop.bg_color = PANEL_BACKGROUND
+	backdrop.set_corner_radius_all(6)
+	backdrop.set_content_margin_all(PANEL_PADDING)
+	_notice.add_theme_stylebox_override("panel", backdrop)
+	add_child(_notice)
+	var row := HBoxContainer.new()
+	_notice.add_child(row)
+	_notice_label = Label.new()
+	_notice_label.text = tr("TELEMETRY_NOTICE")
+	row.add_child(_notice_label)
+	_notice_off = Button.new()
+	_notice_off.name = "TurnOff"
+	_notice_off.text = tr("TELEMETRY_TURN_OFF")
+	_notice_off.focus_mode = Control.FOCUS_NONE
+	row.add_child(_notice_off)
+	_notice_ok = Button.new()
+	_notice_ok.name = "Dismiss"
+	_notice_ok.text = tr("TELEMETRY_OK")
+	_notice_ok.focus_mode = Control.FOCUS_NONE
+	row.add_child(_notice_ok)
+	_notice_off.pressed.connect(func() -> void:
+		host.set_share_stats(false)
+		host.mark_telemetry_notice_seen()
+		refresh())
+	_notice_ok.pressed.connect(func() -> void:
+		host.mark_telemetry_notice_seen()
+		refresh())
 
 func flash_box() -> CheckBox:
 	return _flash_box

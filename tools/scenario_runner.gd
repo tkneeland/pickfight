@@ -573,6 +573,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
+	"mode_awards_go_to_the_right_player_only_in_their_mode",
+	"mode_awards_reach_the_victory_awards_through_the_round_manager",
+	"telemetry_record_has_no_identifying_fields",
+	"telemetry_not_sent_when_off_or_scripted",
+	"telemetry_notice_shows_once",
+	"telemetry_relay_validates_and_stores_no_ip",
+	"telemetry_sender_reaches_relay_and_fails_quietly",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2112,6 +2119,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
 		"announcer_calls_last_life_stolen_and_overtime_in_stock":
 			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
+		"mode_awards_go_to_the_right_player_only_in_their_mode":
+			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
+		"mode_awards_reach_the_victory_awards_through_the_round_manager":
+			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
+		"telemetry_record_has_no_identifying_fields":
+			return await _scenario_telemetry_record_has_no_identifying_fields()
+		"telemetry_not_sent_when_off_or_scripted":
+			return await _scenario_telemetry_not_sent_when_off_or_scripted()
+		"telemetry_notice_shows_once":
+			return await _scenario_telemetry_notice_shows_once()
+		"telemetry_relay_validates_and_stores_no_ip":
+			return await _scenario_telemetry_relay_validates_and_stores_no_ip()
+		"telemetry_sender_reaches_relay_and_fails_quietly":
+			return await _scenario_telemetry_sender_reaches_relay_and_fails_quietly()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -30402,4 +30423,259 @@ func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array
 	if announcer.said.has("announce_sudden_death"):
 		failures.append("the overtime was also called 'Sudden Death!': %s" % [announcer.said])
 	await _stock_finish(rig)
+	return failures
+# --- Issue #372: anonymous match telemetry ------------------------------------
+const StatsSenderScript372 := preload("res://scripts/StatsSender.gd")
+const HostSettingsScript372 := preload("res://scripts/HostSettings.gd")
+func _telemetry_stats_372() -> RefCounted:
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	stats.record_hit(2, 1, 50.0, 100, "axe", true)
+	stats.record_elimination(1, 200)
+	stats.record_hit(3, 0, 99.0, 300, "hammer", false)
+	return stats
+func _telemetry_settings_372(share: bool) -> RefCounted:
+	var host: RefCounted = HostSettingsScript372.new()
+	host.persist = false
+	host.share_stats = share
+	return host
+## Issue #372: the record holds weapon numbers, mode, stages, format and length
+## and nothing that names a player, a seat, a device or an account.
+func _scenario_telemetry_record_has_no_identifying_fields() -> Array[String]:
+	var failures: Array[String] = []
+	var record: Dictionary = StatsSenderScript372.build_record(_telemetry_stats_372(), "stock", ["Flatlands", "Ice"], "ffa", 95, [2])
+	var expected_keys: Array = ["format", "length_sec", "mode", "stages", "weapons", "winner_weapon"]
+	var keys: Array = record.keys()
+	keys.sort()
+	if keys != expected_keys:
+		failures.append("record keys were %s, expected %s" % [keys, expected_keys])
+	if record.get("mode") != "stock" or record.get("format") != "ffa" or int(record.get("length_sec", -1)) != 95:
+		failures.append("mode, format or length wrong: %s" % [record])
+	if record.get("stages") != ["Flatlands", "Ice"]:
+		failures.append("stages wrong: %s" % [record.get("stages")])
+	if record.get("winner_weapon") != "axe":
+		failures.append("winner_weapon was %s, expected axe (slot 2's only weapon)" % [record.get("winner_weapon")])
+	var weapons: Dictionary = record.get("weapons", {})
+	if weapons.has("hammer"):
+		failures.append("a bot's weapon leaked into the record")
+	var axe: Dictionary = weapons.get("axe", {})
+	var pick: Dictionary = weapons.get("pickaxe", {})
+	if int(axe.get("kos", -1)) != 1 or int(axe.get("hits", -1)) != 1 or not is_equal_approx(float(axe.get("damage", -1)), 50.0):
+		failures.append("axe tally wrong: %s" % [axe])
+	if int(pick.get("kos", -1)) != 0 or int(pick.get("hits", -1)) != 1:
+		failures.append("pickaxe tally wrong: %s" % [pick])
+	for weapon: String in weapons:
+		var wkeys: Array = (weapons[weapon] as Dictionary).keys()
+		wkeys.sort()
+		if wkeys != ["damage", "hits", "kos"]:
+			failures.append("weapon row keys were %s" % [wkeys])
+	var text: String = JSON.stringify(record).to_lower()
+	for banned: String in ["nick", "name", "colo", "device", "steam", "player", "slot", "\"id\"", "address", "ip\""]:
+		if text.contains(banned):
+			failures.append("the record mentions '%s': %s" % [banned, text])
+	var empty: Dictionary = StatsSenderScript372.build_record(MatchStatsScript.new(), "", [], "ffa", 5, [])
+	if not empty.is_empty():
+		failures.append("a match with no real damaging hit should give no record: %s" % [empty])
+	_scenario_completed = true
+	return failures
+## Issue #372: the toggle off, a scripted run, or a --bots run sends nothing.
+func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
+	var failures: Array[String] = []
+	var on: RefCounted = _telemetry_settings_372(true)
+	var off: RefCounted = _telemetry_settings_372(false)
+	if not HostSettingsScript372.new().share_stats:
+		failures.append("sharing should be on by default")
+	if not StatsSenderScript372.should_send(on, false, PackedStringArray()):
+		failures.append("a normal run with the toggle on should send")
+	if StatsSenderScript372.should_send(off, false, PackedStringArray()):
+		failures.append("the toggle off still sent")
+	if StatsSenderScript372.should_send(on, true, PackedStringArray()):
+		failures.append("a scripted (-s) run sent")
+	if StatsSenderScript372.should_send(on, false, PackedStringArray(["--bots=3"])):
+		failures.append("a --bots run sent")
+	if not StatsSenderScript372.is_scripted(self, PackedStringArray()):
+		failures.append("the scenario runner itself was not seen as scripted")
+	var path: String = OS.get_temp_dir().path_join("pf_372_toggle_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var saved: RefCounted = HostSettingsScript372.new()
+	saved.path = path
+	saved.set_share_stats(false)
+	var reloaded: RefCounted = HostSettingsScript372.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.share_stats:
+		failures.append("the toggle did not persist as off")
+	DirAccess.remove_absolute(path)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		await physics_frame
+		var box: CheckBox = ui.stats_box()
+		ui.host = _telemetry_settings_372(true)
+		ui.refresh()
+		if box == null or not box.button_pressed:
+			failures.append("the Send anonymous match stats box is missing or not on by default")
+		elif box.text != "Send anonymous match stats":
+			failures.append("box text was '%s'" % box.text)
+		else:
+			box.button_pressed = false
+			if ui.host.share_stats:
+				failures.append("unticking the box left sharing on")
+	_scenario_completed = true
+	return failures
+## Issue #372: the first-launch notice shows until dismissed or acted on, then never.
+func _scenario_telemetry_notice_shows_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var path: String = OS.get_temp_dir().path_join("pf_372_notice_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var host: RefCounted = HostSettingsScript372.new()
+	host.path = path
+	ui.host = host
+	ui.refresh()
+	var notice: Control = ui.telemetry_notice()
+	if notice == null or not notice.visible:
+		failures.append("the notice was not shown on first launch")
+	elif ui.telemetry_notice_label().text != "Pickfight sends anonymous match stats to help balance the game":
+		failures.append("notice text was '%s'" % ui.telemetry_notice_label().text)
+	ui.telemetry_dismiss_button().pressed.emit()
+	if notice.visible:
+		failures.append("the notice stayed after Dismiss")
+	if not host.share_stats:
+		failures.append("Dismiss turned sharing off")
+	var again: RefCounted = HostSettingsScript372.new()
+	again.path = path
+	again.load_settings()
+	if not again.telemetry_notice_seen:
+		failures.append("the dismissal did not persist")
+	ui.host = again
+	ui.refresh()
+	if notice.visible:
+		failures.append("the notice came back on the next launch")
+	DirAccess.remove_absolute(path)
+	var second: RefCounted = HostSettingsScript372.new()
+	second.persist = false
+	ui.host = second
+	ui.refresh()
+	if not notice.visible:
+		failures.append("a fresh settings file should show the notice again")
+	ui.telemetry_turn_off_button().pressed.emit()
+	if notice.visible or second.share_stats or not second.telemetry_notice_seen:
+		failures.append("Turn off should hide the notice, switch sharing off and mark it seen")
+	_scenario_completed = true
+	return failures
+func _telemetry_relay_record_372() -> Dictionary:
+	return {"mode": "stock", "format": "ffa", "length_sec": 95, "stages": ["Flatlands"], "winner_weapon": "axe",
+		"weapons": {"axe": {"damage": 50.0, "hits": 1, "kos": 1}}}
+## Issue #372: the relay stores valid records, refuses oversized or malformed
+## ones, rate-limits per IP and keeps no IP anywhere.
+func _scenario_telemetry_relay_validates_and_stores_no_ip() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	var path: String = OS.get_temp_dir().path_join("pf_372_stats_%d.jsonl" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	relay.stats_path = path
+	relay.stats_limit_per_hour = 3
+	var ip: String = "203.0.113.77"
+	var ok: Dictionary = relay.handle_stats(ip, {"t": "stats", "record": _telemetry_relay_record_372()})
+	if ok.get("status") != 200:
+		failures.append("a valid record gave %s" % [ok])
+	var extra: Dictionary = _telemetry_relay_record_372()
+	extra["nickname"] = "Zed"
+	extra["steam_id"] = "7656"
+	ok = relay.handle_stats(ip, {"t": "stats", "record": extra})
+	if ok.get("status") != 200:
+		failures.append("a record with extra fields gave %s (extras are dropped, not fatal)" % [ok])
+	var text: String = FileAccess.get_file_as_string(path)
+	var lines: PackedStringArray = text.strip_edges().split("\n")
+	if lines.size() != 2:
+		failures.append("expected 2 stored lines, got %d" % lines.size())
+	else:
+		var stored: Variant = JSON.parse_string(lines[0])
+		if not (stored is Dictionary):
+			failures.append("stored line is not JSON: %s" % lines[0])
+		else:
+			if int(stored.get("t", -1)) % 3600 != 0 or int(stored["t"]) <= 0:
+				failures.append("timestamp was not rounded to the hour: %s" % [stored.get("t")])
+			if stored.get("mode") != "stock" or not (stored.get("weapons") is Dictionary):
+				failures.append("stored record lost its fields: %s" % lines[0])
+	if text.contains(ip) or text.contains("203.0.113") or text.contains("Zed") or text.contains("steam_id") or text.contains("nickname"):
+		failures.append("the store holds an IP or a dropped field: %s" % text)
+	var cases: Dictionary = {
+		"not a dict record": {"t": "stats", "record": "x"},
+		"missing weapons": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": 5, "stages": []}},
+		"bad format": {"t": "stats", "record": {"mode": "", "format": "chaos", "length_sec": 5, "stages": [], "weapons": {"axe": {"damage": 1, "hits": 1, "kos": 0}}}},
+		"negative length": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": -4, "stages": [], "weapons": {"axe": {"damage": 1, "hits": 1, "kos": 0}}}},
+		"weapon row not a dict": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": 5, "stages": [], "weapons": {"axe": 7}}},
+		"empty weapons": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": 5, "stages": [], "weapons": {}}},
+	}
+	for label: String in cases:
+		var bad: Dictionary = relay.handle_stats("198.51.100.1", cases[label])
+		if bad.get("status") != 400:
+			failures.append("%s gave %s, expected 400" % [label, bad])
+	var big: Dictionary = _telemetry_relay_record_372()
+	var stages: Array = []
+	for i in 2000:
+		stages.append("Stage%d" % i)
+	big["stages"] = stages
+	var oversized: Dictionary = relay.handle_stats("198.51.100.2", {"t": "stats", "record": big})
+	if oversized.get("status") != 413:
+		failures.append("an oversized record gave %s, expected 413" % [oversized])
+	var third: Dictionary = relay.handle_stats(ip, {"t": "stats", "record": _telemetry_relay_record_372()})
+	var fourth: Dictionary = relay.handle_stats(ip, {"t": "stats", "record": _telemetry_relay_record_372()})
+	if third.get("status") != 200 or fourth.get("status") != 429:
+		failures.append("the 3rd and 4th from one IP gave %s and %s, expected 200 and 429" % [third, fourth])
+	var other: Dictionary = relay.handle_stats("198.51.100.9", {"t": "stats", "record": _telemetry_relay_record_372()})
+	if other.get("status") != 200:
+		failures.append("another IP gave %s, expected 200" % [other])
+	if FileAccess.get_file_as_string(path).contains("198.51.100"):
+		failures.append("an IP reached the store")
+	for prop: Dictionary in relay.get_property_list():
+		if str(prop["name"]).contains("stats") and relay.get(prop["name"]) is Dictionary:
+			if JSON.stringify(relay.get(prop["name"])).contains(ip):
+				failures.append("the relay keeps the raw IP in memory (%s)" % prop["name"])
+	DirAccess.remove_absolute(path)
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+## Issue #372: the game's sender delivers one record over the relay's socket,
+## and an unreachable relay is a quiet no-op, never an error.
+func _scenario_telemetry_sender_reaches_relay_and_fails_quietly() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var path: String = OS.get_temp_dir().path_join("pf_372_wire_%d.jsonl" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	relay.stats_path = path
+	var sender: Node = StatsSenderScript372.new()
+	root.add_child(sender)
+	var statuses: Array = []
+	sender.finished.connect(func(status: int) -> void: statuses.append(status))
+	sender.send(_telemetry_relay_record_372(), "ws://127.0.0.1:%d" % _relay_port_next)
+	var deadline: int = Time.get_ticks_msec() + 5000
+	while statuses.is_empty() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	if statuses != [200]:
+		failures.append("sender finished with %s, expected [200]" % [statuses])
+	if not FileAccess.file_exists(path) or JSON.parse_string(FileAccess.get_file_as_string(path).strip_edges()) == null:
+		failures.append("the relay stored nothing readable")
+	_relay_stop(relay, [])
+	statuses.clear()
+	sender.send(_telemetry_relay_record_372(), "ws://127.0.0.1:1")
+	deadline = Time.get_ticks_msec() + 12000
+	while statuses.is_empty() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	if statuses != [0]:
+		failures.append("an unreachable relay gave %s, expected [0]" % [statuses])
+	sender.queue_free()
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
 	return failures

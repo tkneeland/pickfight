@@ -197,3 +197,11 @@ WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d)
 STAGE_RACETRACK,Racetrack
 STAGE_SWITCHYARD,Switchyard
 STAGE_ORBIT,Orbit
+SETTINGS_SHARE_STATS,Send anonymous match stats
+TELEMETRY_NOTICE,Pickfight sends anonymous match stats to help balance the game
+TELEMETRY_TURN_OFF,Turn off
+TELEMETRY_OK,OK
+STAGE_MESA,Mesa
+STAGE_RELAY,Relay
+STAGE_ROUNDABOUT,Roundabout
+STAGE_SUMMIT,Summit
