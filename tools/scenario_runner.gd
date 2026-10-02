@@ -596,6 +596,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_grunts_one_distinct_quiet_voice_per_slot",
 	"voice_grunts_on_hit_and_ko",
 	"voice_grunts_respect_mute_and_settings_isolation",
+	"character_polish_hit_flash_respects_reduce_flash",
+	"character_polish_takeoff_stretches_within_cap",
+	"character_polish_weapon_head_has_ink_outline",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2183,6 +2186,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_grunts_on_hit_and_ko()
 		"voice_grunts_respect_mute_and_settings_isolation":
 			return await _scenario_voice_grunts_respect_mute_and_settings_isolation()
+		"character_polish_hit_flash_respects_reduce_flash":
+			return await _scenario_character_polish_hit_flash_respects_reduce_flash()
+		"character_polish_takeoff_stretches_within_cap":
+			return await _scenario_character_polish_takeoff_stretches_within_cap()
+		"character_polish_weapon_head_has_ink_outline":
+			return await _scenario_character_polish_weapon_head_has_ink_outline()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -31319,4 +31328,95 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	sfx.set_sfx_volume(was_sfx_volume)
 	sfx.set_muted(was_muted)
 	_scenario_completed = true
+	return failures
+
+## Issue #360: a hit flashes the body white for about 0.1 s of game time, and
+## the flash is off with "Reduce flashes" on. Visual only: the physics body is
+## untouched.
+func _scenario_character_polish_hit_flash_respects_reduce_flash() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var mass0: float = player.mass
+	var scale0: Vector2 = player.scale
+	var face: Node2D = player.face_node()
+	sfx.set_reduce_flash(false)
+	if face.hit_flash_alpha() != 0.0:
+		failures.append("a fresh player is flashing (%.2f)" % face.hit_flash_alpha())
+	player.take_damage(10.0)
+	var peak: float = face.hit_flash_alpha()
+	if peak <= 0.0:
+		failures.append("a hit did not flash with flashes on")
+	if peak > 0.8:
+		failures.append("flash alpha %.2f is brighter than the 0.8 cap" % peak)
+	await _await_ticks(8)
+	if face.hit_flash_alpha() != 0.0:
+		failures.append("the flash was still on 8 ticks (0.13 s) after the hit")
+	sfx.set_reduce_flash(true)
+	player.take_damage(10.0)
+	if face.hit_flash_alpha() != 0.0:
+		failures.append("the hit flashed (%.2f) with Reduce flashes on" % face.hit_flash_alpha())
+	if player.mass != mass0 or player.scale != scale0:
+		failures.append("the flash touched the physics body")
+	print("      hit flash peak %.2f, reduced %.2f" % [peak, face.hit_flash_alpha()])
+	sfx.reduce_flash = flash_was
+	await _teardown(stage)
+	return failures
+
+## Issue #360: a sudden upward launch stretches the body tall and thin, within
+## the 15% squash cap, and eases back; the physics body is untouched.
+func _scenario_character_polish_takeoff_stretches_within_cap() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -600.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var scale0: Vector2 = player.scale
+	player.linear_velocity = Vector2.ZERO
+	await _await_ticks(2)
+	player.linear_velocity = Vector2(0.0, -800.0)
+	var tall: float = 0.0
+	var thin: float = 1.0
+	for i: int in 6:
+		await _await_ticks(1)
+		var s: Vector2 = player.squash_scale()
+		tall = maxf(tall, s.y - 1.0)
+		thin = minf(thin, s.x)
+	print("      take-off stretch +%.3f tall, x %.3f" % [tall, thin])
+	if tall <= 0.01 or thin >= 0.99:
+		failures.append("a take-off did not stretch tall and thin (y +%.3f, x %.3f)" % [tall, thin])
+	if tall > 0.1501 or thin < 0.8499:
+		failures.append("take-off stretch exceeds the 15%% cap (y +%.3f, x %.3f)" % [tall, thin])
+	if player.scale != scale0:
+		failures.append("the stretch touched the physics body scale")
+	await _await_ticks(20)
+	if player.squash_scale() != Vector2.ONE and player.linear_velocity.y > -350.0:
+		failures.append("the stretch had not eased back after 0.33 s: %s" % player.squash_scale())
+	await _teardown(stage)
+	return failures
+
+## Issue #360: every weapon head is drawn with a dark ink outline (a closed
+## ring of at least three points, dark enough to read on any identity colour)
+## that follows the stage ink.
+func _scenario_character_polish_weapon_head_has_ink_outline() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var head: Polygon2D = player.get("_head_visual") as Polygon2D
+	var edge: Line2D = head.get_node_or_null("HeadOutline") as Line2D if head != null else null
+	if edge == null:
+		failures.append("the weapon head has no HeadOutline")
+	else:
+		if edge.points.size() < 3 or not edge.closed:
+			failures.append("HeadOutline is not a closed ring (%d points)" % edge.points.size())
+		var c: Color = player.head_outline_color()
+		if c.get_luminance() > 0.25:
+			failures.append("head outline %s is too light to read as an outline" % c)
+		player.set_ink(Color(0.2, 0.1, 0.3))
+		if not _color_close(player.head_outline_color(), Color(0.2, 0.1, 0.3), 0.01):
+			failures.append("head outline did not follow the stage ink")
+	await _teardown(stage)
 	return failures
