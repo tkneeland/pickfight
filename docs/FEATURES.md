@@ -108,6 +108,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Stage on/off list: the rotation skips switched-off stages (#294)
 - Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
+- "Send anonymous match stats" toggle in "More options", on by default and persisted; a one-time host-screen notice on first launch ("Pickfight sends anonymous match stats to help balance the game", Turn off / OK) that never returns once acted on (#372)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 - All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
@@ -138,6 +139,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Steam Next Fest demo build: the "demo" feature tag (Demo macOS/Windows/Linux export presets, `tools/export.sh demo`) or `--demo-build` limits the game to 6 stages, the pickaxe plus 4 pickup weapons and Classic plus King of the Hill, hides the rest from Settings, and ends each match on a "Wishlist the full game on Steam" card with the logo (#361, `scripts/DemoBuild.gd`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
 - In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
+- Anonymous match telemetry (#372): at match end the host sends one record (per-weapon damage, hits and KOs by real players, mode, stages, format, length, winner weapon; no names, colours, devices or IDs) to the relay, which appends it to a JSONL file with the time rounded to the hour and never stores or logs the IP; 30 per IP per hour, 8 KB cap. Never sent from scenario or `--bots` runs or with the toggle off. `tools/summarise_stats.py` prints damage per hit, win rate by weapon, mode popularity and average match length. Needs a Fly volume (`PICKFIGHT_STATS_PATH`, see `relay/fly.toml`) to persist
 
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)

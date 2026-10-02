@@ -2,12 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
-path="res://.godot/imported/fight_boss_battle_2_8bit.ogg-0.oggvorbisstr"
+uid="uid://b73b2ska3e8o4"
+path="res://.godot/imported/fight_boss_battle_2_8bit.ogg-d7383b19e0cba3367e1685873c358b5b.oggvorbisstr"
 
 [deps]
 
 source_file="res://assets/music/fight_boss_battle_2_8bit.ogg"
-dest_files=["res://.godot/imported/fight_boss_battle_2_8bit.ogg-0.oggvorbisstr"]
+dest_files=["res://.godot/imported/fight_boss_battle_2_8bit.ogg-d7383b19e0cba3367e1685873c358b5b.oggvorbisstr"]
 
 [params]
 
