@@ -619,6 +619,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"deck_captions_drop_keyboard_glyphs_for_a_gamepad",
 	"deck_gamepad_can_dismiss_the_first_launch_notice",
 	"lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players",
+	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
+	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2252,6 +2254,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_deck_gamepad_can_dismiss_the_first_launch_notice()
 		"lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players":
 			return await _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players()
+		"reactor_king_of_the_hill_hill_sits_off_the_hazard":
+			return await _scenario_reactor_king_of_the_hill_hill_sits_off_the_hazard()
+		"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time":
+			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32280,4 +32286,85 @@ func _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players() -> Arr
 		failures.append("adding a ninth card moved or resized the QR: %s -> %s" % [before, qr.get_global_rect()])
 	failures.append_array(_lobby_rects_425(screen, qr))
 	await _teardown(rig["main"])
+	return failures
+
+## Issue #416: Reactor's hill spots sit on the floor out on the wings, clear of
+## the molten core (two Hazards between x=-160 and 160) by more than the hill's
+## radius, so the hill is safe to hold.
+func _scenario_reactor_king_of_the_hill_hill_sits_off_the_hazard() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = load("res://scenes/stages/Reactor.tscn").instantiate()
+	get_root().add_child(stage)
+	var spots: Array[Vector2] = stage.get_hill_spots()
+	if spots.is_empty():
+		failures.append("Reactor has no HillSpot markers")
+	var hill_radius: float = 110.0
+	for spot: Vector2 in spots:
+		for core_name: String in ["CoreLeft", "CoreRight"]:
+			var core: Node2D = stage.get_node(core_name)
+			var gap: float = absf(spot.x - core.position.x) - 80.0
+			if gap < hill_radius:
+				failures.append("hill spot %s overlaps %s (clear gap %.0f, hill radius %.0f)" % [spot, core_name, gap, hill_radius])
+	print("      Reactor hill spots: %s" % [spots])
+	await _teardown(stage)
+	return failures
+
+## Issue #416: a 4-bot King of the Hill round on Reactor ends with someone
+## banking enough hold time, not by everyone else being eliminated.
+func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(float(i) * 100.0, -600.0))
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load("res://scenes/stages/Reactor.tscn")]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = GameModesType.KING_OF_THE_HILL
+	rm.match_seed = 7
+	stage.add_child(rm)
+	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started on Reactor")
+		await _teardown(stage)
+		return failures
+	for i in 4:
+		var bot: Node = BotScript.new()
+		bot.rng.seed = BOT_SEED + i
+		bot.player = players[i]
+		bot.output = players[i].set_input_vector
+		stage.add_child(bot)
+	var seen_winner: Array[int] = [-1]
+	var seen_hold: Array[float] = [0.0]
+	var ended: bool = await _await_condition(func() -> bool:
+		var hill: Variant = rm.game_mode_node()
+		if hill != null and is_instance_valid(hill) and int(hill.winner_slot) >= 0:
+			seen_winner[0] = int(hill.winner_slot)
+		if hill != null and is_instance_valid(hill):
+			for slot: int in hill.hold_time:
+				seen_hold[0] = maxf(seen_hold[0], float(hill.hold_time[slot]))
+		return rm._state == RoundManagerType.State.ROUND_END, 120000)
+	if not ended:
+		failures.append("four bots did not finish a King of the Hill round on Reactor in 120 s")
+	elif seen_winner[0] < 0 and seen_hold[0] < 9.9:
+		failures.append("the Reactor round ended without a hold win (no hill winner seen; most hold time seen %.1f s)" % seen_hold[0])
+	else:
+		print("      Reactor round ended by hold time (a rider banked %.1f s of 10 s)" % seen_hold[0])
+	await _teardown(stage)
 	return failures

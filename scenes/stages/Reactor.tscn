@@ -33,6 +33,10 @@ size = Vector2(8000, 40)
 ; its underside. The bridge is the only way to cross while the walls stand,
 ; and it passes over the pickup above the core (0, 50).
 
+; **Hill (issue #416).** King of the Hill's hill sits on the floor out on a
+; wing (HillSpot0: x=-420; HillSpot1: x=420), a full hill radius clear of the
+; core and its shields, so it is safe to hold.
+
 ; Backdrop (issue #117): magenta haze over a skyline of stacks.
 [node name="Reactor" type="Node2D"]
 script = ExtResource("1")
@@ -101,6 +105,12 @@ script = ExtResource("2")
 
 [node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
 shape = SubResource("RectangleShape2D_kill")
+
+[node name="HillSpot0" type="Marker2D" parent="."]
+position = Vector2(-420, 270)
+
+[node name="HillSpot1" type="Marker2D" parent="."]
+position = Vector2(420, 270)
 
 [node name="PickupSpawn0" type="Marker2D" parent="."]
 position = Vector2(0, 50)
