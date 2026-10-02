@@ -32,6 +32,8 @@ const PANEL_PADDING: float = 6.0
 const SLIDER_WIDTH: float = 180.0
 const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const GameModesScript := preload("res://scripts/GameModes.gd")
+const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 ## Height of the scrolling window-size, stage and weapon area.
 const LIST_HEIGHT: float = 130.0
 
@@ -46,6 +48,10 @@ var _more_area: ScrollContainer
 var _resolution: OptionButton
 var _stage_list: VBoxContainer
 var _weapon_list: VBoxContainer
+var _rules_mode: OptionButton
+var _rules_list: VBoxContainer
+## The game mode ids the Rules selector offers, by item index ("" is Classic).
+var _rules_mode_ids: PackedStringArray = []
 var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
@@ -147,6 +153,7 @@ func _ready() -> void:
 	content.add_child(_scale_button)
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
+	_build_rules(content)
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
@@ -244,6 +251,7 @@ func refresh() -> void:
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
 	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
+	_rebuild_rules()
 
 ## Esc can close the panel mid-drag, and the slider then never reports the
 ## drag's end: finish it here and save what it left (issue #196).
@@ -397,6 +405,51 @@ func apply_resolution() -> void:
 		return
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_size(host.resolution)
+
+## The Rules section (#378): a mode selector and one box per round modifier.
+func _build_rules(content: VBoxContainer) -> void:
+	var label := Label.new()
+	label.text = "Rules: modifiers that can roll (untick to skip)"
+	content.add_child(label)
+	_rules_mode = OptionButton.new()
+	_rules_mode.name = "RulesMode"
+	_rules_mode_ids = PackedStringArray([GameModesScript.CLASSIC])
+	_rules_mode.add_item("Classic")
+	for row: Dictionary in GameModesScript.picker_rows():
+		_rules_mode_ids.append(str(row["id"]))
+		_rules_mode.add_item(str(row["name"]))
+	content.add_child(_rules_mode)
+	_rules_list = VBoxContainer.new()
+	_rules_list.name = "Rules"
+	_rules_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_child(_rules_list)
+	_rules_mode.item_selected.connect(func(_index: int) -> void: _rebuild_rules())
+
+func _rebuild_rules() -> void:
+	var mode_id: String = _rules_mode_ids[maxi(_rules_mode.selected, 0)]
+	for child in _rules_list.get_children():
+		_rules_list.remove_child(child)
+		child.queue_free()
+	for id: String in RoundModifiersScript.IDS:
+		var box := CheckBox.new()
+		box.name = id
+		box.text = RoundModifiersScript.title_of(id)
+		var banned: bool = GameModesScript.bans_modifier(mode_id, id)
+		box.set_pressed_no_signal(host.is_modifier_enabled(mode_id, id))
+		if banned:
+			box.disabled = true  # the mode's table bans it: locked off
+			box.text += " (banned in this mode)"
+		box.toggled.connect(func(pressed: bool) -> void:
+			if not host.set_modifier_enabled(mode_id, id, pressed):
+				box.set_pressed_no_signal(false))
+		_rules_list.add_child(box)
+
+## The mode selector and the modifier box for `modifier_id` in the Rules section.
+func rules_mode_button() -> OptionButton:
+	return _rules_mode
+
+func rules_box(modifier_id: String) -> CheckBox:
+	return _rules_list.get_node_or_null(modifier_id) as CheckBox
 
 func _add_list(content: VBoxContainer, title: String) -> VBoxContainer:
 	var label := Label.new()

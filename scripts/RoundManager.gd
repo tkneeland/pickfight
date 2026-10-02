@@ -922,7 +922,8 @@ func _roll_modifier() -> String:
 	# one it always was.
 	var ids := PackedStringArray()
 	for id: String in RoundModifiersScript.IDS:
-		if not GameModesScript.bans_modifier(game_mode, id):
+		if not GameModesScript.bans_modifier(game_mode, id) \
+				and HostSettingsScript.shared().is_modifier_enabled(game_mode, id):  # Rules tab (#378)
 			ids.append(id)
 	if ids.is_empty():
 		return ""
