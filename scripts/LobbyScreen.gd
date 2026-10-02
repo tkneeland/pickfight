@@ -28,6 +28,7 @@ const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
 const GAME_TITLE: String = "PICKFIGHT"
 ## The wordmark (#359). Loaded as the imported texture where an import exists;
 ## a fresh clone has no import cache, so it falls back to rasterising the SVG.
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const LOGO_PATH: String = "res://art/logo/logo.svg"
 const LOGO_LOBBY_SIZE: Vector2 = Vector2(560, 140)
 const LOGO_VICTORY_SIZE: Vector2 = Vector2(320, 80)
@@ -78,6 +79,7 @@ var _podium: HBoxContainer
 var _how_to_play: Control
 var _lobby_logo: TextureRect
 var _victory_logo: TextureRect
+var _end_card_panel: Control
 
 var _title_layer: CanvasLayer
 var _title_label: Label
@@ -98,6 +100,11 @@ func lobby_panel() -> Control:
 
 func victory_panel() -> Control:
 	return _victory_panel
+
+## The demo build's "wishlist the full game" card (#361), shown after the
+## victory screen; hidden otherwise.
+func end_card_panel() -> Control:
+	return _end_card_panel
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
@@ -180,6 +187,8 @@ func how_to_play_demos() -> Array[Node]:
 func show_panel(which: String) -> void:
 	_lobby_panel.visible = which == "lobby"
 	_victory_panel.visible = which == "victory"
+	if _end_card_panel != null:
+		_end_card_panel.visible = which == "end_card"
 	if which == "lobby":
 		_start_demos()
 	else:
@@ -234,11 +243,14 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 func _apply_streamer_mode(join_source: Object) -> void:
 	if join_source == null:
 		return
+	var hidden_text: String = "Code hidden: see host phone"
+	if "ROOM_CODE_HIDDEN_TEXT" in join_source:
+		hidden_text = join_source.ROOM_CODE_HIDDEN_TEXT
 	var hidden: bool = join_source.has_method("room_code_hidden") and join_source.room_code_hidden()
 	_lobby_qr.visible = join_source.get("join_qr_texture") != null and not hidden
 	if hidden:
-		_lobby_url.text = join_source.ROOM_CODE_HIDDEN_TEXT
-	elif _lobby_url.text == join_source.ROOM_CODE_HIDDEN_TEXT:
+		_lobby_url.text = hidden_text
+	elif _lobby_url.text == hidden_text:
 		_lobby_url.text = str(join_source.get("join_url"))
 	if _room_label != null and hidden:
 		_room_label.visible = false
@@ -479,6 +491,22 @@ func build_panels() -> void:
 	_podium.add_theme_constant_override("separation", 40)
 	stack.add_child(_podium)
 	stack.add_child(_big_label("Tap Continue on your phone", 40, Color.WHITE))
+	_build_end_card()
+
+## The demo build's end card (#361): logo over the thank-you and wishlist line.
+func _build_end_card() -> void:
+	_end_card_panel = _full_screen_panel("EndCardPanel")
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 40)
+	_end_card_panel.add_child(box)
+	var logo: TextureRect = _logo_rect("Logo", LOGO_LOBBY_SIZE)
+	logo.custom_minimum_size = LOGO_LOBBY_SIZE
+	box.add_child(logo)
+	var text: Label = _big_label(DemoBuildScript.END_CARD_TEXT, 64, LOBBY_ACCENT)
+	text.name = "EndCardText"
+	box.add_child(text)
 
 func _full_screen_panel(node_name: String) -> Control:
 	var panel := ColorRect.new()

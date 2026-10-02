@@ -545,6 +545,17 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"competitive_stages_load_rotate_and_are_flagged",
 	"competitive_stages_are_left_right_symmetric",
 	"competitive_stages_have_no_hazards_or_moving_parts",
+	"round_modifier_gale_pushes_players_and_undoes",
+	"demo_build_flag_defines_the_slice",
+	"demo_build_rotation_only_slice_stages",
+	"demo_build_only_slice_weapons_spawn",
+	"demo_build_mode_picker_only_slice_modes",
+	"demo_build_end_card_follows_victory",
+	"demo_build_off_leaves_full_game_unchanged",
+	"stock_plays_the_picked_stage_every_round",
+	"stock_random_pick_is_an_enabled_stage_held_all_match",
+	"stock_never_rolls_a_modifier",
+	"stock_stage_pick_persists_and_reaches_the_host_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2027,6 +2038,28 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_competitive_stages_are_left_right_symmetric()
 		"competitive_stages_have_no_hazards_or_moving_parts":
 			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
+		"round_modifier_gale_pushes_players_and_undoes":
+			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
+		"demo_build_flag_defines_the_slice":
+			return await _scenario_demo_build_flag_defines_the_slice()
+		"demo_build_rotation_only_slice_stages":
+			return await _scenario_demo_build_rotation_only_slice_stages()
+		"demo_build_only_slice_weapons_spawn":
+			return await _scenario_demo_build_only_slice_weapons_spawn()
+		"demo_build_mode_picker_only_slice_modes":
+			return await _scenario_demo_build_mode_picker_only_slice_modes()
+		"demo_build_end_card_follows_victory":
+			return await _scenario_demo_build_end_card_follows_victory()
+		"demo_build_off_leaves_full_game_unchanged":
+			return await _scenario_demo_build_off_leaves_full_game_unchanged()
+		"stock_plays_the_picked_stage_every_round":
+			return await _scenario_stock_plays_the_picked_stage_every_round()
+		"stock_random_pick_is_an_enabled_stage_held_all_match":
+			return await _scenario_stock_random_pick_is_an_enabled_stage_held_all_match()
+		"stock_never_rolls_a_modifier":
+			return await _scenario_stock_never_rolls_a_modifier()
+		"stock_stage_pick_persists_and_reaches_the_host_phone":
+			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -8052,6 +8085,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"meteor_shower": "Meteor Shower",
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
+	"gale": "Gale",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -15008,7 +15042,7 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 			failures.append("'%s' cannot be created" % id)
 	for id: String in counts:
 		if not MODIFIER_TITLES.has(id):
-			failures.append("rolled '%s', which is not one of the ten" % id)
+			failures.append("rolled '%s', which is not one of the eleven" % id)
 	_scenario_completed = true
 	return failures
 # --- Large stages (issue #144) -------------------------------------------------
@@ -29040,7 +29074,6 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
 	return failures
-
 ## Issue #376: the four competitive stages.
 const COMPETITIVE_STAGES_376: PackedStringArray = [
 	"res://scenes/stages/FinalDestination.tscn",
@@ -29138,4 +29171,439 @@ func _scenario_competitive_stages_have_no_hazards_or_moving_parts() -> Array[Str
 				failures.append("%s has a node named like a %s" % [path, hazard_name])
 		instance.free()
 	await _teardown(Node2D.new())
+	return failures
+# --- Gale round modifier (#312) ------------------------------------------------
+## Ticks a gale round is watched for: past the calm, the warning and the gust
+## (4 s calm from a 2 s head start, 1.5 s warning, 2 s gust), with room to spare.
+const GALE_WATCH_TICKS: int = 480
+## Fastest sideways speed a gale must give a still body: well under what
+## 1500 px/s^2 for two seconds does, well over any noise.
+const GALE_MIN_SPEED: float = 300.0
+## Gale: announced as "Gale"; the round has one gust over the stage that warns
+## before it pushes a player in clear air along its own direction, and the
+## round after has neither the gust nor any push.
+func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
+	var players: Array[RigidBody2D] = loop["players"]
+	var gusts: Array = []
+	var extra: Array[String] = []
+	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
+		var gust: Node2D = instance.get_node_or_null("GaleGust") as Node2D
+		gusts.append(gust)
+		var player: RigidBody2D = players[0]
+		var before_gravity: float = player.gravity_scale
+		# Held in clear air inside the zone, with no gravity to confuse a
+		# sideways reading, and no input.
+		player.gravity_scale = 0.0
+		player.set_input_vector(Vector2.ZERO)
+		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -900.0)
+		player.teleport_to(start)
+		player.linear_velocity = Vector2.ZERO
+		var best: float = 0.0
+		var warned_without_push: bool = false
+		for tick in GALE_WATCH_TICKS:
+			await physics_frame
+			var vx: float = player.linear_velocity.x
+			if gust != null:
+				if gust.is_warning() and absf(vx) < 1.0:
+					warned_without_push = true
+				var along: float = vx * gust.push_direction().x
+				if along > best:
+					best = along
+				# Enough shown: stop before the body is carried off the stage.
+				if best >= GALE_MIN_SPEED * 1.5:
+					break
+		player.gravity_scale = before_gravity
+		player.linear_velocity = Vector2.ZERO
+		if gust != null and not warned_without_push:
+			extra.append("the gale never showed a warning before pushing")
+		return best
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 1 and gusts[1] == null:
+			found.append("the gale round has no GaleGust on its stage")
+		elif round_index != 1 and gusts[round_index] != null:
+			found.append("round %d has a gust though it is not a gale round" % (round_index + 1))
+		elif round_index == 2 and gusts[1] != null and is_instance_valid(gusts[1]) and gusts[1].is_inside_tree():
+			found.append("the gale's gust is still in the tree after its round ended")
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "gale", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] > 5.0 or values[2] > 5.0:
+			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
+		if values[1] < GALE_MIN_SPEED:
+			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
+	await _teardown(loop["stage"])
+	return failures
+# --- Issue #361: the Steam Next Fest demo build ----------------------------
+const DemoBuildScript361 := preload("res://scripts/DemoBuild.gd")
+const HostSettingsScriptDemo361 := preload("res://scripts/HostSettings.gd")
+const StageRotationScript361 := preload("res://scripts/StageRotation.gd")
+const GameModesScript361 := preload("res://scripts/GameModes.gd")
+func _real_stage_scenes_361() -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	var names: PackedStringArray = DirAccess.get_files_at("res://scenes/stages")
+	names.sort()
+	for file: String in names:
+		if file.ends_with(".tscn"):
+			scenes.append(load("res://scenes/stages/" + file) as PackedScene)
+	return scenes
+func _fresh_settings_361() -> RefCounted:
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	return settings
+## The flag picks the slice: forced on, the slice is about 6 stages, the
+## pickaxe plus 4 pickup weapons, and Classic plus King of the Hill; every
+## named item is a real file. Forced off, everything is in.
+func _scenario_demo_build_flag_defines_the_slice() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 0
+	if DemoBuildScript361.is_active():
+		failures.append("the demo is on with the flag forced off")
+	DemoBuildScript361.forced = 1
+	if not DemoBuildScript361.is_active():
+		failures.append("the demo is off with the flag forced on")
+	if DemoBuildScript361.STAGES.size() != 6 or DemoBuildScript361.WEAPONS.size() != 4:
+		failures.append("the slice is %d stages and %d pickup weapons, expected 6 and 4" % [
+			DemoBuildScript361.STAGES.size(), DemoBuildScript361.WEAPONS.size()])
+	if DemoBuildScript361.WEAPONS.has("pickaxe"):
+		failures.append("the pickaxe is listed as a pickup weapon; everyone starts with it")
+	if DemoBuildScript361.MODES != PackedStringArray(["", "king_of_the_hill"]):
+		failures.append("the demo's modes are %s" % [DemoBuildScript361.MODES])
+	for stage_name: String in DemoBuildScript361.STAGES:
+		if not ResourceLoader.exists("res://scenes/stages/%s.tscn" % stage_name):
+			failures.append("demo stage %s has no scene" % stage_name)
+	for weapon_name: String in DemoBuildScript361.WEAPONS:
+		if not ResourceLoader.exists("res://resources/%s.tres" % weapon_name):
+			failures.append("demo weapon %s has no resource" % weapon_name)
+	if DemoBuildScript361.stage_in_slice("Gauntlet") or DemoBuildScript361.weapon_in_slice("axe") \
+			or DemoBuildScript361.mode_in_slice("stock"):
+		failures.append("something outside the slice reads as in it")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+## Demo on: 200 rounds over all of the game's stages deal only the slice's
+## stages, all of them, and the settings can neither list nor enable others.
+func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var settings: RefCounted = _fresh_settings_361()
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	rotation.scenes = scenes
+	rotation.round_player_count = 8
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 11
+	var seen: Dictionary = {}
+	for _round in 200:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+	print("      %d stages loaded, dealt %s" % [scenes.size(), seen.keys()])
+	for stage_name: Variant in seen.keys():
+		if not DemoBuildScript361.STAGES.has(str(stage_name)):
+			failures.append("%s came up in the demo's rotation" % stage_name)
+	for stage_name: String in DemoBuildScript361.STAGES:
+		if not seen.has(stage_name):
+			failures.append("demo stage %s never came up" % stage_name)
+	if settings.known_stages.size() != DemoBuildScript361.STAGES.size():
+		failures.append("the settings list %d stages, expected %d" % [settings.known_stages.size(), DemoBuildScript361.STAGES.size()])
+	if settings.set_stage_enabled("Gauntlet", true) or settings.is_stage_enabled("Gauntlet"):
+		failures.append("the settings enabled a stage outside the slice")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+## Demo on: the pickup pool holds only the slice's weapons (never the
+## pickaxe), draws from it only ever give those, and the settings list and
+## allow only them.
+func _scenario_demo_build_only_slice_weapons_spawn() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var pool: Array[Resource] = PickupWeaponsScript.available_weapons()
+	var stems: PackedStringArray = []
+	for stats: Resource in pool:
+		stems.append(HostSettingsScriptDemo361.name_of(stats.resource_path))
+	stems.sort()
+	var wanted: PackedStringArray = DemoBuildScript361.WEAPONS.duplicate()
+	wanted.sort()
+	if stems != wanted:
+		failures.append("the demo's pickup pool is %s, expected %s" % [stems, wanted])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var drawn: Dictionary = {}
+	for _i in 200:
+		var weapon: Resource = PickupWeaponsScript.choose(PickupWeaponsScript.available_weapons(), rng)
+		drawn[HostSettingsScriptDemo361.name_of(weapon.resource_path)] = true
+	for stem: Variant in drawn.keys():
+		if not DemoBuildScript361.WEAPONS.has(str(stem)):
+			failures.append("%s was handed out as a pickup" % stem)
+	var settings: RefCounted = _fresh_settings_361()
+	if HostSettingsScriptDemo361.known_weapons().size() != DemoBuildScript361.WEAPONS.size():
+		failures.append("the settings list %d weapons" % HostSettingsScriptDemo361.known_weapons().size())
+	if settings.set_weapon_enabled("axe", true) or settings.is_weapon_enabled("axe"):
+		failures.append("the settings enabled a weapon outside the slice")
+	if not settings.is_weapon_enabled("sword"):
+		failures.append("a slice weapon is off by default")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+## Demo on: the picker offers Classic and King of the Hill only, and the
+## controller server refuses every other mode.
+func _scenario_demo_build_mode_picker_only_slice_modes() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	HostSettingsScriptDemo361.shared().game_mode = ""
+	var names: Array[String] = []
+	for row: Variant in GameModesScript361.picker_rows():
+		names.append(str((row as Dictionary).get("name")))
+	if names != ["Classic", "King of the Hill"]:
+		failures.append("the demo's picker rows were %s" % [names])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	for refused: String in ["sudden_death", "hot_potato", "stock"]:
+		if server.set_game_mode(refused) or server.game_mode() != "":
+			failures.append("the demo accepted the %s mode" % refused)
+	if not server.set_game_mode("king_of_the_hill") or server.game_mode() != "king_of_the_hill":
+		failures.append("the demo refused King of the Hill")
+	if not server.set_game_mode("") or server.game_mode() != "":
+		failures.append("the demo refused Classic")
+	HostSettingsScriptDemo361.shared().game_mode = ""
+	DemoBuildScript361.forced = -1
+	await _teardown(main)
+	return failures
+## Demo on: the victory screen is followed by the end card, with the logo and
+## the wishlist line; a second continue returns to the lobby. Demo off: no end
+## card, the victory screen goes straight to the lobby.
+func _scenario_demo_build_end_card_follows_victory() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var screen: Node = rm._lobby_screen
+	rm._enter_victory()
+	await _await_ticks(3)
+	if screen.end_card_panel() == null or screen.end_card_panel().visible:
+		failures.append("the end card is up during the victory screen")
+	rm._leave_victory()
+	await _await_ticks(3)
+	var card: Control = screen.end_card_panel()
+	if card == null or not card.visible:
+		failures.append("the end card did not show after the victory screen")
+	else:
+		if screen.victory_panel().visible:
+			failures.append("the victory screen is still up behind the end card")
+		var text: Label = card.find_child("EndCardText", true, false) as Label
+		if text == null or not text.text.contains("Wishlist the full game on Steam") \
+				or not text.text.contains("Thanks for playing the Pickfight demo!"):
+			failures.append("the end card text is %s" % (text.text if text != null else "missing"))
+		var logo: TextureRect = card.find_child("Logo", true, false) as TextureRect
+		if logo == null or logo.texture == null:
+			failures.append("the end card has no logo")
+	if rm.lobby_phase() != "victory":
+		failures.append("the match left the victory state under the end card: %s" % rm.lobby_phase())
+	rm._leave_victory()
+	await _await_ticks(3)
+	if rm.lobby_phase() != "lobby" or (card != null and card.visible):
+		failures.append("dismissing the end card did not return to the lobby (%s)" % rm.lobby_phase())
+	DemoBuildScript361.forced = -1
+	await _teardown(loop["stage"])
+	return failures
+## Demo off: the full game is as it was. Every stage rotates, all fourteen
+## pickup weapons are in the pool, all five modes are on offer and pickable,
+## and the victory screen goes straight to the lobby with no end card.
+func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 0
+	var settings: RefCounted = _fresh_settings_361()
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	rotation.scenes = scenes
+	rotation.round_player_count = 8
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 11
+	var seen: Dictionary = {}
+	for _round in 400:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[index] = true
+	if seen.size() != scenes.size():
+		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
+	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
+		failures.append("the settings lost stages with the demo off")
+	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
+			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
+		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
+	if GameModesScript361.picker_rows().size() != 5 or not GameModesScript361.is_valid("stock"):
+		failures.append("the mode picker lost modes with the demo off")
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm._enter_victory()
+	await _await_ticks(3)
+	rm._leave_victory()
+	await _await_ticks(3)
+	if rm.lobby_phase() != "lobby":
+		failures.append("the victory screen did not go straight to the lobby: %s" % rm.lobby_phase())
+	var card: Control = rm._lobby_screen.end_card_panel()
+	if card != null and card.visible:
+		failures.append("the end card showed with the demo off")
+	DemoBuildScript361.forced = -1
+	await _teardown(loop["stage"])
+	return failures
+## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
+func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = disabled
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var rm: Node = rig["rm"]
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rm.stage_scenes = _named_stub_stages(["StageA", "StageB", "StageC"], spawns)
+	settings.stock_stage = pick
+	return rig
+## Stub stages whose `resource_path` carries their name, as the rotation and
+## the host settings identify a stage by its file's base name.
+func _named_stub_stages(names: Array[String], spawns: Array[Vector2]) -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	for stage_name: String in names:
+		var scene: PackedScene = _make_stub_stage(stage_name, spawns)
+		scene.resource_path = "res://tools/stub_stages/%s.tscn" % stage_name
+		scenes.append(scene)
+	return scenes
+const StageRotationScript := preload("res://scripts/StageRotation.gd")
+func _stock_stage_reset() -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = PackedStringArray()
+	settings.stock_stage = ""
+	_stock_settings(3, 480)
+## The stage names RoundManager plays over `rounds` consecutive rounds.
+func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
+	var names: Array[String] = []
+	for _r in rounds:
+		rm.call("_swap_stage")
+		names.append(str(rm.get("_current_stage").get_meta("stub_stage_name")))
+	return names
+func _scenario_stock_plays_the_picked_stage_every_round() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("StageB")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	var names: Array[String] = _stock_stage_names(rm, 6)
+	for n: String in names:
+		if n != "StageB":
+			failures.append("Stock played %s; the pick was StageB (all rounds: %s)" % [n, names])
+			break
+	# Another mode keeps rotating: not the same stage six times in a row.
+	rm.game_mode = ""
+	rm.call("_begin_match")
+	var party: Array[String] = _stock_stage_names(rm, 6)
+	if party.count(party[0]) == party.size():
+		failures.append("Classic kept playing %s; the rotation was meant to run" % party[0])
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[String]:
+	var failures: Array[String] = []
+	var seen: Dictionary = {}
+	for _attempt in 3:
+		var rig: Dictionary = _stock_stage_rig("", PackedStringArray(["StageA"]))
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		var names: Array[String] = _stock_stage_names(rm, 4)
+		if names.has("StageA"):
+			failures.append("Random picked the switched-off StageA: %s" % [names])
+		if names.count(names[0]) != names.size():
+			failures.append("Random changed stage inside one match: %s" % [names])
+		seen[names[0]] = true
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	if seen.is_empty():
+		failures.append("Random never picked a stage")
+	# A pick the host switched off falls back to an enabled stage.
+	var rig2: Dictionary = _stock_stage_rig("StageC", PackedStringArray(["StageC"]))
+	rig2["rm"].set_process(false)
+	var fallback: Array[String] = _stock_stage_names(rig2["rm"], 2)
+	if fallback.has("StageC"):
+		failures.append("a switched-off pick was still played: %s" % [fallback])
+	_stock_stage_reset()
+	await _teardown(rig2["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_never_rolls_a_modifier() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	rm.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	for _i in 40:
+		var rolled: String = rm.call("_roll_modifier")
+		if rolled != "":
+			failures.append("Stock rolled the modifier '%s'" % rolled)
+			break
+	rm.forced_modifier = "double_damage"
+	if rm.call("_roll_modifier") != "":
+		failures.append("a forced modifier was still rolled in Stock")
+	rm.forced_modifier = ""
+	rm.game_mode = ""
+	var any: bool = false
+	for _i in 40:
+		if rm.call("_roll_modifier") != "":
+			any = true
+	if not any:
+		failures.append("Classic rolled no modifier at chance 1.0; the check proves nothing")
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stock_stage_375.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	fresh.known_stages = PackedStringArray(["StageA", "StageB"])
+	if fresh.stock_stage != "":
+		failures.append("the default pick was '%s', want Random" % fresh.stock_stage)
+	if fresh.set_stock_stage("Nowhere") or fresh.stock_stage != "":
+		failures.append("an unknown stage was accepted")
+	if not fresh.set_stock_stage("StageB"):
+		failures.append("a known stage was refused")
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.stock_stage != "StageB":
+		failures.append("reloaded pick '%s', want StageB" % reloaded.stock_stage)
+	DirAccess.remove_absolute(path)
+	# The host phone's message reaches the shared settings.
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.known_stages = PackedStringArray(["StageA", "StageB"])
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stock_stage", "StageA") or shared.stock_stage != "StageA":
+		failures.append("the host command did not set StageA")
+	if server.apply_host_command("stock_stage", "Nowhere") or shared.stock_stage != "StageA":
+		failures.append("the host command took an unknown stage")
+	server.free()
+	# The picker lists enabled stages only (no competitive stage exists yet).
+	var rotation: RefCounted = StageRotationScript.new()
+	rotation.settings = StockSettingsScript.new()
+	rotation.settings.persist = false
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rotation.scenes = _named_stub_stages(["StageA", "StageB"], spawns)
+	rotation.settings.set_stage_enabled("StageA", false)
+	var rows: Array = rotation.picker_rows()
+	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
+		failures.append("the picker rows were %s" % [rows])
+	_stock_stage_reset()
+	_scenario_completed = true
 	return failures

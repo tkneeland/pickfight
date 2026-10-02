@@ -43,15 +43,17 @@ const WEAPON_ROULETTE: String = "weapon_roulette"
 const METEOR_SHOWER: String = "meteor_shower"
 const BOUNCY: String = "bouncy"
 const DOUBLE_DAMAGE: String = "double_damage"
+const GALE: String = "gale"
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const FallingRockScript := preload("res://scripts/FallingRock.gd")
 const MeteorScript := preload("res://scripts/Meteor.gd")
+const StageGustScene: PackedScene = preload("res://scenes/parts/StageGust.tscn")
 
 ## Every modifier a round can roll, in a fixed order so a seeded roll picks
 ## the same one every run.
 const IDS: PackedStringArray = [LOW_GRAVITY, HEAVY_WEAPONS, BIG_HEADS, FAST_LAVA, SLIPPERY_FLOOR,
-	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE]
+	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE, GALE]
 
 ## Low gravity: players and their weapons fall at this fraction of their
 ## usual gravity. Half, not less: a swing still has to come back down onto
@@ -138,6 +140,25 @@ const BOUNCY_BOUNCE: float = 0.85
 ## at `Player.MAX_STRIKE_DAMAGE` per hit.
 const DOUBLE_DAMAGE_SCALE: float = 2.0
 
+## Gale (issue #312): a stage-wide gust (`StageGust`, #281) laid over the whole
+## view of whatever stage the round is on, blowing one way (drawn from the
+## modifier RNG, left or right) for the round. It is the stage part as
+## authored -- calm, a `GALE_WARNING_SEC` warning (tint, streaks, wind sound),
+## then a gust -- so a gale round has the same tell as a Pillars gust. The
+## cycle starts `GALE_START_OFFSET_SEC` in, so the first warning is not far off.
+const GALE_STRENGTH: float = 1500.0
+const GALE_CALM_SEC: float = 4.0
+const GALE_WARNING_SEC: float = 1.5
+const GALE_GUST_SEC: float = 2.0
+const GALE_START_OFFSET_SEC: float = 2.0
+## The zone covers the stage's view rect times this, so a body at the edge of
+## the screen is still inside it.
+const GALE_VIEW_MARGIN_SCALE: float = 1.5
+## With no view rect (a bare node standing in for a stage), this box over the
+## spawns.
+const GALE_FALLBACK_SIZE: Vector2 = Vector2(4000.0, 3000.0)
+const GALE_NODE_NAME: String = "GaleGust"
+
 ## The on-screen name of modifier `id`, or "" for an unknown id. Every title
 ## is in Title Case (issue #162), set by "Double Damage", the one the owner
 ## named exactly. `Announcer.modifier_line` lower-cases a title and joins its
@@ -165,6 +186,8 @@ static func title_of(id: String) -> String:
 		DOUBLE_DAMAGE:
 			# Exactly this, as the owner asked (issue #147).
 			return "Double Damage"
+		GALE:
+			return "Gale"
 	return ""
 
 ## A fresh, unapplied modifier for `id`, or null for an unknown id.
@@ -191,6 +214,8 @@ static func create(id: String) -> RoundModifier:
 			modifier = Bouncy.new()
 		DOUBLE_DAMAGE:
 			modifier = DoubleDamage.new()
+		GALE:
+			modifier = Gale.new()
 	if modifier != null:
 		modifier.id = id
 		modifier.title = title_of(id)
@@ -607,3 +632,48 @@ class DoubleDamage extends WeaponStatsModifier:
 		doubled.projectile_damage = stats.projectile_damage * DOUBLE_DAMAGE_SCALE
 		doubled.ball_damage = stats.ball_damage * DOUBLE_DAMAGE_SCALE
 		return doubled
+
+class Gale extends RoundModifier:
+	var _gust: Node2D = null
+
+	func _apply() -> void:
+		if _stage == null or not is_instance_valid(_stage) or not _stage is Node2D:
+			return
+		var center: Vector2 = (_stage as Node2D).global_position
+		var size: Vector2 = GALE_FALLBACK_SIZE
+		var view: Rect2 = Rect2()
+		if _stage.has_method("get_view_rect"):
+			view = _stage.get_view_rect()
+		if view.size.x > 0.0 and view.size.y > 0.0:
+			center = view.get_center()
+			size = view.size * GALE_VIEW_MARGIN_SCALE
+		elif _stage.has_method("get_spawn_points"):
+			var points: Array[Vector2] = _stage.get_spawn_points()
+			if not points.is_empty():
+				center = Vector2.ZERO
+				for point: Vector2 in points:
+					center += point
+				center /= points.size()
+		_gust = StageGustScene.instantiate() as Node2D
+		_gust.name = GALE_NODE_NAME
+		_gust.size = size
+		_gust.direction = Vector2.LEFT if _rng().randf() < 0.5 else Vector2.RIGHT
+		_gust.strength = GALE_STRENGTH
+		_gust.calm_sec = GALE_CALM_SEC
+		_gust.warning_sec = GALE_WARNING_SEC
+		_gust.gust_sec = GALE_GUST_SEC
+		_gust.cycle_offset_sec = GALE_START_OFFSET_SEC
+		_stage.add_child(_gust)
+		_gust.global_position = center
+
+	func _undo() -> void:
+		if _gust != null and is_instance_valid(_gust):
+			# Out of the tree at once, so it cannot push another tick.
+			if _gust.get_parent() != null:
+				_gust.get_parent().remove_child(_gust)
+			_gust.queue_free()
+		_gust = null
+
+	## The round's gust node, or null: a scenario seam.
+	func gust() -> Node2D:
+		return _gust

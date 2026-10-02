@@ -140,6 +140,19 @@ static func view_size_of(scene: PackedScene) -> Vector2:
 			return state.get_node_property_value(0, p)
 	return DEFAULT_VIEW_SIZE
 
+## Whether a stage scene is flagged `competitive` (issue #375), read off its
+## packed root like `view_size_of`. Defaults to false: no stage sets it yet.
+static func competitive_of(scene: PackedScene) -> bool:
+	if scene == null:
+		return false
+	var state: SceneState = scene.get_state()
+	if state.get_node_count() == 0:
+		return false
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"competitive":
+			return bool(state.get_node_property_value(0, p))
+	return false
+
 ## The backdrop built in `_ready()`, or null outside the tree.
 func get_background() -> Node2D:
 	return get_node_or_null(BACKGROUND_NODE_NAME) as Node2D
