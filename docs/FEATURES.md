@@ -85,7 +85,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Phone buzz feedback, e.g. on round win (#34, ADR-0013)
 - Phone damage bar: a thin strip showing how close you are to KO, turning red near the end; phone only, resets each round (#331)
 - Laptop browser as a controller with pointer-lock mouse (#244)
-- Gamepad seats: right stick drives the arm, no phone needed (#261)
+- Gamepad seats: right stick drives the arm, no phone needed (#261); parity with phone seats (#442): A on the podium continues and counts toward "every human continued" (an all-pad room returns to the lobby), a KO'd pad's right stick drives its ghost, buzzes play as controller rumble, a one-time "Right stick swings" tip shows on a new pad's lobby card until it swings, an unplugged pad that replugs (even on another port) reclaims its seat and cosmetics (keyed by device GUID, slot index as fallback), and pads get no damage bar
 - Gamepad host menus for Steam Deck (#368): Y in the lobby opens the host controls (Go online, Play on this PC, Mode, First to, Start, Join someone else's game), View opens the Settings panel (or focuses the first-launch notice), D-pad moves, A presses, B closes; A and B stop joining and readying while a menu is open. Captions drop the "(Enter)" keyboard glyph once a gamepad is the active input. The audit and open gaps are in `docs/steam-deck-readiness.md`
 - Host phone controls: pause, end, kick, settings (#149, #216, #231)
 - Host gamepad pause (#430): Start on the host's controller (joypad 0: the Steam Deck's built-in controls, or a PC host's first pad) pauses and resumes a match like the host phone's Pause; any other pad's Start does nothing mid-round and still joins and readies in the lobby
@@ -142,6 +142,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Online
 - Room-code relay server (#238, ADR-0019)
 - Host goes online; remote seats send relative input (#239)
+- Online edges (#446): when the host's room closes (it quits or goes offline) every remote client lands on the join screen reading "Host left.", with no host migration. A remote seat that joins mid-match watches until the next round starts, then plays, taking a freed slot at 0 points exactly as a late phone does (#161). The host pings each remote seat about once a second over the seat channel; the round trip shows beside the player in the lobby (host screen and PC client) and on the scoreboard, in a warning colour above 150 ms, and a slow ping never kicks anyone
 - Host streams world snapshots to remote seats (#251)
 - Host survives a relay blip without losing the room (#249)
 - Remote client shows the full match (#436): scoreboard, round result line, mode HUD line (King of the Hill holds, flag and goal scores, potato fuse, stock lives and clock), announcer banner, countdown, match podium with a Leave button. The host streams a small `hud` text frame (`scripts/RemoteHud.gd`, only on change, at most ~7 Hz) beside the snapshots. A removed body, projectile or pickup, or a new round or stage, goes out as a full snapshot at once so no ghost outlives one snapshot (#429)

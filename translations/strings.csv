@@ -104,6 +104,7 @@ LOBBY_FIRST_TO,First to %d
 LOBBY_HOST_TAG,  (host)
 LOBBY_NOBODY_YET,nobody yet
 LOBBY_NOT_READY,not ready
+LOBBY_PAD_TIP,Right stick swings
 LOBBY_PRESS_READY,Press Ready on your phone
 LOBBY_READY,READY
 LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d)
@@ -142,6 +143,7 @@ ONLINE_UNREACHABLE,relay unreachable
 OVERTIME,OVERTIME
 PAUSED,PAUSED
 PHONE_STOCK_RANDOM,Random
+PING_MS,%d ms
 REPLAY_NOTHING,Replay: nothing recorded yet
 REPLAY_SAVED,Replay saved: %s
 ROOM_CODE_HIDDEN,Code hidden: see host phone

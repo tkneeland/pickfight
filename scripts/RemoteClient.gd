@@ -342,6 +342,8 @@ func _on_host_text(text: String) -> void:
 		"hud":
 			hud = msg
 			_refresh_extras()
+		"ping":
+			_send_json({"t": "pong", "n": msg.get("n", 0)})
 		"closed":
 			_return_to_join(reason_text(str(msg.get("reason", "closed"))))
 		"error":
@@ -1062,6 +1064,8 @@ func _refresh_lobby() -> void:
 			var line: String = str(entry.get("name", "")) if not str(entry.get("name", "")).is_empty() else "P%d" % (int(entry.get("slot", 0)) + 1)
 			if entry.get("ready", false):
 				line = tr("JOIN_PLAYER_READY") % line
+			if entry.has("ping"):
+				line += "  " + tr("PING_MS") % int(entry["ping"])
 			var color := Color.html(str(entry.get("color", "ffffff")))
 			_lobby_list.add_child(_label(line, 20, color))
 	var host: bool = _is_host()
