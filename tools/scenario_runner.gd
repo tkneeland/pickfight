@@ -33697,8 +33697,10 @@ func _scenario_remote_client_rejoins_its_held_seat_by_itself() -> Array[String]:
 		failures.append("the dropped client is not rejoining ('%s')" % client.status_text)
 	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000):
 		failures.append("the client never rejoined (state %d, '%s')" % [client.state, client.status_text])
-	elif client.slot != slot or server.claim_serial(slot) != serial or rm.score_of(slot) != 3:
-		failures.append("the client rejoined slot %d (claim %d, score %d), expected its held slot %d (claim %d, score 3); phase '%s'" % [client.slot, server.claim_serial(slot), rm.score_of(slot), slot, serial, server._lobby_state.get("phase", "")])
+	# The round runs on through the hold, so the seat may win a round meanwhile:
+	# the held score must survive, not stay frozen at 3.
+	elif client.slot != slot or server.claim_serial(slot) != serial or rm.score_of(slot) < 3:
+		failures.append("the client rejoined slot %d (claim %d, score %d), expected its held slot %d (claim %d, score 3+); phase '%s'" % [client.slot, server.claim_serial(slot), rm.score_of(slot), slot, serial, server._lobby_state.get("phase", "")])
 	if client.rejoining():
 		failures.append("the client is still rejoining after it got back in")
 	await _rc_close_241(rig)
