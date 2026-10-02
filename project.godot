@@ -32,6 +32,10 @@ window/size/viewport_height=900
 window/size/mode=2
 window/stretch/mode="canvas_items"
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations/strings.en.translation")
+
 [physics]
 
 common/physics_interpolation=true

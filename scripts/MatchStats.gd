@@ -268,7 +268,7 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var best: int = _leader(slots, pickups, kos, false)
 	if best != -1:
 		var n: int = int(pickups[best])
-		out.append(_award(COLLECTOR, "Magpie", best, "%d pickup%s" % [n, "" if n == 1 else "s"]))
+		out.append(_award(COLLECTOR, TranslationServer.translate("AWARD_MAGPIE"), best, (TranslationServer.translate("DETAIL_PICKUP_ONE") if n == 1 else TranslationServer.translate("DETAIL_PICKUP_MANY")) % n))
 	return out
 
 ## Up to three awards, one per category, each
@@ -279,25 +279,25 @@ func awards(slots: Array) -> Array[Dictionary]:
 	var best: int = _leader(slots, kos, damage_dealt, false)
 	if best != -1:
 		var n: int = int(kos[best])
-		out.append(_award(COMBAT, "Top Brawler", best, "%d KO%s" % [n, "" if n == 1 else "s"]))
+		out.append(_award(COMBAT, TranslationServer.translate("AWARD_TOP_BRAWLER"), best, (TranslationServer.translate("DETAIL_KO_ONE") if n == 1 else TranslationServer.translate("DETAIL_KO_MANY")) % n))
 	else:
 		best = _leader(slots, damage_dealt, kos, false)
 		if best != -1:
-			out.append(_award(COMBAT, "Heavy Hitter", best, "%d damage" % roundi(float(damage_dealt[best]))))
+			out.append(_award(COMBAT, TranslationServer.translate("AWARD_HEAVY_HITTER"), best, TranslationServer.translate("DETAIL_DAMAGE") % roundi(float(damage_dealt[best]))))
 	best = _leader(slots, self_kos, deaths, false)
 	if best != -1:
 		var n: int = int(self_kos[best])
-		out.append(_award(CLUMSY, "Butterfingers", best, "%d self-KO%s" % [n, "" if n == 1 else "s"]))
+		out.append(_award(CLUMSY, TranslationServer.translate("AWARD_BUTTERFINGERS"), best, (TranslationServer.translate("DETAIL_SELF_KO_ONE") if n == 1 else TranslationServer.translate("DETAIL_SELF_KO_MANY")) % n))
 	else:
 		best = _leader(slots, damage_taken, deaths, false)
 		if best != -1:
-			out.append(_award(CLUMSY, "Punching Bag", best, "%d damage taken" % roundi(float(damage_taken[best]))))
+			out.append(_award(CLUMSY, TranslationServer.translate("AWARD_PUNCHING_BAG"), best, TranslationServer.translate("DETAIL_DAMAGE_TAKEN") % roundi(float(damage_taken[best]))))
 	best = _leader(slots, survival_msec, deaths, true)
 	if best != -1:
-		out.append(_award(SURVIVOR, "Hard to Kill", best, "%s alive" % _clock(int(survival_msec[best]))))
+		out.append(_award(SURVIVOR, TranslationServer.translate("AWARD_HARD_TO_KILL"), best, TranslationServer.translate("DETAIL_ALIVE") % _clock(int(survival_msec[best]))))
 	best = _leader(slots, _air_scores(), kos, false)
 	if best != -1:
-		out.append(_award(AIRBORNE, "Longest Airtime", best, "%.1fs airborne" % (float(longest_air_msec[best]) / 1000.0)))
+		out.append(_award(AIRBORNE, TranslationServer.translate("AWARD_LONGEST_AIRTIME"), best, TranslationServer.translate("DETAIL_AIRBORNE") % (float(longest_air_msec[best]) / 1000.0)))
 	return out
 
 ## `longest_air_msec`, without the stretches too short to earn the award.

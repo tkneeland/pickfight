@@ -480,7 +480,7 @@ func _set_waiting_text(connected: int) -> void:
 		return
 	_waiting_label.visible = true
 	# Not "x / 2": two is the minimum to start, not the most who can play (#36).
-	_waiting_label.text = "Waiting for players: %d connected (need %d)" % [connected, min_players_to_start]
+	_waiting_label.text = tr("WAITING_FOR_PLAYERS") % [connected, min_players_to_start]
 
 ## Issue #193: set by a mid-round kick, consumed by the next
 ## `_check_round_end()`.
@@ -737,12 +737,12 @@ func _update_score_label() -> void:
 	var parts: PackedStringArray = PackedStringArray()
 	if _team_mode:
 		for team in TeamsScript.COUNT:
-			parts.append("%s: %d" % [TeamsScript.team_name(team), _team_scores[team]])
+			parts.append(tr("SCORE_TEAM") % [TeamsScript.team_name(team), _team_scores[team]])
 		label.text = "  ".join(parts)
 		return
 	for slot in _scores.size():
 		if _slot_in_play(slot):
-			parts.append("P%d: %d" % [slot + 1, _scores[slot]])
+			parts.append(tr("SCORE_PLAYER") % [slot + 1, _scores[slot]])
 	label.text = "  ".join(parts)
 
 # --- Weapon pickups (issue #14, ADR-0009) ------------------------------------
@@ -944,7 +944,7 @@ func modifier_rng() -> RandomNumberGenerator:
 func _announce_modifier(title: String) -> void:
 	if _modifier_label == null:
 		_build_modifier_label()
-	_modifier_label.text = title
+	_modifier_label.text = tr("MODIFIER_" + title.to_upper().replace(" ", "_"))
 	_modifier_label.visible = true
 	_modifier_timer.start(maxf(modifier_announce_sec, 0.01))
 	modifier_announced.emit(title)
@@ -1405,10 +1405,17 @@ func stage_title_rule_label() -> Label:
 func current_stage_name() -> String:
 	return str(_current_stage.name) if _current_stage != null else ""
 
+## The stage's on-screen name: its translated name, or its node name when no
+## translation is catalogued (a stage added without a row).
+func _stage_display_name(stage_name: String) -> String:
+	var key: String = "STAGE_" + stage_name.to_upper()
+	var shown: String = tr(key)
+	return stage_name.to_upper() if shown == key else shown.to_upper()
+
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
-	_screen().show_stage_title(str(_current_stage.name).to_upper(), stage_title_sec,
+	_screen().show_stage_title(_stage_display_name(str(_current_stage.name)), stage_title_sec,
 		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.rule_line(game_mode)])
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
@@ -1886,9 +1893,9 @@ func _flush_kos() -> void:
 		feed.push_ko(_slot_name(killer), _slot_color(killer), _slot_name(victim), _slot_color(victim))
 		var streak: int = ko["streak"]
 		if streak >= 2:
-			feed.show_banner(["DOUBLE KO!", "TRIPLE KO!"][streak - 2] if streak <= 3 else "MULTI KO!", _slot_name(killer), _slot_color(killer))
+			feed.show_banner([tr("BANNER_DOUBLE_KO"), tr("BANNER_TRIPLE_KO")][streak - 2] if streak <= 3 else tr("BANNER_MULTI_KO"), _slot_name(killer), _slot_color(killer))
 		elif ko["first_blood"]:
-			feed.show_banner("FIRST BLOOD", _slot_name(killer), _slot_color(killer))
+			feed.show_banner(tr("BANNER_FIRST_BLOOD"), _slot_name(killer), _slot_color(killer))
 
 func _ko_match_started() -> void:
 	_stats.begin_match()
@@ -1923,12 +1930,12 @@ func _ko_round_ended(winner_slot: int) -> void:
 	var feed: Control = kill_feed()
 	if _team_mode:
 		if feed != null and _last_winner_team != -1:
-			feed.show_banner("%s TEAM WINS" % TeamsScript.team_name(_last_winner_team),
-				"RED %d - %d BLUE" % [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]],
+			feed.show_banner(tr("BANNER_TEAM_WINS") % TeamsScript.team_name(_last_winner_team),
+				tr("BANNER_TEAM_SCORE") % [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]],
 				TeamsScript.team_color(_last_winner_team))
 		return
 	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
-		feed.show_banner("LAST ONE STANDING", _slot_name(winner_slot), _slot_color(winner_slot))
+		feed.show_banner(tr("BANNER_LAST_ONE_STANDING"), _slot_name(winner_slot), _slot_color(winner_slot))
 
 # --- Match seed (issue #187) ---------------------------------------------------
 #

@@ -155,24 +155,24 @@ static func stage_paths() -> PackedStringArray:
 static func reason_text(reason: String) -> String:
 	match reason:
 		"bad_room":
-			return "No room with that code. Check the code on the host's screen."
+			return TranslationServer.translate("JOIN_ERR_BAD_ROOM")
 		"room_full":
-			return "That room is full."
+			return TranslationServer.translate("JOIN_ERR_ROOM_FULL")
 		"host_left":
-			return "Host left."
+			return TranslationServer.translate("JOIN_ERR_HOST_LEFT")
 		"idle_timeout":
-			return "The room closed after sitting idle."
+			return TranslationServer.translate("JOIN_ERR_IDLE")
 		"version":
-			return "Update your game: this version does not match the host's."
+			return TranslationServer.translate("JOIN_ERR_VERSION")
 		"removed by the host":
-			return "The host removed you from the match."
+			return TranslationServer.translate("JOIN_ERR_REMOVED")
 		"opened somewhere else":
-			return "You joined from somewhere else."
+			return TranslationServer.translate("JOIN_ERR_ELSEWHERE")
 		"no free player slot":
-			return "That match has no free player slot."
+			return TranslationServer.translate("JOIN_ERR_NO_SLOT")
 		"no hello":
-			return "The host did not accept the join in time."
-	return "Disconnected: %s" % reason.left(60)
+			return TranslationServer.translate("JOIN_ERR_NO_HELLO")
+	return TranslationServer.translate("JOIN_ERR_DISCONNECTED") % reason.left(60)
 
 # --- Lifecycle -------------------------------------------------------------------
 
@@ -228,7 +228,7 @@ func join(code: String, display_name: String) -> bool:
 		return false
 	code = normalize_code(code)
 	if not code_is_complete(code):
-		_set_status("Enter the %d-letter room code from the host's screen." % CODE_LENGTH)
+		_set_status(tr("JOIN_ENTER_CODE") % CODE_LENGTH)
 		return false
 	room_code = code
 	player_name = ControllerServerScript.clean_name(display_name)
@@ -238,14 +238,14 @@ func join(code: String, display_name: String) -> bool:
 	var socket := WebSocketPeer.new()
 	socket.inbound_buffer_size = 1 << 20
 	if socket.connect_to_url(relay_url) != OK:
-		_set_status("Could not reach the relay at %s." % relay_url)
+		_set_status(tr("JOIN_RELAY_UNREACHABLE") % relay_url)
 		return false
 	_socket = socket
 	_phase = Phase.OPENING
 	_deadline_msec = Time.get_ticks_msec() + join_timeout_msec
 	_world.clear()
 	_set_state(State.CONNECTING)
-	_set_status("Connecting to the relay...")
+	_set_status(tr("JOIN_CONNECTING"))
 	return true
 
 ## Gives up a join in progress and goes back to the join screen.
@@ -264,7 +264,7 @@ func _poll_socket() -> void:
 	if ready_state == WebSocketPeer.STATE_OPEN:
 		if _phase == Phase.OPENING:
 			_phase = Phase.JOINING
-			_set_status("Joining room %s..." % room_code)
+			_set_status(tr("JOIN_JOINING_ROOM") % room_code)
 			_socket.send_text(JSON.stringify({"t": "join", "room": room_code}))
 		while _socket != null and _socket.get_available_packet_count() > 0:
 			var packet: PackedByteArray = _socket.get_packet()
@@ -280,17 +280,17 @@ func _poll_socket() -> void:
 		return
 	if _socket != null and state == State.CONNECTING and Time.get_ticks_msec() > _deadline_msec:
 		if _phase == Phase.OPENING:
-			_return_to_join("Could not reach the relay at %s (no answer)." % relay_url)
+			_return_to_join(tr("JOIN_RELAY_NO_ANSWER") % relay_url)
 		else:
-			_return_to_join("Timed out waiting for the host. Check the code and try again.")
+			_return_to_join(tr("JOIN_TIMEOUT"))
 
 func _on_socket_closed() -> void:
 	if state == State.PLAYING:
-		_return_to_join("Lost the connection to the host.")
+		_return_to_join(tr("JOIN_LOST"))
 	elif _phase == Phase.OPENING:
-		_return_to_join("Could not reach the relay at %s." % relay_url)
+		_return_to_join(tr("JOIN_RELAY_UNREACHABLE") % relay_url)
 	else:
-		_return_to_join("The connection closed before the match was joined.")
+		_return_to_join(tr("JOIN_CLOSED_EARLY"))
 
 ## The relay's own TEXT messages: welcome or error.
 func _on_relay_text(text: String) -> void:
@@ -301,7 +301,7 @@ func _on_relay_text(text: String) -> void:
 				return
 			peer_id = int(msg.get("peer", 0))
 			_phase = Phase.HELLO
-			_set_status("Joined room %s, waiting for the host..." % room_code)
+			_set_status(tr("JOIN_WAITING_HOST") % room_code)
 			_send_json({"id": client_id, "proto": protocol_version})
 		"error":
 			_return_to_join(reason_text(str(msg.get("reason", "unknown"))), str(msg.get("reason", "")) == "version")
@@ -820,8 +820,8 @@ func _build_join_panel() -> void:
 	_join_panel.add_child(shade)
 	_ui.add_child(_join_panel)
 	var box: VBoxContainer = _centered_panel(_join_panel, 360)
-	box.add_child(_label("Join online game", 30))
-	box.add_child(_label("Room code (from the host's screen)"))
+	box.add_child(_label(tr("JOIN_TITLE"), 30))
+	box.add_child(_label(tr("JOIN_ROOM_CODE_LABEL")))
 	_room_edit = LineEdit.new()
 	_room_edit.name = "RoomCode"
 	_room_edit.placeholder_text = "ABCD"
@@ -829,7 +829,7 @@ func _build_join_panel() -> void:
 	_room_edit.text_changed.connect(_on_room_text_changed)
 	_room_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_room_edit)
-	box.add_child(_label("Your name"))
+	box.add_child(_label(tr("JOIN_YOUR_NAME")))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
 	_name_edit.placeholder_text = "Player"
@@ -846,17 +846,17 @@ func _build_join_panel() -> void:
 	box.add_child(row)
 	_join_button = Button.new()
 	_join_button.name = "Join"
-	_join_button.text = "Join"
+	_join_button.text = tr("JOIN_BUTTON")
 	_join_button.pressed.connect(_on_join_pressed)
 	row.add_child(_join_button)
 	_cancel_button = Button.new()
 	_cancel_button.name = "Cancel"
-	_cancel_button.text = "Cancel"
+	_cancel_button.text = tr("JOIN_CANCEL")
 	_cancel_button.pressed.connect(cancel)
 	row.add_child(_cancel_button)
 	_update_link = LinkButton.new()
 	_update_link.name = "UpdateLink"
-	_update_link.text = "Get the latest version"
+	_update_link.text = tr("JOIN_UPDATE_LINK")
 	_update_link.uri = itch_url
 	_update_link.visible = false
 	box.add_child(_update_link)
@@ -890,7 +890,7 @@ func _build_hud() -> void:
 	_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_banner_label.position = Vector2(0, 12)
 	_hud.add_child(_banner_label)
-	_wait_label = _label("Waiting for the host...", 28)
+	_wait_label = _label(tr("JOIN_WAITING"), 28)
 	_wait_label.set_anchors_preset(Control.PRESET_CENTER)
 	_wait_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_wait_label)
@@ -909,7 +909,7 @@ func _build_lobby_panel() -> void:
 	_ready_button = Button.new()
 	_ready_button.name = "Ready"
 	_ready_button.toggle_mode = true
-	_ready_button.text = "Ready"
+	_ready_button.text = tr("JOIN_READY")
 	_ready_button.toggled.connect(func(on: bool) -> void: _send_json({"t": "ready", "v": on}))
 	box.add_child(_ready_button)
 	_host_row = HBoxContainer.new()
@@ -947,10 +947,10 @@ func _build_menu_panel() -> void:
 	box.add_child(_label("Paused", 28))
 	var resume_button := Button.new()
 	resume_button.name = "Resume"
-	resume_button.text = "Resume"
+	resume_button.text = tr("JOIN_RESUME")
 	resume_button.pressed.connect(resume)
 	box.add_child(resume_button)
-	box.add_child(_label("Mouse sensitivity"))
+	box.add_child(_label(tr("JOIN_MOUSE_SENS")))
 	_sens_slider = HSlider.new()
 	_sens_slider.name = "Sensitivity"
 	_sens_slider.min_value = 0.1
@@ -966,7 +966,7 @@ func _build_menu_panel() -> void:
 	box.add_child(_pause_button)
 	var leave_button := Button.new()
 	leave_button.name = "Leave"
-	leave_button.text = "Leave match"
+	leave_button.text = tr("JOIN_LEAVE_MATCH")
 	leave_button.pressed.connect(leave)
 	box.add_child(leave_button)
 
@@ -1037,7 +1037,7 @@ func _refresh_lobby() -> void:
 	_mode_button.text = "Teams" if lobby.get("mode") == "teams" else "Free-for-all"
 	_target_label.text = "First to %d" % int(lobby.get("target", 5))
 	_pause_button.visible = host
-	_pause_button.text = "Resume match" if lobby.get("paused", false) else "Pause match"
+	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
 
 func _refresh_hud() -> void:

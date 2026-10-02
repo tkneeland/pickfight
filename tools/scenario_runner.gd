@@ -560,6 +560,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hot_potato_draws_its_stages_more_often",
 	"mode_awards_go_to_the_right_player_only_in_their_mode",
 	"mode_awards_reach_the_victory_awards_through_the_round_manager",
+	"pseudo_locale_changes_lobby_and_mode_text",
+	"every_tr_key_is_in_strings_csv",
+	"koth_stages_load_and_are_in_rotation",
+	"koth_hill_starts_on_first_hill_spot",
+	"koth_moving_hill_warns_then_moves",
+	"koth_stage_without_spots_uses_spawn_centre",
+	"announcer_calls_each_mode_at_round_start",
+	"announcer_calls_hill_taken_when_the_hill_changes_hands",
+	"announcer_calls_last_life_stolen_and_overtime_in_stock",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2072,6 +2081,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
 		"mode_awards_reach_the_victory_awards_through_the_round_manager":
 			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
+		"pseudo_locale_changes_lobby_and_mode_text":
+			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
+		"every_tr_key_is_in_strings_csv":
+			return await _scenario_every_tr_key_is_in_strings_csv()
+		"koth_stages_load_and_are_in_rotation":
+			return await _scenario_koth_stages_load_and_are_in_rotation()
+		"koth_hill_starts_on_first_hill_spot":
+			return await _scenario_koth_hill_starts_on_first_hill_spot()
+		"koth_moving_hill_warns_then_moves":
+			return await _scenario_koth_moving_hill_warns_then_moves()
+		"koth_stage_without_spots_uses_spawn_centre":
+			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
+		"announcer_calls_each_mode_at_round_start":
+			return await _scenario_announcer_calls_each_mode_at_round_start()
+		"announcer_calls_hill_taken_when_the_hill_changes_hands":
+			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
+		"announcer_calls_last_life_stolen_and_overtime_in_stock":
+			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -3818,6 +3845,10 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Racetrack.tscn",
 	"res://scenes/stages/Switchyard.tscn",
 	"res://scenes/stages/Orbit.tscn",
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -13446,10 +13477,10 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("Pause/Resume is not a single tap in the menu: %s" % pause_handler)
 	var end_at: int = page.find("menuEndBtn.addEventListener(\"click\"")
 	var end_handler: String = page.substr(end_at, page.find("});", end_at) - end_at) if end_at >= 0 else ""
-	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end", { match: match'):
+	if not end_handler.contains('askConfirm(t("CONFIRM_END")') or not end_handler.contains('sendHost("end", { match: match'):
 		failures.append("End match does not ask 'Are you sure?' before sending: %s" % end_handler)
 	var kick_body: String = _js_function_body(page, "showKickList")
-	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK"') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
 		failures.append("Kick player does not ask 'Are you sure?' before sending")
 	if not kick_body.contains("if (p.slot === slot) { continue; }"):
 		failures.append("the kick list offers the host itself")
@@ -19803,7 +19834,7 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 	var state: String = _js_function_body(page, "showState")
 	var slot_at: int = state.find("} else if (slot < 0) {")
 	var slot_arm: String = state.substr(slot_at, state.find("} else if (lobby", slot_at) - slot_at) if slot_at >= 0 else ""
-	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = "Waiting for a free slot"'):
+	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = t("STATE_WAITING_SLOT")'):
 		failures.append("a refused phone is not told it is waiting for a free slot: %s" % slot_arm)
 	if not slot_arm.contains("} else if (closeReason) {"):
 		failures.append("any other close reason is not shown large: %s" % slot_arm)
@@ -19852,7 +19883,7 @@ func _scenario_controller_page_stale_bits_dropped() -> Array[String]:
 		failures.append("the kick frame is not {slot, claim}")
 	if kick_body.contains("claim: claim, name"):
 		failures.append("the kick frame still sends the unused name")
-	if not kick_body.contains('askConfirm("Are you sure? Kick " + name'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK", name)'):
 		failures.append("the kick confirm no longer names the player")
 	var wake: String = _js_function_body(page, "requestWakeLock")
 	if not wake.contains('lock.addEventListener("release"') or not wake.contains("if (wakeLock === lock) { wakeLock = null; }"):
@@ -22064,7 +22095,7 @@ func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
 		'addEventListener("click", function () { sendTeam(-1); });',
 		'sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });',
 		'menuModeBtn.disabled = inMatch();',
-		'" team wins"',
+		' team wins"',
 		"    showTeams(msg);\n  }\n",
 	]
 	for needle: String in needles:
@@ -29622,6 +29653,103 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	_stock_stage_reset()
 	_scenario_completed = true
 	return failures
+## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
+func _i18n_catalogue_367() -> Dictionary:
+	var out: Dictionary = {}
+	var file: FileAccess = FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	if file == null:
+		return out
+	file.get_csv_line()
+	while not file.eof_reached():
+		var row: PackedStringArray = file.get_csv_line()
+		if row.size() >= 2 and not row[0].is_empty():
+			out[row[0]] = row[1]
+	return out
+## Issue #367: a pseudo-locale ("xx", made here from the catalogue) must change
+## a lobby label and a mode name, and English must read as before.
+func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if TranslationServer.translate("LOBBY_PRESS_READY") != "Press Ready on your phone":
+		failures.append("English lobby text reads '%s'" % TranslationServer.translate("LOBBY_PRESS_READY"))
+	if GameModesType.display_name(GameModesType.KING_OF_THE_HILL) != "King of the Hill":
+		failures.append("English mode name reads '%s'" % GameModesType.display_name(GameModesType.KING_OF_THE_HILL))
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var mode_name: String = GameModesType.display_name(GameModesType.KING_OF_THE_HILL)
+	if mode_name != "[xx] King of the Hill":
+		failures.append("the mode name did not change in the pseudo-locale: '%s'" % mode_name)
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var how_to_play: Control = rm.how_to_play_panel()
+	if how_to_play == null:
+		failures.append("no how-to-play panel in the lobby")
+	else:
+		var texts: PackedStringArray = PackedStringArray()
+		for label: Node in how_to_play.find_children("*", "Label", true, false):
+			texts.append((label as Label).text)
+		print("      lobby labels in xx: %s" % ", ".join(texts))
+		if not texts.has("[xx] HOW TO PLAY"):
+			failures.append("the lobby's how-to-play title did not change: %s" % ", ".join(texts))
+	await _teardown(main)
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	return failures
+## Issue #367: every key a source file asks for (`tr("KEY")`, the static
+## `TranslationServer.translate("KEY")`) is in the catalogue, and so is every
+## key built from an id (modes, modifiers, teams, stages, award categories).
+func _scenario_every_tr_key_is_in_strings_csv() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if catalogue.size() < 100:
+		failures.append("only %d catalogue keys" % catalogue.size())
+	var pattern := RegEx.new()
+	pattern.compile("(?:\\btr|TranslationServer\\.translate)\\(\"([A-Z][A-Z0-9_]*)\"(?!\\s*\\+)")
+	var used: int = 0
+	for file_name: String in DirAccess.get_files_at("res://scripts"):
+		if not file_name.ends_with(".gd"):
+			continue
+		var text: String = FileAccess.get_file_as_string("res://scripts/" + file_name)
+		for found: RegExMatch in pattern.search_all(text):
+			used += 1
+			if not catalogue.has(found.get_string(1)):
+				failures.append("%s uses missing key %s" % [file_name, found.get_string(1)])
+	print("      %d literal keys used, %d in the catalogue" % [used, catalogue.size()])
+	if used < 100:
+		failures.append("only %d tr() calls found, the scan is not reading the sources" % used)
+	var built: PackedStringArray = PackedStringArray()
+	for row: Dictionary in GameModesType.TABLE:
+		var id: String = (str(row["id"]) if row["id"] != "" else "classic").to_upper()
+		built.append("MODE_%s_NAME" % id)
+		built.append("MODE_%s_RULE" % id)
+	for id: String in RoundModifiersScript.IDS:
+		built.append("MODIFIER_" + RoundModifiersScript.title_of(id).to_upper().replace(" ", "_"))
+	for team_name: String in ["RED", "BLUE"]:
+		built.append("TEAM_" + team_name)
+	for category: String in ["COMBAT", "CLUMSY", "SURVIVOR", "AIRBORNE", "COLLECTOR"]:
+		built.append("AWARD_CATEGORY_" + category)
+	for i in LobbyScreenScript230.HOW_TO_PLAY_LINES.size():
+		built.append("HOW_TO_PLAY_LINE_%d" % (i + 1))
+		if catalogue.get("HOW_TO_PLAY_LINE_%d" % (i + 1), "") != LobbyScreenScript230.HOW_TO_PLAY_LINES[i]:
+			failures.append("how-to-play line %d differs from its catalogue entry" % (i + 1))
+	for list_name: String in ["STAGES", "WEAPONS"]:
+		built.append("SETTINGS_%s_LIST" % list_name)
+	for stage_file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if stage_file.ends_with(".tscn"):
+			built.append("STAGE_" + stage_file.get_basename().to_upper())
+	for key: String in built:
+		if not catalogue.has(key):
+			failures.append("built key %s is missing" % key)
+	_scenario_completed = true
+	return failures
 # --- Hot Potato stages (issue #373)
 const HOT_POTATO_STAGES_373: PackedStringArray = [
 	"res://scenes/stages/Racetrack.tscn",
@@ -29845,5 +29973,293 @@ func _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager() 
 	var lives: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "LIVES")
 	if lives.size() != 1 or lives[0]["slot"] != 0 or lives[0]["detail"] != "3 lives left":
 		failures.append("Survivor was %s, expected slot 0 with '3 lives left'" % [lives])
+	await _stock_finish(rig)
+	return failures
+# --- King of the Hill stages (issue #377)
+const KOTH_STAGES_377: PackedStringArray = [
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
+]
+## The four hill stages load, are in Main's rotation and STAGE_PATHS, have eight
+## spawns and hill spots, and weigh 4 for King of the Hill and 0.3 elsewhere.
+## Summit and Mesa hold the hill still; Relay and Roundabout move it.
+func _scenario_koth_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in KOTH_STAGES_377:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_hill_spots().is_empty():
+			failures.append("%s declares no hill spots" % path)
+		var moving: bool = path.ends_with("Relay.tscn") or path.ends_with("Roundabout.tscn")
+		if instance.hill_moves != moving:
+			failures.append("%s hill_moves is %s, wants %s" % [path, instance.hill_moves, moving])
+		if moving and instance.get_hill_spots().size() < 3:
+			failures.append("%s moves the hill between fewer than 3 spots" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["king_of_the_hill", "", "hot_potato", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "king_of_the_hill" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## Starts a King of the Hill round on the stage at `path` and returns its rig.
+func _koth_stage_rig(path: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 3:
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load(path)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = GameModesType.KING_OF_THE_HILL
+	rm.match_seed = 7
+	stage.add_child(rm)
+	return {"stage": stage, "rm": rm, "players": players, "roster": roster}
+## On each hill stage the hill starts exactly on the stage's first hill spot.
+func _scenario_koth_hill_starts_on_first_hill_spot() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in KOTH_STAGES_377:
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"])
+			continue
+		await _await_ticks(5)
+		var rm: Node = rig["rm"]
+		var hill: Node = rm.game_mode_node()
+		var spots: Array[Vector2] = (load(path) as PackedScene).instantiate().get_hill_spots()
+		if spots.is_empty() or not hill.hill_position.is_equal_approx(spots[0]):
+			failures.append("%s: hill at %s, first spot is %s" % [path, hill.hill_position, spots])
+		await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## On Relay the hill sits still until the warning, warns for the last stretch
+## (the ring on the next spot), then hops to the second spot; a fixed stage
+## (Summit) never warns or moves however long the round runs.
+func _scenario_koth_moving_hill_warns_then_moves() -> Array[String]:
+	var failures: Array[String] = []
+	var relay_spots: Array[Vector2] = (load("res://scenes/stages/Relay.tscn") as PackedScene).instantiate().get_hill_spots()
+	var rig: Dictionary = _koth_stage_rig("res://scenes/stages/Relay.tscn")
+	if not await _mode_started(rig):
+		failures.append("the Relay round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	hill.seconds_to_win = 1000.0
+	hill.hill_move_interval = 2.0
+	hill.hill_warn_sec = 1.0
+	hill._since_move = 0.0
+	if hill.hill_warning:
+		failures.append("the hill warned before its time")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("Relay's hill did not start on spot 0: %s" % hill.hill_position)
+	await _await_ticks(70)
+	if not hill.hill_warning:
+		failures.append("no warning 1.17 s into a 2 s interval with a 1 s warning")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("the hill moved during its warning")
+	if not hill.next_hill_position().is_equal_approx(relay_spots[1]):
+		failures.append("the warning points at %s, wants %s" % [hill.next_hill_position(), relay_spots[1]])
+	await _await_ticks(60)
+	if not hill.hill_position.is_equal_approx(relay_spots[1]):
+		failures.append("the hill is at %s after the interval, wants spot 1 %s" % [hill.hill_position, relay_spots[1]])
+	if hill.hill_warning:
+		failures.append("the warning stayed on after the move")
+	await _teardown(rig["stage"])
+	var fixed: Dictionary = _koth_stage_rig("res://scenes/stages/Summit.tscn")
+	if not await _mode_started(fixed):
+		failures.append("the Summit round never started")
+		await _teardown(fixed["stage"])
+		return failures
+	await _await_ticks(5)
+	var still: Node = fixed["rm"].game_mode_node()
+	still.seconds_to_win = 1000.0
+	still.hill_move_interval = 1.0
+	still.hill_warn_sec = 0.5
+	var start: Vector2 = still.hill_position
+	await _await_ticks(120)
+	if still.hill_warning or not still.hill_position.is_equal_approx(start):
+		failures.append("Summit's fixed hill warned or moved")
+	await _teardown(fixed["stage"])
+	_scenario_completed = true
+	return failures
+## A stage with no hill spots (the stub stage) still puts the hill at the centre
+## of its spawn points.
+func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	var sum := Vector2.ZERO
+	for i in 3:
+		sum += MODE_SPAWNS[i]
+	var want: Vector2 = sum / 3.0
+	if not hill.hill_position.is_equal_approx(want):
+		failures.append("hill at %s, wants the spawn centre %s" % [hill.hill_position, want])
+	if hill.hill_moves or not hill.hill_spots.is_empty():
+		failures.append("a stage with no spots reports spots or a moving hill")
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+# --- Issue #370: announcer callouts for modes ----------------------------------
+## The announcer, quiet and recording, or null when the autoload is missing.
+func _callout_announcer() -> Node:
+	var sfx: Node = _sfx()
+	if sfx == null or sfx.announcer == null:
+		return null
+	sfx.announcer.clear()
+	return sfx.announcer
+## The lines each mode calls as its round starts.
+const MODE_START_CALLOUTS: Dictionary = {
+	"king_of_the_hill": "announce_king_of_the_hill",
+	"hot_potato": "announce_hot_potato",
+	"sudden_death": "announce_sudden_death",
+	"stock": "announce_stock",
+}
+## "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" each play
+## as their mode's round starts, and each has a sound entry in the Sfx table.
+func _scenario_announcer_calls_each_mode_at_round_start() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for mode_id: String in MODE_START_CALLOUTS:
+		var want: String = MODE_START_CALLOUTS[mode_id]
+		if not announcer.sfx.has_sound(want):
+			failures.append("no Sfx entry '%s'" % want)
+		announcer.clear()
+		_stock_settings(3, 0)
+		var rig: Dictionary = _mode_rig(3, mode_id)
+		if not await _mode_started(rig):
+			failures.append("the %s round never started" % mode_id)
+		else:
+			await _await_condition(func() -> bool: return announcer.said.has(want), 4000)
+			if not announcer.said.has(want):
+				failures.append("%s: the announcer said %s, expected '%s'" % [mode_id, announcer.said, want])
+		await _stock_finish(rig)
+	return failures
+## "Hill taken!" when a different player takes the hill from the one who held
+## it, but not for the first to hold it.
+func _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	# Everyone off the hill, then a fresh round so nobody counts as its holder.
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(5)
+	var all_slots: Array[int] = [0, 1, 2]
+	hill.start_round(all_slots)
+	announcer.clear()
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	await _await_msec(1500)
+	if announcer.said.has("announce_hill_taken"):
+		failures.append("the first player to hold the hill was called 'Hill taken!'")
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[0].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_hill_taken"), 4000):
+		failures.append("a second player taking the hill was not called: %s" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+## Stock: "Last life!" when a player is down to one, "Stolen!" when a team-mate
+## gives one up, "Overtime!" when a tied clock runs out.
+func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		await _stock_finish(rig)
+		return failures
+	announcer.clear()
+	await _stock_lose_life(players[0])
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_last_life"), 4000):
+		failures.append("down to one life was not called: %s" % [announcer.said])
+	players[0].eliminate()
+	await _await_ticks(4)
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	elif not await _await_condition(func() -> bool: return announcer.said.has("announce_stolen"), 4000):
+		failures.append("a stolen life was not called: %s" % [announcer.said])
+	await _stock_finish(rig)
+	rig = _stock_rig(3, 3, 120)
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the tie round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	announcer.clear()
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_overtime"), 6000):
+		failures.append("the overtime was not called: %s" % [announcer.said])
+	if announcer.said.has("announce_sudden_death"):
+		failures.append("the overtime was also called 'Sudden Death!': %s" % [announcer.said])
 	await _stock_finish(rig)
 	return failures
