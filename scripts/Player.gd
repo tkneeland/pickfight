@@ -995,6 +995,7 @@ func _update_weapon_visual() -> void:
 	var facing: float = held + turn * allowed
 	if allowed < 1.0:
 		_place_head_circles(_head_circle_layout(facing), facing)
+		_head.turn_placed()
 	_head_visual.rotation = wrapf(facing, -PI, PI)
 
 ## Where each head circle sits relative to the anchor at `facing`.
