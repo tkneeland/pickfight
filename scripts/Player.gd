@@ -1097,7 +1097,24 @@ func _build_head_visual(stats: WeaponStatsType) -> Polygon2D:
 		visual.color = FALLBACK_HEAD_COLOR
 		_head_visual_is_fallback = true
 		push_warning("Player: weapon stats carry no art outline (%d points); falling back to the head circles' bounding box" % stats.art_outline.size())
+	# Issue #360: a dark ink outline traced around the head, a child so it
+	# rides the head's rotation and fades with its modulate. Drawing only.
+	var edge := Line2D.new()
+	edge.name = "HeadOutline"
+	edge.points = visual.polygon
+	edge.closed = true
+	edge.width = 2.0
+	edge.default_color = face_ink()
+	edge.joint_mode = Line2D.LINE_JOINT_ROUND
+	visual.add_child(edge)
 	return visual
+
+## The ink of the weapon head's dark outline (#360).
+func head_outline_color() -> Color:
+	if _head_visual == null:
+		return face_ink()
+	var edge: Line2D = _head_visual.get_node_or_null("HeadOutline") as Line2D
+	return edge.default_color if edge != null else face_ink()
 
 ## The box the head's collision circles occupy, in head-local space. Only the
 ## fallback needs it: a head with no art still has to be drawn as something,
@@ -1193,6 +1210,10 @@ func weapon_head_visual_is_fallback() -> bool:
 func set_ink(colour: Color) -> void:
 	if _face != null:
 		_face.set_ink(colour)
+	if _head_visual != null:
+		var edge: Line2D = _head_visual.get_node_or_null("HeadOutline") as Line2D
+		if edge != null:
+			edge.default_color = colour
 
 func face_ink() -> Color:
 	return _face.ink if _face != null else Color.BLACK

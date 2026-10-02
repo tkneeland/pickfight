@@ -35,6 +35,16 @@ const LANDING_SPEED: float = 350.0
 const LANDING_FULL_SPEED: float = 900.0
 ## A hit of at least this much damage squashes as well as squints.
 const BIG_HIT: float = 25.0
+## A take-off stretches (tall and thin) when the upward speed (px/s) is at
+## least this and a tick earlier it was this much slower upward (#360).
+const TAKEOFF_SPEED: float = 350.0
+const TAKEOFF_GAIN: float = 250.0
+const TAKEOFF_FULL_SPEED: float = 900.0
+## The white hit flash (#360): a white wash over the body that fades over
+## HIT_FLASH_SEC game time. Counted in physics ticks of `delta`, never wall
+## clock. Off entirely with the "Reduce flashes" comfort option (#317).
+const HIT_FLASH_SEC: float = 0.1
+const HIT_FLASH_ALPHA: float = 0.75
 
 ## Selectable eye styles (issue #297). "round" is the original and the default.
 const EYE_ROUND := "round"
@@ -74,6 +84,7 @@ var _squash: float = 0.0
 var _squash_left: float = 0.0
 var _squash_dir: float = 1.0
 var _prev_vy: float = 0.0
+var _flash_left: float = 0.0
 
 ## `visuals` are the player's drawn nodes that squash with the face; `hat` is
 ## moved so it stays on the squashed head.
@@ -93,7 +104,11 @@ func _physics_process(delta: float) -> void:
 		if _prev_vy >= LANDING_SPEED and vy < _prev_vy * 0.5:
 			var strength: float = clampf(_prev_vy / LANDING_FULL_SPEED, 0.3, 1.0)
 			start_squash(MAX_SQUASH * strength, 1.0)
+		elif vy <= -TAKEOFF_SPEED and _prev_vy - vy >= TAKEOFF_GAIN:
+			var lift: float = clampf(-vy / TAKEOFF_FULL_SPEED, 0.3, 1.0)
+			start_squash(MAX_SQUASH * lift, -1.0)
 	_prev_vy = vy
+	_flash_left = maxf(0.0, _flash_left - delta)
 	_blink_in -= delta
 	if _blink_in <= 0.0:
 		_blink_left = BLINK_LENGTH
@@ -108,6 +123,7 @@ func _physics_process(delta: float) -> void:
 ## A hit: squint for SQUINT_LENGTH, and squash too when it is a big one.
 func on_hit(amount: float) -> void:
 	_squint_left = SQUINT_LENGTH
+	_flash_left = HIT_FLASH_SEC
 	if amount >= BIG_HIT:
 		start_squash(MAX_SQUASH, -1.0)
 
@@ -117,6 +133,16 @@ func start_squash(amount: float, dir: float) -> void:
 	_squash = minf(absf(amount), MAX_SQUASH)
 	_squash_dir = dir
 	_squash_left = SQUASH_RECOVERY
+
+## Alpha of the white hit flash right now: 0 at rest, and always 0 with
+## "Reduce flashes" on (#317). Observable for scenarios.
+func hit_flash_alpha() -> float:
+	if _flash_left <= 0.0:
+		return 0.0
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx != null and bool(sfx.get("reduce_flash")):
+		return 0.0
+	return HIT_FLASH_ALPHA * _flash_left / HIT_FLASH_SEC
 
 ## The current visual scale factor, for the scenario: Vector2.ONE at rest.
 func squash_scale() -> Vector2:
@@ -154,6 +180,9 @@ func look_dir() -> Vector2:
 func _draw() -> void:
 	var inset: float = HALF - OUTLINE_WIDTH * 0.5
 	draw_rect(Rect2(-inset, -inset, inset * 2.0, inset * 2.0), ink, false, OUTLINE_WIDTH)
+	var flash: float = hit_flash_alpha()
+	if flash > 0.0:
+		draw_rect(Rect2(-inset, -inset, inset * 2.0, inset * 2.0), Color(1, 1, 1, flash))
 	var state: String = eye_state()
 	var look: Vector2 = look_dir()
 	var pupils: Array[Vector2] = pupil_centers(look)
