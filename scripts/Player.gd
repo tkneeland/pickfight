@@ -251,6 +251,8 @@ var _head: WeaponHeadType
 ## stops it accumulating drift.
 var _head_shapes: Array[CollisionShape2D] = []
 var _head_circle_offsets: PackedVector2Array = PackedVector2Array()
+## The head's real collision when the weapon carries `head_polygon` (#465).
+var _head_polygon_node: CollisionShape2D = null
 var _pin: PinJoint2D
 var _groove: GrooveJoint2D
 var _haft_inertia: float = 1.0
@@ -700,6 +702,18 @@ func _build_rig() -> void:
 		node.position = _head_circle_offsets[i]
 		_head.add_child(node)
 		_head_shapes.append(node)
+	_head_polygon_node = null
+	if _stats.head_polygon.size() >= 3:
+		# The collision follows the outline (#465); the circles stay in
+		# `_head_shapes` as the sweep proxy and no longer collide themselves.
+		var poly := ConvexPolygonShape2D.new()
+		poly.points = _stats.head_polygon
+		_head_polygon_node = CollisionShape2D.new()
+		_head_polygon_node.name = "HeadPolygon"
+		_head_polygon_node.shape = poly
+		_head.add_child(_head_polygon_node)
+		for circle_node: CollisionShape2D in _head_shapes:
+			circle_node.disabled = true
 	if _head_shapes.is_empty():
 		push_warning("Player: weapon stats carry no head circles, so this head collides with nothing")
 	# Copied, not handed over. GDScript Arrays are reference types, so
@@ -809,6 +823,7 @@ func _clear_rig() -> void:
 	_haft = null
 	_head = null
 	_head_shapes.clear()
+	_head_polygon_node = null
 	_head_circle_offsets = PackedVector2Array()
 	_pin = null
 	_groove = null
@@ -1011,6 +1026,9 @@ func _place_head_circles(layout: PackedVector2Array, facing: float) -> void:
 		var node: CollisionShape2D = _head_shapes[i]
 		node.position = layout[i]
 		node.rotation = facing
+	if _head_polygon_node != null:
+		_head_polygon_node.position = Vector2.ZERO
+		_head_polygon_node.rotation = facing
 
 # --- Presentation: identity and damage --------------------------------------
 #
@@ -1188,6 +1206,12 @@ func weapon_head_circles_world() -> Array[Dictionary]:
 			continue
 		circles.append({"centre": node.global_position, "radius": circle.radius})
 	return circles
+
+## The head's polygon collision shape, or null for a circles-only head (#465).
+func weapon_head_polygon_shape() -> ConvexPolygonShape2D:
+	if _head_polygon_node == null:
+		return null
+	return _head_polygon_node.shape as ConvexPolygonShape2D
 
 ## Whether the head is drawn as the bounding box of its circles -- the
 ## fallback for a weapon with no art -- rather than as its own `art_outline`.

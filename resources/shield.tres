@@ -7,8 +7,9 @@
 ; on the side the shield faces mostly bounce off, and a bash with it shoves
 ; whoever it hits hard. Blocking and bashing are the whole weapon.
 ;
-; The head is a tall column of circles so the face is wide enough to cover the
-; holder. Head-local space as every other weapon's, +X along the haft.
+; The head is a 50 px wide heater shield (#465; it was 36): flat back, pointed
+; tip. `head_polygon` is its real collision; the circles are the disabled
+; sweep proxy. Head-local space as every other weapon's, +X along the haft.
 
 [resource]
 script = ExtResource("1")
@@ -22,6 +23,7 @@ max_drive_force = 7000.0
 damage = 10.0
 sound_set = &"shield"
 special = &"shield"
-head_circle_offsets = PackedVector2Array(3, -14, 3, -7, 3, 0, 3, 7, 3, 14)
-head_circle_radii = PackedFloat32Array(4, 4, 4, 4, 4)
-art_outline = PackedVector2Array(-1, -18, 9, -18, 9, 18, -1, 18)
+head_circle_offsets = PackedVector2Array(3, -21, 3, -14, 3, -7, 3, 0, 3, 7, 3, 14, 3, 21, 11, 0)
+head_circle_radii = PackedFloat32Array(4, 4, 4, 4, 4, 4, 4, 4)
+head_polygon = PackedVector2Array(-1, -25, 8, -25, 13, -17, 17, -7, 18, 0, 17, 7, 13, 17, 8, 25, -1, 25)
+art_outline = PackedVector2Array(-1, -25, 8, -25, 13, -17, 17, -7, 18, 0, 17, 7, 13, 17, 8, 25, -1, 25)

@@ -206,6 +206,12 @@ extends Resource
 @export var head_circle_offsets: PackedVector2Array = PackedVector2Array()
 @export var head_circle_radii: PackedFloat32Array = PackedFloat32Array()
 
+## Optional convex collision outline (issue #465), head-local like the circles.
+## When it has three or more points the head collides as this polygon -- a
+## ConvexPolygonShape2D -- and the circles above stay as the disabled sweep
+## proxy that keeps a fast swing from tunnelling. Empty means circles only.
+@export var head_polygon: PackedVector2Array = PackedVector2Array()
+
 ## The head's drawn shape, traced by hand from the weapon's drawing
 ## (docs/art/weapons-whiteboard.jpg) and sized against the player body. This
 ## is what a player sees, so it is what the circles are fitted to.
