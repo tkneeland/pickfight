@@ -154,7 +154,11 @@
     font: 700 20px sans-serif;
     pointer-events: none;
   }
-  #menu-stock-lives[hidden], #menu-stock-time[hidden] { display: none !important; }
+  #menu-stock-lives[hidden], #menu-stock-time[hidden], #menu-stockstages[hidden] { display: none !important; }
+  #menu-stockstages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #host-menu #menu-stockstages button { padding: 8px 4px; font-size: 13px; }
+  #host-menu #menu-stockstages button.on { color: #0d0f14; background: #ffd933; }
+  #host-menu #menu-stockstages button.comp { border-color: #ffd933; }
   #lives.show { display: block; }
   #steal {
     position: fixed;
@@ -557,6 +561,7 @@
     <div id="menu-gamemodes"></div>
     <button id="menu-stock-lives" type="button" hidden>Lives: 3</button>
     <button id="menu-stock-time" type="button" hidden>Time: 8 min</button>
+    <div id="menu-stockstages" hidden></div>
     <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
   </div>
@@ -1531,6 +1536,7 @@
     menuModeBtn.textContent = lobby.mode === "teams" ? "Format: Teams" : "Format: Free-for-all";
     menuModeBtn.disabled = inMatch();
     refreshGameModes();
+    refreshStockStages();
     var stock = lobby.stock;
     menuStockLivesBtn.hidden = menuStockTimeBtn.hidden = !stock;
     if (stock) {
@@ -1657,6 +1663,39 @@
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
   });
+  // Issue #375: a Stock match is played on one stage, picked from a grid
+  // (lobby.stock.stages, competitive first, plus a Random tile; stock.stage
+  // "" is Random).
+  var stockStagesEl = document.getElementById("menu-stockstages");
+  function refreshStockStages() {
+    var stock = lobby.stock;
+    stockStagesEl.hidden = !stock;
+    if (!stock) { return; }
+    var tiles = [{ name: "", label: "Random", comp: false }];
+    (stock.stages || []).forEach(function (row) {
+      tiles.push({ name: row.name, label: row.name, comp: !!row.competitive });
+    });
+    // Competitive stages come first, then Random, then the rest.
+    var comps = tiles.filter(function (t) { return t.comp; });
+    var others = tiles.filter(function (t) { return !t.comp; });
+    tiles = comps.concat(others);
+    var key = JSON.stringify([tiles, stock.stage || "", inMatch()]);
+    if (key === stockStagesEl.dataset.key) { return; }
+    stockStagesEl.dataset.key = key;
+    stockStagesEl.innerHTML = "";
+    tiles.forEach(function (t) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = t.label;
+      btn.className = (t.name === (stock.stage || "") ? "on " : "") + (t.comp ? "comp" : "");
+      btn.disabled = inMatch();
+      btn.addEventListener("click", function () {
+        if (inMatch()) { return; }
+        sendText({ t: "stock", stage: t.name });
+      });
+      stockStagesEl.appendChild(btn);
+    });
+  }
   menuStockLivesBtn.addEventListener("click", function () {
     if (inMatch() || !lobby.stock) { return; }
     sendText({ t: "stock", lives: lobby.stock.lives >= 10 ? 1 : lobby.stock.lives + 1 });

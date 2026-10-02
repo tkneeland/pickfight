@@ -536,6 +536,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"streamer_mode_setting_persists_across_reload",
 	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
+	"stock_plays_the_picked_stage_every_round",
+	"stock_random_pick_is_an_enabled_stage_held_all_match",
+	"stock_never_rolls_a_modifier",
+	"stock_stage_pick_persists_and_reaches_the_host_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2000,6 +2004,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"stock_plays_the_picked_stage_every_round":
+			return await _scenario_stock_plays_the_picked_stage_every_round()
+		"stock_random_pick_is_an_enabled_stage_held_all_match":
+			return await _scenario_stock_random_pick_is_an_enabled_stage_held_all_match()
+		"stock_never_rolls_a_modifier":
+			return await _scenario_stock_never_rolls_a_modifier()
+		"stock_stage_pick_persists_and_reaches_the_host_phone":
+			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -28755,4 +28767,152 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 	if victory_logo == null or victory_logo.texture == null:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
+	return failures
+
+## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
+func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = disabled
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var rm: Node = rig["rm"]
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rm.stage_scenes = _named_stub_stages(["StageA", "StageB", "StageC"], spawns)
+	settings.stock_stage = pick
+	return rig
+## Stub stages whose `resource_path` carries their name, as the rotation and
+## the host settings identify a stage by its file's base name.
+func _named_stub_stages(names: Array[String], spawns: Array[Vector2]) -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	for stage_name: String in names:
+		var scene: PackedScene = _make_stub_stage(stage_name, spawns)
+		scene.resource_path = "res://tools/stub_stages/%s.tscn" % stage_name
+		scenes.append(scene)
+	return scenes
+const StageRotationScript := preload("res://scripts/StageRotation.gd")
+func _stock_stage_reset() -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.disabled_stages = PackedStringArray()
+	settings.stock_stage = ""
+	_stock_settings(3, 480)
+## The stage names RoundManager plays over `rounds` consecutive rounds.
+func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
+	var names: Array[String] = []
+	for _r in rounds:
+		rm.call("_swap_stage")
+		names.append(str(rm.get("_current_stage").get_meta("stub_stage_name")))
+	return names
+func _scenario_stock_plays_the_picked_stage_every_round() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("StageB")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	var names: Array[String] = _stock_stage_names(rm, 6)
+	for n: String in names:
+		if n != "StageB":
+			failures.append("Stock played %s; the pick was StageB (all rounds: %s)" % [n, names])
+			break
+	# Another mode keeps rotating: not the same stage six times in a row.
+	rm.game_mode = ""
+	rm.call("_begin_match")
+	var party: Array[String] = _stock_stage_names(rm, 6)
+	if party.count(party[0]) == party.size():
+		failures.append("Classic kept playing %s; the rotation was meant to run" % party[0])
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[String]:
+	var failures: Array[String] = []
+	var seen: Dictionary = {}
+	for _attempt in 3:
+		var rig: Dictionary = _stock_stage_rig("", PackedStringArray(["StageA"]))
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		var names: Array[String] = _stock_stage_names(rm, 4)
+		if names.has("StageA"):
+			failures.append("Random picked the switched-off StageA: %s" % [names])
+		if names.count(names[0]) != names.size():
+			failures.append("Random changed stage inside one match: %s" % [names])
+		seen[names[0]] = true
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	if seen.is_empty():
+		failures.append("Random never picked a stage")
+	# A pick the host switched off falls back to an enabled stage.
+	var rig2: Dictionary = _stock_stage_rig("StageC", PackedStringArray(["StageC"]))
+	rig2["rm"].set_process(false)
+	var fallback: Array[String] = _stock_stage_names(rig2["rm"], 2)
+	if fallback.has("StageC"):
+		failures.append("a switched-off pick was still played: %s" % [fallback])
+	_stock_stage_reset()
+	await _teardown(rig2["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_never_rolls_a_modifier() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_stage_rig("")
+	var rm: Node = rig["rm"]
+	rm.set_process(false)
+	rm.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	for _i in 40:
+		var rolled: String = rm.call("_roll_modifier")
+		if rolled != "":
+			failures.append("Stock rolled the modifier '%s'" % rolled)
+			break
+	rm.forced_modifier = "double_damage"
+	if rm.call("_roll_modifier") != "":
+		failures.append("a forced modifier was still rolled in Stock")
+	rm.forced_modifier = ""
+	rm.game_mode = ""
+	var any: bool = false
+	for _i in 40:
+		if rm.call("_roll_modifier") != "":
+			any = true
+	if not any:
+		failures.append("Classic rolled no modifier at chance 1.0; the check proves nothing")
+	_stock_stage_reset()
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stock_stage_375.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	fresh.known_stages = PackedStringArray(["StageA", "StageB"])
+	if fresh.stock_stage != "":
+		failures.append("the default pick was '%s', want Random" % fresh.stock_stage)
+	if fresh.set_stock_stage("Nowhere") or fresh.stock_stage != "":
+		failures.append("an unknown stage was accepted")
+	if not fresh.set_stock_stage("StageB"):
+		failures.append("a known stage was refused")
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.stock_stage != "StageB":
+		failures.append("reloaded pick '%s', want StageB" % reloaded.stock_stage)
+	DirAccess.remove_absolute(path)
+	# The host phone's message reaches the shared settings.
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.known_stages = PackedStringArray(["StageA", "StageB"])
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stock_stage", "StageA") or shared.stock_stage != "StageA":
+		failures.append("the host command did not set StageA")
+	if server.apply_host_command("stock_stage", "Nowhere") or shared.stock_stage != "StageA":
+		failures.append("the host command took an unknown stage")
+	server.free()
+	# The picker lists enabled stages only (no competitive stage exists yet).
+	var rotation: RefCounted = StageRotationScript.new()
+	rotation.settings = StockSettingsScript.new()
+	rotation.settings.persist = false
+	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
+	rotation.scenes = _named_stub_stages(["StageA", "StageB"], spawns)
+	rotation.settings.set_stage_enabled("StageA", false)
+	var rows: Array = rotation.picker_rows()
+	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
+		failures.append("the picker rows were %s" % [rows])
+	_stock_stage_reset()
+	_scenario_completed = true
 	return failures

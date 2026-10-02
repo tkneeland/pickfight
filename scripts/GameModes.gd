@@ -29,6 +29,7 @@ const CLASSIC: String = ""
 ## - rise: false switches the rising lava off; `rise_grace_factor` scales the
 ##   grace period before it starts and `rise_speed_factor` its climb speed.
 ## - banned: `RoundModifiers` ids never rolled in this mode.
+## - no_modifiers: optional; true means no modifier is ever rolled (Stock, #375).
 ## - ffa_only: not playable in the Teams format.
 const TABLE: Array[Dictionary] = [
 	{
@@ -58,7 +59,7 @@ const TABLE: Array[Dictionary] = [
 		"id": STOCK, "name": "Stock",
 		"rule": "Lose all your lives and you are out.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
-		"banned": [], "ffa_only": false,
+		"banned": [], "ffa_only": false, "no_modifiers": true,
 	},
 ]
 
@@ -94,7 +95,8 @@ static func is_ffa_only(id: String) -> bool:
 
 ## Whether `modifier_id` may never be rolled in `id`.
 static func bans_modifier(id: String, modifier_id: String) -> bool:
-	return (entry(id).get("banned", []) as Array).has(modifier_id)
+	var row: Dictionary = entry(id)
+	return bool(row.get("no_modifiers", false)) or (row.get("banned", []) as Array).has(modifier_id)
 
 ## The picker's rows for the host phone: id, name and whether Teams rules it out.
 static func picker_rows() -> Array:

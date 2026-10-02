@@ -50,6 +50,9 @@ const STOCK_MAX_LIVES: int = 10
 const STOCK_TIME_LIMITS: Array[int] = [120, 300, 480, 900, 0]
 var stock_lives: int = 3
 var stock_time_limit: int = 480
+## The stage a Stock match is played on (#375): a stage's base name, or ""
+## for Random.
+var stock_stage: String = ""
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
@@ -104,6 +107,15 @@ func set_stock_time_limit(seconds: int) -> bool:
 	save_settings()
 	return true
 
+## Returns false (changing nothing) for a name that is neither "" (Random)
+## nor a known stage.
+func set_stock_stage(stage_name: String) -> bool:
+	if stage_name != "" and not known_stages.has(stage_name):
+		return false
+	stock_stage = stage_name
+	save_settings()
+	return true
+
 func set_resolution(size: Vector2i) -> void:
 	resolution = size
 	save_settings()
@@ -141,6 +153,7 @@ func load_settings() -> void:
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
 		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
+		stock_stage = str(config.get_value(SECTION, "stock_stage", ""))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
 
@@ -158,6 +171,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "game_mode", game_mode)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
+	config.set_value(SECTION, "stock_stage", stock_stage)
 	err = config.save(path)
 	if err != OK:
 		push_warning("HostSettings: could not save to %s (%s)" % [path, error_string(err)])
