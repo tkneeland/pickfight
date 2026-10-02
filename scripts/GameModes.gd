@@ -15,8 +15,9 @@ const KING_OF_THE_HILL: String = "king_of_the_hill"
 const SUDDEN_DEATH: String = "sudden_death"
 const HOT_POTATO: String = "hot_potato"
 const STOCK: String = "stock"
+const SOCCER: String = "soccer"
 
-const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO, STOCK]
+const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO, STOCK, SOCCER]
 
 ## Classic is no mode at all: the endless round loop as it always was.
 const CLASSIC: String = ""
@@ -31,6 +32,7 @@ const CLASSIC: String = ""
 ## - banned: `RoundModifiers` ids never rolled in this mode.
 ## - no_modifiers: optional; true means no modifier is ever rolled (Stock, #375).
 ## - ffa_only: not playable in the Teams format.
+## - teams_only: optional; true means playable only in the Teams format (Soccer, #402).
 const TABLE: Array[Dictionary] = [
 	{
 		"id": CLASSIC, "name": "Classic", "rule": "Last one standing wins.",
@@ -60,6 +62,12 @@ const TABLE: Array[Dictionary] = [
 		"rule": "Lose all your lives and you are out.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
 		"banned": [], "ffa_only": false, "no_modifiers": true,
+	},
+	{
+		"id": SOCCER, "name": "Soccer",
+		"rule": "First team to 3 goals wins.",
+		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
+		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true,
 	},
 ]
 
@@ -95,6 +103,13 @@ static func rise_speed_factor(id: String) -> float:
 static func is_ffa_only(id: String) -> bool:
 	return bool(entry(id).get("ffa_only", false))
 
+static func is_teams_only(id: String) -> bool:
+	return bool(entry(id).get("teams_only", false))
+
+## Whether `id` can be played in the format (`teams` true for Teams).
+static func fits_format(id: String, teams: bool) -> bool:
+	return not (teams and is_ffa_only(id)) and not (not teams and is_teams_only(id))
+
 ## Whether `modifier_id` may never be rolled in `id`.
 static func bans_modifier(id: String, modifier_id: String) -> bool:
 	var row: Dictionary = entry(id)
@@ -106,7 +121,7 @@ static func picker_rows() -> Array:
 	for row: Dictionary in TABLE:
 		if not DemoBuildScript.mode_in_slice(row["id"]):  # the demo's slice (#361)
 			continue
-		rows.append({"id": row["id"], "name": row["name"], "ffa_only": row["ffa_only"]})
+		rows.append({"id": row["id"], "name": row["name"], "ffa_only": row["ffa_only"], "teams_only": bool(row.get("teams_only", false))})
 	return rows
 
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
@@ -114,6 +129,7 @@ const KingOfTheHillScript := preload("res://scripts/KingOfTheHill.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const HotPotatoScript := preload("res://scripts/HotPotato.gd")
 const StockScript := preload("res://scripts/Stock.gd")
+const SoccerScript := preload("res://scripts/Soccer.gd")
 
 ## A fresh mode node for `id`, or null for "" or an unknown id.
 static func create(id: String) -> Node:
@@ -126,4 +142,6 @@ static func create(id: String) -> Node:
 			return HotPotatoScript.new()
 		STOCK:
 			return StockScript.new()
+		SOCCER:
+			return SoccerScript.new()
 	return null

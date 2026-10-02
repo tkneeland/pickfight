@@ -441,10 +441,11 @@ func build_panels() -> void:
 	var right := VBoxContainer.new()
 	_lobby_right = right
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	right.add_theme_constant_override("separation", 16)
+	# Tightened for the sixth mode card (#402): eight players still fit the screen.
+	right.add_theme_constant_override("separation", 10)
 	columns.add_child(right)
 	_lobby_qr = TextureRect.new()
-	_lobby_qr.custom_minimum_size = Vector2(380, 380)
+	_lobby_qr.custom_minimum_size = Vector2(372, 372)
 	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
