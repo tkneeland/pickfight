@@ -65,6 +65,11 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## hazards, no moving parts. The Stock stage picker (#375) lists these first.
 @export var competitive: bool = false
 
+## King of the Hill (#377): whether the hill hops between this stage's
+## `get_hill_spots()` every ~30 s (with a warning) instead of staying on the
+## first. Stages without hill spots leave the hill at the spawns' centre.
+@export var hill_moves: bool = false
+
 ## Night variant (#332): set before the stage enters the tree. The stage then
 ## uses the Night palette mood and adds a `NightLighting` child. Visual only.
 var night: bool = false
@@ -190,6 +195,12 @@ func get_background() -> Node2D:
 ## position is the best answer there is.
 func get_spawn_points() -> Array[Vector2]:
 	return _marker_points("Spawn")
+
+## Where the King of the Hill hill may sit (#377): `Marker2D` children named
+## `HillSpot0`, `HillSpot1`, ... The first is where it starts. A stage may
+## declare none, and the hill then sits at the centre of the spawns.
+func get_hill_spots() -> Array[Vector2]:
+	return _marker_points("HillSpot")
 
 ## Where pickups may appear (issue #14, ADR-0009): `Marker2D` children named
 ## `PickupSpawn0`, `PickupSpawn1`, ..., collected the same way as player
