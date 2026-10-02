@@ -531,6 +531,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_hot_potato_it_chases_the_nearest_rival",
 	"bot_hot_potato_keeps_away_from_it",
 	"bot_sudden_death_plays_as_classic",
+	"streamer_mode_hides_room_code_and_qr_when_on",
+	"streamer_mode_shows_room_code_and_qr_when_off",
+	"streamer_mode_setting_persists_across_reload",
+	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -1986,6 +1990,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_hot_potato_keeps_away_from_it()
 		"bot_sudden_death_plays_as_classic":
 			return await _scenario_bot_sudden_death_plays_as_classic()
+		"streamer_mode_hides_room_code_and_qr_when_on":
+			return await _scenario_streamer_mode_hides_room_code_and_qr_when_on()
+		"streamer_mode_shows_room_code_and_qr_when_off":
+			return await _scenario_streamer_mode_shows_room_code_and_qr_when_off()
+		"streamer_mode_setting_persists_across_reload":
+			return await _scenario_streamer_mode_setting_persists_across_reload()
+		"streamer_mode_host_phone_receives_room_code":
+			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
 		_:
@@ -28595,6 +28607,127 @@ func _scenario_bot_sudden_death_plays_as_classic() -> Array[String]:
 	if rival.damage <= 0.0:
 		failures.append("the bot never hunted the rival in Sudden Death")
 	await _teardown(rig["stage"])
+	return failures
+## Issue #369: streamer mode. A real Main scene taken online to an in-process
+## relay, its lobby screen and join corner read with "Hide room code" `hide`.
+const STREAMER_HIDDEN_TEXT_369: String = "Code hidden: see host phone"
+func _streamer_rig_369(hide: bool, failures: Array[String]) -> Dictionary:
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		return {}
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	_sfx().set_hide_room_code(hide)
+	var rig := {"main": main, "server": server, "relay": relay, "old_setting": old_setting, "code": ""}
+	server.apply_host_command("online", true)
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the host never came online")
+	rig["code"] = server.online_room_code()
+	await _await_ticks(5)
+	return rig
+func _streamer_close_369(rig: Dictionary) -> void:
+	_sfx().set_hide_room_code(false)
+	ProjectSettings.set_setting("pickfight/relay_url", rig["old_setting"])
+	rig["server"].apply_host_command("online", false)
+	_relay_stop(rig["relay"], [])
+	await _teardown(rig["main"])
+func _scenario_streamer_mode_hides_room_code_and_qr_when_on() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var lobby: Object = rig["main"].get_node("RoundManager").get("_lobby_screen")
+	var room: Label = lobby.get("_room_label") as Label
+	var url: Label = lobby.get("_lobby_url") as Label
+	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
+	if room.visible and room.text.contains(rig["code"]):
+		failures.append("the lobby still shows the room code '%s'" % room.text)
+	if qr.visible:
+		failures.append("the lobby still shows the join QR")
+	if url.text != STREAMER_HIDDEN_TEXT_369:
+		failures.append("the lobby URL line reads '%s', wanted the hidden notice" % url.text)
+	var corner: Label = server.join_label()
+	if corner.text.contains(rig["code"]) or corner.text.contains(server.join_url):
+		failures.append("the in-round join label still shows the code or URL: '%s'" % corner.text)
+	var corner_qr: TextureRect = server.join_qr_rect()
+	server.set_join_corner_visible(true)
+	if corner_qr.visible:
+		failures.append("the in-round join QR shows with the room code hidden")
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_shows_room_code_and_qr_when_off() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(false, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var lobby: Object = rig["main"].get_node("RoundManager").get("_lobby_screen")
+	var room: Label = lobby.get("_room_label") as Label
+	var url: Label = lobby.get("_lobby_url") as Label
+	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
+	if not room.visible or room.text != "Online: " + rig["code"]:
+		failures.append("the lobby does not show the room code (visible %s, '%s')" % [room.visible, room.text])
+	if url.text != server.join_url:
+		failures.append("the lobby URL line reads '%s', wanted %s" % [url.text, server.join_url])
+	if server.join_qr_texture != null and not qr.visible:
+		failures.append("the lobby hides the join QR with streamer mode off")
+	var corner: Label = server.join_label()
+	if not corner.text.contains("Online: " + rig["code"]):
+		failures.append("the in-round join label lost the code: '%s'" % corner.text)
+	await _streamer_close_369(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_setting_persists_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx.get("hide_room_code") != false:
+		failures.append("Hide room code is not off by default")
+	var was: Dictionary = {"path": sfx.settings_path, "persist": sfx.persist_settings, "hide": sfx.get("hide_room_code")}
+	var path: String = OS.get_temp_dir().path_join("pickfight_streamer_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_hide_room_code(true)
+	sfx.hide_room_code = false
+	sfx.load_settings()
+	if sfx.hide_room_code != true:
+		failures.append("Hide room code not remembered after a reload")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	sfx.persist_settings = was["persist"]
+	sfx.hide_room_code = was["hide"]
+	_scenario_completed = true
+	return failures
+func _scenario_streamer_mode_host_phone_receives_room_code() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _streamer_rig_369(true, failures)
+	if rig.is_empty():
+		return failures
+	var phones: Array[WebSocketPeer] = []
+	var host := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(host, "streamer-host", phones)
+	phones.append(host)
+	if joined["slot"] != 0:
+		failures.append("the host phone got slot %s" % joined["slot"])
+	var lobby: Dictionary = {}
+	for i in 30:
+		await process_frame
+		lobby = _latest_lobby_msg(host, lobby)
+	if lobby.get("room", "") != rig["code"]:
+		failures.append("the host phone was told room '%s', wanted '%s'" % [lobby.get("room", ""), rig["code"]])
+	await _close_phones(phones)
+	await _streamer_close_369(rig)
+	_scenario_completed = true
 	return failures
 ## Issue #359: the lobby is the title screen, and it shows the wordmark: a
 ## visible "Logo" TextureRect with a loaded texture, as wide as the 1600 px
