@@ -1,0 +1,109 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_720x40"]
+size = Vector2(720, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_200x24"]
+size = Vector2(200, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_290x24"]
+size = Vector2(290, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_8000x40"]
+size = Vector2(8000, 40)
+
+; Competitive (issue #376): a small stage. A short sunken floor (720 px) with a
+; platform over its middle, between two raised wings (82 px up, a step every
+; weapon makes) whose outer ends are the ring-outs. Mirror symmetric about
+; x=0, no hazards, nothing that moves. Close quarters: an edge is never far.
+
+[node name="Pocket" type="Node2D"]
+script = ExtResource("1")
+competitive = true
+background_sky_top = Color(0.14, 0.12, 0.22, 1)
+background_sky_bottom = Color(0.26, 0.22, 0.3, 1)
+background_silhouette = Color(0.12, 0.14, 0.2, 1)
+background_layers = PackedStringArray("clouds", "mountains")
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(0, 320)
+
+[node name="GroundShape" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("RectangleShape2D_720x40")
+
+[node name="GroundVisual" type="Polygon2D" parent="Ground"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-360, -20, 360, -20, 360, 20, -360, 20)
+
+[node name="PlatformCentre" type="StaticBody2D" parent="."]
+position = Vector2(0, 190)
+
+[node name="PlatformCentreShape" type="CollisionShape2D" parent="PlatformCentre"]
+shape = SubResource("RectangleShape2D_200x24")
+
+[node name="PlatformCentreVisual" type="Polygon2D" parent="PlatformCentre"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="WingLeft" type="StaticBody2D" parent="."]
+position = Vector2(-505, 230)
+
+[node name="WingLeftShape" type="CollisionShape2D" parent="WingLeft"]
+shape = SubResource("RectangleShape2D_290x24")
+
+[node name="WingLeftVisual" type="Polygon2D" parent="WingLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-145, -12, 145, -12, 145, 12, -145, 12)
+
+[node name="WingRight" type="StaticBody2D" parent="."]
+position = Vector2(505, 230)
+
+[node name="WingRightShape" type="CollisionShape2D" parent="WingRight"]
+shape = SubResource("RectangleShape2D_290x24")
+
+[node name="WingRightVisual" type="Polygon2D" parent="WingRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-145, -12, 145, -12, 145, 12, -145, 12)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-130, 0)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(130, 0)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-190, 0)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(190, 0)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-250, 0)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(250, 0)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-320, 0)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(320, 0)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 480)
+script = ExtResource("2")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_8000x40")
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 138)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-505, 178)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(505, 178)

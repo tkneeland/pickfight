@@ -542,6 +542,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"streamer_mode_setting_persists_across_reload",
 	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
+	"competitive_stages_load_rotate_and_are_flagged",
+	"competitive_stages_are_left_right_symmetric",
+	"competitive_stages_have_no_hazards_or_moving_parts",
 	"round_modifier_gale_pushes_players_and_undoes",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
@@ -2029,6 +2032,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"competitive_stages_load_rotate_and_are_flagged":
+			return await _scenario_competitive_stages_load_rotate_and_are_flagged()
+		"competitive_stages_are_left_right_symmetric":
+			return await _scenario_competitive_stages_are_left_right_symmetric()
+		"competitive_stages_have_no_hazards_or_moving_parts":
+			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
 		"round_modifier_gale_pushes_players_and_undoes":
 			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
 		"demo_build_flag_defines_the_slice":
@@ -3790,6 +3799,10 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Footbridge.tscn",
 	"res://scenes/stages/Gantry.tscn",
 	"res://scenes/stages/Vent.tscn",
+	"res://scenes/stages/FinalDestination.tscn",
+	"res://scenes/stages/Battlefield.tscn",
+	"res://scenes/stages/Pocket.tscn",
+	"res://scenes/stages/Colosseum.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -29060,6 +29073,104 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 	if victory_logo == null or victory_logo.texture == null:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
+	return failures
+## Issue #376: the four competitive stages.
+const COMPETITIVE_STAGES_376: PackedStringArray = [
+	"res://scenes/stages/FinalDestination.tscn",
+	"res://scenes/stages/Battlefield.tscn",
+	"res://scenes/stages/Pocket.tscn",
+	"res://scenes/stages/Colosseum.tscn",
+]
+const COMPETITIVE_SYMMETRY_TOLERANCE_376: float = 3.0
+## Each competitive stage loads, is in Main's rotation and in STAGE_PATHS, and
+## is flagged `competitive`; no other stage is; exactly one (the large
+## Colosseum) is large, so the rotation holds it back from small rounds.
+func _scenario_competitive_stages_load_rotate_and_are_flagged() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in COMPETITIVE_STAGES_376:
+		var scene := load(path) as PackedScene
+		if scene == null:
+			failures.append("%s does not load" % path)
+			continue
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var instance: Node2D = scene.instantiate()
+		if not instance.competitive:
+			failures.append("%s is not flagged competitive" % path)
+		if instance.get_spawn_points().size() < 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		var want_large: bool = path.ends_with("Colosseum.tscn")
+		if instance.is_large() != want_large:
+			failures.append("%s is_large() is %s, wanted %s" % [path, instance.is_large(), want_large])
+		instance.free()
+	for path: String in STAGE_PATHS:
+		if COMPETITIVE_STAGES_376.has(path):
+			continue
+		var other: Node2D = (load(path) as PackedScene).instantiate()
+		if other.competitive:
+			failures.append("%s is flagged competitive but is not one of the four" % path)
+		other.free()
+	await _teardown(Node2D.new())
+	return failures
+## Mirrors every point about x=0 and finds it again, to a few px: platform
+## and ground bodies (with their shape size), spawns and pickup spawns.
+func _scenario_competitive_stages_are_left_right_symmetric() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in COMPETITIVE_STAGES_376:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var items: Array[Array] = []
+		for child in instance.get_children():
+			if child is StaticBody2D:
+				var shape := (child.get_node(NodePath(String(child.name) + "Shape")) as CollisionShape2D).shape as RectangleShape2D
+				items.append([child.position, shape.size, "body " + String(child.name)])
+			elif child is Marker2D:
+				items.append([child.position, Vector2.ZERO, "marker " + String(child.name)])
+		if items.is_empty():
+			failures.append("%s has no geometry" % path)
+		for item: Array in items:
+			var mirrored := Vector2(-item[0].x, item[0].y)
+			var found: bool = false
+			for other: Array in items:
+				if other[0].distance_to(mirrored) <= COMPETITIVE_SYMMETRY_TOLERANCE_376 \
+						and other[1].distance_to(item[1]) <= COMPETITIVE_SYMMETRY_TOLERANCE_376:
+					found = true
+					break
+			if not found:
+				failures.append("%s: %s at %s has no mirror image" % [path, item[2], item[0]])
+		instance.free()
+	await _teardown(Node2D.new())
+	return failures
+## Nothing in a competitive stage may hurt or move: no scripted node besides
+## the stage root and its KillZone, no AnimatableBody2D or other body type than
+## StaticBody2D, and no Area2D besides the KillZone.
+func _scenario_competitive_stages_have_no_hazards_or_moving_parts() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in COMPETITIVE_STAGES_376:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var stack: Array[Node] = [instance]
+		while not stack.is_empty():
+			var node: Node = stack.pop_back()
+			stack.append_array(node.get_children())
+			if node == instance or node.name == &"KillZone":
+				continue
+			if node.get_script() != null:
+				failures.append("%s: %s carries a script" % [path, node.name])
+			if node is Area2D or node is AnimatableBody2D or node is RigidBody2D or node is CharacterBody2D:
+				failures.append("%s: %s is a %s" % [path, node.name, node.get_class()])
+			if node is StaticBody2D and node.scene_file_path != "":
+				failures.append("%s: %s is an instanced part" % [path, node.name])
+		for hazard_name: String in ["Spikes", "Saw", "Lava", "Fan", "Ledge", "Moving"]:
+			if instance.find_child("*" + hazard_name + "*", true, false) != null:
+				failures.append("%s has a node named like a %s" % [path, hazard_name])
+		instance.free()
+	await _teardown(Node2D.new())
 	return failures
 # --- Gale round modifier (#312) ------------------------------------------------
 ## Ticks a gale round is watched for: past the calm, the warning and the gust
