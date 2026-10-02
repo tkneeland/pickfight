@@ -623,6 +623,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
 	"rotation_deals_ctf_and_soccer_only_their_own_stages",
+	"juice_hitstop_never_lifts_a_host_pause",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2264,6 +2265,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
 		"rotation_deals_ctf_and_soccer_only_their_own_stages":
 			return await _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages()
+		"juice_hitstop_never_lifts_a_host_pause":
+			return await _scenario_juice_hitstop_never_lifts_a_host_pause()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32541,4 +32544,33 @@ func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[St
 	if classic_seen.size() < 20:
 		failures.append("Classic dealt only %d stages in 60 rounds" % classic_seen.size())
 	_scenario_completed = true
+	return failures
+## Review sweep b: the host pausing during a hit-stop keeps the game paused once
+## the hit-stop runs out; that pause is the host's to lift, not Juice's.
+func _scenario_juice_hitstop_never_lifts_a_host_pause() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var host := Node.new()
+	var script := GDScript.new()
+	script.source_code = "extends Node\nvar paused: bool = false\nfunc is_paused() -> bool:\n\treturn paused\n"
+	script.reload()
+	host.set_script(script)
+	stage.add_child(host)
+	host.add_to_group("round_manager")
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(2)
+	emitter.strike_landed.emit(emitter, JuiceScript.HITSTOP_DAMAGE_MIN + 20.0, Vector2.ZERO, false)
+	if not juice.is_frozen():
+		failures.append("a heavy hit did not freeze the game")
+	# The host's Pause lands mid-freeze, as RoundManager._pause_match() does it.
+	host.set("paused", true)
+	get_root().get_tree().paused = true
+	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
+	if juice.is_frozen():
+		failures.append("the hit-stop never ran out")
+	if not get_root().get_tree().paused:
+		failures.append("the hit-stop ending lifted the host's pause")
+	get_root().get_tree().paused = false
+	await _teardown(stage)
 	return failures
