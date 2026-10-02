@@ -26,6 +26,12 @@ const TeamsScript := preload("res://scripts/Teams.gd")
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
 const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
 const GAME_TITLE: String = "PICKFIGHT"
+## The wordmark (#359). Loaded as the imported texture where an import exists;
+## a fresh clone has no import cache, so it falls back to rasterising the SVG.
+const LOGO_PATH: String = "res://art/logo/logo.svg"
+const LOGO_LOBBY_SIZE: Vector2 = Vector2(560, 140)
+const LOGO_VICTORY_SIZE: Vector2 = Vector2(320, 80)
+const PODIUM_INK: Color = Color("#14181d")
 ## Podium block heights by place, as a fraction of the tallest.
 const PODIUM_HEIGHTS: Array[float] = [1.0, 0.72, 0.5, 0.34]
 const PODIUM_TALLEST_PX: float = 260.0
@@ -70,6 +76,8 @@ var _lobby_right: VBoxContainer
 var _victory_title: Label
 var _podium: HBoxContainer
 var _how_to_play: Control
+var _lobby_logo: TextureRect
+var _victory_logo: TextureRect
 
 var _title_layer: CanvasLayer
 var _title_label: Label
@@ -94,6 +102,37 @@ func victory_panel() -> Control:
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
 	return _how_to_play
+
+## The wordmark on the lobby, or null before the lobby was ever built.
+func lobby_logo() -> TextureRect:
+	return _lobby_logo
+
+## The wordmark on the victory screen, or null before it was ever built.
+func victory_logo() -> TextureRect:
+	return _victory_logo
+
+## The logo as a texture: the imported resource when there is one, else the
+## SVG rasterised at 1600x400.
+static func load_logo_texture() -> Texture2D:
+	if ResourceLoader.exists(LOGO_PATH):
+		var imported: Texture2D = load(LOGO_PATH) as Texture2D
+		if imported != null:
+			return imported
+	var image := Image.new()
+	if image.load_svg_from_string(FileAccess.get_file_as_string(LOGO_PATH), 1.0) != OK:
+		return null
+	return ImageTexture.create_from_image(image)
+
+func _logo_rect(node_name: String, size: Vector2) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.name = node_name
+	rect.texture = load_logo_texture()
+	rect.custom_minimum_size = size
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
 
 ## The title card label, or null before any round has started.
 func stage_title_label() -> Label:
@@ -298,8 +337,17 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 			name_label.custom_minimum_size.x = PODIUM_CROWDED_COLUMN_PX
 			name_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		column.add_child(name_label)
-		var block := ColorRect.new()
-		block.color = _slot_color.call(slot)
+		var block := Panel.new()
+		block.add_theme_stylebox_override("panel", _podium_block_style(_slot_color.call(slot)))
+		var cap := ColorRect.new()
+		cap.color = Color(1.0, 1.0, 1.0, 0.25)
+		cap.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		cap.offset_left = 5.0
+		cap.offset_right = -5.0
+		cap.offset_top = 5.0
+		cap.offset_bottom = 21.0
+		cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		block.add_child(cap)
 		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * (0.55 if not stat_rows.is_empty() else 1.0) * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
 		column.add_child(block)
 		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
@@ -314,6 +362,15 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		_victory_title.text = "MATCH OVER"
 	_refresh_awards(awards)
 	_refresh_stat_table(stat_rows)
+
+## A podium block in the flat style: the player's colour, a hard ink outline,
+## square corners.
+func _podium_block_style(color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.set_border_width_all(5)
+	style.border_color = PODIUM_INK
+	return style
 
 ## The victory screen's per-player stats table, or null before any.
 func stats_table() -> Control:
@@ -358,7 +415,8 @@ func build_panels() -> void:
 	left.alignment = BoxContainer.ALIGNMENT_CENTER
 	left.add_theme_constant_override("separation", 24)
 	columns.add_child(left)
-	left.add_child(_big_label(GAME_TITLE, 120, LOBBY_ACCENT))
+	_lobby_logo = _logo_rect("Logo", LOGO_LOBBY_SIZE)
+	left.add_child(_lobby_logo)
 	_lobby_target_label = _big_label("First to 5", 44, Color.WHITE)
 	left.add_child(_lobby_target_label)
 	_lobby_rows = VBoxContainer.new()
@@ -409,6 +467,11 @@ func build_panels() -> void:
 	stack.alignment = BoxContainer.ALIGNMENT_CENTER
 	stack.add_theme_constant_override("separation", 32)
 	_victory_panel.add_child(stack)
+	# A corner overlay, outside the stack so it never costs the podium height.
+	_victory_logo = _logo_rect("Logo", LOGO_VICTORY_SIZE)
+	_victory_logo.position = Vector2(24, 16)
+	_victory_logo.size = LOGO_VICTORY_SIZE
+	_victory_panel.add_child(_victory_logo)
 	_victory_title = _big_label("", 110, LOBBY_ACCENT)
 	stack.add_child(_victory_title)
 	_podium = HBoxContainer.new()

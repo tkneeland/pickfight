@@ -535,6 +535,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"streamer_mode_shows_room_code_and_qr_when_off",
 	"streamer_mode_setting_persists_across_reload",
 	"streamer_mode_host_phone_receives_room_code",
+	"lobby_and_victory_show_the_logo",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1997,6 +1998,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_streamer_mode_setting_persists_across_reload()
 		"streamer_mode_host_phone_receives_room_code":
 			return await _scenario_streamer_mode_host_phone_receives_room_code()
+		"lobby_and_victory_show_the_logo":
+			return await _scenario_lobby_and_victory_show_the_logo()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -28725,4 +28728,31 @@ func _scenario_streamer_mode_host_phone_receives_room_code() -> Array[String]:
 	await _close_phones(phones)
 	await _streamer_close_369(rig)
 	_scenario_completed = true
+	return failures
+## Issue #359: the lobby is the title screen, and it shows the wordmark: a
+## visible "Logo" TextureRect with a loaded texture, as wide as the 1600 px
+## logo art. The victory screen carries a smaller one, and its podium blocks
+## are flat panels in the player's colour.
+func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var screen: Node = rm._lobby_screen
+	var logo: TextureRect = screen.lobby_logo()
+	if logo == null:
+		failures.append("the lobby has no logo node")
+	else:
+		if not logo.is_visible_in_tree():
+			failures.append("the lobby's logo is not visible")
+		if logo.texture == null:
+			failures.append("the lobby's logo has no texture loaded")
+		else:
+			print("      lobby logo texture %s" % logo.texture.get_size())
+			if logo.texture.get_width() < 1000:
+				failures.append("the logo texture is only %d px wide" % logo.texture.get_width())
+	var victory_logo: TextureRect = screen.victory_logo()
+	if victory_logo == null or victory_logo.texture == null:
+		failures.append("the victory screen has no logo with a texture")
+	await _teardown(loop["stage"])
 	return failures

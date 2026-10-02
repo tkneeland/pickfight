@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="1240" viewBox="0 0 3840 1240">
+<g transform="translate(576.0,284.0) scale(1.6800)"><g transform="translate(0,0)">
+<g transform="translate(45,70)">
+<path d="M0,0H110L150,40V110L110,150H50V240H0ZM50,45V105H100V45Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M0,0H110L150,40V110L110,150H50V240H0ZM50,45V105H100V45Z" fill="#E69F00" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(219,70)">
+<g transform="translate(12,14)" stroke="#14181d" stroke-width="10" stroke-linejoin="round"><path d="M0,80Q75,-84 150,80L150,120Q75,-20 0,120Z" fill="#14181d"/><path d="M52,55H98V200H52Z" fill="#14181d"/><path d="M10,196H140V240H10Z" fill="#14181d"/></g>
+<g stroke="#14181d" stroke-width="10" stroke-linejoin="round"><path d="M52,55H98V200H52Z" fill="#8a5a33"/><path d="M10,196H140V240H10Z" fill="#F5E24A"/><path d="M0,80Q75,-84 150,80L150,120Q75,-20 0,120Z" fill="#E8E6F0"/></g>
+</g>
+<g transform="translate(393,70)">
+<path d="M40,0H150V50H50V190H150V240H40L0,200V40Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M40,0H150V50H50V190H150V240H40L0,200V40Z" fill="#009E73" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(567,70)">
+<path d="M0,0H50V100L100,0H155L90,115L155,240H100L50,135V240H0Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M0,0H50V100L100,0H155L90,115L155,240H100L50,135V240H0Z" fill="#D55E00" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(746,70)">
+<path d="M0,0H150V50H50V95H125V140H50V240H0Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M0,0H150V50H50V95H125V140H50V240H0Z" fill="#3D8FD1" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(920,70)">
+<path d="M0,0H50V240H0Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M0,0H50V240H0Z" fill="#F5E24A" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(994,70)">
+<path d="M40,0H150V50H50V190H100V140H75V100H150V240H40L0,200V40Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M40,0H150V50H50V190H100V140H75V100H150V240H40L0,200V40Z" fill="#CC79A7" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(1168,70)">
+<path d="M0,0H50V90H100V0H150V240H100V140H50V240H0Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M0,0H50V90H100V0H150V240H100V140H50V240H0Z" fill="#56B4E9" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+<g transform="translate(1342,70)">
+<path d="M0,0H150V50H100V240H50V50H0Z" transform="translate(12,14)" fill="#14181d" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M0,0H150V50H100V240H50V50H0Z" fill="#E69F00" stroke="#14181d" stroke-width="10" stroke-linejoin="round" fill-rule="evenodd"/>
+</g>
+</g></g>
+</svg>

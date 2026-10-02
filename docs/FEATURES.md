@@ -116,6 +116,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Death burst, hit feedback (#33, #168)
 - Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)
 
+- PICKFIGHT logo (flat letters in the player palette, the first I a pickaxe) in `art/logo/`, with 1024 px and Steam capsule PNG exports; shown on the lobby/title screen and the victory screen, whose podium blocks are flat ink-outlined panels (#359, `tools/gen_logo_art.py`, `tools/export_logo_pngs.gd`)
+
 ## Online
 - Room-code relay server (#238, ADR-0019)
 - Host goes online; remote seats send relative input (#239)
