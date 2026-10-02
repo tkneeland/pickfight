@@ -558,6 +558,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
 	"hot_potato_stages_load_and_are_in_rotation",
 	"hot_potato_draws_its_stages_more_often",
+	"music_every_fight_track_loads_and_rotates",
 	"mode_awards_go_to_the_right_player_only_in_their_mode",
 	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"pseudo_locale_changes_lobby_and_mode_text",
@@ -2077,6 +2078,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
 		"hot_potato_draws_its_stages_more_often":
 			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"music_every_fight_track_loads_and_rotates":
+			return await _scenario_music_every_fight_track_loads_and_rotates()
 		"mode_awards_go_to_the_right_player_only_in_their_mode":
 			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
 		"mode_awards_reach_the_victory_awards_through_the_round_manager":
@@ -11358,7 +11361,7 @@ const MUSIC_AUTOLOAD_PATH: NodePath = ^"Music"
 const MUSIC_DIR: String = "res://assets/music/"
 const MUSIC_CREDITS_PATH: String = "res://CREDITS.md"
 ## The shipped music, all together, stays under this.
-const MUSIC_MAX_TOTAL_BYTES: int = 2 * 1024 * 1024
+const MUSIC_MAX_TOTAL_BYTES: int = 12 * 1024 * 1024
 ## Past a crossfade, with room to spare.
 const MUSIC_SETTLE_MSEC: int = 2500
 const MUSIC_DUCK_TIMEOUT_MSEC: int = 3000
@@ -11390,8 +11393,8 @@ func _scenario_music_lobby_and_fight_switching() -> Array[String]:
 	elif AudioServer.get_bus_send(AudioServer.get_bus_index(&"Music")) != &"Master":
 		failures.append("the Music bus does not send to Master")
 	var fights: PackedStringArray = music.fight_tracks()
-	if fights.size() < 1 or fights.size() > 2:
-		failures.append("there are %d fight tracks, expected 1 or 2" % fights.size())
+	if fights.size() < 1:
+		failures.append("there are no fight tracks")
 	music.play_lobby()
 	if music.current_kind() != "lobby" or not music.is_playing():
 		failures.append("play_lobby() left '%s' (%s), not the lobby track playing" % [
@@ -29851,6 +29854,43 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		failures.append("classic should still deal them now and then, dealt none in 900")
 	if counts["hot_potato"] < 2 * counts[""]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
+	_scenario_completed = true
+	return failures
+# --- Every fight track loads, loops and gets a turn (issue #289) ---------------
+## The fight rotation hands each fight track out in turn. Asking for fight music
+## again and again, with a stop between, must reach every one of them, and each
+## must play as a real looping stream of a sensible length.
+const MUSIC_MIN_FIGHT_TRACKS: int = 8
+const MUSIC_MIN_TRACK_SEC: float = 20.0
+func _scenario_music_every_fight_track_loads_and_rotates() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	var fights: PackedStringArray = music.fight_tracks()
+	print("      %d fight tracks" % fights.size())
+	if fights.size() < MUSIC_MIN_FIGHT_TRACKS:
+		failures.append("only %d fight tracks, expected at least %d" % [fights.size(), MUSIC_MIN_FIGHT_TRACKS])
+	var heard: Dictionary = {}
+	for i in fights.size():
+		music.stop()
+		music.play_fight()
+		await physics_frame
+		var stream: AudioStream = null
+		for child: Node in music.get_children():
+			if child is AudioStreamPlayer and (child as AudioStreamPlayer).playing:
+				stream = (child as AudioStreamPlayer).stream
+		var track: String = music.switches()[music.switches().size() - 1]
+		heard[track] = true
+		if not (stream is AudioStreamOggVorbis) or not (stream as AudioStreamOggVorbis).loop:
+			failures.append("%s does not play as a loop" % track)
+		elif stream.get_length() < MUSIC_MIN_TRACK_SEC:
+			failures.append("%s is only %.1f s long" % [track, stream.get_length()])
+	for track: String in fights:
+		if not heard.has(track):
+			failures.append("the fight rotation never reached %s in %d turns" % [track, fights.size()])
+	music.stop()
 	_scenario_completed = true
 	return failures
 ## Issue #355: the mode awards, from MatchStats alone. Each goes to the slot

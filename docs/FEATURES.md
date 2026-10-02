@@ -114,7 +114,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
-- Music: lobby and fight tracks (#118)
+- Music: lobby and fight tracks (#118); six more CC0 fight tracks join the rotation, eight in all, each loop-trimmed so it repeats without a gap (#289)
 - Narrator/announcer, one consistent voice (#152, #211)
 - Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
