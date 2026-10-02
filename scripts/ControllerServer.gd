@@ -2235,6 +2235,7 @@ func _rumble_pad(device: int, kind: String) -> void:
 
 const SnapshotScript: GDScript = preload("res://scripts/Snapshot.gd")
 const SnapshotCaptureScript: GDScript = preload("res://scripts/SnapshotCapture.gd")
+const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
 const SNAPSHOT_HZ: float = 30.0
 ## A full snapshot every this many frames (about a second); deltas between.
 const SNAPSHOT_FULL_EVERY: int = 30
@@ -2245,6 +2246,10 @@ var _snapshot_accum: float = 0.0
 var _snapshot_frame: int = 0
 var _snapshot_bound: Dictionary = {} # RemoteSeat -> true, the seats already sent a full frame
 var _snapshot_previous: Dictionary = {}
+var _hud_last: Dictionary = {}
+var _hud_tick: int = 0
+## Hud text frames sent to remote seats (issue #436), for scenarios.
+var hud_frames_sent: int = 0
 
 ## Streams the world to the remote seats at 30 Hz while at least one is bound;
 ## a seat that just bound gets a full snapshot at once. Captures nothing, and
@@ -2275,7 +2280,10 @@ func _stream_snapshots(delta: float) -> void:
 	if round_manager == null or not round_manager.has_method("score_of"):
 		return
 	var world: Dictionary = SnapshotCaptureScript.capture(round_manager)
-	var full: bool = fresh or _snapshot_frame % SNAPSHOT_FULL_EVERY == 0
+	# Issue #436/#429: a delta cannot say a body left, so a removal (or a new
+	# round or stage) goes out as a full snapshot at once, not up to 1 s later.
+	var full: bool = fresh or _snapshot_frame % SNAPSHOT_FULL_EVERY == 0 \
+		or SnapshotCaptureScript.structure_changed(world, _snapshot_previous)
 	var frame: Dictionary = world if full else SnapshotCaptureScript.delta(world, _snapshot_previous)
 	_snapshot_previous = world
 	_snapshot_frame = 1 if full else _snapshot_frame + 1
@@ -2284,6 +2292,15 @@ func _stream_snapshots(delta: float) -> void:
 	_snapshot_sounds.clear()
 	relay_link.send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
 	snapshot_frames_sent += 1
+	_hud_tick += 1
+	if fresh:
+		_hud_last = {}
+	if fresh or _hud_tick % 4 == 0:
+		var hud: Dictionary = RemoteHudScript.capture(round_manager)
+		if hud != _hud_last:
+			_hud_last = hud
+			relay_link.send_text_to(0, JSON.stringify(hud))
+			hud_frames_sent += 1
 
 var _snapshot_sounds: Array = [] # sounds played since the last frame (see SnapshotCapture's trailer)
 var _sound_source: Node = null

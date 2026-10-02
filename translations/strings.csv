@@ -228,3 +228,18 @@ MODE_CAPTURE_THE_FLAG_RULE,First team to 2 captures wins.
 AWARD_CATEGORY_CAPTURER,CAPTURER
 STAGE_BASTION,Bastion
 STAGE_STRONGHOLD,Stronghold
+HUD_TAKES_ROUND,%s takes the round
+HUD_TEAM_TAKES_ROUND,%s team takes the round
+HUD_ROUND_DRAWN,Round drawn
+HUD_WINS_MATCH,%s wins the match
+HUD_TEAM_WINS_MATCH,%s team wins the match
+HUD_PODIUM_ROW,%d. %s  %d
+HUD_HOLD,%s %d/%ds
+HUD_HILL_MOVING,Hill is moving!
+HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s
+HUD_FLAG_0,home
+HUD_FLAG_1,carried
+HUD_FLAG_2,dropped
+HUD_SOCCER,Red %d - Blue %d (first to %d)
+HUD_POTATO,%s has the potato: %ds
+HUD_LIVES,%s x%d

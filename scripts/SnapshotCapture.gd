@@ -108,6 +108,23 @@ static func delta(world: Dictionary, previous: Dictionary) -> Dictionary:
 		entities.append({"type": 0x0A, "id": 0, "height": world.get("kill_zone_height", 0)})
 	return {"is_full_snapshot": false, "delta_entities": entities}
 
+## Whether `world` lost a body, projectile, pickup, flail or hook that
+## `previous` had, or changed round phase or stage: things a delta cannot say.
+static func structure_changed(world: Dictionary, previous: Dictionary) -> bool:
+	if previous.is_empty():
+		return true
+	if world.get("round_phase") != previous.get("round_phase") or world.get("stage_id") != previous.get("stage_id"):
+		return true
+	for pair: Array in [["players", "player_id"], ["projectiles", "projectile_id"], ["pickups", "pickup_id"]]:
+		var now: Dictionary = _by_key(world.get(pair[0], []), pair[1])
+		for id: Variant in _by_key(previous.get(pair[0], []), pair[1]):
+			if not now.has(id):
+				return true
+	for key: String in ["flail", "grapple"]:
+		if world.get(key, {}).is_empty() and not previous.get(key, {}).is_empty():
+			return true
+	return false
+
 static func _by_key(list: Array, key: String) -> Dictionary:
 	var out: Dictionary = {}
 	for entry: Dictionary in list:

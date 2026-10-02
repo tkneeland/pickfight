@@ -27,6 +27,7 @@ const ControllerServerScript: GDScript = preload("res://scripts/ControllerServer
 const PuppetScript: GDScript = preload("res://scripts/RemotePuppet.gd")
 const PaletteScript: GDScript = preload("res://scripts/Palette.gd")
 const PickupWeaponsScript: GDScript = preload("res://scripts/PickupWeapons.gd")
+const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
@@ -69,6 +70,8 @@ var status_text: String = ""
 var itch_url: String = ""
 ## The last TEXT message of each kind the host sent (lobby, looks).
 var lobby: Dictionary = {}
+## The host's last `hud` frame (issue #436): round result, board, mode HUD.
+var hud: Dictionary = {}
 ## Snapshot frames applied since the page opened (full and delta).
 var frames_applied: int = 0
 var full_frames_applied: int = 0
@@ -106,6 +109,10 @@ var _hud: Control
 var _score_box: VBoxContainer
 var _feed_label: Label
 var _banner_label: Label
+var _mode_label: Label
+var _result_label: Label
+var _podium_label: Label
+var _leave_button: Button
 var _wait_label: Label
 var _lobby_panel: Control
 var _lobby_title: Label
@@ -332,6 +339,9 @@ func _on_host_text(text: String) -> void:
 		"lobby":
 			lobby = msg
 			_refresh_lobby()
+		"hud":
+			hud = msg
+			_refresh_extras()
 		"ping":
 			_send_json({"t": "pong", "n": msg.get("n", 0)})
 		"closed":
@@ -618,6 +628,7 @@ func _clear_world() -> void:
 		_puppets[key].queue_free()
 	_puppets.clear()
 	_hud_signature = ""
+	hud = {}
 	if _puppet_holder != null:
 		for child in _puppet_holder.get_children():
 			_puppet_holder.remove_child(child)
@@ -711,7 +722,9 @@ func _render() -> void:
 
 func _place_thing(key: String, kind: int, a: Dictionary, b: Dictionary, alpha: float, color: Color, label: String, live: Dictionary) -> void:
 	var to_pos: Variant = b["things"].get(key)
-	if to_pos == null:
+	# Issue #429: a thing the newest snapshot no longer holds is gone now, not
+	# when the interpolation window moves past its last sample.
+	if to_pos == null or not _samples.back()["things"].has(key):
 		return
 	var from_pos: Variant = a["things"].get(key, to_pos)
 	live[key] = true
@@ -892,6 +905,15 @@ func _build_hud() -> void:
 	_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_banner_label.position = Vector2(0, 12)
 	_hud.add_child(_banner_label)
+	_mode_label = _label("", 22, Color(0.8, 0.95, 1.0))
+	_mode_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_mode_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_mode_label.position = Vector2(0, 58)
+	_hud.add_child(_mode_label)
+	_result_label = _label("", 40, Color(1, 0.9, 0.4))
+	_result_label.set_anchors_preset(Control.PRESET_CENTER)
+	_result_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_hud.add_child(_result_label)
 	_wait_label = _label(tr("JOIN_WAITING"), 28)
 	_wait_label.set_anchors_preset(Control.PRESET_CENTER)
 	_wait_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -935,6 +957,14 @@ func _build_lobby_panel() -> void:
 	up.text = "+"
 	up.pressed.connect(func() -> void: _send_json({"t": "target", "n": int(lobby.get("target", 5)) + 1}))
 	_host_row.add_child(up)
+	_podium_label = _label("", 22)
+	_podium_label.name = "Podium"
+	box.add_child(_podium_label)
+	_leave_button = Button.new()
+	_leave_button.name = "LeaveLobby"
+	_leave_button.text = tr("JOIN_LEAVE_MATCH")
+	_leave_button.pressed.connect(leave)
+	box.add_child(_leave_button)
 
 func _build_menu_panel() -> void:
 	_menu_panel = Control.new()
@@ -1075,3 +1105,83 @@ func _refresh_hud() -> void:
 	if banner.is_empty() and int(_world.get("timer_ms", 0)) > 0:
 		banner = str(ceili(int(_world["timer_ms"]) / 1000.0))
 	_banner_label.text = banner
+	_refresh_extras()
+
+## The parts of the host screen that come from the `hud` frame (issue #436).
+## Plain text built here with `tr()`, so it follows the player's locale.
+func _refresh_extras() -> void:
+	if _hud == null:
+		return
+	var state: int = int(hud.get("state", 0))
+	var banner: Array = hud.get("banner", [])
+	if not banner.is_empty() and str(_banner_label.text).is_empty():
+		_banner_label.text = ("%s %s" % banner).strip_edges()
+	_mode_label.text = mode_text()
+	_result_label.text = round_result_text() if state == PHASE_ROUND_END else ""
+	_podium_label.text = podium_text()
+	_podium_label.visible = not _podium_label.text.is_empty()
+
+func _name_of(slot: int) -> String:
+	for row: Variant in hud.get("board", []):
+		if int(row[0]) == slot:
+			return str(row[1]) if not str(row[1]).is_empty() else "P%d" % (slot + 1)
+	return "P%d" % (slot + 1)
+
+## The round's result line, or "" (the host's round-end banner).
+func round_result_text() -> String:
+	var team: int = int(hud.get("round_winner_team", -1))
+	if team >= 0:
+		return tr("HUD_TEAM_TAKES_ROUND") % TeamsScript.team_name(team)
+	var winner: int = int(hud.get("round_winner", -1))
+	if winner >= 0:
+		return tr("HUD_TAKES_ROUND") % _name_of(winner)
+	return tr("HUD_ROUND_DRAWN") if hud.has("round_winner") else ""
+
+## The match podium once the match is over: places, names, scores.
+func podium_text() -> String:
+	if str(lobby.get("phase", "")) != "victory" or int(hud.get("state", 0)) != 5:
+		return ""
+	var lines: PackedStringArray = PackedStringArray()
+	var team: int = int(lobby.get("winner_team", -1))
+	var winner: int = int(lobby.get("winner", -1))
+	if team >= 0:
+		lines.append(tr("HUD_TEAM_WINS_MATCH") % TeamsScript.team_name(team))
+	elif winner >= 0:
+		lines.append(tr("HUD_WINS_MATCH") % _name_of(winner))
+	var place: int = 0
+	for row: Variant in hud.get("board", []):
+		place += 1
+		lines.append(tr("HUD_PODIUM_ROW") % [place, _name_of(int(row[0])), int(row[2])])
+	return "\n".join(lines)
+
+## The game mode's own HUD line, or "" (Classic has none).
+func mode_text() -> String:
+	var m: Dictionary = hud.get("m", {})
+	if m.is_empty():
+		return ""
+	match str(hud.get("mode", "")):
+		"king_of_the_hill":
+			var parts: PackedStringArray = PackedStringArray()
+			var hold: Dictionary = m.get("hold", {})
+			for key: Variant in hold:
+				parts.append(tr("HUD_HOLD") % [_name_of(int(key)), int(hold[key]), int(m.get("win", 0))])
+			if bool(m.get("moving", false)):
+				parts.append(tr("HUD_HILL_MOVING"))
+			return "  ".join(parts)
+		"capture_the_flag":
+			var sc: Array = m.get("score", [0, 0])
+			var fl: Array = m.get("flag", [0, 0])
+			return tr("HUD_CTF") % [int(sc[0]), int(sc[1]), tr("HUD_FLAG_%d" % int(fl[0])), tr("HUD_FLAG_%d" % int(fl[1]))]
+		"soccer":
+			var sc2: Array = m.get("score", [0, 0])
+			return tr("HUD_SOCCER") % [int(sc2[0]), int(sc2[1]), int(m.get("win", 0))]
+		"hot_potato":
+			return tr("HUD_POTATO") % [_name_of(int(m.get("it", -1))), int(m.get("fuse", 0))] if int(m.get("it", -1)) >= 0 else ""
+		"stock":
+			var lives: Dictionary = m.get("lives", {})
+			var bits: PackedStringArray = PackedStringArray()
+			for key2: Variant in lives:
+				bits.append(tr("HUD_LIVES") % [_name_of(int(key2)), int(lives[key2])])
+			var clock: String = str(m.get("clock", ""))
+			return ("%s  " % clock if not clock.is_empty() else "") + "  ".join(bits)
+	return ""
