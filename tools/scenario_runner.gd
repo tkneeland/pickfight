@@ -509,6 +509,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_prefers_reachable_target_and_strikes",
 	"bot_never_idles_while_opponent_alive",
 	"bot_hunts_enemy_team_never_teammate",
+	"bot_does_not_overshoot_lone_rival_off_stage",
+	"bot_aggression_rises_as_opponents_dwindle",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1919,6 +1921,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_never_idles_while_opponent_alive()
 		"bot_hunts_enemy_team_never_teammate":
 			return await _scenario_bot_hunts_enemy_team_never_teammate()
+		"bot_does_not_overshoot_lone_rival_off_stage":
+			return await _scenario_bot_does_not_overshoot_lone_rival_off_stage()
+		"bot_aggression_rises_as_opponents_dwindle":
+			return await _scenario_bot_aggression_rises_as_opponents_dwindle()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -27669,4 +27675,74 @@ func _scenario_lobby_sandbox_match_start_resets_state() -> Array[String]:
 	if stats.total_kos != 0 or not stats.deaths.is_empty() or not stats.damage_taken.is_empty():
 		failures.append("the lobby fight carried into the match stats")
 	await _teardown(loop["stage"])
+	return failures
+## Issue #302 part 2: a bot hunting a lone rival on flat ground, from `bot_x`.
+## Returns {alive, past: furthest the bot got beyond the rival (px, away from
+## where it started), damage}.
+const ARENA_FLOOR_TOP_302: float = 330.0
+const ARENA_HALF_WIDTH_302: float = 610.0
+func _overshoot302(bot_x: float, rival_x: float, ticks: int) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(rival_x, 274.0))
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var dir: float = signf(rival_x - bot_x)
+	var past: float = -INF
+	var fell: bool = false
+	for t in ticks:
+		await physics_frame
+		if not player.alive:
+			break
+		past = maxf(past, (player.global_position.x - rival_x) * dir)
+		fell = fell or player.global_position.y > ARENA_FLOOR_TOP_302 or absf(player.global_position.x) > ARENA_HALF_WIDTH_302
+	var alive: bool = player.alive
+	var damage: float = rival.damage
+	await _teardown(stage, false)
+	return {"alive": alive, "fell": fell, "past": past, "damage": damage}
+## The bot closes on a lone rival and stays on the stage, from either side.
+func _scenario_bot_does_not_overshoot_lone_rival_off_stage() -> Array[String]:
+	var failures: Array[String] = []
+	for case: Array in [[100.0, 300.0], [100.0, 500.0], [-100.0, -300.0], [-100.0, -500.0]]:
+		var got: Dictionary = await _overshoot302(case[0], case[1], 1200)
+		print("      bot %d rival %d: alive %s, past rival %.0f px, damage %.0f" % [case[0], case[1], got["alive"], got["past"], got["damage"]])
+		if not got["alive"] or got["fell"]:
+			failures.append("bot from %d went off the stage hunting a rival at %d" % [case[0], case[1]])
+		elif absf(case[1]) < 400.0 and got["damage"] <= 0.0:
+			failures.append("bot from %d never hit the rival at %d" % [case[0], case[1]])
+	_scenario_completed = true
+	return failures
+## The mode a fresh bot at x=0 picks with a rival standing 60 px off on the floor
+## (inside half its reach) and `extra` more rivals alive up on a platform.
+func _mode_close_to_rival302(extra: int) -> String:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 274.0))
+	_spawn_player(stage, Vector2(60, 274.0))
+	for k in extra:
+		_spawn_player(stage, Vector2(300 + 30 * k, 20.0))
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	for t in 3:
+		await physics_frame
+	var mode: String = bot.mode
+	await _teardown(stage, false)
+	return mode
+## Too close to swing hard, a bot with several opponents alive steps back; the
+## same bot with one rival left presses in and fights instead of hesitating.
+func _scenario_bot_aggression_rises_as_opponents_dwindle() -> Array[String]:
+	var failures: Array[String] = []
+	var crowd: String = await _mode_close_to_rival302(3)
+	var lone: String = await _mode_close_to_rival302(0)
+	print("      mode with 4 opponents %s, with 1 %s" % [crowd, lone])
+	if crowd != "back":
+		failures.append("with four opponents alive the bot should step back from a rival 60 px off, was '%s'" % crowd)
+	if lone != "attack":
+		failures.append("with one opponent left the bot should fight a rival 60 px off, was '%s'" % lone)
+	_scenario_completed = true
 	return failures
