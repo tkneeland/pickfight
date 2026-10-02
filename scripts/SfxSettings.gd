@@ -154,7 +154,6 @@ func _ready() -> void:
 	content.add_child(_resolution)
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
-	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
@@ -164,6 +163,8 @@ func _ready() -> void:
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
 	_build_rules(content)
+	# Last in More options, kept quiet (issue #461).
+	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
