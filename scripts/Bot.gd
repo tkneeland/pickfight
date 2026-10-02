@@ -886,10 +886,7 @@ func _brake() -> Vector2:
 	if body == null:
 		return Vector2.ZERO
 	var side: float = signf(body.linear_velocity.x)
-	# Only rightwards (#484): measured over 240 jittered starts of the
-	# bot -100 / rival -300 setup, braking leftwards threw the bot over the
-	# rival and off the stage 23 times; with no brake it did so twice.
-	if side <= 0.0 or absf(body.linear_velocity.x) < BRAKE_SPEED:
+	if side == 0.0 or absf(body.linear_velocity.x) < BRAKE_SPEED:
 		return Vector2.ZERO
 	var ahead: float = BRAKE_ROOM + absf(body.linear_velocity.x) * MOMENTUM_SEC
 	# Carried over the rival's head is as bad as carried over an edge.
