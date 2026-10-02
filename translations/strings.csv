@@ -41,12 +41,14 @@ FEEDBACK_SENT,Thanks! Feedback sent.
 FEEDBACK_TITLE,Send feedback to the developers
 FEED_KO,KO
 FEED_SELF_KO,self-KO
+HOST_END_MATCH,End match
 HOST_FIRST_TO_DOWN,First to  -
 HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
 HOST_GO_ONLINE,Go online (O)
 HOST_GO_ONLINE_STATE,Go online (O): %s
 HOST_JOIN_BLOCKED,Off while players are in your lobby
 HOST_JOIN_ONLINE,Join someone else's game (J)
+HOST_KICK,Kick
 HOST_MODE,Mode (T)
 HOST_MODE_STATE,Mode (T): %s
 HOST_PLAY_ON_PC,Play on this PC (P)
@@ -64,8 +66,10 @@ JOIN_CLOSED_EARLY,The connection closed before the match was joined.
 JOIN_CONNECTING,Connecting to the relay...
 JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.
 JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.
+JOIN_ERR_DEMO_ONLY,This room is running the demo. Join it from the demo.
 JOIN_ERR_DISCONNECTED,Disconnected: %s
 JOIN_ERR_ELSEWHERE,You joined from somewhere else.
+JOIN_ERR_FULL_ONLY,Get the full game to join this room
 JOIN_ERR_HOST_LEFT,Host left.
 JOIN_ERR_IDLE,The room closed after sitting idle.
 JOIN_ERR_NO_HELLO,The host did not accept the join in time.
@@ -208,7 +212,7 @@ WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d)
 STAGE_RACETRACK,Racetrack
 STAGE_SWITCHYARD,Switchyard
 STAGE_ORBIT,Orbit
-SETTINGS_SHARE_STATS,Send anonymous match stats
+SETTINGS_SHARE_STATS,Share anonymous match stats
 TELEMETRY_NOTICE,Pickfight sends anonymous match stats to help balance the game
 TELEMETRY_TURN_OFF,Turn off
 TELEMETRY_OK,OK

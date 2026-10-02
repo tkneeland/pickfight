@@ -239,6 +239,8 @@ func _stop_demos() -> void:
 ## how many it takes to start; `join_source` (the ControllerServer, or null)
 ## has the join QR and URL.
 func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> void:
+	_last_lobby_args = [state, min_players, join_source]
+	_rows_have_kick = _server != null and _server.has_method("pc_runs_room") and _server.pc_runs_room()
 	for child: Node in _lobby_rows.get_children():
 		child.queue_free()
 	var teams: bool = bool(state.get("teams", false))
@@ -303,7 +305,43 @@ func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxCon
 	# Issue #441: a gamepad claim's card carries its cosmetics picker (it hides itself while unplugged).
 	if _server != null and _server.has_method("pad_claim") and _server.pad_claim(slot):
 		row.add_child(preload("res://scripts/PadPickerCard.gd").new(_server, slot))
+	_add_kick_button(row, slot)
 	return row
+
+## Issue #458: running the room (Online, ADR-0021), the host PC kicks from the
+## lobby row itself: a Kick on every row but its own seat's.
+func _add_kick_button(row: HBoxContainer, slot: int) -> void:
+	if _server == null or not _server.has_method("pc_runs_room") or not _server.pc_runs_room() or slot == _server.host_pc_slot():
+		return
+	var kick: Button = Button.new()
+	kick.name = "Kick"
+	kick.text = tr("HOST_KICK")
+	kick.focus_mode = Control.FOCUS_NONE
+	kick.add_theme_font_size_override("font_size", CONTROL_BUTTON_FONT_SIZE)
+	kick.pressed.connect(func() -> void: _server.host_pc_command("kick", slot))
+	row.set_meta("kick_slot", slot)
+	row.add_child(kick)
+
+## Issue #458: the last `refresh_lobby()` arguments, and whether its rows had
+## Kick buttons, so Go online turning them on or off redraws the rows.
+var _last_lobby_args: Array = []
+var _rows_have_kick: bool = false
+
+## Issue #458: the Kick button on `slot`'s lobby row, or null.
+func kick_button(slot: int) -> Button:
+	if _lobby_rows == null:
+		return null
+	for node: Node in _lobby_rows.find_children("*", "HBoxContainer", true, false):
+		if node.has_meta("kick_slot") and int(node.get_meta("kick_slot")) == slot and not _queued(node):
+			return node.get_node_or_null("Kick") as Button
+	return null
+
+static func _queued(node: Node) -> bool:
+	while node != null:
+		if node.is_queued_for_deletion():
+			return true
+		node = node.get_parent()
+	return false
 
 ## Issue #446: a remote seat's round trip as text, and the colour it is shown
 ## in: a warning colour above 150 ms.
@@ -803,6 +841,8 @@ func refresh_controls() -> void:
 	_join_blocked.visible = control_button("join").disabled
 	# No keyboard glyph while a gamepad is the active input (#368).
 	control_button("start").text = tr("HOST_START_MATCH_PAD") if _pad_active else tr("HOST_START_MATCH")
+	if _server.has_method("pc_runs_room") and _server.pc_runs_room() != _rows_have_kick and not _last_lobby_args.is_empty():
+		refresh_lobby.callv(_last_lobby_args) # Kick on the rows (#458)
 
 func _process(_delta: float) -> void:
 	if _server != null and _lobby_panel != null and _lobby_panel.visible:

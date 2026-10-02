@@ -341,6 +341,7 @@ var _recent_leavers: Dictionary = {}
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 const RelayLinkScript: GDScript = preload("res://scripts/RelayLink.gd")
 const HostMouseScript: GDScript = preload("res://scripts/HostMouse.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 ## Issue #239: the remote-seat protocol version. A remote client's hello must
 ## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
@@ -1377,8 +1378,12 @@ func match_serial() -> int:
 ## and hung up on, its claim is dropped -- not held to the end of the round as
 ## an ordinary disconnect is (ADR-0007) -- and its id is refused from now on.
 ## False, doing nothing, for the host's own slot or an unclaimed one.
-func kick(slot: int) -> bool:
-	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1 or slot == host_slot():
+## Issue #458: `by_host_pc` is the host PC's own kick, for which the earliest
+## phone or remote seat is not the host; only the host PC's seat is refused.
+func kick(slot: int, by_host_pc: bool = false) -> bool:
+	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1:
+		return false
+	if slot == (_host_pc_slot if by_host_pc else host_slot()):
 		return false
 	if is_virtual(slot):
 		# A bot (issue #152): its director sends it away.
@@ -1814,11 +1819,30 @@ func _process_remote() -> void:
 				if _log_input:
 					print("remote %d refused: protocol version" % seat.peer)
 				continue
+			var build_reason: String = build_mismatch_reason(hello)
+			if not build_reason.is_empty():
+				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
+				seat.open = false
+				_remote_seats.erase(seat.peer)
+				if _log_input:
+					print("remote %d refused: %s" % [seat.peer, build_reason])
+				continue
 			_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
 		elif now > seat.deadline_msec:
 			_remote_awaiting.erase(seat)
 			seat.close(1008, "no hello")
 			_remote_seats.erase(seat.peer)
+
+## Issue #447: the demo joins only the demo, the full game only the full game.
+## A remote hello carries `"demo": <bool>` (missing reads as the full game).
+## "" when the builds match; else the refusal reason sent to the client:
+## "full_only" (a demo client at a full host) or "demo_only" (the reverse).
+static func build_mismatch_reason(hello: Dictionary) -> String:
+	var host_demo: bool = DemoBuildScript.is_active()
+	var client_demo: bool = hello.get("demo", false) == true
+	if client_demo == host_demo:
+		return ""
+	return "demo_only" if host_demo else "full_only"
 
 ## The first text frame of `seat` that is a JSON object with a string "id", or null.
 func _read_remote_hello(seat: RemoteSeat) -> Variant:
@@ -2048,10 +2072,12 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
 		_update_mouse_capture()
-		get_viewport().set_input_as_handled()
+		# Issue #458: running the room, the same Esc opens the host's menu too.
+		if not pc_runs_room():
+			get_viewport().set_input_as_handled()
 		return
 	var click := event as InputEventMouseButton
-	if click != null and click.pressed and _mouse_escaped and _host_pc_slot != -1:
+	if click != null and click.pressed and _mouse_escaped and _host_pc_slot != -1 and not _host_menu_open():
 		_mouse_escaped = false
 		_update_mouse_capture()
 
@@ -2395,3 +2421,46 @@ func pad_claim(slot: int) -> bool:
 ## and it is the lobby (cosmetics change in the lobby only).
 func pad_picker_shown(slot: int) -> bool:
 	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat and _slot_peers[slot].open 		and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
+
+# --- The host PC's own kick, pause and end match (issue #458) ------------------
+#
+# An Online host has no host phone (ADR-0021), so its own screen carries what
+# the host phone's menu gives: a Kick on each player row (the lobby and the Esc
+# menu) and Pause/Resume and End match in the Esc menu (`HostMatchMenu.gd`).
+# They go out as the same `host_command`s the host phone's requests do.
+
+## Whether the host PC runs the room itself and so shows those controls: an
+## Online match (ADR-0021). For now that is Go online switched on.
+func pc_runs_room() -> bool:
+	return _online_requested
+
+## Whether a match is in play or paused: what Pause and End match act on.
+func host_pc_match_live() -> bool:
+	return MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) or host_pc_paused()
+
+## Whether the match is paused, as the lobby state last said.
+func host_pc_paused() -> bool:
+	return bool(_lobby_state.get("paused", false))
+
+## The host PC's "pause", "resume", "end" or "kick" of `slot`. Returns whether
+## it was taken: Pause, Resume and End only while a match is live; a kick of
+## any claimed seat but the host PC's own.
+func host_pc_command(cmd: String, slot: int = -1) -> bool:
+	match cmd:
+		"pause", "resume", "end":
+			if not host_pc_match_live():
+				return false
+			host_command.emit(cmd, -1)
+			return true
+		"kick":
+			if not kick(slot, true):
+				return false
+			host_command.emit("kick", slot)
+			return true
+	return false
+
+## Whether the host screen's Esc menu is open, when its clicks must not take
+## the mouse back for the host PC's seat.
+func _host_menu_open() -> bool:
+	var menu: Node = get_node_or_null(^"/root/Sfx/SfxSettings")
+	return menu != null and menu.has_method("is_open") and menu.is_open()
