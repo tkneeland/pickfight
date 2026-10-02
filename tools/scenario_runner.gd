@@ -29572,7 +29572,7 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
 			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
 		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
-	if GameModesScript361.picker_rows().size() != 5 or not GameModesScript361.is_valid("stock"):
+	if GameModesScript361.picker_rows().size() != GameModesScript361.TABLE.size() or not GameModesScript361.is_valid("stock"):
 		failures.append("the mode picker lost modes with the demo off")
 	var loop: Dictionary = _new_lobby_round(3)
 	var rm: Node = loop["round_manager"]
