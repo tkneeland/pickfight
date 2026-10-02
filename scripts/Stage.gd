@@ -61,6 +61,9 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## puts it in a bag with probability w, so 0.3 is rare. Read off the packed
 ## scene by `mode_weight_of()`.
 @export var mode_weights: Dictionary = {}
+## Whether this is a no-frills competitive stage (#376): symmetrical, no
+## hazards, no moving parts. The Stock stage picker (#375) lists these first.
+@export var competitive: bool = false
 
 ## King of the Hill (#377): whether the hill hops between this stage's
 ## `get_hill_spots()` every ~30 s (with a warning) instead of staying on the
@@ -162,6 +165,18 @@ static func mode_weight_of(scene: PackedScene, mode_id: String) -> float:
 			var weights: Dictionary = state.get_node_property_value(0, p)
 			return float(weights.get(mode_id, weights.get("_other", 1.0)))
 	return 1.0
+## Whether a stage scene is flagged `competitive` (issue #375), read off its
+## packed root like `view_size_of`. Defaults to false: no stage sets it yet.
+static func competitive_of(scene: PackedScene) -> bool:
+	if scene == null:
+		return false
+	var state: SceneState = scene.get_state()
+	if state.get_node_count() == 0:
+		return false
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"competitive":
+			return bool(state.get_node_property_value(0, p))
+	return false
 
 ## The backdrop built in `_ready()`, or null outside the tree.
 func get_background() -> Node2D:

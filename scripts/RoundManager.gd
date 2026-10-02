@@ -403,6 +403,7 @@ func _swap_stage() -> void:
 		return
 	if _current_stage != null:
 		_current_stage.queue_free()
+	_pin_stock_stage()
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
@@ -1137,6 +1138,11 @@ func _enter_lobby() -> void:
 	_last_lobby_state = {}
 	_tick_lobby()
 
+## The demo build's end card (#361): how long it waits for a Continue tap or
+## a key, and whether it is up now.
+@export var end_card_sec: float = 15.0
+var _end_card_up: bool = false
+var _end_card_until_msec: int = 0
 ## When the victory screen gives up waiting for Continue taps (#337).
 var _victory_until_msec: int = 0
 
@@ -1156,6 +1162,15 @@ func _everyone_continued(roster: Array[int]) -> bool:
 ## Victory over: back to the lobby with nobody ready, so the Continue taps do
 ## not start the next match's countdown by themselves.
 func _leave_victory() -> void:
+	# The demo build (#361) follows the victory screen with its end card.
+	if DemoBuildScript.is_active() and not _end_card_up and _lobby_screen != null:
+		_end_card_up = true
+		_end_card_until_msec = GameClockScript.now_msec() + int(end_card_sec * 1000.0)
+		if _controller_server != null and _controller_server.has_method("clear_ready"):
+			_controller_server.clear_ready()
+		_lobby_screen.show_panel("end_card")
+		return
+	_end_card_up = false
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
 	_enter_lobby()
@@ -1177,6 +1192,7 @@ func _tick_airtime() -> void:
 		_stats.note_air(slot, not touching, now)
 
 func _enter_victory() -> void:
+	_end_card_up = false
 	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
 	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
@@ -1224,6 +1240,7 @@ func _begin_match() -> void:
 	# different sequence than the same seed dealt at launch.
 	_stage_rotation.new_bag()
 	_stage_rotation.stage_index = -1
+	_stage_rotation.pinned = -1
 	_update_score_label()
 	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
@@ -1253,8 +1270,9 @@ func _tick_lobby() -> void:
 				_begin_match()
 				return
 		State.VICTORY:
+			var until_msec: int = _end_card_until_msec if _end_card_up else _victory_until_msec
 			if _everyone_continued(roster) or roster.size() < min_players_to_start \
-					or GameClockScript.now_msec() >= _victory_until_msec:
+					or GameClockScript.now_msec() >= until_msec:
 				_leave_victory()
 				return
 	var tick: int = _countdown_left() if _state == State.COUNTDOWN else 0
@@ -1304,7 +1322,10 @@ func _publish_lobby_state() -> void:
 		picked_mode = str(_controller_server.game_mode())
 	if picked_mode == GameModesScript.STOCK:  # the host phone's Stock controls (#354)
 		var settings: RefCounted = HostSettingsScript.shared()
-		state["stock"] = {"lives": settings.stock_lives, "time": settings.stock_time_limit}
+		state["stock"] = {
+			"lives": settings.stock_lives, "time": settings.stock_time_limit,
+			"stage": settings.stock_stage, "stages": _stage_rotation.picker_rows(),
+		}
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -2069,6 +2090,7 @@ func _tick_lobby_sandbox(roster: Array[int]) -> void:
 
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 ## A `GameModes` id every round plays under, or "" for none. Host-set seam.
 @export var game_mode: String = ""
 var _game_mode_node: Node = null
@@ -2091,6 +2113,16 @@ func _start_game_mode() -> void:
 	add_child(_game_mode_node)
 	_game_mode_node.setup(self)
 	_game_mode_node.start_round(_in_round.duplicate())
+
+## A Stock match plays one stage (#375): the host's pick, or a random enabled
+## one, resolved on the match's first round and held for the rest. Any other
+## mode keeps the rotation.
+func _pin_stock_stage() -> void:
+	if game_mode != GameModesScript.STOCK:
+		_stage_rotation.pinned = -1
+	elif _stage_rotation.pinned == -1:
+		_stage_rotation.round_player_count = _roster().size()
+		_stage_rotation.pinned = _stage_rotation.resolve_pin(HostSettingsScript.shared().stock_stage)
 
 ## The host phone's pick for the next match (issue #352), taken as the match's
 ## countdown runs out and held for all of it. Only a lobby match takes it, so a
