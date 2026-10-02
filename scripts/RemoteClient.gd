@@ -253,8 +253,25 @@ func _pad_input() -> void:
 		_mouse.reset()
 		input_vector = Vector2.ZERO
 
+## Issue #463, ADR-0022: a mouse never lifts, so Space (tap) and the pad's stick
+## clicks toggle "released" and a held shoulder button holds it. Sent as one
+## extra byte on the input frame while set; the host clears the toggle at each
+## respawn (`{"t":"release","v":false}`).
+var release_toggle: bool = false
+var _pad_shoulder_held: bool = false
+
+func input_released() -> bool:
+	return release_toggle or _pad_shoulder_held
+
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
+		return
+	var pad_button := event as InputEventJoypadButton
+	if pad_button != null and not menu_open:
+		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
+			_pad_shoulder_held = pad_button.pressed
+		elif pad_button.pressed and (pad_button.button_index == JOY_BUTTON_LEFT_STICK or pad_button.button_index == JOY_BUTTON_RIGHT_STICK):
+			release_toggle = not release_toggle
 		return
 	var motion := event as InputEventMouseMotion
 	if motion != null:
@@ -262,6 +279,9 @@ func _input(event: InputEvent) -> void:
 			mouse_motion(motion.relative)
 		return
 	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE and not menu_open:
+		release_toggle = not release_toggle
+		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
@@ -392,6 +412,8 @@ func _on_host_text(text: String) -> void:
 			_refresh_extras()
 		"ping":
 			_send_json({"t": "pong", "n": msg.get("n", 0)})
+		"release":
+			release_toggle = bool(msg.get("v", false))
 		"closed":
 			_return_to_join(reason_text(str(msg.get("reason", "closed"))))
 		"error":
@@ -413,6 +435,8 @@ func _return_to_join(message: String, show_update_link: bool = false) -> void:
 	peer_id = 0
 	lobby = {}
 	menu_open = false
+	release_toggle = false
+	_pad_shoulder_held = false
 	_mouse.reset()
 	input_vector = Vector2.ZERO
 	_set_captured(false)
@@ -438,10 +462,13 @@ func _send_json(data: Dictionary) -> void:
 ## One input frame: the phone format, float32 x then y, little-endian.
 func _send_input() -> void:
 	var v: Vector2 = Vector2.ZERO if menu_open else input_vector
+	var released: bool = input_released() and not menu_open
 	var body := PackedByteArray()
-	body.resize(8)
+	body.resize(9 if released else 8)
 	body.encode_float(0, v.x)
 	body.encode_float(4, v.y)
+	if released:
+		body[8] = 1
 	_send_envelope(RelayLinkScript.KIND_INPUT, body)
 	input_frames_sent += 1
 
