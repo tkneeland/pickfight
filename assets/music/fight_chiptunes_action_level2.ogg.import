@@ -2,12 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
-path="res://.godot/imported/fight_chiptunes_action_level2.ogg-0.oggvorbisstr"
+uid="uid://dhl8rtiqph5ws"
+path="res://.godot/imported/fight_chiptunes_action_level2.ogg-6c21b6d98f2ad37d9fe3fa0100670b65.oggvorbisstr"
 
 [deps]
 
 source_file="res://assets/music/fight_chiptunes_action_level2.ogg"
-dest_files=["res://.godot/imported/fight_chiptunes_action_level2.ogg-0.oggvorbisstr"]
+dest_files=["res://.godot/imported/fight_chiptunes_action_level2.ogg-6c21b6d98f2ad37d9fe3fa0100670b65.oggvorbisstr"]
 
 [params]
 
