@@ -29398,12 +29398,18 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 	var loop: Dictionary = _new_modifier_round("")
 	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
 	var players: Array[RigidBody2D] = loop["players"]
+	# The gust pushes every body, so the bystanders would be blown off some
+	# stages and end the round on its own before the next is requested. Only
+	# P0 is measured; hold the rest where they stand.
+	for bystander: RigidBody2D in players.slice(1):
+		bystander.freeze = true
 	var gusts: Array = []
 	var extra: Array[String] = []
 	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
 		var gust: Node2D = instance.get_node_or_null("GaleGust") as Node2D
 		gusts.append(gust)
 		var player: RigidBody2D = players[0]
+		player.freeze = false
 		var before_gravity: float = player.gravity_scale
 		# Held in clear air inside the zone, with no gravity to confuse a
 		# sideways reading, and no input.
@@ -29426,14 +29432,19 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 				# Enough shown: stop before the body is carried off the stage.
 				if best >= GALE_MIN_SPEED * 1.5:
 					break
-				# A slower host may never reach that speed; the gust would then
-				# carry the held body off the stage, the kill zone would end the
-				# round, and the round loop would free the stage before the next
-				# round is requested (#399). Stop at a quarter of the view's width.
-				if absf(player.global_position.x - start.x) > instance.get_view_rect().size.x * 0.25:
-					break
+			# A slower host may never reach that speed; the gust would then
+			# carry the held body off the stage, the kill zone would end the
+			# round, and the round loop would free the stage before the next
+			# round is requested (#399). Stop at a quarter of the view's width.
+			# Plain rounds too: after some scenario orders the held body
+			# drifts there as well.
+			if absf(player.global_position.x - start.x) > instance.get_view_rect().size.x * 0.25:
+				break
 		player.gravity_scale = before_gravity
 		player.linear_velocity = Vector2.ZERO
+		# Held until the next measurement, so it cannot wander off the stage
+		# and end the round before the next is requested.
+		player.freeze = true
 		if gust != null and not warned_without_push:
 			extra.append("the gale never showed a warning before pushing")
 		return best
