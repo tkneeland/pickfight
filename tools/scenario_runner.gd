@@ -532,6 +532,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_hot_potato_keeps_away_from_it",
 	"bot_sudden_death_plays_as_classic",
 	"lobby_and_victory_show_the_logo",
+	"hot_potato_stages_load_and_are_in_rotation",
+	"hot_potato_draws_its_stages_more_often",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1988,6 +1990,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_sudden_death_plays_as_classic()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"hot_potato_stages_load_and_are_in_rotation":
+			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
+		"hot_potato_draws_its_stages_more_often":
+			return await _scenario_hot_potato_draws_its_stages_more_often()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -3727,6 +3733,9 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Footbridge.tscn",
 	"res://scenes/stages/Gantry.tscn",
 	"res://scenes/stages/Vent.tscn",
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -28622,4 +28631,96 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 	if victory_logo == null or victory_logo.texture == null:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
+	return failures
+# --- Hot Potato stages (issue #373)
+const HOT_POTATO_STAGES_373: PackedStringArray = [
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
+]
+## The three chase-loop stages are in Main's rotation and the swept STAGE_PATHS,
+## load as large stages with eight spawns, and weigh 4 for Hot Potato and 1 in
+## every other mode.
+func _scenario_hot_potato_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation: Array = main_scene.get_node("RoundManager").stage_scenes
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in rotation:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in HOT_POTATO_STAGES_373:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_pickup_spawn_points().size() < 3:
+			failures.append("%s declares %d pickup spots, wants 3 or more" % [path, instance.get_pickup_spawn_points().size()])
+		if not instance.is_large():
+			failures.append("%s is not a large stage" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["hot_potato", "", "king_of_the_hill", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "hot_potato" else 1.0
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	if not is_equal_approx(StageType.mode_weight_of(load("res://scenes/stages/Flatlands.tscn"), "hot_potato"), 1.0):
+		failures.append("a stage with no mode_weights should weigh 1.0")
+	_scenario_completed = true
+	return failures
+## Hot Potato deals its three stages about four times as often as a stage that
+## is not favoured, other modes leave the odds alone, and the same seed deals
+## the same sequence. Counted over 900 seeded draws of a full table.
+func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation_script: GDScript = load("res://scripts/StageRotation.gd")
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var scenes: Array[PackedScene] = []
+	scenes.assign(main_scene.get_node("RoundManager").stage_scenes)
+	main_scene.free()
+	var favoured: Array[int] = []
+	for i in scenes.size():
+		if HOT_POTATO_STAGES_373.has(scenes[i].resource_path):
+			favoured.append(i)
+	var counts: Dictionary = {}
+	var sequences: Dictionary = {}
+	for mode_id: String in ["hot_potato", "", "hot_potato"]:
+		var rotation: RefCounted = rotation_script.new()
+		rotation.scenes = scenes
+		rotation.round_player_count = 8
+		rotation.mode_id = mode_id
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 373
+		rotation.rng = rng
+		var hits: int = 0
+		var seq: Array[int] = []
+		for _round in 900:
+			var index: int = rotation.next_stage_index()
+			if seq.size() > 0 and seq[-1] == index:
+				failures.append("mode '%s' dealt stage %d twice in a row" % [mode_id, index])
+				break
+			rotation.stage_index = index
+			seq.append(index)
+			if favoured.has(index):
+				hits += 1
+		if counts.has(mode_id):
+			if sequences[mode_id] != seq:
+				failures.append("the same seed dealt two different sequences for '%s'" % mode_id)
+		counts[mode_id] = hits
+		sequences[mode_id] = seq
+	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
+	# Expected: 12 of 36 bag slots (about 300) against 3 of 30 (about 90).
+	if counts["hot_potato"] < 240:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 240" % counts["hot_potato"])
+	if counts[""] > 150:
+		failures.append("classic dealt the three stages %d of 900 times, wants at most 150" % counts[""])
+	if counts["hot_potato"] < 2 * counts[""]:
+		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
+	_scenario_completed = true
 	return failures

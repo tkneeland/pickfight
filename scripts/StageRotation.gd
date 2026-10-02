@@ -36,6 +36,11 @@ var demo: bool = false
 ## rotations given the same seed produce the same sequence (ADR-0011) --
 ## `Array.shuffle()` can't do that, since it always draws from the global RNG.
 var rng: RandomNumberGenerator
+## The `GameModes` id the round being started plays under ("" for classic);
+## a stage's `mode_weights` for it say how often it is dealt (#373).
+var mode_id: String = ""
+## What `mode_id` was when `bag` was dealt: a mode change re-deals the bag.
+var _bag_mode: String = ""
 ## The index into `scenes` last played. Starts at -1 so the first
 ## `next_stage_index()` call is recognized as the opener rather than the seam
 ## between two bags. The caller stores each pick here.
@@ -113,6 +118,8 @@ func next_stage_index() -> int:
 		return 0
 	if _bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage():
 		bag.clear()
+	if _bag_mode != mode_id:
+		bag.clear()
 	# A fresh bag always holds an allowed stage, so this ends within one bag's
 	# worth of skips and one refill.
 	var index: int = 0
@@ -136,14 +143,38 @@ func _refill_bag(avoid: int) -> void:
 	# draws exactly the order it drew before issue #144.
 	bag = []
 	_bag_large_eligible = _large_stages_eligible()
+	_bag_mode = mode_id
 	for index: int in _shuffled_indices():
 		if stage_allowed(index):
 			bag.append(index)
+	_add_weighted_copies()
 	if bag.size() > 1 and bag[0] == avoid:
 		var swap_with: int = 1 + rng.randi() % (bag.size() - 1)
 		var tmp: int = bag[0]
 		bag[0] = bag[swap_with]
 		bag[swap_with] = tmp
+
+## Stages favoured by this mode (#373): a stage whose `mode_weights` entry for
+## `mode_id` rounds to n > 1 is dealt n times per bag instead of once. The
+## extras go in at positions drawn from `rng`, never next to the same stage.
+## Nothing is drawn when no allowed stage is favoured, so every other mode's
+## sequence is exactly what it was.
+func _add_weighted_copies() -> void:
+	var extras: Array[int] = []
+	for index: int in bag.duplicate():
+		var copies: int = roundi(StageScript.mode_weight_of(scenes[index], mode_id))
+		for _c in range(1, copies):
+			extras.append(index)
+	for index: int in extras:
+		var candidates: Array[int] = []
+		for pos in bag.size() + 1:
+			var before: int = bag[pos - 1] if pos > 0 else -1
+			var after: int = bag[pos] if pos < bag.size() else -1
+			if before != index and after != index:
+				candidates.append(pos)
+		if candidates.is_empty():
+			candidates.append(bag.size())
+		bag.insert(candidates[rng.randi() % candidates.size()], index)
 
 ## Whether this round's player count may play large stages (issue #144).
 func _large_stages_eligible() -> bool:

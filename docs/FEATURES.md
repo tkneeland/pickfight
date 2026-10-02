@@ -33,7 +33,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
-- 27 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
+- 30 rotating stages (#8, #17, #19, #51, #54, #143, #315, #373); #373 added three large Hot Potato chase-loop stages, Racetrack (oval of decks, ramps, bridge and bounce pads), Switchyard (two yards, a shuttle over the gap and a high bridge) and Orbit (two platforms circling a void), each with no dead ends and eight spawns; #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
+- Per-stage rotation weights by game mode (`mode_weights`): the three #373 stages are dealt about four times as often in Hot Potato and at normal odds in every other mode (#373)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)

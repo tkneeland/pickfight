@@ -54,6 +54,13 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## 1, so it can still appear). Empty means just the derived theme.
 @export var weapon_weight_overrides: Dictionary = {}
 
+## Optional per-stage weight in the stage rotation (#373): `GameModes` id ->
+## weight (default 1.0 for any mode not listed). The rotation deals a stage
+## `round(weight)` copies in each bag while that mode is playing, so 4.0 makes
+## it about four times as likely; below 1 still deals it once. Read off the
+## packed scene by `mode_weight_of()`.
+@export var mode_weights: Dictionary = {}
+
 ## Night variant (#332): set before the stage enters the tree. The stage then
 ## uses the Night palette mood and adds a `NightLighting` child. Visual only.
 var night: bool = false
@@ -135,6 +142,20 @@ static func view_size_of(scene: PackedScene) -> Vector2:
 		if state.get_node_property_name(0, p) == &"view_size":
 			return state.get_node_property_value(0, p)
 	return DEFAULT_VIEW_SIZE
+
+## A stage scene's rotation weight for `mode_id` (#373), read off its packed
+## root like `view_size_of()`; 1.0 when the scene lists none for that mode.
+static func mode_weight_of(scene: PackedScene, mode_id: String) -> float:
+	if scene == null:
+		return 1.0
+	var state: SceneState = scene.get_state()
+	if state.get_node_count() == 0:
+		return 1.0
+	for p in state.get_node_property_count(0):
+		if state.get_node_property_name(0, p) == &"mode_weights":
+			var weights: Dictionary = state.get_node_property_value(0, p)
+			return float(weights.get(mode_id, 1.0))
+	return 1.0
 
 ## The backdrop built in `_ready()`, or null outside the tree.
 func get_background() -> Node2D:

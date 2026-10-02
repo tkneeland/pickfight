@@ -1,0 +1,147 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_620x40"]
+size = Vector2(620, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_340x24"]
+size = Vector2(340, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Orbit (issue #373, a large Hot Potato stage for five to eight players):
+; two floors facing each other across a 960 px void, and the only way across is
+; the orbit: two platforms circling the void on a rectangular track (#279's
+; loop_points), half a lap apart, so there is always one coming. A perch above
+; each floor's outer end, reached from a bounce pad, is the way to watch the
+; orbit and drop on a rider from above. The chase is a ring of its own: floor ->
+; orbit -> far floor -> orbit -> back, with the perches as the way round.
+; 
+; Large: the view is 2240 x 1260 (Stage.view_size). Terrain spans x = -1100..1100.
+; Rotation: weighted 4x for Hot Potato (Stage.mode_weights).
+[node name="Orbit" type="Node2D"]
+script = ExtResource("script")
+background_sky_top = Color(0.1, 0.1, 0.18, 1)
+background_sky_bottom = Color(0.24, 0.2, 0.3, 1)
+background_silhouette = Color(0.09, 0.08, 0.14, 1)
+background_layers = PackedStringArray("clouds", "mountains", "clouds")
+view_size = Vector2(2240, 1260)
+mode_weights = {"hot_potato": 4.0}
+
+; The two floors; spawns on their outer ends.
+[node name="FloorLeft" type="StaticBody2D" parent="."]
+position = Vector2(-790, 420)
+
+[node name="FloorLeftShape" type="CollisionShape2D" parent="FloorLeft"]
+shape = SubResource("RectangleShape2D_620x40")
+
+[node name="FloorLeftVisual" type="Polygon2D" parent="FloorLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-310, -20, 310, -20, 310, 20, -310, 20)
+
+[node name="FloorRight" type="StaticBody2D" parent="."]
+position = Vector2(790, 420)
+
+[node name="FloorRightShape" type="CollisionShape2D" parent="FloorRight"]
+shape = SubResource("RectangleShape2D_620x40")
+
+[node name="FloorRightVisual" type="Polygon2D" parent="FloorRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-310, -20, 310, -20, 310, 20, -310, 20)
+
+; Perches over the outer ends, 260 px above the floor.
+[node name="PerchLeft" type="StaticBody2D" parent="."]
+position = Vector2(-930, 152)
+
+[node name="PerchLeftShape" type="CollisionShape2D" parent="PerchLeft"]
+shape = SubResource("RectangleShape2D_340x24")
+
+[node name="PerchLeftVisual" type="Polygon2D" parent="PerchLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-170, -12, 170, -12, 170, 12, -170, 12)
+
+[node name="PerchRight" type="StaticBody2D" parent="."]
+position = Vector2(930, 152)
+
+[node name="PerchRightShape" type="CollisionShape2D" parent="PerchRight"]
+shape = SubResource("RectangleShape2D_340x24")
+
+[node name="PerchRightVisual" type="Polygon2D" parent="PerchRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-170, -12, 170, -12, 170, 12, -170, 12)
+
+; A pad beside each perch throws you up onto it.
+[node name="PadLeft" parent="." instance=ExtResource("pad")]
+position = Vector2(-690, 392)
+size = Vector2(100, 16)
+
+[node name="PadRight" parent="." instance=ExtResource("pad")]
+position = Vector2(690, 392)
+size = Vector2(100, 16)
+
+; The orbit: two platforms on a 700 x 250 rectangle, half a lap apart.
+[node name="OrbitA" parent="." instance=ExtResource("mp")]
+position = Vector2(-350, 330)
+size = Vector2(160, 24)
+one_way_sec = 2.4
+loop_points = PackedVector2Array(700, 0, 700, -250, 0, -250)
+
+[node name="OrbitB" parent="." instance=ExtResource("mp")]
+position = Vector2(350, 80)
+size = Vector2(160, 24)
+one_way_sec = 2.4
+loop_points = PackedVector2Array(-700, 0, -700, 250, 0, 250)
+
+; Spawns, all eight on the floors' outer ends, 70 px apart.
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-1030, 340)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(1030, 340)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-960, 340)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(960, 340)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-890, 340)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(890, 340)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-820, 340)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(820, 340)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("kz")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+; Pickup spots: on each perch and over the middle of the orbit.
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-930, 90)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(930, 90)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(0, 150)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(0, 260)
+
+[node name="PickupSpawn4" type="Marker2D" parent="."]
+position = Vector2(0, -60)
+
