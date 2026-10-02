@@ -21,7 +21,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Staff, sword, dagger (#13)
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
 - Spear: long reach, weak up close (#272)
-- Shield: blocks hits landing on its face; a bash does little damage but big knockback (#275)
+- Shield: a wide (50 px, was 36) heater-shaped plate with a matching polygon hitbox (#465); blocks hits landing on its face; a bash does little damage but big knockback (#275)
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy; a short poker otherwise (#269)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
