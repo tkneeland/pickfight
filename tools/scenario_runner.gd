@@ -546,6 +546,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_random_pick_is_an_enabled_stage_held_all_match",
 	"stock_never_rolls_a_modifier",
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
+	"shield_blocks_a_hit_on_its_face",
+	"shield_bash_knocks_back_harder_than_pickaxe",
+	"shield_is_in_the_pickup_set",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2030,6 +2033,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_never_rolls_a_modifier()
 		"stock_stage_pick_persists_and_reaches_the_host_phone":
 			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
+		"shield_blocks_a_hit_on_its_face":
+			return await _scenario_shield_blocks_a_hit_on_its_face()
+		"shield_bash_knocks_back_harder_than_pickaxe":
+			return await _scenario_shield_bash_knocks_back_harder_than_pickaxe()
+		"shield_is_in_the_pickup_set":
+			return await _scenario_shield_is_in_the_pickup_set()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -29185,5 +29194,85 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
 		failures.append("the picker rows were %s" % [rows])
 	_stock_stage_reset()
+	_scenario_completed = true
+	return failures
+
+# --- Shield (issue #275) -----------------------------------------------------
+
+const SHIELD_PATH: String = "res://resources/shield.tres"
+
+## A hit on the face the shield points at is mostly blocked; one from behind it
+## lands in full, and so does one on a pickaxe held the same way.
+func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var damage_taken := func(point: Vector2) -> float:
+		var before: float = player.damage
+		player.take_damage(20.0, point)
+		return player.damage - before
+	var on_face: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
+	var behind: float = damage_taken.call(player.global_position + Vector2.LEFT * 40.0)
+	print("      20-damage hit: on the shield face %.1f, from behind %.1f" % [on_face, behind])
+	if on_face > 5.0:
+		failures.append("a hit on the shield face took %.1f of 20, expected it blocked" % on_face)
+	if behind < 20.0:
+		failures.append("a hit from behind the shield took %.1f of 20, expected all of it" % behind)
+	await _equip(player, PICKAXE_STARTER_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var pickaxe: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
+	if pickaxe < 20.0:
+		failures.append("a pickaxe holder took %.1f of 20 on the same side; only the shield blocks" % pickaxe)
+	await _teardown(stage)
+	return failures
+
+## Bashes `path` into a neighbour and returns [victim damage, victim speed].
+func _shield_bash_result(path: String) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
+	await _await_ticks(2)
+	await _equip(holder, path)
+	holder.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	var strikes: Array = []
+	_record_strikes(holder, strikes)
+	holder.set_input_vector(Vector2.RIGHT)
+	await _await_condition(func() -> bool: return not strikes.is_empty(), 4000)
+	var fastest: float = 0.0
+	for i in 6:
+		fastest = maxf(fastest, victim.linear_velocity.length())
+		await physics_frame
+	var result: Array[float] = [victim.damage, fastest]
+	await _teardown(stage, false)
+	return result
+
+## A shield bash shoves harder than a pickaxe swing and does less damage.
+func _scenario_shield_bash_knocks_back_harder_than_pickaxe() -> Array[String]:
+	var failures: Array[String] = []
+	var shield: Array[float] = await _shield_bash_result(SHIELD_PATH)
+	var pickaxe: Array[float] = await _shield_bash_result(PICKAXE_STARTER_PATH)
+	print("      bash: shield dmg %.1f speed %.0f; pickaxe dmg %.1f speed %.0f" % [shield[0], shield[1], pickaxe[0], pickaxe[1]])
+	if shield[1] < pickaxe[1] * 1.5:
+		failures.append("the shield bash moved the victim %.0f px/s, not clearly more than the pickaxe's %.0f" % [shield[1], pickaxe[1]])
+	if shield[0] >= pickaxe[0]:
+		failures.append("the shield bash did %.1f damage, not less than the pickaxe's %.1f" % [shield[0], pickaxe[0]])
+	_scenario_completed = true
+	return failures
+
+## The shield is something a pickup can hand out.
+func _scenario_shield_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(SHIELD_PATH):
+		failures.append("the shield is not in the pickup weapon paths")
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == SHIELD_PATH
+	if not found:
+		failures.append("the shield is not among the loaded pickup weapons")
 	_scenario_completed = true
 	return failures
