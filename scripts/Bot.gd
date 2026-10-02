@@ -134,6 +134,17 @@ const FOOT_SLACK: float = 20.0
 const SCAN_STEP: float = 25.0
 ## A gap this wide or narrower is stepped over; a wider one is waited at.
 const GAP_STEP_MAX: float = 60.0
+## Issue #409: two bots on either side of a wider gap each wait at their own
+## edge for the other, and a round that needs them to meet (King of the Hill,
+## Stock's last two lives) never ends. Held at an edge this long with a goal on
+## the far side, the bot tries a gap up to this wide.
+const EDGE_PATIENCE_SEC: float = 3.0
+const GAP_STEP_DESPERATE: float = 150.0
+## Issue #409: a pickup on a platform the bot cannot get onto drew two bots
+## round and round beneath it for the whole round. After this long on the same
+## pickup the bot drops it for PICKUP_IGNORE_SEC and goes back to fighting.
+const PICKUP_GIVE_UP_SEC: float = 10.0
+const PICKUP_IGNORE_SEC: float = 90.0
 ## Nearer than this to an edge, with nowhere to go that way, the bot steps
 ## back from it.
 const EDGE_KEEP: float = 75.0
@@ -237,6 +248,14 @@ var _wiggle_left: float = 0.0
 ## True while the way to the goal is blocked by an edge or a hazard, and the
 ## bot waits there rather than going over.
 var _held_at_edge: bool = false
+## Seconds spent held at an edge this stretch (#409).
+var _edge_wait: float = 0.0
+## The bot's own clock, the pickup it is chasing and since when, and the ones
+## it gave up on (instance id -> clock when it may look again) (#409).
+var _clock: float = 0.0
+var _chasing: Node2D = null
+var _chase_since: float = 0.0
+var _ignored_pickups: Dictionary = {}
 ## The side the bot is fleeing a danger to, kept while it flees so a bot
 ## right under a rock's middle does not dither from side to side.
 var _flee_side: float = 0.0
@@ -300,7 +319,10 @@ func think(delta: float) -> Vector2:
 		_gusts.clear()
 		_danger_frame = -1
 		_pad_route = false
+		_edge_wait = 0.0
+		_held_at_edge = false
 		return Vector2.ZERO
+	_clock += delta
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
 		_aggression = _aggression_now()
@@ -474,7 +496,14 @@ func _choose_goal() -> void:
 			goal = me
 	elif pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR):
 		goal = pickup.global_position
+		if pickup != _chasing:
+			_chasing = pickup
+			_chase_since = _clock
+		elif _clock - _chase_since > PICKUP_GIVE_UP_SEC:
+			_ignored_pickups[pickup.get_instance_id()] = _clock + PICKUP_IGNORE_SEC
+			_chasing = null
 	elif enemy != null:
+		_chasing = null
 		_target = enemy
 		goal = enemy.global_position
 	else:
@@ -556,6 +585,8 @@ func _nearest_pickup() -> Node2D:
 	var best_distance: float = INF
 	for pickup: Node in player.get_tree().get_nodes_in_group("pickups"):
 		if not is_instance_valid(pickup) or pickup.is_queued_for_deletion() or not pickup.is_inside_tree():
+			continue
+		if float(_ignored_pickups.get(pickup.get_instance_id(), -1.0)) > _clock:
 			continue
 		var at: Vector2 = (pickup as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
@@ -836,7 +867,7 @@ func _edge_room(side: float, limit: float, past_danger: bool = false) -> float:
 		if not _can_step(_footing(me + Vector2(side * d, 0.0), past_danger), from):
 			var gap_end: float = d + SCAN_STEP
 			var crossed: bool = false
-			while gap_end <= d + GAP_STEP_MAX:
+			while gap_end <= d + _gap_limit():
 				if _can_step(_footing(me + Vector2(side * gap_end, 0.0), past_danger), from):
 					crossed = true
 					break
@@ -846,6 +877,11 @@ func _edge_room(side: float, limit: float, past_danger: bool = false) -> float:
 			d = gap_end
 		d += SCAN_STEP
 	return limit
+
+## The widest gap the bot steps over now: wider once it has waited at an edge
+## for the way across (#409).
+func _gap_limit() -> float:
+	return GAP_STEP_DESPERATE if _edge_wait >= EDGE_PATIENCE_SEC else GAP_STEP_MAX
 
 ## Whether the bot could walk to `x` on ground it trusts, at its own
 ## height, stepping over narrow gaps only (issue #176). Checked coarsely:
@@ -865,7 +901,7 @@ func _walkable_to(x: float) -> bool:
 			bad_run = 0.0
 		else:
 			bad_run += step
-			if bad_run > GAP_STEP_MAX:
+			if bad_run > _gap_limit():
 				return false
 		d += step
 	return true
@@ -1088,6 +1124,10 @@ func _track_progress(delta: float) -> void:
 		return
 	# Waiting at an edge on purpose is not being stuck: a wiggle there is
 	# how a bot used to hop off it (issue #176).
+	if mode == "move" and _held_at_edge:
+		_edge_wait += delta
+	else:
+		_edge_wait = 0.0
 	if (mode != "move" and mode != "flee") or _held_at_edge:
 		_progress_from = player.global_position
 		_progress_left = STUCK_SEC

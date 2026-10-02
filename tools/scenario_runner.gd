@@ -591,6 +591,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_top_scorer_award_and_goal_credit",
 	"bot_soccer_pushes_the_ball_toward_the_enemy_goal",
 	"announcer_calls_soccer_and_goal",
+	"bot_four_bots_finish_a_king_of_the_hill_round",
+	"bot_four_bots_finish_a_stock_round",
 	"voice_grunts_one_distinct_quiet_voice_per_slot",
 	"voice_grunts_on_hit_and_ko",
 	"voice_grunts_respect_mute_and_settings_isolation",
@@ -2171,6 +2173,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal()
 		"announcer_calls_soccer_and_goal":
 			return await _scenario_announcer_calls_soccer_and_goal()
+		"bot_four_bots_finish_a_king_of_the_hill_round":
+			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round()
+		"bot_four_bots_finish_a_stock_round":
+			return await _scenario_bot_four_bots_finish_a_stock_round()
 		"voice_grunts_one_distinct_quiet_voice_per_slot":
 			return await _scenario_voice_grunts_one_distinct_quiet_voice_per_slot()
 		"voice_grunts_on_hit_and_ko":
@@ -30266,8 +30272,10 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 	for i in 3:
 		sum += MODE_SPAWNS[i]
 	var want: Vector2 = sum / 3.0
-	if not hill.hill_position.is_equal_approx(want):
-		failures.append("hill at %s, wants the spawn centre %s" % [hill.hill_position, want])
+	# Same x as the spawn centre; the spawns hang in the air, so the hill is
+	# dropped onto the floor below them (#409), never above.
+	if not is_equal_approx(hill.hill_position.x, want.x) or hill.hill_position.y < want.y:
+		failures.append("hill at %s, wants the spawn centre %s, or the floor under it" % [hill.hill_position, want])
 	if hill.hill_moves or not hill.hill_spots.is_empty():
 		failures.append("a stage with no spots reports spots or a moving hill")
 	await _teardown(rig["stage"])
@@ -30835,9 +30843,7 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 	panel.queue_free()
 	_scenario_completed = true
 	return failures
-
 # --- Soccer (issue #402) -------------------------------------------------------
-
 const SOCCER_STAGES_402: PackedStringArray = [
 	"res://scenes/stages/Pitch.tscn",
 	"res://scenes/stages/Cage.tscn",
@@ -31118,10 +31124,74 @@ func _scenario_announcer_calls_soccer_and_goal() -> Array[String]:
 		failures.append("the announcer said %s, expected 'announce_goal'" % [announcer.said])
 	await _teardown(rig["stage"])
 	return failures
-
 ## The closed Soccer pitches have no kill zone to be shoved into (#402).
 const RINGOUT_EXEMPT_402: PackedStringArray = SOCCER_STAGES_402
-
+## Issue #409: four bots on the real Flatlands, playing `mode` through the real
+## RoundManager. Returns the game seconds the round took, or -1.0 if it had not
+## ended after `cap_sec`. Failures are appended to `failures`.
+func _bot_round_409(mode: String, cap_sec: float, failures: Array[String]) -> float:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(float(i) * 100.0, -600.0))
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load("res://scenes/stages/Flatlands.tscn")]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = mode
+	rm.match_seed = 7
+	stage.add_child(rm)
+	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
+	if not await _mode_started(rig):
+		failures.append("the %s round never started" % mode)
+		await _teardown(stage)
+		return -1.0
+	for i in 4:
+		var bot: Node = BotScript.new()
+		bot.rng.seed = BOT_SEED + i
+		bot.player = players[i]
+		bot.output = players[i].set_input_vector
+		stage.add_child(bot)
+	var began: int = _game_msec()
+	var ended: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_END, int(cap_sec * 1000.0))
+	var took: float = float(_game_msec() - began) / 1000.0 if ended else -1.0
+	await _teardown(stage)
+	return took
+## Four bots in a King of the Hill round finish it before the cap: the hill
+## sits where a bot standing on the floor is inside it, and bots at either side
+## of a gap too wide to step over cross it rather than wait (#409).
+func _scenario_bot_four_bots_finish_a_king_of_the_hill_round() -> Array[String]:
+	var failures: Array[String] = []
+	var took: float = await _bot_round_409(GameModesType.KING_OF_THE_HILL, 200.0, failures)
+	print("      King of the Hill round with four bots took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a King of the Hill round in 200 s")
+	return failures
+## Four bots with one life each in a Stock round finish it before the cap.
+func _scenario_bot_four_bots_finish_a_stock_round() -> Array[String]:
+	var failures: Array[String] = []
+	_stock_settings(1, 480)
+	var took: float = await _bot_round_409(GameModesType.STOCK, 200.0, failures)
+	_stock_settings(3, 480)
+	print("      Stock round with four bots took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a Stock round in 200 s")
+	return failures
 # --- Voice grunts (issue #290) ---------------------------------------------------
 ## Grunt names for a slot. Eight voices, each with its own files.
 func _grunt_voice_files_290(sfx: Node) -> Dictionary:
