@@ -282,6 +282,7 @@ func _ready() -> void:
 		_enter_lobby()
 
 func _process(_delta: float) -> void:
+	_tick_final_ko()
 	_tick_spawn_protection()
 	_tick_ghosts()
 	_tick_name_tags()
@@ -521,11 +522,13 @@ func _check_round_end() -> void:
 		_scores[winner_slot] += 1
 		_buzz(winner_slot, "win")
 		round_won.emit(winner_slot)
+		var winner_point: Vector2 = _players[winner_slot].global_position
 		_players[winner_slot].leave_round()
 		_update_score_label()
 		_last_winner_slot = winner_slot
 		if lobby_enabled and _scores[winner_slot] >= _match_target:
 			_match_winner_slot = winner_slot
+			_start_final_ko(winner_point)
 			match_won.emit(winner_slot)
 	else:
 		_last_winner_slot = -1
@@ -594,7 +597,10 @@ func _watch_for_buzzes() -> void:
 			player.connect("weapon_picked_up", _on_weapon_picked_up.bind(slot))
 
 ## `attacker_slot` comes last because that is where the signal's bind puts it.
-func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
+func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool, attacker_slot: int) -> void:
+	if lethal:
+		_last_lethal_point = point
+		_has_lethal_point = true
 	_ko_record_hit(victim, amount, attacker_slot)
 	if amount <= 0.0:
 		return
@@ -933,6 +939,7 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
+	_end_final_ko()
 	_end_game_mode()
 	if _paused:
 		_set_tree_paused(false)
@@ -1073,6 +1080,7 @@ func _play_lobby_music() -> void:
 		music.play_lobby()
 
 func _enter_lobby() -> void:
+	_end_final_ko()
 	_play_lobby_music()
 	_state = State.LOBBY
 	_match_winner_slot = -1
@@ -1090,6 +1098,7 @@ func _enter_lobby() -> void:
 	_tick_lobby()
 
 func _enter_victory() -> void:
+	_end_final_ko()
 	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
 	_state = State.VICTORY
@@ -1613,6 +1622,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 			_buzz(slot, "win")
 		round_won.emit(winners[0] if not winners.is_empty() else -1)
 		team_round_won.emit(winner_team)
+	var team_point: Vector2 = _players[winners[0]].global_position if not winners.is_empty() else Vector2.ZERO
 	for slot: int in alive_slots:
 		if _players[slot].alive:
 			_players[slot].leave_round()
@@ -1622,6 +1632,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_team_keep_weapon = winners
 	if winner_team != -1 and lobby_enabled and _team_scores[winner_team] >= _match_target:
 		_match_winner_team = winner_team
+		_start_final_ko(team_point)
 		team_match_won.emit(winner_team)
 	_pickup_director.clear()
 	_stop_kill_zone_rise()
@@ -1985,6 +1996,81 @@ func _end_game_mode() -> void:
 		_game_mode_node.queue_free()
 		_game_mode_node = null
 
+# --- Final-KO slow motion (#328) ---
+# The KO that wins the match plays a beat of slow motion with the camera
+# punched in on the hit, while the announcer calls the winner (Announcer
+# listens to match_won). It runs on game time (GameClock), which moves at
+# Engine.time_scale, so it lasts FINAL_KO_GAME_MSEC / FINAL_KO_TIME_SCALE of
+# real time (about 1 s) and ends before the victory panel (#325) is entered.
+const FINAL_KO_TIME_SCALE: float = 0.3
+const FINAL_KO_GAME_MSEC: int = 300
+const FINAL_KO_ZOOM_FACTOR: float = 1.5
+const FINAL_KO_FLASH_ALPHA: float = 0.45
+
+var _last_lethal_point: Vector2 = Vector2.ZERO
+var _has_lethal_point: bool = false
+var _final_ko_active: bool = false
+var _final_ko_end_msec: int = 0
+var _final_ko_scale_was: float = 1.0
+var _final_ko_camera: Camera2D = null
+var _final_ko_zoom_was: Vector2 = Vector2.ONE
+var _final_ko_pos_was: Vector2 = Vector2.ZERO
+var _final_ko_flash: CanvasLayer = null
+
+func _start_final_ko(fallback_point: Vector2) -> void:
+	if _final_ko_active:
+		return
+	var point: Vector2 = _last_lethal_point if _has_lethal_point else fallback_point
+	_has_lethal_point = false
+	_final_ko_active = true
+	_final_ko_end_msec = GameClockScript.now_msec() + FINAL_KO_GAME_MSEC
+	_final_ko_scale_was = Engine.time_scale
+	Engine.time_scale = FINAL_KO_TIME_SCALE
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx == null or bool(sfx.get("screen_shake")):
+		var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
+		if camera != null:
+			_final_ko_camera = camera
+			_final_ko_zoom_was = camera.zoom
+			_final_ko_pos_was = camera.global_position
+			camera.zoom = camera.zoom * FINAL_KO_ZOOM_FACTOR
+			camera.global_position = point
+	if sfx == null or not bool(sfx.get("reduce_flash")):
+		_final_ko_flash = CanvasLayer.new()
+		_final_ko_flash.layer = 50
+		var rect := ColorRect.new()
+		rect.color = Color(1, 1, 1, FINAL_KO_FLASH_ALPHA)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_final_ko_flash.add_child(rect)
+		add_child(_final_ko_flash)
+
+func _tick_final_ko() -> void:
+	if _final_ko_active and GameClockScript.now_msec() >= _final_ko_end_msec:
+		_end_final_ko()
+
+## Puts the time scale, the camera and the flash back. Safe to call any time.
+func _end_final_ko() -> void:
+	if not _final_ko_active:
+		return
+	_final_ko_active = false
+	Engine.time_scale = _final_ko_scale_was
+	if is_instance_valid(_final_ko_camera):
+		_final_ko_camera.zoom = _final_ko_zoom_was
+		_final_ko_camera.global_position = _final_ko_pos_was
+		_final_ko_camera.reset_smoothing()
+	_final_ko_camera = null
+	if is_instance_valid(_final_ko_flash):
+		_final_ko_flash.queue_free()
+	_final_ko_flash = null
+
+## Whether the final-KO slow motion is playing (for the scenario suite).
+func final_ko_active() -> bool:
+	return _final_ko_active
+
+## The final-KO flash layer, or null (none, or reduce flashes is on).
+func final_ko_flash() -> CanvasLayer:
+	return _final_ko_flash
 # --- Ghosts of KO'd players (issue #324) ---------------------------------------
 
 const GhostScript := preload("res://scripts/Ghost.gd")

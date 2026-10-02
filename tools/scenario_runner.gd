@@ -490,6 +490,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"comfort_reduce_flash_suppresses_flash",
 	"comfort_ui_scale_enlarges_name_tags",
 	"comfort_settings_persist_across_reload",
+	"final_ko_slowmo_only_on_match_win_and_restores",
+	"final_ko_slowmo_respects_comfort_settings",
 	"default_colours_are_colour_blind_distinguishable",
 	"night_variant_applies_by_data",
 	"night_keeps_key_nodes_lit",
@@ -1894,6 +1896,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_comfort_ui_scale_enlarges_name_tags()
 		"comfort_settings_persist_across_reload":
 			return await _scenario_comfort_settings_persist_across_reload()
+		"final_ko_slowmo_only_on_match_win_and_restores":
+			return await _scenario_final_ko_slowmo_only_on_match_win_and_restores()
+		"final_ko_slowmo_respects_comfort_settings":
+			return await _scenario_final_ko_slowmo_respects_comfort_settings()
 		"default_colours_are_colour_blind_distinguishable":
 			return _scenario_default_colours_are_colour_blind_distinguishable()
 		"night_variant_applies_by_data":
@@ -28429,6 +28435,96 @@ func _scenario_feedback_rate_limit_per_ip() -> Array[String]:
 		failures.append("an empty message gave %s, expected 400" % [empty])
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+
+## Issue #328: the slow-mo plays only on the KO that wins the match, runs on
+## game time, and puts Engine.time_scale and the camera back exactly.
+func _scenario_final_ko_slowmo_only_on_match_win_and_restores() -> Array[String]:
+	var failures: Array[String] = []
+	var scale_was: float = Engine.time_scale
+	var loop: Dictionary = _new_lobby_round(2, 2.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var camera := Camera2D.new()
+	camera.name = "FinalKoCamera"
+	loop["stage"].add_child(camera)
+	loop["round_manager"].camera_path = NodePath("../FinalKoCamera")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	var zoom_before: Vector2 = Vector2.ONE
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			await _teardown(loop["stage"])
+			return failures
+		if camera != null:
+			zoom_before = camera.zoom
+		players[1].eliminate()
+		await _await_ticks(3)
+		if round_number == 0:
+			if rm.final_ko_active() or Engine.time_scale != scale_was:
+				failures.append("an ordinary round KO played the slow-mo (scale %.2f)" % Engine.time_scale)
+		else:
+			if not rm.final_ko_active() or not is_equal_approx(Engine.time_scale, 0.3):
+				failures.append("the match-winning KO did not slow time (scale %.2f)" % Engine.time_scale)
+	if not await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the slow-mo never ended")
+	print("      after slow-mo: time_scale %.2f" % Engine.time_scale)
+	if Engine.time_scale != scale_was:
+		failures.append("time_scale left at %.2f, expected %.2f" % [Engine.time_scale, scale_was])
+	if camera != null and not camera.zoom.is_equal_approx(zoom_before):
+		failures.append("camera zoom left at %s, expected %s" % [camera.zoom, zoom_before])
+	if rm.final_ko_flash() != null:
+		failures.append("the flash outlived the slow-mo")
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the victory screen never followed the slow-mo")
+	await _teardown(loop["stage"])
+	Engine.time_scale = scale_was
+	return failures
+
+## Issue #328 with #317: no zoom punch with screen shake off, no flash with
+## reduce flashes on; the slow-mo itself still plays.
+func _scenario_final_ko_slowmo_respects_comfort_settings() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var shake_was: bool = bool(sfx.get("screen_shake"))
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	var scale_was: float = Engine.time_scale
+	for comfort in [true, false]:
+		sfx.screen_shake = not comfort
+		sfx.reduce_flash = comfort
+		var loop: Dictionary = _new_lobby_round(1, 2.0)
+		var players: Array[RigidBody2D] = loop["players"]
+		var roster: Node = loop["roster"]
+		var rm: Node = loop["round_manager"]
+		var camera := Camera2D.new()
+		camera.name = "FinalKoCamera"
+		loop["stage"].add_child(camera)
+		rm.camera_path = NodePath("../FinalKoCamera")
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		roster.ready_slots = {0: true, 1: true}
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("comfort=%s: the round never started" % comfort)
+			await _teardown(loop["stage"])
+			continue
+		var zoom_before: Vector2 = camera.zoom if camera != null else Vector2.ONE
+		players[1].eliminate()
+		await _await_ticks(3)
+		if not rm.final_ko_active():
+			failures.append("comfort=%s: no slow-mo on the match-winning KO" % comfort)
+		var zoomed: bool = camera != null and not camera.zoom.is_equal_approx(zoom_before)
+		var flashing: bool = rm.final_ko_flash() != null
+		print("      comfort=%s: zoomed %s, flash %s" % [comfort, zoomed, flashing])
+		if camera != null and zoomed == comfort:
+			failures.append("comfort=%s: zoomed=%s, expected %s" % [comfort, zoomed, not comfort])
+		if flashing == comfort:
+			failures.append("comfort=%s: flash=%s, expected %s" % [comfort, flashing, not comfort])
+		await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC)
+		await _teardown(loop["stage"])
+		Engine.time_scale = scale_was
+	sfx.screen_shake = shake_was
+	sfx.reduce_flash = flash_was
 	return failures
 
 # --- Colour-blind distinguishability of the default slot colours (#330) -------

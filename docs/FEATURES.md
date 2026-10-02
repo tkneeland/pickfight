@@ -46,6 +46,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Match flow and scoring
 - Endless round loop over the live roster (ADR-0004, ADR-0007)
 - Matches: first to N rounds, host picks N; victory podium (#120)
+- The match-winning KO plays about 1 s of slow motion with the camera punched in on the hit and a brief flash, then goes to the victory panel; no zoom with screen shake off, no flash with reduce flashes on (#328)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
 - Night stages (#332): about 1 round in 5 plays its stage as a night variant, applied by data (`Stage.night`, rolled per round by `RoundManager.night_chance`, from its own RNG; off with the modifier-roll seam, `forced_night` overrides). Darker Night palette with stars, lamps over the spawns, and a soft glow on players, weapon heads, pickups and hazards. Visual only. Lighting is `CanvasModulate` plus shadowless `PointLight2D` (works with the Compatibility renderer); lamps hold steady with Reduce flashes on
