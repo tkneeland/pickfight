@@ -646,6 +646,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_hud_match_result_podium_and_leave",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
+	"telemetry_toggle_defaults_on_and_persists",
+	"telemetry_off_sends_no_record_on_still_does",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2333,6 +2335,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
 			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
+		"telemetry_toggle_defaults_on_and_persists":
+			return await _scenario_telemetry_toggle_defaults_on_and_persists()
+		"telemetry_off_sends_no_record_on_still_does":
+			return await _scenario_telemetry_off_sends_no_record_on_still_does()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -30749,7 +30755,7 @@ func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
 		ui.refresh()
 		if box == null or not box.button_pressed:
 			failures.append("the Send anonymous match stats box is missing or not on by default")
-		elif box.text != "Send anonymous match stats":
+		elif box.text != "Share anonymous match stats":
 			failures.append("box text was '%s'" % box.text)
 		else:
 			box.button_pressed = false
@@ -30757,7 +30763,8 @@ func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
 				failures.append("unticking the box left sharing on")
 	_scenario_completed = true
 	return failures
-## Issue #372: the first-launch notice shows until dismissed or acted on, then never.
+## Issue #372, amended by #461: the first-launch notice never shows, on a
+## fresh settings file or after, and sharing stays on by default.
 func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -30766,41 +30773,15 @@ func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	await physics_frame
 	var ui: CanvasLayer = sfx.build_settings_ui()
 	await physics_frame
-	var path: String = OS.get_temp_dir().path_join("pf_372_notice_%d.cfg" % OS.get_process_id())
-	DirAccess.remove_absolute(path)
-	var host: RefCounted = HostSettingsScript372.new()
-	host.path = path
-	ui.host = host
+	var fresh: RefCounted = HostSettingsScript372.new()
+	fresh.persist = false
+	ui.host = fresh
 	ui.refresh()
 	var notice: Control = ui.telemetry_notice()
-	if notice == null or not notice.visible:
-		failures.append("the notice was not shown on first launch")
-	elif ui.telemetry_notice_label().text != "Pickfight sends anonymous match stats to help balance the game":
-		failures.append("notice text was '%s'" % ui.telemetry_notice_label().text)
-	ui.telemetry_dismiss_button().pressed.emit()
-	if notice.visible:
-		failures.append("the notice stayed after Dismiss")
-	if not host.share_stats:
-		failures.append("Dismiss turned sharing off")
-	var again: RefCounted = HostSettingsScript372.new()
-	again.path = path
-	again.load_settings()
-	if not again.telemetry_notice_seen:
-		failures.append("the dismissal did not persist")
-	ui.host = again
-	ui.refresh()
-	if notice.visible:
-		failures.append("the notice came back on the next launch")
-	DirAccess.remove_absolute(path)
-	var second: RefCounted = HostSettingsScript372.new()
-	second.persist = false
-	ui.host = second
-	ui.refresh()
-	if not notice.visible:
-		failures.append("a fresh settings file should show the notice again")
-	ui.telemetry_turn_off_button().pressed.emit()
-	if notice.visible or second.share_stats or not second.telemetry_notice_seen:
-		failures.append("Turn off should hide the notice, switch sharing off and mark it seen")
+	if notice != null and notice.visible:
+		failures.append("the first-launch notice showed on a fresh settings file (#461: never)")
+	if not fresh.share_stats:
+		failures.append("sharing should default to on")
 	_scenario_completed = true
 	return failures
 func _telemetry_relay_record_372() -> Dictionary:
@@ -32265,6 +32246,7 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	await _teardown(rig["main"])
 	return failures
 func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[String]:
+	# Amended by #461: the notice never shows, so View opens the panel as usual.
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
 	if sfx == null:
@@ -32276,20 +32258,8 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 	var was_seen: bool = ui.host.telemetry_notice_seen
 	ui.host.telemetry_notice_seen = false
 	ui.refresh()
-	if not ui.telemetry_notice().visible:
-		failures.append("the notice is not showing")
-	await _pad_tap_368(0, JOY_BUTTON_BACK)
-	if ui.is_open():
-		failures.append("View opened the panel while the notice was up; it should focus the notice")
-	if get_root().gui_get_focus_owner() != ui.telemetry_dismiss_button():
-		failures.append("View did not focus the notice's OK button (focus is %s)" % get_root().gui_get_focus_owner())
-	await _pad_tap_368(0, JOY_BUTTON_A)
 	if ui.telemetry_notice().visible:
-		failures.append("A did not dismiss the notice")
-	if PadMenuScript368.is_open():
-		failures.append("the gamepad menu stayed open after the notice went")
-	if ui.telemetry_dismiss_button().focus_mode != Control.FOCUS_NONE:
-		failures.append("the notice buttons stayed focusable")
+		failures.append("the first-launch notice showed (#461: never)")
 	ui.host.telemetry_notice_seen = was_seen
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
@@ -33589,4 +33559,58 @@ func _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line() -> Array[String]
 			failures.append("%s: feed %s or score line %s is off-screen" % [size, feed_rect, score_rect])
 	get_root().size = was_size
 	await _teardown(main)
+	return failures
+
+# --- Issue #461: telemetry opt-out toggle --------------------------------------
+## Issue #461: sharing defaults on, the box is the last row in More options, and
+## an off setting persists across a reload.
+func _scenario_telemetry_toggle_defaults_on_and_persists() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pf_461_toggle_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = HostSettingsScript372.new()
+	fresh.path = path
+	fresh.load_settings()
+	if not fresh.share_stats:
+		failures.append("sharing should default to on")
+	fresh.set_share_stats(false)
+	var reloaded: RefCounted = HostSettingsScript372.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.share_stats:
+		failures.append("off did not persist across a reload")
+	reloaded.set_share_stats(true)
+	var again: RefCounted = HostSettingsScript372.new()
+	again.path = path
+	again.load_settings()
+	if not again.share_stats:
+		failures.append("on did not persist across a reload")
+	DirAccess.remove_absolute(path)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		await physics_frame
+		var box: CheckBox = ui.stats_box()
+		if box == null:
+			failures.append("the stats box is missing")
+		else:
+			if box.text != "Share anonymous match stats":
+				failures.append("label was '%s'" % box.text)
+			var siblings: Array[Node] = box.get_parent().get_children()
+			if siblings.back() != box:
+				failures.append("the box is not last in More options (last is %s)" % siblings.back().name)
+	_scenario_completed = true
+	return failures
+## Issue #461: with sharing off a match end sends nothing; with it on a record is
+## still produced and the gate lets it through.
+func _scenario_telemetry_off_sends_no_record_on_still_does() -> Array[String]:
+	var failures: Array[String] = []
+	var record: Dictionary = StatsSenderScript372.build_record(_telemetry_stats_372(), "stock", ["Flatlands"], "ffa", 60, [2])
+	if record.is_empty():
+		failures.append("a match with a damaging hit should give a record")
+	if not StatsSenderScript372.should_send(_telemetry_settings_372(true), false, PackedStringArray()):
+		failures.append("sharing on did not send")
+	if StatsSenderScript372.should_send(_telemetry_settings_372(false), false, PackedStringArray()):
+		failures.append("sharing off still sent")
+	_scenario_completed = true
 	return failures
