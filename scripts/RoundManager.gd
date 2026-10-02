@@ -268,6 +268,8 @@ func _ready() -> void:
 	if _controller_server != null and _controller_server.has_signal("host_command"):
 		_controller_server.connect("host_command", _on_host_command)
 	_watch_for_lobby_changes()
+	if _controller_server != null and _controller_server.has_signal("steal_requested"):
+		_controller_server.connect("steal_requested", _on_steal_requested)
 	if _controller_server != null and _controller_server.has_signal("player_joined"):
 		_controller_server.connect("player_joined", _on_slot_claimed_fresh)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
@@ -501,11 +503,7 @@ func _check_round_end() -> void:
 		_check_team_round_end(after_kick)
 		return
 	_flush_kos()
-	var alive_slots: Array[int] = []
-	for slot in _players.size():
-		var player: Variant = _players[slot]
-		if player != null and player.alive:
-			alive_slots.append(slot)
+	var alive_slots: Array[int] = _alive_slots()
 	# Nobody left, but someone was the last one standing on an earlier physics
 	# tick of this frame: they won before they fell (#163).
 	if alive_slots.is_empty() and _survivor_slot != -1:
@@ -563,6 +561,13 @@ func _watch_for_survivor() -> void:
 			player.connect("eliminated", _on_eliminated_check_survivor.bind(slot))
 
 func _on_eliminated_check_survivor(slot: int) -> void:
+	# Stock decides who is still standing (a life left) itself, then calls
+	# `_record_survivor()`; here the lives would not be counted yet.
+	if _game_mode_node != null and _game_mode_node.has_method("is_pending"):
+		return
+	_record_survivor(slot)
+
+func _record_survivor(slot: int) -> void:
 	if _state != State.ROUND_ACTIVE:
 		return
 	if _team_mode:
@@ -815,6 +820,7 @@ func _floor_kill_zone() -> Node2D:
 ## Round start: arm the rise so it reaches the highest spawn
 ## `kill_zone_rise_sec` after the grace period ends.
 func _start_kill_zone_rise() -> void:
+	if active_game_mode_id() == GameModesScript.STOCK: return  # Stock has no rise (#354)
 	var zone: Node2D = _floor_kill_zone()
 	if zone == null or _stage_spawn_points.is_empty():
 		return
@@ -1273,6 +1279,9 @@ func _publish_lobby_state() -> void:
 		"paused": _paused,
 	}
 	_add_team_state(state, roster, in_lobby)
+	if game_mode == GameModesScript.STOCK:  # the host phone's Stock controls (#354)
+		var settings: RefCounted = HostSettingsScript.shared()
+		state["stock"] = {"lives": settings.stock_lives, "time": settings.stock_time_limit}
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -1368,16 +1377,19 @@ var _name_tags: Node2D
 func name_tag(slot: int) -> Label:
 	return _name_tags.name_tag(slot) if _name_tags != null else null
 
+## Slots still standing: alive, or waiting to respawn in Stock (#354).
 func _alive_slots() -> Array[int]:
 	var alive: Array[int] = []
+	var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
 	for slot in _players.size():
-		if _players[slot] != null and _players[slot].alive:
+		if _players[slot] != null and (_players[slot].alive or (stock and _game_mode_node.is_pending(slot))):
 			alive.append(slot)
 	return alive
 
 func _tick_name_tags() -> void:
 	if _name_tags == null:
 		_name_tags = NameTagsScript.new(_players, _slot_name, _slot_color)
+		_name_tags.lives_of = lives_of
 		add_child(_name_tags)
 		_name_tags.build()
 	_name_tags.tick()
@@ -2023,6 +2035,7 @@ func _tick_lobby_sandbox(roster: Array[int]) -> void:
 # round's modifier is (`_end_round_modifier()`), so it never leaks into the next.
 
 const GameModesScript := preload("res://scripts/GameModes.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 ## A `GameModes` id every round plays under, or "" for none. Host-set seam.
 @export var game_mode: String = ""
 var _game_mode_node: Node = null
@@ -2045,6 +2058,17 @@ func _start_game_mode() -> void:
 	add_child(_game_mode_node)
 	_game_mode_node.setup(self)
 	_game_mode_node.start_round(_in_round.duplicate())
+
+## A phone's "Steal a life" (Stock in Teams, #354).
+func _on_steal_requested(slot: int) -> void:
+	if _game_mode_node != null and _game_mode_node.has_method("steal_life"):
+		_game_mode_node.steal_life(slot)
+
+## `slot`'s lives for its name tag's pips, or -1 outside Stock.
+func lives_of(slot: int) -> int:
+	if _game_mode_node != null and _game_mode_node.has_method("lives_of"):
+		return _game_mode_node.lives_of(slot)
+	return -1
 
 func _end_game_mode() -> void:
 	if _game_mode_node != null:
@@ -2147,8 +2171,15 @@ func _tick_ghosts() -> void:
 	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
 	for slot in _in_round:
 		var player: Variant = _players[slot]
+		var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
+		if stock and (player == null or player.alive or _game_mode_node.is_pending(slot)) and _ghosts.has(slot):
+			if is_instance_valid(_ghosts[slot]):
+				(_ghosts[slot] as Node).queue_free()
+			_ghosts.erase(slot)
 		if player == null or player.alive or not claimed.has(slot):
 			continue
+		if stock and _game_mode_node.is_pending(slot):
+			continue  # a life left: coming back, no ghost yet (#354)
 		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
 			continue
 		if _ghosts.has(slot) and is_instance_valid(_ghosts[slot]):

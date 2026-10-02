@@ -41,6 +41,13 @@ var persist: bool = true
 var resolution: Vector2i = Vector2i.ZERO
 var disabled_stages: PackedStringArray = []
 var disabled_weapons: PackedStringArray = []
+## Stock mode (#354): lives per player (1-10) and the time limit in seconds
+## (one of STOCK_TIME_LIMITS; 0 is no limit).
+const STOCK_MIN_LIVES: int = 1
+const STOCK_MAX_LIVES: int = 10
+const STOCK_TIME_LIMITS: Array[int] = [120, 300, 480, 900, 0]
+var stock_lives: int = 3
+var stock_time_limit: int = 480
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
@@ -83,6 +90,18 @@ func set_stage_enabled(stage_name: String, enabled: bool) -> bool:
 func set_weapon_enabled(weapon_name: String, enabled: bool) -> bool:
 	return _set_enabled(disabled_weapons, known_weapons(), weapon_name, enabled)
 
+func set_stock_lives(lives: int) -> void:
+	stock_lives = clampi(lives, STOCK_MIN_LIVES, STOCK_MAX_LIVES)
+	save_settings()
+
+## Returns false (changing nothing) for a limit that is not on offer.
+func set_stock_time_limit(seconds: int) -> bool:
+	if not STOCK_TIME_LIMITS.has(seconds):
+		return false
+	stock_time_limit = seconds
+	save_settings()
+	return true
+
 func set_resolution(size: Vector2i) -> void:
 	resolution = size
 	save_settings()
@@ -111,6 +130,10 @@ func load_settings() -> void:
 		resolution = size if size is Vector2i else Vector2i.ZERO
 		disabled_stages = PackedStringArray(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
 		disabled_weapons = PackedStringArray(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
+		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
+		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
+		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
+		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
 
@@ -125,6 +148,8 @@ func save_settings() -> void:
 	config.set_value(SECTION, "resolution", resolution)
 	config.set_value(SECTION, "disabled_stages", disabled_stages)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
+	config.set_value(SECTION, "stock_lives", stock_lives)
+	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
 	err = config.save(path)
 	if err != OK:
 		push_warning("HostSettings: could not save to %s (%s)" % [path, error_string(err)])
