@@ -269,16 +269,33 @@ func _pad_input() -> void:
 ## bits a wrapping count, bit 7 set when the latest press was a shoulder (a
 ## hold, which can throw the boomerang but never toggles release). The host
 ## decides whether a press throws the boomerang or toggles release.
+## Issue #485: the count is of TAPS, and the client decides tap vs hold itself
+## on key-up (down and up within TAP_MAX_SEC). A hold is not counted; instead
+## byte 8 (the held flag) is set while a shoulder is down, or while Space / L3 /
+## R3 has been down longer than TAP_MAX_SEC. Bit 7 marks a shoulder tap.
+const TAP_MAX_SEC: float = 0.25
+const GameClockScript: GDScript = preload("res://scripts/GameClock.gd")
 var action_presses: int = 0
 var _action_was_hold: bool = false
+## Game-clock msec each non-shoulder action button (keycode or joypad button) went down.
+var _action_down: Dictionary = {}
+var _shoulder_down_msec: int = -1
+var _pad_shoulder_held: bool = false
 
 func _action_press(hold: bool) -> void:
 	action_presses = (action_presses + 1) & 0x7F
 	_action_was_hold = hold
-var _pad_shoulder_held: bool = false
+
+func _tapped(down_msec: int) -> bool:
+	return float(GameClockScript.now_msec() - down_msec) <= TAP_MAX_SEC * 1000.0
 
 func input_released() -> bool:
-	return _pad_shoulder_held
+	if _pad_shoulder_held:
+		return true
+	for down: int in _action_down.values():
+		if not _tapped(down):
+			return true
+	return false
 
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
@@ -288,9 +305,13 @@ func _input(event: InputEvent) -> void:
 		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
 			_pad_shoulder_held = pad_button.pressed
 			if pad_button.pressed:
-				_action_press(true)
-		elif pad_button.pressed and (pad_button.button_index == JOY_BUTTON_LEFT_STICK or pad_button.button_index == JOY_BUTTON_RIGHT_STICK):
-			_action_press(false)
+				_shoulder_down_msec = GameClockScript.now_msec()
+			else:
+				if _shoulder_down_msec != -1 and _tapped(_shoulder_down_msec):
+					_action_press(true)
+				_shoulder_down_msec = -1
+		elif pad_button.button_index == JOY_BUTTON_LEFT_STICK or pad_button.button_index == JOY_BUTTON_RIGHT_STICK:
+			_action_edge(pad_button.button_index, pad_button.pressed)
 		return
 	var motion := event as InputEventMouseMotion
 	if motion != null:
@@ -298,12 +319,22 @@ func _input(event: InputEvent) -> void:
 			mouse_motion(motion.relative)
 		return
 	var key := event as InputEventKey
-	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE and not menu_open:
-		_action_press(false)
+	if key != null and key.physical_keycode == KEY_SPACE and not key.echo and (not key.pressed or not menu_open):
+		_action_edge(-KEY_SPACE, key.pressed)
 		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
+
+## A non-shoulder action button went down or came up: a tap counts on key-up.
+func _action_edge(id: int, pressed: bool) -> void:
+	if pressed:
+		_action_down[id] = GameClockScript.now_msec()
+	elif _action_down.has(id):
+		var down: int = _action_down[id]
+		_action_down.erase(id)
+		if _tapped(down):
+			_action_press(false)
 
 # --- Joining ----------------------------------------------------------------------
 
@@ -460,6 +491,8 @@ func _return_to_join(message: String, show_update_link: bool = false) -> void:
 	menu_open = false
 	action_presses = 0
 	_pad_shoulder_held = false
+	_action_down.clear()
+	_shoulder_down_msec = -1
 	_mouse.reset()
 	input_vector = Vector2.ZERO
 	_set_captured(false)
