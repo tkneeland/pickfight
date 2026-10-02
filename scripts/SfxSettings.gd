@@ -36,6 +36,7 @@ const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
+const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
 ## Height of the scrolling window-size, stage and weapon area.
 const LIST_HEIGHT: float = 130.0
 
@@ -72,6 +73,7 @@ var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _scale_button: OptionButton
+var _host_match: VBoxContainer
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -118,6 +120,9 @@ func _ready() -> void:
 	corner.add_child(_panel)
 	var rows := VBoxContainer.new()
 	_panel.add_child(rows)
+	# Issue #458: an Online host's Pause, End match and Kick lead the panel mid-match.
+	_host_match = HostMatchMenuScript.new()
+	rows.add_child(_host_match)
 	_slider = _add_slider(rows, "Volume", tr("SETTINGS_MASTER_VOLUME"))
 	_sfx_slider = _add_slider(rows, "SfxVolume", tr("SETTINGS_SFX"))
 	_music_slider = _add_slider(rows, "MusicVolume", tr("SETTINGS_MUSIC"))
@@ -281,8 +286,13 @@ func refresh() -> void:
 	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
 	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
 	_rebuild_rules()
+	_host_match.refresh()
 	if PadMenuScript.is_open():
 		_chain_pad_focus()
+
+## The host PC's match controls at the top of the panel (issue #458).
+func host_match_menu() -> VBoxContainer:
+	return _host_match
 
 ## Esc can close the panel mid-drag, and the slider then never reports the
 ## drag's end: finish it here and save what it left (issue #196).
