@@ -36,6 +36,7 @@ const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
+const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
 ## Height of the scrolling window-size, stage and weapon area.
 const LIST_HEIGHT: float = 130.0
 
@@ -72,6 +73,7 @@ var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _scale_button: OptionButton
+var _host_match: VBoxContainer
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -118,6 +120,9 @@ func _ready() -> void:
 	corner.add_child(_panel)
 	var rows := VBoxContainer.new()
 	_panel.add_child(rows)
+	# Issue #458: an Online host's Pause, End match and Kick lead the panel mid-match.
+	_host_match = HostMatchMenuScript.new()
+	rows.add_child(_host_match)
 	_slider = _add_slider(rows, "Volume", tr("SETTINGS_MASTER_VOLUME"))
 	_sfx_slider = _add_slider(rows, "SfxVolume", tr("SETTINGS_SFX"))
 	_music_slider = _add_slider(rows, "MusicVolume", tr("SETTINGS_MUSIC"))
@@ -154,7 +159,6 @@ func _ready() -> void:
 	content.add_child(_resolution)
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
-	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
@@ -164,6 +168,8 @@ func _ready() -> void:
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
 	_build_rules(content)
+	# Last in More options, kept quiet (issue #461).
+	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
@@ -274,15 +280,22 @@ func refresh() -> void:
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
-	_notice.visible = not host.telemetry_notice_seen
+	# Issue #461: the owner wants telemetry unnoticed by default, so the #372
+	# first-launch notice never shows; the Settings toggle is the only control.
+	_notice.visible = false
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
 	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
 	_rebuild_rules()
+	_host_match.refresh()
 	if PadMenuScript.is_open():
 		_chain_pad_focus()
+
+## The host PC's match controls at the top of the panel (issue #458).
+func host_match_menu() -> VBoxContainer:
+	return _host_match
 
 ## Esc can close the panel mid-drag, and the slider then never reports the
 ## drag's end: finish it here and save what it left (issue #196).

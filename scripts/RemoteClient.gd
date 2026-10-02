@@ -29,6 +29,7 @@ const PaletteScript: GDScript = preload("res://scripts/Palette.gd")
 const PickupWeaponsScript: GDScript = preload("res://scripts/PickupWeapons.gd")
 const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -61,6 +62,9 @@ var client_id: String = ""
 var player_name: String = ""
 ## Sent in the hello; a scenario sets another to see a version mismatch refused.
 var protocol_version: int = ControllerServerScript.PROTOCOL_VERSION
+## Sent in the hello (#447): the host refuses a build that is not its own.
+## A scenario sets it to try the other build against the same host.
+var demo_build: bool = DemoBuildScript.is_active()
 var room_code: String = ""
 var slot: int = -1
 var peer_id: int = 0
@@ -177,6 +181,10 @@ static func reason_text(reason: String) -> String:
 			return TranslationServer.translate("JOIN_ERR_IDLE")
 		"version":
 			return TranslationServer.translate("JOIN_ERR_VERSION")
+		"full_only":
+			return TranslationServer.translate("JOIN_ERR_FULL_ONLY")
+		"demo_only":
+			return TranslationServer.translate("JOIN_ERR_DEMO_ONLY")
 		"removed by the host":
 			return TranslationServer.translate("JOIN_ERR_REMOVED")
 		"opened somewhere else":
@@ -322,7 +330,7 @@ func _on_relay_text(text: String) -> void:
 			peer_id = int(msg.get("peer", 0))
 			_phase = Phase.HELLO
 			_set_status(tr("JOIN_WAITING_HOST") % room_code)
-			_send_json({"id": client_id, "proto": protocol_version})
+			_send_json({"id": client_id, "proto": protocol_version, "demo": demo_build})
 		"error":
 			_return_to_join(reason_text(str(msg.get("reason", "unknown"))), str(msg.get("reason", "")) == "version")
 
