@@ -113,10 +113,10 @@ func push_ko(killer_name: String, killer_color: Color, victim_name: String, vict
 	panel.add_child(row)
 	if killer_name.is_empty():
 		row.add_child(_label(victim_name, FEED_FONT, victim_color))
-		row.add_child(_label("self-KO", FEED_FONT, Color(0.8, 0.82, 0.88)))
+		row.add_child(_label(tr("FEED_SELF_KO"), FEED_FONT, Color(0.8, 0.82, 0.88)))
 	else:
 		row.add_child(_label(killer_name, FEED_FONT, killer_color))
-		row.add_child(_label("KO", FEED_FONT, ACCENT))
+		row.add_child(_label(tr("FEED_KO"), FEED_FONT, ACCENT))
 		row.add_child(_label(victim_name, FEED_FONT, victim_color))
 	panel.set_meta("age", 0.0)
 	_feed.add_child(panel)
@@ -182,7 +182,7 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 		var card := VBoxContainer.new()
 		card.name = "Award" + str(award["category"]).capitalize()
 		card.add_theme_constant_override("separation", 0)
-		var category: Label = _label(str(award["category"]), 18, Color(0.8, 0.82, 0.88))
+		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18, Color(0.8, 0.82, 0.88))
 		category.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(category)
 		var title: Label = _label(str(award["title"]), 30, ACCENT)
@@ -213,7 +213,7 @@ static func stat_table(rows: Array, name_of: Callable, color_of: Callable) -> HB
 			table.add_child(column)
 		var row: Dictionary = rows[i]
 		var slot: int = int(row["slot"])
-		var line: Label = _label("%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s" % [
+		var line: Label = _label(TranslationServer.translate("STATS_LINE") % [
 			str(name_of.call(slot)).left(10), row["kos"], row["damage_dealt"], row["damage_taken"],
 			row["self_kos"], row["pickups"], row["weapon"] if row["weapon"] != "" else "-"], 16, color_of.call(slot))
 		line.name = "Stats%d" % slot

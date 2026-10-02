@@ -108,6 +108,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
+- All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
