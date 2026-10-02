@@ -15,7 +15,7 @@ Built with Godot 4.6.
 ## Status
 
 Early prototype, ready for playtesting. `scenes/Main.tscn` runs the endless
-round loop for up to eight phone-controlled players across 24 rotating
+round loop for up to eight players (phones or gamepads in a room, or PCs online) across 24 rotating
 stages, some built around moving platforms, crumbling ledges, falling rocks,
 wind and hazard walls; the largest stages only come up when enough players
 are in the round. Eleven weapons exist (pickaxe, staff, sword, axe, dagger,
@@ -37,9 +37,15 @@ for it. Your weapon's head can't grab them, so you have to get there.
 
 ## Controls
 
-Everyone plays from their **phone**. One host machine runs the game and
+A match is either **Local** or **Online**, never mixed ([ADR-0021](docs/adr/0021-local-or-online-matches.md)).
+
+**Local:** players use their **phone**, the browser controller page, or a gamepad plugged into the host. One host machine runs the game and
 renders the shared screen, and serves a controller web page over the local
-network — players join by opening a URL, no install.
+network — players join by opening a URL or scanning the QR, no install.
+The host's mouse takes no seat.
+
+**Online:** every player runs their own copy and plays with the mouse or a
+gamepad, joining by room code. Phones and the controller page are not used.
 
 Input is a **drag vector**: direction sets the weapon's angle, distance sets
 how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).

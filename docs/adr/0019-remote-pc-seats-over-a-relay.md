@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-30
+- Amended by [ADR-0021](0021-local-or-online-matches.md): a match is Local or Online, never mixed.
 
 ## Context
 
