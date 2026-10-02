@@ -542,6 +542,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"streamer_mode_setting_persists_across_reload",
 	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
+	"competitive_stages_load_rotate_and_are_flagged",
+	"competitive_stages_are_left_right_symmetric",
+	"competitive_stages_have_no_hazards_or_moving_parts",
+	"round_modifier_gale_pushes_players_and_undoes",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
 	"demo_build_only_slice_weapons_spawn",
@@ -552,6 +556,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_random_pick_is_an_enabled_stage_held_all_match",
 	"stock_never_rolls_a_modifier",
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
+	"hot_potato_stages_load_and_are_in_rotation",
+	"hot_potato_draws_its_stages_more_often",
+	"koth_stages_load_and_are_in_rotation",
+	"koth_hill_starts_on_first_hill_spot",
+	"koth_moving_hill_warns_then_moves",
+	"koth_stage_without_spots_uses_spawn_centre",
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
@@ -2031,6 +2041,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"competitive_stages_load_rotate_and_are_flagged":
+			return await _scenario_competitive_stages_load_rotate_and_are_flagged()
+		"competitive_stages_are_left_right_symmetric":
+			return await _scenario_competitive_stages_are_left_right_symmetric()
+		"competitive_stages_have_no_hazards_or_moving_parts":
+			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
+		"round_modifier_gale_pushes_players_and_undoes":
+			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
 		"demo_build_flag_defines_the_slice":
 			return await _scenario_demo_build_flag_defines_the_slice()
 		"demo_build_rotation_only_slice_stages":
@@ -2051,6 +2069,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_never_rolls_a_modifier()
 		"stock_stage_pick_persists_and_reaches_the_host_phone":
 			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
+		"hot_potato_stages_load_and_are_in_rotation":
+			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
+		"hot_potato_draws_its_stages_more_often":
+			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"koth_stages_load_and_are_in_rotation":
+			return await _scenario_koth_stages_load_and_are_in_rotation()
+		"koth_hill_starts_on_first_hill_spot":
+			return await _scenario_koth_hill_starts_on_first_hill_spot()
+		"koth_moving_hill_warns_then_moves":
+			return await _scenario_koth_moving_hill_warns_then_moves()
+		"koth_stage_without_spots_uses_spawn_centre":
+			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
 		"announcer_calls_each_mode_at_round_start":
 			return await _scenario_announcer_calls_each_mode_at_round_start()
 		"announcer_calls_hill_taken_when_the_hill_changes_hands":
@@ -3796,6 +3826,17 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Footbridge.tscn",
 	"res://scenes/stages/Gantry.tscn",
 	"res://scenes/stages/Vent.tscn",
+	"res://scenes/stages/FinalDestination.tscn",
+	"res://scenes/stages/Battlefield.tscn",
+	"res://scenes/stages/Pocket.tscn",
+	"res://scenes/stages/Colosseum.tscn",
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -8078,6 +8119,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"meteor_shower": "Meteor Shower",
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
+	"gale": "Gale",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -15034,7 +15076,7 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 			failures.append("'%s' cannot be created" % id)
 	for id: String in counts:
 		if not MODIFIER_TITLES.has(id):
-			failures.append("rolled '%s', which is not one of the ten" % id)
+			failures.append("rolled '%s', which is not one of the eleven" % id)
 	_scenario_completed = true
 	return failures
 # --- Large stages (issue #144) -------------------------------------------------
@@ -29066,6 +29108,171 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 		failures.append("the victory screen has no logo with a texture")
 	await _teardown(loop["stage"])
 	return failures
+## Issue #376: the four competitive stages.
+const COMPETITIVE_STAGES_376: PackedStringArray = [
+	"res://scenes/stages/FinalDestination.tscn",
+	"res://scenes/stages/Battlefield.tscn",
+	"res://scenes/stages/Pocket.tscn",
+	"res://scenes/stages/Colosseum.tscn",
+]
+const COMPETITIVE_SYMMETRY_TOLERANCE_376: float = 3.0
+## Each competitive stage loads, is in Main's rotation and in STAGE_PATHS, and
+## is flagged `competitive`; no other stage is; exactly one (the large
+## Colosseum) is large, so the rotation holds it back from small rounds.
+func _scenario_competitive_stages_load_rotate_and_are_flagged() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in COMPETITIVE_STAGES_376:
+		var scene := load(path) as PackedScene
+		if scene == null:
+			failures.append("%s does not load" % path)
+			continue
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var instance: Node2D = scene.instantiate()
+		if not instance.competitive:
+			failures.append("%s is not flagged competitive" % path)
+		if instance.get_spawn_points().size() < 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		var want_large: bool = path.ends_with("Colosseum.tscn")
+		if instance.is_large() != want_large:
+			failures.append("%s is_large() is %s, wanted %s" % [path, instance.is_large(), want_large])
+		instance.free()
+	for path: String in STAGE_PATHS:
+		if COMPETITIVE_STAGES_376.has(path):
+			continue
+		var other: Node2D = (load(path) as PackedScene).instantiate()
+		if other.competitive:
+			failures.append("%s is flagged competitive but is not one of the four" % path)
+		other.free()
+	await _teardown(Node2D.new())
+	return failures
+## Mirrors every point about x=0 and finds it again, to a few px: platform
+## and ground bodies (with their shape size), spawns and pickup spawns.
+func _scenario_competitive_stages_are_left_right_symmetric() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in COMPETITIVE_STAGES_376:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var items: Array[Array] = []
+		for child in instance.get_children():
+			if child is StaticBody2D:
+				var shape := (child.get_node(NodePath(String(child.name) + "Shape")) as CollisionShape2D).shape as RectangleShape2D
+				items.append([child.position, shape.size, "body " + String(child.name)])
+			elif child is Marker2D:
+				items.append([child.position, Vector2.ZERO, "marker " + String(child.name)])
+		if items.is_empty():
+			failures.append("%s has no geometry" % path)
+		for item: Array in items:
+			var mirrored := Vector2(-item[0].x, item[0].y)
+			var found: bool = false
+			for other: Array in items:
+				if other[0].distance_to(mirrored) <= COMPETITIVE_SYMMETRY_TOLERANCE_376 \
+						and other[1].distance_to(item[1]) <= COMPETITIVE_SYMMETRY_TOLERANCE_376:
+					found = true
+					break
+			if not found:
+				failures.append("%s: %s at %s has no mirror image" % [path, item[2], item[0]])
+		instance.free()
+	await _teardown(Node2D.new())
+	return failures
+## Nothing in a competitive stage may hurt or move: no scripted node besides
+## the stage root and its KillZone, no AnimatableBody2D or other body type than
+## StaticBody2D, and no Area2D besides the KillZone.
+func _scenario_competitive_stages_have_no_hazards_or_moving_parts() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in COMPETITIVE_STAGES_376:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var stack: Array[Node] = [instance]
+		while not stack.is_empty():
+			var node: Node = stack.pop_back()
+			stack.append_array(node.get_children())
+			if node == instance or node.name == &"KillZone":
+				continue
+			if node.get_script() != null:
+				failures.append("%s: %s carries a script" % [path, node.name])
+			if node is Area2D or node is AnimatableBody2D or node is RigidBody2D or node is CharacterBody2D:
+				failures.append("%s: %s is a %s" % [path, node.name, node.get_class()])
+			if node is StaticBody2D and node.scene_file_path != "":
+				failures.append("%s: %s is an instanced part" % [path, node.name])
+		for hazard_name: String in ["Spikes", "Saw", "Lava", "Fan", "Ledge", "Moving"]:
+			if instance.find_child("*" + hazard_name + "*", true, false) != null:
+				failures.append("%s has a node named like a %s" % [path, hazard_name])
+		instance.free()
+	await _teardown(Node2D.new())
+	return failures
+# --- Gale round modifier (#312) ------------------------------------------------
+## Ticks a gale round is watched for: past the calm, the warning and the gust
+## (4 s calm from a 2 s head start, 1.5 s warning, 2 s gust), with room to spare.
+const GALE_WATCH_TICKS: int = 480
+## Fastest sideways speed a gale must give a still body: well under what
+## 1500 px/s^2 for two seconds does, well over any noise.
+const GALE_MIN_SPEED: float = 300.0
+## Gale: announced as "Gale"; the round has one gust over the stage that warns
+## before it pushes a player in clear air along its own direction, and the
+## round after has neither the gust nor any push.
+func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
+	var players: Array[RigidBody2D] = loop["players"]
+	var gusts: Array = []
+	var extra: Array[String] = []
+	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
+		var gust: Node2D = instance.get_node_or_null("GaleGust") as Node2D
+		gusts.append(gust)
+		var player: RigidBody2D = players[0]
+		var before_gravity: float = player.gravity_scale
+		# Held in clear air inside the zone, with no gravity to confuse a
+		# sideways reading, and no input.
+		player.gravity_scale = 0.0
+		player.set_input_vector(Vector2.ZERO)
+		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -900.0)
+		player.teleport_to(start)
+		player.linear_velocity = Vector2.ZERO
+		var best: float = 0.0
+		var warned_without_push: bool = false
+		for tick in GALE_WATCH_TICKS:
+			await physics_frame
+			var vx: float = player.linear_velocity.x
+			if gust != null:
+				if gust.is_warning() and absf(vx) < 1.0:
+					warned_without_push = true
+				var along: float = vx * gust.push_direction().x
+				if along > best:
+					best = along
+				# Enough shown: stop before the body is carried off the stage.
+				if best >= GALE_MIN_SPEED * 1.5:
+					break
+		player.gravity_scale = before_gravity
+		player.linear_velocity = Vector2.ZERO
+		if gust != null and not warned_without_push:
+			extra.append("the gale never showed a warning before pushing")
+		return best
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 1 and gusts[1] == null:
+			found.append("the gale round has no GaleGust on its stage")
+		elif round_index != 1 and gusts[round_index] != null:
+			found.append("round %d has a gust though it is not a gale round" % (round_index + 1))
+		elif round_index == 2 and gusts[1] != null and is_instance_valid(gusts[1]) and gusts[1].is_inside_tree():
+			found.append("the gale's gust is still in the tree after its round ended")
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "gale", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] > 5.0 or values[2] > 5.0:
+			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
+		if values[1] < GALE_MIN_SPEED:
+			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
+	await _teardown(loop["stage"])
+	return failures
 # --- Issue #361: the Steam Next Fest demo build ----------------------------
 const DemoBuildScript361 := preload("res://scripts/DemoBuild.gd")
 const HostSettingsScriptDemo361 := preload("res://scripts/HostSettings.gd")
@@ -29434,7 +29641,272 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	_stock_stage_reset()
 	_scenario_completed = true
 	return failures
-
+# --- Hot Potato stages (issue #373)
+const HOT_POTATO_STAGES_373: PackedStringArray = [
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
+]
+## The three chase-loop stages are in Main's rotation and the swept STAGE_PATHS,
+## load as large stages with eight spawns, and weigh 4 for Hot Potato and 0.3 in
+## every other mode.
+func _scenario_hot_potato_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation: Array = main_scene.get_node("RoundManager").stage_scenes
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in rotation:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in HOT_POTATO_STAGES_373:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_pickup_spawn_points().size() < 3:
+			failures.append("%s declares %d pickup spots, wants 3 or more" % [path, instance.get_pickup_spawn_points().size()])
+		if not instance.is_large():
+			failures.append("%s is not a large stage" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["hot_potato", "", "king_of_the_hill", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "hot_potato" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	if not is_equal_approx(StageType.mode_weight_of(load("res://scenes/stages/Flatlands.tscn"), "hot_potato"), 1.0):
+		failures.append("a stage with no mode_weights should weigh 1.0")
+	_scenario_completed = true
+	return failures
+## Hot Potato deals its three stages about four times as often as a stage that
+## is not favoured, other modes leave the odds alone, and the same seed deals
+## the same sequence. Counted over 900 seeded draws of a full table.
+func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation_script: GDScript = load("res://scripts/StageRotation.gd")
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var scenes: Array[PackedScene] = []
+	scenes.assign(main_scene.get_node("RoundManager").stage_scenes)
+	main_scene.free()
+	var favoured: Array[int] = []
+	for i in scenes.size():
+		if HOT_POTATO_STAGES_373.has(scenes[i].resource_path):
+			favoured.append(i)
+	var counts: Dictionary = {}
+	var sequences: Dictionary = {}
+	var classic_counts: Dictionary = {}
+	for mode_id: String in ["hot_potato", "", "hot_potato"]:
+		var rotation: RefCounted = rotation_script.new()
+		rotation.scenes = scenes
+		rotation.round_player_count = 8
+		rotation.mode_id = mode_id
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 373
+		rotation.rng = rng
+		var hits: int = 0
+		var seq: Array[int] = []
+		for _round in 900:
+			var index: int = rotation.next_stage_index()
+			if seq.size() > 0 and seq[-1] == index:
+				failures.append("mode '%s' dealt stage %d twice in a row" % [mode_id, index])
+				break
+			rotation.stage_index = index
+			seq.append(index)
+			if mode_id == "":
+				classic_counts[index] = int(classic_counts.get(index, 0)) + 1
+			if favoured.has(index):
+				hits += 1
+		if counts.has(mode_id):
+			if sequences[mode_id] != seq:
+				failures.append("the same seed dealt two different sequences for '%s'" % mode_id)
+		counts[mode_id] = hits
+		sequences[mode_id] = seq
+	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
+	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
+	if counts["hot_potato"] < 240:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 240" % counts["hot_potato"])
+	var others: int = 0
+	for i in scenes.size():
+		if not favoured.has(i):
+			others += int(classic_counts.get(i, 0))
+	var equal_weight_share: float = float(others) / float(scenes.size() - favoured.size())
+	print("      classic: an equal-weight stage averaged %.1f draws, the three Hot Potato stages %.1f each" % [equal_weight_share, float(counts[""]) / 3.0])
+	if float(counts[""]) / 3.0 > 0.5 * equal_weight_share:
+		failures.append("classic dealt each Hot Potato stage %.1f times, an equal-weight stage %.1f: wants under half" % [float(counts[""]) / 3.0, equal_weight_share])
+	if counts[""] == 0:
+		failures.append("classic should still deal them now and then, dealt none in 900")
+	if counts["hot_potato"] < 2 * counts[""]:
+		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
+	_scenario_completed = true
+	return failures
+# --- King of the Hill stages (issue #377)
+const KOTH_STAGES_377: PackedStringArray = [
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
+]
+## The four hill stages load, are in Main's rotation and STAGE_PATHS, have eight
+## spawns and hill spots, and weigh 4 for King of the Hill and 0.3 elsewhere.
+## Summit and Mesa hold the hill still; Relay and Roundabout move it.
+func _scenario_koth_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in KOTH_STAGES_377:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_hill_spots().is_empty():
+			failures.append("%s declares no hill spots" % path)
+		var moving: bool = path.ends_with("Relay.tscn") or path.ends_with("Roundabout.tscn")
+		if instance.hill_moves != moving:
+			failures.append("%s hill_moves is %s, wants %s" % [path, instance.hill_moves, moving])
+		if moving and instance.get_hill_spots().size() < 3:
+			failures.append("%s moves the hill between fewer than 3 spots" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["king_of_the_hill", "", "hot_potato", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "king_of_the_hill" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## Starts a King of the Hill round on the stage at `path` and returns its rig.
+func _koth_stage_rig(path: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 3:
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load(path)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = GameModesType.KING_OF_THE_HILL
+	rm.match_seed = 7
+	stage.add_child(rm)
+	return {"stage": stage, "rm": rm, "players": players, "roster": roster}
+## On each hill stage the hill starts exactly on the stage's first hill spot.
+func _scenario_koth_hill_starts_on_first_hill_spot() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in KOTH_STAGES_377:
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"])
+			continue
+		await _await_ticks(5)
+		var rm: Node = rig["rm"]
+		var hill: Node = rm.game_mode_node()
+		var spots: Array[Vector2] = (load(path) as PackedScene).instantiate().get_hill_spots()
+		if spots.is_empty() or not hill.hill_position.is_equal_approx(spots[0]):
+			failures.append("%s: hill at %s, first spot is %s" % [path, hill.hill_position, spots])
+		await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## On Relay the hill sits still until the warning, warns for the last stretch
+## (the ring on the next spot), then hops to the second spot; a fixed stage
+## (Summit) never warns or moves however long the round runs.
+func _scenario_koth_moving_hill_warns_then_moves() -> Array[String]:
+	var failures: Array[String] = []
+	var relay_spots: Array[Vector2] = (load("res://scenes/stages/Relay.tscn") as PackedScene).instantiate().get_hill_spots()
+	var rig: Dictionary = _koth_stage_rig("res://scenes/stages/Relay.tscn")
+	if not await _mode_started(rig):
+		failures.append("the Relay round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	hill.seconds_to_win = 1000.0
+	hill.hill_move_interval = 2.0
+	hill.hill_warn_sec = 1.0
+	hill._since_move = 0.0
+	if hill.hill_warning:
+		failures.append("the hill warned before its time")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("Relay's hill did not start on spot 0: %s" % hill.hill_position)
+	await _await_ticks(70)
+	if not hill.hill_warning:
+		failures.append("no warning 1.17 s into a 2 s interval with a 1 s warning")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("the hill moved during its warning")
+	if not hill.next_hill_position().is_equal_approx(relay_spots[1]):
+		failures.append("the warning points at %s, wants %s" % [hill.next_hill_position(), relay_spots[1]])
+	await _await_ticks(60)
+	if not hill.hill_position.is_equal_approx(relay_spots[1]):
+		failures.append("the hill is at %s after the interval, wants spot 1 %s" % [hill.hill_position, relay_spots[1]])
+	if hill.hill_warning:
+		failures.append("the warning stayed on after the move")
+	await _teardown(rig["stage"])
+	var fixed: Dictionary = _koth_stage_rig("res://scenes/stages/Summit.tscn")
+	if not await _mode_started(fixed):
+		failures.append("the Summit round never started")
+		await _teardown(fixed["stage"])
+		return failures
+	await _await_ticks(5)
+	var still: Node = fixed["rm"].game_mode_node()
+	still.seconds_to_win = 1000.0
+	still.hill_move_interval = 1.0
+	still.hill_warn_sec = 0.5
+	var start: Vector2 = still.hill_position
+	await _await_ticks(120)
+	if still.hill_warning or not still.hill_position.is_equal_approx(start):
+		failures.append("Summit's fixed hill warned or moved")
+	await _teardown(fixed["stage"])
+	_scenario_completed = true
+	return failures
+## A stage with no hill spots (the stub stage) still puts the hill at the centre
+## of its spawn points.
+func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	var sum := Vector2.ZERO
+	for i in 3:
+		sum += MODE_SPAWNS[i]
+	var want: Vector2 = sum / 3.0
+	if not hill.hill_position.is_equal_approx(want):
+		failures.append("hill at %s, wants the spawn centre %s" % [hill.hill_position, want])
+	if hill.hill_moves or not hill.hill_spots.is_empty():
+		failures.append("a stage with no spots reports spots or a moving hill")
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
 # --- Issue #370: announcer callouts for modes ----------------------------------
 ## The announcer, quiet and recording, or null when the autoload is missing.
 func _callout_announcer() -> Node:

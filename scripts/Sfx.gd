@@ -224,6 +224,8 @@ const SOUNDS: Dictionary = {
 	"announce_stolen": {"files": ["announcer/stolen.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_overtime": {"files": ["announcer/overtime.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_hill_taken": {"files": ["announcer/hill_taken.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	# No recorded voice clip for Gale yet: the wind-up sound stands in (#312).
+	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 }
 
 const DEFAULT_OVERLAP: int = 3
