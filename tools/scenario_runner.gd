@@ -626,6 +626,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_hitstop_never_lifts_a_host_pause",
 	"mode_award_categories_are_translated",
 	"ctf_a_kicked_player_waiting_to_respawn_stays_out",
+	"hot_potato_first_it_varies_across_a_matchs_rounds",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2273,6 +2274,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_award_categories_are_translated()
 		"ctf_a_kicked_player_waiting_to_respawn_stays_out":
 			return await _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out()
+		"hot_potato_first_it_varies_across_a_matchs_rounds":
+			return await _scenario_hot_potato_first_it_varies_across_a_matchs_rounds()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32624,4 +32627,31 @@ func _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out() -> Array[Strin
 	if mode.is_pending(1):
 		failures.append("the kicked player is still waiting to respawn")
 	await _teardown(rig["stage"])
+	return failures
+
+## Review sweep b: Hot Potato's first "it" is drawn from one match-long stream, so
+## the rounds of a match do not all hand the tag to the same player first (#187:
+## still the match seed's, so a seed replays the same picks).
+func _scenario_hot_potato_first_it_varies_across_a_matchs_rounds() -> Array[String]:
+	var failures: Array[String] = []
+	var picks: Array[Array] = []
+	for _run in 2:
+		var rig: Dictionary = _mode_rig(4, GameModesType.HOT_POTATO)
+		if not await _mode_started(rig):
+			failures.append("the Hot Potato round never started")
+			await _teardown(rig["stage"])
+			return failures
+		var rm: Node = rig["rm"]
+		var firsts: Array[int] = [int(rm.game_mode_node().it_slot)]
+		for _round in 5:
+			rm.call("_start_game_mode")
+			firsts.append(int(rm.game_mode_node().it_slot))
+		picks.append(firsts)
+		await _teardown(rig["stage"], false)
+	print("      first \"it\" per round: %s, replayed: %s" % [picks[0], picks[1]])
+	if picks[0].count(picks[0][0]) == picks[0].size():
+		failures.append("every round of the match made slot %d \"it\" first: %s" % [picks[0][0], picks[0]])
+	if picks[0] != picks[1]:
+		failures.append("the same match seed picked differently: %s vs %s" % [picks[0], picks[1]])
+	_scenario_completed = true
 	return failures

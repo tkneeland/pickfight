@@ -2008,6 +2008,16 @@ func rng_for(stream_name: String) -> RandomNumberGenerator:
 	rng.seed = hash([match_seed_value(), stream_name])
 	return rng
 
+## `rng_for(stream_name)` made once per match and handed out again after, so a
+## node made afresh each round (a game mode) keeps drawing from one stream
+## instead of repeating its first draw every round. `_seed_match` clears these.
+var _match_rngs: Dictionary = {}
+func match_rng(stream_name: String) -> RandomNumberGenerator:
+	match_seed_value()
+	if not _match_rngs.has(stream_name):
+		_match_rngs[stream_name] = rng_for(stream_name)
+	return _match_rngs[stream_name]
+
 ## The N in `--seed=N` among `args`, or -1 without it (or with junk).
 static func seed_from_args(args: PackedStringArray) -> int:
 	var found: int = -1
@@ -2026,6 +2036,7 @@ func _seed_match(announce: bool) -> void:
 	if seed_value == -1:
 		seed_value = randi()
 	_match_seed = seed_value
+	_match_rngs.clear()
 	var stages: RandomNumberGenerator = rng_for("stages")
 	if rotation_seed != -1:
 		stages.seed = rotation_seed
