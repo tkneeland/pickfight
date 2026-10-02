@@ -376,7 +376,7 @@ func build_panels() -> void:
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
 	_podium.add_theme_constant_override("separation", 40)
 	stack.add_child(_podium)
-	stack.add_child(_big_label("Press Rematch on your phone", 40, Color.WHITE))
+	stack.add_child(_big_label("Tap Continue on your phone", 40, Color.WHITE))
 
 func _full_screen_panel(node_name: String) -> Control:
 	var panel := ColorRect.new()

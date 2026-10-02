@@ -125,6 +125,8 @@ extends Node
 @export var lobby_enabled: bool = false
 ## Length of the 3-2-1 countdown once everyone is ready.
 @export var lobby_countdown_sec: float = 3.0
+## How long the victory screen waits for every phone's Continue (#337).
+@export var victory_continue_sec: float = 30.0
 ## Issue #291: seated players are live in the lobby, on a sandbox stage. They
 ## move, swing and hit each other, but nothing counts and a KO respawns after
 ## `lobby_respawn_sec`. Off by default: a fixture without a stage to stand on
@@ -298,6 +300,7 @@ func _process(_delta: float) -> void:
 		State.ROUND_ACTIVE:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
+				_tick_airtime()
 				_pickup_director.tick()
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
@@ -987,9 +990,9 @@ func _apply_demo_mode() -> void:
 # name and ready state. When every joined phone (2+) is ready a 3-2-1
 # countdown runs; a join, a leave or an un-ready during it cancels it. Then a
 # match: rounds as before, until someone reaches the host phone's "first to
-# N". A victory screen with a podium follows, and every phone pressing
-# Rematch (Ready again) takes the room back to the lobby, which counts down
-# straight away. Off by default, so every scenario written before #120 keeps
+# N". A victory screen with a podium follows, and every human phone tapping
+# Continue (bots do not count), 30 seconds passing or the host pressing a key
+# takes the room back to the lobby (#337), where everyone readies afresh. Off by default, so every scenario written before #120 keeps
 # its endless round loop.
 #
 # ControllerServer only carries the phones' requests and this node's state
@@ -1109,7 +1112,47 @@ func _enter_lobby() -> void:
 	_last_lobby_state = {}
 	_tick_lobby()
 
+## When the victory screen gives up waiting for Continue taps (#337).
+var _victory_until_msec: int = 0
+
+## On the victory screen a phone's Ready flag means "Continue" (#337). True when
+## every human has tapped it; bots do not count, and with no human present only
+## the timeout or the host's key moves on.
+func _everyone_continued(roster: Array[int]) -> bool:
+	var humans: int = 0
+	for slot: int in roster:
+		if _controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		humans += 1
+		if not _is_ready(slot):
+			return false
+	return humans > 0
+
+## Victory over: back to the lobby with nobody ready, so the Continue taps do
+## not start the next match's countdown by themselves.
+func _leave_victory() -> void:
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+	_enter_lobby()
+
+## The host at the keyboard skips the wait (#337).
+func _unhandled_key_input(event: InputEvent) -> void:
+	if _state == State.VICTORY and event is InputEventKey and event.pressed and not event.echo:
+		_leave_victory()
+
+## Samples every living player's body contact for the Longest airtime award.
+func _tick_airtime() -> void:
+	var now: int = GameClockScript.now_msec()
+	for slot: int in _in_round:
+		var player: RigidBody2D = _players[slot] if slot < _players.size() else null
+		if player == null or not player.alive:
+			continue
+		var head: Variant = player.get("_head")
+		var touching: bool = player.get_contact_count() > 0 or (head != null and head.get_contact_count() > 0)
+		_stats.note_air(slot, not touching, now)
+
 func _enter_victory() -> void:
+	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
 	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
@@ -1139,7 +1182,7 @@ func _clear_stage() -> void:
 	_stage_spawn_points = []
 
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
-## victory screen's Rematch needs pressing afresh), and the first round.
+## victory screen's Continue needs tapping afresh), and the first round.
 func _begin_match() -> void:
 	_end_lobby_sandbox()
 	_match_target = _requested_target()
@@ -1185,8 +1228,9 @@ func _tick_lobby() -> void:
 				_begin_match()
 				return
 		State.VICTORY:
-			if _everyone_ready(roster) or roster.size() < min_players_to_start:
-				_enter_lobby()
+			if _everyone_continued(roster) or roster.size() < min_players_to_start \
+					or GameClockScript.now_msec() >= _victory_until_msec:
+				_leave_victory()
 				return
 	var tick: int = _countdown_left() if _state == State.COUNTDOWN else 0
 	if tick != _last_countdown_tick and tick > 0:

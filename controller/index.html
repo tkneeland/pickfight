@@ -1036,7 +1036,7 @@
 
   // ---- lobby (issue #120) ---------------------------------------------------
   // The host decides everything; this page only shows the latest state it
-  // sent and asks for changes: Ready (Rematch on the victory screen) and, on
+  // sent and asks for changes: Ready (Continue on the victory screen) and, on
   // the host's phone, the match length.
   var lobbyEl = document.getElementById("lobby");
   var lobbyTitleEl = document.getElementById("lobby-title");
@@ -1090,11 +1090,11 @@
     if (phase === "victory" && msg.teams && msg.winner_team >= 0) {
       lobbyTitleEl.textContent = "Match over — " + TEAM_NAMES[msg.winner_team] + " team wins" +
         (myTeam() === msg.winner_team ? " — you win!" : "");
-      readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
+      readyBtn.textContent = amReady ? "Waiting for the others" : "Continue";
     } else if (phase === "victory") {
       lobbyTitleEl.textContent = "Match over — " + (msg.winner === slot ? "you win!" :
         (msg.winner >= 0 ? slotName(msg.winner) + " wins" : "no winner"));
-      readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
+      readyBtn.textContent = amReady ? "Waiting for the others" : "Continue";
     } else {
       lobbyTitleEl.textContent = phase === "countdown" ? "Get ready" :
         (amReady ? "Ready — waiting for the others" : "In the lobby") + (isHost ? " (you're host)" : "");
