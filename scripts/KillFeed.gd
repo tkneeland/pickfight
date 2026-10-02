@@ -23,9 +23,9 @@ const MAX_QUEUED_BANNERS: int = 3
 ## Most entries `banner_log` keeps (issue #200): the newest this many, so a
 ## long session's log cannot grow without limit.
 const MAX_BANNER_LOG: int = 32
-## Room kept clear for scenes/Main.tscn's JoinQrCode, which sits in the top
-## right corner (8 to 192 px down, 12 px in).
-const FEED_TOP_PX: float = 204.0
+## Gap above the ticker. The in-round join corner is gone (#430), so it hugs
+## the top of the screen (issue #444).
+const FEED_TOP_PX: float = 20.0
 const FEED_MARGIN_PX: float = 16.0
 const FEED_FONT: int = 20
 ## The banner's top edge, as a fraction of the screen's height: under the
