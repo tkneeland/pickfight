@@ -218,12 +218,6 @@ const MAX_DROP: float = 240.0
 ## How far the bot's own speed carries it: the edge check looks this many
 ## seconds of its speed further ahead.
 const MOMENTUM_SEC: float = 0.3
-## Issue #423: with less ground than this towards the target (or the way the
-## body is moving faster than EDGE_SWING_SPEED), swings soften, to no less
-## than EDGE_SWING_MIN of full strength.
-const EDGE_SWING_ROOM: float = 250.0
-const EDGE_SWING_SPEED: float = 120.0
-const EDGE_SWING_MIN: float = 0.6
 ## Slower than this with nothing to push off, the bot is resting on an
 ## edge's corner; it flings its head this way (x towards the ground) to
 ## rock back onto it.
@@ -850,22 +844,7 @@ func _swing(delta: float) -> Vector2:
 		if actual < wanted - BLOCKED_GAP and speed < BLOCKED_SPEED:
 			wanted = maxf(actual, _min_reach())
 	var length: float = _length_for(wanted)
-	return Vector2.RIGHT.rotated(angle) * length * _edge_swing_scale(to_target.x)
-
-## Issue #423: a swing's head-plant throws the bot 500 px/s or more, and the
-## near edge is the one the throw goes to. The nearer that edge, towards the
-## target or the way the bot is already moving (less what that speed carries
-## it), the softer the swing, down to EDGE_SWING_MIN of full strength; 1.0
-## with EDGE_SWING_ROOM or more of ground.
-func _edge_swing_scale(to_target_x: float) -> float:
-	var body := player as RigidBody2D
-	var room: float = EDGE_SWING_ROOM
-	if to_target_x != 0.0:
-		room = minf(room, _edge_room(signf(to_target_x), EDGE_SWING_ROOM))
-	if body != null and absf(body.linear_velocity.x) > EDGE_SWING_SPEED:
-		var side: float = signf(body.linear_velocity.x)
-		room = minf(room, _edge_room(side, EDGE_SWING_ROOM) - absf(body.linear_velocity.x) * MOMENTUM_SEC)
-	return clampf(room / EDGE_SWING_ROOM, EDGE_SWING_MIN, 1.0)
+	return Vector2.RIGHT.rotated(angle) * length
 
 ## Issue #302: a swing's head-plant can throw the bot over its rival and on
 ## towards an edge. Carried towards one faster than it can stop, it plants the
