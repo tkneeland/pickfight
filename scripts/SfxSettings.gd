@@ -103,9 +103,9 @@ func _ready() -> void:
 	corner.add_child(_panel)
 	var rows := VBoxContainer.new()
 	_panel.add_child(rows)
-	_slider = _add_slider(rows, "Volume", "Master volume")
-	_sfx_slider = _add_slider(rows, "SfxVolume", "Sound effects")
-	_music_slider = _add_slider(rows, "MusicVolume", "Music")
+	_slider = _add_slider(rows, "Volume", tr("SETTINGS_MASTER_VOLUME"))
+	_sfx_slider = _add_slider(rows, "SfxVolume", tr("SETTINGS_SFX"))
+	_music_slider = _add_slider(rows, "MusicVolume", tr("SETTINGS_MUSIC"))
 	if music == null:
 		_music_slider.get_parent().visible = false
 	# Side by side, to give the new rows below their height (issue #294): the
@@ -113,13 +113,13 @@ func _ready() -> void:
 	var toggles := HBoxContainer.new()
 	toggles.name = "TogglesRow"
 	rows.add_child(toggles)
-	_mute = _add_box(toggles, "Mute", "Mute (M)")
-	_fullscreen = _add_box(toggles, "Fullscreen", "Full (F11)")
+	_mute = _add_box(toggles, "Mute", tr("SETTINGS_MUTE"))
+	_fullscreen = _add_box(toggles, "Fullscreen", tr("SETTINGS_FULLSCREEN"))
 	# One scrolling area for the window size and both lists, so the panel
 	# grows by LIST_HEIGHT whatever the stage count (24+).
 	_more = CheckBox.new()
 	_more.name = "MoreOptions"
-	_more.text = "More options"
+	_more.text = tr("SETTINGS_MORE_OPTIONS")
 	_more.focus_mode = Control.FOCUS_NONE
 	rows.add_child(_more)
 	var scroll := ScrollContainer.new()
@@ -135,22 +135,22 @@ func _ready() -> void:
 	_resolution = OptionButton.new()
 	_resolution.name = "Resolution"
 	for size: Vector2i in HostSettingsScript.RESOLUTIONS:
-		_resolution.add_item("Window: default" if size == Vector2i.ZERO else "Window: %d x %d" % [size.x, size.y])
+		_resolution.add_item(tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
 	content.add_child(_resolution)
-	_shake_box = _add_box(content, "ScreenShake", "Screen shake")
-	_flash_box = _add_box(content, "ReduceFlash", "Reduce flashes")
-	_hide_code_box = _add_box(content, "HideRoomCode", "Hide room code")
+	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
+	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
+	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
 	for option: float in sfx.UI_SCALES:
-		_scale_button.add_item("Name tags: %sx" % str(option))
+		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
-	_feedback_button.text = "Feedback"
+	_feedback_button.text = tr("SETTINGS_FEEDBACK")
 	_feedback_button.focus_mode = Control.FOCUS_NONE
 	toggles.add_child(_feedback_button)
 	_feedback_button.pressed.connect(toggle_feedback)
@@ -236,7 +236,7 @@ func refresh() -> void:
 		_music_slider.set_value_no_signal(music.volume)
 	_mute.set_pressed_no_signal(sfx.muted)
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
-	_toggle.text = "Settings (muted)" if sfx.muted else "Settings"
+	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
@@ -298,7 +298,7 @@ func submit_feedback() -> void:
 	if rounds != null and rounds.has_method("current_stage_name"):
 		stage = rounds.current_stage_name()
 	var version: String = str(ProjectSettings.get_setting("application/config/version", "dev"))
-	_feedback_status.text = "Sending..."
+	_feedback_status.text = tr("FEEDBACK_SENDING")
 	_feedback_send.disabled = true
 	_feedback_sender.send(_feedback_edit.text, url, version, OS.get_name(), stage if not stage.is_empty() else "lobby")
 
@@ -326,11 +326,11 @@ func _build_feedback_box(corner: VBoxContainer) -> void:
 	var col := VBoxContainer.new()
 	_feedback_box.add_child(col)
 	var title := Label.new()
-	title.text = "Send feedback to the developers"
+	title.text = tr("FEEDBACK_TITLE")
 	col.add_child(title)
 	_feedback_edit = TextEdit.new()
 	_feedback_edit.name = "Text"
-	_feedback_edit.placeholder_text = "What would make this better?"
+	_feedback_edit.placeholder_text = tr("FEEDBACK_PLACEHOLDER")
 	_feedback_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_feedback_edit.custom_minimum_size = Vector2(320.0, 110.0)
 	col.add_child(_feedback_edit)
@@ -339,7 +339,7 @@ func _build_feedback_box(corner: VBoxContainer) -> void:
 	col.add_child(_feedback_status)
 	_feedback_send = Button.new()
 	_feedback_send.name = "Send"
-	_feedback_send.text = "Send"
+	_feedback_send.text = tr("FEEDBACK_SEND")
 	_feedback_send.disabled = true
 	_feedback_send.focus_mode = Control.FOCUS_NONE
 	col.add_child(_feedback_send)
@@ -400,7 +400,7 @@ func apply_resolution() -> void:
 
 func _add_list(content: VBoxContainer, title: String) -> VBoxContainer:
 	var label := Label.new()
-	label.text = title + " (untick to skip)"
+	label.text = tr("SETTINGS_%s_LIST" % title.to_upper())
 	content.add_child(label)
 	var list := VBoxContainer.new()
 	list.name = title

@@ -72,11 +72,11 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 ## Announcer voice
 
 Added for issue #152 and re-voiced for issue #211; the two team lines were
-added for issue #236 in the same voice and settings. `scripts/Sfx.gd` maps each
+added for issue #236, and the eight game-mode lines for issue #370, in the same voice and settings. `scripts/Sfx.gd` maps each
 line to its file (the `announce_*` entries), and `scripts/Announcer.gd`
 decides when each is said.
 
-All 19 lines are **synthesised** in one voice with
+All 27 lines are **synthesised** in one voice with
 [Piper TTS](https://github.com/OHF-Voice/piper1-gpl) 1.8.0 (`piper-tts` on
 PyPI):
 
@@ -118,6 +118,14 @@ encoded as mono Ogg Vorbis. The level suits the `announce_*` default of
 | `announcer/double_damage.ogg` | "Double damage!" | CC0 1.0 (synthesised) | modifier DOUBLE DAMAGE |
 | `announcer/red_team_wins.ogg` | "Red team wins!" | CC0 1.0 (synthesised) | a Teams match won by Red (#236) |
 | `announcer/blue_team_wins.ogg` | "Blue team wins!" | CC0 1.0 (synthesised) | a Teams match won by Blue (#236) |
+| `announcer/king_of_the_hill.ogg` | "King of the Hill!" | CC0 1.0 (synthesised) | game mode KING OF THE HILL starts |
+| `announcer/hot_potato.ogg` | "Hot Potato!" | CC0 1.0 (synthesised) | game mode HOT POTATO starts |
+| `announcer/sudden_death.ogg` | "Sudden Death!" | CC0 1.0 (synthesised) | game mode SUDDEN DEATH starts |
+| `announcer/stock.ogg` | "Stock!" | CC0 1.0 (synthesised) | game mode STOCK starts |
+| `announcer/last_life.ogg` | "Last life!" | CC0 1.0 (synthesised) | Stock: a player is down to one life |
+| `announcer/stolen.ogg` | "Stolen!" | CC0 1.0 (synthesised) | Stock: a team-mate's life is stolen |
+| `announcer/overtime.ogg` | "Overtime!" | CC0 1.0 (synthesised) | Stock: a tied clock runs out |
+| `announcer/hill_taken.ogg` | "Hill taken!" | CC0 1.0 (synthesised) | King of the Hill: a different player or team takes the hill |
 
 That is 19 files, about 0.16 MB in all. Before #211 the count, "FIGHT!" and
 "Winner!" were Kenney's Voiceover Pack: Fighter (CC0) and the rest were

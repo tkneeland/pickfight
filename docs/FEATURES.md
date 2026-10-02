@@ -33,9 +33,9 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
-- 30 rotating stages (#8, #17, #19, #51, #54, #143, #315, #373); #373 added three large Hot Potato chase-loop stages, Racetrack (oval of decks, ramps, bridge and bounce pads), Switchyard (two yards, a shuttle over the gap and a high bridge) and Orbit (two platforms circling a void), each with no dead ends and eight spawns; #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
+- 38 rotating stages (#8, #17, #19, #51, #54, #143, #315, #373, #376, #377); #377 added four King of the Hill stages, Summit and Mesa (fixed hill) and Relay and Roundabout (the hill hops between stage-defined spots every ~30 s, with a ~3 s warning ring on the next one), declared with `HillSpot` markers and `Stage.hill_moves`, weighted 4x for King of the Hill and 0.3 in other modes; a stage with no hill spots keeps the hill at the spawns' centre; #373 added three large Hot Potato chase-loop stages, Racetrack (oval of decks, ramps, bridge and bounce pads), Switchyard (two yards, a shuttle over the gap and a high bridge) and Orbit (two platforms circling a void), each with no dead ends and eight spawns; #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
 - Per-stage rotation weights by game mode (`mode_weights`): the three #373 stages are dealt about four times as often in Hot Potato and rare in every other mode (dealt into a bag 30% of the time); a weight under 1 is a probability of being in the bag (#373)
-- 31 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011); #376 added four no-frills competitive stages (flagged `competitive`, symmetrical, no hazards or moving parts): Final Destination (flat), Battlefield (3 platforms), Pocket (small) and Colosseum (large, 5+ players)
+- #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011); #376 added four no-frills competitive stages (flagged `competitive`, symmetrical, no hazards or moving parts): Final Destination (flat), Battlefield (3 platforms), Pocket (small) and Colosseum (large, 5+ players)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
@@ -62,6 +62,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Night stages (#332): about 1 round in 5 plays its stage as a night variant, applied by data (`Stage.night`, rolled per round by `RoundManager.night_chance`, from its own RNG; off with the modifier-roll seam, `forced_night` overrides). Darker Night palette with stars, lamps over the spawns, and a soft glow on players, weapon heads, pickups and hazards. Visual only. Lighting is `CanvasModulate` plus shadowless `PointLight2D` (works with the Compatibility renderer); lamps hold steady with Reduce flashes on
 - Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Victory screen stats (#325): a per-player table under the awards (KOs, damage dealt and taken, self-KOs, weapon pickups, favourite weapon) and a "Magpie" award for the most weapon pickups
+- Mode awards (#355): the victory screen adds one award for the mode played, only in that mode: "Longest Hold" (most seconds alone on the hill, King of the Hill; individual holds only, so none in Teams), "Hot Hands" (most tags passed on, Hot Potato), "Survivor" (most lives left, summed over the match's rounds, Stock). Classic and Sudden Death add none. Each mode node hands its round numbers to `MatchStats` through `report_stats()` when the round ends
 - Scoreboard shown at round end (#5)
 - KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
@@ -108,12 +109,14 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
+- All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118); six more CC0 fight tracks join the rotation, eight in all, each loop-trimmed so it repeats without a gap (#289)
 - Narrator/announcer, one consistent voice (#152, #211)
+- Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
 ## Visual look and juice
 - Landing dust, head motion trails, clash sparks (#116, #196)
