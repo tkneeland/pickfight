@@ -511,6 +511,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_hunts_enemy_team_never_teammate",
 	"bot_does_not_overshoot_lone_rival_off_stage",
 	"bot_aggression_rises_as_opponents_dwindle",
+	"mode_picker_host_only_and_in_lobby_state",
+	"mode_hot_potato_is_ffa_only",
+	"mode_choice_persists_with_host_settings",
+	"mode_choice_holds_for_whole_match",
+	"mode_king_of_the_hill_teams_hold_together",
+	"mode_rise_follows_the_mode",
+	"mode_banned_modifiers_never_rolled",
+	"mode_title_card_and_how_to_play_cards",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1925,6 +1933,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_does_not_overshoot_lone_rival_off_stage()
 		"bot_aggression_rises_as_opponents_dwindle":
 			return await _scenario_bot_aggression_rises_as_opponents_dwindle()
+		"mode_picker_host_only_and_in_lobby_state":
+			return await _scenario_mode_picker_host_only_and_in_lobby_state()
+		"mode_hot_potato_is_ffa_only":
+			return await _scenario_mode_hot_potato_is_ffa_only()
+		"mode_choice_persists_with_host_settings":
+			return await _scenario_mode_choice_persists_with_host_settings()
+		"mode_choice_holds_for_whole_match":
+			return await _scenario_mode_choice_holds_for_whole_match()
+		"mode_king_of_the_hill_teams_hold_together":
+			return await _scenario_mode_king_of_the_hill_teams_hold_together()
+		"mode_rise_follows_the_mode":
+			return await _scenario_mode_rise_follows_the_mode()
+		"mode_banned_modifiers_never_rolled":
+			return await _scenario_mode_banned_modifiers_never_rolled()
+		"mode_title_card_and_how_to_play_cards":
+			return await _scenario_mode_title_card_and_how_to_play_cards()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -27745,4 +27769,328 @@ func _scenario_bot_aggression_rises_as_opponents_dwindle() -> Array[String]:
 	if lone != "attack":
 		failures.append("with one opponent left the bot should fight a rival 60 px off, was '%s'" % lone)
 	_scenario_completed = true
+	return failures
+
+const HostSettingsScript352 := preload("res://scripts/HostSettings.gd")
+# --- Issue #352: the lobby mode picker and the modes' wiring ---------------------
+## Two phones join a real server; returns the peers (host first), or [] on failure.
+func _mode_picker_join(server: Node, failures: Array[String]) -> Array[WebSocketPeer]:
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "mode-picker-%d" % i, joined)
+		if result["slot"] != i:
+			failures.append("phone %d was given slot %d" % [i + 1, result["slot"]])
+		joined.append(peer)
+	return joined
+## AC1: only the host phone picks the game mode, malformed picks change nothing,
+## and the lobby state carries the choice and the picker's rows (Classic first).
+func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var joined: Array[WebSocketPeer] = await _mode_picker_join(server, failures)
+	if not failures.is_empty():
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[1].send_text(JSON.stringify({"t": "gamemode", "v": "sudden_death"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.game_mode() != "":
+		failures.append("a phone that is not the host picked '%s'" % server.game_mode())
+	for bad: Variant in [true, 3, null, "nonsense", "KING_OF_THE_HILL"]:
+		joined[0].send_text(JSON.stringify({"t": "gamemode", "v": bad}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.game_mode() != "":
+		failures.append("a malformed pick changed the mode to '%s'" % server.game_mode())
+	joined[0].send_text(JSON.stringify({"t": "gamemode", "v": "king_of_the_hill"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	if server.game_mode() != "king_of_the_hill":
+		failures.append("the host's pick was ignored, mode '%s'" % server.game_mode())
+	var msg: Dictionary = _last_lobby_msg_236(joined[0])
+	var rows: Array = msg.get("game_modes", [])
+	var names: Array[String] = []
+	for row: Variant in rows:
+		names.append(str((row as Dictionary).get("name")))
+	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
+	if msg.get("game_mode") != "king_of_the_hill":
+		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
+	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death"]:
+		failures.append("the picker rows were %s" % [names])
+	HostSettingsScript352.shared().game_mode = ""
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## AC2: Hot Potato is Free-for-all only: refused while Teams is on, and
+## switching Teams on with it chosen falls back to Classic. Every other mode
+## combines with either format.
+func _scenario_mode_hot_potato_is_ffa_only() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("gamemode", "hot_potato") or server.game_mode() != "hot_potato":
+		failures.append("Hot Potato was refused in a free-for-all")
+	if not server.apply_host_command("mode", "teams"):
+		failures.append("Teams could not be switched on")
+	if server.game_mode() != "":
+		failures.append("Teams on with Hot Potato chosen left '%s', not Classic" % server.game_mode())
+	if server.apply_host_command("gamemode", "hot_potato") or server.game_mode() == "hot_potato":
+		failures.append("Hot Potato was accepted while Teams is on")
+	for id: String in ["king_of_the_hill", "sudden_death", ""]:
+		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
+			failures.append("'%s' was refused with Teams on" % id)
+	server.apply_host_command("mode", "ffa")
+	for id: String in ["hot_potato", "king_of_the_hill", "sudden_death", ""]:
+		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
+			failures.append("'%s' was refused in a free-for-all" % id)
+	server.apply_host_command("gamemode", "king_of_the_hill")
+	server.apply_host_command("mode", "teams")
+	if server.game_mode() != "king_of_the_hill":
+		failures.append("switching to Teams dropped King of the Hill to '%s'" % server.game_mode())
+	server.free()
+	HostSettingsScript352.shared().game_mode = ""
+	_scenario_completed = true
+	return failures
+## AC1: the choice is saved with the other host settings and read back.
+func _scenario_mode_choice_persists_with_host_settings() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://scenario_mode_persist.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var first: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	first.path = path
+	first.set_stage_enabled("Flatlands", true)
+	first.set_game_mode("sudden_death")
+	var second: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	second.path = path
+	second.load_settings()
+	if second.game_mode != "sudden_death":
+		failures.append("the saved mode read back as '%s'" % second.game_mode)
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = "user://scenario_mode_persist_missing.cfg"
+	fresh.load_settings()
+	if fresh.game_mode != "":
+		failures.append("a fresh install defaults to '%s', not Classic" % fresh.game_mode)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_scenario_completed = true
+	return failures
+## AC1: the mode chosen when the countdown runs out holds for the whole match;
+## a later pick (refused mid-match) does not change it.
+func _scenario_mode_choice_holds_for_whole_match() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var joined: Array[WebSocketPeer] = await _mode_picker_join(server, failures)
+	if not failures.is_empty():
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	joined[0].send_text(JSON.stringify({"t": "gamemode", "v": "sudden_death"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var begun: bool = false
+	var deadline: int = Time.get_ticks_msec() + BOT_START_MSEC
+	while Time.get_ticks_msec() < deadline and not begun:
+		await _poll_phones(joined, 1)
+		begun = rm.lobby_phase() == "playing"
+	if not begun:
+		failures.append("the match never started ('%s')" % rm.lobby_phase())
+	else:
+		await _await_ticks(10)
+		if rm.game_mode != "sudden_death" or rm.active_game_mode_id() != "sudden_death":
+			failures.append("the round played '%s' / '%s', not Sudden Death" % [rm.game_mode, rm.active_game_mode_id()])
+		joined[0].send_text(JSON.stringify({"t": "gamemode", "v": "king_of_the_hill"}))
+		await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+		if server.game_mode() != "sudden_death" or rm.game_mode != "sudden_death":
+			failures.append("a mid-match pick changed the mode: server '%s', round '%s'" % [server.game_mode(), rm.game_mode])
+	HostSettingsScript352.shared().game_mode = ""
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## AC3: in a Teams King of the Hill, any number of teammates inside hold the
+## hill together for their team, a mix of colours inside contests and freezes
+## it, and hold time banks per team; the winning team's rivals are put out (three players: two Red, one Blue).
+func _scenario_mode_king_of_the_hill_teams_hold_together() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	# Red is slots 0 and 1, Blue slot 2, fixed before the round starts.
+	rm._team_mode = true
+	rm._teams = {0: 0, 1: 0, 2: 1}
+	if not await _mode_started(rig):
+		failures.append("the Teams King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	var away: Array[Vector2] = [Vector2(-900.0, -600.0), Vector2(-700.0, -600.0), Vector2(700.0, -600.0)]
+	for i in 3:
+		players[i].teleport_to(away[i])
+	# Whatever a spawn near the hill banked before the move is not under test.
+	await _await_ticks(3)
+	for team: int in [0, 1]:
+		hill.team_hold[team] = 0.0
+	for slot: int in [0, 1, 2]:
+		hill.hold_time[slot] = 0.0
+	# Both Red teammates inside: Red banks, once for the team, not per player.
+	players[0].teleport_to(hill.hill_position + Vector2(0.0, 40.0))
+	players[1].teleport_to(hill.hill_position + Vector2(0.0, -40.0))
+	await _await_ticks(20)
+	var red: float = hill.team_hold_of(0)
+	if red <= 0.1:
+		failures.append("two Red teammates inside banked %f s for Red" % red)
+	if hill.team_hold_of(1) != 0.0 or hill.hold_of(0) != 0.0 or hill.hold_of(1) != 0.0:
+		failures.append("time went to Blue or to a single player: blue %f, p0 %f" % [hill.team_hold_of(1), hill.hold_of(0)])
+	# A Blue player steps in: contested, everyone's clock frozen.
+	players[2].teleport_to(hill.hill_position + Vector2(40.0, 0.0))
+	await _await_ticks(3)
+	var frozen: float = hill.team_hold_of(0)
+	await _await_ticks(15)
+	if hill.team_hold_of(0) != frozen or hill.team_hold_of(1) != 0.0:
+		failures.append("a mixed hill still banked: red %f -> %f, blue %f" % [frozen, hill.team_hold_of(0), hill.team_hold_of(1)])
+	# Blue leaves; Red resumes from where it was, and reaching the target wins it.
+	players[2].teleport_to(away[2])
+	await _await_ticks(15)
+	if hill.team_hold_of(0) <= frozen + 0.1:
+		failures.append("Red did not resume banking after the contest: %f vs %f" % [hill.team_hold_of(0), frozen])
+	hill.seconds_to_win = hill.team_hold_of(0) + 0.3
+	if not await _await_condition(func() -> bool: return not players[2].alive, 3000):
+		failures.append("Red reached the target but Blue was not eliminated")
+	await _await_ticks(5)
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
+		failures.append("the round scored red %d blue %d, expected 1-0" % [rm.team_score(0), rm.team_score(1)])
+	await _teardown(rig["stage"])
+	return failures
+## AC4: the Rise per mode, from one table: on in Classic, off in King of the
+## Hill and Hot Potato, and in Sudden Death after half the grace period at 1.5x
+## the speed. Checked on the timing a round arms the zone with, and live.
+func _scenario_mode_rise_follows_the_mode() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "res://scenes/stages/Flatlands.tscn"
+	var loop: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
+	var stage: Node = loop["stage"]
+	var rm: Node = stage.get_child(stage.get_child_count() - 1)
+	var timing_classic: Dictionary = rm.kill_zone_rise_timing("")
+	var timing_sd: Dictionary = rm.kill_zone_rise_timing("sudden_death")
+	if not timing_classic["rises"] or absf(timing_classic["grace_sec"] - 40.0) > 0.001 or absf(timing_classic["rise_sec"] - 60.0) > 0.001:
+		failures.append("Classic timing changed: %s" % [timing_classic])
+	if not timing_sd["rises"] or absf(timing_sd["grace_sec"] - 20.0) > 0.001 or absf(timing_sd["rise_sec"] - 40.0) > 0.001:
+		failures.append("Sudden Death should be 20 s grace and 40 s to climb (1.5x), was %s" % [timing_sd])
+	for id: String in ["king_of_the_hill", "hot_potato"]:
+		if rm.kill_zone_rise_timing(id)["rises"]:
+			failures.append("%s has a rise" % id)
+	# Live: Classic and Sudden Death arm the zone, King of the Hill does not.
+	rm.game_mode = "king_of_the_hill"
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("the King of the Hill round never started")
+		await _teardown(stage)
+		return failures
+	await _await_ticks(5)
+	if (instance.get_node("KillZone") as Node2D).is_rising():
+		failures.append("the zone is rising in King of the Hill")
+	await _teardown(stage)
+	var classic: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
+	var classic_stage: Node2D = await _await_live_stage(classic)
+	if classic_stage == null:
+		failures.append("the Classic round never started")
+	elif not (classic_stage.get_node("KillZone") as Node2D).is_rising():
+		failures.append("the zone is not rising in Classic")
+	await _teardown(classic["stage"])
+	var sudden: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
+	var sd_stage: Node = sudden["stage"]
+	sd_stage.get_child(sd_stage.get_child_count() - 1).game_mode = "sudden_death"
+	var sd_instance: Node2D = await _await_live_stage(sudden)
+	if sd_instance == null:
+		failures.append("the Sudden Death round never started")
+	elif not (sd_instance.get_node("KillZone") as Node2D).is_rising():
+		failures.append("the zone is not rising in Sudden Death")
+	await _teardown(sudden["stage"])
+	return failures
+## AC5: a banned modifier is never rolled in its mode (and never forced), while
+## Classic still rolls it.
+func _scenario_mode_banned_modifiers_never_rolled() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, "")
+	var rm: Node = rig["rm"]
+	await _await_ticks(5)
+	var was_enabled: bool = RoundManagerScript.modifier_rolls_enabled
+	RoundManagerScript.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	var bans: Dictionary = {
+		"sudden_death": "double_damage", "hot_potato": "weapon_roulette", "king_of_the_hill": "meteor_shower"}
+	var classic_seen: Dictionary = {}
+	for i in 400:
+		classic_seen[rm._roll_modifier()] = true
+	for id: String in bans:
+		rm.game_mode = id
+		var seen: Dictionary = {}
+		for i in 400:
+			seen[rm._roll_modifier()] = true
+		if seen.has(bans[id]):
+			failures.append("%s rolled the banned %s" % [id, bans[id]])
+		if seen.size() < 8:
+			failures.append("%s rolled only %d kinds of modifier" % [id, seen.size()])
+		if not classic_seen.has(bans[id]):
+			failures.append("Classic never rolled %s in 400 rolls" % bans[id])
+		rm.forced_modifier = bans[id]
+		if rm._roll_modifier() != "":
+			failures.append("%s let the banned %s be forced" % [id, bans[id]])
+		rm.forced_modifier = ""
+	rm.game_mode = ""
+	rm.forced_modifier = "double_damage"
+	if rm._roll_modifier() != "double_damage":
+		failures.append("Classic no longer honours a forced modifier")
+	RoundManagerScript.modifier_rolls_enabled = was_enabled
+	await _teardown(rig["stage"])
+	return failures
+## AC6: the stage title card names the mode and gives its one-line rule, and the
+## lobby's how-to-play panel has one card per mode.
+func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.HOT_POTATO)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(3)
+	var rule: Label = rm.stage_title_rule_label()
+	if rule == null or not rule.visible:
+		failures.append("the title card has no mode line")
+	else:
+		print("      title card mode line: '%s'" % rule.text)
+		if not rule.text.begins_with("Hot Potato") or rule.text.length() <= len("Hot Potato: "):
+			failures.append("the mode line is '%s'" % rule.text)
+	await _teardown(rig["stage"])
+	var loop: Dictionary = _new_lobby_round(2)
+	var lobby_rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
+	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death"]
+	if cards.size() != want.size():
+		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
+	else:
+		for i in want.size():
+			if not cards[i].text.begins_with(want[i]):
+				failures.append("card %d reads '%s', expected it to start '%s'" % [i, cards[i].text, want[i]])
+	await _teardown(loop["stage"])
 	return failures

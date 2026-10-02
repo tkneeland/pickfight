@@ -20,6 +20,7 @@ extends CanvasLayer
 
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const GameModesScript := preload("res://scripts/GameModes.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
@@ -72,6 +73,7 @@ var _how_to_play: Control
 
 var _title_layer: CanvasLayer
 var _title_label: Label
+var _title_rule_label: Label
 var _title_tween: Tween
 
 var _pause_layer: CanvasLayer
@@ -97,6 +99,10 @@ func how_to_play_panel() -> Control:
 func stage_title_label() -> Label:
 	return _title_label
 
+## The line under the stage title naming the game mode and its rule (#352).
+func stage_title_rule_label() -> Label:
+	return _title_rule_label
+
 ## The PAUSED banner, or null before the first pause.
 func pause_label() -> Label:
 	return _pause_label
@@ -108,6 +114,15 @@ func awards_row() -> Control:
 ## Whether the lobby and victory panels exist yet.
 func panels_built() -> bool:
 	return _lobby_panel != null
+
+## The lobby's mode cards, its how-to-play explainer's game-mode lines (#352), one per `GameModes.TABLE` row.
+func mode_cards() -> Array[Label]:
+	var out: Array[Label] = []
+	if _lobby_right != null and _lobby_right.has_node("ModeCards"):
+		for child: Node in _lobby_right.get_node("ModeCards").get_children():
+			if child.has_meta("mode_card"):
+				out.append(child as Label)
+	return out
 
 ## The how-to-play demos running now: four while the lobby shows, none
 ## otherwise.
@@ -354,6 +369,16 @@ func build_panels() -> void:
 	right.add_child(_lobby_qr)
 	_lobby_url = _big_label("", 28, Color(0.8, 0.82, 0.88))
 	right.add_child(_lobby_url)
+	# One card per game mode (#352), from `GameModes.TABLE`, under the QR:
+	# the how-to-play column is already as tall as the screen allows.
+	var cards := VBoxContainer.new()
+	cards.name = "ModeCards"
+	cards.add_theme_constant_override("separation", 0)
+	right.add_child(cards)
+	for row: Dictionary in GameModesScript.TABLE:
+		var card: Label = _big_label("%s: %s" % [row["name"], row["rule"]], 12, Color(0.8, 0.82, 0.88))
+		card.set_meta("mode_card", true)
+		cards.add_child(card)
 	# A column of its own, beside the QR and never over it (#219).
 	# Clear of the Settings corner below it (#230).
 	_how_to_play = _build_how_to_play()
@@ -414,7 +439,7 @@ func _big_label(text: String, font_size: int, color: Color) -> Label:
 # start, below the modifier banner so the two never overlap.
 
 ## Sweeps `text` across the screen over `duration` seconds.
-func show_stage_title(text: String, duration: float) -> void:
+func show_stage_title(text: String, duration: float, rule: String = "") -> void:
 	if _title_label == null:
 		_title_layer = CanvasLayer.new()
 		_title_layer.name = "StageTitleLayer"
@@ -428,11 +453,24 @@ func show_stage_title(text: String, duration: float) -> void:
 		_title_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
 		_title_label.add_theme_constant_override("outline_size", 14)
 		_title_layer.add_child(_title_label)
+		# A child of the title, so the sweep carries it along.
+		_title_rule_label = Label.new()
+		_title_rule_label.name = "StageTitleRule"
+		_title_rule_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_title_rule_label.add_theme_font_size_override("font_size", 32)
+		_title_rule_label.add_theme_color_override("font_color", LOBBY_ACCENT)
+		_title_rule_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
+		_title_rule_label.add_theme_constant_override("outline_size", 8)
+		_title_label.add_child(_title_rule_label)
 	_title_label.text = text
 	_title_label.reset_size()
+	_title_rule_label.text = rule
+	_title_rule_label.visible = rule != ""
+	_title_rule_label.reset_size()
 	var screen: Vector2 = get_viewport().get_visible_rect().size
 	var width: float = _title_label.get_minimum_size().x
 	var middle: float = (screen.x - width) * 0.5
+	_title_rule_label.position = Vector2((width - _title_rule_label.get_minimum_size().x) * 0.5, 96.0)
 	_title_label.position = Vector2(screen.x, screen.y * 0.36)
 	_title_label.visible = true
 	if _title_tween != null:

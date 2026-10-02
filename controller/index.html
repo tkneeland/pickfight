@@ -331,6 +331,9 @@
     background: #2a303d;
   }
   #host-menu button:disabled { opacity: 0.35; }
+  /* Issue #352: the game-mode picker, one button per mode, the chosen one lit. */
+  #menu-gamemodes { display: flex; flex-direction: column; gap: 8px; }
+  #host-menu #menu-gamemodes button.on { color: #0d0f14; background: #ffd933; }
   #host-menu button.primary { color: #0d0f14; background: #ffd933; }
   #host-menu button.danger { color: #fff; background: #c62f3a; }
   #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
@@ -523,7 +526,8 @@
     <button id="menu-pause" type="button" class="primary">Pause</button>
     <button id="menu-end" type="button" class="danger">End match</button>
     <button id="menu-kick" type="button">Kick player</button>
-    <button id="menu-mode" type="button">Mode: Free-for-all</button>
+    <button id="menu-mode" type="button">Format: Free-for-all</button>
+    <div id="menu-gamemodes"></div>
     <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
   </div>
@@ -1480,8 +1484,9 @@
     var others = 0;
     for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
     menuKickBtn.disabled = others === 0;
-    menuModeBtn.textContent = lobby.mode === "teams" ? "Mode: Teams" : "Mode: Free-for-all";
+    menuModeBtn.textContent = lobby.mode === "teams" ? "Format: Teams" : "Format: Free-for-all";
     menuModeBtn.disabled = inMatch();
+    refreshGameModes();
     var online = lobby.online || "off";
     menuOnlineBtn.textContent = online === "off" ? "Go online: off" :
       online === "connecting" ? "Go online: connecting\u2026" :
@@ -1566,6 +1571,37 @@
       function () { return inMatch() && lobby.match === match; });
   });
   menuKickBtn.addEventListener("click", showKickList);
+  // Issue #352: the game-mode picker. The host lists the modes (lobby.game_modes,
+  // from GameModes.TABLE) and which is chosen (lobby.game_mode, "" is Classic);
+  // one the Teams format rules out is greyed out.
+  var gameModesEl = document.getElementById("menu-gamemodes");
+  var gameModesKey = "";
+  function refreshGameModes() {
+    var rows = lobby.game_modes || [];
+    var key = JSON.stringify(rows);
+    if (key !== gameModesKey) {
+      gameModesKey = key;
+      gameModesEl.innerHTML = "";
+      rows.forEach(function (row) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.id = row.id;
+        btn.textContent = row.name;
+        btn.addEventListener("click", function () {
+          if (inMatch() || btn.disabled) { return; }
+          sendText({ t: "gamemode", v: row.id });
+        });
+        gameModesEl.appendChild(btn);
+      });
+    }
+    var teams = lobby.mode === "teams";
+    var chosen = lobby.game_mode || "";
+    rows.forEach(function (row, i) {
+      var btn = gameModesEl.children[i];
+      btn.className = row.id === chosen ? "on" : "";
+      btn.disabled = inMatch() || (teams && !!row.ffa_only);
+    });
+  }
   menuModeBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });

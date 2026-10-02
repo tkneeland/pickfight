@@ -816,7 +816,7 @@ func _floor_kill_zone() -> Node2D:
 ## `kill_zone_rise_sec` after the grace period ends.
 func _start_kill_zone_rise() -> void:
 	var zone: Node2D = _floor_kill_zone()
-	if zone == null or _stage_spawn_points.is_empty():
+	if zone == null or _stage_spawn_points.is_empty() or not GameModesScript.has_rise(game_mode):
 		return
 	var highest_y: float = INF
 	for spawn: Vector2 in _stage_spawn_points:
@@ -825,7 +825,18 @@ func _start_kill_zone_rise() -> void:
 	if distance <= 0.0 or kill_zone_rise_sec <= 0.0:
 		push_warning("RoundManager: floor kill zone is not below the highest spawn; not rising")
 		return
-	zone.start_rising(kill_zone_grace_sec, distance / kill_zone_rise_sec)
+	var timing: Dictionary = kill_zone_rise_timing(game_mode)
+	zone.start_rising(float(timing["grace_sec"]), distance / float(timing["rise_sec"]))
+
+## The rise under `mode_id` (issue #352): whether it runs, its grace period
+## and the seconds it takes to reach the highest spawn, `kill_zone_grace_sec`
+## and `kill_zone_rise_sec` scaled by the mode's factors in `GameModes.TABLE`.
+func kill_zone_rise_timing(mode_id: String) -> Dictionary:
+	return {
+		"rises": GameModesScript.has_rise(mode_id),
+		"grace_sec": kill_zone_grace_sec * GameModesScript.rise_grace_factor(mode_id),
+		"rise_sec": kill_zone_rise_sec / GameModesScript.rise_speed_factor(mode_id),
+	}
 
 func _stop_kill_zone_rise() -> void:
 	var zone: Node2D = _floor_kill_zone()
@@ -893,13 +904,20 @@ func _end_round_modifier() -> void:
 
 func _roll_modifier() -> String:
 	if forced_modifier != "":
-		return forced_modifier
+		return "" if GameModesScript.bans_modifier(game_mode, forced_modifier) else forced_modifier
 	if not modifier_rolls_enabled or modifier_chance <= 0.0:
 		return ""
 	var draw: RandomNumberGenerator = modifier_rng()
 	if draw.randf() >= modifier_chance:
 		return ""
-	var ids: PackedStringArray = RoundModifiersScript.IDS
+	# The mode's bans (#352) come off the pool; with none, the draw is the same
+	# one it always was.
+	var ids := PackedStringArray()
+	for id: String in RoundModifiersScript.IDS:
+		if not GameModesScript.bans_modifier(game_mode, id):
+			ids.append(id)
+	if ids.is_empty():
+		return ""
 	return ids[draw.randi() % ids.size()]
 
 ## The one stream the modifier roll and the modifiers' own draws (Weapon
@@ -1273,6 +1291,7 @@ func _publish_lobby_state() -> void:
 		"paused": _paused,
 	}
 	_add_team_state(state, roster, in_lobby)
+	_add_game_mode_state(state, in_lobby)
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -1343,6 +1362,10 @@ func _set_join_corner_visible(on: bool) -> void:
 func stage_title_label() -> Label:
 	return _lobby_screen.stage_title_label() if _lobby_screen != null else null
 
+## The mode line under the stage title: the mode's name and its rule (#352).
+func stage_title_rule_label() -> Label:
+	return _lobby_screen.stage_title_rule_label() if _lobby_screen != null else null
+
 ## Name of the stage in play, or "" in the lobby (issue #262, feedback context).
 func current_stage_name() -> String:
 	return str(_current_stage.name) if _current_stage != null else ""
@@ -1350,7 +1373,8 @@ func current_stage_name() -> String:
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
-	_screen().show_stage_title(str(_current_stage.name).to_upper(), stage_title_sec)
+	_screen().show_stage_title(str(_current_stage.name).to_upper(), stage_title_sec,
+		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.rule_line(game_mode)])
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -1396,6 +1420,10 @@ func _tick_name_tags() -> void:
 # how-to-play panel.
 
 var _paused: bool = false
+
+## The how-to-play panel's mode cards, one per game mode (#352).
+func how_to_play_mode_cards() -> Array[Label]:
+	return _lobby_screen.mode_cards() if _lobby_screen != null else []
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
@@ -1603,6 +1631,7 @@ func _team_key(roster: Array[int]) -> Array:
 ## The countdown ran out: fix the mode and the teams for the whole match.
 func _begin_team_match() -> void:
 	_team_mode = lobby_enabled and _requested_team_mode()
+	_latch_game_mode()
 	_teams = _lobby_teams(_roster()) if _team_mode else {}
 	_team_scores = PackedInt32Array([0, 0])
 	_match_winner_team = -1
@@ -2045,6 +2074,28 @@ func _start_game_mode() -> void:
 	add_child(_game_mode_node)
 	_game_mode_node.setup(self)
 	_game_mode_node.start_round(_in_round.duplicate())
+
+## The host phone's pick for the next match (issue #352), taken as the match's
+## countdown runs out and held for all of it. Only a lobby match takes it, so a
+## `game_mode` set directly (the scenario seam) is left alone.
+func _latch_game_mode() -> void:
+	if not lobby_enabled or _controller_server == null or not _controller_server.has_method("game_mode"):
+		return
+	var picked: String = str(_controller_server.game_mode())
+	if _team_mode and GameModesScript.is_ffa_only(picked):
+		picked = GameModesScript.CLASSIC
+	game_mode = picked
+
+## The lobby state's game-mode fields: the choice, and the picker's rows
+## (from `GameModes.TABLE`) while the host can still change it.
+func _add_game_mode_state(state: Dictionary, in_lobby: bool) -> void:
+	if _controller_server == null or not _controller_server.has_method("game_mode"):
+		return
+	var shown: String = str(_controller_server.game_mode()) if in_lobby or _state == State.VICTORY else game_mode
+	if shown != GameModesScript.CLASSIC:
+		state["game_mode"] = shown
+	if in_lobby or _state == State.VICTORY:
+		state["game_modes"] = GameModesScript.picker_rows()
 
 func _end_game_mode() -> void:
 	if _game_mode_node != null:

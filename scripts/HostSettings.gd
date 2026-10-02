@@ -41,6 +41,8 @@ var persist: bool = true
 var resolution: Vector2i = Vector2i.ZERO
 var disabled_stages: PackedStringArray = []
 var disabled_weapons: PackedStringArray = []
+## The `GameModes` id the host last picked (issue #352); "" is Classic.
+var game_mode: String = ""
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
@@ -87,6 +89,10 @@ func set_resolution(size: Vector2i) -> void:
 	resolution = size
 	save_settings()
 
+func set_game_mode(id: String) -> void:
+	game_mode = id
+	save_settings()
+
 func _set_enabled(disabled: PackedStringArray, known: PackedStringArray, item: String, enabled: bool) -> bool:
 	var index: int = disabled.find(item)
 	if enabled:
@@ -111,6 +117,7 @@ func load_settings() -> void:
 		resolution = size if size is Vector2i else Vector2i.ZERO
 		disabled_stages = PackedStringArray(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
 		disabled_weapons = PackedStringArray(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
+		game_mode = str(config.get_value(SECTION, "game_mode", ""))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
 
@@ -125,6 +132,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "resolution", resolution)
 	config.set_value(SECTION, "disabled_stages", disabled_stages)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
+	config.set_value(SECTION, "game_mode", game_mode)
 	err = config.save(path)
 	if err != OK:
 		push_warning("HostSettings: could not save to %s (%s)" % [path, error_string(err)])
