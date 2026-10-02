@@ -627,6 +627,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_award_categories_are_translated",
 	"ctf_a_kicked_player_waiting_to_respawn_stays_out",
 	"hot_potato_first_it_varies_across_a_matchs_rounds",
+	"sound_trailer_split_survives_hostile_bytes",
+	"remote_client_lobby_text_follows_the_locale",
+	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2276,6 +2279,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out()
 		"hot_potato_first_it_varies_across_a_matchs_rounds":
 			return await _scenario_hot_potato_first_it_varies_across_a_matchs_rounds()
+		"sound_trailer_split_survives_hostile_bytes":
+			return await _scenario_sound_trailer_split_survives_hostile_bytes()
+		"remote_client_lobby_text_follows_the_locale":
+			return await _scenario_remote_client_lobby_text_follows_the_locale()
+		"lobby_pad_menu_lets_go_when_the_lobby_leaves":
+			return await _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32654,4 +32663,119 @@ func _scenario_hot_potato_first_it_varies_across_a_matchs_rounds() -> Array[Stri
 	if picks[0] != picks[1]:
 		failures.append("the same match seed picked differently: %s vs %s" % [picks[0], picks[1]])
 	_scenario_completed = true
+	return failures
+
+## Review sweep: a hostile or truncated sound trailer must split as a plain
+## snapshot (the whole packet, no events, no track), never read past the packet.
+func _trailer_review(prefix: Array, body: Array) -> PackedByteArray:
+	var out := PackedByteArray(prefix)
+	out.append_array(PackedByteArray(body))
+	out.append_array(PackedByteArray([body.size() >> 8, body.size() & 0xFF, 0x53, 0x58]))
+	return out
+func _scenario_sound_trailer_split_survives_hostile_bytes() -> Array[String]:
+	var failures: Array[String] = []
+	var head := PackedByteArray([0x81, 7])
+	var good: PackedByteArray = head.duplicate()
+	good.append_array(SnapshotCaptureScript240.encode_sound_trailer([{"name": "hit", "position": Vector2(10, -20), "strength": 1.0}], "lobby"))
+	var split: Variant = SnapshotCaptureScript240.split_sound_trailer(good)
+	if not split is Dictionary or (split["events"] as Array).size() != 1 or split["track"] != "lobby" or split["snapshot"] != head \
+			or (split["events"][0] as Dictionary)["position"] != Vector2(10, -20):
+		failures.append("a well-formed trailer no longer splits: %s" % str(split))
+	var lost_byte: PackedByteArray = good.duplicate()
+	lost_byte.remove_at(lost_byte.size() - 5)
+	var hostile: Dictionary = {
+		"count 5, no events": _trailer_review([0x81, 7], [5]),
+		"name runs past the trailer": _trailer_review([0x81, 7], [1, 3, 0x61]),
+		"position with no coordinates": _trailer_review([0x81, 7], [1, 0, 1]),
+		"track runs past the trailer": _trailer_review([0x81, 7], [0, 9]),
+		"empty body": _trailer_review([0x81, 7], []),
+		"bytes after the track": _trailer_review([0x81, 7], [0, 0, 7]),
+		"one body byte lost": lost_byte,
+	}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 251
+	for i in 200:
+		var junk := PackedByteArray()
+		for b in rng.randi_range(0, 40):
+			junk.append(rng.randi_range(0, 255))
+		junk.append_array(PackedByteArray([0, rng.randi_range(0, 12), 0x53, 0x58]))
+		var got: Variant = SnapshotCaptureScript240.split_sound_trailer(junk)
+		if not got is Dictionary or not got["snapshot"] is PackedByteArray or junk.slice(0, (got["snapshot"] as PackedByteArray).size()) != got["snapshot"]:
+			failures.append("random packet %d split as %s" % [i, str(got)])
+			break
+	for label: String in hostile:
+		var packet: PackedByteArray = hostile[label]
+		var got: Variant = SnapshotCaptureScript240.split_sound_trailer(packet)
+		if not got is Dictionary:
+			failures.append("%s: split returned %s" % [label, str(got)])
+		elif got["snapshot"] != packet or not (got["events"] as Array).is_empty() or got["track"] != "":
+			failures.append("%s: split as %s, not a plain snapshot" % [label, str(got)])
+	_scenario_completed = true
+	return failures
+## Review sweep: the PC client's lobby and pause text follows the locale like
+## the host's lobby (#367). A pseudo-locale "xx" marks every catalogue string.
+func _rc_untranslated_review(client: Node) -> PackedStringArray:
+	var out := PackedStringArray()
+	for node: Node in client.find_children("*", "", true, false):
+		if not (node is Label or node is BaseButton) or not node.is_inside_tree():
+			continue
+		var text: String = str(node.get("text"))
+		if text.is_empty() or text == "-" or text == "+" or text.begins_with("[xx] "):
+			continue
+		out.append("%s '%s'" % [node.name, text])
+	return out
+func _scenario_remote_client_lobby_text_follows_the_locale() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var rig: Dictionary = {"nodes": []}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var before: PackedStringArray = _rc_untranslated_review(client)
+	if not before.is_empty():
+		failures.append("untranslated before any lobby: %s" % ", ".join(before))
+	client.room_code = "ABCD"
+	client.slot = 0
+	client.lobby = {"phase": "countdown", "count": 3, "host": 0, "mode": "teams", "target": 5, "paused": false,
+		"players": [{"name": "Ann", "slot": 0, "ready": true, "color": "ff0000"}]}
+	client.state = RcState241.PLAYING
+	client._refresh_lobby()
+	await process_frame
+	var titles: PackedStringArray = PackedStringArray([client._lobby_title.text])
+	var during: PackedStringArray = _rc_untranslated_review(client)
+	if not during.is_empty():
+		failures.append("untranslated in a countdown lobby: %s" % ", ".join(during))
+	if client._lobby_title.text != "[xx] Room ABCD  starting in 3":
+		failures.append("countdown title reads '%s'" % client._lobby_title.text)
+	client.lobby["phase"] = "victory"
+	client._refresh_lobby()
+	titles.append(client._lobby_title.text)
+	if client._lobby_title.text != "[xx] Room ABCD  match over":
+		failures.append("victory title reads '%s'" % client._lobby_title.text)
+	print("      lobby titles in xx: %s" % " | ".join(titles))
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD  match over":
+		failures.append("English victory title reads '%s'" % client._lobby_title.text)
+	await _rc_close_241(rig)
+	return failures
+## Review sweep: Join swaps Main for the PC client under an open pad menu. The
+## lobby must let go of PadMenu as it leaves, or A and B stay ignored (#368).
+func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	rig["screen"].set_pad_menu(true)
+	if not PadMenuScript368.is_open():
+		failures.append("the pad menu never opened; the check is void")
+	await _teardown(rig["main"])
+	await process_frame
+	if PadMenuScript368.is_open():
+		failures.append("PadMenu still reports a menu open after the lobby left the tree")
+	PadMenuScript368.reset()
 	return failures
