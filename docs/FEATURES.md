@@ -107,6 +107,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Window size option for windowed mode (#294)
 - Stage on/off list: the rotation skips switched-off stages (#294)
 - Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- Rules section in the host settings panel (#378): pick a mode (Classic, King of the Hill, Sudden Death, Hot Potato, Stock) and untick the round modifiers that may not roll in it; saved per mode in `user://audio.cfg`, default all on. A mode's own bans (and all of Stock's) show locked off and cannot be re-enabled; with every modifier off, none rolls. Host screen only, not mirrored on the phone
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - "Send anonymous match stats" toggle in "More options", on by default and persisted; a one-time host-screen notice on first launch ("Pickfight sends anonymous match stats to help balance the game", Turn off / OK) that never returns once acted on (#372)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
