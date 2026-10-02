@@ -33,6 +33,7 @@ const SLIDER_WIDTH: float = 180.0
 const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
 const NOTICE_TEXT: String = "Pickfight sends anonymous match stats to help balance the game"
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 ## Height of the scrolling window-size, stage and weapon area.
@@ -195,7 +196,10 @@ func _ready() -> void:
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
-	_more.toggled.connect(func(pressed: bool) -> void: _more_area.visible = pressed)
+	_more.toggled.connect(func(pressed: bool) -> void:
+		_more_area.visible = pressed
+		if PadMenuScript.is_open():
+			_chain_pad_focus.call_deferred())
 	apply_resolution()
 
 ## A left click on the toggle is taken here, in `_input`, before the GUI
@@ -229,6 +233,18 @@ func toggle_hit(point: Vector2) -> bool:
 	return _toggle.get_global_rect().has_point(point)
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Gamepad (#368): View opens the panel, B closes it.
+	if PadMenuScript.pressed(event, JOY_BUTTON_BACK):
+		pad_toggle()
+		get_viewport().set_input_as_handled()
+		return
+	if PadMenuScript.pressed(event, JOY_BUTTON_B) and _panel.visible:
+		if _feedback_box.visible:
+			toggle_feedback()
+		else:
+			toggle_panel()
+		get_viewport().set_input_as_handled()
+		return
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
 		return
@@ -265,6 +281,8 @@ func refresh() -> void:
 	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
 	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
 	_rebuild_rules()
+	if PadMenuScript.is_open():
+		_chain_pad_focus()
 
 ## Esc can close the panel mid-drag, and the slider then never reports the
 ## drag's end: finish it here and save what it left (issue #196).
@@ -272,10 +290,64 @@ func toggle_panel() -> void:
 	_panel.visible = not _panel.visible
 	if not _panel.visible:
 		_feedback_box.visible = false
+		_set_pad_focus(false)
 	if _panel.visible:
 		refresh()
 	elif _dragging:
 		_on_drag_ended(true)
+
+## The gamepad's way in (#368): View opens the panel with focus on its first
+## slider, or, while the first-launch notice is up, focuses the notice's OK
+## first. D-pad moves focus, left and right turn a slider, A presses, B closes.
+func pad_toggle() -> void:
+	if _notice.visible and not _panel.visible:
+		_set_pad_focus(true)
+		_notice_ok.grab_focus()
+		return
+	toggle_panel()
+	if _panel.visible:
+		_set_pad_focus(true)
+
+## Makes every control in the panel (and the notice) focusable for the gamepad
+## and focuses the first, or gives it all back to mouse-only when `on` is
+## false. They are FOCUS_NONE otherwise so a stray Enter never presses one
+## mid-match.
+func _set_pad_focus(on: bool) -> void:
+	PadMenuScript.set_open("settings", on)
+	var mode: Control.FocusMode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+	for node: Node in _panel.find_children("*", "Control", true, false):
+		if node is BaseButton or node is Slider:
+			(node as Control).focus_mode = mode
+	_notice_ok.focus_mode = mode
+	_notice_off.focus_mode = mode
+	if on:
+		_chain_pad_focus()
+		_slider.grab_focus()
+	elif is_inside_tree():
+		var focused: Control = get_viewport().gui_get_focus_owner()
+		if focused != null:
+			focused.release_focus()
+
+## Godot's own focus neighbours are geometric and lose controls inside the
+## scrolling lists, so the panel's controls are chained top to bottom in
+## their tree order (the visual order). Left and right keep the geometric
+## default so the Mute / Fullscreen / Feedback row and sliders still work.
+func _chain_pad_focus() -> void:
+	var items: Array[Control] = []
+	for node: Node in _panel.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control == null or not (control is BaseButton or control is Slider):
+			continue
+		if control.focus_mode == Control.FOCUS_NONE or not control.is_visible_in_tree():
+			continue
+		if control is BaseButton and (control as BaseButton).disabled:
+			continue
+		items.append(control)
+	for i in items.size():
+		if i > 0:
+			items[i].focus_neighbor_top = items[i].get_path_to(items[i - 1])
+		if i < items.size() - 1:
+			items[i].focus_neighbor_bottom = items[i].get_path_to(items[i + 1])
 
 func toggle_feedback() -> void:
 	_feedback_box.visible = not _feedback_box.visible
@@ -441,9 +513,13 @@ func _build_telemetry_notice() -> void:
 	_notice_off.pressed.connect(func() -> void:
 		host.set_share_stats(false)
 		host.mark_telemetry_notice_seen()
+		if not _panel.visible:
+			_set_pad_focus(false)
 		refresh())
 	_notice_ok.pressed.connect(func() -> void:
 		host.mark_telemetry_notice_seen()
+		if not _panel.visible:
+			_set_pad_focus(false)
 		refresh())
 
 func flash_box() -> CheckBox:

@@ -600,6 +600,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"character_polish_hit_flash_respects_reduce_flash",
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
+	"deck_text_is_legible_at_1280x800",
+	"deck_lobby_join_qr_and_url_fit_the_deck_screen",
+	"deck_gamepad_reaches_every_lobby_control",
+	"deck_gamepad_operates_the_settings_panel",
+	"deck_captions_drop_keyboard_glyphs_for_a_gamepad",
+	"deck_gamepad_can_dismiss_the_first_launch_notice",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2195,6 +2201,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_character_polish_takeoff_stretches_within_cap()
 		"character_polish_weapon_head_has_ink_outline":
 			return await _scenario_character_polish_weapon_head_has_ink_outline()
+		"deck_text_is_legible_at_1280x800":
+			return await _scenario_deck_text_is_legible_at_1280x800()
+		"deck_lobby_join_qr_and_url_fit_the_deck_screen":
+			return await _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen()
+		"deck_gamepad_reaches_every_lobby_control":
+			return await _scenario_deck_gamepad_reaches_every_lobby_control()
+		"deck_gamepad_operates_the_settings_panel":
+			return await _scenario_deck_gamepad_operates_the_settings_panel()
+		"deck_captions_drop_keyboard_glyphs_for_a_gamepad":
+			return await _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad()
+		"deck_gamepad_can_dismiss_the_first_launch_notice":
+			return await _scenario_deck_gamepad_can_dismiss_the_first_launch_notice()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -31476,4 +31494,252 @@ func _scenario_character_polish_weapon_head_has_ink_outline() -> Array[String]:
 		if not _color_close(player.head_outline_color(), Color(0.2, 0.1, 0.3), 0.01):
 			failures.append("head outline did not follow the stage ink")
 	await _teardown(stage)
+	return failures
+# --- Steam Deck readiness (#368) -------------------------------------------------
+const PadMenuScript368 := preload("res://scripts/PadMenu.gd")
+const HitFeedbackScript368 := preload("res://scripts/HitFeedback.gd")
+## The Deck's screen. The project's 1600x900 canvas scales by the smaller ratio.
+const DECK_SCREEN_368: Vector2 = Vector2(1280, 800)
+## Valve: the smallest character must not fall below 9 px high at 1280x800.
+## Godot's default font has a cap height of about 0.71 em, so 9 px needs about
+## 12.7 px of em size; at the 0.8 scale that is a 16 px theme font size.
+const DECK_MIN_EM_PX_368: float = 12.7
+## A full press and release: a focused Button fires on the release.
+func _pad_tap_368(device: int, button: int) -> void:
+	await _pad_button_261(device, button, true)
+	await _pad_button_261(device, button, false)
+func _deck_rig_368() -> Dictionary:
+	RoundManagerScript.modifier_rolls_enabled = false
+	PadMenuScript368.reset()
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	return {"main": main, "server": server, "rm": rm, "screen": rm.get_node("LobbyLayer")}
+func _scenario_deck_text_is_legible_at_1280x800() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if not ui.is_open():
+		ui.toggle_panel()
+	ui.more_box().button_pressed = true
+	await _await_ticks(3)
+	var scale: float = minf(DECK_SCREEN_368.x / SCREEN_SIZE.x, DECK_SCREEN_368.y / SCREEN_SIZE.y)
+	var checked: int = 0
+	var smallest: float = INF
+	for root: Node in [rig["main"], ui]:
+		for node: Node in root.find_children("*", "Control", true, false):
+			var control: Control = node as Control
+			if not (control is Label or control is BaseButton or control is TextEdit or control is LineEdit):
+				continue
+			var text: String = str(control.get("text"))
+			if text.is_empty() and not (control is TextEdit):
+				continue
+			var size: int = control.get_theme_font_size("font_size")
+			var em: float = float(size) * scale
+			checked += 1
+			smallest = minf(smallest, em)
+			if em < DECK_MIN_EM_PX_368:
+				failures.append("%s '%s' is %.1f px at 1280x800 (theme size %d), below %.1f" % [control.get_path(), text.left(30), em, size, DECK_MIN_EM_PX_368])
+	if checked < 20:
+		failures.append("only %d text controls were found; the walk is broken" % checked)
+	print("      %d text controls checked at scale %.2f; smallest em %.1f px" % [checked, scale, smallest])
+	if float(HitFeedbackScript368.NUMBER_MIN_FONT) * scale < DECK_MIN_EM_PX_368:
+		failures.append("the smallest floating damage number is below the Deck minimum")
+	ui.toggle_panel()
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var panel: Control = screen.lobby_panel()
+	var qr: Control = panel.find_child("JoinQr", true, false) as Control
+	if qr == null:
+		failures.append("no join QR TextureRect in the lobby")
+		await _teardown(rig["main"])
+		return failures
+	var canvas := Rect2(Vector2.ZERO, SCREEN_SIZE)
+	var scale: float = minf(DECK_SCREEN_368.x / SCREEN_SIZE.x, DECK_SCREEN_368.y / SCREEN_SIZE.y)
+	var rect: Rect2 = qr.get_global_rect()
+	if not canvas.encloses(rect):
+		failures.append("the QR %s runs off the %s canvas" % [rect, SCREEN_SIZE])
+	if rect.size.x * scale < 250.0:
+		failures.append("the QR is %.0f px wide on the Deck, under 250" % (rect.size.x * scale))
+	for sibling: Node in qr.get_parent().get_children():
+		if sibling is Label and (sibling as Label).visible and not canvas.encloses((sibling as Control).get_global_rect()):
+			failures.append("%s %s runs off the canvas" % [sibling.name, (sibling as Control).get_global_rect()])
+	var code: Control = panel.find_child("RoomCode", true, false) as Control
+	if code == null:
+		failures.append("no RoomCode label under the QR")
+	elif not canvas.encloses(code.get_global_rect()):
+		failures.append("the room code %s runs off the canvas" % code.get_global_rect())
+	await _teardown(rig["main"])
+	return failures
+## Every control the D-pad can reach from `start` by following Godot's own
+## focus neighbours (what ui_up/down/left/right use), by name.
+func _focus_reach_368(start: Control) -> Dictionary:
+	var seen: Dictionary = {start.get_instance_id(): start}
+	var queue: Array[Control] = [start]
+	while not queue.is_empty():
+		var current: Control = queue.pop_front()
+		for side in [SIDE_TOP, SIDE_BOTTOM, SIDE_LEFT, SIDE_RIGHT]:
+			var next: Control = current.find_valid_focus_neighbor(side)
+			if next != null and not seen.has(next.get_instance_id()):
+				seen[next.get_instance_id()] = next
+				queue.append(next)
+	var names: Dictionary = {}
+	for control: Control in seen.values():
+		names[str(control.name)] = true
+	return names
+func _scenario_deck_gamepad_reaches_every_lobby_control() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	if screen.pad_menu_open():
+		failures.append("the host menu starts open")
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	if not screen.pad_menu_open() or not PadMenuScript368.is_open():
+		failures.append("Y did not open the gamepad host menu")
+	var seen: Dictionary = _focus_reach_368(get_root().gui_get_focus_owner())
+	for id in ["online", "pc_seat", "mode", "target_down", "target_up", "start"]:
+		if not seen.has(id):
+			failures.append("the D-pad never focused the '%s' control (saw %s)" % [id, seen.keys()])
+	# A presses the focused control and must not seat or ready the pad.
+	var was_teams: bool = server.team_mode()
+	screen.control_button("mode").grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if server.team_mode() == was_teams:
+		failures.append("A on the focused Mode button did not change the mode")
+	if not server.claimed_slots().is_empty() or server.pad_slot(0) != -1:
+		failures.append("A inside the host menu seated the gamepad (claims %s)" % [server.claimed_slots()])
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.pad_menu_open() or PadMenuScript368.is_open():
+		failures.append("B did not close the host menu")
+	if screen.control_button("mode").focus_mode != Control.FOCUS_NONE:
+		failures.append("the lobby buttons stayed focusable after the menu closed")
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if server.pad_slot(0) == -1:
+		failures.append("A after the menu closed no longer joins a seat")
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_gamepad_operates_the_settings_panel() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if ui.is_open():
+		ui.toggle_panel()
+	var was_volume: float = sfx.master_volume
+	var was_muted: bool = sfx.muted
+	var was_notice: bool = ui.host.telemetry_notice_seen
+	ui.host.mark_telemetry_notice_seen()
+	ui.refresh()
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	if not ui.is_open():
+		failures.append("View did not open the Settings panel")
+	elif get_root().gui_get_focus_owner() != ui.volume_slider():
+		failures.append("the panel opened with focus on %s, not the master volume slider" % get_root().gui_get_focus_owner())
+	var before: float = ui.volume_slider().value
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_LEFT)
+	if ui.volume_slider().value >= before:
+		failures.append("D-pad left did not lower the focused slider (%.2f -> %.2f)" % [before, ui.volume_slider().value])
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
+	if get_root().gui_get_focus_owner() == ui.volume_slider():
+		failures.append("D-pad down left the focus on the first slider")
+	ui.more_box().button_pressed = true
+	await _await_ticks(3)
+	var seen: Dictionary = _focus_reach_368(ui.volume_slider())
+	for id in ["Volume", "SfxVolume", "MusicVolume", "Mute", "Fullscreen", "MoreOptions", "Feedback", "Resolution", "ScreenShake", "HideRoomCode", "TagSize", "RulesMode"]:
+		if not seen.has(id):
+			failures.append("the D-pad never focused '%s' in Settings (saw %s)" % [id, seen.keys()])
+	ui.mute_box().grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if sfx.muted == was_muted:
+		failures.append("A on the focused Mute box did not toggle mute")
+	if server.pad_slot(0) != -1 or not server.claimed_slots().is_empty():
+		failures.append("A inside Settings seated the gamepad")
+	var unreachable: Array[String] = []
+	for node: Node in ui.get_node("Corner/Panel").find_children("*", "Control", true, false):
+		if (node is BaseButton or node is Slider) and (node as Control).focus_mode == Control.FOCUS_NONE:
+			unreachable.append(str(node.name))
+	if not unreachable.is_empty():
+		failures.append("these panel controls cannot take focus from the gamepad: %s" % [unreachable])
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if ui.is_open() or PadMenuScript368.is_open():
+		failures.append("B did not close the Settings panel")
+	if ui.mute_box().focus_mode != Control.FOCUS_NONE:
+		failures.append("the panel's controls stayed focusable after closing")
+	sfx.set_muted(was_muted)
+	sfx.set_master_volume(was_volume, false)
+	if not was_notice:
+		ui.host.telemetry_notice_seen = false
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_SHIFT
+	key.pressed = true
+	Input.parse_input_event(key)
+	Input.flush_buffered_events()
+	await _await_ticks(3)
+	if screen.pad_active() or not screen.control_button("start").text.contains("(Enter)"):
+		failures.append("with the keyboard active the start button reads '%s'" % screen.control_button("start").text)
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_UP)
+	await _await_ticks(3)
+	if not screen.pad_active():
+		failures.append("a gamepad press did not make the gamepad the active input")
+	var text: String = screen.control_button("start").text
+	if text.contains("Enter") or text.contains("("):
+		failures.append("with a gamepad active the start button still reads '%s'" % text)
+	var hint: Label = screen.lobby_panel().find_child("GamepadHint", true, false) as Label
+	if hint == null or not hint.text.contains("Y"):
+		failures.append("no gamepad hint naming Y (hint %s, text '%s', locale %s)" % [hint != null, hint.text if hint != null else "", TranslationServer.get_locale()])
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if ui.is_open():
+		ui.toggle_panel()
+	var was_seen: bool = ui.host.telemetry_notice_seen
+	ui.host.telemetry_notice_seen = false
+	ui.refresh()
+	if not ui.telemetry_notice().visible:
+		failures.append("the notice is not showing")
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	if ui.is_open():
+		failures.append("View opened the panel while the notice was up; it should focus the notice")
+	if get_root().gui_get_focus_owner() != ui.telemetry_dismiss_button():
+		failures.append("View did not focus the notice's OK button (focus is %s)" % get_root().gui_get_focus_owner())
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if ui.telemetry_notice().visible:
+		failures.append("A did not dismiss the notice")
+	if PadMenuScript368.is_open():
+		failures.append("the gamepad menu stayed open after the notice went")
+	if ui.telemetry_dismiss_button().focus_mode != Control.FOCUS_NONE:
+		failures.append("the notice buttons stayed focusable")
+	ui.host.telemetry_notice_seen = was_seen
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
 	return failures

@@ -22,9 +22,13 @@ const KillFeedScript := preload("res://scripts/KillFeed.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
+const PadMenuScript := preload("res://scripts/PadMenu.gd")
 
 const LOBBY_BACKGROUND: Color = Color(0.05, 0.06, 0.08, 0.96)
 const LOBBY_ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
+## The smallest text size the host screen uses (#368): 16 design px is 12.8 px on a
+## Steam Deck (1280x800 scales the 1600x900 canvas by 0.8), about 9 px cap height.
+const DECK_MIN_FONT_SIZE: int = 16
 const GAME_TITLE: String = "PICKFIGHT"
 ## The wordmark (#359). Loaded as the imported texture where an import exists;
 ## a fresh clone has no import cache, so it falls back to rasterising the SVG.
@@ -445,7 +449,8 @@ func build_panels() -> void:
 	right.add_theme_constant_override("separation", 10)
 	columns.add_child(right)
 	_lobby_qr = TextureRect.new()
-	_lobby_qr.custom_minimum_size = Vector2(372, 372)
+	_lobby_qr.name = "JoinQr"
+	_lobby_qr.custom_minimum_size = Vector2(340, 340) # was 372; the 16 px mode cards (#368) needed the room
 	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -459,7 +464,7 @@ func build_panels() -> void:
 	cards.add_theme_constant_override("separation", 0)
 	right.add_child(cards)
 	for row: Dictionary in GameModesScript.TABLE:
-		var card: Label = _big_label("%s: %s" % [GameModesScript.display_name(row["id"]), GameModesScript.rule_line(row["id"])], 12, Color(0.8, 0.82, 0.88))
+		var card: Label = _big_label("%s: %s" % [GameModesScript.display_name(row["id"]), GameModesScript.rule_line(row["id"])], DECK_MIN_FONT_SIZE, Color(0.8, 0.82, 0.88))
 		card.set_meta("mode_card", true)
 		cards.add_child(card)
 	# A column of its own, beside the QR and never over it (#219).
@@ -657,6 +662,7 @@ func attach_controls(server: Object) -> void:
 	var pad_hint := _big_label(tr("HOST_GAMEPAD_HINT"), 24, Color(0.8, 0.82, 0.88))
 	pad_hint.name = "GamepadHint"
 	box.add_child(pad_hint)
+	_pad_active = not Input.get_connected_joypads().is_empty()
 	box.add_child(_control_button("mode", tr("HOST_MODE")))
 	var target_row := HBoxContainer.new()
 	target_row.add_theme_constant_override("separation", 12)
@@ -728,10 +734,87 @@ func refresh_controls() -> void:
 	control_button("pc_seat").text = tr("HOST_PLAY_ON_PC_STATE") % (tr("ON") if _server.host_pc_slot() != -1 else tr("OFF"))
 	control_button("mode").text = tr("HOST_MODE_STATE") % (tr("MODE_TEAMS") if _server.team_mode() else tr("MODE_FFA"))
 	control_button("join").disabled = not _can_join_online()
+	# No keyboard glyph while a gamepad is the active input (#368).
+	control_button("start").text = tr("HOST_START_MATCH_PAD") if _pad_active else tr("HOST_START_MATCH")
 
 func _process(_delta: float) -> void:
 	if _server != null and _lobby_panel != null and _lobby_panel.visible:
 		refresh_controls()
+	elif _pad_menu_open:
+		set_pad_menu(false) # the lobby went away under the open menu
+
+# --- Gamepad host menu (#368, Steam Deck) ------------------------------------------
+#
+# A and B belong to the seat (join, ready, un-ready), so the lobby controls get
+# their own entry: Y opens the menu and moves focus onto the buttons; the D-pad
+# moves between them, A presses, B or Y leaves. While it is open ControllerServer
+# ignores A and B (PadMenu). The Settings panel has its own button, View.
+
+var _pad_active: bool = false
+var _pad_menu_open: bool = false
+
+## Whether the last input was a gamepad's, which decides the captions' glyphs.
+func pad_active() -> bool:
+	return _pad_active
+
+func pad_menu_open() -> bool:
+	return _pad_menu_open
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.5):
+		_pad_active = true
+	elif event is InputEventKey or event is InputEventMouseButton:
+		_pad_active = false
+	if _server == null or _lobby_panel == null or not _lobby_panel.visible:
+		return
+	if PadMenuScript.pressed(event, JOY_BUTTON_Y):
+		set_pad_menu(not _pad_menu_open)
+		get_viewport().set_input_as_handled()
+	elif _pad_menu_open and PadMenuScript.pressed(event, JOY_BUTTON_B):
+		set_pad_menu(false)
+		get_viewport().set_input_as_handled()
+
+## Opens or closes the gamepad-driven host menu: the lobby control buttons
+## become focusable and take focus (first enabled one), or give it back.
+const PAD_ORDER: Array[String] = ["online", "pc_seat", "mode", "target_down", "target_up", "start", "join"]
+
+## Explicit D-pad links: down the column, with First-to's minus and plus side
+## by side. Geometric neighbours skip the small minus button.
+func _chain_pad_focus() -> void:
+	var column: Array[String] = ["online", "pc_seat", "mode", "target_down", "start", "join"]
+	var buttons: Array[Button] = []
+	for id: String in column:
+		buttons.append(_controls[id])
+	for i in column.size():
+		if i > 0:
+			buttons[i].focus_neighbor_top = buttons[i].get_path_to(buttons[i - 1])
+		if i < column.size() - 1:
+			buttons[i].focus_neighbor_bottom = buttons[i].get_path_to(buttons[i + 1])
+	var down: Button = _controls["target_down"]
+	var up: Button = _controls["target_up"]
+	down.focus_neighbor_right = down.get_path_to(up)
+	up.focus_neighbor_left = up.get_path_to(down)
+	up.focus_neighbor_top = up.get_path_to(_controls["mode"])
+	up.focus_neighbor_bottom = up.get_path_to(_controls["start"])
+
+func set_pad_menu(on: bool) -> void:
+	if on == _pad_menu_open or _server == null:
+		return
+	_pad_menu_open = on
+	PadMenuScript.set_open("lobby", on)
+	for id: String in _controls:
+		(_controls[id] as Button).focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+	if on:
+		_chain_pad_focus()
+		for id: String in PAD_ORDER:
+			var button: Button = _controls[id]
+			if not button.disabled:
+				button.grab_focus()
+				break
+	else:
+		var focused: Control = get_viewport().gui_get_focus_owner()
+		if focused != null:
+			focused.release_focus()
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
