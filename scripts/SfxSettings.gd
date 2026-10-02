@@ -154,7 +154,6 @@ func _ready() -> void:
 	content.add_child(_resolution)
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
-	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
@@ -164,6 +163,8 @@ func _ready() -> void:
 	_stage_list = _add_list(content, "Stages")
 	_weapon_list = _add_list(content, "Weapons")
 	_build_rules(content)
+	# Last in More options, kept quiet (issue #461).
+	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
@@ -274,7 +275,9 @@ func refresh() -> void:
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
-	_notice.visible = not host.telemetry_notice_seen
+	# Issue #461: the owner wants telemetry unnoticed by default, so the #372
+	# first-launch notice never shows; the Settings toggle is the only control.
+	_notice.visible = false
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
