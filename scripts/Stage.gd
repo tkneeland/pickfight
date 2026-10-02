@@ -55,10 +55,11 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 @export var weapon_weight_overrides: Dictionary = {}
 
 ## Optional per-stage weight in the stage rotation (#373): `GameModes` id ->
-## weight (default 1.0 for any mode not listed). The rotation deals a stage
-## `round(weight)` copies in each bag while that mode is playing, so 4.0 makes
-## it about four times as likely; below 1 still deals it once. Read off the
-## packed scene by `mode_weight_of()`.
+## weight. A mode not listed takes the "_other" entry, or 1.0 without one. The
+## rotation deals a stage `round(weight)` copies in each bag while that mode is
+## playing, so 4.0 makes it about four times as likely; a weight w below 1
+## puts it in a bag with probability w, so 0.3 is rare. Read off the packed
+## scene by `mode_weight_of()`.
 @export var mode_weights: Dictionary = {}
 
 ## Night variant (#332): set before the stage enters the tree. The stage then
@@ -154,7 +155,7 @@ static func mode_weight_of(scene: PackedScene, mode_id: String) -> float:
 	for p in state.get_node_property_count(0):
 		if state.get_node_property_name(0, p) == &"mode_weights":
 			var weights: Dictionary = state.get_node_property_value(0, p)
-			return float(weights.get(mode_id, 1.0))
+			return float(weights.get(mode_id, weights.get("_other", 1.0)))
 	return 1.0
 
 ## The backdrop built in `_ready()`, or null outside the tree.

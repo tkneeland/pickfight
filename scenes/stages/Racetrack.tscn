@@ -31,7 +31,8 @@ size = Vector2(8000, 40)
 ; whoever is chased always has a second way out.
 ; 
 ; Large: the view is 2240 x 1260 (Stage.view_size). Terrain spans x = -1100..1100.
-; Rotation: weighted 4x for Hot Potato (Stage.mode_weights).
+; Rotation (Stage.mode_weights): weighted 4x for Hot Potato, and in any other
+; mode dealt into a bag only 30% of the time ("_other").
 [node name="Racetrack" type="Node2D"]
 script = ExtResource("script")
 background_sky_top = Color(0.16, 0.1, 0.1, 1)
@@ -39,7 +40,7 @@ background_sky_bottom = Color(0.34, 0.2, 0.14, 1)
 background_silhouette = Color(0.11, 0.08, 0.08, 1)
 background_layers = PackedStringArray("clouds", "mountains", "rocks")
 view_size = Vector2(2240, 1260)
-mode_weights = {"hot_potato": 4.0}
+mode_weights = {"hot_potato": 4.0, "_other": 0.3}
 
 ; The long floor between the ramps.
 [node name="Floor" type="StaticBody2D" parent="."]

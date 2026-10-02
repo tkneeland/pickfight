@@ -28,7 +28,8 @@ size = Vector2(8000, 40)
 ; shuttle; the chased go over the top.
 ; 
 ; Large: the view is 2240 x 1260 (Stage.view_size). Terrain spans x = -1100..1100.
-; Rotation: weighted 4x for Hot Potato (Stage.mode_weights).
+; Rotation (Stage.mode_weights): weighted 4x for Hot Potato, and in any other
+; mode dealt into a bag only 30% of the time ("_other").
 [node name="Switchyard" type="Node2D"]
 script = ExtResource("script")
 background_sky_top = Color(0.1, 0.12, 0.14, 1)
@@ -36,7 +37,7 @@ background_sky_bottom = Color(0.2, 0.26, 0.26, 1)
 background_silhouette = Color(0.08, 0.1, 0.1, 1)
 background_layers = PackedStringArray("clouds", "city", "city")
 view_size = Vector2(2240, 1260)
-mode_weights = {"hot_potato": 4.0}
+mode_weights = {"hot_potato": 4.0, "_other": 0.3}
 
 ; The two yards. Spawns sit on their outer ends.
 [node name="YardLeft" type="StaticBody2D" parent="."]

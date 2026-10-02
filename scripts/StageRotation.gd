@@ -144,9 +144,19 @@ func _refill_bag(avoid: int) -> void:
 	bag = []
 	_bag_large_eligible = _large_stages_eligible()
 	_bag_mode = mode_id
+	var rare_dropped: Array[int] = []
 	for index: int in _shuffled_indices():
-		if stage_allowed(index):
-			bag.append(index)
+		if not stage_allowed(index):
+			continue
+		# A stage weighing under 1 is dealt into the bag with that probability
+		# (#373); a weight of 1 or more draws nothing.
+		var weight: float = StageScript.mode_weight_of(scenes[index], mode_id)
+		if weight < 1.0 and rng.randf() >= weight:
+			rare_dropped.append(index)
+			continue
+		bag.append(index)
+	if bag.is_empty():
+		bag.assign(rare_dropped)
 	_add_weighted_copies()
 	if bag.size() > 1 and bag[0] == avoid:
 		var swap_with: int = 1 + rng.randi() % (bag.size() - 1)
@@ -154,7 +164,7 @@ func _refill_bag(avoid: int) -> void:
 		bag[0] = bag[swap_with]
 		bag[swap_with] = tmp
 
-## Stages favoured by this mode (#373): a stage whose `mode_weights` entry for
+## Stages favoured by this mode (#373; a rarer one is thinned in `_refill_bag`): a stage whose `mode_weights` entry for
 ## `mode_id` rounds to n > 1 is dealt n times per bag instead of once. The
 ## extras go in at positions drawn from `rng`, never next to the same stage.
 ## Nothing is drawn when no allowed stage is favoured, so every other mode's

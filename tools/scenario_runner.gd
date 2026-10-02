@@ -28639,7 +28639,7 @@ const HOT_POTATO_STAGES_373: PackedStringArray = [
 	"res://scenes/stages/Orbit.tscn",
 ]
 ## The three chase-loop stages are in Main's rotation and the swept STAGE_PATHS,
-## load as large stages with eight spawns, and weigh 4 for Hot Potato and 1 in
+## load as large stages with eight spawns, and weigh 4 for Hot Potato and 0.3 in
 ## every other mode.
 func _scenario_hot_potato_stages_load_and_are_in_rotation() -> Array[String]:
 	var failures: Array[String] = []
@@ -28666,7 +28666,7 @@ func _scenario_hot_potato_stages_load_and_are_in_rotation() -> Array[String]:
 			failures.append("%s has no KillZone" % path)
 		instance.free()
 		for mode_id: String in ["hot_potato", "", "king_of_the_hill", "sudden_death"]:
-			var want: float = 4.0 if mode_id == "hot_potato" else 1.0
+			var want: float = 4.0 if mode_id == "hot_potato" else 0.3
 			var got: float = StageType.mode_weight_of(scene, mode_id)
 			if not is_equal_approx(got, want):
 				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
@@ -28690,6 +28690,7 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 			favoured.append(i)
 	var counts: Dictionary = {}
 	var sequences: Dictionary = {}
+	var classic_counts: Dictionary = {}
 	for mode_id: String in ["hot_potato", "", "hot_potato"]:
 		var rotation: RefCounted = rotation_script.new()
 		rotation.scenes = scenes
@@ -28707,6 +28708,8 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 				break
 			rotation.stage_index = index
 			seq.append(index)
+			if mode_id == "":
+				classic_counts[index] = int(classic_counts.get(index, 0)) + 1
 			if favoured.has(index):
 				hits += 1
 		if counts.has(mode_id):
@@ -28715,11 +28718,19 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		counts[mode_id] = hits
 		sequences[mode_id] = seq
 	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
-	# Expected: 12 of 36 bag slots (about 300) against 3 of 30 (about 90).
+	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
 	if counts["hot_potato"] < 240:
 		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 240" % counts["hot_potato"])
-	if counts[""] > 150:
-		failures.append("classic dealt the three stages %d of 900 times, wants at most 150" % counts[""])
+	var others: int = 0
+	for i in scenes.size():
+		if not favoured.has(i):
+			others += int(classic_counts.get(i, 0))
+	var equal_weight_share: float = float(others) / float(scenes.size() - favoured.size())
+	print("      classic: an equal-weight stage averaged %.1f draws, the three Hot Potato stages %.1f each" % [equal_weight_share, float(counts[""]) / 3.0])
+	if float(counts[""]) / 3.0 > 0.5 * equal_weight_share:
+		failures.append("classic dealt each Hot Potato stage %.1f times, an equal-weight stage %.1f: wants under half" % [float(counts[""]) / 3.0, equal_weight_share])
+	if counts[""] == 0:
+		failures.append("classic should still deal them now and then, dealt none in 900")
 	if counts["hot_potato"] < 2 * counts[""]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
