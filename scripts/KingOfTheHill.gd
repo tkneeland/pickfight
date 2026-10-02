@@ -15,6 +15,10 @@ var round_manager: Node
 ## the centre of the stage's spawn points.
 var hill_position: Vector2 = Vector2.ZERO
 var hill_radius: float = 110.0
+## How far below the spawn centre to look for floor, and how far above it a
+## standing player's centre sits.
+const GROUND_DROP: float = 1200.0
+const STAND_HEIGHT: float = 50.0
 ## Seconds alone in the hill that win the round.
 var seconds_to_win: float = 10.0
 ## slot -> seconds held alone this round.
@@ -65,10 +69,27 @@ func start_round(slots: Array[int]) -> void:
 			var sum := Vector2.ZERO
 			for p: Vector2 in points:
 				sum += p
-			hill_position = sum / float(points.size())
+			hill_position = _on_the_ground(sum / float(points.size()))
 	_active = true
 	queue_redraw()
 	callout.emit(&"announce_king_of_the_hill")
+
+## Spawns hang in the air above the floor, so their centre can sit a couple of
+## hundred pixels over where anyone stands (#409): a hill there is out of reach
+## of anyone on the ground, and a round on such a stage never ends. Drops the
+## point onto the first floor below it, to body height.
+func _on_the_ground(point: Vector2) -> Vector2:
+	if round_manager == null or not is_instance_valid(round_manager) or not (round_manager as Node).is_inside_tree():
+		return point
+	var world: World2D = (round_manager as Node).get_viewport().find_world_2d()
+	if world == null:
+		return point
+	var space: PhysicsDirectSpaceState2D = world.direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(point, point + Vector2(0.0, GROUND_DROP), 1)
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty():
+		return point
+	return Vector2(point.x, (hit["position"] as Vector2).y - STAND_HEIGHT)
 
 ## Reads the stage's hill spots (#377): the hill starts on the first. A stage
 ## with none leaves `hill_position` to the spawn-centre fallback.
