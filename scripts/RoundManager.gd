@@ -718,7 +718,28 @@ func _show_scoreboard() -> void:
 			_team_scoreboard_entry(slot, score_label, name_label)
 		elif name_label != null and name_label.has_theme_color_override("font_color"):
 			name_label.remove_theme_color_override("font_color")
+		_scoreboard_ping(entry, slot)
 	_scoreboard.visible = true
+
+## Issue #446: the round trip to a remote seat in ms, -1 when `slot` has none.
+func _slot_ping(slot: int) -> int:
+	if _controller_server == null or not _controller_server.has_method("slot_ping_msec"):
+		return -1
+	return int(_controller_server.slot_ping_msec(slot))
+
+## Issue #446: a "Ping" label at the end of `entry`, filled for a remote seat
+## (warning colour past the limit) and hidden for everyone else.
+func _scoreboard_ping(entry: Node, slot: int) -> void:
+	var label: Label = entry.get_node_or_null("Ping") as Label
+	if label == null:
+		label = Label.new()
+		label.name = "Ping"
+		entry.add_child(label)
+	var ping: int = _slot_ping(slot)
+	label.visible = ping >= 0
+	if ping >= 0:
+		label.text = LobbyScreenScript.ping_text(ping)
+		label.add_theme_color_override("font_color", LobbyScreenScript.ping_color(ping))
 
 ## Whether `slot` is claimed and, where the roster can say, has a phone
 ## connected right now (#45). Without a roster every slot counts, so a
@@ -1305,6 +1326,9 @@ func _publish_lobby_state() -> void:
 		# the lobby's swatches are redrawn in it.
 		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot),
 			"color": _slot_color(slot).to_html(false)})
+		var ping: int = _slot_ping(slot)
+		if ping >= 0:
+			players[-1]["ping"] = ping
 	var in_lobby: bool = _state == State.LOBBY or _state == State.COUNTDOWN
 	var state: Dictionary = {
 		"phase": lobby_phase(),

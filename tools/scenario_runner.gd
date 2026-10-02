@@ -622,6 +622,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"online_host_left_reaches_client_and_shows_screen",
+	"online_late_remote_joiner_enters_next_round_with_fresh_score",
+	"online_ping_reaches_lobby_and_scoreboard_with_warning",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2261,6 +2264,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"online_host_left_reaches_client_and_shows_screen":
+			return await _scenario_online_host_left_reaches_client_and_shows_screen()
+		"online_late_remote_joiner_enters_next_round_with_fresh_score":
+			return await _scenario_online_late_remote_joiner_enters_next_round_with_fresh_score()
+		"online_ping_reaches_lobby_and_scoreboard_with_warning":
+			return await _scenario_online_ping_reaches_lobby_and_scoreboard_with_warning()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32492,4 +32501,121 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+## Issue #446: the host's room closing, here by the host socket closing
+## cleanly (the host quitting), reaches a real client, which shows the
+## "Host left" message on its join screen. No migration: it stays there.
+func _scenario_online_host_left_reaches_client_and_shows_screen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	rig["server"].relay_link._socket.close(1000, "host quit")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("the client stayed in the match after the host socket closed")
+	_rc_expect_join_screen_241(client, failures, "host socket closed", "Host left")
+	await _await_ticks(60)
+	if client.state != RcState241.JOIN:
+		failures.append("the client left the join screen on its own: no host migration is allowed")
+	await _rc_close_241(rig)
+	return failures
+## Issue #446: a remote seat that joins mid-round watches (not in the round,
+## not alive), takes the freed slot with a fresh score as #161 does for
+## phones, and plays from the next round.
+func _scenario_online_late_remote_joiner_enters_next_round_with_fresh_score() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the bots' round never started")
+		await _rc_close_241(rig)
+		return failures
+	var round_before: int = int(rm.get("_round_number"))
+	rm._scores[3] = 7 # the last occupant's points, still on the freed slot
+	var remote: WebSocketPeer = await _online_remote_239(rig, "late-446")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot != 3:
+		failures.append("the late remote was given slot %d, expected the free slot 3" % slot)
+		await _rc_close_241(rig)
+		return failures
+	var body: RigidBody2D = server.player_in_slot(slot) as RigidBody2D
+	if rm._in_round.has(slot) or body.alive:
+		failures.append("the late remote was put into the running round (in_round %s, alive %s)" % [rm._in_round, body.alive])
+	if rm._scores[slot] != 0:
+		failures.append("the late remote started on %d points, expected the freed slot's 0" % rm._scores[slot])
+	var next_round: Callable = func() -> bool: return int(rm.get("_round_number")) > round_before and rm._in_round.has(slot)
+	await _snap_pump_251(rig, remote, [], 60000, next_round) # keeps the fake client polled
+	if not next_round.call():
+		failures.append("the late remote never entered a later round (round %d, in_round %s, claimed %s)" % [int(rm.get("_round_number")), rm._in_round, server.claimed_slots()])
+	elif not body.alive:
+		failures.append("the late remote is in the next round but not alive")
+	await _rc_close_241(rig)
+	return failures
+## Issue #446: the host pings a remote seat, the round trip lands in the lobby
+## state and on the scoreboard, and past 150 ms it is shown in the warning
+## colour. Nobody is kicked for it.
+func _scenario_online_ping_reaches_lobby_and_scoreboard_with_warning() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var lobby := preload("res://scripts/LobbyScreen.gd")
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "ping-446")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	if server.slot_ping_msec(slot) != -1:
+		failures.append("a ping was reported before any pong")
+	var results: Array[int] = []
+	for delay_msec: int in [0, 260]:
+		var ping: Dictionary = await _online_wait_239(rig, remote, "n")
+		while not ping.is_empty() and ping.get("t") != "ping":
+			ping = await _online_wait_239(rig, remote, "n")
+		if ping.is_empty():
+			failures.append("no ping reached the remote seat (delay %d)" % delay_msec)
+			break
+		await _wait_for_239(func() -> bool: return false, delay_msec)
+		_online_send_239(remote, 1, JSON.stringify({"t": "pong", "n": ping["n"]}).to_utf8_buffer())
+		await _online_frames_239(5)
+		results.append(server.slot_ping_msec(slot))
+	if results.size() == 2:
+		if results[0] < 0 or results[0] > 150:
+			failures.append("an immediate pong measured %d ms, expected 0..150" % results[0])
+		if results[1] < 250:
+			failures.append("a pong held 260 ms measured %d ms, expected >= 250" % results[1])
+		rm._show_scoreboard()
+		var label: Label = rm._scoreboard.get_child(slot).get_node_or_null("Ping") as Label
+		if label == null or not label.visible or label.text != "%d ms" % results[1]:
+			failures.append("the scoreboard ping label was %s, expected '%d ms'" % [label.text if label != null else "missing", results[1]])
+		elif label.get_theme_color("font_color") != lobby.PING_WARN_COLOR:
+			failures.append("a ping of %d ms was not in the warning colour" % results[1])
+		var bot_label: Label = rm._scoreboard.get_child(0).get_node_or_null("Ping") as Label
+		if bot_label != null and bot_label.visible:
+			failures.append("a bot's scoreboard entry shows a ping")
+		rm._publish_lobby_state()
+		var entry: Dictionary = {}
+		for e: Variant in server._lobby_state.get("players", []):
+			if int(e.get("slot", -1)) == slot:
+				entry = e
+		if int(entry.get("ping", -1)) != results[1]:
+			failures.append("the lobby state carried ping %s, expected %d" % [entry.get("ping"), results[1]])
+		if lobby.ping_color(150) == lobby.PING_WARN_COLOR or lobby.ping_color(151) != lobby.PING_WARN_COLOR:
+			failures.append("the warning threshold is not 'above 150 ms'")
+		if not server.claimed_slots().has(slot):
+			failures.append("the slow remote lost its seat: never kick for ping")
+	await _rc_close_241(rig)
 	return failures
