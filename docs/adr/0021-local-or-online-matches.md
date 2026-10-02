@@ -13,8 +13,9 @@ online player sees the host's screen on their own computer. It also leaves open
 the host's own mouse taking a seat in a TV party, and phones that cannot work
 online anyway because they need the host's LAN.
 
-Issue #435 settled how gamepad players get the features a phone gives them, and
-issue #437 asks for the split to be written down.
+The owner decided the split on 2026-10-02 (#435), and the same day settled how
+gamepad and online players get what a phone gives (#441, #442). #437 asks for it
+to be written down.
 
 ## Decision
 
