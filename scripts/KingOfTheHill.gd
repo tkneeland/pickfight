@@ -18,6 +18,13 @@ var seconds_to_win: float = 10.0
 var hold_time: Dictionary = {}
 ## The slot that reached `seconds_to_win`, or -1.
 var winner_slot: int = -1
+## Teams (issue #352): team -> seconds the team held the hill this round. Any
+## number of teammates inside hold it together; a mix of colours contests it
+## and freezes everyone's clock.
+var team_hold: Dictionary = {}
+## The team that reached `seconds_to_win`, or -1.
+var winner_team: int = -1
+var _won: bool = false
 var _slots: Array[int] = []
 var _active: bool = false
 
@@ -28,6 +35,9 @@ func start_round(slots: Array[int]) -> void:
 	_slots = slots.duplicate()
 	hold_time.clear()
 	winner_slot = -1
+	winner_team = -1
+	_won = false
+	team_hold.clear()
 	for slot: int in _slots:
 		hold_time[slot] = 0.0
 	if hill_position == Vector2.ZERO and round_manager != null:
@@ -43,6 +53,13 @@ func start_round(slots: Array[int]) -> void:
 func end_round() -> void:
 	_active = false
 	_slots.clear()
+
+func team_hold_of(team: int) -> float:
+	return float(team_hold.get(team, 0.0))
+
+## Whether the round being played is a Teams round.
+func _teams_round() -> bool:
+	return round_manager != null and round_manager.has_method("team_mode") and bool(round_manager.team_mode())
 
 func hold_of(slot: int) -> float:
 	return float(hold_time.get(slot, 0.0))
@@ -66,18 +83,43 @@ func _player(slot: int) -> Variant:
 	return player if player != null and is_instance_valid(player) else null
 
 func _physics_process(delta: float) -> void:
-	if not _active or round_manager == null or winner_slot != -1:
+	if not _active or round_manager == null or _won:
 		return
 	var inside: Array[int] = occupants()
+	if _teams_round():
+		_tick_teams(inside, delta)
+		return
 	if inside.size() != 1:
 		return
 	var slot: int = inside[0]
 	hold_time[slot] = hold_of(slot) + delta
 	if hold_time[slot] >= seconds_to_win:
 		winner_slot = slot
+		_won = true
 		for other: int in _slots:
 			var player: Variant = _player(other)
 			if other != slot and player != null:
+				player.eliminate()
+
+## Teams: the team alone inside the hill banks the time; at the target every
+## player not on it is eliminated.
+func _tick_teams(inside: Array[int], delta: float) -> void:
+	var team: int = -2
+	for slot: int in inside:
+		var t: int = int(round_manager.team_of(slot))
+		if team == -2:
+			team = t
+		elif t != team:
+			return
+	if team < 0:
+		return
+	team_hold[team] = team_hold_of(team) + delta
+	if team_hold[team] >= seconds_to_win:
+		winner_team = team
+		_won = true
+		for other: int in _slots:
+			var player: Variant = _player(other)
+			if player != null and int(round_manager.team_of(other)) != team:
 				player.eliminate()
 
 func _draw() -> void:
