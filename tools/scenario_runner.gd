@@ -622,6 +622,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"bot_stays_on_stage_over_jittered_starts",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2261,6 +2262,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"bot_stays_on_stage_over_jittered_starts":
+			return await _scenario_bot_stays_on_stage_over_jittered_starts()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32492,4 +32495,30 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+
+# --- Issue #423: edge safety over jittered starts -----------------------------------
+## The #302 overshoot setup is chaotic: a start shifted by a pixel can end with
+## the bot's own swing throwing it off the stage, and each platform lands on its
+## own result. So the check is statistical: the four cases, each from PROBE_N
+## starts (default 5) jittered by up to 3 px (seed PROBE_SEED, default 423),
+## allow at most one bot in 200 off the stage. For a real measurement run it with
+## PROBE_N=50 (200 starts, about 80 s) and read the printed count.
+func _scenario_bot_stays_on_stage_over_jittered_starts() -> Array[String]:
+	var n: int = int(OS.get_environment("PROBE_N")) if OS.get_environment("PROBE_N") != "" else 5
+	var jitter := RandomNumberGenerator.new()
+	jitter.seed = int(OS.get_environment("PROBE_SEED")) if OS.get_environment("PROBE_SEED") != "" else 423
+	var deaths: int = 0
+	var total: int = 0
+	for case: Array in [[100.0, 300.0], [100.0, 500.0], [-100.0, -300.0], [-100.0, -500.0]]:
+		for i in n:
+			var got: Dictionary = await _overshoot302(case[0] + jitter.randf_range(-3.0, 3.0), case[1], 1200)
+			total += 1
+			if not got["alive"] or got["fell"]:
+				deaths += 1
+	print("      %d of %d jittered starts ended off the stage" % [deaths, total])
+	_scenario_completed = true
+	var failures: Array[String] = []
+	if deaths > total / 200:
+		failures.append("%d of %d jittered starts went off the stage" % [deaths, total])
 	return failures
