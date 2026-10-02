@@ -17,15 +17,15 @@ primary_region = "iad"
 
 # Match telemetry (#372) appends one JSON line per match to PICKFIGHT_STATS_PATH
 # (default user://match_stats.jsonl inside the container, which a deploy wipes).
-# For the records to persist, create a Fly volume and mount it, then point the
-# env var at it. Not created yet:
-#   fly volumes create pickfight_stats --size 1 --region iad
-#   [mounts]
-#     source = "pickfight_stats"
-#     destination = "/data"
-#   [env]
-#     PICKFIGHT_STATS_PATH = "/data/match_stats.jsonl"
+# The volume persists the file across deploys (created 2026-10-02).
 # The relay never stores or logs the caller's IP for these requests.
+
+[mounts]
+  source = "pickfight_stats"
+  destination = "/data"
+
+[env]
+  PICKFIGHT_STATS_PATH = "/data/match_stats.jsonl"
 
 [[vm]]
   size = "shared-cpu-1x"
