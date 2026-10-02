@@ -558,6 +558,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
 	"hot_potato_stages_load_and_are_in_rotation",
 	"hot_potato_draws_its_stages_more_often",
+	"music_every_fight_track_loads_and_rotates",
 	"mode_awards_go_to_the_right_player_only_in_their_mode",
 	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"pseudo_locale_changes_lobby_and_mode_text",
@@ -566,9 +567,19 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_hill_starts_on_first_hill_spot",
 	"koth_moving_hill_warns_then_moves",
 	"koth_stage_without_spots_uses_spawn_centre",
+	"shield_blocks_a_hit_on_its_face",
+	"shield_bash_knocks_back_harder_than_pickaxe",
+	"shield_is_in_the_pickup_set",
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
+	"mode_awards_go_to_the_right_player_only_in_their_mode",
+	"mode_awards_reach_the_victory_awards_through_the_round_manager",
+	"telemetry_record_has_no_identifying_fields",
+	"telemetry_not_sent_when_off_or_scripted",
+	"telemetry_notice_shows_once",
+	"telemetry_relay_validates_and_stores_no_ip",
+	"telemetry_sender_reaches_relay_and_fails_quietly",
 	"rules_disabled_modifier_never_rolls_in_that_mode_only",
 	"rules_modifier_toggles_persist_across_reload",
 	"rules_table_bans_cannot_be_reenabled",
@@ -848,6 +859,7 @@ const SLOT_COLOR_TOLERANCE: float = 0.01
 ## be true of the whole roster rather than of whichever weapon `Player.tscn`
 ## happens to ship with, so a sixth weapon is covered by adding it here.
 const WEAPON_RESOURCE_PATHS: PackedStringArray = [
+	"res://resources/shield.tres",
 	"res://resources/pickaxe.tres",
 	"res://resources/staff.tres",
 	"res://resources/sword.tres",
@@ -2080,6 +2092,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
 		"hot_potato_draws_its_stages_more_often":
 			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"music_every_fight_track_loads_and_rotates":
+			return await _scenario_music_every_fight_track_loads_and_rotates()
 		"mode_awards_go_to_the_right_player_only_in_their_mode":
 			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
 		"mode_awards_reach_the_victory_awards_through_the_round_manager":
@@ -2096,12 +2110,32 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_moving_hill_warns_then_moves()
 		"koth_stage_without_spots_uses_spawn_centre":
 			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
+		"shield_blocks_a_hit_on_its_face":
+			return await _scenario_shield_blocks_a_hit_on_its_face()
+		"shield_bash_knocks_back_harder_than_pickaxe":
+			return await _scenario_shield_bash_knocks_back_harder_than_pickaxe()
+		"shield_is_in_the_pickup_set":
+			return await _scenario_shield_is_in_the_pickup_set()
 		"announcer_calls_each_mode_at_round_start":
 			return await _scenario_announcer_calls_each_mode_at_round_start()
 		"announcer_calls_hill_taken_when_the_hill_changes_hands":
 			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
 		"announcer_calls_last_life_stolen_and_overtime_in_stock":
 			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
+		"mode_awards_go_to_the_right_player_only_in_their_mode":
+			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
+		"mode_awards_reach_the_victory_awards_through_the_round_manager":
+			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
+		"telemetry_record_has_no_identifying_fields":
+			return await _scenario_telemetry_record_has_no_identifying_fields()
+		"telemetry_not_sent_when_off_or_scripted":
+			return await _scenario_telemetry_not_sent_when_off_or_scripted()
+		"telemetry_notice_shows_once":
+			return await _scenario_telemetry_notice_shows_once()
+		"telemetry_relay_validates_and_stores_no_ip":
+			return await _scenario_telemetry_relay_validates_and_stores_no_ip()
+		"telemetry_sender_reaches_relay_and_fails_quietly":
+			return await _scenario_telemetry_sender_reaches_relay_and_fails_quietly()
 		"rules_disabled_modifier_never_rolls_in_that_mode_only":
 			return await _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only()
 		"rules_modifier_toggles_persist_across_reload":
@@ -11367,7 +11401,7 @@ const MUSIC_AUTOLOAD_PATH: NodePath = ^"Music"
 const MUSIC_DIR: String = "res://assets/music/"
 const MUSIC_CREDITS_PATH: String = "res://CREDITS.md"
 ## The shipped music, all together, stays under this.
-const MUSIC_MAX_TOTAL_BYTES: int = 2 * 1024 * 1024
+const MUSIC_MAX_TOTAL_BYTES: int = 12 * 1024 * 1024
 ## Past a crossfade, with room to spare.
 const MUSIC_SETTLE_MSEC: int = 2500
 const MUSIC_DUCK_TIMEOUT_MSEC: int = 3000
@@ -11399,8 +11433,8 @@ func _scenario_music_lobby_and_fight_switching() -> Array[String]:
 	elif AudioServer.get_bus_send(AudioServer.get_bus_index(&"Music")) != &"Master":
 		failures.append("the Music bus does not send to Master")
 	var fights: PackedStringArray = music.fight_tracks()
-	if fights.size() < 1 or fights.size() > 2:
-		failures.append("there are %d fight tracks, expected 1 or 2" % fights.size())
+	if fights.size() < 1:
+		failures.append("there are no fight tracks")
 	music.play_lobby()
 	if music.current_kind() != "lobby" or not music.is_playing():
 		failures.append("play_lobby() left '%s' (%s), not the lobby track playing" % [
@@ -29862,6 +29896,43 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
 	return failures
+# --- Every fight track loads, loops and gets a turn (issue #289) ---------------
+## The fight rotation hands each fight track out in turn. Asking for fight music
+## again and again, with a stop between, must reach every one of them, and each
+## must play as a real looping stream of a sensible length.
+const MUSIC_MIN_FIGHT_TRACKS: int = 8
+const MUSIC_MIN_TRACK_SEC: float = 20.0
+func _scenario_music_every_fight_track_loads_and_rotates() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	var fights: PackedStringArray = music.fight_tracks()
+	print("      %d fight tracks" % fights.size())
+	if fights.size() < MUSIC_MIN_FIGHT_TRACKS:
+		failures.append("only %d fight tracks, expected at least %d" % [fights.size(), MUSIC_MIN_FIGHT_TRACKS])
+	var heard: Dictionary = {}
+	for i in fights.size():
+		music.stop()
+		music.play_fight()
+		await physics_frame
+		var stream: AudioStream = null
+		for child: Node in music.get_children():
+			if child is AudioStreamPlayer and (child as AudioStreamPlayer).playing:
+				stream = (child as AudioStreamPlayer).stream
+		var track: String = music.switches()[music.switches().size() - 1]
+		heard[track] = true
+		if not (stream is AudioStreamOggVorbis) or not (stream as AudioStreamOggVorbis).loop:
+			failures.append("%s does not play as a loop" % track)
+		elif stream.get_length() < MUSIC_MIN_TRACK_SEC:
+			failures.append("%s is only %.1f s long" % [track, stream.get_length()])
+	for track: String in fights:
+		if not heard.has(track):
+			failures.append("the fight rotation never reached %s in %d turns" % [track, fights.size()])
+	music.stop()
+	_scenario_completed = true
+	return failures
 ## Issue #355: the mode awards, from MatchStats alone. Each goes to the slot
 ## with the most of its number, only in its own mode; Classic and Sudden Death
 ## get none, and a new match wipes them.
@@ -30147,6 +30218,96 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 	await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures
+# --- Shield (issue #275) -----------------------------------------------------
+const SHIELD_PATH: String = "res://resources/shield.tres"
+## A hit on the face the shield points at is mostly blocked; one from behind it
+## lands in full, and so does one on a pickaxe held the same way.
+func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
+	attacker.gravity_scale = 0.0
+	var damage_taken := func(point: Vector2) -> float:
+		var before: float = player.damage
+		player.take_damage(20.0, point, attacker)
+		return player.damage - before
+	attacker.global_position = player.global_position + Vector2(150, 0)
+	attacker.linear_velocity = Vector2.ZERO
+	var on_face: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
+	await physics_frame
+	var pushed_face: float = attacker.linear_velocity.x
+	attacker.global_position = player.global_position + Vector2(-150, 0)
+	attacker.linear_velocity = Vector2.ZERO
+	var behind: float = damage_taken.call(player.global_position + Vector2.LEFT * 40.0)
+	await physics_frame
+	var pushed_behind: float = attacker.linear_velocity.length()
+	print("      attacker pushed: face block %.0f px/s, hit from behind %.0f px/s" % [pushed_face, pushed_behind])
+	if pushed_face < 200.0:
+		failures.append("a face block pushed the attacker %.0f px/s away, expected a clear shove" % pushed_face)
+	# The attacker drifts a little on its own (its arm settling); a block must clearly beat that.
+	if pushed_behind > pushed_face * 0.4:
+		failures.append("a hit from behind pushed the attacker %.0f px/s against %.0f for a block; only a block should" % [pushed_behind, pushed_face])
+	print("      20-damage hit: on the shield face %.1f, from behind %.1f" % [on_face, behind])
+	if on_face > 5.0:
+		failures.append("a hit on the shield face took %.1f of 20, expected it blocked" % on_face)
+	if behind < 20.0:
+		failures.append("a hit from behind the shield took %.1f of 20, expected all of it" % behind)
+	await _equip(player, PICKAXE_STARTER_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var pickaxe: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
+	if pickaxe < 20.0:
+		failures.append("a pickaxe holder took %.1f of 20 on the same side; only the shield blocks" % pickaxe)
+	await _teardown(stage)
+	return failures
+## Bashes `path` into a neighbour and returns [victim damage, victim speed].
+func _shield_bash_result(path: String) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
+	await _await_ticks(2)
+	await _equip(holder, path)
+	holder.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	var strikes: Array = []
+	_record_strikes(holder, strikes)
+	holder.set_input_vector(Vector2.RIGHT)
+	await _await_condition(func() -> bool: return not strikes.is_empty(), 4000)
+	var fastest: float = 0.0
+	for i in 6:
+		fastest = maxf(fastest, victim.linear_velocity.length())
+		await physics_frame
+	var result: Array[float] = [victim.damage, fastest]
+	await _teardown(stage, false)
+	return result
+## A shield bash shoves harder than a pickaxe swing and does less damage.
+func _scenario_shield_bash_knocks_back_harder_than_pickaxe() -> Array[String]:
+	var failures: Array[String] = []
+	var shield: Array[float] = await _shield_bash_result(SHIELD_PATH)
+	var pickaxe: Array[float] = await _shield_bash_result(PICKAXE_STARTER_PATH)
+	print("      bash: shield dmg %.1f speed %.0f; pickaxe dmg %.1f speed %.0f" % [shield[0], shield[1], pickaxe[0], pickaxe[1]])
+	if shield[1] < pickaxe[1] * 1.5:
+		failures.append("the shield bash moved the victim %.0f px/s, not clearly more than the pickaxe's %.0f" % [shield[1], pickaxe[1]])
+	if shield[0] >= pickaxe[0]:
+		failures.append("the shield bash did %.1f damage, not less than the pickaxe's %.1f" % [shield[0], pickaxe[0]])
+	_scenario_completed = true
+	return failures
+## The shield is something a pickup can hand out.
+func _scenario_shield_is_in_the_pickup_set() -> Array[String]:
+	var failures: Array[String] = []
+	if not PickupWeaponsScript.WEAPON_PATHS.has(SHIELD_PATH):
+		failures.append("the shield is not in the pickup weapon paths")
+	var found: bool = false
+	for stats: Resource in PickupWeaponsScript.available_weapons():
+		found = found or stats.resource_path == SHIELD_PATH
+	if not found:
+		failures.append("the shield is not among the loaded pickup weapons")
+	_scenario_completed = true
+	return failures
 # --- Issue #370: announcer callouts for modes ----------------------------------
 ## The announcer, quiet and recording, or null when the autoload is missing.
 func _callout_announcer() -> Node:
@@ -30272,7 +30433,261 @@ func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array
 		failures.append("the overtime was also called 'Sudden Death!': %s" % [announcer.said])
 	await _stock_finish(rig)
 	return failures
-
+# --- Issue #372: anonymous match telemetry ------------------------------------
+const StatsSenderScript372 := preload("res://scripts/StatsSender.gd")
+const HostSettingsScript372 := preload("res://scripts/HostSettings.gd")
+func _telemetry_stats_372() -> RefCounted:
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	stats.record_hit(2, 1, 50.0, 100, "axe", true)
+	stats.record_elimination(1, 200)
+	stats.record_hit(3, 0, 99.0, 300, "hammer", false)
+	return stats
+func _telemetry_settings_372(share: bool) -> RefCounted:
+	var host: RefCounted = HostSettingsScript372.new()
+	host.persist = false
+	host.share_stats = share
+	return host
+## Issue #372: the record holds weapon numbers, mode, stages, format and length
+## and nothing that names a player, a seat, a device or an account.
+func _scenario_telemetry_record_has_no_identifying_fields() -> Array[String]:
+	var failures: Array[String] = []
+	var record: Dictionary = StatsSenderScript372.build_record(_telemetry_stats_372(), "stock", ["Flatlands", "Ice"], "ffa", 95, [2])
+	var expected_keys: Array = ["format", "length_sec", "mode", "stages", "weapons", "winner_weapon"]
+	var keys: Array = record.keys()
+	keys.sort()
+	if keys != expected_keys:
+		failures.append("record keys were %s, expected %s" % [keys, expected_keys])
+	if record.get("mode") != "stock" or record.get("format") != "ffa" or int(record.get("length_sec", -1)) != 95:
+		failures.append("mode, format or length wrong: %s" % [record])
+	if record.get("stages") != ["Flatlands", "Ice"]:
+		failures.append("stages wrong: %s" % [record.get("stages")])
+	if record.get("winner_weapon") != "axe":
+		failures.append("winner_weapon was %s, expected axe (slot 2's only weapon)" % [record.get("winner_weapon")])
+	var weapons: Dictionary = record.get("weapons", {})
+	if weapons.has("hammer"):
+		failures.append("a bot's weapon leaked into the record")
+	var axe: Dictionary = weapons.get("axe", {})
+	var pick: Dictionary = weapons.get("pickaxe", {})
+	if int(axe.get("kos", -1)) != 1 or int(axe.get("hits", -1)) != 1 or not is_equal_approx(float(axe.get("damage", -1)), 50.0):
+		failures.append("axe tally wrong: %s" % [axe])
+	if int(pick.get("kos", -1)) != 0 or int(pick.get("hits", -1)) != 1:
+		failures.append("pickaxe tally wrong: %s" % [pick])
+	for weapon: String in weapons:
+		var wkeys: Array = (weapons[weapon] as Dictionary).keys()
+		wkeys.sort()
+		if wkeys != ["damage", "hits", "kos"]:
+			failures.append("weapon row keys were %s" % [wkeys])
+	var text: String = JSON.stringify(record).to_lower()
+	for banned: String in ["nick", "name", "colo", "device", "steam", "player", "slot", "\"id\"", "address", "ip\""]:
+		if text.contains(banned):
+			failures.append("the record mentions '%s': %s" % [banned, text])
+	var empty: Dictionary = StatsSenderScript372.build_record(MatchStatsScript.new(), "", [], "ffa", 5, [])
+	if not empty.is_empty():
+		failures.append("a match with no real damaging hit should give no record: %s" % [empty])
+	_scenario_completed = true
+	return failures
+## Issue #372: the toggle off, a scripted run, or a --bots run sends nothing.
+func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
+	var failures: Array[String] = []
+	var on: RefCounted = _telemetry_settings_372(true)
+	var off: RefCounted = _telemetry_settings_372(false)
+	if not HostSettingsScript372.new().share_stats:
+		failures.append("sharing should be on by default")
+	if not StatsSenderScript372.should_send(on, false, PackedStringArray()):
+		failures.append("a normal run with the toggle on should send")
+	if StatsSenderScript372.should_send(off, false, PackedStringArray()):
+		failures.append("the toggle off still sent")
+	if StatsSenderScript372.should_send(on, true, PackedStringArray()):
+		failures.append("a scripted (-s) run sent")
+	if StatsSenderScript372.should_send(on, false, PackedStringArray(["--bots=3"])):
+		failures.append("a --bots run sent")
+	if not StatsSenderScript372.is_scripted(self, PackedStringArray()):
+		failures.append("the scenario runner itself was not seen as scripted")
+	var path: String = OS.get_temp_dir().path_join("pf_372_toggle_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var saved: RefCounted = HostSettingsScript372.new()
+	saved.path = path
+	saved.set_share_stats(false)
+	var reloaded: RefCounted = HostSettingsScript372.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.share_stats:
+		failures.append("the toggle did not persist as off")
+	DirAccess.remove_absolute(path)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		await physics_frame
+		var box: CheckBox = ui.stats_box()
+		ui.host = _telemetry_settings_372(true)
+		ui.refresh()
+		if box == null or not box.button_pressed:
+			failures.append("the Send anonymous match stats box is missing or not on by default")
+		elif box.text != "Send anonymous match stats":
+			failures.append("box text was '%s'" % box.text)
+		else:
+			box.button_pressed = false
+			if ui.host.share_stats:
+				failures.append("unticking the box left sharing on")
+	_scenario_completed = true
+	return failures
+## Issue #372: the first-launch notice shows until dismissed or acted on, then never.
+func _scenario_telemetry_notice_shows_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var path: String = OS.get_temp_dir().path_join("pf_372_notice_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var host: RefCounted = HostSettingsScript372.new()
+	host.path = path
+	ui.host = host
+	ui.refresh()
+	var notice: Control = ui.telemetry_notice()
+	if notice == null or not notice.visible:
+		failures.append("the notice was not shown on first launch")
+	elif ui.telemetry_notice_label().text != "Pickfight sends anonymous match stats to help balance the game":
+		failures.append("notice text was '%s'" % ui.telemetry_notice_label().text)
+	ui.telemetry_dismiss_button().pressed.emit()
+	if notice.visible:
+		failures.append("the notice stayed after Dismiss")
+	if not host.share_stats:
+		failures.append("Dismiss turned sharing off")
+	var again: RefCounted = HostSettingsScript372.new()
+	again.path = path
+	again.load_settings()
+	if not again.telemetry_notice_seen:
+		failures.append("the dismissal did not persist")
+	ui.host = again
+	ui.refresh()
+	if notice.visible:
+		failures.append("the notice came back on the next launch")
+	DirAccess.remove_absolute(path)
+	var second: RefCounted = HostSettingsScript372.new()
+	second.persist = false
+	ui.host = second
+	ui.refresh()
+	if not notice.visible:
+		failures.append("a fresh settings file should show the notice again")
+	ui.telemetry_turn_off_button().pressed.emit()
+	if notice.visible or second.share_stats or not second.telemetry_notice_seen:
+		failures.append("Turn off should hide the notice, switch sharing off and mark it seen")
+	_scenario_completed = true
+	return failures
+func _telemetry_relay_record_372() -> Dictionary:
+	return {"mode": "stock", "format": "ffa", "length_sec": 95, "stages": ["Flatlands"], "winner_weapon": "axe",
+		"weapons": {"axe": {"damage": 50.0, "hits": 1, "kos": 1}}}
+## Issue #372: the relay stores valid records, refuses oversized or malformed
+## ones, rate-limits per IP and keeps no IP anywhere.
+func _scenario_telemetry_relay_validates_and_stores_no_ip() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	var path: String = OS.get_temp_dir().path_join("pf_372_stats_%d.jsonl" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	relay.stats_path = path
+	relay.stats_limit_per_hour = 3
+	var ip: String = "203.0.113.77"
+	var ok: Dictionary = relay.handle_stats(ip, {"t": "stats", "record": _telemetry_relay_record_372()})
+	if ok.get("status") != 200:
+		failures.append("a valid record gave %s" % [ok])
+	var extra: Dictionary = _telemetry_relay_record_372()
+	extra["nickname"] = "Zed"
+	extra["steam_id"] = "7656"
+	ok = relay.handle_stats(ip, {"t": "stats", "record": extra})
+	if ok.get("status") != 200:
+		failures.append("a record with extra fields gave %s (extras are dropped, not fatal)" % [ok])
+	var text: String = FileAccess.get_file_as_string(path)
+	var lines: PackedStringArray = text.strip_edges().split("\n")
+	if lines.size() != 2:
+		failures.append("expected 2 stored lines, got %d" % lines.size())
+	else:
+		var stored: Variant = JSON.parse_string(lines[0])
+		if not (stored is Dictionary):
+			failures.append("stored line is not JSON: %s" % lines[0])
+		else:
+			if int(stored.get("t", -1)) % 3600 != 0 or int(stored["t"]) <= 0:
+				failures.append("timestamp was not rounded to the hour: %s" % [stored.get("t")])
+			if stored.get("mode") != "stock" or not (stored.get("weapons") is Dictionary):
+				failures.append("stored record lost its fields: %s" % lines[0])
+	if text.contains(ip) or text.contains("203.0.113") or text.contains("Zed") or text.contains("steam_id") or text.contains("nickname"):
+		failures.append("the store holds an IP or a dropped field: %s" % text)
+	var cases: Dictionary = {
+		"not a dict record": {"t": "stats", "record": "x"},
+		"missing weapons": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": 5, "stages": []}},
+		"bad format": {"t": "stats", "record": {"mode": "", "format": "chaos", "length_sec": 5, "stages": [], "weapons": {"axe": {"damage": 1, "hits": 1, "kos": 0}}}},
+		"negative length": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": -4, "stages": [], "weapons": {"axe": {"damage": 1, "hits": 1, "kos": 0}}}},
+		"weapon row not a dict": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": 5, "stages": [], "weapons": {"axe": 7}}},
+		"empty weapons": {"t": "stats", "record": {"mode": "", "format": "ffa", "length_sec": 5, "stages": [], "weapons": {}}},
+	}
+	for label: String in cases:
+		var bad: Dictionary = relay.handle_stats("198.51.100.1", cases[label])
+		if bad.get("status") != 400:
+			failures.append("%s gave %s, expected 400" % [label, bad])
+	var big: Dictionary = _telemetry_relay_record_372()
+	var stages: Array = []
+	for i in 2000:
+		stages.append("Stage%d" % i)
+	big["stages"] = stages
+	var oversized: Dictionary = relay.handle_stats("198.51.100.2", {"t": "stats", "record": big})
+	if oversized.get("status") != 413:
+		failures.append("an oversized record gave %s, expected 413" % [oversized])
+	var third: Dictionary = relay.handle_stats(ip, {"t": "stats", "record": _telemetry_relay_record_372()})
+	var fourth: Dictionary = relay.handle_stats(ip, {"t": "stats", "record": _telemetry_relay_record_372()})
+	if third.get("status") != 200 or fourth.get("status") != 429:
+		failures.append("the 3rd and 4th from one IP gave %s and %s, expected 200 and 429" % [third, fourth])
+	var other: Dictionary = relay.handle_stats("198.51.100.9", {"t": "stats", "record": _telemetry_relay_record_372()})
+	if other.get("status") != 200:
+		failures.append("another IP gave %s, expected 200" % [other])
+	if FileAccess.get_file_as_string(path).contains("198.51.100"):
+		failures.append("an IP reached the store")
+	for prop: Dictionary in relay.get_property_list():
+		if str(prop["name"]).contains("stats") and relay.get(prop["name"]) is Dictionary:
+			if JSON.stringify(relay.get(prop["name"])).contains(ip):
+				failures.append("the relay keeps the raw IP in memory (%s)" % prop["name"])
+	DirAccess.remove_absolute(path)
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+## Issue #372: the game's sender delivers one record over the relay's socket,
+## and an unreachable relay is a quiet no-op, never an error.
+func _scenario_telemetry_sender_reaches_relay_and_fails_quietly() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var path: String = OS.get_temp_dir().path_join("pf_372_wire_%d.jsonl" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	relay.stats_path = path
+	var sender: Node = StatsSenderScript372.new()
+	root.add_child(sender)
+	var statuses: Array = []
+	sender.finished.connect(func(status: int) -> void: statuses.append(status))
+	sender.send(_telemetry_relay_record_372(), "ws://127.0.0.1:%d" % _relay_port_next)
+	var deadline: int = Time.get_ticks_msec() + 5000
+	while statuses.is_empty() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	if statuses != [200]:
+		failures.append("sender finished with %s, expected [200]" % [statuses])
+	if not FileAccess.file_exists(path) or JSON.parse_string(FileAccess.get_file_as_string(path).strip_edges()) == null:
+		failures.append("the relay stored nothing readable")
+	_relay_stop(relay, [])
+	statuses.clear()
+	sender.send(_telemetry_relay_record_372(), "ws://127.0.0.1:1")
+	deadline = Time.get_ticks_msec() + 12000
+	while statuses.is_empty() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	if statuses != [0]:
+		failures.append("an unreachable relay gave %s, expected [0]" % [statuses])
+	sender.queue_free()
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
 # --- Rules tab: per-mode modifier toggles (#378) ------------------------------
 func _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only() -> Array[String]:
 	var failures: Array[String] = []

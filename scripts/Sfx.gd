@@ -119,6 +119,10 @@ const SOUNDS: Dictionary = {
 	"hit_plunger": {"files": [
 		"kenney_impact/footstep_snow_000.ogg",
 		"kenney_impact/footstep_snow_001.ogg"], "db": -1.0},
+	# The shield (issue #275): a flat metal clang, own files.
+	"hit_shield": {"files": [
+		"kenney_impact/impactPlate_shield_000.ogg",
+		"kenney_impact/impactPlate_shield_001.ogg"], "db": 0.0},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",

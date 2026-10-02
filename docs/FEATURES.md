@@ -21,6 +21,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Staff, sword, dagger (#13)
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
 - Spear: long reach, weak up close (#272)
+- Shield: blocks hits landing on its face; a bash does little damage but big knockback (#275)
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy; a short poker otherwise (#269)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
@@ -108,6 +109,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
 - Rules section in the host settings panel (#378): pick a mode (Classic, King of the Hill, Sudden Death, Hot Potato, Stock) and untick the round modifiers that may not roll in it; saved per mode in `user://audio.cfg`, default all on. A mode's own bans (and all of Stock's) show locked off and cannot be re-enabled; with every modifier off, none rolls. Host screen only, not mirrored on the phone
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
+- "Send anonymous match stats" toggle in "More options", on by default and persisted; a one-time host-screen notice on first launch ("Pickfight sends anonymous match stats to help balance the game", Turn off / OK) that never returns once acted on (#372)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 - All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
@@ -115,7 +117,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
-- Music: lobby and fight tracks (#118)
+- Music: lobby and fight tracks (#118); six more CC0 fight tracks join the rotation, eight in all, each loop-trimmed so it repeats without a gap (#289)
 - Narrator/announcer, one consistent voice (#152, #211)
 - Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
@@ -138,6 +140,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Steam Next Fest demo build: the "demo" feature tag (Demo macOS/Windows/Linux export presets, `tools/export.sh demo`) or `--demo-build` limits the game to 6 stages, the pickaxe plus 4 pickup weapons and Classic plus King of the Hill, hides the rest from Settings, and ends each match on a "Wishlist the full game on Steam" card with the logo (#361, `scripts/DemoBuild.gd`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
 - In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
+- Anonymous match telemetry (#372): at match end the host sends one record (per-weapon damage, hits and KOs by real players, mode, stages, format, length, winner weapon; no names, colours, devices or IDs) to the relay, which appends it to a JSONL file with the time rounded to the hour and never stores or logs the IP; 30 per IP per hour, 8 KB cap. Never sent from scenario or `--bots` runs or with the toggle off. `tools/summarise_stats.py` prints damage per hit, win rate by weapon, mode popularity and average match length. Needs a Fly volume (`PICKFIGHT_STATS_PATH`, see `relay/fly.toml`) to persist
 
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
@@ -154,7 +157,7 @@ Not shipped; do not treat as existing.
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)
 - #271 Pogo stick, #270 Plunger (tkneeland)
 - #270 Plunger, #269 Umbrella (tkneeland)
-- #275 Shield, #274 Magnet, #273 Fishing rod (agage-JG)
+- #274 Magnet, #273 Fishing rod (agage-JG)
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)
 - #256 Juice pass (agage-JG); #257 Richer stage dressing (tkneeland)

@@ -17,6 +17,13 @@ extends Node
 ##        429 rate limited, 502 GitHub refused, 503 no GITHUB_FEEDBACK_TOKEN.
 ##        Godot's `accept_stream` cannot serve a plain HTTP POST, so the
 ##        endpoint rides the same TLS WebSocket the game already reaches.
+##   {"t":"stats","record":{...}}
+##        -> appends one anonymous match record (issue #372) to a JSONL file
+##        and answers {"t":"stats_result","status":N}: 200 stored, 400 invalid,
+##        413 over STATS_MAX_BYTES, 429 rate limited, 503 cannot write. The
+##        record is rebuilt from known fields only; the IP is never stored or
+##        logged (the rate limiter keys on a salted hash that dies with the
+##        process); the timestamp is rounded down to the hour.
 ##
 ## Control messages (text JSON):
 ##   to host:   {"t":"room","code":"ABCD","token":"<16 hex>"} (a reclaim adds
@@ -73,6 +80,25 @@ var feedback_token: String = OS.get_environment("GITHUB_FEEDBACK_TOKEN")
 var feedback_post: Callable = Callable()
 
 var _feedback_times: Dictionary = {} # ip -> Array[int] of msec
+
+## Match telemetry (issue #372).
+const STATS_MAX_BYTES: int = 8192
+const STATS_FORMATS: PackedStringArray = ["ffa", "teams"]
+const STATS_MAX_STAGES: int = 60
+const STATS_MAX_WEAPONS: int = 40
+const STATS_MAX_NAME_CHARS: int = 40
+const STATS_MAX_LENGTH_SEC: int = 86400
+## Records allowed per IP per hour.
+@export var stats_limit_per_hour: int = 30
+## Where records are appended. Set PICKFIGHT_STATS_PATH to a file on a mounted
+## volume (see fly.toml) for them to survive a deploy.
+var stats_path: String = _default_stats_path()
+var _stats_times: Dictionary = {} # salted hash of the caller (int) -> Array[int] of msec
+var _stats_salt: String = str(randi()) + str(Time.get_ticks_usec())
+
+static func _default_stats_path() -> String:
+	var configured: String = OS.get_environment("PICKFIGHT_STATS_PATH")
+	return configured if not configured.is_empty() else "user://match_stats.jsonl"
 
 ## A socket awaiting its hello, or a peer being flushed before it is closed.
 class Pending:
@@ -206,10 +232,92 @@ func _read_hello(p: Pending, now: int) -> bool:
 			"feedback":
 				_start_feedback(p, msg, now)
 				return true
+			"stats":
+				var status: int = int(handle_stats(p.peer.get_connected_host(), msg)["status"])
+				_send_json(p.peer, {"t": "stats_result", "status": status})
+				_closing.append(Pending.new(p.peer, now + CLOSE_GRACE_MSEC))
+				return true
 			"join":
 				_join_room(p.peer, str(msg.get("room", "")).to_upper(), now)
 				return true
 	return false
+
+## Stores one anonymous match record. Returns {"status": int}: 413 too large,
+## 400 bad shape, 429 over the per-caller limit, 503 cannot write, 200 stored.
+## `ip` is used only to rate-limit, as a salted hash, and is never written.
+func handle_stats(ip: String, msg: Dictionary) -> Dictionary:
+	if JSON.stringify(msg).to_utf8_buffer().size() > STATS_MAX_BYTES:
+		return {"status": 413}
+	var record: Dictionary = clean_stats_record(msg.get("record"))
+	if record.is_empty():
+		return {"status": 400}
+	var now: int = Time.get_ticks_msec()
+	var caller: int = (_stats_salt + ip).hash()
+	var times: Array = _stats_times.get(caller, [])
+	times = times.filter(func(t: int) -> bool: return now - t < FEEDBACK_WINDOW_MSEC)
+	if times.size() >= stats_limit_per_hour:
+		_stats_times[caller] = times
+		return {"status": 429}
+	times.append(now)
+	_stats_times[caller] = times
+	var hour: int = int(Time.get_unix_time_from_system())
+	record["t"] = hour - hour % 3600
+	return {"status": 200 if _append_line(stats_path, JSON.stringify(record)) else 503}
+
+## The record rebuilt from known fields only, or {} when its shape is wrong.
+## Unknown keys are dropped, so nothing identifying can ride along.
+static func clean_stats_record(raw: Variant) -> Dictionary:
+	if not (raw is Dictionary):
+		return {}
+	var rec: Dictionary = raw
+	if not (rec.get("mode") is String) or (rec["mode"] as String).length() > STATS_MAX_NAME_CHARS:
+		return {}
+	if not (rec.get("format") is String) or not STATS_FORMATS.has(rec["format"]):
+		return {}
+	var length: Variant = rec.get("length_sec")
+	if not (length is int or length is float) or float(length) < 0.0 or float(length) > STATS_MAX_LENGTH_SEC:
+		return {}
+	if not (rec.get("stages") is Array) or (rec["stages"] as Array).size() > STATS_MAX_STAGES:
+		return {}
+	var stages: Array = []
+	for stage: Variant in rec["stages"]:
+		if not (stage is String) or (stage as String).length() > STATS_MAX_NAME_CHARS:
+			return {}
+		stages.append(clean_feedback_text(stage, STATS_MAX_NAME_CHARS, false))
+	if not (rec.get("weapons") is Dictionary) or (rec["weapons"] as Dictionary).is_empty() or (rec["weapons"] as Dictionary).size() > STATS_MAX_WEAPONS:
+		return {}
+	var weapons: Dictionary = {}
+	for id: Variant in rec["weapons"]:
+		var row: Variant = rec["weapons"][id]
+		if not (id is String) or (id as String).length() > STATS_MAX_NAME_CHARS or not (row is Dictionary):
+			return {}
+		var clean_row: Dictionary = {}
+		for field: String in ["damage", "hits", "kos"]:
+			var value: Variant = row.get(field)
+			if not (value is int or value is float) or float(value) < 0.0 or float(value) > 1.0e7:
+				return {}
+			clean_row[field] = float(value) if field == "damage" else int(value)
+		weapons[clean_feedback_text(id, STATS_MAX_NAME_CHARS, false)] = clean_row
+	var winner: Variant = rec.get("winner_weapon", "")
+	if not (winner is String) or (winner as String).length() > STATS_MAX_NAME_CHARS:
+		return {}
+	return {
+		"mode": clean_feedback_text(rec["mode"], STATS_MAX_NAME_CHARS, false),
+		"format": rec["format"],
+		"length_sec": int(length),
+		"stages": stages,
+		"winner_weapon": clean_feedback_text(winner, STATS_MAX_NAME_CHARS, false),
+		"weapons": weapons,
+	}
+
+static func _append_line(path: String, line: String) -> bool:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
+	if file == null:
+		return false
+	file.seek_end()
+	file.store_line(line)
+	file.close()
+	return true
 
 ## Keeps the peer polled in `_closing` while GitHub answers, then replies.
 func _start_feedback(p: Pending, msg: Dictionary, now: int) -> void:
