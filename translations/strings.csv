@@ -42,7 +42,7 @@ FEEDBACK_TITLE,Send feedback to the developers
 FEED_KO,KO
 FEED_SELF_KO,self-KO
 HOST_FIRST_TO_DOWN,First to  -
-HOST_GAMEPAD_HINT,Press A to join, Y for menu
+HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
 HOST_GO_ONLINE,Go online (O)
 HOST_GO_ONLINE_STATE,Go online (O): %s
 HOST_JOIN_ONLINE,Join online game (J)

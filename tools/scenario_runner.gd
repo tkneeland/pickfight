@@ -31652,7 +31652,7 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 		failures.append("with a gamepad active the start button still reads '%s'" % text)
 	var hint: Label = screen.lobby_panel().find_child("GamepadHint", true, false) as Label
 	if hint == null or not hint.text.contains("Y"):
-		failures.append("no gamepad hint naming Y")
+		failures.append("no gamepad hint naming Y (hint %s, text '%s', locale %s)" % [hint != null, hint.text if hint != null else "", TranslationServer.get_locale()])
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
