@@ -1298,6 +1298,8 @@ func _handle_text(slot: int, text: String) -> void:
 					apply_host_command("stock_lives", msg.get("lives"))
 				if _is_number(msg.get("time")):
 					apply_host_command("stock_time", msg.get("time"))
+				if msg.get("stage") is String:
+					apply_host_command("stock_stage", msg.get("stage"))
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -1878,6 +1880,10 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 				settings.set_stock_lives(int(arg))
 				return true
 			return settings.set_stock_time_limit(int(arg))
+		"stock_stage":
+			if not arg is String or not MODE_PHASES.has(phase):
+				return false
+			return HostSettingsScript.shared().set_stock_stage(arg)
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false

@@ -402,6 +402,7 @@ func _swap_stage() -> void:
 		return
 	if _current_stage != null:
 		_current_stage.queue_free()
+	_pin_stock_stage()
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
@@ -1223,6 +1224,7 @@ func _begin_match() -> void:
 	# different sequence than the same seed dealt at launch.
 	_stage_rotation.new_bag()
 	_stage_rotation.stage_index = -1
+	_stage_rotation.pinned = -1
 	_update_score_label()
 	_ko_match_started()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
@@ -1303,7 +1305,10 @@ func _publish_lobby_state() -> void:
 		picked_mode = str(_controller_server.game_mode())
 	if picked_mode == GameModesScript.STOCK:  # the host phone's Stock controls (#354)
 		var settings: RefCounted = HostSettingsScript.shared()
-		state["stock"] = {"lives": settings.stock_lives, "time": settings.stock_time_limit}
+		state["stock"] = {
+			"lives": settings.stock_lives, "time": settings.stock_time_limit,
+			"stage": settings.stock_stage, "stages": _stage_rotation.picker_rows(),
+		}
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -2090,6 +2095,16 @@ func _start_game_mode() -> void:
 	add_child(_game_mode_node)
 	_game_mode_node.setup(self)
 	_game_mode_node.start_round(_in_round.duplicate())
+
+## A Stock match plays one stage (#375): the host's pick, or a random enabled
+## one, resolved on the match's first round and held for the rest. Any other
+## mode keeps the rotation.
+func _pin_stock_stage() -> void:
+	if game_mode != GameModesScript.STOCK:
+		_stage_rotation.pinned = -1
+	elif _stage_rotation.pinned == -1:
+		_stage_rotation.round_player_count = _roster().size()
+		_stage_rotation.pinned = _stage_rotation.resolve_pin(HostSettingsScript.shared().stock_stage)
 
 ## The host phone's pick for the next match (issue #352), taken as the match's
 ## countdown runs out and held for all of it. Only a lobby match takes it, so a
