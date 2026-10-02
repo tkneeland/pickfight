@@ -519,6 +519,18 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_rise_follows_the_mode",
 	"mode_banned_modifiers_never_rolled",
 	"mode_title_card_and_how_to_play_cards",
+	"stock_settings_defaults_clamp_persist_and_steal_message",
+	"stock_lost_life_respawns_farthest_protected_and_reset",
+	"stock_out_of_lives_is_eliminated_and_ghosted",
+	"stock_has_no_rise",
+	"stock_teams_steal_a_life_and_team_loss",
+	"stock_timeout_most_lives_wins_tie_overtime",
+	"stock_lives_shown_as_pips_and_on_phone",
+	"bot_king_of_the_hill_heads_for_the_hill",
+	"bot_king_of_the_hill_fights_whoever_holds_it",
+	"bot_hot_potato_it_chases_the_nearest_rival",
+	"bot_hot_potato_keeps_away_from_it",
+	"bot_sudden_death_plays_as_classic",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1949,6 +1961,30 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_banned_modifiers_never_rolled()
 		"mode_title_card_and_how_to_play_cards":
 			return await _scenario_mode_title_card_and_how_to_play_cards()
+		"stock_settings_defaults_clamp_persist_and_steal_message":
+			return await _scenario_stock_settings_defaults_clamp_persist_and_steal_message()
+		"stock_lost_life_respawns_farthest_protected_and_reset":
+			return await _scenario_stock_lost_life_respawns_farthest_protected_and_reset()
+		"stock_out_of_lives_is_eliminated_and_ghosted":
+			return await _scenario_stock_out_of_lives_is_eliminated_and_ghosted()
+		"stock_has_no_rise":
+			return await _scenario_stock_has_no_rise()
+		"stock_teams_steal_a_life_and_team_loss":
+			return await _scenario_stock_teams_steal_a_life_and_team_loss()
+		"stock_timeout_most_lives_wins_tie_overtime":
+			return await _scenario_stock_timeout_most_lives_wins_tie_overtime()
+		"stock_lives_shown_as_pips_and_on_phone":
+			return await _scenario_stock_lives_shown_as_pips_and_on_phone()
+		"bot_king_of_the_hill_heads_for_the_hill":
+			return await _scenario_bot_king_of_the_hill_heads_for_the_hill()
+		"bot_king_of_the_hill_fights_whoever_holds_it":
+			return await _scenario_bot_king_of_the_hill_fights_whoever_holds_it()
+		"bot_hot_potato_it_chases_the_nearest_rival":
+			return await _scenario_bot_hot_potato_it_chases_the_nearest_rival()
+		"bot_hot_potato_keeps_away_from_it":
+			return await _scenario_bot_hot_potato_keeps_away_from_it()
+		"bot_sudden_death_plays_as_classic":
+			return await _scenario_bot_sudden_death_plays_as_classic()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -27770,7 +27806,6 @@ func _scenario_bot_aggression_rises_as_opponents_dwindle() -> Array[String]:
 		failures.append("with one opponent left the bot should fight a rival 60 px off, was '%s'" % lone)
 	_scenario_completed = true
 	return failures
-
 const HostSettingsScript352 := preload("res://scripts/HostSettings.gd")
 # --- Issue #352: the lobby mode picker and the modes' wiring ---------------------
 ## Two phones join a real server; returns the peers (host first), or [] on failure.
@@ -27821,7 +27856,7 @@ func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
 	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
 	if msg.get("game_mode") != "king_of_the_hill":
 		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
-	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death"]:
+	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock"]:
 		failures.append("the picker rows were %s" % [names])
 	HostSettingsScript352.shared().game_mode = ""
 	await _close_phones(joined)
@@ -28085,7 +28120,7 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 	var lobby_rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
-	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death"]
+	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock"]
 	if cards.size() != want.size():
 		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
 	else:
@@ -28093,4 +28128,468 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 			if not cards[i].text.begins_with(want[i]):
 				failures.append("card %d reads '%s', expected it to start '%s'" % [i, cards[i].text, want[i]])
 	await _teardown(loop["stage"])
+	return failures
+# --- Stock mode (issue #354) ---------------------------------------------------
+const StockSettingsScript := preload("res://scripts/HostSettings.gd")
+func _stock_settings(lives: int, limit: int) -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.set_stock_lives(lives)
+	settings.set_stock_time_limit(limit)
+## A Stock round of `count` players (3 at most); `teams` puts them on teams.
+func _stock_rig(count: int, lives: int, limit: int, teams: Dictionary = {}) -> Dictionary:
+	_stock_settings(lives, limit)
+	var rig: Dictionary = _mode_rig(count, GameModesType.STOCK)
+	if not teams.is_empty():
+		rig["rm"]._team_mode = true
+		rig["rm"]._teams = teams
+	return rig
+## The running Stock mode with a short respawn, or null if the round never started.
+func _stock_started(rig: Dictionary) -> Node:
+	if not await _mode_started(rig):
+		return null
+	var mode: Node = rig["rm"].game_mode_node()
+	mode.respawn_sec = 0.3
+	return mode
+func _stock_finish(rig: Dictionary) -> void:
+	_stock_settings(3, 480)
+	await _teardown(rig["stage"])
+## Knocks `player` out and waits for it to come back (it must have a life left).
+func _stock_lose_life(player: RigidBody2D) -> bool:
+	player.eliminate()
+	return await _await_condition(func() -> bool: return player.alive, 3000)
+func _scenario_stock_settings_defaults_clamp_persist_and_steal_message() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stock_settings_354.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	if fresh.stock_lives != 3 or fresh.stock_time_limit != 480:
+		failures.append("defaults were %d lives, %d s; want 3 and 480" % [fresh.stock_lives, fresh.stock_time_limit])
+	fresh.set_stock_lives(0)
+	if fresh.stock_lives != 1:
+		failures.append("0 lives was kept as %d, want clamped to 1" % fresh.stock_lives)
+	fresh.set_stock_lives(99)
+	if fresh.stock_lives != 10:
+		failures.append("99 lives was kept as %d, want clamped to 10" % fresh.stock_lives)
+	fresh.set_stock_lives(7)
+	for seconds: int in [120, 300, 900, 0]:
+		if not fresh.set_stock_time_limit(seconds) or fresh.stock_time_limit != seconds:
+			failures.append("the %d s limit was refused" % seconds)
+	if fresh.set_stock_time_limit(77) or fresh.stock_time_limit != 0:
+		failures.append("a 77 s limit, not on offer, was accepted")
+	fresh.set_stock_time_limit(300)
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.stock_lives != 7 or reloaded.stock_time_limit != 300:
+		failures.append("reloaded %d lives, %d s; want 7 and 300" % [reloaded.stock_lives, reloaded.stock_time_limit])
+	DirAccess.remove_absolute(path)
+	# The host phone's controls and a phone's "Steal a life" tap reach the server.
+	_stock_settings(3, 480)
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stock_lives", 5) or StockSettingsScript.shared().stock_lives != 5:
+		failures.append("the host command did not set 5 lives")
+	if not server.apply_host_command("stock_time", 900) or StockSettingsScript.shared().stock_time_limit != 900:
+		failures.append("the host command did not set the 900 s limit")
+	if server.apply_host_command("stock_time", 61):
+		failures.append("a time limit not on offer was taken")
+	var steals: Array[int] = []
+	server.steal_requested.connect(func(slot: int) -> void: steals.append(slot))
+	server._handle_text(2, JSON.stringify({"t": "steal"}))
+	if steals != [2]:
+		failures.append("a steal tap from slot 2 emitted %s" % [steals])
+	server.free()
+	_stock_settings(3, 480)
+	_scenario_completed = true
+	return failures
+func _scenario_stock_lost_life_respawns_farthest_protected_and_reset() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 2, 0)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	if mode.lives_of(0) != 2:
+		failures.append("a player started with %d lives, want 2" % mode.lives_of(0))
+	players[0].set_weapon_stats(load("res://resources/axe.tres"))
+	players[0].damage = 50.0
+	players[0].eliminate()
+	await _await_ticks(3)
+	if players[0].alive or not mode.is_pending(0) or mode.lives_of(0) != 1:
+		failures.append("after one loss: alive %s, pending %s, lives %d" % [players[0].alive, mode.is_pending(0), mode.lives_of(0)])
+	if not players[1].alive or not players[2].alive or rm.score_of(1) + rm.score_of(2) != 0:
+		failures.append("the round ended when a player still had a life")
+	if rm.ghost_of(0) != null:
+		failures.append("a player with a life left got a ghost")
+	if not await _await_condition(func() -> bool: return players[0].alive, 3000):
+		failures.append("the player never respawned")
+		await _stock_finish(rig)
+		return failures
+	# Whichever spawn it took, no other spawn may be farther from the nearest rival.
+	var gaps: Array[float] = []
+	for spawn: Vector2 in MODE_SPAWNS:
+		var gap: float = INF
+		for other in [1, 2]:
+			gap = minf(gap, spawn.distance_to(players[other].global_position))
+		gaps.append(gap)
+	var chosen: int = -1
+	for k in MODE_SPAWNS.size():
+		if absf(players[0].global_position.x - MODE_SPAWNS[k].x) < 1.0:
+			chosen = k
+	if chosen == -1 or gaps[chosen] < gaps.max() - 0.01:
+		failures.append("respawned at x %.1f; gaps to the nearest rival per spawn were %s" % [players[0].global_position.x, gaps])
+	if players[0].damage != 0.0:
+		failures.append("damage was %.1f after respawn, want 0" % players[0].damage)
+	if players[0].weapon_stats.resource_path != "res://resources/pickaxe.tres":
+		failures.append("respawned holding %s, want the pickaxe" % players[0].weapon_stats.resource_path)
+	if not players[0].spawn_protected:
+		failures.append("the respawned player had no spawn protection")
+	var before: float = players[0].damage
+	players[0].take_damage(30.0)
+	if players[0].damage != before:
+		failures.append("a protected respawn took damage")
+	var roster: Node = rig["roster"]
+	var last_damage: float = -1.0
+	for entry: Array in roster.damage_sent:
+		if entry[0] == 0:
+			last_damage = float(entry[1])
+	if last_damage != 0.0:
+		failures.append("the phone's damage bar was last told %.2f, want 0" % last_damage)
+	await _await_msec(1500)
+	if players[0].spawn_protected:
+		failures.append("spawn protection never ended")
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_out_of_lives_is_eliminated_and_ghosted() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 1, 0)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	players[0].eliminate()
+	await _await_ticks(6)
+	if players[0].alive or mode.is_pending(0) or mode.lives_of(0) != 0:
+		failures.append("out of lives: alive %s, pending %s, lives %d" % [players[0].alive, mode.is_pending(0), mode.lives_of(0)])
+	await _await_msec(600)
+	if players[0].alive:
+		failures.append("a player with no lives left came back")
+	if rm.ghost_of(0) == null:
+		failures.append("the player out of lives got no KO ghost")
+	if mode.can_steal(0):
+		failures.append("a free-for-all player could steal a life")
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm.score_of(2) == 1, 3000):
+		failures.append("the last player with a life did not win the round")
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_has_no_rise() -> Array[String]:
+	var failures: Array[String] = []
+	_stock_settings(3, 0)
+	var path: String = "res://scenes/stages/Flatlands.tscn"
+	var loop: Dictionary = _new_rising_round(PackedStringArray([path]), RISE_TEST_GRACE_SEC, RISE_TEST_RISE_SEC)
+	var stage: Node2D = loop["stage"]
+	stage.get_child(stage.get_child_count() - 1).game_mode = GameModesType.STOCK
+	var instance: Node2D = await _await_live_stage(loop)
+	if instance == null:
+		failures.append("the Stock round never started on %s" % path)
+		await _stock_finish({"stage": stage})
+		return failures
+	var authored_y: float = _authored_kill_zone_y(path)
+	await _await_msec(int((RISE_TEST_GRACE_SEC + RISE_TEST_RISE_SEC) * 1000.0) + 500)
+	var zone: Node2D = instance.get_node("KillZone")
+	if absf(zone.position.y - authored_y) > 0.5:
+		failures.append("the kill zone rose in Stock: y %.1f, authored %.1f" % [zone.position.y, authored_y])
+	await _stock_finish({"stage": stage})
+	return failures
+func _scenario_stock_teams_steal_a_life_and_team_loss() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var roster: Node = rig["roster"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[0])
+	players[0].eliminate()
+	await _await_ticks(4)
+	if mode.lives_of(0) != 0 or players[0].alive:
+		failures.append("slot 0 should be out after two losses of two lives")
+	if rm.lobby_phase() == "round_end" or rm.score_of(1) != 0:
+		failures.append("the round ended with team Red's slot 1 still on two lives")
+	if not mode.can_steal(0):
+		failures.append("an eliminated player with a 2-life team-mate could not steal")
+	if mode.can_steal(2):
+		failures.append("a player on a one-player team could steal")
+	var told: Array = []
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 0:
+			told = entry
+	if told != [0, 0, true]:
+		failures.append("slot 0's phone was last told %s, want [0, 0, true]" % [told])
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	if mode.lives_of(1) != 1 or mode.lives_of(0) != 1 or not players[0].alive:
+		failures.append("after the steal: slot 1 has %d, slot 0 has %d, alive %s" % [mode.lives_of(1), mode.lives_of(0), players[0].alive])
+	if players[0].damage != 0.0 or not players[0].spawn_protected:
+		failures.append("the stealer came back with damage %.1f, protected %s" % [players[0].damage, players[0].spawn_protected])
+	if mode.can_steal(0) or mode.steal_life(0):
+		failures.append("a living player stole a life")
+	# Blue's only player has two lives; losing both loses the team's round.
+	await _stock_lose_life(players[2])
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
+		failures.append("Blue out of lives did not give Red the round (Red %d, Blue %d)" % [rm.team_score(0), rm.team_score(1)])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_timeout_most_lives_wins_tie_overtime() -> Array[String]:
+	var failures: Array[String] = []
+	# Individual: lives 3 / 2 / 1 -- the one with 3 wins when time is up.
+	var rig: Dictionary = _stock_rig(3, 3, 120)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	await _stock_lose_life(players[2])
+	await _stock_lose_life(players[2])
+	mode.time_left = 125.0
+	await _await_ticks(2)
+	if mode.clock_text() != "2:05" or mode.clock_pulsing():
+		failures.append("clock read '%s', pulsing %s; want 2:05, not pulsing" % [mode.clock_text(), mode.clock_pulsing()])
+	mode.time_left = 9.5
+	await _await_ticks(2)
+	if not mode.clock_pulsing():
+		failures.append("the clock did not pulse in the last 10 s")
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+		failures.append("the player with most lives did not win at the timeout")
+	await _stock_finish(rig)
+	# A tie: 3 / 2 / 3 -- slots 0 and 2 play a one-hit overtime, slot 1 is out.
+	rig = _stock_rig(3, 3, 120)
+	rm = rig["rm"]
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the tie round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+		failures.append("a tie at the timeout did not start an overtime")
+	else:
+		await _await_ticks(4)
+		if players[1].alive or not players[0].alive or not players[2].alive:
+			failures.append("overtime: alive %s %s %s, want only slots 0 and 2" % [players[0].alive, players[1].alive, players[2].alive])
+		if mode.clock_text() != "OVERTIME":
+			failures.append("the clock read '%s' in overtime" % mode.clock_text())
+		players[0].strike_landed.emit(players[2], 5.0, Vector2.ZERO, false)
+		if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+			failures.append("one hit in overtime did not decide the round")
+		if players[2].alive:
+			failures.append("the overtime victim came back (a respawn in a one-hit overtime)")
+	await _stock_finish(rig)
+	# Teams: a team's lives add up. Red 3 + 3 beats Blue 3 though slot 0 ties slot 2.
+	rig = _stock_rig(3, 3, 120, {0: 0, 1: 0, 2: 1})
+	rm = rig["rm"]
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Teams timeout round never started")
+		await _stock_finish(rig)
+		return failures
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
+		failures.append("the team with more lives in total did not win (Red %d, Blue %d)" % [rm.team_score(0), rm.team_score(1)])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_lives_shown_as_pips_and_on_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 3, 0)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var roster: Node = rig["roster"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	await _await_ticks(6)
+	var pips: Array = rm._name_tags.pip_counts() if rm._name_tags != null else []
+	if pips.size() != 3 or pips.any(func(entry: Array) -> bool: return entry[1] != 3):
+		failures.append("pips under the name tags were %s, want three players on 3" % [pips])
+	var told: Array = []
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 1:
+			told = entry
+	if told != [1, 3, false]:
+		failures.append("slot 1's phone was last told %s, want [1, 3, false]" % [told])
+	await _stock_lose_life(players[1])
+	await _await_ticks(6)
+	pips = rm._name_tags.pip_counts()
+	var slot1: Array = pips.filter(func(entry: Array) -> bool: return entry[0] == 1)
+	if slot1.size() != 1 or slot1[0][1] != 2:
+		failures.append("after a loss slot 1's pips were %s, want 2" % [slot1])
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 1:
+			told = entry
+	if told != [1, 2, false]:
+		failures.append("after a loss slot 1's phone was told %s, want [1, 2, false]" % [told])
+	rm._end_game_mode()
+	var hidden: Array = []
+	for entry: Array in roster.lives_sent:
+		if entry[0] == 1:
+			hidden = entry
+	if hidden != [1, -1, false]:
+		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [hidden])
+	await _stock_finish(rig)
+	return failures
+## Issue #353: a mode rig of `count` players with a bot driving the last one.
+## Every player is put on the arena floor at `at[i]`, and the mode is held
+## open (a huge hill goal or fuse) so the round does not end under the probe.
+func _bot_mode_rig_353(count: int, mode: String, at: Array) -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, mode)
+	rig["started"] = await _mode_started(rig)
+	if not rig["started"]:
+		return rig
+	await _await_ticks(10)
+	var rm: Node = rig["rm"]
+	var node: Node = rm.game_mode_node()
+	if mode == GameModesType.KING_OF_THE_HILL:
+		node.seconds_to_win = 1000.0
+		node.hill_position = Vector2(0.0, 274.0)
+		node.hill_radius = 150.0
+	elif mode == GameModesType.HOT_POTATO:
+		node.fuse_sec = 1000.0
+		node.fuse_left = 1000.0
+	for i in count:
+		rig["players"][i].teleport_to(at[i])
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = rig["players"][count - 1]
+	bot.output = bot.player.set_input_vector
+	rig["stage"].add_child(bot)
+	rig["bot"] = bot
+	rig["node"] = node
+	return rig
+## A bot far from the hill, nobody in it, goes and stands in it (the only rival
+## is behind it, so a plain hunt would head the other way).
+func _scenario_bot_king_of_the_hill_heads_for_the_hill() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.KING_OF_THE_HILL, [Vector2(-620.0, 274.0), Vector2(-400.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var bot_player: RigidBody2D = rig["players"][1]
+	var hill_at: Vector2 = rig["node"].hill_position
+	var start: float = bot_player.global_position.distance_to(hill_at)
+	var best: float = start
+	for t in 900:
+		await physics_frame
+		best = minf(best, bot_player.global_position.distance_to(hill_at))
+	print("      distance to the hill: %.0f at the start, %.0f at best" % [start, best])
+	if best > 150.0:
+		failures.append("the bot never reached the hill (closest %.0f px, radius 150)" % best)
+	await _teardown(rig["stage"])
+	return failures
+## A rival stands in the hill: the bot goes in and hurts it.
+func _scenario_bot_king_of_the_hill_fights_whoever_holds_it() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.KING_OF_THE_HILL, [Vector2(0.0, 274.0), Vector2(-550.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var holder: RigidBody2D = rig["players"][0]
+	var bot_player: RigidBody2D = rig["players"][1]
+	var hill_at: Vector2 = rig["node"].hill_position
+	var best: float = INF
+	for t in 900:
+		await physics_frame
+		best = minf(best, bot_player.global_position.distance_to(hill_at))
+		if holder.damage > 0.0:
+			break
+	print("      holder damage %.1f, bot closest to the hill %.0f" % [holder.damage, best])
+	if best > 200.0:
+		failures.append("the bot never went into the hill (closest %.0f px)" % best)
+	if holder.damage <= 0.0:
+		failures.append("the bot never hit the player holding the hill")
+	await _teardown(rig["stage"])
+	return failures
+## The bot is "it" and chases a passive rival, landing a hit.
+func _scenario_bot_hot_potato_it_chases_the_nearest_rival() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.HOT_POTATO, [Vector2(300.0, 274.0), Vector2(-500.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	rig["node"].it_slot = 1
+	var rival: RigidBody2D = rig["players"][0]
+	for t in 900:
+		await physics_frame
+		if rival.damage > 0.0:
+			break
+	print("      rival damage %.1f" % rival.damage)
+	if rival.damage <= 0.0:
+		failures.append("the bot that is 'it' never hit the rival")
+	await _teardown(rig["stage"])
+	return failures
+## Someone else is "it", close by: the bot ends up farther from "it" than it began.
+func _scenario_bot_hot_potato_keeps_away_from_it() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.HOT_POTATO, [Vector2(-300.0, 274.0), Vector2(-150.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	rig["node"].it_slot = 0
+	var it_player: RigidBody2D = rig["players"][0]
+	var bot_player: RigidBody2D = rig["players"][1]
+	var total: float = 0.0
+	var samples: int = 0
+	for t in 600:
+		await physics_frame
+		if t >= 300:
+			total += bot_player.global_position.distance_to(it_player.global_position)
+			samples += 1
+	var mean: float = total / float(samples)
+	print("      mean distance from 'it' over the last 300 ticks: %.0f (began at 150)" % mean)
+	if bot_player.damage > 0.0 and it_player.damage <= 0.0 and mean < 300.0:
+		failures.append("the bot was caught")
+	if mean < 300.0:
+		failures.append("the bot stayed within %.0f px of 'it' (mean)" % mean)
+	await _teardown(rig["stage"])
+	return failures
+## Sudden Death carries no objective of its own: the bot hunts the rival as in Classic.
+func _scenario_bot_sudden_death_plays_as_classic() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.SUDDEN_DEATH, [Vector2(300.0, 274.0), Vector2(-500.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var rival: RigidBody2D = rig["players"][0]
+	for t in 900:
+		await physics_frame
+		if rival.damage > 0.0:
+			break
+	print("      rival damage %.1f" % rival.damage)
+	if rival.damage <= 0.0:
+		failures.append("the bot never hunted the rival in Sudden Death")
+	await _teardown(rig["stage"])
 	return failures

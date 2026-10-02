@@ -106,6 +106,10 @@ signal host_changed(slot: int)
 ## decides what each means.
 signal host_command(cmd: String, slot: int)
 
+## A phone tapped "Steal a life" (Stock in Teams, #354). RoundManager forwards
+## it to the mode, which decides whether it is allowed.
+signal steal_requested(slot: int)
+
 ## The close reason a kicked phone is shown, and refused with if it comes back.
 const KICKED_REASON: String = "removed by the host"
 ## Commands the host phone may send besides "kick".
@@ -491,6 +495,8 @@ func _ready() -> void:
 	_damage_sent.resize(_players.size())
 	_damage_sent.fill(-1)
 	_damage_sent_msec.resize(_players.size())
+	_lives_sent.resize(_players.size())
+	_lives_sent.fill("")
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
@@ -1020,6 +1026,7 @@ func _remember_leaver(slot: int) -> void:
 ## (issue #164). The caller tells every other phone with `_broadcast_looks(peer)`.
 func _attach(slot: int, peer: Variant) -> void:
 	_slot_peers[slot] = peer
+	_lives_sent[slot] = ""
 	_damage_sent[slot] = -1  # a newly bound page has no bar yet: the next call sends it
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
@@ -1104,6 +1111,23 @@ func send_damage(slot: int, fraction: float) -> void:
 	_damage_sent[slot] = percent
 	_damage_sent_msec[slot] = now
 	peer.send_text(JSON.stringify({"t": "dmg", "v": percent / 100.0}))
+
+var _lives_sent: Array[String] = []
+
+## Tell the phone on `slot` its player's lives (Stock, #354): one
+## `{"t":"lives","v":<n>,"steal":<bool>}` frame, `n` -1 to hide the counter.
+## Sent only when it changed since the last frame to that seat.
+func send_lives(slot: int, count: int, can_steal: bool) -> void:
+	if not slot_has_controller(slot):
+		return
+	var key: String = "%d:%s" % [count, can_steal]
+	if _lives_sent[slot] == key:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_lives_sent[slot] = key
+	peer.send_text(JSON.stringify({"t": "lives", "v": count, "steal": can_steal}))
 
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round
@@ -1255,6 +1279,15 @@ func _handle_text(slot: int, text: String) -> void:
 			if slot == host_slot() and picked is String:
 				if apply_host_command("gamemode", picked) and _log_input:
 					print("slot %d set game mode '%s'" % [slot, picked])
+		"steal":
+			steal_requested.emit(slot)
+		"stock":
+			# The host phone's Stock lobby controls (#354): lives and/or time limit.
+			if slot == host_slot():
+				if _is_number(msg.get("lives")):
+					apply_host_command("stock_lives", msg.get("lives"))
+				if _is_number(msg.get("time")):
+					apply_host_command("stock_time", msg.get("time"))
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -1827,6 +1860,14 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false
 			return set_game_mode(arg)
+		"stock_lives", "stock_time":
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
+				return false
+			var settings: RefCounted = HostSettingsScript.shared()
+			if cmd == "stock_lives":
+				settings.set_stock_lives(int(arg))
+				return true
+			return settings.set_stock_time_limit(int(arg))
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false

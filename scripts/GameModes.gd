@@ -14,8 +14,9 @@ extends RefCounted
 const KING_OF_THE_HILL: String = "king_of_the_hill"
 const SUDDEN_DEATH: String = "sudden_death"
 const HOT_POTATO: String = "hot_potato"
+const STOCK: String = "stock"
 
-const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO]
+const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO, STOCK]
 
 ## Classic is no mode at all: the endless round loop as it always was.
 const CLASSIC: String = ""
@@ -52,6 +53,12 @@ const TABLE: Array[Dictionary] = [
 		"rule": "One hit and you are out.",
 		"rise": true, "rise_grace_factor": 0.5, "rise_speed_factor": 1.5,
 		"banned": ["double_damage"], "ffa_only": false,
+	},
+	{
+		"id": STOCK, "name": "Stock",
+		"rule": "Lose all your lives and you are out.",
+		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
+		"banned": [], "ffa_only": false,
 	},
 ]
 
@@ -99,6 +106,7 @@ static func picker_rows() -> Array:
 const KingOfTheHillScript := preload("res://scripts/KingOfTheHill.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const HotPotatoScript := preload("res://scripts/HotPotato.gd")
+const StockScript := preload("res://scripts/Stock.gd")
 
 ## A fresh mode node for `id`, or null for "" or an unknown id.
 static func create(id: String) -> Node:
@@ -109,4 +117,6 @@ static func create(id: String) -> Node:
 			return SuddenDeathScript.new()
 		HOT_POTATO:
 			return HotPotatoScript.new()
+		STOCK:
+			return StockScript.new()
 	return null
