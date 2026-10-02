@@ -194,3 +194,6 @@ VICTORY_TAP_CONTINUE,Tap Continue on your phone
 VICTORY_TEAM_WINS,%s TEAM WINS!
 VICTORY_WINS,%s WINS!
 WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d)
+STAGE_RACETRACK,Racetrack
+STAGE_SWITCHYARD,Switchyard
+STAGE_ORBIT,Orbit

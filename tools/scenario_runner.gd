@@ -556,6 +556,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_random_pick_is_an_enabled_stage_held_all_match",
 	"stock_never_rolls_a_modifier",
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
+	"hot_potato_stages_load_and_are_in_rotation",
+	"hot_potato_draws_its_stages_more_often",
 	"pseudo_locale_changes_lobby_and_mode_text",
 	"every_tr_key_is_in_strings_csv",
 ]
@@ -2062,6 +2064,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_never_rolls_a_modifier()
 		"stock_stage_pick_persists_and_reaches_the_host_phone":
 			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
+		"hot_potato_stages_load_and_are_in_rotation":
+			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
+		"hot_potato_draws_its_stages_more_often":
+			return await _scenario_hot_potato_draws_its_stages_more_often()
 		"pseudo_locale_changes_lobby_and_mode_text":
 			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
 		"every_tr_key_is_in_strings_csv":
@@ -3809,6 +3815,9 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Battlefield.tscn",
 	"res://scenes/stages/Pocket.tscn",
 	"res://scenes/stages/Colosseum.tscn",
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -29711,5 +29720,108 @@ func _scenario_every_tr_key_is_in_strings_csv() -> Array[String]:
 	for key: String in built:
 		if not catalogue.has(key):
 			failures.append("built key %s is missing" % key)
+	_scenario_completed = true
+	return failures
+# --- Hot Potato stages (issue #373)
+const HOT_POTATO_STAGES_373: PackedStringArray = [
+	"res://scenes/stages/Racetrack.tscn",
+	"res://scenes/stages/Switchyard.tscn",
+	"res://scenes/stages/Orbit.tscn",
+]
+## The three chase-loop stages are in Main's rotation and the swept STAGE_PATHS,
+## load as large stages with eight spawns, and weigh 4 for Hot Potato and 0.3 in
+## every other mode.
+func _scenario_hot_potato_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation: Array = main_scene.get_node("RoundManager").stage_scenes
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in rotation:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in HOT_POTATO_STAGES_373:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_pickup_spawn_points().size() < 3:
+			failures.append("%s declares %d pickup spots, wants 3 or more" % [path, instance.get_pickup_spawn_points().size()])
+		if not instance.is_large():
+			failures.append("%s is not a large stage" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["hot_potato", "", "king_of_the_hill", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "hot_potato" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	if not is_equal_approx(StageType.mode_weight_of(load("res://scenes/stages/Flatlands.tscn"), "hot_potato"), 1.0):
+		failures.append("a stage with no mode_weights should weigh 1.0")
+	_scenario_completed = true
+	return failures
+## Hot Potato deals its three stages about four times as often as a stage that
+## is not favoured, other modes leave the odds alone, and the same seed deals
+## the same sequence. Counted over 900 seeded draws of a full table.
+func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation_script: GDScript = load("res://scripts/StageRotation.gd")
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var scenes: Array[PackedScene] = []
+	scenes.assign(main_scene.get_node("RoundManager").stage_scenes)
+	main_scene.free()
+	var favoured: Array[int] = []
+	for i in scenes.size():
+		if HOT_POTATO_STAGES_373.has(scenes[i].resource_path):
+			favoured.append(i)
+	var counts: Dictionary = {}
+	var sequences: Dictionary = {}
+	var classic_counts: Dictionary = {}
+	for mode_id: String in ["hot_potato", "", "hot_potato"]:
+		var rotation: RefCounted = rotation_script.new()
+		rotation.scenes = scenes
+		rotation.round_player_count = 8
+		rotation.mode_id = mode_id
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 373
+		rotation.rng = rng
+		var hits: int = 0
+		var seq: Array[int] = []
+		for _round in 900:
+			var index: int = rotation.next_stage_index()
+			if seq.size() > 0 and seq[-1] == index:
+				failures.append("mode '%s' dealt stage %d twice in a row" % [mode_id, index])
+				break
+			rotation.stage_index = index
+			seq.append(index)
+			if mode_id == "":
+				classic_counts[index] = int(classic_counts.get(index, 0)) + 1
+			if favoured.has(index):
+				hits += 1
+		if counts.has(mode_id):
+			if sequences[mode_id] != seq:
+				failures.append("the same seed dealt two different sequences for '%s'" % mode_id)
+		counts[mode_id] = hits
+		sequences[mode_id] = seq
+	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
+	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
+	if counts["hot_potato"] < 240:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 240" % counts["hot_potato"])
+	var others: int = 0
+	for i in scenes.size():
+		if not favoured.has(i):
+			others += int(classic_counts.get(i, 0))
+	var equal_weight_share: float = float(others) / float(scenes.size() - favoured.size())
+	print("      classic: an equal-weight stage averaged %.1f draws, the three Hot Potato stages %.1f each" % [equal_weight_share, float(counts[""]) / 3.0])
+	if float(counts[""]) / 3.0 > 0.5 * equal_weight_share:
+		failures.append("classic dealt each Hot Potato stage %.1f times, an equal-weight stage %.1f: wants under half" % [float(counts[""]) / 3.0, equal_weight_share])
+	if counts[""] == 0:
+		failures.append("classic should still deal them now and then, dealt none in 900")
+	if counts["hot_potato"] < 2 * counts[""]:
+		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
 	return failures
