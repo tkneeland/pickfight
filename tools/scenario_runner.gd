@@ -621,15 +621,32 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players",
 	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
+	"round_never_shows_join_corner",
+	"host_pad_start_pauses_and_resumes_other_pads_do_not",
+	"host_pad_start_and_host_phone_share_one_pause",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
 	"rotation_deals_ctf_and_soccer_only_their_own_stages",
 	"juice_hitstop_never_lifts_a_host_pause",
 	"mode_award_categories_are_translated",
 	"ctf_a_kicked_player_waiting_to_respawn_stays_out",
 	"hot_potato_first_it_varies_across_a_matchs_rounds",
+	"online_host_left_reaches_client_and_shows_screen",
+	"online_late_remote_joiner_enters_next_round_with_fresh_score",
+	"online_ping_reaches_lobby_and_scoreboard_with_warning",
+	"bot_stays_on_stage_over_jittered_starts",
+	"gamepad_all_pad_room_continues_to_lobby_after_podium",
+	"gamepad_ko_ghost_follows_right_stick",
+	"gamepad_replug_on_new_port_keeps_slot_and_cosmetics",
+	"gamepad_rumbles_on_round_win_and_has_no_damage_bar",
+	"gamepad_first_join_tip_shows_once_until_stick_swings",
 	"sound_trailer_split_survives_hostile_bytes",
 	"remote_client_lobby_text_follows_the_locale",
 	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
+	"remote_client_hud_scoreboard_and_round_result",
+	"remote_client_hud_king_of_the_hill_and_mode_lines",
+	"remote_client_hud_match_result_podium_and_leave",
+	"remote_client_removed_body_is_gone_after_one_snapshot",
+	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2267,6 +2284,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_reactor_king_of_the_hill_hill_sits_off_the_hazard()
 		"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time":
 			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
+		"round_never_shows_join_corner":
+			return await _scenario_round_never_shows_join_corner()
+		"host_pad_start_pauses_and_resumes_other_pads_do_not":
+			return await _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not()
+		"host_pad_start_and_host_phone_share_one_pause":
+			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
 		"rotation_deals_ctf_and_soccer_only_their_own_stages":
@@ -2279,12 +2302,40 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out()
 		"hot_potato_first_it_varies_across_a_matchs_rounds":
 			return await _scenario_hot_potato_first_it_varies_across_a_matchs_rounds()
+		"online_host_left_reaches_client_and_shows_screen":
+			return await _scenario_online_host_left_reaches_client_and_shows_screen()
+		"online_late_remote_joiner_enters_next_round_with_fresh_score":
+			return await _scenario_online_late_remote_joiner_enters_next_round_with_fresh_score()
+		"online_ping_reaches_lobby_and_scoreboard_with_warning":
+			return await _scenario_online_ping_reaches_lobby_and_scoreboard_with_warning()
+		"bot_stays_on_stage_over_jittered_starts":
+			return await _scenario_bot_stays_on_stage_over_jittered_starts()
+		"gamepad_all_pad_room_continues_to_lobby_after_podium":
+			return await _scenario_gamepad_all_pad_room_continues_to_lobby_after_podium()
+		"gamepad_ko_ghost_follows_right_stick":
+			return await _scenario_gamepad_ko_ghost_follows_right_stick()
+		"gamepad_replug_on_new_port_keeps_slot_and_cosmetics":
+			return await _scenario_gamepad_replug_on_new_port_keeps_slot_and_cosmetics()
+		"gamepad_rumbles_on_round_win_and_has_no_damage_bar":
+			return await _scenario_gamepad_rumbles_on_round_win_and_has_no_damage_bar()
+		"gamepad_first_join_tip_shows_once_until_stick_swings":
+			return await _scenario_gamepad_first_join_tip_shows_once_until_stick_swings()
 		"sound_trailer_split_survives_hostile_bytes":
 			return await _scenario_sound_trailer_split_survives_hostile_bytes()
 		"remote_client_lobby_text_follows_the_locale":
 			return await _scenario_remote_client_lobby_text_follows_the_locale()
 		"lobby_pad_menu_lets_go_when_the_lobby_leaves":
 			return await _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves()
+		"remote_client_hud_scoreboard_and_round_result":
+			return await _scenario_remote_client_hud_scoreboard_and_round_result()
+		"remote_client_hud_king_of_the_hill_and_mode_lines":
+			return await _scenario_remote_client_hud_king_of_the_hill_and_mode_lines()
+		"remote_client_hud_match_result_podium_and_leave":
+			return await _scenario_remote_client_hud_match_result_podium_and_leave()
+		"remote_client_removed_body_is_gone_after_one_snapshot":
+			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
+		"hud_top_gap_reclaimed_kill_feed_and_score_line":
+			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -13792,8 +13843,8 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 	if lines != PackedStringArray(["Alice KO Bob", "Carl self-KO"]):
 		failures.append("round 1 feed read %s, expected Alice KO Bob then Carl self-KO" % [lines])
 	var feed_rect: Rect2 = feed.feed().get_global_rect()
-	if feed_rect.end.x > feed.get_global_rect().end.x or feed_rect.position.y < 192.0:
-		failures.append("the feed sits at %s, not top right under the QR code" % feed_rect)
+	if feed_rect.end.x > feed.get_global_rect().end.x or feed_rect.position.y < 0.0:
+		failures.append("the feed sits at %s, not at the top right of the screen" % feed_rect)
 	if not await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("round 2 never started")
 		await _teardown(loop["stage"])
@@ -13877,7 +13928,7 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 		failures.append("the ticker holds %d lines, expected the cap of %d" % [feed.entries().size(), KillFeedScript.MAX_ENTRIES])
 	if not screen.encloses(feed_rect):
 		failures.append("the full ticker %s runs off the %s screen" % [feed_rect, SCREEN_SIZE])
-	if feed_rect.intersects(qr.get_global_rect()):
+	if qr.is_visible_in_tree() and feed_rect.intersects(qr.get_global_rect()):
 		failures.append("the ticker %s overlaps the join QR code %s" % [feed_rect, qr.get_global_rect()])
 	if feed_rect.intersects(board_rect):
 		failures.append("the ticker %s overlaps the round-end scoreboard %s" % [feed_rect, board_rect])
@@ -20828,7 +20879,7 @@ func _scenario_join_qr_shown_without_qrencode() -> Array[String]:
 		else:
 			failures.append_array(_check_qr_image(tex.get_image(), url, "join QR"))
 			# Hidden while the lobby is up since #230, which shows the QR big
-			# itself; `lobby_hides_in_round_join_corner` sees it back in a round.
+			# itself; since #430 it never shows in a round either.
 			if rect.texture != tex:
 				failures.append("UI/JoinQrCode does not carry the join QR")
 			if rect.visible:
@@ -21367,12 +21418,8 @@ func _scenario_lobby_hides_in_round_join_corner() -> Array[String]:
 	else:
 		await _poll_phones(joined, 5)
 		print("      in a round: label %s, QR %s (texture %s)" % [label.is_visible_in_tree(), qr.is_visible_in_tree(), has_qr])
-		if not label.is_visible_in_tree():
-			failures.append("in a round: the join label is hidden")
-		if has_qr and not qr.is_visible_in_tree():
-			failures.append("in a round: the join QR is hidden")
-		if not has_qr and qr.is_visible_in_tree():
-			failures.append("in a round: the join QR shows with no texture")
+		# Issue #430: the corner stays hidden in a round too (lobby only).
+		check_hidden.call("in a round")
 	rm.set("_match_winner_slot", server.claimed_slots()[0])
 	rm._enter_victory()
 	await _poll_phones(joined, 3)
@@ -31440,7 +31487,6 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	_scenario_completed = true
 	return failures
 # --- Capture the Flag (issue #403) ---------------------------------------------
-
 const CTF_STAGES_403: PackedStringArray = [
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
@@ -31861,7 +31907,6 @@ func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
 		failures.append("the announcer said %s, expected 'announce_captured'" % [announcer.said])
 	await _teardown(rig["stage"])
 	return failures
-
 ## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
 func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
 	var stage: Node2D = _new_stage()
@@ -32252,7 +32297,6 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
-
 # --- Lobby mode-card grid (issue #425) ---------------------------------------
 ## The lobby state `RoundManager` would publish for `count` seated phones.
 func _lobby_state_425(count: int) -> Dictionary:
@@ -32315,7 +32359,6 @@ func _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players() -> Arr
 	failures.append_array(_lobby_rects_425(screen, qr))
 	await _teardown(rig["main"])
 	return failures
-
 ## Issue #416: Reactor's hill spots sit on the floor out on the wings, clear of
 ## the molten core (two Hazards between x=-160 and 160) by more than the hill's
 ## radius, so the hill is safe to hold.
@@ -32336,7 +32379,6 @@ func _scenario_reactor_king_of_the_hill_hill_sits_off_the_hazard() -> Array[Stri
 	print("      Reactor hill spots: %s" % [spots])
 	await _teardown(stage)
 	return failures
-
 ## Issue #416: a 4-bot King of the Hill round on Reactor ends with someone
 ## banking enough hold time, not by everyone else being eliminated.
 func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time() -> Array[String]:
@@ -32396,7 +32438,239 @@ func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_tim
 		print("      Reactor round ended by hold time (a rider banked %.1f s of 10 s)" % seen_hold[0])
 	await _teardown(stage)
 	return failures
-
+# --- Lobby-only join corner, host-pad Start pauses (#430) --------------------
+## Issue #430, in the real game (scenes/Main.tscn, its real ControllerServer
+## over the real WebSocket seam): the join QR and room code show in the lobby
+## only. Through a round -- with streamer mode (#369) switched on and off again
+## mid-round, which redraws the corner -- the in-round join corner (UI/JoinLabel
+## and UI/JoinQrCode) never shows.
+func _scenario_round_never_shows_join_corner() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 430
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var label: Label = server.join_label()
+	var qr: TextureRect = server.join_qr_rect()
+	if label == null or qr == null:
+		await _teardown(main)
+		return ["Main.tscn's ControllerServer has no join label (%s) or QR (%s)" % [label, qr]]
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "issue-430-corner-%d" % i, joined)
+		if result["slot"] == -1:
+			failures.append("phone %d got no slot (closed=%s '%s')" % [i + 1, result["closed"], result["reason"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.claimed_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var round_on := func() -> bool:
+		for peer: WebSocketPeer in joined:
+			peer.poll()
+		return rm.lobby_phase() == "playing" and _all_alive(players)
+	if not await _await_condition(round_on, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	var sfx: Node = _sfx()
+	var was_hidden: bool = sfx != null and bool(sfx.get("hide_room_code"))
+	var shown_frames: int = 0
+	for frame in 60:
+		if sfx != null and (frame == 20 or frame == 40):
+			sfx.hide_room_code = frame == 20
+		await _poll_phones(joined, 1)
+		if label.is_visible_in_tree() or qr.is_visible_in_tree():
+			shown_frames += 1
+	if sfx != null:
+		sfx.hide_room_code = was_hidden
+	print("      in a round: corner shown on %d of 60 frames (QR texture %s)" % [shown_frames, qr.texture != null])
+	if shown_frames > 0:
+		failures.append("in a round the join corner showed on %d of 60 frames" % shown_frames)
+	if rm.lobby_phase() != "playing" and rm.lobby_phase() != "round_end":
+		failures.append("the round left play while sampled (phase '%s')" % rm.lobby_phase())
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## A gamepad button pressed and released, as a real pad sends it.
+func _pad_tap_430(device: int, button: int) -> void:
+	await _pad_button_261(device, button)
+	await _pad_button_261(device, button, false)
+## Issue #430, in the real game: Start pauses only if the host uses it. The
+## host's controller is pad 0 (`HOST_PAD_DEVICE`: the Deck's built-in
+## controls). In the lobby, Start from pad 0 and from pad 5 keeps its #261
+## meaning: join, then ready. Mid-round, pad 5's Start does nothing (no pause,
+## no ready); pad 0's pauses the match as the host phone's Pause does (tree
+## paused, PAUSED banner up); pad 5's Start cannot resume it; pad 0's resumes.
+func _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 431
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var host_pad: int = int(_server_const_164("HOST_PAD_DEVICE", -1))
+	if host_pad != 0:
+		failures.append("HOST_PAD_DEVICE is %d, expected joypad 0" % host_pad)
+	var other_pad: int = 5
+	var joined: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "issue-430-pause-host", joined)
+	if result["slot"] == -1:
+		failures.append("the host phone got no slot (closed=%s '%s')" % [result["closed"], result["reason"]])
+	joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	for device: int in [host_pad, other_pad]:
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		var slot: int = server.pad_slot(device)
+		if slot == -1:
+			failures.append("lobby: Start from pad %d did not join it" % device)
+			continue
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		if not server.slot_ready(slot):
+			failures.append("lobby: a second Start from pad %d did not ready it" % device)
+		if rm.is_paused():
+			failures.append("lobby: Start from pad %d paused" % device)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	var other_slot: int = server.pad_slot(other_pad)
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.claimed_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	joined[0].send_text(JSON.stringify({"t": "ready", "v": true}))
+	var round_on := func() -> bool:
+		joined[0].poll()
+		return rm.lobby_phase() == "playing" and _all_alive(players)
+	if not await _await_condition(round_on, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _pad_tap_430(other_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("mid-round: Start from pad %d (not the host's) paused the match" % other_pad)
+	if server.slot_ready(other_slot):
+		failures.append("mid-round: Start from pad %d readied its seat" % other_pad)
+	await _pad_tap_430(host_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	var banner: Label = rm.pause_label()
+	if not rm.is_paused() or not paused:
+		failures.append("mid-round: Start from the host's pad did not pause (paused %s, tree %s)" % [rm.is_paused(), paused])
+	elif banner == null or not banner.is_visible_in_tree():
+		failures.append("paused by the host's pad, but no PAUSED banner shows")
+	await _pad_tap_430(other_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused():
+		failures.append("paused: Start from pad %d (not the host's) resumed the match" % other_pad)
+	await _pad_tap_430(host_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("paused: Start from the host's pad did not resume (paused %s, tree %s)" % [rm.is_paused(), paused])
+	if rm.lobby_phase() != "playing" and rm.lobby_phase() != "round_end":
+		failures.append("the match left play (phase '%s')" % rm.lobby_phase())
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## Issue #430 review: the host pad's Start and the host phone's Pause and
+## Resume drive one pause. A phone pause is resumed by the host pad's Start,
+## a pad pause by the phone's Resume, and a pad pause landing on the round-end
+## screen holds it there (its game-time wait does not run out) until the pad
+## resumes it. Pad 0 is unseated here: the host's controller need not be a
+## player.
+func _scenario_host_pad_start_and_host_phone_share_one_pause() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(2, "issue-430-shared-pause")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		return failures
+	rm.round_end_pause_sec = 2.0
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var p0: RigidBody2D = server.player_in_slot(0)
+	var p1: RigidBody2D = server.player_in_slot(1)
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "playing" and p0.alive and p1.alive, BOT_START_MSEC):
+		failures.append("two ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "pause"}))
+	await _poll_phones(joined, 10)
+	if not rm.is_paused() or not paused:
+		failures.append("the host phone's Pause did not pause the game")
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("the host pad's Start did not resume the host phone's pause")
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused() or not paused:
+		failures.append("the host pad's Start did not pause the game")
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "resume"}))
+	await _poll_phones(joined, 10)
+	if rm.is_paused() or paused:
+		failures.append("the host phone's Resume did not resume the host pad's pause")
+	if server.pad_slot(0) != -1:
+		failures.append("the host pad's Start mid-match seated it in slot %d" % server.pad_slot(0))
+	p1.eliminate()
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never ended (phase '%s')" % rm.lobby_phase())
+		paused = false
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused() or not paused:
+		failures.append("round end: the host pad's Start did not pause the game")
+	# 3 s of frames, past the 2 s round-end wait: frozen, it must not run out.
+	await _poll_phones(joined, 180)
+	print("      round end paused by the pad: phase after 180 frames '%s', paused %s" % [rm.lobby_phase(), rm.is_paused()])
+	if rm.lobby_phase() != "round_end":
+		failures.append("round end: paused, the round-end wait still ran out (phase '%s')" % rm.lobby_phase())
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("round end: the host pad's Start did not resume")
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() != "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round end: resumed, the round end never moved on")
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
 # --- Lobby worst state and joining by room code (#425 playtest) --------------
 ## The window sizes the lobby must fit: the design canvas, 1080p and the Deck.
 const LOBBY_RESOLUTIONS_425B: Array[Vector2i] = [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]
@@ -32665,6 +32939,350 @@ func _scenario_hot_potato_first_it_varies_across_a_matchs_rounds() -> Array[Stri
 	_scenario_completed = true
 	return failures
 
+## Issue #446: the host's room closing, here by the host socket closing
+## cleanly (the host quitting), reaches a real client, which shows the
+## "Host left" message on its join screen. No migration: it stays there.
+func _scenario_online_host_left_reaches_client_and_shows_screen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	rig["server"].relay_link._socket.close(1000, "host quit")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("the client stayed in the match after the host socket closed")
+	_rc_expect_join_screen_241(client, failures, "host socket closed", "Host left")
+	await _await_ticks(60)
+	if client.state != RcState241.JOIN:
+		failures.append("the client left the join screen on its own: no host migration is allowed")
+	await _rc_close_241(rig)
+	return failures
+## Issue #446: a remote seat that joins mid-round watches (not in the round,
+## not alive), takes the freed slot with a fresh score as #161 does for
+## phones, and plays from the next round.
+func _scenario_online_late_remote_joiner_enters_next_round_with_fresh_score() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the bots' round never started")
+		await _rc_close_241(rig)
+		return failures
+	var round_before: int = int(rm.get("_round_number"))
+	rm._scores[3] = 7 # the last occupant's points, still on the freed slot
+	var remote: WebSocketPeer = await _online_remote_239(rig, "late-446")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot != 3:
+		failures.append("the late remote was given slot %d, expected the free slot 3" % slot)
+		await _rc_close_241(rig)
+		return failures
+	var body: RigidBody2D = server.player_in_slot(slot) as RigidBody2D
+	if rm._in_round.has(slot) or body.alive:
+		failures.append("the late remote was put into the running round (in_round %s, alive %s)" % [rm._in_round, body.alive])
+	if rm._scores[slot] != 0:
+		failures.append("the late remote started on %d points, expected the freed slot's 0" % rm._scores[slot])
+	# Three bots can stalemate for a minute; end their round outright (#446).
+	for bot_slot: int in [0, 1]:
+		var bot: Node = server.player_in_slot(bot_slot)
+		if bot != null and bot.alive:
+			bot.eliminate()
+	var next_round: Callable = func() -> bool: return int(rm.get("_round_number")) > round_before and rm._in_round.has(slot)
+	await _snap_pump_251(rig, remote, [], 60000, next_round) # keeps the fake client polled
+	if not next_round.call():
+		failures.append("the late remote never entered a later round (round %d, in_round %s, claimed %s)" % [int(rm.get("_round_number")), rm._in_round, server.claimed_slots()])
+	elif not body.alive:
+		failures.append("the late remote is in the next round but not alive")
+	await _rc_close_241(rig)
+	return failures
+## Issue #446: the host pings a remote seat, the round trip lands in the lobby
+## state and on the scoreboard, and past 150 ms it is shown in the warning
+## colour. Nobody is kicked for it.
+func _scenario_online_ping_reaches_lobby_and_scoreboard_with_warning() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var lobby := preload("res://scripts/LobbyScreen.gd")
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "ping-446")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	if server.slot_ping_msec(slot) != -1:
+		failures.append("a ping was reported before any pong")
+	var results: Array[int] = []
+	for delay_msec: int in [0, 260]:
+		var ping: Dictionary = await _online_wait_239(rig, remote, "n")
+		while not ping.is_empty() and ping.get("t") != "ping":
+			ping = await _online_wait_239(rig, remote, "n")
+		if ping.is_empty():
+			failures.append("no ping reached the remote seat (delay %d)" % delay_msec)
+			break
+		await _wait_for_239(func() -> bool: return false, delay_msec)
+		_online_send_239(remote, 1, JSON.stringify({"t": "pong", "n": ping["n"]}).to_utf8_buffer())
+		await _online_frames_239(5)
+		results.append(server.slot_ping_msec(slot))
+	if results.size() == 2:
+		if results[0] < 0 or results[0] > 150:
+			failures.append("an immediate pong measured %d ms, expected 0..150" % results[0])
+		if results[1] < 250:
+			failures.append("a pong held 260 ms measured %d ms, expected >= 250" % results[1])
+		rm._show_scoreboard()
+		var label: Label = rm._scoreboard.get_child(slot).get_node_or_null("Ping") as Label
+		if label == null or not label.visible or label.text != "%d ms" % results[1]:
+			failures.append("the scoreboard ping label was %s, expected '%d ms'" % [label.text if label != null else "missing", results[1]])
+		elif label.get_theme_color("font_color") != lobby.PING_WARN_COLOR:
+			failures.append("a ping of %d ms was not in the warning colour" % results[1])
+		var bot_label: Label = rm._scoreboard.get_child(0).get_node_or_null("Ping") as Label
+		if bot_label != null and bot_label.visible:
+			failures.append("a bot's scoreboard entry shows a ping")
+		rm._publish_lobby_state()
+		var entry: Dictionary = {}
+		for e: Variant in server._lobby_state.get("players", []):
+			if int(e.get("slot", -1)) == slot:
+				entry = e
+		if int(entry.get("ping", -1)) != results[1]:
+			failures.append("the lobby state carried ping %s, expected %d" % [entry.get("ping"), results[1]])
+		if lobby.ping_color(150) == lobby.PING_WARN_COLOR or lobby.ping_color(151) != lobby.PING_WARN_COLOR:
+			failures.append("the warning threshold is not 'above 150 ms'")
+		if not server.claimed_slots().has(slot):
+			failures.append("the slow remote lost its seat: never kick for ping")
+	await _rc_close_241(rig)
+	return failures
+# --- Gamepad seat parity (#442) ------------------------------------------------
+## A real ControllerServer and RoundManager, `count` slots, first to 1.
+# --- Issue #423: edge safety over jittered starts -----------------------------------
+## The #302 overshoot setup is chaotic: a start shifted by a pixel can end with
+## the bot's own swing throwing it off the stage, and each platform lands on its
+## own result. So the check is statistical: the four cases, each from PROBE_N
+## starts (default 5) jittered by up to 3 px (seed PROBE_SEED, default 423),
+## allow at most one bot in 200 off the stage. For a real measurement run it with
+## PROBE_N=50 (200 starts, about 80 s) and read the printed count.
+func _scenario_bot_stays_on_stage_over_jittered_starts() -> Array[String]:
+	var n: int = int(OS.get_environment("PROBE_N")) if OS.get_environment("PROBE_N") != "" else 5
+	var jitter := RandomNumberGenerator.new()
+	jitter.seed = int(OS.get_environment("PROBE_SEED")) if OS.get_environment("PROBE_SEED") != "" else 423
+	var deaths: int = 0
+	var total: int = 0
+	for case: Array in [[100.0, 300.0], [100.0, 500.0], [-100.0, -300.0], [-100.0, -500.0]]:
+		for i in n:
+			var got: Dictionary = await _overshoot302(case[0] + jitter.randf_range(-3.0, 3.0), case[1], 1200)
+			total += 1
+			if not got["alive"] or got["fell"]:
+				deaths += 1
+	print("      %d of %d jittered starts ended off the stage" % [deaths, total])
+	_scenario_completed = true
+	var failures: Array[String] = []
+	if deaths > total / 200:
+		failures.append("%d of %d jittered starts went off the stage" % [deaths, total])
+	return failures
+# --- Gamepad seat parity (#442) ------------------------------------------------
+## A real ControllerServer and RoundManager, `count` slots, first to 1.
+func _pad_loop_442(count: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "PadContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	var spawns := PackedVector2Array()
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "PadP%d" % i
+		player.start_in_round = false
+		player.identity_color = FOUR_PLAYER_COLORS[i % FOUR_PLAYER_COLORS.size()]
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../PadP%d" % i))
+		spawns.append(FOUR_PLAYER_SKY_SPAWNS[i % FOUR_PLAYER_SKY_SPAWNS.size()])
+	var server: Node = ControllerServerScript.new()
+	server.name = "PadServer"
+	_set_phone_ports(server)
+	server.player_paths = paths
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "PadRoundManager"
+	round_manager.player_paths = paths
+	round_manager.stage_scenes = [_make_pickup_stub_stage("PadStage", spawns, PICKUP_STUB_POINTS)]
+	round_manager.arena_container_path = NodePath("../PadContainer")
+	round_manager.controller_server_path = NodePath("../PadServer")
+	round_manager.min_players_to_start = 2
+	round_manager.round_end_pause_sec = 0.0
+	round_manager.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
+	round_manager.pickup_weapons = [
+		_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH),
+		_make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)] as Array[Resource]
+	round_manager.lobby_enabled = true
+	round_manager.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	stage.add_child(round_manager)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	server.apply_host_command("target", 1)
+	return {"stage": stage, "server": server, "players": players, "round_manager": round_manager}
+## Two pads join, ready, and play a first-to-1 match to the podium.
+func _pad_match_442(loop: Dictionary) -> bool:
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		return false
+	players[1].eliminate()
+	return await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+func _scenario_gamepad_all_pad_room_continues_to_lobby_after_podium() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(2)
+	var rm: Node = loop["round_manager"]
+	if not await _pad_match_442(loop):
+		failures.append("two pads never played a match to the podium (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if rm.lobby_phase() != "victory":
+		failures.append("one pad of two pressing A ended the podium")
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("every pad pressing A did not return the room to the lobby (phase %s)" % rm.lobby_phase())
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_gamepad_ko_ghost_follows_right_stick() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(3)
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	for d in 3:
+		await _pad_button_261(d, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive and players[2].alive and rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the three-pad match never started (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	players[0].eliminate()
+	await _await_ticks(6)
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("a KO'd pad player got no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	server._test_pad_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(45)
+	if not ghost.is_shown():
+		failures.append("the ghost did not appear under the pad's right stick")
+	var x0: float = ghost.global_position.x
+	await _await_ticks(30)
+	if ghost.global_position.x <= x0 + 10.0:
+		failures.append("the ghost did not follow the right stick (x %.1f -> %.1f)" % [x0, ghost.global_position.x])
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_gamepad_replug_on_new_port_keeps_slot_and_cosmetics() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadGuid442")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	server._test_pad_guids[1] = "guid-aaa"
+	server._test_pad_guids[2] = "guid-bbb"
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(2)
+	server._slot_hat[slot] = "crown"
+	server._slot_color[slot] = 6
+	var name_before: String = server.slot_name(slot)
+	Input.joy_connection_changed.emit(2, false)
+	await _await_ticks(5)
+	# The same pad comes back on port 6.
+	server._test_pad_guids[6] = "guid-bbb"
+	Input.joy_connection_changed.emit(6, true)
+	await _await_ticks(5)
+	if server.pad_slot(6) != slot:
+		failures.append("the replugged pad (new port, same GUID) got slot %d, expected %d" % [server.pad_slot(6), slot])
+	if server._slot_hat[slot] != "crown" or server._slot_color[slot] != 6 or server.slot_name(slot) != name_before:
+		failures.append("the replugged pad lost its cosmetics (hat %s, colour %s, name %s)" % [server._slot_hat[slot], server._slot_color[slot], server.slot_name(slot)])
+	if server.claimed_slots().size() != 2:
+		failures.append("replug made a new claim: %s" % [server.claimed_slots()])
+	# A different pad on the held pad's old index does not steal a held seat.
+	Input.joy_connection_changed.emit(6, false)
+	await _await_ticks(5)
+	server._test_pad_guids[2] = "guid-ccc"
+	Input.joy_connection_changed.emit(2, true)
+	await _await_ticks(5)
+	if server.pad_slot(2) != -1:
+		failures.append("a different pad on the old index took the held seat")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_gamepad_rumbles_on_round_win_and_has_no_damage_bar() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(2)
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive and rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	players[1].eliminate()
+	await _await_condition(func() -> bool: return rm.lobby_phase() != "playing", ROUND_LOOP_TIMEOUT_MSEC)
+	var won: bool = false
+	for r: Dictionary in server.pad_rumbles:
+		if r["device"] == 0 and r["kind"] == "win":
+			won = true
+	if not won:
+		failures.append("the round winner's pad did not rumble 'win' (rumbles %s)" % [server.pad_rumbles])
+	var seat: Variant = server._slot_peers[0]
+	seat.last_text = ""
+	server.send_damage(0, 0.5)
+	if seat.last_text.contains("dmg"):
+		failures.append("a pad was sent a damage bar")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_gamepad_first_join_tip_shows_once_until_stick_swings() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PadTip442")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	if server.pad_tip_pending(0):
+		failures.append("tip pending for a slot with no pad")
+	await _pad_button_261(3, JOY_BUTTON_A)
+	if not server.pad_tip_pending(0):
+		failures.append("a freshly joined pad got no right-stick tip")
+	server._test_pad_axes[3] = Vector2(1.0, 0.0)
+	await _await_ticks(5)
+	server._test_pad_axes[3] = Vector2.ZERO
+	if server.pad_tip_pending(0):
+		failures.append("the tip stayed after the player swung the stick")
+	Input.joy_connection_changed.emit(3, false)
+	await _await_ticks(5)
+	Input.joy_connection_changed.emit(3, true)
+	await _await_ticks(5)
+	if server.pad_tip_pending(0):
+		failures.append("the tip came back on a replug")
+	await _teardown(rig["stage"])
+	return failures
 ## Review sweep: a hostile or truncated sound trailer must split as a plain
 ## snapshot (the whole packet, no events, no track), never read past the packet.
 func _trailer_review(prefix: Array, body: Array) -> PackedByteArray:
@@ -32778,4 +33396,200 @@ func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
 	if PadMenuScript368.is_open():
 		failures.append("PadMenu still reports a menu open after the lobby left the tree")
 	PadMenuScript368.reset()
+	return failures
+## Issue #436: ends the round in the host's favour of `winner` by eliminating
+## every other player, so a scenario never waits for bots to finish by themselves.
+func _hud_436_eliminate_all_but(rig: Dictionary, winner: int) -> void:
+	var rm: Node = rig["rm"]
+	for slot: int in rm.get("_in_round").duplicate():
+		if slot != winner:
+			(rig["server"].player_in_slot(slot) as Node).eliminate()
+func _hud_436_name(rm: Node, slot: int) -> String:
+	var shown: String = str(rm.call("_slot_name", slot))
+	return shown if not shown.is_empty() else "P%d" % (slot + 1)
+## A remote client gets the scoreboard and the round result the couch screen shows.
+func _scenario_remote_client_hud_scoreboard_and_round_result() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var winner: int = int(rm.get("_in_round")[0])
+	_hud_436_eliminate_all_but(rig, winner)
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 2 and client.hud.get("round_winner", -1) == winner, 8000):
+		failures.append("the client never got the round result (host state %d, hud winner %s)" % [int(rm.get("_state")), client.hud.get("round_winner")])
+		await _rc_close_241(rig)
+		return failures
+	var board: Array = client.hud.get("board", [])
+	if board.size() != 8:
+		failures.append("the scoreboard has %d rows, expected 8" % board.size())
+	elif int(board[0][0]) != winner or int(board[0][2]) != rm.score_of(winner) or rm.score_of(winner) < 1:
+		failures.append("scoreboard leader is %s, expected slot %d on %d" % [board[0], winner, rm.score_of(winner)])
+	var want: String = "%s takes the round" % _hud_436_name(rm, winner)
+	if client.round_result_text() != want or client._result_label.text != want:
+		failures.append("result line '%s' / label '%s', expected '%s'" % [client.round_result_text(), client._result_label.text, want])
+	if client._score_box.get_child_count() != 8:
+		failures.append("the score box shows %d rows, expected 8" % client._score_box.get_child_count())
+	await _rc_close_241(rig)
+	return failures
+## King of the Hill hold times reach the remote client's mode line; the other
+## modes' lines read their `hud` state (flags, goals, potato, lives).
+func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	if not rig["server"].set_game_mode("king_of_the_hill"):
+		failures.append("the host refused King of the Hill")
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var hill: Node = rm.game_mode_node()
+	if hill == null or rm.active_game_mode_id() != "king_of_the_hill":
+		failures.append("the host is not playing King of the Hill ('%s')" % rm.active_game_mode_id())
+		await _rc_close_241(rig)
+		return failures
+	var holder: int = int(rm.get("_in_round")[0])
+	hill.seconds_to_win = 10.0
+	hill.hold_time[holder] = 4.0
+	var want: String = "%s 4/10s" % _hud_436_name(rm, holder)
+	if not await _wait_for_239(func() -> bool: return client.mode_text().contains(want), 4000):
+		failures.append("the mode line is '%s', expected it to hold '%s'" % [client.mode_text(), want])
+	if client._mode_label.text != client.mode_text():
+		failures.append("the mode label shows '%s'" % client._mode_label.text)
+	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "capture_the_flag",
+		"m": {"score": [1, 2], "flag": [0, 1], "carrier": [-1, 0], "win": 3}}
+	if client.mode_text() != "Red 1 - Blue 2  Flags: red home / blue carried":
+		failures.append("CTF line reads '%s'" % client.mode_text())
+	client.hud = {"board": [], "mode": "soccer", "m": {"score": [2, 0], "win": 3}}
+	if client.mode_text() != "Red 2 - Blue 0 (first to 3)":
+		failures.append("Soccer line reads '%s'" % client.mode_text())
+	client.hud = {"board": [[1, "Bo", 0]], "mode": "hot_potato", "m": {"it": 1, "fuse": 7}}
+	if client.mode_text() != "Bo has the potato: 7s":
+		failures.append("Hot Potato line reads '%s'" % client.mode_text())
+	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": "1:30"}}
+	if client.mode_text() != "1:30  Ann x3  Bo x1":
+		failures.append("Stock line reads '%s'" % client.mode_text())
+	await _rc_close_241(rig)
+	return failures
+## The match result, the podium and the way back to the menu on the client.
+func _scenario_remote_client_hud_match_result_podium_and_leave() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var winner: int = int(rm.get("_in_round")[0])
+	var scores: PackedInt32Array = rm.get("_scores")
+	scores[winner] = int(rm.get("_match_target")) - 1
+	rm.set("_scores", scores)
+	_hud_436_eliminate_all_but(rig, winner)
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 5 and client.podium_text() != "", 8000):
+		failures.append("the client never got a podium (host state %d, hud state %s)" % [int(rm.get("_state")), client.hud.get("state")])
+		await _rc_close_241(rig)
+		return failures
+	var lines: PackedStringArray = client.podium_text().split("\n")
+	var name: String = _hud_436_name(rm, winner)
+	if lines[0] != "%s wins the match" % name:
+		failures.append("the podium opens with '%s', expected '%s wins the match'" % [lines[0], name])
+	if lines.size() != 9 or lines[1] != "1. %s  %d" % [name, rm.score_of(winner)]:
+		failures.append("podium rows: %d lines, first '%s'" % [lines.size(), lines[1] if lines.size() > 1 else ""])
+	if not client.lobby_visible() or not client._leave_button.is_visible_in_tree() or not client._podium_label.is_visible_in_tree():
+		failures.append("the victory panel does not show the podium and a Leave button")
+	client._leave_button.pressed.emit()
+	if client.state != RcState241.JOIN or not client.join_screen_visible():
+		failures.append("Leave did not return to the join screen (state %d)" % client.state)
+	await _rc_close_241(rig)
+	return failures
+## #429: a body that leaves the world is gone from the remote client on the very
+## next snapshot, not up to a second later with the next periodic full one.
+func _scenario_remote_client_removed_body_is_gone_after_one_snapshot() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(6, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		failures.append("the rig did not come up")
+		await _rc_close_241(rig)
+		return failures
+	if not await _wait_for_239(func() -> bool: return client.puppet_count(RcKind241.PICKUP) >= 1, 8000):
+		failures.append("the client never drew a pickup")
+		await _rc_close_241(rig)
+		return failures
+	# The watcher joins now and is polled at once: an unpolled socket is dropped.
+	var raw: WebSocketPeer = await _online_remote_239(rig, "ghost-watcher")
+	if raw == null or (await _online_wait_239(rig, raw, "slot")).is_empty():
+		failures.append("the watching seat never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	var frames: Array = []
+	await _snap_pump_251(rig, raw, frames, 500)
+	if frames.is_empty():
+		failures.append("the watching seat got no snapshots")
+	var removed_msec: int = _game_msec()
+	for node: Node in get_root().get_tree().get_nodes_in_group("pickups"):
+		node.remove_from_group("pickups")
+		node.queue_free()
+	await _snap_pump_251(rig, raw, frames, 1000, func() -> bool:
+		return not frames.is_empty() and frames.back()["snapshot"].get("pickups", [1]).is_empty())
+	if frames.is_empty() or not frames.back()["snapshot"].get("pickups", [1]).is_empty():
+		failures.append("no snapshot after the removal ever lacked the pickup (%d frames, last full=%s pickups=%s)" % [frames.size(), frames.back()["snapshot"].get("is_full_snapshot") if not frames.is_empty() else "-", frames.back()["snapshot"].get("pickups") if not frames.is_empty() else "-"])
+	elif not frames.back()["snapshot"].get("is_full_snapshot", false):
+		failures.append("the first snapshot without the pickup was a delta, so a client could not drop it")
+	elif frames.back()["msec"] - removed_msec > 150:
+		failures.append("the pickup lingered %d ms after its removal; one snapshot is 33 ms" % (frames.back()["msec"] - removed_msec))
+	if not await _wait_for_239(func() -> bool: return client.world().get("pickups", [1]).is_empty(), 1000):
+		failures.append("the client's world still holds the pickup")
+	client._render()
+	if client.puppet_count(RcKind241.PICKUP) != 0:
+		failures.append("a ghost pickup puppet is still drawn")
+	await _rc_close_241(rig)
+	return failures
+## Issue #444: with the in-round join corner gone, the kill feed and the score
+## line sit at the very top of the screen, clear of each other and on-screen.
+func _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var rm: Node = main.get_node("RoundManager")
+	var feed: Control = rm.kill_feed()
+	var score: Label = main.get_node("UI/ScoreLabel") as Label
+	if feed == null or score == null:
+		await _teardown(main)
+		return ["Main.tscn has no kill feed (%s) or score label (%s)" % [feed, score]]
+	score.text = "P1: 0   P2: 0"
+	feed.push_ko("Aa", Color.WHITE, "Bb", Color.WHITE)
+	var was_size: Vector2i = get_root().size
+	for size: Vector2i in [Vector2i(1280, 800), Vector2i(1600, 900), Vector2i(1920, 1080)]:
+		get_root().size = size
+		await _await_ticks(3)
+		var screen := Rect2(Vector2.ZERO, get_root().get_visible_rect().size)
+		var feed_rect: Rect2 = feed.feed().get_global_rect()
+		var score_rect: Rect2 = score.get_global_rect()
+		print("      %s (canvas %s): feed %s, score line %s" % [size, screen.size, feed_rect, score_rect])
+		if feed_rect.position.y > 60.0 or feed_rect.size.y <= 0.0:
+			failures.append("%s: kill feed top %s is not near the screen top" % [size, feed_rect])
+		if score_rect.position.y > 60.0:
+			failures.append("%s: score line top %s is not near the screen top" % [size, score_rect])
+		if feed_rect.intersects(score_rect):
+			failures.append("%s: kill feed %s overlaps the score line %s" % [size, feed_rect, score_rect])
+		if not screen.encloses(feed_rect) or not screen.encloses(score_rect):
+			failures.append("%s: feed %s or score line %s is off-screen" % [size, feed_rect, score_rect])
+	get_root().size = was_size
+	await _teardown(main)
 	return failures

@@ -357,6 +357,12 @@ class RemoteSeat extends RefCounted:
 	var open: bool = true
 	var deadline_msec: int = 0
 	var _inbox: Array = [] # [is_text, PackedByteArray]
+	## Issue #446: the last measured round trip in ms (-1 until a pong
+	## arrives), the ping in flight and when it left.
+	var rtt_msec: int = -1
+	var ping_n: int = 0
+	var ping_sent_msec: int = 0
+	var ping_sent: Dictionary = {} # ping n -> msec it left
 	var _last_was_text: bool = false
 
 	func push(kind: int, payload: PackedByteArray) -> void:
@@ -454,8 +460,10 @@ var join_qr_texture: ImageTexture = null
 ## Issue #230. Whether the in-round join corner (the JoinLabel top left and
 ## the small JoinQrCode top right) is hidden: RoundManager hides it while the
 ## lobby, countdown or victory screen is up, which show their own big QR and
-## URL, so the corner never bleeds through their backdrop.
-var _join_corner_hidden: bool = false
+## URL, so the corner never bleeds through their backdrop. Issue #430: the
+## join QR and room code show in the lobby only, so the corner starts hidden
+## and RoundManager never shows it in a round either.
+var _join_corner_hidden: bool = true
 ## The join label's text before the room code is added (issue #239).
 var _join_label_base: String = ""
 
@@ -552,6 +560,7 @@ func _ready() -> void:
 		# address is already printed to the console for the rare case the
 		# first one isn't the room's network.
 		label.text = tr("JOIN_ON_PHONE") + "\n" + (urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
+		label.visible = not _join_corner_hidden
 
 	var qr_rect: TextureRect = get_node_or_null(qr_texture_path) as TextureRect
 	if qr_rect != null:
@@ -586,6 +595,7 @@ func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
 	_process_remote()
+	_ping_remote_seats()
 	_check_host_pc_seat()
 	_stream_snapshots(delta)
 	if host_slot() != _last_host:
@@ -1088,6 +1098,9 @@ func send_buzz(slot: int, kind: String) -> void:
 	if not slot_has_controller(slot):
 		return
 	var peer: Variant = _slot_peers[slot]
+	if peer is PadSeat and peer.open:
+		_rumble_pad(peer.device, kind)
+		return
 	if peer == null or not peer is WebSocketPeer or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
@@ -1106,8 +1119,8 @@ var _damage_sent_msec: Array[int] = []
 ## last frame and at least `DAMAGE_SEND_GAP_MSEC` has passed; a change held back
 ## by the throttle goes out on a later call, so callers just report every tick.
 func send_damage(slot: int, fraction: float) -> void:
-	if not slot_has_controller(slot):
-		return
+	if not slot_has_controller(slot) or _slot_peers[slot] is PadSeat:
+		return # a gamepad has no screen for the bar (#442)
 	var percent: int = roundi(clampf(fraction, 0.0, 1.0) * 100.0)
 	if percent == _damage_sent[slot]:
 		return
@@ -1299,6 +1312,8 @@ func _handle_text(slot: int, text: String) -> void:
 					apply_host_command("stock_time", msg.get("time"))
 				if msg.get("stage") is String:
 					apply_host_command("stock_stage", msg.get("stage"))
+		"pong":
+			_on_pong(slot, msg)
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -2091,14 +2106,28 @@ func _push_pad_sticks() -> void:
 		var slot: int = pad_slot(device)
 		if slot == -1:
 			continue
+		if _pad_axis(device) != Vector2.ZERO:
+			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 		_smoothers[slot].push(_pad_axis(device))
 
-## A or Start joins (in the lobby) or readies; B un-readies.
+## Issue #430: the host's controller, whose Start pauses and resumes a match.
+## Joypad 0: the Steam Deck's own built-in controls (docs/steam-deck-readiness.md
+## D16), and a PC host's first pad. Seated or not, it never makes its seat host.
+const HOST_PAD_DEVICE: int = 0
+
+## A or Start joins (in the lobby) or readies; B un-readies. Issue #430: in a
+## match (or paused), Start from the host's pad sends the host phone's Pause or
+## Resume, and from any other pad does nothing.
 func _pad_button_pressed(device: int, button: int) -> void:
 	if PadMenuScript.is_open():
 		return # a host menu owns A and B right now (#368)
 	var slot: int = pad_slot(device)
+	var paused: bool = bool(_lobby_state.get("paused", false))
+	if button == JOY_BUTTON_START and (paused or MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby")))):
+		if device == HOST_PAD_DEVICE:
+			host_command.emit("resume" if paused else "pause", -1)
+		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
 			if SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
@@ -2110,10 +2139,12 @@ func _pad_button_pressed(device: int, button: int) -> void:
 
 ## Seat `device` under the id "pad-<device>": a replugged pad takes its held
 ## claim back through `_bind_with_id` (ADR-0007).
-func _bind_pad(device: int) -> void:
+func _bind_pad(device: int, id: String = "") -> void:
 	var seat := PadSeat.new()
 	seat.device = device
-	_bind_with_id(seat, PAD_ID_PREFIX + str(device))
+	if id.is_empty():
+		id = _pad_claim_id(device)
+	_bind_with_id(seat, id)
 	var slot: int = _slot_peers.find(seat)
 	if slot == -1:
 		return # full or kicked: the seat was closed
@@ -2130,18 +2161,81 @@ func _on_joy_connection_changed(device: int, connected: bool) -> void:
 			_pad_seats.erase(device)
 		return
 	# Replugged: take a held claim back; a new pad waits for A.
-	var id: String = PAD_ID_PREFIX + str(device)
 	if pad_slot(device) != -1:
 		return
+	var held_id: String = _held_pad_claim_id(device)
+	if not held_id.is_empty():
+		_bind_pad(device, held_id)
+
+## Gamepad parity (#442). A pad's claim id is "pad-<device>" plus its GUID when
+## the OS reports one, so a replug on another port still finds its own seat, and
+## a different pad that lands on the same index does not take it.
+var _pad_guids: Dictionary = {} # claim id -> GUID of the pad that holds it
+## Tests set a device's GUID here; headless has no real joypads.
+var _test_pad_guids: Dictionary = {}
+## Claim ids whose pad has already been told "right stick swings".
+var _pad_tip_done: Dictionary = {}
+## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios).
+var pad_rumbles: Array = []
+
+func _pad_guid(device: int) -> String:
+	if _test_pad_guids.has(device):
+		return str(_test_pad_guids[device])
+	if not Input.get_connected_joypads().has(device):
+		return ""
+	return Input.get_joy_guid(device)
+
+func _pad_claim_id(device: int) -> String:
+	var guid: String = _pad_guid(device)
+	var id: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
+	_pad_guids[id] = guid
+	return id
+
+## The claim id of a held (unplugged) pad seat that `device` should take back:
+## the same GUID (the same index first), else the same index with no GUID.
+func _held_pad_claim_id(device: int) -> String:
+	var guid: String = _pad_guid(device)
+	var own: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
+	var found: String = ""
 	for slot in _slot_peers.size():
-		if _slot_claimed[slot] == 1 and _slot_client_id[slot] == id and _slot_peers[slot] == null:
-			_bind_pad(device)
-			return
+		var id: String = str(_slot_client_id[slot])
+		if _slot_claimed[slot] != 1 or _slot_peers[slot] != null or not id.begins_with(PAD_ID_PREFIX):
+			continue
+		if id == own:
+			return id
+		if not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
+			found = id
+	return found
+
+## Whether the "right stick swings" hint should show on `slot`'s lobby card.
+func pad_tip_pending(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat \
+		and not _pad_tip_done.has(str(_slot_client_id[slot]))
+
+## A buzz as controller rumble (ADR-0013): the same kinds, a pulse each.
+func _rumble_pad(device: int, kind: String) -> void:
+	var weak: float = 0.4
+	var strong: float = 0.4
+	var seconds: float = 0.15
+	match kind:
+		"win":
+			strong = 1.0
+			seconds = 0.5
+		"eliminated":
+			strong = 0.9
+			seconds = 0.35
+		"hit":
+			weak = 0.7
+			strong = 0.0
+			seconds = 0.1
+	Input.start_joy_vibration(device, weak, strong, seconds)
+	pad_rumbles.append({"device": device, "kind": kind})
 
 # --- Snapshot stream to remote seats (issue #251) ----------------------------
 
 const SnapshotScript: GDScript = preload("res://scripts/Snapshot.gd")
 const SnapshotCaptureScript: GDScript = preload("res://scripts/SnapshotCapture.gd")
+const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
 const SNAPSHOT_HZ: float = 30.0
 ## A full snapshot every this many frames (about a second); deltas between.
 const SNAPSHOT_FULL_EVERY: int = 30
@@ -2152,6 +2246,10 @@ var _snapshot_accum: float = 0.0
 var _snapshot_frame: int = 0
 var _snapshot_bound: Dictionary = {} # RemoteSeat -> true, the seats already sent a full frame
 var _snapshot_previous: Dictionary = {}
+var _hud_last: Dictionary = {}
+var _hud_tick: int = 0
+## Hud text frames sent to remote seats (issue #436), for scenarios.
+var hud_frames_sent: int = 0
 
 ## Streams the world to the remote seats at 30 Hz while at least one is bound;
 ## a seat that just bound gets a full snapshot at once. Captures nothing, and
@@ -2182,7 +2280,10 @@ func _stream_snapshots(delta: float) -> void:
 	if round_manager == null or not round_manager.has_method("score_of"):
 		return
 	var world: Dictionary = SnapshotCaptureScript.capture(round_manager)
-	var full: bool = fresh or _snapshot_frame % SNAPSHOT_FULL_EVERY == 0
+	# Issue #436/#429: a delta cannot say a body left, so a removal (or a new
+	# round or stage) goes out as a full snapshot at once, not up to 1 s later.
+	var full: bool = fresh or _snapshot_frame % SNAPSHOT_FULL_EVERY == 0 \
+		or SnapshotCaptureScript.structure_changed(world, _snapshot_previous)
 	var frame: Dictionary = world if full else SnapshotCaptureScript.delta(world, _snapshot_previous)
 	_snapshot_previous = world
 	_snapshot_frame = 1 if full else _snapshot_frame + 1
@@ -2191,6 +2292,15 @@ func _stream_snapshots(delta: float) -> void:
 	_snapshot_sounds.clear()
 	relay_link.send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
 	snapshot_frames_sent += 1
+	_hud_tick += 1
+	if fresh:
+		_hud_last = {}
+	if fresh or _hud_tick % 4 == 0:
+		var hud: Dictionary = RemoteHudScript.capture(round_manager)
+		if hud != _hud_last:
+			_hud_last = hud
+			relay_link.send_text_to(0, JSON.stringify(hud))
+			hud_frames_sent += 1
 
 var _snapshot_sounds: Array = [] # sounds played since the last frame (see SnapshotCapture's trailer)
 var _sound_source: Node = null
@@ -2215,3 +2325,41 @@ func _on_sound_played(sound: StringName, position: Variant, strength: float) -> 
 func _music_track() -> String:
 	var music: Node = get_node_or_null("/root/Music")
 	return music.current_track() if music != null else ""
+
+# --- Ping over the remote-seat channel (issue #446) ---------------------------
+#
+# About once a second the host sends each bound remote seat {"t":"ping","n":N};
+# the client echoes {"t":"pong","n":N}. The round trip is shown beside the
+# player in the Online lobby and on the scoreboard. It never kicks anyone.
+
+## How often a remote seat is pinged, and the round trip above which it is
+## shown in a warning colour.
+var ping_interval_msec: int = 1000
+const PING_WARN_MSEC: int = 150
+
+func _ping_remote_seats() -> void:
+	var now: int = Time.get_ticks_msec()
+	for slot in _slot_peers.size():
+		var seat: Variant = _slot_peers[slot]
+		if not seat is RemoteSeat or not seat.open:
+			continue
+		if seat.ping_n != 0 and now - seat.ping_sent_msec < ping_interval_msec:
+			continue
+		seat.ping_n += 1
+		seat.ping_sent_msec = now
+		seat.ping_sent[seat.ping_n] = now
+		seat.ping_sent.erase(seat.ping_n - 10)
+		seat.send_text(JSON.stringify({"t": "ping", "n": seat.ping_n}))
+
+func _on_pong(slot: int, msg: Dictionary) -> void:
+	var seat: Variant = _slot_peers[slot] if slot >= 0 and slot < _slot_peers.size() else null
+	if not seat is RemoteSeat or not _is_number(msg.get("n")) or not seat.ping_sent.has(int(msg["n"])):
+		return
+	seat.rtt_msec = maxi(0, Time.get_ticks_msec() - int(seat.ping_sent[int(msg["n"])]))
+
+## The last round trip to the remote seat in `slot`, in ms; -1 for a phone,
+## the host PC, a bot, or a seat that has not answered a ping yet.
+func slot_ping_msec(slot: int) -> int:
+	if slot < 0 or slot >= _slot_peers.size() or not _slot_peers[slot] is RemoteSeat:
+		return -1
+	return _slot_peers[slot].rtt_msec

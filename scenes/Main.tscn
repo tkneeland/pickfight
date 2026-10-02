@@ -148,9 +148,9 @@ text = "Join on your phone: starting server..."
 
 [node name="ScoreLabel" type="Label" parent="UI"]
 offset_left = 12.0
-offset_top = 74.0
+offset_top = 8.0
 offset_right = 620.0
-offset_bottom = 110.0
+offset_bottom = 44.0
 text = ""
 
 [node name="WaitingLabel" type="Label" parent="UI"]
