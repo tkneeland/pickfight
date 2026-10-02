@@ -558,6 +558,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
 	"hot_potato_stages_load_and_are_in_rotation",
 	"hot_potato_draws_its_stages_more_often",
+	"music_every_fight_track_loads_and_rotates",
+	"mode_awards_go_to_the_right_player_only_in_their_mode",
+	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"pseudo_locale_changes_lobby_and_mode_text",
 	"every_tr_key_is_in_strings_csv",
 	"koth_stages_load_and_are_in_rotation",
@@ -567,6 +570,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"announcer_calls_each_mode_at_round_start",
+	"announcer_calls_hill_taken_when_the_hill_changes_hands",
+	"announcer_calls_last_life_stolen_and_overtime_in_stock",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2075,6 +2081,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
 		"hot_potato_draws_its_stages_more_often":
 			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"music_every_fight_track_loads_and_rotates":
+			return await _scenario_music_every_fight_track_loads_and_rotates()
+		"mode_awards_go_to_the_right_player_only_in_their_mode":
+			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
+		"mode_awards_reach_the_victory_awards_through_the_round_manager":
+			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
 		"pseudo_locale_changes_lobby_and_mode_text":
 			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
 		"every_tr_key_is_in_strings_csv":
@@ -2093,6 +2105,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shield_bash_knocks_back_harder_than_pickaxe()
 		"shield_is_in_the_pickup_set":
 			return await _scenario_shield_is_in_the_pickup_set()
+		"announcer_calls_each_mode_at_round_start":
+			return await _scenario_announcer_calls_each_mode_at_round_start()
+		"announcer_calls_hill_taken_when_the_hill_changes_hands":
+			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
+		"announcer_calls_last_life_stolen_and_overtime_in_stock":
+			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -11352,7 +11370,7 @@ const MUSIC_AUTOLOAD_PATH: NodePath = ^"Music"
 const MUSIC_DIR: String = "res://assets/music/"
 const MUSIC_CREDITS_PATH: String = "res://CREDITS.md"
 ## The shipped music, all together, stays under this.
-const MUSIC_MAX_TOTAL_BYTES: int = 2 * 1024 * 1024
+const MUSIC_MAX_TOTAL_BYTES: int = 12 * 1024 * 1024
 ## Past a crossfade, with room to spare.
 const MUSIC_SETTLE_MSEC: int = 2500
 const MUSIC_DUCK_TIMEOUT_MSEC: int = 3000
@@ -11384,8 +11402,8 @@ func _scenario_music_lobby_and_fight_switching() -> Array[String]:
 	elif AudioServer.get_bus_send(AudioServer.get_bus_index(&"Music")) != &"Master":
 		failures.append("the Music bus does not send to Master")
 	var fights: PackedStringArray = music.fight_tracks()
-	if fights.size() < 1 or fights.size() > 2:
-		failures.append("there are %d fight tracks, expected 1 or 2" % fights.size())
+	if fights.size() < 1:
+		failures.append("there are no fight tracks")
 	music.play_lobby()
 	if music.current_kind() != "lobby" or not music.is_playing():
 		failures.append("play_lobby() left '%s' (%s), not the lobby track playing" % [
@@ -29847,6 +29865,165 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
 	return failures
+# --- Every fight track loads, loops and gets a turn (issue #289) ---------------
+## The fight rotation hands each fight track out in turn. Asking for fight music
+## again and again, with a stop between, must reach every one of them, and each
+## must play as a real looping stream of a sensible length.
+const MUSIC_MIN_FIGHT_TRACKS: int = 8
+const MUSIC_MIN_TRACK_SEC: float = 20.0
+func _scenario_music_every_fight_track_loads_and_rotates() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	await physics_frame
+	var fights: PackedStringArray = music.fight_tracks()
+	print("      %d fight tracks" % fights.size())
+	if fights.size() < MUSIC_MIN_FIGHT_TRACKS:
+		failures.append("only %d fight tracks, expected at least %d" % [fights.size(), MUSIC_MIN_FIGHT_TRACKS])
+	var heard: Dictionary = {}
+	for i in fights.size():
+		music.stop()
+		music.play_fight()
+		await physics_frame
+		var stream: AudioStream = null
+		for child: Node in music.get_children():
+			if child is AudioStreamPlayer and (child as AudioStreamPlayer).playing:
+				stream = (child as AudioStreamPlayer).stream
+		var track: String = music.switches()[music.switches().size() - 1]
+		heard[track] = true
+		if not (stream is AudioStreamOggVorbis) or not (stream as AudioStreamOggVorbis).loop:
+			failures.append("%s does not play as a loop" % track)
+		elif stream.get_length() < MUSIC_MIN_TRACK_SEC:
+			failures.append("%s is only %.1f s long" % [track, stream.get_length()])
+	for track: String in fights:
+		if not heard.has(track):
+			failures.append("the fight rotation never reached %s in %d turns" % [track, fights.size()])
+	music.stop()
+	_scenario_completed = true
+	return failures
+## Issue #355: the mode awards, from MatchStats alone. Each goes to the slot
+## with the most of its number, only in its own mode; Classic and Sudden Death
+## get none, and a new match wipes them.
+func _scenario_mode_awards_go_to_the_right_player_only_in_their_mode() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hill_hold(0, 4.0)
+	stats.record_hill_hold(1, 7.5)
+	stats.record_hill_hold(1, 1.0)
+	stats.record_hill_hold(2, 8.0)
+	stats.record_tags_passed(0, 1)
+	stats.record_tags_passed(2, 3)
+	stats.record_tags_passed(1, 2)
+	stats.record_lives_left(0, 2)
+	stats.record_lives_left(1, 1)
+	stats.record_lives_left(2, 3)
+	stats.record_lives_left(2, 1)
+	var slots: Array = [0, 1, 2]
+	var want: Dictionary = {
+		"king_of_the_hill": ["HILL", "Longest Hold", 1, "8.5s on the hill"],
+		"hot_potato": ["TAGGER", "Hot Hands", 2, "3 tags passed"],
+		"stock": ["LIVES", "Survivor", 2, "4 lives left"],
+	}
+	for mode_id: String in want:
+		var got: Array[Dictionary] = stats.mode_awards(slots, mode_id)
+		var w: Array = want[mode_id]
+		if got.size() != 1:
+			failures.append("%s gave %d mode awards, expected 1: %s" % [mode_id, got.size(), got])
+			continue
+		var a: Dictionary = got[0]
+		print("      %s: %s -> slot %d (%s)" % [a["category"], a["title"], a["slot"], a["detail"]])
+		if a["category"] != w[0] or a["title"] != w[1] or a["slot"] != w[2] or a["detail"] != w[3]:
+			failures.append("%s awarded %s, expected %s" % [mode_id, a, w])
+	for mode_id: String in ["", "sudden_death"]:
+		if not stats.mode_awards(slots, mode_id).is_empty():
+			failures.append("mode '%s' showed mode awards: %s" % [mode_id, stats.mode_awards(slots, mode_id)])
+	# Only the eligible roster is considered, and a blip of a hold earns nothing.
+	if stats.mode_awards([0, 1], "king_of_the_hill")[0]["slot"] != 1:
+		failures.append("an absent slot 2 still took Longest Hold")
+	var brief: RefCounted = MatchStatsScript.new()
+	brief.record_hill_hold(0, 0.2)
+	if not brief.mode_awards([0], "king_of_the_hill").is_empty():
+		failures.append("a 0.2 s hold earned Longest Hold")
+	stats.forget_slot(2)
+	if stats.mode_awards(slots, "hot_potato")[0]["slot"] != 1:
+		failures.append("a forgotten slot kept its tags")
+	stats.begin_match()
+	for mode_id: String in want:
+		if not stats.mode_awards(slots, mode_id).is_empty():
+			failures.append("a new match kept the %s award" % mode_id)
+	_scenario_completed = true
+	return failures
+## Issue #355 through the real RoundManager and mode nodes: the numbers a mode
+## keeps are handed to the match stats when the round ends, and the victory
+## awards then hold the mode's award -- in that mode only, never in Classic.
+func _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager() -> Array[String]:
+	var failures: Array[String] = []
+	# Hot Potato: slot "it" lands a damaging hit twice (passing the tag back and
+	# forth past the cooldown); the passer with the most tags gets Hot Hands.
+	var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO, 99)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"], false)
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.fuse_sec = 60.0
+	mode.fuse_left = 60.0
+	mode.tag_cooldown_sec = 0.0
+	mode._cooldown_left = 0.0
+	var first: int = mode.it_slot
+	var second: int = (first + 1) % 3
+	players[first].strike_landed.emit(players[second], 10.0, Vector2.ZERO, false)
+	players[second].strike_landed.emit(players[first], 10.0, Vector2.ZERO, false)
+	players[first].strike_landed.emit(players[second], 10.0, Vector2.ZERO, false)
+	var roster: Array[int] = [0, 1, 2]
+	if not rm._stats.mode_awards(roster, "hot_potato").is_empty():
+		failures.append("Hot Hands appeared before the round's tags were handed over")
+	rm._end_game_mode()
+	var hot: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "TAGGER")
+	if hot.size() != 1 or hot[0]["slot"] != first or hot[0]["detail"] != "2 tags passed":
+		failures.append("Hot Hands was %s, expected slot %d with '2 tags passed'" % [hot, first])
+	rm.game_mode = ""
+	if not rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "TAGGER").is_empty():
+		failures.append("Hot Hands appeared once the match was Classic")
+	await _teardown(rig["stage"], false)
+	# King of the Hill: the sole occupant banks hold time.
+	rig = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	rm = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"], false)
+		return failures
+	mode = rm.game_mode_node()
+	mode.hold_time[2] = 3.0
+	mode.hold_time[0] = 1.0
+	rm._end_game_mode()
+	var hill: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "HILL")
+	if hill.size() != 1 or hill[0]["slot"] != 2 or hill[0]["detail"] != "3.0s on the hill":
+		failures.append("Longest Hold was %s, expected slot 2 with '3.0s on the hill'" % [hill])
+	if not rm._stats.mode_awards(roster, "").is_empty():
+		failures.append("Classic showed a mode award")
+	await _teardown(rig["stage"], false)
+	# Stock: the player with the most lives left at the round's end.
+	rig = _stock_rig(3, 3, 480)
+	rm = rig["rm"]
+	var stock: Node = await _stock_started(rig)
+	if stock == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var players3: Array[RigidBody2D] = rig["players"]
+	if not await _stock_lose_life(players3[1]):
+		failures.append("slot 1 never came back after losing a life")
+	rm._end_game_mode()
+	var lives: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "LIVES")
+	if lives.size() != 1 or lives[0]["slot"] != 0 or lives[0]["detail"] != "3 lives left":
+		failures.append("Survivor was %s, expected slot 0 with '3 lives left'" % [lives])
+	await _stock_finish(rig)
+	return failures
 # --- King of the Hill stages (issue #377)
 const KOTH_STAGES_377: PackedStringArray = [
 	"res://scenes/stages/Summit.tscn",
@@ -30011,9 +30188,7 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 	_scenario_completed = true
 	return failures
 # --- Shield (issue #275) -----------------------------------------------------
-
 const SHIELD_PATH: String = "res://resources/shield.tres"
-
 ## A hit on the face the shield points at is mostly blocked; one from behind it
 ## lands in full, and so does one on a pickaxe held the same way.
 func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
@@ -30058,7 +30233,6 @@ func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
 		failures.append("a pickaxe holder took %.1f of 20 on the same side; only the shield blocks" % pickaxe)
 	await _teardown(stage)
 	return failures
-
 ## Bashes `path` into a neighbour and returns [victim damage, victim speed].
 func _shield_bash_result(path: String) -> Array[float]:
 	var stage: Node2D = _new_stage()
@@ -30079,7 +30253,6 @@ func _shield_bash_result(path: String) -> Array[float]:
 	var result: Array[float] = [victim.damage, fastest]
 	await _teardown(stage, false)
 	return result
-
 ## A shield bash shoves harder than a pickaxe swing and does less damage.
 func _scenario_shield_bash_knocks_back_harder_than_pickaxe() -> Array[String]:
 	var failures: Array[String] = []
@@ -30092,7 +30265,6 @@ func _scenario_shield_bash_knocks_back_harder_than_pickaxe() -> Array[String]:
 		failures.append("the shield bash did %.1f damage, not less than the pickaxe's %.1f" % [shield[0], pickaxe[0]])
 	_scenario_completed = true
 	return failures
-
 ## The shield is something a pickup can hand out.
 func _scenario_shield_is_in_the_pickup_set() -> Array[String]:
 	var failures: Array[String] = []
@@ -30104,4 +30276,129 @@ func _scenario_shield_is_in_the_pickup_set() -> Array[String]:
 	if not found:
 		failures.append("the shield is not among the loaded pickup weapons")
 	_scenario_completed = true
+	return failures
+# --- Issue #370: announcer callouts for modes ----------------------------------
+## The announcer, quiet and recording, or null when the autoload is missing.
+func _callout_announcer() -> Node:
+	var sfx: Node = _sfx()
+	if sfx == null or sfx.announcer == null:
+		return null
+	sfx.announcer.clear()
+	return sfx.announcer
+## The lines each mode calls as its round starts.
+const MODE_START_CALLOUTS: Dictionary = {
+	"king_of_the_hill": "announce_king_of_the_hill",
+	"hot_potato": "announce_hot_potato",
+	"sudden_death": "announce_sudden_death",
+	"stock": "announce_stock",
+}
+## "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" each play
+## as their mode's round starts, and each has a sound entry in the Sfx table.
+func _scenario_announcer_calls_each_mode_at_round_start() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for mode_id: String in MODE_START_CALLOUTS:
+		var want: String = MODE_START_CALLOUTS[mode_id]
+		if not announcer.sfx.has_sound(want):
+			failures.append("no Sfx entry '%s'" % want)
+		announcer.clear()
+		_stock_settings(3, 0)
+		var rig: Dictionary = _mode_rig(3, mode_id)
+		if not await _mode_started(rig):
+			failures.append("the %s round never started" % mode_id)
+		else:
+			await _await_condition(func() -> bool: return announcer.said.has(want), 4000)
+			if not announcer.said.has(want):
+				failures.append("%s: the announcer said %s, expected '%s'" % [mode_id, announcer.said, want])
+		await _stock_finish(rig)
+	return failures
+## "Hill taken!" when a different player takes the hill from the one who held
+## it, but not for the first to hold it.
+func _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	# Everyone off the hill, then a fresh round so nobody counts as its holder.
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(5)
+	var all_slots: Array[int] = [0, 1, 2]
+	hill.start_round(all_slots)
+	announcer.clear()
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	await _await_msec(1500)
+	if announcer.said.has("announce_hill_taken"):
+		failures.append("the first player to hold the hill was called 'Hill taken!'")
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[0].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_hill_taken"), 4000):
+		failures.append("a second player taking the hill was not called: %s" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+## Stock: "Last life!" when a player is down to one, "Stolen!" when a team-mate
+## gives one up, "Overtime!" when a tied clock runs out.
+func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		await _stock_finish(rig)
+		return failures
+	announcer.clear()
+	await _stock_lose_life(players[0])
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_last_life"), 4000):
+		failures.append("down to one life was not called: %s" % [announcer.said])
+	players[0].eliminate()
+	await _await_ticks(4)
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	elif not await _await_condition(func() -> bool: return announcer.said.has("announce_stolen"), 4000):
+		failures.append("a stolen life was not called: %s" % [announcer.said])
+	await _stock_finish(rig)
+	rig = _stock_rig(3, 3, 120)
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the tie round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	announcer.clear()
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_overtime"), 6000):
+		failures.append("the overtime was not called: %s" % [announcer.said])
+	if announcer.said.has("announce_sudden_death"):
+		failures.append("the overtime was also called 'Sudden Death!': %s" % [announcer.said])
+	await _stock_finish(rig)
 	return failures

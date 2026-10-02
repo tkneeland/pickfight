@@ -20,7 +20,8 @@ const WEAPONS: PackedStringArray = ["sword", "boomstick", "grapple", "flail"]
 ## `GameModes` ids ("" is Classic). Literal here so this file needs no preload.
 const MODES: PackedStringArray = ["", "king_of_the_hill"]
 
-const END_CARD_TEXT: String = "Thanks for playing the Pickfight demo!\nWishlist the full game on Steam"
+static func end_card_text() -> String:
+	return TranslationServer.translate("DEMO_END_CARD")
 
 ## Scenario seam: -1 follows the real flag, 0 forces the full game, 1 the demo.
 static var forced: int = -1

@@ -73,11 +73,11 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 ## Announcer voice
 
 Added for issue #152 and re-voiced for issue #211; the two team lines were
-added for issue #236 in the same voice and settings. `scripts/Sfx.gd` maps each
+added for issue #236, and the eight game-mode lines for issue #370, in the same voice and settings. `scripts/Sfx.gd` maps each
 line to its file (the `announce_*` entries), and `scripts/Announcer.gd`
 decides when each is said.
 
-All 19 lines are **synthesised** in one voice with
+All 27 lines are **synthesised** in one voice with
 [Piper TTS](https://github.com/OHF-Voice/piper1-gpl) 1.8.0 (`piper-tts` on
 PyPI):
 
@@ -119,6 +119,14 @@ encoded as mono Ogg Vorbis. The level suits the `announce_*` default of
 | `announcer/double_damage.ogg` | "Double damage!" | CC0 1.0 (synthesised) | modifier DOUBLE DAMAGE |
 | `announcer/red_team_wins.ogg` | "Red team wins!" | CC0 1.0 (synthesised) | a Teams match won by Red (#236) |
 | `announcer/blue_team_wins.ogg` | "Blue team wins!" | CC0 1.0 (synthesised) | a Teams match won by Blue (#236) |
+| `announcer/king_of_the_hill.ogg` | "King of the Hill!" | CC0 1.0 (synthesised) | game mode KING OF THE HILL starts |
+| `announcer/hot_potato.ogg` | "Hot Potato!" | CC0 1.0 (synthesised) | game mode HOT POTATO starts |
+| `announcer/sudden_death.ogg` | "Sudden Death!" | CC0 1.0 (synthesised) | game mode SUDDEN DEATH starts |
+| `announcer/stock.ogg` | "Stock!" | CC0 1.0 (synthesised) | game mode STOCK starts |
+| `announcer/last_life.ogg` | "Last life!" | CC0 1.0 (synthesised) | Stock: a player is down to one life |
+| `announcer/stolen.ogg` | "Stolen!" | CC0 1.0 (synthesised) | Stock: a team-mate's life is stolen |
+| `announcer/overtime.ogg` | "Overtime!" | CC0 1.0 (synthesised) | Stock: a tied clock runs out |
+| `announcer/hill_taken.ogg` | "Hill taken!" | CC0 1.0 (synthesised) | King of the Hill: a different player or team takes the hill |
 
 That is 19 files, about 0.16 MB in all. Before #211 the count, "FIGHT!" and
 "Winner!" were Kenney's Voiceover Pack: Fighter (CC0) and the rest were
@@ -140,6 +148,12 @@ maps each one to its use.
 | `assets/music/lobby_snowfall_looped.ogg` | Snowfall (Looped ver.) | Kistol | CC0 1.0 | https://opengameart.org/content/snowfall | https://opengameart.org/sites/default/files/Snowfall%20%28Looped%20ver.%29_0.ogg | lobby and menu (chill) |
 | `assets/music/fight_fast_fight_looped.ogg` | Fast fight / battle music (looped) | Ville Nousiainen; loop edit by XCVG | CC0 1.0 | https://opengameart.org/content/fast-fight-battle-music-looped | https://opengameart.org/sites/default/files/fight_looped.ogg | fight, first in the rotation |
 | `assets/music/fight_nes_shooter_mars.ogg` | Mars, from "NES Shooter Music (5 tracks, 3 jingles)" | SketchyLogic | CC0 1.0 | https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles | https://opengameart.org/sites/default/files/Mars.ogg | fight, second in the rotation |
+| `assets/music/fight_chiptunes_action_level1.ogg` | Level 1, from "5 Chiptunes (Action)" | SubspaceAudio | CC0 1.0 | https://opengameart.org/content/5-chiptunes-action | https://opengameart.org/sites/default/files/audio_preview/level1.mp3.ogg | fight rotation |
+| `assets/music/fight_chiptunes_action_level2.ogg` | Level 2, from "5 Chiptunes (Action)" | SubspaceAudio | CC0 1.0 | https://opengameart.org/content/5-chiptunes-action | https://opengameart.org/sites/default/files/audio_preview/level2.mp3.ogg | fight rotation |
+| `assets/music/fight_chiptunes_action_level3.ogg` | Level 3, from "5 Chiptunes (Action)" | SubspaceAudio | CC0 1.0 | https://opengameart.org/content/5-chiptunes-action | https://opengameart.org/sites/default/files/audio_preview/level3.mp3.ogg | fight rotation |
+| `assets/music/fight_boss_battle_2_8bit.ogg` | Boss Battle #2 ["8 bit"] | nene | CC0 1.0 | https://opengameart.org/content/boss-battle-2-8-bit | https://opengameart.org/sites/default/files/audio_preview/boss_battle_%232.mp3.ogg | fight rotation |
+| `assets/music/fight_battle_theme_a.ogg` | Battle Theme A | cynicmusic | CC0 1.0 | https://opengameart.org/content/battle-theme-a | https://opengameart.org/sites/default/files/audio_preview/battleThemeA_0.mp3.ogg | fight rotation |
+| `assets/music/fight_battle_theme_wolfgang.ogg` | Battle Theme | Wolfgang_ | CC0 1.0 | https://opengameart.org/content/battle-theme-0 | https://opengameart.org/sites/default/files/audio_preview/Battle.mp3.ogg | fight rotation |
 
 Notes:
 
@@ -154,7 +168,9 @@ Notes:
   credit, for a link to http://soundcloud.com/mutkanto.
 - Credit for Snowfall: "Music by Kistol, but credit is not required."
 
-That is three files, about 1.6 MB in all. The `music_tracks_exist_and_credited`
+Issue #289 added the last six rows. Each page gives CC0 as its only licence (checked 2026-10-01). As with Mars, the OGG is the Vorbis copy OpenGameArt serves for the page's player, not a re-encode. The first ones are loop-trimmed in `Music.TRACKS` (`loop_start`, `tail_trim`) so the seam has almost no silence.
+
+That is nine files, about 9 MB in all. The `music_tracks_exist_and_credited`
 scenario fails if a track is missing, if it is not listed here with CC0, or if
 a shipped music file is unused.
 

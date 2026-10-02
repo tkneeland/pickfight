@@ -63,6 +63,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Night stages (#332): about 1 round in 5 plays its stage as a night variant, applied by data (`Stage.night`, rolled per round by `RoundManager.night_chance`, from its own RNG; off with the modifier-roll seam, `forced_night` overrides). Darker Night palette with stars, lamps over the spawns, and a soft glow on players, weapon heads, pickups and hazards. Visual only. Lighting is `CanvasModulate` plus shadowless `PointLight2D` (works with the Compatibility renderer); lamps hold steady with Reduce flashes on
 - Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Victory screen stats (#325): a per-player table under the awards (KOs, damage dealt and taken, self-KOs, weapon pickups, favourite weapon) and a "Magpie" award for the most weapon pickups
+- Mode awards (#355): the victory screen adds one award for the mode played, only in that mode: "Longest Hold" (most seconds alone on the hill, King of the Hill; individual holds only, so none in Teams), "Hot Hands" (most tags passed on, Hot Potato), "Survivor" (most lives left, summed over the match's rounds, Stock). Classic and Sudden Death add none. Each mode node hands its round numbers to `MatchStats` through `report_stats()` when the round ends
 - Scoreboard shown at round end (#5)
 - KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
@@ -109,12 +110,14 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
+- All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
-- Music: lobby and fight tracks (#118)
+- Music: lobby and fight tracks (#118); six more CC0 fight tracks join the rotation, eight in all, each loop-trimmed so it repeats without a gap (#289)
 - Narrator/announcer, one consistent voice (#152, #211)
+- Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
 ## Visual look and juice
 - Landing dust, head motion trails, clash sparks (#116, #196)

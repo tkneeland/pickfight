@@ -75,10 +75,12 @@ static func is_valid(id: String) -> bool:
 	return not entry(id).is_empty() and DemoBuildScript.mode_in_slice(id)
 
 static func display_name(id: String) -> String:
-	return str(entry(id).get("name", "Classic"))
+	return TranslationServer.translate("MODE_%s_NAME" % (id if id != CLASSIC else "classic").to_upper())
 
 static func rule_line(id: String) -> String:
-	return str(entry(id).get("rule", ""))
+	if not is_valid(id):
+		return ""
+	return TranslationServer.translate("MODE_%s_RULE" % (id if id != CLASSIC else "classic").to_upper())
 
 ## Whether the rising lava runs in `id`.
 static func has_rise(id: String) -> bool:

@@ -62,6 +62,18 @@ const TRACKS: Dictionary = {
 	"fight_fast": {"file": "fight_fast_fight_looped.ogg", "kind": "fight", "db": -8.0},
 	"fight_mars": {"file": "fight_nes_shooter_mars.ogg", "kind": "fight", "db": -9.0,
 		"loop_start": 0.08, "tail_trim": 0.075},
+	"fight_chiptunes_1": {"file": "fight_chiptunes_action_level1.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.07, "tail_trim": 0.35},
+	"fight_chiptunes_2": {"file": "fight_chiptunes_action_level2.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.082, "tail_trim": 0.37},
+	"fight_chiptunes_3": {"file": "fight_chiptunes_action_level3.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.07, "tail_trim": 0.085},
+	"fight_boss_2": {"file": "fight_boss_battle_2_8bit.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.02},
+	"fight_theme_a": {"file": "fight_battle_theme_a.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.214, "tail_trim": 0.052},
+	"fight_wolfgang": {"file": "fight_battle_theme_wolfgang.ogg", "kind": "fight", "db": -9.0,
+		"loop_start": 0.024, "tail_trim": 2.385},
 }
 
 const CROSSFADE_SEC: float = 1.0

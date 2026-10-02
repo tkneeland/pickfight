@@ -219,6 +219,15 @@ const SOUNDS: Dictionary = {
 	"announce_meteor_shower": {"files": ["announcer/meteor_shower.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_bouncy": {"files": ["announcer/bouncy.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_double_damage": {"files": ["announcer/double_damage.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	# Mode callouts (#370), synthesised like the rest (CREDITS.md).
+	"announce_king_of_the_hill": {"files": ["announcer/king_of_the_hill.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_hot_potato": {"files": ["announcer/hot_potato.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_sudden_death": {"files": ["announcer/sudden_death.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_stock": {"files": ["announcer/stock.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_last_life": {"files": ["announcer/last_life.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_stolen": {"files": ["announcer/stolen.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_overtime": {"files": ["announcer/overtime.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_hill_taken": {"files": ["announcer/hill_taken.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	# No recorded voice clip for Gale yet: the wind-up sound stands in (#312).
 	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 }

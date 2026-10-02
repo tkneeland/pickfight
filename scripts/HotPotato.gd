@@ -10,6 +10,9 @@ extends Node
 ##
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
+## An announcer line for the mode (#370); the Announcer listens for it.
+signal callout(sound: StringName)
+
 ## Seconds "it" has before the fuse eliminates them.
 var fuse_sec: float = 12.0
 ## After a tag nobody can be tagged for this long, so the new "it" cannot be
@@ -23,6 +26,8 @@ var fuse_left: float = 0.0
 ## slot -> seconds spent as "it" this round (a float, never truncated).
 var it_time: Dictionary = {}
 var tag_count: int = 0
+## slot -> tags that player passed on this round (issue #355).
+var tags_passed: Dictionary = {}
 var _cooldown_left: float = 0.0
 var _active: bool = false
 var _rng: RandomNumberGenerator
@@ -43,6 +48,7 @@ func start_round(slots: Array[int]) -> void:
 		_rng.seed = 278
 	it_time.clear()
 	tag_count = 0
+	tags_passed.clear()
 	_cooldown_left = 0.0
 	for slot: int in slots:
 		if slot < 0 or slot >= round_manager._players.size():
@@ -56,6 +62,7 @@ func start_round(slots: Array[int]) -> void:
 		it_time[slot] = 0.0
 		player.strike_landed.connect(handler)
 	_active = true
+	callout.emit(&"announce_hot_potato")
 	_pick_it()
 
 func end_round() -> void:
@@ -69,6 +76,11 @@ func end_round() -> void:
 	_watched.clear()
 	it_slot = -1
 	fuse_left = 0.0
+
+## Hands this round's tags to the match stats (issue #355).
+func report_stats(stats: RefCounted) -> void:
+	for slot: int in tags_passed:
+		stats.record_tags_passed(slot, int(tags_passed[slot]))
 
 func connected_count() -> int:
 	return _handlers.size()
@@ -115,6 +127,7 @@ func _on_strike(victim: Node, amount: float, _point: Vector2, _lethal: bool, str
 			fuse_left = fuse_sec
 			_cooldown_left = tag_cooldown_sec
 			tag_count += 1
+			tags_passed[striker_slot] = int(tags_passed.get(striker_slot, 0)) + 1
 			return
 
 ## A random live player becomes "it" with a full fuse; nobody with fewer than

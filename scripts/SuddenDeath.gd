@@ -7,7 +7,13 @@ extends Node
 ##
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
+## An announcer line for the mode (#370); the Announcer listens for it.
+signal callout(sound: StringName)
+
 var round_manager: Node
+## Whether starting the round calls "Sudden Death!". Stock's overtime turns it
+## off and calls "Overtime!" itself.
+var announce_start: bool = true
 ## slot -> the Callable connected to that player's `strike_landed`.
 var _handlers: Dictionary = {}
 var _watched: Dictionary = {}
@@ -19,6 +25,8 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
+	if announce_start:
+		callout.emit(&"announce_sudden_death")
 	for slot: int in slots:
 		if slot < 0 or slot >= round_manager._players.size():
 			continue
