@@ -532,6 +532,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_hot_potato_keeps_away_from_it",
 	"bot_sudden_death_plays_as_classic",
 	"lobby_and_victory_show_the_logo",
+	"demo_build_flag_defines_the_slice",
+	"demo_build_rotation_only_slice_stages",
+	"demo_build_only_slice_weapons_spawn",
+	"demo_build_mode_picker_only_slice_modes",
+	"demo_build_end_card_follows_victory",
+	"demo_build_off_leaves_full_game_unchanged",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1988,6 +1994,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_sudden_death_plays_as_classic()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"demo_build_flag_defines_the_slice":
+			return await _scenario_demo_build_flag_defines_the_slice()
+		"demo_build_rotation_only_slice_stages":
+			return await _scenario_demo_build_rotation_only_slice_stages()
+		"demo_build_only_slice_weapons_spawn":
+			return await _scenario_demo_build_only_slice_weapons_spawn()
+		"demo_build_mode_picker_only_slice_modes":
+			return await _scenario_demo_build_mode_picker_only_slice_modes()
+		"demo_build_end_card_follows_victory":
+			return await _scenario_demo_build_end_card_follows_victory()
+		"demo_build_off_leaves_full_game_unchanged":
+			return await _scenario_demo_build_off_leaves_full_game_unchanged()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -28621,5 +28639,235 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 	var victory_logo: TextureRect = screen.victory_logo()
 	if victory_logo == null or victory_logo.texture == null:
 		failures.append("the victory screen has no logo with a texture")
+	await _teardown(loop["stage"])
+	return failures
+
+# --- Issue #361: the Steam Next Fest demo build ----------------------------
+const DemoBuildScript361 := preload("res://scripts/DemoBuild.gd")
+const HostSettingsScriptDemo361 := preload("res://scripts/HostSettings.gd")
+const StageRotationScript361 := preload("res://scripts/StageRotation.gd")
+const GameModesScript361 := preload("res://scripts/GameModes.gd")
+
+func _real_stage_scenes_361() -> Array[PackedScene]:
+	var scenes: Array[PackedScene] = []
+	var names: PackedStringArray = DirAccess.get_files_at("res://scenes/stages")
+	names.sort()
+	for file: String in names:
+		if file.ends_with(".tscn"):
+			scenes.append(load("res://scenes/stages/" + file) as PackedScene)
+	return scenes
+
+func _fresh_settings_361() -> RefCounted:
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	settings.persist = false
+	return settings
+
+## The flag picks the slice: forced on, the slice is about 6 stages, the
+## pickaxe plus 4 pickup weapons, and Classic plus King of the Hill; every
+## named item is a real file. Forced off, everything is in.
+func _scenario_demo_build_flag_defines_the_slice() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 0
+	if DemoBuildScript361.is_active():
+		failures.append("the demo is on with the flag forced off")
+	DemoBuildScript361.forced = 1
+	if not DemoBuildScript361.is_active():
+		failures.append("the demo is off with the flag forced on")
+	if DemoBuildScript361.STAGES.size() != 6 or DemoBuildScript361.WEAPONS.size() != 4:
+		failures.append("the slice is %d stages and %d pickup weapons, expected 6 and 4" % [
+			DemoBuildScript361.STAGES.size(), DemoBuildScript361.WEAPONS.size()])
+	if DemoBuildScript361.WEAPONS.has("pickaxe"):
+		failures.append("the pickaxe is listed as a pickup weapon; everyone starts with it")
+	if DemoBuildScript361.MODES != PackedStringArray(["", "king_of_the_hill"]):
+		failures.append("the demo's modes are %s" % [DemoBuildScript361.MODES])
+	for stage_name: String in DemoBuildScript361.STAGES:
+		if not ResourceLoader.exists("res://scenes/stages/%s.tscn" % stage_name):
+			failures.append("demo stage %s has no scene" % stage_name)
+	for weapon_name: String in DemoBuildScript361.WEAPONS:
+		if not ResourceLoader.exists("res://resources/%s.tres" % weapon_name):
+			failures.append("demo weapon %s has no resource" % weapon_name)
+	if DemoBuildScript361.stage_in_slice("Gauntlet") or DemoBuildScript361.weapon_in_slice("axe") \
+			or DemoBuildScript361.mode_in_slice("stock"):
+		failures.append("something outside the slice reads as in it")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+
+## Demo on: 200 rounds over all of the game's stages deal only the slice's
+## stages, all of them, and the settings can neither list nor enable others.
+func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var settings: RefCounted = _fresh_settings_361()
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	rotation.scenes = scenes
+	rotation.round_player_count = 8
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 11
+	var seen: Dictionary = {}
+	for _round in 200:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+	print("      %d stages loaded, dealt %s" % [scenes.size(), seen.keys()])
+	for stage_name: Variant in seen.keys():
+		if not DemoBuildScript361.STAGES.has(str(stage_name)):
+			failures.append("%s came up in the demo's rotation" % stage_name)
+	for stage_name: String in DemoBuildScript361.STAGES:
+		if not seen.has(stage_name):
+			failures.append("demo stage %s never came up" % stage_name)
+	if settings.known_stages.size() != DemoBuildScript361.STAGES.size():
+		failures.append("the settings list %d stages, expected %d" % [settings.known_stages.size(), DemoBuildScript361.STAGES.size()])
+	if settings.set_stage_enabled("Gauntlet", true) or settings.is_stage_enabled("Gauntlet"):
+		failures.append("the settings enabled a stage outside the slice")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+
+## Demo on: the pickup pool holds only the slice's weapons (never the
+## pickaxe), draws from it only ever give those, and the settings list and
+## allow only them.
+func _scenario_demo_build_only_slice_weapons_spawn() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var pool: Array[Resource] = PickupWeaponsScript.available_weapons()
+	var stems: PackedStringArray = []
+	for stats: Resource in pool:
+		stems.append(HostSettingsScriptDemo361.name_of(stats.resource_path))
+	stems.sort()
+	var wanted: PackedStringArray = DemoBuildScript361.WEAPONS.duplicate()
+	wanted.sort()
+	if stems != wanted:
+		failures.append("the demo's pickup pool is %s, expected %s" % [stems, wanted])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var drawn: Dictionary = {}
+	for _i in 200:
+		var weapon: Resource = PickupWeaponsScript.choose(PickupWeaponsScript.available_weapons(), rng)
+		drawn[HostSettingsScriptDemo361.name_of(weapon.resource_path)] = true
+	for stem: Variant in drawn.keys():
+		if not DemoBuildScript361.WEAPONS.has(str(stem)):
+			failures.append("%s was handed out as a pickup" % stem)
+	var settings: RefCounted = _fresh_settings_361()
+	if HostSettingsScriptDemo361.known_weapons().size() != DemoBuildScript361.WEAPONS.size():
+		failures.append("the settings list %d weapons" % HostSettingsScriptDemo361.known_weapons().size())
+	if settings.set_weapon_enabled("axe", true) or settings.is_weapon_enabled("axe"):
+		failures.append("the settings enabled a weapon outside the slice")
+	if not settings.is_weapon_enabled("sword"):
+		failures.append("a slice weapon is off by default")
+	DemoBuildScript361.forced = -1
+	_scenario_completed = true
+	return failures
+
+## Demo on: the picker offers Classic and King of the Hill only, and the
+## controller server refuses every other mode.
+func _scenario_demo_build_mode_picker_only_slice_modes() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	HostSettingsScriptDemo361.shared().game_mode = ""
+	var names: Array[String] = []
+	for row: Variant in GameModesScript361.picker_rows():
+		names.append(str((row as Dictionary).get("name")))
+	if names != ["Classic", "King of the Hill"]:
+		failures.append("the demo's picker rows were %s" % [names])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	for refused: String in ["sudden_death", "hot_potato", "stock"]:
+		if server.set_game_mode(refused) or server.game_mode() != "":
+			failures.append("the demo accepted the %s mode" % refused)
+	if not server.set_game_mode("king_of_the_hill") or server.game_mode() != "king_of_the_hill":
+		failures.append("the demo refused King of the Hill")
+	if not server.set_game_mode("") or server.game_mode() != "":
+		failures.append("the demo refused Classic")
+	HostSettingsScriptDemo361.shared().game_mode = ""
+	DemoBuildScript361.forced = -1
+	await _teardown(main)
+	return failures
+
+## Demo on: the victory screen is followed by the end card, with the logo and
+## the wishlist line; a second continue returns to the lobby. Demo off: no end
+## card, the victory screen goes straight to the lobby.
+func _scenario_demo_build_end_card_follows_victory() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 1
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var screen: Node = rm._lobby_screen
+	rm._enter_victory()
+	await _await_ticks(3)
+	if screen.end_card_panel() == null or screen.end_card_panel().visible:
+		failures.append("the end card is up during the victory screen")
+	rm._leave_victory()
+	await _await_ticks(3)
+	var card: Control = screen.end_card_panel()
+	if card == null or not card.visible:
+		failures.append("the end card did not show after the victory screen")
+	else:
+		if screen.victory_panel().visible:
+			failures.append("the victory screen is still up behind the end card")
+		var text: Label = card.find_child("EndCardText", true, false) as Label
+		if text == null or not text.text.contains("Wishlist the full game on Steam") \
+				or not text.text.contains("Thanks for playing the Pickfight demo!"):
+			failures.append("the end card text is %s" % (text.text if text != null else "missing"))
+		var logo: TextureRect = card.find_child("Logo", true, false) as TextureRect
+		if logo == null or logo.texture == null:
+			failures.append("the end card has no logo")
+	if rm.lobby_phase() != "victory":
+		failures.append("the match left the victory state under the end card: %s" % rm.lobby_phase())
+	rm._leave_victory()
+	await _await_ticks(3)
+	if rm.lobby_phase() != "lobby" or (card != null and card.visible):
+		failures.append("dismissing the end card did not return to the lobby (%s)" % rm.lobby_phase())
+	DemoBuildScript361.forced = -1
+	await _teardown(loop["stage"])
+	return failures
+
+## Demo off: the full game is as it was. Every stage rotates, all fourteen
+## pickup weapons are in the pool, all five modes are on offer and pickable,
+## and the victory screen goes straight to the lobby with no end card.
+func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
+	var failures: Array[String] = []
+	DemoBuildScript361.forced = 0
+	var settings: RefCounted = _fresh_settings_361()
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	rotation.scenes = scenes
+	rotation.round_player_count = 8
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 11
+	var seen: Dictionary = {}
+	for _round in 400:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		seen[index] = true
+	if seen.size() != scenes.size():
+		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
+	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
+		failures.append("the settings lost stages with the demo off")
+	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
+			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
+		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
+	if GameModesScript361.picker_rows().size() != 5 or not GameModesScript361.is_valid("stock"):
+		failures.append("the mode picker lost modes with the demo off")
+	var loop: Dictionary = _new_lobby_round(3)
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm._enter_victory()
+	await _await_ticks(3)
+	rm._leave_victory()
+	await _await_ticks(3)
+	if rm.lobby_phase() != "lobby":
+		failures.append("the victory screen did not go straight to the lobby: %s" % rm.lobby_phase())
+	var card: Control = rm._lobby_screen.end_card_panel()
+	if card != null and card.visible:
+		failures.append("the end card showed with the demo off")
+	DemoBuildScript361.forced = -1
 	await _teardown(loop["stage"])
 	return failures
