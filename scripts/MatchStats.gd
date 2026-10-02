@@ -29,6 +29,13 @@ const AIRBORNE: String = "AIRBORNE"
 ## The shortest airtime that earns the award (issue #337).
 const AIRTIME_MIN_MSEC: int = 1000
 const COLLECTOR: String = "COLLECTOR"
+## Mode-specific award categories (issue #355), each given only in its mode.
+const HILL: String = "HILL"
+const TAGGER: String = "TAGGER"
+const LIVES: String = "LIVES"
+## The shortest hill hold (seconds) that earns Longest Hold.
+const HILL_MIN_SEC: float = 0.5
+const GameModesScript := preload("res://scripts/GameModes.gd")
 
 ## slot -> number, created on first use so any roster size works.
 var kos: Dictionary = {}
@@ -50,6 +57,14 @@ var longest_air_msec: Dictionary = {}
 ## (name -> count) -- the favourite is the one grabbed most, first grabbed on a tie.
 var pickups: Dictionary = {}
 var weapon_grabs: Dictionary = {}
+## Mode stats (issue #355), summed over the match's rounds and reported by the
+## mode node at the end of each round (`report_stats()` on the mode).
+## slot -> seconds held alone in the King of the Hill zone.
+var hill_hold_sec: Dictionary = {}
+## slot -> Hot Potato tags passed on (damaging hits made while "it").
+var tags_passed: Dictionary = {}
+## slot -> Stock lives left at the end of each round, summed.
+var lives_left: Dictionary = {}
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
 
@@ -73,6 +88,9 @@ func begin_match() -> void:
 	survival_msec.clear()
 	pickups.clear()
 	weapon_grabs.clear()
+	hill_hold_sec.clear()
+	tags_passed.clear()
+	lives_left.clear()
 	total_kos = 0
 	_last_hit.clear()
 	_streak.clear()
@@ -100,7 +118,7 @@ func end_round(now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	for victim: int in _last_hit.keys():
@@ -207,6 +225,40 @@ func stat_rows(slots: Array) -> Array[Dictionary]:
 			"pickups": int(pickups.get(slot, 0)),
 			"weapon": favourite_weapon(slot),
 		})
+	return out
+
+func record_hill_hold(slot: int, seconds: float) -> void:
+	_add(hill_hold_sec, slot, seconds)
+
+func record_tags_passed(slot: int, count: int) -> void:
+	_add(tags_passed, slot, count)
+
+func record_lives_left(slot: int, count: int) -> void:
+	_add(lives_left, slot, count)
+
+## The awards only `mode_id` gives (issue #355): Longest Hold (King of the
+## Hill), Hot Hands (Hot Potato), Survivor (Stock). Classic and the other
+## modes give none, whatever the tables hold.
+func mode_awards(slots: Array, mode_id: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if mode_id == GameModesScript.KING_OF_THE_HILL:
+		var held: Dictionary = {}
+		for slot: Variant in hill_hold_sec:
+			if float(hill_hold_sec[slot]) >= HILL_MIN_SEC:
+				held[slot] = hill_hold_sec[slot]
+		var best: int = _leader(slots, held, kos, false)
+		if best != -1:
+			out.append(_award(HILL, "Longest Hold", best, "%.1fs on the hill" % float(held[best])))
+	elif mode_id == GameModesScript.HOT_POTATO:
+		var best: int = _leader(slots, tags_passed, kos, false)
+		if best != -1:
+			var n: int = int(tags_passed[best])
+			out.append(_award(TAGGER, "Hot Hands", best, "%d tag%s passed" % [n, "" if n == 1 else "s"]))
+	elif mode_id == GameModesScript.STOCK:
+		var best: int = _leader(slots, lives_left, kos, false)
+		if best != -1:
+			var n: int = int(lives_left[best])
+			out.append(_award(LIVES, "Survivor", best, "%d li%s left" % [n, "fe" if n == 1 else "ves"]))
 	return out
 
 ## Superlatives beyond `awards()` (issue #325): "Magpie" for the most weapon
