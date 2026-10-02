@@ -106,3 +106,23 @@ Both owners want maximum throughput. Every agent working this repo should:
 - **When idle, take the next ready ticket.** Every open ticket should be owned
   and moving. If yours are all in flight, ask your owner to grill for more, or
   pick up an unowned `ready-for-agent` one and assign yourself.
+
+## Usage beacon and triage by headroom
+
+- **Keep your beacon current.** Each dev's status-line hook edits that dev's
+  own comment on issue #432 at most every 15 minutes. The comment carries the
+  5-hour and 7-day used percentages and their reset times, in UTC. Never edit
+  the other dev's comment.
+- **Any agent that files or reassigns tickets reads both beacons first:**
+  `gh issue view 432 -R tkneeland/pickfight --json comments -q '.comments[]|.body'`.
+- **Assign by weekly headroom, not by ticket count.** Headroom is 100 minus the
+  7-day %. Split new tickets in proportion to headroom. For example, at 85% and
+  51% headroom, about 60/40 to the first dev. Recompute on every triage.
+- **The 5-hour window only decides timing, not ownership.** At 90% or more,
+  that dev's agent still gets the ticket, but starts it after the 5-hour reset.
+  Don't hand it to the other dev just for that.
+- **When a beacon is missing or more than 6 hours stale,** fall back to a 50/50
+  split by open-ticket count, and mention the stale beacon in the triage
+  report.
+- **Tickets that need a human,** such as owner decisions, secrets or store
+  submissions, go to the dev the owner names, whatever the headroom.
