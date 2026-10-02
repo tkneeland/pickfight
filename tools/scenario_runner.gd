@@ -646,6 +646,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_hud_match_result_podium_and_leave",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
+	"online_remote_seat_held_30s_keeps_slot_score_and_looks",
+	"online_remote_seat_frees_after_30s_for_a_fresh_seat",
+	"remote_client_rejoins_its_held_seat_by_itself",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2333,6 +2336,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
 			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
+		"online_remote_seat_held_30s_keeps_slot_score_and_looks":
+			return await _scenario_online_remote_seat_held_30s_keeps_slot_score_and_looks()
+		"online_remote_seat_frees_after_30s_for_a_fresh_seat":
+			return await _scenario_online_remote_seat_frees_after_30s_for_a_fresh_seat()
+		"remote_client_rejoins_its_held_seat_by_itself":
+			return await _scenario_remote_client_rejoins_its_held_seat_by_itself()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -33590,3 +33599,145 @@ func _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line() -> Array[String]
 	get_root().size = was_size
 	await _teardown(main)
 	return failures
+
+## Issue #459: a remote seat that drops mid-match is held. It rejoins the
+## same slot under the same claim, with its score, nickname, hat and colour,
+## even after 20 s of game time and a round boundary's expiry pass.
+func _scenario_online_remote_seat_held_30s_keeps_slot_score_and_looks() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _hold_rig_459("held-459", failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	var slot: int = rig["slot"]
+	rm._scores[slot] = 4
+	var serial: int = server.claim_serial(slot)
+	var hat: String = server.slot_hat(slot)
+	var color: int = server.slot_color(slot)
+	rig["remote"].close()
+	await _snap_pump_251(rig, rig["remote"], [], 3000, func() -> bool: return not server.slot_has_controller(slot))
+	if server.slot_has_controller(slot):
+		failures.append("the dropped remote still has a controller")
+	if not server.remote_seat_held(slot):
+		failures.append("the dropped remote seat is not held mid-match (phase '%s')" % server._lobby_state.get("phase", ""))
+	GameClockScript.advance(20.0)
+	server.expire_disconnected_claims() # what every round boundary runs
+	if not server.claimed_slots().has(slot) or not server.remote_seat_held(slot):
+		failures.append("the seat was not held 20 s on and through a round boundary (claimed %s)" % [server.claimed_slots()])
+	var back: WebSocketPeer = await _online_remote_239(rig, "held-459")
+	var seat: Dictionary = await _online_wait_239(rig, back, "slot")
+	if int(seat.get("slot", -1)) != slot:
+		failures.append("the rejoining remote was told %s, expected its held slot %d" % [seat, slot])
+	if server.claim_serial(slot) != serial:
+		failures.append("the rejoin opened a new claim (serial %d, was %d)" % [server.claim_serial(slot), serial])
+	if rm.score_of(slot) != 4:
+		failures.append("the rejoined seat's score is %d, expected its 4" % rm.score_of(slot))
+	if server.slot_name(slot) != "Held" or server.slot_hat(slot) != hat or hat == HatScript.NONE or server.slot_color(slot) != color:
+		failures.append("the rejoined seat lost its looks: '%s' %s/%d, was 'Held' %s/%d" % [server.slot_name(slot), server.slot_hat(slot), server.slot_color(slot), hat, color])
+	if not server.slot_has_controller(slot) or server.remote_seat_held(slot):
+		failures.append("the rejoined seat has no controller, or is still marked held")
+	await _rc_close_241(rig)
+	return failures
+
+## Issue #459: past 30 s of game time the held seat frees by itself, mid-round:
+## the limp body leaves the round, and the same id coming back gets a fresh
+## seat -- a new claim, no points, no hat.
+func _scenario_online_remote_seat_frees_after_30s_for_a_fresh_seat() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _hold_rig_459("lapse-459", failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	var slot: int = rig["slot"]
+	rm._scores[slot] = 4
+	var serial: int = server.claim_serial(slot)
+	rig["remote"].close()
+	await _snap_pump_251(rig, rig["remote"], [], 3000, func() -> bool: return not server.slot_has_controller(slot))
+	GameClockScript.advance(29.0)
+	await _await_ticks(3)
+	if not server.claimed_slots().has(slot):
+		failures.append("the seat was freed before its 30 s were up")
+	GameClockScript.advance(2.0)
+	await _await_ticks(3)
+	if server.claimed_slots().has(slot) or server.remote_seat_held(slot):
+		failures.append("the seat was still held after 31 s (claimed %s)" % [server.claimed_slots()])
+	var body: Node = server.player_in_slot(slot)
+	if rm._in_round.has(slot) and body.alive:
+		failures.append("the freed seat's body is still alive in the round")
+	var back: WebSocketPeer = await _online_remote_239(rig, "lapse-459")
+	var seat: Dictionary = await _online_wait_239(rig, back, "slot")
+	var got: int = int(seat.get("slot", -1))
+	if got < 0:
+		failures.append("the late rejoin got no seat: %s" % seat)
+	else:
+		if got == slot and server.claim_serial(got) == serial:
+			failures.append("the late rejoin reclaimed the old claim")
+		if rm.score_of(got) != 0:
+			failures.append("the late rejoin kept points: %d" % rm.score_of(got))
+		if server.slot_hat(got) != HatScript.NONE or server.slot_name(got) == "Held":
+			failures.append("the late rejoin kept its old looks (%s, '%s')" % [server.slot_hat(got), server.slot_name(got)])
+	await _rc_close_241(rig)
+	return failures
+
+## Issue #459: the PC client whose connection drops mid-match rejoins by
+## itself and lands back in its held seat with its score.
+func _scenario_remote_client_rejoins_its_held_seat_by_itself() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	client._send_json({"t": "ready", "v": true})
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1 and rm._in_round.has(slot), 20000):
+		failures.append("the client's round never started (state %d)" % int(rm.get("_state")))
+		await _rc_close_241(rig)
+		return failures
+	rm._scores[slot] = 3
+	var serial: int = server.claim_serial(slot)
+	client._socket.close(4001, "test drop")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("the dropped client never left the match view")
+	if not client.rejoining() or not client.status_text.contains("Lost the connection"):
+		failures.append("the dropped client is not rejoining ('%s')" % client.status_text)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000):
+		failures.append("the client never rejoined (state %d, '%s')" % [client.state, client.status_text])
+	elif client.slot != slot or server.claim_serial(slot) != serial or rm.score_of(slot) != 3:
+		failures.append("the client rejoined slot %d (claim %d, score %d), expected its held slot %d (claim %d, score 3)" % [client.slot, server.claim_serial(slot), rm.score_of(slot), slot, serial])
+	if client.rejoining():
+		failures.append("the client is still rejoining after it got back in")
+	await _rc_close_241(rig)
+	return failures
+
+## Issue #459: one bot and one raw remote seat named "Held" in a crown and
+## colour 6, readied into a running round together. {} on failure.
+func _hold_rig_459(id: String, failures: Array[String]) -> Dictionary:
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return {}
+	var rm: Node = rig["rm"]
+	var remote: WebSocketPeer = await _online_remote_239(rig, id)
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote got no seat: %s" % seat)
+		await _rc_close_241(rig)
+		return {}
+	for msg: Dictionary in [{"t": "name", "v": "Held"}, {"t": "hat", "v": "crown"}, {"t": "color", "v": 6}, {"t": "ready", "v": true}]:
+		_online_send_239(remote, 1, JSON.stringify(msg).to_utf8_buffer())
+	var started: Callable = func() -> bool: return int(rm.get("_state")) == 1 and rm._in_round.has(slot)
+	await _snap_pump_251(rig, remote, [], 20000, started)
+	if not started.call():
+		failures.append("the remote's round never started (state %d, in_round %s)" % [int(rm.get("_state")), rm._in_round])
+		await _rc_close_241(rig)
+		return {}
+	rig["remote"] = remote
+	rig["slot"] = slot
+	return rig

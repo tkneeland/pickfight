@@ -102,8 +102,9 @@ signal host_changed(slot: int)
 
 ## The host phone asked for `cmd` (issue #149): "pause", "resume" or "end",
 ## with `slot` -1; or "kick", emitted after `slot` has been removed from the
-## roster. Only ever emitted for a request from `host_slot()`. RoundManager
-## decides what each means.
+## roster. Only ever emitted for a request from `host_slot()`, except "kick"
+## for a dropped remote seat whose hold lapsed mid-match (issue #459), which
+## leaves the roster the same way. RoundManager decides what each means.
 signal host_command(cmd: String, slot: int)
 
 ## A phone tapped "Steal a life" (Stock in Teams, #354). RoundManager forwards
@@ -597,6 +598,7 @@ func _process(delta: float) -> void:
 	_process_remote()
 	_ping_remote_seats()
 	_check_host_pc_seat()
+	_lapse_remote_holds()
 	_stream_snapshots(delta)
 	if host_slot() != _last_host:
 		_last_host = host_slot()
@@ -1018,6 +1020,8 @@ func _release_claim(slot: int) -> void:
 	_slot_claim_serial[slot] = 0
 	_join_order.erase(slot)
 	_release_look(slot)
+	_remote_claim.erase(slot)
+	_remote_dropped_msec.erase(slot)
 
 ## Note what `slot`'s claim holds before it is released, so its phone gets
 ## it back if it returns within REJOIN_GRACE_MSEC (issue #193). Not for a bot,
@@ -1055,6 +1059,7 @@ func _attach(slot: int, peer: Variant) -> void:
 	_slot_text_window_msec[slot] = 0
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
+	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
 		peer.send_text(_lobby_text())
@@ -1076,6 +1081,7 @@ func _unbind(slot: int) -> void:
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
+	_note_remote_drop(slot)
 	if _log_input:
 		print("slot %d unbound" % slot)
 
@@ -1162,10 +1168,11 @@ func slot_has_controller(slot: int) -> bool:
 ## survives a disconnect only until the end of the round it disconnected in
 ## (ADR-0007) -- an entry not reclaimed by then does not carry into the next
 ## round, and one that dropped while no round was running is not held at all.
+## Issue #459: a remote seat that dropped mid-match is kept while its hold runs.
 func expire_disconnected_claims() -> void:
 	var released: bool = false
 	for slot in _slot_claimed.size():
-		if _slot_claimed[slot] == 1 and not slot_has_controller(slot):
+		if _slot_claimed[slot] == 1 and not slot_has_controller(slot) and not remote_seat_held(slot):
 			_release_claim(slot)
 			released = true
 	if released:
@@ -2363,3 +2370,71 @@ func slot_ping_msec(slot: int) -> int:
 	if slot < 0 or slot >= _slot_peers.size() or not _slot_peers[slot] is RemoteSeat:
 		return -1
 	return _slot_peers[slot].rtt_msec
+
+# --- Holding a dropped remote seat (issue #459) -------------------------------
+#
+# A remote seat whose connection drops mid-match keeps its roster entry for
+# REMOTE_SEAT_HOLD_MSEC of game time, across round boundaries too: the body goes
+# limp as for any drop (ADR-0007), and the same client id coming back inside the
+# window reclaims the slot with its score and looks, through `_bind_with_id()`'s
+# ordinary reclaim. When the window lapses the claim is released at once, even
+# mid-round: the body leaves the round the way a kicked player's does (the
+# `host_command` "kick" signal, with no ban), and the id is not remembered as a
+# recent leaver, so a later rejoin is a fresh seat. Game time (GameClock.gd)
+# stops while the host has the match paused, so a pause never eats the window.
+# Outside a match (lobby, countdown, victory) nothing is held: ADR-0007's "no
+# round, no hold" stands, and REJOIN_GRACE_MSEC covers a quick lobby rejoin.
+
+const GameClockScript459 := preload("res://scripts/GameClock.gd")
+## How long a dropped remote seat is held mid-match, in game msec (issue #459).
+## RemoteClient.gd keeps retrying its rejoin for the same window.
+const REMOTE_SEAT_HOLD_MSEC: int = 30000
+
+var _remote_claim: Dictionary = {} # slot -> true while its claim belongs to a remote seat
+var _remote_dropped_msec: Dictionary = {} # slot -> game msec its remote seat dropped
+
+func _note_remote_attach(slot: int, peer: Variant) -> void:
+	_remote_dropped_msec.erase(slot)
+	if peer is RemoteSeat:
+		_remote_claim[slot] = true
+	else:
+		_remote_claim.erase(slot)
+
+func _note_remote_drop(slot: int) -> void:
+	if _remote_claim.has(slot) and _slot_claimed[slot] == 1:
+		_remote_dropped_msec[slot] = GameClockScript459.now_msec()
+
+func _in_match_phase() -> bool:
+	return MATCH_PHASES.has(str(_lobby_state.get("phase", "")))
+
+## Whether `slot` is a dropped remote seat still inside its hold (issue #459).
+func remote_seat_held(slot: int) -> bool:
+	if not _remote_dropped_msec.has(slot) or not _in_match_phase():
+		return false
+	return GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]) < REMOTE_SEAT_HOLD_MSEC
+
+## Game msec left on `slot`'s hold, or -1 when it is not held.
+func remote_seat_hold_left_msec(slot: int) -> int:
+	if not remote_seat_held(slot):
+		return -1
+	return REMOTE_SEAT_HOLD_MSEC - (GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]))
+
+## Every frame: a held seat whose window ran out mid-match is released now.
+func _lapse_remote_holds() -> void:
+	if _remote_dropped_msec.is_empty():
+		return
+	for slot: int in _remote_dropped_msec.keys():
+		if remote_seat_held(slot):
+			continue
+		if not _in_match_phase():
+			continue # expire_disconnected_claims() decides outside a match
+		_remote_dropped_msec.erase(slot)
+		if _slot_claimed[slot] != 1 or slot_has_controller(slot):
+			continue
+		var id: String = _slot_client_id[slot]
+		_release_claim(slot)
+		_recent_leavers.erase(id)
+		_broadcast_looks()
+		if _log_input:
+			print("slot %d remote seat hold lapsed" % slot)
+		host_command.emit("kick", slot)

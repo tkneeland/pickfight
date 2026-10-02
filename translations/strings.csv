@@ -246,3 +246,4 @@ HUD_FLAG_2,dropped
 HUD_SOCCER,Red %d - Blue %d (first to %d)
 HUD_POTATO,%s has the potato: %ds
 HUD_LIVES,%s x%d
+JOIN_REJOINING,Rejoining your seat...
