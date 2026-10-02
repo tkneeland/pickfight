@@ -622,6 +622,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"sound_trailer_split_survives_hostile_bytes",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2261,6 +2262,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"sound_trailer_split_survives_hostile_bytes":
+			return await _scenario_sound_trailer_split_survives_hostile_bytes()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32492,4 +32495,51 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+## Review sweep: a hostile or truncated sound trailer must split as a plain
+## snapshot (the whole packet, no events, no track), never read past the packet.
+func _trailer_review(prefix: Array, body: Array) -> PackedByteArray:
+	var out := PackedByteArray(prefix)
+	out.append_array(PackedByteArray(body))
+	out.append_array(PackedByteArray([body.size() >> 8, body.size() & 0xFF, 0x53, 0x58]))
+	return out
+func _scenario_sound_trailer_split_survives_hostile_bytes() -> Array[String]:
+	var failures: Array[String] = []
+	var head := PackedByteArray([0x81, 7])
+	var good: PackedByteArray = head.duplicate()
+	good.append_array(SnapshotCaptureScript240.encode_sound_trailer([{"name": "hit", "position": Vector2(10, -20), "strength": 1.0}], "lobby"))
+	var split: Variant = SnapshotCaptureScript240.split_sound_trailer(good)
+	if not split is Dictionary or (split["events"] as Array).size() != 1 or split["track"] != "lobby" or split["snapshot"] != head \
+			or (split["events"][0] as Dictionary)["position"] != Vector2(10, -20):
+		failures.append("a well-formed trailer no longer splits: %s" % str(split))
+	var lost_byte: PackedByteArray = good.duplicate()
+	lost_byte.remove_at(lost_byte.size() - 5)
+	var hostile: Dictionary = {
+		"count 5, no events": _trailer_review([0x81, 7], [5]),
+		"name runs past the trailer": _trailer_review([0x81, 7], [1, 3, 0x61]),
+		"position with no coordinates": _trailer_review([0x81, 7], [1, 0, 1]),
+		"track runs past the trailer": _trailer_review([0x81, 7], [0, 9]),
+		"empty body": _trailer_review([0x81, 7], []),
+		"bytes after the track": _trailer_review([0x81, 7], [0, 0, 7]),
+		"one body byte lost": lost_byte,
+	}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 251
+	for i in 200:
+		var junk := PackedByteArray()
+		for b in rng.randi_range(0, 40):
+			junk.append(rng.randi_range(0, 255))
+		junk.append_array(PackedByteArray([0, rng.randi_range(0, 12), 0x53, 0x58]))
+		var got: Variant = SnapshotCaptureScript240.split_sound_trailer(junk)
+		if not got is Dictionary or not got["snapshot"] is PackedByteArray or junk.slice(0, (got["snapshot"] as PackedByteArray).size()) != got["snapshot"]:
+			failures.append("random packet %d split as %s" % [i, str(got)])
+			break
+	for label: String in hostile:
+		var packet: PackedByteArray = hostile[label]
+		var got: Variant = SnapshotCaptureScript240.split_sound_trailer(packet)
+		if not got is Dictionary:
+			failures.append("%s: split returned %s" % [label, str(got)])
+		elif got["snapshot"] != packet or not (got["events"] as Array).is_empty() or got["track"] != "":
+			failures.append("%s: split as %s, not a plain snapshot" % [label, str(got)])
+	_scenario_completed = true
 	return failures
