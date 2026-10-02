@@ -34,6 +34,14 @@ Amend ADR-0019: a match is either **Local** or **Online**, never mixed.
   gamepad player's lobby card on the shared screen, shown only while a gamepad
   holds that seat; and a large mouse-friendly panel in an Online player's own
   lobby.
+  - The Online panel sits in the Online lobby beside the player list and stays
+    visible until the player readies up.
+  - An Online player's picks are saved in their own copy and sent on join. A
+    Local gamepad's picks last only for the session.
+  - Cosmetics change in the lobby only, never between rounds.
+  - A colour another player has taken is greyed out on every input: phone,
+    gamepad and online. It is first come, first served, as the phone picker
+    already works.
 - **Other gamepad parity:** a gamepad player presses A to Continue after the
   podium and counts toward "every human continued". The right stick drives
   their KO ghost. Phone buzz maps to controller rumble. There is no damage bar
