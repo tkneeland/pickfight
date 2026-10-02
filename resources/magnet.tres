@@ -3,9 +3,8 @@
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
 ; The magnet (issue #274): a passive weapon that pulls nearby players and
-; weapon heads toward the wielder. The magnet creates a continuous attraction
-; field around the wielder, pulling nearby objects inward. The field itself
-; does no damage; the head still hits as an ordinary melee weapon.
+; weapon heads toward the wielder. The field itself does no damage; the head
+; still hits as an ordinary melee weapon.
 ;
 ; Pulls other players' bodies and weapon heads within `launch_range` (300 px)
 ; toward the wielder, hardest up close and fading to nothing at the edge:
@@ -18,8 +17,8 @@
 ; enemies into unfavorable positions, making it useful for control and setup
 ; rather than raw damage.
 ;
-; Force ceiling 8000, same as medium weapons, so it wins mid-tier clashes but
-; the sword still has the longer reach for setup.
+; Force ceiling 8000, the same as the medium weapons (the sword included), so
+; it meets them evenly in a clash.
 
 [resource]
 script = ExtResource("1")
