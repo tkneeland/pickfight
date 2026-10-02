@@ -102,8 +102,9 @@ signal host_changed(slot: int)
 
 ## The host phone asked for `cmd` (issue #149): "pause", "resume" or "end",
 ## with `slot` -1; or "kick", emitted after `slot` has been removed from the
-## roster. Only ever emitted for a request from `host_slot()`. RoundManager
-## decides what each means.
+## roster. Only ever emitted for a request from `host_slot()`, except "kick"
+## for a dropped remote seat whose hold lapsed mid-match (issue #459), which
+## leaves the roster the same way. RoundManager decides what each means.
 signal host_command(cmd: String, slot: int)
 
 ## A phone tapped "Steal a life" (Stock in Teams, #354). RoundManager forwards
@@ -341,6 +342,7 @@ var _recent_leavers: Dictionary = {}
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 const RelayLinkScript: GDScript = preload("res://scripts/RelayLink.gd")
 const HostMouseScript: GDScript = preload("res://scripts/HostMouse.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 ## Issue #239: the remote-seat protocol version. A remote client's hello must
 ## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
@@ -597,6 +599,7 @@ func _process(delta: float) -> void:
 	_process_remote()
 	_ping_remote_seats()
 	_check_host_pc_seat()
+	_lapse_remote_holds()
 	_stream_snapshots(delta)
 	if host_slot() != _last_host:
 		_last_host = host_slot()
@@ -1018,6 +1021,8 @@ func _release_claim(slot: int) -> void:
 	_slot_claim_serial[slot] = 0
 	_join_order.erase(slot)
 	_release_look(slot)
+	_remote_claim.erase(slot)
+	_remote_dropped_msec.erase(slot)
 
 ## Note what `slot`'s claim holds before it is released, so its phone gets
 ## it back if it returns within REJOIN_GRACE_MSEC (issue #193). Not for a bot,
@@ -1055,6 +1060,7 @@ func _attach(slot: int, peer: Variant) -> void:
 	_slot_text_window_msec[slot] = 0
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
+	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
 		peer.send_text(_lobby_text())
@@ -1076,6 +1082,7 @@ func _unbind(slot: int) -> void:
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
+	_note_remote_drop(slot)
 	if _log_input:
 		print("slot %d unbound" % slot)
 
@@ -1162,10 +1169,11 @@ func slot_has_controller(slot: int) -> bool:
 ## survives a disconnect only until the end of the round it disconnected in
 ## (ADR-0007) -- an entry not reclaimed by then does not carry into the next
 ## round, and one that dropped while no round was running is not held at all.
+## Issue #459: a remote seat that dropped mid-match is kept while its hold runs.
 func expire_disconnected_claims() -> void:
 	var released: bool = false
 	for slot in _slot_claimed.size():
-		if _slot_claimed[slot] == 1 and not slot_has_controller(slot):
+		if _slot_claimed[slot] == 1 and not slot_has_controller(slot) and not remote_seat_held(slot):
 			_release_claim(slot)
 			released = true
 	if released:
@@ -1377,8 +1385,12 @@ func match_serial() -> int:
 ## and hung up on, its claim is dropped -- not held to the end of the round as
 ## an ordinary disconnect is (ADR-0007) -- and its id is refused from now on.
 ## False, doing nothing, for the host's own slot or an unclaimed one.
-func kick(slot: int) -> bool:
-	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1 or slot == host_slot():
+## Issue #458: `by_host_pc` is the host PC's own kick, for which the earliest
+## phone or remote seat is not the host; only the host PC's seat is refused.
+func kick(slot: int, by_host_pc: bool = false) -> bool:
+	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1:
+		return false
+	if slot == (_host_pc_slot if by_host_pc else host_slot()):
 		return false
 	if is_virtual(slot):
 		# A bot (issue #152): its director sends it away.
@@ -1814,11 +1826,30 @@ func _process_remote() -> void:
 				if _log_input:
 					print("remote %d refused: protocol version" % seat.peer)
 				continue
+			var build_reason: String = build_mismatch_reason(hello)
+			if not build_reason.is_empty():
+				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
+				seat.open = false
+				_remote_seats.erase(seat.peer)
+				if _log_input:
+					print("remote %d refused: %s" % [seat.peer, build_reason])
+				continue
 			_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
 		elif now > seat.deadline_msec:
 			_remote_awaiting.erase(seat)
 			seat.close(1008, "no hello")
 			_remote_seats.erase(seat.peer)
+
+## Issue #447: the demo joins only the demo, the full game only the full game.
+## A remote hello carries `"demo": <bool>` (missing reads as the full game).
+## "" when the builds match; else the refusal reason sent to the client:
+## "full_only" (a demo client at a full host) or "demo_only" (the reverse).
+static func build_mismatch_reason(hello: Dictionary) -> String:
+	var host_demo: bool = DemoBuildScript.is_active()
+	var client_demo: bool = hello.get("demo", false) == true
+	if client_demo == host_demo:
+		return ""
+	return "demo_only" if host_demo else "full_only"
 
 ## The first text frame of `seat` that is a JSON object with a string "id", or null.
 func _read_remote_hello(seat: RemoteSeat) -> Variant:
@@ -2048,10 +2079,12 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
 		_update_mouse_capture()
-		get_viewport().set_input_as_handled()
+		# Issue #458: running the room, the same Esc opens the host's menu too.
+		if not pc_runs_room():
+			get_viewport().set_input_as_handled()
 		return
 	var click := event as InputEventMouseButton
-	if click != null and click.pressed and _mouse_escaped and _host_pc_slot != -1:
+	if click != null and click.pressed and _mouse_escaped and _host_pc_slot != -1 and not _host_menu_open():
 		_mouse_escaped = false
 		_update_mouse_capture()
 
@@ -2363,3 +2396,117 @@ func slot_ping_msec(slot: int) -> int:
 	if slot < 0 or slot >= _slot_peers.size() or not _slot_peers[slot] is RemoteSeat:
 		return -1
 	return _slot_peers[slot].rtt_msec
+
+# --- Holding a dropped remote seat (issue #459) -------------------------------
+#
+# A remote seat whose connection drops mid-match keeps its roster entry for
+# REMOTE_SEAT_HOLD_MSEC of game time, across round boundaries too: the body goes
+# limp as for any drop (ADR-0007), and the same client id coming back inside the
+# window reclaims the slot with its score and looks, through `_bind_with_id()`'s
+# ordinary reclaim. When the window lapses the claim is released at once, even
+# mid-round: the body leaves the round the way a kicked player's does (the
+# `host_command` "kick" signal, with no ban), and the id is not remembered as a
+# recent leaver, so a later rejoin is a fresh seat. Game time (GameClock.gd)
+# stops while the host has the match paused, so a pause never eats the window.
+# Outside a match (lobby, countdown, victory) nothing is held: ADR-0007's "no
+# round, no hold" stands, and REJOIN_GRACE_MSEC covers a quick lobby rejoin.
+
+const GameClockScript459 := preload("res://scripts/GameClock.gd")
+## How long a dropped remote seat is held mid-match, in game msec (issue #459).
+## RemoteClient.gd keeps retrying its rejoin for the same window.
+const REMOTE_SEAT_HOLD_MSEC: int = 30000
+## The hold this host applies; a scenario whose wall-clock client must outlast
+## a fast game clock raises it.
+var remote_seat_hold_msec: int = REMOTE_SEAT_HOLD_MSEC
+
+var _remote_claim: Dictionary = {} # slot -> true while its claim belongs to a remote seat
+var _remote_dropped_msec: Dictionary = {} # slot -> game msec its remote seat dropped
+
+func _note_remote_attach(slot: int, peer: Variant) -> void:
+	_remote_dropped_msec.erase(slot)
+	if peer is RemoteSeat:
+		_remote_claim[slot] = true
+	else:
+		_remote_claim.erase(slot)
+
+func _note_remote_drop(slot: int) -> void:
+	if _remote_claim.has(slot) and _slot_claimed[slot] == 1:
+		_remote_dropped_msec[slot] = GameClockScript459.now_msec()
+
+func _in_match_phase() -> bool:
+	return MATCH_PHASES.has(str(_lobby_state.get("phase", "")))
+
+## Whether `slot` is a dropped remote seat still inside its hold (issue #459).
+func remote_seat_held(slot: int) -> bool:
+	if not _remote_dropped_msec.has(slot) or not _in_match_phase():
+		return false
+	return GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]) < remote_seat_hold_msec
+
+## Game msec left on `slot`'s hold, or -1 when it is not held.
+func remote_seat_hold_left_msec(slot: int) -> int:
+	if not remote_seat_held(slot):
+		return -1
+	return remote_seat_hold_msec - (GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]))
+
+## Every frame: a held seat whose window ran out mid-match is released now.
+func _lapse_remote_holds() -> void:
+	if _remote_dropped_msec.is_empty():
+		return
+	for slot: int in _remote_dropped_msec.keys():
+		if remote_seat_held(slot):
+			continue
+		if not _in_match_phase():
+			continue # expire_disconnected_claims() decides outside a match
+		_remote_dropped_msec.erase(slot)
+		if _slot_claimed[slot] != 1 or slot_has_controller(slot):
+			continue
+		var id: String = _slot_client_id[slot]
+		_release_claim(slot)
+		_recent_leavers.erase(id)
+		_broadcast_looks()
+		if _log_input:
+			print("slot %d remote seat hold lapsed" % slot)
+		host_command.emit("kick", slot)
+
+# --- The host PC's own kick, pause and end match (issue #458) ------------------
+#
+# An Online host has no host phone (ADR-0021), so its own screen carries what
+# the host phone's menu gives: a Kick on each player row (the lobby and the Esc
+# menu) and Pause/Resume and End match in the Esc menu (`HostMatchMenu.gd`).
+# They go out as the same `host_command`s the host phone's requests do.
+
+## Whether the host PC runs the room itself and so shows those controls: an
+## Online match (ADR-0021). For now that is Go online switched on.
+func pc_runs_room() -> bool:
+	return _online_requested
+
+## Whether a match is in play or paused: what Pause and End match act on.
+func host_pc_match_live() -> bool:
+	return MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) or host_pc_paused()
+
+## Whether the match is paused, as the lobby state last said.
+func host_pc_paused() -> bool:
+	return bool(_lobby_state.get("paused", false))
+
+## The host PC's "pause", "resume", "end" or "kick" of `slot`. Returns whether
+## it was taken: Pause, Resume and End only while a match is live; a kick of
+## any claimed seat but the host PC's own.
+func host_pc_command(cmd: String, slot: int = -1) -> bool:
+	match cmd:
+		"pause", "resume", "end":
+			if not host_pc_match_live():
+				return false
+			host_command.emit(cmd, -1)
+			return true
+		"kick":
+			if not kick(slot, true):
+				return false
+			host_command.emit("kick", slot)
+			return true
+	return false
+
+## Whether the host screen's Esc menu is open, when its clicks must not take
+## the mouse back for the host PC's seat.
+func _host_menu_open() -> bool:
+	var menu: Node = get_node_or_null(^"/root/Sfx/SfxSettings")
+	return menu != null and menu.has_method("is_open") and menu.is_open()

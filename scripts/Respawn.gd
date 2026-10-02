@@ -48,12 +48,21 @@ func tick(_delta: float) -> void:
 func respawn_now(slot: int) -> void:
 	_pending.erase(slot)
 	var player: Node2D = watched[slot]
-	if not is_instance_valid(player):
+	if not is_instance_valid(player) or not _still_claimed(slot):
 		return
 	player.start_round(farthest_spawn(slot), false)
 	if float(round_manager.spawn_protection_sec) > 0.0:
 		player.spawn_protected = true
 		_protected[slot] = GameClockScript.now_msec() + int(float(round_manager.spawn_protection_sec) * 1000.0)
+
+## Whether the roster still holds `slot`: one the host kicked while it waited
+## is out of the round, so it does not come back. A disconnect keeps its claim
+## until the round ends (ADR-0007). True with no roster to ask.
+func _still_claimed(slot: int) -> bool:
+	var server: Variant = round_manager.get("_controller_server") if round_manager != null else null
+	if server == null or not is_instance_valid(server) or not (server as Object).has_method("claimed_slots"):
+		return true
+	return (server.claimed_slots() as Array).has(slot)
 
 ## The stage spawn point whose nearest standing player is farthest away.
 func farthest_spawn(slot: int) -> Vector2:

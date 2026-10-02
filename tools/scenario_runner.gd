@@ -625,6 +625,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pad_start_pauses_and_resumes_other_pads_do_not",
 	"host_pad_start_and_host_phone_share_one_pause",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"rotation_deals_ctf_and_soccer_only_their_own_stages",
+	"juice_hitstop_never_lifts_a_host_pause",
+	"mode_award_categories_are_translated",
+	"ctf_a_kicked_player_waiting_to_respawn_stays_out",
+	"hot_potato_first_it_varies_across_a_matchs_rounds",
 	"online_host_left_reaches_client_and_shows_screen",
 	"online_late_remote_joiner_enters_next_round_with_fresh_score",
 	"online_ping_reaches_lobby_and_scoreboard_with_warning",
@@ -642,6 +647,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 	"bot_stays_on_stage_over_jittered_starts",
+	"online_remote_seat_held_30s_keeps_slot_score_and_looks",
+	"online_remote_seat_frees_after_30s_for_a_fresh_seat",
+	"remote_client_rejoins_its_held_seat_by_itself",
+	"online_host_kicks_remote_seat_from_lobby_row",
+	"online_host_esc_menu_pauses_kicks_and_ends_match",
+	"online_demo_joins_demo_and_full_joins_full",
+	"online_demo_and_full_refuse_each_other",
+	"telemetry_toggle_defaults_on_and_persists",
+	"telemetry_off_sends_no_record_on_still_does",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2287,6 +2301,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"rotation_deals_ctf_and_soccer_only_their_own_stages":
+			return await _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages()
+		"juice_hitstop_never_lifts_a_host_pause":
+			return await _scenario_juice_hitstop_never_lifts_a_host_pause()
+		"mode_award_categories_are_translated":
+			return await _scenario_mode_award_categories_are_translated()
+		"ctf_a_kicked_player_waiting_to_respawn_stays_out":
+			return await _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out()
+		"hot_potato_first_it_varies_across_a_matchs_rounds":
+			return await _scenario_hot_potato_first_it_varies_across_a_matchs_rounds()
 		"online_host_left_reaches_client_and_shows_screen":
 			return await _scenario_online_host_left_reaches_client_and_shows_screen()
 		"online_late_remote_joiner_enters_next_round_with_fresh_score":
@@ -2321,6 +2345,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
 		"bot_stays_on_stage_over_jittered_starts":
 			return await _scenario_bot_stays_on_stage_over_jittered_starts()
+		"online_remote_seat_held_30s_keeps_slot_score_and_looks":
+			return await _scenario_online_remote_seat_held_30s_keeps_slot_score_and_looks()
+		"online_remote_seat_frees_after_30s_for_a_fresh_seat":
+			return await _scenario_online_remote_seat_frees_after_30s_for_a_fresh_seat()
+		"remote_client_rejoins_its_held_seat_by_itself":
+			return await _scenario_remote_client_rejoins_its_held_seat_by_itself()
+		"online_host_kicks_remote_seat_from_lobby_row":
+			return await _scenario_online_host_kicks_remote_seat_from_lobby_row()
+		"online_host_esc_menu_pauses_kicks_and_ends_match":
+			return await _scenario_online_host_esc_menu_pauses_kicks_and_ends_match()
+		"online_demo_joins_demo_and_full_joins_full":
+			return await _scenario_online_demo_joins_demo_and_full_joins_full()
+		"online_demo_and_full_refuse_each_other":
+			return await _scenario_online_demo_and_full_refuse_each_other()
+		"telemetry_toggle_defaults_on_and_persists":
+			return await _scenario_telemetry_toggle_defaults_on_and_persists()
+		"telemetry_off_sends_no_record_on_still_does":
+			return await _scenario_telemetry_off_sends_no_record_on_still_does()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -30737,7 +30779,7 @@ func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
 		ui.refresh()
 		if box == null or not box.button_pressed:
 			failures.append("the Send anonymous match stats box is missing or not on by default")
-		elif box.text != "Send anonymous match stats":
+		elif box.text != "Share anonymous match stats":
 			failures.append("box text was '%s'" % box.text)
 		else:
 			box.button_pressed = false
@@ -30745,7 +30787,8 @@ func _scenario_telemetry_not_sent_when_off_or_scripted() -> Array[String]:
 				failures.append("unticking the box left sharing on")
 	_scenario_completed = true
 	return failures
-## Issue #372: the first-launch notice shows until dismissed or acted on, then never.
+## Issue #372, amended by #461: the first-launch notice never shows, on a
+## fresh settings file or after, and sharing stays on by default.
 func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -30754,41 +30797,15 @@ func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	await physics_frame
 	var ui: CanvasLayer = sfx.build_settings_ui()
 	await physics_frame
-	var path: String = OS.get_temp_dir().path_join("pf_372_notice_%d.cfg" % OS.get_process_id())
-	DirAccess.remove_absolute(path)
-	var host: RefCounted = HostSettingsScript372.new()
-	host.path = path
-	ui.host = host
+	var fresh: RefCounted = HostSettingsScript372.new()
+	fresh.persist = false
+	ui.host = fresh
 	ui.refresh()
 	var notice: Control = ui.telemetry_notice()
-	if notice == null or not notice.visible:
-		failures.append("the notice was not shown on first launch")
-	elif ui.telemetry_notice_label().text != "Pickfight sends anonymous match stats to help balance the game":
-		failures.append("notice text was '%s'" % ui.telemetry_notice_label().text)
-	ui.telemetry_dismiss_button().pressed.emit()
-	if notice.visible:
-		failures.append("the notice stayed after Dismiss")
-	if not host.share_stats:
-		failures.append("Dismiss turned sharing off")
-	var again: RefCounted = HostSettingsScript372.new()
-	again.path = path
-	again.load_settings()
-	if not again.telemetry_notice_seen:
-		failures.append("the dismissal did not persist")
-	ui.host = again
-	ui.refresh()
-	if notice.visible:
-		failures.append("the notice came back on the next launch")
-	DirAccess.remove_absolute(path)
-	var second: RefCounted = HostSettingsScript372.new()
-	second.persist = false
-	ui.host = second
-	ui.refresh()
-	if not notice.visible:
-		failures.append("a fresh settings file should show the notice again")
-	ui.telemetry_turn_off_button().pressed.emit()
-	if notice.visible or second.share_stats or not second.telemetry_notice_seen:
-		failures.append("Turn off should hide the notice, switch sharing off and mark it seen")
+	if notice != null and notice.visible:
+		failures.append("the first-launch notice showed on a fresh settings file (#461: never)")
+	if not fresh.share_stats:
+		failures.append("sharing should default to on")
 	_scenario_completed = true
 	return failures
 func _telemetry_relay_record_372() -> Dictionary:
@@ -32253,6 +32270,7 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	await _teardown(rig["main"])
 	return failures
 func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[String]:
+	# Amended by #461: the notice never shows, so View opens the panel as usual.
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
 	if sfx == null:
@@ -32264,20 +32282,8 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 	var was_seen: bool = ui.host.telemetry_notice_seen
 	ui.host.telemetry_notice_seen = false
 	ui.refresh()
-	if not ui.telemetry_notice().visible:
-		failures.append("the notice is not showing")
-	await _pad_tap_368(0, JOY_BUTTON_BACK)
-	if ui.is_open():
-		failures.append("View opened the panel while the notice was up; it should focus the notice")
-	if get_root().gui_get_focus_owner() != ui.telemetry_dismiss_button():
-		failures.append("View did not focus the notice's OK button (focus is %s)" % get_root().gui_get_focus_owner())
-	await _pad_tap_368(0, JOY_BUTTON_A)
 	if ui.telemetry_notice().visible:
-		failures.append("A did not dismiss the notice")
-	if PadMenuScript368.is_open():
-		failures.append("the gamepad menu stayed open after the notice went")
-	if ui.telemetry_dismiss_button().focus_mode != Control.FOCUS_NONE:
-		failures.append("the notice buttons stayed focusable")
+		failures.append("the first-launch notice showed (#461: never)")
 	ui.host.telemetry_notice_seen = was_seen
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
@@ -32775,6 +32781,152 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+## Review sweep b: Capture the Flag and Soccer can only end on a stage with their
+## bases or goals, so their rotation deals only the stages whose `mode_weights`
+## name the mode -- even when the host switched those off -- while every other
+## mode still deals the rest.
+func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var own: Dictionary = {"capture_the_flag": ["Bastion", "Stronghold"], "soccer": ["Pitch", "Cage", "Dunes"]}
+	for mode_id: String in own.keys():
+		for switched_off: bool in [false, true]:
+			var settings: RefCounted = _fresh_settings_361()
+			var rotation: RefCounted = StageRotationScript361.new()
+			rotation.settings = settings
+			rotation.scenes = scenes
+			rotation.round_player_count = 8
+			rotation.mode_id = mode_id
+			rotation.rng = RandomNumberGenerator.new()
+			rotation.rng.seed = 21
+			if switched_off:
+				for stage_name: String in own[mode_id]:
+					settings.set_stage_enabled(stage_name, false)
+			var seen: Dictionary = {}
+			for _round in 60:
+				var index: int = rotation.next_stage_index()
+				rotation.stage_index = index
+				seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+			for stage_name: Variant in seen.keys():
+				if not (own[mode_id] as Array).has(str(stage_name)):
+					failures.append("%s dealt %s (own stages %s, switched off: %s)" % [mode_id, stage_name, own[mode_id], switched_off])
+			if seen.is_empty():
+				failures.append("%s dealt no stage" % mode_id)
+	var classic: RefCounted = StageRotationScript361.new()
+	classic.settings = _fresh_settings_361()
+	classic.scenes = scenes
+	classic.round_player_count = 8
+	classic.rng = RandomNumberGenerator.new()
+	classic.rng.seed = 21
+	var classic_seen: Dictionary = {}
+	for _round in 60:
+		var index: int = classic.next_stage_index()
+		classic.stage_index = index
+		classic_seen[index] = true
+	if classic_seen.size() < 20:
+		failures.append("Classic dealt only %d stages in 60 rounds" % classic_seen.size())
+	_scenario_completed = true
+	return failures
+## Review sweep b: the host pausing during a hit-stop keeps the game paused once
+## the hit-stop runs out; that pause is the host's to lift, not Juice's.
+func _scenario_juice_hitstop_never_lifts_a_host_pause() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var host := Node.new()
+	var script := GDScript.new()
+	script.source_code = "extends Node\nvar paused: bool = false\nfunc is_paused() -> bool:\n\treturn paused\n"
+	script.reload()
+	host.set_script(script)
+	stage.add_child(host)
+	host.add_to_group("round_manager")
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(2)
+	emitter.strike_landed.emit(emitter, JuiceScript.HITSTOP_DAMAGE_MIN + 20.0, Vector2.ZERO, false)
+	if not juice.is_frozen():
+		failures.append("a heavy hit did not freeze the game")
+	# The host's Pause lands mid-freeze, as RoundManager._pause_match() does it.
+	host.set("paused", true)
+	get_root().get_tree().paused = true
+	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
+	if juice.is_frozen():
+		failures.append("the hit-stop never ran out")
+	if not get_root().get_tree().paused:
+		failures.append("the hit-stop ending lifted the host's pause")
+	get_root().get_tree().paused = false
+	await _teardown(stage)
+	return failures
+## Review sweep b: every mode award's category has a translation, so the victory
+## panel never shows a raw AWARD_CATEGORY_ key.
+func _scenario_mode_award_categories_are_translated() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = load("res://scripts/MatchStats.gd").new()
+	stats.begin_match()
+	stats.record_hill_hold(0, 5.0)
+	stats.record_tags_passed(0, 2)
+	stats.record_lives_left(0, 1)
+	stats.record_goals(0, 1)
+	stats.record_captures(0, 1)
+	var slots: Array = [0, 1]
+	for mode_id: String in ["king_of_the_hill", "hot_potato", "stock", "soccer", "capture_the_flag"]:
+		var awards: Array[Dictionary] = stats.mode_awards(slots, mode_id)
+		if awards.is_empty():
+			failures.append("%s gave no mode award" % mode_id)
+		for award: Dictionary in awards:
+			var key: String = "AWARD_CATEGORY_" + str(award["category"])
+			if TranslationServer.translate(key) == key:
+				failures.append("%s: %s has no translation" % [mode_id, key])
+	_scenario_completed = true
+	return failures
+## Review sweep b: a Capture the Flag player the host kicks while they wait to
+## respawn stays out of the round, rather than coming back on a slot nobody holds.
+func _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	var kicked: RigidBody2D = rig["players"][1]
+	kicked.eliminate()
+	await _await_ticks(2)
+	if not mode.is_pending(1):
+		failures.append("the KO'd player was not waiting to respawn")
+	(rig["roster"].slots as Array).erase(1)
+	rm.call("_on_host_command", "kick", 1)
+	await _await_ticks(int(mode.respawn_sec * 60.0) + 30)
+	if kicked.alive:
+		failures.append("the kicked player respawned into the round")
+	if mode.is_pending(1):
+		failures.append("the kicked player is still waiting to respawn")
+	await _teardown(rig["stage"])
+	return failures
+## Review sweep b: Hot Potato's first "it" is drawn from one match-long stream, so
+## the rounds of a match do not all hand the tag to the same player first (#187:
+## still the match seed's, so a seed replays the same picks).
+func _scenario_hot_potato_first_it_varies_across_a_matchs_rounds() -> Array[String]:
+	var failures: Array[String] = []
+	var picks: Array[Array] = []
+	for _run in 2:
+		var rig: Dictionary = _mode_rig(4, GameModesType.HOT_POTATO)
+		if not await _mode_started(rig):
+			failures.append("the Hot Potato round never started")
+			await _teardown(rig["stage"])
+			return failures
+		var rm: Node = rig["rm"]
+		var firsts: Array[int] = [int(rm.game_mode_node().it_slot)]
+		for _round in 5:
+			rm.call("_start_game_mode")
+			firsts.append(int(rm.game_mode_node().it_slot))
+		picks.append(firsts)
+		await _teardown(rig["stage"], false)
+	print("      first \"it\" per round: %s, replayed: %s" % [picks[0], picks[1]])
+	if picks[0].count(picks[0][0]) == picks[0].size():
+		failures.append("every round of the match made slot %d \"it\" first: %s" % [picks[0][0], picks[0]])
+	if picks[0] != picks[1]:
+		failures.append("the same match seed picked differently: %s vs %s" % [picks[0], picks[1]])
+	_scenario_completed = true
 	return failures
 ## Issue #446: the host's room closing, here by the host socket closing
 ## cleanly (the host quitting), reaches a real client, which shows the
@@ -33429,4 +33581,425 @@ func _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line() -> Array[String]
 			failures.append("%s: feed %s or score line %s is off-screen" % [size, feed_rect, score_rect])
 	get_root().size = was_size
 	await _teardown(main)
+	return failures
+## Issue #459: a remote seat that drops mid-match is held. It rejoins the
+## same slot under the same claim, with its score, nickname, hat and colour,
+## even after 20 s of game time and a round boundary's expiry pass.
+func _scenario_online_remote_seat_held_30s_keeps_slot_score_and_looks() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _hold_rig_459("held-459", failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	var slot: int = rig["slot"]
+	rm._scores[slot] = 4
+	var serial: int = server.claim_serial(slot)
+	var hat: String = server.slot_hat(slot)
+	var color: int = server.slot_color(slot)
+	rig["remote"].close()
+	await _snap_pump_251(rig, rig["remote"], [], 3000, func() -> bool: return not server.slot_has_controller(slot))
+	if server.slot_has_controller(slot):
+		failures.append("the dropped remote still has a controller")
+	if not server.remote_seat_held(slot):
+		failures.append("the dropped remote seat is not held mid-match (phase '%s')" % server._lobby_state.get("phase", ""))
+	GameClockScript.advance(20.0)
+	server.expire_disconnected_claims() # what every round boundary runs
+	if not server.claimed_slots().has(slot) or not server.remote_seat_held(slot):
+		failures.append("the seat was not held 20 s on and through a round boundary (claimed %s)" % [server.claimed_slots()])
+	var back: WebSocketPeer = await _online_remote_239(rig, "held-459")
+	var seat: Dictionary = await _online_wait_239(rig, back, "slot")
+	if int(seat.get("slot", -1)) != slot:
+		failures.append("the rejoining remote was told %s, expected its held slot %d" % [seat, slot])
+	if server.claim_serial(slot) != serial:
+		failures.append("the rejoin opened a new claim (serial %d, was %d)" % [server.claim_serial(slot), serial])
+	if rm.score_of(slot) != 4:
+		failures.append("the rejoined seat's score is %d, expected its 4" % rm.score_of(slot))
+	if server.slot_name(slot) != "Held" or server.slot_hat(slot) != hat or hat == HatScript.NONE or server.slot_color(slot) != color:
+		failures.append("the rejoined seat lost its looks: '%s' %s/%d, was 'Held' %s/%d" % [server.slot_name(slot), server.slot_hat(slot), server.slot_color(slot), hat, color])
+	if not server.slot_has_controller(slot) or server.remote_seat_held(slot):
+		failures.append("the rejoined seat has no controller, or is still marked held")
+	await _rc_close_241(rig)
+	return failures
+## Issue #459: past 30 s of game time the held seat frees by itself, mid-round:
+## the limp body leaves the round, and the same id coming back gets a fresh
+## seat -- a new claim, no points, no hat.
+func _scenario_online_remote_seat_frees_after_30s_for_a_fresh_seat() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _hold_rig_459("lapse-459", failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	var slot: int = rig["slot"]
+	rm._scores[slot] = 4
+	var serial: int = server.claim_serial(slot)
+	rig["remote"].close()
+	await _snap_pump_251(rig, rig["remote"], [], 3000, func() -> bool: return not server.slot_has_controller(slot))
+	GameClockScript.advance(29.0)
+	await _await_ticks(3)
+	if not server.claimed_slots().has(slot):
+		failures.append("the seat was freed before its 30 s were up")
+	GameClockScript.advance(2.0)
+	await _await_ticks(3)
+	if server.claimed_slots().has(slot) or server.remote_seat_held(slot):
+		failures.append("the seat was still held after 31 s (claimed %s)" % [server.claimed_slots()])
+	var body: Node = server.player_in_slot(slot)
+	if rm._in_round.has(slot) and body.alive:
+		failures.append("the freed seat's body is still alive in the round")
+	var back: WebSocketPeer = await _online_remote_239(rig, "lapse-459")
+	var seat: Dictionary = await _online_wait_239(rig, back, "slot")
+	var got: int = int(seat.get("slot", -1))
+	if got < 0:
+		failures.append("the late rejoin got no seat: %s" % seat)
+	else:
+		if got == slot and server.claim_serial(got) == serial:
+			failures.append("the late rejoin reclaimed the old claim")
+		if rm.score_of(got) != 0:
+			failures.append("the late rejoin kept points: %d" % rm.score_of(got))
+		if server.slot_hat(got) != HatScript.NONE or server.slot_name(got) == "Held":
+			failures.append("the late rejoin kept its old looks (%s, '%s')" % [server.slot_hat(got), server.slot_name(got)])
+	await _rc_close_241(rig)
+	return failures
+## Issue #459: the PC client whose connection drops mid-match rejoins by
+## itself and lands back in its held seat with its score.
+func _scenario_remote_client_rejoins_its_held_seat_by_itself() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	client._send_json({"t": "ready", "v": true})
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1 and rm._in_round.has(slot), 20000):
+		failures.append("the client's round never started (state %d)" % int(rm.get("_state")))
+		await _rc_close_241(rig)
+		return failures
+	rm._scores[slot] = 3
+	# The client retries on the wall clock; under --fixed-fps game time can run
+	# many times faster, so the host's game-time hold is lengthened here.
+	server.remote_seat_hold_msec = 600000
+	var serial: int = server.claim_serial(slot)
+	client._socket.close(4001, "test drop")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("the dropped client never left the match view")
+	if not client.rejoining() or not client.status_text.contains("Lost the connection"):
+		failures.append("the dropped client is not rejoining ('%s')" % client.status_text)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000):
+		failures.append("the client never rejoined (state %d, '%s')" % [client.state, client.status_text])
+	elif client.slot != slot or server.claim_serial(slot) != serial or rm.score_of(slot) != 3:
+		failures.append("the client rejoined slot %d (claim %d, score %d), expected its held slot %d (claim %d, score 3); phase '%s'" % [client.slot, server.claim_serial(slot), rm.score_of(slot), slot, serial, server._lobby_state.get("phase", "")])
+	if client.rejoining():
+		failures.append("the client is still rejoining after it got back in")
+	await _rc_close_241(rig)
+	return failures
+## Issue #459: one bot and one raw remote seat named "Held" in a crown and
+## colour 6, readied into a running round together. {} on failure.
+func _hold_rig_459(id: String, failures: Array[String]) -> Dictionary:
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return {}
+	var rm: Node = rig["rm"]
+	var remote: WebSocketPeer = await _online_remote_239(rig, id)
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote got no seat: %s" % seat)
+		await _rc_close_241(rig)
+		return {}
+	for msg: Dictionary in [{"t": "name", "v": "Held"}, {"t": "hat", "v": "crown"}, {"t": "color", "v": 6}, {"t": "ready", "v": true}]:
+		_online_send_239(remote, 1, JSON.stringify(msg).to_utf8_buffer())
+	var started: Callable = func() -> bool: return int(rm.get("_state")) == 1 and rm._in_round.has(slot)
+	await _snap_pump_251(rig, remote, [], 20000, started)
+	if not started.call():
+		failures.append("the remote's round never started (state %d, in_round %s)" % [int(rm.get("_state")), rm._in_round])
+		await _rc_close_241(rig)
+		return {}
+	rig["remote"] = remote
+	rig["slot"] = slot
+	return rig
+# --- Online host controls on the PC (issue #458) ------------------------------
+## An Online host (Go online on, its own seat on) with `bots` bots and one
+## remote PC client joined through a real relay; no phone anywhere. {} on failure.
+func _online_host_rig_458(failures: Array[String], bots: int) -> Dictionary:
+	var rig: Dictionary = await _rc_rig_241(bots, failures)
+	if rig.is_empty():
+		return rig
+	var server: Node = rig["server"]
+	server._online_requested = true # the rig dialled the relay itself: Go online is on
+	if not server.apply_host_command("pc_seat", true) or server.host_pc_slot() == -1:
+		failures.append("the host PC's own seat did not come on")
+	var client: Node = await _rc_client_241(rig)
+	if failures.size() > 0 or not await _rc_joined_241(rig, client, failures, "Visitor"):
+		await _rc_close_241(rig)
+		return {}
+	rig["client"] = client
+	return rig
+## Issue #458: in the Online lobby every row but the host PC's own carries a
+## Kick. Kicking the remote seat -- the earliest remote seat, which the host
+## phone's kick would refuse as "the host" -- frees its slot, and that client
+## lands on its join screen reading the host removed it; joining again is
+## refused the same way. The host PC keeps its seat. Go online off takes the
+## Kick buttons away again (a Local lobby keeps the host phone's kick).
+func _scenario_online_host_kicks_remote_seat_from_lobby_row() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_host_rig_458(failures, 0)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = rig["client"]
+	var screen: CanvasLayer = rig["rm"].get_node("LobbyLayer")
+	var slot: int = client.slot
+	var own: int = server.host_pc_slot()
+	if not await _wait_for_239(func() -> bool: return screen.kick_button(slot) != null):
+		failures.append("the remote seat's lobby row (slot %d) has no Kick" % slot)
+		await _rc_close_241(rig)
+		return failures
+	if screen.kick_button(own) != null:
+		failures.append("the host PC's own lobby row (slot %d) has a Kick" % own)
+	screen.kick_button(slot).pressed.emit()
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+		failures.append("the kicked client stayed in the room")
+	_rc_expect_join_screen_241(client, failures, "kicked from the lobby row", "removed")
+	if server.claimed_slots().has(slot):
+		failures.append("the kicked seat's slot %d is still claimed: %s" % [slot, server.claimed_slots()])
+	if server.host_pc_slot() != own or not server.claimed_slots().has(own):
+		failures.append("kicking the remote seat dropped the host PC's own seat")
+	client.join(rig["code"], "Visitor")
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN and not client.status_text.is_empty(), 4000):
+		failures.append("the kicked client's second join was not refused")
+	else:
+		_rc_expect_join_screen_241(client, failures, "rejoin after a kick", "removed")
+	if server.claimed_slots().size() != 1:
+		failures.append("after the refused rejoin the roster is %s, expected only the host PC" % [server.claimed_slots()])
+	var visitor: Node = await _rc_client_241(rig)
+	if await _rc_joined_241(rig, visitor, failures, "Second"):
+		if not await _wait_for_239(func() -> bool: return screen.kick_button(visitor.slot) != null):
+			failures.append("a second remote seat's row has no Kick")
+		server._online_requested = false
+		if not await _wait_for_239(func() -> bool: return screen.kick_button(visitor.slot) == null):
+			failures.append("Go online off left the Kick on the lobby rows")
+		if server.host_pc_command("pause"):
+			failures.append("the host PC's Pause was taken in the lobby")
+	await _rc_close_241(rig)
+	return failures
+## Issue #458: mid-match, the Online host's Esc menu (the settings panel) leads
+## with Pause/Resume, End match and a Kick on each player's row but its own.
+## Pause freezes the game as the host phone's does and Resume lifts it; Kick
+## sends the remote client to its join screen; End match goes back to the
+## lobby, where the match controls hide. Esc on the captured mouse frees it and
+## opens the menu in the same press. No phone is involved.
+func _scenario_online_host_esc_menu_pauses_kicks_and_ends_match() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_host_rig_458(failures, 1)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var client: Node = rig["client"]
+	if not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var ui: CanvasLayer = _sfx().build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	if not ui.is_open():
+		ui.toggle_panel()
+	menu.refresh()
+	if not menu.visible or menu.pause_button() == null or menu.end_button() == null:
+		failures.append("the open menu shows no match controls mid-round")
+		ui.toggle_panel()
+		await _rc_close_241(rig)
+		return failures
+	menu.pause_button().pressed.emit()
+	await process_frame
+	if not rm.is_paused() or not paused:
+		failures.append("Pause did not pause (paused %s, tree %s)" % [rm.is_paused(), paused])
+	elif rm.pause_label() == null or not rm.pause_label().is_visible_in_tree():
+		failures.append("paused from the PC, but no PAUSED banner shows")
+	if menu.pause_button().text != TranslationServer.translate("JOIN_RESUME_MATCH"):
+		failures.append("paused, the button reads '%s', not Resume" % menu.pause_button().text)
+	menu.pause_button().pressed.emit()
+	await process_frame
+	if rm.is_paused() or paused:
+		failures.append("Resume did not resume (paused %s, tree %s)" % [rm.is_paused(), paused])
+	paused = false
+	menu.refresh()
+	var slot: int = client.slot
+	if menu.kick_button(server.host_pc_slot()) != null:
+		failures.append("the menu offers a Kick on the host PC's own seat")
+	var bots: Array = server.virtual_slots()
+	if bots.is_empty() or menu.kick_button(int(bots[0])) == null:
+		failures.append("the bot's row in the menu has no Kick (bots %s)" % [bots])
+	var kick: Button = menu.kick_button(slot)
+	if kick == null:
+		failures.append("the remote seat's row in the menu (slot %d) has no Kick" % slot)
+	else:
+		kick.pressed.emit()
+		if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
+			failures.append("the client kicked mid-match stayed in it")
+		_rc_expect_join_screen_241(client, failures, "kicked mid-match", "removed")
+		if server.claimed_slots().has(slot):
+			failures.append("the slot kicked mid-match is still claimed")
+		menu.refresh()
+		if menu.kick_button(slot) != null:
+			failures.append("the kicked seat's row is still in the menu")
+	# Esc on the captured mouse: freed, and the menu open, in one press. (After
+	# the kick: the in-process client's own Esc menu would take the key first.)
+	ui.toggle_panel()
+	if not server._mouse_captured:
+		failures.append("the host PC's seat does not hold the mouse mid-round")
+	for down: bool in [true, false]:
+		var esc := InputEventKey.new()
+		esc.physical_keycode = KEY_ESCAPE
+		esc.pressed = down
+		get_root().push_input(esc)
+	await _await_ticks(2)
+	if server._mouse_captured:
+		failures.append("Esc did not free the host PC's mouse")
+	if not ui.is_open():
+		failures.append("Esc on the captured mouse did not open the host's menu")
+		ui.toggle_panel()
+	menu.refresh()
+	if not server.host_pc_match_live():
+		failures.append("the match ended before End match (phase '%s')" % rm.lobby_phase())
+	menu.end_button().pressed.emit()
+	# The host PC and the bot are always ready, so a new countdown may follow at once.
+	if rm.lobby_phase() != "lobby" and rm.lobby_phase() != "countdown":
+		failures.append("End match did not go back to the lobby (phase '%s')" % rm.lobby_phase())
+	menu.refresh()
+	if menu.visible:
+		failures.append("the match controls still show in the lobby")
+	if ui.is_open():
+		ui.toggle_panel()
+	await _rc_close_241(rig)
+	return failures
+# --- Demo and full builds keep apart online (issue #447) -------------------------
+const DemoBuildScript447 := preload("res://scripts/DemoBuild.gd")
+const ControllerServerScript447 := preload("res://scripts/ControllerServer.gd")
+## Joins a fresh client of build `client_demo` to the rig's room while the host
+## runs as `host_demo`; returns it once it is seated or refused.
+func _demo_join_447(rig: Dictionary, host_demo: bool, client_demo: bool, failures: Array[String], display_name: String) -> Node:
+	DemoBuildScript447.forced = 1 if host_demo else 0
+	var client: Node = await _rc_client_241(rig)
+	client.demo_build = client_demo
+	client.join(rig["code"], display_name)
+	await _wait_for_239(func() -> bool: return client.state != RcState241.CONNECTING, 5000)
+	return client
+func _scenario_online_demo_joins_demo_and_full_joins_full() -> Array[String]:
+	var failures: Array[String] = []
+	for pair: Array in [[false, false, ""], [true, true, ""], [false, true, "full_only"], [true, false, "demo_only"]]:
+		DemoBuildScript447.forced = 1 if pair[0] else 0
+		var said: String = ControllerServerScript447.build_mismatch_reason({"id": "x", "proto": 1, "demo": pair[1]})
+		if said != pair[2]:
+			failures.append("host demo %s, client demo %s: reason '%s', expected '%s'" % [pair[0], pair[1], said, pair[2]])
+	DemoBuildScript447.forced = 0
+	if ControllerServerScript447.build_mismatch_reason({"id": "x", "proto": 1}) != "":
+		failures.append("a hello with no demo flag was not read as the full game")
+	DemoBuildScript447.forced = -1
+	var rig: Dictionary = await _rc_rig_241(2, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var before: int = server.claimed_slots().size()
+	var demo: Node = await _demo_join_447(rig, true, true, failures, "Demo")
+	if demo.state != RcState241.PLAYING:
+		failures.append("a demo client at a demo host was not seated (state %d, '%s')" % [demo.state, demo.status_text])
+	var full: Node = await _demo_join_447(rig, false, false, failures, "Full")
+	if full.state != RcState241.PLAYING:
+		failures.append("a full client at a full host was not seated (state %d, '%s')" % [full.state, full.status_text])
+	if server.claimed_slots().size() != before + 2:
+		failures.append("matching builds claimed slots %s, expected two more than %d" % [server.claimed_slots(), before])
+	DemoBuildScript447.forced = -1
+	await _rc_close_241(rig)
+	return failures
+func _scenario_online_demo_and_full_refuse_each_other() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(2, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var before: int = server.claimed_slots().size()
+	var full_only: String = TranslationServer.translate("JOIN_ERR_FULL_ONLY")
+	var demo_only: String = TranslationServer.translate("JOIN_ERR_DEMO_ONLY")
+	if full_only != "Get the full game to join this room":
+		failures.append("JOIN_ERR_FULL_ONLY translates to '%s'" % full_only)
+	if demo_only == "JOIN_ERR_DEMO_ONLY" or demo_only.is_empty():
+		failures.append("JOIN_ERR_DEMO_ONLY has no string")
+	# A demo player at a full game's room.
+	var demo: Node = await _demo_join_447(rig, false, true, failures, "Demo")
+	_rc_expect_join_screen_241(demo, failures, "demo at full", "Get the full game to join this room")
+	if demo.status_text != full_only:
+		failures.append("demo at full: message '%s', expected '%s'" % [demo.status_text, full_only])
+	# A full-game player at a demo room.
+	var full: Node = await _demo_join_447(rig, true, false, failures, "Full")
+	_rc_expect_join_screen_241(full, failures, "full at demo", "demo")
+	if full.status_text != demo_only:
+		failures.append("full at demo: message '%s', expected '%s'" % [full.status_text, demo_only])
+	await _online_frames_239(10)
+	if server.claimed_slots().size() != before:
+		failures.append("a refused build claimed slots %s (had %d)" % [server.claimed_slots(), before])
+	# The room still seats its own build after both refusals.
+	var ok: Node = await _demo_join_447(rig, true, true, failures, "Ok")
+	if ok.state != RcState241.PLAYING:
+		failures.append("a matching client was not seated after the refusals (state %d, '%s')" % [ok.state, ok.status_text])
+	DemoBuildScript447.forced = -1
+	await _rc_close_241(rig)
+	return failures
+# --- Issue #461: telemetry opt-out toggle --------------------------------------
+## Issue #461: sharing defaults on, the box is the last row in More options, and
+## an off setting persists across a reload.
+func _scenario_telemetry_toggle_defaults_on_and_persists() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pf_461_toggle_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = HostSettingsScript372.new()
+	fresh.path = path
+	fresh.load_settings()
+	if not fresh.share_stats:
+		failures.append("sharing should default to on")
+	fresh.set_share_stats(false)
+	var reloaded: RefCounted = HostSettingsScript372.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.share_stats:
+		failures.append("off did not persist across a reload")
+	reloaded.set_share_stats(true)
+	var again: RefCounted = HostSettingsScript372.new()
+	again.path = path
+	again.load_settings()
+	if not again.share_stats:
+		failures.append("on did not persist across a reload")
+	DirAccess.remove_absolute(path)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		await physics_frame
+		var box: CheckBox = ui.stats_box()
+		if box == null:
+			failures.append("the stats box is missing")
+		else:
+			if box.text != "Share anonymous match stats":
+				failures.append("label was '%s'" % box.text)
+			var siblings: Array[Node] = box.get_parent().get_children()
+			if siblings.back() != box:
+				failures.append("the box is not last in More options (last is %s)" % siblings.back().name)
+	_scenario_completed = true
+	return failures
+## Issue #461: with sharing off a match end sends nothing; with it on a record is
+## still produced and the gate lets it through.
+func _scenario_telemetry_off_sends_no_record_on_still_does() -> Array[String]:
+	var failures: Array[String] = []
+	var record: Dictionary = StatsSenderScript372.build_record(_telemetry_stats_372(), "stock", ["Flatlands"], "ffa", 60, [2])
+	if record.is_empty():
+		failures.append("a match with a damaging hit should give a record")
+	if not StatsSenderScript372.should_send(_telemetry_settings_372(true), false, PackedStringArray()):
+		failures.append("sharing on did not send")
+	if StatsSenderScript372.should_send(_telemetry_settings_372(false), false, PackedStringArray()):
+		failures.append("sharing off still sent")
+	_scenario_completed = true
 	return failures

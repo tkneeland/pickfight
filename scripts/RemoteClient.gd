@@ -29,6 +29,7 @@ const PaletteScript: GDScript = preload("res://scripts/Palette.gd")
 const PickupWeaponsScript: GDScript = preload("res://scripts/PickupWeapons.gd")
 const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -61,6 +62,9 @@ var client_id: String = ""
 var player_name: String = ""
 ## Sent in the hello; a scenario sets another to see a version mismatch refused.
 var protocol_version: int = ControllerServerScript.PROTOCOL_VERSION
+## Sent in the hello (#447): the host refuses a build that is not its own.
+## A scenario sets it to try the other build against the same host.
+var demo_build: bool = DemoBuildScript.is_active()
 var room_code: String = ""
 var slot: int = -1
 var peer_id: int = 0
@@ -92,6 +96,12 @@ var _stage_id: int = -1
 var _stage: Node = null
 var _puppets: Dictionary = {} # key (String) -> RemotePuppet
 var _hud_signature: String = ""
+## Issue #459: after a dropped connection mid-match the client rejoins by
+## itself, every REJOIN_RETRY_MSEC, until the host's seat hold would have run
+## out (wall clock here; the host counts it in game time). 0 when not rejoining.
+const REJOIN_RETRY_MSEC: int = 1500
+var _rejoin_until_msec: int = 0
+var _rejoin_next_msec: int = 0
 
 var _camera: Camera2D
 var _world_root: Node2D
@@ -171,6 +181,10 @@ static func reason_text(reason: String) -> String:
 			return TranslationServer.translate("JOIN_ERR_IDLE")
 		"version":
 			return TranslationServer.translate("JOIN_ERR_VERSION")
+		"full_only":
+			return TranslationServer.translate("JOIN_ERR_FULL_ONLY")
+		"demo_only":
+			return TranslationServer.translate("JOIN_ERR_DEMO_ONLY")
 		"removed by the host":
 			return TranslationServer.translate("JOIN_ERR_REMOVED")
 		"opened somewhere else":
@@ -205,6 +219,7 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if _socket != null:
 		_poll_socket()
+	_tick_rejoin()
 	if state == State.PLAYING:
 		_render()
 
@@ -286,18 +301,24 @@ func _poll_socket() -> void:
 		_on_socket_closed()
 		return
 	if _socket != null and state == State.CONNECTING and Time.get_ticks_msec() > _deadline_msec:
+		var until: int = _rejoin_until_msec
 		if _phase == Phase.OPENING:
 			_return_to_join(tr("JOIN_RELAY_NO_ANSWER") % relay_url)
 		else:
 			_return_to_join(tr("JOIN_TIMEOUT"))
+		_keep_rejoining(until)
 
 func _on_socket_closed() -> void:
 	if state == State.PLAYING:
 		_return_to_join(tr("JOIN_LOST"))
-	elif _phase == Phase.OPENING:
+		_keep_rejoining(Time.get_ticks_msec() + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
+		return
+	var until: int = _rejoin_until_msec
+	if _phase == Phase.OPENING:
 		_return_to_join(tr("JOIN_RELAY_UNREACHABLE") % relay_url)
 	else:
 		_return_to_join(tr("JOIN_CLOSED_EARLY"))
+	_keep_rejoining(until)
 
 ## The relay's own TEXT messages: welcome or error.
 func _on_relay_text(text: String) -> void:
@@ -309,7 +330,7 @@ func _on_relay_text(text: String) -> void:
 			peer_id = int(msg.get("peer", 0))
 			_phase = Phase.HELLO
 			_set_status(tr("JOIN_WAITING_HOST") % room_code)
-			_send_json({"id": client_id, "proto": protocol_version})
+			_send_json({"id": client_id, "proto": protocol_version, "demo": demo_build})
 		"error":
 			_return_to_join(reason_text(str(msg.get("reason", "unknown"))), str(msg.get("reason", "")) == "version")
 
@@ -330,6 +351,7 @@ func _on_host_text(text: String) -> void:
 	var msg: Dictionary = _parse_object(text)
 	if msg.has("slot") and msg.get("slot") is float and state == State.CONNECTING:
 		slot = int(msg["slot"])
+		_rejoin_until_msec = 0
 		_set_state(State.PLAYING)
 		_send_json({"t": "name", "v": player_name})
 		_set_captured(true)
@@ -357,6 +379,7 @@ static func _parse_object(text: String) -> Dictionary:
 	return json.data
 
 func _return_to_join(message: String, show_update_link: bool = false) -> void:
+	_rejoin_until_msec = 0
 	if _socket != null:
 		_socket.close()
 		_socket = null
@@ -1185,3 +1208,34 @@ func mode_text() -> String:
 			var clock: String = str(m.get("clock", ""))
 			return ("%s  " % clock if not clock.is_empty() else "") + "  ".join(bits)
 	return ""
+
+# --- Rejoining a held seat (issue #459) ------------------------------------------
+
+## Whether the client is retrying its way back into the match it dropped from.
+func rejoining() -> bool:
+	return _rejoin_until_msec > Time.get_ticks_msec()
+
+## After a network failure, keep retrying the same room until `until` (wall
+## msec); a refusal (kick, no slot, room gone) goes through `_return_to_join()`
+## alone and so ends the retries.
+func _keep_rejoining(until: int) -> void:
+	if until <= Time.get_ticks_msec() or room_code.is_empty():
+		return
+	_rejoin_until_msec = until
+	_rejoin_next_msec = Time.get_ticks_msec() + REJOIN_RETRY_MSEC
+	var lost: String = tr("JOIN_LOST") if status_text.is_empty() else status_text
+	_set_status(lost + " " + tr("JOIN_REJOINING"))
+
+func _tick_rejoin() -> void:
+	if _rejoin_until_msec == 0 or state != State.JOIN:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now >= _rejoin_until_msec:
+		_rejoin_until_msec = 0
+		_set_status(tr("JOIN_LOST"))
+		return
+	if now < _rejoin_next_msec:
+		return
+	var until: int = _rejoin_until_msec
+	if not join(room_code, player_name):
+		_keep_rejoining(until)

@@ -515,8 +515,16 @@ func _end_hitstop() -> void:
 	_hitstop_frames = 0
 	if _froze:
 		_froze = false
-		if is_inside_tree():
+		if is_inside_tree() and not _host_paused():
 			get_tree().paused = false
+
+## Whether the host phone paused the match (`RoundManager.is_paused()`) while
+## the hit-stop held the tree: that pause is the host's to lift.
+func _host_paused() -> bool:
+	for node: Node in get_tree().get_nodes_in_group("round_manager"):
+		if node.has_method("is_paused") and bool(node.call("is_paused")):
+			return true
+	return false
 
 ## Ends any freeze and shake: a round started or ended, or this node is
 ## leaving the tree.
