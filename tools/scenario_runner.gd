@@ -591,6 +591,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_top_scorer_award_and_goal_credit",
 	"bot_soccer_pushes_the_ball_toward_the_enemy_goal",
 	"announcer_calls_soccer_and_goal",
+	"bot_four_bots_finish_a_king_of_the_hill_round",
+	"bot_four_bots_finish_a_stock_round",
 	"voice_grunts_one_distinct_quiet_voice_per_slot",
 	"voice_grunts_on_hit_and_ko",
 	"voice_grunts_respect_mute_and_settings_isolation",
@@ -606,6 +608,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_flag_runner_award",
 	"bot_ctf_attackers_defenders_and_carrier_chase",
 	"announcer_calls_capture_the_flag",
+	"character_polish_hit_flash_respects_reduce_flash",
+	"character_polish_takeoff_stretches_within_cap",
+	"character_polish_weapon_head_has_ink_outline",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2183,6 +2188,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal()
 		"announcer_calls_soccer_and_goal":
 			return await _scenario_announcer_calls_soccer_and_goal()
+		"bot_four_bots_finish_a_king_of_the_hill_round":
+			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round()
+		"bot_four_bots_finish_a_stock_round":
+			return await _scenario_bot_four_bots_finish_a_stock_round()
 		"voice_grunts_one_distinct_quiet_voice_per_slot":
 			return await _scenario_voice_grunts_one_distinct_quiet_voice_per_slot()
 		"voice_grunts_on_hit_and_ko":
@@ -2213,6 +2222,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_ctf_attackers_defenders_and_carrier_chase()
 		"announcer_calls_capture_the_flag":
 			return await _scenario_announcer_calls_capture_the_flag()
+		"character_polish_hit_flash_respects_reduce_flash":
+			return await _scenario_character_polish_hit_flash_respects_reduce_flash()
+		"character_polish_takeoff_stretches_within_cap":
+			return await _scenario_character_polish_takeoff_stretches_within_cap()
+		"character_polish_weapon_head_has_ink_outline":
+			return await _scenario_character_polish_weapon_head_has_ink_outline()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -30304,8 +30319,10 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 	for i in 3:
 		sum += MODE_SPAWNS[i]
 	var want: Vector2 = sum / 3.0
-	if not hill.hill_position.is_equal_approx(want):
-		failures.append("hill at %s, wants the spawn centre %s" % [hill.hill_position, want])
+	# Same x as the spawn centre; the spawns hang in the air, so the hill is
+	# dropped onto the floor below them (#409), never above.
+	if not is_equal_approx(hill.hill_position.x, want.x) or hill.hill_position.y < want.y:
+		failures.append("hill at %s, wants the spawn centre %s, or the floor under it" % [hill.hill_position, want])
 	if hill.hill_moves or not hill.hill_spots.is_empty():
 		failures.append("a stage with no spots reports spots or a moving hill")
 	await _teardown(rig["stage"])
@@ -30873,9 +30890,7 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 	panel.queue_free()
 	_scenario_completed = true
 	return failures
-
 # --- Soccer (issue #402) -------------------------------------------------------
-
 const SOCCER_STAGES_402: PackedStringArray = [
 	"res://scenes/stages/Pitch.tscn",
 	"res://scenes/stages/Cage.tscn",
@@ -31156,10 +31171,74 @@ func _scenario_announcer_calls_soccer_and_goal() -> Array[String]:
 		failures.append("the announcer said %s, expected 'announce_goal'" % [announcer.said])
 	await _teardown(rig["stage"])
 	return failures
-
 ## The closed Soccer pitches have no kill zone to be shoved into (#402).
 const RINGOUT_EXEMPT_402: PackedStringArray = SOCCER_STAGES_402
-
+## Issue #409: four bots on the real Flatlands, playing `mode` through the real
+## RoundManager. Returns the game seconds the round took, or -1.0 if it had not
+## ended after `cap_sec`. Failures are appended to `failures`.
+func _bot_round_409(mode: String, cap_sec: float, failures: Array[String]) -> float:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(float(i) * 100.0, -600.0))
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load("res://scenes/stages/Flatlands.tscn")]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = mode
+	rm.match_seed = 7
+	stage.add_child(rm)
+	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
+	if not await _mode_started(rig):
+		failures.append("the %s round never started" % mode)
+		await _teardown(stage)
+		return -1.0
+	for i in 4:
+		var bot: Node = BotScript.new()
+		bot.rng.seed = BOT_SEED + i
+		bot.player = players[i]
+		bot.output = players[i].set_input_vector
+		stage.add_child(bot)
+	var began: int = _game_msec()
+	var ended: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_END, int(cap_sec * 1000.0))
+	var took: float = float(_game_msec() - began) / 1000.0 if ended else -1.0
+	await _teardown(stage)
+	return took
+## Four bots in a King of the Hill round finish it before the cap: the hill
+## sits where a bot standing on the floor is inside it, and bots at either side
+## of a gap too wide to step over cross it rather than wait (#409).
+func _scenario_bot_four_bots_finish_a_king_of_the_hill_round() -> Array[String]:
+	var failures: Array[String] = []
+	var took: float = await _bot_round_409(GameModesType.KING_OF_THE_HILL, 200.0, failures)
+	print("      King of the Hill round with four bots took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a King of the Hill round in 200 s")
+	return failures
+## Four bots with one life each in a Stock round finish it before the cap.
+func _scenario_bot_four_bots_finish_a_stock_round() -> Array[String]:
+	var failures: Array[String] = []
+	_stock_settings(1, 480)
+	var took: float = await _bot_round_409(GameModesType.STOCK, 200.0, failures)
+	_stock_settings(3, 480)
+	print("      Stock round with four bots took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a Stock round in 200 s")
+	return failures
 # --- Voice grunts (issue #290) ---------------------------------------------------
 ## Grunt names for a slot. Eight voices, each with its own files.
 func _grunt_voice_files_290(sfx: Node) -> Dictionary:
@@ -31709,4 +31788,95 @@ func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
 	if not announcer.said.has("announce_captured"):
 		failures.append("the announcer said %s, expected 'announce_captured'" % [announcer.said])
 	await _teardown(rig["stage"])
+	return failures
+
+## Issue #360: a hit flashes the body white for about 0.1 s of game time, and
+## the flash is off with "Reduce flashes" on. Visual only: the physics body is
+## untouched.
+func _scenario_character_polish_hit_flash_respects_reduce_flash() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var mass0: float = player.mass
+	var scale0: Vector2 = player.scale
+	var face: Node2D = player.face_node()
+	sfx.set_reduce_flash(false)
+	if face.hit_flash_alpha() != 0.0:
+		failures.append("a fresh player is flashing (%.2f)" % face.hit_flash_alpha())
+	player.take_damage(10.0)
+	var peak: float = face.hit_flash_alpha()
+	if peak <= 0.0:
+		failures.append("a hit did not flash with flashes on")
+	if peak > 0.8:
+		failures.append("flash alpha %.2f is brighter than the 0.8 cap" % peak)
+	await _await_ticks(8)
+	if face.hit_flash_alpha() != 0.0:
+		failures.append("the flash was still on 8 ticks (0.13 s) after the hit")
+	sfx.set_reduce_flash(true)
+	player.take_damage(10.0)
+	if face.hit_flash_alpha() != 0.0:
+		failures.append("the hit flashed (%.2f) with Reduce flashes on" % face.hit_flash_alpha())
+	if player.mass != mass0 or player.scale != scale0:
+		failures.append("the flash touched the physics body")
+	print("      hit flash peak %.2f, reduced %.2f" % [peak, face.hit_flash_alpha()])
+	sfx.reduce_flash = flash_was
+	await _teardown(stage)
+	return failures
+
+## Issue #360: a sudden upward launch stretches the body tall and thin, within
+## the 15% squash cap, and eases back; the physics body is untouched.
+func _scenario_character_polish_takeoff_stretches_within_cap() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -600.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var scale0: Vector2 = player.scale
+	player.linear_velocity = Vector2.ZERO
+	await _await_ticks(2)
+	player.linear_velocity = Vector2(0.0, -800.0)
+	var tall: float = 0.0
+	var thin: float = 1.0
+	for i: int in 6:
+		await _await_ticks(1)
+		var s: Vector2 = player.squash_scale()
+		tall = maxf(tall, s.y - 1.0)
+		thin = minf(thin, s.x)
+	print("      take-off stretch +%.3f tall, x %.3f" % [tall, thin])
+	if tall <= 0.01 or thin >= 0.99:
+		failures.append("a take-off did not stretch tall and thin (y +%.3f, x %.3f)" % [tall, thin])
+	if tall > 0.1501 or thin < 0.8499:
+		failures.append("take-off stretch exceeds the 15%% cap (y +%.3f, x %.3f)" % [tall, thin])
+	if player.scale != scale0:
+		failures.append("the stretch touched the physics body scale")
+	await _await_ticks(20)
+	if player.squash_scale() != Vector2.ONE and player.linear_velocity.y > -350.0:
+		failures.append("the stretch had not eased back after 0.33 s: %s" % player.squash_scale())
+	await _teardown(stage)
+	return failures
+
+## Issue #360: every weapon head is drawn with a dark ink outline (a closed
+## ring of at least three points, dark enough to read on any identity colour)
+## that follows the stage ink.
+func _scenario_character_polish_weapon_head_has_ink_outline() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, -300.0))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var head: Polygon2D = player.get("_head_visual") as Polygon2D
+	var edge: Line2D = head.get_node_or_null("HeadOutline") as Line2D if head != null else null
+	if edge == null:
+		failures.append("the weapon head has no HeadOutline")
+	else:
+		if edge.points.size() < 3 or not edge.closed:
+			failures.append("HeadOutline is not a closed ring (%d points)" % edge.points.size())
+		var c: Color = player.head_outline_color()
+		if c.get_luminance() > 0.25:
+			failures.append("head outline %s is too light to read as an outline" % c)
+		player.set_ink(Color(0.2, 0.1, 0.3))
+		if not _color_close(player.head_outline_color(), Color(0.2, 0.1, 0.3), 0.01):
+			failures.append("head outline did not follow the stage ink")
+	await _teardown(stage)
 	return failures

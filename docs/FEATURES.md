@@ -94,6 +94,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Bots read stage hazards; bots yield to phones (#176, #193)
 - Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
 - Bots hunt deliberately: they pick the rival cheapest to reach (a rival high up on a ledge is the last chosen) and stick with it, never a teammate, and a bot hooked on a ledge by its own pickaxe sweeps the head off it instead of hanging there (#302)
+- Bots no longer stall rounds (#409): a bot held at an edge for 3 s tries a wider gap (up to 150 px) so two bots either side of a pit meet; it drops a pickup it has chased for 10 s without reaching (for 90 s) and goes back to fighting; and King of the Hill's default hill (no stage hill spot) sits on the floor under the spawns' centre, not in mid-air where nobody on the ground is inside it
 - Bots keep their own swing from throwing them over a rival and off the stage: no closing on a rival with a drop right past it, a gentler chop near an edge, a brake when carried towards one, and no swinging while thrown into the air; and they press harder as opponents dwindle (shorter hesitation, closer fighting, further engagement, a faster vault) up to full pace with one rival left (#302)
 - Bots play each mode's objective: in King of the Hill they head into the hill and fight whoever holds it; in Hot Potato the bot that is "it" chases a rival and every other bot keeps away from "it"; in Soccer they get behind the ball and drive it at the enemy goal (#402); in Capture the Flag they defend, attack, escort and chase the carrier (#403); Sudden Death (and any mode without an objective) plays as Classic (#353)
 
@@ -130,6 +131,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)
 
 - PICKFIGHT logo (flat letters in the player palette, the first I a pickaxe) in `art/logo/`, with 1024 px and Steam capsule PNG exports; shown on the lobby/title screen and the victory screen, whose podium blocks are flat ink-outlined panels (#359, `tools/gen_logo_art.py`, `tools/export_logo_pngs.gd`)
+- Character polish (#360, on top of the #254 eyes/outline and #256 squash): every weapon head gets a dark ink outline that follows the stage ink, a sudden upward launch stretches the body tall and thin (within the 15% squash cap), and a hit flashes the body white for 0.1 s (off with Reduce flashes). Visual only; evidence in `test-results/character-polish/` (`tools/capture_character_polish.gd`)
 
 ## Online
 - Room-code relay server (#238, ADR-0019)
