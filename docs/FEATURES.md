@@ -110,7 +110,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118)
 - Narrator/announcer, one consistent voice (#152, #211)
-- Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie. Stand-in clips until the real ones are recorded (reused files in `assets/sfx/announcer/`): King of the Hill = big_heads, Hot Potato = bouncy, Sudden Death = double_ko, Stock = heavy_weapons, Last life = ko, Stolen = tiny_weapons, Overtime = fast_lava, Hill taken = fight
+- Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" as those rounds start, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
 ## Visual look and juice
 - Landing dust, head motion trails, clash sparks (#116, #196)
