@@ -234,11 +234,14 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 func _apply_streamer_mode(join_source: Object) -> void:
 	if join_source == null:
 		return
+	var hidden_text: String = "Code hidden: see host phone"
+	if "ROOM_CODE_HIDDEN_TEXT" in join_source:
+		hidden_text = join_source.ROOM_CODE_HIDDEN_TEXT
 	var hidden: bool = join_source.has_method("room_code_hidden") and join_source.room_code_hidden()
 	_lobby_qr.visible = join_source.get("join_qr_texture") != null and not hidden
 	if hidden:
-		_lobby_url.text = join_source.ROOM_CODE_HIDDEN_TEXT
-	elif _lobby_url.text == join_source.ROOM_CODE_HIDDEN_TEXT:
+		_lobby_url.text = hidden_text
+	elif _lobby_url.text == hidden_text:
 		_lobby_url.text = str(join_source.get("join_url"))
 	if _room_label != null and hidden:
 		_room_label.visible = false
