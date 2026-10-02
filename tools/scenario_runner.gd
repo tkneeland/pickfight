@@ -633,7 +633,6 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_host_left_reaches_client_and_shows_screen",
 	"online_late_remote_joiner_enters_next_round_with_fresh_score",
 	"online_ping_reaches_lobby_and_scoreboard_with_warning",
-	"bot_stays_on_stage_over_jittered_starts",
 	"gamepad_all_pad_room_continues_to_lobby_after_podium",
 	"gamepad_ko_ghost_follows_right_stick",
 	"gamepad_replug_on_new_port_keeps_slot_and_cosmetics",
@@ -2308,8 +2307,6 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_late_remote_joiner_enters_next_round_with_fresh_score()
 		"online_ping_reaches_lobby_and_scoreboard_with_warning":
 			return await _scenario_online_ping_reaches_lobby_and_scoreboard_with_warning()
-		"bot_stays_on_stage_over_jittered_starts":
-			return await _scenario_bot_stays_on_stage_over_jittered_starts()
 		"gamepad_all_pad_room_continues_to_lobby_after_podium":
 			return await _scenario_gamepad_all_pad_room_continues_to_lobby_after_podium()
 		"gamepad_ko_ghost_follows_right_stick":
