@@ -623,6 +623,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
 	"sound_trailer_split_survives_hostile_bytes",
+	"remote_client_lobby_text_follows_the_locale",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2264,6 +2265,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
 		"sound_trailer_split_survives_hostile_bytes":
 			return await _scenario_sound_trailer_split_survives_hostile_bytes()
+		"remote_client_lobby_text_follows_the_locale":
+			return await _scenario_remote_client_lobby_text_follows_the_locale()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32542,4 +32545,57 @@ func _scenario_sound_trailer_split_survives_hostile_bytes() -> Array[String]:
 		elif got["snapshot"] != packet or not (got["events"] as Array).is_empty() or got["track"] != "":
 			failures.append("%s: split as %s, not a plain snapshot" % [label, str(got)])
 	_scenario_completed = true
+	return failures
+## Review sweep: the PC client's lobby and pause text follows the locale like
+## the host's lobby (#367). A pseudo-locale "xx" marks every catalogue string.
+func _rc_untranslated_review(client: Node) -> PackedStringArray:
+	var out := PackedStringArray()
+	for node: Node in client.find_children("*", "", true, false):
+		if not (node is Label or node is BaseButton) or not node.is_inside_tree():
+			continue
+		var text: String = str(node.get("text"))
+		if text.is_empty() or text == "-" or text == "+" or text.begins_with("[xx] "):
+			continue
+		out.append("%s '%s'" % [node.name, text])
+	return out
+func _scenario_remote_client_lobby_text_follows_the_locale() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var rig: Dictionary = {"nodes": []}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var before: PackedStringArray = _rc_untranslated_review(client)
+	if not before.is_empty():
+		failures.append("untranslated before any lobby: %s" % ", ".join(before))
+	client.room_code = "ABCD"
+	client.slot = 0
+	client.lobby = {"phase": "countdown", "count": 3, "host": 0, "mode": "teams", "target": 5, "paused": false,
+		"players": [{"name": "Ann", "slot": 0, "ready": true, "color": "ff0000"}]}
+	client.state = RcState241.PLAYING
+	client._refresh_lobby()
+	await process_frame
+	var titles: PackedStringArray = PackedStringArray([client._lobby_title.text])
+	var during: PackedStringArray = _rc_untranslated_review(client)
+	if not during.is_empty():
+		failures.append("untranslated in a countdown lobby: %s" % ", ".join(during))
+	if client._lobby_title.text != "[xx] Room ABCD  starting in 3":
+		failures.append("countdown title reads '%s'" % client._lobby_title.text)
+	client.lobby["phase"] = "victory"
+	client._refresh_lobby()
+	titles.append(client._lobby_title.text)
+	if client._lobby_title.text != "[xx] Room ABCD  match over":
+		failures.append("victory title reads '%s'" % client._lobby_title.text)
+	print("      lobby titles in xx: %s" % " | ".join(titles))
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD  match over":
+		failures.append("English victory title reads '%s'" % client._lobby_title.text)
+	await _rc_close_241(rig)
 	return failures
