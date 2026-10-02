@@ -265,11 +265,20 @@ func _pad_input() -> void:
 ## clicks toggle "released" and a held shoulder button holds it. Sent as one
 ## extra byte on the input frame while set; the host clears the toggle at each
 ## respawn (`{"t":"release","v":false}`).
-var release_toggle: bool = false
+## Issue #481: action presses go out as byte 9 of the input frame: the low 7
+## bits a wrapping count, bit 7 set when the latest press was a shoulder (a
+## hold, which can throw the boomerang but never toggles release). The host
+## decides whether a press throws the boomerang or toggles release.
+var action_presses: int = 0
+var _action_was_hold: bool = false
+
+func _action_press(hold: bool) -> void:
+	action_presses = (action_presses + 1) & 0x7F
+	_action_was_hold = hold
 var _pad_shoulder_held: bool = false
 
 func input_released() -> bool:
-	return release_toggle or _pad_shoulder_held
+	return _pad_shoulder_held
 
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
@@ -278,8 +287,10 @@ func _input(event: InputEvent) -> void:
 	if pad_button != null and not menu_open:
 		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
 			_pad_shoulder_held = pad_button.pressed
+			if pad_button.pressed:
+				_action_press(true)
 		elif pad_button.pressed and (pad_button.button_index == JOY_BUTTON_LEFT_STICK or pad_button.button_index == JOY_BUTTON_RIGHT_STICK):
-			release_toggle = not release_toggle
+			_action_press(false)
 		return
 	var motion := event as InputEventMouseMotion
 	if motion != null:
@@ -288,7 +299,7 @@ func _input(event: InputEvent) -> void:
 		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE and not menu_open:
-		release_toggle = not release_toggle
+		_action_press(false)
 		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
@@ -425,7 +436,7 @@ func _on_host_text(text: String) -> void:
 		"ping":
 			_send_json({"t": "pong", "n": msg.get("n", 0)})
 		"release":
-			release_toggle = bool(msg.get("v", false))
+			pass # the host owns the toggle now (#481)
 		"closed":
 			_return_to_join(reason_text(str(msg.get("reason", "closed"))))
 		"error":
@@ -447,7 +458,7 @@ func _return_to_join(message: String, show_update_link: bool = false) -> void:
 	peer_id = 0
 	lobby = {}
 	menu_open = false
-	release_toggle = false
+	action_presses = 0
 	_pad_shoulder_held = false
 	_mouse.reset()
 	input_vector = Vector2.ZERO
@@ -476,11 +487,11 @@ func _send_input() -> void:
 	var v: Vector2 = Vector2.ZERO if menu_open else input_vector
 	var released: bool = input_released() and not menu_open
 	var body := PackedByteArray()
-	body.resize(9 if released else 8)
+	body.resize(10)
 	body.encode_float(0, v.x)
 	body.encode_float(4, v.y)
-	if released:
-		body[8] = 1
+	body[8] = 1 if released else 0
+	body[9] = action_presses | (0x80 if _action_was_hold else 0)
 	_send_envelope(RelayLinkScript.KIND_INPUT, body)
 	input_frames_sent += 1
 

@@ -2046,6 +2046,17 @@ func _detect_flick() -> bool:
 	_flick_armed = false
 	return true
 
+## Issue #481: an action press (PC Space, a pad bumper or stick click) throws the
+## boomerang the way a flick does -- same readiness, same launch -- and reports
+## whether it did, so the caller toggles release only when it did not.
+func try_action_throw() -> bool:
+	if _stats == null or _stats.special != &"boomerang" or not alive:
+		return false
+	if not special_ready() or _head == null or _head.phased:
+		return false
+	_launch_special()
+	return launched_boomerang() != null
+
 func _launch_special() -> void:
 	var host: Node = get_parent()
 	if host == null or not _rig_is_live():

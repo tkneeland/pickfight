@@ -164,6 +164,10 @@ const PACKET_SIZE: int = 8
 ## a Space tap, say) appends one byte, nonzero, to the vector packet. A packet
 ## without it -- every phone, every older client -- means not released.
 const RELEASE_PACKET_SIZE: int = 9
+## Issue #481: a newer client appends a second byte, a wrapping count of its
+## action presses (Space, L3/R3). A count that moved since the last packet is a
+## press, so one is not lost between packets. Older packets carry no count.
+const ACTION_PACKET_SIZE: int = 10
 ## Every `kind` `send_buzz()` is sent with, strongest first; the controller
 ## page has a vibration pattern and a flash for each.
 const BUZZ_KINDS: PackedStringArray = ["win", "eliminated", "struck", "hit"]
@@ -525,6 +529,8 @@ func _ready() -> void:
 	_slot_release_remote.resize(_players.size())
 	_slot_release_toggle.resize(_players.size())
 	_slot_release_held.resize(_players.size())
+	_slot_press_seen.resize(_players.size())
+	_slot_press_seen.fill(-1)
 	_slot_was_alive.resize(_players.size())
 	_slot_name.resize(_players.size())
 	_slot_hat.resize(_players.size())
@@ -622,16 +628,26 @@ var _slot_release_remote: PackedByteArray = PackedByteArray()
 var _slot_release_toggle: PackedByteArray = PackedByteArray()
 var _slot_release_held: PackedByteArray = PackedByteArray()
 var _slot_was_alive: PackedByteArray = PackedByteArray()
+## Last action-press count seen from each remote client; -1 = adopt the next.
+var _slot_press_seen: PackedInt32Array = PackedInt32Array()
 
 func _clear_release(slot: int) -> void:
 	_slot_release_remote[slot] = 0
 	_slot_release_toggle[slot] = 0
 	_slot_release_held[slot] = 0
+	_slot_press_seen[slot] = -1
 
 ## Whether `slot` is letting go right now (a test seam, like `pad_slot`).
 func slot_released(slot: int) -> bool:
 	return slot >= 0 and slot < _slot_release_toggle.size() \
 		and (_slot_release_remote[slot] == 1 or _slot_release_toggle[slot] == 1 or _slot_release_held[slot] == 1)
+
+## Issue #481: an action press throws a held boomerang, else toggles release.
+func _action_press(slot: int) -> void:
+	if slot >= 0 and slot < _players.size() and _players[slot] != null \
+			and _players[slot].try_action_throw():
+		return
+	_toggle_release(slot)
 
 func _toggle_release(slot: int) -> void:
 	if slot >= 0 and slot < _slot_release_toggle.size():
@@ -1241,7 +1257,7 @@ func _drain(slot: int, peer: Variant) -> void:
 			if _take_text_budget(slot) and pkt.size() <= MAX_TEXT_FRAME_BYTES:
 				_handle_text(slot, pkt.get_string_from_utf8())
 			continue
-		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE:
+		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE and pkt.size() != ACTION_PACKET_SIZE:
 			continue
 		latest = pkt
 		got = true
@@ -1250,7 +1266,16 @@ func _drain(slot: int, peer: Variant) -> void:
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	var v: Vector2 = Vector2(latest.decode_float(0), latest.decode_float(4))
 	_smoothers[slot].push(v)
-	_slot_release_remote[slot] = 1 if latest.size() == RELEASE_PACKET_SIZE and latest[PACKET_SIZE] != 0 else 0
+	_slot_release_remote[slot] = 1 if latest.size() >= RELEASE_PACKET_SIZE and latest[PACKET_SIZE] != 0 else 0
+	if latest.size() == ACTION_PACKET_SIZE:
+		var count: int = latest[RELEASE_PACKET_SIZE] & 0x7F
+		var hold: bool = latest[RELEASE_PACKET_SIZE] & 0x80 != 0
+		if _slot_press_seen[slot] != -1 and count != _slot_press_seen[slot]:
+			if not hold:
+				_action_press(slot)
+			elif _players[slot] != null:
+				_players[slot].try_action_throw()
+		_slot_press_seen[slot] = count
 	if _log_input:
 		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])
 
@@ -2136,7 +2161,7 @@ func _input(event: InputEvent) -> void:
 	# touching again), since a mouse never sends a zero vector.
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
 			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
-		_toggle_release(_host_pc_slot)
+		_action_press(_host_pc_slot)
 		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
@@ -2223,8 +2248,10 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 		return
 	if button == JOY_BUTTON_LEFT_SHOULDER or button == JOY_BUTTON_RIGHT_SHOULDER:
 		_slot_release_held[slot] = 1 if pressed else 0
+		if pressed:
+			_slot_release_held[slot] = 0 if _players[slot] != null and _players[slot].try_action_throw() else 1
 	elif pressed and (button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK):
-		_toggle_release(slot)
+		_action_press(slot)
 
 ## A or Start joins (in the lobby) or readies; B un-readies. Issue #430: in a
 ## match (or paused), Start from the host's pad sends the host phone's Pause or

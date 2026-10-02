@@ -51,3 +51,21 @@ A controller reports **released** as an explicit state beside its vector.
 - Arm-to-centre: needs a deadzone the mouse offset has no way to return to.
 - Redesigning the weapons around a vector-only input: larger, and leaves phones
   working fine.
+
+## Amendment (issue #481): the action press also throws the boomerang
+
+The release inputs are really one "action press": a PC Space tap, a pad bumper
+press or a pad stick click. With the boomerang held, an action press throws it
+along the arm's current aim, through the same launch as a flick and under the
+same rules (not already out, cooldown over, head not phased); it then does
+**not** toggle or hold release, since the boomerang has no release use. With any
+other weapon nothing changes. The flick throw stays, phones are unchanged, and
+the boomstick stays automatic.
+
+On the wire, the host owns the toggle. An Online client's input frame grows to
+ten bytes: byte 8 stays the held-release flag (shoulder held), and byte 9 is a
+wrapping 7-bit count of action presses with bit 7 set when the latest press was
+a shoulder (a hold: it may throw but never toggles). The host acts when the
+count differs from the last one it saw for that seat, so a press is not lost
+between packets; the first count after a seat is bound is only adopted. Eight-
+and nine-byte frames from phones and older clients carry no press.
