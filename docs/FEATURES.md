@@ -131,6 +131,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)
 
 - PICKFIGHT logo (flat letters in the player palette, the first I a pickaxe) in `art/logo/`, with 1024 px and Steam capsule PNG exports; shown on the lobby/title screen and the victory screen, whose podium blocks are flat ink-outlined panels (#359, `tools/gen_logo_art.py`, `tools/export_logo_pngs.gd`)
+- Character polish (#360, on top of the #254 eyes/outline and #256 squash): every weapon head gets a dark ink outline that follows the stage ink, a sudden upward launch stretches the body tall and thin (within the 15% squash cap), and a hit flashes the body white for 0.1 s (off with Reduce flashes). Visual only; evidence in `test-results/character-polish/` (`tools/capture_character_polish.gd`)
 
 ## Online
 - Room-code relay server (#238, ADR-0019)
