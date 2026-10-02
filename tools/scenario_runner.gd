@@ -634,6 +634,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sound_trailer_split_survives_hostile_bytes",
 	"remote_client_lobby_text_follows_the_locale",
 	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
+	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2297,6 +2298,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_lobby_text_follows_the_locale()
 		"lobby_pad_menu_lets_go_when_the_lobby_leaves":
 			return await _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves()
+		"hud_top_gap_reclaimed_kill_feed_and_score_line":
+			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -13804,8 +13807,8 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 	if lines != PackedStringArray(["Alice KO Bob", "Carl self-KO"]):
 		failures.append("round 1 feed read %s, expected Alice KO Bob then Carl self-KO" % [lines])
 	var feed_rect: Rect2 = feed.feed().get_global_rect()
-	if feed_rect.end.x > feed.get_global_rect().end.x or feed_rect.position.y < 192.0:
-		failures.append("the feed sits at %s, not top right under the QR code" % feed_rect)
+	if feed_rect.end.x > feed.get_global_rect().end.x or feed_rect.position.y < 0.0:
+		failures.append("the feed sits at %s, not at the top right of the screen" % feed_rect)
 	if not await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("round 2 never started")
 		await _teardown(loop["stage"])
@@ -13889,7 +13892,7 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 		failures.append("the ticker holds %d lines, expected the cap of %d" % [feed.entries().size(), KillFeedScript.MAX_ENTRIES])
 	if not screen.encloses(feed_rect):
 		failures.append("the full ticker %s runs off the %s screen" % [feed_rect, SCREEN_SIZE])
-	if feed_rect.intersects(qr.get_global_rect()):
+	if qr.is_visible_in_tree() and feed_rect.intersects(qr.get_global_rect()):
 		failures.append("the ticker %s overlaps the join QR code %s" % [feed_rect, qr.get_global_rect()])
 	if feed_rect.intersects(board_rect):
 		failures.append("the ticker %s overlaps the round-end scoreboard %s" % [feed_rect, board_rect])
@@ -33085,4 +33088,41 @@ func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
 	if PadMenuScript368.is_open():
 		failures.append("PadMenu still reports a menu open after the lobby left the tree")
 	PadMenuScript368.reset()
+	return failures
+
+## Issue #444: with the in-round join corner gone, the kill feed and the score
+## line sit at the very top of the screen, clear of each other and on-screen.
+func _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	get_root().add_child(main)
+	await _await_ticks(5)
+	var rm: Node = main.get_node("RoundManager")
+	var feed: Control = rm.kill_feed()
+	var score: Label = main.get_node("UI/ScoreLabel") as Label
+	if feed == null or score == null:
+		await _teardown(main)
+		return ["Main.tscn has no kill feed (%s) or score label (%s)" % [feed, score]]
+	score.text = "P1: 0   P2: 0"
+	feed.push_ko("Aa", Color.WHITE, "Bb", Color.WHITE)
+	var was_size: Vector2i = get_root().size
+	for size: Vector2i in [Vector2i(1280, 800), Vector2i(1600, 900), Vector2i(1920, 1080)]:
+		get_root().size = size
+		await _await_ticks(3)
+		var screen := Rect2(Vector2.ZERO, get_root().get_visible_rect().size)
+		var feed_rect: Rect2 = feed.feed().get_global_rect()
+		var score_rect: Rect2 = score.get_global_rect()
+		print("      %s (canvas %s): feed %s, score line %s" % [size, screen.size, feed_rect, score_rect])
+		if feed_rect.position.y > 60.0 or feed_rect.size.y <= 0.0:
+			failures.append("%s: kill feed top %s is not near the screen top" % [size, feed_rect])
+		if score_rect.position.y > 60.0:
+			failures.append("%s: score line top %s is not near the screen top" % [size, score_rect])
+		if feed_rect.intersects(score_rect):
+			failures.append("%s: kill feed %s overlaps the score line %s" % [size, feed_rect, score_rect])
+		if not screen.encloses(feed_rect) or not screen.encloses(score_rect):
+			failures.append("%s: feed %s or score line %s is off-screen" % [size, feed_rect, score_rect])
+	get_root().size = was_size
+	await _teardown(main)
 	return failures
