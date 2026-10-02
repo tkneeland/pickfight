@@ -74,7 +74,7 @@ Pickfight is in Early Access. It is playable now and growing quickly. See the Ea
 The core game is playable and fun, but a game built for a room full of friends gets better with real rooms full of friends. We want feedback from real parties on weapons, stages, modes and balance before calling it 1.0.
 
 [b]Roughly how long will it be in Early Access?[/b]
-We expect about a year. This is a goal, not a promise, and we will say so plainly if it changes.
+We expect about 6 to 12 months. This is a goal, not a promise, and we will say so plainly if it changes.
 
 [b]What is planned?[/b]
 [list]
@@ -90,7 +90,7 @@ Plans can change based on what players tell us.
 Up to 8 players, 12 weapons, 27 stages, several modes, bots, and local and online play. Art and audio are still being polished toward a cleaner flat-shape look.
 
 [b]Will the price change?[/b]
-Early Access launches at $7.99. We expect to raise the price as content grows toward 1.0. We will announce any change ahead of time.
+Early Access launches at $7.99. The price rises to $9.99 at 1.0, so buying now is the cheapest way in. We will announce any change ahead of time.
 
 [b]Will the full version differ from Early Access?[/b]
 It will have more content and more polish. Everyone who bought in Early Access gets the 1.0 game.
@@ -140,7 +140,7 @@ Steamworks category checkboxes. Verify exact names in Steamworks (**verify**).
 - [ ] Achievements, Trading Cards, Workshop: not planned for launch
 - [ ] Family Sharing: only if left enabled; the host buys, so it is a natural fit
 
-Other store settings: Early Access, $7.99 USD. Languages: English interface and audio (narrator). Content survey: cartoon violence, no blood, no gambling, no in-app purchases.
+Other store settings: Early Access, $7.99 USD ($9.99 at 1.0). Languages: English interface and audio (narrator). Content survey: cartoon violence, no blood, no gambling, no in-app purchases.
 
 ## 6. Screenshot ideas
 
