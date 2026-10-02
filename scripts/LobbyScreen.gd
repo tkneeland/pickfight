@@ -246,7 +246,8 @@ func victory_title() -> Label:
 ## and the team points in `team_scores`: the title names the winning team,
 ## and each column shows its player's team in place of a personal score.
 func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awards: Array[Dictionary],
-		winner_team: int = -1, teams: Dictionary = {}, team_scores: PackedInt32Array = PackedInt32Array()) -> void:
+		winner_team: int = -1, teams: Dictionary = {}, team_scores: PackedInt32Array = PackedInt32Array(),
+		stat_rows: Array[Dictionary] = []) -> void:
 	for child: Node in _podium.get_children():
 		child.queue_free()
 	# Five to eight on the podium (issue #138) take narrower columns and smaller
@@ -270,7 +271,7 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		column.add_child(name_label)
 		var block := ColorRect.new()
 		block.color = _slot_color.call(slot)
-		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
+		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * (0.55 if not stat_rows.is_empty() else 1.0) * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
 		column.add_child(block)
 		column.add_child(_big_label(str(place + 1), 28, Color.WHITE))
 		_podium.add_child(column)
@@ -283,6 +284,24 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 	else:
 		_victory_title.text = "MATCH OVER"
 	_refresh_awards(awards)
+	_refresh_stat_table(stat_rows)
+
+## The victory screen's per-player stats table, or null before any.
+func stats_table() -> Control:
+	return _podium.get_parent().get_node_or_null("StatRows") as Control if _podium != null else null
+
+func _refresh_stat_table(stat_rows: Array[Dictionary]) -> void:
+	var stack: Node = _podium.get_parent()
+	var old: Node = stack.get_node_or_null("StatRows")
+	if old != null:
+		stack.remove_child(old)
+		old.queue_free()
+	if stat_rows.is_empty():
+		return
+	var table: Control = KillFeedScript.stat_table(stat_rows, _slot_name, _slot_color)
+	stack.add_child(table)
+	var prompt_at: int = stack.get_child_count() - 2
+	stack.move_child(table, prompt_at)
 
 func _refresh_awards(awards: Array[Dictionary]) -> void:
 	var stack: Node = _podium.get_parent()

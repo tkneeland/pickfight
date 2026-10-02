@@ -102,7 +102,7 @@ start_in_round = false
 [node name="Player7" parent="." instance=ExtResource("2")]
 position = Vector2(-700, 0)
 debug_source = 0
-identity_color = Color(0.941176, 0.768627, 0, 1)
+identity_color = Color(0.960784, 0.886275, 0.290196, 1)
 start_in_round = false
 
 [node name="Player8" parent="." instance=ExtResource("2")]
