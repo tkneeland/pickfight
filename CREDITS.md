@@ -134,6 +134,18 @@ That is 19 files, about 0.16 MB in all. Before #211 the count, "FIGHT!" and
 "Winner!" were Kenney's Voiceover Pack: Fighter (CC0) and the rest were
 espeak-ng; none of those files are shipped any more.
 
+## Player voice grunts
+
+Added for issue #290. The 24 files in `assets/sfx/voice/` (`hit_<slot>_0/1.ogg`
+and `ko_<slot>.ogg`, slots 0 to 7) are **placeholder sounds synthesised from
+scratch** by `tools/gen_voice_grunts.py`: a pitched pulse train plus a little
+breath noise through three vowel formants, with a short envelope, encoded as
+mono Ogg Vorbis at 22,050 Hz. No recording or third-party asset is used, so
+they are dedicated to the public domain under **CC0 1.0**
+(http://creativecommons.org/publicdomain/zero/1.0/) like the rest of
+`assets/sfx/`. They are about 0.12 MB in all. Swap in recorded voices later by
+replacing the files (and the script, if it stays).
+
 ## Music
 
 Added for issue #118 (ADR-0017). Every track is from OpenGameArt and each

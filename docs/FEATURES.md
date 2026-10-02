@@ -120,6 +120,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118); six more CC0 fight tracks join the rotation, eight in all, each loop-trimmed so it repeats without a gap (#289)
 - Narrator/announcer, one consistent voice (#152, #211)
+- Subtle voice grunts: each of the eight player slots has its own voice, a short grunt when hit (at most one per half second) and a longer one when knocked out; mixed about 15 dB under weapon sounds, on the SFX bus so Mute and the SFX slider govern them; placeholder synthesised sounds (#290)
 - Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" and "Soccer!" as those rounds start, "Goal!" on every Soccer goal, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie.
 
 ## Visual look and juice
