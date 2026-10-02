@@ -1157,6 +1157,8 @@ func _attach(slot: int, peer: Variant) -> void:
 	_slot_text_window_msec[slot] = 0
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
+	# Issue #487: only a phone (no action button) flicks to launch.
+	_players[slot].flick_launch_enabled = peer is not LocalSeat and peer is not RemoteSeat
 	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
@@ -1181,6 +1183,7 @@ func _unbind(slot: int) -> void:
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
+		_players[slot].flick_launch_enabled = true
 	_note_remote_drop(slot)
 	if _log_input:
 		print("slot %d unbound" % slot)
