@@ -85,6 +85,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Phone damage bar: a thin strip showing how close you are to KO, turning red near the end; phone only, resets each round (#331)
 - Laptop browser as a controller with pointer-lock mouse (#244)
 - Gamepad seats: right stick drives the arm, no phone needed (#261)
+- Gamepad host menus for Steam Deck (#368): Y in the lobby opens the host controls (Go online, Play on this PC, Mode, First to, Start, Join online), View opens the Settings panel (or focuses the first-launch notice), D-pad moves, A presses, B closes; A and B stop joining and readying while a menu is open. Captions drop the "(Enter)" keyboard glyph once a gamepad is the active input. The audit and open gaps are in `docs/steam-deck-readiness.md`
 - Host phone controls: pause, end, kick, settings (#149, #216, #231)
 - Phone reconnect, message validation, refused-phone state (#164, #193, #194)
 
@@ -112,6 +113,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Rules section in the host settings panel (#378): pick a mode (Classic, King of the Hill, Sudden Death, Hot Potato, Stock, Soccer) and untick the round modifiers that may not roll in it; saved per mode in `user://audio.cfg`, default all on. A mode's own bans (and all of Stock's) show locked off and cannot be re-enabled; with every modifier off, none rolls. Host screen only, not mirrored on the phone
 - Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
 - "Send anonymous match stats" toggle in "More options", on by default and persisted; a one-time host-screen notice on first launch ("Pickfight sends anonymous match stats to help balance the game", Turn off / OK) that never returns once acted on (#372)
+- Text on the host screen is never below 16 design px (12.8 px on a 1280x800 Steam Deck screen), checked by a scenario; the lobby mode cards went from 12 to 16 (#368)
 - Streamer mode: a "Hide room code" toggle in the Settings panel's "More options" (off by default, persists) replaces the shared screen's online room code, join URL and join QR with "Code hidden: see host phone"; the host phone's menu still shows the code (#369)
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 - All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
