@@ -531,6 +531,10 @@ func _ready() -> void:
 	_slot_release_held.resize(_players.size())
 	_slot_press_seen.resize(_players.size())
 	_slot_press_seen.fill(-1)
+	_slot_action_down.resize(_players.size())
+	_slot_action_down.fill(-1)
+	_slot_bumper_down.resize(_players.size())
+	_slot_bumper_down.fill(-1)
 	_slot_was_alive.resize(_players.size())
 	_slot_name.resize(_players.size())
 	_slot_hat.resize(_players.size())
@@ -636,11 +640,42 @@ func _clear_release(slot: int) -> void:
 	_slot_release_toggle[slot] = 0
 	_slot_release_held[slot] = 0
 	_slot_press_seen[slot] = -1
+	_slot_action_down[slot] = -1
+	_slot_bumper_down[slot] = -1
+
+## Issue #485: an action button (Space, L3/R3) is a tap when it comes up within
+## TAP_MAX_SEC of going down, and a hold when it is still down after that. A
+## tap fires on key-up; a hold counts as released while held and never fires.
+## Game-clock msec the seat's action button went down, -1 when up.
+const TAP_MAX_SEC: float = 0.25
+var _slot_action_down: PackedInt64Array = PackedInt64Array()
+## Same for a bumper, which is released while held from the moment it goes down.
+var _slot_bumper_down: PackedInt64Array = PackedInt64Array()
+
+func _is_tap(down_msec: int) -> bool:
+	return float(GameClockScript459.now_msec() - down_msec) <= TAP_MAX_SEC * 1000.0
+
+func _action_down(slot: int) -> void:
+	if slot >= 0 and slot < _slot_action_down.size():
+		_slot_action_down[slot] = GameClockScript459.now_msec()
+
+## The button came up: a tap does the weapon's job, a hold already did its work.
+func _action_up(slot: int) -> void:
+	if slot < 0 or slot >= _slot_action_down.size() or _slot_action_down[slot] == -1:
+		return
+	var tap: bool = _is_tap(_slot_action_down[slot])
+	_slot_action_down[slot] = -1
+	if tap:
+		_action_press(slot)
+
+func _action_held_long(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_action_down.size() and _slot_action_down[slot] != -1 \
+		and not _is_tap(_slot_action_down[slot])
 
 ## Whether `slot` is letting go right now (a test seam, like `pad_slot`).
 func slot_released(slot: int) -> bool:
 	return slot >= 0 and slot < _slot_release_toggle.size() \
-		and (_slot_release_remote[slot] == 1 or _slot_release_toggle[slot] == 1 or _slot_release_held[slot] == 1)
+		and (_slot_release_remote[slot] == 1 or _slot_release_toggle[slot] == 1 or _slot_release_held[slot] == 1 or _action_held_long(slot))
 
 ## Issue #481: an action press throws a held boomerang, else toggles release.
 func _action_press(slot: int) -> void:
@@ -1122,6 +1157,8 @@ func _attach(slot: int, peer: Variant) -> void:
 	_slot_text_window_msec[slot] = 0
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
+	# Issue #487: only a phone (no action button) flicks to launch.
+	_players[slot].flick_launch_enabled = peer is not LocalSeat and peer is not RemoteSeat
 	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
@@ -1146,6 +1183,7 @@ func _unbind(slot: int) -> void:
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
+		_players[slot].flick_launch_enabled = true
 	_note_remote_drop(slot)
 	if _log_input:
 		print("slot %d unbound" % slot)
@@ -2161,7 +2199,10 @@ func _input(event: InputEvent) -> void:
 	# touching again), since a mouse never sends a zero vector.
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
 			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
-		_action_press(_host_pc_slot)
+		_action_down(_host_pc_slot)
+		return
+	if key != null and not key.pressed and key.physical_keycode == KEY_SPACE and _host_pc_slot != -1:
+		_action_up(_host_pc_slot)
 		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
@@ -2247,11 +2288,21 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 	if slot == -1:
 		return
 	if button == JOY_BUTTON_LEFT_SHOULDER or button == JOY_BUTTON_RIGHT_SHOULDER:
-		_slot_release_held[slot] = 1 if pressed else 0
+		# Released while held; a tap (up within TAP_MAX_SEC) throws the boomerang.
 		if pressed:
-			_slot_release_held[slot] = 0 if _players[slot] != null and _players[slot].try_action_throw() else 1
-	elif pressed and (button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK):
-		_action_press(slot)
+			_slot_release_held[slot] = 1
+			_slot_bumper_down[slot] = GameClockScript459.now_msec()
+		else:
+			_slot_release_held[slot] = 0
+			var down: int = _slot_bumper_down[slot]
+			_slot_bumper_down[slot] = -1
+			if down != -1 and _is_tap(down) and _players[slot] != null:
+				_players[slot].try_action_throw()
+	elif button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK:
+		if pressed:
+			_action_down(slot)
+		else:
+			_action_up(slot)
 
 ## A or Start joins (in the lobby) or readies; B un-readies. Issue #430: in a
 ## match (or paused), Start from the host's pad sends the host phone's Pause or

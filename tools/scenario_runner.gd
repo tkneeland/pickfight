@@ -677,6 +677,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pc_space_press_throws_boomerang_along_aim_without_releasing",
 	"gamepad_bumper_press_throws_boomerang",
 	"remote_client_space_press_throws_boomerang_on_host",
+	"host_pc_space_hold_phases_head_with_boomerang_and_never_throws",
+	"host_pc_space_tap_throws_boomerang_on_key_up",
+	"remote_client_space_hold_releases_and_tap_throws_boomerang",
+	"gamepad_bumper_tap_throws_boomerang_and_hold_releases",
+	"flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple",
+	"flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple",
+	"flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host",
+	"phone_seat_flick_still_launches_grapple_and_boomerang",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2426,6 +2434,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gamepad_bumper_press_throws_boomerang()
 		"remote_client_space_press_throws_boomerang_on_host":
 			return await _scenario_remote_client_space_press_throws_boomerang_on_host()
+		"host_pc_space_hold_phases_head_with_boomerang_and_never_throws":
+			return await _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws()
+		"host_pc_space_tap_throws_boomerang_on_key_up":
+			return await _scenario_host_pc_space_tap_throws_boomerang_on_key_up()
+		"remote_client_space_hold_releases_and_tap_throws_boomerang":
+			return await _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang()
+		"gamepad_bumper_tap_throws_boomerang_and_hold_releases":
+			return await _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases()
+		"flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple":
+			return await _scenario_flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple()
+		"flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple":
+			return await _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple()
+		"flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host":
+			return await _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host()
+		"phone_seat_flick_still_launches_grapple_and_boomerang":
+			return await _scenario_phone_seat_flick_still_launches_grapple_and_boomerang()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -34824,29 +34848,32 @@ func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Arr
 	await _await_ticks(20)
 	var size: Vector2 = get_root().get_visible_rect().size
 	var radius: float = 0.35 * minf(size.x, size.y)
-	# A flick straight up from rest, then the mouse stays out there.
+	# Issue #487: a mouse flick no longer fires; the mouse goes out there and a
+	# Space tap fires the hook along it.
 	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(20)
+	await _tap_485(KEY_SPACE)
 	var hook: Node2D = null
 	var fired: bool = await _await_condition(func() -> bool: return player.launched_hook() != null, 1000)
 	if fired:
 		hook = player.launched_hook()
 	var stuck: bool = fired and await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
 	if not stuck:
-		failures.append("the mouse flick did not fire and stick the hook (fired %s)" % fired)
+		failures.append("the Space tap did not fire and stick the hook (fired %s)" % fired)
 	else:
 		await _await_ticks(30)
 		if player.launched_hook() == null:
 			failures.append("the hook came home before any release")
 		if player.input_vector.length() < 0.5:
 			failures.append("the mouse vector is %s, expected it held out" % player.input_vector)
-		await _key_463(KEY_SPACE)
+		await _tap_485(KEY_SPACE)
 		if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1000):
 			failures.append("a Space tap with the mouse held out did not retract the grapple")
 		if not server.slot_released(0):
 			failures.append("the server does not report the PC seat as released after a Space tap")
 		if player.input_vector.length() < 0.5:
 			failures.append("the Space tap disturbed the mouse vector (%s)" % player.input_vector)
-		await _key_463(KEY_SPACE)
+		await _tap_485(KEY_SPACE)
 		await _await_ticks(3)
 		if server.slot_released(0):
 			failures.append("a second Space tap did not toggle released back off")
@@ -34933,11 +34960,13 @@ func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = true
 	client._input(ev)
+	client._input(_space_up_485())
 	if not await _await_condition(func() -> bool: return player.input_released, 3000, true):
 		failures.append("a Space tap on the client never released the host-side player")
 	if player.input_vector.x < 0.9:
 		failures.append("the Space tap disturbed the sent vector (%s)" % player.input_vector)
 	client._input(ev)
+	client._input(_space_up_485())
 	if not await _await_condition(func() -> bool: return not player.input_released, 3000, true):
 		failures.append("a second Space tap never un-released the host-side player")
 	await _rc_close_241(rig)
@@ -34999,7 +35028,7 @@ func _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing() -> 
 	if player.launched_boomerang() != null:
 		failures.append("a slow aim thrown the boomerang without a press")
 	var start_x: float = player.global_position.x
-	await _key_463(KEY_SPACE)
+	await _tap_485(KEY_SPACE)
 	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
 		failures.append("a Space press did not throw the boomerang (vec %s)" % player.input_vector)
 	else:
@@ -35030,11 +35059,11 @@ func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
 	if player.launched_boomerang() != null:
 		failures.append("a slow aim thrown the boomerang without a press")
 	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, true)
-	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
-		failures.append("a bumper press did not throw the boomerang (vec %s)" % player.input_vector)
-	if server.slot_released(0):
-		failures.append("a bumper press that threw the boomerang counts as a release hold")
 	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, false)
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
+		failures.append("a bumper tap did not throw the boomerang (vec %s)" % player.input_vector)
+	if server.slot_released(0):
+		failures.append("a bumper tap that threw the boomerang counts as a release hold")
 	await _teardown(rig["stage"])
 	return failures
 
@@ -35060,9 +35089,363 @@ func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[Str
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = true
 	client._input(ev)
+	client._input(_space_up_485())
 	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 3000, true):
 		failures.append("a client Space press never threw the host-side boomerang (vec %s)" % player.input_vector)
 	if player.input_released or server.slot_released(client.slot):
 		failures.append("the throwing press left the remote seat released")
 	await _rc_close_241(rig)
 	return failures
+
+# --- Tap for the weapon's job, hold to unstick (issue #485, ADR-0022 amendment 2) ---
+
+## A keyboard key going down or up, as the host sees it.
+func _key_485(keycode: Key, pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = keycode
+	ev.keycode = keycode
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+
+## Down and up in the next frame: well inside TAP_MAX_SEC.
+func _tap_485(keycode: Key) -> void:
+	await _key_485(keycode, true)
+	await _key_485(keycode, false)
+
+func _space_up_485() -> InputEventKey:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = false
+	return ev
+
+## Holding Space with the boomerang counts as released (so the cut-off head
+## phases home after the gridlock delay) and never throws; coming up after a
+## hold does not toggle release on.
+func _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws() -> Array[String]:
+	var failures: Array[String] = []
+	var slab_top: float = DEEP_PARK_POSITION.y - 12.0
+	var rig: Dictionary = await _release_rig_463(DEEP_PARK_POSITION, Vector2(DEEP_PARK_POSITION.x, slab_top - PLAYER_RADIUS - 1.0), "PcHold485")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, BOOMERANG_PATH)
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	# Aim straight down, slowly (no flick), and put the head under the slab,
+	# the way the trapped-head scenario holds it.
+	var head: RigidBody2D = player.get("_head")
+	var bottom: float = DEEP_PARK_POSITION.y + 12.0
+	var stats: Resource = player.get("_stats")
+	var rest: Vector2 = Vector2(DEEP_PARK_POSITION.x, slab_top - PLAYER_RADIUS - 1.0)
+	server.host_pc_mouse_motion(Vector2(0.0, radius * 0.01))
+	await _await_ticks(TRAPPED_HOLD_TICKS)
+	player.call("teleport_to", rest)
+	head.global_position = Vector2(rest.x, bottom + TRAPPED_HEAD_GAP)
+	head.linear_velocity = Vector2.ZERO
+	head.call("forget_previous_position")
+	var reach: float = head.global_position.y - rest.y
+	server.host_pc_mouse_motion(Vector2(0.0, radius * (inverse_lerp(stats.min_reach, stats.max_reach, reach) - 0.01)))
+	await _await_ticks(TRAPPED_HOLD_TICKS)
+	if player.is_head_phased():
+		failures.append("setup: the head was phased before any hold")
+	await _key_485(KEY_SPACE, true)
+	await _await_ticks(6)
+	if server.slot_released(0):
+		failures.append("Space counted as released inside the tap window")
+	var held_ticks: int = 0
+	var phased: bool = false
+	while held_ticks < 120 and not phased:
+		await physics_frame
+		held_ticks += 1
+		phased = player.is_head_phased()
+	if not server.slot_released(0):
+		failures.append("a held Space did not count as released")
+	if not phased:
+		failures.append("holding Space for 2 s did not phase the cut-off head home (released %s)" % server.slot_released(0))
+	if player.launched_boomerang() != null:
+		failures.append("a held Space threw the boomerang")
+	await _key_485(KEY_SPACE, false)
+	await _await_ticks(4)
+	if server.slot_released(0):
+		failures.append("letting go of a held Space toggled release on")
+	if player.launched_boomerang() != null:
+		failures.append("letting go of a held Space threw the boomerang")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## A tap fires on key-up, not on key-down.
+func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcTap485")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, BOOMERANG_PATH)
+	await _await_ticks(20)
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	server.host_pc_mouse_motion(Vector2(radius * 0.5, 0.0))
+	await _await_ticks(30)
+	await _key_485(KEY_SPACE, true)
+	await _await_ticks(5)
+	if player.launched_boomerang() != null:
+		failures.append("Space going down threw the boomerang; a tap fires on key-up")
+	await _key_485(KEY_SPACE, false)
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
+		failures.append("a Space tap did not throw the boomerang on key-up")
+	if server.slot_released(0):
+		failures.append("the throwing tap left the seat released")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## Online: the client decides tap vs hold. A hold sets the host's released flag
+## and throws nothing; a tap is counted and throws.
+func _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	await _equip(player, BOOMERANG_PATH)
+	client.mouse_motion(Vector2(60, 0))
+	await _await_ticks(20)
+	var down := InputEventKey.new()
+	down.physical_keycode = KEY_SPACE
+	down.pressed = true
+	client._input(down)
+	if not await _await_condition(func() -> bool: return player.input_released, 3000, true):
+		failures.append("a held client Space never released the host-side player")
+	if player.launched_boomerang() != null:
+		failures.append("a held client Space threw the boomerang")
+	client._input(_space_up_485())
+	if not await _await_condition(func() -> bool: return not player.input_released, 3000, true):
+		failures.append("letting go of a held client Space left the host-side player released")
+	await _await_condition(func() -> bool: return false, 600, true)
+	if player.launched_boomerang() != null:
+		failures.append("letting go of a held client Space threw the boomerang")
+	if server.slot_released(client.slot):
+		failures.append("letting go of a held client Space toggled release on")
+	client._input(down)
+	client._input(_space_up_485())
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 3000, true):
+		failures.append("a client Space tap never threw the host-side boomerang")
+	if server.slot_released(client.slot):
+		failures.append("the client's throwing tap left the seat released")
+	await _rc_close_241(rig)
+	return failures
+
+## A bumper is released while held; a tap throws on key-up, a hold never does.
+func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadTap485")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _equip(player, BOOMERANG_PATH)
+	server._test_pad_axes[0] = Vector2(0.6, 0.0)
+	await _await_ticks(30)
+	# A hold: released while down, no throw on key-up.
+	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, true)
+	await _await_ticks(30)
+	if not server.slot_released(0):
+		failures.append("a held bumper did not count as released")
+	if player.launched_boomerang() != null:
+		failures.append("a held bumper threw the boomerang")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, false)
+	await _await_ticks(10)
+	if player.launched_boomerang() != null:
+		failures.append("letting go of a held bumper threw the boomerang")
+	if server.slot_released(0):
+		failures.append("letting go of a bumper left the pad released")
+	# A tap: nothing on the way down, a throw on the way up.
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, true)
+	await _await_ticks(5)
+	if player.launched_boomerang() != null:
+		failures.append("a bumper going down threw the boomerang; a tap fires on key-up")
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, false)
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
+		failures.append("a bumper tap did not throw the boomerang on key-up")
+	await _teardown(rig["stage"])
+	return failures
+
+
+# --- No flick launches on button seats (issue #487, ADR-0022 amendment 3) ---
+
+## Whether `player`'s launcher is out (a hook or a boomerang).
+func _launcher_out_487(player: RigidBody2D) -> bool:
+	return player.launched_hook() != null or player.launched_boomerang() != null
+
+## A fast flick on the host PC seat launches neither the grapple nor the
+## boomerang; a Space tap fires the grapple along the aim, a second tap (hook
+## out) retracts it.
+func _scenario_flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_grapple() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcFlick487")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	if player.flick_launch_enabled:
+		failures.append("the host PC seat still has flick launches enabled")
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		await _await_ticks(20)
+		server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+		await _await_ticks(40)
+		if player.input_vector.length() < 0.5:
+			failures.append("%s: the mouse flick did not reach the player (vec %s)" % [path.get_file(), player.input_vector])
+		if _launcher_out_487(player):
+			failures.append("%s: a mouse flick launched on the PC seat" % path.get_file())
+		server.host_pc_mouse_motion(Vector2(0.0, radius * 3.0))
+		await _await_ticks(30)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(30)
+	var start_y: float = player.global_position.y
+	await _tap_485(KEY_SPACE)
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("a Space tap did not fire the grapple")
+	else:
+		await _await_ticks(10)
+		var hook: Node2D = player.launched_hook()
+		if hook != null and hook.global_position.y > start_y - 20.0:
+			failures.append("the hook did not fly along the aim (y %s from %s)" % [hook.global_position.y, start_y])
+		if server.slot_released(0):
+			failures.append("the firing tap left the seat released")
+		await _tap_485(KEY_SPACE)
+		if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
+			failures.append("a second Space tap did not retract the hook")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## A pad's flick launches nothing; a bumper tap fires the grapple.
+func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadFlick487")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	if player.flick_launch_enabled:
+		failures.append("a gamepad seat still has flick launches enabled")
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		server._test_pad_axes[0] = Vector2.ZERO
+		await _await_ticks(30)
+		server._test_pad_axes[0] = Vector2(0.0, -1.0)
+		await _await_ticks(30)
+		if player.input_vector.length() < 0.5:
+			failures.append("%s: the stick flick did not reach the player (vec %s)" % [path.get_file(), player.input_vector])
+		if _launcher_out_487(player):
+			failures.append("%s: a stick flick launched on the pad seat" % path.get_file())
+	await _equip(player, GRAPPLE_PATH)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, true)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, false)
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("a bumper tap did not fire the grapple")
+	await _teardown(rig["stage"])
+	return failures
+
+## An Online client's flick launches nothing on the host; its Space tap fires
+## the grapple there.
+func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host() -> Array[String]:
+	var failures: Array[String] = []
+	# One bot, not seven: a crowd of bots could kill the seat before its tap.
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	if player.flick_launch_enabled:
+		failures.append("a remote seat still has flick launches enabled")
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		client.mouse_motion(Vector2(0, -2000))
+		await _await_ticks(40)
+		if player.input_vector.length() < 0.5:
+			failures.append("%s: the client flick did not reach the host player (vec %s)" % [path.get_file(), player.input_vector])
+		if _launcher_out_487(player):
+			failures.append("%s: a client flick launched on the host" % path.get_file())
+		client.mouse_motion(Vector2(0, 4000))
+		await _await_ticks(40)
+	await _equip(player, GRAPPLE_PATH)
+	# Aim up, away from the floor: a hook aimed into the ground it stands on
+	# may not launch, which made this flaky on CI.
+	client.mouse_motion(Vector2(0, -8000))
+	await _await_ticks(40)
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = true
+	client._input(ev)
+	client._input(_space_up_485())
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 3000, true):
+		failures.append("a client Space tap never fired the host-side grapple (vec %s, ready %s, presses %d, seen %d, phased %s, cd %.2f, alive %s)" % [player.input_vector, player.special_ready(), client.action_presses, server._slot_press_seen[client.slot], player.is_head_phased(), player._launch_cooldown, player.alive])
+	await _rc_close_241(rig)
+	return failures
+
+## A phone has no button, so its flick still launches the grapple and the
+## boomerang (issue #487 leaves phones unchanged).
+func _scenario_phone_seat_flick_still_launches_grapple_and_boomerang() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PhoneFlick487")
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "flick-phone-487", [] as Array[WebSocketPeer])
+	if joined["slot"] != 0:
+		failures.append("the phone was not given slot 0")
+		await _teardown(rig["stage"])
+		return failures
+	if not player.flick_launch_enabled:
+		failures.append("a phone seat lost flick launches")
+	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
+		await _equip(player, path)
+		await _send_until_input_reaches(peer, player, Vector2.ZERO)
+		await _await_ticks(10)
+		var fired: bool = false
+		var deadline: int = Time.get_ticks_msec() + 1500
+		while Time.get_ticks_msec() < deadline and not fired:
+			peer.put_packet(_packet_for_487(Vector2(0.0, -1.0)))
+			await process_frame
+			peer.poll()
+			fired = _launcher_out_487(player)
+		if not fired:
+			failures.append("%s: a phone flick did not launch" % path.get_file())
+	peer.close()
+	await _teardown(rig["stage"])
+	return failures
+
+func _packet_for_487(v: Vector2) -> PackedByteArray:
+	var pkt := PackedByteArray()
+	pkt.resize(8)
+	pkt.encode_float(0, v.x)
+	pkt.encode_float(4, v.y)
+	return pkt

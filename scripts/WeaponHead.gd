@@ -118,6 +118,12 @@ const PAIR_CONTACT_STEPS: int = 10
 ## a third of the head, and plainly wrong for a block.
 const PAIR_OVERLAP_ALLOWANCE: float = 2.0
 
+## Set when this step's pair correction seated the head against another head, so
+## the tether pull that follows must not carry it back through that head (#480).
+## Only then: a pull past a head the ball merely brushed changes the chain's
+## behaviour for no gain (`roster_hafts_are_non_colliding`).
+var _seated_by_crossing: bool = false
+
 ## The collision shape nodes whose shapes are swept: every circle in the
 ## head's cluster (ADR-0010). Set by `Player` when it builds the rig. Each is
 ## read for its local transform as well as its shape, because the cluster is
@@ -944,6 +950,8 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 ## from the physics server, not the node, which may not have been synced from
 ## this step yet.
 func _hold_tether(state: PhysicsDirectBodyState2D) -> void:
+	var seated: bool = _seated_by_crossing
+	_seated_by_crossing = false
 	if tether_length <= 0.0 or not is_instance_valid(tether_to):
 		return
 	var rid: RID = tether_to.get_rid()
@@ -970,7 +978,19 @@ func _hold_tether(state: PhysicsDirectBodyState2D) -> void:
 	if distance <= tether_length or distance == 0.0:
 		return
 	var out: Vector2 = span / distance
-	xform.origin = anchor + out * tether_length
+	var held: Vector2 = anchor + out * tether_length
+	# The pull back to the tether must not carry the head into another head
+	# (issue #480): a ball seated against a blade by the pair correction sits
+	# further out than the tether allows, and drawing it straight in to the
+	# limit went through the blade -- 6.8 px deep on macOS. The pull stops
+	# where it first touches a head instead; the ball is a hair past the
+	# tether for a tick, and the next pull finds the blade in its way again.
+	if seated and not sweep_shapes.is_empty() and not phased:
+		var struck: Dictionary = _trace_heads(
+			_other_head_circles(xform.origin), xform.origin, held, _circle_radius(0))
+		if not struck.is_empty():
+			held = struck["position"]
+	xform.origin = held
 	state.transform = xform
 	var away: float = (velocity - anchor_velocity).dot(out)
 	if away > 0.0:
@@ -1395,6 +1415,7 @@ func _find_head_crossing(held_from: float = -1.0) -> Dictionary:
 ## that head actually ended the step, and take out the closing speed between
 ## the two.
 func _apply_head_crossing(state: PhysicsDirectBodyState2D, hit: Dictionary) -> void:
+	_seated_by_crossing = true
 	state.transform = Transform2D(state.transform.get_rotation(), hit["origin"])
 	# The other head is moving too, so what is taken out is the part of the
 	# closing speed *between the two of them* -- a head being carried along by
