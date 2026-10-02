@@ -8283,6 +8283,9 @@ func _modifier_off_on_off(loop: Dictionary, id: String, measure: Callable, inspe
 		if i == 0:
 			instance = await _await_live_stage(loop)
 		else:
+			if not is_instance_valid(previous):
+				failures.append("round %d: round %d ended on its own and its stage was freed before the next was requested" % [i + 1, i])
+				return {"failures": failures, "values": values}
 			instance = await _next_modifier_round(loop, previous, forced[i])
 		if instance == null:
 			failures.append("round %d never started" % (i + 1))
@@ -29293,6 +29296,12 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 					best = along
 				# Enough shown: stop before the body is carried off the stage.
 				if best >= GALE_MIN_SPEED * 1.5:
+					break
+				# A slower host may never reach that speed; the gust would then
+				# carry the held body off the stage, the kill zone would end the
+				# round, and the round loop would free the stage before the next
+				# round is requested (#399). Stop at a quarter of the view's width.
+				if absf(player.global_position.x - start.x) > instance.get_view_rect().size.x * 0.25:
 					break
 		player.gravity_scale = before_gravity
 		player.linear_velocity = Vector2.ZERO
