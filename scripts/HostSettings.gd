@@ -21,6 +21,7 @@ extends RefCounted
 
 const SfxScript := preload("res://scripts/Sfx.gd")
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const SETTINGS_PATH: String = "user://audio.cfg"
 const SECTION: String = "host"
@@ -50,6 +51,9 @@ const STOCK_MAX_LIVES: int = 10
 const STOCK_TIME_LIMITS: Array[int] = [120, 300, 480, 900, 0]
 var stock_lives: int = 3
 var stock_time_limit: int = 480
+## The stage a Stock match is played on (#375): a stage's base name, or ""
+## for Random.
+var stock_stage: String = ""
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
@@ -73,23 +77,28 @@ static func name_of(resource_path: String) -> String:
 static func known_weapons() -> PackedStringArray:
 	var names := PackedStringArray()
 	for weapon_path: String in PickupWeaponsScript.WEAPON_PATHS:
-		names.append(name_of(weapon_path))
+		if DemoBuildScript.weapon_in_slice(name_of(weapon_path)):  # the demo's slice (#361)
+			names.append(name_of(weapon_path))
 	return names
 
 func is_stage_enabled(stage_name: String) -> bool:
-	return not disabled_stages.has(stage_name)
+	return not disabled_stages.has(stage_name) and DemoBuildScript.stage_in_slice(stage_name)
 
 func is_weapon_enabled(weapon_name: String) -> bool:
-	return not disabled_weapons.has(weapon_name)
+	return not disabled_weapons.has(weapon_name) and DemoBuildScript.weapon_in_slice(weapon_name)
 
 ## Returns false (changing nothing) when this would switch off the last
 ## enabled stage.
 func set_stage_enabled(stage_name: String, enabled: bool) -> bool:
+	if enabled and not DemoBuildScript.stage_in_slice(stage_name):
+		return false  # outside the demo's slice (#361)
 	return _set_enabled(disabled_stages, known_stages, stage_name, enabled)
 
 ## Returns false (changing nothing) when this would switch off the last
 ## enabled pickup weapon.
 func set_weapon_enabled(weapon_name: String, enabled: bool) -> bool:
+	if enabled and not DemoBuildScript.weapon_in_slice(weapon_name):
+		return false  # outside the demo's slice (#361)
 	return _set_enabled(disabled_weapons, known_weapons(), weapon_name, enabled)
 
 func set_stock_lives(lives: int) -> void:
@@ -101,6 +110,15 @@ func set_stock_time_limit(seconds: int) -> bool:
 	if not STOCK_TIME_LIMITS.has(seconds):
 		return false
 	stock_time_limit = seconds
+	save_settings()
+	return true
+
+## Returns false (changing nothing) for a name that is neither "" (Random)
+## nor a known stage.
+func set_stock_stage(stage_name: String) -> bool:
+	if stage_name != "" and not known_stages.has(stage_name):
+		return false
+	stock_stage = stage_name
 	save_settings()
 	return true
 
@@ -141,6 +159,7 @@ func load_settings() -> void:
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
 		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
+		stock_stage = str(config.get_value(SECTION, "stock_stage", ""))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
 
@@ -158,6 +177,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "game_mode", game_mode)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
+	config.set_value(SECTION, "stock_stage", stock_stage)
 	err = config.save(path)
 	if err != OK:
 		push_warning("HostSettings: could not save to %s (%s)" % [path, error_string(err)])
