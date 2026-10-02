@@ -108,6 +108,12 @@ func end_round() -> void:
 	_active = false
 	_slots.clear()
 
+## Hands this round's hold times to the match stats (issue #355). A Teams
+## round banks `team_hold` instead, so no individual awards come of it.
+func report_stats(stats: RefCounted) -> void:
+	for slot: int in hold_time:
+		stats.record_hill_hold(slot, float(hold_time[slot]))
+
 func team_hold_of(team: int) -> float:
 	return float(team_hold.get(team, 0.0))
 

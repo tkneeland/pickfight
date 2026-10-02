@@ -558,6 +558,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
 	"hot_potato_stages_load_and_are_in_rotation",
 	"hot_potato_draws_its_stages_more_often",
+	"mode_awards_go_to_the_right_player_only_in_their_mode",
+	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"pseudo_locale_changes_lobby_and_mode_text",
 	"every_tr_key_is_in_strings_csv",
 	"koth_stages_load_and_are_in_rotation",
@@ -2075,6 +2077,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
 		"hot_potato_draws_its_stages_more_often":
 			return await _scenario_hot_potato_draws_its_stages_more_often()
+		"mode_awards_go_to_the_right_player_only_in_their_mode":
+			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
+		"mode_awards_reach_the_victory_awards_through_the_round_manager":
+			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
 		"pseudo_locale_changes_lobby_and_mode_text":
 			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
 		"every_tr_key_is_in_strings_csv":
@@ -29846,6 +29852,128 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 	if counts["hot_potato"] < 2 * counts[""]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
+	return failures
+## Issue #355: the mode awards, from MatchStats alone. Each goes to the slot
+## with the most of its number, only in its own mode; Classic and Sudden Death
+## get none, and a new match wipes them.
+func _scenario_mode_awards_go_to_the_right_player_only_in_their_mode() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hill_hold(0, 4.0)
+	stats.record_hill_hold(1, 7.5)
+	stats.record_hill_hold(1, 1.0)
+	stats.record_hill_hold(2, 8.0)
+	stats.record_tags_passed(0, 1)
+	stats.record_tags_passed(2, 3)
+	stats.record_tags_passed(1, 2)
+	stats.record_lives_left(0, 2)
+	stats.record_lives_left(1, 1)
+	stats.record_lives_left(2, 3)
+	stats.record_lives_left(2, 1)
+	var slots: Array = [0, 1, 2]
+	var want: Dictionary = {
+		"king_of_the_hill": ["HILL", "Longest Hold", 1, "8.5s on the hill"],
+		"hot_potato": ["TAGGER", "Hot Hands", 2, "3 tags passed"],
+		"stock": ["LIVES", "Survivor", 2, "4 lives left"],
+	}
+	for mode_id: String in want:
+		var got: Array[Dictionary] = stats.mode_awards(slots, mode_id)
+		var w: Array = want[mode_id]
+		if got.size() != 1:
+			failures.append("%s gave %d mode awards, expected 1: %s" % [mode_id, got.size(), got])
+			continue
+		var a: Dictionary = got[0]
+		print("      %s: %s -> slot %d (%s)" % [a["category"], a["title"], a["slot"], a["detail"]])
+		if a["category"] != w[0] or a["title"] != w[1] or a["slot"] != w[2] or a["detail"] != w[3]:
+			failures.append("%s awarded %s, expected %s" % [mode_id, a, w])
+	for mode_id: String in ["", "sudden_death"]:
+		if not stats.mode_awards(slots, mode_id).is_empty():
+			failures.append("mode '%s' showed mode awards: %s" % [mode_id, stats.mode_awards(slots, mode_id)])
+	# Only the eligible roster is considered, and a blip of a hold earns nothing.
+	if stats.mode_awards([0, 1], "king_of_the_hill")[0]["slot"] != 1:
+		failures.append("an absent slot 2 still took Longest Hold")
+	var brief: RefCounted = MatchStatsScript.new()
+	brief.record_hill_hold(0, 0.2)
+	if not brief.mode_awards([0], "king_of_the_hill").is_empty():
+		failures.append("a 0.2 s hold earned Longest Hold")
+	stats.forget_slot(2)
+	if stats.mode_awards(slots, "hot_potato")[0]["slot"] != 1:
+		failures.append("a forgotten slot kept its tags")
+	stats.begin_match()
+	for mode_id: String in want:
+		if not stats.mode_awards(slots, mode_id).is_empty():
+			failures.append("a new match kept the %s award" % mode_id)
+	_scenario_completed = true
+	return failures
+## Issue #355 through the real RoundManager and mode nodes: the numbers a mode
+## keeps are handed to the match stats when the round ends, and the victory
+## awards then hold the mode's award -- in that mode only, never in Classic.
+func _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager() -> Array[String]:
+	var failures: Array[String] = []
+	# Hot Potato: slot "it" lands a damaging hit twice (passing the tag back and
+	# forth past the cooldown); the passer with the most tags gets Hot Hands.
+	var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO, 99)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"], false)
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.fuse_sec = 60.0
+	mode.fuse_left = 60.0
+	mode.tag_cooldown_sec = 0.0
+	mode._cooldown_left = 0.0
+	var first: int = mode.it_slot
+	var second: int = (first + 1) % 3
+	players[first].strike_landed.emit(players[second], 10.0, Vector2.ZERO, false)
+	players[second].strike_landed.emit(players[first], 10.0, Vector2.ZERO, false)
+	players[first].strike_landed.emit(players[second], 10.0, Vector2.ZERO, false)
+	var roster: Array[int] = [0, 1, 2]
+	if not rm._stats.mode_awards(roster, "hot_potato").is_empty():
+		failures.append("Hot Hands appeared before the round's tags were handed over")
+	rm._end_game_mode()
+	var hot: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "TAGGER")
+	if hot.size() != 1 or hot[0]["slot"] != first or hot[0]["detail"] != "2 tags passed":
+		failures.append("Hot Hands was %s, expected slot %d with '2 tags passed'" % [hot, first])
+	rm.game_mode = ""
+	if not rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "TAGGER").is_empty():
+		failures.append("Hot Hands appeared once the match was Classic")
+	await _teardown(rig["stage"], false)
+	# King of the Hill: the sole occupant banks hold time.
+	rig = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	rm = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"], false)
+		return failures
+	mode = rm.game_mode_node()
+	mode.hold_time[2] = 3.0
+	mode.hold_time[0] = 1.0
+	rm._end_game_mode()
+	var hill: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "HILL")
+	if hill.size() != 1 or hill[0]["slot"] != 2 or hill[0]["detail"] != "3.0s on the hill":
+		failures.append("Longest Hold was %s, expected slot 2 with '3.0s on the hill'" % [hill])
+	if not rm._stats.mode_awards(roster, "").is_empty():
+		failures.append("Classic showed a mode award")
+	await _teardown(rig["stage"], false)
+	# Stock: the player with the most lives left at the round's end.
+	rig = _stock_rig(3, 3, 480)
+	rm = rig["rm"]
+	var stock: Node = await _stock_started(rig)
+	if stock == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var players3: Array[RigidBody2D] = rig["players"]
+	if not await _stock_lose_life(players3[1]):
+		failures.append("slot 1 never came back after losing a life")
+	rm._end_game_mode()
+	var lives: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "LIVES")
+	if lives.size() != 1 or lives[0]["slot"] != 0 or lives[0]["detail"] != "3 lives left":
+		failures.append("Survivor was %s, expected slot 0 with '3 lives left'" % [lives])
+	await _stock_finish(rig)
 	return failures
 # --- King of the Hill stages (issue #377)
 const KOTH_STAGES_377: PackedStringArray = [

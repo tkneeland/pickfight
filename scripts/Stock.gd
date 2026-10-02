@@ -103,6 +103,11 @@ func end_round() -> void:
 	_hud = null
 	_clock_label = null
 
+## Hands the lives each player ends the round with to the match stats (#355).
+func report_stats(stats: RefCounted) -> void:
+	for slot: int in lives:
+		stats.record_lives_left(slot, maxi(int(lives[slot]), 0))
+
 func connected_count() -> int:
 	return _handlers.size()
 
