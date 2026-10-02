@@ -469,6 +469,20 @@ func guard_turn(previous_offsets: PackedVector2Array) -> float:
 	# leaves every circle clear, since none of them met anything sooner.
 	if not hit["head"]:
 		return hit["fraction"]
+	# A head met is seated by moving the whole head (issue #82), and that
+	# shift is the distance the circle that met it had left to go, carried by
+	# every circle of the head. On a long, thin head that is a long way: a
+	# boomstick's muzzle met a parked head early in a turn, the anchor was
+	# shifted 45.7 px, and the barrel was carried clean through the head the
+	# turn had stopped short of (issue #397, `roster_heads_do_not_tunnel_head
+	# _reversed`, which only showed where the boomstick sat in the roster's
+	# order). Nothing swept the shift itself. So it is traced, circle by
+	# circle, against every other head; a shift that would cross one is not
+	# made, and the turn stops where the first circle arrived instead, as it
+	# does against terrain.
+	if _shift_crosses_head(hit["anchor"], hit["shift"]):
+		_snapshot_stale = true
+		return hit["fraction"]
 	global_position = hit["anchor"] + hit["shift"]
 	# The anchor's own velocity into the surface is taken out, as for a world
 	# contact; the turn itself is the haft's and is resisted through the
@@ -489,6 +503,38 @@ func guard_turn(previous_offsets: PackedVector2Array) -> float:
 		for node: CollisionShape2D in sweep_shapes:
 			_previous_shape_xforms.append(node.transform)
 	return 1.0
+
+## Set when a turn was stopped short of a head (see `guard_turn`), so the
+## circles the step starts from are the ones `Player` is about to place and not
+## the ones the previous step ended with.
+var _snapshot_stale: bool = false
+
+## Called by `Player` once it has placed the circles for this tick. After a
+## turn stopped at a head the step starts from a pose that is neither the
+## last step's end nor the full turn, and the pair sweep has to be told, or it
+## traces the step from the pose before the turn and finds the crossing the
+## guard just avoided (issue #82, as for a head moved there).
+func turn_placed() -> void:
+	if not _snapshot_stale:
+		return
+	_snapshot_stale = false
+	if _has_previous:
+		_previous_shape_xforms.clear()
+		for node: CollisionShape2D in sweep_shapes:
+			_previous_shape_xforms.append(node.transform)
+
+## Whether moving every circle of this head, as they sit now around `anchor`,
+## by `shift` would take any of them through a circle of another head
+## (issue #397).
+func _shift_crosses_head(anchor: Vector2, shift: Vector2) -> bool:
+	var heads: Array[Vector3] = _other_head_circles(anchor)
+	if heads.is_empty():
+		return false
+	for i in sweep_shapes.size():
+		var from: Vector2 = anchor + sweep_shapes[i].position
+		if not _trace_heads(heads, from, from + shift, _circle_radius(i)).is_empty():
+			return true
+	return false
 
 ## The earliest point in a re-placement of the circles at which a centre
 ## enters terrain, or a circle meets another head's (issue #82):
