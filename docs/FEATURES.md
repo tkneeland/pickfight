@@ -27,6 +27,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
+- Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152); never spawn on a spot a living player is standing on, another free spot is used instead (#333)
+- Plunger: sticks to players (drag them) and surfaces (hang and swing, never reels you in); a hard yank pops it free (#270)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
@@ -44,10 +46,14 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Match flow and scoring
 - Endless round loop over the live roster (ADR-0004, ADR-0007)
 - Matches: first to N rounds, host picks N; victory podium (#120)
+- The match-winning KO plays about 1 s of slow motion with the camera punched in on the hit and a brief flash, then goes to the victory panel; no zoom with screen shake off, no flash with reduce flashes on (#328)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
+- Night stages (#332): about 1 round in 5 plays its stage as a night variant, applied by data (`Stage.night`, rolled per round by `RoundManager.night_chance`, from its own RNG; off with the modifier-roll seam, `forced_night` overrides). Darker Night palette with stars, lamps over the spawns, and a soft glow on players, weapon heads, pickups and hazards. Visual only. Lighting is `CanvasModulate` plus shadowless `PointLight2D` (works with the Compatibility renderer); lamps hold steady with Reduce flashes on
 - Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
+- Victory screen stats (#325): a per-player table under the awards (KOs, damage dealt and taken, self-KOs, weapon pickups, favourite weapon) and a "Magpie" award for the most weapon pickups
 - Scoreboard shown at round end (#5)
+- KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
 
 ## Players, cosmetics and identity
@@ -57,7 +63,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Six eye styles (round, sleepy, angry, wide, dot, visor) picked in the same phone picker as hats and colour; pupils still track the weapon; kept per seat through reconnects (#297)
 - Hats (crown, top hat, cap, beanie, viking, party, halo, propeller) and colour picker on the phone (#151)
 - Squares have eyes that track the weapon head, blink and squint; arm drawn in front/behind body (#254, #91)
-- One cohesive colour palette (#255)
+- One cohesive colour palette (#255); the eight default slot colours are checked to stay distinguishable under protanopia, deuteranopia and tritanopia (#330)
 
 ## Controllers and input
 - Phone browser controller page over LAN, served by the host (#1, ADR-0002)
@@ -73,11 +79,14 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Bots via `--bots=N` flag and Solo practice button (#152)
 - Bots read stage hazards; bots yield to phones (#176, #193)
 - Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
+- Bots hunt deliberately: they pick the rival cheapest to reach (a rival high up on a ledge is the last chosen) and stick with it, never a teammate, and a bot hooked on a ledge by its own pickaxe sweeps the head off it instead of hanging there (#302)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)
 - Join URL plus in-game generated QR code (#29, #214, #230)
 - How-to-play explainer with animated demos (#149, #219)
+- First-join tip on the phone: looping drag-to-swing animation, shown once per device (#291)
+- Live lobby sandbox: seated players move, swing and fight on a stage under the lobby; nothing scores, KOs respawn, the match starts clean (#291)
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)
@@ -114,6 +123,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
 - Screenshot capture tools for stages and damage numbers
+- Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence in `user://clips/` with a toast showing the path (#329, ADR-0020)
+- Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316)
 
 ## In flight / planned
 Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.

@@ -388,6 +388,49 @@
     opacity: 0.3;
     background-image: linear-gradient(135deg, transparent 46%, #0d0f14 46%, #0d0f14 54%, transparent 54%) !important;
   }
+  /* First-join tip (issue #291): a looping drag-to-swing animation over a
+     full-screen card, shown once per device. Dismissed by the one button;
+     the card takes touches only while it is up. */
+  #tip {
+    position: fixed;
+    inset: 0;
+    z-index: 11;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 20px;
+    background: rgba(13, 15, 20, 0.96);
+    text-align: center;
+  }
+  #tip.show { display: flex; }
+  #tip-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
+  #tip-art { width: min(70vw, 280px); height: auto; }
+  #tip-pick { transform-origin: 140px 130px; animation: tip-swing 2.4s ease-in-out infinite; }
+  #tip-finger { animation: tip-drag 2.4s ease-in-out infinite; }
+  @keyframes tip-swing {
+    0%, 15% { transform: rotate(-70deg); }
+    55%, 75% { transform: rotate(40deg); }
+    100% { transform: rotate(-70deg); }
+  }
+  @keyframes tip-drag {
+    0%, 15% { transform: translate(-30px, 20px); opacity: 0.2; }
+    25% { opacity: 1; }
+    55%, 75% { transform: translate(40px, -10px); opacity: 1; }
+    100% { transform: translate(-30px, 20px); opacity: 0.2; }
+  }
+  #tip-go {
+    font: inherit;
+    font-size: 22px;
+    font-weight: 800;
+    padding: 18px 22px;
+    min-width: 50vw;
+    border: 0;
+    border-radius: 16px;
+    color: #0d0f14;
+    background: #ffd933;
+  }
   #look-go {
     font: inherit;
     font-size: 22px;
@@ -460,6 +503,19 @@
   <div id="color-row"></div>
   <button id="look-go" type="button">Done</button>
 </div>
+<div id="tip">
+  <svg id="tip-art" viewBox="0 0 280 200" aria-hidden="true">
+    <rect x="10" y="150" width="260" height="8" rx="4" fill="#3a3f4b"/>
+    <circle cx="140" cy="130" r="16" fill="#ffd933"/>
+    <g id="tip-pick">
+      <rect x="138" y="30" width="5" height="100" rx="2" fill="#c9a36a"/>
+      <path d="M118 36 Q140 14 164 36" stroke="#cfd3dc" stroke-width="6" fill="none" stroke-linecap="round"/>
+    </g>
+    <circle id="tip-finger" cx="140" cy="100" r="22" fill="#ffffff" fill-opacity="0.35" stroke="#ffffff" stroke-width="3"/>
+  </svg>
+  <div id="tip-text">Drag anywhere to swing your pick</div>
+  <button id="tip-go" type="button">Got it</button>
+</div>
 <button id="gear" type="button" aria-label="Host menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 <div id="host-menu">
   <div id="host-menu-title">Host menu</div>
@@ -507,7 +563,7 @@
   // "looks" frame -- sent right behind the slot frame -- says which colour the
   // player actually holds (colorOf()). The scenario
   // identity_colours_match_controller_page keeps this list and Main.tscn in step.
-  var SLOT_COLORS = ["#e69f00", "#3d8fd1", "#009e73", "#d55e00", "#cc79a7", "#56b4e9", "#f0c400", "#e8e6f0"];
+  var SLOT_COLORS = ["#e69f00", "#3d8fd1", "#009e73", "#d55e00", "#cc79a7", "#56b4e9", "#f5e24a", "#e8e6f0"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
@@ -872,6 +928,7 @@
       nameInput.blur();
     }
     lookEl.classList.remove("show");
+    tipEl.classList.remove("show");
   }
 
   function commitName() {
@@ -1147,7 +1204,28 @@
   function closeLookPrompt() {
     store(LOOK_CHOSEN_KEY, "1");
     lookEl.classList.remove("show");
+    maybeShowTip();
   }
+
+  // ---- first-join tip (issue #291) -------------------------------------------
+  // Once per device: remembered in localStorage (best effort -- in private
+  // mode it shows once per page load instead).
+  var TIP_SEEN_KEY = "pickfight-tip-seen";
+  var tipEl = document.getElementById("tip");
+  var tipShownThisLoad = false;
+  function maybeShowTip() {
+    var seen = false;
+    try { seen = localStorage.getItem(TIP_SEEN_KEY) === "1"; } catch (err) { seen = false; }
+    if (seen || tipShownThisLoad || inPlay()) { return; }
+    tipShownThisLoad = true;
+    release();
+    tipEl.classList.add("show");
+  }
+  function dismissTip() {
+    try { localStorage.setItem(TIP_SEEN_KEY, "1"); } catch (err) { /* this load only */ }
+    tipEl.classList.remove("show");
+  }
+  document.getElementById("tip-go").addEventListener("click", dismissTip);
 
   function darken(hex, amount) {
     var n = parseInt(String(hex).slice(1), 16);
@@ -1543,6 +1621,7 @@
           sendLook();
           if (!nameChosen()) { openNamePrompt(); }
           else if (!lookChosen()) { openLookPrompt(); }
+          else { maybeShowTip(); }
         }
         else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "buzz") { buzz(msg.kind); }

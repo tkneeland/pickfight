@@ -177,7 +177,7 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 	var row := HBoxContainer.new()
 	row.name = "Awards"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 48)
+	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else 16)
 	for award: Dictionary in awards:
 		var card := VBoxContainer.new()
 		card.name = "Award" + str(award["category"]).capitalize()
@@ -194,6 +194,31 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 		card.add_child(who)
 		row.add_child(card)
 	return row
+
+## The per-player stats table for the victory screen (issue #325): one line per
+## row of `MatchStats.stat_rows()` -- name, KOs, damage dealt/taken, self-KOs,
+## pickups and favourite weapon. Five or more players split into two columns
+## so eight still fit under the podium.
+static func stat_table(rows: Array, name_of: Callable, color_of: Callable) -> HBoxContainer:
+	var table := HBoxContainer.new()
+	table.name = "StatRows"
+	table.alignment = BoxContainer.ALIGNMENT_CENTER
+	table.add_theme_constant_override("separation", 48)
+	var per_column: int = rows.size() if rows.size() <= 4 else (rows.size() + 1) / 2
+	var column: VBoxContainer = null
+	for i in rows.size():
+		if i % per_column == 0:
+			column = VBoxContainer.new()
+			column.add_theme_constant_override("separation", 0)
+			table.add_child(column)
+		var row: Dictionary = rows[i]
+		var slot: int = int(row["slot"])
+		var line: Label = _label("%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s" % [
+			str(name_of.call(slot)).left(10), row["kos"], row["damage_dealt"], row["damage_taken"],
+			row["self_kos"], row["pickups"], row["weapon"] if row["weapon"] != "" else "-"], 16, color_of.call(slot))
+		line.name = "Stats%d" % slot
+		column.add_child(line)
+	return table
 
 static func _label(text: String, font_size: int, color: Color) -> Label:
 	var label := Label.new()
