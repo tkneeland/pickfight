@@ -1,0 +1,147 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+
+[sub_resource type="RectangleShape2D" id="R_200x24"]
+size = Vector2(200, 24)
+
+[sub_resource type="RectangleShape2D" id="R_260x24"]
+size = Vector2(260, 24)
+
+[sub_resource type="RectangleShape2D" id="R_300x24"]
+size = Vector2(300, 24)
+
+[sub_resource type="RectangleShape2D" id="R_1500x40"]
+size = Vector2(1500, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; Relay (issue #377, a King of the Hill stage with a moving hill): three
+; platforms, centre, left and right, and the hill hops between them every
+; ~30 s (HillSpot0 first, then 1, 2, and round again) with a warning ring on the
+; next spot for the last ~3 s. Pads on the floor reach each platform.
+; Rotation (Stage.mode_weights): weighted 4x for King of the Hill, and in any
+; other mode dealt into a bag only 30% of the time ("_other").
+
+[node name="Relay" type="Node2D"]
+script = ExtResource("script")
+background_sky_top = Color(0.1, 0.16, 0.2, 1)
+background_sky_bottom = Color(0.2, 0.28, 0.32, 1)
+background_silhouette = Color(0.1, 0.1, 0.12, 1)
+background_layers = PackedStringArray("clouds", "city", "hills")
+mode_weights = {"king_of_the_hill": 4.0, "_other": 0.3}
+hill_moves = true
+
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(0, 400)
+
+[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("R_1500x40")
+
+[node name="FloorVisual" type="Polygon2D" parent="Floor"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)
+
+[node name="Centre" type="StaticBody2D" parent="."]
+position = Vector2(0, 240)
+
+[node name="CentreShape" type="CollisionShape2D" parent="Centre"]
+shape = SubResource("R_300x24")
+
+[node name="CentreVisual" type="Polygon2D" parent="Centre"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
+
+[node name="Left" type="StaticBody2D" parent="."]
+position = Vector2(-480, 290)
+
+[node name="LeftShape" type="CollisionShape2D" parent="Left"]
+shape = SubResource("R_260x24")
+
+[node name="LeftVisual" type="Polygon2D" parent="Left"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
+
+[node name="Right" type="StaticBody2D" parent="."]
+position = Vector2(480, 290)
+
+[node name="RightShape" type="CollisionShape2D" parent="Right"]
+shape = SubResource("R_260x24")
+
+[node name="RightVisual" type="Polygon2D" parent="Right"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
+
+[node name="Roof" type="StaticBody2D" parent="."]
+position = Vector2(0, 60)
+
+[node name="RoofShape" type="CollisionShape2D" parent="Roof"]
+shape = SubResource("R_200x24")
+
+[node name="RoofVisual" type="Polygon2D" parent="Roof"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+
+[node name="PadLeft" parent="." instance=ExtResource("pad")]
+position = Vector2(-250, 372)
+size = Vector2(100, 16)
+
+[node name="PadRight" parent="." instance=ExtResource("pad")]
+position = Vector2(250, 372)
+size = Vector2(100, 16)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-700, 320)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(700, 320)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-620, 320)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(620, 320)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-540, 320)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(540, 320)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-460, 320)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(460, 320)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("kz")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_kill")
+
+[node name="HillSpot0" type="Marker2D" parent="."]
+position = Vector2(0, 150)
+
+[node name="HillSpot1" type="Marker2D" parent="."]
+position = Vector2(-480, 200)
+
+[node name="HillSpot2" type="Marker2D" parent="."]
+position = Vector2(480, 200)
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(0, 10)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(-480, 230)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(480, 230)
+
+[node name="PickupSpawn3" type="Marker2D" parent="."]
+position = Vector2(0, 330)
