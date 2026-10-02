@@ -29360,6 +29360,11 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 	var loop: Dictionary = _new_modifier_round("")
 	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
 	var players: Array[RigidBody2D] = loop["players"]
+	# The gust pushes every body, so the bystanders would be blown off some
+	# stages and end the round on its own before the next is requested. Only
+	# P0 is measured; hold the rest where they stand.
+	for bystander: RigidBody2D in players.slice(1):
+		bystander.freeze = true
 	var gusts: Array = []
 	var extra: Array[String] = []
 	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
