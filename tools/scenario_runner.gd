@@ -625,6 +625,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"host_pad_start_pauses_and_resumes_other_pads_do_not",
 	"host_pad_start_and_host_phone_share_one_pause",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"bot_stays_on_stage_over_jittered_starts",
 	"gamepad_all_pad_room_continues_to_lobby_after_podium",
 	"gamepad_ko_ghost_follows_right_stick",
 	"gamepad_replug_on_new_port_keeps_slot_and_cosmetics",
@@ -2278,6 +2279,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"bot_stays_on_stage_over_jittered_starts":
+			return await _scenario_bot_stays_on_stage_over_jittered_starts()
 		"gamepad_all_pad_room_continues_to_lobby_after_podium":
 			return await _scenario_gamepad_all_pad_room_continues_to_lobby_after_podium()
 		"gamepad_ko_ghost_follows_right_stick":
@@ -32748,6 +32751,31 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+# --- Issue #423: edge safety over jittered starts -----------------------------------
+## The #302 overshoot setup is chaotic: a start shifted by a pixel can end with
+## the bot's own swing throwing it off the stage, and each platform lands on its
+## own result. So the check is statistical: the four cases, each from PROBE_N
+## starts (default 5) jittered by up to 3 px (seed PROBE_SEED, default 423),
+## allow at most one bot in 200 off the stage. For a real measurement run it with
+## PROBE_N=50 (200 starts, about 80 s) and read the printed count.
+func _scenario_bot_stays_on_stage_over_jittered_starts() -> Array[String]:
+	var n: int = int(OS.get_environment("PROBE_N")) if OS.get_environment("PROBE_N") != "" else 5
+	var jitter := RandomNumberGenerator.new()
+	jitter.seed = int(OS.get_environment("PROBE_SEED")) if OS.get_environment("PROBE_SEED") != "" else 423
+	var deaths: int = 0
+	var total: int = 0
+	for case: Array in [[100.0, 300.0], [100.0, 500.0], [-100.0, -300.0], [-100.0, -500.0]]:
+		for i in n:
+			var got: Dictionary = await _overshoot302(case[0] + jitter.randf_range(-3.0, 3.0), case[1], 1200)
+			total += 1
+			if not got["alive"] or got["fell"]:
+				deaths += 1
+	print("      %d of %d jittered starts ended off the stage" % [deaths, total])
+	_scenario_completed = true
+	var failures: Array[String] = []
+	if deaths > total / 200:
+		failures.append("%d of %d jittered starts went off the stage" % [deaths, total])
 	return failures
 # --- Gamepad seat parity (#442) ------------------------------------------------
 ## A real ControllerServer and RoundManager, `count` slots, first to 1.
