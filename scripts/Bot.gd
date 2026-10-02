@@ -48,6 +48,7 @@ const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
 const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
 const SpikesScript: GDScript = preload("res://scripts/Spikes.gd")
 const SawScript: GDScript = preload("res://scripts/Saw.gd")
+const GameModesScript: GDScript = preload("res://scripts/GameModes.gd")
 
 ## Player.LAYER_WORLD: terrain and bodies. Heads are on their own layer, so
 ## the rays below never see one.
@@ -320,9 +321,68 @@ func think(delta: float) -> Vector2:
 		return unhook
 	return _vault(delta)
 
+# --- Mode objectives (issue #353) -------------------------------------------------
+
+## Hot Potato: how far from "it" a bot that is not "it" tries to stay.
+const KEEP_AWAY_FROM_IT: float = 700.0
+## King of the Hill: inside this fraction of the hill's radius counts as holding it.
+const HILL_HOLD_FRACTION: float = 0.6
+
+## The hill (King of the Hill) this tick, or null; and the Hot Potato "it" this
+## bot keeps away from, or null. Sudden Death, Stock, Classic and any mode this
+## does not know leave both null: the bot plays the existing hunt.
+var _hill_node: Node = null
+var _hill_rival_inside: bool = false
+var _keep_away_from: Node2D = null
+
+func _read_mode() -> void:
+	_hill_node = null
+	_hill_rival_inside = false
+	_keep_away_from = null
+	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	if rm == null or not rm.has_method("active_game_mode_id"):
+		return
+	var node: Node = rm.game_mode_node()
+	if node == null or not is_instance_valid(node):
+		return
+	match rm.active_game_mode_id():
+		GameModesScript.KING_OF_THE_HILL:
+			_hill_node = node
+			for other: Node in player.get_tree().get_nodes_in_group("players"):
+				if other != player and _alive(other) and _in_hill(other as Node2D) \
+						and not (player.has_method("is_teammate") and player.is_teammate(other)):
+					_hill_rival_inside = true
+		GameModesScript.HOT_POTATO:
+			var it_slot: int = int(node.it_slot)
+			var me_slot: int = rm._players.find(player)
+			if it_slot >= 0 and it_slot != me_slot and it_slot < rm._players.size():
+				var it: Variant = rm._players[it_slot]
+				if _alive(it):
+					_keep_away_from = it as Node2D
+
+func _in_hill(who: Node2D, fraction: float = 1.0) -> bool:
+	return who.global_position.distance_to(_hill_node.hill_position) <= float(_hill_node.hill_radius) * fraction
+
+## Not "it" in Hot Potato: step away from "it" along the ground the bot can
+## trust. `goal` is where the vault heads.
+func _keep_away_goal() -> Vector2:
+	var me: Vector2 = player.global_position
+	var it_at: Vector2 = _keep_away_from.global_position
+	if me.distance_to(it_at) >= KEEP_AWAY_FROM_IT:
+		return me
+	var side: float = signf(me.x - it_at.x) if me.x != it_at.x else 1.0
+	var away: float = _safe_side(side)
+	if away == 0.0:
+		away = _safe_side(-side)
+		# Ground only towards "it": hold the place rather than run into it.
+		if away != 0.0 and signf(away) != side:
+			return me
+	return Vector2(me.x + away * FLEE_DISTANCE, me.y) if away != 0.0 else me
+
 # --- Choosing a goal -------------------------------------------------------------
 
 func _choose_goal() -> void:
+	_read_mode()
 	var me: Vector2 = player.global_position
 	var enemy: Node2D = _nearest_enemy()
 	var enemy_distance: float = me.distance_to(enemy.global_position) if enemy != null else INF
@@ -337,6 +397,11 @@ func _choose_goal() -> void:
 		mode = "flee"
 		_target = null
 		goal = escape
+		return
+	if _keep_away_from != null and not lava_close:
+		mode = "move"
+		_target = null
+		goal = _keep_away_goal()
 		return
 	if enemy != null and enemy_distance < _reach() * lerpf(CLOSE_FRACTION, CLOSE_FRACTION_AGGRESSIVE, _aggression) and not lava_close:
 		# Too close to swing fast: a short lever moves the head slowly, and
@@ -373,7 +438,15 @@ func _choose_goal() -> void:
 		return
 	mode = "move"
 	_target = null
-	if pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR):
+	if _hill_node != null:
+		if not _in_hill(player, HILL_HOLD_FRACTION):
+			goal = _hill_node.hill_position
+		elif enemy != null and _hill_rival_inside:
+			_target = enemy
+			goal = enemy.global_position
+		else:
+			goal = me
+	elif pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR):
 		goal = pickup.global_position
 	elif enemy != null:
 		_target = enemy
@@ -418,6 +491,9 @@ func _nearest_enemy() -> Node2D:
 			continue
 		# Issue #236: never a teammate in a Teams match.
 		if player.has_method("is_teammate") and player.is_teammate(other):
+			continue
+		# King of the Hill: fight whoever is in the hill before anyone else.
+		if _hill_rival_inside and not _in_hill(other as Node2D):
 			continue
 		var at: Vector2 = (other as Node2D).global_position
 		var cost: float = _hunt_cost(at)
