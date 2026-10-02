@@ -542,6 +542,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"streamer_mode_setting_persists_across_reload",
 	"streamer_mode_host_phone_receives_room_code",
 	"lobby_and_victory_show_the_logo",
+	"round_modifier_gale_pushes_players_and_undoes",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
 	"demo_build_only_slice_weapons_spawn",
@@ -2028,6 +2029,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_streamer_mode_host_phone_receives_room_code()
 		"lobby_and_victory_show_the_logo":
 			return await _scenario_lobby_and_victory_show_the_logo()
+		"round_modifier_gale_pushes_players_and_undoes":
+			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
 		"demo_build_flag_defines_the_slice":
 			return await _scenario_demo_build_flag_defines_the_slice()
 		"demo_build_rotation_only_slice_stages":
@@ -8069,6 +8072,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"meteor_shower": "Meteor Shower",
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
+	"gale": "Gale",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -15025,7 +15029,7 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 			failures.append("'%s' cannot be created" % id)
 	for id: String in counts:
 		if not MODIFIER_TITLES.has(id):
-			failures.append("rolled '%s', which is not one of the ten" % id)
+			failures.append("rolled '%s', which is not one of the eleven" % id)
 	_scenario_completed = true
 	return failures
 # --- Large stages (issue #144) -------------------------------------------------
@@ -29055,6 +29059,73 @@ func _scenario_lobby_and_victory_show_the_logo() -> Array[String]:
 	var victory_logo: TextureRect = screen.victory_logo()
 	if victory_logo == null or victory_logo.texture == null:
 		failures.append("the victory screen has no logo with a texture")
+	await _teardown(loop["stage"])
+	return failures
+# --- Gale round modifier (#312) ------------------------------------------------
+## Ticks a gale round is watched for: past the calm, the warning and the gust
+## (4 s calm from a 2 s head start, 1.5 s warning, 2 s gust), with room to spare.
+const GALE_WATCH_TICKS: int = 480
+## Fastest sideways speed a gale must give a still body: well under what
+## 1500 px/s^2 for two seconds does, well over any noise.
+const GALE_MIN_SPEED: float = 300.0
+## Gale: announced as "Gale"; the round has one gust over the stage that warns
+## before it pushes a player in clear air along its own direction, and the
+## round after has neither the gust nor any push.
+func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
+	var players: Array[RigidBody2D] = loop["players"]
+	var gusts: Array = []
+	var extra: Array[String] = []
+	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
+		var gust: Node2D = instance.get_node_or_null("GaleGust") as Node2D
+		gusts.append(gust)
+		var player: RigidBody2D = players[0]
+		var before_gravity: float = player.gravity_scale
+		# Held in clear air inside the zone, with no gravity to confuse a
+		# sideways reading, and no input.
+		player.gravity_scale = 0.0
+		player.set_input_vector(Vector2.ZERO)
+		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -900.0)
+		player.teleport_to(start)
+		player.linear_velocity = Vector2.ZERO
+		var best: float = 0.0
+		var warned_without_push: bool = false
+		for tick in GALE_WATCH_TICKS:
+			await physics_frame
+			var vx: float = player.linear_velocity.x
+			if gust != null:
+				if gust.is_warning() and absf(vx) < 1.0:
+					warned_without_push = true
+				var along: float = vx * gust.push_direction().x
+				if along > best:
+					best = along
+				# Enough shown: stop before the body is carried off the stage.
+				if best >= GALE_MIN_SPEED * 1.5:
+					break
+		player.gravity_scale = before_gravity
+		player.linear_velocity = Vector2.ZERO
+		if gust != null and not warned_without_push:
+			extra.append("the gale never showed a warning before pushing")
+		return best
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 1 and gusts[1] == null:
+			found.append("the gale round has no GaleGust on its stage")
+		elif round_index != 1 and gusts[round_index] != null:
+			found.append("round %d has a gust though it is not a gale round" % (round_index + 1))
+		elif round_index == 2 and gusts[1] != null and is_instance_valid(gusts[1]) and gusts[1].is_inside_tree():
+			found.append("the gale's gust is still in the tree after its round ended")
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "gale", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	failures.append_array(extra)
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] > 5.0 or values[2] > 5.0:
+			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
+		if values[1] < GALE_MIN_SPEED:
+			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
 	await _teardown(loop["stage"])
 	return failures
 # --- Issue #361: the Steam Next Fest demo build ----------------------------
