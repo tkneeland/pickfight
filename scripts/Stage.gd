@@ -235,6 +235,33 @@ func get_ball_spawn() -> Vector2:
 		return global_position if is_inside_tree() else position
 	return marker.global_position if marker.is_inside_tree() else marker.position
 
+## Capture the Flag (#403): where `team`'s flag sits at home, a `Flag0` /
+## `Flag1` marker; the stage's origin without one.
+func get_flag_home(team: int) -> Vector2:
+	var marker: Node2D = get_node_or_null("Flag%d" % team) as Node2D
+	if marker == null:
+		return global_position if is_inside_tree() else position
+	return marker.global_position if marker.is_inside_tree() else marker.position
+
+## The world-space rectangle of `team`'s base (`Base0` / `Base1`, an `Area2D`
+## with a rectangle `CollisionShape2D`), where a carrier of the enemy flag
+## captures. An empty Rect2 for a stage with no such base.
+func get_base_rect(team: int) -> Rect2:
+	var base: Node2D = get_node_or_null("Base%d" % team) as Node2D
+	if base == null:
+		return Rect2()
+	for child in base.get_children():
+		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+			var size: Vector2 = ((child as CollisionShape2D).shape as RectangleShape2D).size
+			var centre: Vector2 = (child as CollisionShape2D).global_position if child.is_inside_tree() else base.position + (child as CollisionShape2D).position
+			return Rect2(centre - size * 0.5, size)
+	return Rect2()
+
+## Whether this stage has a flag and a base for each team (#403).
+func has_bases() -> bool:
+	return get_base_rect(0).size != Vector2.ZERO and get_base_rect(1).size != Vector2.ZERO \
+			and get_node_or_null("Flag0") != null and get_node_or_null("Flag1") != null
+
 func _marker_points(prefix: String) -> Array[Vector2]:
 	var markers: Array[Marker2D] = []
 	for child in get_children():

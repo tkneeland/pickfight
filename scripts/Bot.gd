@@ -431,6 +431,9 @@ var _keep_away_from: Node2D = null
 ## Soccer (#402): the mode node this tick, or null.
 var _soccer_node: Node = null
 
+## Capture the Flag (#403): the mode node this tick, or null.
+var _ctf_node: Node = null
+
 ## Soccer: how far behind the ball (away from the goal it attacks) a bot lines
 ## up, and how far past it the bot drives.
 const SOCCER_BEHIND: float = 90.0
@@ -438,6 +441,7 @@ const SOCCER_DRIVE: float = 160.0
 
 func _read_mode() -> void:
 	_soccer_node = null
+	_ctf_node = null
 	_hill_node = null
 	_hill_rival_inside = false
 	_keep_away_from = null
@@ -456,6 +460,8 @@ func _read_mode() -> void:
 					_hill_rival_inside = true
 		GameModesScript.SOCCER:
 			_soccer_node = node
+		GameModesScript.CAPTURE_THE_FLAG:
+			_ctf_node = node
 		GameModesScript.HOT_POTATO:
 			var it_slot: int = int(node.it_slot)
 			var me_slot: int = rm._players.find(player)
@@ -480,6 +486,39 @@ func _soccer_goal() -> Vector2:
 	if behind:
 		return Vector2(ball_at.x + dir * SOCCER_DRIVE, ball_at.y)
 	return Vector2(ball_at.x - dir * SOCCER_BEHIND, ball_at.y)
+
+## Capture the Flag: where this bot heads (#403).
+## - Carrying the enemy flag: home to its own base.
+## - An enemy carries ours: everyone on the team chases the carrier.
+## - Our flag lies dropped: everyone not carrying runs to return it.
+## - Otherwise the team's lowest slot defends (waits at its own flag) when it
+##   has company, and the rest go for the enemy flag (or, if a teammate already
+##   carries it, escort that teammate home).
+func _ctf_goal() -> Vector2:
+	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var slot: int = rm._players.find(player)
+	var team: int = _ctf_node.team_of(slot)
+	var enemy: int = 1 - team
+	var me: Vector2 = player.global_position
+	if _ctf_node.carried_flag_of(slot) != -1:
+		return _ctf_node.base_rect(team).get_center()
+	var chased: int = int(_ctf_node.carrier[team])
+	if chased != -1 and chased < rm._players.size() and _alive(rm._players[chased]):
+		_target = rm._players[chased] as Node2D
+		return (rm._players[chased] as Node2D).global_position
+	if int(_ctf_node.state[team]) == _ctf_node.DROPPED:
+		return _ctf_node.flag_position[team]
+	var mates: Array[int] = []
+	for o in rm._players.size():
+		if _ctf_node.team_of(o) == team and rm._players[o] != null and _alive(rm._players[o]):
+			mates.append(o)
+	mates.sort()
+	if mates.size() > 1 and mates[0] == slot:
+		return _ctf_node.home_position(team)
+	var ours: int = int(_ctf_node.carrier[enemy])
+	if ours != -1 and ours != slot and ours < rm._players.size() and _alive(rm._players[ours]):
+		return _ctf_node.base_rect(team).get_center()
+	return _ctf_node.flag_position[enemy]
 
 ## Not "it" in Hot Potato: step away from "it" along the ground the bot can
 ## trust. `goal` is where the vault heads.
@@ -573,6 +612,8 @@ func _choose_goal() -> void:
 	_target = null
 	if _soccer_node != null and _soccer_node.ball != null and is_instance_valid(_soccer_node.ball):
 		goal = _soccer_goal()
+	elif _ctf_node != null:
+		goal = _ctf_goal()
 	elif _hill_node != null:
 		if not _in_hill(player, HILL_HOLD_FRACTION):
 			goal = _hill_node.hill_position

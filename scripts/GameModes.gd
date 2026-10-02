@@ -16,8 +16,9 @@ const SUDDEN_DEATH: String = "sudden_death"
 const HOT_POTATO: String = "hot_potato"
 const STOCK: String = "stock"
 const SOCCER: String = "soccer"
+const CAPTURE_THE_FLAG: String = "capture_the_flag"
 
-const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO, STOCK, SOCCER]
+const IDS: PackedStringArray = [KING_OF_THE_HILL, SUDDEN_DEATH, HOT_POTATO, STOCK, SOCCER, CAPTURE_THE_FLAG]
 
 ## Classic is no mode at all: the endless round loop as it always was.
 const CLASSIC: String = ""
@@ -66,6 +67,12 @@ const TABLE: Array[Dictionary] = [
 	{
 		"id": SOCCER, "name": "Soccer",
 		"rule": "First team to 3 goals wins.",
+		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
+		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true,
+	},
+	{
+		"id": CAPTURE_THE_FLAG, "name": "Capture the Flag",
+		"rule": "First team to 2 captures wins.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
 		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true,
 	},
@@ -130,6 +137,7 @@ const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const HotPotatoScript := preload("res://scripts/HotPotato.gd")
 const StockScript := preload("res://scripts/Stock.gd")
 const SoccerScript := preload("res://scripts/Soccer.gd")
+const CaptureTheFlagScript := preload("res://scripts/CaptureTheFlag.gd")
 
 ## A fresh mode node for `id`, or null for "" or an unknown id.
 static func create(id: String) -> Node:
@@ -144,4 +152,6 @@ static func create(id: String) -> Node:
 			return StockScript.new()
 		SOCCER:
 			return SoccerScript.new()
+		CAPTURE_THE_FLAG:
+			return CaptureTheFlagScript.new()
 	return null

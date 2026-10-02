@@ -596,6 +596,18 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_grunts_one_distinct_quiet_voice_per_slot",
 	"voice_grunts_on_hit_and_ko",
 	"voice_grunts_respect_mute_and_settings_isolation",
+	"mode_ctf_is_teams_only",
+	"ctf_touching_the_enemy_flag_picks_it_up",
+	"ctf_a_hit_makes_the_carrier_drop_the_flag",
+	"ctf_a_dropped_flag_returns_after_ten_seconds",
+	"ctf_a_defender_touch_returns_the_flag",
+	"ctf_a_capture_scores_and_resets_the_flag",
+	"ctf_two_captures_end_the_round",
+	"ctf_a_ko_drops_the_flag_and_respawns_the_player",
+	"ctf_stages_load_bases_and_weights",
+	"ctf_flag_runner_award",
+	"bot_ctf_attackers_defenders_and_carrier_chase",
+	"announcer_calls_capture_the_flag",
 	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
 	"character_polish_hit_flash_respects_reduce_flash",
 	"character_polish_takeoff_stretches_within_cap",
@@ -2193,6 +2205,30 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_grunts_on_hit_and_ko()
 		"voice_grunts_respect_mute_and_settings_isolation":
 			return await _scenario_voice_grunts_respect_mute_and_settings_isolation()
+		"mode_ctf_is_teams_only":
+			return await _scenario_mode_ctf_is_teams_only()
+		"ctf_touching_the_enemy_flag_picks_it_up":
+			return await _scenario_ctf_touching_the_enemy_flag_picks_it_up()
+		"ctf_a_hit_makes_the_carrier_drop_the_flag":
+			return await _scenario_ctf_a_hit_makes_the_carrier_drop_the_flag()
+		"ctf_a_dropped_flag_returns_after_ten_seconds":
+			return await _scenario_ctf_a_dropped_flag_returns_after_ten_seconds()
+		"ctf_a_defender_touch_returns_the_flag":
+			return await _scenario_ctf_a_defender_touch_returns_the_flag()
+		"ctf_a_capture_scores_and_resets_the_flag":
+			return await _scenario_ctf_a_capture_scores_and_resets_the_flag()
+		"ctf_two_captures_end_the_round":
+			return await _scenario_ctf_two_captures_end_the_round()
+		"ctf_a_ko_drops_the_flag_and_respawns_the_player":
+			return await _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player()
+		"ctf_stages_load_bases_and_weights":
+			return await _scenario_ctf_stages_load_bases_and_weights()
+		"ctf_flag_runner_award":
+			return await _scenario_ctf_flag_runner_award()
+		"bot_ctf_attackers_defenders_and_carrier_chase":
+			return await _scenario_bot_ctf_attackers_defenders_and_carrier_chase()
+		"announcer_calls_capture_the_flag":
+			return await _scenario_announcer_calls_capture_the_flag()
 		"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel":
 			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel()
 		"character_polish_hit_flash_respects_reduce_flash":
@@ -3966,6 +4002,8 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Pitch.tscn",
 	"res://scenes/stages/Cage.tscn",
 	"res://scenes/stages/Dunes.tscn",
+	"res://scenes/stages/Bastion.tscn",
+	"res://scenes/stages/Stronghold.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -5594,7 +5632,7 @@ func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# spawn by spawn, left then right, until the first shove gets out.
 	var jobs: Array[Callable] = []
 	for s in STAGE_PATHS.size():
-		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]):
+		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_403.has(STAGE_PATHS[s]):
 			continue  # closed pitches: the ball may only leave through a goal
 		jobs.append(_stage_ringout_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
 	var failures: Array[String] = await _run_concurrently(jobs, "stage ring-out sweep")
@@ -25584,8 +25622,8 @@ func _mode_rig(count: int, mode: String, seed_value: int = 7) -> Dictionary:
 	var paths: Array[NodePath] = []
 	var players: Array[RigidBody2D] = []
 	for i in count:
-		spawns.append(MODE_SPAWNS[i])
-		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		spawns.append(MODE_SPAWNS[i % MODE_SPAWNS.size()])
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i % MODE_SPAWNS.size()])
 		player.name = "ModeP%d" % i
 		players.append(player)
 		paths.append(NodePath("../ModeP%d" % i))
@@ -28363,7 +28401,7 @@ func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
 	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
 	if msg.get("game_mode") != "king_of_the_hill":
 		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
-	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer"]:
+	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]:
 		failures.append("the picker rows were %s" % [names])
 	HostSettingsScript352.shared().game_mode = ""
 	await _close_phones(joined)
@@ -28627,7 +28665,7 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 	var lobby_rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
-	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer"]
+	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]
 	if cards.size() != want.size():
 		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
 	else:
@@ -31353,6 +31391,429 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	sfx.set_muted(was_muted)
 	_scenario_completed = true
 	return failures
+# --- Capture the Flag (issue #403) ---------------------------------------------
+
+const CTF_STAGES_403: PackedStringArray = [
+	"res://scenes/stages/Bastion.tscn",
+	"res://scenes/stages/Stronghold.tscn",
+]
+## The closed Capture the Flag halls have no kill zone to be shoved into (#403).
+const RINGOUT_EXEMPT_403: PackedStringArray = CTF_STAGES_403
+## A Teams round of `count` (up to 4) players on `stage_path`, slots alternating Red, Blue.
+func _ctf_rig(count: int, stage_path: String = "res://scenes/stages/Bastion.tscn") -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, GameModesType.CAPTURE_THE_FLAG)
+	var rm: Node = rig["rm"]
+	var hall: Array[PackedScene] = [load(stage_path)]
+	rm.stage_scenes = hall
+	var teams: Dictionary = {}
+	for i in count:
+		teams[i] = i % 2
+	rm._team_mode = true
+	rm._teams = teams
+	return rig
+## Everyone to the middle of the floor, apart, and past the spawn protection, so a
+## scenario starts from a quiet field. Slot 0 and 2 are Red, 1 and 3 Blue.
+func _ctf_quiet(rig: Dictionary) -> void:
+	var spots: Array[Vector2] = [Vector2(-300.0, 240.0), Vector2(300.0, 240.0), Vector2(-200.0, 240.0), Vector2(200.0, 240.0)]
+	for i in rig["players"].size():
+		var player: RigidBody2D = rig["players"][i]
+		player.teleport_to(spots[i])
+		player.spawn_protected = false
+		player.modulate.a = 1.0
+## Starts a Capture the Flag round and hands back its mode node, or null with a failure noted.
+func _ctf_start(rig: Dictionary, failures: Array[String]) -> Node:
+	if not await _mode_started(rig):
+		failures.append("the Capture the Flag round never started")
+		await _teardown(rig["stage"])
+		return null
+	var mode: Node = rig["rm"].game_mode_node()
+	_ctf_quiet(rig)
+	await _await_ticks(3)
+	return mode
+## Capture the Flag is Teams only, like Soccer: refused in a free-for-all, kept with
+## Teams on, dropped to Classic when Teams is switched off.
+func _scenario_mode_ctf_is_teams_only() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var server: Node = ControllerServerScript.new()
+	if server.apply_host_command("gamemode", "capture_the_flag") or server.game_mode() == "capture_the_flag":
+		failures.append("Capture the Flag was accepted in a free-for-all")
+	if not server.apply_host_command("mode", "teams"):
+		failures.append("Teams could not be switched on")
+	if not server.apply_host_command("gamemode", "capture_the_flag") or server.game_mode() != "capture_the_flag":
+		failures.append("Capture the Flag was refused with Teams on")
+	server.apply_host_command("mode", "ffa")
+	if server.game_mode() != "":
+		failures.append("switching Teams off with Capture the Flag chosen left '%s', not Classic" % server.game_mode())
+	var seen: bool = false
+	for row: Dictionary in GameModesType.picker_rows():
+		if row["id"] == "capture_the_flag":
+			seen = true
+			if not bool(row.get("teams_only", false)):
+				failures.append("the picker row for Capture the Flag is not marked teams_only")
+	if not seen:
+		failures.append("Capture the Flag is not in the picker rows")
+	if GameModesType.display_name("capture_the_flag") != "Capture the Flag" or GameModesType.rule_line("capture_the_flag") == "":
+		failures.append("Capture the Flag has no name or rule line")
+	server.free()
+	HostSettingsScript352.shared().game_mode = ""
+	_scenario_completed = true
+	return failures
+## Touching the enemy flag picks it up; a teammate touching its own flag at home, or
+## a player who already carries one, changes nothing.
+func _scenario_ctf_touching_the_enemy_flag_picks_it_up() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rig["rm"]._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	var blue: RigidBody2D = rig["players"][1]
+	blue.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.HOME or int(mode.carrier[1]) != -1:
+		failures.append("Blue picked up its own flag at home (state %d)" % int(mode.state[1]))
+	red.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.CARRIED or int(mode.carrier[1]) != 0:
+		failures.append("Red touching Blue's flag did not pick it up (state %d, carrier %d)" % [int(mode.state[1]), int(mode.carrier[1])])
+	if not red.alive:
+		failures.append("the carrier is not alive")
+	rig["players"][2].teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.carrier[1]) != 0:
+		failures.append("a second Red touch changed the carrier to %d" % int(mode.carrier[1]))
+	var shown: Node2D = mode.get_node("CtfFlags/Flag1")
+	if shown.global_position.distance_to(red.global_position) > 80.0:
+		failures.append("the carried flag is not drawn with its carrier (%.0f px away)" % shown.global_position.distance_to(red.global_position))
+	await _teardown(rig["stage"])
+	return failures
+## Any hit makes the carrier drop the flag where they stand; they cannot grab it
+## straight back, and the flag does not move with them afterwards.
+func _scenario_ctf_a_hit_makes_the_carrier_drop_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var red: RigidBody2D = rig["players"][0]
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.CARRIED:
+		failures.append("the flag was not carried before the hit")
+	red.take_damage(2.0)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.DROPPED or int(mode.carrier[1]) != -1:
+		failures.append("a hit did not make the carrier drop the flag (state %d)" % int(mode.state[1]))
+	var spot: Vector2 = mode.flag_position[1]
+	if absf(spot.x - red.global_position.x) > 6.0:
+		failures.append("the flag dropped %.0f px from the carrier" % absf(spot.x - red.global_position.x))
+	await _await_ticks(30)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("the carrier re-took the flag at once (state %d)" % int(mode.state[1]))
+	if mode.flag_position[1].distance_to(spot) > 1.0:
+		failures.append("a dropped flag moved by itself")
+	# A carrier shielded by spawn protection takes no damage, so keeps the flag.
+	var other: RigidBody2D = rig["players"][2]
+	other.teleport_to(Vector2(-100.0, 240.0))
+	mode.return_flag(1)
+	mode.take_flag(1, 2)
+	other.spawn_protected = true
+	other.take_damage(5.0)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.CARRIED:
+		failures.append("a hit that dealt no damage still dropped the flag")
+	await _teardown(rig["stage"])
+	return failures
+## A dropped flag goes home on its own after about 10 s, and not before.
+func _scenario_ctf_a_dropped_flag_returns_after_ten_seconds() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	if absf(mode.return_sec - 10.0) > 0.001:
+		failures.append("the return delay is %.1f s, wanted 10" % mode.return_sec)
+	rig["players"][0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.drop_flag(1)
+	rig["players"][0].teleport_to(Vector2(-600.0, 240.0))
+	await _await_ticks(540)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("the flag went home before 10 s (state %d, %.1f s left)" % [int(mode.state[1]), float(mode.return_left[1])])
+	await _await_ticks(100)
+	var home: Vector2 = rig["rm"]._current_stage.get_flag_home(1)
+	if int(mode.state[1]) != mode.HOME or mode.flag_position[1].distance_to(home) > 1.0:
+		failures.append("the flag was not home after 10 s (state %d)" % int(mode.state[1]))
+	await _teardown(rig["stage"])
+	return failures
+## A defender (a teammate of the flag's team) touching a dropped flag sends it home at once.
+func _scenario_ctf_a_defender_touch_returns_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	rig["players"][0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.drop_flag(1)
+	rig["players"][0].teleport_to(Vector2(-500.0, 240.0))
+	var spot: Vector2 = mode.flag_position[1]
+	await _await_ticks(20)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("the flag did not stay dropped (state %d)" % int(mode.state[1]))
+	# Blue's other player is the flag's own team: its touch returns it.
+	rig["players"][3].teleport_to(spot)
+	await _await_ticks(3)
+	var home: Vector2 = rig["rm"]._current_stage.get_flag_home(1)
+	if int(mode.state[1]) != mode.HOME or mode.flag_position[1].distance_to(home) > 1.0:
+		failures.append("a defender's touch did not return the flag (state %d)" % int(mode.state[1]))
+	await _teardown(rig["stage"])
+	return failures
+## Carrying the enemy flag into your own base is a capture: a point, the flag home.
+func _scenario_ctf_a_capture_scores_and_resets_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rig["rm"]._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	var blue: RigidBody2D = rig["players"][1]
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[0]) != 0:
+		failures.append("walking into its own base with no flag scored")
+	red.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.carrier[1]) != 0:
+		failures.append("Red did not pick up the flag")
+	if int(mode.scores[0]) != 0:
+		failures.append("picking the flag up scored (it is not in Red's base)")
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[0]) != 1 or int(mode.scores[1]) != 0:
+		failures.append("a capture scored %s, wanted Red 1 - Blue 0" % [mode.scores])
+	if int(mode.state[1]) != mode.HOME or int(mode.carrier[1]) != -1:
+		failures.append("the captured flag is not home (state %d)" % int(mode.state[1]))
+	if int(mode.capturers.get(0, 0)) != 1:
+		failures.append("the capture was not credited to the carrier: %s" % [mode.capturers])
+	if mode.score_text() != "1 - 0":
+		failures.append("the score reads '%s', wanted '1 - 0'" % mode.score_text())
+	# Blue captures too, to be sure each team scores for itself.
+	blue.teleport_to(stage.get_flag_home(0))
+	await _await_ticks(3)
+	blue.teleport_to(stage.get_base_rect(1).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[1]) != 1:
+		failures.append("Blue's capture scored %s" % [mode.scores])
+	await _teardown(rig["stage"])
+	return failures
+## The second capture ends the round for that team and scores it a round win.
+func _scenario_ctf_two_captures_end_the_round() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	if mode.captures_to_win != 2:
+		failures.append("the round is first to %d, wanted 2" % mode.captures_to_win)
+	var stage: Node2D = rm._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	for capture in 2:
+		if rm.team_score(0) != 0:
+			failures.append("the round ended after only %d capture(s)" % capture)
+			break
+		red.teleport_to(stage.get_flag_home(1))
+		await _await_ticks(3)
+		red.teleport_to(stage.get_base_rect(0).get_center())
+		await _await_ticks(3)
+	await _await_ticks(10)
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
+		failures.append("team scores after 2 captures were %d - %d, wanted 1 - 0" % [rm.team_score(0), rm.team_score(1)])
+	if rm.lobby_phase() != "round_end":
+		failures.append("the round was not over after the second capture (phase '%s')" % rm.lobby_phase())
+	await _teardown(rig["stage"])
+	return failures
+## A knocked-out carrier drops the flag where they fell and is back in about 1.5 s
+## with spawn protection; the round goes on while a team is briefly empty.
+func _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(2)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	if absf(mode.respawn_sec - 1.5) > 0.001:
+		failures.append("the respawn delay is %.2f s, wanted 1.5" % mode.respawn_sec)
+	var red: RigidBody2D = rig["players"][0]
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	red.eliminate()
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("a knocked-out carrier did not drop the flag (state %d)" % int(mode.state[1]))
+	if not mode.is_pending(0) or red.alive:
+		failures.append("the knocked-out player was not waiting to respawn")
+	await _await_msec(500)
+	if red.alive:
+		failures.append("the player was back after 0.5 s, too early")
+	if not await _await_condition(func() -> bool: return red.alive, 3000):
+		failures.append("the knocked-out player never respawned")
+	elif not red.spawn_protected:
+		failures.append("the respawned player has no spawn protection")
+	if rm.lobby_phase() == "round_end":
+		failures.append("the round ended while the only Red player was waiting to respawn")
+	await _teardown(rig["stage"])
+	return failures
+## Both stages load with a flag and a base each side, mirrored, eight spawns, are
+## in Main's rotation and STAGE_PATHS, and weigh 4 for Capture the Flag, 0.3 elsewhere.
+func _scenario_ctf_stages_load_bases_and_weights() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in CTF_STAGES_403:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if not instance.has_bases():
+			failures.append("%s has no flag and base for each team" % path)
+		else:
+			var red: Rect2 = instance.get_base_rect(0)
+			var blue: Rect2 = instance.get_base_rect(1)
+			if not is_equal_approx(red.get_center().x, -blue.get_center().x) or not is_equal_approx(red.get_center().y, blue.get_center().y):
+				failures.append("%s: the bases are not mirror images" % path)
+			if not is_equal_approx(instance.get_flag_home(0).x, -instance.get_flag_home(1).x):
+				failures.append("%s: the flags are not mirror images" % path)
+			if red.get_center().x > 0.0:
+				failures.append("%s: Red's base is not on the left" % path)
+			if not red.has_point(instance.get_flag_home(0)) or not blue.has_point(instance.get_flag_home(1)):
+				failures.append("%s: a flag sits outside its own base" % path)
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["capture_the_flag", "", "soccer", "stock"]:
+			var want: float = 4.0 if mode_id == "capture_the_flag" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## "Flag Runner" goes to the player with most captures, only in Capture the Flag.
+func _scenario_ctf_flag_runner_award() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_captures(0, 1)
+	stats.record_captures(2, 1)
+	stats.record_captures(2, 1)
+	var got: Array[Dictionary] = stats.mode_awards([0, 1, 2], "capture_the_flag")
+	if got.size() != 1 or got[0]["title"] != "Flag Runner" or int(got[0]["slot"]) != 2 or got[0]["detail"] != "2 captures":
+		failures.append("Capture the Flag awards were %s, wanted Flag Runner to slot 2 for 2 captures" % [got])
+	if not stats.mode_awards([0, 1, 2], "soccer").is_empty():
+		failures.append("Flag Runner leaked into another mode")
+	_scenario_completed = true
+	return failures
+## A bot plays its job: the lowest slot defends its own flag, the other attacks the
+## enemy flag, everyone chases an enemy carrier, a carrier heads home, and a dropped
+## flag is gone for. Then an attacker really does close on the enemy flag.
+func _scenario_bot_ctf_attackers_defenders_and_carrier_chase() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rm._current_stage
+	var defender := BotScript.new()
+	defender.rng.seed = BOT_SEED
+	defender.player = rig["players"][0]
+	defender.output = rig["players"][0].set_input_vector
+	rig["stage"].add_child(defender)
+	var attacker := BotScript.new()
+	attacker.rng.seed = BOT_SEED
+	attacker.player = rig["players"][2]
+	attacker.output = rig["players"][2].set_input_vector
+	rig["stage"].add_child(attacker)
+	defender._read_mode()
+	attacker._read_mode()
+	if defender._ctf_goal().distance_to(stage.get_flag_home(0)) > 1.0:
+		failures.append("the defender heads to %s, not its own flag" % [defender._ctf_goal()])
+	if attacker._ctf_goal().distance_to(stage.get_flag_home(1)) > 1.0:
+		failures.append("the attacker heads to %s, not the enemy flag" % [attacker._ctf_goal()])
+	# Blue's player 1 takes Red's flag: both Red bots go for it.
+	mode.take_flag(0, 1)
+	var carrier_at: Vector2 = rig["players"][1].global_position
+	if defender._ctf_goal().distance_to(carrier_at) > 1.0 or attacker._ctf_goal().distance_to(carrier_at) > 1.0:
+		failures.append("the Red bots did not both chase the carrier")
+	mode.return_flag(0)
+	# A Red carrier heads for its own base.
+	mode.take_flag(1, 2)
+	if attacker._ctf_goal().distance_to(stage.get_base_rect(0).get_center()) > 1.0:
+		failures.append("the carrying bot heads to %s, not home" % [attacker._ctf_goal()])
+	mode.return_flag(1)
+	# An attacker really closes on the enemy flag.
+	rig["players"][1].teleport_to(Vector2(-500.0, 240.0))
+	rig["players"][3].teleport_to(Vector2(-450.0, 240.0))
+	rig["players"][0].teleport_to(Vector2(-650.0, 240.0))
+	rig["players"][2].teleport_to(Vector2(-100.0, 240.0))
+	defender.queue_free()
+	var start: float = rig["players"][2].global_position.distance_to(stage.get_flag_home(1))
+	var best: float = start
+	for t in 900:
+		await physics_frame
+		best = minf(best, rig["players"][2].global_position.distance_to(stage.get_flag_home(1)))
+		if int(mode.carrier[1]) == 2:
+			break
+	print("      attacker distance to the enemy flag: %.0f at the start, %.0f at best" % [start, best])
+	if best > start - 100.0:
+		failures.append("the attacking bot never closed 100 px on the enemy flag (%.0f -> best %.0f)" % [start, best])
+	await _teardown(rig["stage"])
+	return failures
+## "Capture the Flag!" at the round start, "Flag taken!" on a pickup and "Captured!" on a capture.
+func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for sound: String in ["announce_capture_the_flag", "announce_flag_taken", "announce_captured"]:
+		if not announcer.sfx.has_sound(sound):
+			failures.append("no Sfx entry '%s'" % sound)
+	announcer.clear()
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	await _await_condition(func() -> bool: return announcer.said.has("announce_capture_the_flag"), 4000)
+	if not announcer.said.has("announce_capture_the_flag"):
+		failures.append("the announcer said %s, expected 'announce_capture_the_flag'" % [announcer.said])
+	mode.take_flag(1, 0)
+	await _await_condition(func() -> bool: return announcer.said.has("announce_flag_taken"), 4000)
+	if not announcer.said.has("announce_flag_taken"):
+		failures.append("the announcer said %s, expected 'announce_flag_taken'" % [announcer.said])
+	mode.capture(0, 0)
+	await _await_condition(func() -> bool: return announcer.said.has("announce_captured"), 4000)
+	if not announcer.said.has("announce_captured"):
+		failures.append("the announcer said %s, expected 'announce_captured'" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+
 ## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
 func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
 	var stage: Node2D = _new_stage()
