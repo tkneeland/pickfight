@@ -276,6 +276,10 @@ var reduce_flash: bool = false
 ## are drawn. One of `UI_SCALES`; 1.0 by default.
 const UI_SCALES: Array[float] = [1.0, 1.5, 2.0]
 var ui_scale: float = 1.0
+## Streamer mode (#369): when on, the shared screen hides the room code, the
+## join URL and the join QR ("Code hidden: see host phone"); the host phone's
+## menu still shows the code. Off by default.
+var hide_room_code: bool = false
 ## What `sync_fullscreen()` reads the window mode from: a Callable returning a
 ## `DisplayServer.WINDOW_MODE_*`, or an empty one for the real window. The
 ## scenarios point it at a fake window, as headless has none.
@@ -581,6 +585,11 @@ func set_reduce_flash(value: bool) -> void:
 	reduce_flash = value
 	_save_settings()
 
+## Hide the room code and join QR on the shared screen (#369), and remember it.
+func set_hide_room_code(value: bool) -> void:
+	hide_room_code = value
+	_save_settings()
+
 ## Pick the name tag size (#317): snaps to the nearest of `UI_SCALES`.
 func set_ui_scale(value: float) -> void:
 	ui_scale = _nearest_ui_scale(value)
@@ -686,6 +695,7 @@ func load_settings() -> void:
 		screen_shake = bool(config.get_value("display", "screen_shake", true))
 		reduce_flash = bool(config.get_value("display", "reduce_flash", false))
 		ui_scale = _nearest_ui_scale(float(config.get_value("display", "ui_scale", 1.0)))
+		hide_room_code = bool(config.get_value("display", "hide_room_code", false))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -709,6 +719,7 @@ func _save_settings() -> void:
 	config.set_value("display", "screen_shake", screen_shake)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
+	config.set_value("display", "hide_room_code", hide_room_code)
 	err = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])

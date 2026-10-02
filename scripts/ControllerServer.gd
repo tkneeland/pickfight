@@ -468,7 +468,16 @@ func set_join_corner_visible(on: bool) -> void:
 		label.visible = on
 	var qr_rect: TextureRect = join_qr_rect()
 	if qr_rect != null:
-		qr_rect.visible = on and qr_rect.texture != null
+		qr_rect.visible = on and qr_rect.texture != null and not room_code_hidden()
+
+## What the shared screen shows in place of the room code, URL and QR in
+## streamer mode (#369).
+const ROOM_CODE_HIDDEN_TEXT: String = "Code hidden: see host phone"
+
+## Streamer mode (#369): the host's saved "Hide room code" setting.
+func room_code_hidden() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx != null and bool(sfx.get("hide_room_code"))
 
 ## The in-round join label and QR, or null (issue #230).
 func join_label() -> Label:
@@ -574,6 +583,7 @@ func _ready() -> void:
 	_join_label_base = label.text if label != null else ""
 
 func _process(delta: float) -> void:
+	_sync_room_code_hidden()
 	_process_http()
 	_process_websocket()
 	_process_remote()
@@ -1913,12 +1923,26 @@ func _on_room_code_changed(_code: String) -> void:
 	_refresh_join_label()
 	_send_lobby_to_all()
 
+## Streamer mode (#369) can be toggled at any time: redraw the corner when it is.
+func _sync_room_code_hidden() -> void:
+	var hidden: bool = room_code_hidden()
+	if hidden == _room_code_was_hidden:
+		return
+	_room_code_was_hidden = hidden
+	if relay_link != null:
+		_refresh_join_label()
+	set_join_corner_visible(not _join_corner_hidden)
+
+var _room_code_was_hidden: bool = false
+
 func _refresh_join_label() -> void:
 	var label: Label = join_label()
 	var code: String = relay_link.room_code()
 	if label == null:
 		return
-	if code.is_empty():
+	if room_code_hidden():
+		label.text = ROOM_CODE_HIDDEN_TEXT
+	elif code.is_empty():
 		label.text = _join_label_base
 	elif relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
 		label.text = "%s\nOnline: %s (reconnecting...)" % [_join_label_base, code]

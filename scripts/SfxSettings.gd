@@ -63,6 +63,7 @@ var _notice: PanelContainer
 var _notice_label: Label
 var _notice_off: Button
 var _notice_ok: Button
+var _hide_code_box: CheckBox
 var _scale_button: OptionButton
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
@@ -147,6 +148,7 @@ func _ready() -> void:
 	_shake_box = _add_box(content, "ScreenShake", "Screen shake")
 	_flash_box = _add_box(content, "ReduceFlash", "Reduce flashes")
 	_stats_box = _add_box(content, "ShareStats", "Send anonymous match stats")
+	_hide_code_box = _add_box(content, "HideRoomCode", "Hide room code")
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
 	for option: float in sfx.UI_SCALES:
@@ -184,6 +186,7 @@ func _ready() -> void:
 	_resolution.item_selected.connect(_on_resolution_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
+	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
 	_more.toggled.connect(func(pressed: bool) -> void: _more_area.visible = pressed)
 	apply_resolution()
@@ -249,6 +252,7 @@ func refresh() -> void:
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_notice.visible = not host.telemetry_notice_seen
+	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
