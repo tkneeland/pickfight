@@ -558,13 +558,20 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
 	"hot_potato_stages_load_and_are_in_rotation",
 	"hot_potato_draws_its_stages_more_often",
-	"rules_disabled_modifier_never_rolls_in_that_mode_only",
-	"rules_modifier_toggles_persist_across_reload",
-	"rules_table_bans_cannot_be_reenabled",
+	"mode_awards_go_to_the_right_player_only_in_their_mode",
+	"mode_awards_reach_the_victory_awards_through_the_round_manager",
+	"pseudo_locale_changes_lobby_and_mode_text",
+	"every_tr_key_is_in_strings_csv",
 	"koth_stages_load_and_are_in_rotation",
 	"koth_hill_starts_on_first_hill_spot",
 	"koth_moving_hill_warns_then_moves",
 	"koth_stage_without_spots_uses_spawn_centre",
+	"announcer_calls_each_mode_at_round_start",
+	"announcer_calls_hill_taken_when_the_hill_changes_hands",
+	"announcer_calls_last_life_stolen_and_overtime_in_stock",
+	"rules_disabled_modifier_never_rolls_in_that_mode_only",
+	"rules_modifier_toggles_persist_across_reload",
+	"rules_table_bans_cannot_be_reenabled",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2073,12 +2080,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_stages_load_and_are_in_rotation()
 		"hot_potato_draws_its_stages_more_often":
 			return await _scenario_hot_potato_draws_its_stages_more_often()
-		"rules_disabled_modifier_never_rolls_in_that_mode_only":
-			return await _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only()
-		"rules_modifier_toggles_persist_across_reload":
-			return await _scenario_rules_modifier_toggles_persist_across_reload()
-		"rules_table_bans_cannot_be_reenabled":
-			return await _scenario_rules_table_bans_cannot_be_reenabled()
+		"mode_awards_go_to_the_right_player_only_in_their_mode":
+			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
+		"mode_awards_reach_the_victory_awards_through_the_round_manager":
+			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
+		"pseudo_locale_changes_lobby_and_mode_text":
+			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
+		"every_tr_key_is_in_strings_csv":
+			return await _scenario_every_tr_key_is_in_strings_csv()
 		"koth_stages_load_and_are_in_rotation":
 			return await _scenario_koth_stages_load_and_are_in_rotation()
 		"koth_hill_starts_on_first_hill_spot":
@@ -2087,6 +2096,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_moving_hill_warns_then_moves()
 		"koth_stage_without_spots_uses_spawn_centre":
 			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
+		"announcer_calls_each_mode_at_round_start":
+			return await _scenario_announcer_calls_each_mode_at_round_start()
+		"announcer_calls_hill_taken_when_the_hill_changes_hands":
+			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
+		"announcer_calls_last_life_stolen_and_overtime_in_stock":
+			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
+		"rules_disabled_modifier_never_rolls_in_that_mode_only":
+			return await _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only()
+		"rules_modifier_toggles_persist_across_reload":
+			return await _scenario_rules_modifier_toggles_persist_across_reload()
+		"rules_table_bans_cannot_be_reenabled":
+			return await _scenario_rules_table_bans_cannot_be_reenabled()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -13465,10 +13486,10 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("Pause/Resume is not a single tap in the menu: %s" % pause_handler)
 	var end_at: int = page.find("menuEndBtn.addEventListener(\"click\"")
 	var end_handler: String = page.substr(end_at, page.find("});", end_at) - end_at) if end_at >= 0 else ""
-	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end", { match: match'):
+	if not end_handler.contains('askConfirm(t("CONFIRM_END")') or not end_handler.contains('sendHost("end", { match: match'):
 		failures.append("End match does not ask 'Are you sure?' before sending: %s" % end_handler)
 	var kick_body: String = _js_function_body(page, "showKickList")
-	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK"') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
 		failures.append("Kick player does not ask 'Are you sure?' before sending")
 	if not kick_body.contains("if (p.slot === slot) { continue; }"):
 		failures.append("the kick list offers the host itself")
@@ -19822,7 +19843,7 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 	var state: String = _js_function_body(page, "showState")
 	var slot_at: int = state.find("} else if (slot < 0) {")
 	var slot_arm: String = state.substr(slot_at, state.find("} else if (lobby", slot_at) - slot_at) if slot_at >= 0 else ""
-	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = "Waiting for a free slot"'):
+	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = t("STATE_WAITING_SLOT")'):
 		failures.append("a refused phone is not told it is waiting for a free slot: %s" % slot_arm)
 	if not slot_arm.contains("} else if (closeReason) {"):
 		failures.append("any other close reason is not shown large: %s" % slot_arm)
@@ -19871,7 +19892,7 @@ func _scenario_controller_page_stale_bits_dropped() -> Array[String]:
 		failures.append("the kick frame is not {slot, claim}")
 	if kick_body.contains("claim: claim, name"):
 		failures.append("the kick frame still sends the unused name")
-	if not kick_body.contains('askConfirm("Are you sure? Kick " + name'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK", name)'):
 		failures.append("the kick confirm no longer names the player")
 	var wake: String = _js_function_body(page, "requestWakeLock")
 	if not wake.contains('lock.addEventListener("release"') or not wake.contains("if (wakeLock === lock) { wakeLock = null; }"):
@@ -22083,7 +22104,7 @@ func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
 		'addEventListener("click", function () { sendTeam(-1); });',
 		'sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });',
 		'menuModeBtn.disabled = inMatch();',
-		'" team wins"',
+		' team wins"',
 		"    showTeams(msg);\n  }\n",
 	]
 	for needle: String in needles:
@@ -29641,6 +29662,103 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	_stock_stage_reset()
 	_scenario_completed = true
 	return failures
+## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
+func _i18n_catalogue_367() -> Dictionary:
+	var out: Dictionary = {}
+	var file: FileAccess = FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	if file == null:
+		return out
+	file.get_csv_line()
+	while not file.eof_reached():
+		var row: PackedStringArray = file.get_csv_line()
+		if row.size() >= 2 and not row[0].is_empty():
+			out[row[0]] = row[1]
+	return out
+## Issue #367: a pseudo-locale ("xx", made here from the catalogue) must change
+## a lobby label and a mode name, and English must read as before.
+func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if TranslationServer.translate("LOBBY_PRESS_READY") != "Press Ready on your phone":
+		failures.append("English lobby text reads '%s'" % TranslationServer.translate("LOBBY_PRESS_READY"))
+	if GameModesType.display_name(GameModesType.KING_OF_THE_HILL) != "King of the Hill":
+		failures.append("English mode name reads '%s'" % GameModesType.display_name(GameModesType.KING_OF_THE_HILL))
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var mode_name: String = GameModesType.display_name(GameModesType.KING_OF_THE_HILL)
+	if mode_name != "[xx] King of the Hill":
+		failures.append("the mode name did not change in the pseudo-locale: '%s'" % mode_name)
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var how_to_play: Control = rm.how_to_play_panel()
+	if how_to_play == null:
+		failures.append("no how-to-play panel in the lobby")
+	else:
+		var texts: PackedStringArray = PackedStringArray()
+		for label: Node in how_to_play.find_children("*", "Label", true, false):
+			texts.append((label as Label).text)
+		print("      lobby labels in xx: %s" % ", ".join(texts))
+		if not texts.has("[xx] HOW TO PLAY"):
+			failures.append("the lobby's how-to-play title did not change: %s" % ", ".join(texts))
+	await _teardown(main)
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	return failures
+## Issue #367: every key a source file asks for (`tr("KEY")`, the static
+## `TranslationServer.translate("KEY")`) is in the catalogue, and so is every
+## key built from an id (modes, modifiers, teams, stages, award categories).
+func _scenario_every_tr_key_is_in_strings_csv() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if catalogue.size() < 100:
+		failures.append("only %d catalogue keys" % catalogue.size())
+	var pattern := RegEx.new()
+	pattern.compile("(?:\\btr|TranslationServer\\.translate)\\(\"([A-Z][A-Z0-9_]*)\"(?!\\s*\\+)")
+	var used: int = 0
+	for file_name: String in DirAccess.get_files_at("res://scripts"):
+		if not file_name.ends_with(".gd"):
+			continue
+		var text: String = FileAccess.get_file_as_string("res://scripts/" + file_name)
+		for found: RegExMatch in pattern.search_all(text):
+			used += 1
+			if not catalogue.has(found.get_string(1)):
+				failures.append("%s uses missing key %s" % [file_name, found.get_string(1)])
+	print("      %d literal keys used, %d in the catalogue" % [used, catalogue.size()])
+	if used < 100:
+		failures.append("only %d tr() calls found, the scan is not reading the sources" % used)
+	var built: PackedStringArray = PackedStringArray()
+	for row: Dictionary in GameModesType.TABLE:
+		var id: String = (str(row["id"]) if row["id"] != "" else "classic").to_upper()
+		built.append("MODE_%s_NAME" % id)
+		built.append("MODE_%s_RULE" % id)
+	for id: String in RoundModifiersScript.IDS:
+		built.append("MODIFIER_" + RoundModifiersScript.title_of(id).to_upper().replace(" ", "_"))
+	for team_name: String in ["RED", "BLUE"]:
+		built.append("TEAM_" + team_name)
+	for category: String in ["COMBAT", "CLUMSY", "SURVIVOR", "AIRBORNE", "COLLECTOR"]:
+		built.append("AWARD_CATEGORY_" + category)
+	for i in LobbyScreenScript230.HOW_TO_PLAY_LINES.size():
+		built.append("HOW_TO_PLAY_LINE_%d" % (i + 1))
+		if catalogue.get("HOW_TO_PLAY_LINE_%d" % (i + 1), "") != LobbyScreenScript230.HOW_TO_PLAY_LINES[i]:
+			failures.append("how-to-play line %d differs from its catalogue entry" % (i + 1))
+	for list_name: String in ["STAGES", "WEAPONS"]:
+		built.append("SETTINGS_%s_LIST" % list_name)
+	for stage_file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if stage_file.ends_with(".tscn"):
+			built.append("STAGE_" + stage_file.get_basename().to_upper())
+	for key: String in built:
+		if not catalogue.has(key):
+			failures.append("built key %s is missing" % key)
+	_scenario_completed = true
+	return failures
 # --- Hot Potato stages (issue #373)
 const HOT_POTATO_STAGES_373: PackedStringArray = [
 	"res://scenes/stages/Racetrack.tscn",
@@ -29744,96 +29862,127 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
 	return failures
-# --- Rules tab: per-mode modifier toggles (#378) ------------------------------
-func _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only() -> Array[String]:
+## Issue #355: the mode awards, from MatchStats alone. Each goes to the slot
+## with the most of its number, only in its own mode; Classic and Sudden Death
+## get none, and a new match wipes them.
+func _scenario_mode_awards_go_to_the_right_player_only_in_their_mode() -> Array[String]:
 	var failures: Array[String] = []
-	var rig: Dictionary = _mode_rig(2, "")
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hill_hold(0, 4.0)
+	stats.record_hill_hold(1, 7.5)
+	stats.record_hill_hold(1, 1.0)
+	stats.record_hill_hold(2, 8.0)
+	stats.record_tags_passed(0, 1)
+	stats.record_tags_passed(2, 3)
+	stats.record_tags_passed(1, 2)
+	stats.record_lives_left(0, 2)
+	stats.record_lives_left(1, 1)
+	stats.record_lives_left(2, 3)
+	stats.record_lives_left(2, 1)
+	var slots: Array = [0, 1, 2]
+	var want: Dictionary = {
+		"king_of_the_hill": ["HILL", "Longest Hold", 1, "8.5s on the hill"],
+		"hot_potato": ["TAGGER", "Hot Hands", 2, "3 tags passed"],
+		"stock": ["LIVES", "Survivor", 2, "4 lives left"],
+	}
+	for mode_id: String in want:
+		var got: Array[Dictionary] = stats.mode_awards(slots, mode_id)
+		var w: Array = want[mode_id]
+		if got.size() != 1:
+			failures.append("%s gave %d mode awards, expected 1: %s" % [mode_id, got.size(), got])
+			continue
+		var a: Dictionary = got[0]
+		print("      %s: %s -> slot %d (%s)" % [a["category"], a["title"], a["slot"], a["detail"]])
+		if a["category"] != w[0] or a["title"] != w[1] or a["slot"] != w[2] or a["detail"] != w[3]:
+			failures.append("%s awarded %s, expected %s" % [mode_id, a, w])
+	for mode_id: String in ["", "sudden_death"]:
+		if not stats.mode_awards(slots, mode_id).is_empty():
+			failures.append("mode '%s' showed mode awards: %s" % [mode_id, stats.mode_awards(slots, mode_id)])
+	# Only the eligible roster is considered, and a blip of a hold earns nothing.
+	if stats.mode_awards([0, 1], "king_of_the_hill")[0]["slot"] != 1:
+		failures.append("an absent slot 2 still took Longest Hold")
+	var brief: RefCounted = MatchStatsScript.new()
+	brief.record_hill_hold(0, 0.2)
+	if not brief.mode_awards([0], "king_of_the_hill").is_empty():
+		failures.append("a 0.2 s hold earned Longest Hold")
+	stats.forget_slot(2)
+	if stats.mode_awards(slots, "hot_potato")[0]["slot"] != 1:
+		failures.append("a forgotten slot kept its tags")
+	stats.begin_match()
+	for mode_id: String in want:
+		if not stats.mode_awards(slots, mode_id).is_empty():
+			failures.append("a new match kept the %s award" % mode_id)
+	_scenario_completed = true
+	return failures
+## Issue #355 through the real RoundManager and mode nodes: the numbers a mode
+## keeps are handed to the match stats when the round ends, and the victory
+## awards then hold the mode's award -- in that mode only, never in Classic.
+func _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager() -> Array[String]:
+	var failures: Array[String] = []
+	# Hot Potato: slot "it" lands a damaging hit twice (passing the tag back and
+	# forth past the cooldown); the passer with the most tags gets Hot Hands.
+	var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO, 99)
 	var rm: Node = rig["rm"]
-	await _await_ticks(5)
-	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
-	var was_enabled: bool = RoundManagerScript.modifier_rolls_enabled
-	RoundManagerScript.modifier_rolls_enabled = true
-	rm.modifier_chance = 1.0
-	host.set_modifier_enabled("sudden_death", "gale", false)
-	rm.game_mode = "sudden_death"
-	var sudden: Dictionary = {}
-	for i in 400:
-		sudden[rm._roll_modifier()] = true
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"], false)
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.fuse_sec = 60.0
+	mode.fuse_left = 60.0
+	mode.tag_cooldown_sec = 0.0
+	mode._cooldown_left = 0.0
+	var first: int = mode.it_slot
+	var second: int = (first + 1) % 3
+	players[first].strike_landed.emit(players[second], 10.0, Vector2.ZERO, false)
+	players[second].strike_landed.emit(players[first], 10.0, Vector2.ZERO, false)
+	players[first].strike_landed.emit(players[second], 10.0, Vector2.ZERO, false)
+	var roster: Array[int] = [0, 1, 2]
+	if not rm._stats.mode_awards(roster, "hot_potato").is_empty():
+		failures.append("Hot Hands appeared before the round's tags were handed over")
+	rm._end_game_mode()
+	var hot: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "TAGGER")
+	if hot.size() != 1 or hot[0]["slot"] != first or hot[0]["detail"] != "2 tags passed":
+		failures.append("Hot Hands was %s, expected slot %d with '2 tags passed'" % [hot, first])
 	rm.game_mode = ""
-	var classic: Dictionary = {}
-	for i in 400:
-		classic[rm._roll_modifier()] = true
-	if sudden.has("gale"):
-		failures.append("gale rolled in sudden_death after the host switched it off")
-	if not classic.has("gale"):
-		failures.append("gale stopped rolling in Classic, which the host left on")
-	# Everything off: nothing rolls.
-	for id: String in RoundModifiersScript.IDS:
-		host.set_modifier_enabled("", id, false)
-	for i in 50:
-		if rm._roll_modifier() != "":
-			failures.append("a modifier rolled with every one switched off")
-			break
-	host.disabled_modifiers = {}
-	RoundManagerScript.modifier_rolls_enabled = was_enabled
-	await _teardown(rig["stage"])
-	_scenario_completed = true
-	return failures
-func _scenario_rules_modifier_toggles_persist_across_reload() -> Array[String]:
-	var failures: Array[String] = []
-	var path: String = OS.get_temp_dir().path_join("pickfight_rules_%d.cfg" % OS.get_process_id())
-	DirAccess.remove_absolute(path)
-	var script: GDScript = load("res://scripts/HostSettings.gd") as GDScript
-	var first: RefCounted = script.new()
-	first.path = path
-	if not first.is_modifier_enabled("", "gale"):
-		failures.append("a fresh store should have every modifier on")
-	first.set_modifier_enabled("", "gale", false)
-	first.set_modifier_enabled("hot_potato", "bouncy", false)
-	var second: RefCounted = script.new()
-	second.path = path
-	second.load_settings()
-	if second.is_modifier_enabled("", "gale") or second.is_modifier_enabled("hot_potato", "bouncy"):
-		failures.append("a switched-off modifier came back on after a reload")
-	if not second.is_modifier_enabled("hot_potato", "gale") or not second.is_modifier_enabled("", "bouncy"):
-		failures.append("a modifier switched off in one mode was off in another")
-	second.set_modifier_enabled("", "gale", true)
-	var third: RefCounted = script.new()
-	third.path = path
-	third.load_settings()
-	if not third.is_modifier_enabled("", "gale"):
-		failures.append("switching a modifier back on did not persist")
-	DirAccess.remove_absolute(path)
-	_scenario_completed = true
-	return failures
-func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
-	var failures: Array[String] = []
-	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
-	if host.set_modifier_enabled("hot_potato", "weapon_roulette", true):
-		failures.append("the host re-enabled a modifier Hot Potato bans")
-	if host.is_modifier_enabled("hot_potato", "weapon_roulette"):
-		failures.append("a banned modifier reported enabled")
-	for id: String in RoundModifiersScript.IDS:
-		if host.is_modifier_enabled("stock", id) or host.set_modifier_enabled("stock", id, true):
-			failures.append("Stock allowed %s" % id)
-	if not host.is_modifier_enabled("hot_potato", "gale"):
-		failures.append("an unbanned modifier should default on")
-	# The panel shows banned boxes locked off.
-	var sfx: Node = _sfx()
-	if sfx == null:
-		return ["the Sfx autoload is missing"]
-	var panel: CanvasLayer = sfx.build_settings_ui()
-	await _await_ticks(3)
-	panel.rules_mode_button().select(panel._rules_mode_ids.find("hot_potato"))
-	panel._rebuild_rules()
-	var box: CheckBox = panel.rules_box("weapon_roulette")
-	if box == null or not box.disabled or box.button_pressed:
-		failures.append("the banned box was not locked off in the Rules list")
-	var open_box: CheckBox = panel.rules_box("gale")
-	if open_box == null or open_box.disabled or not open_box.button_pressed:
-		failures.append("an unbanned box should be live and ticked")
-	panel.queue_free()
-	_scenario_completed = true
+	if not rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "TAGGER").is_empty():
+		failures.append("Hot Hands appeared once the match was Classic")
+	await _teardown(rig["stage"], false)
+	# King of the Hill: the sole occupant banks hold time.
+	rig = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	rm = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"], false)
+		return failures
+	mode = rm.game_mode_node()
+	mode.hold_time[2] = 3.0
+	mode.hold_time[0] = 1.0
+	rm._end_game_mode()
+	var hill: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "HILL")
+	if hill.size() != 1 or hill[0]["slot"] != 2 or hill[0]["detail"] != "3.0s on the hill":
+		failures.append("Longest Hold was %s, expected slot 2 with '3.0s on the hill'" % [hill])
+	if not rm._stats.mode_awards(roster, "").is_empty():
+		failures.append("Classic showed a mode award")
+	await _teardown(rig["stage"], false)
+	# Stock: the player with the most lives left at the round's end.
+	rig = _stock_rig(3, 3, 480)
+	rm = rig["rm"]
+	var stock: Node = await _stock_started(rig)
+	if stock == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var players3: Array[RigidBody2D] = rig["players"]
+	if not await _stock_lose_life(players3[1]):
+		failures.append("slot 1 never came back after losing a life")
+	rm._end_game_mode()
+	var lives: Array[Dictionary] = rm._all_awards(roster).filter(func(a: Dictionary) -> bool: return a["category"] == "LIVES")
+	if lives.size() != 1 or lives[0]["slot"] != 0 or lives[0]["detail"] != "3 lives left":
+		failures.append("Survivor was %s, expected slot 0 with '3 lives left'" % [lives])
+	await _stock_finish(rig)
 	return failures
 # --- King of the Hill stages (issue #377)
 const KOTH_STAGES_377: PackedStringArray = [
@@ -29996,5 +30145,222 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 	if hill.hill_moves or not hill.hill_spots.is_empty():
 		failures.append("a stage with no spots reports spots or a moving hill")
 	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+# --- Issue #370: announcer callouts for modes ----------------------------------
+## The announcer, quiet and recording, or null when the autoload is missing.
+func _callout_announcer() -> Node:
+	var sfx: Node = _sfx()
+	if sfx == null or sfx.announcer == null:
+		return null
+	sfx.announcer.clear()
+	return sfx.announcer
+## The lines each mode calls as its round starts.
+const MODE_START_CALLOUTS: Dictionary = {
+	"king_of_the_hill": "announce_king_of_the_hill",
+	"hot_potato": "announce_hot_potato",
+	"sudden_death": "announce_sudden_death",
+	"stock": "announce_stock",
+}
+## "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" each play
+## as their mode's round starts, and each has a sound entry in the Sfx table.
+func _scenario_announcer_calls_each_mode_at_round_start() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for mode_id: String in MODE_START_CALLOUTS:
+		var want: String = MODE_START_CALLOUTS[mode_id]
+		if not announcer.sfx.has_sound(want):
+			failures.append("no Sfx entry '%s'" % want)
+		announcer.clear()
+		_stock_settings(3, 0)
+		var rig: Dictionary = _mode_rig(3, mode_id)
+		if not await _mode_started(rig):
+			failures.append("the %s round never started" % mode_id)
+		else:
+			await _await_condition(func() -> bool: return announcer.said.has(want), 4000)
+			if not announcer.said.has(want):
+				failures.append("%s: the announcer said %s, expected '%s'" % [mode_id, announcer.said, want])
+		await _stock_finish(rig)
+	return failures
+## "Hill taken!" when a different player takes the hill from the one who held
+## it, but not for the first to hold it.
+func _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	# Everyone off the hill, then a fresh round so nobody counts as its holder.
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(5)
+	var all_slots: Array[int] = [0, 1, 2]
+	hill.start_round(all_slots)
+	announcer.clear()
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	await _await_msec(1500)
+	if announcer.said.has("announce_hill_taken"):
+		failures.append("the first player to hold the hill was called 'Hill taken!'")
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[0].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_hill_taken"), 4000):
+		failures.append("a second player taking the hill was not called: %s" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+## Stock: "Last life!" when a player is down to one, "Stolen!" when a team-mate
+## gives one up, "Overtime!" when a tied clock runs out.
+func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		await _stock_finish(rig)
+		return failures
+	announcer.clear()
+	await _stock_lose_life(players[0])
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_last_life"), 4000):
+		failures.append("down to one life was not called: %s" % [announcer.said])
+	players[0].eliminate()
+	await _await_ticks(4)
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	elif not await _await_condition(func() -> bool: return announcer.said.has("announce_stolen"), 4000):
+		failures.append("a stolen life was not called: %s" % [announcer.said])
+	await _stock_finish(rig)
+	rig = _stock_rig(3, 3, 120)
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the tie round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	announcer.clear()
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_overtime"), 6000):
+		failures.append("the overtime was not called: %s" % [announcer.said])
+	if announcer.said.has("announce_sudden_death"):
+		failures.append("the overtime was also called 'Sudden Death!': %s" % [announcer.said])
+	await _stock_finish(rig)
+	return failures
+
+# --- Rules tab: per-mode modifier toggles (#378) ------------------------------
+func _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, "")
+	var rm: Node = rig["rm"]
+	await _await_ticks(5)
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was_enabled: bool = RoundManagerScript.modifier_rolls_enabled
+	RoundManagerScript.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	host.set_modifier_enabled("sudden_death", "gale", false)
+	rm.game_mode = "sudden_death"
+	var sudden: Dictionary = {}
+	for i in 400:
+		sudden[rm._roll_modifier()] = true
+	rm.game_mode = ""
+	var classic: Dictionary = {}
+	for i in 400:
+		classic[rm._roll_modifier()] = true
+	if sudden.has("gale"):
+		failures.append("gale rolled in sudden_death after the host switched it off")
+	if not classic.has("gale"):
+		failures.append("gale stopped rolling in Classic, which the host left on")
+	# Everything off: nothing rolls.
+	for id: String in RoundModifiersScript.IDS:
+		host.set_modifier_enabled("", id, false)
+	for i in 50:
+		if rm._roll_modifier() != "":
+			failures.append("a modifier rolled with every one switched off")
+			break
+	host.disabled_modifiers = {}
+	RoundManagerScript.modifier_rolls_enabled = was_enabled
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_rules_modifier_toggles_persist_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pickfight_rules_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var script: GDScript = load("res://scripts/HostSettings.gd") as GDScript
+	var first: RefCounted = script.new()
+	first.path = path
+	if not first.is_modifier_enabled("", "gale"):
+		failures.append("a fresh store should have every modifier on")
+	first.set_modifier_enabled("", "gale", false)
+	first.set_modifier_enabled("hot_potato", "bouncy", false)
+	var second: RefCounted = script.new()
+	second.path = path
+	second.load_settings()
+	if second.is_modifier_enabled("", "gale") or second.is_modifier_enabled("hot_potato", "bouncy"):
+		failures.append("a switched-off modifier came back on after a reload")
+	if not second.is_modifier_enabled("hot_potato", "gale") or not second.is_modifier_enabled("", "bouncy"):
+		failures.append("a modifier switched off in one mode was off in another")
+	second.set_modifier_enabled("", "gale", true)
+	var third: RefCounted = script.new()
+	third.path = path
+	third.load_settings()
+	if not third.is_modifier_enabled("", "gale"):
+		failures.append("switching a modifier back on did not persist")
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	if host.set_modifier_enabled("hot_potato", "weapon_roulette", true):
+		failures.append("the host re-enabled a modifier Hot Potato bans")
+	if host.is_modifier_enabled("hot_potato", "weapon_roulette"):
+		failures.append("a banned modifier reported enabled")
+	for id: String in RoundModifiersScript.IDS:
+		if host.is_modifier_enabled("stock", id) or host.set_modifier_enabled("stock", id, true):
+			failures.append("Stock allowed %s" % id)
+	if not host.is_modifier_enabled("hot_potato", "gale"):
+		failures.append("an unbanned modifier should default on")
+	# The panel shows banned boxes locked off.
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var panel: CanvasLayer = sfx.build_settings_ui()
+	await _await_ticks(3)
+	panel.rules_mode_button().select(panel._rules_mode_ids.find("hot_potato"))
+	panel._rebuild_rules()
+	var box: CheckBox = panel.rules_box("weapon_roulette")
+	if box == null or not box.disabled or box.button_pressed:
+		failures.append("the banned box was not locked off in the Rules list")
+	var open_box: CheckBox = panel.rules_box("gale")
+	if open_box == null or open_box.disabled or not open_box.button_pressed:
+		failures.append("an unbanned box should be live and ticked")
+	panel.queue_free()
 	_scenario_completed = true
 	return failures

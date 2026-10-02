@@ -85,9 +85,9 @@ func save_clip(stamp: String = "") -> String:
 ## Save and show a toast with the path (the F9 handler).
 func save_and_toast() -> String:
 	var dir := save_clip()
-	var shown := "Replay: nothing recorded yet"
+	var shown := tr("REPLAY_NOTHING")
 	if not dir.is_empty():
-		shown = "Replay saved: %s" % ProjectSettings.globalize_path(dir)
+		shown = tr("REPLAY_SAVED") % ProjectSettings.globalize_path(dir)
 	_toast.text = shown
 	_toast.visible = true
 	_toast_timer.start(TOAST_SEC)
