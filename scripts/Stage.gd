@@ -54,6 +54,10 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## 1, so it can still appear). Empty means just the derived theme.
 @export var weapon_weight_overrides: Dictionary = {}
 
+## Whether this is a no-frills competitive stage (#376): symmetrical, no
+## hazards, no moving parts. The Stock stage picker (#375) lists these first.
+@export var competitive: bool = false
+
 ## Night variant (#332): set before the stage enters the tree. The stage then
 ## uses the Night palette mood and adds a `NightLighting` child. Visual only.
 var night: bool = false
