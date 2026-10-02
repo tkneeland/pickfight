@@ -28,6 +28,7 @@ const AIRBORNE: String = "AIRBORNE"
 
 ## The shortest airtime that earns the award (issue #337).
 const AIRTIME_MIN_MSEC: int = 1000
+const COLLECTOR: String = "COLLECTOR"
 
 ## slot -> number, created on first use so any roster size works.
 var kos: Dictionary = {}
@@ -45,6 +46,10 @@ var survival_msec: Dictionary = {}
 ## Longest continuous stretch (msec) each slot went with no body contact this
 ## match (issue #337).
 var longest_air_msec: Dictionary = {}
+## Weapon pickups grabbed this match (issue #325), and per slot which weapon
+## (name -> count) -- the favourite is the one grabbed most, first grabbed on a tie.
+var pickups: Dictionary = {}
+var weapon_grabs: Dictionary = {}
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
 
@@ -66,6 +71,8 @@ func begin_match() -> void:
 	weapon_damage.clear()
 	weapon_hits.clear()
 	survival_msec.clear()
+	pickups.clear()
+	weapon_grabs.clear()
 	total_kos = 0
 	_last_hit.clear()
 	_streak.clear()
@@ -93,7 +100,7 @@ func end_round(now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	for victim: int in _last_hit.keys():
@@ -166,6 +173,51 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	result["streak"] = streak
 	result["first_blood"] = total_kos == 1
 	return result
+
+## `slot` picked up weapon `weapon` (a name such as "Hammer") off the stage.
+func record_pickup(slot: int, weapon: String) -> void:
+	if slot < 0:
+		return
+	_add(pickups, slot, 1)
+	var grabs: Dictionary = weapon_grabs.get(slot, {})
+	grabs[weapon] = int(grabs.get(weapon, 0)) + 1
+	weapon_grabs[slot] = grabs
+
+## The weapon `slot` grabbed most, "" when they grabbed none.
+func favourite_weapon(slot: int) -> String:
+	var grabs: Dictionary = weapon_grabs.get(slot, {})
+	var best: String = ""
+	for weapon: String in grabs.keys():
+		if best == "" or int(grabs[weapon]) > int(grabs[best]):
+			best = weapon
+	return best
+
+## One row per slot in `slots`, in that order, for the victory screen's stats
+## table: {"slot", "kos", "self_kos", "damage_dealt", "damage_taken",
+## "pickups", "weapon"} (damage rounded, weapon "" for none).
+func stat_rows(slots: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for slot: int in slots:
+		out.append({
+			"slot": slot,
+			"kos": int(kos.get(slot, 0)),
+			"self_kos": int(self_kos.get(slot, 0)),
+			"damage_dealt": roundi(float(damage_dealt.get(slot, 0))),
+			"damage_taken": roundi(float(damage_taken.get(slot, 0))),
+			"pickups": int(pickups.get(slot, 0)),
+			"weapon": favourite_weapon(slot),
+		})
+	return out
+
+## Superlatives beyond `awards()` (issue #325): "Magpie" for the most weapon
+## pickups. Kept apart so the three core awards stay as they were.
+func extra_awards(slots: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var best: int = _leader(slots, pickups, kos, false)
+	if best != -1:
+		var n: int = int(pickups[best])
+		out.append(_award(COLLECTOR, "Magpie", best, "%d pickup%s" % [n, "" if n == 1 else "s"]))
+	return out
 
 ## Up to three awards, one per category, each
 ## {"category", "title", "slot", "detail"}. `slots` are the players eligible
