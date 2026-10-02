@@ -970,7 +970,19 @@ func _hold_tether(state: PhysicsDirectBodyState2D) -> void:
 	if distance <= tether_length or distance == 0.0:
 		return
 	var out: Vector2 = span / distance
-	xform.origin = anchor + out * tether_length
+	var held: Vector2 = anchor + out * tether_length
+	# The pull back to the tether must not carry the head into another head
+	# (issue #480): a ball seated against a blade by the pair correction sits
+	# further out than the tether allows, and drawing it straight in to the
+	# limit went through the blade -- 6.8 px deep on macOS. The pull stops
+	# where it first touches a head instead; the ball is a hair past the
+	# tether for a tick, and the next pull finds the blade in its way again.
+	if not sweep_shapes.is_empty() and not phased:
+		var struck: Dictionary = _trace_heads(
+			_other_head_circles(xform.origin), xform.origin, held, _circle_radius(0))
+		if not struck.is_empty():
+			held = struck["position"]
+	xform.origin = held
 	state.transform = xform
 	var away: float = (velocity - anchor_velocity).dot(out)
 	if away > 0.0:
