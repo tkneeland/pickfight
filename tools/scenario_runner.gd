@@ -624,6 +624,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
 	"sound_trailer_split_survives_hostile_bytes",
 	"remote_client_lobby_text_follows_the_locale",
+	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2267,6 +2268,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_sound_trailer_split_survives_hostile_bytes()
 		"remote_client_lobby_text_follows_the_locale":
 			return await _scenario_remote_client_lobby_text_follows_the_locale()
+		"lobby_pad_menu_lets_go_when_the_lobby_leaves":
+			return await _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32598,4 +32601,18 @@ func _scenario_remote_client_lobby_text_follows_the_locale() -> Array[String]:
 	if client._lobby_title.text != "Room ABCD  match over":
 		failures.append("English victory title reads '%s'" % client._lobby_title.text)
 	await _rc_close_241(rig)
+	return failures
+## Review sweep: Join swaps Main for the PC client under an open pad menu. The
+## lobby must let go of PadMenu as it leaves, or A and B stay ignored (#368).
+func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	rig["screen"].set_pad_menu(true)
+	if not PadMenuScript368.is_open():
+		failures.append("the pad menu never opened; the check is void")
+	await _teardown(rig["main"])
+	await process_frame
+	if PadMenuScript368.is_open():
+		failures.append("PadMenu still reports a menu open after the lobby left the tree")
+	PadMenuScript368.reset()
 	return failures
