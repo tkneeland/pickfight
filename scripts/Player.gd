@@ -516,12 +516,16 @@ func teleport_to(pos: Vector2) -> void:
 ## weapon's damage and hands over the result. A no-op once eliminated: an
 ## eliminated player's head has no collision layer to be struck through, but
 ## nothing here should rely on that alone.
-func take_damage(amount: float, point: Vector2 = Vector2.INF) -> void:
+func take_damage(amount: float, point: Vector2 = Vector2.INF, attacker: Node = null) -> void:
 	if amount <= 0.0 or not alive or spawn_protected:
 		return
 	# An open umbrella's canopy takes a hit that lands on its face (issue #269).
 	if point != Vector2.INF and canopy_open() and canopy_faces(point):
 		amount *= CANOPY_BLOCK_FACTOR
+	# A shield takes a hit that lands on the side it faces (issue #275).
+	if point != Vector2.INF and shield_blocks(point):
+		amount *= SHIELD_BLOCK_FACTOR
+		_shield_recoil(attacker)
 	damage += amount
 	if _face != null:
 		_face.on_hit(amount)
@@ -1441,7 +1445,9 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount, point)
+	victim.take_damage(amount, point, self)
+	if _stats.special == &"shield":
+		_shield_bash(victim)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
@@ -1549,7 +1555,7 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount, point)
+	victim.take_damage(amount, point, self)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
@@ -2081,7 +2087,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount, point)
+	victim.take_damage(amount, point, self)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 # --- Umbrella (issue #269) ---------------------------------------------------
@@ -2214,3 +2220,39 @@ func _pogo_body_stomp(body: Node) -> void:
 	var speed: float = _stomp_speed(body, global_position)
 	if speed > 0.0:
 		_land_strike(body, speed, true)
+
+# --- Shield (issue #275) -----------------------------------------------------
+#
+# Bash and block. A hit that lands on the side the shield faces is mostly
+# turned; a strike with the shield does little damage but shoves its victim.
+
+## Share of a hit's damage that gets through the shield's face.
+const SHIELD_BLOCK_FACTOR: float = 0.1
+## A hit is on the face when it comes from within this cosine of the aim.
+const SHIELD_FACE_COS: float = 0.3
+## Impulse a shield bash gives the victim, along the line from the holder.
+const SHIELD_BASH_IMPULSE: float = 900.0
+## Impulse a blocked hit gives its attacker, away from the shield holder.
+const SHIELD_RECOIL_IMPULSE: float = 450.0
+
+## Whether a shield is in hand and `point` (world) is on the side it covers.
+func shield_blocks(point: Vector2) -> bool:
+	if _stats == null or _stats.special != &"shield" or not _rig_is_live():
+		return false
+	var offset: Vector2 = _head.global_position - global_position
+	var to_point: Vector2 = point - global_position
+	if offset.length() <= 1.0 or to_point.length() <= 0.0:
+		return false
+	return offset.normalized().dot(to_point.normalized()) >= SHIELD_FACE_COS
+
+func _shield_bash(victim: Node) -> void:
+	if not victim.alive or not (victim is RigidBody2D):
+		return
+	var away: Vector2 = (victim.global_position - global_position).normalized()
+	(victim as RigidBody2D).apply_central_impulse(away * SHIELD_BASH_IMPULSE)
+
+func _shield_recoil(attacker: Node) -> void:
+	if attacker == null or attacker == self or not (attacker is RigidBody2D):
+		return
+	var away: Vector2 = ((attacker as RigidBody2D).global_position - global_position).normalized()
+	(attacker as RigidBody2D).apply_central_impulse(away * SHIELD_RECOIL_IMPULSE)
