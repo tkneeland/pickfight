@@ -670,6 +670,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_toggle_defaults_on_and_persists",
 	"telemetry_off_sends_no_record_on_still_does",
 	"shield_head_is_wide_and_shield_shaped",
+	"pc_space_tap_retracts_grapple_while_mouse_vector_is_held",
+	"gamepad_shoulder_hold_and_stick_click_release_plunger",
+	"remote_client_space_tap_releases_on_host",
+	"phone_packet_without_release_flag_keeps_zero_vector_release",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2405,6 +2409,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_off_sends_no_record_on_still_does()
 		"shield_head_is_wide_and_shield_shaped":
 			return await _scenario_shield_head_is_wide_and_shield_shaped()
+		"pc_space_tap_retracts_grapple_while_mouse_vector_is_held":
+			return await _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held()
+		"gamepad_shoulder_hold_and_stick_click_release_plunger":
+			return await _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger()
+		"remote_client_space_tap_releases_on_host":
+			return await _scenario_remote_client_space_tap_releases_on_host()
+		"phone_packet_without_release_flag_keeps_zero_vector_release":
+			return await _scenario_phone_packet_without_release_flag_keeps_zero_vector_release()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -34764,4 +34776,195 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 	if shape.points.size() <= 4 or xs.size() <= 2:
 		failures.append("shield collision is a plain rectangle (%d points)" % shape.points.size())
 	_scenario_completed = true
+	return failures
+
+# --- Explicit release input (issue #463, ADR-0022) ---------------------------
+
+## A phone rig on a real arena, with a bar at `bar_at` and slot 0's player
+## parked at `stand_at`; slot 1's player is moved out of the way.
+func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictionary:
+	var rig: Dictionary = await _phone_rig_164(2, tag)
+	var stage: Node2D = rig["stage"]
+	stage.add_child(ArenaScene.instantiate())
+	rig["bar"] = _add_bar(stage, bar_at, Vector2(240, 24))
+	var players: Array[RigidBody2D] = rig["players"]
+	players[0].start_round(stand_at)
+	players[1].start_round(stand_at + Vector2(1500, 0))
+	await _await_ticks(6)
+	return rig
+
+func _key_463(keycode: Key) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = keycode
+	ev.keycode = keycode
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+
+## A PC seat's mouse never reports zero, so a Space tap is what lets go.
+func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcRelease463")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	# A flick straight up from rest, then the mouse stays out there.
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	var hook: Node2D = null
+	var fired: bool = await _await_condition(func() -> bool: return player.launched_hook() != null, 1000)
+	if fired:
+		hook = player.launched_hook()
+	var stuck: bool = fired and await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
+	if not stuck:
+		failures.append("the mouse flick did not fire and stick the hook (fired %s)" % fired)
+	else:
+		await _await_ticks(30)
+		if player.launched_hook() == null:
+			failures.append("the hook came home before any release")
+		if player.input_vector.length() < 0.5:
+			failures.append("the mouse vector is %s, expected it held out" % player.input_vector)
+		await _key_463(KEY_SPACE)
+		if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1000):
+			failures.append("a Space tap with the mouse held out did not retract the grapple")
+		if not server.slot_released(0):
+			failures.append("the server does not report the PC seat as released after a Space tap")
+		if player.input_vector.length() < 0.5:
+			failures.append("the Space tap disturbed the mouse vector (%s)" % player.input_vector)
+		await _key_463(KEY_SPACE)
+		await _await_ticks(3)
+		if server.slot_released(0):
+			failures.append("a second Space tap did not toggle released back off")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## A pad lets go with a shoulder held, or a stick click toggled.
+func _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(DEEP_PARK_POSITION, DEEP_PARK_POSITION + Vector2(0, 60), "PadRelease463")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var holder: RigidBody2D = players[0]
+	# Deep above the arena: no gravity, or the holder falls away from the bar.
+	holder.gravity_scale = 0.0
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _equip(holder, PLUNGER_PATH)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	if not await _await_condition(func() -> bool: return holder.plunger_attached(), 4000):
+		failures.append("the pad's stick up did not stick the plunger to the bar (slot %d vec %s pos %s)" % [server.pad_slot(0), holder.input_vector, holder.global_position])
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(60)
+	if not holder.plunger_attached():
+		failures.append("the plunger let go with the stick held and no release")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, true)
+	if not server.slot_released(0):
+		failures.append("holding LB did not mark the pad released")
+	if not await _await_condition(func() -> bool: return not holder.plunger_attached(), 1000):
+		failures.append("holding LB with the stick out did not let the plunger go")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, false)
+	if server.slot_released(0):
+		failures.append("letting go of LB left the pad released")
+	# The stick swings back to rest and out again to plunge a second time.
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(60)
+	holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
+	holder.linear_velocity = Vector2.ZERO
+	await _await_ticks(2)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	var pinned_attach := func() -> bool:
+		if holder.plunger_attached():
+			return true
+		holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
+		holder.linear_velocity = Vector2.ZERO
+		return false
+	if not await _await_condition(pinned_attach, 4000):
+		failures.append("the plunger did not stick again after LB was let go (pos %s vec %s rel %s drag %s len %s)" % [holder.global_position, holder.input_vector, holder.input_released, holder.get("_drag_released"), holder.weapon_length])
+	# A stick click toggles, like Space.
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, true)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, false)
+	if not server.slot_released(0):
+		failures.append("clicking R3 did not toggle the pad released")
+	if not await _await_condition(func() -> bool: return not holder.plunger_attached(), 1000):
+		failures.append("a toggled-on release did not let the plunger go")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, true)
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, false)
+	if server.slot_released(0):
+		failures.append("clicking L3 did not toggle the pad back to not released")
+	await _teardown(rig["stage"])
+	return failures
+
+## The Online client's Space tap reaches the host as the packet's flag byte.
+func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	client.mouse_motion(Vector2(4000, 0))
+	if not await _await_condition(func() -> bool: return player.input_vector.x > 0.9, 3000, true):
+		failures.append("the mouse sweep never reached the host (%s)" % player.input_vector)
+	if player.input_released or server.slot_released(client.slot):
+		failures.append("a remote client started out released")
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = true
+	client._input(ev)
+	if not await _await_condition(func() -> bool: return player.input_released, 3000, true):
+		failures.append("a Space tap on the client never released the host-side player")
+	if player.input_vector.x < 0.9:
+		failures.append("the Space tap disturbed the sent vector (%s)" % player.input_vector)
+	client._input(ev)
+	if not await _await_condition(func() -> bool: return not player.input_released, 3000, true):
+		failures.append("a second Space tap never un-released the host-side player")
+	await _rc_close_241(rig)
+	return failures
+
+## Phones send eight bytes and no flag: a nonzero vector is held, zero is released.
+func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(1, "PhoneRelease463")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	players[0].start_round(Vector2(0, 274))
+	await _await_ticks(6)
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	await _join_phone(phone, "phone-release-463", phones)
+	phones.append(phone)
+	var packet := PackedByteArray()
+	packet.resize(8)
+	packet.encode_float(0, 0.8)
+	packet.encode_float(4, 0.0)
+	for i in 20:
+		phone.send(packet, WebSocketPeer.WRITE_MODE_BINARY)
+		await process_frame
+		phone.poll()
+	await _await_ticks(10)
+	if server.slot_released(0) or players[0].input_released or bool(players[0].get("_drag_released")):
+		failures.append("a held phone drag counted as released (%s %s %s vec %s)" % [server.slot_released(0), players[0].input_released, players[0].get("_drag_released"), players[0].input_vector])
+	packet.encode_float(0, 0.0)
+	for i in 20:
+		phone.send(packet, WebSocketPeer.WRITE_MODE_BINARY)
+		await process_frame
+		phone.poll()
+	await _await_ticks(10)
+	if not bool(players[0].get("_drag_released")):
+		failures.append("a phone's zero vector no longer counts as released")
+	await _close_phones(phones)
+	await _teardown(rig["stage"])
 	return failures
