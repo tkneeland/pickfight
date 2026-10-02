@@ -868,6 +868,7 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	# and hangs rather than planting. It has its own plunger_* scenarios.
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
+	"res://resources/shield.tres",
 ]
 ## How far a head circle may stick out of its weapon's drawn art and still
 ## count as inside it: half a pixel.
