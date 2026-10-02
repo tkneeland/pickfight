@@ -80,3 +80,29 @@ the dispatcher; don't reorder), `CONTEXT.md`.
 
 Rebase your branch onto `origin/main`, re-run the full scenario suite, and
 fix any conflict in *your* branch. Don't ask the other dev to change theirs.
+
+## Throughput: run agents in parallel (owner request, 2026-10-01)
+
+Both owners want maximum throughput. Every agent working this repo should:
+
+- **Run one background worker per ready ticket you own, at the same time.** Each
+  worker gets its own worktree (`.claude/worktrees/<issue>/pickfight`, branch
+  `feat/issue-<n>-<slug>` from `origin/main`). Don't work tickets one at a time
+  in the main checkout.
+- **Use the cheapest model that can do the ticket** (Sonnet for most features,
+  Haiku for mechanical swaps). Keep the orchestrator for merging and review.
+- **Give each worker a self-contained packet:** the issue number, its worktree,
+  the append-only runner rules below, and the exact verify commands. Have it
+  commit but not push. The orchestrator merges `origin/main`, opens the PR and
+  merges it after CI.
+- **Ship serially, build in parallel.** Main moves fast, so merge `origin/main`
+  into each finished branch right before its PR, and re-run the suite.
+- **`tools/scenario_runner.gd` is append-only.** Add names at the end of
+  `SCENARIO_NAMES`, cases at the end of the dispatcher (just before the single
+  `_:` arm) and functions at the end of the file. In a conflict, keep both
+  sides. Then check that there is still exactly one `_:` arm
+  (`grep -c "^		_:$"` → 1), that no comma was lost at the end of the name
+  list, and that the last function still ends in `return failures`.
+- **When idle, take the next ready ticket.** Every open ticket should be owned
+  and moving. If yours are all in flight, ask your owner to grill for more, or
+  pick up an unowned `ready-for-agent` one and assign yourself.
