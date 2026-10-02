@@ -646,6 +646,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_hud_match_result_podium_and_leave",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
+	"online_demo_joins_demo_and_full_joins_full",
+	"online_demo_and_full_refuse_each_other",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2333,6 +2335,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
 			return await _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line()
+		"online_demo_joins_demo_and_full_joins_full":
+			return await _scenario_online_demo_joins_demo_and_full_joins_full()
+		"online_demo_and_full_refuse_each_other":
+			return await _scenario_online_demo_and_full_refuse_each_other()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -33589,4 +33595,76 @@ func _scenario_hud_top_gap_reclaimed_kill_feed_and_score_line() -> Array[String]
 			failures.append("%s: feed %s or score line %s is off-screen" % [size, feed_rect, score_rect])
 	get_root().size = was_size
 	await _teardown(main)
+	return failures
+# --- Demo and full builds keep apart online (issue #447) -------------------------
+const DemoBuildScript447 := preload("res://scripts/DemoBuild.gd")
+const ControllerServerScript447 := preload("res://scripts/ControllerServer.gd")
+## Joins a fresh client of build `client_demo` to the rig's room while the host
+## runs as `host_demo`; returns it once it is seated or refused.
+func _demo_join_447(rig: Dictionary, host_demo: bool, client_demo: bool, failures: Array[String], display_name: String) -> Node:
+	DemoBuildScript447.forced = 1 if host_demo else 0
+	var client: Node = await _rc_client_241(rig)
+	client.demo_build = client_demo
+	client.join(rig["code"], display_name)
+	await _wait_for_239(func() -> bool: return client.state != RcState241.CONNECTING, 5000)
+	return client
+func _scenario_online_demo_joins_demo_and_full_joins_full() -> Array[String]:
+	var failures: Array[String] = []
+	for pair: Array in [[false, false, ""], [true, true, ""], [false, true, "full_only"], [true, false, "demo_only"]]:
+		DemoBuildScript447.forced = 1 if pair[0] else 0
+		var said: String = ControllerServerScript447.build_mismatch_reason({"id": "x", "proto": 1, "demo": pair[1]})
+		if said != pair[2]:
+			failures.append("host demo %s, client demo %s: reason '%s', expected '%s'" % [pair[0], pair[1], said, pair[2]])
+	DemoBuildScript447.forced = 0
+	if ControllerServerScript447.build_mismatch_reason({"id": "x", "proto": 1}) != "":
+		failures.append("a hello with no demo flag was not read as the full game")
+	DemoBuildScript447.forced = -1
+	var rig: Dictionary = await _rc_rig_241(2, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var before: int = server.claimed_slots().size()
+	var demo: Node = await _demo_join_447(rig, true, true, failures, "Demo")
+	if demo.state != RcState241.PLAYING:
+		failures.append("a demo client at a demo host was not seated (state %d, '%s')" % [demo.state, demo.status_text])
+	var full: Node = await _demo_join_447(rig, false, false, failures, "Full")
+	if full.state != RcState241.PLAYING:
+		failures.append("a full client at a full host was not seated (state %d, '%s')" % [full.state, full.status_text])
+	if server.claimed_slots().size() != before + 2:
+		failures.append("matching builds claimed slots %s, expected two more than %d" % [server.claimed_slots(), before])
+	DemoBuildScript447.forced = -1
+	await _rc_close_241(rig)
+	return failures
+func _scenario_online_demo_and_full_refuse_each_other() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(2, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var before: int = server.claimed_slots().size()
+	var full_only: String = TranslationServer.translate("JOIN_ERR_FULL_ONLY")
+	var demo_only: String = TranslationServer.translate("JOIN_ERR_DEMO_ONLY")
+	if full_only != "Get the full game to join this room":
+		failures.append("JOIN_ERR_FULL_ONLY translates to '%s'" % full_only)
+	if demo_only == "JOIN_ERR_DEMO_ONLY" or demo_only.is_empty():
+		failures.append("JOIN_ERR_DEMO_ONLY has no string")
+	# A demo player at a full game's room.
+	var demo: Node = await _demo_join_447(rig, false, true, failures, "Demo")
+	_rc_expect_join_screen_241(demo, failures, "demo at full", "Get the full game to join this room")
+	if demo.status_text != full_only:
+		failures.append("demo at full: message '%s', expected '%s'" % [demo.status_text, full_only])
+	# A full-game player at a demo room.
+	var full: Node = await _demo_join_447(rig, true, false, failures, "Full")
+	_rc_expect_join_screen_241(full, failures, "full at demo", "demo")
+	if full.status_text != demo_only:
+		failures.append("full at demo: message '%s', expected '%s'" % [full.status_text, demo_only])
+	await _online_frames_239(10)
+	if server.claimed_slots().size() != before:
+		failures.append("a refused build claimed slots %s (had %d)" % [server.claimed_slots(), before])
+	# The room still seats its own build after both refusals.
+	var ok: Node = await _demo_join_447(rig, true, true, failures, "Ok")
+	if ok.state != RcState241.PLAYING:
+		failures.append("a matching client was not seated after the refusals (state %d, '%s')" % [ok.state, ok.status_text])
+	DemoBuildScript447.forced = -1
+	await _rc_close_241(rig)
 	return failures
