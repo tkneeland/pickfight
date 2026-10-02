@@ -60,6 +60,10 @@ Getting Over It — but with a high enough skill ceiling that better movement
 meaningfully beats worse movement. The weapon answers the player's aim
 precisely; the difficulty is in what the body attached to it then does.
 
+The look is polished flat shapes: square bodies with eyes, hats, one
+cohesive palette and flat parallax stages, refined rather than replaced. It
+has to stay readable with eight players on one screen.
+
 Because the weapon is both the moveset and the arsenal, picking one up is a
 commitment, not an upgrade. A heavy weapon that wins every clash is a liability
 on a stage that demands quick climbing — and the stage changes every round.
@@ -72,4 +76,3 @@ interesting.
 
 - The full roster of stages beyond the 24 that exist (ADR-0008 settled the
   authoring format: one `.tscn` per stage under `scenes/stages/`).
-- Art direction.
