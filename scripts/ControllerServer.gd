@@ -454,8 +454,10 @@ var join_qr_texture: ImageTexture = null
 ## Issue #230. Whether the in-round join corner (the JoinLabel top left and
 ## the small JoinQrCode top right) is hidden: RoundManager hides it while the
 ## lobby, countdown or victory screen is up, which show their own big QR and
-## URL, so the corner never bleeds through their backdrop.
-var _join_corner_hidden: bool = false
+## URL, so the corner never bleeds through their backdrop. Issue #430: the
+## join QR and room code show in the lobby only, so the corner starts hidden
+## and RoundManager never shows it in a round either.
+var _join_corner_hidden: bool = true
 ## The join label's text before the room code is added (issue #239).
 var _join_label_base: String = ""
 
@@ -552,6 +554,7 @@ func _ready() -> void:
 		# address is already printed to the console for the rare case the
 		# first one isn't the room's network.
 		label.text = tr("JOIN_ON_PHONE") + "\n" + (urls[0] if not urls.is_empty() else "http://127.0.0.1:%d/" % http_port)
+		label.visible = not _join_corner_hidden
 
 	var qr_rect: TextureRect = get_node_or_null(qr_texture_path) as TextureRect
 	if qr_rect != null:
@@ -2094,11 +2097,23 @@ func _push_pad_sticks() -> void:
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 		_smoothers[slot].push(_pad_axis(device))
 
-## A or Start joins (in the lobby) or readies; B un-readies.
+## Issue #430: the host's controller, whose Start pauses and resumes a match.
+## Joypad 0: the Steam Deck's own built-in controls (docs/steam-deck-readiness.md
+## D16), and a PC host's first pad. Seated or not, it never makes its seat host.
+const HOST_PAD_DEVICE: int = 0
+
+## A or Start joins (in the lobby) or readies; B un-readies. Issue #430: in a
+## match (or paused), Start from the host's pad sends the host phone's Pause or
+## Resume, and from any other pad does nothing.
 func _pad_button_pressed(device: int, button: int) -> void:
 	if PadMenuScript.is_open():
 		return # a host menu owns A and B right now (#368)
 	var slot: int = pad_slot(device)
+	var paused: bool = bool(_lobby_state.get("paused", false))
+	if button == JOY_BUTTON_START and (paused or MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby")))):
+		if device == HOST_PAD_DEVICE:
+			host_command.emit("resume" if paused else "pause", -1)
+		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
 			if SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):

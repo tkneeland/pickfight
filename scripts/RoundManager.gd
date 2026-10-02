@@ -1253,7 +1253,7 @@ func _begin_match() -> void:
 		_controller_server.clear_ready()
 	if _lobby_screen != null and _lobby_screen.panels_built():
 		_lobby_screen.show_panel("")
-	_set_join_corner_visible(true)
+	_set_join_corner_visible(false) # lobby only (#430)
 	_state = State.WAITING
 	_publish_lobby_state()
 	_try_start_round()

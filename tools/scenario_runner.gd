@@ -621,6 +621,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players",
 	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
+	"round_never_shows_join_corner",
+	"host_pad_start_pauses_and_resumes_other_pads_do_not",
+	"host_pad_start_and_host_phone_share_one_pause",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
 	"sound_trailer_split_survives_hostile_bytes",
 	"remote_client_lobby_text_follows_the_locale",
@@ -2262,6 +2265,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_reactor_king_of_the_hill_hill_sits_off_the_hazard()
 		"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time":
 			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
+		"round_never_shows_join_corner":
+			return await _scenario_round_never_shows_join_corner()
+		"host_pad_start_pauses_and_resumes_other_pads_do_not":
+			return await _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not()
+		"host_pad_start_and_host_phone_share_one_pause":
+			return await _scenario_host_pad_start_and_host_phone_share_one_pause()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
 		"sound_trailer_split_survives_hostile_bytes":
@@ -20813,7 +20822,7 @@ func _scenario_join_qr_shown_without_qrencode() -> Array[String]:
 		else:
 			failures.append_array(_check_qr_image(tex.get_image(), url, "join QR"))
 			# Hidden while the lobby is up since #230, which shows the QR big
-			# itself; `lobby_hides_in_round_join_corner` sees it back in a round.
+			# itself; since #430 it never shows in a round either.
 			if rect.texture != tex:
 				failures.append("UI/JoinQrCode does not carry the join QR")
 			if rect.visible:
@@ -21352,12 +21361,8 @@ func _scenario_lobby_hides_in_round_join_corner() -> Array[String]:
 	else:
 		await _poll_phones(joined, 5)
 		print("      in a round: label %s, QR %s (texture %s)" % [label.is_visible_in_tree(), qr.is_visible_in_tree(), has_qr])
-		if not label.is_visible_in_tree():
-			failures.append("in a round: the join label is hidden")
-		if has_qr and not qr.is_visible_in_tree():
-			failures.append("in a round: the join QR is hidden")
-		if not has_qr and qr.is_visible_in_tree():
-			failures.append("in a round: the join QR shows with no texture")
+		# Issue #430: the corner stays hidden in a round too (lobby only).
+		check_hidden.call("in a round")
 	rm.set("_match_winner_slot", server.claimed_slots()[0])
 	rm._enter_victory()
 	await _poll_phones(joined, 3)
@@ -32380,6 +32385,239 @@ func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_tim
 	else:
 		print("      Reactor round ended by hold time (a rider banked %.1f s of 10 s)" % seen_hold[0])
 	await _teardown(stage)
+	return failures
+# --- Lobby-only join corner, host-pad Start pauses (#430) --------------------
+## Issue #430, in the real game (scenes/Main.tscn, its real ControllerServer
+## over the real WebSocket seam): the join QR and room code show in the lobby
+## only. Through a round -- with streamer mode (#369) switched on and off again
+## mid-round, which redraws the corner -- the in-round join corner (UI/JoinLabel
+## and UI/JoinQrCode) never shows.
+func _scenario_round_never_shows_join_corner() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 430
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var label: Label = server.join_label()
+	var qr: TextureRect = server.join_qr_rect()
+	if label == null or qr == null:
+		await _teardown(main)
+		return ["Main.tscn's ControllerServer has no join label (%s) or QR (%s)" % [label, qr]]
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		var result: Dictionary = await _join_phone(peer, "issue-430-corner-%d" % i, joined)
+		if result["slot"] == -1:
+			failures.append("phone %d got no slot (closed=%s '%s')" % [i + 1, result["closed"], result["reason"]])
+		joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.claimed_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var round_on := func() -> bool:
+		for peer: WebSocketPeer in joined:
+			peer.poll()
+		return rm.lobby_phase() == "playing" and _all_alive(players)
+	if not await _await_condition(round_on, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	var sfx: Node = _sfx()
+	var was_hidden: bool = sfx != null and bool(sfx.get("hide_room_code"))
+	var shown_frames: int = 0
+	for frame in 60:
+		if sfx != null and (frame == 20 or frame == 40):
+			sfx.hide_room_code = frame == 20
+		await _poll_phones(joined, 1)
+		if label.is_visible_in_tree() or qr.is_visible_in_tree():
+			shown_frames += 1
+	if sfx != null:
+		sfx.hide_room_code = was_hidden
+	print("      in a round: corner shown on %d of 60 frames (QR texture %s)" % [shown_frames, qr.texture != null])
+	if shown_frames > 0:
+		failures.append("in a round the join corner showed on %d of 60 frames" % shown_frames)
+	if rm.lobby_phase() != "playing" and rm.lobby_phase() != "round_end":
+		failures.append("the round left play while sampled (phase '%s')" % rm.lobby_phase())
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## A gamepad button pressed and released, as a real pad sends it.
+func _pad_tap_430(device: int, button: int) -> void:
+	await _pad_button_261(device, button)
+	await _pad_button_261(device, button, false)
+## Issue #430, in the real game: Start pauses only if the host uses it. The
+## host's controller is pad 0 (`HOST_PAD_DEVICE`: the Deck's built-in
+## controls). In the lobby, Start from pad 0 and from pad 5 keeps its #261
+## meaning: join, then ready. Mid-round, pad 5's Start does nothing (no pause,
+## no ready); pad 0's pauses the match as the host phone's Pause does (tree
+## paused, PAUSED banner up); pad 5's Start cannot resume it; pad 0's resumes.
+func _scenario_host_pad_start_pauses_and_resumes_other_pads_do_not() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 431
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var host_pad: int = int(_server_const_164("HOST_PAD_DEVICE", -1))
+	if host_pad != 0:
+		failures.append("HOST_PAD_DEVICE is %d, expected joypad 0" % host_pad)
+	var other_pad: int = 5
+	var joined: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "issue-430-pause-host", joined)
+	if result["slot"] == -1:
+		failures.append("the host phone got no slot (closed=%s '%s')" % [result["closed"], result["reason"]])
+	joined.append(peer)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	for device: int in [host_pad, other_pad]:
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		var slot: int = server.pad_slot(device)
+		if slot == -1:
+			failures.append("lobby: Start from pad %d did not join it" % device)
+			continue
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		if not server.slot_ready(slot):
+			failures.append("lobby: a second Start from pad %d did not ready it" % device)
+		if rm.is_paused():
+			failures.append("lobby: Start from pad %d paused" % device)
+	if failures.size() > 0:
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	var other_slot: int = server.pad_slot(other_pad)
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.claimed_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	joined[0].send_text(JSON.stringify({"t": "ready", "v": true}))
+	var round_on := func() -> bool:
+		joined[0].poll()
+		return rm.lobby_phase() == "playing" and _all_alive(players)
+	if not await _await_condition(round_on, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _pad_tap_430(other_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("mid-round: Start from pad %d (not the host's) paused the match" % other_pad)
+	if server.slot_ready(other_slot):
+		failures.append("mid-round: Start from pad %d readied its seat" % other_pad)
+	await _pad_tap_430(host_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	var banner: Label = rm.pause_label()
+	if not rm.is_paused() or not paused:
+		failures.append("mid-round: Start from the host's pad did not pause (paused %s, tree %s)" % [rm.is_paused(), paused])
+	elif banner == null or not banner.is_visible_in_tree():
+		failures.append("paused by the host's pad, but no PAUSED banner shows")
+	await _pad_tap_430(other_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused():
+		failures.append("paused: Start from pad %d (not the host's) resumed the match" % other_pad)
+	await _pad_tap_430(host_pad, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("paused: Start from the host's pad did not resume (paused %s, tree %s)" % [rm.is_paused(), paused])
+	if rm.lobby_phase() != "playing" and rm.lobby_phase() != "round_end":
+		failures.append("the match left play (phase '%s')" % rm.lobby_phase())
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+## Issue #430 review: the host pad's Start and the host phone's Pause and
+## Resume drive one pause. A phone pause is resumed by the host pad's Start,
+## a pad pause by the phone's Resume, and a pad pause landing on the round-end
+## screen holds it there (its game-time wait does not run out) until the pad
+## resumes it. Pad 0 is unseated here: the host's controller need not be a
+## player.
+func _scenario_host_pad_start_and_host_phone_share_one_pause() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(2, "issue-430-shared-pause")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		return failures
+	rm.round_end_pause_sec = 2.0
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var p0: RigidBody2D = server.player_in_slot(0)
+	var p1: RigidBody2D = server.player_in_slot(1)
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "playing" and p0.alive and p1.alive, BOT_START_MSEC):
+		failures.append("two ready phones never started a round (phase '%s')" % rm.lobby_phase())
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "pause"}))
+	await _poll_phones(joined, 10)
+	if not rm.is_paused() or not paused:
+		failures.append("the host phone's Pause did not pause the game")
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("the host pad's Start did not resume the host phone's pause")
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused() or not paused:
+		failures.append("the host pad's Start did not pause the game")
+	joined[0].send_text(JSON.stringify({"t": "host", "cmd": "resume"}))
+	await _poll_phones(joined, 10)
+	if rm.is_paused() or paused:
+		failures.append("the host phone's Resume did not resume the host pad's pause")
+	if server.pad_slot(0) != -1:
+		failures.append("the host pad's Start mid-match seated it in slot %d" % server.pad_slot(0))
+	p1.eliminate()
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never ended (phase '%s')" % rm.lobby_phase())
+		paused = false
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if not rm.is_paused() or not paused:
+		failures.append("round end: the host pad's Start did not pause the game")
+	# 3 s of frames, past the 2 s round-end wait: frozen, it must not run out.
+	await _poll_phones(joined, 180)
+	print("      round end paused by the pad: phase after 180 frames '%s', paused %s" % [rm.lobby_phase(), rm.is_paused()])
+	if rm.lobby_phase() != "round_end":
+		failures.append("round end: paused, the round-end wait still ran out (phase '%s')" % rm.lobby_phase())
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _poll_phones(joined, 2)
+	if rm.is_paused() or paused:
+		failures.append("round end: the host pad's Start did not resume")
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() != "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round end: resumed, the round end never moved on")
+	paused = false
+	await _close_phones(joined)
+	await _teardown(main)
 	return failures
 
 # --- Lobby worst state and joining by room code (#425 playtest) --------------
