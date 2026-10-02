@@ -300,6 +300,9 @@ func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxCon
 		row.add_child(ping_label)
 	if bool(entry.get("tip", false)):
 		row.add_child(_big_label(tr("LOBBY_PAD_TIP"), 22, Color(0.8, 0.82, 0.88)))
+	# Issue #441: a gamepad claim's card carries its cosmetics picker (it hides itself while unplugged).
+	if _server != null and _server.has_method("pad_claim") and _server.pad_claim(slot):
+		row.add_child(preload("res://scripts/PadPickerCard.gd").new(_server, slot))
 	return row
 
 ## Issue #446: a remote seat's round trip as text, and the colour it is shown
