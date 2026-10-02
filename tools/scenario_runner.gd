@@ -15109,6 +15109,9 @@ func _scenario_round_modifier_weapon_roulette_swaps_every_ten_seconds() -> Array
 	var roster: Array[String] = []
 	for path: String in WEAPON_RESOURCE_PATHS:
 		roster.append(path)
+	# The roulette draws from every pickup, plunger included (left out of the
+	# list above for the traversal sweep only).
+	roster.append("res://resources/plunger.tres")
 	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
 		if round_manager.active_modifier_id() != "weapon_roulette":
 			return 0.0
