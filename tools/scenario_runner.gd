@@ -33726,7 +33726,6 @@ func _hold_rig_459(id: String, failures: Array[String]) -> Dictionary:
 	rig["remote"] = remote
 	rig["slot"] = slot
 	return rig
-	return failures
 
 # --- Online host controls on the PC (issue #458) ------------------------------
 ## An Online host (Go online on, its own seat on) with `bots` bots and one
