@@ -209,6 +209,32 @@ func get_hill_spots() -> Array[Vector2]:
 func get_pickup_spawn_points() -> Array[Vector2]:
 	return _marker_points("PickupSpawn")
 
+## Soccer (#402): the world-space rectangle of the goal `team` defends (team 0
+## `Goal0`, team 1 `Goal1`): an `Area2D` with a rectangle `CollisionShape2D`.
+## An empty Rect2 for a stage with no such goal.
+func get_goal_rect(team: int) -> Rect2:
+	var goal: Node2D = get_node_or_null("Goal%d" % team) as Node2D
+	if goal == null:
+		return Rect2()
+	for child in goal.get_children():
+		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+			var size: Vector2 = ((child as CollisionShape2D).shape as RectangleShape2D).size
+			var centre: Vector2 = (child as CollisionShape2D).global_position if child.is_inside_tree() else goal.position + (child as CollisionShape2D).position
+			return Rect2(centre - size * 0.5, size)
+	return Rect2()
+
+## Whether this stage has a goal at each end (Soccer, #402).
+func has_goals() -> bool:
+	return get_goal_rect(0).size != Vector2.ZERO and get_goal_rect(1).size != Vector2.ZERO
+
+## Where Soccer's ball kicks off (#402): a `BallSpawn` marker, else the
+## stage's origin.
+func get_ball_spawn() -> Vector2:
+	var marker: Node2D = get_node_or_null("BallSpawn") as Node2D
+	if marker == null:
+		return global_position if is_inside_tree() else position
+	return marker.global_position if marker.is_inside_tree() else marker.position
+
 func _marker_points(prefix: String) -> Array[Vector2]:
 	var markers: Array[Marker2D] = []
 	for child in get_children():

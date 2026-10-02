@@ -1,0 +1,180 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1440x40"]
+size = Vector2(1440, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_40x740"]
+size = Vector2(40, 740)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1520x40"]
+size = Vector2(1520, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_130x170"]
+size = Vector2(130, 170)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_130x20"]
+size = Vector2(130, 20)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_8000x40"]
+size = Vector2(8000, 40)
+
+; Dunes (issue #402, a Soccer stage): a wide mound across the middle of the floor, so the ball is played up and
+; over it and the two halves are not in each other's line of sight. Symmetric left to right.
+; Rotation (Stage.mode_weights): weighted 4x for Soccer, and in any other mode dealt into a bag only 30% of the time.
+[node name="Dunes" type="Node2D"]
+script = ExtResource("script")
+background_sky_top = Color(0.22, 0.15, 0.1, 1)
+background_sky_bottom = Color(0.4, 0.28, 0.18, 1)
+background_silhouette = Color(0.16, 0.11, 0.08, 1)
+background_layers = PackedStringArray("clouds", "hills")
+mode_weights = {"soccer": 4.0, "_other": 0.3}
+
+; The pitch floor, top at y=280.
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(0, 300)
+
+[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("RectangleShape2D_1440x40")
+
+[node name="FloorVisual" type="Polygon2D" parent="Floor"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-720.0, -20.0, 720.0, -20.0, 720.0, 20.0, -720.0, 20.0)
+
+; End walls and a roof close the pitch: the ball can only leave through a goal.
+[node name="WallLeft" type="StaticBody2D" parent="."]
+position = Vector2(-740, -50.0)
+
+[node name="WallLeftShape" type="CollisionShape2D" parent="WallLeft"]
+shape = SubResource("RectangleShape2D_40x740")
+
+[node name="WallLeftVisual" type="Polygon2D" parent="WallLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-20.0, -370.0, 20.0, -370.0, 20.0, 370.0, -20.0, 370.0)
+
+[node name="WallRight" type="StaticBody2D" parent="."]
+position = Vector2(740, -50.0)
+
+[node name="WallRightShape" type="CollisionShape2D" parent="WallRight"]
+shape = SubResource("RectangleShape2D_40x740")
+
+[node name="WallRightVisual" type="Polygon2D" parent="WallRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-20.0, -370.0, 20.0, -370.0, 20.0, 370.0, -20.0, 370.0)
+
+[node name="Roof" type="StaticBody2D" parent="."]
+position = Vector2(0, -400)
+
+[node name="RoofShape" type="CollisionShape2D" parent="Roof"]
+shape = SubResource("RectangleShape2D_1520x40")
+
+[node name="RoofVisual" type="Polygon2D" parent="Roof"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-760.0, -20.0, 760.0, -20.0, 760.0, 20.0, -760.0, 20.0)
+
+; Red defends the left goal, Blue the right (Goal0 / Goal1). A ball inside one is a point for the other team.
+[node name="Goal0" type="Area2D" parent="."]
+position = Vector2(-655.0, 195.0)
+collision_layer = 0
+collision_mask = 0
+monitoring = false
+monitorable = false
+
+[node name="Goal0Shape" type="CollisionShape2D" parent="Goal0"]
+shape = SubResource("RectangleShape2D_130x170")
+
+[node name="Goal0Net" type="Polygon2D" parent="Goal0"]
+color = Color(1, 0.3, 0.3, 0.28)
+polygon = PackedVector2Array(-65.0, -85.0, 65.0, -85.0, 65.0, 85.0, -65.0, 85.0)
+
+[node name="Goal1" type="Area2D" parent="."]
+position = Vector2(655.0, 195.0)
+collision_layer = 0
+collision_mask = 0
+monitoring = false
+monitorable = false
+
+[node name="Goal1Shape" type="CollisionShape2D" parent="Goal1"]
+shape = SubResource("RectangleShape2D_130x170")
+
+[node name="Goal1Net" type="Polygon2D" parent="Goal1"]
+color = Color(0.35, 0.55, 1, 0.28)
+polygon = PackedVector2Array(-65.0, -85.0, 65.0, -85.0, 65.0, 85.0, -65.0, 85.0)
+
+; Crossbars, so the ball cannot rest on top of a goal.
+[node name="BarLeft" type="StaticBody2D" parent="."]
+position = Vector2(-655.0, 100)
+
+[node name="BarLeftShape" type="CollisionShape2D" parent="BarLeft"]
+shape = SubResource("RectangleShape2D_130x20")
+
+[node name="BarLeftVisual" type="Polygon2D" parent="BarLeft"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-65.0, -10.0, 65.0, -10.0, 65.0, 10.0, -65.0, 10.0)
+
+[node name="BarRight" type="StaticBody2D" parent="."]
+position = Vector2(655.0, 100)
+
+[node name="BarRightShape" type="CollisionShape2D" parent="BarRight"]
+shape = SubResource("RectangleShape2D_130x20")
+
+[node name="BarRightVisual" type="Polygon2D" parent="BarRight"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-65.0, -10.0, 65.0, -10.0, 65.0, 10.0, -65.0, 10.0)
+
+; The mound: shallow slopes either side of a flat top 80 above the floor.
+[node name="Mound" type="StaticBody2D" parent="."]
+
+[node name="MoundShape" type="CollisionPolygon2D" parent="Mound"]
+polygon = PackedVector2Array(-260, 280, -120, 200, 120, 200, 260, 280)
+
+[node name="MoundVisual" type="Polygon2D" parent="Mound"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-260, 280, -120, 200, 120, 200, 260, 280)
+
+; Four spawns a side, alternating left and right like every stage; Soccer sends each team to its own half (Red left, Blue right).
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-640, 225)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(640, 225)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-560, 225)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(560, 225)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-480, 225)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(480, 225)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-400, 225)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(400, 225)
+
+; The kick-off spot, over the top of the mound.
+[node name="BallSpawn" type="Marker2D" parent="."]
+position = Vector2(0, 120)
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-420, 200)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(420, 200)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(0, 120)
+
+[node name="KillZone" type="Area2D" parent="."]
+position = Vector2(0, 700)
+script = ExtResource("kz")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
+shape = SubResource("RectangleShape2D_8000x40")

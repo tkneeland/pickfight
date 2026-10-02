@@ -73,11 +73,11 @@ Added for the stage parts (issue #76), from the same packs and under the same li
 ## Announcer voice
 
 Added for issue #152 and re-voiced for issue #211; the two team lines were
-added for issue #236, and the eight game-mode lines for issue #370, in the same voice and settings. `scripts/Sfx.gd` maps each
+added for issue #236, and the eight game-mode lines for issue #370, the two Soccer lines for issue #402, in the same voice and settings. `scripts/Sfx.gd` maps each
 line to its file (the `announce_*` entries), and `scripts/Announcer.gd`
 decides when each is said.
 
-All 27 lines are **synthesised** in one voice with
+All 29 lines are **synthesised** in one voice with
 [Piper TTS](https://github.com/OHF-Voice/piper1-gpl) 1.8.0 (`piper-tts` on
 PyPI):
 
@@ -126,6 +126,8 @@ encoded as mono Ogg Vorbis. The level suits the `announce_*` default of
 | `announcer/last_life.ogg` | "Last life!" | CC0 1.0 (synthesised) | Stock: a player is down to one life |
 | `announcer/stolen.ogg` | "Stolen!" | CC0 1.0 (synthesised) | Stock: a team-mate's life is stolen |
 | `announcer/overtime.ogg` | "Overtime!" | CC0 1.0 (synthesised) | Stock: a tied clock runs out |
+| `announcer/soccer.ogg` | "Soccer!" | CC0 1.0 (synthesised) | game mode SOCCER starts (#402) |
+| `announcer/goal.ogg` | "Goal!" | CC0 1.0 (synthesised) | Soccer: a goal is scored (#402) |
 | `announcer/hill_taken.ogg` | "Hill taken!" | CC0 1.0 (synthesised) | King of the Hill: a different player or team takes the hill |
 
 That is 19 files, about 0.16 MB in all. Before #211 the count, "FIGHT!" and

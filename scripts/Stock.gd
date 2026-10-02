@@ -23,7 +23,7 @@ extends Node
 
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
-const GameClockScript := preload("res://scripts/GameClock.gd")
+const RespawnScript := preload("res://scripts/Respawn.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -38,10 +38,8 @@ var lives: Dictionary = {}
 var overtime: bool = false
 var round_manager: Node
 
-## slot -> seconds until it respawns.
-var _pending: Dictionary = {}
-## slot -> GameClock msec its spawn protection ends.
-var _protected: Dictionary = {}
+## The respawn timer and spawn protection, shared with Soccer (#402).
+var _respawner: RefCounted
 var _watched: Dictionary = {}
 var _handlers: Dictionary = {}
 var _active: bool = false
@@ -56,6 +54,7 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
+	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	var settings: RefCounted = HostSettingsScript.shared()
 	var start_lives: int = int(settings.stock_lives)
 	time_limit_sec = float(settings.stock_time_limit)
@@ -90,8 +89,8 @@ func end_round() -> void:
 		_send_lives(slot, -1, false)
 	_handlers.clear()
 	_watched.clear()
-	_pending.clear()
-	_protected.clear()
+	if _respawner != null:
+		_respawner.clear()
 	lives.clear()
 	overtime = false
 	if _overtime_mode != null and is_instance_valid(_overtime_mode):
@@ -113,14 +112,14 @@ func connected_count() -> int:
 
 ## Whether `slot` has lost a life and is waiting to come back.
 func is_pending(slot: int) -> bool:
-	return _pending.has(slot)
+	return _respawner != null and _respawner.is_pending(slot)
 
 func lives_of(slot: int) -> int:
 	return int(lives.get(slot, -1))
 
 ## Whether `slot` is out of lives (and so a ghost).
 func is_out(slot: int) -> bool:
-	return lives.has(slot) and int(lives[slot]) <= 0 and not _pending.has(slot) \
+	return lives.has(slot) and int(lives[slot]) <= 0 and not is_pending(slot) \
 		and not bool(_watched[slot].alive)
 
 func _on_eliminated(slot: int) -> void:
@@ -128,7 +127,7 @@ func _on_eliminated(slot: int) -> void:
 		return
 	lives[slot] = 0 if overtime else maxi(int(lives.get(slot, 0)) - 1, 0)
 	if int(lives[slot]) > 0:
-		_pending[slot] = respawn_sec
+		_respawner.queue(slot)
 	if int(lives[slot]) == 1 and not overtime:
 		callout.emit(&"announce_last_life")
 	# Counted here, after the lives are, so a player about to come back is
@@ -138,11 +137,7 @@ func _on_eliminated(slot: int) -> void:
 func _physics_process(delta: float) -> void:
 	if not _active:
 		return
-	for slot: int in _pending.keys():
-		_pending[slot] = float(_pending[slot]) - delta
-		if float(_pending[slot]) <= 0.0:
-			_respawn(slot)
-	_tick_protection()
+	_respawner.tick(delta)
 	if time_limit_sec > 0.0 and not overtime:
 		time_left = maxf(time_left - delta, 0.0)
 		if time_left <= 0.0:
@@ -151,51 +146,8 @@ func _physics_process(delta: float) -> void:
 	for slot: int in lives.keys():
 		_send_lives(slot, int(lives[slot]), can_steal(slot))
 
-## Back in at the spawn farthest from the others, a pickaxe in hand.
 func _respawn(slot: int) -> void:
-	_pending.erase(slot)
-	var player: Node2D = _watched[slot]
-	if not is_instance_valid(player):
-		return
-	player.start_round(_farthest_spawn(slot), false)
-	if float(round_manager.spawn_protection_sec) > 0.0:
-		player.spawn_protected = true
-		_protected[slot] = _now_msec() + int(float(round_manager.spawn_protection_sec) * 1000.0)
-
-## The stage spawn point whose nearest standing player is farthest away.
-func _farthest_spawn(slot: int) -> Vector2:
-	var points: Array[Vector2] = round_manager._stage_spawn_points
-	var here: Vector2 = _watched[slot].global_position
-	if points.is_empty():
-		return here
-	var best: Vector2 = points[0]
-	var best_gap: float = -1.0
-	for point: Vector2 in points:
-		var gap: float = INF
-		for other: int in _watched.keys():
-			if other != slot and bool(_watched[other].alive):
-				gap = minf(gap, point.distance_to(_watched[other].global_position))
-		if gap > best_gap:
-			best_gap = gap
-			best = point
-	return best
-
-func _tick_protection() -> void:
-	var now: int = _now_msec()
-	for slot: int in _protected.keys():
-		var player: Node2D = _watched[slot]
-		if not is_instance_valid(player):
-			_protected.erase(slot)
-		elif now >= int(_protected[slot]):
-			player.spawn_protected = false
-			player.modulate.a = 1.0
-			_protected.erase(slot)
-		else:
-			var lit: bool = int(float(now) / 1000.0 * 16.0) % 2 == 0
-			player.modulate.a = 1.0 if lit else 0.35
-
-func _now_msec() -> int:
-	return GameClockScript.now_msec()
+	_respawner.respawn_now(slot)
 
 # --- Teams: steal a life -------------------------------------------------------
 
@@ -260,7 +212,7 @@ func _timeout() -> void:
 			losers.append(slot)
 	for slot: int in losers:
 		lives[slot] = 0
-		_pending.erase(slot)
+		_respawner.cancel(slot)
 	overtime = true
 	var tied_units: Dictionary = {}
 	for slot: int in tied:
