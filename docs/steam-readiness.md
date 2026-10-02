@@ -23,10 +23,22 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Item | Placeholder | Who |
 |---|---|---|
 | Release date | Decided 2026-10-01: store page public by about December 2026; a demo in **Steam Next Fest, Feb 22 - Mar 1 2027 (registration by Jan 10 2027)**; Early Access launch about March 2027. Demo is a slice: about 6 stages, 5 weapons, Classic plus one mode, 8 players. Early Access bar: everything ticketed as of October 2026. Steam wants the store page public ahead of release (**verify**: about 2 weeks minimum "Coming soon") and a wait after paperwork/fee (**verify**: about 30 days). Work backwards from these. | owner |
-| Launch price per region | Decided 2026-10-01: **$7.99 USD** base (only the host buys; phones join free), 10-15% launch discount; Steam suggests regional prices (**verify**); launch discount (**verify** typical 10-20%) | owner |
+| Launch price per region | Decided 2026-10-01: **$7.99 USD** in Early Access, rising to **$9.99** at 1.0 (only the host buys; phones join free), 10-15% launch discount; Steam suggests regional prices (**verify**); launch discount (**verify** typical 10-20%) | owner |
 | Final name / trademark check | "Pickfight" | owner |
 | Early Access vs 1.0 | Decided 2026-10-01: **Early Access** | owner |
 | Publisher entity (individual vs company) | Decided 2026-10-01: the owner as an individual, with a revenue split agreed privately with Austin; drives tax/bank forms and macOS/Windows signing identity | owner |
+
+## Demo contents (#361)
+
+The Next Fest demo is the same game with a content slice, chosen by one flag: the "demo" feature tag (the `Demo macOS`, `Demo Windows` and `Demo Linux` export presets, `tools/export.sh demo`) or `--demo-build` on the command line. The slice lives in `scripts/DemoBuild.gd`. It limits the stage rotation, the pickup weapon pool and the host phone's mode picker; the Settings panel lists only slice items and can't switch on anything outside it. Up to 8 players, no time cap. After a match's victory screen the demo shows an end card with the logo: "Thanks for playing the Pickfight demo! Wishlist the full game on Steam".
+
+| Part | Picks | Why |
+|---|---|---|
+| Stages (6) | Flatlands, Highrise, Pillars, Islands, Bowl, Springboard | Plant-and-swing reads best on stages with something to plant on. Flatlands opens every match and teaches the controls on flat ground; Highrise is vertical, Pillars and Islands make gaps to cross with the pole, Bowl suits King of the Hill, Springboard adds bounce pads. None is a large-view stage (those need 5+ players, and a demo table often has two), and none has heavy hazards, so the hook is the fighting. |
+| Weapons (5) | Pickaxe (everyone starts with it), sword, boomstick, grapple, flail | Four very different feels for a first match: a plain melee swing, a ranged shot, a pull-yourself-around tool that is the closest thing to Getting Over It, and a physics chain. Axe, dagger and the rest are held back for the full game. |
+| Modes (2) | Classic, King of the Hill | Classic is the core loop; King of the Hill gives a reason to stay in one spot and fight over it. Hot Potato, Sudden Death and Stock stay in the full game. |
+
+`--demo` on its own is the older showcase mode (random weapons, 120 Hz physics), not this; `--demo-build` is the demo.
 
 ## Checklist (in order)
 

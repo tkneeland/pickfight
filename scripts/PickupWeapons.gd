@@ -6,6 +6,8 @@ extends RefCounted
 ## nothing (user story 4). Preloaded by path wherever it is used, never
 ## referenced by `class_name` (CLAUDE.md).
 
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+
 const PICKAXE_PATH: String = "res://resources/pickaxe.tres"
 const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/staff.tres",
@@ -44,7 +46,12 @@ static func available_weapons() -> Array[Resource]:
 		for path: String in WEAPON_PATHS:
 			if ResourceLoader.exists(path):
 				_loaded.append(load(path))
-	return _loaded.duplicate()
+	var offered: Array[Resource] = []
+	for stats: Resource in _loaded:
+		# The demo build's slice (#361).
+		if DemoBuildScript.weapon_in_slice(stats.resource_path.get_file().get_basename()):
+			offered.append(stats)
+	return offered
 
 ## One weapon drawn uniformly at random from `candidates`, never the pickaxe
 ## however it got into the list. Null when nothing eligible is offered, rather

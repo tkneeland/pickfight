@@ -16,6 +16,7 @@ extends RefCounted
 
 const StageScript := preload("res://scripts/Stage.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 ## Which stages the host switched off (#294); a scenario hands in its own.
 var settings: RefCounted = HostSettingsScript.shared()
@@ -26,7 +27,9 @@ var scenes: Array[PackedScene] = []:
 		scenes = value
 		var names := PackedStringArray()
 		for scene: PackedScene in value:
-			names.append(HostSettingsScript.name_of(scene.resource_path))
+			var stage_name: String = HostSettingsScript.name_of(scene.resource_path)
+			if DemoBuildScript.stage_in_slice(stage_name):  # the demo's slice (#361)
+				names.append(stage_name)
 		settings.known_stages = names
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5
@@ -54,6 +57,40 @@ var round_player_count: int = 0
 var _bag_large_eligible: bool = false
 ## `Stage.view_size_of()` per stage scene, so a scene's state is read once.
 var _large_stage_cache: Dictionary = {}
+
+## The stage a Stock match is pinned to (#375): an index into `scenes`, or -1
+## for the ordinary rotation. RoundManager resolves it once per match.
+var pinned: int = -1
+
+## The stage index for `stage_name` (a base name) when it exists and is
+## enabled, otherwise a random allowed one (the Random tile, or a pick the host
+## has since switched off). Draws from `rng`.
+func resolve_pin(stage_name: String) -> int:
+	if stage_name != "":
+		for i in scenes.size():
+			if HostSettingsScript.name_of(scenes[i].resource_path) == stage_name and _stage_enabled(i):
+				return i
+	var options: Array[int] = []
+	for i in scenes.size():
+		if stage_allowed(i):
+			options.append(i)
+	if options.is_empty():
+		return 0
+	var pick: int = rng.randi() if rng != null else randi()
+	return options[pick % options.size()]
+
+## The host phone's Stock stage grid (#375): every enabled stage as
+## {name, competitive}, competitive ones first, the rest in rotation order.
+func picker_rows() -> Array:
+	var comp: Array = []
+	var rest: Array = []
+	for i in scenes.size():
+		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
+		if not _stage_enabled(i):
+			continue
+		var is_comp: bool = StageScript.competitive_of(scenes[i])
+		(comp if is_comp else rest).append({"name": stage_name, "competitive": is_comp})
+	return comp + rest
 
 ## Throws away what is left of the bag, so the next deal starts a fresh one
 ## for its own player count (a new match, #163).
@@ -104,6 +141,8 @@ func _stage_enabled(index: int) -> bool:
 ## however many rounds of seven it had left. A new match deals afresh too
 ## (`new_bag()`).
 func next_stage_index() -> int:
+	if pinned >= 0 and pinned < scenes.size():
+		return pinned
 	if demo:
 		var next: int = stage_index
 		for _i in scenes.size():
