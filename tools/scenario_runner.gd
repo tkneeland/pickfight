@@ -622,6 +622,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"reactor_king_of_the_hill_hill_sits_off_the_hazard",
 	"bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time",
 	"lobby_worst_state_fits_and_join_by_code_is_reachable",
+	"rotation_deals_ctf_and_soccer_only_their_own_stages",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2261,6 +2262,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_time()
 		"lobby_worst_state_fits_and_join_by_code_is_reachable":
 			return await _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable()
+		"rotation_deals_ctf_and_soccer_only_their_own_stages":
+			return await _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32492,4 +32495,50 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
+	return failures
+## Review sweep b: Capture the Flag and Soccer can only end on a stage with their
+## bases or goals, so their rotation deals only the stages whose `mode_weights`
+## name the mode -- even when the host switched those off -- while every other
+## mode still deals the rest.
+func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var own: Dictionary = {"capture_the_flag": ["Bastion", "Stronghold"], "soccer": ["Pitch", "Cage", "Dunes"]}
+	for mode_id: String in own.keys():
+		for switched_off: bool in [false, true]:
+			var settings: RefCounted = _fresh_settings_361()
+			var rotation: RefCounted = StageRotationScript361.new()
+			rotation.settings = settings
+			rotation.scenes = scenes
+			rotation.round_player_count = 8
+			rotation.mode_id = mode_id
+			rotation.rng = RandomNumberGenerator.new()
+			rotation.rng.seed = 21
+			if switched_off:
+				for stage_name: String in own[mode_id]:
+					settings.set_stage_enabled(stage_name, false)
+			var seen: Dictionary = {}
+			for _round in 60:
+				var index: int = rotation.next_stage_index()
+				rotation.stage_index = index
+				seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+			for stage_name: Variant in seen.keys():
+				if not (own[mode_id] as Array).has(str(stage_name)):
+					failures.append("%s dealt %s (own stages %s, switched off: %s)" % [mode_id, stage_name, own[mode_id], switched_off])
+			if seen.is_empty():
+				failures.append("%s dealt no stage" % mode_id)
+	var classic: RefCounted = StageRotationScript361.new()
+	classic.settings = _fresh_settings_361()
+	classic.scenes = scenes
+	classic.round_player_count = 8
+	classic.rng = RandomNumberGenerator.new()
+	classic.rng.seed = 21
+	var classic_seen: Dictionary = {}
+	for _round in 60:
+		var index: int = classic.next_stage_index()
+		classic.stage_index = index
+		classic_seen[index] = true
+	if classic_seen.size() < 20:
+		failures.append("Classic dealt only %d stages in 60 rounds" % classic_seen.size())
+	_scenario_completed = true
 	return failures
