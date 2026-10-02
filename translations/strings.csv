@@ -42,7 +42,7 @@ FEEDBACK_TITLE,Send feedback to the developers
 FEED_KO,KO
 FEED_SELF_KO,self-KO
 HOST_FIRST_TO_DOWN,First to  -
-HOST_GAMEPAD_HINT,Press A on a gamepad to join
+HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
 HOST_GO_ONLINE,Go online (O)
 HOST_GO_ONLINE_STATE,Go online (O): %s
 HOST_JOIN_ONLINE,Join online game (J)
@@ -51,6 +51,7 @@ HOST_MODE_STATE,Mode (T): %s
 HOST_PLAY_ON_PC,Play on this PC (P)
 HOST_PLAY_ON_PC_STATE,Play on this PC (P): %s
 HOST_START_MATCH,Start match (Enter)
+HOST_START_MATCH_PAD,Start match
 HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.
 HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.
 HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.
@@ -212,3 +213,8 @@ AWARD_CATEGORY_SCORER,SCORER
 STAGE_PITCH,Pitch
 STAGE_CAGE,Cage
 STAGE_DUNES,Dunes
+MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag
+MODE_CAPTURE_THE_FLAG_RULE,First team to 2 captures wins.
+AWARD_CATEGORY_CAPTURER,CAPTURER
+STAGE_BASTION,Bastion
+STAGE_STRONGHOLD,Stronghold

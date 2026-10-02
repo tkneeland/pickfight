@@ -150,9 +150,9 @@ Existing online work this builds on: relay with room codes (#238, ADR-0019), hos
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
 | 7.1 | Gamepad seats: right stick drives the arm, no phone needed | agent | none | done (#261) |
-| 7.2 | Confirm full-controller navigation of menus and lobby (no mouse or keyboard needed to start a match), on-screen glyphs, and a Deck-readable UI at 1280x800 | agent | none | todo |
-| 7.3 | Linux build runs under Proton-free native Linux or Proton; test on a real Deck or `Steam Deck` desktop-mode simulation (**verify** Valve's Deck Verified checklist) | owner (hardware) | 5.3 | todo |
-| 7.4 | The phone web controller still works on Deck as host if the Deck is on a LAN; document it | agent | none | todo |
+| 7.2 | Confirm full-controller navigation of menus and lobby (no mouse or keyboard needed to start a match), on-screen glyphs, and a Deck-readable UI at 1280x800 | agent | none | done in code (#368: Y host menu, View settings, 16 px text floor, scenarios `deck_*`); the on-device check stays with 7.3. Gap list: `docs/steam-deck-readiness.md` |
+| 7.3 | Linux build runs under Proton-free native Linux or Proton; test on a real Deck. Valve's criteria are recorded in `docs/steam-deck-readiness.md` (checked 2026-10-02) | owner (hardware) | 5.3 | todo |
+| 7.4 | The phone web controller still works on Deck as host if the Deck is on a LAN; document it | agent | none | documented in `docs/steam-deck-readiness.md`; needs a real Deck to confirm |
 | 7.5 | Deck Verified submission | owner | 7.2, 7.3, store page live | todo |
 
 ### 8. Localization

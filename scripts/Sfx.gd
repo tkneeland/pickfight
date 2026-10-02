@@ -229,6 +229,10 @@ const SOUNDS: Dictionary = {
 	"announce_overtime": {"files": ["announcer/overtime.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_soccer": {"files": ["announcer/soccer.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_goal": {"files": ["announcer/goal.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	# No recorded voice clips for Capture the Flag yet (#403): UI sounds stand in.
+	"announce_capture_the_flag": {"files": ["kenney_interface/bong_001.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
+	"announce_flag_taken": {"files": ["kenney_interface/maximize_006.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
+	"announce_captured": {"files": ["kenney_interface/confirmation_002.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
 	"announce_hill_taken": {"files": ["announcer/hill_taken.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	# No recorded voice clip for Gale yet: the wind-up sound stands in (#312).
 	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},

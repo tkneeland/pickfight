@@ -596,9 +596,28 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_grunts_one_distinct_quiet_voice_per_slot",
 	"voice_grunts_on_hit_and_ko",
 	"voice_grunts_respect_mute_and_settings_isolation",
+	"mode_ctf_is_teams_only",
+	"ctf_touching_the_enemy_flag_picks_it_up",
+	"ctf_a_hit_makes_the_carrier_drop_the_flag",
+	"ctf_a_dropped_flag_returns_after_ten_seconds",
+	"ctf_a_defender_touch_returns_the_flag",
+	"ctf_a_capture_scores_and_resets_the_flag",
+	"ctf_two_captures_end_the_round",
+	"ctf_a_ko_drops_the_flag_and_respawns_the_player",
+	"ctf_stages_load_bases_and_weights",
+	"ctf_flag_runner_award",
+	"bot_ctf_attackers_defenders_and_carrier_chase",
+	"announcer_calls_capture_the_flag",
+	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
 	"character_polish_hit_flash_respects_reduce_flash",
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
+	"deck_text_is_legible_at_1280x800",
+	"deck_lobby_join_qr_and_url_fit_the_deck_screen",
+	"deck_gamepad_reaches_every_lobby_control",
+	"deck_gamepad_operates_the_settings_panel",
+	"deck_captions_drop_keyboard_glyphs_for_a_gamepad",
+	"deck_gamepad_can_dismiss_the_first_launch_notice",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2186,12 +2205,50 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_grunts_on_hit_and_ko()
 		"voice_grunts_respect_mute_and_settings_isolation":
 			return await _scenario_voice_grunts_respect_mute_and_settings_isolation()
+		"mode_ctf_is_teams_only":
+			return await _scenario_mode_ctf_is_teams_only()
+		"ctf_touching_the_enemy_flag_picks_it_up":
+			return await _scenario_ctf_touching_the_enemy_flag_picks_it_up()
+		"ctf_a_hit_makes_the_carrier_drop_the_flag":
+			return await _scenario_ctf_a_hit_makes_the_carrier_drop_the_flag()
+		"ctf_a_dropped_flag_returns_after_ten_seconds":
+			return await _scenario_ctf_a_dropped_flag_returns_after_ten_seconds()
+		"ctf_a_defender_touch_returns_the_flag":
+			return await _scenario_ctf_a_defender_touch_returns_the_flag()
+		"ctf_a_capture_scores_and_resets_the_flag":
+			return await _scenario_ctf_a_capture_scores_and_resets_the_flag()
+		"ctf_two_captures_end_the_round":
+			return await _scenario_ctf_two_captures_end_the_round()
+		"ctf_a_ko_drops_the_flag_and_respawns_the_player":
+			return await _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player()
+		"ctf_stages_load_bases_and_weights":
+			return await _scenario_ctf_stages_load_bases_and_weights()
+		"ctf_flag_runner_award":
+			return await _scenario_ctf_flag_runner_award()
+		"bot_ctf_attackers_defenders_and_carrier_chase":
+			return await _scenario_bot_ctf_attackers_defenders_and_carrier_chase()
+		"announcer_calls_capture_the_flag":
+			return await _scenario_announcer_calls_capture_the_flag()
+		"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel":
+			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel()
 		"character_polish_hit_flash_respects_reduce_flash":
 			return await _scenario_character_polish_hit_flash_respects_reduce_flash()
 		"character_polish_takeoff_stretches_within_cap":
 			return await _scenario_character_polish_takeoff_stretches_within_cap()
 		"character_polish_weapon_head_has_ink_outline":
 			return await _scenario_character_polish_weapon_head_has_ink_outline()
+		"deck_text_is_legible_at_1280x800":
+			return await _scenario_deck_text_is_legible_at_1280x800()
+		"deck_lobby_join_qr_and_url_fit_the_deck_screen":
+			return await _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen()
+		"deck_gamepad_reaches_every_lobby_control":
+			return await _scenario_deck_gamepad_reaches_every_lobby_control()
+		"deck_gamepad_operates_the_settings_panel":
+			return await _scenario_deck_gamepad_operates_the_settings_panel()
+		"deck_captions_drop_keyboard_glyphs_for_a_gamepad":
+			return await _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad()
+		"deck_gamepad_can_dismiss_the_first_launch_notice":
+			return await _scenario_deck_gamepad_can_dismiss_the_first_launch_notice()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -3945,6 +4002,8 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Pitch.tscn",
 	"res://scenes/stages/Cage.tscn",
 	"res://scenes/stages/Dunes.tscn",
+	"res://scenes/stages/Bastion.tscn",
+	"res://scenes/stages/Stronghold.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -5573,7 +5632,7 @@ func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# spawn by spawn, left then right, until the first shove gets out.
 	var jobs: Array[Callable] = []
 	for s in STAGE_PATHS.size():
-		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]):
+		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_403.has(STAGE_PATHS[s]):
 			continue  # closed pitches: the ball may only leave through a goal
 		jobs.append(_stage_ringout_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
 	var failures: Array[String] = await _run_concurrently(jobs, "stage ring-out sweep")
@@ -25563,8 +25622,8 @@ func _mode_rig(count: int, mode: String, seed_value: int = 7) -> Dictionary:
 	var paths: Array[NodePath] = []
 	var players: Array[RigidBody2D] = []
 	for i in count:
-		spawns.append(MODE_SPAWNS[i])
-		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		spawns.append(MODE_SPAWNS[i % MODE_SPAWNS.size()])
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i % MODE_SPAWNS.size()])
 		player.name = "ModeP%d" % i
 		players.append(player)
 		paths.append(NodePath("../ModeP%d" % i))
@@ -28342,7 +28401,7 @@ func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
 	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
 	if msg.get("game_mode") != "king_of_the_hill":
 		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
-	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer"]:
+	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]:
 		failures.append("the picker rows were %s" % [names])
 	HostSettingsScript352.shared().game_mode = ""
 	await _close_phones(joined)
@@ -28606,7 +28665,7 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 	var lobby_rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
-	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer"]
+	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]
 	if cards.size() != want.size():
 		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
 	else:
@@ -29339,12 +29398,18 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 	var loop: Dictionary = _new_modifier_round("")
 	loop["round_manager"].modifier_seed = int(OS.get_environment("GSEED"))
 	var players: Array[RigidBody2D] = loop["players"]
+	# The gust pushes every body, so the bystanders would be blown off some
+	# stages and end the round on its own before the next is requested. Only
+	# P0 is measured; hold the rest where they stand.
+	for bystander: RigidBody2D in players.slice(1):
+		bystander.freeze = true
 	var gusts: Array = []
 	var extra: Array[String] = []
 	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
 		var gust: Node2D = instance.get_node_or_null("GaleGust") as Node2D
 		gusts.append(gust)
 		var player: RigidBody2D = players[0]
+		player.freeze = false
 		var before_gravity: float = player.gravity_scale
 		# Held in clear air inside the zone, with no gravity to confuse a
 		# sideways reading, and no input.
@@ -29367,14 +29432,19 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 				# Enough shown: stop before the body is carried off the stage.
 				if best >= GALE_MIN_SPEED * 1.5:
 					break
-				# A slower host may never reach that speed; the gust would then
-				# carry the held body off the stage, the kill zone would end the
-				# round, and the round loop would free the stage before the next
-				# round is requested (#399). Stop at a quarter of the view's width.
-				if absf(player.global_position.x - start.x) > instance.get_view_rect().size.x * 0.25:
-					break
+			# A slower host may never reach that speed; the gust would then
+			# carry the held body off the stage, the kill zone would end the
+			# round, and the round loop would free the stage before the next
+			# round is requested (#399). Stop at a quarter of the view's width.
+			# Plain rounds too: after some scenario orders the held body
+			# drifts there as well.
+			if absf(player.global_position.x - start.x) > instance.get_view_rect().size.x * 0.25:
+				break
 		player.gravity_scale = before_gravity
 		player.linear_velocity = Vector2.ZERO
+		# Held until the next measurement, so it cannot wander off the stage
+		# and end the round before the next is requested.
+		player.freeze = true
 		if gust != null and not warned_without_push:
 			extra.append("the gale never showed a warning before pushing")
 		return best
@@ -31195,11 +31265,14 @@ func _scenario_bot_four_bots_finish_a_king_of_the_hill_round() -> Array[String]:
 func _scenario_bot_four_bots_finish_a_stock_round() -> Array[String]:
 	var failures: Array[String] = []
 	_stock_settings(1, 480)
-	var took: float = await _bot_round_409(GameModesType.STOCK, 200.0, failures)
+	# Game seconds, well past the 127 s it takes and short of the 480 s time
+	# limit, so a finish is still the last bot standing; a CI run that was
+	# unlucky with timing once overran the old 200 s (#409).
+	var took: float = await _bot_round_409(GameModesType.STOCK, 280.0, failures)
 	_stock_settings(3, 480)
 	print("      Stock round with four bots took %.1f s" % took)
 	if took < 0.0 and failures.is_empty():
-		failures.append("four bots did not finish a Stock round in 200 s")
+		failures.append("four bots did not finish a Stock round in 280 s")
 	return failures
 # --- Voice grunts (issue #290) ---------------------------------------------------
 ## Grunt names for a slot. Eight voices, each with its own files.
@@ -31329,7 +31402,483 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	sfx.set_muted(was_muted)
 	_scenario_completed = true
 	return failures
+# --- Capture the Flag (issue #403) ---------------------------------------------
 
+const CTF_STAGES_403: PackedStringArray = [
+	"res://scenes/stages/Bastion.tscn",
+	"res://scenes/stages/Stronghold.tscn",
+]
+## The closed Capture the Flag halls have no kill zone to be shoved into (#403).
+const RINGOUT_EXEMPT_403: PackedStringArray = CTF_STAGES_403
+## A Teams round of `count` (up to 4) players on `stage_path`, slots alternating Red, Blue.
+func _ctf_rig(count: int, stage_path: String = "res://scenes/stages/Bastion.tscn") -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, GameModesType.CAPTURE_THE_FLAG)
+	var rm: Node = rig["rm"]
+	var hall: Array[PackedScene] = [load(stage_path)]
+	rm.stage_scenes = hall
+	var teams: Dictionary = {}
+	for i in count:
+		teams[i] = i % 2
+	rm._team_mode = true
+	rm._teams = teams
+	return rig
+## Everyone to the middle of the floor, apart, and past the spawn protection, so a
+## scenario starts from a quiet field. Slot 0 and 2 are Red, 1 and 3 Blue.
+func _ctf_quiet(rig: Dictionary) -> void:
+	var spots: Array[Vector2] = [Vector2(-300.0, 240.0), Vector2(300.0, 240.0), Vector2(-200.0, 240.0), Vector2(200.0, 240.0)]
+	for i in rig["players"].size():
+		var player: RigidBody2D = rig["players"][i]
+		player.teleport_to(spots[i])
+		player.spawn_protected = false
+		player.modulate.a = 1.0
+## Starts a Capture the Flag round and hands back its mode node, or null with a failure noted.
+func _ctf_start(rig: Dictionary, failures: Array[String]) -> Node:
+	if not await _mode_started(rig):
+		failures.append("the Capture the Flag round never started")
+		await _teardown(rig["stage"])
+		return null
+	var mode: Node = rig["rm"].game_mode_node()
+	_ctf_quiet(rig)
+	await _await_ticks(3)
+	return mode
+## Capture the Flag is Teams only, like Soccer: refused in a free-for-all, kept with
+## Teams on, dropped to Classic when Teams is switched off.
+func _scenario_mode_ctf_is_teams_only() -> Array[String]:
+	var failures: Array[String] = []
+	HostSettingsScript352.shared().game_mode = ""
+	var server: Node = ControllerServerScript.new()
+	if server.apply_host_command("gamemode", "capture_the_flag") or server.game_mode() == "capture_the_flag":
+		failures.append("Capture the Flag was accepted in a free-for-all")
+	if not server.apply_host_command("mode", "teams"):
+		failures.append("Teams could not be switched on")
+	if not server.apply_host_command("gamemode", "capture_the_flag") or server.game_mode() != "capture_the_flag":
+		failures.append("Capture the Flag was refused with Teams on")
+	server.apply_host_command("mode", "ffa")
+	if server.game_mode() != "":
+		failures.append("switching Teams off with Capture the Flag chosen left '%s', not Classic" % server.game_mode())
+	var seen: bool = false
+	for row: Dictionary in GameModesType.picker_rows():
+		if row["id"] == "capture_the_flag":
+			seen = true
+			if not bool(row.get("teams_only", false)):
+				failures.append("the picker row for Capture the Flag is not marked teams_only")
+	if not seen:
+		failures.append("Capture the Flag is not in the picker rows")
+	if GameModesType.display_name("capture_the_flag") != "Capture the Flag" or GameModesType.rule_line("capture_the_flag") == "":
+		failures.append("Capture the Flag has no name or rule line")
+	server.free()
+	HostSettingsScript352.shared().game_mode = ""
+	_scenario_completed = true
+	return failures
+## Touching the enemy flag picks it up; a teammate touching its own flag at home, or
+## a player who already carries one, changes nothing.
+func _scenario_ctf_touching_the_enemy_flag_picks_it_up() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rig["rm"]._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	var blue: RigidBody2D = rig["players"][1]
+	blue.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.HOME or int(mode.carrier[1]) != -1:
+		failures.append("Blue picked up its own flag at home (state %d)" % int(mode.state[1]))
+	red.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.CARRIED or int(mode.carrier[1]) != 0:
+		failures.append("Red touching Blue's flag did not pick it up (state %d, carrier %d)" % [int(mode.state[1]), int(mode.carrier[1])])
+	if not red.alive:
+		failures.append("the carrier is not alive")
+	rig["players"][2].teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.carrier[1]) != 0:
+		failures.append("a second Red touch changed the carrier to %d" % int(mode.carrier[1]))
+	var shown: Node2D = mode.get_node("CtfFlags/Flag1")
+	if shown.global_position.distance_to(red.global_position) > 80.0:
+		failures.append("the carried flag is not drawn with its carrier (%.0f px away)" % shown.global_position.distance_to(red.global_position))
+	await _teardown(rig["stage"])
+	return failures
+## Any hit makes the carrier drop the flag where they stand; they cannot grab it
+## straight back, and the flag does not move with them afterwards.
+func _scenario_ctf_a_hit_makes_the_carrier_drop_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var red: RigidBody2D = rig["players"][0]
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.CARRIED:
+		failures.append("the flag was not carried before the hit")
+	red.take_damage(2.0)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.DROPPED or int(mode.carrier[1]) != -1:
+		failures.append("a hit did not make the carrier drop the flag (state %d)" % int(mode.state[1]))
+	var spot: Vector2 = mode.flag_position[1]
+	if absf(spot.x - red.global_position.x) > 6.0:
+		failures.append("the flag dropped %.0f px from the carrier" % absf(spot.x - red.global_position.x))
+	await _await_ticks(30)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("the carrier re-took the flag at once (state %d)" % int(mode.state[1]))
+	if mode.flag_position[1].distance_to(spot) > 1.0:
+		failures.append("a dropped flag moved by itself")
+	# A carrier shielded by spawn protection takes no damage, so keeps the flag.
+	var other: RigidBody2D = rig["players"][2]
+	other.teleport_to(Vector2(-100.0, 240.0))
+	mode.return_flag(1)
+	mode.take_flag(1, 2)
+	other.spawn_protected = true
+	other.take_damage(5.0)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.CARRIED:
+		failures.append("a hit that dealt no damage still dropped the flag")
+	await _teardown(rig["stage"])
+	return failures
+## A dropped flag goes home on its own after about 10 s, and not before.
+func _scenario_ctf_a_dropped_flag_returns_after_ten_seconds() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	if absf(mode.return_sec - 10.0) > 0.001:
+		failures.append("the return delay is %.1f s, wanted 10" % mode.return_sec)
+	rig["players"][0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.drop_flag(1)
+	rig["players"][0].teleport_to(Vector2(-600.0, 240.0))
+	await _await_ticks(540)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("the flag went home before 10 s (state %d, %.1f s left)" % [int(mode.state[1]), float(mode.return_left[1])])
+	await _await_ticks(100)
+	var home: Vector2 = rig["rm"]._current_stage.get_flag_home(1)
+	if int(mode.state[1]) != mode.HOME or mode.flag_position[1].distance_to(home) > 1.0:
+		failures.append("the flag was not home after 10 s (state %d)" % int(mode.state[1]))
+	await _teardown(rig["stage"])
+	return failures
+## A defender (a teammate of the flag's team) touching a dropped flag sends it home at once.
+func _scenario_ctf_a_defender_touch_returns_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	rig["players"][0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.drop_flag(1)
+	rig["players"][0].teleport_to(Vector2(-500.0, 240.0))
+	var spot: Vector2 = mode.flag_position[1]
+	await _await_ticks(20)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("the flag did not stay dropped (state %d)" % int(mode.state[1]))
+	# Blue's other player is the flag's own team: its touch returns it.
+	rig["players"][3].teleport_to(spot)
+	await _await_ticks(3)
+	var home: Vector2 = rig["rm"]._current_stage.get_flag_home(1)
+	if int(mode.state[1]) != mode.HOME or mode.flag_position[1].distance_to(home) > 1.0:
+		failures.append("a defender's touch did not return the flag (state %d)" % int(mode.state[1]))
+	await _teardown(rig["stage"])
+	return failures
+## Carrying the enemy flag into your own base is a capture: a point, the flag home.
+func _scenario_ctf_a_capture_scores_and_resets_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rig["rm"]._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	var blue: RigidBody2D = rig["players"][1]
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[0]) != 0:
+		failures.append("walking into its own base with no flag scored")
+	red.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if int(mode.carrier[1]) != 0:
+		failures.append("Red did not pick up the flag")
+	if int(mode.scores[0]) != 0:
+		failures.append("picking the flag up scored (it is not in Red's base)")
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[0]) != 1 or int(mode.scores[1]) != 0:
+		failures.append("a capture scored %s, wanted Red 1 - Blue 0" % [mode.scores])
+	if int(mode.state[1]) != mode.HOME or int(mode.carrier[1]) != -1:
+		failures.append("the captured flag is not home (state %d)" % int(mode.state[1]))
+	if int(mode.capturers.get(0, 0)) != 1:
+		failures.append("the capture was not credited to the carrier: %s" % [mode.capturers])
+	if mode.score_text() != "1 - 0":
+		failures.append("the score reads '%s', wanted '1 - 0'" % mode.score_text())
+	# Blue captures too, to be sure each team scores for itself.
+	blue.teleport_to(stage.get_flag_home(0))
+	await _await_ticks(3)
+	blue.teleport_to(stage.get_base_rect(1).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[1]) != 1:
+		failures.append("Blue's capture scored %s" % [mode.scores])
+	await _teardown(rig["stage"])
+	return failures
+## The second capture ends the round for that team and scores it a round win.
+func _scenario_ctf_two_captures_end_the_round() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	if mode.captures_to_win != 2:
+		failures.append("the round is first to %d, wanted 2" % mode.captures_to_win)
+	var stage: Node2D = rm._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	for capture in 2:
+		if rm.team_score(0) != 0:
+			failures.append("the round ended after only %d capture(s)" % capture)
+			break
+		red.teleport_to(stage.get_flag_home(1))
+		await _await_ticks(3)
+		red.teleport_to(stage.get_base_rect(0).get_center())
+		await _await_ticks(3)
+	await _await_ticks(10)
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
+		failures.append("team scores after 2 captures were %d - %d, wanted 1 - 0" % [rm.team_score(0), rm.team_score(1)])
+	if rm.lobby_phase() != "round_end":
+		failures.append("the round was not over after the second capture (phase '%s')" % rm.lobby_phase())
+	await _teardown(rig["stage"])
+	return failures
+## A knocked-out carrier drops the flag where they fell and is back in about 1.5 s
+## with spawn protection; the round goes on while a team is briefly empty.
+func _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(2)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	if absf(mode.respawn_sec - 1.5) > 0.001:
+		failures.append("the respawn delay is %.2f s, wanted 1.5" % mode.respawn_sec)
+	var red: RigidBody2D = rig["players"][0]
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	red.eliminate()
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.DROPPED:
+		failures.append("a knocked-out carrier did not drop the flag (state %d)" % int(mode.state[1]))
+	if not mode.is_pending(0) or red.alive:
+		failures.append("the knocked-out player was not waiting to respawn")
+	await _await_msec(500)
+	if red.alive:
+		failures.append("the player was back after 0.5 s, too early")
+	if not await _await_condition(func() -> bool: return red.alive, 3000):
+		failures.append("the knocked-out player never respawned")
+	elif not red.spawn_protected:
+		failures.append("the respawned player has no spawn protection")
+	if rm.lobby_phase() == "round_end":
+		failures.append("the round ended while the only Red player was waiting to respawn")
+	await _teardown(rig["stage"])
+	return failures
+## Both stages load with a flag and a base each side, mirrored, eight spawns, are
+## in Main's rotation and STAGE_PATHS, and weigh 4 for Capture the Flag, 0.3 elsewhere.
+func _scenario_ctf_stages_load_bases_and_weights() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in CTF_STAGES_403:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if not instance.has_bases():
+			failures.append("%s has no flag and base for each team" % path)
+		else:
+			var red: Rect2 = instance.get_base_rect(0)
+			var blue: Rect2 = instance.get_base_rect(1)
+			if not is_equal_approx(red.get_center().x, -blue.get_center().x) or not is_equal_approx(red.get_center().y, blue.get_center().y):
+				failures.append("%s: the bases are not mirror images" % path)
+			if not is_equal_approx(instance.get_flag_home(0).x, -instance.get_flag_home(1).x):
+				failures.append("%s: the flags are not mirror images" % path)
+			if red.get_center().x > 0.0:
+				failures.append("%s: Red's base is not on the left" % path)
+			if not red.has_point(instance.get_flag_home(0)) or not blue.has_point(instance.get_flag_home(1)):
+				failures.append("%s: a flag sits outside its own base" % path)
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["capture_the_flag", "", "soccer", "stock"]:
+			var want: float = 4.0 if mode_id == "capture_the_flag" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## "Flag Runner" goes to the player with most captures, only in Capture the Flag.
+func _scenario_ctf_flag_runner_award() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_captures(0, 1)
+	stats.record_captures(2, 1)
+	stats.record_captures(2, 1)
+	var got: Array[Dictionary] = stats.mode_awards([0, 1, 2], "capture_the_flag")
+	if got.size() != 1 or got[0]["title"] != "Flag Runner" or int(got[0]["slot"]) != 2 or got[0]["detail"] != "2 captures":
+		failures.append("Capture the Flag awards were %s, wanted Flag Runner to slot 2 for 2 captures" % [got])
+	if not stats.mode_awards([0, 1, 2], "soccer").is_empty():
+		failures.append("Flag Runner leaked into another mode")
+	_scenario_completed = true
+	return failures
+## A bot plays its job: the lowest slot defends its own flag, the other attacks the
+## enemy flag, everyone chases an enemy carrier, a carrier heads home, and a dropped
+## flag is gone for. Then an attacker really does close on the enemy flag.
+func _scenario_bot_ctf_attackers_defenders_and_carrier_chase() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rm._current_stage
+	var defender := BotScript.new()
+	defender.rng.seed = BOT_SEED
+	defender.player = rig["players"][0]
+	defender.output = rig["players"][0].set_input_vector
+	rig["stage"].add_child(defender)
+	var attacker := BotScript.new()
+	attacker.rng.seed = BOT_SEED
+	attacker.player = rig["players"][2]
+	attacker.output = rig["players"][2].set_input_vector
+	rig["stage"].add_child(attacker)
+	defender._read_mode()
+	attacker._read_mode()
+	if defender._ctf_goal().distance_to(stage.get_flag_home(0)) > 1.0:
+		failures.append("the defender heads to %s, not its own flag" % [defender._ctf_goal()])
+	if attacker._ctf_goal().distance_to(stage.get_flag_home(1)) > 1.0:
+		failures.append("the attacker heads to %s, not the enemy flag" % [attacker._ctf_goal()])
+	# Blue's player 1 takes Red's flag: both Red bots go for it.
+	mode.take_flag(0, 1)
+	var carrier_at: Vector2 = rig["players"][1].global_position
+	if defender._ctf_goal().distance_to(carrier_at) > 1.0 or attacker._ctf_goal().distance_to(carrier_at) > 1.0:
+		failures.append("the Red bots did not both chase the carrier")
+	mode.return_flag(0)
+	# A Red carrier heads for its own base.
+	mode.take_flag(1, 2)
+	if attacker._ctf_goal().distance_to(stage.get_base_rect(0).get_center()) > 1.0:
+		failures.append("the carrying bot heads to %s, not home" % [attacker._ctf_goal()])
+	mode.return_flag(1)
+	# An attacker really closes on the enemy flag.
+	rig["players"][1].teleport_to(Vector2(-500.0, 240.0))
+	rig["players"][3].teleport_to(Vector2(-450.0, 240.0))
+	rig["players"][0].teleport_to(Vector2(-650.0, 240.0))
+	rig["players"][2].teleport_to(Vector2(-100.0, 240.0))
+	defender.queue_free()
+	var start: float = rig["players"][2].global_position.distance_to(stage.get_flag_home(1))
+	var best: float = start
+	for t in 900:
+		await physics_frame
+		best = minf(best, rig["players"][2].global_position.distance_to(stage.get_flag_home(1)))
+		if int(mode.carrier[1]) == 2:
+			break
+	print("      attacker distance to the enemy flag: %.0f at the start, %.0f at best" % [start, best])
+	if best > start - 100.0:
+		failures.append("the attacking bot never closed 100 px on the enemy flag (%.0f -> best %.0f)" % [start, best])
+	await _teardown(rig["stage"])
+	return failures
+## "Capture the Flag!" at the round start, "Flag taken!" on a pickup and "Captured!" on a capture.
+func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for sound: String in ["announce_capture_the_flag", "announce_flag_taken", "announce_captured"]:
+		if not announcer.sfx.has_sound(sound):
+			failures.append("no Sfx entry '%s'" % sound)
+	announcer.clear()
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	await _await_condition(func() -> bool: return announcer.said.has("announce_capture_the_flag"), 4000)
+	if not announcer.said.has("announce_capture_the_flag"):
+		failures.append("the announcer said %s, expected 'announce_capture_the_flag'" % [announcer.said])
+	mode.take_flag(1, 0)
+	await _await_condition(func() -> bool: return announcer.said.has("announce_flag_taken"), 4000)
+	if not announcer.said.has("announce_flag_taken"):
+		failures.append("the announcer said %s, expected 'announce_flag_taken'" % [announcer.said])
+	mode.capture(0, 0)
+	await _await_condition(func() -> bool: return announcer.said.has("announce_captured"), 4000)
+	if not announcer.said.has("announce_captured"):
+		failures.append("the announcer said %s, expected 'announce_captured'" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+
+## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
+func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(float(i) * 100.0, -600.0))
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load("res://scenes/stages/%s.tscn" % stage_name)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = mode
+	rm.match_seed = 7
+	stage.add_child(rm)
+	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
+	if not await _mode_started(rig):
+		failures.append("the %s round never started on %s" % [mode, stage_name])
+		await _teardown(stage)
+		return -1.0
+	for i in 4:
+		var bot: Node = BotScript.new()
+		bot.rng.seed = BOT_SEED + i
+		bot.player = players[i]
+		bot.output = players[i].set_input_vector
+		stage.add_child(bot)
+	var began: int = _game_msec()
+	var ended: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_END, int(cap_sec * 1000.0))
+	var took: float = float(_game_msec() - began) / 1000.0 if ended else -1.0
+	await _teardown(stage)
+	return took
+## Carousel: every route between the shoulders and the hub tips or turns. A bot
+## that would only step on still ground waited on its shoulder for the whole
+## round; waiting at an edge it now steps onto the see-saws.
+func _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel() -> Array[String]:
+	var failures: Array[String] = []
+	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 120.0, failures)
+	print("      King of the Hill round with four bots on Carousel took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a King of the Hill round on Carousel in 120 s")
+	return failures
 ## Issue #360: a hit flashes the body white for about 0.1 s of game time, and
 ## the flash is off with "Reduce flashes" on. Visual only: the physics body is
 ## untouched.
@@ -31365,7 +31914,6 @@ func _scenario_character_polish_hit_flash_respects_reduce_flash() -> Array[Strin
 	sfx.reduce_flash = flash_was
 	await _teardown(stage)
 	return failures
-
 ## Issue #360: a sudden upward launch stretches the body tall and thin, within
 ## the 15% squash cap, and eases back; the physics body is untouched.
 func _scenario_character_polish_takeoff_stretches_within_cap() -> Array[String]:
@@ -31396,7 +31944,6 @@ func _scenario_character_polish_takeoff_stretches_within_cap() -> Array[String]:
 		failures.append("the stretch had not eased back after 0.33 s: %s" % player.squash_scale())
 	await _teardown(stage)
 	return failures
-
 ## Issue #360: every weapon head is drawn with a dark ink outline (a closed
 ## ring of at least three points, dark enough to read on any identity colour)
 ## that follows the stage ink.
@@ -31419,4 +31966,252 @@ func _scenario_character_polish_weapon_head_has_ink_outline() -> Array[String]:
 		if not _color_close(player.head_outline_color(), Color(0.2, 0.1, 0.3), 0.01):
 			failures.append("head outline did not follow the stage ink")
 	await _teardown(stage)
+	return failures
+# --- Steam Deck readiness (#368) -------------------------------------------------
+const PadMenuScript368 := preload("res://scripts/PadMenu.gd")
+const HitFeedbackScript368 := preload("res://scripts/HitFeedback.gd")
+## The Deck's screen. The project's 1600x900 canvas scales by the smaller ratio.
+const DECK_SCREEN_368: Vector2 = Vector2(1280, 800)
+## Valve: the smallest character must not fall below 9 px high at 1280x800.
+## Godot's default font has a cap height of about 0.71 em, so 9 px needs about
+## 12.7 px of em size; at the 0.8 scale that is a 16 px theme font size.
+const DECK_MIN_EM_PX_368: float = 12.7
+## A full press and release: a focused Button fires on the release.
+func _pad_tap_368(device: int, button: int) -> void:
+	await _pad_button_261(device, button, true)
+	await _pad_button_261(device, button, false)
+func _deck_rig_368() -> Dictionary:
+	RoundManagerScript.modifier_rolls_enabled = false
+	PadMenuScript368.reset()
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	return {"main": main, "server": server, "rm": rm, "screen": rm.get_node("LobbyLayer")}
+func _scenario_deck_text_is_legible_at_1280x800() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if not ui.is_open():
+		ui.toggle_panel()
+	ui.more_box().button_pressed = true
+	await _await_ticks(3)
+	var scale: float = minf(DECK_SCREEN_368.x / SCREEN_SIZE.x, DECK_SCREEN_368.y / SCREEN_SIZE.y)
+	var checked: int = 0
+	var smallest: float = INF
+	for root: Node in [rig["main"], ui]:
+		for node: Node in root.find_children("*", "Control", true, false):
+			var control: Control = node as Control
+			if not (control is Label or control is BaseButton or control is TextEdit or control is LineEdit):
+				continue
+			var text: String = str(control.get("text"))
+			if text.is_empty() and not (control is TextEdit):
+				continue
+			var size: int = control.get_theme_font_size("font_size")
+			var em: float = float(size) * scale
+			checked += 1
+			smallest = minf(smallest, em)
+			if em < DECK_MIN_EM_PX_368:
+				failures.append("%s '%s' is %.1f px at 1280x800 (theme size %d), below %.1f" % [control.get_path(), text.left(30), em, size, DECK_MIN_EM_PX_368])
+	if checked < 20:
+		failures.append("only %d text controls were found; the walk is broken" % checked)
+	print("      %d text controls checked at scale %.2f; smallest em %.1f px" % [checked, scale, smallest])
+	if float(HitFeedbackScript368.NUMBER_MIN_FONT) * scale < DECK_MIN_EM_PX_368:
+		failures.append("the smallest floating damage number is below the Deck minimum")
+	ui.toggle_panel()
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var panel: Control = screen.lobby_panel()
+	var qr: Control = panel.find_child("JoinQr", true, false) as Control
+	if qr == null:
+		failures.append("no join QR TextureRect in the lobby")
+		await _teardown(rig["main"])
+		return failures
+	var canvas := Rect2(Vector2.ZERO, SCREEN_SIZE)
+	var scale: float = minf(DECK_SCREEN_368.x / SCREEN_SIZE.x, DECK_SCREEN_368.y / SCREEN_SIZE.y)
+	var rect: Rect2 = qr.get_global_rect()
+	if not canvas.encloses(rect):
+		failures.append("the QR %s runs off the %s canvas" % [rect, SCREEN_SIZE])
+	if rect.size.x * scale < 250.0:
+		failures.append("the QR is %.0f px wide on the Deck, under 250" % (rect.size.x * scale))
+	for sibling: Node in qr.get_parent().get_children():
+		if sibling is Label and (sibling as Label).visible and not canvas.encloses((sibling as Control).get_global_rect()):
+			failures.append("%s %s runs off the canvas" % [sibling.name, (sibling as Control).get_global_rect()])
+	var code: Control = panel.find_child("RoomCode", true, false) as Control
+	if code == null:
+		failures.append("no RoomCode label under the QR")
+	elif not canvas.encloses(code.get_global_rect()):
+		failures.append("the room code %s runs off the canvas" % code.get_global_rect())
+	await _teardown(rig["main"])
+	return failures
+## Every control the D-pad can reach from `start` by following Godot's own
+## focus neighbours (what ui_up/down/left/right use), by name.
+func _focus_reach_368(start: Control) -> Dictionary:
+	var seen: Dictionary = {start.get_instance_id(): start}
+	var queue: Array[Control] = [start]
+	while not queue.is_empty():
+		var current: Control = queue.pop_front()
+		for side in [SIDE_TOP, SIDE_BOTTOM, SIDE_LEFT, SIDE_RIGHT]:
+			var next: Control = current.find_valid_focus_neighbor(side)
+			if next != null and not seen.has(next.get_instance_id()):
+				seen[next.get_instance_id()] = next
+				queue.append(next)
+	var names: Dictionary = {}
+	for control: Control in seen.values():
+		names[str(control.name)] = true
+	return names
+func _scenario_deck_gamepad_reaches_every_lobby_control() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	if screen.pad_menu_open():
+		failures.append("the host menu starts open")
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	if not screen.pad_menu_open() or not PadMenuScript368.is_open():
+		failures.append("Y did not open the gamepad host menu")
+	var seen: Dictionary = _focus_reach_368(get_root().gui_get_focus_owner())
+	for id in ["online", "pc_seat", "mode", "target_down", "target_up", "start"]:
+		if not seen.has(id):
+			failures.append("the D-pad never focused the '%s' control (saw %s)" % [id, seen.keys()])
+	# A presses the focused control and must not seat or ready the pad.
+	var was_teams: bool = server.team_mode()
+	screen.control_button("mode").grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if server.team_mode() == was_teams:
+		failures.append("A on the focused Mode button did not change the mode")
+	if not server.claimed_slots().is_empty() or server.pad_slot(0) != -1:
+		failures.append("A inside the host menu seated the gamepad (claims %s)" % [server.claimed_slots()])
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.pad_menu_open() or PadMenuScript368.is_open():
+		failures.append("B did not close the host menu")
+	if screen.control_button("mode").focus_mode != Control.FOCUS_NONE:
+		failures.append("the lobby buttons stayed focusable after the menu closed")
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if server.pad_slot(0) == -1:
+		failures.append("A after the menu closed no longer joins a seat")
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_gamepad_operates_the_settings_panel() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if ui.is_open():
+		ui.toggle_panel()
+	var was_volume: float = sfx.master_volume
+	var was_muted: bool = sfx.muted
+	var was_notice: bool = ui.host.telemetry_notice_seen
+	ui.host.mark_telemetry_notice_seen()
+	ui.refresh()
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	if not ui.is_open():
+		failures.append("View did not open the Settings panel")
+	elif get_root().gui_get_focus_owner() != ui.volume_slider():
+		failures.append("the panel opened with focus on %s, not the master volume slider" % get_root().gui_get_focus_owner())
+	var before: float = ui.volume_slider().value
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_LEFT)
+	if ui.volume_slider().value >= before:
+		failures.append("D-pad left did not lower the focused slider (%.2f -> %.2f)" % [before, ui.volume_slider().value])
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
+	if get_root().gui_get_focus_owner() == ui.volume_slider():
+		failures.append("D-pad down left the focus on the first slider")
+	ui.more_box().button_pressed = true
+	await _await_ticks(3)
+	var seen: Dictionary = _focus_reach_368(ui.volume_slider())
+	for id in ["Volume", "SfxVolume", "MusicVolume", "Mute", "Fullscreen", "MoreOptions", "Feedback", "Resolution", "ScreenShake", "HideRoomCode", "TagSize", "RulesMode"]:
+		if not seen.has(id):
+			failures.append("the D-pad never focused '%s' in Settings (saw %s)" % [id, seen.keys()])
+	ui.mute_box().grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if sfx.muted == was_muted:
+		failures.append("A on the focused Mute box did not toggle mute")
+	if server.pad_slot(0) != -1 or not server.claimed_slots().is_empty():
+		failures.append("A inside Settings seated the gamepad")
+	var unreachable: Array[String] = []
+	for node: Node in ui.get_node("Corner/Panel").find_children("*", "Control", true, false):
+		if (node is BaseButton or node is Slider) and (node as Control).focus_mode == Control.FOCUS_NONE:
+			unreachable.append(str(node.name))
+	if not unreachable.is_empty():
+		failures.append("these panel controls cannot take focus from the gamepad: %s" % [unreachable])
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if ui.is_open() or PadMenuScript368.is_open():
+		failures.append("B did not close the Settings panel")
+	if ui.mute_box().focus_mode != Control.FOCUS_NONE:
+		failures.append("the panel's controls stayed focusable after closing")
+	sfx.set_muted(was_muted)
+	sfx.set_master_volume(was_volume, false)
+	if not was_notice:
+		ui.host.telemetry_notice_seen = false
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_SHIFT
+	key.pressed = true
+	Input.parse_input_event(key)
+	Input.flush_buffered_events()
+	await _await_ticks(3)
+	if screen.pad_active() or not screen.control_button("start").text.contains("(Enter)"):
+		failures.append("with the keyboard active the start button reads '%s'" % screen.control_button("start").text)
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_UP)
+	await _await_ticks(3)
+	if not screen.pad_active():
+		failures.append("a gamepad press did not make the gamepad the active input")
+	var text: String = screen.control_button("start").text
+	if text.contains("Enter") or text.contains("("):
+		failures.append("with a gamepad active the start button still reads '%s'" % text)
+	var hint: Label = screen.lobby_panel().find_child("GamepadHint", true, false) as Label
+	if hint == null or not hint.text.contains("Y"):
+		failures.append("no gamepad hint naming Y (hint %s, text '%s', locale %s)" % [hint != null, hint.text if hint != null else "", TranslationServer.get_locale()])
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if ui.is_open():
+		ui.toggle_panel()
+	var was_seen: bool = ui.host.telemetry_notice_seen
+	ui.host.telemetry_notice_seen = false
+	ui.refresh()
+	if not ui.telemetry_notice().visible:
+		failures.append("the notice is not showing")
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	if ui.is_open():
+		failures.append("View opened the panel while the notice was up; it should focus the notice")
+	if get_root().gui_get_focus_owner() != ui.telemetry_dismiss_button():
+		failures.append("View did not focus the notice's OK button (focus is %s)" % get_root().gui_get_focus_owner())
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if ui.telemetry_notice().visible:
+		failures.append("A did not dismiss the notice")
+	if PadMenuScript368.is_open():
+		failures.append("the gamepad menu stayed open after the notice went")
+	if ui.telemetry_dismiss_button().focus_mode != Control.FOCUS_NONE:
+		failures.append("the notice buttons stayed focusable")
+	ui.host.telemetry_notice_seen = was_seen
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
 	return failures

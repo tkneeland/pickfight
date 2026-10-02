@@ -1,4 +1,4 @@
-[gd_scene load_steps=46 format=3]
+[gd_scene load_steps=48 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ControllerServer.gd" id="3"]
@@ -44,6 +44,8 @@
 [ext_resource type="PackedScene" path="res://scenes/stages/Pitch.tscn" id="402_0"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Cage.tscn" id="402_1"]
 [ext_resource type="PackedScene" path="res://scenes/stages/Dunes.tscn" id="402_2"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Bastion.tscn" id="403_0"]
+[ext_resource type="PackedScene" path="res://scenes/stages/Stronghold.tscn" id="403_1"]
 [ext_resource type="Script" path="res://scripts/HitFeedback.gd" id="16"]
 [ext_resource type="Script" path="res://scripts/Juice.gd" id="40"]
 [ext_resource type="Script" path="res://scripts/KillFeed.gd" id="41"]
@@ -337,7 +339,7 @@ qr_texture_path = NodePath("../UI/JoinQrCode")
 [node name="RoundManager" type="Node" parent="."]
 script = ExtResource("4")
 player_paths = [NodePath("../Player1"), NodePath("../Player2"), NodePath("../Player3"), NodePath("../Player4"), NodePath("../Player5"), NodePath("../Player6"), NodePath("../Player7"), NodePath("../Player8")]
-stage_scenes = [ExtResource("5"), ExtResource("8"), ExtResource("12"), ExtResource("6"), ExtResource("13"), ExtResource("9"), ExtResource("14"), ExtResource("7"), ExtResource("15"), ExtResource("10"), ExtResource("11"), ExtResource("22"), ExtResource("23"), ExtResource("24"), ExtResource("25"), ExtResource("26"), ExtResource("27"), ExtResource("60"), ExtResource("61"), ExtResource("62"), ExtResource("143_1"), ExtResource("143_2"), ExtResource("143_3"), ExtResource("143_4"), ExtResource("315_0"), ExtResource("315_1"), ExtResource("315_2"), ExtResource("376_0"), ExtResource("376_1"), ExtResource("376_2"), ExtResource("376_3"), ExtResource("373_0"), ExtResource("373_1"), ExtResource("373_2"), ExtResource("377_0"), ExtResource("377_1"), ExtResource("377_2"), ExtResource("377_3"), ExtResource("402_0"), ExtResource("402_1"), ExtResource("402_2")]
+stage_scenes = [ExtResource("5"), ExtResource("8"), ExtResource("12"), ExtResource("6"), ExtResource("13"), ExtResource("9"), ExtResource("14"), ExtResource("7"), ExtResource("15"), ExtResource("10"), ExtResource("11"), ExtResource("22"), ExtResource("23"), ExtResource("24"), ExtResource("25"), ExtResource("26"), ExtResource("27"), ExtResource("60"), ExtResource("61"), ExtResource("62"), ExtResource("143_1"), ExtResource("143_2"), ExtResource("143_3"), ExtResource("143_4"), ExtResource("315_0"), ExtResource("315_1"), ExtResource("315_2"), ExtResource("376_0"), ExtResource("376_1"), ExtResource("376_2"), ExtResource("376_3"), ExtResource("373_0"), ExtResource("373_1"), ExtResource("373_2"), ExtResource("377_0"), ExtResource("377_1"), ExtResource("377_2"), ExtResource("377_3"), ExtResource("402_0"), ExtResource("402_1"), ExtResource("402_2"), ExtResource("403_0"), ExtResource("403_1")]
 arena_container_path = NodePath("../Arena")
 controller_server_path = NodePath("../ControllerServer")
 score_label_path = NodePath("../UI/ScoreLabel")

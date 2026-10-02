@@ -2058,6 +2058,7 @@ func _update_mouse_capture() -> void:
 
 # --- Gamepad seats (issue #261) ----------------------------------------------
 
+const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const PAD_ID_PREFIX: String = "pad-"
 const PAD_DEADZONE: float = 0.2
 ## device -> PadSeat for every pad whose seat is bound.
@@ -2095,6 +2096,8 @@ func _push_pad_sticks() -> void:
 
 ## A or Start joins (in the lobby) or readies; B un-readies.
 func _pad_button_pressed(device: int, button: int) -> void:
+	if PadMenuScript.is_open():
+		return # a host menu owns A and B right now (#368)
 	var slot: int = pad_slot(device)
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
