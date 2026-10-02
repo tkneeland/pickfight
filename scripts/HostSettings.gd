@@ -42,6 +42,11 @@ var persist: bool = true
 var resolution: Vector2i = Vector2i.ZERO
 var disabled_stages: PackedStringArray = []
 var disabled_weapons: PackedStringArray = []
+## Rules tab (#378): per game mode ("" is Classic), the round modifiers the host
+## switched off, as `{mode id: PackedStringArray of modifier ids}`. Empty by
+## default, so every modifier can roll. A mode's own bans in `GameModes.TABLE`
+## always win over this.
+var disabled_modifiers: Dictionary = {}
 ## The `GameModes` id the host last picked (issue #352); "" is Classic.
 var game_mode: String = ""
 ## Anonymous match stats (issue #372): sent to the relay at match end unless
@@ -106,6 +111,36 @@ func set_weapon_enabled(weapon_name: String, enabled: bool) -> bool:
 		return false  # outside the demo's slice (#361)
 	return _set_enabled(disabled_weapons, known_weapons(), weapon_name, enabled)
 
+## Whether `modifier_id` may roll in `mode_id`: the mode's table bans win,
+## then the host's per-mode switches.
+func is_modifier_enabled(mode_id: String, modifier_id: String) -> bool:
+	if _game_modes().bans_modifier(mode_id, modifier_id):
+		return false
+	return not (disabled_modifiers.get(mode_id, PackedStringArray()) as PackedStringArray).has(modifier_id)
+
+## Returns false (changing nothing) for a modifier the mode's table bans:
+## those stay locked off. Switching every modifier off is allowed; then none
+## rolls.
+func set_modifier_enabled(mode_id: String, modifier_id: String, enabled: bool) -> bool:
+	if _game_modes().bans_modifier(mode_id, modifier_id):
+		return false
+	var list := PackedStringArray(disabled_modifiers.get(mode_id, PackedStringArray()))
+	var index: int = list.find(modifier_id)
+	if enabled and index != -1:
+		list.remove_at(index)
+	elif not enabled and index == -1:
+		list.append(modifier_id)
+	if list.is_empty():
+		disabled_modifiers.erase(mode_id)
+	else:
+		disabled_modifiers[mode_id] = list
+	save_settings()
+	return true
+
+# Loaded on use: GameModes reaches back to the settings through its modes.
+func _game_modes() -> GDScript:
+	return load("res://scripts/GameModes.gd") as GDScript
+
 func set_stock_lives(lives: int) -> void:
 	stock_lives = clampi(lives, STOCK_MIN_LIVES, STOCK_MAX_LIVES)
 	save_settings()
@@ -168,6 +203,13 @@ func load_settings() -> void:
 		disabled_stages = PackedStringArray(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
 		disabled_weapons = PackedStringArray(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
+		disabled_modifiers = {}
+		var stored: Variant = config.get_value(SECTION, "disabled_modifiers", {})
+		if stored is Dictionary:
+			for mode_id: Variant in stored:
+				var ids := PackedStringArray(stored[mode_id])
+				if not ids.is_empty():
+					disabled_modifiers[str(mode_id)] = ids
 		share_stats = bool(config.get_value(SECTION, "share_stats", true))
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
@@ -190,6 +232,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "disabled_stages", disabled_stages)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
 	config.set_value(SECTION, "game_mode", game_mode)
+	config.set_value(SECTION, "disabled_modifiers", disabled_modifiers)
 	config.set_value(SECTION, "share_stats", share_stats)
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "stock_lives", stock_lives)

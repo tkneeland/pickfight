@@ -580,6 +580,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_notice_shows_once",
 	"telemetry_relay_validates_and_stores_no_ip",
 	"telemetry_sender_reaches_relay_and_fails_quietly",
+	"rules_disabled_modifier_never_rolls_in_that_mode_only",
+	"rules_modifier_toggles_persist_across_reload",
+	"rules_table_bans_cannot_be_reenabled",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2135,6 +2138,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_relay_validates_and_stores_no_ip()
 		"telemetry_sender_reaches_relay_and_fails_quietly":
 			return await _scenario_telemetry_sender_reaches_relay_and_fails_quietly()
+		"rules_disabled_modifier_never_rolls_in_that_mode_only":
+			return await _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only()
+		"rules_modifier_toggles_persist_across_reload":
+			return await _scenario_rules_modifier_toggles_persist_across_reload()
+		"rules_table_bans_cannot_be_reenabled":
+			return await _scenario_rules_table_bans_cannot_be_reenabled()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -8285,6 +8294,9 @@ func _modifier_off_on_off(loop: Dictionary, id: String, measure: Callable, inspe
 		if i == 0:
 			instance = await _await_live_stage(loop)
 		else:
+			if not is_instance_valid(previous):
+				failures.append("round %d: round %d ended on its own and its stage was freed before the next was requested" % [i + 1, i])
+				return {"failures": failures, "values": values}
 			instance = await _next_modifier_round(loop, previous, forced[i])
 		if instance == null:
 			failures.append("round %d never started" % (i + 1))
@@ -29296,6 +29308,12 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 				# Enough shown: stop before the body is carried off the stage.
 				if best >= GALE_MIN_SPEED * 1.5:
 					break
+				# A slower host may never reach that speed; the gust would then
+				# carry the held body off the stage, the kill zone would end the
+				# round, and the round loop would free the stage before the next
+				# round is requested (#399). Stop at a quarter of the view's width.
+				if absf(player.global_position.x - start.x) > instance.get_view_rect().size.x * 0.25:
+					break
 		player.gravity_scale = before_gravity
 		player.linear_velocity = Vector2.ZERO
 		if gust != null and not warned_without_push:
@@ -30679,5 +30697,96 @@ func _scenario_telemetry_sender_reaches_relay_and_fails_quietly() -> Array[Strin
 		failures.append("an unreachable relay gave %s, expected [0]" % [statuses])
 	sender.queue_free()
 	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+# --- Rules tab: per-mode modifier toggles (#378) ------------------------------
+func _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, "")
+	var rm: Node = rig["rm"]
+	await _await_ticks(5)
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was_enabled: bool = RoundManagerScript.modifier_rolls_enabled
+	RoundManagerScript.modifier_rolls_enabled = true
+	rm.modifier_chance = 1.0
+	host.set_modifier_enabled("sudden_death", "gale", false)
+	rm.game_mode = "sudden_death"
+	var sudden: Dictionary = {}
+	for i in 400:
+		sudden[rm._roll_modifier()] = true
+	rm.game_mode = ""
+	var classic: Dictionary = {}
+	for i in 400:
+		classic[rm._roll_modifier()] = true
+	if sudden.has("gale"):
+		failures.append("gale rolled in sudden_death after the host switched it off")
+	if not classic.has("gale"):
+		failures.append("gale stopped rolling in Classic, which the host left on")
+	# Everything off: nothing rolls.
+	for id: String in RoundModifiersScript.IDS:
+		host.set_modifier_enabled("", id, false)
+	for i in 50:
+		if rm._roll_modifier() != "":
+			failures.append("a modifier rolled with every one switched off")
+			break
+	host.disabled_modifiers = {}
+	RoundManagerScript.modifier_rolls_enabled = was_enabled
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_rules_modifier_toggles_persist_across_reload() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pickfight_rules_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var script: GDScript = load("res://scripts/HostSettings.gd") as GDScript
+	var first: RefCounted = script.new()
+	first.path = path
+	if not first.is_modifier_enabled("", "gale"):
+		failures.append("a fresh store should have every modifier on")
+	first.set_modifier_enabled("", "gale", false)
+	first.set_modifier_enabled("hot_potato", "bouncy", false)
+	var second: RefCounted = script.new()
+	second.path = path
+	second.load_settings()
+	if second.is_modifier_enabled("", "gale") or second.is_modifier_enabled("hot_potato", "bouncy"):
+		failures.append("a switched-off modifier came back on after a reload")
+	if not second.is_modifier_enabled("hot_potato", "gale") or not second.is_modifier_enabled("", "bouncy"):
+		failures.append("a modifier switched off in one mode was off in another")
+	second.set_modifier_enabled("", "gale", true)
+	var third: RefCounted = script.new()
+	third.path = path
+	third.load_settings()
+	if not third.is_modifier_enabled("", "gale"):
+		failures.append("switching a modifier back on did not persist")
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	if host.set_modifier_enabled("hot_potato", "weapon_roulette", true):
+		failures.append("the host re-enabled a modifier Hot Potato bans")
+	if host.is_modifier_enabled("hot_potato", "weapon_roulette"):
+		failures.append("a banned modifier reported enabled")
+	for id: String in RoundModifiersScript.IDS:
+		if host.is_modifier_enabled("stock", id) or host.set_modifier_enabled("stock", id, true):
+			failures.append("Stock allowed %s" % id)
+	if not host.is_modifier_enabled("hot_potato", "gale"):
+		failures.append("an unbanned modifier should default on")
+	# The panel shows banned boxes locked off.
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var panel: CanvasLayer = sfx.build_settings_ui()
+	await _await_ticks(3)
+	panel.rules_mode_button().select(panel._rules_mode_ids.find("hot_potato"))
+	panel._rebuild_rules()
+	var box: CheckBox = panel.rules_box("weapon_roulette")
+	if box == null or not box.disabled or box.button_pressed:
+		failures.append("the banned box was not locked off in the Rules list")
+	var open_box: CheckBox = panel.rules_box("gale")
+	if open_box == null or open_box.disabled or not open_box.button_pressed:
+		failures.append("an unbanned box should be live and ticked")
+	panel.queue_free()
 	_scenario_completed = true
 	return failures
