@@ -674,6 +674,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"gamepad_shoulder_hold_and_stick_click_release_plunger",
 	"remote_client_space_tap_releases_on_host",
 	"phone_packet_without_release_flag_keeps_zero_vector_release",
+	"pc_space_press_throws_boomerang_along_aim_without_releasing",
+	"gamepad_bumper_press_throws_boomerang",
+	"remote_client_space_press_throws_boomerang_on_host",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2417,6 +2420,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_space_tap_releases_on_host()
 		"phone_packet_without_release_flag_keeps_zero_vector_release":
 			return await _scenario_phone_packet_without_release_flag_keeps_zero_vector_release()
+		"pc_space_press_throws_boomerang_along_aim_without_releasing":
+			return await _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing()
+		"gamepad_bumper_press_throws_boomerang":
+			return await _scenario_gamepad_bumper_press_throws_boomerang()
+		"remote_client_space_press_throws_boomerang_on_host":
+			return await _scenario_remote_client_space_press_throws_boomerang_on_host()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -34967,4 +34976,93 @@ func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> 
 		failures.append("a phone's zero vector no longer counts as released")
 	await _close_phones(phones)
 	await _teardown(rig["stage"])
+	return failures
+
+# --- The action press throws the boomerang (issue #481, ADR-0022 amendment) ---
+
+## Space on the host PC seat throws it along the aim, with no flick, and does
+## not leave the seat released.
+func _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcBoomerang481")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, BOOMERANG_PATH)
+	await _await_ticks(20)
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	server.host_pc_mouse_motion(Vector2(radius * 0.5, 0.0))
+	await _await_ticks(30)
+	if player.launched_boomerang() != null:
+		failures.append("a slow aim thrown the boomerang without a press")
+	var start_x: float = player.global_position.x
+	await _key_463(KEY_SPACE)
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
+		failures.append("a Space press did not throw the boomerang (vec %s)" % player.input_vector)
+	else:
+		await _await_ticks(10)
+		var boomerang: Node2D = player.launched_boomerang()
+		if boomerang != null and boomerang.global_position.x < start_x + 20.0:
+			failures.append("the boomerang did not fly along the aim (x %s from %s)" % [boomerang.global_position.x, start_x])
+	if server.slot_released(0):
+		failures.append("a Space press that threw the boomerang left the seat released")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+
+## A pad's bumper press throws it and is not held as a release; a stick click
+## throws once it is home again.
+func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadBoomerang481")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _equip(player, BOOMERANG_PATH)
+	server._test_pad_axes[0] = Vector2(0.6, 0.0)
+	await _await_ticks(30)
+	if player.launched_boomerang() != null:
+		failures.append("a slow aim thrown the boomerang without a press")
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, true)
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 1000):
+		failures.append("a bumper press did not throw the boomerang (vec %s)" % player.input_vector)
+	if server.slot_released(0):
+		failures.append("a bumper press that threw the boomerang counts as a release hold")
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, false)
+	await _teardown(rig["stage"])
+	return failures
+
+## The Online client's Space press reaches the host as the action count and
+## throws there; it does not release.
+func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var player: RigidBody2D = server.player_in_slot(client.slot) as RigidBody2D
+	await _equip(player, BOOMERANG_PATH)
+	client.mouse_motion(Vector2(60, 0))
+	await _await_ticks(20)
+	if player.launched_boomerang() != null:
+		failures.append("the boomerang was out before any press (vec %s)" % player.input_vector)
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = true
+	client._input(ev)
+	if not await _await_condition(func() -> bool: return player.launched_boomerang() != null, 3000, true):
+		failures.append("a client Space press never threw the host-side boomerang (vec %s)" % player.input_vector)
+	if player.input_released or server.slot_released(client.slot):
+		failures.append("the throwing press left the remote seat released")
+	await _rc_close_241(rig)
 	return failures
