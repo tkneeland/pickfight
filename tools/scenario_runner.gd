@@ -591,6 +591,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_top_scorer_award_and_goal_credit",
 	"bot_soccer_pushes_the_ball_toward_the_enemy_goal",
 	"announcer_calls_soccer_and_goal",
+	"voice_grunts_one_distinct_quiet_voice_per_slot",
+	"voice_grunts_on_hit_and_ko",
+	"voice_grunts_respect_mute_and_settings_isolation",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2168,6 +2171,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal()
 		"announcer_calls_soccer_and_goal":
 			return await _scenario_announcer_calls_soccer_and_goal()
+		"voice_grunts_one_distinct_quiet_voice_per_slot":
+			return await _scenario_voice_grunts_one_distinct_quiet_voice_per_slot()
+		"voice_grunts_on_hit_and_ko":
+			return await _scenario_voice_grunts_on_hit_and_ko()
+		"voice_grunts_respect_mute_and_settings_isolation":
+			return await _scenario_voice_grunts_respect_mute_and_settings_isolation()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -10306,7 +10315,10 @@ func _scenario_sfx_strike_sounds_as_attackers_weapon() -> Array[String]:
 	# damage and reports it through the same signal.
 	attacker.land_projectile_hit(victim, 10.0, point)
 	sfx.stop_recording()
-	var names: PackedStringArray = sfx.recorded_names()
+	var names := PackedStringArray()
+	for requested: String in sfx.recorded_names():
+		if not requested.begins_with("grunt_"):	# the victim's voice (#290) is checked on its own
+			names.append(requested)
 	print("      requested: %s" % [names])
 	if names != PackedStringArray(["hit_sword", "hit_sword"]):
 		failures.append("a sword's damaging strikes should each ask for hit_sword and a 0-damage one for nothing; got %s" % [names])
@@ -31106,3 +31118,132 @@ func _scenario_announcer_calls_soccer_and_goal() -> Array[String]:
 
 ## The closed Soccer pitches have no kill zone to be shoved into (#402).
 const RINGOUT_EXEMPT_402: PackedStringArray = SOCCER_STAGES_402
+
+# --- Voice grunts (issue #290) ---------------------------------------------------
+## Grunt names for a slot. Eight voices, each with its own files.
+func _grunt_voice_files_290(sfx: Node) -> Dictionary:
+	var sounds: Dictionary = (sfx.get_script() as GDScript).get_script_constant_map()["SOUNDS"]
+	return sounds
+func _grunt_requests_290(sfx: Node) -> int:
+	var n: int = 0
+	for name: String in sfx.recorded_names():
+		if name.begins_with("grunt_"):
+			n += 1
+	return n
+## One distinct voice per slot, all quiet next to a weapon hit, none a placeholder
+## copy of another slot's file.
+func _scenario_voice_grunts_one_distinct_quiet_voice_per_slot() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var sounds: Dictionary = _grunt_voice_files_290(sfx)
+	var seen: Dictionary = {}
+	for slot in 8:
+		for kind: String in ["hit", "ko"]:
+			var key: String = "grunt_%s_%d" % [kind, slot]
+			if not sounds.has(key):
+				failures.append("no Sfx entry '%s'" % key)
+				continue
+			if not bool(sounds[key].get("voice", false)):
+				failures.append("%s is not marked voice, so its pitch would drift" % key)
+			for file: String in sounds[key]["files"]:
+				if seen.has(file):
+					failures.append("%s and %s share %s" % [key, seen[file], file])
+				seen[file] = key
+			# Subtle (#290): at least 10 dB under the quietest weapon hit it can sit beside.
+			var grunt_db: float = sfx.volume_db_for(key, 1.0)
+			var weapon_db: float = sfx.volume_db_for("hit_dagger", 1.0)
+			if grunt_db > weapon_db - 10.0:
+				failures.append("%s at %.1f dB is not 10 dB under a weapon hit (%.1f dB)" % [key, grunt_db, weapon_db])
+	print("      %d grunt files, all distinct" % seen.size())
+	_scenario_completed = true
+	return failures
+## A damaged player grunts in their own voice, once per cooldown; a killing blow
+## and an elimination give the KO grunt; a non-player victim and a 0-damage
+## contact stay silent. The weapon's own sound still plays.
+func _scenario_voice_grunts_on_hit_and_ko() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var attacker: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2.RIGHT * 300.0)
+	victim.name = "Player3"
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	var point: Vector2 = victim.global_position
+	sfx.start_recording()
+	attacker.strike_landed.emit(victim, 30.0, point, false)
+	attacker.strike_landed.emit(victim, 30.0, point, false)
+	attacker.strike_landed.emit(victim, 0.0, point, false)
+	var names: PackedStringArray = sfx.recorded_names()
+	print("      requested: %s" % [names])
+	if _sfx_count(sfx, "grunt_hit_2") != 1:
+		failures.append("Player3 hit twice at once should grunt once in voice 2; got %s" % [names])
+	if _sfx_count(sfx, "hit_pickaxe") != 2:
+		failures.append("the weapon sound was lost: %s" % [names])
+	var grunt: Dictionary = _sfx_last(sfx, "grunt_hit_2")
+	if not grunt.is_empty() and not (grunt["position"] is Vector2 and (grunt["position"] as Vector2).is_equal_approx(point)):
+		failures.append("the grunt was not placed on the victim: %s" % [grunt["position"]])
+	# After the quiet gap a second blow grunts again.
+	await _await_ticks(40)
+	attacker.strike_landed.emit(victim, 30.0, point, false)
+	if _sfx_count(sfx, "grunt_hit_2") != 2:
+		failures.append("a blow after the cooldown did not grunt again")
+	# A killing blow is the KO grunt, not a hit grunt.
+	await _await_ticks(40)
+	var before_hits: int = _sfx_count(sfx, "grunt_hit_2")
+	attacker.strike_landed.emit(victim, 30.0, point, true)
+	if _sfx_count(sfx, "grunt_hit_2") != before_hits:
+		failures.append("a lethal blow made a hit grunt")
+	victim.eliminate()
+	if _sfx_count(sfx, "grunt_ko_2") != 1:
+		failures.append("eliminating Player3 asked for grunt_ko_2 %d times, expected once" % _sfx_count(sfx, "grunt_ko_2"))
+	# Something that is not a player does not grunt.
+	var crate := Node2D.new()
+	stage.add_child(crate)
+	var grunts_before: int = _grunt_requests_290(sfx)
+	attacker.strike_landed.emit(crate, 30.0, point, false)
+	sfx.stop_recording()
+	if _grunt_requests_290(sfx) != grunts_before:
+		failures.append("a non-player victim grunted: %s" % [sfx.recorded_names()])
+	await _teardown(stage)
+	return failures
+## Grunts go out through the SFX bus like every other sound, so the Mute box and
+## the SFX volume govern them, and a test run never touches the owner's settings
+## file (#195).
+func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	if sfx.settings_path == sfx.SETTINGS_PATH or sfx.persist_settings:
+		failures.append("this run would save to the owner's %s" % sfx.SETTINGS_PATH)
+	var was_muted: bool = sfx.muted
+	var was_sfx_volume: float = sfx.sfx_volume
+	sfx.play(&"grunt_hit_0", Vector2(100.0, 100.0), 1.0)
+	sfx.play(&"grunt_ko_5", Vector2(100.0, 100.0), 1.0)
+	var voices: int = 0
+	for voice: Node in sfx.get_children():
+		if voice is AudioStreamPlayer2D:
+			voices += 1
+			if voice.bus != &"SFX":
+				failures.append("a grunt played on the %s bus, not SFX" % voice.bus)
+	if voices == 0:
+		failures.append("no placed player node was made for the grunts")
+	sfx.set_muted(true)
+	if not AudioServer.is_bus_mute(0):
+		failures.append("Mute did not mute the Master bus the grunts reach")
+	sfx.set_muted(false)
+	sfx.set_sfx_volume(0.0)
+	if AudioServer.get_bus_volume_db(AudioServer.get_bus_index(&"SFX")) > -60.0:
+		failures.append("SFX volume 0 left the SFX bus audible")
+	sfx.stop_all()
+	sfx.set_sfx_volume(was_sfx_volume)
+	sfx.set_muted(was_muted)
+	_scenario_completed = true
+	return failures
