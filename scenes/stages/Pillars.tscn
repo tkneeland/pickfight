@@ -1,7 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/StageGust.tscn" id="9"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_pillar"]
 size = Vector2(140, 300)
@@ -88,6 +89,14 @@ shape = SubResource("RectangleShape2D_pillar")
 [node name="PillarFarRightVisual" type="Polygon2D" parent="PillarFarRight"]
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
+
+; Issue #281: a stage-wide gust every ~9 s, always blowing right, with a 1.5 s
+; warning (tint and streaks across the whole stage, the wind_tell sound).
+[node name="Gust" parent="." instance=ExtResource("9")]
+position = Vector2(0, 100)
+strength = 900.0
+calm_sec = 7.0
+gust_sec = 1.5
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-320, 60)

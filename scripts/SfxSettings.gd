@@ -6,7 +6,12 @@ extends CanvasLayer
 ##
 ## - master, SFX and music volume sliders;
 ## - a mute box;
-## - a fullscreen box.
+## - a fullscreen box;
+## - a window size for windowed mode, and scrolling lists of stages and
+##   pickup weapons to switch on or off (issue #294, `HostSettings`). The last
+##   enabled stage or weapon refuses to switch off.
+##
+## A voice volume slider (#290) goes in the audio rows above, beside music.
 ##
 ## Keys: `Esc` opens and closes the panel, `M` toggles mute and `F11` toggles
 ## fullscreen.
@@ -25,11 +30,22 @@ const MARGIN: float = 12.0
 const PANEL_BACKGROUND: Color = Color(0.1, 0.11, 0.14, 1.0)
 const PANEL_PADDING: float = 6.0
 const SLIDER_WIDTH: float = 180.0
+const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+## Height of the scrolling window-size, stage and weapon area.
+const LIST_HEIGHT: float = 130.0
 
 var sfx: Node
 ## The `Music` autoload, or null. Without it the music slider is hidden.
 var music: Node
 
+## The host's resolution, stage and weapon choices (#294).
+var host: RefCounted = HostSettingsScript.shared()
+var _more: CheckBox
+var _more_area: ScrollContainer
+var _resolution: OptionButton
+var _stage_list: VBoxContainer
+var _weapon_list: VBoxContainer
 var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
@@ -37,12 +53,26 @@ var _sfx_slider: HSlider
 var _music_slider: HSlider
 var _mute: CheckBox
 var _fullscreen: CheckBox
+var _shake_box: CheckBox
+var _flash_box: CheckBox
+var _scale_button: OptionButton
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
 ## Whether this layer took the left press now held down, which was on the
 ## toggle, so the matching release is its too (issue #216).
 var _took_press: bool = false
+
+## Feedback (issue #262): a button in the panel opens a text box whose text goes
+## to the relay, which files a GitHub issue. Empty `feedback_relay_url` means
+## the game's configured relay.
+var feedback_relay_url: String = ""
+var _feedback_button: Button
+var _feedback_box: PanelContainer
+var _feedback_edit: TextEdit
+var _feedback_send: Button
+var _feedback_status: Label
+var _feedback_sender: Node
 
 func _ready() -> void:
 	layer = 20
@@ -77,8 +107,52 @@ func _ready() -> void:
 	_music_slider = _add_slider(rows, "MusicVolume", "Music")
 	if music == null:
 		_music_slider.get_parent().visible = false
-	_mute = _add_box(rows, "Mute", "Mute (M)")
-	_fullscreen = _add_box(rows, "Fullscreen", "Fullscreen (F11)")
+	# Side by side, to give the new rows below their height (issue #294): the
+	# lobby's how-to-play column only has so much room above the panel.
+	var toggles := HBoxContainer.new()
+	toggles.name = "TogglesRow"
+	rows.add_child(toggles)
+	_mute = _add_box(toggles, "Mute", "Mute (M)")
+	_fullscreen = _add_box(toggles, "Fullscreen", "Full (F11)")
+	# One scrolling area for the window size and both lists, so the panel
+	# grows by LIST_HEIGHT whatever the stage count (24+).
+	_more = CheckBox.new()
+	_more.name = "MoreOptions"
+	_more.text = "More options"
+	_more.focus_mode = Control.FOCUS_NONE
+	rows.add_child(_more)
+	var scroll := ScrollContainer.new()
+	scroll.name = "ContentScroll"
+	scroll.visible = false
+	_more_area = scroll
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, LIST_HEIGHT)
+	rows.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(content)
+	_resolution = OptionButton.new()
+	_resolution.name = "Resolution"
+	for size: Vector2i in HostSettingsScript.RESOLUTIONS:
+		_resolution.add_item("Window: default" if size == Vector2i.ZERO else "Window: %d x %d" % [size.x, size.y])
+	content.add_child(_resolution)
+	_shake_box = _add_box(content, "ScreenShake", "Screen shake")
+	_flash_box = _add_box(content, "ReduceFlash", "Reduce flashes")
+	_scale_button = OptionButton.new()
+	_scale_button.name = "TagSize"
+	for option: float in sfx.UI_SCALES:
+		_scale_button.add_item("Name tags: %sx" % str(option))
+	content.add_child(_scale_button)
+	_stage_list = _add_list(content, "Stages")
+	_weapon_list = _add_list(content, "Weapons")
+
+	_feedback_button = Button.new()
+	_feedback_button.name = "Feedback"
+	_feedback_button.text = "Feedback"
+	_feedback_button.focus_mode = Control.FOCUS_NONE
+	toggles.add_child(_feedback_button)
+	_feedback_button.pressed.connect(toggle_feedback)
+	_build_feedback_box(corner)
 
 	_toggle = Button.new()
 	_toggle.name = "Toggle"
@@ -96,6 +170,12 @@ func _ready() -> void:
 	_mute.toggled.connect(_on_mute_toggled)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
+	_resolution.item_selected.connect(_on_resolution_selected)
+	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
+	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
+	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
+	_more.toggled.connect(func(pressed: bool) -> void: _more_area.visible = pressed)
+	apply_resolution()
 
 ## A left click on the toggle is taken here, in `_input`, before the GUI
 ## routes it (issue #216). The owner saw the button do nothing mid-round in
@@ -154,15 +234,113 @@ func refresh() -> void:
 	_mute.set_pressed_no_signal(sfx.muted)
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
 	_toggle.text = "Settings (muted)" if sfx.muted else "Settings"
+	_shake_box.set_pressed_no_signal(sfx.screen_shake)
+	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
+	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
+	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
+	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
+	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
 
 ## Esc can close the panel mid-drag, and the slider then never reports the
 ## drag's end: finish it here and save what it left (issue #196).
 func toggle_panel() -> void:
 	_panel.visible = not _panel.visible
+	if not _panel.visible:
+		_feedback_box.visible = false
 	if _panel.visible:
 		refresh()
 	elif _dragging:
 		_on_drag_ended(true)
+
+func toggle_feedback() -> void:
+	_feedback_box.visible = not _feedback_box.visible
+	if _feedback_box.visible:
+		_feedback_status.text = ""
+		_feedback_edit.grab_focus()
+
+func feedback_open() -> bool:
+	return _feedback_box.visible
+
+func feedback_button() -> Button:
+	return _feedback_button
+
+func feedback_edit() -> TextEdit:
+	return _feedback_edit
+
+func feedback_send_button() -> Button:
+	return _feedback_send
+
+func feedback_status() -> Label:
+	return _feedback_status
+
+## Sends the typed message to the relay. Nothing happens for an empty message
+## or while a send is still in flight. `FeedbackSender.finished` shows the result.
+func submit_feedback() -> void:
+	if _feedback_edit.text.strip_edges().is_empty():
+		_feedback_status.text = FeedbackSenderScript.message_for(400)
+		return
+	if _feedback_sender != null and _feedback_sender.is_busy():
+		return
+	if _feedback_sender == null:
+		_feedback_sender = FeedbackSenderScript.new()
+		_feedback_sender.finished.connect(_on_feedback_finished)
+		add_child(_feedback_sender)
+	var url: String = feedback_relay_url
+	if url.is_empty():
+		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
+	var stage: String = ""
+	var scene: Node = get_tree().current_scene
+	var rounds: Node = scene.get_node_or_null(^"RoundManager") if scene != null else null
+	if rounds != null and rounds.has_method("current_stage_name"):
+		stage = rounds.current_stage_name()
+	var version: String = str(ProjectSettings.get_setting("application/config/version", "dev"))
+	_feedback_status.text = "Sending..."
+	_feedback_send.disabled = true
+	_feedback_sender.send(_feedback_edit.text, url, version, OS.get_name(), stage if not stage.is_empty() else "lobby")
+
+func _on_feedback_finished(status: int) -> void:
+	_feedback_status.text = FeedbackSenderScript.message_for(status)
+	_feedback_send.disabled = _feedback_edit.text.strip_edges().is_empty()
+	if status == 200:
+		_feedback_edit.text = ""
+		_feedback_send.disabled = true
+
+func _on_feedback_text_changed() -> void:
+	_feedback_send.disabled = _feedback_edit.text.strip_edges().is_empty() \
+			or (_feedback_sender != null and _feedback_sender.is_busy())
+
+func _build_feedback_box(corner: VBoxContainer) -> void:
+	_feedback_box = PanelContainer.new()
+	_feedback_box.name = "FeedbackBox"
+	_feedback_box.visible = false
+	var backdrop := StyleBoxFlat.new()
+	backdrop.bg_color = PANEL_BACKGROUND
+	backdrop.set_corner_radius_all(6)
+	backdrop.set_content_margin_all(PANEL_PADDING)
+	_feedback_box.add_theme_stylebox_override("panel", backdrop)
+	corner.add_child(_feedback_box)
+	var col := VBoxContainer.new()
+	_feedback_box.add_child(col)
+	var title := Label.new()
+	title.text = "Send feedback to the developers"
+	col.add_child(title)
+	_feedback_edit = TextEdit.new()
+	_feedback_edit.name = "Text"
+	_feedback_edit.placeholder_text = "What would make this better?"
+	_feedback_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_feedback_edit.custom_minimum_size = Vector2(320.0, 110.0)
+	col.add_child(_feedback_edit)
+	_feedback_status = Label.new()
+	_feedback_status.name = "Status"
+	col.add_child(_feedback_status)
+	_feedback_send = Button.new()
+	_feedback_send.name = "Send"
+	_feedback_send.text = "Send"
+	_feedback_send.disabled = true
+	_feedback_send.focus_mode = Control.FOCUS_NONE
+	col.add_child(_feedback_send)
+	_feedback_edit.text_changed.connect(_on_feedback_text_changed)
+	_feedback_send.pressed.connect(submit_feedback)
 
 func is_open() -> bool:
 	return _panel.visible
@@ -182,6 +360,70 @@ func mute_box() -> CheckBox:
 func fullscreen_box() -> CheckBox:
 	return _fullscreen
 
+## The box that opens the window-size, stage and weapon area, shut by default
+## so the lobby's how-to-play column keeps its room above the panel.
+func more_box() -> CheckBox:
+	return _more
+
+func shake_box() -> CheckBox:
+	return _shake_box
+
+func flash_box() -> CheckBox:
+	return _flash_box
+
+func tag_size_button() -> OptionButton:
+	return _scale_button
+
+func resolution_button() -> OptionButton:
+	return _resolution
+
+## The on/off box for a stage or pickup weapon, by name; null if not listed.
+func stage_box(stage_name: String) -> CheckBox:
+	return _stage_list.get_node_or_null(stage_name) as CheckBox
+
+func weapon_box(weapon_name: String) -> CheckBox:
+	return _weapon_list.get_node_or_null(weapon_name) as CheckBox
+
+## Put the chosen window size into effect: windowed only, never fullscreen,
+## never a headless run, and nothing for the default.
+func apply_resolution() -> void:
+	if host.resolution == Vector2i.ZERO or sfx.fullscreen:
+		return
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_size(host.resolution)
+
+func _add_list(content: VBoxContainer, title: String) -> VBoxContainer:
+	var label := Label.new()
+	label.text = title + " (untick to skip)"
+	content.add_child(label)
+	var list := VBoxContainer.new()
+	list.name = title
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_child(list)
+	return list
+
+## Rebuild a list's boxes from the store. A box that the store refuses (the
+## last one on) snaps back to ticked.
+func _rebuild_list(list: VBoxContainer, names: PackedStringArray, is_on: Callable, set_on: Callable) -> void:
+	for child in list.get_children():
+		list.remove_child(child)
+		child.queue_free()
+	for item_name: String in names:
+		var box := CheckBox.new()
+		box.name = item_name
+		box.text = item_name.capitalize()
+		box.set_pressed_no_signal(is_on.call(item_name))
+		box.toggled.connect(func(pressed: bool) -> void:
+			if not set_on.call(item_name, pressed):
+				box.set_pressed_no_signal(true))
+		list.add_child(box)
+
+func _on_resolution_selected(index: int) -> void:
+	host.set_resolution(HostSettingsScript.RESOLUTIONS[index])
+	apply_resolution()
+
 func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlider:
 	var group := VBoxContainer.new()
 	group.name = node_name + "Row"
@@ -199,7 +441,7 @@ func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlid
 	group.add_child(slider)
 	return slider
 
-func _add_box(rows: VBoxContainer, node_name: String, title: String) -> CheckBox:
+func _add_box(rows: Container, node_name: String, title: String) -> CheckBox:
 	var box := CheckBox.new()
 	box.name = node_name
 	box.text = title

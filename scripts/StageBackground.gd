@@ -70,6 +70,23 @@ var _drift: PackedFloat32Array = []
 var _time: float = 0.0
 var _sky: Polygon2D
 
+## Flat parallax dressing (#257): a sky layer (clouds, or stars on Dusk) and a
+## far and a mid silhouette, all plain Polygon2Ds with no collision, coloured
+## from the mood's dress_* keys and shaped from `dressing_index`. Off unless
+## `Stage` turns it on. Kept apart from `_layers` so the 2-3 layer count of
+## the original backdrop holds.
+const DRESS_PARALLAX: Array[float] = [0.04, 0.07, 0.12]
+const DRESS_CLOUD_DRIFT: float = 4.0
+const DRESS_KINDS: PackedStringArray = ["hills", "blocks", "peaks"]
+var dressing_enabled: bool = false
+var dressing_index: int = 0
+var dressing_stars: bool = false
+var dress_sky: Color = Color.WHITE
+var dress_far: Color = Color.WHITE
+var dress_mid: Color = Color.WHITE
+var _dress_layers: Array[Node2D] = []
+var _dress_drift: PackedFloat32Array = []
+
 func configure(top: Color, bottom: Color, tint: Color, kinds: PackedStringArray, seed_value: int,
 		view: Vector2 = VIEW_SIZE) -> void:
 	view_size = view
@@ -105,7 +122,31 @@ func get_colours() -> Array[Color]:
 		for child: Node in layer.get_children():
 			if child is Polygon2D:
 				colours.append((child as Polygon2D).color)
+	for layer: Node2D in _dress_layers:
+		for child: Node in layer.get_children():
+			colours.append((child as Polygon2D).color)
 	return colours
+
+## Sets up the dressing from a palette mood and the stage's rotation index.
+func configure_dressing(mood: Dictionary, stage_index: int) -> void:
+	dressing_enabled = true
+	dressing_index = maxi(stage_index, 0)
+	dressing_stars = mood.get("name", "") in ["dusk", "night"]
+	dress_sky = mood["dress_sky"]
+	dress_far = mood["dress_far"]
+	dress_mid = mood["dress_mid"]
+
+func get_dressing_layers() -> Array[Node2D]:
+	return _dress_layers
+
+## A number that changes whenever any dressing shape does; equal for equal
+## layouts. Hashes every polygon's points.
+func get_dressing_signature() -> int:
+	var h: int = 17
+	for layer: Node2D in _dress_layers:
+		for child: Node in layer.get_children():
+			h = hash([h, (child as Polygon2D).polygon])
+	return h
 
 func get_layer_count() -> int:
 	return _layers.size()
@@ -133,6 +174,11 @@ func _follow_view(delta: float) -> void:
 		if _drift[i] != 0.0:
 			shift.x += fposmod(_time * _drift[i], wrap) - wrap
 		_layers[i].position = shift
+	for i in _dress_layers.size():
+		var dress_shift: Vector2 = -offset * DRESS_PARALLAX[i] / _scale
+		if _dress_drift[i] != 0.0:
+			dress_shift.x += fposmod(_time * _dress_drift[i], wrap) - wrap
+		_dress_layers[i].position = dress_shift
 
 func _build() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -146,6 +192,8 @@ func _build() -> void:
 		Vector2(half.x, half.y), Vector2(-half.x, half.y)])
 	_sky.vertex_colors = PackedColorArray([sky_top, sky_top, sky_bottom, sky_bottom])
 	add_child(_sky)
+	if dressing_enabled:
+		_build_dressing(half)
 
 	var kinds: PackedStringArray = []
 	for kind: String in layer_kinds:
@@ -264,4 +312,87 @@ func _add_city(layer: Node2D, rng: RandomNumberGenerator, half: Vector2, colour:
 		points.append(Vector2(x + width, top))
 		x += width
 	points.append(Vector2(x, half.y))
+	_add_polygon(layer, points, colour)
+
+## The dressing: three flat layers, far to near, built once. Shapes come from
+## a generator seeded by the stage index, so a stage always looks the same and
+## the 24 differ. The far/mid silhouette kinds step with the rotation lap.
+func _build_dressing(half: Vector2) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = dressing_index * 7919 + 101
+	var lap: int = dressing_index / 3
+	var far_kind: String = DRESS_KINDS[lap % 3]
+	var mid_kind: String = DRESS_KINDS[(lap + 1 + (lap / 3) % 2) % 3]
+	var wrap: float = half.x * 2.0
+
+	var sky_layer := Node2D.new()
+	sky_layer.name = "DressSky"
+	add_child(sky_layer)
+	if dressing_stars:
+		for s in 28:
+			var side: float = rng.randf_range(5.0, 11.0)
+			var at := Vector2(rng.randf_range(-half.x, half.x), rng.randf_range(-half.y, -60.0))
+			_add_polygon(sky_layer, _rect(at, Vector2(side, side)), dress_sky)
+	else:
+		for c in 5:
+			var at := Vector2(-half.x + (float(c) + rng.randf_range(0.1, 0.9)) * wrap / 5.0,
+				rng.randf_range(-half.y + MARGIN, -140.0))
+			var width: float = rng.randf_range(110.0, 220.0)
+			var height: float = rng.randf_range(26.0, 44.0)
+			for copy: float in [0.0, wrap]:
+				_add_polygon(sky_layer, _rect(at + Vector2(copy, 0.0), Vector2(width, height)), dress_sky)
+				_add_polygon(sky_layer, _rect(at + Vector2(copy + width * 0.2, -height * 0.7),
+					Vector2(width * 0.5, height)), dress_sky)
+	_dress_layers.append(sky_layer)
+	_dress_drift.append(0.0 if dressing_stars else DRESS_CLOUD_DRIFT)
+
+	var far := Node2D.new()
+	far.name = "DressFar_" + far_kind
+	add_child(far)
+	_dress_silhouette(far, rng, half, dress_far, far_kind, -20.0, 130.0)
+	_dress_layers.append(far)
+	_dress_drift.append(0.0)
+
+	var mid := Node2D.new()
+	mid.name = "DressMid_" + mid_kind
+	add_child(mid)
+	_dress_silhouette(mid, rng, half, dress_mid, mid_kind, 140.0, 90.0)
+	_dress_layers.append(mid)
+	_dress_drift.append(0.0)
+
+func _rect(top_left: Vector2, size: Vector2) -> PackedVector2Array:
+	return PackedVector2Array([top_left, top_left + Vector2(size.x, 0.0),
+		top_left + size, top_left + Vector2(0.0, size.y)])
+
+## A flat silhouette across the view: rolling hills, square-topped blocks or
+## sharp peaks, filled down past the bottom edge.
+func _dress_silhouette(layer: Node2D, rng: RandomNumberGenerator, half: Vector2, colour: Color,
+		kind: String, base_y: float, amplitude: float) -> void:
+	var left: float = -half.x - MARGIN
+	var right: float = half.x + MARGIN
+	var points := PackedVector2Array()
+	match kind:
+		"hills":
+			var phase_a: float = rng.randf() * TAU
+			var phase_b: float = rng.randf() * TAU
+			var x: float = left
+			while x <= right:
+				points.append(Vector2(x, base_y + amplitude * (0.6 * sin(x * 0.005 + phase_a) + 0.4 * sin(x * 0.013 + phase_b))))
+				x += 80.0
+		"blocks":
+			var x: float = left
+			points.append(Vector2(x, half.y))
+			while x < right:
+				var width: float = rng.randf_range(70.0, 160.0)
+				var top: float = base_y - rng.randf_range(0.0, amplitude * 1.6)
+				points.append(Vector2(x, top))
+				points.append(Vector2(x + width, top))
+				x += width
+		_:
+			var x: float = left
+			while x <= right:
+				points.append(Vector2(x, base_y - rng.randf_range(0.1, 1.0) * amplitude))
+				x += rng.randf_range(120.0, 260.0)
+	points.append(Vector2(right, half.y))
+	points.append(Vector2(left, half.y))
 	_add_polygon(layer, points, colour)

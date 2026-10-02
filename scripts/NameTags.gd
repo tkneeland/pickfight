@@ -40,6 +40,12 @@ var _players: Array = []
 var _slot_name: Callable
 var _slot_color: Callable
 var _name_tags: Array[Label] = []
+## Stock (#354): a Callable slot -> lives (-1 for none) drawn as pips under the tag.
+var lives_of: Callable = Callable()
+const PIP_RADIUS: float = 4.0
+const PIP_GAP: float = 4.0
+## [slot, centre, count] per slot with pips this frame.
+var _pips: Array = []
 
 func _init(players: Array = [], slot_name: Callable = Callable(), slot_color: Callable = Callable()) -> void:
 	name = "NameTags"
@@ -77,8 +83,13 @@ func tick() -> void:
 	var camera: Camera2D = get_viewport().get_camera_2d()
 	if camera != null and camera.zoom.x > 0.0:
 		tag_scale = 1.0 / camera.zoom.x
-	var had_rings: bool = not _rings.is_empty()
+	# Comfort option (#317): bigger tags for a far-off couch.
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx != null:
+		tag_scale *= float(sfx.get("ui_scale"))
+	var had_rings: bool = not _rings.is_empty() or not _pips.is_empty()
 	_rings.clear()
+	_pips.clear()
 	for slot in _players.size():
 		var player: Variant = _players[slot]
 		var tag: Label = _name_tags[slot]
@@ -116,7 +127,11 @@ func tick() -> void:
 					moved = true
 		tag.position = rect.position
 		placed.append(rect)
-	if had_rings or not _rings.is_empty():
+		var count: int = int(lives_of.call(slot)) if lives_of.is_valid() else -1
+		if count > 0:
+			var below: float = rect.position.y + rect.size.y + (PIP_RADIUS + 2.0) * tag_scale
+			_pips.append([slot, Vector2(rect.position.x + rect.size.x * 0.5, below), count, tag_scale])
+	if had_rings or not _rings.is_empty() or not _pips.is_empty():
 		queue_redraw()
 
 ## Issue #236: `player`'s team, 0 or 1, or -1 in a free-for-all.
@@ -139,6 +154,18 @@ func _mark_team(tag: Label, player: Node2D) -> void:
 func team_rings() -> Array:
 	return _rings.duplicate()
 
+## Stock (#354): [slot, lives] per player showing pips this frame.
+func pip_counts() -> Array:
+	var counts: Array = []
+	for pip: Array in _pips:
+		counts.append([pip[0], pip[2]])
+	return counts
+
 func _draw() -> void:
+	for pip: Array in _pips:
+		var step: float = (PIP_RADIUS * 2.0 + PIP_GAP) * float(pip[3])
+		var left: float = (pip[1] as Vector2).x - step * (int(pip[2]) - 1) * 0.5
+		for i in int(pip[2]):
+			draw_circle(to_local(Vector2(left + step * i, (pip[1] as Vector2).y)), PIP_RADIUS * float(pip[3]), _slot_color.call(pip[0]))
 	for ring: Array in _rings:
 		draw_arc(to_local(ring[0]), TEAM_RING_RADIUS, 0.0, TAU, 48, TeamsScript.team_color(ring[1]), TEAM_RING_WIDTH, true)

@@ -13,3 +13,15 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
+
+## Priority labels
+
+Every open ticket has exactly one priority label, alongside its triage role. The filing agent picks the priority itself and only asks the owner when the owner has named one.
+
+| Label | Meaning |
+|---|---|
+| `p1` | Next up. Pick these first. |
+| `p2` | Normal priority. |
+| `p3` | Someday: deferred or low value. Never picked while p1 or p2 work is unowned. |
+
+When picking unowned work, take the highest priority first, then the oldest.

@@ -46,6 +46,9 @@ const RotatingPlatformScript: GDScript = preload("res://scripts/RotatingPlatform
 const BouncePadScript: GDScript = preload("res://scripts/BouncePad.gd")
 const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
 const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
+const SpikesScript: GDScript = preload("res://scripts/Spikes.gd")
+const SawScript: GDScript = preload("res://scripts/Saw.gd")
+const GameModesScript: GDScript = preload("res://scripts/GameModes.gd")
 
 ## Player.LAYER_WORLD: terrain and bodies. Heads are on their own layer, so
 ## the rays below never see one.
@@ -64,6 +67,12 @@ const SWING_SEC: float = 0.22
 ## angle drive always takes the short way round.
 const SWING_ABOVE: float = 1.45
 const SWING_BELOW: float = 0.6
+## The gentler chop used with a drop close past the rival (issue #302).
+const SWING_ABOVE_GENTLE: float = 0.7
+const SWING_BELOW_GENTLE: float = 0.15
+const SWING_SEC_GENTLE: float = 0.35
+## Drop this close past the rival and the chop is gentle.
+const GENTLE_EDGE_ROOM: float = 450.0
 ## Input length while aiming a vault, and while holding the head in the air.
 const AIM_LENGTH: float = 0.15
 const AIR_LENGTH: float = 0.3
@@ -161,6 +170,41 @@ const MOMENTUM_SEC: float = 0.3
 ## rock back onto it.
 const PERCHED_SPEED: float = 40.0
 const PERCH_FLING: Vector2 = Vector2(0.8, -0.6)
+## Issue #302: a bot aiming its head down, at rest, with the head well above
+## its body has the head hooked on top of a ledge and the body hanging below
+## it. After HOOKED_SEC of that it sweeps the head out sideways, off the
+## ledge, for UNHOOK_SEC.
+## Issue #302: height above the bot beyond which a rival counts as that much
+## farther away, once per pixel over it, times CLIMB_COST: a vault only lifts
+## a bot so far, so a rival up on a high ledge is the last to be hunted.
+const FREE_CLIMB: float = 100.0
+const CLIMB_COST: float = 4.0
+## A new rival takes over from the one being hunted only when this much closer.
+const RETARGET_RATIO: float = 0.7
+## Issue #302: faster than this sideways, with less than BRAKE_ROOM (plus what
+## its speed carries) of ground ahead, an attacking bot brakes.
+const BRAKE_SPEED: float = 250.0
+const BRAKE_ROOM: float = 120.0
+const AIM_SEC_AGGRESSIVE: float = 0.15
+const PUSH_SEC_AGGRESSIVE: float = 0.22
+const ENGAGE_AGGRESSIVE: float = 2.0
+## Issue #302: the bot's pace with one rival left (see _aggression_now).
+const FIELD_FULL: int = 4
+const THINK_SEC_AGGRESSIVE: float = 0.1
+const CLOSE_FRACTION_AGGRESSIVE: float = 0.0
+const SWING_SEC_AGGRESSIVE: float = 0.17
+const STRIKE_REACH_OFFSET: float = -25.0
+## Ground the bot wants past a rival before it will close on one (issue #302).
+const EDGE_BEYOND_ROOM: float = 160.0
+## A head this much short of the reach it was sent to, and slower than
+## BLOCKED_SPEED, is pinned (issue #302).
+const BLOCKED_GAP: float = 25.0
+const BLOCKED_SPEED: float = 150.0
+## Further than this above the ground, the bot is in the air (issue #302).
+const AIRBORNE_GAP: float = 45.0
+const HOOKED_SEC: float = 0.5
+const UNHOOK_SEC: float = 0.6
+const HOOKED_HEAD_ABOVE: float = 40.0
 
 ## The `Player` this bot drives, and where its input goes.
 var player: Node2D
@@ -209,6 +253,13 @@ var lava_lookups: int = 0
 var _hazard_rects: Array[Rect2] = []
 var _rocks: Array[Node2D] = []
 var _pads: Array[Node2D] = []
+## Issue #313: saws (their zone moves, so it is rebuilt each tick from where
+## the blade is now) and stage gusts (found by duck typing, so a gust part that
+## lands later is handled without Bot knowing its script).
+var _saws: Array[Node2D] = []
+var _gusts: Array[Node2D] = []
+## Off, the bot ignores spikes and saws; for scenarios that compare.
+var avoid_damage_hazards: bool = true
 ## The hazard rectangles plus the columns under any rock now warning or
 ## falling: built once a physics tick.
 var _danger: Array[Rect2] = []
@@ -216,6 +267,11 @@ var _danger_frame: int = -1
 ## True while the bot is heading for a bounce pad on purpose, so the pad
 ## counts as ground to walk onto.
 var _pad_route: bool = false
+var _hooked_for: float = 0.0
+var _aggression: float = 0.0
+var _last_head: Vector2 = Vector2.ZERO
+var _unhook_left: float = 0.0
+var _unhook_side: float = 1.0
 ## The players' bodies, which every ray ignores: gathered once a physics tick,
 ## not once a ray (issue #165).
 var _rids: Array[RID] = []
@@ -240,21 +296,93 @@ func think(delta: float) -> Vector2:
 		_hazard_rects.clear()
 		_rocks.clear()
 		_pads.clear()
+		_saws.clear()
+		_gusts.clear()
 		_danger_frame = -1
 		_pad_route = false
 		return Vector2.ZERO
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
-		_think_left = THINK_SEC
+		_aggression = _aggression_now()
+		_think_left = lerpf(THINK_SEC, THINK_SEC_AGGRESSIVE, _aggression)
 		_choose_goal()
 	_track_progress(delta)
 	if mode == "attack" and _alive(_target):
+		_hooked_for = 0.0
+		var brake: Vector2 = _brake()
+		if brake != Vector2.ZERO:
+			return brake
+		var air: Vector2 = _hold_in_air()
+		if air != Vector2.ZERO:
+			return air
 		return _swing(delta)
+	var unhook: Vector2 = _unhook(delta)
+	if unhook != Vector2.ZERO:
+		return unhook
 	return _vault(delta)
+
+# --- Mode objectives (issue #353) -------------------------------------------------
+
+## Hot Potato: how far from "it" a bot that is not "it" tries to stay.
+const KEEP_AWAY_FROM_IT: float = 700.0
+## King of the Hill: inside this fraction of the hill's radius counts as holding it.
+const HILL_HOLD_FRACTION: float = 0.6
+
+## The hill (King of the Hill) this tick, or null; and the Hot Potato "it" this
+## bot keeps away from, or null. Sudden Death, Stock, Classic and any mode this
+## does not know leave both null: the bot plays the existing hunt.
+var _hill_node: Node = null
+var _hill_rival_inside: bool = false
+var _keep_away_from: Node2D = null
+
+func _read_mode() -> void:
+	_hill_node = null
+	_hill_rival_inside = false
+	_keep_away_from = null
+	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	if rm == null or not rm.has_method("active_game_mode_id"):
+		return
+	var node: Node = rm.game_mode_node()
+	if node == null or not is_instance_valid(node):
+		return
+	match rm.active_game_mode_id():
+		GameModesScript.KING_OF_THE_HILL:
+			_hill_node = node
+			for other: Node in player.get_tree().get_nodes_in_group("players"):
+				if other != player and _alive(other) and _in_hill(other as Node2D) \
+						and not (player.has_method("is_teammate") and player.is_teammate(other)):
+					_hill_rival_inside = true
+		GameModesScript.HOT_POTATO:
+			var it_slot: int = int(node.it_slot)
+			var me_slot: int = rm._players.find(player)
+			if it_slot >= 0 and it_slot != me_slot and it_slot < rm._players.size():
+				var it: Variant = rm._players[it_slot]
+				if _alive(it):
+					_keep_away_from = it as Node2D
+
+func _in_hill(who: Node2D, fraction: float = 1.0) -> bool:
+	return who.global_position.distance_to(_hill_node.hill_position) <= float(_hill_node.hill_radius) * fraction
+
+## Not "it" in Hot Potato: step away from "it" along the ground the bot can
+## trust. `goal` is where the vault heads.
+func _keep_away_goal() -> Vector2:
+	var me: Vector2 = player.global_position
+	var it_at: Vector2 = _keep_away_from.global_position
+	if me.distance_to(it_at) >= KEEP_AWAY_FROM_IT:
+		return me
+	var side: float = signf(me.x - it_at.x) if me.x != it_at.x else 1.0
+	var away: float = _safe_side(side)
+	if away == 0.0:
+		away = _safe_side(-side)
+		# Ground only towards "it": hold the place rather than run into it.
+		if away != 0.0 and signf(away) != side:
+			return me
+	return Vector2(me.x + away * FLEE_DISTANCE, me.y) if away != 0.0 else me
 
 # --- Choosing a goal -------------------------------------------------------------
 
 func _choose_goal() -> void:
+	_read_mode()
 	var me: Vector2 = player.global_position
 	var enemy: Node2D = _nearest_enemy()
 	var enemy_distance: float = me.distance_to(enemy.global_position) if enemy != null else INF
@@ -270,7 +398,12 @@ func _choose_goal() -> void:
 		_target = null
 		goal = escape
 		return
-	if enemy != null and enemy_distance < _reach() * CLOSE_FRACTION and not lava_close:
+	if _keep_away_from != null and not lava_close:
+		mode = "move"
+		_target = null
+		goal = _keep_away_goal()
+		return
+	if enemy != null and enemy_distance < _reach() * lerpf(CLOSE_FRACTION, CLOSE_FRACTION_AGGRESSIVE, _aggression) and not lava_close:
 		# Too close to swing fast: a short lever moves the head slowly, and
 		# a slow head does no damage. Step back out to a swinging distance,
 		# unless there is no ground that way, or not enough of it.
@@ -284,7 +417,18 @@ func _choose_goal() -> void:
 	# behind, the bot presses in towards the target instead (issue #176).
 	var behind: float = -signf(enemy.global_position.x - me.x) if enemy != null and enemy.global_position.x != me.x else 0.0
 	var room_behind: bool = behind == 0.0 or _edge_room(behind, ATTACK_EDGE_ROOM) >= ATTACK_EDGE_ROOM
-	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS and not lava_close and room_behind:
+	# Issue #302: nor does it close on a rival with a drop right past it: the
+	# swing's throw carries the bot over the rival and off the stage. It holds
+	# off until the rival comes away from the edge.
+	var drop_beyond: bool = enemy != null and enemy.global_position.x != me.x \
+			and _edge_room(signf(enemy.global_position.x - me.x), absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM) \
+			< absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM
+	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS * 3.0 and drop_beyond and not lava_close and room_behind:
+		mode = "move"
+		_target = enemy
+		goal = me
+		return
+	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS * lerpf(1.0, ENGAGE_AGGRESSIVE, _aggression) and not lava_close and room_behind:
 		if mode != "attack":
 			_phase = 0
 			_phase_left = SWING_SEC
@@ -294,7 +438,15 @@ func _choose_goal() -> void:
 		return
 	mode = "move"
 	_target = null
-	if pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR):
+	if _hill_node != null:
+		if not _in_hill(player, HILL_HOLD_FRACTION):
+			goal = _hill_node.hill_position
+		elif enemy != null and _hill_rival_inside:
+			_target = enemy
+			goal = enemy.global_position
+		else:
+			goal = me
+	elif pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR):
 		goal = pickup.global_position
 	elif enemy != null:
 		_target = enemy
@@ -309,28 +461,67 @@ func _choose_goal() -> void:
 			_pad_route = true
 			goal = pad
 
+## Issue #302: 0 with FIELD_FULL or more rivals alive, 1 with one left, and
+## in between as they dwindle: the fewer rivals, the less the bot hesitates,
+## the closer it fights and the faster it chops.
+func _aggression_now() -> float:
+	var rivals: int = 0
+	for other: Node in player.get_tree().get_nodes_in_group("players"):
+		if other == player or not _alive(other):
+			continue
+		if player.has_method("is_teammate") and player.is_teammate(other):
+			continue
+		rivals += 1
+	if rivals == 0:
+		return 0.0
+	return clampf(float(FIELD_FULL - rivals) / float(FIELD_FULL - 1), 0.0, 1.0)
+
 ## The nearest player the bot can walk to (issue #176), or failing that the
 ## nearest at all: it waits at the edge for that one.
 func _nearest_enemy() -> Node2D:
 	var best: Node2D = null
-	var best_distance: float = INF
+	var best_cost: float = INF
 	var walkable: Node2D = null
-	var walkable_distance: float = INF
+	var walkable_cost: float = INF
+	var current: Node2D = null
+	var current_cost: float = INF
+	var current_walkable: bool = false
 	for other: Node in player.get_tree().get_nodes_in_group("players"):
 		if other == player or not _alive(other):
 			continue
 		# Issue #236: never a teammate in a Teams match.
 		if player.has_method("is_teammate") and player.is_teammate(other):
 			continue
+		# King of the Hill: fight whoever is in the hill before anyone else.
+		if _hill_rival_inside and not _in_hill(other as Node2D):
+			continue
 		var at: Vector2 = (other as Node2D).global_position
-		var d: float = player.global_position.distance_to(at)
-		if d < best_distance:
-			best_distance = d
-			best = other
-		if d < walkable_distance and _walkable_to(at.x):
-			walkable_distance = d
-			walkable = other
-	return walkable if walkable != null else best
+		var cost: float = _hunt_cost(at)
+		var reachable: bool = _walkable_to(at.x)
+		if other == _target:
+			current = other as Node2D
+			current_cost = cost
+			current_walkable = reachable
+		if cost < best_cost:
+			best_cost = cost
+			best = other as Node2D
+		if cost < walkable_cost and reachable:
+			walkable_cost = cost
+			walkable = other as Node2D
+	var pick: Node2D = walkable if walkable != null else best
+	var pick_cost: float = walkable_cost if walkable != null else best_cost
+	# Stick with the rival being hunted unless another is clearly better
+	# (issue #302): swapping on every think tick is dithering.
+	if current != null and current != pick and (current_walkable or walkable == null) \
+			and pick_cost > current_cost * RETARGET_RATIO:
+		return current
+	return pick
+
+## How costly a rival at `at` is to hunt (issue #302): the distance, plus
+## extra for every pixel it is up above what a vault can reach.
+func _hunt_cost(at: Vector2) -> float:
+	var above: float = maxf(player.global_position.y - at.y - FREE_CLIMB, 0.0)
+	return player.global_position.distance_to(at) + above * CLIMB_COST
 
 ## The nearest pickup with solid ground under it and either side of it: one
 ## over open air, a hazard, a pad or ground that will not last is bait.
@@ -388,15 +579,91 @@ func _swing(delta: float) -> Vector2:
 	# Screen y points down, so "up" is towards negative angles on the right
 	# and towards positive ones on the left.
 	var up_side: float = -1.0 if to_target.x >= 0.0 else 1.0
+	# Issue #302: with a drop just past the rival, a hard chop that plants the
+	# head throws the bot over it and off the stage: a short, gentle one.
+	var gentle: bool = to_target.x != 0.0 \
+			and _edge_room(signf(to_target.x), absf(to_target.x) + GENTLE_EDGE_ROOM) < absf(to_target.x) + GENTLE_EDGE_ROOM
+	var above: float = SWING_ABOVE_GENTLE if gentle else SWING_ABOVE
+	var below: float = SWING_BELOW_GENTLE if gentle else SWING_BELOW
 	_phase_left -= delta
 	if _phase_left <= 0.0:
 		_phase = 1 - _phase
-		_phase_left = SWING_SEC
-	var angle: float = base + up_side * SWING_ABOVE if _phase == 0 else base - up_side * SWING_BELOW
-	var length: float = _length_for(to_target.length() + BODY_RADIUS * 0.5)
+		_phase_left = SWING_SEC_GENTLE if gentle else lerpf(SWING_SEC, SWING_SEC_AGGRESSIVE, _aggression)
+	var angle: float = base + up_side * above if _phase == 0 else base - up_side * below
+	var wanted: float = to_target.length() + STRIKE_REACH_OFFSET
+	# Issue #302: a head pinned against the rival or the floor and pushed on
+	# vaults the body over it. Once it is held short of where it was sent
+	# (not just lagging in a swing), ease off to where it is.
+	if player.has_method("weapon_head_position") and delta > 0.0:
+		var head: Vector2 = player.weapon_head_position()
+		var speed: float = head.distance_to(_last_head) / delta
+		_last_head = head
+		var actual: float = player.global_position.distance_to(head)
+		if actual < wanted - BLOCKED_GAP and speed < BLOCKED_SPEED:
+			wanted = maxf(actual, _min_reach())
+	var length: float = _length_for(wanted)
 	return Vector2.RIGHT.rotated(angle) * length
 
+## Issue #302: a swing's head-plant can throw the bot over its rival and on
+## towards an edge. Carried towards one faster than it can stop, it plants the
+## head ahead of itself, down and forward, and pushes: the throw goes back.
+func _brake() -> Vector2:
+	var body := player as RigidBody2D
+	if body == null:
+		return Vector2.ZERO
+	var side: float = signf(body.linear_velocity.x)
+	if side == 0.0 or absf(body.linear_velocity.x) < BRAKE_SPEED:
+		return Vector2.ZERO
+	var ahead: float = BRAKE_ROOM + absf(body.linear_velocity.x) * MOMENTUM_SEC
+	# Carried over the rival's head is as bad as carried over an edge.
+	var to_rival: float = (_target.global_position.x - player.global_position.x) * side
+	var overshooting: bool = to_rival > -BODY_RADIUS and to_rival < absf(body.linear_velocity.x) * MOMENTUM_SEC \
+			and absf(body.linear_velocity.x) > BRAKE_SPEED
+	if not overshooting and _edge_room(side, ahead) >= ahead:
+		return Vector2.ZERO
+	var dir := Vector2(side * 0.5, 0.87).normalized()
+	if not _floor_hit(player.global_position, player.global_position + dir * (_reach() + ANCHOR_SLACK)):
+		return dir * AIR_LENGTH
+	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
+
+## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
+## vault over the rival's head, stops swinging: every push it makes in the air
+## only speeds it on its way over the rival. It holds the head short and low
+## behind, ready to plant on landing.
+func _hold_in_air() -> Vector2:
+	var me: Vector2 = player.global_position
+	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
+		return Vector2.ZERO
+	var side: float = signf(_target.global_position.x - me.x)
+	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
+
 # --- Moving --------------------------------------------------------------------
+
+## Issue #302: the head hooked over a ledge's top with the body dangling
+## beneath it holds the bot there for good, because every anchor it plants
+## is downwards, into the ledge the head is already resting on. Sweep the
+## head out sideways, towards the goal, to slide it off.
+func _unhook(delta: float) -> Vector2:
+	if _unhook_left > 0.0:
+		_unhook_left -= delta
+		return Vector2(_unhook_side, 0.0)
+	var body := player as RigidBody2D
+	if body == null or not player.has_method("weapon_head_position"):
+		return Vector2.ZERO
+	var head: Vector2 = player.weapon_head_position()
+	var hooked: bool = body.linear_velocity.length() < PERCHED_SPEED and last_input.y > 0.0 \
+			and head.y < player.global_position.y - HOOKED_HEAD_ABOVE
+	if not hooked:
+		_hooked_for = 0.0
+		return Vector2.ZERO
+	_hooked_for += delta
+	if _hooked_for < HOOKED_SEC:
+		return Vector2.ZERO
+	_hooked_for = 0.0
+	_unhook_left = UNHOOK_SEC
+	var side: float = signf(goal.x - player.global_position.x)
+	_unhook_side = side if side != 0.0 else (-1.0 if rng.randf() < 0.5 else 1.0)
+	return Vector2(_unhook_side, 0.0)
 
 ## Vault towards `goal`: aim short at an anchor, then push out through it.
 func _vault(delta: float) -> Vector2:
@@ -404,10 +671,10 @@ func _vault(delta: float) -> Vector2:
 	if _phase_left <= 0.0:
 		_phase = 1 - _phase
 		if _phase == 0:
-			_phase_left = AIM_SEC
+			_phase_left = lerpf(AIM_SEC, AIM_SEC_AGGRESSIVE, _aggression)
 			_pick_anchor()
 		else:
-			_phase_left = PUSH_SEC
+			_phase_left = lerpf(PUSH_SEC, PUSH_SEC_AGGRESSIVE, _aggression)
 	if _phase == 0 or _airborne:
 		return _anchor * _anchor_length
 	return _anchor * PICKAXE_PUSH_LENGTH if _holds_pickaxe() else _anchor
@@ -493,6 +760,10 @@ func _travel_side() -> float:
 			if _edge_room(side, ahead, true) < ahead:
 				return 0.0
 		return side
+	# Upwind of a gust that is warning or blowing (issue #313).
+	var gust: float = _gust_side()
+	if gust != 0.0:
+		side = gust
 	var safe: float = _safe_side(side)
 	_held_at_edge = side != 0.0 and safe == 0.0
 	if safe == 0.0:
@@ -693,6 +964,10 @@ func _danger_rects() -> Array[Rect2]:
 	_lava_top()
 	_danger.clear()
 	_danger.append_array(_hazard_rects)
+	for saw: Node2D in _saws:
+		if is_instance_valid(saw) and saw.is_inside_tree():
+			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
+			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
 	for rock: Node2D in _rocks:
 		if not is_instance_valid(rock) or not rock.is_inside_tree():
 			continue
@@ -823,6 +1098,8 @@ func _read_stage() -> void:
 	_hazard_rects.clear()
 	_rocks.clear()
 	_pads.clear()
+	_saws.clear()
+	_gusts.clear()
 	_danger_frame = -1
 	if _lava == null or _lava.get_parent() == null:
 		return
@@ -836,6 +1113,14 @@ func _read_stage() -> void:
 			_rocks.append(node as Node2D)
 		elif script == BouncePadScript:
 			_pads.append(node as Node2D)
+		elif avoid_damage_hazards and script == SpikesScript:
+			var spikes := node as Node2D
+			var size: Vector2 = (spikes.get("size") as Vector2) * spikes.global_scale.abs()
+			_hazard_rects.append(Rect2(spikes.global_position - size * 0.5, size).grow(HAZARD_MARGIN + BODY_RADIUS))
+		elif avoid_damage_hazards and script == SawScript:
+			_saws.append(node as Node2D)
+		elif node is Node2D and node.has_method("is_warning") and node.has_method("gust_direction"):
+			_gusts.append(node as Node2D)
 
 ## A zone's rectangle shape in world space (unrotated, as stages place them).
 func _zone_rect(zone: Area2D) -> Rect2:
@@ -853,3 +1138,22 @@ func _lava_top_offset() -> float:
 			var shape := child as CollisionShape2D
 			return shape.position.y - (shape.shape as RectangleShape2D).size.y * 0.5
 	return -20.0
+
+## Issue #313: the side that is upwind of a stage gust now warning or blowing,
+## or 0. A gust part is found by duck typing: `is_warning()` and
+## `gust_direction()` (a Vector2 or a float along x), and, where it has one,
+## `is_active()`. A bot already fleeing a danger keeps to that.
+func _gust_side() -> float:
+	for gust: Node2D in _gusts:
+		if not is_instance_valid(gust) or not gust.is_inside_tree():
+			continue
+		var live: bool = bool(gust.call("is_warning"))
+		if not live and gust.has_method("is_active"):
+			live = bool(gust.call("is_active"))
+		if not live:
+			continue
+		var dir: Variant = gust.call("gust_direction")
+		var x: float = (dir as Vector2).x if dir is Vector2 else float(dir)
+		if absf(x) > 0.01:
+			return -signf(x)
+	return 0.0

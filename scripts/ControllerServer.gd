@@ -30,7 +30,8 @@ extends Node
 ## From the host phone only, `{"t":"solo","v":<bool>}` asks for bots, or
 ## for them to go (issue #152).
 ## Teams mode (issue #236, ADR-0018): from the host phone only,
-## `{"t":"mode","v":"ffa"|"teams"}` picks the next match's mode, heeded only
+## `{"t":"gamemode","v":<GameModes id>}` (issue #352) picks the game mode the
+## same way, and is refused for Hot Potato while Teams is chosen. `{"t":"mode","v":"ffa"|"teams"}` picks the next match's mode, heeded only
 ## outside a match (MODE_PHASES); and from any phone, `{"t":"team","v":0|1|-1}`
 ## picks Red, Blue or "auto", heeded only in the lobby or countdown
 ## (TEAM_PICK_PHASES). Both are additions: a page that never sends them plays
@@ -105,6 +106,10 @@ signal host_changed(slot: int)
 ## decides what each means.
 signal host_command(cmd: String, slot: int)
 
+## A phone tapped "Steal a life" (Stock in Teams, #354). RoundManager forwards
+## it to the mode, which decides whether it is allowed.
+signal steal_requested(slot: int)
+
 ## The close reason a kicked phone is shown, and refused with if it comes back.
 const KICKED_REASON: String = "removed by the host"
 ## Commands the host phone may send besides "kick".
@@ -144,6 +149,8 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 
 ## The hats a phone may pick (issue #151), by path (CLAUDE.md).
 const HatScript := preload("res://scripts/Hat.gd")
+const GameModesScript := preload("res://scripts/GameModes.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 ## The eye styles a phone may pick (issue #297), by path (CLAUDE.md).
 const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
@@ -432,6 +439,9 @@ const MODE_PHASES: PackedStringArray = ["lobby", "countdown", "victory"]
 const TEAM_PICK_PHASES: PackedStringArray = ["lobby", "countdown"]
 ## Issue #236: whether the host phone chose Teams for the next match.
 var _team_mode: bool = false
+## Issue #352: the `GameModes` id the host phone chose ("" is Classic), kept in
+## `HostSettings` so it survives a relaunch. Hot Potato never stands with Teams.
+var _game_mode: String = ""
 ## Issue #236: each slot's team pick (0 red, 1 blue), -1 for "auto" -- the
 ## default, and what a fresh or released claim goes back to.
 var _slot_team_pick: PackedInt32Array = PackedInt32Array()
@@ -468,6 +478,8 @@ func join_qr_rect() -> TextureRect:
 	return get_node_or_null(qr_texture_path) as TextureRect
 
 func _ready() -> void:
+	var saved: String = HostSettingsScript.shared().game_mode
+	_game_mode = saved if GameModesScript.is_valid(saved) else ""
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
 	# The host phone's Resume has to reach a paused game (issue #149).
@@ -480,6 +492,11 @@ func _ready() -> void:
 	_last_weapon.resize(_players.size())
 	_steady_frames.resize(_players.size())
 	_bound_once.resize(_players.size())
+	_damage_sent.resize(_players.size())
+	_damage_sent.fill(-1)
+	_damage_sent_msec.resize(_players.size())
+	_lives_sent.resize(_players.size())
+	_lives_sent.fill("")
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
@@ -1009,6 +1026,8 @@ func _remember_leaver(slot: int) -> void:
 ## (issue #164). The caller tells every other phone with `_broadcast_looks(peer)`.
 func _attach(slot: int, peer: Variant) -> void:
 	_slot_peers[slot] = peer
+	_lives_sent[slot] = ""
+	_damage_sent[slot] = -1  # a newly bound page has no bar yet: the next call sends it
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
@@ -1065,6 +1084,50 @@ func send_buzz(slot: int, kind: String) -> void:
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
 	if _log_input:
 		print("slot %d buzz %s" % [slot, kind])
+
+## Minimum gap between two `dmg` frames to one seat, and the steps (percent)
+## the bar is sent in. Cheap by construction (issue #331): only on change.
+const DAMAGE_SEND_GAP_MSEC: int = 100
+var _damage_sent: Array[int] = []  # last percent sent per slot, -1 = nothing yet
+var _damage_sent_msec: Array[int] = []
+
+## Tell the phone on `slot` how close its player is to a KO (issue #331): one
+## `{"t":"dmg","v":<0..1>}` frame, which the page draws as a bar. `fraction` is
+## damage / DEATH_DAMAGE. Sent only when the rounded percent changed since the
+## last frame and at least `DAMAGE_SEND_GAP_MSEC` has passed; a change held back
+## by the throttle goes out on a later call, so callers just report every tick.
+func send_damage(slot: int, fraction: float) -> void:
+	if not slot_has_controller(slot):
+		return
+	var percent: int = roundi(clampf(fraction, 0.0, 1.0) * 100.0)
+	if percent == _damage_sent[slot]:
+		return
+	var now: int = Time.get_ticks_msec()
+	if _damage_sent[slot] != -1 and now - _damage_sent_msec[slot] < DAMAGE_SEND_GAP_MSEC:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_damage_sent[slot] = percent
+	_damage_sent_msec[slot] = now
+	peer.send_text(JSON.stringify({"t": "dmg", "v": percent / 100.0}))
+
+var _lives_sent: Array[String] = []
+
+## Tell the phone on `slot` its player's lives (Stock, #354): one
+## `{"t":"lives","v":<n>,"steal":<bool>}` frame, `n` -1 to hide the counter.
+## Sent only when it changed since the last frame to that seat.
+func send_lives(slot: int, count: int, can_steal: bool) -> void:
+	if not slot_has_controller(slot):
+		return
+	var key: String = "%d:%s" % [count, can_steal]
+	if _lives_sent[slot] == key:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_lives_sent[slot] = key
+	peer.send_text(JSON.stringify({"t": "lives", "v": count, "steal": can_steal}))
 
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round
@@ -1211,6 +1274,20 @@ func _handle_text(slot: int, text: String) -> void:
 			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams"):
 				if apply_host_command("mode", mode) and _log_input:
 					print("slot %d set mode %s" % [slot, mode])
+		"gamemode":
+			var picked: Variant = msg.get("v")
+			if slot == host_slot() and picked is String:
+				if apply_host_command("gamemode", picked) and _log_input:
+					print("slot %d set game mode '%s'" % [slot, picked])
+		"steal":
+			steal_requested.emit(slot)
+		"stock":
+			# The host phone's Stock lobby controls (#354): lives and/or time limit.
+			if slot == host_slot():
+				if _is_number(msg.get("lives")):
+					apply_host_command("stock_lives", msg.get("lives"))
+				if _is_number(msg.get("time")):
+					apply_host_command("stock_time", msg.get("time"))
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -1328,6 +1405,28 @@ func team_mode() -> bool:
 ## Issue #236: set the mode as the host phone's menu would (a test seam).
 func set_team_mode(on: bool) -> void:
 	_team_mode = on
+	_drop_ffa_only_mode()
+
+## Issue #352: the `GameModes` id chosen for the next match, "" for Classic.
+func game_mode() -> String:
+	return _game_mode
+
+## Issue #352: set the game mode as the host phone's picker would (a test
+## seam). Returns false, changing nothing, for an unknown id or one the Teams
+## format rules out.
+func set_game_mode(id: String) -> bool:
+	if not GameModesScript.is_valid(id) or (_team_mode and GameModesScript.is_ffa_only(id)):
+		return false
+	_game_mode = id
+	HostSettingsScript.shared().set_game_mode(id)
+	return true
+
+## Teams was switched on with a Free-for-all-only mode (Hot Potato) chosen:
+## fall back to Classic.
+func _drop_ffa_only_mode() -> void:
+	if _team_mode and GameModesScript.is_ffa_only(_game_mode):
+		_game_mode = GameModesScript.CLASSIC
+		HostSettingsScript.shared().set_game_mode(_game_mode)
 
 ## Issue #236: `slot`'s team pick, 0 red or 1 blue, or -1 for "auto".
 func slot_team_pick(slot: int) -> int:
@@ -1736,7 +1835,7 @@ static func resolve_relay_url(args: PackedStringArray) -> String:
 	return str(configured) if configured is String and not (configured as String).is_empty() else DEFAULT_RELAY_URL
 
 ## A host-screen or host-phone lobby command: "online" (bool), "pc_seat" (bool),
-## "mode" ("ffa" or "teams"), "target" (number) or "start" (forces every seat
+## "mode" ("ffa" or "teams"), "gamemode" (a `GameModes` id), "target" (number) or "start" (forces every seat
 ## ready). Returns whether it was taken. "online", "pc_seat" and "start" are
 ## heeded only in the lobby (SOLO_PHASES / "lobby"); "mode" and "target" also
 ## on the victory screen (MODE_PHASES), as the phone's were.
@@ -1755,7 +1854,20 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not (arg is String and (arg == "ffa" or arg == "teams")) or not MODE_PHASES.has(phase):
 				return false
 			_team_mode = arg == "teams"
+			_drop_ffa_only_mode()
 			return true
+		"gamemode":
+			if not arg is String or not MODE_PHASES.has(phase):
+				return false
+			return set_game_mode(arg)
+		"stock_lives", "stock_time":
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
+				return false
+			var settings: RefCounted = HostSettingsScript.shared()
+			if cmd == "stock_lives":
+				settings.set_stock_lives(int(arg))
+				return true
+			return settings.set_stock_time_limit(int(arg))
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false

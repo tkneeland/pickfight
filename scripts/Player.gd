@@ -203,6 +203,10 @@ signal strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool)
 ## emitted by `leave_round()`: finishing a round alive is not an elimination.
 signal eliminated
 
+## This player took a weapon off a stage pickup (issue #325); `RoundManager`
+## counts it for the match stats. Carries the weapon's name, e.g. "Hammer".
+signal weapon_picked_up(weapon_name: String)
+
 ## Whether this player is in play. False from elimination (damage or a
 ## ring-out) until `start_round()` brings them back for the next round --
 ## there is no mid-round respawn (ADR-0004): a round is over the same body
@@ -351,7 +355,10 @@ func _physics_process(delta: float) -> void:
 	_update_gridlock_phase(delta)
 	_update_head_grip()
 	_drive_angle(delta)
-	_drive_extension(delta)
+	# A plunger stuck to something holds its length: driving the head back in
+	# would reel the holder toward the anchor, which is the grapple's job.
+	if not plunger_attached():
+		_drive_extension(delta)
 	_update_weapon_visual()
 	_tick_fire(delta)
 	_tick_special(delta)
@@ -509,9 +516,12 @@ func teleport_to(pos: Vector2) -> void:
 ## weapon's damage and hands over the result. A no-op once eliminated: an
 ## eliminated player's head has no collision layer to be struck through, but
 ## nothing here should rely on that alone.
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, point: Vector2 = Vector2.INF) -> void:
 	if amount <= 0.0 or not alive or spawn_protected:
 		return
+	# An open umbrella's canopy takes a hit that lands on its face (issue #269).
+	if point != Vector2.INF and canopy_open() and canopy_faces(point):
+		amount *= CANOPY_BLOCK_FACTOR
 	damage += amount
 	if _face != null:
 		_face.on_hit(amount)
@@ -1370,6 +1380,8 @@ func _score_swept_strike() -> void:
 	_head.swept_into = null
 	_head.swept_speed = 0.0
 	var struck: Node = hit as Node
+	if struck != null and _stats.special == &"plunger":
+		_plunge_onto.call_deferred(struck)
 	if struck == null or struck == self or not struck.is_in_group("players"):
 		return
 	if _stats.special == &"pogo":
@@ -1389,6 +1401,8 @@ func _score_swept_strike() -> void:
 ## a clash, which is `WeaponHead`'s pair correction and the solver's business
 ## between them, and nobody's damage.
 func _on_head_hit(body: Node) -> void:
+	if _stats != null and _stats.special == &"plunger":
+		_plunge_onto.call_deferred(body)
 	if body == self or not body.is_in_group("players") or _head == null:
 		return
 	var to_body: Vector2 = body.global_position - _head.global_position
@@ -1427,7 +1441,7 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount)
+	victim.take_damage(amount, point)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
@@ -1535,7 +1549,7 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount)
+	victim.take_damage(amount, point)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
@@ -1780,12 +1794,113 @@ func special_ready() -> bool:
 	return launched_hook() == null and launched_boomerang() == null and _launch_cooldown <= 0.0 \
 		and not is_head_phased()
 
+# --- The plunger (issue #270) -------------------------------------------------
+#
+# A melee head that sticks to what it meets by a PinJoint2D between the head and
+# the thing struck. On a player it drags them wherever the holder swings; on a
+# surface the holder hangs from it like a pendulum. It NEVER reels the holder
+# in (that is the grapple's job): while stuck the extension drive is off, so the
+# head slides out along its groove to at most `max_reach` and never back in.
+# It lets go when yanked hard (the head pulled off its anchor, or the holder
+# dragged past the arm's length plus `PLUNGER_YANK_SLACK`), when the drag is
+# released for `PLUNGER_LET_GO_TIME`, or when the target dies or is gone.
+
+const PLUNGER_YANK_STRETCH: float = 28.0
+const PLUNGER_YANK_SLACK: float = 40.0
+const PLUNGER_LET_GO_TIME: float = 0.35
+const PLUNGER_COOLDOWN: float = 0.6
+
+var _plunge_joint: PinJoint2D
+var _plunge_target: PhysicsBody2D
+var _plunge_local: Vector2 = Vector2.ZERO
+var _plunge_cooldown: float = 0.0
+var _plunge_idle: float = 0.0
+
+func plunger_attached() -> bool:
+	return is_instance_valid(_plunge_joint) and is_instance_valid(_plunge_target)
+
+## What the plunger is stuck to, or null.
+func plunger_target() -> PhysicsBody2D:
+	return _plunge_target if plunger_attached() else null
+
+## Where the stuck head is anchored, in world space.
+func plunger_anchor() -> Vector2:
+	return _plunge_target.to_global(_plunge_local) if plunger_attached() else global_position
+
+## Stick the head to `target` if it is something a plunger holds: an opposing
+## live player, or solid terrain.
+func _plunge_onto(target: Node) -> void:
+	if _stats == null or _stats.special != &"plunger" or not _rig_is_live():
+		return
+	if plunger_attached() or _plunge_cooldown > 0.0 or _head.phased or not alive:
+		return
+	var body := target as PhysicsBody2D
+	if body == null or body == self or body == _head:
+		return
+	if body.is_in_group("players"):
+		if not body.alive or is_teammate(body):
+			return
+	elif body is RigidBody2D or not _plunge_solid(body):
+		return
+	var point: Vector2 = _head.global_position
+	_plunge_joint = PinJoint2D.new()
+	_plunge_joint.name = "PlungerStick"
+	_rig.add_child(_plunge_joint)
+	_plunge_joint.global_position = point
+	_plunge_joint.node_a = _plunge_joint.get_path_to(_head)
+	_plunge_joint.node_b = _plunge_joint.get_path_to(body)
+	_plunge_target = body
+	_plunge_local = body.to_local(point)
+	_plunge_idle = 0.0
+
+func _plunge_solid(body: Node) -> bool:
+	if body.has_method("is_solid"):
+		return bool(body.call("is_solid"))
+	return true
+
+func _plunge_release() -> void:
+	if is_instance_valid(_plunge_joint):
+		_plunge_joint.free()
+	_plunge_joint = null
+	_plunge_target = null
+	_plunge_cooldown = PLUNGER_COOLDOWN
+	_plunge_idle = 0.0
+
+func _tick_plunger(delta: float) -> void:
+	_plunge_cooldown = maxf(0.0, _plunge_cooldown - delta)
+	if _plunge_joint == null and _plunge_target == null:
+		return
+	if not plunger_attached():
+		_plunge_release()
+		return
+	var target: PhysicsBody2D = _plunge_target
+	if (target.is_in_group("players") and not target.alive) or not _plunge_solid(target) \
+			or not target.is_inside_tree():
+		_plunge_release()
+		return
+	var anchor: Vector2 = plunger_anchor()
+	var yanked: bool = (_head.global_position - anchor).length() > PLUNGER_YANK_STRETCH \
+		or (global_position - anchor).length() > _stats.max_reach + PLUNGER_YANK_SLACK
+	if yanked:
+		_plunge_release()
+		return
+	if _drag_released:
+		_plunge_idle += delta
+		if _plunge_idle >= PLUNGER_LET_GO_TIME:
+			_plunge_release()
+	else:
+		_plunge_idle = 0.0
+
 func _build_special(axis: Vector2) -> void:
 	_clear_launched()
 	_launch_cooldown = 0.0
 	# A drag held through a weapon swap is not a flick.
 	_flick_armed = false
 	_flick_history.clear()
+	_plunge_joint = null
+	_plunge_target = null
+	_plunge_cooldown = 0.0
+	_plunge_idle = 0.0
 	match _stats.special:
 		&"flail":
 			_flail = FlailChainScript.new()
@@ -1807,10 +1922,14 @@ func _tick_special(delta: float) -> void:
 	match _stats.special:
 		&"flail":
 			_tick_flail()
+		&"umbrella":
+			_tick_umbrella()
 		&"magnet":
 			pass
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
+		&"plunger":
+			_tick_plunger(delta)
 		&"pogo":
 			_tick_pogo(delta)
 
@@ -1962,9 +2081,48 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount)
+	victim.take_damage(amount, point)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
+# --- Umbrella (issue #269) ---------------------------------------------------
+#
+# Held with the aim up, the umbrella is open: the canopy slows the fall, the
+# wind zone pushes the holder harder, and a hit that lands on the canopy's face
+# is mostly turned. Pointed anywhere else it is a short poker and does none of
+# this. All of it keys on `WeaponStats.special == &"umbrella"`.
+
+## How far from straight up the aim may be, as the cosine, and still count as
+## held overhead (about 45 degrees).
+const CANOPY_OVERHEAD_COS: float = 0.7
+## The fastest an open canopy lets the body fall, in px/s.
+const CANOPY_FALL_CAP: float = 140.0
+## How much harder a wind zone pushes a body under an open canopy.
+const CANOPY_WIND_MULTIPLIER: float = 4.0
+## Share of a hit's damage that gets through the canopy face.
+const CANOPY_BLOCK_FACTOR: float = 0.25
+## A hit is on the face when it comes from within this cosine of the aim.
+const CANOPY_FACE_COS: float = 0.3
+
+## Whether an umbrella is in hand and held overhead.
+func canopy_open() -> bool:
+	if _stats == null or _stats.special != &"umbrella" or not _rig_is_live():
+		return false
+	var offset: Vector2 = _head.global_position - global_position
+	return offset.length() > 1.0 and offset.normalized().y <= -CANOPY_OVERHEAD_COS
+
+## Whether `point` (world) is on the side of the body the open canopy covers.
+func canopy_faces(point: Vector2) -> bool:
+	var aim: Vector2 = (_head.global_position - global_position).normalized()
+	var to_point: Vector2 = point - global_position
+	return to_point.length() > 0.0 and aim.dot(to_point.normalized()) >= CANOPY_FACE_COS
+
+## What a wind zone multiplies its push on this body by.
+func wind_multiplier() -> float:
+	return CANOPY_WIND_MULTIPLIER if canopy_open() else 1.0
+
+func _tick_umbrella() -> void:
+	if canopy_open() and linear_velocity.y > CANOPY_FALL_CAP:
+		linear_velocity.y = CANOPY_FALL_CAP
 # --- Pogo (issue #271) --------------------------------------------------------
 #
 # A head touching terrain bounces the player a little, by itself. Pushing the

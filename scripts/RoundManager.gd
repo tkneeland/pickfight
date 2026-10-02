@@ -125,6 +125,15 @@ extends Node
 @export var lobby_enabled: bool = false
 ## Length of the 3-2-1 countdown once everyone is ready.
 @export var lobby_countdown_sec: float = 3.0
+## How long the victory screen waits for every phone's Continue (#337).
+@export var victory_continue_sec: float = 30.0
+## Issue #291: seated players are live in the lobby, on a sandbox stage. They
+## move, swing and hit each other, but nothing counts and a KO respawns after
+## `lobby_respawn_sec`. Off by default: a fixture without a stage to stand on
+## keeps its players inert in the lobby, as it always was.
+@export var lobby_sandbox: bool = false
+@export var lobby_respawn_sec: float = 1.5
+@export var lobby_sandbox_stage_index: int = 0
 
 ## How long the stage name takes to sweep across. 0 turns it off.
 @export var stage_title_sec: float = 1.1
@@ -224,10 +233,24 @@ const DEMO_KILL_ZONE_RISE_SEC: float = 40.0
 const DEMO_PHYSICS_TICKS: int = 120
 
 func _init() -> void:
+	add_to_group("round_manager")
 	_pickup_director = PickupDirectorScript.new(self)
 	add_child(_pickup_director)
 
+const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
+var _replay: Node
+
+## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
+		_replay.save_and_toast()
+		get_viewport().set_input_as_handled()
+
 func _ready() -> void:
+	_replay = ReplayBufferScript.new()
+	_replay.name = "ReplayBuffer"
+	add_child(_replay)
 	# Either list: `-- --demo` from a terminal, or bare `--demo` from the
 	# editor's Play button (project.godot `editor/run/main_run_args`).
 	_demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_args().has("--demo")
@@ -246,6 +269,8 @@ func _ready() -> void:
 	if _controller_server != null and _controller_server.has_signal("host_command"):
 		_controller_server.connect("host_command", _on_host_command)
 	_watch_for_lobby_changes()
+	if _controller_server != null and _controller_server.has_signal("steal_requested"):
+		_controller_server.connect("steal_requested", _on_steal_requested)
 	if _controller_server != null and _controller_server.has_signal("player_joined"):
 		_controller_server.connect("player_joined", _on_slot_claimed_fresh)
 	_waiting_label = get_node_or_null(waiting_label_path) as Label
@@ -262,8 +287,11 @@ func _ready() -> void:
 		_enter_lobby()
 
 func _process(_delta: float) -> void:
+	_tick_final_ko()
 	_tick_spawn_protection()
+	_tick_ghosts()
 	_tick_name_tags()
+	_tick_damage_bars()
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
 			_tick_lobby()
@@ -275,6 +303,7 @@ func _process(_delta: float) -> void:
 		State.ROUND_ACTIVE:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
+				_tick_airtime()
 				_pickup_director.tick()
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
@@ -353,6 +382,7 @@ func _try_start_round() -> void:
 	_survivor_team = -1
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
+	_start_game_mode()
 	_pickup_director.start()
 	_start_kill_zone_rise()
 	_start_spawn_protection()
@@ -375,13 +405,43 @@ func _swap_stage() -> void:
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
+	var night: bool = _roll_night()
+	_current_stage.set("night", night)
 	container.add_child(_current_stage)
-	var ink: Color = PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
+	var ink: Color = PaletteScript.NIGHT["ink"] if night else PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
 	for player in _players:
 		if player != null and player.has_method("set_ink"):
 			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
+
+# --- Night stages (issue #332) -------------------------------------------------
+#
+# A stage can be played as a night variant: darkened, lit by lamps and glows,
+# purely visual. It is applied by data (`Stage.night`, set before the stage
+# enters the tree), so no stage scene is duplicated. Each round rolls it with
+# `night_chance`, from its own RNG so the modifier stream is undisturbed. The
+# roll honours `modifier_rolls_enabled` (the deterministic-run seam) and
+# `forced_night` (-1 roll, 0 never, 1 always) overrides it.
+
+## Chance, 0..1, that a round's stage is the night variant.
+@export_range(0.0, 1.0) var night_chance: float = 0.2
+## -1 roll as usual, 0 never night, 1 always night.
+@export var forced_night: int = -1
+var _night_rng: RandomNumberGenerator
+
+func _roll_night() -> bool:
+	if forced_night >= 0:
+		return forced_night == 1
+	if not modifier_rolls_enabled or night_chance <= 0.0:
+		return false
+	if _night_rng == null:
+		_night_rng = RandomNumberGenerator.new()
+		if modifier_seed >= 0:
+			_night_rng.seed = modifier_seed + 332
+		else:
+			_night_rng.randomize()
+	return _night_rng.randf() < night_chance
 
 # --- Large stages (issue #144) ------------------------------------------------
 #
@@ -444,11 +504,7 @@ func _check_round_end() -> void:
 		_check_team_round_end(after_kick)
 		return
 	_flush_kos()
-	var alive_slots: Array[int] = []
-	for slot in _players.size():
-		var player: Variant = _players[slot]
-		if player != null and player.alive:
-			alive_slots.append(slot)
+	var alive_slots: Array[int] = _alive_slots()
 	# Nobody left, but someone was the last one standing on an earlier physics
 	# tick of this frame: they won before they fell (#163).
 	if alive_slots.is_empty() and _survivor_slot != -1:
@@ -469,11 +525,13 @@ func _check_round_end() -> void:
 		_scores[winner_slot] += 1
 		_buzz(winner_slot, "win")
 		round_won.emit(winner_slot)
+		var winner_point: Vector2 = _players[winner_slot].global_position
 		_players[winner_slot].leave_round()
 		_update_score_label()
 		_last_winner_slot = winner_slot
 		if lobby_enabled and _scores[winner_slot] >= _match_target:
 			_match_winner_slot = winner_slot
+			_start_final_ko(winner_point)
 			match_won.emit(winner_slot)
 	else:
 		_last_winner_slot = -1
@@ -504,6 +562,13 @@ func _watch_for_survivor() -> void:
 			player.connect("eliminated", _on_eliminated_check_survivor.bind(slot))
 
 func _on_eliminated_check_survivor(slot: int) -> void:
+	# Stock decides who is still standing (a life left) itself, then calls
+	# `_record_survivor()`; here the lives would not be counted yet.
+	if _game_mode_node != null and _game_mode_node.has_method("is_pending"):
+		return
+	_record_survivor(slot)
+
+func _record_survivor(slot: int) -> void:
 	if _state != State.ROUND_ACTIVE:
 		return
 	if _team_mode:
@@ -538,9 +603,14 @@ func _watch_for_buzzes() -> void:
 			player.connect("strike_landed", _on_strike_landed.bind(slot))
 		if player.has_signal("eliminated"):
 			player.connect("eliminated", _on_ko_eliminated.bind(slot))
+		if player.has_signal("weapon_picked_up"):
+			player.connect("weapon_picked_up", _on_weapon_picked_up.bind(slot))
 
 ## `attacker_slot` comes last because that is where the signal's bind puts it.
-func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool, attacker_slot: int) -> void:
+func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool, attacker_slot: int) -> void:
+	if lethal:
+		_last_lethal_point = point
+		_has_lethal_point = true
 	_ko_record_hit(victim, amount, attacker_slot)
 	if amount <= 0.0:
 		return
@@ -548,6 +618,17 @@ func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bo
 	if victim_slot != -1:
 		_buzz(victim_slot, "struck")
 	_buzz(attacker_slot, "hit")
+
+## Phone damage bars (issue #331): every claimed slot's phone is told its
+## player's damage fraction each tick; `send_damage` drops the unchanged and
+## throttles the rest. A fresh round's 0 damage resets the bar the same way.
+func _tick_damage_bars() -> void:
+	if _controller_server == null or not _controller_server.has_method("send_damage"):
+		return
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player != null:
+			_controller_server.send_damage(slot, player.damage / player.DEATH_DAMAGE)
 
 ## A roster that cannot buzz (a test stub without `send_buzz`) is skipped.
 func _buzz(slot: int, kind: String) -> void:
@@ -741,7 +822,7 @@ func _floor_kill_zone() -> Node2D:
 ## `kill_zone_rise_sec` after the grace period ends.
 func _start_kill_zone_rise() -> void:
 	var zone: Node2D = _floor_kill_zone()
-	if zone == null or _stage_spawn_points.is_empty():
+	if zone == null or _stage_spawn_points.is_empty() or not GameModesScript.has_rise(game_mode):
 		return
 	var highest_y: float = INF
 	for spawn: Vector2 in _stage_spawn_points:
@@ -750,7 +831,18 @@ func _start_kill_zone_rise() -> void:
 	if distance <= 0.0 or kill_zone_rise_sec <= 0.0:
 		push_warning("RoundManager: floor kill zone is not below the highest spawn; not rising")
 		return
-	zone.start_rising(kill_zone_grace_sec, distance / kill_zone_rise_sec)
+	var timing: Dictionary = kill_zone_rise_timing(game_mode)
+	zone.start_rising(float(timing["grace_sec"]), distance / float(timing["rise_sec"]))
+
+## The rise under `mode_id` (issue #352): whether it runs, its grace period
+## and the seconds it takes to reach the highest spawn, `kill_zone_grace_sec`
+## and `kill_zone_rise_sec` scaled by the mode's factors in `GameModes.TABLE`.
+func kill_zone_rise_timing(mode_id: String) -> Dictionary:
+	return {
+		"rises": GameModesScript.has_rise(mode_id),
+		"grace_sec": kill_zone_grace_sec * GameModesScript.rise_grace_factor(mode_id),
+		"rise_sec": kill_zone_rise_sec / GameModesScript.rise_speed_factor(mode_id),
+	}
 
 func _stop_kill_zone_rise() -> void:
 	var zone: Node2D = _floor_kill_zone()
@@ -809,6 +901,7 @@ func _start_round_modifier() -> void:
 
 ## Round end: put back everything the modifier changed and drop its name.
 func _end_round_modifier() -> void:
+	_end_game_mode()
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
@@ -817,13 +910,20 @@ func _end_round_modifier() -> void:
 
 func _roll_modifier() -> String:
 	if forced_modifier != "":
-		return forced_modifier
+		return "" if GameModesScript.bans_modifier(game_mode, forced_modifier) else forced_modifier
 	if not modifier_rolls_enabled or modifier_chance <= 0.0:
 		return ""
 	var draw: RandomNumberGenerator = modifier_rng()
 	if draw.randf() >= modifier_chance:
 		return ""
-	var ids: PackedStringArray = RoundModifiersScript.IDS
+	# The mode's bans (#352) come off the pool; with none, the draw is the same
+	# one it always was.
+	var ids := PackedStringArray()
+	for id: String in RoundModifiersScript.IDS:
+		if not GameModesScript.bans_modifier(game_mode, id):
+			ids.append(id)
+	if ids.is_empty():
+		return ""
 	return ids[draw.randi() % ids.size()]
 
 ## The one stream the modifier roll and the modifiers' own draws (Weapon
@@ -878,6 +978,8 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
+	_end_final_ko()
+	_end_game_mode()
 	if _paused:
 		_set_tree_paused(false)
 	if _modifier != null:
@@ -912,9 +1014,9 @@ func _apply_demo_mode() -> void:
 # name and ready state. When every joined phone (2+) is ready a 3-2-1
 # countdown runs; a join, a leave or an un-ready during it cancels it. Then a
 # match: rounds as before, until someone reaches the host phone's "first to
-# N". A victory screen with a podium follows, and every phone pressing
-# Rematch (Ready again) takes the room back to the lobby, which counts down
-# straight away. Off by default, so every scenario written before #120 keeps
+# N". A victory screen with a podium follows, and every human phone tapping
+# Continue (bots do not count), 30 seconds passing or the host pressing a key
+# takes the room back to the lobby (#337), where everyone readies afresh. Off by default, so every scenario written before #120 keeps
 # its endless round loop.
 #
 # ControllerServer only carries the phones' requests and this node's state
@@ -1017,6 +1119,7 @@ func _play_lobby_music() -> void:
 		music.play_lobby()
 
 func _enter_lobby() -> void:
+	_end_final_ko()
 	_play_lobby_music()
 	_state = State.LOBBY
 	_match_winner_slot = -1
@@ -1029,12 +1132,56 @@ func _enter_lobby() -> void:
 	_build_lobby_ui()
 	_lobby_screen.show_panel("lobby")
 	_set_join_corner_visible(false)
+	_start_lobby_sandbox()
 	_last_lobby_state = {}
 	_tick_lobby()
 
+## When the victory screen gives up waiting for Continue taps (#337).
+var _victory_until_msec: int = 0
+
+## On the victory screen a phone's Ready flag means "Continue" (#337). True when
+## every human has tapped it; bots do not count, and with no human present only
+## the timeout or the host's key moves on.
+func _everyone_continued(roster: Array[int]) -> bool:
+	var humans: int = 0
+	for slot: int in roster:
+		if _controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		humans += 1
+		if not _is_ready(slot):
+			return false
+	return humans > 0
+
+## Victory over: back to the lobby with nobody ready, so the Continue taps do
+## not start the next match's countdown by themselves.
+func _leave_victory() -> void:
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+	_enter_lobby()
+
+## The host at the keyboard skips the wait (#337).
+func _unhandled_key_input(event: InputEvent) -> void:
+	if _state == State.VICTORY and event is InputEventKey and event.pressed and not event.echo:
+		_leave_victory()
+
+## Samples every living player's body contact for the Longest airtime award.
+func _tick_airtime() -> void:
+	var now: int = GameClockScript.now_msec()
+	for slot: int in _in_round:
+		var player: RigidBody2D = _players[slot] if slot < _players.size() else null
+		if player == null or not player.alive:
+			continue
+		var head: Variant = player.get("_head")
+		var touching: bool = player.get_contact_count() > 0 or (head != null and head.get_contact_count() > 0)
+		_stats.note_air(slot, not touching, now)
+
 func _enter_victory() -> void:
+	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
+	_end_final_ko()
+	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 	_play_lobby_music()
 	_state = State.VICTORY
+	_end_lobby_sandbox()
 	_clear_stage()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
@@ -1059,8 +1206,9 @@ func _clear_stage() -> void:
 	_stage_spawn_points = []
 
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
-## victory screen's Rematch needs pressing afresh), and the first round.
+## victory screen's Continue needs tapping afresh), and the first round.
 func _begin_match() -> void:
+	_end_lobby_sandbox()
 	_match_target = _requested_target()
 	_match_winner_slot = -1
 	_last_winner_slot = -1
@@ -1088,6 +1236,8 @@ func _begin_match() -> void:
 
 func _tick_lobby() -> void:
 	var roster: Array[int] = _roster()
+	if _sandbox_active and (_state == State.LOBBY or _state == State.COUNTDOWN):
+		_tick_lobby_sandbox(roster)
 	match _state:
 		State.LOBBY:
 			if _everyone_ready(roster) and _teams_can_start(roster):
@@ -1102,8 +1252,9 @@ func _tick_lobby() -> void:
 				_begin_match()
 				return
 		State.VICTORY:
-			if _everyone_ready(roster) or roster.size() < min_players_to_start:
-				_enter_lobby()
+			if _everyone_continued(roster) or roster.size() < min_players_to_start \
+					or GameClockScript.now_msec() >= _victory_until_msec:
+				_leave_victory()
 				return
 	var tick: int = _countdown_left() if _state == State.COUNTDOWN else 0
 	if tick != _last_countdown_tick and tick > 0:
@@ -1146,6 +1297,13 @@ func _publish_lobby_state() -> void:
 		"paused": _paused,
 	}
 	_add_team_state(state, roster, in_lobby)
+	_add_game_mode_state(state, in_lobby)
+	var picked_mode: String = game_mode
+	if (in_lobby or _state == State.VICTORY) and _controller_server != null and _controller_server.has_method("game_mode"):
+		picked_mode = str(_controller_server.game_mode())
+	if picked_mode == GameModesScript.STOCK:  # the host phone's Stock controls (#354)
+		var settings: RefCounted = HostSettingsScript.shared()
+		state["stock"] = {"lives": settings.stock_lives, "time": settings.stock_time_limit}
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -1167,9 +1325,15 @@ func _refresh_victory() -> void:
 			slots.append(slot)
 	slots.sort_custom(podium_before)
 	if _team_mode:
-		_lobby_screen.refresh_victory(slots, _scores, -1, _stats.awards(slots), _match_winner_team, _teams, _team_scores)
+		_lobby_screen.refresh_victory(slots, _scores, -1, _all_awards(slots), _match_winner_team, _teams, _team_scores, _stats.stat_rows(slots))
 		return
-	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _stats.awards(slots))
+	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _all_awards(slots), -1, {}, PackedInt32Array(), _stats.stat_rows(slots))
+
+## The core awards plus the extra superlatives (issue #325).
+func _all_awards(slots: Array[int]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = _stats.awards(slots)
+	out.append_array(_stats.extra_awards(slots))
+	return out
 
 ## The podium's order: whether slot `a` stands before slot `b`. The match
 ## winner first, then by final score. Strict (#200): never true both ways,
@@ -1210,10 +1374,19 @@ func _set_join_corner_visible(on: bool) -> void:
 func stage_title_label() -> Label:
 	return _lobby_screen.stage_title_label() if _lobby_screen != null else null
 
+## The mode line under the stage title: the mode's name and its rule (#352).
+func stage_title_rule_label() -> Label:
+	return _lobby_screen.stage_title_rule_label() if _lobby_screen != null else null
+
+## Name of the stage in play, or "" in the lobby (issue #262, feedback context).
+func current_stage_name() -> String:
+	return str(_current_stage.name) if _current_stage != null else ""
+
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
-	_screen().show_stage_title(str(_current_stage.name).to_upper(), stage_title_sec)
+	_screen().show_stage_title(str(_current_stage.name).to_upper(), stage_title_sec,
+		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.rule_line(game_mode)])
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -1231,16 +1404,19 @@ var _name_tags: Node2D
 func name_tag(slot: int) -> Label:
 	return _name_tags.name_tag(slot) if _name_tags != null else null
 
+## Slots still standing: alive, or waiting to respawn in Stock (#354).
 func _alive_slots() -> Array[int]:
 	var alive: Array[int] = []
+	var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
 	for slot in _players.size():
-		if _players[slot] != null and _players[slot].alive:
+		if _players[slot] != null and (_players[slot].alive or (stock and _game_mode_node.is_pending(slot))):
 			alive.append(slot)
 	return alive
 
 func _tick_name_tags() -> void:
 	if _name_tags == null:
 		_name_tags = NameTagsScript.new(_players, _slot_name, _slot_color)
+		_name_tags.lives_of = lives_of
 		add_child(_name_tags)
 		_name_tags.build()
 	_name_tags.tick()
@@ -1259,6 +1435,10 @@ func _tick_name_tags() -> void:
 # how-to-play panel.
 
 var _paused: bool = false
+
+## The how-to-play panel's mode cards, one per game mode (#352).
+func how_to_play_mode_cards() -> Array[Label]:
+	return _lobby_screen.mode_cards() if _lobby_screen != null else []
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
@@ -1466,6 +1646,7 @@ func _team_key(roster: Array[int]) -> Array:
 ## The countdown ran out: fix the mode and the teams for the whole match.
 func _begin_team_match() -> void:
 	_team_mode = lobby_enabled and _requested_team_mode()
+	_latch_game_mode()
 	_teams = _lobby_teams(_roster()) if _team_mode else {}
 	_team_scores = PackedInt32Array([0, 0])
 	_match_winner_team = -1
@@ -1541,6 +1722,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 			_buzz(slot, "win")
 		round_won.emit(winners[0] if not winners.is_empty() else -1)
 		team_round_won.emit(winner_team)
+	var team_point: Vector2 = _players[winners[0]].global_position if not winners.is_empty() else Vector2.ZERO
 	for slot: int in alive_slots:
 		if _players[slot].alive:
 			_players[slot].leave_round()
@@ -1550,6 +1732,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_team_keep_weapon = winners
 	if winner_team != -1 and lobby_enabled and _team_scores[winner_team] >= _match_target:
 		_match_winner_team = winner_team
+		_start_final_ko(team_point)
 		team_match_won.emit(winner_team)
 	_pickup_director.clear()
 	_stop_kill_zone_rise()
@@ -1611,7 +1794,9 @@ func _add_team_state(state: Dictionary, roster: Array[int], in_lobby: bool) -> v
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
 #
 # `MatchStats.gd` keeps the match's numbers and decides who gets each KO: the
-# last player to hit the victim within 3 s, otherwise a self-KO. `KillFeed.gd`
+# last player to hit the victim within 3 s, otherwise a self-KO. That holds for
+# a hazard (spikes, saws, lava, kill zone) death too, since those report on the
+# victim's own `strike_landed` and never overwrite the last hitter (#311). `KillFeed.gd`
 # (the HUD node at `kill_feed_path`) shows each KO top right and a banner for
 # the big moments. The victory screen gets up to three awards under the podium.
 
@@ -1633,10 +1818,31 @@ func kill_feed() -> Control:
 func awards_row() -> Control:
 	return _lobby_screen.awards_row() if _lobby_screen != null else null
 
+## Where the per-match balance tallies are appended (issue #316).
+var balance_log_path: String = "user://balance_stats.jsonl"
+
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
-	_stats.record_hit(attacker_slot, _players.find(victim), amount, GameClockScript.now_msec())
+	if _sandbox_active:
+		return
+	var victim_slot: int = _players.find(victim)
+	# Issue #311: a teammate never earns the KO for a teammate's death.
+	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
+		return
+	var weapon: String = ""
+	var real: bool = true
+	if amount > 0.0 and attacker_slot >= 0 and attacker_slot < _players.size() and _players[attacker_slot] != null:
+		var stats: Variant = _players[attacker_slot].get("weapon_stats")
+		if stats != null and stats.resource_path != "":
+			weapon = stats.resource_path.get_file().get_basename()
+		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
+	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
+
+func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
+	_stats.record_pickup(slot, weapon_name)
 
 func _on_ko_eliminated(slot: int) -> void:
+	if _sandbox_active:
+		return
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()
 	_pending_kos.append([slot, GameClockScript.now_msec()])
@@ -1767,3 +1973,283 @@ func _seed_match(announce: bool) -> void:
 		sfx.reseed(hash([seed_value, "sfx"]))
 	if announce:
 		print("RoundManager: match seed %d (replay with -- --seed=%d)" % [seed_value, seed_value])
+
+# --- Lobby sandbox (issue #291) ------------------------------------------------
+#
+# With `lobby_sandbox` the lobby runs a stage under its (translucent) panel and
+# every seated player is spawned on it, live: they can move, swing and hit each
+# other while waiting. None of it counts: hits and KOs are not recorded (no
+# stats, kill feed or awards), scores are never touched, a KO respawns the
+# player after `lobby_respawn_sec`, and the start of a match frees the stage
+# and sends everyone back to inert, so `_try_start_round()` begins from the
+# same state it always did. It draws nothing from the match RNG streams.
+
+const LOBBY_PANEL_SANDBOX_ALPHA: float = 0.6
+
+## A global off switch for the sandbox, in the way of `modifier_rolls_enabled`:
+## the scenario suite turns it off for every scenario that reads a player being
+## `alive` in the lobby as "a round has started", and on for its own.
+static var lobby_sandbox_allowed: bool = true
+
+var _sandbox_active: bool = false
+## Slots that have been spawned into this sandbox, and slot -> game msec a
+## fallen one comes back at.
+var _sandbox_seated: Dictionary = {}
+var _sandbox_respawn_at: Dictionary = {}
+
+## Whether the lobby sandbox is running (scenarios read it).
+func lobby_sandbox_active() -> bool:
+	return _sandbox_active
+
+func _start_lobby_sandbox() -> void:
+	_sandbox_active = false
+	_sandbox_seated.clear()
+	_sandbox_respawn_at.clear()
+	if not lobby_sandbox or not lobby_sandbox_allowed or stage_scenes.is_empty():
+		return
+	var container: Node = get_node_or_null(arena_container_path)
+	if container == null:
+		return
+	var index: int = clampi(lobby_sandbox_stage_index, 0, stage_scenes.size() - 1)
+	_current_stage = stage_scenes[index].instantiate()
+	_current_stage.set("stage_index", index)
+	container.add_child(_current_stage)
+	var ink: Color = PaletteScript.mood_for_stage(index)["ink"]
+	for player in _players:
+		if player != null:
+			player.leave_round()
+			if player.has_method("set_ink"):
+				player.set_ink(ink)
+	_stage_spawn_points = _current_stage.get_spawn_points()
+	_fit_camera_to_stage()
+	var panel: Control = lobby_panel()
+	if panel is ColorRect:
+		(panel as ColorRect).color.a = LOBBY_PANEL_SANDBOX_ALPHA
+	_sandbox_active = true
+
+func _end_lobby_sandbox() -> void:
+	if not _sandbox_active:
+		return
+	_sandbox_active = false
+	_sandbox_seated.clear()
+	_sandbox_respawn_at.clear()
+	for player in _players:
+		if player != null:
+			player.leave_round()
+	_clear_stage()
+
+func _tick_lobby_sandbox(roster: Array[int]) -> void:
+	var now: int = GameClockScript.now_msec()
+	for slot in _players.size():
+		var player: Variant = _players[slot]
+		if player == null:
+			continue
+		if not roster.has(slot):
+			player.leave_round()
+			_sandbox_seated.erase(slot)
+			_sandbox_respawn_at.erase(slot)
+			continue
+		if player.alive:
+			continue
+		if _sandbox_seated.has(slot):
+			if not _sandbox_respawn_at.has(slot):
+				_sandbox_respawn_at[slot] = now + int(lobby_respawn_sec * 1000.0)
+			if now < int(_sandbox_respawn_at[slot]):
+				continue
+		_sandbox_respawn_at.erase(slot)
+		_sandbox_seated[slot] = true
+		player.start_round(_spawn_point(roster.find(slot)), false)
+
+# --- Game modes (issues #276-#278) -------------------------------------------------
+# An optional rules layer over each round (`GameModes.gd`): King of the Hill,
+# Sudden Death or Hot Potato. "" (the default) is the classic round. The mode
+# node lives under this manager for one round and is torn down wherever the
+# round's modifier is (`_end_round_modifier()`), so it never leaks into the next.
+
+const GameModesScript := preload("res://scripts/GameModes.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+## A `GameModes` id every round plays under, or "" for none. Host-set seam.
+@export var game_mode: String = ""
+var _game_mode_node: Node = null
+
+## The id of the mode on the current round, or "" for none.
+func active_game_mode_id() -> String:
+	return game_mode if _game_mode_node != null else ""
+
+## The current round's mode node, or null.
+func game_mode_node() -> Node:
+	return _game_mode_node
+
+func _start_game_mode() -> void:
+	_end_game_mode()
+	_game_mode_node = GameModesScript.create(game_mode)
+	if _game_mode_node == null:
+		if game_mode != "":
+			push_warning("RoundManager: unknown game mode '%s'" % game_mode)
+		return
+	add_child(_game_mode_node)
+	_game_mode_node.setup(self)
+	_game_mode_node.start_round(_in_round.duplicate())
+
+## The host phone's pick for the next match (issue #352), taken as the match's
+## countdown runs out and held for all of it. Only a lobby match takes it, so a
+## `game_mode` set directly (the scenario seam) is left alone.
+func _latch_game_mode() -> void:
+	if not lobby_enabled or _controller_server == null or not _controller_server.has_method("game_mode"):
+		return
+	var picked: String = str(_controller_server.game_mode())
+	if _team_mode and GameModesScript.is_ffa_only(picked):
+		picked = GameModesScript.CLASSIC
+	game_mode = picked
+
+## The lobby state's game-mode fields: the choice, and the picker's rows
+## (from `GameModes.TABLE`) while the host can still change it.
+func _add_game_mode_state(state: Dictionary, in_lobby: bool) -> void:
+	if _controller_server == null or not _controller_server.has_method("game_mode"):
+		return
+	var shown: String = str(_controller_server.game_mode()) if in_lobby or _state == State.VICTORY else game_mode
+	if shown != GameModesScript.CLASSIC:
+		state["game_mode"] = shown
+	if in_lobby or _state == State.VICTORY:
+		state["game_modes"] = GameModesScript.picker_rows()
+## A phone's "Steal a life" (Stock in Teams, #354).
+func _on_steal_requested(slot: int) -> void:
+	if _game_mode_node != null and _game_mode_node.has_method("steal_life"):
+		_game_mode_node.steal_life(slot)
+
+## `slot`'s lives for its name tag's pips, or -1 outside Stock.
+func lives_of(slot: int) -> int:
+	if _game_mode_node != null and _game_mode_node.has_method("lives_of"):
+		return _game_mode_node.lives_of(slot)
+	return -1
+
+func _end_game_mode() -> void:
+	if _game_mode_node != null:
+		_game_mode_node.end_round()
+		_game_mode_node.queue_free()
+		_game_mode_node = null
+
+# --- Final-KO slow motion (#328) ---
+# The KO that wins the match plays a beat of slow motion with the camera
+# punched in on the hit, while the announcer calls the winner (Announcer
+# listens to match_won). It runs on game time (GameClock), which moves at
+# Engine.time_scale, so it lasts FINAL_KO_GAME_MSEC / FINAL_KO_TIME_SCALE of
+# real time (about 1 s) and ends before the victory panel (#325) is entered.
+const FINAL_KO_TIME_SCALE: float = 0.3
+const FINAL_KO_GAME_MSEC: int = 300
+const FINAL_KO_ZOOM_FACTOR: float = 1.5
+const FINAL_KO_FLASH_ALPHA: float = 0.45
+
+var _last_lethal_point: Vector2 = Vector2.ZERO
+var _has_lethal_point: bool = false
+var _final_ko_active: bool = false
+var _final_ko_end_msec: int = 0
+var _final_ko_scale_was: float = 1.0
+var _final_ko_camera: Camera2D = null
+var _final_ko_zoom_was: Vector2 = Vector2.ONE
+var _final_ko_pos_was: Vector2 = Vector2.ZERO
+var _final_ko_flash: CanvasLayer = null
+
+func _start_final_ko(fallback_point: Vector2) -> void:
+	if _final_ko_active:
+		return
+	var point: Vector2 = _last_lethal_point if _has_lethal_point else fallback_point
+	_has_lethal_point = false
+	_final_ko_active = true
+	_final_ko_end_msec = GameClockScript.now_msec() + FINAL_KO_GAME_MSEC
+	_final_ko_scale_was = Engine.time_scale
+	Engine.time_scale = FINAL_KO_TIME_SCALE
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx == null or bool(sfx.get("screen_shake")):
+		var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
+		if camera != null:
+			_final_ko_camera = camera
+			_final_ko_zoom_was = camera.zoom
+			_final_ko_pos_was = camera.global_position
+			camera.zoom = camera.zoom * FINAL_KO_ZOOM_FACTOR
+			camera.global_position = point
+	if sfx == null or not bool(sfx.get("reduce_flash")):
+		_final_ko_flash = CanvasLayer.new()
+		_final_ko_flash.layer = 50
+		var rect := ColorRect.new()
+		rect.color = Color(1, 1, 1, FINAL_KO_FLASH_ALPHA)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_final_ko_flash.add_child(rect)
+		add_child(_final_ko_flash)
+
+func _tick_final_ko() -> void:
+	if _final_ko_active and GameClockScript.now_msec() >= _final_ko_end_msec:
+		_end_final_ko()
+
+## Puts the time scale, the camera and the flash back. Safe to call any time.
+func _end_final_ko() -> void:
+	if not _final_ko_active:
+		return
+	_final_ko_active = false
+	Engine.time_scale = _final_ko_scale_was
+	if is_instance_valid(_final_ko_camera):
+		_final_ko_camera.zoom = _final_ko_zoom_was
+		_final_ko_camera.global_position = _final_ko_pos_was
+		_final_ko_camera.reset_smoothing()
+	_final_ko_camera = null
+	if is_instance_valid(_final_ko_flash):
+		_final_ko_flash.queue_free()
+	_final_ko_flash = null
+
+## Whether the final-KO slow motion is playing (for the scenario suite).
+func final_ko_active() -> bool:
+	return _final_ko_active
+
+## The final-KO flash layer, or null (none, or reduce flashes is on).
+func final_ko_flash() -> CanvasLayer:
+	return _final_ko_flash
+# --- Ghosts of KO'd players (issue #324) ---------------------------------------
+
+const GhostScript := preload("res://scripts/Ghost.gd")
+## slot -> its Ghost node, for human players knocked out this round.
+var _ghosts: Dictionary = {}
+
+## The ghost for `slot`, or null.
+func ghost_of(slot: int) -> Node2D:
+	return _ghosts.get(slot) as Node2D
+
+## A knocked-out human gets a ghost the rest of the round; bots never do.
+## Everything is gone the moment the round is no longer active.
+func _tick_ghosts() -> void:
+	if _state != State.ROUND_ACTIVE or _current_stage == null:
+		if not _ghosts.is_empty():
+			_clear_ghosts()
+		return
+	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
+	for slot in _in_round:
+		var player: Variant = _players[slot]
+		var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
+		if stock and (player == null or player.alive or _game_mode_node.is_pending(slot)) and _ghosts.has(slot):
+			if is_instance_valid(_ghosts[slot]):
+				(_ghosts[slot] as Node).queue_free()
+			_ghosts.erase(slot)
+		if player == null or player.alive or not claimed.has(slot):
+			continue
+		if stock and _game_mode_node.is_pending(slot):
+			continue  # a life left: coming back, no ghost yet (#354)
+		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		if _ghosts.has(slot) and is_instance_valid(_ghosts[slot]):
+			continue
+		var view: Rect2
+		if _current_stage.has_method("get_view_rect"):
+			view = _current_stage.get_view_rect()
+		else:
+			view = Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+		var ghost: Node2D = GhostScript.new()
+		ghost.name = "Ghost%d" % slot
+		_current_stage.add_child(ghost)
+		ghost.setup(player, slot, player.global_position, view, player.identity_color)
+		_ghosts[slot] = ghost
+
+func _clear_ghosts() -> void:
+	for ghost: Variant in _ghosts.values():
+		if is_instance_valid(ghost):
+			(ghost as Node).queue_free()
+	_ghosts.clear()

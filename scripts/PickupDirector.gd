@@ -16,6 +16,11 @@ extends Node
 ## did; this node has no `_process` of its own.
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const WeaponThemesScript := preload("res://scripts/WeaponThemes.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+
+## Which pickup weapons the host switched off (#294); a scenario hands in its own.
+var settings: RefCounted = HostSettingsScript.shared()
 ## Game time (#182), not wall clock: the interval stops for a pause and runs
 ## at `Engine.time_scale`.
 const GameClockScript := preload("res://scripts/GameClock.gd")
@@ -24,6 +29,9 @@ const GameClockScript := preload("res://scripts/GameClock.gd")
 const FALLBACK_PICKUP_OFFSET: Vector2 = Vector2(0.0, -200.0)
 ## Two pickups within this of each other are on the same spot.
 const PICKUP_SPOT_EPSILON: float = 8.0
+## A spot is occupied while a living player's body is within this of it: the
+## pickup's largest touch radius (25) plus a body's reach plus a margin (#333).
+const PICKUP_OCCUPIED_RADIUS: float = 60.0
 ## A pickup spot this close to a player spawn is skipped (#111, owner
 ## playtest: players spawned on a drop and took it before moving). About a
 ## body width plus the largest pickup's trigger, with room to spare, so a
@@ -38,7 +46,7 @@ var _next_pickup_msec: int = 0
 ## RoundManager hands it a stream derived from the match seed; until then (a
 ## director driven by hand) it is an unseeded one of its own.
 var rng := RandomNumberGenerator.new()
-## Weapons still to come out before the draw repeats one (`_draw_weapon`).
+## Weapons still to come out before the draw repeats one (`draw_weapon`).
 var _bag: Array[Resource] = []
 
 func _init(round_manager: Node = null) -> void:
@@ -50,6 +58,8 @@ func _init(round_manager: Node = null) -> void:
 ## start the interval from now.
 func start() -> void:
 	clear()
+	# The bag is dealt per stage (#310): a new stage has a new theme.
+	_bag.clear()
 	_spawn_pickup()
 	_next_pickup_msec = GameClockScript.now_msec() + int(interval_sec() * 1000.0)
 
@@ -135,7 +145,8 @@ func _spawn_pickup() -> void:
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
-	var weapon: Resource = _draw_weapon(offered)
+	offered = _switched_on(offered)
+	var weapon: Resource = draw_weapon(offered)
 	if weapon == null:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
@@ -146,20 +157,34 @@ func _spawn_pickup() -> void:
 	pickup.reset_physics_interpolation()
 	_pickups.append(pickup)
 
+## `offered` without the weapons the host switched off (#294). Left whole if
+## that would leave nothing, which the settings do not allow anyway.
+func _switched_on(offered: Array[Resource]) -> Array[Resource]:
+	var kept: Array[Resource] = []
+	for stats: Resource in offered:
+		if stats != null and settings.is_weapon_enabled(HostSettingsScript.name_of(stats.resource_path)):
+			kept.append(stats)
+	return kept if not kept.is_empty() else offered
+
 ## The next weapon from a shuffled bag of everything offered, refilled once
-## it runs dry: every weapon comes out once before any comes out twice.
+## it runs dry: every weapon comes out before the bag is dealt again.
 ## Playtest 2026-09-27: with a uniform draw over eight weapons and a handful
-## of pickups a session, the boomerang never turned up. A weapon no longer
-## offered is skipped, and the pickaxe never goes in (PickupWeapons.choose).
-## Shuffled from `rng`, so a seeded match still draws the same sequence.
-func _draw_weapon(offered: Array[Resource]) -> Resource:
+## of pickups a session, the boomerang never turned up. The stage's theme
+## (#310, WeaponThemes) puts extra copies of the weapons that suit it in the
+## bag, but every offered weapon keeps at least one. A weapon no longer
+## offered is skipped, and the pickaxe never goes in. Shuffled from `rng`, so
+## a seeded match still draws the same sequence.
+func draw_weapon(offered: Array[Resource]) -> Resource:
 	while not _bag.is_empty():
 		var next: Resource = _bag.pop_back()
 		if offered.has(next):
 			return next
+	var stage: Variant = _rm._current_stage if _rm != null else null
+	var copies: Dictionary = WeaponThemesScript.copies_for(stage, offered)
 	for stats: Resource in offered:
-		if stats != null and stats.resource_path != PickupWeaponsScript.PICKAXE_PATH:
-			_bag.append(stats)
+		if copies.has(stats):
+			for i in int(copies[stats]):
+				_bag.append(stats)
 	# Fisher-Yates off our own stream: Array.shuffle() uses the global RNG.
 	for i in range(_bag.size() - 1, 0, -1):
 		var j: int = rng.randi() % (i + 1)
@@ -174,7 +199,8 @@ func _draw_weapon(offered: Array[Resource]) -> Resource:
 ## skipped while any other free spot remains; if every free spot is near a
 ## spawn, the one furthest from all spawns is used, so a stage still gets
 ## its pickups (#111). A spot at or below the floor kill zone's surface is
-## never used (#200).
+## never used (#200). A spot a living player is standing on is skipped too, so
+## a weapon is not swapped out from under its holder; null when all are (#333).
 func free_spot() -> Variant:
 	var stage: Variant = _rm._current_stage
 	var spots: Array[Vector2] = []
@@ -193,6 +219,8 @@ func free_spot() -> Variant:
 			if pickup.global_position.distance_to(spot) < PICKUP_SPOT_EPSILON:
 				taken = true
 				break
+		if not taken and _player_on(spot):
+			taken = true
 		if not taken:
 			free.append(spot)
 	if free.is_empty():
@@ -208,6 +236,19 @@ func free_spot() -> Variant:
 		if _distance_to_nearest_spawn(spot) > _distance_to_nearest_spawn(best):
 			best = spot
 	return best
+
+## Whether a living player stands on or hovers over `spot`, close enough that
+## a pickup spawned there would swap their weapon under them (#333). Only the
+## body triggers a swap (ADR-0009), so only bodies count.
+func _player_on(spot: Vector2) -> bool:
+	for player: Variant in _rm._players:
+		if player == null or not is_instance_valid(player):
+			continue
+		if player.get("alive") == false:
+			continue
+		if (player as Node2D).global_position.distance_to(spot) < PICKUP_OCCUPIED_RADIUS:
+			return true
+	return false
 
 ## How far `spot` is from the nearest player spawn on the current stage; INF
 ## when the stage declares none.

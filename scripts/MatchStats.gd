@@ -24,6 +24,11 @@ const MULTI_KO_WINDOW_MSEC: int = 3000
 const COMBAT: String = "COMBAT"
 const CLUMSY: String = "CLUMSY"
 const SURVIVOR: String = "SURVIVOR"
+const AIRBORNE: String = "AIRBORNE"
+
+## The shortest airtime that earns the award (issue #337).
+const AIRTIME_MIN_MSEC: int = 1000
+const COLLECTOR: String = "COLLECTOR"
 
 ## slot -> number, created on first use so any roster size works.
 var kos: Dictionary = {}
@@ -31,8 +36,20 @@ var self_kos: Dictionary = {}
 var deaths: Dictionary = {}
 var damage_dealt: Dictionary = {}
 var damage_taken: Dictionary = {}
+## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
+## this match. Bots and self-hits are left out. Written once per match by
+## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
+var weapon_damage: Dictionary = {}
+var weapon_hits: Dictionary = {}
 ## Total msec each slot spent alive in rounds this match.
 var survival_msec: Dictionary = {}
+## Longest continuous stretch (msec) each slot went with no body contact this
+## match (issue #337).
+var longest_air_msec: Dictionary = {}
+## Weapon pickups grabbed this match (issue #325), and per slot which weapon
+## (name -> count) -- the favourite is the one grabbed most, first grabbed on a tie.
+var pickups: Dictionary = {}
+var weapon_grabs: Dictionary = {}
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
 
@@ -42,6 +59,8 @@ var _last_hit: Dictionary = {}
 var _streak: Dictionary = {}
 ## Slots still alive in the current round -> msec they entered it.
 var _alive_since: Dictionary = {}
+## Slot -> msec its current airborne stretch began.
+var _air_since: Dictionary = {}
 
 func begin_match() -> void:
 	kos.clear()
@@ -49,13 +68,20 @@ func begin_match() -> void:
 	deaths.clear()
 	damage_dealt.clear()
 	damage_taken.clear()
+	weapon_damage.clear()
+	weapon_hits.clear()
 	survival_msec.clear()
+	pickups.clear()
+	weapon_grabs.clear()
 	total_kos = 0
 	_last_hit.clear()
 	_streak.clear()
 	_alive_since.clear()
+	_air_since.clear()
+	longest_air_msec.clear()
 
 func begin_round(slots: Array, now_msec: int) -> void:
+	_air_since.clear()
 	_last_hit.clear()
 	_streak.clear()
 	_alive_since.clear()
@@ -65,6 +91,7 @@ func begin_round(slots: Array, now_msec: int) -> void:
 
 ## Everyone still standing stops the survival clock here.
 func end_round(now_msec: int) -> void:
+	_air_since.clear()
 	for slot: int in _alive_since.keys():
 		_add(survival_msec, slot, now_msec - int(_alive_since[slot]))
 	_alive_since.clear()
@@ -73,7 +100,7 @@ func end_round(now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, _streak, _alive_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	for victim: int in _last_hit.keys():
@@ -92,12 +119,31 @@ func shift(msec: int) -> void:
 		_streak[killer][0] = int(_streak[killer][0]) + msec
 	for slot: int in _alive_since.keys():
 		_alive_since[slot] = int(_alive_since[slot]) + msec
+	for slot: int in _air_since.keys():
+		_air_since[slot] = int(_air_since[slot]) + msec
 
-func record_hit(attacker: int, victim: int, amount: float, now_msec: int) -> void:
+## One sample of whether `slot` is touching nothing (issue #337), taken each
+## frame while it is alive in a round. Cheap: a start time per airborne slot and
+## a best per slot. The stretch ends on the first grounded sample, the slot's
+## elimination or the round's end.
+func note_air(slot: int, airborne: bool, now_msec: int) -> void:
+	if not airborne:
+		_air_since.erase(slot)
+		return
+	if not _air_since.has(slot):
+		_air_since[slot] = now_msec
+	longest_air_msec[slot] = maxi(int(longest_air_msec.get(slot, 0)), now_msec - int(_air_since[slot]))
+
+## `weapon` names the attacker's weapon and `real` is false for a bot; only a
+## real player's damaging hit with a named weapon joins the balance tallies.
+func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon: String = "", real: bool = true) -> void:
 	if attacker < 0 or victim < 0 or attacker == victim:
 		return
 	_last_hit[victim] = {"attacker": attacker, "msec": now_msec}
 	if amount > 0.0:
+		if real and weapon != "":
+			_add(weapon_damage, weapon, amount)
+			_add(weapon_hits, weapon, 1)
 		_add(damage_dealt, attacker, amount)
 		_add(damage_taken, victim, amount)
 
@@ -106,6 +152,7 @@ func record_hit(attacker: int, victim: int, amount: float, now_msec: int) -> voi
 ## row, 1 for a lone KO), "first_blood" (the match's first credited KO)}.
 func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	_add(deaths, victim, 1)
+	_air_since.erase(victim)
 	if _alive_since.has(victim):
 		_add(survival_msec, victim, now_msec - int(_alive_since[victim]))
 		_alive_since.erase(victim)
@@ -126,6 +173,51 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	result["streak"] = streak
 	result["first_blood"] = total_kos == 1
 	return result
+
+## `slot` picked up weapon `weapon` (a name such as "Hammer") off the stage.
+func record_pickup(slot: int, weapon: String) -> void:
+	if slot < 0:
+		return
+	_add(pickups, slot, 1)
+	var grabs: Dictionary = weapon_grabs.get(slot, {})
+	grabs[weapon] = int(grabs.get(weapon, 0)) + 1
+	weapon_grabs[slot] = grabs
+
+## The weapon `slot` grabbed most, "" when they grabbed none.
+func favourite_weapon(slot: int) -> String:
+	var grabs: Dictionary = weapon_grabs.get(slot, {})
+	var best: String = ""
+	for weapon: String in grabs.keys():
+		if best == "" or int(grabs[weapon]) > int(grabs[best]):
+			best = weapon
+	return best
+
+## One row per slot in `slots`, in that order, for the victory screen's stats
+## table: {"slot", "kos", "self_kos", "damage_dealt", "damage_taken",
+## "pickups", "weapon"} (damage rounded, weapon "" for none).
+func stat_rows(slots: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for slot: int in slots:
+		out.append({
+			"slot": slot,
+			"kos": int(kos.get(slot, 0)),
+			"self_kos": int(self_kos.get(slot, 0)),
+			"damage_dealt": roundi(float(damage_dealt.get(slot, 0))),
+			"damage_taken": roundi(float(damage_taken.get(slot, 0))),
+			"pickups": int(pickups.get(slot, 0)),
+			"weapon": favourite_weapon(slot),
+		})
+	return out
+
+## Superlatives beyond `awards()` (issue #325): "Magpie" for the most weapon
+## pickups. Kept apart so the three core awards stay as they were.
+func extra_awards(slots: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var best: int = _leader(slots, pickups, kos, false)
+	if best != -1:
+		var n: int = int(pickups[best])
+		out.append(_award(COLLECTOR, "Magpie", best, "%d pickup%s" % [n, "" if n == 1 else "s"]))
+	return out
 
 ## Up to three awards, one per category, each
 ## {"category", "title", "slot", "detail"}. `slots` are the players eligible
@@ -151,6 +243,17 @@ func awards(slots: Array) -> Array[Dictionary]:
 	best = _leader(slots, survival_msec, deaths, true)
 	if best != -1:
 		out.append(_award(SURVIVOR, "Hard to Kill", best, "%s alive" % _clock(int(survival_msec[best]))))
+	best = _leader(slots, _air_scores(), kos, false)
+	if best != -1:
+		out.append(_award(AIRBORNE, "Longest Airtime", best, "%.1fs airborne" % (float(longest_air_msec[best]) / 1000.0)))
+	return out
+
+## `longest_air_msec`, without the stretches too short to earn the award.
+func _air_scores() -> Dictionary:
+	var out: Dictionary = {}
+	for slot: int in longest_air_msec:
+		if int(longest_air_msec[slot]) >= AIRTIME_MIN_MSEC:
+			out[slot] = longest_air_msec[slot]
 	return out
 
 ## The slot with the highest positive `primary`; ties go to the higher
@@ -180,9 +283,31 @@ func _leader(slots: Array, primary: Dictionary, secondary: Dictionary, secondary
 func _award(category: String, title: String, slot: int, detail: String) -> Dictionary:
 	return {"category": category, "title": title, "slot": slot, "detail": detail}
 
-func _add(table: Dictionary, slot: int, amount: Variant) -> void:
+func _add(table: Dictionary, slot: Variant, amount: Variant) -> void:
 	table[slot] = table.get(slot, 0) + amount
 
 static func _clock(msec: int) -> String:
 	var sec: int = maxi(0, msec) / 1000
 	return "%d:%02d" % [sec / 60, sec % 60]
+
+## One JSON line for the balance log: {"t": unix time, "weapons": {id: {"damage", "hits"}}}.
+## Empty when no real player landed a damaging hit this match.
+func balance_log_line(unix_time: int) -> String:
+	if weapon_damage.is_empty():
+		return ""
+	var weapons: Dictionary = {}
+	for id: String in weapon_damage:
+		weapons[id] = {"damage": snappedf(float(weapon_damage[id]), 0.1), "hits": int(weapon_hits.get(id, 0))}
+	return JSON.stringify({"t": unix_time, "weapons": weapons})
+
+## Appends `line` to `path`. False (never an error) when it cannot be written.
+static func append_line(path: String, line: String) -> bool:
+	if line == "":
+		return false
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
+	if file == null:
+		return false
+	file.seek_end()
+	file.store_line(line)
+	file.close()
+	return true

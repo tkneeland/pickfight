@@ -21,30 +21,45 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Staff, sword, dagger (#13)
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
 - Spear: long reach, weak up close (#272)
+- Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy; a short poker otherwise (#269)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150)
+- Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152); never spawn on a spot a living player is standing on, another free spot is used instead (#333)
+- Plunger: sticks to players (drag them) and surfaces (hang and swing, never reels you in); a hard yank pops it free (#270)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152)
+- Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
-- 24 rotating stages (#8, #17, #19, #51, #54, #143); shuffled bag rotation (#20, ADR-0011)
+- 27 rotating stages (#8, #17, #19, #51, #54, #143, #315); #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, used at 5+ players (#144)
 - Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
 - Parts: bounce pad, wind zone, rotating platform (#52)
+- Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
 - Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
 
 ## Match flow and scoring
 - Endless round loop over the live roster (ADR-0004, ADR-0007)
+- Matches: first to N rounds, host picks N; victory podium (#120); each phone taps Continue and the room returns to the lobby once every human has (bots excluded), after 30 s, or on a host keypress (#337)
+- Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
+- Game modes (#352): the host phone's menu picks Classic, King of the Hill, Hot Potato or Sudden Death for the whole match, saved with the other host settings (`user://audio.cfg`). Combines with Free-for-all or Teams (the Format); Hot Potato is Free-for-all only (greyed out with Teams on, and switching Teams on drops it to Classic). King of the Hill in Teams: teammates hold the hill together, a mixed hill is contested and frozen, hold time banks per team. The Rise runs in Classic, is off in King of the Hill and Hot Potato, and in Sudden Death starts after half the grace period at 1.5x speed. Each mode bans modifiers: Sudden Death double damage, Hot Potato weapon roulette, King of the Hill meteor shower. The stage title card shows the mode name and a one-line rule; the how-to-play panel has one card per mode. All of it is one table, `GameModes.TABLE`
+- Stock mode (#354): 1-10 lives per round (default 3) and a 2 / 5 / 8 / 15 min or no time limit (default 8), both set on the host phone and remembered. A lost life respawns after about 1.5 s at the spawn farthest from the others, with spawn protection, the pickaxe and zero damage; out of lives means out, with the KO ghost. No rising lava. Lives show as pips under the name tag and as "♥ N" on the phone. Timeout: most lives wins (a team's total in Teams); a tie plays a one-hit overtime among the tied. In Teams an eliminated player can "Steal a life" from the team-mate with most (2+ lives). Countdown top centre, pulsing in the last 10 s
+- Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
+- Kill feed, KO credit, match awards (#148), including Longest airtime, the longest stretch with no body contact (#337); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
 - Matches: first to N rounds, host picks N; victory podium (#120)
+- The match-winning KO plays about 1 s of slow motion with the camera punched in on the hit and a brief flash, then goes to the victory panel; no zoom with screen shake off, no flash with reduce flashes on (#328)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
-- Kill feed, KO credit, match awards (#148)
+- Night stages (#332): about 1 round in 5 plays its stage as a night variant, applied by data (`Stage.night`, rolled per round by `RoundManager.night_chance`, from its own RNG; off with the modifier-roll seam, `forced_night` overrides). Darker Night palette with stars, lamps over the spawns, and a soft glow on players, weapon heads, pickups and hazards. Visual only. Lighting is `CanvasModulate` plus shadowless `PointLight2D` (works with the Compatibility renderer); lamps hold steady with Reduce flashes on
+- Kill feed, KO credit, match awards (#148); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
+- Victory screen stats (#325): a per-player table under the awards (KOs, damage dealt and taken, self-KOs, weapon pickups, favourite weapon) and a "Magpie" award for the most weapon pickups
 - Scoreboard shown at round end (#5)
+- KO'd players drive a floaty translucent ghost from their phone that shows only while they touch their controls (fades ~1.5 s after); it cannot hurt anyone, only weakly nudges pickups, never appears for bots and is cleared at round end (#324)
 - Mid-match joiner inherits freed slot's score (#161); roster survives a mid-round disconnect (#12, ADR-0007)
 
 ## Players, cosmetics and identity
@@ -54,12 +69,13 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Six eye styles (round, sleepy, angry, wide, dot, visor) picked in the same phone picker as hats and colour; pupils still track the weapon; kept per seat through reconnects (#297)
 - Hats (crown, top hat, cap, beanie, viking, party, halo, propeller) and colour picker on the phone (#151)
 - Squares have eyes that track the weapon head, blink and squint; arm drawn in front/behind body (#254, #91)
-- One cohesive colour palette (#255)
+- One cohesive colour palette (#255); the eight default slot colours are checked to stay distinguishable under protanopia, deuteranopia and tritanopia (#330)
 
 ## Controllers and input
 - Phone browser controller page over LAN, served by the host (#1, ADR-0002)
 - Multi-touch, drag smoothing against Wi-Fi jitter (#29, #113)
 - Phone buzz feedback, e.g. on round win (#34, ADR-0013)
+- Phone damage bar: a thin strip showing how close you are to KO, turning red near the end; phone only, resets each round (#331)
 - Laptop browser as a controller with pointer-lock mouse (#244)
 - Gamepad seats: right stick drives the arm, no phone needed (#261)
 - Host phone controls: pause, end, kick, settings (#149, #216, #231)
@@ -68,23 +84,38 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Bots and solo practice
 - Bots via `--bots=N` flag and Solo practice button (#152)
 - Bots read stage hazards; bots yield to phones (#176, #193)
+- Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
+- Bots hunt deliberately: they pick the rival cheapest to reach (a rival high up on a ledge is the last chosen) and stick with it, never a teammate, and a bot hooked on a ledge by its own pickaxe sweeps the head off it instead of hanging there (#302)
+- Bots keep their own swing from throwing them over a rival and off the stage: no closing on a rival with a drop right past it, a gentler chop near an edge, a brake when carried towards one, and no swinging while thrown into the air; and they press harder as opponents dwindle (shorter hesitation, closer fighting, further engagement, a faster vault) up to full pace with one rival left (#302)
+- Bots play each mode's objective: in King of the Hill they head into the hill and fight whoever holds it; in Hot Potato the bot that is "it" chases a rival and every other bot keeps away from "it"; Sudden Death (and any mode without an objective) plays as Classic (#353)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)
 - Join URL plus in-game generated QR code (#29, #214, #230)
 - How-to-play explainer with animated demos (#149, #219)
+- First-join tip on the phone: looping drag-to-swing animation, shown once per device (#291)
+- Live lobby sandbox: seated players move, swing and fight on a stage under the lobby; nothing scores, KOs respawn, the match starts clean (#291)
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)
+- Window size option for windowed mode (#294)
+- Stage on/off list: the rotation skips switched-off stages (#294)
+- Pickup weapon on/off list: switched-off weapons never spawn as pickups (#294)
+- Comfort options in the Settings panel's "More options": screen shake on/off (#256), reduce flashes (elimination burst, bounce pad, breaking wall), and name tag size 1x / 1.5x / 2x; all persist (#317)
+- The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
+- Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
 - Music: lobby and fight tracks (#118)
 - Narrator/announcer, one consistent voice (#152, #211)
 
 ## Visual look and juice
 - Landing dust, head motion trails, clash sparks (#116, #196)
 - Death burst, hit feedback (#33, #168)
+- Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)
+
+- PICKFIGHT logo (flat letters in the player palette, the first I a pickaxe) in `art/logo/`, with 1024 px and Steam capsule PNG exports; shown on the lobby/title screen and the victory screen, whose podium blocks are flat ink-outlined panels (#359, `tools/gen_logo_art.py`, `tools/export_logo_pngs.gd`)
 
 ## Online
 - Room-code relay server (#238, ADR-0019)
@@ -96,24 +127,27 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Exported macOS .app and Windows .exe (#119, `tools/export.sh`)
 - Release workflow builds Windows, macOS, Linux and pushes to itch.io (`.github/workflows/release.yml`)
 - Relay deployable on Fly.io (`relay/fly.toml`, `relay/Dockerfile`)
+- In-game Feedback button in the host Settings panel: sends text (plus build, OS, stage) to the relay, which files a `needs-triage` + `feedback` GitHub issue using the relay-only `GITHUB_FEEDBACK_TOKEN`; 5 per IP per hour, 2000 chars, offline (503) until the token is set (#262)
 
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
 - Screenshot capture tools for stages and damage numbers
+- Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence in `user://clips/` with a toast showing the path (#329, ADR-0020)
+- Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316)
 
 ## In flight / planned
-Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
+Not shipped; do not treat as existing.
 - #297 Cosmetics: eye styles (tkneeland)
-- #294 Host settings menu: volume, display, stage and weapon toggles (tkneeland)
 - #291 Onboarding: first-join tip on phone, live lobby sandbox (tkneeland)
 - #288 Real per-weapon hit sounds (tkneeland)
 - #282 Hazard: spikes and saws (tkneeland); #281 wind / fans (tkneeland)
+- #271 Pogo stick, #270 Plunger (tkneeland)
 - #270 Plunger, #269 Umbrella (tkneeland)
 - #275 Shield, #274 Magnet, #273 Fishing rod (agage-JG)
 - #278 Tag / hot potato, #277 Sudden death, #276 King of the hill (agage-JG)
 - #290 Per-player voice grunts, #289 More music tracks (agage-JG)
 - #256 Juice pass (agage-JG); #257 Richer stage dressing (tkneeland)
-- #262 In-game send-feedback button (tkneeland); #263 Content roadmap (tkneeland)
+- #263 Content roadmap (tkneeland)
 - #240 Snapshot encode/decode, #241 PC client: join by code, mouse arm (agage-JG); #242 Deploy relay, ship PC builds (tkneeland); #212 PC/online idea (tkneeland, parked)
 - #258 Steam readiness plan, #268 Switch release (tkneeland); #296, #298 Steam lobbies and invites over relay (agage-JG)

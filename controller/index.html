@@ -126,6 +126,47 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* Damage bar (issue #331): a thin strip along the very top, the player's
+     colour filling toward red as they near a KO. Never takes a touch. */
+  #dmgbar {
+    position: fixed;
+    z-index: 3;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    pointer-events: none;
+  }
+  #dmgfill {
+    height: 100%;
+    width: 0;
+    transition: width 0.1s linear;
+  }
+  /* Stock lives (issue #354): "♥ N" beside the damage bar, and the Steal a
+     life button on an eliminated Teams player's phone. */
+  #lives {
+    position: fixed;
+    z-index: 3;
+    top: 8px;
+    right: 10px;
+    display: none;
+    color: #ff5a6a;
+    font: 700 20px sans-serif;
+    pointer-events: none;
+  }
+  #menu-stock-lives[hidden], #menu-stock-time[hidden] { display: none !important; }
+  #lives.show { display: block; }
+  #steal {
+    position: fixed;
+    z-index: 4;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    display: none;
+    padding: 14px 22px;
+    font: 700 20px sans-serif;
+  }
+  #steal.show { display: block; }
   /* Lobby, countdown and victory (issue #120): covers the pad whenever no
      match is being played, so its buttons get the touches instead. */
   #lobby {
@@ -315,6 +356,9 @@
     background: #2a303d;
   }
   #host-menu button:disabled { opacity: 0.35; }
+  /* Issue #352: the game-mode picker, one button per mode, the chosen one lit. */
+  #menu-gamemodes { display: flex; flex-direction: column; gap: 8px; }
+  #host-menu #menu-gamemodes button.on { color: #0d0f14; background: #ffd933; }
   #host-menu button.primary { color: #0d0f14; background: #ffd933; }
   #host-menu button.danger { color: #fff; background: #c62f3a; }
   #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
@@ -372,6 +416,49 @@
     opacity: 0.3;
     background-image: linear-gradient(135deg, transparent 46%, #0d0f14 46%, #0d0f14 54%, transparent 54%) !important;
   }
+  /* First-join tip (issue #291): a looping drag-to-swing animation over a
+     full-screen card, shown once per device. Dismissed by the one button;
+     the card takes touches only while it is up. */
+  #tip {
+    position: fixed;
+    inset: 0;
+    z-index: 11;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 20px;
+    background: rgba(13, 15, 20, 0.96);
+    text-align: center;
+  }
+  #tip.show { display: flex; }
+  #tip-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
+  #tip-art { width: min(70vw, 280px); height: auto; }
+  #tip-pick { transform-origin: 140px 130px; animation: tip-swing 2.4s ease-in-out infinite; }
+  #tip-finger { animation: tip-drag 2.4s ease-in-out infinite; }
+  @keyframes tip-swing {
+    0%, 15% { transform: rotate(-70deg); }
+    55%, 75% { transform: rotate(40deg); }
+    100% { transform: rotate(-70deg); }
+  }
+  @keyframes tip-drag {
+    0%, 15% { transform: translate(-30px, 20px); opacity: 0.2; }
+    25% { opacity: 1; }
+    55%, 75% { transform: translate(40px, -10px); opacity: 1; }
+    100% { transform: translate(-30px, 20px); opacity: 0.2; }
+  }
+  #tip-go {
+    font: inherit;
+    font-size: 22px;
+    font-weight: 800;
+    padding: 18px 22px;
+    min-width: 50vw;
+    border: 0;
+    border-radius: 16px;
+    color: #0d0f14;
+    background: #ffd933;
+  }
   #look-go {
     font: inherit;
     font-size: 22px;
@@ -398,6 +485,9 @@
 <body>
 <canvas id="pad"></canvas>
 <div id="flash"></div>
+<div id="dmgbar"><div id="dmgfill"></div></div>
+<div id="lives"></div>
+<button id="steal" type="button">Steal a life</button>
 <div id="hud">
   <div id="who">
     <div id="slot">--</div>
@@ -443,6 +533,19 @@
   <div id="color-row"></div>
   <button id="look-go" type="button">Done</button>
 </div>
+<div id="tip">
+  <svg id="tip-art" viewBox="0 0 280 200" aria-hidden="true">
+    <rect x="10" y="150" width="260" height="8" rx="4" fill="#3a3f4b"/>
+    <circle cx="140" cy="130" r="16" fill="#ffd933"/>
+    <g id="tip-pick">
+      <rect x="138" y="30" width="5" height="100" rx="2" fill="#c9a36a"/>
+      <path d="M118 36 Q140 14 164 36" stroke="#cfd3dc" stroke-width="6" fill="none" stroke-linecap="round"/>
+    </g>
+    <circle id="tip-finger" cx="140" cy="100" r="22" fill="#ffffff" fill-opacity="0.35" stroke="#ffffff" stroke-width="3"/>
+  </svg>
+  <div id="tip-text">Drag anywhere to swing your pick</div>
+  <button id="tip-go" type="button">Got it</button>
+</div>
 <button id="gear" type="button" aria-label="Host menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 <div id="host-menu">
   <div id="host-menu-title">Host menu</div>
@@ -450,7 +553,10 @@
     <button id="menu-pause" type="button" class="primary">Pause</button>
     <button id="menu-end" type="button" class="danger">End match</button>
     <button id="menu-kick" type="button">Kick player</button>
-    <button id="menu-mode" type="button">Mode: Free-for-all</button>
+    <button id="menu-mode" type="button">Format: Free-for-all</button>
+    <div id="menu-gamemodes"></div>
+    <button id="menu-stock-lives" type="button" hidden>Lives: 3</button>
+    <button id="menu-stock-time" type="button" hidden>Time: 8 min</button>
     <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
   </div>
@@ -490,7 +596,7 @@
   // "looks" frame -- sent right behind the slot frame -- says which colour the
   // player actually holds (colorOf()). The scenario
   // identity_colours_match_controller_page keeps this list and Main.tscn in step.
-  var SLOT_COLORS = ["#e69f00", "#3d8fd1", "#009e73", "#d55e00", "#cc79a7", "#56b4e9", "#f0c400", "#e8e6f0"];
+  var SLOT_COLORS = ["#e69f00", "#3d8fd1", "#009e73", "#d55e00", "#cc79a7", "#56b4e9", "#f5e24a", "#e8e6f0"];
   var NEUTRAL_COLOR = "#59606e";
   // Never let the drag radius reach zero: (point - anchor) / 0 is NaN, the
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
@@ -855,6 +961,7 @@
       nameInput.blur();
     }
     lookEl.classList.remove("show");
+    tipEl.classList.remove("show");
   }
 
   function commitName() {
@@ -932,6 +1039,27 @@
       finePointer && hintShown && !mouseLocked());
   }
 
+  // Damage bar (issue #331): v is 0..1 of the way to a KO. Colour blends from
+  // this phone's own colour to red as it fills; solid red in the last stretch.
+  var dmgFillEl = document.getElementById("dmgfill");
+  function showDamage(v) {
+    if (typeof v !== "number" || !(v >= 0)) { v = 0; }
+    if (v > 1) { v = 1; }
+    dmgFillEl.style.width = (v * 100) + "%";
+    dmgFillEl.style.background = v >= 0.75 ? "#ff2a2a" : (slot >= 0 ? colorOf(slot) : "#ffffff");
+  }
+
+  // Stock lives (issue #354): {t:"lives", v:N, steal:bool}; N < 0 hides both.
+  var livesEl = document.getElementById("lives");
+  var stealBtn = document.getElementById("steal");
+  function showLives(msg) {
+    var n = typeof msg.v === "number" ? msg.v : -1;
+    livesEl.classList.toggle("show", n >= 0);
+    livesEl.textContent = "\u2665 " + n;
+    stealBtn.classList.toggle("show", n >= 0 && !!msg.steal);
+  }
+  stealBtn.addEventListener("click", function () { sendText({ t: "steal" }); });
+
   function buzz(kind) {
     var b = BUZZ[kind];
     if (!b || slot < 0) { return; }
@@ -952,7 +1080,7 @@
 
   // ---- lobby (issue #120) ---------------------------------------------------
   // The host decides everything; this page only shows the latest state it
-  // sent and asks for changes: Ready (Rematch on the victory screen) and, on
+  // sent and asks for changes: Ready (Continue on the victory screen) and, on
   // the host's phone, the match length.
   var lobbyEl = document.getElementById("lobby");
   var lobbyTitleEl = document.getElementById("lobby-title");
@@ -1006,11 +1134,11 @@
     if (phase === "victory" && msg.teams && msg.winner_team >= 0) {
       lobbyTitleEl.textContent = "Match over — " + TEAM_NAMES[msg.winner_team] + " team wins" +
         (myTeam() === msg.winner_team ? " — you win!" : "");
-      readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
+      readyBtn.textContent = amReady ? "Waiting for the others" : "Continue";
     } else if (phase === "victory") {
       lobbyTitleEl.textContent = "Match over — " + (msg.winner === slot ? "you win!" :
         (msg.winner >= 0 ? slotName(msg.winner) + " wins" : "no winner"));
-      readyBtn.textContent = amReady ? "Waiting for the others" : "Rematch";
+      readyBtn.textContent = amReady ? "Waiting for the others" : "Continue";
     } else {
       lobbyTitleEl.textContent = phase === "countdown" ? "Get ready" :
         (amReady ? "Ready — waiting for the others" : "In the lobby") + (isHost ? " (you're host)" : "");
@@ -1120,7 +1248,28 @@
   function closeLookPrompt() {
     store(LOOK_CHOSEN_KEY, "1");
     lookEl.classList.remove("show");
+    maybeShowTip();
   }
+
+  // ---- first-join tip (issue #291) -------------------------------------------
+  // Once per device: remembered in localStorage (best effort -- in private
+  // mode it shows once per page load instead).
+  var TIP_SEEN_KEY = "pickfight-tip-seen";
+  var tipEl = document.getElementById("tip");
+  var tipShownThisLoad = false;
+  function maybeShowTip() {
+    var seen = false;
+    try { seen = localStorage.getItem(TIP_SEEN_KEY) === "1"; } catch (err) { seen = false; }
+    if (seen || tipShownThisLoad || inPlay()) { return; }
+    tipShownThisLoad = true;
+    release();
+    tipEl.classList.add("show");
+  }
+  function dismissTip() {
+    try { localStorage.setItem(TIP_SEEN_KEY, "1"); } catch (err) { /* this load only */ }
+    tipEl.classList.remove("show");
+  }
+  document.getElementById("tip-go").addEventListener("click", dismissTip);
 
   function darken(hex, amount) {
     var n = parseInt(String(hex).slice(1), 16);
@@ -1303,6 +1452,10 @@
   var menuKickBtn = document.getElementById("menu-kick");
   // Issue #236: Free-for-all or Teams, only between matches.
   var menuModeBtn = document.getElementById("menu-mode");
+  // Stock lobby controls (issue #354), shown only while the lobby carries lobby.stock.
+  var menuStockLivesBtn = document.getElementById("menu-stock-lives");
+  var menuStockTimeBtn = document.getElementById("menu-stock-time");
+  var STOCK_TIMES = [120, 300, 480, 900, 0];
   // Issue #239: Go online, only between matches. The host says where it is
   // in lobby.online ("off", "connecting", "online" or "unreachable") and
   // lobby.room.
@@ -1375,8 +1528,16 @@
     var others = 0;
     for (var i = 0; i < lobby.players.length; i++) { if (lobby.players[i].slot !== slot) { others++; } }
     menuKickBtn.disabled = others === 0;
-    menuModeBtn.textContent = lobby.mode === "teams" ? "Mode: Teams" : "Mode: Free-for-all";
+    menuModeBtn.textContent = lobby.mode === "teams" ? "Format: Teams" : "Format: Free-for-all";
     menuModeBtn.disabled = inMatch();
+    refreshGameModes();
+    var stock = lobby.stock;
+    menuStockLivesBtn.hidden = menuStockTimeBtn.hidden = !stock;
+    if (stock) {
+      menuStockLivesBtn.textContent = "Lives: " + stock.lives;
+      menuStockTimeBtn.textContent = "Time: " + (stock.time > 0 ? (stock.time / 60) + " min" : "no limit");
+      menuStockLivesBtn.disabled = menuStockTimeBtn.disabled = inMatch();
+    }
     var online = lobby.online || "off";
     menuOnlineBtn.textContent = online === "off" ? "Go online: off" :
       online === "connecting" ? "Go online: connecting\u2026" :
@@ -1461,9 +1622,49 @@
       function () { return inMatch() && lobby.match === match; });
   });
   menuKickBtn.addEventListener("click", showKickList);
+  // Issue #352: the game-mode picker. The host lists the modes (lobby.game_modes,
+  // from GameModes.TABLE) and which is chosen (lobby.game_mode, "" is Classic);
+  // one the Teams format rules out is greyed out.
+  var gameModesEl = document.getElementById("menu-gamemodes");
+  var gameModesKey = "";
+  function refreshGameModes() {
+    var rows = lobby.game_modes || [];
+    var key = JSON.stringify(rows);
+    if (key !== gameModesKey) {
+      gameModesKey = key;
+      gameModesEl.innerHTML = "";
+      rows.forEach(function (row) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.id = row.id;
+        btn.textContent = row.name;
+        btn.addEventListener("click", function () {
+          if (inMatch() || btn.disabled) { return; }
+          sendText({ t: "gamemode", v: row.id });
+        });
+        gameModesEl.appendChild(btn);
+      });
+    }
+    var teams = lobby.mode === "teams";
+    var chosen = lobby.game_mode || "";
+    rows.forEach(function (row, i) {
+      var btn = gameModesEl.children[i];
+      btn.className = row.id === chosen ? "on" : "";
+      btn.disabled = inMatch() || (teams && !!row.ffa_only);
+    });
+  }
   menuModeBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
+  });
+  menuStockLivesBtn.addEventListener("click", function () {
+    if (inMatch() || !lobby.stock) { return; }
+    sendText({ t: "stock", lives: lobby.stock.lives >= 10 ? 1 : lobby.stock.lives + 1 });
+  });
+  menuStockTimeBtn.addEventListener("click", function () {
+    if (inMatch() || !lobby.stock) { return; }
+    var i = STOCK_TIMES.indexOf(lobby.stock.time);
+    sendText({ t: "stock", time: STOCK_TIMES[(i + 1) % STOCK_TIMES.length] });
   });
   menuOnlineBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
@@ -1516,9 +1717,12 @@
           sendLook();
           if (!nameChosen()) { openNamePrompt(); }
           else if (!lookChosen()) { openLookPrompt(); }
+          else { maybeShowTip(); }
         }
         else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
+        else if (msg.t === "dmg") { showDamage(msg.v); }
+        else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }
     };
