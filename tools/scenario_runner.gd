@@ -561,6 +561,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"rules_disabled_modifier_never_rolls_in_that_mode_only",
 	"rules_modifier_toggles_persist_across_reload",
 	"rules_table_bans_cannot_be_reenabled",
+	"koth_stages_load_and_are_in_rotation",
+	"koth_hill_starts_on_first_hill_spot",
+	"koth_moving_hill_warns_then_moves",
+	"koth_stage_without_spots_uses_spawn_centre",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2075,6 +2079,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_rules_modifier_toggles_persist_across_reload()
 		"rules_table_bans_cannot_be_reenabled":
 			return await _scenario_rules_table_bans_cannot_be_reenabled()
+		"koth_stages_load_and_are_in_rotation":
+			return await _scenario_koth_stages_load_and_are_in_rotation()
+		"koth_hill_starts_on_first_hill_spot":
+			return await _scenario_koth_hill_starts_on_first_hill_spot()
+		"koth_moving_hill_warns_then_moves":
+			return await _scenario_koth_moving_hill_warns_then_moves()
+		"koth_stage_without_spots_uses_spawn_centre":
+			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -3821,6 +3833,10 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Racetrack.tscn",
 	"res://scenes/stages/Switchyard.tscn",
 	"res://scenes/stages/Orbit.tscn",
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
 ]
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -29728,7 +29744,6 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		failures.append("Hot Potato (%d) should deal them at least twice as often as classic (%d)" % [counts["hot_potato"], counts[""]])
 	_scenario_completed = true
 	return failures
-
 # --- Rules tab: per-mode modifier toggles (#378) ------------------------------
 func _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only() -> Array[String]:
 	var failures: Array[String] = []
@@ -29764,7 +29779,6 @@ func _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only() -> Array[
 	await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_rules_modifier_toggles_persist_across_reload() -> Array[String]:
 	var failures: Array[String] = []
 	var path: String = OS.get_temp_dir().path_join("pickfight_rules_%d.cfg" % OS.get_process_id())
@@ -29792,7 +29806,6 @@ func _scenario_rules_modifier_toggles_persist_across_reload() -> Array[String]:
 	DirAccess.remove_absolute(path)
 	_scenario_completed = true
 	return failures
-
 func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 	var failures: Array[String] = []
 	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
@@ -29820,5 +29833,168 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 	if open_box == null or open_box.disabled or not open_box.button_pressed:
 		failures.append("an unbanned box should be live and ticked")
 	panel.queue_free()
+	_scenario_completed = true
+	return failures
+# --- King of the Hill stages (issue #377)
+const KOTH_STAGES_377: PackedStringArray = [
+	"res://scenes/stages/Summit.tscn",
+	"res://scenes/stages/Mesa.tscn",
+	"res://scenes/stages/Relay.tscn",
+	"res://scenes/stages/Roundabout.tscn",
+]
+## The four hill stages load, are in Main's rotation and STAGE_PATHS, have eight
+## spawns and hill spots, and weigh 4 for King of the Hill and 0.3 elsewhere.
+## Summit and Mesa hold the hill still; Relay and Roundabout move it.
+func _scenario_koth_stages_load_and_are_in_rotation() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var rotation_paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		rotation_paths.append(scene.resource_path)
+	main_scene.free()
+	for path: String in KOTH_STAGES_377:
+		if not rotation_paths.has(path):
+			failures.append("%s is not in Main's stage rotation" % path)
+		if not STAGE_PATHS.has(path):
+			failures.append("%s is not in STAGE_PATHS" % path)
+		var scene: PackedScene = load(path)
+		var instance: Node2D = scene.instantiate()
+		if instance.get_spawn_points().size() != 8:
+			failures.append("%s declares %d spawns, wants 8" % [path, instance.get_spawn_points().size()])
+		if instance.get_hill_spots().is_empty():
+			failures.append("%s declares no hill spots" % path)
+		var moving: bool = path.ends_with("Relay.tscn") or path.ends_with("Roundabout.tscn")
+		if instance.hill_moves != moving:
+			failures.append("%s hill_moves is %s, wants %s" % [path, instance.hill_moves, moving])
+		if moving and instance.get_hill_spots().size() < 3:
+			failures.append("%s moves the hill between fewer than 3 spots" % path)
+		if instance.get_node_or_null("KillZone") == null:
+			failures.append("%s has no KillZone" % path)
+		instance.free()
+		for mode_id: String in ["king_of_the_hill", "", "hot_potato", "sudden_death"]:
+			var want: float = 4.0 if mode_id == "king_of_the_hill" else 0.3
+			var got: float = StageType.mode_weight_of(scene, mode_id)
+			if not is_equal_approx(got, want):
+				failures.append("%s weighs %.1f for mode '%s', wants %.1f" % [path, got, mode_id, want])
+	_scenario_completed = true
+	return failures
+## Starts a King of the Hill round on the stage at `path` and returns its rig.
+func _koth_stage_rig(path: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 3:
+		var player: RigidBody2D = _spawn_player(stage, MODE_SPAWNS[i])
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load(path)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = GameModesType.KING_OF_THE_HILL
+	rm.match_seed = 7
+	stage.add_child(rm)
+	return {"stage": stage, "rm": rm, "players": players, "roster": roster}
+## On each hill stage the hill starts exactly on the stage's first hill spot.
+func _scenario_koth_hill_starts_on_first_hill_spot() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in KOTH_STAGES_377:
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"])
+			continue
+		await _await_ticks(5)
+		var rm: Node = rig["rm"]
+		var hill: Node = rm.game_mode_node()
+		var spots: Array[Vector2] = (load(path) as PackedScene).instantiate().get_hill_spots()
+		if spots.is_empty() or not hill.hill_position.is_equal_approx(spots[0]):
+			failures.append("%s: hill at %s, first spot is %s" % [path, hill.hill_position, spots])
+		await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## On Relay the hill sits still until the warning, warns for the last stretch
+## (the ring on the next spot), then hops to the second spot; a fixed stage
+## (Summit) never warns or moves however long the round runs.
+func _scenario_koth_moving_hill_warns_then_moves() -> Array[String]:
+	var failures: Array[String] = []
+	var relay_spots: Array[Vector2] = (load("res://scenes/stages/Relay.tscn") as PackedScene).instantiate().get_hill_spots()
+	var rig: Dictionary = _koth_stage_rig("res://scenes/stages/Relay.tscn")
+	if not await _mode_started(rig):
+		failures.append("the Relay round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	hill.seconds_to_win = 1000.0
+	hill.hill_move_interval = 2.0
+	hill.hill_warn_sec = 1.0
+	hill._since_move = 0.0
+	if hill.hill_warning:
+		failures.append("the hill warned before its time")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("Relay's hill did not start on spot 0: %s" % hill.hill_position)
+	await _await_ticks(70)
+	if not hill.hill_warning:
+		failures.append("no warning 1.17 s into a 2 s interval with a 1 s warning")
+	if not hill.hill_position.is_equal_approx(relay_spots[0]):
+		failures.append("the hill moved during its warning")
+	if not hill.next_hill_position().is_equal_approx(relay_spots[1]):
+		failures.append("the warning points at %s, wants %s" % [hill.next_hill_position(), relay_spots[1]])
+	await _await_ticks(60)
+	if not hill.hill_position.is_equal_approx(relay_spots[1]):
+		failures.append("the hill is at %s after the interval, wants spot 1 %s" % [hill.hill_position, relay_spots[1]])
+	if hill.hill_warning:
+		failures.append("the warning stayed on after the move")
+	await _teardown(rig["stage"])
+	var fixed: Dictionary = _koth_stage_rig("res://scenes/stages/Summit.tscn")
+	if not await _mode_started(fixed):
+		failures.append("the Summit round never started")
+		await _teardown(fixed["stage"])
+		return failures
+	await _await_ticks(5)
+	var still: Node = fixed["rm"].game_mode_node()
+	still.seconds_to_win = 1000.0
+	still.hill_move_interval = 1.0
+	still.hill_warn_sec = 0.5
+	var start: Vector2 = still.hill_position
+	await _await_ticks(120)
+	if still.hill_warning or not still.hill_position.is_equal_approx(start):
+		failures.append("Summit's fixed hill warned or moved")
+	await _teardown(fixed["stage"])
+	_scenario_completed = true
+	return failures
+## A stage with no hill spots (the stub stage) still puts the hill at the centre
+## of its spawn points.
+func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(5)
+	var hill: Node = rig["rm"].game_mode_node()
+	var sum := Vector2.ZERO
+	for i in 3:
+		sum += MODE_SPAWNS[i]
+	var want: Vector2 = sum / 3.0
+	if not hill.hill_position.is_equal_approx(want):
+		failures.append("hill at %s, wants the spawn centre %s" % [hill.hill_position, want])
+	if hill.hill_moves or not hill.hill_spots.is_empty():
+		failures.append("a stage with no spots reports spots or a moving hill")
+	await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures
