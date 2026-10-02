@@ -357,6 +357,12 @@ class RemoteSeat extends RefCounted:
 	var open: bool = true
 	var deadline_msec: int = 0
 	var _inbox: Array = [] # [is_text, PackedByteArray]
+	## Issue #446: the last measured round trip in ms (-1 until a pong
+	## arrives), the ping in flight and when it left.
+	var rtt_msec: int = -1
+	var ping_n: int = 0
+	var ping_sent_msec: int = 0
+	var ping_sent: Dictionary = {} # ping n -> msec it left
 	var _last_was_text: bool = false
 
 	func push(kind: int, payload: PackedByteArray) -> void:
@@ -589,6 +595,7 @@ func _process(delta: float) -> void:
 	_process_http()
 	_process_websocket()
 	_process_remote()
+	_ping_remote_seats()
 	_check_host_pc_seat()
 	_stream_snapshots(delta)
 	if host_slot() != _last_host:
@@ -1305,6 +1312,8 @@ func _handle_text(slot: int, text: String) -> void:
 					apply_host_command("stock_time", msg.get("time"))
 				if msg.get("stage") is String:
 					apply_host_command("stock_stage", msg.get("stage"))
+		"pong":
+			_on_pong(slot, msg)
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -2299,3 +2308,41 @@ func _on_sound_played(sound: StringName, position: Variant, strength: float) -> 
 func _music_track() -> String:
 	var music: Node = get_node_or_null("/root/Music")
 	return music.current_track() if music != null else ""
+
+# --- Ping over the remote-seat channel (issue #446) ---------------------------
+#
+# About once a second the host sends each bound remote seat {"t":"ping","n":N};
+# the client echoes {"t":"pong","n":N}. The round trip is shown beside the
+# player in the Online lobby and on the scoreboard. It never kicks anyone.
+
+## How often a remote seat is pinged, and the round trip above which it is
+## shown in a warning colour.
+var ping_interval_msec: int = 1000
+const PING_WARN_MSEC: int = 150
+
+func _ping_remote_seats() -> void:
+	var now: int = Time.get_ticks_msec()
+	for slot in _slot_peers.size():
+		var seat: Variant = _slot_peers[slot]
+		if not seat is RemoteSeat or not seat.open:
+			continue
+		if seat.ping_n != 0 and now - seat.ping_sent_msec < ping_interval_msec:
+			continue
+		seat.ping_n += 1
+		seat.ping_sent_msec = now
+		seat.ping_sent[seat.ping_n] = now
+		seat.ping_sent.erase(seat.ping_n - 10)
+		seat.send_text(JSON.stringify({"t": "ping", "n": seat.ping_n}))
+
+func _on_pong(slot: int, msg: Dictionary) -> void:
+	var seat: Variant = _slot_peers[slot] if slot >= 0 and slot < _slot_peers.size() else null
+	if not seat is RemoteSeat or not _is_number(msg.get("n")) or not seat.ping_sent.has(int(msg["n"])):
+		return
+	seat.rtt_msec = maxi(0, Time.get_ticks_msec() - int(seat.ping_sent[int(msg["n"])]))
+
+## The last round trip to the remote seat in `slot`, in ms; -1 for a phone,
+## the host PC, a bot, or a seat that has not answered a ping yet.
+func slot_ping_msec(slot: int) -> int:
+	if slot < 0 or slot >= _slot_peers.size() or not _slot_peers[slot] is RemoteSeat:
+		return -1
+	return _slot_peers[slot].rtt_msec

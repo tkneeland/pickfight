@@ -142,6 +142,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Online
 - Room-code relay server (#238, ADR-0019)
 - Host goes online; remote seats send relative input (#239)
+- Online edges (#446): when the host's room closes (it quits or goes offline) every remote client lands on the join screen reading "Host left.", with no host migration. A remote seat that joins mid-match watches until the next round starts, then plays, taking a freed slot at 0 points exactly as a late phone does (#161). The host pings each remote seat about once a second over the seat channel; the round trip shows beside the player in the lobby (host screen and PC client) and on the scoreboard, in a warning colour above 150 ms, and a slow ping never kicks anyone
 - Host streams world snapshots to remote seats (#251)
 - Host survives a relay blip without losing the room (#249)
 

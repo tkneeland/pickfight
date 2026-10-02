@@ -143,6 +143,7 @@ ONLINE_UNREACHABLE,relay unreachable
 OVERTIME,OVERTIME
 PAUSED,PAUSED
 PHONE_STOCK_RANDOM,Random
+PING_MS,%d ms
 REPLAY_NOTHING,Replay: nothing recorded yet
 REPLAY_SAVED,Replay saved: %s
 ROOM_CODE_HIDDEN,Code hidden: see host phone
