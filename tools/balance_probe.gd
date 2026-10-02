@@ -13,6 +13,9 @@ extends SceneTree
 ##   --mode=<id>        classic (default), king_of_the_hill, hot_potato, stock
 ##   --rounds=<n>       rounds to play (default 10)
 ##   --seed=<n>         match seed (stages, bots)
+##   --stage=<Name>     play only this stage (scenes/stages/<Name>.tscn), every round
+##   --lives=<n>        Stock lives per player (default: the saved setting)
+##   --diag             every 20 game seconds print `DIAG` lines: each bot's place, mode and goal
 ##   --bots=<n>         accepted and ignored apart from telemetry's guard
 ##
 ## Numbers come from the game's own `MatchStats` (RoundManager's `_stats`):
@@ -44,6 +47,10 @@ var _mode: String = ""
 var _mode_name: String = "classic"
 var _rounds: int = 10
 var _seed: int = 1
+var _stage_only: String = ""
+var _lives: int = 0
+var _diag: bool = false
+var _diag_at: float = 5.0
 var _main: Node
 var _rm: Node
 var _players: Array[RigidBody2D] = []
@@ -68,6 +75,12 @@ func _initialize() -> void:
 			_mode = "" if _mode_name == "classic" else _mode_name
 		elif arg.begins_with("--rounds="):
 			_rounds = arg.trim_prefix("--rounds=").to_int()
+		elif arg.begins_with("--stage="):
+			_stage_only = arg.trim_prefix("--stage=")
+		elif arg == "--diag":
+			_diag = true
+		elif arg.begins_with("--lives="):
+			_lives = arg.trim_prefix("--lives=").to_int()
 		elif arg.begins_with("--seed="):
 			_seed = arg.trim_prefix("--seed=").to_int()
 	if _weapons.size() < 2 or _weapons.size() > 8:
@@ -101,6 +114,11 @@ func _initialize() -> void:
 	_rm.stage_title_sec = 0.0
 	_rm.pickup_scene = null
 	_rm.game_mode = _mode
+	if _stage_only != "":
+		var only: Array[PackedScene] = [load("res://scenes/stages/%s.tscn" % _stage_only)]
+		_rm.stage_scenes = only
+	if _lives > 0:
+		HostSettingsScript.shared().set_stock_lives(_lives)
 	_rm.round_started.connect(_on_round_started)
 	_rm.round_won.connect(func(slot: int) -> void: _round_winner = slot)
 	for i in _weapons.size():
@@ -145,7 +163,24 @@ func _close_round() -> void:
 		"timeout": _timed_out,
 	})
 
+func _print_diag(sec: float) -> void:
+	var hill: Variant = _rm.game_mode_node().get("hill_position") if _rm.game_mode_node() != null else null
+	var parts: PackedStringArray = []
+	for i in _players.size():
+		var bot: Node = _main.get_node("Bot%d" % i)
+		var alive: bool = is_instance_valid(_players[i]) and _players[i].visible and _players[i].is_inside_tree()
+		parts.append("p%d %s mode=%s goal=%s foot=%d des=%.0f wait=%.0f v=%s in=%s head=%s" % [i, Vector2i(_players[i].global_position), bot.mode, Vector2i(bot.goal), bot._standing_on(), bot._desperate_left, bot._wait_total, Vector2i(_players[i].linear_velocity), bot.last_input.snapped(Vector2(0.01,0.01)), Vector2i(_players[i].weapon_head_position())])
+	for node: Node in _rm._current_stage.find_children("*", "", true, false):
+		if node.has_method("hp_left"):
+			parts.append("wall %s hp=%.0f hits=%d speed=%.0f" % [node.name, node.hp_left(), node.hit_count(), node.last_hit_speed()])
+	print("DIAG t=%d stage=%s hill=%s | %s" % [int(sec), _round_stage, hill, " | ".join(parts)])
+
 func _physics_process(_delta: float) -> bool:
+	if _diag and _round_open:
+		var sec: float = float(GameClockScript.now_msec() - _round_start_msec) / 1000.0
+		if sec >= _diag_at:
+			_diag_at += 20.0
+			_print_diag(sec)
 	if not _finishing:
 		if _round_open and float(GameClockScript.now_msec() - _round_start_msec) / 1000.0 > ROUND_CAP_SEC:
 			_timed_out = true

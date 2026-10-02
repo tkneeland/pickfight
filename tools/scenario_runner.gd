@@ -596,6 +596,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_grunts_one_distinct_quiet_voice_per_slot",
 	"voice_grunts_on_hit_and_ko",
 	"voice_grunts_respect_mute_and_settings_isolation",
+	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
 	"character_polish_hit_flash_respects_reduce_flash",
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
@@ -2192,6 +2193,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_grunts_on_hit_and_ko()
 		"voice_grunts_respect_mute_and_settings_isolation":
 			return await _scenario_voice_grunts_respect_mute_and_settings_isolation()
+		"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel":
+			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel()
 		"character_polish_hit_flash_respects_reduce_flash":
 			return await _scenario_character_polish_hit_flash_respects_reduce_flash()
 		"character_polish_takeoff_stretches_within_cap":
@@ -31213,11 +31216,14 @@ func _scenario_bot_four_bots_finish_a_king_of_the_hill_round() -> Array[String]:
 func _scenario_bot_four_bots_finish_a_stock_round() -> Array[String]:
 	var failures: Array[String] = []
 	_stock_settings(1, 480)
-	var took: float = await _bot_round_409(GameModesType.STOCK, 200.0, failures)
+	# Game seconds, well past the 127 s it takes and short of the 480 s time
+	# limit, so a finish is still the last bot standing; a CI run that was
+	# unlucky with timing once overran the old 200 s (#409).
+	var took: float = await _bot_round_409(GameModesType.STOCK, 280.0, failures)
 	_stock_settings(3, 480)
 	print("      Stock round with four bots took %.1f s" % took)
 	if took < 0.0 and failures.is_empty():
-		failures.append("four bots did not finish a Stock round in 200 s")
+		failures.append("four bots did not finish a Stock round in 280 s")
 	return failures
 # --- Voice grunts (issue #290) ---------------------------------------------------
 ## Grunt names for a slot. Eight voices, each with its own files.
@@ -31347,7 +31353,60 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	sfx.set_muted(was_muted)
 	_scenario_completed = true
 	return failures
-
+## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
+func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "ModeContainer"
+	stage.add_child(container)
+	var roster := StubRosterScript.new()
+	roster.name = "ModeRoster"
+	var paths: Array[NodePath] = []
+	var players: Array[RigidBody2D] = []
+	for i in 4:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(float(i) * 100.0, -600.0))
+		player.name = "ModeP%d" % i
+		players.append(player)
+		paths.append(NodePath("../ModeP%d" % i))
+		roster.slots.append(i)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "ModeRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [load("res://scenes/stages/%s.tscn" % stage_name)]
+	rm.arena_container_path = NodePath("../ModeContainer")
+	rm.controller_server_path = NodePath("../ModeRoster")
+	rm.round_end_pause_sec = 30.0
+	rm.min_players_to_start = 2
+	rm.game_mode = mode
+	rm.match_seed = 7
+	stage.add_child(rm)
+	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
+	if not await _mode_started(rig):
+		failures.append("the %s round never started on %s" % [mode, stage_name])
+		await _teardown(stage)
+		return -1.0
+	for i in 4:
+		var bot: Node = BotScript.new()
+		bot.rng.seed = BOT_SEED + i
+		bot.player = players[i]
+		bot.output = players[i].set_input_vector
+		stage.add_child(bot)
+	var began: int = _game_msec()
+	var ended: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_END, int(cap_sec * 1000.0))
+	var took: float = float(_game_msec() - began) / 1000.0 if ended else -1.0
+	await _teardown(stage)
+	return took
+## Carousel: every route between the shoulders and the hub tips or turns. A bot
+## that would only step on still ground waited on its shoulder for the whole
+## round; waiting at an edge it now steps onto the see-saws.
+func _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel() -> Array[String]:
+	var failures: Array[String] = []
+	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 120.0, failures)
+	print("      King of the Hill round with four bots on Carousel took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a King of the Hill round on Carousel in 120 s")
+	return failures
 ## Issue #360: a hit flashes the body white for about 0.1 s of game time, and
 ## the flash is off with "Reduce flashes" on. Visual only: the physics body is
 ## untouched.
@@ -31383,7 +31442,6 @@ func _scenario_character_polish_hit_flash_respects_reduce_flash() -> Array[Strin
 	sfx.reduce_flash = flash_was
 	await _teardown(stage)
 	return failures
-
 ## Issue #360: a sudden upward launch stretches the body tall and thin, within
 ## the 15% squash cap, and eases back; the physics body is untouched.
 func _scenario_character_polish_takeoff_stretches_within_cap() -> Array[String]:
@@ -31414,7 +31472,6 @@ func _scenario_character_polish_takeoff_stretches_within_cap() -> Array[String]:
 		failures.append("the stretch had not eased back after 0.33 s: %s" % player.squash_scale())
 	await _teardown(stage)
 	return failures
-
 ## Issue #360: every weapon head is drawn with a dark ink outline (a closed
 ## ring of at least three points, dark enough to read on any identity colour)
 ## that follows the stage ink.

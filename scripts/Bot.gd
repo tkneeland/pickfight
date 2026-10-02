@@ -46,6 +46,7 @@ const RotatingPlatformScript: GDScript = preload("res://scripts/RotatingPlatform
 const BouncePadScript: GDScript = preload("res://scripts/BouncePad.gd")
 const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
 const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
+const BreakableWallScript: GDScript = preload("res://scripts/BreakableWall.gd")
 const SpikesScript: GDScript = preload("res://scripts/Spikes.gd")
 const SawScript: GDScript = preload("res://scripts/Saw.gd")
 const GameModesScript: GDScript = preload("res://scripts/GameModes.gd")
@@ -128,6 +129,9 @@ const FOOT_NONE: int = 0
 const FOOT_UNSTABLE: int = 1
 const FOOT_SOLID: int = 2
 const FOOT_PAD: int = 3
+## Ground that moves under a rider (a ferry, a see-saw, a turning sail): only
+## stepped onto from solid ground once desperate (#409), and not fled once on.
+const FOOT_RIDE: int = 4
 ## Ground this far below the body's edge counts as under its feet.
 const FOOT_SLACK: float = 20.0
 ## The step between the points checked for ground along the way ahead.
@@ -140,6 +144,44 @@ const GAP_STEP_MAX: float = 60.0
 ## the far side, the bot tries a gap up to this wide.
 const EDGE_PATIENCE_SEC: float = 3.0
 const GAP_STEP_DESPERATE: float = 150.0
+## Issue #409 (part 2): once desperate a bot also steps onto ground that moves
+## (see-saws, sails, a crane), for this long after the last time it waited at an
+## edge, enough to ride across and back. Spikes and saws it walks through only
+## once it leaps, for as long again.
+const DESPERATE_HOLD_SEC: float = 20.0
+## Waiting at the same place this long in all, whatever else it tried, the bot
+## stops waiting for a way across and goes over the edge for LEAP_HOLD_SEC: a
+## round that needs it to move (King of the Hill, Stock) is better for the
+## fall than for the stand-off. Left alone, a few stages' bots wait forever.
+const LEAP_SEC: float = 12.0
+const LEAP_HOLD_SEC: float = 4.0
+## Issue #409: two bots at different heights, each in reach of the other's
+## spot but not of the other (one on a ledge over the other), swing at nothing
+## for the whole round. Attacking this long without moving, the bot drops that
+## target as something to swing at for SHUN_SEC and goes to it instead.
+const ATTACK_STALL_SEC: float = 8.0
+const ATTACK_STALL_DISTANCE: float = 60.0
+const SHUN_SEC: float = 12.0
+## Holding off a rival who stands with a drop past it gives up after this long,
+## and closes on it anyway for HOLDOFF_SKIP_SEC.
+const HOLDOFF_MAX_SEC: float = 6.0
+const HOLDOFF_SKIP_SEC: float = 10.0
+## A standing breakable wall between the bot and its goal is chopped down once
+## the bot has made no headway against it for this long.
+const WALL_BLOCKED_SEC: float = 1.0
+## Chopped from this fraction of the weapon's reach from the wall's face: close
+## against it a swing has no room to build speed.
+const WALL_STAND_OFF: float = 0.6
+## The chop at a wall: wound up behind and above the line to it, short, then
+## swept through to just past its face. Measured on Reactor's shield walls.
+const WALL_SWEEP_SEC: float = 0.2
+const WALL_WIND_UP_SEC: float = 0.3
+const WALL_SWEEP_BACK: float = 1.6
+const WALL_SWEEP_FRONT: float = 0.0
+const WALL_SWEEP_PAST: float = 40.0
+const WALL_SWEEP_WIND_UP: float = 1.0
+## How far the bot may drift and still be waiting "at the same place".
+const WAIT_PLACE: float = 100.0
 ## Issue #409: a pickup on a platform the bot cannot get onto drew two bots
 ## round and round beneath it for the whole round. After this long on the same
 ## pickup the bot drops it for PICKUP_IGNORE_SEC and goes back to fighting.
@@ -250,6 +292,15 @@ var _wiggle_left: float = 0.0
 var _held_at_edge: bool = false
 ## Seconds spent held at an edge this stretch (#409).
 var _edge_wait: float = 0.0
+## Seconds left of the desperate stretch (#409): see DESPERATE_HOLD_SEC.
+var _desperate_left: float = 0.0
+## Seconds held at an edge near `_wait_place`, kept through a crossing that
+## fell short, and seconds left of a leap over the edge (#409).
+var _wait_total: float = 0.0
+var _wait_place: Vector2 = Vector2.ZERO
+var _leap_left: float = 0.0
+## Seconds left in which spikes and saws are walked through: from a leap on (#409).
+var _soft_pass_left: float = 0.0
 ## The bot's own clock, the pickup it is chasing and since when, and the ones
 ## it gave up on (instance id -> clock when it may look again) (#409).
 var _clock: float = 0.0
@@ -270,6 +321,17 @@ var lava_lookups: int = 0
 ## The stage's hazard zones (KillZone areas other than the lava), as world
 ## rectangles grown by HAZARD_MARGIN; its falling rocks and bounce pads.
 var _hazard_rects: Array[Rect2] = []
+## Spikes' rectangles: they hurt rather than kill, so a desperate bot ignores them (#409).
+var _soft_rects: Array[Rect2] = []
+## Breakable walls on the stage, the one being chopped, and the attack stall (#409).
+var _walls: Array[Node2D] = []
+var _wall_target: Node2D = null
+var _attack_from: Vector2 = Vector2.ZERO
+var _attack_stall: float = 0.0
+var _shunned: Dictionary = {}
+## Since when the bot has held off a rival with a drop past it, and until when it may not (#409).
+var _holdoff_since: float = -1.0
+var _holdoff_skip_until: float = 0.0
 var _rocks: Array[Node2D] = []
 var _pads: Array[Node2D] = []
 ## Issue #313: saws (their zone moves, so it is rebuilt each tick from where
@@ -313,6 +375,9 @@ func think(delta: float) -> Vector2:
 		_lava = null
 		_lava_looked_up = false
 		_hazard_rects.clear()
+		_soft_rects.clear()
+		_walls.clear()
+		_wall_target = null
 		_rocks.clear()
 		_pads.clear()
 		_saws.clear()
@@ -320,9 +385,16 @@ func think(delta: float) -> Vector2:
 		_danger_frame = -1
 		_pad_route = false
 		_edge_wait = 0.0
+		_desperate_left = 0.0
+		_wait_total = 0.0
+		_leap_left = 0.0
+		_soft_pass_left = 0.0
 		_held_at_edge = false
 		return Vector2.ZERO
 	_clock += delta
+	_desperate_left = maxf(_desperate_left - delta, 0.0)
+	_leap_left = maxf(_leap_left - delta, 0.0)
+	_soft_pass_left = maxf(_soft_pass_left - delta, 0.0)
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
 		_aggression = _aggression_now()
@@ -429,6 +501,7 @@ func _keep_away_goal() -> Vector2:
 
 func _choose_goal() -> void:
 	_read_mode()
+	var was_chopping: Node2D = _target if mode == "attack" and _target != null and _target.get_script() == BreakableWallScript else null
 	var me: Vector2 = player.global_position
 	var enemy: Node2D = _nearest_enemy()
 	var enemy_distance: float = me.distance_to(enemy.global_position) if enemy != null else INF
@@ -469,12 +542,26 @@ func _choose_goal() -> void:
 	var drop_beyond: bool = enemy != null and enemy.global_position.x != me.x \
 			and _edge_room(signf(enemy.global_position.x - me.x), absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM) \
 			< absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM
-	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS * 3.0 and drop_beyond and not lava_close and room_behind:
+	var holding_off: bool = enemy != null and enemy_distance <= _reach() + BODY_RADIUS * 3.0 and drop_beyond and not lava_close and room_behind
+	if not holding_off:
+		_holdoff_since = -1.0
+	elif _clock < _holdoff_skip_until:
+		holding_off = false
+	elif _holdoff_since < 0.0:
+		_holdoff_since = _clock
+	elif _clock - _holdoff_since > HOLDOFF_MAX_SEC:
+		# A rival that never comes away from its edge (stuck on a pad, say):
+		# waiting on it for good ends no round (#409).
+		_holdoff_since = -1.0
+		_holdoff_skip_until = _clock + HOLDOFF_SKIP_SEC
+		holding_off = false
+	if holding_off:
 		mode = "move"
 		_target = enemy
 		goal = me
 		return
-	if enemy != null and enemy_distance <= _reach() + BODY_RADIUS * lerpf(1.0, ENGAGE_AGGRESSIVE, _aggression) and not lava_close and room_behind:
+	var shunned: bool = enemy != null and float(_shunned.get(enemy.get_instance_id(), -1.0)) > _clock
+	if enemy != null and not shunned and enemy_distance <= _reach() + BODY_RADIUS * lerpf(1.0, ENGAGE_AGGRESSIVE, _aggression) and not lava_close and room_behind:
 		if mode != "attack":
 			_phase = 0
 			_phase_left = SWING_SEC
@@ -508,13 +595,57 @@ func _choose_goal() -> void:
 		goal = enemy.global_position
 	else:
 		goal = me
-	if lava_close:
+	var wall: Node2D = null if lava_close else _blocking_wall()
+	if wall != null:
+		var wall_side: float = signf(wall.global_position.x - me.x)
+		var face: float = absf(wall.global_position.x - me.x) - (wall.get("size") as Vector2).x * 0.5
+		var stand_off: float = _reach() * WALL_STAND_OFF
+		if face < stand_off * 0.7 and _edge_room(-wall_side, stand_off - face + EDGE_KEEP) >= stand_off - face + EDGE_KEEP:
+			mode = "back"
+			_target = wall
+			goal = Vector2(me.x - wall_side * (stand_off - face), me.y)
+			return
+		if face > stand_off * 1.25:
+			mode = "move"
+			_target = null
+			goal = Vector2(wall.global_position.x - wall_side * ((wall.get("size") as Vector2).x * 0.5 + stand_off), me.y)
+			return
+		if was_chopping != wall:
+			_phase = 0
+			_phase_left = SWING_SEC
+		mode = "attack"
+		_target = wall
+		goal = wall.global_position
+	elif lava_close:
 		goal = Vector2(goal.x, minf(goal.y, me.y - 300.0))
 	elif goal.y < me.y - PAD_CLIMB:
 		var pad: Vector2 = _pad_towards(goal)
 		if pad != Vector2.INF:
 			_pad_route = true
 			goal = pad
+
+## The standing breakable wall in the way of `goal` that the bot is up against
+## and cannot get past, or null (#409): same height, between the bot and the
+## goal, within a weapon's reach, and the bot has stopped making headway (or is
+## already chopping it).
+func _blocking_wall() -> Node2D:
+	var me: Vector2 = player.global_position
+	var stalled: bool = _progress_left < STUCK_SEC - WALL_BLOCKED_SEC or _edge_wait >= WALL_BLOCKED_SEC
+	for wall: Node2D in _walls:
+		if not is_instance_valid(wall) or not wall.is_inside_tree() or not _alive(wall):
+			continue
+		if float(_shunned.get(wall.get_instance_id(), -1.0)) > _clock:
+			continue
+		var size: Vector2 = wall.get("size")
+		var to_wall: float = wall.global_position.x - me.x
+		if to_wall == 0.0 or signf(goal.x - wall.global_position.x) != signf(to_wall):
+			continue
+		if absf(to_wall) - size.x * 0.5 > _reach() or absf(wall.global_position.y - me.y) > size.y * 0.5 + BODY_RADIUS:
+			continue
+		if stalled or wall == _wall_target:
+			_wall_target = wall
+			return wall
+	return null
 
 ## Issue #302: 0 with FIELD_FULL or more rivals alive, 1 with one left, and
 ## in between as they dwindle: the fewer rivals, the less the bot hesitates,
@@ -600,6 +731,8 @@ func _alive(node: Variant) -> bool:
 	if node == null or not is_instance_valid(node):
 		return false
 	var n: Node = node as Node
+	if n.get_script() == BreakableWallScript:
+		return n.is_inside_tree() and bool(n.call("is_solid"))
 	return n.is_inside_tree() and bool(n.get("alive"))
 
 func _holds_pickaxe() -> bool:
@@ -632,6 +765,17 @@ func _length_for(reach: float) -> float:
 ## wind-up side is whichever side of the line to the target is up.
 func _swing(delta: float) -> Vector2:
 	var to_target: Vector2 = _target.global_position - player.global_position
+	# A wall has no body to chop through: an overhead sweep from behind and above
+	# to the wall's face brings the head into it fast and across it (#409).
+	if _target.get_script() == BreakableWallScript:
+		var wall_up: float = -1.0 if to_target.x >= 0.0 else 1.0
+		_phase_left -= delta
+		if _phase_left <= 0.0:
+			_phase = 1 - _phase
+			_phase_left = WALL_SWEEP_SEC if _phase == 1 else WALL_WIND_UP_SEC
+		var sweep: float = WALL_SWEEP_BACK if _phase == 0 else WALL_SWEEP_FRONT
+		var face_reach: float = absf(to_target.x) - (_target.get("size") as Vector2).x * 0.5 + WALL_SWEEP_PAST
+		return Vector2.RIGHT.rotated(to_target.angle() + wall_up * sweep) * (_length_for(face_reach) if _phase == 1 else WALL_SWEEP_WIND_UP)
 	var base: float = to_target.angle()
 	# Screen y points down, so "up" is towards negative angles on the right
 	# and towards positive ones on the left.
@@ -835,6 +979,8 @@ func _travel_side() -> float:
 func _safe_side(side: float) -> float:
 	if side == 0.0:
 		return 0.0
+	if _leap_left > 0.0:
+		return side
 	var ahead: float = EDGE_LOOKAHEAD + _momentum(side)
 	return side if _edge_room(side, ahead) >= ahead else 0.0
 
@@ -881,7 +1027,12 @@ func _edge_room(side: float, limit: float, past_danger: bool = false) -> float:
 ## The widest gap the bot steps over now: wider once it has waited at an edge
 ## for the way across (#409).
 func _gap_limit() -> float:
-	return GAP_STEP_DESPERATE if _edge_wait >= EDGE_PATIENCE_SEC else GAP_STEP_MAX
+	return GAP_STEP_DESPERATE if _desperate() else GAP_STEP_MAX
+
+## Whether the bot has waited at an edge long enough to try what it would not
+## at first: ground that moves, spikes and saws, wider gaps (#409).
+func _desperate() -> bool:
+	return _edge_wait >= EDGE_PATIENCE_SEC or _desperate_left > 0.0
 
 ## Whether the bot could walk to `x` on ground it trusts, at its own
 ## height, stepping over narrow gaps only (issue #176). Checked coarsely:
@@ -914,6 +1065,8 @@ func _can_step(kind: int, from: int) -> bool:
 			return true
 		FOOT_UNSTABLE:
 			return from != FOOT_SOLID
+		FOOT_RIDE:
+			return from != FOOT_SOLID or _desperate()
 		FOOT_PAD:
 			return _pad_route
 	return false
@@ -954,7 +1107,7 @@ func _ground_kind(collider: Object) -> int:
 	if script == CollapsingFloorScript:
 		return FOOT_UNSTABLE if collider.call("state_name") == "solid" else FOOT_NONE
 	if script == RotatingPlatformScript:
-		return FOOT_UNSTABLE if int(collider.get("mode")) == RotatingPlatformScript.Mode.SEESAW else FOOT_NONE
+		return FOOT_RIDE
 	if script == BouncePadScript:
 		return FOOT_PAD
 	# A platform moving sideways (a ferry's barge) is gone from under a
@@ -963,7 +1116,7 @@ func _ground_kind(collider: Object) -> int:
 	if script == MovingPlatformScript:
 		var travel: Vector2 = collider.get("travel")
 		if absf(travel.x) > SIDEWAYS_TRAVEL or absf(travel.y) > LIFT_TRAVEL:
-			return FOOT_UNSTABLE
+			return FOOT_RIDE
 	return FOOT_SOLID
 
 ## The side of the nearest clear column above the bot, preferring `side` on
@@ -1026,7 +1179,9 @@ func _danger_rects() -> Array[Rect2]:
 	_lava_top()
 	_danger.clear()
 	_danger.append_array(_hazard_rects)
-	for saw: Node2D in _saws:
+	if _soft_pass_left <= 0.0:
+		_danger.append_array(_soft_rects)
+	for saw: Node2D in ([] as Array[Node2D]) if _soft_pass_left > 0.0 else _saws:
 		if is_instance_valid(saw) and saw.is_inside_tree():
 			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
 			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
@@ -1073,6 +1228,9 @@ func _escape_goal() -> Vector2:
 	var kind: int = _standing_on()
 	if kind == FOOT_SOLID:
 		return Vector2.INF
+	# Ground made to be ridden is not fled once the bot is on it (#409).
+	if kind == FOOT_RIDE:
+		return Vector2.INF
 	# Over nothing (or ground giving way), or on ground that will not last:
 	# to the nearest solid ground either way, if there is any near enough.
 	var best: float = INF
@@ -1086,7 +1244,19 @@ func _escape_goal() -> Vector2:
 			d += SCAN_STEP
 	if best == INF:
 		return Vector2.INF
-	return Vector2(me.x + best + signf(best) * EDGE_KEEP, me.y)
+	# Up on to a ledge when the solid ground is higher than the bot: a bot
+	# fleeing level with its own height, wedged below a lip, never climbs (#409).
+	var goal_x: float = me.x + best + signf(best) * EDGE_KEEP
+	var top: float = _floor_top(goal_x, me.y)
+	return Vector2(goal_x, minf(me.y, top - BODY_RADIUS * 2.0) if not is_nan(top) else me.y)
+
+## The y of the first ground below `above_y - SOLID_SEARCH * 0.5` at x, or NAN.
+func _floor_top(x: float, above_y: float) -> float:
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var from := Vector2(x, above_y - SOLID_SEARCH * 0.5)
+	var query := PhysicsRayQueryParameters2D.create(from, from + Vector2(0.0, SOLID_SEARCH), LAYER_WORLD, _player_rids())
+	var hit: Dictionary = space.intersect_ray(query)
+	return NAN if hit.is_empty() else (hit["position"] as Vector2).y
 
 ## The nearest bounce pad on the bot's own floor that it can walk to, when
 ## the target is high above (issue #176): the pad is the way up. The bot
@@ -1119,6 +1289,19 @@ func _pad_towards(high: Vector2) -> Vector2:
 
 ## No real progress towards the goal for STUCK_SEC and the bot wiggles.
 func _track_progress(delta: float) -> void:
+	if mode == "attack" and _target != null:
+		if player.global_position.distance_to(_attack_from) > ATTACK_STALL_DISTANCE:
+			_attack_from = player.global_position
+			_attack_stall = 0.0
+		else:
+			_attack_stall += delta
+		if _attack_stall >= ATTACK_STALL_SEC and _target.get_script() != BreakableWallScript:
+			_attack_stall = 0.0
+			_shunned[_target.get_instance_id()] = _clock + SHUN_SEC
+			_think_left = 0.0
+	else:
+		_attack_stall = 0.0
+		_attack_from = player.global_position
 	if _wiggle_left > 0.0:
 		_wiggle_left -= delta
 		return
@@ -1126,6 +1309,16 @@ func _track_progress(delta: float) -> void:
 	# how a bot used to hop off it (issue #176).
 	if mode == "move" and _held_at_edge:
 		_edge_wait += delta
+		if _edge_wait >= EDGE_PATIENCE_SEC:
+			_desperate_left = DESPERATE_HOLD_SEC
+		if player.global_position.distance_to(_wait_place) > WAIT_PLACE:
+			_wait_place = player.global_position
+			_wait_total = 0.0
+		_wait_total += delta
+		if _wait_total >= LEAP_SEC:
+			_wait_total = 0.0
+			_leap_left = LEAP_HOLD_SEC
+			_soft_pass_left = DESPERATE_HOLD_SEC
 	else:
 		_edge_wait = 0.0
 	if (mode != "move" and mode != "flee") or _held_at_edge:
@@ -1162,6 +1355,8 @@ func _lava_top() -> float:
 ## stage to read.
 func _read_stage() -> void:
 	_hazard_rects.clear()
+	_soft_rects.clear()
+	_walls.clear()
 	_rocks.clear()
 	_pads.clear()
 	_saws.clear()
@@ -1179,10 +1374,12 @@ func _read_stage() -> void:
 			_rocks.append(node as Node2D)
 		elif script == BouncePadScript:
 			_pads.append(node as Node2D)
+		elif script == BreakableWallScript:
+			_walls.append(node as Node2D)
 		elif avoid_damage_hazards and script == SpikesScript:
 			var spikes := node as Node2D
 			var size: Vector2 = (spikes.get("size") as Vector2) * spikes.global_scale.abs()
-			_hazard_rects.append(Rect2(spikes.global_position - size * 0.5, size).grow(HAZARD_MARGIN + BODY_RADIUS))
+			_soft_rects.append(Rect2(spikes.global_position - size * 0.5, size).grow(HAZARD_MARGIN + BODY_RADIUS))
 		elif avoid_damage_hazards and script == SawScript:
 			_saws.append(node as Node2D)
 		elif node is Node2D and node.has_method("is_warning") and node.has_method("gust_direction"):
