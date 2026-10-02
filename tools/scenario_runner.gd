@@ -564,6 +564,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_hill_starts_on_first_hill_spot",
 	"koth_moving_hill_warns_then_moves",
 	"koth_stage_without_spots_uses_spawn_centre",
+	"announcer_calls_each_mode_at_round_start",
+	"announcer_calls_hill_taken_when_the_hill_changes_hands",
+	"announcer_calls_last_life_stolen_and_overtime_in_stock",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2084,6 +2087,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_moving_hill_warns_then_moves()
 		"koth_stage_without_spots_uses_spawn_centre":
 			return await _scenario_koth_stage_without_spots_uses_spawn_centre()
+		"announcer_calls_each_mode_at_round_start":
+			return await _scenario_announcer_calls_each_mode_at_round_start()
+		"announcer_calls_hill_taken_when_the_hill_changes_hands":
+			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
+		"announcer_calls_last_life_stolen_and_overtime_in_stock":
+			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -30000,4 +30009,129 @@ func _scenario_koth_stage_without_spots_uses_spawn_centre() -> Array[String]:
 		failures.append("a stage with no spots reports spots or a moving hill")
 	await _teardown(rig["stage"])
 	_scenario_completed = true
+	return failures
+# --- Issue #370: announcer callouts for modes ----------------------------------
+## The announcer, quiet and recording, or null when the autoload is missing.
+func _callout_announcer() -> Node:
+	var sfx: Node = _sfx()
+	if sfx == null or sfx.announcer == null:
+		return null
+	sfx.announcer.clear()
+	return sfx.announcer
+## The lines each mode calls as its round starts.
+const MODE_START_CALLOUTS: Dictionary = {
+	"king_of_the_hill": "announce_king_of_the_hill",
+	"hot_potato": "announce_hot_potato",
+	"sudden_death": "announce_sudden_death",
+	"stock": "announce_stock",
+}
+## "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" each play
+## as their mode's round starts, and each has a sound entry in the Sfx table.
+func _scenario_announcer_calls_each_mode_at_round_start() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	for mode_id: String in MODE_START_CALLOUTS:
+		var want: String = MODE_START_CALLOUTS[mode_id]
+		if not announcer.sfx.has_sound(want):
+			failures.append("no Sfx entry '%s'" % want)
+		announcer.clear()
+		_stock_settings(3, 0)
+		var rig: Dictionary = _mode_rig(3, mode_id)
+		if not await _mode_started(rig):
+			failures.append("the %s round never started" % mode_id)
+		else:
+			await _await_condition(func() -> bool: return announcer.said.has(want), 4000)
+			if not announcer.said.has(want):
+				failures.append("%s: the announcer said %s, expected '%s'" % [mode_id, announcer.said, want])
+		await _stock_finish(rig)
+	return failures
+## "Hill taken!" when a different player takes the hill from the one who held
+## it, but not for the first to hold it.
+func _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	# Everyone off the hill, then a fresh round so nobody counts as its holder.
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(5)
+	var all_slots: Array[int] = [0, 1, 2]
+	hill.start_round(all_slots)
+	announcer.clear()
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	await _await_msec(1500)
+	if announcer.said.has("announce_hill_taken"):
+		failures.append("the first player to hold the hill was called 'Hill taken!'")
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[0].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_hill_taken"), 4000):
+		failures.append("a second player taking the hill was not called: %s" % [announcer.said])
+	await _teardown(rig["stage"])
+	return failures
+## Stock: "Last life!" when a player is down to one, "Stolen!" when a team-mate
+## gives one up, "Overtime!" when a tied clock runs out.
+func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var announcer: Node = _callout_announcer()
+	if announcer == null:
+		_scenario_completed = true
+		return ["the Sfx autoload has no announcer"]
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		await _stock_finish(rig)
+		return failures
+	announcer.clear()
+	await _stock_lose_life(players[0])
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_last_life"), 4000):
+		failures.append("down to one life was not called: %s" % [announcer.said])
+	players[0].eliminate()
+	await _await_ticks(4)
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	elif not await _await_condition(func() -> bool: return announcer.said.has("announce_stolen"), 4000):
+		failures.append("a stolen life was not called: %s" % [announcer.said])
+	await _stock_finish(rig)
+	rig = _stock_rig(3, 3, 120)
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the tie round never started")
+		await _stock_finish(rig)
+		return failures
+	await _stock_lose_life(players[1])
+	announcer.clear()
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return announcer.said.has("announce_overtime"), 6000):
+		failures.append("the overtime was not called: %s" % [announcer.said])
+	if announcer.said.has("announce_sudden_death"):
+		failures.append("the overtime was also called 'Sudden Death!': %s" % [announcer.said])
+	await _stock_finish(rig)
 	return failures
