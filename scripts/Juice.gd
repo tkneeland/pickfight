@@ -4,6 +4,11 @@ extends Node2D
 ## a short fading trail behind a weapon head swung fast, and sparks where two
 ## heads clash. No assets, like `DeathBurst.gd`.
 ##
+## It also gives hits weight (issue #256): a strike shakes the screen in
+## proportion to its damage, an elimination shakes it harder, and a heavy
+## strike freezes the whole game for a few physics ticks (hit-stop). The
+## shake obeys the "Screen shake" setting; hit-stop always runs.
+##
 ## Built the way `HitFeedback.gd` and `SfxHooks.gd` are: it watches the tree
 ## for the nodes that emit events and connects to their signals, so `Player`
 ## and `WeaponHead` never learn it exists. Nodes are recognised by the signals
@@ -80,10 +85,11 @@ const TRAIL_COLOR: Color = Color(1.0, 1.0, 1.0, 0.55)
 const TRAIL_MAX_JUMP: float = 160.0
 
 ## --- Screen shake ---
-## Damage threshold above which a strike causes screen shake. Real strike
-## damage runs 0..`Player.MAX_STRIKE_DAMAGE` (90): a full-speed pickaxe swing
-## (34) and every heavier weapon clear it, a staff tap (20 at most) does not
-## shake the room.
+## Damage at or above which a strike shakes the screen, growing from no
+## movement here to full strength at `SHAKE_DAMAGE_MAX`. Real strike damage
+## runs 0..`Player.MAX_STRIKE_DAMAGE` (90): a full-speed pickaxe swing (34)
+## and every heavier weapon clear it. A staff tap (20 at most) reaches it at
+## zero strength, so it does not visibly shake the room.
 const SHAKE_DAMAGE_MIN: float = 20.0
 ## Damage at which the shake is at full strength: the most a strike can deal
 ## (`Player.MAX_STRIKE_DAMAGE`), so the top of the scale is reachable.
@@ -98,8 +104,9 @@ const SHAKE_INTENSITY_ELIMINATION: float = 5.0
 const SHAKE_DURATION_ELIMINATION: float = 0.25
 
 ## --- Hit-stop ---
-## Damage threshold for hit-stop: reached by the axe, spear, dagger and
-## sword at full speed (90, 75, 70, 55), never by the pickaxe (34).
+## Damage at or above which a strike causes hit-stop: reached by the axe,
+## spear, dagger and sword at full speed (90, 75, 70, 55), never by the
+## pickaxe (34).
 const HITSTOP_DAMAGE_MIN: float = 40.0
 ## Physics ticks the whole game freezes for on a heavy hit. Counted in ticks,
 ## never wall-clock, so a run under `--fixed-fps 60` freezes exactly this many
@@ -511,6 +518,8 @@ func _apply_hitstop(frames: int) -> void:
 		_froze = true
 	_hitstop_frames = maxi(_hitstop_frames, frames)
 
+## Lifts a hit-stop freeze this node holds, unless the host paused meanwhile.
+## Safe to call with no freeze in effect.
 func _end_hitstop() -> void:
 	_hitstop_frames = 0
 	if _froze:

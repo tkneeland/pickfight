@@ -18654,6 +18654,13 @@ func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
 	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
 		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
+	# "Lightly" is a real hit, but a lighter one than the grapple's: a rod whose
+	# hook does no damage at all must not pass the check above by matching 0.
+	var grapple_damage: float = (load(GRAPPLE_PATH) as WeaponStatsType).projectile_damage
+	if victim.damage <= 0.0 or stats.projectile_damage <= 0.0:
+		failures.append("the hook did no damage to the player it met (%.1f)" % victim.damage)
+	elif stats.projectile_damage >= grapple_damage:
+		failures.append("the fishing rod's hook does %.1f, not less than the grapple's %.1f" % [stats.projectile_damage, grapple_damage])
 	if victim.linear_velocity.x >= -50.0:
 		failures.append("the hook did not tug its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
 	if strikes.is_empty() or strikes[0]["victim"] != victim:
@@ -22789,6 +22796,9 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 	var announcer = decoded.get("announcer_text")
 	if announcer != "Final round!":
 		failures.append("announcer_text: got %s, wanted 'Final round!'" % announcer)
+	# Every field, not only the sample above: kill-feed text, colours, rotations,
+	# velocities, weapon types and the round phase all ride the same frame.
+	failures.append_array(_snap_mismatches_240(decoded, world, "snapshot"))
 	_scenario_completed = true
 	return failures
 func _scenario_snapshot_quantization_tolerance() -> Array[String]:
@@ -22849,47 +22859,60 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 func _scenario_snapshot_delta_encode() -> Array[String]:
 	var failures: Array[String] = []
 	var SnapshotScript = preload("res://scripts/Snapshot.gd")
+	# A player delta carries its pose in "body" and "weapon" sub-dictionaries, as
+	# SnapshotCapture.delta builds it; decode flattens them into the entity.
 	var world = {
 		"is_full_snapshot": false,
 		"delta_entities": [
 			{
 				"type": SnapshotScript.TYPE_PLAYER,
 				"id": 1,
-				"position": Vector2(100, 100),
-				"rotation": 0.5,
-				"linear_velocity": Vector2(10, 0),
-				"head_position": Vector2(120, 80),
-				"head_rotation": 0.3,
-				"head_shape_index": 0,
+				"body": {"position": Vector2(100, 100), "rotation": 0.5, "linear_velocity": Vector2(10, -4)},
+				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2},
 				"damage": 30,
-				"state": 0,
+				"state": 1,
 			},
 			{
 				"type": SnapshotScript.TYPE_PROJECTILE,
 				"id": 1,
 				"position": Vector2(200, 200),
-				"velocity": Vector2(100, 0),
+				"velocity": Vector2(100, -20),
 			},
 			{
 				"type": SnapshotScript.TYPE_TIMER,
 				"id": 0,
 				"timer_ms": 30000,
 			},
+			{"type": SnapshotScript.TYPE_PICKUP, "id": 4, "position": Vector2(-30, 60)},
+			{"type": SnapshotScript.TYPE_FLAIL, "id": 2, "pos1": Vector2(11, 12), "pos2": Vector2(-13, 14)},
+			{"type": SnapshotScript.TYPE_GRAPPLE, "id": 3, "pos1": Vector2(21, 22), "pos2": Vector2(23, -24)},
+			{"type": SnapshotScript.TYPE_MODIFIER, "id": 5, "name": "low_gravity"},
+			{"type": SnapshotScript.TYPE_SCORES, "id": 2, "score": 7},
+			{"type": SnapshotScript.TYPE_KILL_FEED, "id": 0, "text": "Alice eliminated Bob"},
+			{"type": SnapshotScript.TYPE_KILL_ZONE, "id": 0, "height": 480},
 		],
 	}
 	var encoded = SnapshotScript.encode(world)
 	var decoded = SnapshotScript.decode(encoded)
-	if not decoded.get("is_full_snapshot", false):
-		var deltas = decoded.get("delta_entities", [])
-		if deltas.size() != 3:
-			failures.append("delta entities count: got %d, wanted 3" % deltas.size())
-		else:
-			if deltas[0].get("id") != 1:
-				failures.append("first delta id: got %d, wanted 1" % deltas[0].get("id"))
-			if deltas[1].get("type") != SnapshotScript.TYPE_PROJECTILE:
-				failures.append("second delta type: got %d, wanted TYPE_PROJECTILE" % deltas[1].get("type"))
-			if deltas[2].get("timer_ms") != 30000:
-				failures.append("timer_ms: got %d, wanted 30000" % deltas[2].get("timer_ms"))
+	if decoded.is_empty():
+		failures.append("decode rejected the delta frame")
+	elif decoded.get("is_full_snapshot", true):
+		failures.append("the delta frame decoded as a full snapshot")
+	var want: Array = [
+		{"type": SnapshotScript.TYPE_PLAYER, "id": 1, "position": Vector2(100, 100), "rotation": 0.5,
+			"linear_velocity": Vector2(10, -4), "head_position": Vector2(120, 80), "head_rotation": 0.3,
+			"head_shape_index": 2, "damage": 30, "state": 1},
+		{"type": SnapshotScript.TYPE_PROJECTILE, "id": 1, "position": Vector2(200, 200), "velocity": Vector2(100, -20)},
+		{"type": SnapshotScript.TYPE_TIMER, "id": 0, "timer_ms": 30000},
+		{"type": SnapshotScript.TYPE_PICKUP, "id": 4, "position": Vector2(-30, 60)},
+		{"type": SnapshotScript.TYPE_FLAIL, "id": 2, "pos1": Vector2(11, 12), "pos2": Vector2(-13, 14)},
+		{"type": SnapshotScript.TYPE_GRAPPLE, "id": 3, "pos1": Vector2(21, 22), "pos2": Vector2(23, -24)},
+		{"type": SnapshotScript.TYPE_MODIFIER, "id": 5, "name": "low_gravity"},
+		{"type": SnapshotScript.TYPE_SCORES, "id": 2, "score": 7},
+		{"type": SnapshotScript.TYPE_KILL_FEED, "id": 0, "text": "Alice eliminated Bob"},
+		{"type": SnapshotScript.TYPE_KILL_ZONE, "id": 0, "height": 480},
+	]
+	failures.append_array(_snap_mismatches_240(decoded.get("delta_entities", []), want, "delta_entities"))
 	_scenario_completed = true
 	return failures
 # --- Remote seats over the relay (issue #239) ---------------------------------
@@ -25937,6 +25960,9 @@ func _scenario_mode_hot_potato_tags_fuses_and_reseeds() -> Array[String]:
 			players[it].strike_landed.emit(players[others[0]], 10.0, Vector2.ZERO, false)
 			if mode.it_slot != others[0] or mode.tag_count != 1:
 				failures.append("the tag did not pass to the victim: it=%d tags=%d" % [mode.it_slot, mode.tag_count])
+			# The new "it" gets a full fuse, not what was left of the old one's.
+			if absf(mode.fuse_left - mode.fuse_sec) > 0.001:
+				failures.append("the tag left the fuse at %.2f s, not a fresh %.2f s" % [mode.fuse_left, mode.fuse_sec])
 			# The tag-back cooldown: the old 'it' cannot be hit straight back.
 			players[others[0]].strike_landed.emit(players[it], 10.0, Vector2.ZERO, false)
 			if mode.it_slot != others[0]:
@@ -25979,6 +26005,15 @@ func _scenario_mode_handlers_gone_after_round_and_edge_cases() -> Array[String]:
 	for p in players:
 		if p.alive and _mode_handlers_on(p, mode) != 1:
 			failures.append("%s has %d handlers mid-round, want 1" % [p.name, _mode_handlers_on(p, mode)])
+	# The checks after the round below run once RoundManager has freed the mode,
+	# when a freed node has no handlers to count. End the round on the live node
+	# first so a handler end_round leaves behind is still visible.
+	mode.end_round()
+	for p in players:
+		if _mode_handlers_on(p, mode) != 0:
+			failures.append("%s still has %d Hot Potato handlers after end_round" % [p.name, _mode_handlers_on(p, mode)])
+	if mode.connected_count() != 0 or mode.it_slot != -1:
+		failures.append("Hot Potato kept state after end_round (connected %d, it %d)" % [mode.connected_count(), mode.it_slot])
 	for p in players:
 		p.eliminate()
 	await _await_ticks(5)
@@ -34663,6 +34698,42 @@ func _scenario_telemetry_off_sends_no_record_on_still_does() -> Array[String]:
 		failures.append("sharing off still sent")
 	_scenario_completed = true
 	return failures
+# --- Snapshot field-by-field comparison (#240 quality pass) -------------------
+## One line per field where `got` differs from `want`: numbers and Vector2s
+## within 0.001 (the wire's pixel rounding and 16-bit rotation are well inside
+## that for the whole values the scenarios send), dictionaries with exactly the
+## same keys, arrays of the same length.
+func _snap_mismatches_240(got: Variant, want: Variant, path: String) -> Array[String]:
+	var failures: Array[String] = []
+	var numeric: Array[int] = [TYPE_INT, TYPE_FLOAT]
+	if want is Dictionary:
+		if not got is Dictionary:
+			failures.append("%s: got %s, wanted a dictionary" % [path, got])
+			return failures
+		for key: Variant in want:
+			if not got.has(key):
+				failures.append("%s.%s is missing" % [path, key])
+			else:
+				failures.append_array(_snap_mismatches_240(got[key], want[key], "%s.%s" % [path, key]))
+		for key: Variant in got:
+			if not want.has(key):
+				failures.append("%s.%s was not sent" % [path, key])
+	elif want is Array:
+		if not got is Array or got.size() != want.size():
+			failures.append("%s: got %s, wanted %s" % [path, got, want])
+			return failures
+		for i in want.size():
+			failures.append_array(_snap_mismatches_240(got[i], want[i], "%s[%d]" % [path, i]))
+	elif want is Vector2:
+		if not got is Vector2 or (got as Vector2).distance_to(want) > 0.001:
+			failures.append("%s: got %s, wanted %s" % [path, got, want])
+	elif numeric.has(typeof(want)):
+		if not numeric.has(typeof(got)) or absf(float(got) - float(want)) > 0.001:
+			failures.append("%s: got %s, wanted %s" % [path, got, want])
+	elif typeof(got) != typeof(want) or got != want:
+		failures.append("%s: got %s, wanted %s" % [path, got, want])
+	return failures
+
 
 # --- Shield shape (issue #465) -----------------------------------------------
 const SHIELD_MIN_WIDTH_465: float = 48.0
