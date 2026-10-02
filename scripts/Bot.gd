@@ -256,6 +256,9 @@ const EDGE_SWING_SPEED: float = 120.0
 const EDGE_SWING_MIN: float = 0.4
 ## Ground the bot wants past a rival before it will close on one (issue #302).
 const EDGE_BEYOND_ROOM: float = 160.0
+## Closing on a rival faster than this, the bot wants its momentum's worth of
+## ground past the rival as well (#476).
+const OVERSHOOT_SPEED: float = 450.0
 ## A head this much short of the reach it was sent to, and slower than
 ## BLOCKED_SPEED, is pinned (issue #302).
 const BLOCKED_GAP: float = 25.0
@@ -585,9 +588,17 @@ func _choose_goal() -> void:
 	# Issue #302: nor does it close on a rival with a drop right past it: the
 	# swing's throw carries the bot over the rival and off the stage. It holds
 	# off until the rival comes away from the edge.
+	# Carried towards the rival at speed, the bot wants that much more ground
+	# past it: a rival 190 px from a drop still got the bot thrown over it (#476).
+	var carried: float = 0.0
+	var body := player as RigidBody2D
+	if enemy != null and body != null:
+		var closing: float = body.linear_velocity.x * signf(enemy.global_position.x - me.x)
+		if closing > OVERSHOOT_SPEED:
+			carried = closing * MOMENTUM_SEC
 	var drop_beyond: bool = enemy != null and enemy.global_position.x != me.x \
-			and _edge_room(signf(enemy.global_position.x - me.x), absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM) \
-			< absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM
+			and _edge_room(signf(enemy.global_position.x - me.x), absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM + carried) \
+			< absf(enemy.global_position.x - me.x) + EDGE_BEYOND_ROOM + carried
 	var holding_off: bool = enemy != null and enemy_distance <= _reach() + BODY_RADIUS * 3.0 and drop_beyond and not lava_close and room_behind
 	if not holding_off:
 		_holdoff_since = -1.0
