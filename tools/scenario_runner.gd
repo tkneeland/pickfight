@@ -625,6 +625,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"rotation_deals_ctf_and_soccer_only_their_own_stages",
 	"juice_hitstop_never_lifts_a_host_pause",
 	"mode_award_categories_are_translated",
+	"ctf_a_kicked_player_waiting_to_respawn_stays_out",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2270,6 +2271,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_hitstop_never_lifts_a_host_pause()
 		"mode_award_categories_are_translated":
 			return await _scenario_mode_award_categories_are_translated()
+		"ctf_a_kicked_player_waiting_to_respawn_stays_out":
+			return await _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32598,4 +32601,27 @@ func _scenario_mode_award_categories_are_translated() -> Array[String]:
 			if TranslationServer.translate(key) == key:
 				failures.append("%s: %s has no translation" % [mode_id, key])
 	_scenario_completed = true
+	return failures
+## Review sweep b: a Capture the Flag player the host kicks while they wait to
+## respawn stays out of the round, rather than coming back on a slot nobody holds.
+func _scenario_ctf_a_kicked_player_waiting_to_respawn_stays_out() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	var kicked: RigidBody2D = rig["players"][1]
+	kicked.eliminate()
+	await _await_ticks(2)
+	if not mode.is_pending(1):
+		failures.append("the KO'd player was not waiting to respawn")
+	(rig["roster"].slots as Array).erase(1)
+	rm.call("_on_host_command", "kick", 1)
+	await _await_ticks(int(mode.respawn_sec * 60.0) + 30)
+	if kicked.alive:
+		failures.append("the kicked player respawned into the round")
+	if mode.is_pending(1):
+		failures.append("the kicked player is still waiting to respawn")
+	await _teardown(rig["stage"])
 	return failures
