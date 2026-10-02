@@ -883,6 +883,13 @@ func set_pad_menu(on: bool) -> void:
 		if focused != null:
 			focused.release_focus()
 
+## Join swaps Main for the PC client under an open pad menu: let go of
+## PadMenu on the way out, or the seat code would ignore A and B from then on.
+func _exit_tree() -> void:
+	if _pad_menu_open:
+		_pad_menu_open = false
+		PadMenuScript.set_open("lobby", false)
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if _server == null or key == null or not key.pressed or key.echo or _lobby_panel == null or not _lobby_panel.visible:

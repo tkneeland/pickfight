@@ -834,7 +834,7 @@ func _build_join_panel() -> void:
 	box.add_child(_label(tr("JOIN_YOUR_NAME")))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
-	_name_edit.placeholder_text = "Player"
+	_name_edit.placeholder_text = tr("JOIN_NAME_PLACEHOLDER")
 	_name_edit.max_length = NAME_MAX_LENGTH
 	_name_edit.text = player_name
 	_name_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
@@ -904,7 +904,7 @@ func _build_lobby_panel() -> void:
 	_lobby_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(_lobby_panel)
 	var box: VBoxContainer = _centered_panel(_lobby_panel, 380)
-	_lobby_title = _label("Lobby", 28)
+	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28)
 	box.add_child(_lobby_title)
 	_lobby_list = VBoxContainer.new()
 	box.add_child(_lobby_list)
@@ -928,7 +928,7 @@ func _build_lobby_panel() -> void:
 	down.text = "-"
 	down.pressed.connect(func() -> void: _send_json({"t": "target", "n": int(lobby.get("target", 5)) - 1}))
 	_host_row.add_child(down)
-	_target_label = _label("First to 5")
+	_target_label = _label(tr("LOBBY_FIRST_TO") % 5)
 	_host_row.add_child(_target_label)
 	var up := Button.new()
 	up.name = "TargetUp"
@@ -946,7 +946,7 @@ func _build_menu_panel() -> void:
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_menu_panel.add_child(shade)
 	var box: VBoxContainer = _centered_panel(_menu_panel, 320)
-	box.add_child(_label("Paused", 28))
+	box.add_child(_label(tr("JOIN_PAUSED"), 28))
 	var resume_button := Button.new()
 	resume_button.name = "Resume"
 	resume_button.text = tr("JOIN_RESUME")
@@ -1020,26 +1020,28 @@ func _refresh_lobby() -> void:
 		return
 	var phase: String = str(lobby.get("phase", ""))
 	_lobby_panel.visible = phase == "lobby" or phase == "countdown" or phase == "victory"
-	_lobby_title.text = "Room %s" % room_code
 	if phase == "countdown":
-		_lobby_title.text += "  starting in %d" % int(lobby.get("count", 0))
+		_lobby_title.text = tr("JOIN_ROOM_STARTING") % [room_code, int(lobby.get("count", 0))]
 	elif phase == "victory":
-		_lobby_title.text += "  match over"
+		_lobby_title.text = tr("JOIN_ROOM_OVER") % room_code
+	else:
+		_lobby_title.text = tr("JOIN_ROOM_TITLE") % room_code
 	for child in _lobby_list.get_children():
 		_lobby_list.remove_child(child)
 		child.queue_free()
 	for entry: Variant in lobby.get("players", []):
 		if entry is Dictionary:
-			var line: String = "%s%s" % [str(entry.get("name", "")) if not str(entry.get("name", "")).is_empty() else "P%d" % (int(entry.get("slot", 0)) + 1),
-				"  ready" if entry.get("ready", false) else ""]
+			var line: String = str(entry.get("name", "")) if not str(entry.get("name", "")).is_empty() else "P%d" % (int(entry.get("slot", 0)) + 1)
+			if entry.get("ready", false):
+				line = tr("JOIN_PLAYER_READY") % line
 			if entry.has("ping"):
-				line += "  %d ms" % int(entry["ping"])
+				line += "  " + tr("PING_MS") % int(entry["ping"])
 			var color := Color.html(str(entry.get("color", "ffffff")))
 			_lobby_list.add_child(_label(line, 20, color))
 	var host: bool = _is_host()
 	_host_row.visible = host
-	_mode_button.text = "Teams" if lobby.get("mode") == "teams" else "Free-for-all"
-	_target_label.text = "First to %d" % int(lobby.get("target", 5))
+	_mode_button.text = tr("MODE_TEAMS") if lobby.get("mode") == "teams" else tr("MODE_FFA")
+	_target_label.text = tr("LOBBY_FIRST_TO") % int(lobby.get("target", 5))
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
