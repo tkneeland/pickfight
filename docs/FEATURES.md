@@ -144,6 +144,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Host goes online; remote seats send relative input (#239)
 - Host streams world snapshots to remote seats (#251)
 - Host survives a relay blip without losing the room (#249)
+- Remote client shows the full match (#436): scoreboard, round result line, mode HUD line (King of the Hill holds, flag and goal scores, potato fuse, stock lives and clock), announcer banner, countdown, match podium with a Leave button. The host streams a small `hud` text frame (`scripts/RemoteHud.gd`, only on change, at most ~7 Hz) beside the snapshots. A removed body, projectile or pickup, or a new round or stage, goes out as a full snapshot at once so no ghost outlives one snapshot (#429)
 
 ## Builds and distribution
 - Exported macOS .app and Windows .exe (#119, `tools/export.sh`)

@@ -628,6 +628,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sound_trailer_split_survives_hostile_bytes",
 	"remote_client_lobby_text_follows_the_locale",
 	"lobby_pad_menu_lets_go_when_the_lobby_leaves",
+	"remote_client_hud_scoreboard_and_round_result",
+	"remote_client_hud_king_of_the_hill_and_mode_lines",
+	"remote_client_hud_match_result_podium_and_leave",
+	"remote_client_removed_body_is_gone_after_one_snapshot",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2279,6 +2283,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_lobby_text_follows_the_locale()
 		"lobby_pad_menu_lets_go_when_the_lobby_leaves":
 			return await _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves()
+		"remote_client_hud_scoreboard_and_round_result":
+			return await _scenario_remote_client_hud_scoreboard_and_round_result()
+		"remote_client_hud_king_of_the_hill_and_mode_lines":
+			return await _scenario_remote_client_hud_king_of_the_hill_and_mode_lines()
+		"remote_client_hud_match_result_podium_and_leave":
+			return await _scenario_remote_client_hud_match_result_podium_and_leave()
+		"remote_client_removed_body_is_gone_after_one_snapshot":
+			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32853,4 +32865,164 @@ func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
 	if PadMenuScript368.is_open():
 		failures.append("PadMenu still reports a menu open after the lobby left the tree")
 	PadMenuScript368.reset()
+	return failures
+## Issue #436: ends the round in the host's favour of `winner` by eliminating
+## every other player, so a scenario never waits for bots to finish by themselves.
+func _hud_436_eliminate_all_but(rig: Dictionary, winner: int) -> void:
+	var rm: Node = rig["rm"]
+	for slot: int in rm.get("_in_round").duplicate():
+		if slot != winner:
+			(rig["server"].player_in_slot(slot) as Node).eliminate()
+func _hud_436_name(rm: Node, slot: int) -> String:
+	var shown: String = str(rm.call("_slot_name", slot))
+	return shown if not shown.is_empty() else "P%d" % (slot + 1)
+## A remote client gets the scoreboard and the round result the couch screen shows.
+func _scenario_remote_client_hud_scoreboard_and_round_result() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var winner: int = int(rm.get("_in_round")[0])
+	_hud_436_eliminate_all_but(rig, winner)
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 2 and client.hud.get("round_winner", -1) == winner, 8000):
+		failures.append("the client never got the round result (host state %d, hud winner %s)" % [int(rm.get("_state")), client.hud.get("round_winner")])
+		await _rc_close_241(rig)
+		return failures
+	var board: Array = client.hud.get("board", [])
+	if board.size() != 8:
+		failures.append("the scoreboard has %d rows, expected 8" % board.size())
+	elif int(board[0][0]) != winner or int(board[0][2]) != rm.score_of(winner) or rm.score_of(winner) < 1:
+		failures.append("scoreboard leader is %s, expected slot %d on %d" % [board[0], winner, rm.score_of(winner)])
+	var want: String = "%s takes the round" % _hud_436_name(rm, winner)
+	if client.round_result_text() != want or client._result_label.text != want:
+		failures.append("result line '%s' / label '%s', expected '%s'" % [client.round_result_text(), client._result_label.text, want])
+	if client._score_box.get_child_count() != 8:
+		failures.append("the score box shows %d rows, expected 8" % client._score_box.get_child_count())
+	await _rc_close_241(rig)
+	return failures
+## King of the Hill hold times reach the remote client's mode line; the other
+## modes' lines read their `hud` state (flags, goals, potato, lives).
+func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	if not rig["server"].set_game_mode("king_of_the_hill"):
+		failures.append("the host refused King of the Hill")
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var hill: Node = rm.game_mode_node()
+	if hill == null or rm.active_game_mode_id() != "king_of_the_hill":
+		failures.append("the host is not playing King of the Hill ('%s')" % rm.active_game_mode_id())
+		await _rc_close_241(rig)
+		return failures
+	var holder: int = int(rm.get("_in_round")[0])
+	hill.seconds_to_win = 10.0
+	hill.hold_time[holder] = 4.0
+	var want: String = "%s 4/10s" % _hud_436_name(rm, holder)
+	if not await _wait_for_239(func() -> bool: return client.mode_text().contains(want), 4000):
+		failures.append("the mode line is '%s', expected it to hold '%s'" % [client.mode_text(), want])
+	if client._mode_label.text != client.mode_text():
+		failures.append("the mode label shows '%s'" % client._mode_label.text)
+	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "capture_the_flag",
+		"m": {"score": [1, 2], "flag": [0, 1], "carrier": [-1, 0], "win": 3}}
+	if client.mode_text() != "Red 1 - Blue 2  Flags: red home / blue carried":
+		failures.append("CTF line reads '%s'" % client.mode_text())
+	client.hud = {"board": [], "mode": "soccer", "m": {"score": [2, 0], "win": 3}}
+	if client.mode_text() != "Red 2 - Blue 0 (first to 3)":
+		failures.append("Soccer line reads '%s'" % client.mode_text())
+	client.hud = {"board": [[1, "Bo", 0]], "mode": "hot_potato", "m": {"it": 1, "fuse": 7}}
+	if client.mode_text() != "Bo has the potato: 7s":
+		failures.append("Hot Potato line reads '%s'" % client.mode_text())
+	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": "1:30"}}
+	if client.mode_text() != "1:30  Ann x3  Bo x1":
+		failures.append("Stock line reads '%s'" % client.mode_text())
+	await _rc_close_241(rig)
+	return failures
+## The match result, the podium and the way back to the menu on the client.
+func _scenario_remote_client_hud_match_result_podium_and_leave() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(7, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var winner: int = int(rm.get("_in_round")[0])
+	var scores: PackedInt32Array = rm.get("_scores")
+	scores[winner] = int(rm.get("_match_target")) - 1
+	rm.set("_scores", scores)
+	_hud_436_eliminate_all_but(rig, winner)
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 5 and client.podium_text() != "", 8000):
+		failures.append("the client never got a podium (host state %d, hud state %s)" % [int(rm.get("_state")), client.hud.get("state")])
+		await _rc_close_241(rig)
+		return failures
+	var lines: PackedStringArray = client.podium_text().split("\n")
+	var name: String = _hud_436_name(rm, winner)
+	if lines[0] != "%s wins the match" % name:
+		failures.append("the podium opens with '%s', expected '%s wins the match'" % [lines[0], name])
+	if lines.size() != 9 or lines[1] != "1. %s  %d" % [name, rm.score_of(winner)]:
+		failures.append("podium rows: %d lines, first '%s'" % [lines.size(), lines[1] if lines.size() > 1 else ""])
+	if not client.lobby_visible() or not client._leave_button.is_visible_in_tree() or not client._podium_label.is_visible_in_tree():
+		failures.append("the victory panel does not show the podium and a Leave button")
+	client._leave_button.pressed.emit()
+	if client.state != RcState241.JOIN or not client.join_screen_visible():
+		failures.append("Leave did not return to the join screen (state %d)" % client.state)
+	await _rc_close_241(rig)
+	return failures
+## #429: a body that leaves the world is gone from the remote client on the very
+## next snapshot, not up to a second later with the next periodic full one.
+func _scenario_remote_client_removed_body_is_gone_after_one_snapshot() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(6, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		failures.append("the rig did not come up")
+		await _rc_close_241(rig)
+		return failures
+	if not await _wait_for_239(func() -> bool: return client.puppet_count(RcKind241.PICKUP) >= 1, 8000):
+		failures.append("the client never drew a pickup")
+		await _rc_close_241(rig)
+		return failures
+	# The watcher joins now and is polled at once: an unpolled socket is dropped.
+	var raw: WebSocketPeer = await _online_remote_239(rig, "ghost-watcher")
+	if raw == null or (await _online_wait_239(rig, raw, "slot")).is_empty():
+		failures.append("the watching seat never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	var frames: Array = []
+	await _snap_pump_251(rig, raw, frames, 500)
+	if frames.is_empty():
+		failures.append("the watching seat got no snapshots")
+	var removed_msec: int = _game_msec()
+	for node: Node in get_root().get_tree().get_nodes_in_group("pickups"):
+		node.remove_from_group("pickups")
+		node.queue_free()
+	await _snap_pump_251(rig, raw, frames, 1000, func() -> bool:
+		return not frames.is_empty() and frames.back()["snapshot"].get("pickups", [1]).is_empty())
+	if frames.is_empty() or not frames.back()["snapshot"].get("pickups", [1]).is_empty():
+		failures.append("no snapshot after the removal ever lacked the pickup (%d frames, last full=%s pickups=%s)" % [frames.size(), frames.back()["snapshot"].get("is_full_snapshot") if not frames.is_empty() else "-", frames.back()["snapshot"].get("pickups") if not frames.is_empty() else "-"])
+	elif not frames.back()["snapshot"].get("is_full_snapshot", false):
+		failures.append("the first snapshot without the pickup was a delta, so a client could not drop it")
+	elif frames.back()["msec"] - removed_msec > 150:
+		failures.append("the pickup lingered %d ms after its removal; one snapshot is 33 ms" % (frames.back()["msec"] - removed_msec))
+	if not await _wait_for_239(func() -> bool: return client.world().get("pickups", [1]).is_empty(), 1000):
+		failures.append("the client's world still holds the pickup")
+	client._render()
+	if client.puppet_count(RcKind241.PICKUP) != 0:
+		failures.append("a ghost pickup puppet is still drawn")
+	await _rc_close_241(rig)
 	return failures
