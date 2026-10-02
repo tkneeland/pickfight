@@ -285,7 +285,7 @@ func _build_hud() -> void:
 ## The countdown's text: "m:ss", "OVERTIME" in a tie-break, nothing with no limit.
 func clock_text() -> String:
 	if overtime:
-		return "OVERTIME"
+		return tr("OVERTIME")
 	if time_limit_sec <= 0.0:
 		return ""
 	var whole: int = ceili(time_left)

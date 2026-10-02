@@ -556,6 +556,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_random_pick_is_an_enabled_stage_held_all_match",
 	"stock_never_rolls_a_modifier",
 	"stock_stage_pick_persists_and_reaches_the_host_phone",
+	"pseudo_locale_changes_lobby_and_mode_text",
+	"every_tr_key_is_in_strings_csv",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2060,6 +2062,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_never_rolls_a_modifier()
 		"stock_stage_pick_persists_and_reaches_the_host_phone":
 			return await _scenario_stock_stage_pick_persists_and_reaches_the_host_phone()
+		"pseudo_locale_changes_lobby_and_mode_text":
+			return await _scenario_pseudo_locale_changes_lobby_and_mode_text()
+		"every_tr_key_is_in_strings_csv":
+			return await _scenario_every_tr_key_is_in_strings_csv()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -13431,10 +13437,10 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("Pause/Resume is not a single tap in the menu: %s" % pause_handler)
 	var end_at: int = page.find("menuEndBtn.addEventListener(\"click\"")
 	var end_handler: String = page.substr(end_at, page.find("});", end_at) - end_at) if end_at >= 0 else ""
-	if not end_handler.contains('askConfirm("Are you sure?') or not end_handler.contains('sendHost("end", { match: match'):
+	if not end_handler.contains('askConfirm(t("CONFIRM_END")') or not end_handler.contains('sendHost("end", { match: match'):
 		failures.append("End match does not ask 'Are you sure?' before sending: %s" % end_handler)
 	var kick_body: String = _js_function_body(page, "showKickList")
-	if not kick_body.contains('askConfirm("Are you sure?') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK"') or not kick_body.contains('sendHost("kick", { slot: target, claim: claim'):
 		failures.append("Kick player does not ask 'Are you sure?' before sending")
 	if not kick_body.contains("if (p.slot === slot) { continue; }"):
 		failures.append("the kick list offers the host itself")
@@ -19788,7 +19794,7 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 	var state: String = _js_function_body(page, "showState")
 	var slot_at: int = state.find("} else if (slot < 0) {")
 	var slot_arm: String = state.substr(slot_at, state.find("} else if (lobby", slot_at) - slot_at) if slot_at >= 0 else ""
-	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = "Waiting for a free slot"'):
+	if not slot_arm.contains("closeReason === NO_SLOT_REASON") or not slot_arm.contains('text = t("STATE_WAITING_SLOT")'):
 		failures.append("a refused phone is not told it is waiting for a free slot: %s" % slot_arm)
 	if not slot_arm.contains("} else if (closeReason) {"):
 		failures.append("any other close reason is not shown large: %s" % slot_arm)
@@ -19837,7 +19843,7 @@ func _scenario_controller_page_stale_bits_dropped() -> Array[String]:
 		failures.append("the kick frame is not {slot, claim}")
 	if kick_body.contains("claim: claim, name"):
 		failures.append("the kick frame still sends the unused name")
-	if not kick_body.contains('askConfirm("Are you sure? Kick " + name'):
+	if not kick_body.contains('askConfirm(t("CONFIRM_KICK", name)'):
 		failures.append("the kick confirm no longer names the player")
 	var wake: String = _js_function_body(page, "requestWakeLock")
 	if not wake.contains('lock.addEventListener("release"') or not wake.contains("if (wakeLock === lock) { wakeLock = null; }"):
@@ -22049,7 +22055,7 @@ func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
 		'addEventListener("click", function () { sendTeam(-1); });',
 		'sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });',
 		'menuModeBtn.disabled = inMatch();',
-		'" team wins"',
+		' team wins"',
 		"    showTeams(msg);\n  }\n",
 	]
 	for needle: String in needles:
@@ -29605,5 +29611,105 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
 		failures.append("the picker rows were %s" % [rows])
 	_stock_stage_reset()
+	_scenario_completed = true
+	return failures
+
+## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
+func _i18n_catalogue_367() -> Dictionary:
+	var out: Dictionary = {}
+	var file: FileAccess = FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	if file == null:
+		return out
+	file.get_csv_line()
+	while not file.eof_reached():
+		var row: PackedStringArray = file.get_csv_line()
+		if row.size() >= 2 and not row[0].is_empty():
+			out[row[0]] = row[1]
+	return out
+
+## Issue #367: a pseudo-locale ("xx", made here from the catalogue) must change
+## a lobby label and a mode name, and English must read as before.
+func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if TranslationServer.translate("LOBBY_PRESS_READY") != "Press Ready on your phone":
+		failures.append("English lobby text reads '%s'" % TranslationServer.translate("LOBBY_PRESS_READY"))
+	if GameModesType.display_name(GameModesType.KING_OF_THE_HILL) != "King of the Hill":
+		failures.append("English mode name reads '%s'" % GameModesType.display_name(GameModesType.KING_OF_THE_HILL))
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	var mode_name: String = GameModesType.display_name(GameModesType.KING_OF_THE_HILL)
+	if mode_name != "[xx] King of the Hill":
+		failures.append("the mode name did not change in the pseudo-locale: '%s'" % mode_name)
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var how_to_play: Control = rm.how_to_play_panel()
+	if how_to_play == null:
+		failures.append("no how-to-play panel in the lobby")
+	else:
+		var texts: PackedStringArray = PackedStringArray()
+		for label: Node in how_to_play.find_children("*", "Label", true, false):
+			texts.append((label as Label).text)
+		print("      lobby labels in xx: %s" % ", ".join(texts))
+		if not texts.has("[xx] HOW TO PLAY"):
+			failures.append("the lobby's how-to-play title did not change: %s" % ", ".join(texts))
+	await _teardown(main)
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	return failures
+
+## Issue #367: every key a source file asks for (`tr("KEY")`, the static
+## `TranslationServer.translate("KEY")`) is in the catalogue, and so is every
+## key built from an id (modes, modifiers, teams, stages, award categories).
+func _scenario_every_tr_key_is_in_strings_csv() -> Array[String]:
+	var failures: Array[String] = []
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	if catalogue.size() < 100:
+		failures.append("only %d catalogue keys" % catalogue.size())
+	var pattern := RegEx.new()
+	pattern.compile("(?:\\btr|TranslationServer\\.translate)\\(\"([A-Z][A-Z0-9_]*)\"(?!\\s*\\+)")
+	var used: int = 0
+	for file_name: String in DirAccess.get_files_at("res://scripts"):
+		if not file_name.ends_with(".gd"):
+			continue
+		var text: String = FileAccess.get_file_as_string("res://scripts/" + file_name)
+		for found: RegExMatch in pattern.search_all(text):
+			used += 1
+			if not catalogue.has(found.get_string(1)):
+				failures.append("%s uses missing key %s" % [file_name, found.get_string(1)])
+	print("      %d literal keys used, %d in the catalogue" % [used, catalogue.size()])
+	if used < 100:
+		failures.append("only %d tr() calls found, the scan is not reading the sources" % used)
+	var built: PackedStringArray = PackedStringArray()
+	for row: Dictionary in GameModesType.TABLE:
+		var id: String = (str(row["id"]) if row["id"] != "" else "classic").to_upper()
+		built.append("MODE_%s_NAME" % id)
+		built.append("MODE_%s_RULE" % id)
+	for id: String in RoundModifiersScript.IDS:
+		built.append("MODIFIER_" + RoundModifiersScript.title_of(id).to_upper().replace(" ", "_"))
+	for team_name: String in ["RED", "BLUE"]:
+		built.append("TEAM_" + team_name)
+	for category: String in ["COMBAT", "CLUMSY", "SURVIVOR", "AIRBORNE", "COLLECTOR"]:
+		built.append("AWARD_CATEGORY_" + category)
+	for i in LobbyScreenScript230.HOW_TO_PLAY_LINES.size():
+		built.append("HOW_TO_PLAY_LINE_%d" % (i + 1))
+		if catalogue.get("HOW_TO_PLAY_LINE_%d" % (i + 1), "") != LobbyScreenScript230.HOW_TO_PLAY_LINES[i]:
+			failures.append("how-to-play line %d differs from its catalogue entry" % (i + 1))
+	for list_name: String in ["STAGES", "WEAPONS"]:
+		built.append("SETTINGS_%s_LIST" % list_name)
+	for stage_file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if stage_file.ends_with(".tscn"):
+			built.append("STAGE_" + stage_file.get_basename().to_upper())
+	for key: String in built:
+		if not catalogue.has(key):
+			failures.append("built key %s is missing" % key)
 	_scenario_completed = true
 	return failures

@@ -19,7 +19,7 @@ const COLORS: Array[Color] = [Color(0.95, 0.27, 0.27, 1.0), Color(0.3, 0.55, 1.0
 
 ## "RED" or "BLUE", or "" for no team.
 static func team_name(team: int) -> String:
-	return NAMES[team] if team >= 0 and team < COUNT else ""
+	return TranslationServer.translate("TEAM_" + NAMES[team]) if team >= 0 and team < COUNT else ""
 
 ## The team's colour, or white for no team.
 static func team_color(team: int) -> Color:

@@ -24,15 +24,15 @@ var _done: bool = true
 static func message_for(status: int) -> String:
 	match status:
 		200:
-			return "Thanks! Feedback sent."
+			return TranslationServer.translate("FEEDBACK_SENT")
 		400:
-			return "Type something first."
+			return TranslationServer.translate("FEEDBACK_EMPTY")
 		429:
-			return "Too much feedback for now. Try again later."
+			return TranslationServer.translate("FEEDBACK_RATE_LIMITED")
 		503:
-			return "Feedback is offline right now"
+			return TranslationServer.translate("FEEDBACK_OFFLINE")
 		_:
-			return "Could not send feedback. Try again later."
+			return TranslationServer.translate("FEEDBACK_FAILED")
 
 ## Message text with control characters dropped (newlines kept) and capped.
 static func clean(text: String) -> String:
