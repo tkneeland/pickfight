@@ -464,6 +464,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_socket_drop_returns_to_join",
 	"remote_client_kick_and_version_return_to_join",
 	"remote_client_plays_stream_sound_and_music",
+	"snapshot_truncated_frames_decode_empty",
+	"snapshot_hostile_counts_and_versions_rejected",
+	"snapshot_counts_clamp_without_wrapping",
+	"snapshot_nan_and_bad_types_encode_safely",
+	"snapshot_quantization_rounds_to_nearest",
+	"snapshot_delta_applied_equals_full_of_same_tick",
 	"windy_stage_favours_umbrella_pickups",
 	"themed_pool_keeps_every_enabled_weapon",
 	"themed_pool_never_draws_a_disabled_weapon",
@@ -1860,6 +1866,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_kick_and_version_return_to_join()
 		"remote_client_plays_stream_sound_and_music":
 			return await _scenario_remote_client_plays_stream_sound_and_music()
+		"snapshot_truncated_frames_decode_empty":
+			return await _scenario_snapshot_truncated_frames_decode_empty()
+		"snapshot_hostile_counts_and_versions_rejected":
+			return await _scenario_snapshot_hostile_counts_and_versions_rejected()
+		"snapshot_counts_clamp_without_wrapping":
+			return await _scenario_snapshot_counts_clamp_without_wrapping()
+		"snapshot_nan_and_bad_types_encode_safely":
+			return await _scenario_snapshot_nan_and_bad_types_encode_safely()
+		"snapshot_quantization_rounds_to_nearest":
+			return await _scenario_snapshot_quantization_rounds_to_nearest()
+		"snapshot_delta_applied_equals_full_of_same_tick":
+			return await _scenario_snapshot_delta_applied_equals_full_of_same_tick()
 		"windy_stage_favours_umbrella_pickups":
 			return await _scenario_windy_stage_favours_umbrella_pickups()
 		"themed_pool_keeps_every_enabled_weapon":
@@ -22381,6 +22399,9 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 		Vector2(32767, -32768),
 		Vector2(0.1, 0.9),
 		Vector2(99.9, -99.1),
+		Vector2(0.9, 0.9),
+		Vector2(-0.9, -0.9),
+		Vector2(0.5, -0.5),
 	]
 	for pos in positions:
 		var world = {
@@ -22417,6 +22438,8 @@ func _scenario_snapshot_quantization_tolerance() -> Array[String]:
 			continue
 		var decoded_pos = players[0].get("body", {}).get("position", Vector2.ZERO)
 		var diff = (decoded_pos - pos).length()
+		if absf(decoded_pos.x - pos.x) > 0.5 or absf(decoded_pos.y - pos.y) > 0.5:
+			failures.append("position %s quantized to %s (diff %.2f px, wanted <= 0.5 per axis)" % [pos, decoded_pos, diff])
 		if diff > 1.0:
 			failures.append("position %s quantized to %s (diff %.2f px, wanted ≤ 1)" % [pos, decoded_pos, diff])
 	_scenario_completed = true
@@ -25082,6 +25105,254 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 		failures.append("the reconnect lost the eyes (slot %s, host '%s', player '%s')" % [back["slot"], server.slot_eyes(0), player.eyes_id()])
 	await _close_phones([again] as Array[WebSocketPeer])
 	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+# --- Snapshot hardening (issue #240 follow-up) ---------------------------------
+const SnapshotScript240 := preload("res://scripts/Snapshot.gd")
+const SnapshotCaptureScript240 := preload("res://scripts/SnapshotCapture.gd")
+func _snap_player_240(id: int, pos: Vector2) -> Dictionary:
+	return {
+		"player_id": id,
+		"body": {"position": pos, "rotation": 0.5, "linear_velocity": Vector2(3, -4)},
+		"weapon": {"head_position": pos + Vector2(20, 0), "head_rotation": 1.0, "head_shape_index": 2},
+		"color": id, "name": "P%d" % id, "team": 0, "damage": 10, "state": 1,
+	}
+func _snap_world_240() -> Dictionary:
+	return {
+		"is_full_snapshot": true,
+		"stage_id": 3,
+		"static_stage_bodies": [{"position": Vector2(10, 20), "rotation": 0.2, "linear_velocity": Vector2.ZERO}],
+		"players": [_snap_player_240(1, Vector2(100, 200)), _snap_player_240(2, Vector2(300, 200))],
+		"projectiles": [{"projectile_id": 7, "position": Vector2(50, 60), "velocity": Vector2(5, 6), "weapon_type": 2}],
+		"pickups": [{"pickup_id": 9, "position": Vector2(70, 80), "weapon_type": 3}],
+		"flail": {"flail_id": 1, "ball_position": Vector2(11, 12), "ball_velocity": Vector2(1, 2)},
+		"grapple": {"grapple_id": 2, "hook_position": Vector2(21, 22), "rope_end": Vector2(23, 24)},
+		"modifiers": [{"modifier_id": 1, "name": "low_gravity"}],
+		"round_phase": 1, "timer_ms": 5000, "scores": {1: 3, 2: 4},
+		"kill_feed": [{"text": "A beat B"}], "kill_zone_height": 600, "announcer_text": "Go",
+	}
+func _scenario_snapshot_truncated_frames_decode_empty() -> Array[String]:
+	var failures: Array[String] = []
+	var full: PackedByteArray = SnapshotScript240.encode(_snap_world_240())
+	if SnapshotScript240.decode(full).is_empty():
+		failures.append("the intact full frame did not decode")
+	var delta_world: Dictionary = {"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript240.TYPE_PLAYER, "id": 1, "body": {"position": Vector2(1, 2)}},
+		{"type": SnapshotScript240.TYPE_KILL_FEED, "id": 0, "text": "x"},
+		{"type": SnapshotScript240.TYPE_TIMER, "id": 0, "timer_ms": 9}]}
+	var delta: PackedByteArray = SnapshotScript240.encode(delta_world)
+	if SnapshotScript240.decode(delta).is_empty():
+		failures.append("the intact delta frame did not decode")
+	for frame: PackedByteArray in [full, delta]:
+		for n in frame.size():
+			if not SnapshotScript240.decode(frame.slice(0, n)).is_empty():
+				failures.append("a %d-byte prefix of a %d-byte frame decoded to a non-empty result" % [n, frame.size()])
+				break
+	var trailed: PackedByteArray = full.duplicate()
+	trailed.append_array(PackedByteArray([1, 2, 3]))
+	if SnapshotScript240.decode(trailed).is_empty():
+		failures.append("trailing bytes (the sound trailer) broke decode")
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_hostile_counts_and_versions_rejected() -> Array[String]:
+	var failures: Array[String] = []
+	var v: int = SnapshotScript240.FORMAT_VERSION
+	var hostile: Dictionary = {
+		"unknown version, full": PackedByteArray([0x80 | (v + 1), 0, 1]),
+		"unknown version, delta": PackedByteArray([v + 1, 0]),
+		"version 0 (pre-version frame)": PackedByteArray([0x00, 0]),
+		"255 stage bodies, no data": PackedByteArray([0x80 | v, 0, 1, 255]),
+		"255 players, no data": PackedByteArray([0x80 | v, 0, 1, 0, 255]),
+		"255 delta entities, no data": PackedByteArray([v, 255]),
+		"unknown delta type": PackedByteArray([v, 1, 0x7F, 0, 1, 0, 0]),
+		"modifier type with no body": PackedByteArray([v, 1, SnapshotScript240.TYPE_MODIFIER, 0, 1]),
+	}
+	for label: String in hostile:
+		if not SnapshotScript240.decode(hostile[label]).is_empty():
+			failures.append("%s decoded to a non-empty result" % label)
+	# A frame whose score count claims 65535 entries it does not carry.
+	var world: Dictionary = _snap_world_240()
+	world["scores"] = {}
+	world["kill_feed"] = []
+	world["announcer_text"] = ""
+	var bytes: PackedByteArray = SnapshotScript240.encode(world)
+	# tail after the score count: kill feed count (1) + kill zone (2) + announcer length (1)
+	var count_at: int = bytes.size() - 4 - 2
+	bytes[count_at] = 0xFF
+	bytes[count_at + 1] = 0xFF
+	if not SnapshotScript240.decode(bytes).is_empty():
+		failures.append("a 65535 score count with no scores decoded to a non-empty result")
+	# Random garbage must never raise (a script error fails the run).
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 240
+	for i in 300:
+		var junk := PackedByteArray()
+		for j in rng.randi_range(0, 80):
+			junk.append(rng.randi() & 0xFF)
+		SnapshotScript240.decode(junk)
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_counts_clamp_without_wrapping() -> Array[String]:
+	var failures: Array[String] = []
+	var world: Dictionary = _snap_world_240()
+	var many_players: Array = []
+	var many_bodies: Array = []
+	var many_projectiles: Array = []
+	for i in 300:
+		many_players.append(_snap_player_240(i, Vector2(i, i)))
+		many_bodies.append({"position": Vector2(i, i), "rotation": 0.0, "linear_velocity": Vector2.ZERO})
+		many_projectiles.append({"projectile_id": i, "position": Vector2.ZERO, "velocity": Vector2.ZERO, "weapon_type": 1})
+	world["players"] = many_players
+	world["static_stage_bodies"] = many_bodies
+	world["projectiles"] = many_projectiles
+	var kills: Array = []
+	for i in 300:
+		kills.append({"text": "k%d" % i})
+	world["kill_feed"] = kills
+	var scores: Dictionary = {}
+	for i in 70000:
+		scores[i] = i
+	world["scores"] = scores
+	var decoded: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(world))
+	if decoded.is_empty():
+		failures.append("an over-full world did not decode (the count and the loop disagreed)")
+		_scenario_completed = true
+		return failures
+	for key: String in ["players", "static_stage_bodies", "projectiles", "kill_feed"]:
+		if decoded[key].size() != 255:
+			failures.append("%s decoded %d entries, wanted the 255 clamp" % [key, decoded[key].size()])
+	if decoded["scores"].size() != 65535:
+		failures.append("scores decoded %d entries, wanted the 65535 clamp" % decoded["scores"].size())
+	# Over-range scalar fields clamp, they do not wrap.
+	var p: Dictionary = _snap_player_240(1, Vector2.ZERO)
+	p["damage"] = 70000
+	p["team"] = 300
+	p["color"] = -3
+	p["state"] = 256
+	var odd: Dictionary = _snap_world_240()
+	var no_team: Dictionary = _snap_player_240(2, Vector2.ZERO)
+	no_team["team"] = -1
+	odd["players"] = [p, no_team]
+	odd["timer_ms"] = 5000000000
+	odd["kill_zone_height"] = -40.0
+	var back: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(odd))
+	if back.is_empty():
+		failures.append("the over-range world did not decode")
+	else:
+		var q: Dictionary = back["players"][0]
+		if q["damage"] != 65535 or q["team"] != 255 or q["color"] != 0 or q["state"] != 255:
+			failures.append("scalars did not clamp: damage %s team %s color %s state %s" % [q["damage"], q["team"], q["color"], q["state"]])
+		if back["players"][1]["team"] != 255:
+			failures.append("team -1 (no team) decoded as %s, wanted 255" % back["players"][1]["team"])
+		if back["timer_ms"] != 4294967295:
+			failures.append("timer_ms %s, wanted the u32 clamp" % back["timer_ms"])
+		if back["kill_zone_height"] != 0:
+			failures.append("negative kill_zone_height decoded as %s, wanted 0" % back["kill_zone_height"])
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_nan_and_bad_types_encode_safely() -> Array[String]:
+	var failures: Array[String] = []
+	var p: Dictionary = _snap_player_240(1, Vector2(NAN, INF))
+	p["body"]["rotation"] = NAN
+	p["body"]["linear_velocity"] = Vector2(-INF, NAN)
+	p["weapon"]["head_rotation"] = INF
+	p["damage"] = NAN
+	p["team"] = 2.7
+	p["name"] = 12345
+	p["weapon"]["head_position"] = "not a vector"
+	var world: Dictionary = _snap_world_240()
+	world["players"] = [p, "not a dict"]
+	world["timer_ms"] = NAN
+	world["stage_id"] = -5.5
+	world["scores"] = {1: NAN, 2: -4, 3: 1.5e30}
+	var decoded: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(world))
+	if decoded.is_empty():
+		failures.append("a NaN/INF/bad-typed world did not decode")
+		_scenario_completed = true
+		return failures
+	var q: Dictionary = decoded["players"][0]
+	var pos: Vector2 = q["body"]["position"]
+	if pos != Vector2(0, 32767):
+		failures.append("NaN/INF position decoded %s, wanted (0, 32767)" % pos)
+	if q["body"]["linear_velocity"] != Vector2(-32768, 0):
+		failures.append("-INF/NaN velocity decoded %s, wanted (-32768, 0)" % q["body"]["linear_velocity"])
+	if not is_finite(q["body"]["rotation"]) or not is_finite(q["weapon"]["head_rotation"]):
+		failures.append("a NaN rotation decoded non-finite")
+	if q["damage"] != 0 or q["team"] != 3 or q["name"] != "":
+		failures.append("damage %s team %s name '%s', wanted 0, 3, ''" % [q["damage"], q["team"], q["name"]])
+	if decoded["timer_ms"] != 0 or decoded["stage_id"] != 0:
+		failures.append("timer_ms %s stage_id %s, wanted 0, 0" % [decoded["timer_ms"], decoded["stage_id"]])
+	if decoded["scores"] != {1: 0, 2: 0, 3: 65535}:
+		failures.append("scores decoded %s" % decoded["scores"])
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_quantization_rounds_to_nearest() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [
+		[Vector2(0.9, 0.9), Vector2(1, 1)], [Vector2(0.4, 0.49), Vector2(0, 0)],
+		[Vector2(-0.9, -0.9), Vector2(-1, -1)], [Vector2(-0.4, 2.6), Vector2(0, 3)],
+		[Vector2(40000, -40000), Vector2(32767, -32768)],
+	]
+	for c: Array in cases:
+		var world: Dictionary = _snap_world_240()
+		world["players"] = [_snap_player_240(1, c[0])]
+		var got: Vector2 = SnapshotScript240.decode(SnapshotScript240.encode(world))["players"][0]["body"]["position"]
+		if got != c[1]:
+			failures.append("%s decoded %s, wanted %s" % [c[0], got, c[1]])
+	# Worst case over many fractional values: at most half a pixel per axis.
+	var worst: float = 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 200:
+		var pos := Vector2(rng.randf_range(-3000, 3000), rng.randf_range(-3000, 3000))
+		var world: Dictionary = _snap_world_240()
+		world["players"] = [_snap_player_240(1, pos)]
+		var got: Vector2 = SnapshotScript240.decode(SnapshotScript240.encode(world))["players"][0]["body"]["position"]
+		worst = maxf(worst, maxf(absf(got.x - pos.x), absf(got.y - pos.y)))
+	print("snapshot quantization worst per-axis error over 200 samples: %.4f px" % worst)
+	if worst > 0.5001:
+		failures.append("worst per-axis position error %.4f px, wanted <= 0.5" % worst)
+	_scenario_completed = true
+	return failures
+func _scenario_snapshot_delta_applied_equals_full_of_same_tick() -> Array[String]:
+	var failures: Array[String] = []
+	var tick_a: Dictionary = _snap_world_240()
+	var tick_b: Dictionary = _snap_world_240()
+	tick_b["players"][0]["body"]["position"] = Vector2(111.4, 205.6)
+	tick_b["players"][0]["weapon"]["head_rotation"] = 2.2
+	tick_b["players"][0]["damage"] = 40
+	tick_b["players"][1]["state"] = 0
+	tick_b["projectiles"][0]["position"] = Vector2(55, 66)
+	tick_b["pickups"][0]["position"] = Vector2(71, 81)
+	tick_b["flail"]["ball_position"] = Vector2(15, 16)
+	tick_b["grapple"]["rope_end"] = Vector2(30, 31)
+	tick_b["timer_ms"] = 4967
+	tick_b["scores"][2] = 5
+	tick_b["kill_zone_height"] = 590
+	var delta_bytes: PackedByteArray = SnapshotScript240.encode(SnapshotCaptureScript240.delta(tick_b, tick_a))
+	var delta: Dictionary = SnapshotScript240.decode(delta_bytes)
+	if delta.is_empty() or delta.get("is_full_snapshot", true):
+		failures.append("the delta frame did not decode as a delta")
+		_scenario_completed = true
+		return failures
+	var base: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(tick_a))
+	var base_copy: Dictionary = base.duplicate(true)
+	var applied: Dictionary = SnapshotScript240.apply_delta(base, delta)
+	var want: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode(tick_b))
+	for key: String in want:
+		if applied.get(key) != want[key]:
+			failures.append("%s: delta-applied %s, full snapshot of the same tick %s" % [key, applied.get(key), want[key]])
+	if applied != want:
+		failures.append("the delta-applied snapshot does not equal the full snapshot of the same tick")
+	if base != base_copy:
+		failures.append("apply_delta changed the snapshot it was given")
+	# The two delta types the encoder used to drop.
+	var extra: Dictionary = SnapshotScript240.decode(SnapshotScript240.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript240.TYPE_MODIFIER, "id": 1, "name": "big_heads"},
+		{"type": SnapshotScript240.TYPE_KILL_FEED, "id": 0, "text": "C beat D"}]}))
+	var with_extra: Dictionary = SnapshotScript240.apply_delta(base, extra)
+	if with_extra["modifiers"][0]["name"] != "big_heads" or with_extra["kill_feed"].back()["text"] != "C beat D":
+		failures.append("TYPE_MODIFIER / TYPE_KILL_FEED deltas did not apply: %s %s" % [with_extra["modifiers"], with_extra["kill_feed"]])
 	_scenario_completed = true
 	return failures
 # --- Game modes (issues #276-#278) ---------------------------------------------
