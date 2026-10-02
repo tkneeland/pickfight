@@ -88,6 +88,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Gamepad seats: right stick drives the arm, no phone needed (#261)
 - Gamepad host menus for Steam Deck (#368): Y in the lobby opens the host controls (Go online, Play on this PC, Mode, First to, Start, Join online), View opens the Settings panel (or focuses the first-launch notice), D-pad moves, A presses, B closes; A and B stop joining and readying while a menu is open. Captions drop the "(Enter)" keyboard glyph once a gamepad is the active input. The audit and open gaps are in `docs/steam-deck-readiness.md`
 - Host phone controls: pause, end, kick, settings (#149, #216, #231)
+- Host gamepad pause (#430): Start on the host's controller (joypad 0: the Steam Deck's built-in controls, or a PC host's first pad) pauses and resumes a match like the host phone's Pause; any other pad's Start does nothing mid-round and still joins and readies in the lobby
 - Phone reconnect, message validation, refused-phone state (#164, #193, #194)
 
 ## Bots and solo practice
@@ -102,7 +103,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)
-- Join URL plus in-game generated QR code (#29, #214, #230)
+- Join URL plus in-game generated QR code (#29, #214, #230), shown on the lobby, countdown and victory screens only: nothing join-related is on screen during a round (#430)
 - Lobby mode cards sit in a fixed 2 x 4 grid under the QR, so the QR stays 340 px with eight players and up to eight modes (a ninth card opens a third column rather than shrinking the QR); the host controls are tighter, with Start beside First to (#425)
 - How-to-play explainer with animated demos (#149, #219)
 - First-join tip on the phone: looping drag-to-swing animation, shown once per device (#291)

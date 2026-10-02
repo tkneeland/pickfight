@@ -35,7 +35,7 @@ Status column: **fixed** = fixed in this PR with a scenario; **needs-human** = n
 | D11 | Join info | The join QR, URL and online room code sit together in the lobby and fit the screen at 1280x800 scale (the QR is 272 px wide there). | **fixed**: the QR shrank from 372 to 340 design px to make room for the 16 px mode cards (D7); asserted by `deck_lobby_join_qr_and_url_fit_the_deck_screen` |
 | D12 | Join info | During a match the join QR and the room code are not shown; only the in-round join line. A phone that arrives mid-match needs the QR from the lobby. | **needs-human**: owner decision. Valve's list has no rule on this, so it is not a Verified blocker; it matters for the TV party case |
 | D13 | Text entry | The feedback box needs a keyboard. A gamepad can open it but not type. The PC client's room-code entry (RemoteClient) is also keyboard text. | **needs-human**: needs the Steamworks floating gamepad text input, i.e. GodotSteam (steam-readiness 6.1). Neither is on the main play path, so either could stay mouse and keyboard with the Deck simply showing no text-entry prompts until then; Valve's rule asks for an on-screen keyboard wherever text is required |
-| D14 | Input | Pause is on the host phone only; a gamepad's Start button joins and readies. A Deck player holding only the Deck cannot pause. | **needs-human**: owner decision (for example, Start pauses once seated) |
+| D14 | Input | Pause was on the host phone only; a gamepad's Start button joined and readied. A Deck player holding only the Deck could not pause. | **fixed** (#430, owner decision: Start pauses only if the host uses it): the host's controller is joypad 0, which is the Deck's built-in controls (D16) and a PC host's first pad, seated or not. In a match (or paused), its Start sends the host phone's Pause or Resume through the same `host_command` path; any other pad's Start does nothing mid-round. In the lobby, countdown and victory screen every pad's Start keeps its join and ready meaning. A pad seat never becomes the host phone's host (`host_slot`). Scenario `host_pad_start_pauses_and_resumes_other_pads_do_not` |
 | D15 | Input | The default controller configuration: Steam Input must present the Deck as a gamepad with the right stick as stick (not mouse). The game reads raw joypad events and axes. | **needs-human**: set and test the default layout in the Steamworks Steam Input config on a Deck |
 | D16 | Input | Deck's built-in controls when nothing else is connected: the Deck appears as joypad 0. `LobbyScreen` treats a connected joypad as the active input at boot. | **needs-human**: confirm on hardware |
 | D17 | Performance | 30 fps at 800p by default. The game uses the Compatibility renderer and 2D physics; a perf probe exists (`tools/perf_probe.gd`) but was not run on Deck-class hardware. | **needs-human** |
@@ -48,10 +48,10 @@ Status column: **fixed** = fixed in this PR with a scenario; **needs-human** = n
 - `scripts/PadMenu.gd` (new): the shared "a gamepad menu is open" flag, the A binding fix and the button helper.
 - `scripts/LobbyScreen.gd`: Y menu, explicit D-pad links, active-input tracking, glyph and hint captions, 16 px mode cards.
 - `scripts/SfxSettings.gd`: View and B handling, focus switching and the top-to-bottom chain.
-- `scripts/ControllerServer.gd`: `_pad_button_pressed` returns early while a gamepad menu is open.
+- `scripts/ControllerServer.gd`: `_pad_button_pressed` returns early while a gamepad menu is open; since #430, Start from `HOST_PAD_DEVICE` (joypad 0) pauses and resumes a match, and Start from other pads does nothing mid-round.
 - `translations/strings.csv` (and the regenerated `strings.en.translation`): `HOST_GAMEPAD_HINT` (reworded), `HOST_START_MATCH_PAD`.
 - `tools/scenario_runner.gd`: six `deck_*` scenarios, appended.
 
 ## Left for a person with a Deck
 
-Everything marked needs-human above. In order of effort: D15 and D16 (Steam Input default config), D17 and D19 (run a Linux build and measure), D20 (LAN test), then D8, D9 and D10 (look at the screen), then the owner decisions D12 and D14, and D13 with the GodotSteam work.
+Everything marked needs-human above. In order of effort: D15 and D16 (Steam Input default config), D17 and D19 (run a Linux build and measure), D20 (LAN test), then D8, D9 and D10 (look at the screen), then the owner decision D12, and D13 with the GodotSteam work.
