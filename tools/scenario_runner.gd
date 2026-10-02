@@ -35374,7 +35374,8 @@ func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Ar
 ## the grapple there.
 func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host() -> Array[String]:
 	var failures: Array[String] = []
-	var rig: Dictionary = await _rc_rig_241(7, failures)
+	# One bot, not seven: a crowd of bots could kill the seat before its tap.
+	var rig: Dictionary = await _rc_rig_241(1, failures)
 	if rig.is_empty():
 		return failures
 	var server: Node = rig["server"]
@@ -35396,13 +35397,17 @@ func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host(
 		client.mouse_motion(Vector2(0, 4000))
 		await _await_ticks(40)
 	await _equip(player, GRAPPLE_PATH)
+	# Aim up, away from the floor: a hook aimed into the ground it stands on
+	# may not launch, which made this flaky on CI.
+	client.mouse_motion(Vector2(0, -8000))
+	await _await_ticks(40)
 	var ev := InputEventKey.new()
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = true
 	client._input(ev)
 	client._input(_space_up_485())
 	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 3000, true):
-		failures.append("a client Space tap never fired the host-side grapple (vec %s)" % player.input_vector)
+		failures.append("a client Space tap never fired the host-side grapple (vec %s, ready %s, presses %d, seen %d, phased %s, cd %.2f, alive %s)" % [player.input_vector, player.special_ready(), client.action_presses, server._slot_press_seen[client.slot], player.is_head_phased(), player._launch_cooldown, player.alive])
 	await _rc_close_241(rig)
 	return failures
 
