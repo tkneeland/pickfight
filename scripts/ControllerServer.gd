@@ -2389,6 +2389,9 @@ const GameClockScript459 := preload("res://scripts/GameClock.gd")
 ## How long a dropped remote seat is held mid-match, in game msec (issue #459).
 ## RemoteClient.gd keeps retrying its rejoin for the same window.
 const REMOTE_SEAT_HOLD_MSEC: int = 30000
+## The hold this host applies; a scenario whose wall-clock client must outlast
+## a fast game clock raises it.
+var remote_seat_hold_msec: int = REMOTE_SEAT_HOLD_MSEC
 
 var _remote_claim: Dictionary = {} # slot -> true while its claim belongs to a remote seat
 var _remote_dropped_msec: Dictionary = {} # slot -> game msec its remote seat dropped
@@ -2411,13 +2414,13 @@ func _in_match_phase() -> bool:
 func remote_seat_held(slot: int) -> bool:
 	if not _remote_dropped_msec.has(slot) or not _in_match_phase():
 		return false
-	return GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]) < REMOTE_SEAT_HOLD_MSEC
+	return GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]) < remote_seat_hold_msec
 
 ## Game msec left on `slot`'s hold, or -1 when it is not held.
 func remote_seat_hold_left_msec(slot: int) -> int:
 	if not remote_seat_held(slot):
 		return -1
-	return REMOTE_SEAT_HOLD_MSEC - (GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]))
+	return remote_seat_hold_msec - (GameClockScript459.now_msec() - int(_remote_dropped_msec[slot]))
 
 ## Every frame: a held seat whose window ran out mid-match is released now.
 func _lapse_remote_holds() -> void:
