@@ -41,6 +41,8 @@ var persist: bool = true
 var resolution: Vector2i = Vector2i.ZERO
 var disabled_stages: PackedStringArray = []
 var disabled_weapons: PackedStringArray = []
+## The `GameModes` id the host last picked (issue #352); "" is Classic.
+var game_mode: String = ""
 ## Stock mode (#354): lives per player (1-10) and the time limit in seconds
 ## (one of STOCK_TIME_LIMITS; 0 is no limit).
 const STOCK_MIN_LIVES: int = 1
@@ -106,6 +108,10 @@ func set_resolution(size: Vector2i) -> void:
 	resolution = size
 	save_settings()
 
+func set_game_mode(id: String) -> void:
+	game_mode = id
+	save_settings()
+
 func _set_enabled(disabled: PackedStringArray, known: PackedStringArray, item: String, enabled: bool) -> bool:
 	var index: int = disabled.find(item)
 	if enabled:
@@ -130,6 +136,7 @@ func load_settings() -> void:
 		resolution = size if size is Vector2i else Vector2i.ZERO
 		disabled_stages = PackedStringArray(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
 		disabled_weapons = PackedStringArray(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
+		game_mode = str(config.get_value(SECTION, "game_mode", ""))
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
@@ -148,6 +155,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "resolution", resolution)
 	config.set_value(SECTION, "disabled_stages", disabled_stages)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
+	config.set_value(SECTION, "game_mode", game_mode)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
 	err = config.save(path)

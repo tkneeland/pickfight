@@ -47,6 +47,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Endless round loop over the live roster (ADR-0004, ADR-0007)
 - Matches: first to N rounds, host picks N; victory podium (#120); each phone taps Continue and the room returns to the lobby once every human has (bots excluded), after 30 s, or on a host keypress (#337)
 - Teams mode: Red vs Blue, no friendly damage, team rings, auto-balance (#236, ADR-0018)
+- Game modes (#352): the host phone's menu picks Classic, King of the Hill, Hot Potato or Sudden Death for the whole match, saved with the other host settings (`user://audio.cfg`). Combines with Free-for-all or Teams (the Format); Hot Potato is Free-for-all only (greyed out with Teams on, and switching Teams on drops it to Classic). King of the Hill in Teams: teammates hold the hill together, a mixed hill is contested and frozen, hold time banks per team. The Rise runs in Classic, is off in King of the Hill and Hot Potato, and in Sudden Death starts after half the grace period at 1.5x speed. Each mode bans modifiers: Sudden Death double damage, Hot Potato weapon roulette, King of the Hill meteor shower. The stage title card shows the mode name and a one-line rule; the how-to-play panel has one card per mode. All of it is one table, `GameModes.TABLE`
 - Stock mode (#354): 1-10 lives per round (default 3) and a 2 / 5 / 8 / 15 min or no time limit (default 8), both set on the host phone and remembered. A lost life respawns after about 1.5 s at the spawn farthest from the others, with spawn protection, the pickaxe and zero damage; out of lives means out, with the KO ghost. No rising lava. Lives show as pips under the name tag and as "♥ N" on the phone. Timeout: most lives wins (a team's total in Teams); a tie plays a one-hit overtime among the tied. In Teams an eliminated player can "Steal a life" from the team-mate with most (2+ lives). Countdown top centre, pulsing in the last 10 s
 - Round modifiers, about 1 round in 3 (#50, ADR-0015, #147): low gravity, heavy weapons, big heads, fast lava, slippery floor, tiny weapons, weapon roulette, meteor shower, bouncy, double damage
 - Kill feed, KO credit, match awards (#148), including Longest airtime, the longest stretch with no body contact (#337); a hazard (spikes, saws, lava) or ring-out death credits whoever last hit the victim within 3 s of game time, else a self-KO; teammates never earn it (#311)
@@ -134,7 +135,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316)
 
 ## In flight / planned
-Not shipped; do not treat as existing. Mode scripts for Sudden Death, King of the Hill and Hot Potato exist in `scripts/` but are not wired in.
+Not shipped; do not treat as existing.
 - #297 Cosmetics: eye styles (tkneeland)
 - #291 Onboarding: first-join tip on phone, live lobby sandbox (tkneeland)
 - #288 Real per-weapon hit sounds (tkneeland)
