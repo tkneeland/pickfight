@@ -215,6 +215,16 @@ const SOUNDS: Dictionary = {
 	"announce_meteor_shower": {"files": ["announcer/meteor_shower.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_bouncy": {"files": ["announcer/bouncy.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_double_damage": {"files": ["announcer/double_damage.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	# Mode callouts (#370). STAND-IN clips: each reuses another line's file until
+	# its own is recorded (stand-in in the comment).
+	"announce_king_of_the_hill": {"files": ["announcer/big_heads.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_hot_potato": {"files": ["announcer/bouncy.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_sudden_death": {"files": ["announcer/double_ko.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_stock": {"files": ["announcer/heavy_weapons.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_last_life": {"files": ["announcer/ko.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_stolen": {"files": ["announcer/tiny_weapons.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_overtime": {"files": ["announcer/fast_lava.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_hill_taken": {"files": ["announcer/fight.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 }
 
 const DEFAULT_OVERLAP: int = 3

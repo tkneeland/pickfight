@@ -10,6 +10,9 @@ extends Node
 ##
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
+## An announcer line for the mode (#370); the Announcer listens for it.
+signal callout(sound: StringName)
+
 ## Seconds "it" has before the fuse eliminates them.
 var fuse_sec: float = 12.0
 ## After a tag nobody can be tagged for this long, so the new "it" cannot be
@@ -56,6 +59,7 @@ func start_round(slots: Array[int]) -> void:
 		it_time[slot] = 0.0
 		player.strike_landed.connect(handler)
 	_active = true
+	callout.emit(&"announce_hot_potato")
 	_pick_it()
 
 func end_round() -> void:
