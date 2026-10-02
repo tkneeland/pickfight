@@ -341,6 +341,7 @@ var _recent_leavers: Dictionary = {}
 const BotDirectorScript: GDScript = preload("res://scripts/BotDirector.gd")
 const RelayLinkScript: GDScript = preload("res://scripts/RelayLink.gd")
 const HostMouseScript: GDScript = preload("res://scripts/HostMouse.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 ## Issue #239: the remote-seat protocol version. A remote client's hello must
 ## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
@@ -1814,11 +1815,30 @@ func _process_remote() -> void:
 				if _log_input:
 					print("remote %d refused: protocol version" % seat.peer)
 				continue
+			var build_reason: String = build_mismatch_reason(hello)
+			if not build_reason.is_empty():
+				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
+				seat.open = false
+				_remote_seats.erase(seat.peer)
+				if _log_input:
+					print("remote %d refused: %s" % [seat.peer, build_reason])
+				continue
 			_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
 		elif now > seat.deadline_msec:
 			_remote_awaiting.erase(seat)
 			seat.close(1008, "no hello")
 			_remote_seats.erase(seat.peer)
+
+## Issue #447: the demo joins only the demo, the full game only the full game.
+## A remote hello carries `"demo": <bool>` (missing reads as the full game).
+## "" when the builds match; else the refusal reason sent to the client:
+## "full_only" (a demo client at a full host) or "demo_only" (the reverse).
+static func build_mismatch_reason(hello: Dictionary) -> String:
+	var host_demo: bool = DemoBuildScript.is_active()
+	var client_demo: bool = hello.get("demo", false) == true
+	if client_demo == host_demo:
+		return ""
+	return "demo_only" if host_demo else "full_only"
 
 ## The first text frame of `seat` that is a JSON object with a string "id", or null.
 func _read_remote_hello(seat: RemoteSeat) -> Variant:

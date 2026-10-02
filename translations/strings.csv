@@ -64,8 +64,10 @@ JOIN_CLOSED_EARLY,The connection closed before the match was joined.
 JOIN_CONNECTING,Connecting to the relay...
 JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.
 JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.
+JOIN_ERR_DEMO_ONLY,This room is running the demo. Join it from the demo.
 JOIN_ERR_DISCONNECTED,Disconnected: %s
 JOIN_ERR_ELSEWHERE,You joined from somewhere else.
+JOIN_ERR_FULL_ONLY,Get the full game to join this room
 JOIN_ERR_HOST_LEFT,Host left.
 JOIN_ERR_IDLE,The room closed after sitting idle.
 JOIN_ERR_NO_HELLO,The host did not accept the join in time.
