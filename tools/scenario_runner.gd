@@ -618,6 +618,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"deck_gamepad_operates_the_settings_panel",
 	"deck_captions_drop_keyboard_glyphs_for_a_gamepad",
 	"deck_gamepad_can_dismiss_the_first_launch_notice",
+	"lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2249,6 +2250,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad()
 		"deck_gamepad_can_dismiss_the_first_launch_notice":
 			return await _scenario_deck_gamepad_can_dismiss_the_first_launch_notice()
+		"lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players":
+			return await _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -32213,5 +32216,68 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 		failures.append("the notice buttons stayed focusable")
 	ui.host.telemetry_notice_seen = was_seen
 	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+
+# --- Lobby mode-card grid (issue #425) ---------------------------------------
+## The lobby state `RoundManager` would publish for `count` seated phones.
+func _lobby_state_425(count: int) -> Dictionary:
+	var players: Array[Dictionary] = []
+	for slot in count:
+		players.append({"slot": slot, "name": "Player %d" % (slot + 1), "ready": slot % 2 == 0})
+	return {"players": players, "host": 0, "target": 5, "phase": "lobby", "count": 0, "teams": false}
+## Every visible control under `panel`, by path, for the overlap checks.
+func _lobby_rects_425(screen: CanvasLayer, qr: Control) -> Array[String]:
+	var failures: Array[String] = []
+	var canvas := Rect2(Vector2.ZERO, SCREEN_SIZE)
+	var right: Control = qr.get_parent() as Control
+	var qr_rect: Rect2 = qr.get_global_rect()
+	for node: Node in screen.lobby_panel().find_children("*", "Control", true, false):
+		var control: Control = node as Control
+		if not control.is_visible_in_tree() or control.is_queued_for_deletion():
+			continue
+		if not (control is Label or control is BaseButton or control is TextureRect):
+			continue
+		var rect: Rect2 = control.get_global_rect()
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			continue
+		if node.find_parent("HowToPlay") != null or node.find_parent("HowToPlaySlot") != null:
+			continue
+		if not canvas.encloses(rect):
+			failures.append("%s %s is not inside the %s screen" % [control.get_path(), rect, SCREEN_SIZE])
+		if control != qr and right.is_ancestor_of(control) and rect.intersects(qr_rect):
+			failures.append("%s %s overlaps the join QR %s" % [control.get_path(), rect, qr_rect])
+	return failures
+func _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_panel("lobby")
+	screen.refresh_lobby(_lobby_state_425(8), 2, rig["server"])
+	await _await_ticks(4)
+	var qr: Control = screen.lobby_panel().find_child("JoinQr", true, false) as Control
+	var cards: Control = screen.lobby_panel().find_child("ModeCards", true, false) as Control
+	print("      QR %s, cards %s, %d cards" % [qr.get_global_rect(), cards.get_global_rect(), screen.mode_cards().size()])
+	failures.append_array(_lobby_rects_425(screen, qr))
+	for card: Label in screen.mode_cards():
+		if card.get_visible_line_count() < card.get_line_count():
+			failures.append("mode card '%s' is cut off (%d of %d lines)" % [card.text, card.get_visible_line_count(), card.get_line_count()])
+	if screen.mode_cards().size() < 7:
+		failures.append("only %d mode cards" % screen.mode_cards().size())
+	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 340.0:
+		failures.append("the QR is %s, under 340 px square" % qr.get_global_rect().size)
+	var before: Rect2 = qr.get_global_rect()
+	var added: Label = screen.append_mode_card("Eighth Mode: A rule line about as long as the others are.")
+	await _await_ticks(4)
+	if screen.mode_cards().size() < 8 or not screen.mode_cards().has(added):
+		failures.append("the extra card did not join the grid")
+	if qr.get_global_rect() != before:
+		failures.append("adding an eighth card moved or resized the QR: %s -> %s" % [before, qr.get_global_rect()])
+	failures.append_array(_lobby_rects_425(screen, qr))
+	screen.append_mode_card("Ninth Mode: Another rule line about as long as the others.")
+	await _await_ticks(4)
+	if qr.get_global_rect() != before:
+		failures.append("adding a ninth card moved or resized the QR: %s -> %s" % [before, qr.get_global_rect()])
+	failures.append_array(_lobby_rects_425(screen, qr))
 	await _teardown(rig["main"])
 	return failures

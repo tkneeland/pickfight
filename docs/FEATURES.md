@@ -103,6 +103,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Lobby and onboarding
 - Lobby with ready-up (#120)
 - Join URL plus in-game generated QR code (#29, #214, #230)
+- Lobby mode cards sit in a fixed 2 x 4 grid under the QR, so the QR stays 340 px with eight players and up to eight modes (a ninth card opens a third column rather than shrinking the QR); the host controls are tighter, with Start beside First to (#425)
 - How-to-play explainer with animated demos (#149, #219)
 - First-join tip on the phone: looping drag-to-swing animation, shown once per device (#291)
 - Live lobby sandbox: seated players move, swing and fight on a stage under the lobby; nothing scores, KOs respawn, the match starts clean (#291)
