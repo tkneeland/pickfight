@@ -86,6 +86,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Bots steer clear of spikes and saws (a moving saw by its current position) and move upwind of a stage gust warning once a gust part exists (#313)
 - Bots hunt deliberately: they pick the rival cheapest to reach (a rival high up on a ledge is the last chosen) and stick with it, never a teammate, and a bot hooked on a ledge by its own pickaxe sweeps the head off it instead of hanging there (#302)
 - Bots keep their own swing from throwing them over a rival and off the stage: no closing on a rival with a drop right past it, a gentler chop near an edge, a brake when carried towards one, and no swinging while thrown into the air; and they press harder as opponents dwindle (shorter hesitation, closer fighting, further engagement, a faster vault) up to full pace with one rival left (#302)
+- Bots play each mode's objective: in King of the Hill they head into the hill and fight whoever holds it; in Hot Potato the bot that is "it" chases a rival and every other bot keeps away from "it"; Sudden Death (and any mode without an objective) plays as Classic (#353)
 
 ## Lobby and onboarding
 - Lobby with ready-up (#120)

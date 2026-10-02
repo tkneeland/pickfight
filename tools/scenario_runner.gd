@@ -518,6 +518,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_teams_steal_a_life_and_team_loss",
 	"stock_timeout_most_lives_wins_tie_overtime",
 	"stock_lives_shown_as_pips_and_on_phone",
+	"bot_king_of_the_hill_heads_for_the_hill",
+	"bot_king_of_the_hill_fights_whoever_holds_it",
+	"bot_hot_potato_it_chases_the_nearest_rival",
+	"bot_hot_potato_keeps_away_from_it",
+	"bot_sudden_death_plays_as_classic",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1946,6 +1951,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_timeout_most_lives_wins_tie_overtime()
 		"stock_lives_shown_as_pips_and_on_phone":
 			return await _scenario_stock_lives_shown_as_pips_and_on_phone()
+		"bot_king_of_the_hill_heads_for_the_hill":
+			return await _scenario_bot_king_of_the_hill_heads_for_the_hill()
+		"bot_king_of_the_hill_fights_whoever_holds_it":
+			return await _scenario_bot_king_of_the_hill_fights_whoever_holds_it()
+		"bot_hot_potato_it_chases_the_nearest_rival":
+			return await _scenario_bot_hot_potato_it_chases_the_nearest_rival()
+		"bot_hot_potato_keeps_away_from_it":
+			return await _scenario_bot_hot_potato_keeps_away_from_it()
+		"bot_sudden_death_plays_as_classic":
+			return await _scenario_bot_sudden_death_plays_as_classic()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -27767,7 +27782,6 @@ func _scenario_bot_aggression_rises_as_opponents_dwindle() -> Array[String]:
 		failures.append("with one opponent left the bot should fight a rival 60 px off, was '%s'" % lone)
 	_scenario_completed = true
 	return failures
-
 # --- Stock mode (issue #354) ---------------------------------------------------
 const StockSettingsScript := preload("res://scripts/HostSettings.gd")
 func _stock_settings(lives: int, limit: int) -> void:
@@ -28095,4 +28109,140 @@ func _scenario_stock_lives_shown_as_pips_and_on_phone() -> Array[String]:
 	if hidden != [1, -1, false]:
 		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [hidden])
 	await _stock_finish(rig)
+	return failures
+## Issue #353: a mode rig of `count` players with a bot driving the last one.
+## Every player is put on the arena floor at `at[i]`, and the mode is held
+## open (a huge hill goal or fuse) so the round does not end under the probe.
+func _bot_mode_rig_353(count: int, mode: String, at: Array) -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, mode)
+	rig["started"] = await _mode_started(rig)
+	if not rig["started"]:
+		return rig
+	await _await_ticks(10)
+	var rm: Node = rig["rm"]
+	var node: Node = rm.game_mode_node()
+	if mode == GameModesType.KING_OF_THE_HILL:
+		node.seconds_to_win = 1000.0
+		node.hill_position = Vector2(0.0, 274.0)
+		node.hill_radius = 150.0
+	elif mode == GameModesType.HOT_POTATO:
+		node.fuse_sec = 1000.0
+		node.fuse_left = 1000.0
+	for i in count:
+		rig["players"][i].teleport_to(at[i])
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = rig["players"][count - 1]
+	bot.output = bot.player.set_input_vector
+	rig["stage"].add_child(bot)
+	rig["bot"] = bot
+	rig["node"] = node
+	return rig
+## A bot far from the hill, nobody in it, goes and stands in it (the only rival
+## is behind it, so a plain hunt would head the other way).
+func _scenario_bot_king_of_the_hill_heads_for_the_hill() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.KING_OF_THE_HILL, [Vector2(-620.0, 274.0), Vector2(-400.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var bot_player: RigidBody2D = rig["players"][1]
+	var hill_at: Vector2 = rig["node"].hill_position
+	var start: float = bot_player.global_position.distance_to(hill_at)
+	var best: float = start
+	for t in 900:
+		await physics_frame
+		best = minf(best, bot_player.global_position.distance_to(hill_at))
+	print("      distance to the hill: %.0f at the start, %.0f at best" % [start, best])
+	if best > 150.0:
+		failures.append("the bot never reached the hill (closest %.0f px, radius 150)" % best)
+	await _teardown(rig["stage"])
+	return failures
+## A rival stands in the hill: the bot goes in and hurts it.
+func _scenario_bot_king_of_the_hill_fights_whoever_holds_it() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.KING_OF_THE_HILL, [Vector2(0.0, 274.0), Vector2(-550.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var holder: RigidBody2D = rig["players"][0]
+	var bot_player: RigidBody2D = rig["players"][1]
+	var hill_at: Vector2 = rig["node"].hill_position
+	var best: float = INF
+	for t in 900:
+		await physics_frame
+		best = minf(best, bot_player.global_position.distance_to(hill_at))
+		if holder.damage > 0.0:
+			break
+	print("      holder damage %.1f, bot closest to the hill %.0f" % [holder.damage, best])
+	if best > 200.0:
+		failures.append("the bot never went into the hill (closest %.0f px)" % best)
+	if holder.damage <= 0.0:
+		failures.append("the bot never hit the player holding the hill")
+	await _teardown(rig["stage"])
+	return failures
+## The bot is "it" and chases a passive rival, landing a hit.
+func _scenario_bot_hot_potato_it_chases_the_nearest_rival() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.HOT_POTATO, [Vector2(300.0, 274.0), Vector2(-500.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	rig["node"].it_slot = 1
+	var rival: RigidBody2D = rig["players"][0]
+	for t in 900:
+		await physics_frame
+		if rival.damage > 0.0:
+			break
+	print("      rival damage %.1f" % rival.damage)
+	if rival.damage <= 0.0:
+		failures.append("the bot that is 'it' never hit the rival")
+	await _teardown(rig["stage"])
+	return failures
+## Someone else is "it", close by: the bot ends up farther from "it" than it began.
+func _scenario_bot_hot_potato_keeps_away_from_it() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.HOT_POTATO, [Vector2(-300.0, 274.0), Vector2(-150.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	rig["node"].it_slot = 0
+	var it_player: RigidBody2D = rig["players"][0]
+	var bot_player: RigidBody2D = rig["players"][1]
+	var total: float = 0.0
+	var samples: int = 0
+	for t in 600:
+		await physics_frame
+		if t >= 300:
+			total += bot_player.global_position.distance_to(it_player.global_position)
+			samples += 1
+	var mean: float = total / float(samples)
+	print("      mean distance from 'it' over the last 300 ticks: %.0f (began at 150)" % mean)
+	if bot_player.damage > 0.0 and it_player.damage <= 0.0 and mean < 300.0:
+		failures.append("the bot was caught")
+	if mean < 300.0:
+		failures.append("the bot stayed within %.0f px of 'it' (mean)" % mean)
+	await _teardown(rig["stage"])
+	return failures
+## Sudden Death carries no objective of its own: the bot hunts the rival as in Classic.
+func _scenario_bot_sudden_death_plays_as_classic() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.SUDDEN_DEATH, [Vector2(300.0, 274.0), Vector2(-500.0, 274.0)])
+	if not rig["started"]:
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var rival: RigidBody2D = rig["players"][0]
+	for t in 900:
+		await physics_frame
+		if rival.damage > 0.0:
+			break
+	print("      rival damage %.1f" % rival.damage)
+	if rival.damage <= 0.0:
+		failures.append("the bot never hunted the rival in Sudden Death")
+	await _teardown(rig["stage"])
 	return failures

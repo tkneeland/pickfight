@@ -233,6 +233,7 @@ const DEMO_KILL_ZONE_RISE_SEC: float = 40.0
 const DEMO_PHYSICS_TICKS: int = 120
 
 func _init() -> void:
+	add_to_group("round_manager")
 	_pickup_director = PickupDirectorScript.new(self)
 	add_child(_pickup_director)
 
