@@ -2157,9 +2157,24 @@ func _set_host_pc_seat(on: bool) -> bool:
 	_claim_for_phone(_rejoin_slot(HOST_PC_ID, slot), HOST_PC_ID, _host_pc_seat)
 	_host_pc_slot = _slot_peers.find(_host_pc_seat)
 	_slot_name[_host_pc_slot] = HOST_PC_NAME
+	_apply_saved_host_pick()
 	_update_mouse_capture()
 	_send_lobby_to_all()
 	return true
+
+## Issue #441: the host PC's saved look goes on its seat as it is claimed, by the
+## phone's own rules (a colour another seat holds is refused, the automatic one stays).
+func _apply_saved_host_pick() -> void:
+	var pick: Dictionary = CosmeticsPickerScript.clean_pick(HostSettingsScript.shared().cosmetic_pick)
+	set_slot_hat(_host_pc_slot, str(pick["hat"]))
+	set_slot_eyes(_host_pc_slot, str(pick["eyes"]))
+	if int(pick["color"]) >= 0:
+		request_color(_host_pc_slot, int(pick["color"]))
+
+## Whether the host PC's own cosmetics panel shows: an Online match with its
+## seat on, in the lobby or countdown.
+func host_picker_shown() -> bool:
+	return _match_kind == KIND_ONLINE and _host_pc_slot != -1 and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 
 func _release_host_pc_seat() -> void:
 	var slot: int = _host_pc_slot

@@ -849,6 +849,7 @@ func refresh_controls() -> void:
 	control_button("mode").text = tr("HOST_MODE_STATE") % (tr("MODE_TEAMS") if _server.team_mode() else tr("MODE_FFA"))
 	control_button("bots").text = tr("HOST_BOTS_STATE") % _server.bot_director.bot_count()
 	control_button("join").disabled = not _can_join_online()
+	_sync_host_picker()
 	_join_blocked.visible = control_button("join").disabled
 	# No keyboard glyph while a gamepad is the active input (#368).
 	control_button("start").text = tr("HOST_START_MATCH_PAD") if _pad_active else tr("HOST_START_MATCH")
@@ -860,6 +861,35 @@ func _process(_delta: float) -> void:
 		refresh_controls()
 	elif _pad_menu_open:
 		set_pad_menu(false) # the lobby went away under the open menu
+
+## Issue #441: the host PC's own seat picks hat, colour and eyes on the same mouse
+## panel an Online client gets, in the QR's place (the mode cards give way too). It saves the pick in the
+## host's own settings; the server puts it on the seat at claim.
+var _host_picker: Control = null
+
+func host_picker() -> Control:
+	return _host_picker
+
+func _sync_host_picker() -> void:
+	var seat: int = _server.host_pc_slot() if _server.has_method("host_pc_slot") else -1
+	var show: bool = _server.has_method("host_picker_shown") and _server.host_picker_shown()
+	if show and _host_picker == null:
+		_host_picker = preload("res://scripts/OnlineCosmeticsPanel.gd").new()
+		_host_picker.name = "HostPicker"
+		_lobby_right.add_child(_host_picker) # where the QR is in a Couch lobby
+		_lobby_right.move_child(_host_picker, 0)
+		_host_picker.set_compact(true)
+	if show and _host_picker.own_slot != seat:
+		_host_picker.bind_server(_server, seat)
+		if not _host_picker.picked.is_connected(_save_host_pick):
+			_host_picker.picked.connect(_save_host_pick) # after the server has applied the pick
+	if _host_picker != null:
+		_host_picker.visible = show
+		_mode_grid.visible = not show # the room the panel needs; the cards come back with the QR
+
+func _save_host_pick(_kind: String, _value: Variant) -> void:
+	var slot: int = _server.host_pc_slot()
+	preload("res://scripts/HostSettings.gd").shared().set_cosmetic_pick({"hat": _server.slot_hat(slot), "eyes": _server.slot_eyes(slot), "color": _server.slot_color(slot)})
 
 # --- Gamepad host menu (#368, Steam Deck) ------------------------------------------
 #

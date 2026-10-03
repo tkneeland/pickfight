@@ -13,9 +13,8 @@ extends PanelContainer
 ##     `picked` into frames back to the host, saving the pick in its own copy;
 ##   - the host's own seat in an Online lobby calls `bind_server(server, slot)`,
 ##     which reads the server directly and applies picks through its setters.
-##     Hook for #435: once LobbyScreen knows the lobby is Online, add one beside
-##     its player rows bound to `server.host_pc_slot()`, and hide it while that
-##     seat is ready (see docs/FEATURES.md, #441).
+##     LobbyScreen adds one to its right column in an Online lobby, bound to
+##     `server.host_pc_slot()` (see docs/FEATURES.md, #441).
 ##
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
@@ -79,6 +78,11 @@ func _init() -> void:
 		button.pressed.connect(pick_eyes.bind(id))
 		_eyes_grid.add_child(button)
 		_eyes_buttons[id] = button
+
+## A shorter preview, for a lobby with little height to spare (the host's own
+## seat shares its column with the host controls).
+func set_compact(on: bool) -> void:
+	_preview.custom_minimum_size = Vector2(PREVIEW_SIZE.x, 100.0) if on else PREVIEW_SIZE
 
 ## The host's full `looks` frame (palette, hats, eyes, everyone's looks).
 func set_catalog(looks_frame: Dictionary) -> void:

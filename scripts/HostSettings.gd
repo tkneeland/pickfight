@@ -64,6 +64,9 @@ var stock_time_limit: int = 480
 ## The stage a Stock match is played on (#375): a stage's base name, or ""
 ## for Random.
 var stock_stage: String = ""
+## The host PC seat's saved look (#441): {"hat", "eyes", "color"} as
+## `CosmeticsPicker.clean_pick` cleans it, put on whenever the seat is claimed.
+var cosmetic_pick: Dictionary = {"hat": "none", "eyes": "round", "color": -1}
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
@@ -194,6 +197,11 @@ func _set_enabled(disabled: PackedStringArray, known: PackedStringArray, item: S
 	save_settings()
 	return true
 
+## Saves the host PC seat's pick (#441), cleaned.
+func set_cosmetic_pick(pick: Dictionary) -> void:
+	cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).clean_pick(pick)
+	save_settings()
+
 func load_settings() -> void:
 	var config := ConfigFile.new()
 	var err: Error = config.load(path)
@@ -217,6 +225,7 @@ func load_settings() -> void:
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
 		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
 		stock_stage = str(config.get_value(SECTION, "stock_stage", ""))
+		cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).read_pick(config, SECTION)
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
 
@@ -238,6 +247,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
 	config.set_value(SECTION, "stock_stage", stock_stage)
+	(load("res://scripts/CosmeticsPicker.gd") as GDScript).write_pick(config, SECTION, cosmetic_pick)
 	err = config.save(path)
 	if err != OK:
 		push_warning("HostSettings: could not save to %s (%s)" % [path, error_string(err)])
