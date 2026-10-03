@@ -737,8 +737,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_60_s_backstop_is_a_draw_556",
 	"stock_sudden_death_double_ko_replays_overtime_556",
 	"stock_sudden_death_leaves_no_rocks_behind_556",
+	"remote_shoulder_throw_clears_retract_toggle_551",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
 	"title_screen_restyle_fits_every_resolution_546",
+	"umbrella_canopy_reduces_a_falling_rock_569",
+	"umbrella_canopy_reduces_a_meteor_569",
+	"sudden_death_block_does_not_eliminate_569",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2602,10 +2606,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_sudden_death_double_ko_replays_overtime_556()
 		"stock_sudden_death_leaves_no_rocks_behind_556":
 			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
+		"remote_shoulder_throw_clears_retract_toggle_551":
+			return await _scenario_remote_shoulder_throw_clears_retract_toggle_551()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
 		"title_screen_restyle_fits_every_resolution_546":
 			return await _scenario_title_screen_restyle_fits_every_resolution_546()
+		"umbrella_canopy_reduces_a_falling_rock_569":
+			return await _scenario_umbrella_canopy_reduces_a_falling_rock_569()
+		"umbrella_canopy_reduces_a_meteor_569":
+			return await _scenario_umbrella_canopy_reduces_a_meteor_569()
+		"sudden_death_block_does_not_eliminate_569":
+			return await _scenario_sudden_death_block_does_not_eliminate_569()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37366,6 +37378,73 @@ func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
 		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
 	await _stock_finish(rig)
 	return failures
+
+## Issue #551: on a remote seat a stick click retracts (toggle on), and a later
+## shoulder-button throw must start held, not pulled home by that leftover toggle.
+class _FakePeer551 extends RefCounted:
+	var packets: Array[PackedByteArray] = []
+	func get_available_packet_count() -> int:
+		return packets.size()
+	func get_packet() -> PackedByteArray:
+		return packets.pop_front()
+	func was_string_packet() -> bool:
+		return false
+func _packet_551(count: int, hold: bool) -> PackedByteArray:
+	var pkt := PackedByteArray()
+	pkt.resize(10)
+	pkt.encode_float(0, 0.0)
+	pkt.encode_float(4, -1.0)
+	pkt[8] = 0
+	pkt[9] = (count & 0x7F) | (0x80 if hold else 0)
+	return pkt
+func _scenario_remote_shoulder_throw_clears_retract_toggle_551() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "RemoteShoulder551")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	# A pad claims the seat and holds the aim; the packets below are the remote
+	# client's action presses, which is the path under test.
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(30)
+	player.flick_launch_enabled = false  # a remote seat throws on its action button
+	var peer := _FakePeer551.new()
+	# Count 0 only adopts the seat's press count; the wait lets the aim ease in.
+	peer.packets.append(_packet_551(0, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(40)
+	peer.packets.append(_packet_551(1, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() == null:
+		failures.append("the stick-click throw did not fire the grapple")
+	peer.packets.append(_packet_551(2, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() != null:
+		failures.append("the second stick click did not retract the hook")
+	if not server._slot_release_toggle[0] == 1:
+		failures.append("setup: the retract left no toggle on")
+	await _await_ticks(60)
+	peer.packets.append(_packet_551(3, true))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() == null:
+		failures.append("the shoulder throw's hook was pulled home at once")
+	if server.slot_released(0):
+		failures.append("the shoulder throw left the seat released")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
+	return failures
+
 ## #552: Online to Solo must not leave remote seats (connected or held after a
 ## disconnect, #459) claimed in the Solo lobby, where they would eat bot capacity.
 func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Array[String]:
@@ -37450,4 +37529,98 @@ func _scenario_title_screen_restyle_fits_every_resolution_546() -> Array[String]
 	if server.match_kind() != "online" or screen.title_visible():
 		failures.append("the O key gave kind '%s', title showing %s" % [server.match_kind(), screen.title_visible()])
 	await _kind_close_435(rig)
+	return failures
+
+
+## #569: a rock that lands on an open umbrella's canopy face is reduced like any
+## other hit (the part used to call take_damage without a hit point).
+func _scenario_umbrella_canopy_reduces_a_falling_rock_569() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var rock: Node2D = FallingRockScene.instantiate()
+	rock.auto_drop = false
+	rock.one_shot = true
+	rock.warning_sec = 0.1
+	rock.damage = 40.0
+	rock.position = ROCK_COLUMN_TOP
+	stage.add_child(rock)
+	var player: RigidBody2D = _spawn_player(stage, Vector2(ROCK_COLUMN_TOP.x, GROUND_TOP - PLAYER_RADIUS))
+	await _equip(player, UMBRELLA_PATH)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(SETTLE_TICKS)
+	if not player.canopy_open():
+		failures.append("the umbrella aimed up is not open; the fixture is wrong")
+	rock.drop_now()
+	for _i in ROCK_FALL_TICKS + 60:
+		await physics_frame
+		if player.damage > 0.0:
+			break
+	print("      40-damage rock on an open canopy: took %.1f" % player.damage)
+	if player.damage <= 0.0:
+		failures.append("the rock never hit the umbrella holder")
+	elif player.damage > 20.0:
+		failures.append("a rock on the canopy face took %.1f of 40, expected it reduced" % player.damage)
+	await _teardown(stage)
+	return failures
+
+## #569: the same for a meteor.
+func _scenario_umbrella_canopy_reduces_a_meteor_569() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(600.0, GROUND_TOP - PLAYER_RADIUS))
+	await _equip(player, UMBRELLA_PATH)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(SETTLE_TICKS)
+	var meteor: Node2D = preload("res://scripts/Meteor.gd").new()
+	meteor.setup(player.global_position + Vector2(0.0, -300.0), Vector2(0.0, 900.0), 40.0, 650.0, 16.0, 4000.0)
+	stage.add_child(meteor)
+	for _i in 90:
+		await physics_frame
+		if player.damage > 0.0:
+			break
+	print("      40-damage meteor on an open canopy: took %.1f" % player.damage)
+	if player.damage <= 0.0:
+		failures.append("the meteor never hit the umbrella holder")
+	elif player.damage > 20.0:
+		failures.append("a meteor on the canopy face took %.1f of 40, expected it reduced" % player.damage)
+	await _teardown(stage)
+	return failures
+
+## #569: in Sudden Death a hit on the shield face or open canopy face does not
+## eliminate; an unblocked hit still does, and is reported lethal.
+func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.SUDDEN_DEATH)
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _equip(players[1], SHIELD_PATH)
+	players[1].set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var face: Vector2 = players[1].global_position + Vector2.RIGHT * 40.0
+	var behind: Vector2 = players[1].global_position + Vector2.LEFT * 40.0
+	if not players[1].shield_blocks(face):
+		failures.append("the shield does not cover its face; the fixture is wrong")
+	var lethal: Array[bool] = []
+	var on_report := func(_v: Node, _a: float, _p: Vector2, was_lethal: bool) -> void:
+		lethal.append(was_lethal)
+	players[0].strike_landed.connect(on_report)
+	players[1].spawn_protected = false
+	players[1].damage = 0.0
+	var dealt: float = players[1].take_damage(10.0, face, players[0])
+	players[0].strike_landed.emit(players[1], dealt, face, players[0]._strike_was_lethal(players[1], dealt, face))
+	if not players[1].alive:
+		failures.append("a hit blocked by the shield eliminated the victim in Sudden Death")
+	if lethal.size() == 1 and lethal[0]:
+		failures.append("a shield-blocked hit was reported lethal")
+	dealt = players[1].take_damage(10.0, behind, players[0])
+	players[0].strike_landed.emit(players[1], dealt, behind, players[0]._strike_was_lethal(players[1], dealt, behind))
+	if players[1].alive:
+		failures.append("an unblocked hit from behind the shield did not eliminate")
+	if lethal.size() == 2 and not lethal[1]:
+		failures.append("an unblocked hit was not reported lethal")
+	players[0].strike_landed.disconnect(on_report)
+	await _teardown(rig["stage"])
 	return failures
