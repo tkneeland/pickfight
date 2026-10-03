@@ -532,21 +532,28 @@ func teleport_to(pos: Vector2) -> void:
 ## weapon's damage and hands over the result. A no-op once eliminated: an
 ## eliminated player's head has no collision layer to be struck through, but
 ## nothing here should rely on that alone.
-func take_damage(amount: float, point: Vector2 = Vector2.INF, attacker: Node = null) -> void:
+##
+## Returns the damage actually applied, after the umbrella and shield
+## reductions (issue #514), so a caller can report the real figure. A shield
+## shoves its attacker back only when `recoil` is true: melee hits do, ranged
+## ones (`land_projectile_hit`) never shove a shooter across the stage.
+func take_damage(amount: float, point: Vector2 = Vector2.INF, attacker: Node = null, recoil: bool = true) -> float:
 	if amount <= 0.0 or not alive or spawn_protected:
-		return
+		return 0.0
 	# An open umbrella's canopy takes a hit that lands on its face (issue #269).
 	if point != Vector2.INF and canopy_open() and canopy_faces(point):
 		amount *= CANOPY_BLOCK_FACTOR
 	# A shield takes a hit that lands on the side it faces (issue #275).
 	if point != Vector2.INF and shield_blocks(point):
 		amount *= SHIELD_BLOCK_FACTOR
-		_shield_recoil(attacker)
+		if recoil:
+			_shield_recoil(attacker)
 	damage += amount
 	if _face != null:
 		_face.on_hit(amount)
 	if damage >= DEATH_DAMAGE:
 		eliminate()
+	return amount
 
 ## Eliminate this player, by whatever route. Both routes there -- accumulated
 ## damage and the kill zone -- end here, so there is one description of what
@@ -1502,7 +1509,7 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount, point, self)
+	amount = victim.take_damage(amount, point, self)
 	if _stats.special == &"shield":
 		_shield_bash(victim)
 	strike_landed.emit(victim, amount, point, not victim.alive)
@@ -1612,7 +1619,7 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount, point, self)
+	amount = victim.take_damage(amount, point, self, false)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
@@ -2052,7 +2059,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 		return
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	victim.take_damage(amount, point, self)
+	amount = victim.take_damage(amount, point, self)
 	strike_landed.emit(victim, amount, point, not victim.alive)
 
 # --- Umbrella (issue #269) ---------------------------------------------------

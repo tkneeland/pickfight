@@ -693,6 +693,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
+	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2471,6 +2472,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gif_writer_encodes_valid_animated_gif()
 		"replay_save_writes_clip_gif_beside_pngs":
 			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
+		"shield_ranged_hit_does_not_recoil_and_reports_real_damage":
+			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -35881,4 +35884,38 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 	DirAccess.remove_absolute(abs_dir)
 	rb.queue_free()
 	_scenario_completed = true
+	return failures
+
+# --- Shield: ranged hits and reported damage (issue #514) --------------------
+## A bullet on a shield's face never shoves the shooter, and `strike_landed`
+## carries the damage that got through the shield, not the damage dealt.
+func _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
+	shooter.gravity_scale = 0.0
+	shooter.global_position = player.global_position + Vector2(150, 0)
+	shooter.linear_velocity = Vector2.ZERO
+	var reported: Array[float] = []
+	shooter.strike_landed.connect(func(_v: Node, amount: float, _p: Vector2, _l: bool) -> void:
+		reported.append(amount))
+	var before: float = player.damage
+	shooter.land_projectile_hit(player, 20.0, player.global_position + Vector2.RIGHT * 40.0)
+	await physics_frame
+	var pushed: float = shooter.linear_velocity.length()
+	var taken: float = player.damage - before
+	print("      bullet on shield face: shooter pushed %.0f px/s, taken %.1f, reported %s" % [pushed, taken, reported])
+	if pushed > 100.0:
+		failures.append("a bullet on the shield face shoved the shooter %.0f px/s; only melee recoils" % pushed)
+	if taken > 5.0:
+		failures.append("a bullet on the shield face took %.1f of 20, expected it blocked" % taken)
+	if reported.size() != 1:
+		failures.append("expected one strike_landed, got %d" % reported.size())
+	elif absf(reported[0] - taken) > 0.01:
+		failures.append("strike_landed reported %.1f but the shield let through %.1f" % [reported[0], taken])
+	await _teardown(stage)
 	return failures
