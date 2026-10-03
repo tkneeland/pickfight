@@ -69,13 +69,13 @@ const TABLE: Array[Dictionary] = [
 	},
 	{
 		"id": SOCCER, "name": "Soccer",
-		"rule": "First team to 3 goals wins.",
+		"rule": "Reach the goal target to win.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
 		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "own_stages": true,
 	},
 	{
 		"id": CAPTURE_THE_FLAG, "name": "Capture the Flag",
-		"rule": "First team to 2 captures wins.",
+		"rule": "Reach the capture target to win.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
 		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "own_stages": true,
 	},
@@ -94,6 +94,53 @@ static func is_valid(id: String) -> bool:
 
 static func display_name(id: String) -> String:
 	return TranslationServer.translate("MODE_%s_NAME" % (id if id != CLASSIC else "classic").to_upper())
+
+## What the Host panel's adjustable target row counts in `id` (#544):
+## "first_to" rounds (Classic and the other round modes), Stock "lives",
+## Soccer "goals" or Capture the Flag "captures".
+static func target_kind(id: String) -> String:
+	match id:
+		STOCK:
+			return "lives"
+		SOCCER:
+			return "goals"
+		CAPTURE_THE_FLAG:
+			return "captures"
+	return "first_to"
+
+## The saved value behind `target_kind(id)`, or -1 for "first_to" (the
+## round target lives on `ControllerServer`).
+static func target_setting(id: String) -> int:
+	var settings: RefCounted = HostSettingsScript.shared()
+	match target_kind(id):
+		"lives":
+			return settings.stock_lives
+		"goals":
+			return settings.soccer_goals
+		"captures":
+			return settings.ctf_captures
+	return -1
+
+## The translation key of the target row's label for a `target_kind`.
+static func target_label_key(kind: String) -> String:
+	match kind:
+		"lives":
+			return "LOBBY_LIVES"
+		"goals":
+			return "LOBBY_GOALS_TO_WIN"
+		"captures":
+			return "LOBBY_CAPTURES_TO_WIN"
+	return "LOBBY_FIRST_TO"
+
+## `rule_line` with the host's target in it, for the stage title card (#544):
+## the mode cards stay number-free, this reads the saved value.
+static func status_line(id: String) -> String:
+	if not is_valid(id):
+		return ""
+	var value: int = target_setting(id)
+	if value < 0:
+		return rule_line(id)
+	return TranslationServer.translate("MODE_%s_RULE_N" % id.to_upper()) % value
 
 static func rule_line(id: String) -> String:
 	if not is_valid(id):
@@ -139,6 +186,7 @@ static func picker_rows() -> Array:
 	return rows
 
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const KingOfTheHillScript := preload("res://scripts/KingOfTheHill.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const HotPotatoScript := preload("res://scripts/HotPotato.gd")
