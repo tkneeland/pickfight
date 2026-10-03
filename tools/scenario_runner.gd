@@ -690,6 +690,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_match_starts_with_host_and_bots_only",
 	"online_bots_only_match_starts_offline_and_says_so",
 	"remote_join_cancel_button_click_aborts_join_and_closes_link",
+	"remote_join_cancel_idle_and_rejoin_wait_paths",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2462,6 +2463,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
 		"remote_join_cancel_button_click_aborts_join_and_closes_link":
 			return await _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link()
+		"remote_join_cancel_idle_and_rejoin_wait_paths":
+			return await _scenario_remote_join_cancel_idle_and_rejoin_wait_paths()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -35655,8 +35658,63 @@ func _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link() -> 
 			failures.append("%s: still in state %d after Cancel" % [via, client.state])
 		if client._socket != null:
 			failures.append("%s: relay link not closed" % via)
-		if client._cancel_button.visible or client._join_button.disabled or not client._room_edit.editable:
+		if client._join_button.disabled or not client._room_edit.editable:
 			failures.append("%s: join menu left stuck" % via)
 	silent.stop()
+	_rc_close_241(rig)
+	return failures
+## #506: Cancel and Esc on the idle join screen ask to go back to the title; both work during the retry wait after a drop.
+func _scenario_remote_join_cancel_idle_and_rejoin_wait_paths() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var silent := TCPServer.new()
+	if silent.listen(0, "127.0.0.1") != OK:
+		return ["no free port for the silent relay"]
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:%d" % silent.get_local_port())
+	var backs: Array[int] = [0]
+	client.back_requested.connect(func() -> void: backs[0] += 1)
+	if not client._cancel_button.visible:
+		failures.append("idle: Cancel not shown on the first join screen")
+	await _settings_click(client._cancel_button.get_global_rect().get_center())
+	if backs[0] != 1 or client.state != RcState241.JOIN:
+		failures.append("idle: clicking Cancel asked to go back %d times" % backs[0])
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	get_root().push_input(esc)
+	await process_frame
+	if backs[0] != 2:
+		failures.append("idle: Esc asked to go back %d times in all" % backs[0])
+	# Retry wait: a join that drops keeps redialling until Cancel.
+	client.join_timeout_msec = 60000
+	client.join("ABCD", "Tester")
+	client._keep_rejoining(Time.get_ticks_msec() + 60000)
+	client._return_to_join("")
+	client._rejoin_until_msec = Time.get_ticks_msec() + 60000
+	if not client.rejoining():
+		failures.append("rejoin: could not enter the retry wait")
+	await _settings_click(client._cancel_button.get_global_rect().get_center())
+	if client.rejoining() or backs[0] != 2:
+		failures.append("rejoin: Cancel click did not end the retry wait (backs %d)" % backs[0])
+	client._rejoin_until_msec = Time.get_ticks_msec() + 60000
+	get_root().push_input(esc)
+	await process_frame
+	if client.rejoining() or backs[0] != 2:
+		failures.append("rejoin: Esc did not end the retry wait (backs %d)" % backs[0])
+	silent.stop()
+	# Run as the current scene, an idle Cancel lands on Main (the title).
+	client._rejoin_until_msec = 0
+	current_scene = client
+	await _settings_click(client._cancel_button.get_global_rect().get_center())
+	await _await_ticks(5)
+	var landed: Node = current_scene
+	if landed == null or landed.scene_file_path != "res://scenes/Main.tscn":
+		failures.append("idle: Cancel did not land on Main (scene %s)" % [landed.scene_file_path if landed != null else "none"])
+	if landed != null and landed != client:
+		landed.queue_free()
+	current_scene = null
+	rig["nodes"].clear() # the scene change freed the client
+	await process_frame
 	_rc_close_241(rig)
 	return failures

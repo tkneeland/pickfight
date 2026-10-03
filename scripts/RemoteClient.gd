@@ -54,6 +54,10 @@ enum State { JOIN, CONNECTING, PLAYING }
 enum Phase { OPENING, JOINING, HELLO }
 
 signal state_changed(state: int)
+## Cancel or Esc on the idle join screen: the host heads back to the title (#506).
+signal back_requested
+
+const MAIN_SCENE: String = "res://scenes/Main.tscn"
 
 var state: int = State.JOIN
 var relay_url: String = ""
@@ -300,8 +304,8 @@ func input_released() -> bool:
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
 		var back := event as InputEventKey
-		if back != null and back.pressed and not back.echo and back.physical_keycode == KEY_ESCAPE and (state == State.CONNECTING or rejoining()):
-			cancel() # Esc backs out of a join like the Cancel button (#506)
+		if back != null and back.pressed and not back.echo and back.physical_keycode == KEY_ESCAPE:
+			cancel() # Esc does what the Cancel button does (#506)
 			get_viewport().set_input_as_handled()
 		return
 	var pad_button := event as InputEventJoypadButton
@@ -371,11 +375,16 @@ func join(code: String, display_name: String) -> bool:
 	return true
 
 ## Gives up a join in progress, or the retries after a drop, and goes back to
-## the join screen (#506: it used to ignore the retry wait, where the join
-## screen shows its Cancel but the retry loop kept dialling).
+## the join screen; from the idle join screen it goes back to the title
+## instead (#506). The scene only changes when this client is the running
+## scene, so a client embedded in a test stays put.
 func cancel() -> void:
 	if state == State.CONNECTING or rejoining():
 		_return_to_join("")
+	elif state == State.JOIN:
+		back_requested.emit()
+		if is_inside_tree() and get_tree().current_scene == self:
+			get_tree().change_scene_to_file(MAIN_SCENE)
 
 ## Hangs up and goes back to the join screen.
 func leave() -> void:
@@ -1008,7 +1017,7 @@ func _build_join_panel() -> void:
 	_cancel_button.name = "Cancel"
 	_cancel_button.text = tr("JOIN_CANCEL")
 	_cancel_button.pressed.connect(cancel)
-	row.add_child(_cancel_button)
+	row.add_child(_cancel_button) # always shown: idle, it backs out to the title
 	_update_link = LinkButton.new()
 	_update_link.name = "UpdateLink"
 	_update_link.text = tr("JOIN_UPDATE_LINK")
@@ -1160,7 +1169,6 @@ func _set_status(text: String) -> void:
 	var busy: bool = state == State.CONNECTING
 	if _join_button != null:
 		_join_button.disabled = busy
-		_cancel_button.visible = busy or rejoining()
 		_room_edit.editable = not busy
 		_name_edit.editable = not busy
 
