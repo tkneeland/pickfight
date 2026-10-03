@@ -56,6 +56,7 @@ var _hat_grid: GridContainer
 var _color_grid: GridContainer
 var _eyes_grid: GridContainer
 var _popup_layout: bool = false
+var _margin: MarginContainer
 var _root: BoxContainer
 var _title: Label
 var _headings: Array[Label] = []
@@ -66,10 +67,11 @@ var _done_row: HBoxContainer
 
 func _init() -> void:
 	name = "CosmeticsPanel"
-	var margin := MarginContainer.new()
+	_margin = MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 14)
-	add_child(margin)
+		_margin.add_theme_constant_override("margin_" + side, 14)
+	add_child(_margin)
+	var margin: MarginContainer = _margin
 	_root = BoxContainer.new()
 	_root.vertical = true
 	_root.add_theme_constant_override("separation", 8)
@@ -161,6 +163,8 @@ func _apply_layout() -> void:
 	for heading: Label in _headings:
 		heading.add_theme_font_size_override("font_size", 26 if _popup_layout else FONT_SIZE)
 		heading.theme_type_variation = UiThemeScript.INK_HEADING_LABEL if _popup_layout else UiThemeScript.HEADING_LABEL
+	for side: String in ["left", "right", "top", "bottom"]:
+		_margin.add_theme_constant_override("margin_" + side, 0 if _popup_layout else 14)
 	if _popup_layout:
 		add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 		_preview_frame.theme_type_variation = UiThemeScript.PREVIEW_STAGE

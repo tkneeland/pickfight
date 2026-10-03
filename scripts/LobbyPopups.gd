@@ -14,6 +14,7 @@ extends RefCounted
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 const OnlineCosmeticsPanelScript := preload("res://scripts/OnlineCosmeticsPanel.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
+const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
@@ -146,6 +147,8 @@ func open(which: String) -> void:
 	if which == _open or _help == null:
 		return
 	_open = which
+	# A popup owns A and B while it is up, so a gamepad cannot ready its seat behind it.
+	PadMenuScript.set_open("lobby_popup", which != "")
 	_help.visible = which == "help"
 	_look.visible = which == "look"
 	if which == "help":

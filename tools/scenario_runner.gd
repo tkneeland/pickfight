@@ -744,6 +744,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_pad_picker_arrows_only_on_the_selected_row_547",
 	"lobby_kind_keys_and_join_only_online_547",
 	"lobby_mode_card_click_picks_the_mode_and_its_format_547",
+	"lobby_pad_menu_opens_and_closes_popups_547",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2621,6 +2622,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_kind_keys_and_join_only_online_547()
 		"lobby_mode_card_click_picks_the_mode_and_its_format_547":
 			return await _scenario_lobby_mode_card_click_picks_the_mode_and_its_format_547()
+		"lobby_pad_menu_opens_and_closes_popups_547":
+			return await _scenario_lobby_pad_menu_opens_and_closes_popups_547()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37650,5 +37653,43 @@ func _scenario_lobby_mode_card_click_picks_the_mode_and_its_format_547() -> Arra
 		for other: Label in screen.mode_cards():
 			if other.get_parent().get_parent() != card and other.get_parent().get_parent().theme_type_variation == &"ModeCardOn":
 				failures.append("another card is highlighted beside '%s'" % case[0])
+	await _teardown(rig["main"])
+	return failures
+## The gamepad reaches the How to play popup from the host menu: A opens it with
+## focus on its close button, B closes just the popup (the menu stays, focus back
+## on How to play), and a second B closes the menu. A seat cannot be readied behind it.
+func _scenario_lobby_pad_menu_opens_and_closes_popups_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	if not screen.pad_menu_open():
+		failures.append("Y did not open the host menu")
+	var how: Button = screen.control_button("how_to_play")
+	how.grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	await _await_ticks(2)
+	if screen.popup_open() != "help":
+		failures.append("A on How to play opened '%s'" % screen.popup_open())
+	var focus: Control = get_root().gui_get_focus_owner()
+	if focus == null or focus.name != "Close":
+		failures.append("focus is on %s in the popup, expected its Close button" % (focus.name if focus != null else "nothing"))
+	if screen.how_to_play_demos().size() != 4:
+		failures.append("the popup runs %d demos, expected 4" % screen.how_to_play_demos().size())
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	await _await_ticks(2)
+	if screen.popup_open() != "" or not screen.pad_menu_open():
+		failures.append("B left popup '%s' with the menu open %s; expected the popup closed and the menu open" % [screen.popup_open(), screen.pad_menu_open()])
+	if not screen.how_to_play_demos().is_empty():
+		failures.append("the demos kept running after the popup closed")
+	if get_root().gui_get_focus_owner() != how:
+		failures.append("focus did not return to How to play")
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.pad_menu_open():
+		failures.append("the second B did not close the menu")
+	if not server.claimed_slots().is_empty():
+		failures.append("a pad press seated or readied behind the popup: %s" % [server.claimed_slots()])
+	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures

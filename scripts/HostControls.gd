@@ -554,6 +554,7 @@ func exit_tree() -> void:
 		_pad_menu_open = false
 		PadMenuScript.set_open("lobby", false)
 	PadMenuScript.set_open("title", false)
+	PadMenuScript.set_open("lobby_popup", false)
 
 func unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
