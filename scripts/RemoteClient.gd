@@ -311,6 +311,9 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 		return
 	var pad_button := event as InputEventJoypadButton
+	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
+		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
+		return
 	if pad_button != null and not menu_open:
 		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
 			_pad_shoulder_held = pad_button.pressed
@@ -469,7 +472,7 @@ func _on_host_text(text: String) -> void:
 		_send_json({"t": "name", "v": player_name})
 		for pick: Dictionary in CosmeticsPickerScript.pick_messages(saved_pick):
 			_send_json(pick) # issue #441: the saved look goes on at join
-		_set_captured(true)
+		_set_captured(false) # the lobby message below decides (#518)
 		_show_playing()
 		return
 	match str(msg.get("t", "")):
@@ -580,7 +583,13 @@ func resume() -> void:
 	menu_open = false
 	_menu_panel.visible = false
 	_mouse.reset()
-	_set_captured(true)
+	_sync_capture()
+
+## The mouse is captured only while a round is on screen, never over the lobby or
+## the podium where Ready must be clickable (#518).
+func _sync_capture() -> void:
+	var phase: String = str(lobby.get("phase", ""))
+	_set_captured(state == State.PLAYING and not menu_open and (phase == "playing" or phase == "round_end"))
 
 func _set_captured(on: bool) -> void:
 	mouse_captured = on
@@ -1233,6 +1242,8 @@ func _refresh_lobby() -> void:
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
 	_cosmetics_panel.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
+	_ready_button.set_pressed_no_signal(_own_ready()) # mirror the server: it clears ready at match start and victory (#518)
+	_sync_capture()
 
 func _refresh_hud() -> void:
 	if _hud == null:
