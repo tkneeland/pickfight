@@ -911,7 +911,8 @@ func _load_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load(settings_path) != OK:
 		return
-	player_name = str(config.get_value(SECTION, "name", ""))
+	# #460: a hand-edited or junk saved name reads as empty; the join falls back to "Player".
+	player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
 	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)
@@ -1237,7 +1238,7 @@ func _refresh_lobby() -> void:
 	var host: bool = _is_host()
 	_host_row.visible = host
 	_mode_button.text = tr("MODE_TEAMS") if lobby.get("mode") == "teams" else tr("MODE_FFA")
-	_target_label.text = tr("LOBBY_FIRST_TO") % int(lobby.get("target", 5))
+	_target_label.text = tr(_target_label_key(str(lobby.get("target_kind", "first_to")))) % int(lobby.get("target", 5))
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
@@ -1413,3 +1414,14 @@ func _tick_rejoin() -> void:
 	var until: int = _rejoin_until_msec
 	if not join(room_code, player_name):
 		_keep_rejoining(until)
+
+## The host row's target label per `target_kind` (#544), as `GameModes.target_label_key`.
+func _target_label_key(kind: String) -> String:
+	match kind:
+		"lives":
+			return "LOBBY_LIVES"
+		"goals":
+			return "LOBBY_GOALS_TO_WIN"
+		"captures":
+			return "LOBBY_CAPTURES_TO_WIN"
+	return "LOBBY_FIRST_TO"

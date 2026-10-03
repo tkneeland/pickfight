@@ -249,8 +249,9 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	else:
 		for entry: Dictionary in state["players"]:
 			_lobby_rows.add_child(_lobby_row(state, entry, 36 if state["players"].size() <= 4 else 28))
-	_lobby_target_label.text = tr("LOBBY_FIRST_TO") % state["target"]
-	if teams:
+	var target_key: String = GameModesScript.target_label_key(str(state.get("target_kind", "first_to")))
+	_lobby_target_label.text = tr(target_key) % state["target"]
+	if teams and target_key == "LOBBY_FIRST_TO":
 		_lobby_target_label.text = tr("LOBBY_TEAMS_FIRST_TO") % state["target"]
 	var joined: int = state["players"].size()
 	var online: bool = _online_kind(join_source)
@@ -803,9 +804,9 @@ func press_control(id: String) -> void:
 			var count: int = _server.bot_director.bot_count()
 			_server.apply_host_command("bots", count + 1 if count < _server.bot_capacity() else 0)
 		"target_down":
-			_server.apply_host_command("target", _server.match_target() - 1)
+			_server.apply_host_command("target", _server.mode_target() - 1)
 		"target_up":
-			_server.apply_host_command("target", _server.match_target() + 1)
+			_server.apply_host_command("target", _server.mode_target() + 1)
 		"start":
 			_server.apply_host_command("start")
 		"join":
