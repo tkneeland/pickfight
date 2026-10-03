@@ -413,10 +413,6 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"juice_strike_shakes_real_camera",
 	"juice_shake_disabled_by_setting",
 	"juice_hitstop_restores_and_does_not_desync",
-	"plunger_sticks_to_player_and_drags_them",
-	"plunger_surface_stick_hangs_without_reeling_in",
-	"plunger_hard_yank_detaches",
-	"plunger_is_in_the_pickup_set",
 	"host_settings_disabled_stage_never_rotates_in",
 	"host_settings_disabled_weapon_never_spawns",
 	"host_settings_refuse_last_stage_and_weapon",
@@ -671,7 +667,6 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_off_sends_no_record_on_still_does",
 	"shield_head_is_wide_and_shield_shaped",
 	"pc_space_tap_retracts_grapple_while_mouse_vector_is_held",
-	"gamepad_shoulder_hold_and_stick_click_release_plunger",
 	"remote_client_space_tap_releases_on_host",
 	"phone_packet_without_release_flag_keeps_zero_vector_release",
 	"pc_space_press_throws_boomerang_along_aim_without_releasing",
@@ -976,9 +971,6 @@ const WEAPON_RESOURCE_PATHS: PackedStringArray = [
 	"res://resources/spear.tres",
 	"res://resources/pogo.tres",
 	"res://resources/fishing_rod.tres",
-	# The plunger (#270) is left out on purpose: roster_traversal_is_measured
-	# wants every roster weapon to vault an 80 px ledge, and the plunger sticks
-	# and hangs rather than planting. It has its own plunger_* scenarios.
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
 	# Last (#397): the seeded tunnel sweeps hand every weapon its throws by list
@@ -1907,14 +1899,6 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_juice_shake_disabled_by_setting()
 		"juice_hitstop_restores_and_does_not_desync":
 			return await _scenario_juice_hitstop_restores_and_does_not_desync()
-		"plunger_sticks_to_player_and_drags_them":
-			return await _scenario_plunger_sticks_to_player_and_drags_them()
-		"plunger_surface_stick_hangs_without_reeling_in":
-			return await _scenario_plunger_surface_stick_hangs_without_reeling_in()
-		"plunger_hard_yank_detaches":
-			return await _scenario_plunger_hard_yank_detaches()
-		"plunger_is_in_the_pickup_set":
-			return await _scenario_plunger_is_in_the_pickup_set()
 		"host_settings_disabled_stage_never_rotates_in":
 			return await _scenario_host_settings_disabled_stage_never_rotates_in()
 		"host_settings_disabled_weapon_never_spawns":
@@ -2423,8 +2407,6 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shield_head_is_wide_and_shield_shaped()
 		"pc_space_tap_retracts_grapple_while_mouse_vector_is_held":
 			return await _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held()
-		"gamepad_shoulder_hold_and_stick_click_release_plunger":
-			return await _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger()
 		"remote_client_space_tap_releases_on_host":
 			return await _scenario_remote_client_space_tap_releases_on_host()
 		"phone_packet_without_release_flag_keeps_zero_vector_release":
@@ -15169,9 +15151,6 @@ func _scenario_round_modifier_weapon_roulette_swaps_every_ten_seconds() -> Array
 	var roster: Array[String] = []
 	for path: String in WEAPON_RESOURCE_PATHS:
 		roster.append(path)
-	# The roulette draws from every pickup, plunger included (left out of the
-	# list above for the traversal sweep only).
-	roster.append("res://resources/plunger.tres")
 	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
 		if round_manager.active_modifier_id() != "weapon_roulette":
 			return 0.0
@@ -25018,120 +24997,6 @@ func _scenario_juice_hitstop_restores_and_does_not_desync() -> Array[String]:
 	get_root().get_tree().paused = false
 	await _teardown(stage)
 	return failures
-# --- Plunger (issue #270) ----------------------------------------------------
-const PLUNGER_PATH: String = "res://resources/plunger.tres"
-## Holder under a bar, head thrust up into the bar's underside until it sticks.
-## Returns {"stage", "holder", "bar"}; the holder is hanging from the plunger.
-func _plunger_hang_setup() -> Dictionary:
-	var stage: Node2D = _new_stage()
-	var bar: StaticBody2D = _add_bar(stage, DEEP_PARK_POSITION, Vector2(240, 24))
-	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, 60))
-	await _await_ticks(2)
-	await _equip(holder, PLUNGER_PATH)
-	holder.set_input_vector(Vector2.UP)
-	await _await_condition(func() -> bool: return holder.plunger_attached(), 4000)
-	return {"stage": stage, "holder": holder, "bar": bar}
-## A plunger hit on an opponent attaches it, and moving the holder drags them.
-func _scenario_plunger_sticks_to_player_and_drags_them() -> Array[String]:
-	var failures: Array[String] = []
-	var stage: Node2D = _new_stage()
-	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
-	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
-	await _await_ticks(2)
-	await _equip(holder, PLUNGER_PATH)
-	# Free of gravity so the drag is the only thing moving either body.
-	holder.gravity_scale = 0.0
-	victim.gravity_scale = 0.0
-	holder.set_input_vector(Vector2.RIGHT)
-	var stuck: bool = await _await_condition(func() -> bool: return holder.plunger_attached(), 4000)
-	if not stuck or holder.plunger_target() != victim:
-		failures.append("a plunger hit on an opponent did not attach to them (target %s)" % holder.plunger_target())
-		await _teardown(stage)
-		return failures
-	if victim.damage <= 0.0:
-		failures.append("plunging the opponent did no damage")
-	if victim.damage > 20.0:
-		failures.append("the plunger hit took %.1f off, not a light hit" % victim.damage)
-	var before: float = victim.global_position.x
-	var holder_before: float = holder.global_position.x
-	for i in 40:
-		holder.linear_velocity = Vector2(-150, 0)
-		await physics_frame
-	print("      plunger: holder moved %.1f px left" % (holder_before - holder.global_position.x))
-	var dragged: float = before - victim.global_position.x
-	print("      plunger: victim dragged %.1f px left, still attached %s, damage %.1f" % [dragged, holder.plunger_attached(), victim.damage])
-	if dragged < 10.0:
-		failures.append("moving the holder dragged the stuck opponent only %.1f px" % dragged)
-	if not holder.plunger_attached():
-		failures.append("a moderate pull popped the plunger off the opponent")
-	await _teardown(stage)
-	return failures
-## Stuck to a surface the holder hangs, and the distance to the anchor never
-## shrinks: no reel-in, even with the drag held the whole time.
-func _scenario_plunger_surface_stick_hangs_without_reeling_in() -> Array[String]:
-	var failures: Array[String] = []
-	var setup: Dictionary = await _plunger_hang_setup()
-	var stage: Node2D = setup["stage"]
-	var holder: RigidBody2D = setup["holder"]
-	if not holder.plunger_attached() or holder.plunger_target() != setup["bar"]:
-		failures.append("the plunger did not stick to the bar above")
-		await _teardown(stage)
-		return failures
-	var anchor: Vector2 = holder.plunger_anchor()
-	# Let the stick's own momentum settle (the head overshoots the rope's end
-	# a little); from there the rope must only ever hold or lengthen.
-	await _await_ticks(60)
-	var start: float = (holder.global_position - anchor).length()
-	var shortest: float = start
-	var longest: float = start
-	for i in 180:
-		await physics_frame
-		var d: float = (holder.global_position - anchor).length()
-		shortest = minf(shortest, d)
-		longest = maxf(longest, d)
-	var end: float = (holder.global_position - anchor).length()
-	print("      plunger hang: rope %.1f once settled, shortest %.1f, longest %.1f, end %.1f, attached %s" % [start, shortest, longest, end, holder.plunger_attached()])
-	if not holder.plunger_attached():
-		failures.append("the plunger let go of a surface under the holder's own weight")
-	if shortest < start - 4.0:
-		failures.append("the rope shrank from %.1f to %.1f px: the plunger reeled the holder in" % [start, shortest])
-	if end < start - 4.0:
-		failures.append("after hanging 3 s the holder was %.1f px from the anchor, closer than the %.1f once settled" % [end, start])
-	if holder.global_position.y <= anchor.y:
-		failures.append("the holder did not hang below the anchor")
-	await _teardown(stage)
-	return failures
-## A hard pull on a stuck plunger pops it free.
-func _scenario_plunger_hard_yank_detaches() -> Array[String]:
-	var failures: Array[String] = []
-	var setup: Dictionary = await _plunger_hang_setup()
-	var stage: Node2D = setup["stage"]
-	var holder: RigidBody2D = setup["holder"]
-	if not holder.plunger_attached():
-		failures.append("the plunger did not stick to the bar above")
-		await _teardown(stage)
-		return failures
-	for i in 30:
-		holder.linear_velocity = Vector2(0, 1800)
-		await physics_frame
-		if not holder.plunger_attached():
-			break
-	print("      plunger yank: attached after the yank %s" % holder.plunger_attached())
-	if holder.plunger_attached():
-		failures.append("a hard yank did not pop the plunger free")
-	await _teardown(stage)
-	return failures
-func _scenario_plunger_is_in_the_pickup_set() -> Array[String]:
-	var failures: Array[String] = []
-	if not PickupWeaponsScript.WEAPON_PATHS.has(PLUNGER_PATH):
-		failures.append("the plunger is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
-	var found: bool = false
-	for stats: Resource in PickupWeaponsScript.available_weapons():
-		found = found or stats.resource_path == PLUNGER_PATH
-	if not found:
-		failures.append("the plunger is not among the loaded pickup weapons")
-	_scenario_completed = true
-	return failures
 ## Issue #294: a stage the host switched off never comes up in the rotation,
 ## however many rounds are dealt, while the others all still do.
 func _scenario_host_settings_disabled_stage_never_rotates_in() -> Array[String]:
@@ -27470,7 +27335,7 @@ func _scenario_sfx_hit_sets_have_no_placeholder_files() -> Array[String]:
 			continue
 		for file: String in sounds[key]["files"]:
 			checked += 1
-			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_", "_plunger_"]:
+			for marker: String in ["_spear_", "_pogo_", "_rod_", "_magnet_", "_umbrella_"]:
 				if file.contains(marker):
 					failures.append("%s uses placeholder file %s" % [key, file])
 	if checked == 0:
@@ -29901,7 +29766,7 @@ func _scenario_demo_build_end_card_follows_victory() -> Array[String]:
 	DemoBuildScript361.forced = -1
 	await _teardown(loop["stage"])
 	return failures
-## Demo off: the full game is as it was. Every stage rotates, all fourteen
+## Demo off: the full game is as it was. Every stage rotates, all thirteen
 ## pickup weapons are in the pool, all five modes are on offer and pickable,
 ## and the victory screen goes straight to the lobby with no end card.
 func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
@@ -34904,64 +34769,6 @@ func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Arr
 	await _teardown(rig["stage"])
 	return failures
 
-## A pad lets go with a shoulder held, or a stick click toggled.
-func _scenario_gamepad_shoulder_hold_and_stick_click_release_plunger() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = await _release_rig_463(DEEP_PARK_POSITION, DEEP_PARK_POSITION + Vector2(0, 60), "PadRelease463")
-	var server: Node = rig["server"]
-	var players: Array[RigidBody2D] = rig["players"]
-	var holder: RigidBody2D = players[0]
-	# Deep above the arena: no gravity, or the holder falls away from the bar.
-	holder.gravity_scale = 0.0
-	server.set_lobby_state({"phase": "lobby", "players": []})
-	await _pad_button_261(0, JOY_BUTTON_A)
-	await _equip(holder, PLUNGER_PATH)
-	server._test_pad_axes[0] = Vector2(0.0, -1.0)
-	if not await _await_condition(func() -> bool: return holder.plunger_attached(), 4000):
-		failures.append("the pad's stick up did not stick the plunger to the bar (slot %d vec %s pos %s)" % [server.pad_slot(0), holder.input_vector, holder.global_position])
-		await _teardown(rig["stage"])
-		return failures
-	await _await_ticks(60)
-	if not holder.plunger_attached():
-		failures.append("the plunger let go with the stick held and no release")
-	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, true)
-	if not server.slot_released(0):
-		failures.append("holding LB did not mark the pad released")
-	if not await _await_condition(func() -> bool: return not holder.plunger_attached(), 1000):
-		failures.append("holding LB with the stick out did not let the plunger go")
-	await _pad_button_261(0, JOY_BUTTON_LEFT_SHOULDER, false)
-	if server.slot_released(0):
-		failures.append("letting go of LB left the pad released")
-	# The stick swings back to rest and out again to plunge a second time.
-	server._test_pad_axes[0] = Vector2.ZERO
-	await _await_ticks(60)
-	holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
-	holder.linear_velocity = Vector2.ZERO
-	await _await_ticks(2)
-	server._test_pad_axes[0] = Vector2(0.0, -1.0)
-	var pinned_attach := func() -> bool:
-		if holder.plunger_attached():
-			return true
-		holder.global_position = DEEP_PARK_POSITION + Vector2(0, 60)
-		holder.linear_velocity = Vector2.ZERO
-		return false
-	if not await _await_condition(pinned_attach, 4000):
-		failures.append("the plunger did not stick again after LB was let go (pos %s vec %s rel %s drag %s len %s)" % [holder.global_position, holder.input_vector, holder.input_released, holder.get("_drag_released"), holder.weapon_length])
-	# A stick click toggles, like Space.
-	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, true)
-	await _pad_button_261(0, JOY_BUTTON_RIGHT_STICK, false)
-	if not server.slot_released(0):
-		failures.append("clicking R3 did not toggle the pad released")
-	if not await _await_condition(func() -> bool: return not holder.plunger_attached(), 1000):
-		failures.append("a toggled-on release did not let the plunger go")
-	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, true)
-	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, false)
-	if server.slot_released(0):
-		failures.append("clicking L3 did not toggle the pad back to not released")
-	await _teardown(rig["stage"])
-	return failures
-
-## The Online client's Space tap reaches the host as the packet's flag byte.
 func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rc_rig_241(7, failures)

@@ -218,7 +218,7 @@ def write_report(path, date, profile_name, profile, records, one, ffa, pair, cel
     L.append("## Context (read this before the numbers)")
     L.append("")
     L.append("- **Bots:** the game's own `Bot.gd`, the only skill level (\"decent\"), driven straight into `Player.set_input_vector` "
-             "(no phone smoothing). Bots are seeded per run. Bots use weapons the same way for all 16 weapons; if the bot "
+             "(no phone smoothing). Bots are seeded per run. Bots use weapons the same way for all 15 weapons; if the bot "
              "plays a weapon badly, that weapon looks weak here.")
     L.append("- **Harness:** the real `Main.tscn` + `RoundManager` (stage rotation over all stages, rising lava, modifiers off, "
              "pickups off so nobody changes weapon, a fixed weapon per slot every round), headless at `--fixed-fps 60`. "

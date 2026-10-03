@@ -357,10 +357,7 @@ func _physics_process(delta: float) -> void:
 	_update_gridlock_phase(delta)
 	_update_head_grip()
 	_drive_angle(delta)
-	# A plunger stuck to something holds its length: driving the head back in
-	# would reel the holder toward the anchor, which is the grapple's job.
-	if not plunger_attached():
-		_drive_extension(delta)
+	_drive_extension(delta)
 	_update_weapon_visual()
 	_tick_fire(delta)
 	_tick_special(delta)
@@ -1448,8 +1445,6 @@ func _score_swept_strike() -> void:
 	_head.swept_into = null
 	_head.swept_speed = 0.0
 	var struck: Node = hit as Node
-	if struck != null and _stats.special == &"plunger":
-		_plunge_onto.call_deferred(struck)
 	if struck == null or struck == self or not struck.is_in_group("players"):
 		return
 	if _stats.special == &"pogo":
@@ -1469,8 +1464,6 @@ func _score_swept_strike() -> void:
 ## a clash, which is `WeaponHead`'s pair correction and the solver's business
 ## between them, and nobody's damage.
 func _on_head_hit(body: Node) -> void:
-	if _stats != null and _stats.special == &"plunger":
-		_plunge_onto.call_deferred(body)
 	if body == self or not body.is_in_group("players") or _head == null:
 		return
 	var to_body: Vector2 = body.global_position - _head.global_position
@@ -1864,113 +1857,12 @@ func special_ready() -> bool:
 	return launched_hook() == null and launched_boomerang() == null and _launch_cooldown <= 0.0 \
 		and not is_head_phased()
 
-# --- The plunger (issue #270) -------------------------------------------------
-#
-# A melee head that sticks to what it meets by a PinJoint2D between the head and
-# the thing struck. On a player it drags them wherever the holder swings; on a
-# surface the holder hangs from it like a pendulum. It NEVER reels the holder
-# in (that is the grapple's job): while stuck the extension drive is off, so the
-# head slides out along its groove to at most `max_reach` and never back in.
-# It lets go when yanked hard (the head pulled off its anchor, or the holder
-# dragged past the arm's length plus `PLUNGER_YANK_SLACK`), when the drag is
-# released for `PLUNGER_LET_GO_TIME`, or when the target dies or is gone.
-
-const PLUNGER_YANK_STRETCH: float = 28.0
-const PLUNGER_YANK_SLACK: float = 40.0
-const PLUNGER_LET_GO_TIME: float = 0.35
-const PLUNGER_COOLDOWN: float = 0.6
-
-var _plunge_joint: PinJoint2D
-var _plunge_target: PhysicsBody2D
-var _plunge_local: Vector2 = Vector2.ZERO
-var _plunge_cooldown: float = 0.0
-var _plunge_idle: float = 0.0
-
-func plunger_attached() -> bool:
-	return is_instance_valid(_plunge_joint) and is_instance_valid(_plunge_target)
-
-## What the plunger is stuck to, or null.
-func plunger_target() -> PhysicsBody2D:
-	return _plunge_target if plunger_attached() else null
-
-## Where the stuck head is anchored, in world space.
-func plunger_anchor() -> Vector2:
-	return _plunge_target.to_global(_plunge_local) if plunger_attached() else global_position
-
-## Stick the head to `target` if it is something a plunger holds: an opposing
-## live player, or solid terrain.
-func _plunge_onto(target: Node) -> void:
-	if _stats == null or _stats.special != &"plunger" or not _rig_is_live():
-		return
-	if plunger_attached() or _plunge_cooldown > 0.0 or _head.phased or not alive:
-		return
-	var body := target as PhysicsBody2D
-	if body == null or body == self or body == _head:
-		return
-	if body.is_in_group("players"):
-		if not body.alive or is_teammate(body):
-			return
-	elif body is RigidBody2D or not _plunge_solid(body):
-		return
-	var point: Vector2 = _head.global_position
-	_plunge_joint = PinJoint2D.new()
-	_plunge_joint.name = "PlungerStick"
-	_rig.add_child(_plunge_joint)
-	_plunge_joint.global_position = point
-	_plunge_joint.node_a = _plunge_joint.get_path_to(_head)
-	_plunge_joint.node_b = _plunge_joint.get_path_to(body)
-	_plunge_target = body
-	_plunge_local = body.to_local(point)
-	_plunge_idle = 0.0
-
-func _plunge_solid(body: Node) -> bool:
-	if body.has_method("is_solid"):
-		return bool(body.call("is_solid"))
-	return true
-
-func _plunge_release() -> void:
-	if is_instance_valid(_plunge_joint):
-		_plunge_joint.free()
-	_plunge_joint = null
-	_plunge_target = null
-	_plunge_cooldown = PLUNGER_COOLDOWN
-	_plunge_idle = 0.0
-
-func _tick_plunger(delta: float) -> void:
-	_plunge_cooldown = maxf(0.0, _plunge_cooldown - delta)
-	if _plunge_joint == null and _plunge_target == null:
-		return
-	if not plunger_attached():
-		_plunge_release()
-		return
-	var target: PhysicsBody2D = _plunge_target
-	if (target.is_in_group("players") and not target.alive) or not _plunge_solid(target) \
-			or not target.is_inside_tree():
-		_plunge_release()
-		return
-	var anchor: Vector2 = plunger_anchor()
-	var yanked: bool = (_head.global_position - anchor).length() > PLUNGER_YANK_STRETCH \
-		or (global_position - anchor).length() > _stats.max_reach + PLUNGER_YANK_SLACK
-	if yanked:
-		_plunge_release()
-		return
-	if _drag_released:
-		_plunge_idle += delta
-		if _plunge_idle >= PLUNGER_LET_GO_TIME:
-			_plunge_release()
-	else:
-		_plunge_idle = 0.0
-
 func _build_special(axis: Vector2) -> void:
 	_clear_launched()
 	_launch_cooldown = 0.0
 	# A drag held through a weapon swap is not a flick.
 	_flick_armed = false
 	_flick_history.clear()
-	_plunge_joint = null
-	_plunge_target = null
-	_plunge_cooldown = 0.0
-	_plunge_idle = 0.0
 	match _stats.special:
 		&"flail":
 			_flail = FlailChainScript.new()
@@ -1996,8 +1888,6 @@ func _tick_special(delta: float) -> void:
 			_tick_umbrella()
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
-		&"plunger":
-			_tick_plunger(delta)
 		&"pogo":
 			_tick_pogo(delta)
 

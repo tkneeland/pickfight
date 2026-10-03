@@ -2,7 +2,7 @@ extends RefCounted
 
 ## Per-stage weapon themes for the pickup pool (issue #310). A stage favours
 ## the weapons that suit it: the umbrella where wind zones blow, the grapple
-## (and plunger) on tall stages, the pogo on flat or bouncy ones. Weighted, not
+## on tall stages, the pogo on flat or bouncy ones. Weighted, not
 ## exclusive -- every offered weapon keeps at least BASE_COPIES, so any of them
 ## can still turn up anywhere. Weights are derived from the parts on the stage,
 ## so no stage is hand-edited; a stage may adjust them with the
@@ -21,7 +21,7 @@ const FLAT_SPREAD: float = 150.0
 
 ## Weapon file stems each theme favours.
 const WIND_WEAPONS: PackedStringArray = ["umbrella"]
-const TALL_WEAPONS: PackedStringArray = ["grapple", "plunger"]
+const TALL_WEAPONS: PackedStringArray = ["grapple"]
 const FLAT_WEAPONS: PackedStringArray = ["pogo"]
 
 ## Copies in the bag for each of `offered` on `stage`: weapon -> int >= 1. The
