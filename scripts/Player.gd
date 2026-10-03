@@ -625,6 +625,9 @@ func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	alive = true
 	damage = 0.0
 	input_released = false
+	_pogo_charge = 0.0
+	_pogo_cooldown = 0.0
+	_stomp_lock = 0.0
 	if not keeps_weapon:
 		_assign_weapon_stats(DEFAULT_WEAPON_STATS)
 	freeze = false
@@ -1888,6 +1891,9 @@ func special_ready() -> bool:
 func _build_special(axis: Vector2) -> void:
 	_clear_launched()
 	_launch_cooldown = 0.0
+	_pogo_charge = 0.0
+	_pogo_cooldown = 0.0
+	_stomp_lock = 0.0
 	# A drag held through a weapon swap is not a flick.
 	_flick_armed = false
 	_flick_history.clear()
