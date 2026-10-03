@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pickfight lobby</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&amp;family=Nunito:wght@600;800;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#14181d;text-decoration:none}a:hover{color:#14181d}
+.pf-btn{transition:transform 110ms ease-out, box-shadow 110ms ease-out;cursor:pointer}
+.pf-btn:hover,.pf-btn:focus-visible{transform:translate(-2px,-3px);box-shadow:6px 7px 0 #14181d}
+.pf-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #14181d}
+.pf-pop{animation:pfpop 220ms ease-out}
+@keyframes pfpop{0%{transform:scale(0.85)}70%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes h1p{0%{transform:rotate(150deg)}12%{transform:rotate(198deg)}45%{transform:rotate(333deg)}55%{transform:rotate(270deg)}59%{transform:rotate(387deg)}66%{transform:rotate(387deg)}70%{transform:rotate(420deg)}100%{transform:rotate(420deg)}}
+.h1p{animation:h1p 4.2s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h1t{0%{transform:translate(0px,0px);opacity:0}5%{transform:translate(-2px,0px);opacity:1}12%{transform:translate(-4px,-1px);opacity:1}45%{transform:translate(10px,-5px);opacity:1}55%{transform:translate(0px,-14px);opacity:1}59%{transform:translate(12.5px,6.4px);opacity:1}66%{transform:translate(12.5px,6.4px);opacity:1}69%{transform:translate(12.5px,6.4px);opacity:0}100%{transform:translate(0px,0px);opacity:0}}
+.h1t{animation:h1t 4.2s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h1r{0%{transform:translate(0px,0px) rotate(0deg);opacity:1}58%{transform:translate(0px,0px) rotate(0deg);opacity:1}62%{transform:translate(9px,-4px) rotate(8deg);opacity:1}75%{transform:translate(4px,0px) rotate(0deg);opacity:1}100%{transform:translate(0px,0px) rotate(0deg);opacity:1}}
+.h1r{animation:h1r 4.2s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h1f{0%,58%{opacity:0}59%{opacity:0.85}66%,100%{opacity:0}}
+.h1f{animation:h1f 4.2s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h2p{0%{transform:rotate(150deg)}10%{transform:rotate(210deg)}20%{transform:rotate(270deg)}25%{transform:rotate(306deg)}32%{transform:rotate(306deg)}40%{transform:rotate(312deg)}50%{transform:rotate(337deg)}60%{transform:rotate(414deg)}68%{transform:rotate(380deg)}100%{transform:rotate(420deg)}}
+.h2p{animation:h2p 6.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h2b{0%{transform:translate(0px,0px) rotate(0deg);opacity:1}32%{transform:translate(0px,0px) rotate(0deg);opacity:1}40%{transform:translate(6px,-12px) rotate(0deg);opacity:1}50%{transform:translate(8px,-24px) rotate(0deg);opacity:1}60%{transform:translate(12px,-44px) rotate(0deg);opacity:1}68%{transform:translate(34px,-42px) rotate(0deg);opacity:1}92%{transform:translate(34px,-42px) rotate(0deg);opacity:1}96%{transform:translate(34px,-42px) rotate(0deg);opacity:0}100%{transform:translate(0px,0px) rotate(0deg);opacity:0}}
+.h2b{animation:h2b 6.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h2t{0%{transform:translate(0px,0px);opacity:0}4%{transform:translate(-3px,1px);opacity:1}10%{transform:translate(-6px,-6px);opacity:1}20%{transform:translate(0px,-10px);opacity:1}25%{transform:translate(8.2px,-11.3px);opacity:1}32%{transform:translate(8.2px,-11.3px);opacity:1}40%{transform:translate(9.4px,-10.4px);opacity:1}50%{transform:translate(12.9px,-5.5px);opacity:1}60%{transform:translate(8.2px,11.3px);opacity:1}66%{transform:translate(8.2px,11.3px);opacity:0}100%{transform:translate(0px,0px);opacity:0}}
+.h2t{animation:h2t 6.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h3b{0%{transform:translate(0px,0px) rotate(0deg);opacity:1}19%{transform:translate(0px,0px) rotate(0deg);opacity:1}27%{transform:translate(70px,-30px) rotate(45deg);opacity:1}40%{transform:translate(110px,0px) rotate(90deg);opacity:1}92%{transform:translate(110px,0px) rotate(90deg);opacity:1}96%{transform:translate(110px,0px) rotate(90deg);opacity:0}100%{transform:translate(0px,0px) rotate(0deg);opacity:0}}
+.h3b{animation:h3b 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h3p{0%,26%{opacity:1;transform:rotate(130deg)}27%,100%{opacity:0;transform:rotate(130deg)}}
+.h3p{animation:h3p 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h3s{0%,26%{opacity:0;transform:rotate(60deg)}27%{opacity:1;transform:rotate(60deg)}40%{opacity:1;transform:rotate(60deg)}58%{opacity:1;transform:rotate(-90deg)}76%,84%{opacity:1;transform:rotate(-9deg)}92%{opacity:1;transform:rotate(60deg)}100%{opacity:1;transform:rotate(60deg)}}
+.h3s{animation:h3s 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h3k{0%,26%{opacity:1;transform:translate(0px,0px)}13%{opacity:1;transform:translate(0px,-4px)}27%,100%{opacity:0;transform:translate(0px,-4px)}}
+.h3k{animation:h3k 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h3t{0%{transform:translate(0px,0px);opacity:0}7%{transform:translate(-0.2px,0.2px);opacity:1}19%{transform:translate(-9px,10.7px);opacity:1}29%{transform:translate(-9px,10.7px);opacity:1}31%{transform:translate(-9px,10.7px);opacity:0}55%{transform:translate(0px,0px);opacity:0}58%{transform:translate(0px,-2.8px);opacity:1}76%{transform:translate(13.8px,-2.2px);opacity:1}84%{transform:translate(13.8px,-2.2px);opacity:1}87%{transform:translate(13.8px,-2.2px);opacity:0}100%{transform:translate(0px,0px);opacity:0}}
+.h3t{animation:h3t 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h4p{0%{transform:rotate(150deg)}11%{transform:rotate(198deg)}42%{transform:rotate(333deg)}51%{transform:rotate(270deg)}55%{transform:rotate(369deg)}60%{transform:rotate(369deg)}64%{transform:rotate(495deg)}100%{transform:rotate(495deg)}}
+.h4p{animation:h4p 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h4t{0%{transform:translate(0px,0px);opacity:0}5%{transform:translate(-2px,0px);opacity:1}11%{transform:translate(-4px,-1px);opacity:1}42%{transform:translate(10px,-5px);opacity:1}51%{transform:translate(0px,-14px);opacity:1}55%{transform:translate(14px,3.1px);opacity:1}60%{transform:translate(14px,3.1px);opacity:1}64%{transform:translate(-3px,3px);opacity:1}89%{transform:translate(-3px,3px);opacity:1}91%{transform:translate(-3px,3px);opacity:0}100%{transform:translate(0px,0px);opacity:0}}
+.h4t{animation:h4t 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h4r{0%{transform:translate(0px,0px) rotate(0deg);opacity:1}55%{transform:translate(0px,0px) rotate(0deg);opacity:1}63%{transform:translate(40px,-34px) rotate(120deg);opacity:1}72%{transform:translate(66px,-12px) rotate(240deg);opacity:1}78%{transform:translate(80px,24px) rotate(330deg);opacity:1}80%{transform:translate(80px,28px) rotate(330deg);opacity:0}100%{transform:translate(80px,28px) rotate(330deg);opacity:0}}
+.h4r{animation:h4r 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+@keyframes h4s{0%,77%{opacity:0;transform:scale(0.3)}80%{opacity:1;transform:scale(1)}90%,100%{opacity:0;transform:scale(1.6)}}
+.h4s{animation:h4s 4.5s linear infinite;transform-box:view-box;transform-origin:0 0}
+</style>
+</helmet>
+<div style="width: 1600px; height: 900px; box-sizing: border-box; position: relative; overflow: hidden; background: #232A4A; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 28px, transparent 28px 56px); font-family: 'Nunito', sans-serif; color: #14181d; padding: 16px 36px 34px; display: flex; flex-direction: column; gap: 14px">
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 24px">
+    <div style="display: flex; justify-self: start; background: #FBF6EA; border: 4px solid #14181d; border-radius: 14px; box-shadow: 4px 4px 0 #14181d; overflow: hidden">
+      <sc-for list="{{kinds}}" as="k" hint-placeholder-count="3">
+        <button class="pf-btn" onClick="{{k.pick}}" style="{{k.style}}">{{k.label}}</button>
+      </sc-for>
+    </div>
+    <a href="Main.dc.html" aria-label="Back to title" style="display: block; line-height: 0"><img src="../../../art/logo/logo.svg" alt="Pickfight" style="width: 560px; height: 140px; display: block; margin: -30px 0 -26px; position: relative; top: 6px"></a>
+    <div style="justify-self: end; text-align: right; font-family: 'Lilita One', sans-serif; font-size: 28px; line-height: 1.1; color: #FBF6EA">{{statusLine}}</div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; gap: 28px; min-height: 0">
+
+    <div style="width: 360px; display: flex; flex-direction: column; gap: 20px">
+      <div style="background: #FBF6EA; border: 5px solid #14181d; border-radius: 20px; box-shadow: 6px 6px 0 #14181d; padding: 14px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px">
+        <sc-if value="{{isCouch}}" hint-placeholder-val="{{ true }}">
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 30px">Scan to join</div>
+          <div style="width: 176px; height: 176px; background: #ffffff; border: 4px solid #14181d; border-radius: 10px; padding: 10px; box-sizing: border-box; display: grid; grid-template-columns: repeat(21, minmax(0, 1fr))">
+            <sc-for list="{{qr}}" as="c" hint-placeholder-count="441">
+              <div style="{{c.style}}"></div>
+            </sc-for>
+          </div>
+          <div style="font-size: 22px; font-weight: 900">192.168.1.24:8080</div>
+        </sc-if>
+        <sc-if value="{{isSolo}}" hint-placeholder-val="{{ false }}">
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 30px">Solo practice</div>
+          <div style="font-size: 22px; font-weight: 800; text-align: center">Just you and the bots on this computer. No room code, nothing online.</div>
+          <div style="font-size: 18px; font-weight: 800; text-align: center; color: #5A628C">Bots stay ready. Start when you are.</div>
+        </sc-if>
+        <sc-if value="{{isNet}}" hint-placeholder-val="{{ false }}">
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 30px">Room code</div>
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 96px; letter-spacing: 8px; line-height: 1.1; color: #3D8FD1; -webkit-text-stroke: 4px #14181d; paint-order: stroke fill">K7QX</div>
+          <div style="font-size: 20px; font-weight: 800; text-align: center">Friends open Pickfight, pick Online, then Join a game</div>
+        </sc-if>
+      </div>
+      <div style="font-family: 'Lilita One', sans-serif; font-size: 26px; color: #FBF6EA">Mode</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{modes}}" as="m" hint-placeholder-count="7">
+          <button class="pf-btn" onClick="{{m.pick}}" style="{{m.style}}">
+            <span style="font-family: 'Lilita One', sans-serif; font-size: 22px; display: block">{{m.name}}</span>
+            <span style="font-size: 16px; font-weight: 800; display: block; margin-top: 2px; line-height: 1.1; font-size: 15px">{{m.rule}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; align-items: baseline; gap: 16px">
+        <div style="font-family: 'Lilita One', sans-serif; font-size: 40px; color: #FBF6EA">Players</div>
+        <div style="font-size: 22px; font-weight: 800; color: #C9CCE0">{{countLine}}</div>
+      </div>
+      <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 18px">
+        <sc-for list="{{slots}}" as="s" hint-placeholder-count="8">
+          <sc-if value="{{s.filled}}" hint-placeholder-val="{{ true }}">
+            <div class="pf-pop" style="{{s.cardStyle}}">
+              <div style="display: flex; justify-content: center; padding-top: 14px">
+                <svg width="70" height="70" viewBox="16 26 70 72" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="27" y="48" width="48" height="48" fill="{{s.color}}" stroke="#14181d" stroke-width="4"></rect>
+                  <path d="{{s.hat}}" fill="#14181d" stroke="#14181d" stroke-width="2"></path>
+                  <circle cx="42" cy="66" r="6.5" fill="#FBF6EA" stroke="#14181d" stroke-width="1.5"></circle>
+                  <circle cx="60" cy="66" r="6.5" fill="#FBF6EA" stroke="#14181d" stroke-width="1.5"></circle>
+                  <circle cx="44" cy="67" r="3" fill="#14181d"></circle>
+                  <circle cx="62" cy="67" r="3" fill="#14181d"></circle>
+                </svg>
+              </div>
+              <div style="font-family: 'Lilita One', sans-serif; font-size: 26px; text-align: center; line-height: 1">{{s.name}}</div>
+              <sc-if value="{{s.pad}}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 4px; padding: 0 6px">
+                  <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
+                    <div style="{{r.style}}">
+                      <span role="button" tabindex="0" onClick="{{r.prev}}" aria-label="Previous" style="font-family: 'Lilita One', sans-serif; font-size: 18px; padding: 0 6px; cursor: pointer">&#9664;</span>
+                      <span style="flex-grow: 1; text-align: center">{{r.label}}: {{r.value}}</span>
+                      <span role="button" tabindex="0" onClick="{{r.next}}" aria-label="Next" style="font-family: 'Lilita One', sans-serif; font-size: 18px; padding: 0 6px; cursor: pointer">&#9654;</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <div style="display: flex; justify-content: center">
+                <button class="pf-btn" onClick="{{s.toggle}}" aria-label="{{s.aria}}" style="{{s.badgeStyle}}">{{s.badge}}</button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{s.empty}}" hint-placeholder-val="{{ false }}">
+            <div style="border: 4px dashed #5A628C; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #8F96BD">
+              <div style="font-family: 'Lilita One', sans-serif; font-size: 28px">Open seat</div>
+              <div style="font-size: 17px; font-weight: 800; white-space: nowrap">{{joinHint}}</div>
+            </div>
+          </sc-if>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="width: 320px; display: flex; flex-direction: column; gap: 14px">
+      <div style="background: #FBF6EA; border: 5px solid #14181d; border-radius: 20px; box-shadow: 6px 6px 0 #14181d; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px">
+        <div style="font-family: 'Lilita One', sans-serif; font-size: 28px">Host</div>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 22px; font-weight: 900">{{goalLabel}}</span>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <button class="pf-btn" onClick="{{firstDown}}" aria-label="Less" style="width: 44px; height: 44px; border-radius: 12px; border: 4px solid #14181d; background: #FBF6EA; box-shadow: 3px 3px 0 #14181d; font-family: 'Lilita One', sans-serif; font-size: 24px; color: #14181d">-</button>
+            <span style="font-family: 'Lilita One', sans-serif; font-size: 34px; width: 40px; text-align: center">{{goalValue}}</span>
+            <button class="pf-btn" onClick="{{firstUp}}" aria-label="More" style="width: 44px; height: 44px; border-radius: 12px; border: 4px solid #14181d; background: #FBF6EA; box-shadow: 3px 3px 0 #14181d; font-family: 'Lilita One', sans-serif; font-size: 24px; color: #14181d">+</button>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 22px; font-weight: 900">Bots</span>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <button class="pf-btn" onClick="{{botsDown}}" aria-label="Fewer bots" style="width: 44px; height: 44px; border-radius: 12px; border: 4px solid #14181d; background: #FBF6EA; box-shadow: 3px 3px 0 #14181d; font-family: 'Lilita One', sans-serif; font-size: 24px; color: #14181d">-</button>
+            <span style="font-family: 'Lilita One', sans-serif; font-size: 34px; width: 40px; text-align: center">{{bots}}</span>
+            <button class="pf-btn" onClick="{{botsUp}}" aria-label="More bots" style="width: 44px; height: 44px; border-radius: 12px; border: 4px solid #14181d; background: #FBF6EA; box-shadow: 3px 3px 0 #14181d; font-family: 'Lilita One', sans-serif; font-size: 24px; color: #14181d">+</button>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 22px; font-weight: 900">Teams</span>
+          <button class="pf-btn" onClick="{{toggleTeams}}" style="{{teamsStyle}}">{{teamsLabel}}</button>
+        </div>
+      </div>
+      <sc-if value="{{isOnline}}" hint-placeholder-val="{{ false }}">
+        <button class="pf-btn" onClick="{{openLook}}" style="background: #56B4E9; border: 4px solid #14181d; border-radius: 16px; box-shadow: 4px 4px 0 #14181d; padding: 14px; font-family: 'Lilita One', sans-serif; font-size: 24px; color: #14181d">Your look</button>
+      </sc-if>
+      <button class="pf-btn" onClick="{{openHelp}}" style="background: #CC79A7; border: 4px solid #14181d; border-radius: 16px; box-shadow: 4px 4px 0 #14181d; padding: 14px; font-family: 'Lilita One', sans-serif; font-size: 24px; color: #14181d">How to play</button>
+      <sc-if value="{{isNet}}" hint-placeholder-val="{{ false }}">
+        <button class="pf-btn" style="background: #FBF6EA; border: 4px solid #14181d; border-radius: 16px; box-shadow: 4px 4px 0 #14181d; padding: 14px; font-family: 'Lilita One', sans-serif; font-size: 22px; color: #14181d">Join someone's game (J)</button>
+      </sc-if>
+      <div style="flex-grow: 1"></div>
+      <button class="pf-btn" onClick="{{start}}" style="{{startStyle}}">{{startLabel}}</button>
+      <div style="font-size: 18px; font-weight: 800; color: #C9CCE0; text-align: center">{{startHint}}</div>
+    </div>
+  </div>
+
+  <sc-if value="{{showHelp}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(20,24,29,0.72); display: flex; align-items: center; justify-content: center">
+      <div class="pf-pop" style="width: 920px; background: #FBF6EA; border: 6px solid #14181d; border-radius: 26px; box-shadow: 10px 10px 0 #14181d; padding: 26px 40px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 46px">How to play</div>
+          <button class="pf-btn" onClick="{{closeHelp}}" aria-label="Close" style="width: 56px; height: 56px; border-radius: 14px; border: 4px solid #14181d; background: #F5E24A; box-shadow: 4px 4px 0 #14181d; font-family: 'Lilita One', sans-serif; font-size: 28px; color: #14181d">X</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px"><div style="background: #E69F00; border: 4px solid #14181d; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><svg width="56" height="99" viewBox="0 0 44 78"><rect x="2" y="2" width="40" height="74" rx="7" fill="#D9DEEB" stroke="#14181d" stroke-width="2.5"></rect><rect x="6" y="9" width="32" height="60" rx="3" fill="#FBF6EA"></rect><circle cx="22" cy="40" r="14" fill="none" stroke="#C9CCE0" stroke-width="1.5" stroke-dasharray="3 3"></circle><g transform="translate(22,40)"><g class="h1t"><circle r="6" fill="#FFD933" stroke="#14181d" stroke-width="2"></circle></g></g></svg><svg width="310" height="174" viewBox="0 0 224 126" style="display:block;border:4px solid #14181d;border-radius:12px;background:#212638"><rect x="0" y="100" width="224" height="26" fill="#5E5F73"></rect><g transform="translate(70,88)"><g class="h1p"><path d="M0 0 L30 0" stroke="#8a5a33" stroke-width="3.5" stroke-linecap="round"></path><path d="M24 -10 Q33 -8 35 0 Q33 8 24 10 Q30 0 24 -10 Z" fill="#B9BCC8" stroke="#14181d" stroke-width="1.5"></path></g><rect x="-12" y="-12" width="24" height="24" fill="#FFD933" stroke="#14181d" stroke-width="2.5"></rect><circle cx="-5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="-4" cy="-2.5" r="1.5" fill="#14181d"></circle><circle cx="6" cy="-2.5" r="1.5" fill="#14181d"></circle></g><g transform="translate(108,88)"><g class="h1r"><rect x="-12" y="-12" width="24" height="24" fill="#59BFFF" stroke="#14181d" stroke-width="2.5"></rect><circle cx="-5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="-4" cy="-2.5" r="1.5" fill="#14181d"></circle><circle cx="6" cy="-2.5" r="1.5" fill="#14181d"></circle><rect class="h1f" x="-12" y="-12" width="24" height="24" fill="#FFFFFF"></rect></g></g></svg></div><div style="font-size: 18px; font-weight: 800; line-height: 1.2">Drag on your phone to swing your pick. Flick fast to hit hard.</div></div><div style="background: #56B4E9; border: 4px solid #14181d; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><svg width="56" height="99" viewBox="0 0 44 78"><rect x="2" y="2" width="40" height="74" rx="7" fill="#D9DEEB" stroke="#14181d" stroke-width="2.5"></rect><rect x="6" y="9" width="32" height="60" rx="3" fill="#FBF6EA"></rect><circle cx="22" cy="40" r="14" fill="none" stroke="#C9CCE0" stroke-width="1.5" stroke-dasharray="3 3"></circle><g transform="translate(22,40)"><g class="h2t"><circle r="6" fill="#FFD933" stroke="#14181d" stroke-width="2"></circle></g></g></svg><svg width="310" height="174" viewBox="0 0 224 126" style="display:block;border:4px solid #14181d;border-radius:12px;background:#212638"><rect x="0" y="112" width="224" height="14" fill="#5E5F73"></rect><rect x="122" y="70" width="102" height="56" fill="#5E5F73"></rect><g class="h2b"><g transform="translate(106,100)"><g class="h2p"><path d="M0 0 L30 0" stroke="#8a5a33" stroke-width="3.5" stroke-linecap="round"></path><path d="M24 -10 Q33 -8 35 0 Q33 8 24 10 Q30 0 24 -10 Z" fill="#B9BCC8" stroke="#14181d" stroke-width="1.5"></path></g><rect x="-12" y="-12" width="24" height="24" fill="#FFD933" stroke="#14181d" stroke-width="2.5"></rect><circle cx="-5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="-4" cy="-2.5" r="1.5" fill="#14181d"></circle><circle cx="6" cy="-2.5" r="1.5" fill="#14181d"></circle></g></g></svg></div><div style="font-size: 18px; font-weight: 800; line-height: 1.2">Hook the pick on a ledge and pull to climb.</div></div><div style="background: #009E73; border: 4px solid #14181d; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><svg width="56" height="99" viewBox="0 0 44 78"><rect x="2" y="2" width="40" height="74" rx="7" fill="#D9DEEB" stroke="#14181d" stroke-width="2.5"></rect><rect x="6" y="9" width="32" height="60" rx="3" fill="#FBF6EA"></rect><circle cx="22" cy="40" r="14" fill="none" stroke="#C9CCE0" stroke-width="1.5" stroke-dasharray="3 3"></circle><g transform="translate(22,40)"><g class="h3t"><circle r="6" fill="#FFD933" stroke="#14181d" stroke-width="2"></circle></g></g></svg><svg width="310" height="174" viewBox="0 0 224 126" style="display:block;border:4px solid #14181d;border-radius:12px;background:#212638"><rect x="0" y="100" width="224" height="26" fill="#5E5F73"></rect><g transform="translate(110,58)"><g class="h3k"><circle r="13" fill="#F5E24A" opacity="0.35"></circle><g transform="rotate(-45) translate(-18,0)"><path d="M2 0 L36 0" stroke="#D9DCE6" stroke-width="4" stroke-linecap="round"></path><path d="M2 0 L36 0" stroke="#14181d" stroke-width="1" stroke-linecap="round"></path><path d="M8 -6 L8 6" stroke="#8a5a33" stroke-width="3.5" stroke-linecap="round"></path></g></g></g><g class="h3b"><g transform="translate(40,88)"><g class="h3p"><path d="M0 0 L30 0" stroke="#8a5a33" stroke-width="3.5" stroke-linecap="round"></path><path d="M24 -10 Q33 -8 35 0 Q33 8 24 10 Q30 0 24 -10 Z" fill="#B9BCC8" stroke="#14181d" stroke-width="1.5"></path></g><g class="h3s"><path d="M2 0 L36 0" stroke="#D9DCE6" stroke-width="4" stroke-linecap="round"></path><path d="M2 0 L36 0" stroke="#14181d" stroke-width="1" stroke-linecap="round"></path><path d="M8 -6 L8 6" stroke="#8a5a33" stroke-width="3.5" stroke-linecap="round"></path></g><rect x="-12" y="-12" width="24" height="24" fill="#FFD933" stroke="#14181d" stroke-width="2.5"></rect><circle cx="-5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="-4" cy="-2.5" r="1.5" fill="#14181d"></circle><circle cx="6" cy="-2.5" r="1.5" fill="#14181d"></circle></g></g></svg></div><div style="font-size: 18px; font-weight: 800; line-height: 1.2">Touch a weapon pickup to grab it.</div></div><div style="background: #CC79A7; border: 4px solid #14181d; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><svg width="56" height="99" viewBox="0 0 44 78"><rect x="2" y="2" width="40" height="74" rx="7" fill="#D9DEEB" stroke="#14181d" stroke-width="2.5"></rect><rect x="6" y="9" width="32" height="60" rx="3" fill="#FBF6EA"></rect><circle cx="22" cy="40" r="14" fill="none" stroke="#C9CCE0" stroke-width="1.5" stroke-dasharray="3 3"></circle><g transform="translate(22,40)"><g class="h4t"><circle r="6" fill="#FFD933" stroke="#14181d" stroke-width="2"></circle></g></g></svg><svg width="310" height="174" viewBox="0 0 224 126" style="display:block;border:4px solid #14181d;border-radius:12px;background:#212638"><rect x="150" y="106" width="74" height="20" fill="#E6330D"></rect><path d="M150 106 L224 106" stroke="#FFBF33" stroke-width="2.5"></path><rect x="0" y="100" width="150" height="26" fill="#5E5F73"></rect><g transform="translate(60,88)"><g class="h4p"><path d="M0 0 L30 0" stroke="#8a5a33" stroke-width="3.5" stroke-linecap="round"></path><path d="M24 -10 Q33 -8 35 0 Q33 8 24 10 Q30 0 24 -10 Z" fill="#B9BCC8" stroke="#14181d" stroke-width="1.5"></path></g><rect x="-12" y="-12" width="24" height="24" fill="#FFD933" stroke="#14181d" stroke-width="2.5"></rect><circle cx="-5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="-4" cy="-2.5" r="1.5" fill="#14181d"></circle><circle cx="6" cy="-2.5" r="1.5" fill="#14181d"></circle></g><g transform="translate(108,88)"><g class="h4r"><rect x="-12" y="-12" width="24" height="24" fill="#59BFFF" stroke="#14181d" stroke-width="2.5"></rect><circle cx="-5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="5" cy="-3" r="3.2" fill="#FBF6EA" stroke="#14181d" stroke-width="0.8"></circle><circle cx="-4" cy="-2.5" r="1.5" fill="#14181d"></circle><circle cx="6" cy="-2.5" r="1.5" fill="#14181d"></circle></g></g><g transform="translate(188,108)"><g class="h4s"><circle r="10" fill="#FFBF33" opacity="0.8"></circle><circle r="5" fill="#FBF6EA"></circle></g></g></svg></div><div style="font-size: 18px; font-weight: 800; line-height: 1.2">Hit them till they die, or knock them off. Last one standing wins.</div></div></div>
+        <div style="font-size: 20px; font-weight: 800; background: #F5E24A; border: 4px solid #14181d; border-radius: 14px; padding: 12px 18px">{{helpRule}}</div>
+        <div style="font-size: 15px; font-weight: 800; color: #5A628C">The same four demos the lobby has today (HowToPlayDemo), restyled into the new panel.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{showLook}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(20,24,29,0.72); display: flex; align-items: center; justify-content: center">
+      <div class="pf-pop" style="width: 980px; background: #FBF6EA; border: 6px solid #14181d; border-radius: 26px; box-shadow: 10px 10px 0 #14181d; padding: 32px 40px; display: flex; gap: 36px">
+        <div style="width: 280px; display: flex; flex-direction: column; align-items: center; gap: 14px">
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 44px; align-self: flex-start">Your look</div>
+          <div style="width: 260px; height: 260px; background: #232A4A; border: 5px solid #14181d; border-radius: 20px; display: flex; align-items: center; justify-content: center">
+            <svg width="200" height="200" viewBox="0 0 102 102">
+              <path d="{{lookHat}}" transform="translate(0 6)" fill="#14181d" stroke="#14181d" stroke-width="2"></path>
+              <rect x="27" y="54" width="48" height="48" fill="{{lookColor}}" stroke="#14181d" stroke-width="4"></rect>
+              <circle cx="42" cy="72" r="6.5" fill="#FBF6EA" stroke="#14181d" stroke-width="1.5"></circle>
+              <circle cx="60" cy="72" r="6.5" fill="#FBF6EA" stroke="#14181d" stroke-width="1.5"></circle>
+              <circle cx="44" cy="73" r="3" fill="#14181d"></circle>
+              <circle cx="62" cy="73" r="3" fill="#14181d"></circle>
+            </svg>
+          </div>
+          <div style="font-size: 17px; font-weight: 800; color: #5A628C; text-align: center">In the game this is the real character, live</div>
+        </div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px">
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 26px">Colour</div>
+          <div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px">
+            <sc-for list="{{swatches}}" as="w" hint-placeholder-count="8">
+              <button class="pf-btn" onClick="{{w.pick}}" aria-label="{{w.aria}}" style="{{w.style}}"></button>
+            </sc-for>
+          </div>
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 26px">Hat</div>
+          <div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px">
+            <sc-for list="{{hatOpts}}" as="h" hint-placeholder-count="8">
+              <button class="pf-btn" onClick="{{h.pick}}" aria-label="{{h.aria}}" style="{{h.style}}">
+                <svg width="44" height="30" viewBox="24 24 54 26"><path d="{{h.path}}" fill="#14181d"></path></svg>
+              </button>
+            </sc-for>
+          </div>
+          <div style="font-family: 'Lilita One', sans-serif; font-size: 26px">Eyes</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px">
+            <sc-for list="{{eyeOpts}}" as="e" hint-placeholder-count="6">
+              <button class="pf-btn" onClick="{{e.pick}}" style="{{e.style}}">{{e.label}}</button>
+            </sc-for>
+          </div>
+          <div style="font-size: 16px; font-weight: 800; color: #5A628C">Greyed colours are taken by other players</div>
+          <div style="display: flex; justify-content: flex-end">
+            <button class="pf-btn" onClick="{{closeLook}}" style="padding: 12px 36px; border-radius: 16px; border: 5px solid #14181d; box-shadow: 5px 5px 0 #14181d; background: #F5E24A; font-family: 'Lilita One', sans-serif; font-size: 30px; color: #14181d">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 16px; font-weight: 800; color: #8F96BD">{{footer}}</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      kind: 'couch',
+      mode: 0,
+      firstTo: 5,
+      lives: 3,
+      goals: 3,
+      caps: 2,
+      bots: 1,
+      teams: false,
+      showHelp: false,
+      showLook: false,
+      look: { color: 0, hat: 0, eyes: 0 },
+      humans: [
+        { name: 'Tommy', ready: true },
+        { name: 'Austin', ready: false },
+        { name: 'Sam', ready: true },
+        { name: 'Pad 4', ready: false, pad: true, look: { color: 4, hat: 3, eyes: 2 }, row: 0 }
+      ]
+    };
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    var ink = '#14181d';
+    var cols = ['#E69F00', '#56B4E9', '#009E73', '#F5E24A', '#CC79A7', '#D55E00', '#3D8FD1', '#E8E6F0'];
+    var hats = [
+      'M33 48 L69 48 L64 36 L38 36 Z',
+      'M35 48 Q51 26 67 48 Z',
+      'M37 48 L42 32 L51 42 L60 32 L65 48 Z',
+      'M27 48 L75 48 L75 44 L63 44 L63 28 L39 28 L39 44 L27 44 Z',
+      'M39 48 Q51 36 63 48 Z',
+      'M35 48 L51 26 L67 48 Z',
+      'M37 48 L65 48 L65 38 L37 38 Z',
+      'M41 48 L61 48 L51 34 Z'
+    ];
+    var modesBase = [
+      ['Classic', 'Last one standing'],
+      ['King of the Hill', 'Hold the hill alone'],
+      ['Hot Potato', 'Pass the tag'],
+      ['Sudden Death', 'One hit, you are out'],
+      ['Stock', 'Last one with lives left'],
+      ['Soccer', 'Teams: score goals'],
+      ['Capture the Flag', 'Teams: steal their flag']
+    ];
+    var kinds = [['couch', 'Couch'], ['online', 'Online'], ['solo', 'Solo']].map(function (k, i) {
+      var on = st.kind === k[0];
+      return {
+        label: k[1],
+        pick: function () {
+          var next = { kind: k[0] };
+          if (k[0] === 'solo') { next.bots = 3; next.humans = [{ name: 'Tommy', ready: false }]; }
+          self.setState(next);
+        },
+        style: 'border:0;border-left:' + (i ? '4px solid ' + ink : '0') + ';padding:10px 22px;font-family:"Lilita One",sans-serif;font-size:24px;color:' + ink + ';background:' + (on ? '#F5E24A' : '#FBF6EA') + ';box-shadow:none'
+      };
+    });
+    var mname = modesBase[st.mode][0];
+    var isStock = mname === 'Stock';
+    var goal = mname === 'Stock' ? { key: 'lives', label: 'Lives', max: 9, unit: 'lives' } : mname === 'Soccer' ? { key: 'goals', label: 'Goals to win', max: 9, unit: 'goals' } : mname === 'Capture the Flag' ? { key: 'caps', label: 'Captures to win', max: 9, unit: 'captures' } : { key: 'firstTo', label: 'First to', max: 15, unit: 'rounds' };
+    var modes = modesBase.map(function (m, i) {
+      var on = st.mode === i;
+      return {
+        name: m[0],
+        rule: m[1],
+        pick: function () { self.setState({ mode: i }); },
+        style: 'text-align:left;padding:7px 10px;border:4px solid ' + ink + ';border-radius:14px;color:' + ink + ';background:' + (on ? '#F5E24A' : '#FBF6EA') + ';box-shadow:' + (on ? '5px 5px 0 ' + ink : '3px 3px 0 ' + ink) + ';transform:' + (on ? 'rotate(-1.5deg)' : 'none')
+      };
+    });
+    var slots = [];
+    var seat = 0;
+    var mine = st.kind !== 'couch';
+    st.humans.forEach(function (h, i) {
+      var own = mine && i === 0;
+      var isPad = !mine && !!h.pad;
+      var c = own ? cols[st.look.color] : (isPad ? cols[h.look.color] : cols[seat]);
+      var eyeNames = ['Round', 'Sleepy', 'Angry', 'Wide', 'Dot', 'Visor'];
+      var setPad = function (patch) {
+        var hs = st.humans.slice();
+        hs[i] = Object.assign({}, h, patch);
+        self.setState({ humans: hs });
+      };
+      var cycle = function (key, n, d, rowIdx) {
+        var lk = Object.assign({}, h.look);
+        lk[key] = (lk[key] + d + n) % n;
+        setPad({ look: lk, row: rowIdx });
+      };
+      var rows = isPad ? [['Hat', 'hat', 8, 'Hat ' + (h.look.hat + 1)], ['Colour', 'color', 8, 'Colour ' + (h.look.color + 1)], ['Eyes', 'eyes', 6, eyeNames[h.look.eyes]]].map(function (r, ri) {
+        var on = h.row === ri;
+        return {
+          label: r[0], value: r[3],
+          prev: function () { cycle(r[1], r[2], -1, ri); },
+          next: function () { cycle(r[1], r[2], 1, ri); },
+          style: 'display:flex;align-items:center;font-size:14px;font-weight:900;border:3px solid ' + ink + ';border-radius:10px;padding:0 2px;background:' + (on ? '#F5E24A' : '#FBF6EA')
+        };
+      }) : [];
+      slots.push({
+        filled: true, empty: false, name: own ? h.name + ' (you)' : h.name, hat: own ? hats[st.look.hat] : (isPad ? hats[h.look.hat] : hats[seat]), color: c, pad: isPad, rows: rows,
+        aria: h.name + (h.ready ? ' ready' : ' not ready'),
+        badge: h.ready ? 'READY' : 'not ready',
+        badgeStyle: 'font-family:"Lilita One",sans-serif;font-size:19px;padding:2px 14px;border-radius:999px;border:4px solid ' + ink + ';background:' + (h.ready ? '#FBF6EA' : 'transparent') + ';color:' + ink + ';opacity:' + (h.ready ? '1' : '0.7'),
+        cardStyle: 'background:#FBF6EA;border:5px solid ' + ink + ';border-radius:20px;box-shadow:inset 0 18px 0 ' + c + ',6px 6px 0 ' + ink + ';display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:16px 8px 10px;color:' + ink + ';opacity:' + (h.ready ? '1' : '0.82'),
+        toggle: own && !h.ready ? function () { self.setState({ showLook: true }); } : function () {
+          var hs = st.humans.slice();
+          hs[i] = { name: h.name, ready: !h.ready };
+          self.setState({ humans: hs });
+        }
+      });
+      seat++;
+    });
+    for (var b = 0; b < st.bots && seat < 8; b++) {
+      slots.push({
+        filled: true, empty: false, name: 'Bot ' + (b + 1), hat: hats[seat], color: cols[seat], aria: 'Bot ' + (b + 1) + ' ready',
+        badge: 'BOT',
+        badgeStyle: 'font-family:"Lilita One",sans-serif;font-size:19px;padding:2px 14px;border-radius:999px;border:4px solid ' + ink + ';background:' + ink + ';color:#FBF6EA',
+        cardStyle: 'background:#FBF6EA;border:5px solid ' + ink + ';border-radius:20px;box-shadow:inset 0 18px 0 ' + cols[seat] + ',6px 6px 0 ' + ink + ';display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:16px 8px 10px;color:' + ink,
+        toggle: function () {}
+      });
+      seat++;
+    }
+    while (slots.length < 8) slots.push({ filled: false, empty: true });
+    var waiting = st.humans.filter(function (h) { return !h.ready; }).length;
+    var canStart = st.humans.length > 0 && waiting === 0;
+    var qr = [];
+    for (var y = 0; y < 21; y++) {
+      for (var x = 0; x < 21; x++) {
+        var finder = function (fx, fy) {
+          var dx = x - fx, dy = y - fy;
+          if (dx < 0 || dy < 0 || dx > 6 || dy > 6) return -1;
+          var edge = dx === 0 || dy === 0 || dx === 6 || dy === 6;
+          var core = dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4;
+          return edge || core ? 1 : 0;
+        };
+        var f = Math.max(finder(0, 0), finder(14, 0), finder(0, 14));
+        var on = f >= 0 ? f === 1 : ((x * 7 + y * 13 + x * y * 3) % 5) < 2;
+        qr.push({ style: 'background:' + (on ? ink : '#ffffff') + ';aspect-ratio:1' });
+      }
+    }
+    var humansN = st.humans.length;
+    return {
+      kinds: kinds,
+      modes: modes,
+      slots: slots,
+      qr: qr,
+      isCouch: st.kind === 'couch',
+      isOnline: st.kind !== 'couch',
+      isNet: st.kind === 'online',
+      isSolo: st.kind === 'solo',
+      firstTo: st.firstTo,
+      goalLabel: goal.label,
+      goalValue: st[goal.key],
+      bots: st.bots,
+      showHelp: st.showHelp,
+      helpRule: modesBase[st.mode][0] + ': ' + modesBase[st.mode][1].toLowerCase() + (isStock ? '. Everyone starts with ' + st.lives + ' lives.' : goal.key === 'firstTo' ? '. First to ' + st.firstTo + ' rounds takes the match.' : '. First team to ' + st[goal.key] + ' ' + goal.unit + ' wins.'),
+      statusLine: modesBase[st.mode][0] + (st.teams ? ' - Teams' : '') + (goal.key === 'firstTo' ? ' - first to ' + st.firstTo : ' - ' + st[goal.key] + ' ' + goal.unit),
+      countLine: humansN + ' joined, ' + st.bots + (st.bots === 1 ? ' bot' : ' bots'),
+      joinHint: st.kind === 'couch' ? 'Scan QR or press A' : (st.kind === 'solo' ? 'Add a bot with B' : 'Share the room code'),
+      teamsLabel: st.teams ? 'On' : 'Off',
+      teamsStyle: 'min-width:84px;padding:8px 14px;border-radius:12px;border:4px solid ' + ink + ';box-shadow:3px 3px 0 ' + ink + ';font-family:"Lilita One",sans-serif;font-size:22px;color:' + ink + ';background:' + (st.teams ? '#56B4E9' : '#FBF6EA'),
+      startLabel: canStart ? 'START!' : 'Waiting...',
+      startHint: canStart ? 'Enter or Start' : (waiting + (waiting === 1 ? ' player' : ' players') + ' not ready yet'),
+      startStyle: 'padding:22px;border-radius:20px;border:5px solid ' + ink + ';box-shadow:6px 6px 0 ' + ink + ';font-family:"Lilita One",sans-serif;font-size:44px;color:' + ink + ';background:' + (canStart ? '#F5E24A' : '#9CA0B8') + ';opacity:' + (canStart ? '1' : '0.75'),
+      start: function () {},
+      firstUp: function () { var n = {}; n[goal.key] = Math.min(goal.max, st[goal.key] + 1); self.setState(n); },
+      firstDown: function () { var n = {}; n[goal.key] = Math.max(1, st[goal.key] - 1); self.setState(n); },
+      botsUp: function () { self.setState({ bots: Math.min(8 - humansN, st.bots + 1) }); },
+      botsDown: function () { self.setState({ bots: Math.max(0, st.bots - 1) }); },
+      toggleTeams: function () { self.setState({ teams: !st.teams }); },
+      openHelp: function () { self.setState({ showHelp: true }); },
+      closeHelp: function () { self.setState({ showHelp: false }); },
+      showLook: st.showLook,
+      openLook: function () { self.setState({ showLook: true }); },
+      closeLook: function () { self.setState({ showLook: false }); },
+      lookColor: cols[st.look.color],
+      lookHat: hats[st.look.hat],
+      swatches: cols.map(function (col, i) {
+        var taken = mine && i >= 1 && i < humansN + st.bots;
+        var on = st.look.color === i;
+        return {
+          aria: (taken ? 'Taken colour ' : 'Colour ') + (i + 1),
+          pick: taken ? function () {} : function () { self.setState({ look: Object.assign({}, st.look, { color: i }) }); },
+          style: 'height:52px;border-radius:12px;border:4px solid ' + ink + ';background:' + col + ';box-shadow:' + (on ? '0 0 0 4px #FBF6EA, 0 0 0 8px ' + ink : '3px 3px 0 ' + ink) + ';opacity:' + (taken ? '0.25' : '1') + ';cursor:' + (taken ? 'not-allowed' : 'pointer')
+        };
+      }),
+      hatOpts: hats.map(function (path, i) {
+        var on = st.look.hat === i;
+        return {
+          path: path, aria: 'Hat ' + (i + 1),
+          pick: function () { self.setState({ look: Object.assign({}, st.look, { hat: i }) }); },
+          style: 'height:52px;border-radius:12px;border:4px solid ' + ink + ';display:flex;align-items:center;justify-content:center;background:' + (on ? '#F5E24A' : '#FBF6EA') + ';box-shadow:3px 3px 0 ' + ink
+        };
+      }),
+      eyeOpts: ['Round', 'Sleepy', 'Angry', 'Wide', 'Dot', 'Visor'].map(function (label, i) {
+        var on = st.look.eyes === i;
+        return {
+          label: label,
+          pick: function () { self.setState({ look: Object.assign({}, st.look, { eyes: i }) }); },
+          style: 'padding:8px 16px;border-radius:999px;border:4px solid ' + ink + ';font-family:"Lilita One",sans-serif;font-size:20px;color:' + ink + ';background:' + (on ? '#F5E24A' : '#FBF6EA') + ';box-shadow:3px 3px 0 ' + ink
+        };
+      }),
+      lessons: [
+        ['Swing', 'Drag your thumb to swing the pick. Flick fast to hit hard.', 'pf-thumb-drag', 'pf-body-still', 'pf-arm-swing', '#E69F00'],
+        ['Let go', 'Lift your thumb to let go and fling yourself across the stage.', 'pf-thumb-lift', 'pf-body-fling', 'pf-arm-still', '#56B4E9'],
+        ['Grab weapons', 'Walk into a weapon on the stage to pick it up.', 'pf-thumb-tap', 'pf-body-grab', 'pf-arm-swing', '#009E73']
+      ].map(function (l) {
+        return { title: l[0], text: l[1], thumbClass: l[2], bodyClass: l[3], armClass: l[4], cardStyle: 'background:' + l[5] + ';border:4px solid ' + ink + ';border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:8px' };
+      }),
+      footer: mine ? 'Online: click your own card or Your look to pick colour, hat and eyes (mockup only)' : 'Click a player card to toggle their ready state (mockup only)'
+
+    };
+  }
+}
+</script>
+</body>
+</html>
