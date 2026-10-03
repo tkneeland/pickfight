@@ -1234,6 +1234,7 @@ func _enter_victory() -> void:
 	_lobby_screen.show_panel("victory")
 	_set_join_corner_visible(false)
 	_last_lobby_state = {}
+	_publish_lobby_state() # the phase first: Solo's host must Continue, and reads it (#522)
 	_tick_lobby()
 
 ## Frees the last round's stage on the way into the lobby or the victory

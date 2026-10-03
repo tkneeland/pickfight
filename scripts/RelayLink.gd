@@ -46,6 +46,24 @@ var host_grace_sec: float = 15.0
 var _reconnect_deadline_msec: int = 0
 var _next_attempt_msec: int = 0
 var _attempt: int = 0
+## Keepalive (#519). The deployed relay only counts BINARY frames from the host
+## as room traffic, so a host with no remote seat would hit its 600 s
+## idle_timeout. The host therefore sends one tiny binary frame this often. Its
+## first byte is a peer id no room can hold (the relay seats at most 8), so the
+## relay drops it instead of forwarding it to any client.
+const KEEPALIVE_PEER: int = 255
+var keepalive_interval_sec: float = 60.0
+var _next_keepalive_msec: int = 0
+## Retry after a link failure (#519): quiet, bounded, fresh room (the relay has
+## already closed the old one). Seconds before each successive attempt.
+var retry_backoff_sec: Array[float] = [2.0, 5.0, 10.0, 20.0, 30.0]
+var _was_online: bool = false
+var _retrying: bool = false
+var _retry_count: int = 0
+## A link that stayed online this long before failing earns a fresh retry budget.
+var retry_reset_sec: float = 120.0
+var _online_since_msec: int = 0
+var _retry_at_msec: int = 0
 
 ## Connects to the relay at `url` (ws://host:port); returns an Error code.
 ## Online once the relay answers with the room code.
@@ -80,6 +98,9 @@ func go_offline() -> void:
 		_socket.close()
 		_socket = null
 	_token = ""
+	_was_online = false
+	_retrying = false
+	_retry_count = 0
 	_drop_room()
 	_set_state(STATE_OFFLINE)
 
@@ -111,6 +132,10 @@ func send_text_to(peer: int, text: String) -> void:
 	send_to(peer, KIND_TEXT, text.to_utf8_buffer())
 
 func _process(_delta: float) -> void:
+	if _state == STATE_ERROR and _retrying and _socket == null \
+			and Time.get_ticks_msec() >= _retry_at_msec:
+		if _open_socket() != OK:
+			_schedule_retry()
 	if _state == STATE_RECONNECTING:
 		var now: int = Time.get_ticks_msec()
 		if now > _reconnect_deadline_msec:
@@ -131,6 +156,11 @@ func _process(_delta: float) -> void:
 				hello["room"] = _room_code
 				hello["token"] = _token
 			_socket.send_text(JSON.stringify(hello))
+		if _state == STATE_ONLINE:
+			var tick: int = Time.get_ticks_msec()
+			if tick >= _next_keepalive_msec:
+				_next_keepalive_msec = tick + int(keepalive_interval_sec * 1000.0)
+				_socket.send(PackedByteArray([KEEPALIVE_PEER]), WebSocketPeer.WRITE_MODE_BINARY)
 		while _socket != null and _socket.get_available_packet_count() > 0:
 			var pkt: PackedByteArray = _socket.get_packet()
 			if _socket.was_string_packet():
@@ -144,8 +174,25 @@ func _process(_delta: float) -> void:
 		elif _state == STATE_RECONNECTING:
 			_schedule_attempt()
 		else:
-			_drop_room()
-			_set_state(STATE_ERROR)
+			_fail()
+
+## The link is down for good (until a retry brings it back): report the error,
+## and when it had been online, retry quietly a bounded number of times.
+func _fail() -> void:
+	_drop_room()
+	_set_state(STATE_ERROR)
+	if _was_online:
+		if not _retrying and Time.get_ticks_msec() - _online_since_msec >= int(retry_reset_sec * 1000.0):
+			_retry_count = 0
+		_retrying = true
+		_schedule_retry()
+
+func _schedule_retry() -> void:
+	if _retry_count >= retry_backoff_sec.size():
+		_retrying = false
+		return
+	_retry_at_msec = Time.get_ticks_msec() + int(retry_backoff_sec[_retry_count] * 1000.0)
+	_retry_count += 1
 
 func _state_reconnecting() -> void:
 	_reconnect_deadline_msec = Time.get_ticks_msec() + int(host_grace_sec * 1000.0)
@@ -164,8 +211,7 @@ func _give_up() -> void:
 		_socket.close()
 		_socket = null
 	_token = ""
-	_drop_room()
-	_set_state(STATE_ERROR)
+	_fail()
 
 func _handle_control(text: String) -> void:
 	var json := JSON.new()
@@ -191,6 +237,10 @@ func _handle_control(text: String) -> void:
 					_peers.clear()
 				_room_code = code
 				room_code_changed.emit(_room_code)
+			_was_online = true
+			_retrying = false
+			_online_since_msec = Time.get_ticks_msec()
+			_next_keepalive_msec = Time.get_ticks_msec() + int(keepalive_interval_sec * 1000.0)
 			_set_state(STATE_ONLINE)
 		"joined":
 			var id: int = int(msg.get("peer", 0))
@@ -206,8 +256,7 @@ func _handle_control(text: String) -> void:
 				_socket.close()
 				_socket = null
 			_token = ""
-			_drop_room()
-			_set_state(STATE_ERROR)
+			_fail()
 
 func _handle_frame(pkt: PackedByteArray) -> void:
 	if pkt.size() < 2:

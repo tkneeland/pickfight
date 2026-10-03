@@ -446,7 +446,11 @@ func _pump_room(room: Room, now: int) -> void:
 	if room.host.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		while room.host.get_available_packet_count() > 0:
 			var pkt: PackedByteArray = room.host.get_packet()
-			if room.host.was_string_packet() or pkt.size() < 1:
+			if room.host.was_string_packet():
+				# Text/control frames count as traffic too (#519).
+				room.last_traffic_msec = now
+				continue
+			if pkt.size() < 1:
 				continue
 			room.last_traffic_msec = now
 			var target: int = pkt[0]
@@ -463,9 +467,9 @@ func _pump_room(room: Room, now: int) -> void:
 		if state == WebSocketPeer.STATE_OPEN:
 			while client.get_available_packet_count() > 0:
 				var pkt: PackedByteArray = client.get_packet()
+				room.last_traffic_msec = now
 				if client.was_string_packet():
 					continue
-				room.last_traffic_msec = now
 				var framed := PackedByteArray([id])
 				framed.append_array(pkt)
 				_send_binary(room.host, framed)
