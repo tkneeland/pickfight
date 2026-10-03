@@ -689,6 +689,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_human_joining_full_room_replaces_a_bot_between_rounds",
 	"online_match_starts_with_host_and_bots_only",
 	"online_bots_only_match_starts_offline_and_says_so",
+	"solo_waits_for_the_host_seat_to_ready_up_bots_are_ready",
+	"lobby_sandbox_solo_players_and_bots_move_after_the_countdown",
+	"lobby_sandbox_couch_first_round_players_move_after_the_countdown",
+	"lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen",
+	"couch_bots_alone_never_start_a_match",
+	"solo_switching_to_couch_sends_the_bots_away",
+	"remote_join_cancel_button_click_aborts_join_and_closes_link",
+	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
@@ -2462,6 +2470,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed()
 		"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry":
 			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
+		"solo_waits_for_the_host_seat_to_ready_up_bots_are_ready":
+			return await _scenario_solo_waits_for_the_host_seat_to_ready_up_bots_are_ready()
+		"lobby_sandbox_solo_players_and_bots_move_after_the_countdown":
+			return await _scenario_lobby_sandbox_solo_players_and_bots_move_after_the_countdown()
+		"lobby_sandbox_couch_first_round_players_move_after_the_countdown":
+			return await _scenario_lobby_sandbox_couch_first_round_players_move_after_the_countdown()
+		"lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen":
+			return await _scenario_lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen()
+		"couch_bots_alone_never_start_a_match":
+			return await _scenario_couch_bots_alone_never_start_a_match()
+		"solo_switching_to_couch_sends_the_bots_away":
+			return await _scenario_solo_switching_to_couch_sends_the_bots_away()
+		"remote_join_cancel_button_click_aborts_join_and_closes_link":
+			return await _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link()
+		"remote_join_cancel_idle_and_rejoin_wait_paths":
+			return await _scenario_remote_join_cancel_idle_and_rejoin_wait_paths()
 		"gif_writer_encodes_valid_animated_gif":
 			return await _scenario_gif_writer_encodes_valid_animated_gif()
 		"replay_save_writes_clip_gif_beside_pngs":
@@ -34006,7 +34030,6 @@ func _scenario_remote_client_gamepad_stick_drives_arm() -> Array[String]:
 			failures.append("the centred stick left the arm at %s" % client.input_vector)
 	await _rc_close_241(rig)
 	return failures
-
 ## Issue #459: a remote seat that drops mid-match is held. It rejoins the
 ## same slot under the same claim, with its score, nickname, hat and colour,
 ## even after 20 s of game time and a round boundary's expiry pass.
@@ -34688,8 +34711,6 @@ func _snap_mismatches_240(got: Variant, want: Variant, path: String) -> Array[St
 	elif typeof(got) != typeof(want) or got != want:
 		failures.append("%s: got %s, wanted %s" % [path, got, want])
 	return failures
-
-
 # --- Shield shape (issue #465) -----------------------------------------------
 const SHIELD_MIN_WIDTH_465: float = 48.0
 ## The shield head collides as a convex polygon at least 48 px across (it was
@@ -34722,9 +34743,7 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 	# scenario and change the physics of whatever runs next (#493).
 	await _teardown(stage)
 	return failures
-
 # --- Explicit release input (issue #463, ADR-0022) ---------------------------
-
 ## A phone rig on a real arena, with a bar at `bar_at` and slot 0's player
 ## parked at `stand_at`; slot 1's player is moved out of the way.
 func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictionary:
@@ -34737,7 +34756,6 @@ func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictio
 	players[1].start_round(stand_at + Vector2(1500, 0))
 	await _await_ticks(6)
 	return rig
-
 func _key_463(keycode: Key) -> void:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = keycode
@@ -34746,7 +34764,6 @@ func _key_463(keycode: Key) -> void:
 	Input.parse_input_event(ev)
 	Input.flush_buffered_events()
 	await process_frame
-
 ## A PC seat's mouse never reports zero, so a Space tap is what lets go.
 func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Array[String]:
 	var failures: Array[String] = []
@@ -34793,7 +34810,6 @@ func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Arr
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rc_rig_241(7, failures)
@@ -34825,7 +34841,6 @@ func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
 		failures.append("a second Space tap never un-released the host-side player")
 	await _rc_close_241(rig)
 	return failures
-
 ## Phones send eight bytes and no flag: a nonzero vector is held, zero is released.
 func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> Array[String]:
 	var failures: Array[String] = []
@@ -34860,9 +34875,7 @@ func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> 
 	await _close_phones(phones)
 	await _teardown(rig["stage"])
 	return failures
-
 # --- The action press throws the boomerang (issue #481, ADR-0022 amendment) ---
-
 ## Space on the host PC seat throws it along the aim, with no flick, and does
 ## not leave the seat released.
 func _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing() -> Array[String]:
@@ -34896,7 +34909,6 @@ func _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing() -> 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## A pad's bumper press throws it and is not held as a release; a stick click
 ## throws once it is home again.
 func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
@@ -34921,7 +34933,6 @@ func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
 		failures.append("a bumper tap that threw the boomerang counts as a release hold")
 	await _teardown(rig["stage"])
 	return failures
-
 ## The Online client's Space press reaches the host as the action count and
 ## throws there; it does not release.
 func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[String]:
@@ -34951,9 +34962,7 @@ func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[Str
 		failures.append("the throwing press left the remote seat released")
 	await _rc_close_241(rig)
 	return failures
-
 # --- Tap for the weapon's job, hold to unstick (issue #485, ADR-0022 amendment 2) ---
-
 ## A keyboard key going down or up, as the host sees it.
 func _key_485(keycode: Key, pressed: bool) -> void:
 	var ev := InputEventKey.new()
@@ -34963,18 +34972,15 @@ func _key_485(keycode: Key, pressed: bool) -> void:
 	Input.parse_input_event(ev)
 	Input.flush_buffered_events()
 	await process_frame
-
 ## Down and up in the next frame: well inside TAP_MAX_SEC.
 func _tap_485(keycode: Key) -> void:
 	await _key_485(keycode, true)
 	await _key_485(keycode, false)
-
 func _space_up_485() -> InputEventKey:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = false
 	return ev
-
 ## Holding Space with the boomerang counts as released (so the cut-off head
 ## phases home after the gridlock delay) and never throws; coming up after a
 ## hold does not toggle release on.
@@ -35033,7 +35039,6 @@ func _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws() 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## A tap fires on key-up, not on key-down.
 func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
 	var failures: Array[String] = []
@@ -35062,7 +35067,6 @@ func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## Online: the client decides tap vs hold. A hold sets the host's released flag
 ## and throws nothing; a tap is counted and throws.
 func _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang() -> Array[String]:
@@ -35103,7 +35107,6 @@ func _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang() -> A
 		failures.append("the client's throwing tap left the seat released")
 	await _rc_close_241(rig)
 	return failures
-
 ## A bumper is released while held; a tap throws on key-up, a hold never does.
 func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[String]:
 	var failures: Array[String] = []
@@ -35140,14 +35143,10 @@ func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[
 		failures.append("a bumper tap did not throw the boomerang on key-up")
 	await _teardown(rig["stage"])
 	return failures
-
-
 # --- No flick launches on button seats (issue #487, ADR-0022 amendment 3) ---
-
 ## Whether `player`'s launcher is out (a hook or a boomerang).
 func _launcher_out_487(player: RigidBody2D) -> bool:
 	return player.launched_hook() != null or player.launched_boomerang() != null
-
 ## A fast flick on the host PC seat launches neither the grapple nor the
 ## boomerang; a Space tap fires the grapple along the aim, a second tap (hook
 ## out) retracts it.
@@ -35196,7 +35195,6 @@ func _scenario_flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_g
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## A pad's flick launches nothing; a bumper tap fires the grapple.
 func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Array[String]:
 	var failures: Array[String] = []
@@ -35226,7 +35224,6 @@ func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Ar
 		failures.append("a bumper tap did not fire the grapple")
 	await _teardown(rig["stage"])
 	return failures
-
 ## An Online client's flick launches nothing on the host; its Space tap fires
 ## the grapple there.
 func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host() -> Array[String]:
@@ -35267,7 +35264,6 @@ func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host(
 		failures.append("a client Space tap never fired the host-side grapple (vec %s, ready %s, presses %d, seen %d, phased %s, cd %.2f, alive %s)" % [player.input_vector, player.special_ready(), client.action_presses, server._slot_press_seen[client.slot], player.is_head_phased(), player._launch_cooldown, player.alive])
 	await _rc_close_241(rig)
 	return failures
-
 ## A phone has no button, so its flick still launches the grapple and the
 ## boomerang (issue #487 leaves phones unchanged).
 func _scenario_phone_seat_flick_still_launches_grapple_and_boomerang() -> Array[String]:
@@ -35299,7 +35295,6 @@ func _scenario_phone_seat_flick_still_launches_grapple_and_boomerang() -> Array[
 	peer.close()
 	await _teardown(rig["stage"])
 	return failures
-
 func _packet_for_487(v: Vector2) -> PackedByteArray:
 	var pkt := PackedByteArray()
 	pkt.resize(8)
@@ -35330,7 +35325,6 @@ func _scenario_bot_overshoot_fixture_replays_identically_in_one_process() -> Arr
 			failures.append("start %d differs between runs: '%s' then '%s'" % [i, first[i], second[i]])
 	_scenario_completed = true
 	return failures
-
 # --- Host bot counter (issue #445) -----------------------------------------------
 ## A lobby for the counter scenarios: Main with no `--bots`, one Couch or
 ## Online match picked on the title screen. Online goes through a real relay
@@ -35519,7 +35513,6 @@ func _scenario_online_bots_only_match_starts_offline_and_says_so() -> Array[Stri
 		failures.append("the match never started offline (state %d)" % int(rm.get("_state")))
 	await _bots_close_445(rig)
 	return failures
-
 # --- The host PC seat's cosmetics picker (issue #441) ----------------------------
 const HostSettingsScript441 := preload("res://scripts/HostSettings.gd")
 const BARE_PICK_441: Dictionary = {"hat": "none", "eyes": "round", "color": -1}
@@ -35634,7 +35627,255 @@ func _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry() 
 		failures.append("next entry: seat %d wears %s / %s / %d" % [again, server.slot_hat(again), server.slot_eyes(again), server.slot_color(again)])
 	await _host_picker_free_441(rig)
 	return failures
-
+## Solo (#505): the title screen's Solo seats the host PC and three bots, and
+## the lobby waits for the host seat to ready up (Start, Enter); bots are ready.
+func _scenario_solo_waits_for_the_host_seat_to_ready_up_bots_are_ready() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("solo")
+	await _await_ticks(240)
+	var host: int = server.host_pc_slot()
+	if not server.room_closed() or host == -1 or server.virtual_slots().size() != 3:
+		failures.append("solo did not seat the host and three bots (host %d, bots %d)" % [host, server.virtual_slots().size()])
+	if server.slot_ready(host):
+		failures.append("the host seat was ready before the host readied up")
+	for bot: int in server.virtual_slots():
+		if not server.slot_ready(bot):
+			failures.append("bot in slot %d was not ready" % bot)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("solo left the lobby without the host (state %d)" % rm._state)
+	server.apply_host_command("start")
+	await _await_ticks(2)
+	if not server.slot_ready(host) or rm._state != RoundManagerType.State.COUNTDOWN:
+		failures.append("Start did not ready the host seat into the countdown (state %d)" % rm._state)
+	await _kind_close_435(rig)
+	return failures
+## Solo (#505): once the host has readied and the countdown ran out, the host
+## player answers input and the bots move away from their spawns.
+func _scenario_lobby_sandbox_solo_players_and_bots_move_after_the_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	screen.press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	var started: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000)
+	if not started:
+		failures.append("the solo round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	var host: int = server.host_pc_slot()
+	var slots: Array[int] = [host]
+	slots.append_array(server.virtual_slots())
+	var before: Dictionary = {}
+	for slot: int in slots:
+		before[slot] = (server.player_in_slot(slot) as Node2D).global_position
+	server.host_pc_mouse_motion(Vector2(400, 0))
+	await _await_ticks(120)
+	for slot: int in slots:
+		var moved: float = (server.player_in_slot(slot) as Node2D).global_position.distance_to(before[slot])
+		if moved < 5.0:
+			failures.append("slot %d (%s) moved %.1f px in 120 ticks" % [slot, "host" if slot == host else "bot", moved])
+	await _kind_close_435(rig)
+	return failures
+## #505: the first round of any match, not only Solo, left every player frozen at
+## its spawn when the lobby sandbox had them in play at the countdown's end.
+func _scenario_lobby_sandbox_couch_first_round_players_move_after_the_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("local")
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "couch505", phones)
+	phones.append(phone)
+	if int(got["slot"]) < 0:
+		failures.append("the phone did not get a seat")
+		await _kind_close_435(rig, phones)
+		return failures
+	server.set_bot_count(2)
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	var started: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000)
+	if not started:
+		failures.append("the first round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig, phones)
+		return failures
+	var slots: Array[int] = server.virtual_slots()
+	var before: Dictionary = {}
+	for slot: int in slots:
+		before[slot] = (server.player_in_slot(slot) as Node2D).global_position
+	await _await_ticks(120)
+	for slot: int in slots:
+		var moved: float = (server.player_in_slot(slot) as Node2D).global_position.distance_to(before[slot])
+		if moved < 5.0:
+			failures.append("bot in slot %d moved %.1f px in 120 ticks of the first round" % [slot, moved])
+	await _kind_close_435(rig, phones)
+	return failures
+## #505: End match winds the round down and re-seats everyone in the lobby
+## sandbox in the same frame; none of them may be left frozen where they stand.
+func _scenario_lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	if not await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000):
+		failures.append("the solo round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(30)
+	server.host_pc_command("end")
+	await _await_ticks(30)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("End match left state %d, expected the lobby" % rm._state)
+	for slot: int in server.claimed_slots():
+		var player: Node = server.player_in_slot(slot)
+		if bool(player.get("alive")) and bool(player.get("freeze")):
+			failures.append("slot %d is back in the lobby frozen" % slot)
+	await _kind_close_435(rig)
+	return failures
+## #505: bots the host's counter seated make no ready room on their own, so a
+## Couch lobby with Bots=2 and no phone stays in the lobby.
+func _scenario_couch_bots_alone_never_start_a_match() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("local")
+	server.set_bot_count(2)
+	server.apply_host_command("start")
+	await _await_ticks(400)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("two counter bots alone left the lobby (state %d)" % rm._state)
+	await _kind_close_435(rig)
+	return failures
+## #505: O from Solo goes to Couch, and Solo's bots do not come along.
+func _scenario_solo_switching_to_couch_sends_the_bots_away() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	if server.bot_director.bot_count() != 3:
+		failures.append("solo seated %d bots, expected 3" % server.bot_director.bot_count())
+	rig["screen"].press_control("online")
+	await _await_ticks(5)
+	if server.match_kind() != "local" or server.bot_director.bot_count() != 0:
+		failures.append("after O from Solo: kind '%s' with %d bots, expected Couch and none" % [server.match_kind(), server.bot_director.bot_count()])
+	await _kind_close_435(rig)
+	return failures
+## #506: Cancel on the Online join menu, pressed with a real click or Esc mid-join, aborts the join and hangs up.
+func _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var silent := TCPServer.new() # accepts the socket but never answers the handshake
+	if silent.listen(0, "127.0.0.1") != OK:
+		return ["no free port for the silent relay"]
+	for via: String in ["click", "escape"]:
+		var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:%d" % silent.get_local_port())
+		client.join_timeout_msec = 60000
+		if not client.join("ABCD", "Tester") or client.state != RcState241.CONNECTING:
+			failures.append("%s: join did not start" % via)
+			continue
+		await process_frame
+		var button: Button = client._cancel_button
+		if not button.is_visible_in_tree():
+			failures.append("%s: Cancel not visible while joining" % via)
+			continue
+		if via == "click":
+			await _settings_click(button.get_global_rect().get_center())
+		else:
+			var esc := InputEventKey.new()
+			esc.keycode = KEY_ESCAPE
+			esc.physical_keycode = KEY_ESCAPE
+			esc.pressed = true
+			get_root().push_input(esc)
+			await process_frame
+		if client.state != RcState241.JOIN:
+			failures.append("%s: still in state %d after Cancel" % [via, client.state])
+		if client._socket != null:
+			failures.append("%s: relay link not closed" % via)
+		if client._join_button.disabled or not client._room_edit.editable:
+			failures.append("%s: join menu left stuck" % via)
+	silent.stop()
+	_rc_close_241(rig)
+	return failures
+## #506: Cancel and Esc on the idle join screen ask to go back to the title; both work during the retry wait after a drop.
+func _scenario_remote_join_cancel_idle_and_rejoin_wait_paths() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var silent := TCPServer.new()
+	if silent.listen(0, "127.0.0.1") != OK:
+		return ["no free port for the silent relay"]
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:%d" % silent.get_local_port())
+	var backs: Array[int] = [0]
+	client.back_requested.connect(func() -> void: backs[0] += 1)
+	if not client._cancel_button.visible:
+		failures.append("idle: Cancel not shown on the first join screen")
+	await _settings_click(client._cancel_button.get_global_rect().get_center())
+	if backs[0] != 1 or client.state != RcState241.JOIN:
+		failures.append("idle: clicking Cancel asked to go back %d times" % backs[0])
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	get_root().push_input(esc)
+	await process_frame
+	if backs[0] != 2:
+		failures.append("idle: Esc asked to go back %d times in all" % backs[0])
+	# Retry wait: a join that drops keeps redialling until Cancel.
+	client.join_timeout_msec = 60000
+	client.join("ABCD", "Tester")
+	client._keep_rejoining(Time.get_ticks_msec() + 60000)
+	client._return_to_join("")
+	client._rejoin_until_msec = Time.get_ticks_msec() + 60000
+	if not client.rejoining():
+		failures.append("rejoin: could not enter the retry wait")
+	await _settings_click(client._cancel_button.get_global_rect().get_center())
+	if client.rejoining() or backs[0] != 2:
+		failures.append("rejoin: Cancel click did not end the retry wait (backs %d)" % backs[0])
+	client._rejoin_until_msec = Time.get_ticks_msec() + 60000
+	get_root().push_input(esc)
+	await process_frame
+	if client.rejoining() or backs[0] != 2:
+		failures.append("rejoin: Esc did not end the retry wait (backs %d)" % backs[0])
+	silent.stop()
+	# Run as the current scene, an idle Cancel lands on Main (the title).
+	client._rejoin_until_msec = 0
+	current_scene = client
+	await _settings_click(client._cancel_button.get_global_rect().get_center())
+	await _await_ticks(5)
+	var landed: Node = current_scene
+	if landed == null or landed.scene_file_path != "res://scenes/Main.tscn":
+		failures.append("idle: Cancel did not land on Main (scene %s)" % [landed.scene_file_path if landed != null else "none"])
+	if landed != null and landed != client:
+		landed.queue_free()
+	current_scene = null
+	rig["nodes"].clear() # the scene change freed the client
+	await process_frame
+	_rc_close_241(rig)
+	return failures
 ## #502: independent GIF89a reader for the scenarios. Returns size, frame
 ## count, loop flag, trailer flag, and each frame's decoded palette indices.
 func _gif_parse_502(b: PackedByteArray) -> Dictionary:
@@ -35676,7 +35917,6 @@ func _gif_parse_502(b: PackedByteArray) -> Dictionary:
 		else:
 			return r
 	return r
-
 func _gif_lzw_decode_502(data: PackedByteArray, min_size: int, want: int) -> PackedByteArray:
 	var out := PackedByteArray()
 	var clear := 1 << min_size
@@ -35727,7 +35967,6 @@ func _gif_lzw_decode_502(data: PackedByteArray, min_size: int, want: int) -> Pac
 	if out.size() != want:
 		out.resize(0)
 	return out
-
 ## #502: a tiny clip encodes to a structurally valid, looping GIF whose
 ## frames decode back to the colours that went in.
 func _scenario_gif_writer_encodes_valid_animated_gif() -> Array[String]:
@@ -35773,7 +36012,6 @@ func _scenario_gif_writer_encodes_valid_animated_gif() -> Array[String]:
 			failures.append("frame %d marker pixel is not white" % f)
 	_scenario_completed = true
 	return failures
-
 ## #502: F9 (save_and_toast) writes clip.gif beside the PNGs; also times a
 ## full-size 120-frame encode and round-trips it through the decoder.
 func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:

@@ -1526,7 +1526,13 @@ func kick(slot: int, by_host_pc: bool = false) -> bool:
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).
 func slot_ready(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or slot == _host_pc_slot)
+	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or (slot == _host_pc_slot and not _solo_host_must_ready()))
+
+## Solo (#505): the host PC seat is the only human, so it readies up itself (Start,
+## Enter) in the lobby rather than starting the match by existing. Everywhere
+## else, and in a Solo match once it is running, the seat counts as ready.
+func _solo_host_must_ready() -> bool:
+	return room_closed() and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 
 ## Mark `slot` ready or not, as its phone's Ready button would: Solo
 ## practice readies the host (issue #152).
@@ -2660,6 +2666,8 @@ func kind_drop_notice() -> Dictionary:
 func set_match_kind(kind: String) -> bool:
 	if not [KIND_LOCAL, KIND_ONLINE, KIND_SOLO].has(kind):
 		return false
+	if room_closed() and kind != KIND_SOLO:
+		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
 	var dropped: int = _drop_seats_for(target) if target != _match_kind else 0
 	_match_kind = target
@@ -2675,6 +2683,7 @@ func set_match_kind(kind: String) -> bool:
 		_set_online_requested(not _room_closed)
 		if kind == KIND_SOLO:
 			bot_director.add_bots(maxi(0, SOLO_BOTS - bot_director.bot_count()))
+			bot_director.counter_seated = true
 	if dropped > 0:
 		_kind_drop = {"kind": target, "count": dropped, "msec": Time.get_ticks_msec()}
 	_send_lobby_to_all()
@@ -2692,6 +2701,7 @@ func set_bot_count(count: int) -> int:
 	var have: int = bot_director.bot_count()
 	if wanted > have:
 		bot_director.add_bots(wanted - have)
+		bot_director.counter_seated = true
 	while bot_director.bot_count() > wanted:
 		var bots: Array[int] = virtual_slots()
 		bot_director.remove_bot(bots[bots.size() - 1])
