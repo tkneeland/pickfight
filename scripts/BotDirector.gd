@@ -44,6 +44,10 @@ var server: Node = null
 var bots: Dictionary = {}
 ## True while the bots came from Solo practice: they need a human to play with.
 var solo: bool = false
+## True while the host's bot counter or Solo seated the bots (#505): like Solo
+## practice bots they need a human who has readied, not a room of bots alone.
+## `--bots=N` bots, the headless playtest, are exempt.
+var counter_seated: bool = false
 ## How long solo bots wait with no phone connected before they all go: long
 ## enough to ride out a phone that drops and reconnects.
 @export var orphan_grace_sec: float = 10.0
@@ -137,6 +141,7 @@ func remove_bots() -> void:
 	for slot: int in bots.keys():
 		remove_bot(slot)
 	solo = false
+	counter_seated = false
 
 ## Send the bot in `slot` away (the host's kick lands here too). A bot in the
 ## round leaves it, the way a kicked phone's player does, rather than leaving
@@ -152,6 +157,7 @@ func remove_bot(slot: int) -> void:
 	server.remove_virtual_controller(slot)
 	if bots.is_empty():
 		solo = false
+		counter_seated = false
 
 func bot_count() -> int:
 	return bots.size()
