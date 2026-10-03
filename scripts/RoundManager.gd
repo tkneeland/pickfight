@@ -621,7 +621,9 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 	var victim_slot: int = _players.find(victim)
 	if victim_slot != -1:
 		_buzz(victim_slot, "struck")
-	_buzz(attacker_slot, "hit")
+	# A rock reports on the victim's own signal (attacker == victim, #521).
+	if attacker_slot != victim_slot:
+		_buzz(attacker_slot, "hit")
 
 ## Phone damage bars (issue #331): every claimed slot's phone is told its
 ## player's damage fraction each tick; `send_damage` drops the unchanged and
@@ -1151,6 +1153,10 @@ func _enter_lobby() -> void:
 	_match_winner_slot = -1
 	_match_winner_team = -1
 	_clear_stage()
+	# The last round's teams do not carry into the lobby sandbox (#521).
+	for player: Variant in _players:
+		if player != null and "team" in player:
+			player.team = TeamsScript.NONE
 	if _waiting_label != null:
 		_waiting_label.visible = false
 	if _scoreboard != null:
@@ -1539,6 +1545,10 @@ func _on_host_command(cmd: String, slot: int) -> void:
 			# Already out of the roster; out of the round too, without a death.
 			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
 				_players[slot].leave_round()
+			# Issue #521: a kicked Stock player still waiting to respawn is out
+			# now, not when the timer runs down, or the survivor scores.
+			if _game_mode_node != null and _game_mode_node.has_method("cancel_respawn"):
+				_game_mode_node.cancel_respawn(slot)
 			if lobby_enabled:
 				_publish_lobby_state()
 
@@ -1942,6 +1952,9 @@ func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 
 func _on_ko_eliminated(slot: int) -> void:
 	if _sandbox_active:
+		return
+	# A mode's scripted win eliminates the losers; that is a score, not a KO (#521).
+	if _game_mode_node != null and _game_mode_node.has_method("is_won") and _game_mode_node.is_won():
 		return
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()

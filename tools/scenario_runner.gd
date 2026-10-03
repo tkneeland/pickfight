@@ -711,6 +711,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
+	"stock_kicking_last_opponent_mid_respawn_scores_nobody",
+	"lobby_sandbox_players_carry_no_round_team",
+	"mode_win_eliminations_are_not_counted_as_kos",
+	"survival_time_resumes_after_a_respawn",
+	"own_hazard_strike_buzzes_the_victim_once",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2525,6 +2530,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
 			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
+		"stock_kicking_last_opponent_mid_respawn_scores_nobody":
+			return await _scenario_stock_kicking_last_opponent_mid_respawn_scores_nobody()
+		"lobby_sandbox_players_carry_no_round_team":
+			return await _scenario_lobby_sandbox_players_carry_no_round_team()
+		"mode_win_eliminations_are_not_counted_as_kos":
+			return await _scenario_mode_win_eliminations_are_not_counted_as_kos()
+		"survival_time_resumes_after_a_respawn":
+			return await _scenario_survival_time_resumes_after_a_respawn()
+		"own_hazard_strike_buzzes_the_victim_once":
+			return await _scenario_own_hazard_strike_buzzes_the_victim_once()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -36525,4 +36540,112 @@ func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[St
 	relay.stop()
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+## Issue #521: in Stock, kicking the last opponent while they wait to respawn
+## handed the survivor a point (breaking #193): the kicked player still counted
+## as standing until the respawn timer ran out. The kick cancels the respawn.
+func _scenario_stock_kicking_last_opponent_mid_respawn_scores_nobody() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var rm: Node = rig["rm"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	var kicked: RigidBody2D = rig["players"][1]
+	kicked.eliminate()
+	await _await_ticks(2)
+	if not mode.is_pending(1):
+		failures.append("the KO'd player was not waiting to respawn")
+	(rig["roster"].slots as Array).erase(1)
+	rm.call("_on_host_command", "kick", 1)
+	await _await_ticks(180)  # past the respawner's own 1.5 s
+	print("      kicked mid-respawn: host score %d, rounds won %s" % [rm.score_of(0), wins])
+	if rm.score_of(0) != 0 or not wins.is_empty():
+		failures.append("kicking the last opponent mid-respawn scored the survivor: score %d, wins %s" % [rm.score_of(0), wins])
+	await _stock_finish(rig)
+	return failures
+## Issue #521: `team` was reset only at round start, so players who had been on
+## teams in the last round still could not hit each other in the lobby sandbox.
+func _scenario_lobby_sandbox_players_carry_no_round_team() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	await _await_ticks(2)
+	for player: RigidBody2D in rig["players"]:
+		player.team = 1
+	rm.call("_enter_lobby")
+	await _await_ticks(2)
+	for player: RigidBody2D in rig["players"]:
+		if player.team != -1:
+			failures.append("%s kept team %d in the lobby" % [player.name, player.team])
+	await _teardown(rig["stage"])
+	return failures
+## Issue #521: the scripted `eliminate()` that ends a Soccer / Capture the Flag /
+## King of the Hill round on a mode win counted as KOs: deaths, self-KOs and
+## streak banners. A mode win is a score, not a KO.
+func _scenario_mode_win_eliminations_are_not_counted_as_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	mode.call("_win", 0)
+	await _await_ticks(5)
+	var stats: RefCounted = rm.get("_stats")
+	var deaths: int = 0
+	for slot: int in [1, 3]:
+		deaths += int(stats.deaths.get(slot, 0)) + int(stats.self_kos.get(slot, 0))
+	print("      after a CTF win: deaths+self-KOs of the losers %d" % deaths)
+	if deaths != 0:
+		failures.append("a Capture the Flag win counted %d deaths/self-KOs for the losing team" % deaths)
+	await _teardown(rig["stage"])
+	return failures
+## Issue #521: `record_elimination` ends a slot's survival clock and nothing
+## restarted it on a respawn, so survival time stopped at the first lost life.
+func _scenario_survival_time_resumes_after_a_respawn() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = preload("res://scripts/MatchStats.gd").new()
+	stats.begin_round([0, 1], 0)
+	stats.record_elimination(0, 1000)
+	stats.resume_round(0, 2000)
+	stats.end_round(5000)
+	print("      survival: %s" % [stats.survival_msec])
+	if int(stats.survival_msec[0]) != 4000:
+		failures.append("slot 0 survived %d ms, expected 1000 + 3000" % int(stats.survival_msec[0]))
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var rm: Node = rig["rm"]
+	var player: RigidBody2D = rig["players"][1]
+	if not await _stock_lose_life(player):
+		failures.append("the player never respawned")
+	elif not (rm.get("_stats")._alive_since as Dictionary).has(1):
+		failures.append("the respawned player's survival clock never restarted")
+	await _stock_finish(rig)
+	return failures
+## Issue #521: a falling rock reports its hit on the victim's own
+## `strike_landed`, so attacker == victim and the phone got "struck" and "hit".
+func _scenario_own_hazard_strike_buzzes_the_victim_once() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	var victim: RigidBody2D = rig["players"][0]
+	await _await_ticks(2)
+	rig["roster"].buzzes.clear()
+	rm.call("_on_strike_landed", victim, 10.0, Vector2.ZERO, false, 0)
+	print("      buzzes: %s" % [rig["roster"].buzzes])
+	if rig["roster"].buzzes.size() != 1:
+		failures.append("a self-inflicted hit buzzed %d times: %s" % [rig["roster"].buzzes.size(), rig["roster"].buzzes])
+	rm.call("_on_strike_landed", rig["players"][1], 10.0, Vector2.ZERO, false, 0)
+	if rig["roster"].buzzes.size() != 3:
+		failures.append("a hit on someone else should buzz both phones: %s" % [rig["roster"].buzzes])
+	await _teardown(rig["stage"])
 	return failures
