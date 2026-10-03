@@ -25,10 +25,6 @@ extends CanvasLayer
 ## clear of the open panel (issue #230, `LobbyScreen.SETTINGS_CORNER_RESERVE_PX`).
 
 const MARGIN: float = 12.0
-## The open panel's own opaque backdrop (issue #230), so nothing behind it
-## shows through its controls.
-const PANEL_BACKGROUND: Color = Color(0.1, 0.11, 0.14, 1.0)
-const PANEL_PADDING: float = 6.0
 const SLIDER_WIDTH: float = 180.0
 const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
 const NOTICE_TEXT: String = "Pickfight sends anonymous match stats to help balance the game"
@@ -112,11 +108,7 @@ func _ready() -> void:
 	_panel = PanelContainer.new()
 	_panel.name = "Panel"
 	_panel.visible = false
-	var backdrop := StyleBoxFlat.new()
-	backdrop.bg_color = PANEL_BACKGROUND
-	backdrop.set_corner_radius_all(6)
-	backdrop.set_content_margin_all(PANEL_PADDING)
-	_panel.add_theme_stylebox_override("panel", backdrop)
+	# The theme\'s panel look (#549): indigo, ink outline, hard shadow.
 	corner.add_child(_panel)
 	var rows := VBoxContainer.new()
 	_panel.add_child(rows)
@@ -423,11 +415,7 @@ func _build_feedback_box(corner: VBoxContainer) -> void:
 	_feedback_box = PanelContainer.new()
 	_feedback_box.name = "FeedbackBox"
 	_feedback_box.visible = false
-	var backdrop := StyleBoxFlat.new()
-	backdrop.bg_color = PANEL_BACKGROUND
-	backdrop.set_corner_radius_all(6)
-	backdrop.set_content_margin_all(PANEL_PADDING)
-	_feedback_box.add_theme_stylebox_override("panel", backdrop)
+	# The theme\'s panel look (#549): indigo, ink outline, hard shadow.
 	corner.add_child(_feedback_box)
 	var col := VBoxContainer.new()
 	_feedback_box.add_child(col)
@@ -502,11 +490,7 @@ func _build_telemetry_notice() -> void:
 	_notice.anchor_right = 0.5
 	_notice.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_notice.offset_top = MARGIN
-	var backdrop := StyleBoxFlat.new()
-	backdrop.bg_color = PANEL_BACKGROUND
-	backdrop.set_corner_radius_all(6)
-	backdrop.set_content_margin_all(PANEL_PADDING)
-	_notice.add_theme_stylebox_override("panel", backdrop)
+	# The theme\'s panel look (#549): indigo, ink outline, hard shadow.
 	add_child(_notice)
 	var row := HBoxContainer.new()
 	_notice.add_child(row)

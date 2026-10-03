@@ -217,6 +217,8 @@ func show_panel(which: String) -> void:
 	_victory_panel.visible = which == "victory"
 	if _end_card_panel != null:
 		_end_card_panel.visible = which == "end_card"
+	if which != "lobby" and title_visible():
+		show_title(false) # a match began under the title: let go of PadMenu (#545)
 	if which == "lobby":
 		_start_demos()
 	else:
@@ -263,6 +265,8 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		_lobby_status.text = tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
 	else:
 		_lobby_status.text = tr("LOBBY_PRESS_READY_ONLINE") if online else tr("LOBBY_PRESS_READY")
+	if state["phase"] != "countdown" and Time.get_ticks_msec() < _start_notice_until_msec:
+		_lobby_status.text = _start_notice
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
 		_lobby_qr.texture = qr as Texture2D
@@ -808,7 +812,8 @@ func press_control(id: String) -> void:
 		"target_up":
 			_server.apply_host_command("target", _server.mode_target() + 1)
 		"start":
-			_server.apply_host_command("start")
+			if _server.apply_host_command("start"):
+				_note_start_blocked()
 		"join":
 			# Issue #241: leave this host's lobby for the PC client's join
 			# screen. Only while nobody but the host's own seat (and bots) is
@@ -820,6 +825,32 @@ func press_control(id: String) -> void:
 				get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE)
 				return
 	refresh_controls()
+
+## #545: Start pressed with the lobby's conditions unmet used to do nothing and
+## say nothing. The reason shows in the status line for a few seconds.
+const START_NOTICE_MSEC: int = 4000
+var _start_notice: String = ""
+var _start_notice_until_msec: int = 0
+
+func _note_start_blocked() -> void:
+	var min_players: int = int(_last_lobby_args[1]) if _last_lobby_args.size() > 1 else 2
+	var claimed: Array[int] = _server.claimed_slots()
+	var held: int = 0
+	for slot: int in claimed:
+		if not _server.slot_has_controller(slot):
+			held += 1
+	var notice: String = ""
+	if claimed.size() < min_players:
+		notice = tr("LOBBY_START_NEED_PLAYERS") % [claimed.size(), min_players]
+	elif held > 0:
+		notice = tr("LOBBY_START_HELD_SEAT") % held
+	elif not _last_lobby_args.is_empty() and bool(_last_lobby_args[0].get("teams", false)) and not both_teams_manned(_last_lobby_args[0]):
+		notice = tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
+	if notice.is_empty():
+		return
+	_start_notice = notice
+	_start_notice_until_msec = Time.get_ticks_msec() + START_NOTICE_MSEC
+	_lobby_status.text = notice
 
 func _can_join_online() -> bool:
 	if _server == null or not _server.has_method("claimed_slots"):
@@ -888,9 +919,12 @@ func _sync_host_picker() -> void:
 		_host_picker.visible = show
 		_mode_grid.visible = not show # the room the panel needs; the cards come back with the QR
 
-func _save_host_pick(_kind: String, _value: Variant) -> void:
+func _save_host_pick(kind: String, _value: Variant) -> void:
 	var slot: int = _server.host_pc_slot()
-	preload("res://scripts/HostSettings.gd").shared().set_cosmetic_pick({"hat": _server.slot_hat(slot), "eyes": _server.slot_eyes(slot), "color": _server.slot_color(slot)})
+	var settings: RefCounted = preload("res://scripts/HostSettings.gd").shared()
+	# #545: only a colour pick fixes the colour; the seat's automatic one stays automatic.
+	var color: int = _server.slot_color(slot) if kind == "color" else int(settings.cosmetic_pick.get("color", -1))
+	settings.set_cosmetic_pick({"hat": _server.slot_hat(slot), "eyes": _server.slot_eyes(slot), "color": color})
 
 # --- Gamepad host menu (#368, Steam Deck) ------------------------------------------
 #

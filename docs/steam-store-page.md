@@ -31,7 +31,7 @@ Bring the whole couch. Eight players share one screen, with bots to fill empty s
 
 [h2]Easy to learn, hard to master[/h2]
 [list]
-[*] Drag to swing. A first-join tip and a live lobby sandbox let new players practice before the match starts.
+[*] Drag to swing. A first-join tip shows new players how to swing before the match starts.
 [*] Weapons bite into walls and floors, so your swing is also your climb.
 [*] Block, knock people back, and ring them out.
 [/list]
@@ -148,7 +148,7 @@ Capture at 1920x1080 on the polished flat-shape art. Steam wants at least five. 
 
 1. **Eight-player brawl.** A busy stage mid-fight with all eight squares, name tags and hats visible. Lead image.
 2. **Phone in hand.** A real photo or mock beside the screen: the phone controller with its damage bar, with the match on the TV behind it. Shows the "no app" pitch.
-3. **QR join lobby.** The lobby with the join URL and QR code, ready-up and the live sandbox running underneath.
+3. **QR join lobby.** The lobby with the join URL and QR code and ready-up.
 4. **Weapon variety.** A collage or one scene that shows the umbrella catching wind, the pogo mid-launch and the grappling hook mid-swing.
 5. **Hazard stage.** Rising lava, a swinging saw or spikes, with a player about to be knocked into it. Shows that stages fight back.
 6. **Night stage.** The darker palette with stars and lamps over the spawns, glowing weapon heads.
