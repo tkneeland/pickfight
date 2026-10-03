@@ -659,6 +659,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"cosmetics_colour_taken_by_phone_is_skipped_by_pad_and_reverse",
 	"cosmetics_no_picker_in_lobby_without_gamepad_seats",
 	"cosmetics_online_saved_pick_arrives_on_join",
+	"cosmetics_host_pc_seat_cycles_hat_colour_eyes_and_body_shows_them",
+	"cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed",
+	"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry",
 	"online_host_kicks_remote_seat_from_lobby_row",
 	"online_host_esc_menu_pauses_kicks_and_ends_match",
 	"online_demo_joins_demo_and_full_joins_full",
@@ -2450,6 +2453,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_match_starts_with_host_and_bots_only()
 		"online_bots_only_match_starts_offline_and_says_so":
 			return await _scenario_online_bots_only_match_starts_offline_and_says_so()
+		"cosmetics_host_pc_seat_cycles_hat_colour_eyes_and_body_shows_them":
+			return await _scenario_cosmetics_host_pc_seat_cycles_hat_colour_eyes_and_body_shows_them()
+		"cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed":
+			return await _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed()
+		"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry":
+			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -35496,4 +35505,119 @@ func _scenario_online_bots_only_match_starts_offline_and_says_so() -> Array[Stri
 	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
 		failures.append("the match never started offline (state %d)" % int(rm.get("_state")))
 	await _bots_close_445(rig)
+	return failures
+
+# --- The host PC seat's cosmetics picker (issue #441) ----------------------------
+const HostSettingsScript441 := preload("res://scripts/HostSettings.gd")
+const BARE_PICK_441: Dictionary = {"hat": "none", "eyes": "round", "color": -1}
+## An Online lobby on the host PC's own seat: `players` bodies, an optional pad
+## seat first (so the host seat is the next slot), the lobby screen and its
+## picker panel. The saved pick starts as `saved`.
+func _host_picker_rig_441(saved: Dictionary, pad_first: bool) -> Dictionary:
+	HostSettingsScript441.shared().cosmetic_pick = saved.duplicate()
+	var rig: Dictionary = await _phone_rig_164(4, "HostPick441")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	if pad_first:
+		await _pad_button_261(3, JOY_BUTTON_A)
+	server.apply_host_command("pc_seat", true)
+	server._match_kind = "online"
+	var screen: CanvasLayer = LobbyScreenScript435.new()
+	rig["stage"].add_child(screen)
+	screen.build_panels()
+	screen.attach_controls(server)
+	await process_frame
+	screen.refresh_controls()
+	rig["screen"] = screen
+	return rig
+func _host_picker_free_441(rig: Dictionary) -> void:
+	HostSettingsScript441.shared().cosmetic_pick = BARE_PICK_441.duplicate()
+	await _teardown(rig["stage"])
+## The host PC seat cycles hat, colour and eyes on the panel, the body shows
+## them, the pick is saved, and the panel is gone mid-round.
+func _scenario_cosmetics_host_pc_seat_cycles_hat_colour_eyes_and_body_shows_them() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _host_picker_rig_441(BARE_PICK_441, false)
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var slot: int = server.host_pc_slot()
+	var panel: Control = screen.host_picker()
+	if slot == -1 or panel == null or not panel.visible:
+		failures.append("no visible host picker (slot %d, panel %s)" % [slot, panel])
+		await _host_picker_free_441(rig)
+		return failures
+	var body: RigidBody2D = rig["players"][slot]
+	panel.pick_hat("crown")
+	panel.pick_eyes("sleepy")
+	var colour: int = 2
+	panel.pick_color(colour)
+	if server.slot_hat(slot) != "crown" or body.hat_id() != "crown":
+		failures.append("hat: seat '%s', body '%s'; expected crown" % [server.slot_hat(slot), body.hat_id()])
+	if server.slot_eyes(slot) != "sleepy" or body.eyes_id() != "sleepy":
+		failures.append("eyes: seat '%s', body '%s'; expected sleepy" % [server.slot_eyes(slot), body.eyes_id()])
+	if server.slot_color(slot) != colour or body.identity_color != server.palette_color(colour):
+		failures.append("colour: seat %d, body %s; expected %d (%s)" % [server.slot_color(slot), body.identity_color, colour, server.palette_color(colour)])
+	if panel.preview_look().get("hat") != "crown":
+		failures.append("the preview shows %s, not the seat's look" % [panel.preview_look()])
+	var saved: Dictionary = HostSettingsScript441.shared().cosmetic_pick
+	if saved != {"hat": "crown", "eyes": "sleepy", "color": colour}:
+		failures.append("the host's saved pick is %s" % [saved])
+	server.set_lobby_state({"phase": "playing", "players": []})
+	screen.refresh_controls()
+	if panel.visible:
+		failures.append("the host picker still shows mid-round")
+	await _host_picker_free_441(rig)
+	return failures
+## A colour another seat wears is greyed and refused for the host seat, and the
+## host's colour is refused to the other seat in return (first come first served).
+func _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _host_picker_rig_441(BARE_PICK_441, true)
+	var server: Node = rig["server"]
+	var slot: int = server.host_pc_slot()
+	var other: int = server.pad_slot(3)
+	var panel: Control = rig["screen"].host_picker()
+	if slot == -1 or other == -1 or other == slot or panel == null:
+		failures.append("rig: host slot %d, pad slot %d, panel %s" % [slot, other, panel])
+		await _host_picker_free_441(rig)
+		return failures
+	server.request_color(other, 3)
+	await process_frame
+	var before: int = server.slot_color(slot)
+	if not panel.color_taken(3) or not panel.color_button(3).disabled:
+		failures.append("colour 3, worn by seat %d, is not greyed on the host panel" % other)
+	panel.pick_color(3)
+	panel.color_button(3).pressed.emit()
+	if server.slot_color(slot) != before or server.slot_color(slot) == 3:
+		failures.append("the host seat took the taken colour 3 (colour %d, was %d)" % [server.slot_color(slot), before])
+	panel.pick_color(2)
+	if server.slot_color(slot) != 2 or server.request_color(other, 2) or server.slot_color(other) != 3:
+		failures.append("host colour 2 not held first come first served (host %d, other %d)" % [server.slot_color(slot), server.slot_color(other)])
+	await _host_picker_free_441(rig)
+	return failures
+## The host's saved pick goes back on its seat on every Online lobby entry.
+func _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _host_picker_rig_441({"hat": "viking", "eyes": "angry", "color": 2}, false)
+	var server: Node = rig["server"]
+	var slot: int = server.host_pc_slot()
+	if slot == -1:
+		failures.append("the host seat did not come on")
+		await _host_picker_free_441(rig)
+		return failures
+	var body: RigidBody2D = rig["players"][slot]
+	if server.slot_hat(slot) != "viking" or server.slot_eyes(slot) != "angry" or server.slot_color(slot) != 2:
+		failures.append("first entry: seat wears %s / %s / %d" % [server.slot_hat(slot), server.slot_eyes(slot), server.slot_color(slot)])
+	if body.hat_id() != "viking" or body.eyes_id() != "angry" or body.identity_color != server.palette_color(2):
+		failures.append("first entry: body wears %s / %s / %s" % [body.hat_id(), body.eyes_id(), body.identity_color])
+	server.set_slot_hat(slot, "crown") # a look change that is not a pick: not saved
+	server._match_kind = ""
+	server.apply_host_command("pc_seat", false)
+	if server.host_pc_slot() != -1:
+		failures.append("the host seat did not go off")
+	server.apply_host_command("pc_seat", true)
+	var again: int = server.host_pc_slot()
+	if again == -1 or server.slot_hat(again) != "viking" or server.slot_eyes(again) != "angry" or server.slot_color(again) != 2:
+		failures.append("next entry: seat %d wears %s / %s / %d" % [again, server.slot_hat(again), server.slot_eyes(again), server.slot_color(again)])
+	await _host_picker_free_441(rig)
 	return failures
