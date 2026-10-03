@@ -731,6 +731,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_targets_lobby_label_value_and_status_line_544",
 	"mode_targets_reach_the_round_and_the_remote_hud_544",
 	"remote_client_remembers_name_460",
+	"remote_ready_focused_pad_a_and_space_act_once_550",
+	"remote_ready_click_survives_stale_lobby_550",
 	"stock_tie_sudden_death_rocks_start_at_15_s_556",
 	"stock_sudden_death_rock_rate_rises_556",
 	"stock_sudden_death_60_s_backstop_is_a_draw_556",
@@ -2590,6 +2592,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_targets_reach_the_round_and_the_remote_hud_544()
 		"remote_client_remembers_name_460":
 			return await _scenario_remote_client_remembers_name_460()
+		"remote_ready_focused_pad_a_and_space_act_once_550":
+			return await _scenario_remote_ready_focused_pad_a_and_space_act_once_550()
+		"remote_ready_click_survives_stale_lobby_550":
+			return await _scenario_remote_ready_click_survives_stale_lobby_550()
 		"stock_tie_sudden_death_rocks_start_at_15_s_556":
 			return await _scenario_stock_tie_sudden_death_rocks_start_at_15_s_556()
 		"stock_sudden_death_rock_rate_rises_556":
@@ -37228,6 +37234,90 @@ func _scenario_remote_client_remembers_name_460() -> Array[String]:
 	third.queue_free()
 	await process_frame
 	DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+
+## #550: with the Ready button focused (after a click), pad A and Space reach it
+## as ui_accept too; each must act exactly once (A flips Ready once, Space not at all).
+func _scenario_remote_ready_focused_pad_a_and_space_act_once_550() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	var ready_btn: Button = client._ready_button
+	ready_btn.grab_focus()
+	# Headless Godot may lack the stock pad-A ui_accept binding a real build has.
+	var accept_pad := InputEventJoypadButton.new()
+	accept_pad.button_index = JOY_BUTTON_A
+	var added_accept: bool = not InputMap.action_has_event("ui_accept", accept_pad)
+	if added_accept:
+		InputMap.action_add_event("ui_accept", accept_pad)
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	pad.pressed = true
+	Input.parse_input_event(pad)
+	await process_frame
+	await process_frame
+	var release := InputEventJoypadButton.new()
+	release.button_index = JOY_BUTTON_A
+	release.pressed = false
+	Input.parse_input_event(release)
+	await process_frame
+	if added_accept:
+		InputMap.action_erase_event("ui_accept", accept_pad)
+	if not ready_btn.button_pressed:
+		failures.append("pad A on a focused Ready did not leave it pressed (double toggle)")
+	ready_btn.set_pressed_no_signal(false)
+	ready_btn.grab_focus()
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.keycode = KEY_SPACE
+	space.pressed = true
+	Input.parse_input_event(space)
+	await process_frame
+	await process_frame
+	var space_up := InputEventKey.new()
+	space_up.physical_keycode = KEY_SPACE
+	space_up.keycode = KEY_SPACE
+	space_up.pressed = false
+	Input.parse_input_event(space_up)
+	await process_frame
+	await process_frame
+	if ready_btn.button_pressed:
+		failures.append("Space toggled the focused Ready button")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #550: a lobby message in flight when Ready is clicked must not redraw it
+## unpressed; the host's echo (or a lapse) restores mirroring.
+func _scenario_remote_ready_click_survives_stale_lobby_550() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	var ready_btn: Button = client._ready_button
+	ready_btn.button_pressed = true
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	if not ready_btn.button_pressed:
+		failures.append("a stale lobby message unpressed Ready before the host echoed")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": true}]}))
+	if not ready_btn.button_pressed:
+		failures.append("Ready unpressed when the host echoed ready")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "playing", "players": [{"slot": 2, "ready": false}]}))
+	if ready_btn.button_pressed:
+		failures.append("Ready did not mirror the host after the echo")
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures
 
