@@ -219,18 +219,6 @@
     background: #ffd933;
   }
   #ready-btn.on { background: #59606e; }
-  /* Issue #152: the host's Solo practice / Remove bots button. */
-  #solo-btn {
-    font: inherit;
-    font-size: 20px;
-    padding: 14px 22px;
-    border: 1px solid #59606e;
-    border-radius: 14px;
-    color: #e6e9ef;
-    background: #1b1f29;
-    display: none;
-  }
-  #solo-btn:disabled { opacity: 0.5; }
   #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
   /* Issue #236: the team picker, shown only in a Teams lobby, and the line
      that says which team this phone is on. */
@@ -516,7 +504,6 @@
   </div>
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
-  <button id="solo-btn" type="button">Solo practice</button>
 </div>
 <div id="name-prompt">
   <div id="name-prompt-title">Pick your name</div>
@@ -600,7 +587,6 @@
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Ready",
       "PHONE_HAT_AND_COLOUR": "Hat & colour",
-      "PHONE_SOLO_PRACTICE": "Solo practice",
       "PHONE_PICK_NAME": "Pick your name",
       "PHONE_NAME_INFO": "Up to 12 letters. It shows above your fighter.",
       "PHONE_SHUFFLE": "Shuffle",
@@ -650,7 +636,6 @@
       "READY_TAP_CANCEL": "Ready! (tap to cancel)",
       "LOBBY_N_READY": "{0} of {1} ready",
       "LOBBY_NEED_2": " (need 2 players)",
-      "SOLO_REMOVE_BOTS": "Remove bots",
       "HAT_NONE": "None",
       "HAT_CROWN": "Crown",
       "HAT_TOP_HAT": "Top hat",
@@ -720,7 +705,6 @@
       "PHONE_TEAM_AUTO": "#team-auto",
       "PHONE_READY": "#ready-btn",
       "PHONE_HAT_AND_COLOUR": "#look-btn",
-      "PHONE_SOLO_PRACTICE": "#solo-btn",
       "PHONE_PICK_NAME": "#name-prompt-title",
       "PHONE_NAME_INFO": "#name-prompt-info",
       "PHONE_SHUFFLE": "#name-shuffle",
@@ -1323,28 +1307,8 @@
     readyBtn.className = amReady ? "on" : "";
     lobbyInfoEl.textContent = t("LOBBY_N_READY", ready, msg.players.length) +
       (msg.players.length < 2 ? t("LOBBY_NEED_2") : "");
-    showSolo(msg, isHost);
     showTeams(msg);
   }
-
-  // Issue #152: the host can fill the lobby with bots and start at once, or
-  // send the bots away again. Only in the lobby itself, never mid-countdown.
-  var soloBtn = document.getElementById("solo-btn");
-  var haveBots = false;
-  function showSolo(msg, isHost) {
-    haveBots = false;
-    for (var i = 0; i < msg.players.length; i++) { if (msg.players[i].bot) { haveBots = true; } }
-    soloBtn.style.display = isHost && msg.phase === "lobby" ? "block" : "none";
-    soloBtn.textContent = haveBots ? t("SOLO_REMOVE_BOTS") : t("PHONE_SOLO_PRACTICE");
-    soloBtn.disabled = false;
-  }
-  // Issue #194: one press per lobby state -- a double tap must not add the
-  // bots and send them away again. The next lobby state enables it again.
-  soloBtn.addEventListener("click", function () {
-    if (soloBtn.disabled) { return; }
-    soloBtn.disabled = true;
-    sendText({ t: "solo", v: !haveBots });
-  });
 
   function sendTarget(n) {
     n = Math.max(1, Math.min(99, Math.round(Number(n) || 1)));

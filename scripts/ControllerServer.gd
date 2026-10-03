@@ -448,6 +448,8 @@ var bot_director: Node = null
 ## The Solo practice button is heeded only in these lobby phases (issue #165):
 ## mid-match, removing the bots would leave their bodies in the round.
 const SOLO_PHASES: PackedStringArray = ["lobby", "countdown"]
+## Where an Online late joiner may take a bot's seat in a full room (#445).
+const BETWEEN_ROUNDS_PHASES: PackedStringArray = ["round_end", "victory"]
 ## Issue #236: the mode can change only between matches, never mid-match.
 const MODE_PHASES: PackedStringArray = ["lobby", "countdown", "victory"]
 ## Issue #236: a phone picks its team in the lobby (or its countdown, which a
@@ -1055,13 +1057,15 @@ func _recent_leaver(id: String) -> Dictionary:
 		return {}
 	return left
 
-## The slot of the Solo bot that makes way when a phone finds every slot
-## claimed (issue #193): the most recent Solo bot, and only in the lobby
-## (SOLO_PHASES) -- mid-match a bot's body is in the round. -1 for none.
+## The slot of the bot that makes way when a human finds every slot claimed
+## (issues #193, #445): the most recent bot, in the lobby (SOLO_PHASES) and, in
+## an Online match, between rounds too (BETWEEN_ROUNDS_PHASES) -- mid-round a
+## bot's body is in the fight. -1 for none.
 func _yielding_bot_slot() -> int:
-	if bot_director == null or not bot_director.solo:
+	if bot_director == null:
 		return -1
-	if not SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	if not SOLO_PHASES.has(phase) and not (_match_kind == KIND_ONLINE and BETWEEN_ROUNDS_PHASES.has(phase)):
 		return -1
 	var bots: Array[int] = virtual_slots()
 	return bots[bots.size() - 1] if not bots.is_empty() else -1
@@ -2025,6 +2029,11 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is String or not SOLO_PHASES.has(phase):
 				return false
 			return set_match_kind(arg)
+		"bots":
+			if not _is_number(arg) or not SOLO_PHASES.has(phase):
+				return false
+			set_bot_count(int(arg))
+			return true
 		"mode":
 			if not (arg is String and (arg == "ffa" or arg == "teams")) or not MODE_PHASES.has(phase):
 				return false
@@ -2652,6 +2661,24 @@ func set_match_kind(kind: String) -> bool:
 		_kind_drop = {"kind": target, "count": dropped, "msec": Time.get_ticks_msec()}
 	_send_lobby_to_all()
 	return true
+
+## How many bots the host's counter can seat right now: every seat that no
+## human holds (#445).
+func bot_capacity() -> int:
+	return _slot_peers.size() - (claimed_slots().size() - bot_director.bot_count())
+
+## Seats exactly `count` bots (clamped to 0..bot_capacity()): the newest go
+## first when it is fewer. Returns the number seated (#445).
+func set_bot_count(count: int) -> int:
+	var wanted: int = clampi(count, 0, bot_capacity())
+	var have: int = bot_director.bot_count()
+	if wanted > have:
+		bot_director.add_bots(wanted - have)
+	while bot_director.bot_count() > wanted:
+		var bots: Array[int] = virtual_slots()
+		bot_director.remove_bot(bots[bots.size() - 1])
+	_send_lobby_to_all()
+	return bot_director.bot_count()
 
 ## Whether `peer` may not join this kind of match; a refused peer is closed.
 func _refused_by_match_kind(peer: Variant) -> bool:
