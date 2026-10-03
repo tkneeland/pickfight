@@ -26408,8 +26408,8 @@ func _scenario_remote_client_joins_host_and_takes_a_slot() -> Array[String]:
 	await _wait_for_239(func() -> bool: return server.slot_name(client.slot) == "Tester")
 	if client.slot < 0 or not server.slot_has_controller(client.slot) or server.slot_name(client.slot) != "Tester":
 		failures.append("slot %d, controller %s, name '%s'" % [client.slot, server.slot_has_controller(client.slot), server.slot_name(client.slot)])
-	if client.join_screen_visible() or not client.mouse_captured:
-		failures.append("after joining the join screen should be gone and the mouse captured")
+	if client.join_screen_visible() or client.mouse_captured:
+		failures.append("after joining the join screen should be gone and the mouse free in the lobby (#518)")
 	if not await _wait_for_239(func() -> bool: return client.full_frames_applied > 0, 3000):
 		failures.append("no full snapshot reached the client after it bound")
 	if not await _wait_for_239(func() -> bool: return client.input_frames_sent > 10):
