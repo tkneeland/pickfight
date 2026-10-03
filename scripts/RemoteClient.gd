@@ -304,9 +304,11 @@ func input_released() -> bool:
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
 		var back := event as InputEventKey
-		if back != null and back.pressed and not back.echo and back.physical_keycode == KEY_ESCAPE:
+		if back != null and back.pressed and not back.echo and back.physical_keycode == KEY_ESCAPE and _join_panel != null and _join_panel.is_visible_in_tree():
+			var idle: bool = state == State.JOIN and not rejoining()
 			cancel() # Esc does what the Cancel button does (#506)
-			get_viewport().set_input_as_handled()
+			if not idle: # an idle back swaps the scene; do not starve a host sharing this tree of its Esc
+				get_viewport().set_input_as_handled()
 		return
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and not menu_open:
