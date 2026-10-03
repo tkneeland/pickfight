@@ -720,6 +720,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_grazing_a_player_still_hits_them",
 	"pogo_state_resets_when_a_round_starts",
 	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
+	"lobby_title_released_when_a_match_starts_545",
+	"lobby_start_unmet_shows_reason_in_status_545",
+	"lobby_hat_only_pick_keeps_colour_automatic_545",
+	"cosmetics_panel_idle_when_not_visible_in_tree_545",
+	"kick_never_removes_the_host_pc_seat_545",
 	"ui_theme_loads_with_bundled_fonts",
 	"mode_targets_settings_clamp_persist_and_host_commands_544",
 	"mode_targets_lobby_label_value_and_status_line_544",
@@ -2561,6 +2566,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_state_resets_when_a_round_starts()
 		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
 			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
+		"lobby_title_released_when_a_match_starts_545":
+			return await _scenario_lobby_title_released_when_a_match_starts_545()
+		"lobby_start_unmet_shows_reason_in_status_545":
+			return await _scenario_lobby_start_unmet_shows_reason_in_status_545()
+		"lobby_hat_only_pick_keeps_colour_automatic_545":
+			return await _scenario_lobby_hat_only_pick_keeps_colour_automatic_545()
+		"cosmetics_panel_idle_when_not_visible_in_tree_545":
+			return await _scenario_cosmetics_panel_idle_when_not_visible_in_tree_545()
+		"kick_never_removes_the_host_pc_seat_545":
+			return await _scenario_kick_never_removes_the_host_pc_seat_545()
 		"ui_theme_loads_with_bundled_fonts":
 			return await _scenario_ui_theme_loads_with_bundled_fonts()
 		"mode_targets_settings_clamp_persist_and_host_commands_544":
@@ -35503,6 +35518,7 @@ func _host_picker_rig_441(saved: Dictionary, pad_first: bool) -> Dictionary:
 	rig["stage"].add_child(screen)
 	screen.build_panels()
 	screen.attach_controls(server)
+	screen.show_panel("lobby") # #545: the picker only works while it is in the visible tree
 	await process_frame
 	screen.refresh_controls()
 	rig["screen"] = screen
@@ -36753,6 +36769,108 @@ func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[S
 			failures.append("%s: shield polygon not restored after undo" % case[0])
 	await _teardown(stage)
 	return failures
+# --- Lobby logic bugs (issue #545) -------------------------------------------------
+## A match that starts under the title screen lets go of PadMenu "title".
+func _scenario_lobby_title_released_when_a_match_starts_545() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	if not PadMenuScript368.is_open():
+		failures.append("the title screen did not register with PadMenu")
+	screen.show_panel("")
+	if screen.title_visible() or PadMenuScript368.is_open():
+		failures.append("PadMenu still open after the lobby went away (title %s, open %s)" % [screen.title_visible(), PadMenuScript368.is_open()])
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Start with too few players or a held seat says why in the status line.
+func _scenario_lobby_start_unmet_shows_reason_in_status_545() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Start545")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	var screen: CanvasLayer = LobbyScreenScript435.new()
+	rig["stage"].add_child(screen)
+	screen.build_panels()
+	screen.attach_controls(server)
+	await process_frame
+	var status: Label = screen.get("_lobby_status") as Label
+	screen.press_control("start")
+	var want: String = TranslationServer.translate("LOBBY_START_NEED_PLAYERS") % [0, 2]
+	if status.text != want:
+		failures.append("no players: status reads '%s', expected '%s'" % [status.text, want])
+	server._slot_claimed[0] = 1
+	server._slot_claimed[1] = 1 # claimed, no controller: held seats
+	screen.press_control("start")
+	want = TranslationServer.translate("LOBBY_START_HELD_SEAT") % 2
+	if status.text != want:
+		failures.append("held seats: status reads '%s', expected '%s'" % [status.text, want])
+	await _teardown(rig["stage"])
+	return failures
+## Picking only a hat saves the hat, not the seat's automatic colour.
+func _scenario_lobby_hat_only_pick_keeps_colour_automatic_545() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _host_picker_rig_441(BARE_PICK_441, false)
+	var panel: Control = rig["screen"].host_picker()
+	if panel == null:
+		failures.append("no host picker")
+		await _host_picker_free_441(rig)
+		return failures
+	panel.pick_hat("crown")
+	var saved: Dictionary = HostSettingsScript441.shared().cosmetic_pick
+	if saved.get("hat") != "crown" or int(saved.get("color", 0)) != -1:
+		failures.append("a hat-only pick saved %s, expected crown with colour -1" % [saved])
+	panel.pick_color(2)
+	panel.pick_eyes("sleepy")
+	saved = HostSettingsScript441.shared().cosmetic_pick
+	if int(saved.get("color", -1)) != 2:
+		failures.append("a colour pick then an eyes pick saved %s, expected colour 2" % [saved])
+	await _host_picker_free_441(rig)
+	return failures
+## The panel does no per-frame work while it is hidden anywhere up the tree.
+func _scenario_cosmetics_panel_idle_when_not_visible_in_tree_545() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _host_picker_rig_441(BARE_PICK_441, false)
+	var panel: Control = rig["screen"].host_picker()
+	if panel == null:
+		failures.append("no host picker")
+		await _host_picker_free_441(rig)
+		return failures
+	var stale: Array = [{"slot": 99}]
+	rig["screen"].show_panel("lobby")
+	var parent: Control = panel.get_parent() as Control
+	parent.visible = false # the panel's own flag stays true
+	panel.set("_looks", stale)
+	await _await_ticks(3)
+	if not panel.visible or panel.is_visible_in_tree():
+		failures.append("rig: panel.visible %s, in tree %s" % [panel.visible, panel.is_visible_in_tree()])
+	if panel.get("_looks") != stale:
+		failures.append("the hidden panel still refreshed its looks")
+	parent.visible = true
+	await _await_ticks(3)
+	if panel.get("_looks") == stale:
+		failures.append("the shown panel never refreshed its looks")
+	await _host_picker_free_441(rig)
+	return failures
+## kick() refuses the host PC's seat whoever asks.
+func _scenario_kick_never_removes_the_host_pc_seat_545() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _host_picker_rig_441(BARE_PICK_441, true)
+	var server: Node = rig["server"]
+	var pc: int = server.host_pc_slot()
+	var pad: int = server.pad_slot(3)
+	if pc == -1 or pad == -1:
+		failures.append("rig: host pc slot %d, pad slot %d" % [pc, pad])
+		await _host_picker_free_441(rig)
+		return failures
+	if server.kick(pc) or server.kick(pc, true):
+		failures.append("kick() took the host PC seat %d" % pc)
+	if server.host_pc_slot() != pc or not server.claimed_slots().has(pc):
+		failures.append("the host PC seat is gone after the kick")
+	await _host_picker_free_441(rig)
+	return failures
+
 
 # --- Shared UI theme and fonts (#541) ---------------------------------------------
 const UiThemeScript541 := preload("res://scripts/UiTheme.gd")

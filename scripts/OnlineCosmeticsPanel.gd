@@ -148,7 +148,7 @@ func bind_server(server: Object, slot: int) -> void:
 	set_catalog(server.looks_message())
 
 func _process(_delta: float) -> void:
-	if _server != null and visible:
+	if _server != null and is_visible_in_tree():
 		var looks: Array = _server.looks_update_message().get("looks", [])
 		if looks != _looks:
 			set_looks(looks, own_slot)
