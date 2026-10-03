@@ -138,6 +138,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 - PICKFIGHT logo (flat letters in the player palette, the first I a pickaxe) in `art/logo/`, with 1024 px and Steam capsule PNG exports; shown on the lobby/title screen and the victory screen, whose podium blocks are flat ink-outlined panels (#359, `tools/gen_logo_art.py`, `tools/export_logo_pngs.gd`)
 - Character polish (#360, on top of the #254 eyes/outline and #256 squash): every weapon head gets a dark ink outline that follows the stage ink, a sudden upward launch stretches the body tall and thin (within the 15% squash cap), and a hit flashes the body white for 0.1 s (off with Reduce flashes). Visual only; evidence in `test-results/character-polish/` (`tools/capture_character_polish.gd`)
+- Shared UI theme and bundled fonts (#541, first slice of the #507 UI overhaul): one project-wide Godot theme (`art/ui/pickfight_theme.tres`, built by `scripts/UiTheme.gd`, regenerated with `tools/build_ui_theme.gd`) gives every control Nunito body text and chunky buttons and panels (ink outlines, hard offset shadows, cream buttons and fields, hover/focus pop), with Lilita One for the `HeadingLabel` variation and a 16 design px minimum font size (#368). Fonts are OFL (Lilita One, Nunito) and ship under `art/fonts/` with their licences. Existing screens inherit it; per-screen restyles follow in later #507 tickets
 
 ## Online
 - Room-code relay server (#238, ADR-0019)
