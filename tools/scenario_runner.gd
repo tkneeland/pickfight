@@ -27208,13 +27208,17 @@ func _weapon_theme_director(windy: bool, seed_value: int) -> Node:
 	director.rng.seed = seed_value
 	rm.add_child(director)
 	return director
-## Draws `count` weapons and tallies them by file stem.
+## Draws `count` weapons and tallies them by file stem, then frees the director
+## and the stand-in round manager (and wind zone) it hangs from. Left in the
+## tree they outlast the scenario, and a live WindZone changes the physics of
+## whatever runs next (#493).
 func _weapon_theme_tally(director: Node, offered: Array[Resource], count: int) -> Dictionary:
 	var tally: Dictionary = {}
 	for i in count:
 		var weapon: Resource = director.draw_weapon(offered)
 		var stem: String = weapon.resource_path.get_file().get_basename()
 		tally[stem] = int(tally.get(stem, 0)) + 1
+	director.get_parent().queue_free()
 	return tally
 func _scenario_windy_stage_favours_umbrella_pickups() -> Array[String]:
 	var failures: Array[String] = []
@@ -34808,7 +34812,7 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 	var shape: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
 	if shape == null:
 		failures.append("the shield head has no convex polygon collision shape")
-		_scenario_completed = true
+		await _teardown(stage)
 		return failures
 	var low: float = INF
 	var high: float = -INF
@@ -34824,7 +34828,9 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 		xs[snappedf(point.x, 0.1)] = true
 	if shape.points.size() <= 4 or xs.size() <= 2:
 		failures.append("shield collision is a plain rectangle (%d points)" % shape.points.size())
-	_scenario_completed = true
+	# Freed, not left in the tree: a live player and its weapon rig outlast the
+	# scenario and change the physics of whatever runs next (#493).
+	await _teardown(stage)
 	return failures
 
 # --- Explicit release input (issue #463, ADR-0022) ---------------------------
