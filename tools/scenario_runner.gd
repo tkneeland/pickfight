@@ -693,6 +693,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
+	"remote_ready_capture_mirror_and_pad_518",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2471,6 +2472,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gif_writer_encodes_valid_animated_gif()
 		"replay_save_writes_clip_gif_beside_pngs":
 			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
+		"remote_ready_capture_mirror_and_pad_518":
+			return await _scenario_remote_ready_capture_mirror_and_pad_518()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -35880,5 +35883,59 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 		failures.append("%d PNGs beside the gif, expected 120" % pngs)
 	DirAccess.remove_absolute(abs_dir)
 	rb.queue_free()
+	_scenario_completed = true
+	return failures
+
+## #518: the remote client captures the mouse only while a round shows, its Ready
+## toggle mirrors the server, and pad A or Start readies in the lobby.
+func _scenario_remote_ready_capture_mirror_and_pad_518() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	if client.mouse_captured:
+		failures.append("mouse captured on join, before any lobby message")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	if client.mouse_captured:
+		failures.append("mouse captured in the lobby")
+	client.toggle_menu()
+	client.resume()
+	if client.mouse_captured:
+		failures.append("resuming from the menu in the lobby captured the mouse")
+	# Pad A readies.
+	var ready_btn: Button = client._ready_button
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	pad.pressed = true
+	client._input(pad)
+	if not ready_btn.button_pressed:
+		failures.append("pad A did not ready in the lobby")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": true}]}))
+	if not ready_btn.button_pressed:
+		failures.append("toggle unpressed while the server says ready")
+	# Match starts: server clears ready; the toggle follows and capture begins.
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "playing", "players": [{"slot": 2, "ready": false}]}))
+	if not client.mouse_captured:
+		failures.append("mouse not captured while playing")
+	if ready_btn.button_pressed:
+		failures.append("toggle stayed pressed after the server cleared ready")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "round_end", "players": [{"slot": 2, "ready": false}]}))
+	if not client.mouse_captured:
+		failures.append("mouse released in round_end")
+	# Victory: free the mouse; Start readies.
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "victory", "players": [{"slot": 2, "ready": false}]}))
+	if client.mouse_captured:
+		failures.append("mouse captured on the victory screen")
+	var start := InputEventJoypadButton.new()
+	start.button_index = JOY_BUTTON_START
+	start.pressed = true
+	client._input(start)
+	if not ready_btn.button_pressed:
+		failures.append("pad Start did not ready on the victory screen")
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures
