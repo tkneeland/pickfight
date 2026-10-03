@@ -1,7 +1,8 @@
 # Collaboration: two devs working at the same time
 
-Two developers (each with their own Claude + Atlas) work in parallel on this
-repo. This file is the working agreement both agents follow. It sits alongside
+Several agents work in parallel on this repo, one per GitHub account:
+`tkneeland` (the integrator), `tommykneeland` (the owner's second agent) and
+`agage-JG` (Austin). This file is the working agreement every agent follows. It sits alongside
 `issue-tracker.md`, which still owns claim/label/transition mechanics.
 
 ## Ownership comes from the tracker
@@ -55,8 +56,8 @@ the dispatcher; don't reorder), `CONTEXT.md`.
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
 - **No pause for human review** (owner's decision, 2026-09-24), and **one
-  integrator merges**: tkneeland's Claude. Everyone else, Austin's Claude and
-  any subagents included, pushes the branch, opens the PR with the suite
+  integrator merges**: tkneeland's Claude. Everyone else, tommykneeland's and
+  Austin's Claude and any subagents included, pushes the branch, opens the PR with the suite
   green, comments on the issue with the PR URL, and **stops**. The integrator
   merges PRs one at a time. For each, it rebases onto the current
   `origin/main`, resolves conflicts, re-runs the full suite, then runs
@@ -64,7 +65,8 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   `UNKNOWN`. One merger means nobody rebases against a main that is moving
   under them.
 - **Fallback:** if the integrator is unavailable (for example, out of
-  usage), Austin's Claude may merge its own green PRs by the same steps.
+  usage), tommykneeland's or Austin's Claude may merge its own green PRs by
+  the same steps.
 
 ## Shared decisions
 
@@ -109,20 +111,21 @@ Both owners want maximum throughput. Every agent working this repo should:
 
 ## Usage beacon and triage by headroom
 
-- **Keep your beacon current.** Each dev's status-line hook edits that dev's
+- **Keep your beacon current.** Each agent's status-line hook edits that account's
   own comment on issue #432 at most every 15 minutes. The comment carries the
   5-hour and 7-day used percentages and their reset times, in UTC. Never edit
-  the other dev's comment.
-- **Any agent that files or reassigns tickets reads both beacons first:**
+  another agent's comment.
+- **Any agent that files or reassigns tickets reads every beacon first:**
   `gh issue view 432 -R tkneeland/pickfight --json comments -q '.comments[]|.body'`.
 - **Assign by weekly headroom, not by ticket count.** Headroom is 100 minus the
-  7-day %. Split new tickets in proportion to headroom. For example, at 85% and
-  51% headroom, about 60/40 to the first dev. Recompute on every triage.
+  7-day %. Split new tickets in proportion to headroom across every agent with a
+  fresh beacon. For example, at 85% and 51% headroom, about 60/40 to the
+  first. Recompute on every triage.
 - **The 5-hour window only decides timing, not ownership.** At 90% or more,
   that dev's agent still gets the ticket, but starts it after the 5-hour reset.
   Don't hand it to the other dev just for that.
-- **When a beacon is missing or more than 6 hours stale,** fall back to a 50/50
-  split by open-ticket count, and mention the stale beacon in the triage
-  report.
+- **When a beacon is missing or more than 6 hours stale,** leave that agent
+  out of the split (if none is fresh, split evenly by open-ticket count), and
+  mention the stale beacon in the triage report.
 - **Tickets that need a human,** such as owner decisions, secrets or store
   submissions, go to the dev the owner names, whatever the headroom.
