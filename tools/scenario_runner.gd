@@ -702,6 +702,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
 	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
+	"fresh_claim_does_not_inherit_round_winner_weapon_or_match_win",
 	"solo_never_creates_or_opens_the_relay_link",
 	"solo_lobby_shows_no_room_code_qr_or_url",
 	"solo_refuses_phone_and_remote_joins",
@@ -2505,6 +2506,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		"pad_bumper_cycling_picker_does_not_release_weapon":
 			return await _scenario_pad_bumper_cycling_picker_does_not_release_weapon()
+		"fresh_claim_does_not_inherit_round_winner_weapon_or_match_win":
+			return await _scenario_fresh_claim_does_not_inherit_round_winner_weapon_or_match_win()
 		"solo_never_creates_or_opens_the_relay_link":
 			return await _scenario_solo_never_creates_or_opens_the_relay_link()
 		"solo_lobby_shows_no_room_code_qr_or_url":
@@ -36216,6 +36219,60 @@ func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[Stri
 		failures.append("RB mid-round no longer releases the weapon")
 	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
 	await _teardown(rig["stage"])
+	return failures
+## Issue #510: a bot wins a round, then a fresh claim takes its seat during the
+## round-end pause. The newcomer must not spawn with the bot's weapon, nor
+## inherit its match win.
+func _scenario_fresh_claim_does_not_inherit_round_winner_weapon_or_match_win() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "Claim510Container"
+	stage.add_child(container)
+	var p1: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_A)
+	p1.name = "Claim510P1"
+	var p2: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_B)
+	p2.name = "Claim510P2"
+	var roster := StubRosterScript.new()
+	roster.name = "Claim510Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "Claim510RoundManager"
+	round_manager.player_paths = [NodePath("../Claim510P1"), NodePath("../Claim510P2")]
+	round_manager.stage_scenes = [
+		_make_stub_stage("Claim510Stage", [ROUND_WINNER_SPAWN_A, ROUND_WINNER_SPAWN_B])]
+	round_manager.arena_container_path = NodePath("../Claim510Container")
+	round_manager.controller_server_path = NodePath("../Claim510Roster")
+	round_manager.round_end_pause_sec = 2.0
+	round_manager.min_players_to_start = 2
+	stage.add_child(round_manager)
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+	var bot_weapon := WeaponStatsType.new()
+	bot_weapon.min_reach = STUB_MIN_REACH
+	bot_weapon.max_reach = STUB_MAX_REACH
+	p1.set_weapon_stats(bot_weapon)
+	await _await_ticks(2)
+	p2.eliminate()
+	await _await_ticks(SETTLE_TICKS)
+	if p1.alive and p2.alive:
+		failures.append("the round restarted before the round-end pause, so the claim cannot land inside it")
+	round_manager.set("_match_winner_slot", 0)
+	# A remote client takes the bot's seat during the pause.
+	round_manager._on_slot_claimed_fresh(0)
+	if round_manager.match_winner_slot() == 0:
+		failures.append("the newcomer in slot 0 inherited the bot's match win")
+	var restarted: bool = false
+	for i in 400:
+		await physics_frame
+		if p1.alive and p2.alive:
+			restarted = true
+			break
+	if not restarted:
+		failures.append("the round did not restart after the claim")
+	elif p1.weapon_stats == bot_weapon:
+		failures.append("the newcomer in slot 0 spawned holding the bot's round-winner weapon")
+	await _teardown(stage)
 	return failures
 # --- Solo is fully offline (#522, ADR-0023) ------------------------------------------
 ## Solo from the title: no RelayLink is created, none is opened, and no way is left to ask for one.
