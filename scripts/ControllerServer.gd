@@ -1500,6 +1500,8 @@ func kick(slot: int, by_host_pc: bool = false) -> bool:
 		return false
 	if slot == (_host_pc_slot if by_host_pc else host_slot()):
 		return false
+	if slot == _host_pc_slot:
+		return false # #545: the host PC's own seat is never kickable
 	if is_virtual(slot):
 		# A bot (issue #152): its director sends it away.
 		bot_director.remove_bot(slot)

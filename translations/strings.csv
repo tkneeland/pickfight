@@ -287,3 +287,5 @@ PICKER_EYES_VISOR,Visor
 JOIN_REJOINING,Rejoining your seat...
 REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s
 REPLAY_GIF_SAVED,GIF saved: %s
+LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d)
+LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect
