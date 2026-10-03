@@ -911,7 +911,8 @@ func _load_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load(settings_path) != OK:
 		return
-	player_name = str(config.get_value(SECTION, "name", ""))
+	# #460: a hand-edited or junk saved name reads as empty; the join falls back to "Player".
+	player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
 	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)

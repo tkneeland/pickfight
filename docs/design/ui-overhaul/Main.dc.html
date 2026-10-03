@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pickfight title screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&amp;family=Nunito:wght@600;800;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#14181d;text-decoration:none}a:hover{color:#14181d}
+.pf-card{transition:transform 120ms ease-out, box-shadow 120ms ease-out}
+.pf-card:hover,.pf-card:focus-visible{transform:translate(-3px,-5px) rotate(-1deg);box-shadow:10px 12px 0 #14181d}
+.pf-letter{display:inline-block;-webkit-text-stroke:5px #14181d;paint-order:stroke fill;text-shadow:6px 6px 0 #14181d}
+.pf-gear:hover{transform:rotate(30deg)}
+</style>
+</helmet>
+<div style="width: 1600px; height: 900px; box-sizing: border-box; position: relative; overflow: hidden; background: #232A4A; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 28px, transparent 28px 56px); font-family: 'Nunito', sans-serif; color: #14181d; display: flex; flex-direction: column; align-items: center; padding: 48px 120px 64px; gap: 24px">
+  <img src="../../../art/logo/logo.svg" alt="Pickfight" style="width: 1360px; height: 340px; display: block; margin: -20px 0 -24px">
+  <div style="font-family: 'Lilita One', sans-serif; font-size: 40px; color: #FBF6EA; letter-spacing: 1px; margin-top: 8px">How are you playing?</div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; width: 100%; margin-top: 12px">
+    <a class="pf-card" href="Lobby.dc.html" style="background: #E69F00; border: 5px solid #14181d; border-radius: 22px; box-shadow: 7px 7px 0 #14181d; padding: 28px 32px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <span style="font-family: 'Lilita One', sans-serif; font-size: 56px">Couch</span>
+        <span style="font-family: 'Lilita One', sans-serif; font-size: 26px; background: #FBF6EA; border: 4px solid #14181d; border-radius: 12px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center">C</span>
+      </div>
+      <span style="font-size: 24px; font-weight: 800">One screen. Phones and gamepads in this room.</span>
+    </a>
+    <a class="pf-card" href="Lobby.dc.html" style="background: #56B4E9; border: 5px solid #14181d; border-radius: 22px; box-shadow: 7px 7px 0 #14181d; padding: 28px 32px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <span style="font-family: 'Lilita One', sans-serif; font-size: 56px">Online</span>
+        <span style="font-family: 'Lilita One', sans-serif; font-size: 26px; background: #FBF6EA; border: 4px solid #14181d; border-radius: 12px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center">O</span>
+      </div>
+      <span style="font-size: 24px; font-weight: 800">Everyone plays on their own computer.</span>
+    </a>
+    <a class="pf-card" href="Lobby.dc.html" style="background: #009E73; border: 5px solid #14181d; border-radius: 22px; box-shadow: 7px 7px 0 #14181d; padding: 28px 32px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <span style="font-family: 'Lilita One', sans-serif; font-size: 56px">Solo</span>
+        <span style="font-family: 'Lilita One', sans-serif; font-size: 26px; background: #FBF6EA; border: 4px solid #14181d; border-radius: 12px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center">S</span>
+      </div>
+      <span style="font-size: 24px; font-weight: 800">You against 3 bots.</span>
+    </a>
+  </div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 36px; display: flex; justify-content: center; gap: 36px; color: #C9CCE0; font-size: 20px; font-weight: 800">
+    <span>Click, press a key, or D-pad + A</span>
+  </div>
+  <button class="pf-gear" aria-label="Settings" style="position: absolute; top: 36px; right: 40px; width: 64px; height: 64px; border-radius: 16px; background: #FBF6EA; border: 4px solid #14181d; box-shadow: 4px 4px 0 #14181d; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 150ms ease-out">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#14181d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+  </button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var cols = ['#E69F00', '#56B4E9', '#009E73', '#F5E24A', '#CC79A7', '#D55E00', '#3D8FD1', '#E69F00', '#56B4E9'];
+    var tilt = [-4, 3, -2, 5, -3, 2, -5, 3, -2];
+    var word = 'PICKFIGHT';
+    var letters = [];
+    for (var i = 0; i < word.length; i++) {
+      letters.push({ ch: word[i], style: 'color:' + cols[i] + ';transform:rotate(' + tilt[i] + 'deg)' });
+    }
+    return { letters: letters };
+  }
+}
+</script>
+</body>
+</html>

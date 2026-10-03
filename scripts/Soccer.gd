@@ -304,6 +304,10 @@ func score_goal(team: int) -> void:
 	_pause_left = goal_pause_sec
 	_show_goal(true)
 
+## Whether a goal has won the round, so the eliminations after it are no KOs (#521).
+func is_won() -> bool:
+	return _finished
+
 func _kick_off() -> void:
 	_show_goal(false)
 	_place_ball()

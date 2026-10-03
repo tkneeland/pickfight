@@ -2451,19 +2451,35 @@ func _pad_claim_id(device: int) -> String:
 	_pad_guids[id] = guid
 	return id
 
+## Whether another connected pad (not `device`) reports `guid`.
+func _other_pad_has_guid(device: int, guid: String) -> bool:
+	if guid.is_empty():
+		return false
+	var devices: Array = Input.get_connected_joypads()
+	for d in _pad_seats.keys():
+		if not devices.has(d):
+			devices.append(d)
+	for d in devices:
+		if d != device and _pad_guid(d) == guid:
+			return true
+	return false
+
 ## The claim id of a held (unplugged) pad seat that `device` should take back:
 ## the same GUID (the same index first), else the same index with no GUID.
 func _held_pad_claim_id(device: int) -> String:
 	var guid: String = _pad_guid(device)
 	var own: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
 	var found: String = ""
+	var twin: bool = _other_pad_has_guid(device, guid)
 	for slot in _slot_peers.size():
 		var id: String = str(_slot_client_id[slot])
 		if _slot_claimed[slot] != 1 or _slot_peers[slot] != null or not id.begins_with(PAD_ID_PREFIX):
 			continue
 		if id == own:
 			return id
-		if not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
+		# An identical pad that is still connected means a GUID alone cannot say
+		# whose seat this is (#512): then only the same index reclaims.
+		if not twin and not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
 			found = id
 	return found
 

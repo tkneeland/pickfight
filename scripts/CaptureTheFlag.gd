@@ -384,6 +384,10 @@ func _place_players() -> void:
 			player.start_round(spot, true)
 			index += 1
 
+## Whether a capture has won the round, so the eliminations after it are no KOs (#521).
+func is_won() -> bool:
+	return _finished
+
 ## `team` has the captures: everyone on the other team is out, so the round
 ## manager's last-team-standing rule scores it.
 func _win(team: int) -> void:
