@@ -1984,6 +1984,12 @@ func _on_slot_claimed_fresh(slot: int) -> void:
 	# the next round start, and never keeps the old occupant's weapon.
 	_teams.erase(slot)
 	_team_keep_weapon.erase(slot)
+	# Issue #510: nor the old occupant's round win (the weapon it keeps into the
+	# next round) or match win.
+	if _last_winner_slot == slot:
+		_last_winner_slot = -1
+	if _match_winner_slot == slot:
+		_match_winner_slot = -1
 	_stats.forget_slot(slot)
 	_pending_kos = _pending_kos.filter(func(entry: Array) -> bool: return entry[0] != slot)
 	_update_score_label()
