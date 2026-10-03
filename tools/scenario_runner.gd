@@ -689,6 +689,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_human_joining_full_room_replaces_a_bot_between_rounds",
 	"online_match_starts_with_host_and_bots_only",
 	"online_bots_only_match_starts_offline_and_says_so",
+	"remote_join_cancel_button_click_aborts_join_and_closes_link",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2459,6 +2460,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed()
 		"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry":
 			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
+		"remote_join_cancel_button_click_aborts_join_and_closes_link":
+			return await _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -35620,4 +35623,40 @@ func _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry() 
 	if again == -1 or server.slot_hat(again) != "viking" or server.slot_eyes(again) != "angry" or server.slot_color(again) != 2:
 		failures.append("next entry: seat %d wears %s / %s / %d" % [again, server.slot_hat(again), server.slot_eyes(again), server.slot_color(again)])
 	await _host_picker_free_441(rig)
+	return failures
+## #506: Cancel on the Online join menu, pressed with a real click or Esc mid-join, aborts the join and hangs up.
+func _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var silent := TCPServer.new() # accepts the socket but never answers the handshake
+	if silent.listen(0, "127.0.0.1") != OK:
+		return ["no free port for the silent relay"]
+	for via: String in ["click", "escape"]:
+		var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:%d" % silent.get_local_port())
+		client.join_timeout_msec = 60000
+		if not client.join("ABCD", "Tester") or client.state != RcState241.CONNECTING:
+			failures.append("%s: join did not start" % via)
+			continue
+		await process_frame
+		var button: Button = client._cancel_button
+		if not button.is_visible_in_tree():
+			failures.append("%s: Cancel not visible while joining" % via)
+			continue
+		if via == "click":
+			await _settings_click(button.get_global_rect().get_center())
+		else:
+			var esc := InputEventKey.new()
+			esc.keycode = KEY_ESCAPE
+			esc.physical_keycode = KEY_ESCAPE
+			esc.pressed = true
+			get_root().push_input(esc)
+			await process_frame
+		if client.state != RcState241.JOIN:
+			failures.append("%s: still in state %d after Cancel" % [via, client.state])
+		if client._socket != null:
+			failures.append("%s: relay link not closed" % via)
+		if client._cancel_button.visible or client._join_button.disabled or not client._room_edit.editable:
+			failures.append("%s: join menu left stuck" % via)
+	silent.stop()
+	_rc_close_241(rig)
 	return failures

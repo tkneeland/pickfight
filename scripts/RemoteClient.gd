@@ -299,6 +299,10 @@ func input_released() -> bool:
 
 func _input(event: InputEvent) -> void:
 	if state != State.PLAYING:
+		var back := event as InputEventKey
+		if back != null and back.pressed and not back.echo and back.physical_keycode == KEY_ESCAPE and (state == State.CONNECTING or rejoining()):
+			cancel() # Esc backs out of a join like the Cancel button (#506)
+			get_viewport().set_input_as_handled()
 		return
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and not menu_open:
@@ -366,9 +370,11 @@ func join(code: String, display_name: String) -> bool:
 	_set_status(tr("JOIN_CONNECTING"))
 	return true
 
-## Gives up a join in progress and goes back to the join screen.
+## Gives up a join in progress, or the retries after a drop, and goes back to
+## the join screen (#506: it used to ignore the retry wait, where the join
+## screen shows its Cancel but the retry loop kept dialling).
 func cancel() -> void:
-	if state == State.CONNECTING:
+	if state == State.CONNECTING or rejoining():
 		_return_to_join("")
 
 ## Hangs up and goes back to the join screen.
@@ -1154,7 +1160,7 @@ func _set_status(text: String) -> void:
 	var busy: bool = state == State.CONNECTING
 	if _join_button != null:
 		_join_button.disabled = busy
-		_cancel_button.visible = busy
+		_cancel_button.visible = busy or rejoining()
 		_room_edit.editable = not busy
 		_name_edit.editable = not busy
 
