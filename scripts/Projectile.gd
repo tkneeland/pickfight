@@ -59,6 +59,9 @@ signal impacted(collider: Object, point: Vector2)
 
 ## Who fired it. Read by scenarios; never hit by the bullet itself.
 var shooter: Node2D
+## Issue #516: the weapon that fired this bullet (file basename), kept for
+## credit after the shooter swaps weapons mid-flight.
+var weapon_id: String = ""
 ## Unit vector the bullet flies along.
 var direction: Vector2 = Vector2.RIGHT
 var speed: float = 0.0
@@ -156,7 +159,7 @@ func _hit(collider: Object, point: Vector2) -> void:
 		if victim is RigidBody2D:
 			(victim as RigidBody2D).apply_central_impulse(direction * knockback)
 		if shooter != null and shooter.has_method("land_projectile_hit"):
-			shooter.land_projectile_hit(victim, damage, point)
+			shooter.land_projectile_hit(victim, damage, point, weapon_id)
 		else:
 			victim.take_damage(damage)
 	elif victim != null and victim.has_method("take_projectile_hit"):

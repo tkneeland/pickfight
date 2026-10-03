@@ -168,6 +168,12 @@ func _move(motion: Vector2) -> void:
 		var rest: Dictionary = space.get_rest_info(query)
 		var collider: Object = instance_from_id(rest["collider_id"]) if rest.has("collider_id") else null
 		var point: Vector2 = rest["point"] if rest.has("point") else global_position
+		if rest.is_empty():
+			# A graze can leave no rest info; an overlap query still finds
+			# what was touched, so a player is not mistaken for terrain.
+			var overlaps: Array[Dictionary] = space.intersect_shape(query, 1)
+			if not overlaps.is_empty():
+				collider = overlaps[0]["collider"]
 		var node: Node = collider as Node
 		if node != null and node.is_in_group("players"):
 			_hit_player(node, point)

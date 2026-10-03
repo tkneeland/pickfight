@@ -1944,6 +1944,10 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 		var stats: Variant = _players[attacker_slot].get("weapon_stats")
 		if stats != null and stats.resource_path != "":
 			weapon = stats.resource_path.get_file().get_basename()
+		# Issue #516: an in-flight shot is credited to the weapon that fired it.
+		var fired_with: Variant = _players[attacker_slot].get("hit_weapon_id")
+		if fired_with is String and fired_with != "":
+			weapon = fired_with
 		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
