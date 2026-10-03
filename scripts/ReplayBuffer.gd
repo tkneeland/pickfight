@@ -1,6 +1,7 @@
 extends Node
 ## Instant replay (#329, ADR-0020): a bounded ring of downscaled viewport
-## frames, written out as a PNG sequence when the host presses F9.
+## frames, written out as a PNG sequence plus an animated GIF (#502) when the
+## host presses F9. The GIF is encoded on a worker thread.
 ##
 ## Cost: one viewport grab + downscale every `CAPTURE_INTERVAL_SEC` (12 a
 ## second), so a few ms spread over 5 frames at 60 fps. Memory is capped at
@@ -13,7 +14,13 @@ const FRAME_SIZE := Vector2i(256, 144)
 const CLIPS_DIR := "user://clips"
 const TOAST_SEC: float = 3.0
 
+const GifWriterType := preload("res://scripts/GifWriter.gd")
+## 12 fps in hundredths of a second (8 cs, a GIF delay unit).
+const GIF_DELAY_CS: int = 8
+
 signal clip_saved(path: String)
+## The worker finished: the GIF's path, or "" if it could not be written.
+signal gif_saved(path: String)
 
 var _frames: Array[Image] = []
 var _accum: float = 0.0
@@ -21,6 +28,10 @@ var _toast: Label
 var _toast_timer: Timer
 ## Where clips go; scenarios point it at a scratch directory.
 var clips_dir: String = CLIPS_DIR
+## F9 also encodes clip.gif; scenarios that only count PNGs turn it off.
+var encode_gif: bool = true
+var _gif_thread: Thread
+var _gif_dir: String = ""
 
 func _ready() -> void:
 	var layer := CanvasLayer.new()
@@ -82,12 +93,53 @@ func save_clip(stamp: String = "") -> String:
 	clip_saved.emit(dir)
 	return dir
 
+## Encode the buffered frames to `<dir>/clip.gif` on a worker thread;
+## `gif_saved` fires on the main thread when it is done. Returns false if a
+## previous encode is still running or there is nothing to encode.
+func start_gif(dir: String) -> bool:
+	if _frames.is_empty() or (_gif_thread != null and _gif_thread.is_alive()):
+		return false
+	if _gif_thread != null:
+		_gif_thread.wait_to_finish()
+	_gif_dir = dir
+	var copy: Array = _frames.duplicate()
+	var path := ProjectSettings.globalize_path(dir + "/clip.gif")
+	_gif_thread = Thread.new()
+	_gif_thread.start(_encode_gif.bind(copy, path))
+	return true
+
+func _encode_gif(frames: Array, path: String) -> void:
+	var bytes: PackedByteArray = GifWriterType.encode(frames, GIF_DELAY_CS)
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	var ok := f != null
+	if ok:
+		f.store_buffer(bytes)
+		f.close()
+	_gif_done.call_deferred(path if ok else "")
+
+func _gif_done(path: String) -> void:
+	if _gif_thread != null:
+		_gif_thread.wait_to_finish()
+		_gif_thread = null
+	if not path.is_empty() and _toast != null:
+		_toast.text = tr("REPLAY_GIF_SAVED") % path
+		_toast.visible = true
+		_toast_timer.start(TOAST_SEC)
+	gif_saved.emit(path)
+
+func _exit_tree() -> void:
+	if _gif_thread != null:
+		_gif_thread.wait_to_finish()
+		_gif_thread = null
+
 ## Save and show a toast with the path (the F9 handler).
 func save_and_toast() -> String:
 	var dir := save_clip()
 	var shown := tr("REPLAY_NOTHING")
 	if not dir.is_empty():
 		shown = tr("REPLAY_SAVED") % ProjectSettings.globalize_path(dir)
+		if encode_gif and start_gif(dir):
+			shown = tr("REPLAY_GIF_ENCODING") % ProjectSettings.globalize_path(dir + "/clip.gif")
 	_toast.text = shown
 	_toast.visible = true
 	_toast_timer.start(TOAST_SEC)
