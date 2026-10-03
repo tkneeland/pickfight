@@ -681,6 +681,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host",
 	"phone_seat_flick_still_launches_grapple_and_boomerang",
 	"bot_overshoot_fixture_replays_identically_in_one_process",
+	"host_bot_counter_adds_bots_and_caps_at_eight_seats",
+	"human_joining_full_couch_room_replaces_a_bot",
+	"online_human_joining_full_room_replaces_a_bot_between_rounds",
+	"online_match_starts_with_host_and_bots_only",
+	"online_bots_only_match_starts_offline_and_says_so",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2435,6 +2440,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_seat_flick_still_launches_grapple_and_boomerang()
 		"bot_overshoot_fixture_replays_identically_in_one_process":
 			return await _scenario_bot_overshoot_fixture_replays_identically_in_one_process()
+		"host_bot_counter_adds_bots_and_caps_at_eight_seats":
+			return await _scenario_host_bot_counter_adds_bots_and_caps_at_eight_seats()
+		"human_joining_full_couch_room_replaces_a_bot":
+			return await _scenario_human_joining_full_couch_room_replaces_a_bot()
+		"online_human_joining_full_room_replaces_a_bot_between_rounds":
+			return await _scenario_online_human_joining_full_room_replaces_a_bot_between_rounds()
+		"online_match_starts_with_host_and_bots_only":
+			return await _scenario_online_match_starts_with_host_and_bots_only()
+		"online_bots_only_match_starts_offline_and_says_so":
+			return await _scenario_online_bots_only_match_starts_offline_and_says_so()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -20214,21 +20229,12 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 ## Solo button is disabled from its press until the next lobby state arrives,
 ## so a double tap sends one solo frame, not bots-in then bots-out.
 func _scenario_controller_page_solo_button_debounced() -> Array[String]:
+	# #445: the Solo practice button is gone; the host's bot counter replaced it.
 	var failures: Array[String] = []
 	var page: String = _controller_page_lf_194()
-	var at: int = page.find('soloBtn.addEventListener("click"')
-	var handler: String = page.substr(at, page.find("});", at) - at) if at >= 0 else ""
-	var guard_at: int = handler.find("if (soloBtn.disabled) { return; }")
-	var disable_at: int = handler.find("soloBtn.disabled = true;")
-	var send_at: int = handler.find('sendText({ t: "solo"')
-	if guard_at < 0 or disable_at < 0 or send_at < 0 or not (guard_at < disable_at and disable_at < send_at):
-		failures.append("a press does not disable the Solo button before sending: %s" % handler)
-	if not _js_function_body(page, "showSolo").contains("soloBtn.disabled = false;"):
-		failures.append("the next lobby state does not enable the Solo button again")
-	if not _js_function_body(page, "showLobby").contains("showSolo(msg, isHost)"):
-		failures.append("a lobby state does not redraw the Solo button")
-	if not page.contains("#solo-btn:disabled {"):
-		failures.append("a disabled Solo button does not look disabled")
+	for stale: String in ["solo-btn", "soloBtn", "showSolo", 't: "solo"']:
+		if page.contains(stale):
+			failures.append("the controller page still carries the Solo practice button (%s)" % stale)
 	_scenario_completed = true
 	return failures
 ## Issue #194, item 4, read off controller/index.html as shipped: the kick frame
@@ -35301,4 +35307,193 @@ func _scenario_bot_overshoot_fixture_replays_identically_in_one_process() -> Arr
 		if first[i] != second[i]:
 			failures.append("start %d differs between runs: '%s' then '%s'" % [i, first[i], second[i]])
 	_scenario_completed = true
+	return failures
+
+# --- Host bot counter (issue #445) -----------------------------------------------
+## A lobby for the counter scenarios: Main with no `--bots`, one Couch or
+## Online match picked on the title screen. Online goes through a real relay
+## unless `relay_up` is false (the relay is unreachable then).
+func _bots_rig_445(kind: String, relay_up: bool, failures: Array[String]) -> Dictionary:
+	BotDirectorScript.extra_args = PackedStringArray()
+	var built: Dictionary = _new_bot_main()
+	var relay: Node = null
+	var port: int = 1 # nothing listens here: "relay unreachable"
+	if kind == "online" and relay_up:
+		relay = _relay_start()
+		if relay == null:
+			failures.append("no free port for the relay")
+			return {}
+		port = _relay_port_next
+	var rig: Dictionary = {"main": built["main"], "server": built["server"], "rm": built["rm"], "relay": relay, "clients": [], "nodes": [],
+		"code": "", "old": _relay_setting_239(port), "phones": [] as Array[WebSocketPeer]}
+	var main: Node = built["main"]
+	main.get_node("RoundManager").round_end_pause_sec = 8.0 # room to join between rounds
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	_phone_ws_port = rig["server"].ws_port
+	rig["screen"] = rig["rm"].get_node("LobbyLayer")
+	rig["screen"].press_title(kind)
+	if kind == "online" and relay_up:
+		if not await _wait_for_239(func() -> bool: return rig["server"].is_online()):
+			failures.append("host never came online")
+		rig["code"] = rig["server"].online_room_code()
+	return rig
+func _bots_close_445(rig: Dictionary) -> void:
+	await _close_phones(rig["phones"])
+	ProjectSettings.set_setting("pickfight/relay_url", rig["old"])
+	BotDirectorScript.extra_args = PackedStringArray()
+	for node: Node in rig["nodes"]:
+		if is_instance_valid(node):
+			node.queue_free()
+	rig["server"].go_offline()
+	if rig["relay"] != null:
+		_relay_stop(rig["relay"], rig["clients"])
+	await _teardown(rig["main"])
+## Humans in the roster: every claimed seat that is not a bot.
+func _humans_445(server: Node) -> int:
+	return server.claimed_slots().size() - server.bot_director.bot_count()
+## The counter adds bots one press at a time, wraps to none after the last free
+## seat, and never takes a seat a human holds: eight seats in all.
+func _scenario_host_bot_counter_adds_bots_and_caps_at_eight_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("local", false, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var button: Button = screen.control_button("bots")
+	if button == null or not button.text.contains("0") or server.bot_director.bot_count() != 0:
+		failures.append("the counter does not start at 0 ('%s', %d bots)" % [button.text if button != null else "missing", server.bot_director.bot_count()])
+	for presses in [1, 2]:
+		screen.press_control("bots")
+		if server.bot_director.bot_count() != presses or server.claimed_slots().size() != presses:
+			failures.append("press %d left %d bots on %d seats" % [presses, server.bot_director.bot_count(), server.claimed_slots().size()])
+	if not button.text.contains("2"):
+		failures.append("the counter reads '%s' with two bots" % button.text)
+	server.apply_host_command("bots", 50)
+	if server.bot_director.bot_count() != 8 or server.claimed_slots().size() != 8:
+		failures.append("asking for 50 bots gave %d bots on %d seats, expected 8 on 8" % [server.bot_director.bot_count(), server.claimed_slots().size()])
+	screen.press_control("bots")
+	if server.bot_director.bot_count() != 0:
+		failures.append("a press at the cap left %d bots, expected the counter to wrap to 0" % server.bot_director.bot_count())
+	# A human's seat is not the counter's to take: one phone leaves 7 for bots.
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "bots445-cap", rig["phones"])
+	rig["phones"].append(phone)
+	if int(got["slot"]) < 0:
+		failures.append("the phone could not join (%s)" % got["reason"])
+	server.apply_host_command("bots", 50)
+	if server.bot_director.bot_count() != 7 or server.claimed_slots().size() != 8:
+		failures.append("with a phone seated, 50 bots gave %d bots on %d seats, expected 7 on 8" % [server.bot_director.bot_count(), server.claimed_slots().size()])
+	if server.apply_host_command("bots", "x"):
+		failures.append("a non-number counter value was taken")
+	await _bots_close_445(rig)
+	return failures
+## Couch: a phone finds the room full, a bot leaves at once and the phone has
+## its seat (never the other way round); the counter follows.
+func _scenario_human_joining_full_couch_room_replaces_a_bot() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("local", false, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.apply_host_command("bots", 8)
+	if server.claimed_slots().size() != 8:
+		failures.append("the room is not full before the phone comes (%d seats)" % server.claimed_slots().size())
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "bots445-couch", rig["phones"])
+	rig["phones"].append(phone)
+	if int(got["slot"]) < 0 or got["closed"]:
+		failures.append("a phone joining a full room of bots was refused (%s)" % got["reason"])
+	if server.bot_director.bot_count() != 7 or _humans_445(server) != 1:
+		failures.append("after the join there are %d bots and %d humans, expected 7 and 1" % [server.bot_director.bot_count(), _humans_445(server)])
+	if int(got["slot"]) >= 0 and server.is_virtual(int(got["slot"])):
+		failures.append("the phone's slot %d is still a bot's" % int(got["slot"]))
+	await _bots_close_445(rig)
+	return failures
+## Online: a human who finds the room full of bots mid-round is turned away
+## (a bot's body is in the fight); between rounds a bot makes room.
+func _scenario_online_human_joining_full_room_replaces_a_bot_between_rounds() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.apply_host_command("bots", 7)
+	if server.bot_director.bot_count() != 7 or server.claimed_slots().size() != 8:
+		failures.append("the Online room is not full (%d bots, %d seats)" % [server.bot_director.bot_count(), server.claimed_slots().size()])
+	server.apply_host_command("start")
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the round never started (state %d)" % int(rm.get("_state")))
+		await _bots_close_445(rig)
+		return failures
+	var early: WebSocketPeer = await _online_remote_239(rig, "bots445-early")
+	var turned_away: Dictionary = await _online_wait_239(rig, early, "slot")
+	if not turned_away.is_empty() or server.bot_director.bot_count() != 7:
+		failures.append("a mid-round joiner got %s, and %d bots remain; expected a refusal and 7" % [turned_away, server.bot_director.bot_count()])
+	for slot: int in server.virtual_slots():
+		var bot: Node = server.player_in_slot(slot)
+		if bot != null and bot.alive:
+			bot.eliminate()
+	if not await _wait_for_239(func() -> bool: return rm.lobby_phase() == "round_end" or rm.lobby_phase() == "victory", 20000):
+		failures.append("the round never ended (phase %s)" % rm.lobby_phase())
+		await _bots_close_445(rig)
+		return failures
+	var late: WebSocketPeer = await _online_remote_239(rig, "bots445-late")
+	var seat: Dictionary = await _online_wait_239(rig, late, "slot")
+	if seat.is_empty() or int(seat.get("slot", -1)) < 0:
+		failures.append("a joiner between rounds got no seat: %s" % seat)
+	if server.bot_director.bot_count() != 6 or _humans_445(server) != 2:
+		failures.append("after the join there are %d bots and %d humans, expected 6 and 2" % [server.bot_director.bot_count(), _humans_445(server)])
+	await _bots_close_445(rig)
+	return failures
+## Online with only the host and bots: no remote player is needed to start, and
+## a friend can still drop in afterwards.
+func _scenario_online_match_starts_with_host_and_bots_only() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var rm: Node = rig["rm"]
+	for i in 3:
+		screen.press_control("bots")
+	if server.match_kind() != "online" or server.bot_director.bot_count() != 3:
+		failures.append("kind '%s' with %d bots, expected online with 3" % [server.match_kind(), server.bot_director.bot_count()])
+	screen.press_control("start")
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the match never started with the host and bots only (state %d)" % int(rm.get("_state")))
+		await _bots_close_445(rig)
+		return failures
+	if _humans_445(server) != 1 or server.claimed_slots().size() != 4:
+		failures.append("the round holds %d humans on %d seats, expected the host alone with 3 bots" % [_humans_445(server), server.claimed_slots().size()])
+	var friend: WebSocketPeer = await _online_remote_239(rig, "bots445-friend")
+	var seat: Dictionary = await _online_wait_239(rig, friend, "slot")
+	if seat.is_empty() or int(seat.get("slot", -1)) < 0:
+		failures.append("a friend could not drop in after the start: %s" % seat)
+	await _bots_close_445(rig)
+	return failures
+## The relay is unreachable: the Online match still starts (host and bots), and
+## the lobby says it is playing offline.
+func _scenario_online_bots_only_match_starts_offline_and_says_so() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", false, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var rm: Node = rig["rm"]
+	if not await _wait_for_239(func() -> bool: return server.online_status() == "unreachable", 10000):
+		failures.append("the link never reported unreachable ('%s')" % server.online_status())
+	screen.press_control("bots")
+	await _await_ticks(3)
+	var status: Label = screen.get("_online_status") as Label
+	if status == null or not status.is_visible_in_tree() or status.text != TranslationServer.translate("ONLINE_UNREACHABLE") or not status.text.contains("offline"):
+		failures.append("the lobby does not say it is playing offline ('%s')" % (status.text if status != null else "missing"))
+	screen.press_control("start")
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the match never started offline (state %d)" % int(rm.get("_state")))
+	await _bots_close_445(rig)
 	return failures

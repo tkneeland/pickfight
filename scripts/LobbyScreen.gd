@@ -715,7 +715,7 @@ func show_pause_banner(on: bool) -> void:
 # phone's menu ends up in, so nothing is decided here.
 
 const CONTROL_KEYS: Dictionary = {
-	"online": KEY_O, "mode": KEY_T, "target_down": KEY_MINUS,
+	"online": KEY_O, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
 	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
 }
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
@@ -760,6 +760,7 @@ func attach_controls(server: Object) -> void:
 	box.add_child(pad_hint)
 	_pad_active = not Input.get_connected_joypads().is_empty()
 	box.add_child(_control_button("mode", tr("HOST_MODE")))
+	box.add_child(_control_button("bots", tr("HOST_BOTS_STATE") % 0)) # #445: the one bot counter, Couch and Online
 	var target_row := HBoxContainer.new()
 	target_row.add_theme_constant_override("separation", 12)
 	box.add_child(target_row)
@@ -782,7 +783,7 @@ func _control_button(id: String, text: String) -> Button:
 	_controls[id] = button
 	return button
 
-## The control button `id` ("online", "pc_seat", "mode", "target_down",
+## The control button `id` ("online", "pc_seat", "mode", "bots", "target_down",
 ## "target_up", "start"), or null.
 func control_button(id: String) -> Button:
 	return _controls.get(id) as Button
@@ -797,6 +798,10 @@ func press_control(id: String) -> void:
 			_server.apply_host_command("kind", "local" if _online_kind(_server) else "online")
 		"mode":
 			_server.apply_host_command("mode", "ffa" if _server.team_mode() else "teams")
+		"bots":
+			# #445: one more bot, back to none after the last free seat.
+			var count: int = _server.bot_director.bot_count()
+			_server.apply_host_command("bots", count + 1 if count < _server.bot_capacity() else 0)
 		"target_down":
 			_server.apply_host_command("target", _server.match_target() - 1)
 		"target_up":
@@ -842,6 +847,7 @@ func refresh_controls() -> void:
 	_apply_streamer_mode(_server)
 	_refresh_kind_notice()
 	control_button("mode").text = tr("HOST_MODE_STATE") % (tr("MODE_TEAMS") if _server.team_mode() else tr("MODE_FFA"))
+	control_button("bots").text = tr("HOST_BOTS_STATE") % _server.bot_director.bot_count()
 	control_button("join").disabled = not _can_join_online()
 	_join_blocked.visible = control_button("join").disabled
 	# No keyboard glyph while a gamepad is the active input (#368).
@@ -888,12 +894,12 @@ func _input(event: InputEvent) -> void:
 
 ## Opens or closes the gamepad-driven host menu: the lobby control buttons
 ## become focusable and take focus (first enabled one), or give it back.
-const PAD_ORDER: Array[String] = ["online", "mode", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
+const PAD_ORDER: Array[String] = ["online", "mode", "bots", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
 
 ## Explicit D-pad links: down the column, with First-to's minus and plus side
 ## by side. Geometric neighbours skip the small minus button.
 func _chain_pad_focus() -> void:
-	var column: Array[String] = ["join", "online", "mode", "target_down"]
+	var column: Array[String] = ["join", "online", "mode", "bots", "target_down"]
 	var buttons: Array[Button] = []
 	for id: String in column:
 		buttons.append(_controls[id])
@@ -906,13 +912,13 @@ func _chain_pad_focus() -> void:
 	var up: Button = _controls["target_up"]
 	down.focus_neighbor_right = down.get_path_to(up)
 	up.focus_neighbor_left = up.get_path_to(down)
-	up.focus_neighbor_top = up.get_path_to(_controls["mode"])
+	up.focus_neighbor_top = up.get_path_to(_controls["bots"])
 	# Start sits right of the plus (#425): left goes back to it, up to Mode.
 	# Join heads the column now, so the bottom row has nothing below it.
 	var start: Button = _controls["start"]
 	up.focus_neighbor_right = up.get_path_to(start)
 	start.focus_neighbor_left = start.get_path_to(up)
-	start.focus_neighbor_top = start.get_path_to(_controls["mode"])
+	start.focus_neighbor_top = start.get_path_to(_controls["bots"])
 
 func set_pad_menu(on: bool) -> void:
 	if on == _pad_menu_open or _server == null:

@@ -66,6 +66,7 @@ HOST_JOIN_ONLINE,Join someone else's game (J)
 HOST_KICK,Kick
 HOST_MODE,Mode (T)
 HOST_MODE_STATE,Mode (T): %s
+HOST_BOTS_STATE,Bots (B): %d
 HOST_START_MATCH,Start match (Enter)
 HOST_START_MATCH_PAD,Start match
 HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.
@@ -156,7 +157,7 @@ ONLINE_CONNECTING,connecting…
 ONLINE_ONLINE,online
 ONLINE_ROOM,Online: %s
 ONLINE_ROOM_RECONNECTING,Online: %s (reconnecting...)
-ONLINE_UNREACHABLE,relay unreachable
+ONLINE_UNREACHABLE,relay unreachable: playing offline
 OVERTIME,OVERTIME
 PAUSED,PAUSED
 PHONE_STOCK_RANDOM,Random
