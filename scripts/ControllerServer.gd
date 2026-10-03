@@ -27,8 +27,6 @@ extends Node
 ## `{"t":"host","cmd":"kick","slot":<int>}` (issue #149); and the phone's
 ## look (issue #151), `{"t":"hat","v":<hat id>}` and `{"t":"color","v":<int>}`,
 ## answered by a `{"t":"looks",...}` frame (see `looks_message()`).
-## From the host phone only, `{"t":"solo","v":<bool>}` asks for bots, or
-## for them to go (issue #152).
 ## Teams mode (issue #236, ADR-0018): from the host phone only,
 ## `{"t":"gamemode","v":<GameModes id>}` (issue #352) picks the game mode the
 ## same way, and is refused for Hot Potato while Teams is chosen. `{"t":"mode","v":"ffa"|"teams"}` picks the next match's mode, heeded only
@@ -93,8 +91,6 @@ extends Node
 ## RoundManager clears the slot's match numbers on it (issue #161) and
 ## SfxHooks plays the join sound (issue #75, ADR-0016).
 signal player_joined(slot: int)
-## The host phone pressed "Solo practice" (`on`) or "Remove bots" (issue #152).
-signal solo_requested(on: bool)
 ## `host_slot()` changed, to `slot` (-1 with no phone connected). Checked every
 ## frame, paused or not, so a paused game still tells the phones who holds the
 ## host menu when the host's phone drops (issue #165).
@@ -1411,10 +1407,6 @@ func _handle_text(slot: int, text: String) -> void:
 			var c: Variant = msg.get("v")
 			if _is_number(c):
 				request_color(slot, int(c))
-		"solo":
-			var on: Variant = msg.get("v")
-			if slot == host_slot() and on is bool and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
-				solo_requested.emit(on)
 		"mode":
 			var mode: Variant = msg.get("v")
 			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams"):
