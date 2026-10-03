@@ -726,6 +726,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_grazing_a_player_still_hits_them",
 	"pogo_state_resets_when_a_round_starts",
 	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
+	"ui_theme_loads_with_bundled_fonts",
 	"mode_targets_settings_clamp_persist_and_host_commands_544",
 	"mode_targets_lobby_label_value_and_status_line_544",
 	"mode_targets_reach_the_round_and_the_remote_hud_544",
@@ -2574,6 +2575,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_state_resets_when_a_round_starts()
 		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
 			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
+		"ui_theme_loads_with_bundled_fonts":
+			return await _scenario_ui_theme_loads_with_bundled_fonts()
 		"mode_targets_settings_clamp_persist_and_host_commands_544":
 			return await _scenario_mode_targets_settings_clamp_persist_and_host_commands_544()
 		"mode_targets_lobby_label_value_and_status_line_544":
@@ -36968,6 +36971,50 @@ func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[S
 		if restored == null or restored.points != base:
 			failures.append("%s: shield polygon not restored after undo" % case[0])
 	await _teardown(stage)
+	return failures
+
+# --- Shared UI theme and fonts (#541) ---------------------------------------------
+const UiThemeScript541 := preload("res://scripts/UiTheme.gd")
+func _scenario_ui_theme_loads_with_bundled_fonts() -> Array[String]:
+	var failures: Array[String] = []
+	var configured: String = str(ProjectSettings.get_setting("gui/theme/custom", ""))
+	if configured != UiThemeScript541.THEME_PATH:
+		failures.append("project gui/theme/custom is '%s', expected %s" % [configured, UiThemeScript541.THEME_PATH])
+	var theme := load(UiThemeScript541.THEME_PATH) as Theme
+	if theme == null:
+		failures.append("the theme resource does not load")
+		_scenario_completed = true
+		return failures
+	if theme.default_font == null or theme.default_font.resource_path != UiThemeScript541.BODY_FONT_PATH:
+		failures.append("the theme's default font is not the bundled Nunito")
+	if theme.default_font_size < UiThemeScript541.MIN_FONT_SIZE:
+		failures.append("the theme's default font size %d is below the %d px floor" % [theme.default_font_size, UiThemeScript541.MIN_FONT_SIZE])
+	var heading: Font = theme.get_font("font", UiThemeScript541.HEADING_LABEL)
+	if heading == null or heading.resource_path != UiThemeScript541.HEADING_FONT_PATH:
+		failures.append("the HeadingLabel variation does not use the bundled Lilita One")
+	for style_type: String in ["Button", "Panel", "PanelContainer", "LineEdit"]:
+		var style_name: String = "normal" if style_type in ["Button", "LineEdit"] else "panel"
+		if not theme.has_stylebox(style_name, style_type):
+			failures.append("the theme has no %s style for %s" % [style_name, style_type])
+	for path: String in [UiThemeScript541.HEADING_FONT_PATH, UiThemeScript541.BODY_FONT_PATH,
+			"res://art/fonts/OFL-LilitaOne.txt", "res://art/fonts/OFL-Nunito.txt"]:
+		if not FileAccess.file_exists(path):
+			failures.append("%s is missing" % path)
+	# A live control resolves the project theme and measures text with the bundled font.
+	var label := Label.new()
+	get_root().add_child(label)
+	label.text = "Pickfight"
+	var resolved: Font = label.get_theme_font("font")
+	if resolved == null or resolved.resource_path != UiThemeScript541.BODY_FONT_PATH:
+		failures.append("a plain Label does not resolve to the bundled Nunito")
+	if label.get_theme_font_size("font_size") < UiThemeScript541.MIN_FONT_SIZE:
+		failures.append("a plain Label's font size is below the floor")
+	label.theme_type_variation = UiThemeScript541.HEADING_LABEL
+	var heading_resolved: Font = label.get_theme_font("font")
+	if heading_resolved == null or heading_resolved.resource_path != UiThemeScript541.HEADING_FONT_PATH:
+		failures.append("a HeadingLabel does not resolve to Lilita One")
+	label.queue_free()
+	_scenario_completed = true
 	return failures
 
 # --- Per-mode match targets (issue #544) ---------------------------------------

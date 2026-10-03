@@ -577,7 +577,7 @@ func build_panels() -> void:
 	_victory_logo.position = Vector2(24, 16)
 	_victory_logo.size = LOGO_VICTORY_SIZE
 	_victory_panel.add_child(_victory_logo)
-	_victory_title = _big_label("", 110, LOBBY_ACCENT)
+	_victory_title = _big_label("", 96, LOBBY_ACCENT) # 110 before the Nunito metrics (#541); a 12-W name must still fit 1600
 	stack.add_child(_victory_title)
 	_podium = HBoxContainer.new()
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -618,7 +618,7 @@ func _build_how_to_play() -> Control:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	# Tighter than it was (14 px) to make room for SETTINGS_CORNER_RESERVE_PX.
 	box.add_theme_constant_override("separation", 10)
-	box.add_child(_big_label(tr("HOW_TO_PLAY_TITLE"), 34, LOBBY_ACCENT))
+	box.add_child(_big_label(tr("HOW_TO_PLAY_TITLE"), 30, LOBBY_ACCENT)) # 34 before the Nunito metrics (#541)
 	return box
 
 func _big_label(text: String, font_size: int, color: Color) -> Label:
