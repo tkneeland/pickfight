@@ -1615,12 +1615,14 @@ func _on_host_changed(_slot: int) -> void:
 	if lobby_enabled:
 		_publish_lobby_state()
 
-## Whether `roster` is only Solo practice bots waiting for a human: no phone
-## in it is connected, and the bots came from the host's Solo button, not
-## from `--bots=N`.
+## Whether `roster` is only bots waiting for a human: no phone or host seat in
+## it is connected, and the bots came from Solo practice or the host's bot
+## counter (#505), not from `--bots=N`.
 func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 	var director: Variant = _controller_server.get("bot_director") if _controller_server != null else null
-	if director == null or not director.has_method("needs_a_human") or not director.needs_a_human():
+	if director == null or not director.has_method("needs_a_human"):
+		return false
+	if not director.needs_a_human() and not bool(director.get("counter_seated")):
 		return false
 	for slot: int in roster:
 		if not _controller_server.is_virtual(slot) and _controller_server.slot_has_controller(slot):
