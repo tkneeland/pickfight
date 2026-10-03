@@ -1,5 +1,6 @@
 # 21. Local or online matches, never mixed
 
+> Amended by [ADR-0023](0023-solo-is-offline.md): Solo is its own offline match kind, not an Online match with the room closed.
 - Status: Accepted
 - Date: 2026-10-02
 

@@ -602,14 +602,6 @@ func _ready() -> void:
 	bot_director.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(bot_director)
 
-	relay_link = RelayLinkScript.new()
-	relay_link.name = "RelayLink"
-	add_child(relay_link)
-	relay_link.peer_joined.connect(_on_relay_peer_joined)
-	relay_link.peer_left.connect(_on_relay_peer_left)
-	relay_link.frame_received.connect(_on_relay_frame)
-	relay_link.room_code_changed.connect(_on_room_code_changed)
-	relay_link.link_state_changed.connect(_on_link_state_changed)
 	_join_label_base = label.text if label != null else ""
 
 func _process(delta: float) -> void:
@@ -933,7 +925,7 @@ func _process_websocket() -> void:
 		if peer is LocalSeat:
 			# No socket to go silent: the host PC's seat never times out.
 			_slot_last_packet_msec[slot] = now
-		elif peer is RemoteSeat and relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
+		elif peer is RemoteSeat and relay_state() == RelayLinkScript.STATE_RECONNECTING:
 			# The host's own link is down, not the player's: pause the clock (#249).
 			_slot_last_packet_msec[slot] = now
 		var state: int = peer.get_ready_state()
@@ -1530,9 +1522,11 @@ func slot_ready(slot: int) -> bool:
 
 ## Solo (#505): the host PC seat is the only human, so it readies up itself (Start,
 ## Enter) in the lobby rather than starting the match by existing. Everywhere
-## else, and in a Solo match once it is running, the seat counts as ready.
+## else, and in a Solo match once it is running, the seat counts as ready. On the
+## victory screen the Solo host must Continue (key, or the timeout) like any human.
 func _solo_host_must_ready() -> bool:
-	return room_closed() and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby")))
+	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	return room_closed() and (SOLO_PHASES.has(phase) or phase == "victory") # the lone human must Continue too, or the podium never shows (#522)
 
 ## Mark `slot` ready or not, as its phone's Ready button would: Solo
 ## practice readies the host (issue #152).
@@ -1887,19 +1881,40 @@ func player_in_slot(slot: int) -> Node:
 
 ## Connects to the relay at `url` and opens the room; returns an Error code.
 func go_online(url: String) -> int:
-	return relay_link.go_online(url)
+	if _match_kind == KIND_SOLO:
+		return ERR_UNAVAILABLE # Solo never contacts the relay (#522, ADR-0023)
+	return _ensure_relay_link().go_online(url)
+
+## The relay link, made the first time a match goes online: a Couch or Solo
+## match never creates one (#522).
+func _ensure_relay_link() -> Node:
+	if relay_link == null:
+		relay_link = RelayLinkScript.new()
+		relay_link.name = "RelayLink"
+		add_child(relay_link)
+		relay_link.peer_joined.connect(_on_relay_peer_joined)
+		relay_link.peer_left.connect(_on_relay_peer_left)
+		relay_link.frame_received.connect(_on_relay_frame)
+		relay_link.room_code_changed.connect(_on_room_code_changed)
+		relay_link.link_state_changed.connect(_on_link_state_changed)
+	return relay_link
+
+## The relay link's state; "offline" while there is no link at all.
+func relay_state() -> String:
+	return relay_link.link_state() if relay_link != null else RelayLinkScript.STATE_OFFLINE
 
 ## Leaves the relay and closes the room.
 func go_offline() -> void:
-	relay_link.go_offline()
+	if relay_link != null:
+		relay_link.go_offline()
 
 ## The room code the relay gave this host, or "" when not online.
 func online_room_code() -> String:
-	return relay_link.room_code()
+	return relay_link.room_code() if relay_link != null else ""
 
 ## Whether the relay link is up and the room open.
 func is_online() -> bool:
-	return relay_link.link_state() == "online"
+	return relay_state() == "online"
 
 func _on_relay_peer_joined(peer: int) -> void:
 	var seat := RemoteSeat.new()
@@ -1932,7 +1947,7 @@ func _process_remote() -> void:
 		if not _remote_seats[peer].open:
 			_remote_seats.erase(peer)
 	var now: int = Time.get_ticks_msec()
-	var reconnecting: bool = relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING
+	var reconnecting: bool = relay_state() == RelayLinkScript.STATE_RECONNECTING
 	for seat: RemoteSeat in _remote_awaiting.duplicate():
 		if reconnecting:
 			seat.deadline_msec = now + int(connection_timeout_sec * 1000.0)
@@ -2023,9 +2038,8 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 	var phase: String = str(_lobby_state.get("phase", "lobby"))
 	match cmd:
 		"online":
-			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind == KIND_LOCAL:
+			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind == KIND_LOCAL or _match_kind == KIND_SOLO:
 				return false
-			_room_closed = _match_kind == KIND_ONLINE and not arg
 			return _set_online_requested(arg)
 		"pc_seat":
 			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind != "":
@@ -2078,7 +2092,7 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 	return false
 
 func _set_online_requested(on: bool) -> bool:
-	if on == _online_requested and not (on and relay_link.link_state() == RelayLinkScript.STATE_ERROR):
+	if on == _online_requested and not (on and relay_state() == RelayLinkScript.STATE_ERROR):
 		return true
 	_online_requested = on
 	if on:
@@ -2121,14 +2135,14 @@ var _room_code_was_hidden: bool = false
 
 func _refresh_join_label() -> void:
 	var label: Label = join_label()
-	var code: String = relay_link.room_code()
+	var code: String = online_room_code()
 	if label == null:
 		return
 	if room_code_hidden():
 		label.text = tr("ROOM_CODE_HIDDEN")
 	elif code.is_empty():
 		label.text = _join_label_base
-	elif relay_link.link_state() == RelayLinkScript.STATE_RECONNECTING:
+	elif relay_state() == RelayLinkScript.STATE_RECONNECTING:
 		label.text = "%s\n%s" % [_join_label_base, tr("ONLINE_ROOM_RECONNECTING") % code]
 	else:
 		label.text = "%s\n%s" % [_join_label_base, tr("ONLINE_ROOM") % code]
@@ -2180,7 +2194,7 @@ func _apply_saved_host_pick() -> void:
 ## Whether the host PC's own cosmetics panel shows: an Online match with its
 ## seat on, in the lobby or countdown.
 func host_picker_shown() -> bool:
-	return _match_kind == KIND_ONLINE and _host_pc_slot != -1 and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
+	return (_match_kind == KIND_ONLINE or _match_kind == KIND_SOLO) and _host_pc_slot != -1 and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 
 func _release_host_pc_seat() -> void:
 	var slot: int = _host_pc_slot
@@ -2514,7 +2528,7 @@ func _stream_snapshots(delta: float) -> void:
 	var payload: PackedByteArray = SnapshotScript.encode(frame)
 	payload.append_array(SnapshotCaptureScript.encode_sound_trailer(_snapshot_sounds, _music_track()))
 	_snapshot_sounds.clear()
-	relay_link.send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
+	_ensure_relay_link().send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
 	snapshot_frames_sent += 1
 	_hud_tick += 1
 	if fresh:
@@ -2523,7 +2537,7 @@ func _stream_snapshots(delta: float) -> void:
 		var hud: Dictionary = RemoteHudScript.capture(round_manager)
 		if hud != _hud_last:
 			_hud_last = hud
-			relay_link.send_text_to(0, JSON.stringify(hud))
+			_ensure_relay_link().send_text_to(0, JSON.stringify(hud))
 			hud_frames_sent += 1
 
 var _snapshot_sounds: Array = [] # sounds played since the last frame (see SnapshotCapture's trailer)
@@ -2634,26 +2648,25 @@ const SOLO_BOTS: int = 3
 ## What a refused phone and a refused remote seat are told.
 const ONLINE_MATCH_REASON: String = "online match: join from the game on a computer"
 const COUCH_MATCH_REASON: String = "couch match"
+const SOLO_MATCH_REASON: String = "solo match: nobody else can join"
 const ROOM_CLOSED_REASON: String = "room closed"
 const REFUSED_CODE: int = 4003
 ## How long the lobby shows "N players were dropped" after a switch.
 const KIND_NOTICE_MSEC: int = 4000
 
 var _match_kind: String = ""
-## Solo: an Online match whose room never opens.
-var _room_closed: bool = false
 ## The last switch that dropped seats: {"kind", "count", "msec"}.
 var _kind_drop: Dictionary = {}
 ## Joins refused for the match kind (diagnostic, for scenarios).
 var refused_joins: int = 0
 
-## "local", "online", or "" before the host picked one.
+## "local", "online", "solo", or "" before the host picked one.
 func match_kind() -> String:
 	return _match_kind
 
-## Whether this is Solo: an Online match with the room closed.
+## Whether this is Solo: its own offline match kind (#522, ADR-0023).
 func room_closed() -> bool:
-	return _match_kind == KIND_ONLINE and _room_closed
+	return _match_kind == KIND_SOLO
 
 ## The drop notice to show right now, or {} once it has had its time.
 func kind_drop_notice() -> Dictionary:
@@ -2669,18 +2682,17 @@ func set_match_kind(kind: String) -> bool:
 	if room_closed() and kind != KIND_SOLO:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
-	var dropped: int = _drop_seats_for(target) if target != _match_kind else 0
-	_match_kind = target
-	_room_closed = kind == KIND_SOLO
+	var dropped: int = _drop_seats_for(target) if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
+	_match_kind = kind
 	if target == KIND_LOCAL:
 		if _host_pc_slot != -1:
 			_release_host_pc_seat()
 		_set_online_requested(false)
-		if relay_link.link_state() != RelayLinkScript.STATE_OFFLINE:
+		if relay_state() != RelayLinkScript.STATE_OFFLINE:
 			go_offline() # the relay is never left up in a Couch match
 	else:
 		_set_host_pc_seat(true)
-		_set_online_requested(not _room_closed)
+		_set_online_requested(kind == KIND_ONLINE) # Solo stays off the relay
 		if kind == KIND_SOLO:
 			bot_director.add_bots(maxi(0, SOLO_BOTS - bot_director.bot_count()))
 			bot_director.counter_seated = true
@@ -2711,7 +2723,9 @@ func set_bot_count(count: int) -> int:
 ## Whether `peer` may not join this kind of match; a refused peer is closed.
 func _refused_by_match_kind(peer: Variant) -> bool:
 	var reason: String = ""
-	if peer is WebSocketPeer and _match_kind == KIND_ONLINE:
+	if peer is WebSocketPeer and _match_kind == KIND_SOLO:
+		reason = SOLO_MATCH_REASON
+	elif peer is WebSocketPeer and _match_kind == KIND_ONLINE:
 		reason = ONLINE_MATCH_REASON
 	elif peer is RemoteSeat and _match_kind == KIND_LOCAL:
 		reason = COUCH_MATCH_REASON
@@ -2838,7 +2852,7 @@ func _lapse_remote_holds() -> void:
 ## Online match (ADR-0021). For now that is Go online switched on.
 func pc_runs_room() -> bool:
 	if _match_kind != "":  # #435: a picked kind decides; unpicked keeps Go online
-		return _match_kind == KIND_ONLINE
+		return _match_kind == KIND_ONLINE or _match_kind == KIND_SOLO
 	return _online_requested
 
 ## Whether a match is in play or paused: what Pause and End match act on.
