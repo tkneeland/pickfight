@@ -689,6 +689,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_human_joining_full_room_replaces_a_bot_between_rounds",
 	"online_match_starts_with_host_and_bots_only",
 	"online_bots_only_match_starts_offline_and_says_so",
+	"gif_writer_encodes_valid_animated_gif",
+	"replay_save_writes_clip_gif_beside_pngs",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2459,6 +2461,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed()
 		"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry":
 			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
+		"gif_writer_encodes_valid_animated_gif":
+			return await _scenario_gif_writer_encodes_valid_animated_gif()
+		"replay_save_writes_clip_gif_beside_pngs":
+			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -27965,6 +27971,7 @@ func _scenario_replay_buffer_bounded_and_saves_clip() -> Array[String]:
 	root.add_child(rb)
 	var scratch := "user://scenario_clips_329"
 	rb.clips_dir = scratch
+	rb.encode_gif = false
 	if rb.save_clip("empty") != "":
 		failures.append("an empty buffer saved a clip")
 	for i in 500:
@@ -35620,4 +35627,196 @@ func _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry() 
 	if again == -1 or server.slot_hat(again) != "viking" or server.slot_eyes(again) != "angry" or server.slot_color(again) != 2:
 		failures.append("next entry: seat %d wears %s / %s / %d" % [again, server.slot_hat(again), server.slot_eyes(again), server.slot_color(again)])
 	await _host_picker_free_441(rig)
+	return failures
+
+## #502: independent GIF89a reader for the scenarios. Returns size, frame
+## count, loop flag, trailer flag, and each frame's decoded palette indices.
+func _gif_parse_502(b: PackedByteArray) -> Dictionary:
+	var r := {"ok": false, "w": 0, "h": 0, "frames": [], "loop": false, "delay": -1, "trailer": false, "palette": PackedByteArray()}
+	if b.size() < 14 or b.slice(0, 6).get_string_from_ascii() != "GIF89a":
+		return r
+	r["w"] = b[6] | (b[7] << 8)
+	r["h"] = b[8] | (b[9] << 8)
+	var pos := 13
+	if b[10] & 0x80:
+		var n := 3 * (1 << ((b[10] & 7) + 1))
+		r["palette"] = b.slice(13, 13 + n)
+		pos += n
+	while pos < b.size():
+		var t: int = b[pos]
+		if t == 0x3B:
+			r["trailer"] = pos == b.size() - 1
+			r["ok"] = true
+			return r
+		if t == 0x21:
+			var label: int = b[pos + 1]
+			if label == 0xF9:
+				r["delay"] = b[pos + 4] | (b[pos + 5] << 8)
+			elif label == 0xFF and b.slice(pos + 3, pos + 14).get_string_from_ascii() == "NETSCAPE2.0":
+				r["loop"] = true
+			pos += 2
+			while b[pos] != 0:
+				pos += b[pos] + 1
+			pos += 1
+		elif t == 0x2C:
+			var min_size: int = b[pos + 10]
+			pos += 11
+			var data := PackedByteArray()
+			while b[pos] != 0:
+				data.append_array(b.slice(pos + 1, pos + 1 + b[pos]))
+				pos += b[pos] + 1
+			pos += 1
+			r["frames"].append(_gif_lzw_decode_502(data, min_size, r["w"] * r["h"]))
+		else:
+			return r
+	return r
+
+func _gif_lzw_decode_502(data: PackedByteArray, min_size: int, want: int) -> PackedByteArray:
+	var out := PackedByteArray()
+	var clear := 1 << min_size
+	var eoi := clear + 1
+	var table: Array = []
+	var size := min_size + 1
+	var acc := 0
+	var nbits := 0
+	var prev: PackedByteArray = PackedByteArray()
+	var have_prev := false
+	var p := 0
+	while true:
+		while nbits < size and p < data.size():
+			acc |= data[p] << nbits
+			nbits += 8
+			p += 1
+		if nbits < size:
+			break
+		var code := acc & ((1 << size) - 1)
+		acc >>= size
+		nbits -= size
+		if code == clear:
+			table.clear()
+			for i in clear + 2:
+				table.append(PackedByteArray([i]) if i < clear else PackedByteArray())
+			size = min_size + 1
+			have_prev = false
+			continue
+		if code == eoi:
+			break
+		var entry: PackedByteArray
+		if code < table.size():
+			entry = table[code]
+		elif have_prev:
+			entry = prev.duplicate()
+			entry.append(prev[0])
+		else:
+			break
+		out.append_array(entry)
+		if have_prev and table.size() < 4096:
+			var ne := prev.duplicate()
+			ne.append(entry[0])
+			table.append(ne)
+		prev = entry
+		have_prev = true
+		if table.size() == (1 << size) and size < 12:
+			size += 1
+	if out.size() != want:
+		out.resize(0)
+	return out
+
+## #502: a tiny clip encodes to a structurally valid, looping GIF whose
+## frames decode back to the colours that went in.
+func _scenario_gif_writer_encodes_valid_animated_gif() -> Array[String]:
+	var failures: Array[String] = []
+	var gif_script := preload("res://scripts/GifWriter.gd")
+	var cols := [Color8(255, 0, 0), Color8(0, 255, 0), Color8(0, 0, 255)]
+	var frames: Array = []
+	for c in cols:
+		var img := Image.create(16, 16, false, Image.FORMAT_RGB8)
+		img.fill(c)
+		img.fill_rect(Rect2i(3, 4, 6, 4), Color8(255, 255, 255))
+		frames.append(img)
+	var bytes: PackedByteArray = gif_script.encode(frames, 8)
+	if bytes.size() < 20 or bytes.slice(0, 6).get_string_from_ascii() != "GIF89a":
+		failures.append("bytes do not start with GIF89a")
+	if bytes.is_empty() or bytes[bytes.size() - 1] != 0x3B:
+		failures.append("bytes do not end with the 0x3B trailer")
+	var g := _gif_parse_502(bytes)
+	if not g["ok"] or not g["trailer"]:
+		failures.append("block walk did not reach a clean trailer")
+	if g["w"] != 16 or g["h"] != 16:
+		failures.append("logical screen %dx%d, expected 16x16" % [g["w"], g["h"]])
+	if g["frames"].size() != 3:
+		failures.append("%d image descriptors, expected 3" % g["frames"].size())
+	if not g["loop"]:
+		failures.append("NETSCAPE2.0 loop extension missing")
+	if g["delay"] != 8:
+		failures.append("frame delay %d cs, expected 8" % g["delay"])
+	var pal: PackedByteArray = g["palette"]
+	for f in g["frames"].size():
+		var px: PackedByteArray = g["frames"][f]
+		if px.size() != 256:
+			failures.append("frame %d did not decode to 256 pixels" % f)
+			continue
+		var at := func(x: int, y: int) -> Color:
+			var i: int = px[y * 16 + x]
+			return Color8(pal[i * 3], pal[i * 3 + 1], pal[i * 3 + 2])
+		var want: Color = cols[f]
+		var got: Color = at.call(0, 0)
+		if absf(got.r - want.r) > 0.05 or absf(got.g - want.g) > 0.05 or absf(got.b - want.b) > 0.05:
+			failures.append("frame %d background decoded as %s, expected %s" % [f, got, want])
+		if at.call(3, 4).r < 0.9 or at.call(3, 4).g < 0.9 or at.call(3, 4).b < 0.9:
+			failures.append("frame %d marker pixel is not white" % f)
+	_scenario_completed = true
+	return failures
+
+## #502: F9 (save_and_toast) writes clip.gif beside the PNGs; also times a
+## full-size 120-frame encode and round-trips it through the decoder.
+func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	rb.clips_dir = "user://scenario_clips_502"
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 502
+	for i in 120:
+		var img := Image.create(256, 144, false, Image.FORMAT_RGB8)
+		img.fill(Color8((i * 7) % 256, (i * 3) % 256, 90))
+		for k in 40:
+			img.fill_rect(Rect2i(rng.randi_range(0, 240), rng.randi_range(0, 130), 12, 10), Color8(rng.randi() % 256, rng.randi() % 256, rng.randi() % 256))
+		rb.push_frame(img)
+	var t0 := Time.get_ticks_msec()
+	var dir: String = rb.save_and_toast()
+	var abs_dir := ProjectSettings.globalize_path(dir)
+	if not rb.toast_text().contains("clip.gif"):
+		failures.append("toast does not show the GIF path: '%s'" % rb.toast_text())
+	var path: String = await rb.gif_saved
+	var ms := Time.get_ticks_msec() - t0
+	print("      120 frames 256x144 saved + encoded in %d ms" % ms)
+	var gif_path := abs_dir + "/clip.gif"
+	if path != gif_path:
+		failures.append("gif_saved gave '%s', expected '%s'" % [path, gif_path])
+	var bytes := FileAccess.get_file_as_bytes(gif_path)
+	if bytes.is_empty():
+		failures.append("clip.gif missing or empty")
+	else:
+		var g := _gif_parse_502(bytes)
+		if g["frames"].size() != 120 or g["w"] != 256 or g["h"] != 144 or not g["loop"] or not g["trailer"]:
+			failures.append("clip.gif malformed: %d frames, %dx%d, loop %s" % [g["frames"].size(), g["w"], g["h"], g["loop"]])
+		elif (g["frames"][119] as PackedByteArray).size() != 256 * 144:
+			failures.append("last frame did not decode")
+		var out_path := OS.get_environment("PF502_GIF")
+		if out_path != "":
+			var f := FileAccess.open(out_path, FileAccess.WRITE)
+			f.store_buffer(bytes)
+			f.close()
+	var pngs := 0
+	for f in DirAccess.get_files_at(abs_dir):
+		if f.ends_with(".png"):
+			pngs += 1
+		DirAccess.remove_absolute(abs_dir + "/" + f)
+	if pngs != 120:
+		failures.append("%d PNGs beside the gif, expected 120" % pngs)
+	DirAccess.remove_absolute(abs_dir)
+	rb.queue_free()
+	_scenario_completed = true
 	return failures
