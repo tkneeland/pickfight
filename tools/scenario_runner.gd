@@ -726,6 +726,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_grazing_a_player_still_hits_them",
 	"pogo_state_resets_when_a_round_starts",
 	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
+	"remote_client_remembers_name_460",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2570,6 +2571,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_state_resets_when_a_round_starts()
 		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
 			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
+		"remote_client_remembers_name_460":
+			return await _scenario_remote_client_remembers_name_460()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -36956,4 +36959,51 @@ func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[S
 		if restored == null or restored.points != base:
 			failures.append("%s: shield polygon not restored after undo" % case[0])
 	await _teardown(stage)
+	return failures
+
+## #460: the PC join screen pre-fills the last name used, joining saves it, and
+## an empty or junk name falls back to the default. Runs on a temp settings
+## file, never the owner's `user://remote_client.cfg` (#195).
+func _scenario_remote_client_remembers_name_460() -> Array[String]:
+	var failures: Array[String] = []
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_remote_client_460_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	var first: Node = RemoteClientScene241.instantiate()
+	first.settings_path = temp_path
+	first.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(first)
+	await process_frame
+	if first._name_edit.text != "":
+		failures.append("a fresh install pre-filled '%s'" % first._name_edit.text)
+	first.join("ABCD", "Zelda")
+	first.queue_free()
+	await process_frame
+	var second: Node = RemoteClientScene241.instantiate()
+	second.settings_path = temp_path
+	second.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(second)
+	await process_frame
+	if second._name_edit.text != "Zelda":
+		failures.append("relaunch shows '%s', expected 'Zelda'" % second._name_edit.text)
+	second.join("ABCD", "")
+	if second.player_name != "Player":
+		failures.append("an empty name joined as '%s', expected the default" % second.player_name)
+	second.queue_free()
+	await process_frame
+	var junk := ConfigFile.new()
+	junk.load(temp_path)
+	junk.set_value(RemoteClientScript241.SECTION, "name", "\u0001\u0002")
+	junk.save(temp_path)
+	var third: Node = RemoteClientScene241.instantiate()
+	third.settings_path = temp_path
+	third.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(third)
+	await process_frame
+	if third._name_edit.text != "":
+		failures.append("a junk saved name pre-filled '%s'" % third._name_edit.text)
+	third.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
 	return failures
