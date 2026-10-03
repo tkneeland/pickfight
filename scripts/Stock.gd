@@ -114,6 +114,14 @@ func connected_count() -> int:
 func is_pending(slot: int) -> bool:
 	return _respawner != null and _respawner.is_pending(slot)
 
+## The host kicked `slot` (#521): it does not come back, and a pending respawn
+## must not keep it standing while the survivor is handed the round.
+func cancel_respawn(slot: int) -> void:
+	if _respawner != null:
+		_respawner.cancel(slot)
+	if lives.has(slot):
+		lives[slot] = 0
+
 func lives_of(slot: int) -> int:
 	return int(lives.get(slot, -1))
 
