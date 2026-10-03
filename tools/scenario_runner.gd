@@ -20456,6 +20456,19 @@ func _scenario_axe_wins_clash_against_every_weapon() -> Array[String]:
 		return failures
 	_brace(left)
 	_brace(right)
+	# Cold start: the very first clash after the two players spawn is not like
+	# the rest. On macOS the axe on the left gave 8.6 px against the pickaxe
+	# there and 3.6 px in the identical clash with the sides swapped, while
+	# every later pair gave 3.0 to 3.8 px. Run one discarded clash first so the
+	# rigs and the contact solver are settled; the measured clashes below are
+	# unchanged and no threshold moves (#496).
+	for path: String in WEAPON_RESOURCE_PATHS:
+		if path != AXE_PATH:
+			var warm: WeaponStatsType = load(path)
+			if warm != null:
+				await _roster_clash(left, right, centre, axe, warm, axe.max_reach + _stats_forward_extent(axe) \
+						+ warm.max_reach + _stats_forward_extent(warm) - AXE_CLASH_OVERLAP)
+			break
 	for path: String in WEAPON_RESOURCE_PATHS:
 		if path == AXE_PATH:
 			continue
