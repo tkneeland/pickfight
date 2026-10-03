@@ -4588,23 +4588,30 @@ func _scenario_round_winner_keeps_weapon() -> Array[String]:
 	if absf(p2_reach - MAX_REACH) > REACH_TOLERANCE:
 		failures.append("phase A: loser p2 reached %.1f px at full drag, expected the pickaxe's %.1f px" % [
 			p2_reach, MAX_REACH])
-	# --- Phase B: no survivors, so everyone resets --------------------------
+	# --- Phase B: a draw, played off (#554); the winner's weapon goes with
+	# the loss. Both fall together, come back for the tiebreaker, and p2's one
+	# hit on p1 decides it: next round p1 is back on the pickaxe.
 	p1.eliminate()
 	p2.eliminate()
 	var phase_b_restarted: bool = false
-	for i in ROUND_TRANSITION_TICKS:
+	var tiebreak_decided: bool = false
+	for i in ROUND_TRANSITION_TICKS * 2:
 		await physics_frame
-		if p1.alive and p2.alive:
+		if not tiebreak_decided and p1.alive and p2.alive:
+			await _await_ticks(2)
+			p2.strike_landed.emit(p1, 5.0, Vector2.ZERO, false)
+			tiebreak_decided = true
+		elif tiebreak_decided and p1.alive and p2.alive:
 			phase_b_restarted = true
 			break
 	if not phase_b_restarted:
-		failures.append("phase B: round did not restart after a no-survivors round")
+		failures.append("phase B: round did not restart after the tiebreaker")
 		await _teardown(stage)
 		return failures
 	if p1.weapon_stats == null or p1.weapon_stats.resource_path != "res://resources/pickaxe.tres":
-		failures.append("phase B: p1 did not reset to the pickaxe after a no-survivors round")
+		failures.append("phase B: p1 did not reset to the pickaxe after losing the tiebreaker")
 	if p2.weapon_stats == null or p2.weapon_stats.resource_path != "res://resources/pickaxe.tres":
-		failures.append("phase B: p2 did not reset to the pickaxe after a no-survivors round")
+		failures.append("phase B: p2 did not hold the pickaxe after winning the tiebreaker")
 	# --- Phase C: an expired winner claim does not pass the weapon on (D3) -
 	var stub_p1c := WeaponStatsType.new()
 	stub_p1c.min_reach = STUB_MIN_REACH
