@@ -27,8 +27,6 @@ extends Node
 ## `{"t":"host","cmd":"kick","slot":<int>}` (issue #149); and the phone's
 ## look (issue #151), `{"t":"hat","v":<hat id>}` and `{"t":"color","v":<int>}`,
 ## answered by a `{"t":"looks",...}` frame (see `looks_message()`).
-## From the host phone only, `{"t":"solo","v":<bool>}` asks for bots, or
-## for them to go (issue #152).
 ## Teams mode (issue #236, ADR-0018): from the host phone only,
 ## `{"t":"gamemode","v":<GameModes id>}` (issue #352) picks the game mode the
 ## same way, and is refused for Hot Potato while Teams is chosen. `{"t":"mode","v":"ffa"|"teams"}` picks the next match's mode, heeded only
@@ -93,8 +91,6 @@ extends Node
 ## RoundManager clears the slot's match numbers on it (issue #161) and
 ## SfxHooks plays the join sound (issue #75, ADR-0016).
 signal player_joined(slot: int)
-## The host phone pressed "Solo practice" (`on`) or "Remove bots" (issue #152).
-signal solo_requested(on: bool)
 ## `host_slot()` changed, to `slot` (-1 with no phone connected). Checked every
 ## frame, paused or not, so a paused game still tells the phones who holds the
 ## host menu when the host's phone drops (issue #165).
@@ -1411,10 +1407,6 @@ func _handle_text(slot: int, text: String) -> void:
 			var c: Variant = msg.get("v")
 			if _is_number(c):
 				request_color(slot, int(c))
-		"solo":
-			var on: Variant = msg.get("v")
-			if slot == host_slot() and on is bool and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
-				solo_requested.emit(on)
 		"mode":
 			var mode: Variant = msg.get("v")
 			if slot == host_slot() and mode is String and (mode == "ffa" or mode == "teams"):
@@ -2437,19 +2429,35 @@ func _pad_claim_id(device: int) -> String:
 	_pad_guids[id] = guid
 	return id
 
+## Whether another connected pad (not `device`) reports `guid`.
+func _other_pad_has_guid(device: int, guid: String) -> bool:
+	if guid.is_empty():
+		return false
+	var devices: Array = Input.get_connected_joypads()
+	for d in _pad_seats.keys():
+		if not devices.has(d):
+			devices.append(d)
+	for d in devices:
+		if d != device and _pad_guid(d) == guid:
+			return true
+	return false
+
 ## The claim id of a held (unplugged) pad seat that `device` should take back:
 ## the same GUID (the same index first), else the same index with no GUID.
 func _held_pad_claim_id(device: int) -> String:
 	var guid: String = _pad_guid(device)
 	var own: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
 	var found: String = ""
+	var twin: bool = _other_pad_has_guid(device, guid)
 	for slot in _slot_peers.size():
 		var id: String = str(_slot_client_id[slot])
 		if _slot_claimed[slot] != 1 or _slot_peers[slot] != null or not id.begins_with(PAD_ID_PREFIX):
 			continue
 		if id == own:
 			return id
-		if not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
+		# An identical pad that is still connected means a GUID alone cannot say
+		# whose seat this is (#512): then only the same index reclaims.
+		if not twin and not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
 			found = id
 	return found
 

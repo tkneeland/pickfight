@@ -15,13 +15,12 @@ extends Node
 ## - `--bots=N` on the command line (after `--`) adds N bots at start-up, for
 ##   testing. With no phone joined the bots are all the lobby has and all are
 ##   ready, so a match starts by itself.
-## - The host phone's "Solo practice" button sends `{"t":"solo","v":true}`.
-##   The lobby fills up to SOLO_PLAYERS with bots and the host is readied, so
-##   the countdown starts. "Remove bots" (`v` false) sends them all away.
-##   Solo bots are there for the humans (issue #165): they do not make a
-##   ready lobby on their own (RoundManager asks `needs_a_human()`), and once
-##   no phone has been connected for `orphan_grace_sec` they all go, even
-##   mid-round. `--bots=N` bots need no human and never go by themselves.
+## - The host's bot counter, or the Solo match kind (#445, #522), seats bots
+##   (`counter_seated`). Those bots are there for the humans (issue #165): they
+##   do not make a ready lobby on their own (RoundManager asks
+##   `needs_a_human()`), and once no human seat has been connected for
+##   `orphan_grace_sec` they all go, even mid-round (#509). `--bots=N` bots
+##   need no human and never go by themselves.
 ##
 ## Paused with the rest of the game: `ControllerServer` runs through a pause,
 ## but it makes this node PAUSABLE, so a bot stops thinking when the host
@@ -42,8 +41,6 @@ static var extra_args: PackedStringArray = PackedStringArray()
 var server: Node = null
 ## slot -> the `Bot` driving it.
 var bots: Dictionary = {}
-## True while the bots came from Solo practice: they need a human to play with.
-var solo: bool = false
 ## True while the host's bot counter or Solo seated the bots (#505): like Solo
 ## practice bots they need a human who has readied, not a room of bots alone.
 ## `--bots=N` bots, the headless playtest, are exempt.
@@ -72,8 +69,6 @@ func seed_bots(seed_value: int) -> void:
 func _ready() -> void:
 	if server == null:
 		return
-	if server.has_signal("solo_requested"):
-		server.connect("solo_requested", _on_solo_requested)
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	args.append_array(extra_args)
 	var wanted: int = bots_from_args(args)
@@ -82,10 +77,10 @@ func _ready() -> void:
 		# to be ready before a controller binds to it.
 		add_bots.call_deferred(wanted)
 
-## Solo bots with no phone connected for `orphan_grace_sec`: send them away,
-## so they do not play match after match to an empty room (issue #165).
+## Counter bots with no human seat connected for `orphan_grace_sec`: send them
+## away, so they do not play match after match to an empty room (issue #165).
 func _process(delta: float) -> void:
-	if not needs_a_human() or server.host_slot() != -1:
+	if not needs_a_human() or _a_human_is_connected():
 		_orphaned_for = 0.0
 		return
 	_orphaned_for += delta
@@ -93,10 +88,17 @@ func _process(delta: float) -> void:
 		_orphaned_for = 0.0
 		remove_bots()
 
-## Whether these bots only play alongside a human: they came from Solo
-## practice, and are still here.
+## Whether these bots only play alongside a human: the host's counter or Solo
+## seated them, and they are still here.
 func needs_a_human() -> bool:
-	return solo and not bots.is_empty()
+	return counter_seated and not bots.is_empty()
+
+## Whether any human seat (a phone, the host's PC seat, a pad) is connected.
+func _a_human_is_connected() -> bool:
+	for slot: int in server.claimed_slots():
+		if not server.is_virtual(slot) and server.slot_has_controller(slot):
+			return true
+	return false
 
 ## The N in `--bots=N`, or 0 without the flag. Negative or junk reads as 0.
 static func bots_from_args(args: PackedStringArray) -> int:
@@ -140,7 +142,6 @@ func _free_bot_name() -> String:
 func remove_bots() -> void:
 	for slot: int in bots.keys():
 		remove_bot(slot)
-	solo = false
 	counter_seated = false
 
 ## Send the bot in `slot` away (the host's kick lands here too). A bot in the
@@ -156,25 +157,7 @@ func remove_bot(slot: int) -> void:
 		player.leave_round()
 	server.remove_virtual_controller(slot)
 	if bots.is_empty():
-		solo = false
 		counter_seated = false
 
 func bot_count() -> int:
 	return bots.size()
-
-## The host phone's Solo practice button. On: bots fill the lobby to
-## SOLO_PLAYERS (always at least one) and the host is readied, so the match
-## starts. Off: every bot goes. Issue #193: an "on" while Solo bots are
-## already here (a double press) adds none.
-func _on_solo_requested(on: bool) -> void:
-	if not on:
-		remove_bots()
-		return
-	if needs_a_human():
-		return
-	solo = true
-	var roster: int = server.claimed_slots().size()
-	add_bots(maxi(1, SOLO_PLAYERS - roster))
-	var host: int = server.host_slot()
-	if host != -1:
-		server.set_slot_ready(host, true)

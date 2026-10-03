@@ -711,6 +711,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
+	"gamepad_identical_pad_cannot_take_held_seat_while_twin_connected",
+	"stock_kicking_last_opponent_mid_respawn_scores_nobody",
+	"lobby_sandbox_players_carry_no_round_team",
+	"mode_win_eliminations_are_not_counted_as_kos",
+	"survival_time_resumes_after_a_respawn",
+	"own_hazard_strike_buzzes_the_victim_once",
+	"dead_solo_message_is_gone_509",
+	"counter_bots_leave_when_no_human_seat_is_connected_509",
+	"controller_page_refused_4003_is_terminal_509",
 	"combat_in_flight_shot_credited_to_firing_weapon",
 	"combat_sudden_death_hit_reported_lethal",
 	"fishing_rod_cast_has_its_own_sound_not_the_gunshot",
@@ -2532,6 +2541,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
 			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
+		"gamepad_identical_pad_cannot_take_held_seat_while_twin_connected":
+			return await _scenario_gamepad_identical_pad_cannot_take_held_seat_while_twin_connected()
+		"stock_kicking_last_opponent_mid_respawn_scores_nobody":
+			return await _scenario_stock_kicking_last_opponent_mid_respawn_scores_nobody()
+		"lobby_sandbox_players_carry_no_round_team":
+			return await _scenario_lobby_sandbox_players_carry_no_round_team()
+		"mode_win_eliminations_are_not_counted_as_kos":
+			return await _scenario_mode_win_eliminations_are_not_counted_as_kos()
+		"survival_time_resumes_after_a_respawn":
+			return await _scenario_survival_time_resumes_after_a_respawn()
+		"own_hazard_strike_buzzes_the_victim_once":
+			return await _scenario_own_hazard_strike_buzzes_the_victim_once()
+		"dead_solo_message_is_gone_509":
+			return await _scenario_dead_solo_message_is_gone_509()
+		"counter_bots_leave_when_no_human_seat_is_connected_509":
+			return await _scenario_counter_bots_leave_when_no_human_seat_is_connected_509()
+		"controller_page_refused_4003_is_terminal_509":
+			return await _scenario_controller_page_refused_4003_is_terminal_509()
 		"combat_in_flight_shot_credited_to_firing_weapon":
 			return await _scenario_combat_in_flight_shot_credited_to_firing_weapon()
 		"combat_sudden_death_hit_reported_lethal":
@@ -14956,7 +14983,7 @@ func _scenario_solo_practice_button_adds_and_removes_bots() -> Array[String]:
 	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
 	if director.bot_count() != 0:
 		failures.append("a phone that is not the host added %d bots" % director.bot_count())
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
 	if director.bot_count() != BotDirectorScript.SOLO_PLAYERS - 2:
 		failures.append("Solo practice with two phones added %d bots, expected %d" % [
@@ -14968,12 +14995,12 @@ func _scenario_solo_practice_button_adds_and_removes_bots() -> Array[String]:
 	var bots_marked: int = _lobby_bots_seen(joined[1])
 	if bots_marked != director.bot_count():
 		failures.append("the phones were told of %d bots, expected %d" % [bots_marked, director.bot_count()])
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": false}))
+	_solo_press_509(server, false)
 	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
 	if director.bot_count() != 0 or server.claimed_slots() != [0, 1]:
 		failures.append("Remove bots left %d bots, roster %s" % [director.bot_count(), server.claimed_slots()])
 	joined[1].send_text(JSON.stringify({"t": "ready", "v": true}))
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	var begun: bool = false
 	var deadline: int = Time.get_ticks_msec() + BOT_START_MSEC
 	while Time.get_ticks_msec() < deadline and not begun:
@@ -16170,7 +16197,7 @@ func _poll_until(joined: Array[WebSocketPeer], condition: Callable, timeout_msec
 func _start_solo_match(built: Dictionary) -> bool:
 	var joined: Array[WebSocketPeer] = built["joined"]
 	var server: Node = built["server"]
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	return await _poll_until(joined, func() -> bool:
 		var slots: Array[int] = server.claimed_slots()
 		if slots.size() != BotDirectorScript.SOLO_PLAYERS:
@@ -16247,7 +16274,7 @@ func _scenario_solo_ignored_mid_match_and_removed_bots_leave_round() -> Array[St
 			rm.lobby_phase(), server.claimed_slots()])
 	else:
 		var bot_slots: Array[int] = server.virtual_slots()
-		joined[0].send_text(JSON.stringify({"t": "solo", "v": false}))
+		server.apply_host_command("bots", 0)
 		await _poll_phones(joined, 10)
 		print("      Remove bots mid-round: %d bots left, roster %s, phase '%s'" % [
 			director.bot_count(), server.claimed_slots(), rm.lobby_phase()])
@@ -16340,7 +16367,7 @@ func _scenario_solo_bots_go_when_the_last_phone_leaves() -> Array[String]:
 	rm.lobby_countdown_sec = ORPHAN_COUNTDOWN_SEC
 	director.set("orphan_grace_sec", ORPHAN_GRACE_SEC)
 	# In the lobby: Solo practice starts the countdown, then the phone leaves.
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "countdown", BOT_START_MSEC):
 		failures.append("Solo practice never started the countdown (phase '%s')" % rm.lobby_phase())
 	joined[0].close(1000, "solo host gone")
@@ -20771,10 +20798,10 @@ func _scenario_solo_double_press_adds_bots_once() -> Array[String]:
 		_scenario_completed = true
 		return failures
 	rm.lobby_countdown_sec = 600.0
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
+	_solo_press_509(server, true)
 	await _poll_phones(joined, 10)
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	await _poll_phones(joined, 10)
 	print("      three Solo presses: %d bots, roster %s" % [director.bot_count(), server.claimed_slots()])
 	if director.bot_count() != BotDirectorScript.SOLO_PLAYERS - 1 or server.claimed_slots().size() != BotDirectorScript.SOLO_PLAYERS:
@@ -20802,7 +20829,7 @@ func _scenario_solo_bot_yields_slot_to_phone() -> Array[String]:
 		_scenario_completed = true
 		return failures
 	rm.lobby_countdown_sec = 600.0
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	await _poll_until(joined, func() -> bool: return director.bot_count() > 0, BOT_START_MSEC)
 	var slots: int = server.player_paths.size()
 	director.add_bots(slots)
@@ -22353,7 +22380,7 @@ func _scenario_teams_bots_fill_the_smaller_team() -> Array[String]:
 	joined[0].send_text(JSON.stringify({"t": "team", "v": 0}))
 	joined[1].send_text(JSON.stringify({"t": "team", "v": 0}))
 	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
-	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	_solo_press_509(server, true)
 	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
 	var bots: Array[int] = server.virtual_slots()
 	var lobby_teams: Dictionary = rm._lobby_teams(server.claimed_slots())
@@ -23588,7 +23615,7 @@ func _scenario_host_pc_seat_not_replaced_by_phone() -> Array[String]:
 	var rig: Dictionary = await _phone_rig_164(2, "PcBot239")
 	var server: Node = rig["server"]
 	server.apply_host_command("pc_seat", true)
-	server.bot_director.solo = true
+	server.bot_director.counter_seated = true
 	server.bot_director.add_bots(1)
 	if server.virtual_slots() != [1]:
 		failures.append("the Solo bot is in %s, expected [1]" % [server.virtual_slots()])
@@ -36547,6 +36574,235 @@ func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[St
 	relay.queue_free()
 	_scenario_completed = true
 	return failures
+func _scenario_gamepad_identical_pad_cannot_take_held_seat_while_twin_connected() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadTwin512")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	server._test_pad_guids[1] = "guid-xbox"
+	server._test_pad_guids[2] = "guid-xbox"
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(2)
+	Input.joy_connection_changed.emit(2, false)
+	await _await_ticks(5)
+	# A third identical pad joins while pad 1 (same GUID) is still connected.
+	server._test_pad_guids[5] = "guid-xbox"
+	Input.joy_connection_changed.emit(5, true)
+	await _await_ticks(5)
+	if server.pad_slot(5) != -1:
+		failures.append("an identical pad took the held seat without pressing A (slot %d)" % server.pad_slot(5))
+	# The original pad replugged on its own index still reclaims.
+	Input.joy_connection_changed.emit(2, true)
+	await _await_ticks(5)
+	if server.pad_slot(2) != slot:
+		failures.append("the original pad did not reclaim its seat on the same index (slot %d, wanted %d)" % [server.pad_slot(2), slot])
+	await _teardown(rig["stage"])
+	return failures
+
+## Issue #521: in Stock, kicking the last opponent while they wait to respawn
+## handed the survivor a point (breaking #193): the kicked player still counted
+## as standing until the respawn timer ran out. The kick cancels the respawn.
+func _scenario_stock_kicking_last_opponent_mid_respawn_scores_nobody() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var rm: Node = rig["rm"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	var kicked: RigidBody2D = rig["players"][1]
+	kicked.eliminate()
+	await _await_ticks(2)
+	if not mode.is_pending(1):
+		failures.append("the KO'd player was not waiting to respawn")
+	(rig["roster"].slots as Array).erase(1)
+	rm.call("_on_host_command", "kick", 1)
+	await _await_ticks(180)  # past the respawner's own 1.5 s
+	print("      kicked mid-respawn: host score %d, rounds won %s" % [rm.score_of(0), wins])
+	if rm.score_of(0) != 0 or not wins.is_empty():
+		failures.append("kicking the last opponent mid-respawn scored the survivor: score %d, wins %s" % [rm.score_of(0), wins])
+	await _stock_finish(rig)
+	return failures
+## Issue #521: `team` was reset only at round start, so players who had been on
+## teams in the last round still could not hit each other in the lobby sandbox.
+func _scenario_lobby_sandbox_players_carry_no_round_team() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	await _await_ticks(2)
+	for player: RigidBody2D in rig["players"]:
+		player.team = 1
+	rm.call("_enter_lobby")
+	await _await_ticks(2)
+	for player: RigidBody2D in rig["players"]:
+		if player.team != -1:
+			failures.append("%s kept team %d in the lobby" % [player.name, player.team])
+	await _teardown(rig["stage"])
+	return failures
+## Issue #521: the scripted `eliminate()` that ends a Soccer / Capture the Flag /
+## King of the Hill round on a mode win counted as KOs: deaths, self-KOs and
+## streak banners. A mode win is a score, not a KO.
+func _scenario_mode_win_eliminations_are_not_counted_as_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	mode.call("_win", 0)
+	await _await_ticks(5)
+	var stats: RefCounted = rm.get("_stats")
+	var deaths: int = 0
+	for slot: int in [1, 3]:
+		deaths += int(stats.deaths.get(slot, 0)) + int(stats.self_kos.get(slot, 0))
+	print("      after a CTF win: deaths+self-KOs of the losers %d" % deaths)
+	if deaths != 0:
+		failures.append("a Capture the Flag win counted %d deaths/self-KOs for the losing team" % deaths)
+	await _teardown(rig["stage"])
+	return failures
+## Issue #521: `record_elimination` ends a slot's survival clock and nothing
+## restarted it on a respawn, so survival time stopped at the first lost life.
+func _scenario_survival_time_resumes_after_a_respawn() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = preload("res://scripts/MatchStats.gd").new()
+	stats.begin_round([0, 1], 0)
+	stats.record_elimination(0, 1000)
+	stats.resume_round(0, 2000)
+	stats.end_round(5000)
+	print("      survival: %s" % [stats.survival_msec])
+	if int(stats.survival_msec[0]) != 4000:
+		failures.append("slot 0 survived %d ms, expected 1000 + 3000" % int(stats.survival_msec[0]))
+	var rig: Dictionary = _stock_rig(2, 3, 0)
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	var rm: Node = rig["rm"]
+	var player: RigidBody2D = rig["players"][1]
+	if not await _stock_lose_life(player):
+		failures.append("the player never respawned")
+	elif not (rm.get("_stats")._alive_since as Dictionary).has(1):
+		failures.append("the respawned player's survival clock never restarted")
+	await _stock_finish(rig)
+	return failures
+## Issue #521: a falling rock reports its hit on the victim's own
+## `strike_landed`, so attacker == victim and the phone got "struck" and "hit".
+func _scenario_own_hazard_strike_buzzes_the_victim_once() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	var victim: RigidBody2D = rig["players"][0]
+	await _await_ticks(2)
+	rig["roster"].buzzes.clear()
+	rm.call("_on_strike_landed", victim, 10.0, Vector2.ZERO, false, 0)
+	print("      buzzes: %s" % [rig["roster"].buzzes])
+	if rig["roster"].buzzes.size() != 1:
+		failures.append("a self-inflicted hit buzzed %d times: %s" % [rig["roster"].buzzes.size(), rig["roster"].buzzes])
+	rm.call("_on_strike_landed", rig["players"][1], 10.0, Vector2.ZERO, false, 0)
+	if rig["roster"].buzzes.size() != 3:
+		failures.append("a hit on someone else should buzz both phones: %s" % [rig["roster"].buzzes])
+	await _teardown(rig["stage"])
+	return failures
+
+## Stands in for the retired `{"t":"solo"}` phone message (#509) in the older
+## bot scenarios: on, the host's counter fills the lobby to SOLO_PLAYERS and
+## the host is readied; off, every bot goes.
+func _solo_press_509(server: Node, on: bool) -> void:
+	var director: Node = server.bot_director
+	if not on:
+		director.remove_bots()
+		return
+	if director.needs_a_human():
+		return
+	var roster: int = server.claimed_slots().size()
+	server.set_bot_count(director.bot_count() + maxi(1, BotDirectorScript.SOLO_PLAYERS - roster))
+	var host: int = server.host_slot()
+	if host != -1:
+		server.set_slot_ready(host, true)
+## Issue #509 (1): the host phone's `{"t":"solo"}` frame is no longer handled
+## (#445 removed the button): it adds no bots and readies nobody.
+func _scenario_dead_solo_message_is_gone_509() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "dead-solo-509")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	joined[0].send_text(JSON.stringify({"t": "solo", "v": true}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.bot_director.bot_count() != 0:
+		failures.append("a solo frame still seated %d bots" % server.bot_director.bot_count())
+	if server.slot_ready(0):
+		failures.append("a solo frame still readied the host")
+	if server.has_signal("solo_requested"):
+		failures.append("ControllerServer still has the solo_requested signal")
+	if "solo" in server.bot_director:
+		failures.append("BotDirector still has a solo flag")
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+## Issue #509 (2): the orphan cleanup keyed on a flag nothing set. Bots the
+## host's counter seated now leave once no human seat is connected.
+func _scenario_counter_bots_leave_when_no_human_seat_is_connected_509() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _bot_main_with_phones(1, "orphan-509")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	var director: Node = server.bot_director
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	rm.lobby_countdown_sec = 600.0
+	director.set("orphan_grace_sec", ORPHAN_GRACE_SEC)
+	server.set_bot_count(2)
+	await _poll_phones(joined, 10)
+	if director.bot_count() != 2:
+		failures.append("the counter seated %d bots, expected 2" % director.bot_count())
+	await _poll_phones(joined, int(ORPHAN_GRACE_SEC * 60.0) + 30)
+	if director.bot_count() != 2:
+		failures.append("the bots left while a phone was still connected (%d left)" % director.bot_count())
+	joined[0].close(1000, "phone gone")
+	var deadline: int = Time.get_ticks_msec() + ORPHAN_WATCH_MSEC
+	while Time.get_ticks_msec() < deadline and director.bot_count() > 0:
+		await _poll_phones(joined, 1)
+	if director.bot_count() != 0 or not server.claimed_slots().is_empty():
+		failures.append("counter bots stayed with no human seat: %d bots, roster %s" % [
+			director.bot_count(), server.claimed_slots()])
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+## Issue #509 (3): a phone refused with close code 4003 (the match kind) must
+## not reconnect every second forever; the page treats it as terminal.
+func _scenario_controller_page_refused_4003_is_terminal_509() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	if not page.contains("var REFUSED_CODE = %d;" % ControllerServerScript.REFUSED_CODE):
+		failures.append("the page's refused code does not match ControllerServer.REFUSED_CODE")
+	var close_body: String = page.substr(page.find("sock.onclose = function"))
+	close_body = close_body.substr(0, close_body.find("sock.onerror"))
+	var refused_at: int = close_body.find("if (refused) { refusedOut = true;")
+	var retry_at: int = close_body.find("setTimeout(connect")
+	if refused_at == -1:
+		failures.append("onclose has no terminal branch for a refused phone")
+	elif retry_at == -1 or refused_at > retry_at:
+		failures.append("the refused branch comes after the reconnect timer")
+	_scenario_completed = true
+	return failures
+
 
 # Issue #516: a bullet that lands after its shooter swapped weapons is logged
 # against the weapon that fired it.
