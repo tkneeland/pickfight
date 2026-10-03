@@ -68,3 +68,11 @@ incorrect, `BLOCKED` when it cannot be observed or exercised, and `SKIPPED` only
 for an approved exception with the attempted command and reason. Sanitize every
 retained artifact before storage or sharing.
 <!-- atlas-v3:testing:end -->
+
+## Visual review of UI changes
+
+`tools/ui_screenshots.gd` renders each host-screen state to a PNG (#565): title, the Couch, Online and Solo lobbies with 0, 3 and 8 seats (Couch with 3 includes a gamepad seat), How to play, Your look, settings, the Esc menu, the PC join screen, and the 8-player HUD and victory. Run it **without** `--headless`, since it needs a renderer (a window opens briefly):
+
+`godot --path . -s tools/ui_screenshots.gd -- --out=/abs/dir [--size=1600x900|WxH|all]`
+
+`--size=all` renders 1600x900, 1920x1080 and 1280x800, one folder per size. It exits 0 once every PNG is saved and non-blank. Use it as a visual-review step on UI PRs and compare the output against `docs/design/ui-overhaul/`. Like the scenario runner it never touches the owner's settings, and it is not part of the scenario suite or CI. Put PNGs cited as evidence under `test-results`.
