@@ -1234,6 +1234,7 @@ func _enter_victory() -> void:
 	_lobby_screen.show_panel("victory")
 	_set_join_corner_visible(false)
 	_last_lobby_state = {}
+	_publish_lobby_state() # the phase first: Solo's host must Continue, and reads it (#522)
 	_tick_lobby()
 
 ## Frees the last round's stage on the way into the lobby or the victory
@@ -1615,12 +1616,14 @@ func _on_host_changed(_slot: int) -> void:
 	if lobby_enabled:
 		_publish_lobby_state()
 
-## Whether `roster` is only Solo practice bots waiting for a human: no phone
-## in it is connected, and the bots came from the host's Solo button, not
-## from `--bots=N`.
+## Whether `roster` is only bots waiting for a human: no phone or host seat in
+## it is connected, and the bots came from Solo practice or the host's bot
+## counter (#505), not from `--bots=N`.
 func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 	var director: Variant = _controller_server.get("bot_director") if _controller_server != null else null
-	if director == null or not director.has_method("needs_a_human") or not director.needs_a_human():
+	if director == null or not director.has_method("needs_a_human"):
+		return false
+	if not director.needs_a_human() and not bool(director.get("counter_seated")):
 		return false
 	for slot: int in roster:
 		if not _controller_server.is_virtual(slot) and _controller_server.slot_has_controller(slot):
@@ -1982,6 +1985,12 @@ func _on_slot_claimed_fresh(slot: int) -> void:
 	# the next round start, and never keeps the old occupant's weapon.
 	_teams.erase(slot)
 	_team_keep_weapon.erase(slot)
+	# Issue #510: nor the old occupant's round win (the weapon it keeps into the
+	# next round) or match win.
+	if _last_winner_slot == slot:
+		_last_winner_slot = -1
+	if _match_winner_slot == slot:
+		_match_winner_slot = -1
 	_stats.forget_slot(slot)
 	_pending_kos = _pending_kos.filter(func(entry: Array) -> bool: return entry[0] != slot)
 	_update_score_label()

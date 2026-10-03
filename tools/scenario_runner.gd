@@ -689,11 +689,28 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_human_joining_full_room_replaces_a_bot_between_rounds",
 	"online_match_starts_with_host_and_bots_only",
 	"online_bots_only_match_starts_offline_and_says_so",
+	"solo_waits_for_the_host_seat_to_ready_up_bots_are_ready",
+	"lobby_sandbox_solo_players_and_bots_move_after_the_countdown",
+	"lobby_sandbox_couch_first_round_players_move_after_the_countdown",
+	"lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen",
+	"couch_bots_alone_never_start_a_match",
+	"solo_switching_to_couch_sends_the_bots_away",
 	"remote_join_cancel_button_click_aborts_join_and_closes_link",
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
 	"remote_ready_capture_mirror_and_pad_518",
+	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
+	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
+	"pad_bumper_cycling_picker_does_not_release_weapon",
+	"fresh_claim_does_not_inherit_round_winner_weapon_or_match_win",
+	"solo_never_creates_or_opens_the_relay_link",
+	"solo_lobby_shows_no_room_code_qr_or_url",
+	"solo_refuses_phone_and_remote_joins",
+	"solo_plays_a_full_match_back_to_the_lobby",
+	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
+	"relay_host_keepalive_holds_idle_room_open",
+	"relay_link_retries_after_idle_timeout_error_bounded",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2464,6 +2481,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed()
 		"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry":
 			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
+		"solo_waits_for_the_host_seat_to_ready_up_bots_are_ready":
+			return await _scenario_solo_waits_for_the_host_seat_to_ready_up_bots_are_ready()
+		"lobby_sandbox_solo_players_and_bots_move_after_the_countdown":
+			return await _scenario_lobby_sandbox_solo_players_and_bots_move_after_the_countdown()
+		"lobby_sandbox_couch_first_round_players_move_after_the_countdown":
+			return await _scenario_lobby_sandbox_couch_first_round_players_move_after_the_countdown()
+		"lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen":
+			return await _scenario_lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen()
+		"couch_bots_alone_never_start_a_match":
+			return await _scenario_couch_bots_alone_never_start_a_match()
+		"solo_switching_to_couch_sends_the_bots_away":
+			return await _scenario_solo_switching_to_couch_sends_the_bots_away()
 		"remote_join_cancel_button_click_aborts_join_and_closes_link":
 			return await _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link()
 		"remote_join_cancel_idle_and_rejoin_wait_paths":
@@ -2474,6 +2503,28 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
 		"remote_ready_capture_mirror_and_pad_518":
 			return await _scenario_remote_ready_capture_mirror_and_pad_518()
+		"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats":
+			return await _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats()
+		"shield_ranged_hit_does_not_recoil_and_reports_real_damage":
+			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
+		"pad_bumper_cycling_picker_does_not_release_weapon":
+			return await _scenario_pad_bumper_cycling_picker_does_not_release_weapon()
+		"fresh_claim_does_not_inherit_round_winner_weapon_or_match_win":
+			return await _scenario_fresh_claim_does_not_inherit_round_winner_weapon_or_match_win()
+		"solo_never_creates_or_opens_the_relay_link":
+			return await _scenario_solo_never_creates_or_opens_the_relay_link()
+		"solo_lobby_shows_no_room_code_qr_or_url":
+			return await _scenario_solo_lobby_shows_no_room_code_qr_or_url()
+		"solo_refuses_phone_and_remote_joins":
+			return await _scenario_solo_refuses_phone_and_remote_joins()
+		"solo_plays_a_full_match_back_to_the_lobby":
+			return await _scenario_solo_plays_a_full_match_back_to_the_lobby()
+		"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay":
+			return await _scenario_solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay()
+		"relay_host_keepalive_holds_idle_room_open":
+			return await _scenario_relay_host_keepalive_holds_idle_room_open()
+		"relay_link_retries_after_idle_timeout_error_bounded":
+			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -23373,8 +23424,8 @@ func _scenario_online_toggle_ignored_mid_match() -> Array[String]:
 	server.set_lobby_state({"phase": "playing", "players": [{"slot": 0, "name": "", "ready": false}]})
 	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": true}))
 	await _poll_phones(phones, 20)
-	if server.online_requested() or server.relay_link.link_state() != "offline":
-		failures.append("Go online was taken mid-match (link %s)" % server.relay_link.link_state())
+	if server.online_requested() or server.relay_state() != "offline":
+		failures.append("Go online was taken mid-match (link %s)" % server.relay_state())
 	if server.apply_host_command("online", true):
 		failures.append("apply_host_command('online') returned true mid-match")
 	# Back in the lobby it works; then the match starts and it cannot be turned off.
@@ -33936,7 +33987,7 @@ func _scenario_title_screen_offers_couch_online_and_solo_and_no_pc_seat_control(
 		failures.append("two D-pad downs reached %s, expected Solo" % (focused.name if focused != null else "nothing"))
 	await _pad_tap_368(0, JOY_BUTTON_A)
 	await _await_ticks(3)
-	if server.match_kind() != "online" or not server.room_closed():
+	if server.match_kind() != "solo" or not server.room_closed():
 		failures.append("Solo gave kind '%s', room closed %s" % [server.match_kind(), server.room_closed()])
 	if server.bot_director.bot_count() != server.SOLO_BOTS:
 		failures.append("Solo seated %d bots, expected %d" % [server.bot_director.bot_count(), server.SOLO_BOTS])
@@ -34901,6 +34952,7 @@ func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
 	var player: RigidBody2D = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # #511: bumpers release mid-round, not in the lobby picker
 	await _equip(player, BOOMERANG_PATH)
 	server._test_pad_axes[0] = Vector2(0.6, 0.0)
 	await _await_ticks(30)
@@ -35097,6 +35149,7 @@ func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[
 	var player: RigidBody2D = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # #511: bumpers release mid-round, not in the lobby picker
 	await _equip(player, BOOMERANG_PATH)
 	server._test_pad_axes[0] = Vector2(0.6, 0.0)
 	await _await_ticks(30)
@@ -35184,6 +35237,7 @@ func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Ar
 	var player: RigidBody2D = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # #511: bumpers release mid-round, not in the lobby picker
 	if player.flick_launch_enabled:
 		failures.append("a gamepad seat still has flick launches enabled")
 	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
@@ -35606,6 +35660,164 @@ func _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry() 
 		failures.append("next entry: seat %d wears %s / %s / %d" % [again, server.slot_hat(again), server.slot_eyes(again), server.slot_color(again)])
 	await _host_picker_free_441(rig)
 	return failures
+## Solo (#505): the title screen's Solo seats the host PC and three bots, and
+## the lobby waits for the host seat to ready up (Start, Enter); bots are ready.
+func _scenario_solo_waits_for_the_host_seat_to_ready_up_bots_are_ready() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("solo")
+	await _await_ticks(240)
+	var host: int = server.host_pc_slot()
+	if not server.room_closed() or host == -1 or server.virtual_slots().size() != 3:
+		failures.append("solo did not seat the host and three bots (host %d, bots %d)" % [host, server.virtual_slots().size()])
+	if server.slot_ready(host):
+		failures.append("the host seat was ready before the host readied up")
+	for bot: int in server.virtual_slots():
+		if not server.slot_ready(bot):
+			failures.append("bot in slot %d was not ready" % bot)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("solo left the lobby without the host (state %d)" % rm._state)
+	server.apply_host_command("start")
+	await _await_ticks(2)
+	if not server.slot_ready(host) or rm._state != RoundManagerType.State.COUNTDOWN:
+		failures.append("Start did not ready the host seat into the countdown (state %d)" % rm._state)
+	await _kind_close_435(rig)
+	return failures
+## Solo (#505): once the host has readied and the countdown ran out, the host
+## player answers input and the bots move away from their spawns.
+func _scenario_lobby_sandbox_solo_players_and_bots_move_after_the_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	screen.press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	var started: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000)
+	if not started:
+		failures.append("the solo round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	var host: int = server.host_pc_slot()
+	var slots: Array[int] = [host]
+	slots.append_array(server.virtual_slots())
+	var before: Dictionary = {}
+	for slot: int in slots:
+		before[slot] = (server.player_in_slot(slot) as Node2D).global_position
+	server.host_pc_mouse_motion(Vector2(400, 0))
+	await _await_ticks(120)
+	for slot: int in slots:
+		var moved: float = (server.player_in_slot(slot) as Node2D).global_position.distance_to(before[slot])
+		if moved < 5.0:
+			failures.append("slot %d (%s) moved %.1f px in 120 ticks" % [slot, "host" if slot == host else "bot", moved])
+	await _kind_close_435(rig)
+	return failures
+## #505: the first round of any match, not only Solo, left every player frozen at
+## its spawn when the lobby sandbox had them in play at the countdown's end.
+func _scenario_lobby_sandbox_couch_first_round_players_move_after_the_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("local")
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "couch505", phones)
+	phones.append(phone)
+	if int(got["slot"]) < 0:
+		failures.append("the phone did not get a seat")
+		await _kind_close_435(rig, phones)
+		return failures
+	server.set_bot_count(2)
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	var started: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000)
+	if not started:
+		failures.append("the first round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig, phones)
+		return failures
+	var slots: Array[int] = server.virtual_slots()
+	var before: Dictionary = {}
+	for slot: int in slots:
+		before[slot] = (server.player_in_slot(slot) as Node2D).global_position
+	await _await_ticks(120)
+	for slot: int in slots:
+		var moved: float = (server.player_in_slot(slot) as Node2D).global_position.distance_to(before[slot])
+		if moved < 5.0:
+			failures.append("bot in slot %d moved %.1f px in 120 ticks of the first round" % [slot, moved])
+	await _kind_close_435(rig, phones)
+	return failures
+## #505: End match winds the round down and re-seats everyone in the lobby
+## sandbox in the same frame; none of them may be left frozen where they stand.
+func _scenario_lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	if not await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000):
+		failures.append("the solo round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(30)
+	server.host_pc_command("end")
+	await _await_ticks(30)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("End match left state %d, expected the lobby" % rm._state)
+	for slot: int in server.claimed_slots():
+		var player: Node = server.player_in_slot(slot)
+		if bool(player.get("alive")) and bool(player.get("freeze")):
+			failures.append("slot %d is back in the lobby frozen" % slot)
+	await _kind_close_435(rig)
+	return failures
+## #505: bots the host's counter seated make no ready room on their own, so a
+## Couch lobby with Bots=2 and no phone stays in the lobby.
+func _scenario_couch_bots_alone_never_start_a_match() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("local")
+	server.set_bot_count(2)
+	server.apply_host_command("start")
+	await _await_ticks(400)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("two counter bots alone left the lobby (state %d)" % rm._state)
+	await _kind_close_435(rig)
+	return failures
+## #505: O from Solo goes to Couch, and Solo's bots do not come along.
+func _scenario_solo_switching_to_couch_sends_the_bots_away() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	if server.bot_director.bot_count() != 3:
+		failures.append("solo seated %d bots, expected 3" % server.bot_director.bot_count())
+	rig["screen"].press_control("online")
+	await _await_ticks(5)
+	if server.match_kind() != "local" or server.bot_director.bot_count() != 0:
+		failures.append("after O from Solo: kind '%s' with %d bots, expected Couch and none" % [server.match_kind(), server.bot_director.bot_count()])
+	await _kind_close_435(rig)
+	return failures
 ## #506: Cancel on the Online join menu, pressed with a real click or Esc mid-join, aborts the join and hangs up.
 func _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link() -> Array[String]:
 	var failures: Array[String] = []
@@ -35885,7 +36097,6 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 	rb.queue_free()
 	_scenario_completed = true
 	return failures
-
 ## #518: the remote client captures the mouse only while a round shows, its Ready
 ## toggle mirrors the server, and pad A or Start readies in the lobby.
 func _scenario_remote_ready_capture_mirror_and_pad_518() -> Array[String]:
@@ -35937,5 +36148,381 @@ func _scenario_remote_ready_capture_mirror_and_pad_518() -> Array[String]:
 		failures.append("pad Start did not ready on the victory screen")
 	client.queue_free()
 	await process_frame
+	_scenario_completed = true
+	return failures
+## Issue #513: throw, retract, throw on a PC seat and a pad seat -- the second
+## hook flies instead of being pulled home by the retract's leftover release.
+func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "Retoss513")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(30)
+	await _retoss_513("PC", failures, player, server, func() -> void: await _tap_485(KEY_SPACE))
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	# The pad seat.
+	rig = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadRetoss513")
+	server = rig["server"]
+	players = rig["players"]
+	player = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	# Bumpers cycle the lobby picker (#511); throw mid-round.
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(30)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(30)
+	# A bumper tap throws; a stick click retracts (toggles release).
+	await _retoss_513("pad", failures, player, server, func() -> void:
+		var button: int = JOY_BUTTON_LEFT_STICK if player.launched_hook() != null else JOY_BUTTON_RIGHT_SHOULDER
+		await _pad_button_261(0, button, true)
+		await _pad_button_261(0, button, false))
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
+	return failures
+func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, server: Node, tap: Callable) -> void:
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("%s: the first tap did not fire the grapple" % label)
+		return
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
+		failures.append("%s: the second tap did not retract the hook" % label)
+		return
+	await _await_ticks(60)
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("%s: the third tap did not throw a second hook" % label)
+		return
+	var hook: Node2D = player.launched_hook()
+	var start: Vector2 = hook.global_position
+	await _await_ticks(10)
+	hook = player.launched_hook()
+	if hook == null:
+		failures.append("%s: the second hook was pulled home at once" % label)
+	elif hook.global_position.distance_to(start) < 20.0:
+		failures.append("%s: the second hook moved only %.1f px" % [label, hook.global_position.distance_to(start)])
+	if server.slot_released(0):
+		failures.append("%s: the throw left the seat released" % label)
+# --- Shield: ranged hits and reported damage (issue #514) --------------------
+## A bullet on a shield's face never shoves the shooter, and `strike_landed`
+## carries the damage that got through the shield, not the damage dealt.
+func _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
+	shooter.gravity_scale = 0.0
+	shooter.global_position = player.global_position + Vector2(150, 0)
+	shooter.linear_velocity = Vector2.ZERO
+	var reported: Array[float] = []
+	shooter.strike_landed.connect(func(_v: Node, amount: float, _p: Vector2, _l: bool) -> void:
+		reported.append(amount))
+	var before: float = player.damage
+	shooter.land_projectile_hit(player, 20.0, player.global_position + Vector2.RIGHT * 40.0)
+	await physics_frame
+	var pushed: float = shooter.linear_velocity.length()
+	var taken: float = player.damage - before
+	print("      bullet on shield face: shooter pushed %.0f px/s, taken %.1f, reported %s" % [pushed, taken, reported])
+	if pushed > 100.0:
+		failures.append("a bullet on the shield face shoved the shooter %.0f px/s; only melee recoils" % pushed)
+	if taken > 5.0:
+		failures.append("a bullet on the shield face took %.1f of 20, expected it blocked" % taken)
+	if reported.size() != 1:
+		failures.append("expected one strike_landed, got %d" % reported.size())
+	elif absf(reported[0] - taken) > 0.01:
+		failures.append("strike_landed reported %.1f but the shield let through %.1f" % [reported[0], taken])
+	await _teardown(stage)
+	return failures
+## Issue #511: a pad's bumper that cycles the lobby picker does not also let the
+## weapon go; mid-round it still does.
+func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Bump511")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(3)
+	if slot != 0 or not server.pad_picker_shown(slot):
+		failures.append("the pad seat %d does not show its picker" % slot)
+		await _teardown(rig["stage"])
+		return failures
+	var hat_before: String = server.slot_hat(slot)
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_hat(slot) == hat_before:
+		failures.append("RB did not cycle the hat (still '%s')" % hat_before)
+	if server.slot_released(slot):
+		failures.append("RB in the lobby picker also released the weapon")
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if not server.slot_released(slot):
+		failures.append("RB mid-round no longer releases the weapon")
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
+	await _teardown(rig["stage"])
+	return failures
+## Issue #510: a bot wins a round, then a fresh claim takes its seat during the
+## round-end pause. The newcomer must not spawn with the bot's weapon, nor
+## inherit its match win.
+func _scenario_fresh_claim_does_not_inherit_round_winner_weapon_or_match_win() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "Claim510Container"
+	stage.add_child(container)
+	var p1: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_A)
+	p1.name = "Claim510P1"
+	var p2: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_B)
+	p2.name = "Claim510P2"
+	var roster := StubRosterScript.new()
+	roster.name = "Claim510Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "Claim510RoundManager"
+	round_manager.player_paths = [NodePath("../Claim510P1"), NodePath("../Claim510P2")]
+	round_manager.stage_scenes = [
+		_make_stub_stage("Claim510Stage", [ROUND_WINNER_SPAWN_A, ROUND_WINNER_SPAWN_B])]
+	round_manager.arena_container_path = NodePath("../Claim510Container")
+	round_manager.controller_server_path = NodePath("../Claim510Roster")
+	round_manager.round_end_pause_sec = 2.0
+	round_manager.min_players_to_start = 2
+	stage.add_child(round_manager)
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+	var bot_weapon := WeaponStatsType.new()
+	bot_weapon.min_reach = STUB_MIN_REACH
+	bot_weapon.max_reach = STUB_MAX_REACH
+	p1.set_weapon_stats(bot_weapon)
+	await _await_ticks(2)
+	p2.eliminate()
+	await _await_ticks(SETTLE_TICKS)
+	if p1.alive and p2.alive:
+		failures.append("the round restarted before the round-end pause, so the claim cannot land inside it")
+	round_manager.set("_match_winner_slot", 0)
+	# A remote client takes the bot's seat during the pause.
+	round_manager._on_slot_claimed_fresh(0)
+	if round_manager.match_winner_slot() == 0:
+		failures.append("the newcomer in slot 0 inherited the bot's match win")
+	var restarted: bool = false
+	for i in 400:
+		await physics_frame
+		if p1.alive and p2.alive:
+			restarted = true
+			break
+	if not restarted:
+		failures.append("the round did not restart after the claim")
+	elif p1.weapon_stats == bot_weapon:
+		failures.append("the newcomer in slot 0 spawned holding the bot's round-winner weapon")
+	await _teardown(stage)
+	return failures
+# --- Solo is fully offline (#522, ADR-0023) ------------------------------------------
+## Solo from the title: no RelayLink is created, none is opened, and no way is left to ask for one.
+func _scenario_solo_never_creates_or_opens_the_relay_link() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(30)
+	if server.match_kind() != "solo":
+		failures.append("Solo from the title gave kind '%s'" % server.match_kind())
+	if server.relay_link != null or server.get_node_or_null("RelayLink") != null:
+		failures.append("Solo created a RelayLink")
+	if server.apply_host_command("online", true) or server.go_online("ws://127.0.0.1:1") == OK:
+		failures.append("Solo accepted a request to go online")
+	await _await_ticks(5)
+	if server.relay_link != null or server.online_requested() or server.online_status() != "off" or server.online_room_code() != "":
+		failures.append("Solo reached for the relay (link %s, requested %s, status '%s')" % [server.relay_link, server.online_requested(), server.online_status()])
+	await _kind_close_435(rig)
+	return failures
+## The Solo lobby carries no room code, QR or LAN URL, on screen or to the lobby state.
+func _scenario_solo_lobby_shows_no_room_code_qr_or_url() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.press_title("solo")
+	screen.show_panel("lobby")
+	screen.refresh_lobby(_lobby_state_425(1), 2, server)
+	screen.refresh_controls()
+	await _await_ticks(3)
+	var qr: Control = screen.lobby_panel().find_child("JoinQr", true, false) as Control
+	var url: Label = screen.get("_lobby_url") as Label
+	var code: Label = screen.get("_room_label") as Label
+	if qr == null or qr.is_visible_in_tree():
+		failures.append("the join QR shows in the Solo lobby")
+	if url == null or url.is_visible_in_tree():
+		failures.append("the LAN join URL shows in the Solo lobby")
+	if code != null and code.is_visible_in_tree():
+		failures.append("a room code shows in the Solo lobby ('%s')" % code.text)
+	var state: Dictionary = JSON.parse_string(server._lobby_text())
+	if str(state.get("room", "x")) != "" or state.get("kind") != "solo":
+		failures.append("the lobby state carries room '%s' kind '%s'" % [state.get("room"), state.get("kind")])
+	await _kind_close_435(rig)
+	return failures
+## A phone is turned away from Solo with its own reason, and no remote seat can arrive: there is no relay to arrive by.
+func _scenario_solo_refuses_phone_and_remote_joins() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var phones: Array[WebSocketPeer] = []
+	rig["screen"].press_title("solo")
+	await _await_ticks(3)
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "solo522-phone", phones)
+	phones.append(phone)
+	if int(got["slot"]) >= 0 or not got["closed"] or got["reason"] != server.SOLO_MATCH_REASON:
+		failures.append("a phone joining Solo got slot %s, closed %s ('%s')" % [got["slot"], got["closed"], got["reason"]])
+	if server.claimed_slots() != [server.host_pc_slot()] + server.virtual_slots() and server.claimed_slots().size() != 1 + server.virtual_slots().size():
+		failures.append("claims after the refusals: %s" % [server.claimed_slots()])
+	if server.relay_link != null:
+		failures.append("a RelayLink exists in Solo")
+	await _kind_close_435(rig, phones)
+	return failures
+## Solo plays through: the host readies, the countdown runs, a round is won (first to 1), the victory screen shows and Continue returns to the lobby.
+func _scenario_solo_plays_a_full_match_back_to_the_lobby() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("target", 1)
+	server.apply_host_command("start")
+	await _await_ticks(2)
+	if rm.lobby_phase() != "countdown":
+		failures.append("Start did not begin the countdown (phase '%s')" % rm.lobby_phase())
+	if not await _wait_for_239(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 30000):
+		failures.append("the countdown never ended in a round (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	for bot: int in server.virtual_slots():
+		var body: Node = server.player_in_slot(bot)
+		if body != null:
+			body.eliminate()
+	var seen_victory: bool = await _wait_for_239(func() -> bool: return rm.lobby_phase() == "victory", 30000)
+	var winner: int = rm.match_winner_slot()
+	if seen_victory:
+		await _await_ticks(30)
+		if rm.lobby_phase() != "victory":
+			failures.append("the victory screen did not wait for the Solo host (phase '%s')" % rm.lobby_phase())
+		var key := InputEventKey.new()
+		key.keycode = KEY_SPACE
+		key.pressed = true
+		rm._unhandled_key_input(key)
+		await _await_ticks(5)
+	if not seen_victory:
+		failures.append("the host beating the bots never reached victory")
+	elif winner != server.host_pc_slot():
+		failures.append("victory went to slot %d, expected the host seat %d" % [winner, server.host_pc_slot()])
+	if rm.lobby_phase() != "lobby":
+		failures.append("the match never returned to the lobby (phase '%s')" % rm.lobby_phase())
+	if server.match_kind() != "solo" or server.relay_link != null or server.bot_director.bot_count() != 3:
+		failures.append("after the match: kind '%s', relay %s, %d bots" % [server.match_kind(), server.relay_link, server.bot_director.bot_count()])
+	await _kind_close_435(rig)
+	return failures
+## Solo to Online sends the bots away and opens the room; Online back to Solo closes it again.
+func _scenario_solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("kind", "online")
+	if server.match_kind() != "online" or server.bot_director.bot_count() != 0 or server.room_closed():
+		failures.append("Solo to Online: kind '%s' with %d bots" % [server.match_kind(), server.bot_director.bot_count()])
+	if not await _wait_for_239(func() -> bool: return server.is_online(), 10000):
+		failures.append("Online after Solo never opened the room")
+	server.apply_host_command("kind", "solo")
+	await _await_ticks(5)
+	if server.match_kind() != "solo" or server.bot_director.bot_count() != 3 or server.online_room_code() != "" or server.relay_state() != "offline":
+		failures.append("Online to Solo: kind '%s', %d bots, code '%s', link %s" % [server.match_kind(), server.bot_director.bot_count(), server.online_room_code(), server.relay_state()])
+	await _kind_close_435(rig)
+	return failures
+# --- Relay keepalive and retry (issue #519) --------------------------------
+## Waits `sec` of wall-clock time (the relay and RelayLink read the wall clock).
+func _wait_wall_519(sec: float) -> void:
+	var until: int = Time.get_ticks_msec() + int(sec * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await process_frame
+## A host with no remote seat sends nothing of its own; the keepalive must keep
+## the room alive past the relay's idle timeout.
+func _scenario_relay_host_keepalive_holds_idle_room_open() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	relay.idle_timeout_sec = 1.2
+	var link: Node = preload("res://scripts/RelayLink.gd").new()
+	link.set("keepalive_interval_sec", 0.25)
+	root.add_child(link)
+	link.go_online("ws://127.0.0.1:%d" % _relay_port_next)
+	await _wait_wall_519(3.5)
+	if link.link_state() != "online":
+		failures.append("an idle host's link was %s after 3x the idle timeout, wanted online" % link.link_state())
+	if relay.room_count() != 1:
+		failures.append("room_count %d after 3x the idle timeout, wanted 1" % relay.room_count())
+	link.go_offline()
+	link.queue_free()
+	relay.stop()
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+## With no keepalive the relay idles the room out; RelayLink then retries a
+## bounded number of times, each time with a fresh room code, and stops.
+func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	relay.idle_timeout_sec = 0.4
+	var link: Node = preload("res://scripts/RelayLink.gd").new()
+	link.set("keepalive_interval_sec", 1000.0)
+	link.set("retry_backoff_sec", [0.1, 0.1] as Array[float])
+	root.add_child(link)
+	var codes: Array[String] = []
+	var states: Array[String] = []
+	link.room_code_changed.connect(func(c: String) -> void:
+		if c != "":
+			codes.append(c))
+	link.link_state_changed.connect(func(st: String) -> void: states.append(st))
+	link.go_online("ws://127.0.0.1:%d" % _relay_port_next)
+	await _wait_wall_519(4.0)
+	if codes.size() != 3:
+		failures.append("room codes handed out: %s, wanted 3 (first try + 2 retries)" % [codes])
+	if link.link_state() != "error":
+		failures.append("link %s after retries ran out, wanted error" % link.link_state())
+	if not states.has("error"):
+		failures.append("the idle_timeout failure was never reported as error: %s" % [states])
+	if relay.room_count() != 0:
+		failures.append("room_count %d after retries ran out, wanted 0" % relay.room_count())
+	link.go_offline()
+	link.queue_free()
+	relay.stop()
+	relay.queue_free()
 	_scenario_completed = true
 	return failures

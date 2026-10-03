@@ -1042,9 +1042,10 @@ func press_title(kind: String) -> void:
 	show_title(false)
 	refresh_controls()
 
-## Whether `source` (the ControllerServer) runs an Online match.
+## Whether `source` (the ControllerServer) runs a match with no QR and no LAN
+## URL: Online, or Solo, which is offline (#522).
 static func _online_kind(source: Object) -> bool:
-	return source != null and source.has_method("match_kind") and source.match_kind() == "online"
+	return source != null and source.has_method("match_kind") and ["online", "solo"].has(source.match_kind())
 
 ## The match kind as the player reads it: Couch, Online or Solo.
 static func match_kind_text(source: Object) -> String:

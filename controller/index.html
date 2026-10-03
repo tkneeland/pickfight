@@ -1685,7 +1685,7 @@
       online === "online" ? t("ONLINE_ROOM", lobby.room || "") : t("MENU_ONLINE_UNREACHABLE");
     menuOnlineBtn.disabled = inMatch();
     // Issue #435: a Couch (Local) match never goes online.
-    menuOnlineBtn.hidden = lobby.kind === "local";
+    menuOnlineBtn.hidden = lobby.kind === "local" || lobby.kind === "solo";
     // Issue #164: the lobby moved on under an open menu.
     if (viewShown("menu-confirm") && confirmValid && !confirmValid()) {
       confirmAction = null;
