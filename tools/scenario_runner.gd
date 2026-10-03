@@ -689,6 +689,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_human_joining_full_room_replaces_a_bot_between_rounds",
 	"online_match_starts_with_host_and_bots_only",
 	"online_bots_only_match_starts_offline_and_says_so",
+	"solo_waits_for_the_host_seat_to_ready_up_bots_are_ready",
+	"lobby_sandbox_solo_players_and_bots_move_after_the_countdown",
+	"lobby_sandbox_couch_first_round_players_move_after_the_countdown",
+	"lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen",
+	"couch_bots_alone_never_start_a_match",
+	"solo_switching_to_couch_sends_the_bots_away",
 	"remote_join_cancel_button_click_aborts_join_and_closes_link",
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
@@ -2463,6 +2469,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_host_pc_seat_colour_taken_by_other_seat_is_greyed()
 		"cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry":
 			return await _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry()
+		"solo_waits_for_the_host_seat_to_ready_up_bots_are_ready":
+			return await _scenario_solo_waits_for_the_host_seat_to_ready_up_bots_are_ready()
+		"lobby_sandbox_solo_players_and_bots_move_after_the_countdown":
+			return await _scenario_lobby_sandbox_solo_players_and_bots_move_after_the_countdown()
+		"lobby_sandbox_couch_first_round_players_move_after_the_countdown":
+			return await _scenario_lobby_sandbox_couch_first_round_players_move_after_the_countdown()
+		"lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen":
+			return await _scenario_lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen()
+		"couch_bots_alone_never_start_a_match":
+			return await _scenario_couch_bots_alone_never_start_a_match()
+		"solo_switching_to_couch_sends_the_bots_away":
+			return await _scenario_solo_switching_to_couch_sends_the_bots_away()
 		"remote_join_cancel_button_click_aborts_join_and_closes_link":
 			return await _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link()
 		"remote_join_cancel_idle_and_rejoin_wait_paths":
@@ -35602,6 +35620,164 @@ func _scenario_cosmetics_host_pc_seat_saved_pick_restored_on_next_lobby_entry() 
 	if again == -1 or server.slot_hat(again) != "viking" or server.slot_eyes(again) != "angry" or server.slot_color(again) != 2:
 		failures.append("next entry: seat %d wears %s / %s / %d" % [again, server.slot_hat(again), server.slot_eyes(again), server.slot_color(again)])
 	await _host_picker_free_441(rig)
+	return failures
+## Solo (#505): the title screen's Solo seats the host PC and three bots, and
+## the lobby waits for the host seat to ready up (Start, Enter); bots are ready.
+func _scenario_solo_waits_for_the_host_seat_to_ready_up_bots_are_ready() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("solo")
+	await _await_ticks(240)
+	var host: int = server.host_pc_slot()
+	if not server.room_closed() or host == -1 or server.virtual_slots().size() != 3:
+		failures.append("solo did not seat the host and three bots (host %d, bots %d)" % [host, server.virtual_slots().size()])
+	if server.slot_ready(host):
+		failures.append("the host seat was ready before the host readied up")
+	for bot: int in server.virtual_slots():
+		if not server.slot_ready(bot):
+			failures.append("bot in slot %d was not ready" % bot)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("solo left the lobby without the host (state %d)" % rm._state)
+	server.apply_host_command("start")
+	await _await_ticks(2)
+	if not server.slot_ready(host) or rm._state != RoundManagerType.State.COUNTDOWN:
+		failures.append("Start did not ready the host seat into the countdown (state %d)" % rm._state)
+	await _kind_close_435(rig)
+	return failures
+## Solo (#505): once the host has readied and the countdown ran out, the host
+## player answers input and the bots move away from their spawns.
+func _scenario_lobby_sandbox_solo_players_and_bots_move_after_the_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	screen.press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	var started: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000)
+	if not started:
+		failures.append("the solo round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	var host: int = server.host_pc_slot()
+	var slots: Array[int] = [host]
+	slots.append_array(server.virtual_slots())
+	var before: Dictionary = {}
+	for slot: int in slots:
+		before[slot] = (server.player_in_slot(slot) as Node2D).global_position
+	server.host_pc_mouse_motion(Vector2(400, 0))
+	await _await_ticks(120)
+	for slot: int in slots:
+		var moved: float = (server.player_in_slot(slot) as Node2D).global_position.distance_to(before[slot])
+		if moved < 5.0:
+			failures.append("slot %d (%s) moved %.1f px in 120 ticks" % [slot, "host" if slot == host else "bot", moved])
+	await _kind_close_435(rig)
+	return failures
+## #505: the first round of any match, not only Solo, left every player frozen at
+## its spawn when the lobby sandbox had them in play at the countdown's end.
+func _scenario_lobby_sandbox_couch_first_round_players_move_after_the_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("local")
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "couch505", phones)
+	phones.append(phone)
+	if int(got["slot"]) < 0:
+		failures.append("the phone did not get a seat")
+		await _kind_close_435(rig, phones)
+		return failures
+	server.set_bot_count(2)
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	var started: bool = await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000)
+	if not started:
+		failures.append("the first round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig, phones)
+		return failures
+	var slots: Array[int] = server.virtual_slots()
+	var before: Dictionary = {}
+	for slot: int in slots:
+		before[slot] = (server.player_in_slot(slot) as Node2D).global_position
+	await _await_ticks(120)
+	for slot: int in slots:
+		var moved: float = (server.player_in_slot(slot) as Node2D).global_position.distance_to(before[slot])
+		if moved < 5.0:
+			failures.append("bot in slot %d moved %.1f px in 120 ticks of the first round" % [slot, moved])
+	await _kind_close_435(rig, phones)
+	return failures
+## #505: End match winds the round down and re-seats everyone in the lobby
+## sandbox in the same frame; none of them may be left frozen where they stand.
+func _scenario_lobby_sandbox_end_match_returns_players_to_the_lobby_unfrozen() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("start")
+	if not await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 15000):
+		failures.append("the solo round never became active (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(30)
+	server.host_pc_command("end")
+	await _await_ticks(30)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("End match left state %d, expected the lobby" % rm._state)
+	for slot: int in server.claimed_slots():
+		var player: Node = server.player_in_slot(slot)
+		if bool(player.get("alive")) and bool(player.get("freeze")):
+			failures.append("slot %d is back in the lobby frozen" % slot)
+	await _kind_close_435(rig)
+	return failures
+## #505: bots the host's counter seated make no ready room on their own, so a
+## Couch lobby with Bots=2 and no phone stays in the lobby.
+func _scenario_couch_bots_alone_never_start_a_match() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.set_match_kind("local")
+	server.set_bot_count(2)
+	server.apply_host_command("start")
+	await _await_ticks(400)
+	if rm._state != RoundManagerType.State.LOBBY:
+		failures.append("two counter bots alone left the lobby (state %d)" % rm._state)
+	await _kind_close_435(rig)
+	return failures
+## #505: O from Solo goes to Couch, and Solo's bots do not come along.
+func _scenario_solo_switching_to_couch_sends_the_bots_away() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	if server.bot_director.bot_count() != 3:
+		failures.append("solo seated %d bots, expected 3" % server.bot_director.bot_count())
+	rig["screen"].press_control("online")
+	await _await_ticks(5)
+	if server.match_kind() != "local" or server.bot_director.bot_count() != 0:
+		failures.append("after O from Solo: kind '%s' with %d bots, expected Couch and none" % [server.match_kind(), server.bot_director.bot_count()])
+	await _kind_close_435(rig)
 	return failures
 ## #506: Cancel on the Online join menu, pressed with a real click or Esc mid-join, aborts the join and hangs up.
 func _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link() -> Array[String]:
