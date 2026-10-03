@@ -685,6 +685,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple",
 	"flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host",
 	"phone_seat_flick_still_launches_grapple_and_boomerang",
+	"bot_overshoot_fixture_replays_identically_in_one_process",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2450,6 +2451,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host()
 		"phone_seat_flick_still_launches_grapple_and_boomerang":
 			return await _scenario_phone_seat_flick_still_launches_grapple_and_boomerang()
+		"bot_overshoot_fixture_replays_identically_in_one_process":
+			return await _scenario_bot_overshoot_fixture_replays_identically_in_one_process()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -35449,3 +35452,27 @@ func _packet_for_487(v: Vector2) -> PackedByteArray:
 	pkt.encode_float(0, v.x)
 	pkt.encode_float(4, v.y)
 	return pkt
+# --- Determinism (#493) --------------------------------------------------------
+## The overshoot fixture's per-start results, as text, over a few jittered starts.
+func _overshoot_trace_493() -> PackedStringArray:
+	var jitter := RandomNumberGenerator.new()
+	jitter.seed = 423
+	var trace := PackedStringArray()
+	for case: Array in [[100.0, 300.0], [100.0, 500.0], [-100.0, -300.0], [-100.0, -500.0]]:
+		for i in 3:
+			var got: Dictionary = await _overshoot302(case[0] + jitter.randf_range(-3.0, 3.0), case[1], 600)
+			trace.append("%d/%d#%d alive %s fell %s past %.6f damage %.6f" % [case[0], case[1], i, got["alive"], got["fell"], got["past"], got["damage"]])
+	return trace
+## Two runs of the same fixture in one process give the same result for every
+## start, so a difference between runs of the suite is not the fixture's own
+## doing (#493). The trace is printed so two processes can be diffed too.
+func _scenario_bot_overshoot_fixture_replays_identically_in_one_process() -> Array[String]:
+	var first: PackedStringArray = await _overshoot_trace_493()
+	var second: PackedStringArray = await _overshoot_trace_493()
+	var failures: Array[String] = []
+	for i in first.size():
+		print("      %s" % first[i])
+		if first[i] != second[i]:
+			failures.append("start %d differs between runs: '%s' then '%s'" % [i, first[i], second[i]])
+	_scenario_completed = true
+	return failures
