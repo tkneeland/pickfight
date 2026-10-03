@@ -51,6 +51,9 @@ func respawn_now(slot: int) -> void:
 	if not is_instance_valid(player) or not _still_claimed(slot):
 		return
 	player.start_round(farthest_spawn(slot), false)
+	var stats: Variant = round_manager.get("_stats")
+	if stats != null:
+		stats.resume_round(slot, GameClockScript.now_msec())
 	if float(round_manager.spawn_protection_sec) > 0.0:
 		player.spawn_protected = true
 		_protected[slot] = GameClockScript.now_msec() + int(float(round_manager.spawn_protection_sec) * 1000.0)

@@ -451,6 +451,12 @@ const MODE_PHASES: PackedStringArray = ["lobby", "countdown", "victory"]
 ## Issue #236: a phone picks its team in the lobby (or its countdown, which a
 ## new pick cancels, as an un-ready does).
 const TEAM_PICK_PHASES: PackedStringArray = ["lobby", "countdown"]
+## The number the Host panel's target row shows and steps (#544): the round
+## target, or the mode's own lives / goals / captures.
+func mode_target() -> int:
+	var picked: int = GameModesScript.target_setting(_game_mode)
+	return picked if picked >= 0 else _match_target
+
 ## Issue #236: whether the host phone chose Teams for the next match.
 var _team_mode: bool = false
 ## Issue #352: the `GameModes` id the host phone chose ("" is Classic), kept in
@@ -2076,9 +2082,25 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false
 			return HostSettingsScript.shared().set_stock_stage(arg)
+		"soccer_goals", "ctf_captures":
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
+				return false
+			if cmd == "soccer_goals":
+				HostSettingsScript.shared().set_soccer_goals(int(arg))
+			else:
+				HostSettingsScript.shared().set_ctf_captures(int(arg))
+			return true
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false
+			# The row's meaning follows the mode (#544): lives, goals or captures.
+			match GameModesScript.target_kind(_game_mode):
+				"lives":
+					return apply_host_command("stock_lives", arg)
+				"goals":
+					return apply_host_command("soccer_goals", arg)
+				"captures":
+					return apply_host_command("ctf_captures", arg)
 			_match_target = clampi(int(arg), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
 			return true
 		"start":
@@ -2429,19 +2451,35 @@ func _pad_claim_id(device: int) -> String:
 	_pad_guids[id] = guid
 	return id
 
+## Whether another connected pad (not `device`) reports `guid`.
+func _other_pad_has_guid(device: int, guid: String) -> bool:
+	if guid.is_empty():
+		return false
+	var devices: Array = Input.get_connected_joypads()
+	for d in _pad_seats.keys():
+		if not devices.has(d):
+			devices.append(d)
+	for d in devices:
+		if d != device and _pad_guid(d) == guid:
+			return true
+	return false
+
 ## The claim id of a held (unplugged) pad seat that `device` should take back:
 ## the same GUID (the same index first), else the same index with no GUID.
 func _held_pad_claim_id(device: int) -> String:
 	var guid: String = _pad_guid(device)
 	var own: String = PAD_ID_PREFIX + str(device) + ("-" + guid if not guid.is_empty() else "")
 	var found: String = ""
+	var twin: bool = _other_pad_has_guid(device, guid)
 	for slot in _slot_peers.size():
 		var id: String = str(_slot_client_id[slot])
 		if _slot_claimed[slot] != 1 or _slot_peers[slot] != null or not id.begins_with(PAD_ID_PREFIX):
 			continue
 		if id == own:
 			return id
-		if not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
+		# An identical pad that is still connected means a GUID alone cannot say
+		# whose seat this is (#512): then only the same index reclaims.
+		if not twin and not guid.is_empty() and _pad_guids.get(id, "") == guid and found.is_empty():
 			found = id
 	return found
 

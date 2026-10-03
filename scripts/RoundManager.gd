@@ -614,7 +614,9 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 	var victim_slot: int = _players.find(victim)
 	if victim_slot != -1:
 		_buzz(victim_slot, "struck")
-	_buzz(attacker_slot, "hit")
+	# A rock reports on the victim's own signal (attacker == victim, #521).
+	if attacker_slot != victim_slot:
+		_buzz(attacker_slot, "hit")
 
 ## Phone damage bars (issue #331): every claimed slot's phone is told its
 ## player's damage fraction each tick; `send_damage` drops the unchanged and
@@ -1110,6 +1112,23 @@ func _host_slot() -> int:
 		return _controller_server.host_slot()
 	return -1
 
+## The Host panel's target row (#544): the mode's own value for Stock, Soccer
+## and Capture the Flag, else the round target.
+func _state_target(in_lobby: bool) -> int:
+	var picked: int = GameModesScript.target_setting(_state_mode_id())
+	if picked >= 0:
+		return picked
+	return _requested_target() if in_lobby else _match_target
+
+func _state_target_kind() -> String:
+	return GameModesScript.target_kind(_state_mode_id())
+
+func _state_mode_id() -> String:
+	if (_state == State.LOBBY or _state == State.COUNTDOWN or _state == State.VICTORY) \
+			and _controller_server != null and _controller_server.has_method("game_mode"):
+		return str(_controller_server.game_mode())
+	return game_mode
+
 ## What the host phone has typed, or the current value with no host to ask.
 func _requested_target() -> int:
 	if _controller_server != null and _controller_server.has_method("match_target"):
@@ -1144,6 +1163,10 @@ func _enter_lobby() -> void:
 	_match_winner_slot = -1
 	_match_winner_team = -1
 	_clear_stage()
+	# The last round's teams do not carry into the lobby sandbox (#521).
+	for player: Variant in _players:
+		if player != null and "team" in player:
+			player.team = TeamsScript.NONE
 	if _waiting_label != null:
 		_waiting_label.visible = false
 	if _scoreboard != null:
@@ -1325,7 +1348,7 @@ func _publish_lobby_state() -> void:
 	var state: Dictionary = {
 		"phase": lobby_phase(),
 		"host": _host_slot(),
-		"target": _requested_target() if in_lobby else _match_target,
+		"target": _state_target(in_lobby),
 		"players": players,
 		"count": _countdown_left() if _state == State.COUNTDOWN else 0,
 		"winner": _match_winner_slot,
@@ -1337,6 +1360,8 @@ func _publish_lobby_state() -> void:
 		# Issue #149: the host phone's menu offers Resume instead of Pause.
 		"paused": _paused,
 	}
+	if _state_target_kind() != "first_to":  # only a mode with its own target adds the key (#544)
+		state["target_kind"] = _state_target_kind()
 	_add_team_state(state, roster, in_lobby)
 	_add_game_mode_state(state, in_lobby)
 	var picked_mode: String = game_mode
@@ -1438,7 +1463,7 @@ func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
 	_screen().show_stage_title(_stage_display_name(str(_current_stage.name)), stage_title_sec,
-		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.rule_line(game_mode)])
+		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)])
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -1527,6 +1552,10 @@ func _on_host_command(cmd: String, slot: int) -> void:
 			# Already out of the roster; out of the round too, without a death.
 			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
 				_players[slot].leave_round()
+			# Issue #521: a kicked Stock player still waiting to respawn is out
+			# now, not when the timer runs down, or the survivor scores.
+			if _game_mode_node != null and _game_mode_node.has_method("cancel_respawn"):
+				_game_mode_node.cancel_respawn(slot)
 			if lobby_enabled:
 				_publish_lobby_state()
 
@@ -1931,6 +1960,9 @@ func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 	_stats.record_pickup(slot, weapon_name)
 
 func _on_ko_eliminated(slot: int) -> void:
+	# A mode's scripted win eliminates the losers; that is a score, not a KO (#521).
+	if _game_mode_node != null and _game_mode_node.has_method("is_won") and _game_mode_node.is_won():
+		return
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()
 	_pending_kos.append([slot, GameClockScript.now_msec()])

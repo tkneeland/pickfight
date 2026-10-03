@@ -140,6 +140,8 @@ var _lobby_panel: Control
 var _lobby_title: Label
 var _lobby_list: VBoxContainer
 var _ready_button: Button
+var _ready_want: int = -1 # the clicked Ready (0/1) awaiting the host's echo, else -1 (#550)
+var _ready_want_msec: int = 0
 var _host_row: HBoxContainer
 var _mode_button: Button
 var _target_label: Label
@@ -313,6 +315,7 @@ func _input(event: InputEvent) -> void:
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
+		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
 		return
 	if pad_button != null and not menu_open:
 		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
@@ -334,6 +337,8 @@ func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key != null and key.physical_keycode == KEY_SPACE and not key.echo and (not key.pressed or not menu_open):
 		_action_edge(-KEY_SPACE, key.pressed)
+		if _ready_button != null and _ready_button.is_visible_in_tree() and _ready_button.has_focus():
+			get_viewport().set_input_as_handled() # Space is the action key, not Ready's accept (#550)
 		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
@@ -911,7 +916,8 @@ func _load_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load(settings_path) != OK:
 		return
-	player_name = str(config.get_value(SECTION, "name", ""))
+	# #460: a hand-edited or junk saved name reads as empty; the join falls back to "Player".
+	player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
 	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)
@@ -1101,7 +1107,10 @@ func _build_lobby_panel() -> void:
 	_ready_button.name = "Ready"
 	_ready_button.toggle_mode = true
 	_ready_button.text = tr("JOIN_READY")
-	_ready_button.toggled.connect(func(on: bool) -> void: _send_json({"t": "ready", "v": on}))
+	_ready_button.toggled.connect(func(on: bool) -> void:
+		_ready_want = 1 if on else 0
+		_ready_want_msec = GameClockScript.now_msec()
+		_send_json({"t": "ready", "v": on}))
 	box.add_child(_ready_button)
 	_host_row = HBoxContainer.new()
 	_host_row.name = "HostMenu"
@@ -1237,12 +1246,15 @@ func _refresh_lobby() -> void:
 	var host: bool = _is_host()
 	_host_row.visible = host
 	_mode_button.text = tr("MODE_TEAMS") if lobby.get("mode") == "teams" else tr("MODE_FFA")
-	_target_label.text = tr("LOBBY_FIRST_TO") % int(lobby.get("target", 5))
+	_target_label.text = tr(_target_label_key(str(lobby.get("target_kind", "first_to")))) % int(lobby.get("target", 5))
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
 	_cosmetics_panel.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
-	_ready_button.set_pressed_no_signal(_own_ready()) # mirror the server: it clears ready at match start and victory (#518)
+	if _ready_want != -1 and (_own_ready() == (_ready_want == 1) or GameClockScript.now_msec() - _ready_want_msec > 3000):
+		_ready_want = -1 # the host's echo arrived (or never will): mirror again (#550)
+	if _ready_want == -1:
+		_ready_button.set_pressed_no_signal(_own_ready()) # mirror the server: it clears ready at match start and victory (#518)
 	_sync_capture()
 
 func _refresh_hud() -> void:
@@ -1413,3 +1425,14 @@ func _tick_rejoin() -> void:
 	var until: int = _rejoin_until_msec
 	if not join(room_code, player_name):
 		_keep_rejoining(until)
+
+## The host row's target label per `target_kind` (#544), as `GameModes.target_label_key`.
+func _target_label_key(kind: String) -> String:
+	match kind:
+		"lives":
+			return "LOBBY_LIVES"
+		"goals":
+			return "LOBBY_GOALS_TO_WIN"
+		"captures":
+			return "LOBBY_CAPTURES_TO_WIN"
+	return "LOBBY_FIRST_TO"

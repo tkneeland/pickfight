@@ -194,7 +194,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot0"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot1" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -209,7 +209,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot1"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot2" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -224,7 +224,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot2"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot3" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -239,7 +239,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot3"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot4" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -254,7 +254,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot4"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot5" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -269,7 +269,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot5"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot6" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -284,7 +284,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot6"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="Slot7" type="HBoxContainer" parent="UI/Scoreboard"]
@@ -299,7 +299,7 @@ theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot7"]
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = ""
 
 [node name="JoinQrCode" type="TextureRect" parent="UI"]

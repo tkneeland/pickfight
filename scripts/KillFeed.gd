@@ -189,7 +189,7 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(title)
 		var slot: int = int(award["slot"])
-		var who: Label = _label("%s  -  %s" % [name_of.call(slot), award["detail"]], 22, color_of.call(slot))
+		var who: Label = _label("%s  -  %s" % [name_of.call(slot), award["detail"]], 20, color_of.call(slot))
 		who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(who)
 		row.add_child(card)

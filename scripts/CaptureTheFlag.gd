@@ -19,6 +19,7 @@ extends Node
 ## referenced by `class_name` (CLAUDE.md).
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -85,6 +86,7 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
+	captures_to_win = int(HostSettingsScript.shared().ctf_captures)
 	scores = {0: 0, 1: 0}
 	capturers.clear()
 	state = {0: HOME, 1: HOME}
@@ -381,6 +383,10 @@ func _place_players() -> void:
 				spot = mine[index % mine.size()] + Vector2(48.0, -24.0) * float(lap)
 			player.start_round(spot, true)
 			index += 1
+
+## Whether a capture has won the round, so the eliminations after it are no KOs (#521).
+func is_won() -> bool:
+	return _finished
 
 ## `team` has the captures: everyone on the other team is out, so the round
 ## manager's last-team-standing rule scores it.
