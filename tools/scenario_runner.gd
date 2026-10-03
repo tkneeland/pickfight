@@ -699,6 +699,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
+	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
+	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
@@ -2492,6 +2494,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gif_writer_encodes_valid_animated_gif()
 		"replay_save_writes_clip_gif_beside_pngs":
 			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
+		"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats":
+			return await _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats()
+		"shield_ranged_hit_does_not_recoil_and_reports_real_damage":
+			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		"pad_bumper_cycling_picker_does_not_release_weapon":
 			return await _scenario_pad_bumper_cycling_picker_does_not_release_weapon()
 		"relay_host_keepalive_holds_idle_room_open":
@@ -36070,7 +36076,105 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 	rb.queue_free()
 	_scenario_completed = true
 	return failures
-
+## Issue #513: throw, retract, throw on a PC seat and a pad seat -- the second
+## hook flies instead of being pulled home by the retract's leftover release.
+func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "Retoss513")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(30)
+	await _retoss_513("PC", failures, player, server, func() -> void: await _tap_485(KEY_SPACE))
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	# The pad seat.
+	rig = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadRetoss513")
+	server = rig["server"]
+	players = rig["players"]
+	player = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	# Bumpers cycle the lobby picker (#511); throw mid-round.
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(30)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(30)
+	# A bumper tap throws; a stick click retracts (toggles release).
+	await _retoss_513("pad", failures, player, server, func() -> void:
+		var button: int = JOY_BUTTON_LEFT_STICK if player.launched_hook() != null else JOY_BUTTON_RIGHT_SHOULDER
+		await _pad_button_261(0, button, true)
+		await _pad_button_261(0, button, false))
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
+	return failures
+func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, server: Node, tap: Callable) -> void:
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("%s: the first tap did not fire the grapple" % label)
+		return
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
+		failures.append("%s: the second tap did not retract the hook" % label)
+		return
+	await _await_ticks(60)
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("%s: the third tap did not throw a second hook" % label)
+		return
+	var hook: Node2D = player.launched_hook()
+	var start: Vector2 = hook.global_position
+	await _await_ticks(10)
+	hook = player.launched_hook()
+	if hook == null:
+		failures.append("%s: the second hook was pulled home at once" % label)
+	elif hook.global_position.distance_to(start) < 20.0:
+		failures.append("%s: the second hook moved only %.1f px" % [label, hook.global_position.distance_to(start)])
+	if server.slot_released(0):
+		failures.append("%s: the throw left the seat released" % label)
+# --- Shield: ranged hits and reported damage (issue #514) --------------------
+## A bullet on a shield's face never shoves the shooter, and `strike_landed`
+## carries the damage that got through the shield, not the damage dealt.
+func _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	player.set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
+	shooter.gravity_scale = 0.0
+	shooter.global_position = player.global_position + Vector2(150, 0)
+	shooter.linear_velocity = Vector2.ZERO
+	var reported: Array[float] = []
+	shooter.strike_landed.connect(func(_v: Node, amount: float, _p: Vector2, _l: bool) -> void:
+		reported.append(amount))
+	var before: float = player.damage
+	shooter.land_projectile_hit(player, 20.0, player.global_position + Vector2.RIGHT * 40.0)
+	await physics_frame
+	var pushed: float = shooter.linear_velocity.length()
+	var taken: float = player.damage - before
+	print("      bullet on shield face: shooter pushed %.0f px/s, taken %.1f, reported %s" % [pushed, taken, reported])
+	if pushed > 100.0:
+		failures.append("a bullet on the shield face shoved the shooter %.0f px/s; only melee recoils" % pushed)
+	if taken > 5.0:
+		failures.append("a bullet on the shield face took %.1f of 20, expected it blocked" % taken)
+	if reported.size() != 1:
+		failures.append("expected one strike_landed, got %d" % reported.size())
+	elif absf(reported[0] - taken) > 0.01:
+		failures.append("strike_landed reported %.1f but the shield let through %.1f" % [reported[0], taken])
+	await _teardown(stage)
+	return failures
 ## Issue #511: a pad's bumper that cycles the lobby picker does not also let the
 ## weapon go; mid-round it still does.
 func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[String]:
