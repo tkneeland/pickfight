@@ -129,6 +129,11 @@ func end_round(now_msec: int) -> void:
 		_add(survival_msec, slot, now_msec - int(_alive_since[slot]))
 	_alive_since.clear()
 
+## `slot` came back from a lost life (Stock, Soccer, Capture the Flag): its
+## survival clock runs again from `now_msec` (#521).
+func resume_round(slot: int, now_msec: int) -> void:
+	_alive_since[slot] = now_msec
+
 ## A fresh player took `slot` mid-match (issue #161): nothing the slot's last
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.

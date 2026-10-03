@@ -128,6 +128,9 @@ const SOUNDS: Dictionary = {
 	# does a bullet and plays `fire_<sound_set>` as it is placed.
 	"fire_grapple": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": -4.0, "overlap": 4},
+	# The fishing rod's cast (#517): the same hook node as the grapple's.
+	"fire_fishing_rod": {"files": [
+		"kenney_interface/pluck_001.ogg"], "db": -4.0, "overlap": 4},
 	"fire_boomerang": {"files": [
 		"kenney_scifi/forceField_000.ogg",
 		"kenney_scifi/forceField_001.ogg"], "db": -8.0, "overlap": 4, "max_sec": 0.4},

@@ -186,6 +186,10 @@ func _physics_process(delta: float) -> void:
 			if other != slot and player != null:
 				player.eliminate()
 
+## Whether the hill has been held to the target, so the eliminations after it are no KOs (#521).
+func is_won() -> bool:
+	return _won
+
 func _note_holder(holder: int) -> void:
 	if _last_holder != -1 and holder != _last_holder:
 		callout.emit(&"announce_hill_taken")
