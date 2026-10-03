@@ -731,6 +731,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_targets_lobby_label_value_and_status_line_544",
 	"mode_targets_reach_the_round_and_the_remote_hud_544",
 	"remote_client_remembers_name_460",
+	"stock_tie_sudden_death_rocks_start_at_15_s_556",
+	"stock_sudden_death_rock_rate_rises_556",
+	"stock_sudden_death_60_s_backstop_is_a_draw_556",
+	"stock_sudden_death_double_ko_replays_overtime_556",
+	"stock_sudden_death_leaves_no_rocks_behind_556",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2585,6 +2590,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_targets_reach_the_round_and_the_remote_hud_544()
 		"remote_client_remembers_name_460":
 			return await _scenario_remote_client_remembers_name_460()
+		"stock_tie_sudden_death_rocks_start_at_15_s_556":
+			return await _scenario_stock_tie_sudden_death_rocks_start_at_15_s_556()
+		"stock_sudden_death_rock_rate_rises_556":
+			return await _scenario_stock_sudden_death_rock_rate_rises_556()
+		"stock_sudden_death_60_s_backstop_is_a_draw_556":
+			return await _scenario_stock_sudden_death_60_s_backstop_is_a_draw_556()
+		"stock_sudden_death_double_ko_replays_overtime_556":
+			return await _scenario_stock_sudden_death_double_ko_replays_overtime_556()
+		"stock_sudden_death_leaves_no_rocks_behind_556":
+			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37214,4 +37229,166 @@ func _scenario_remote_client_remembers_name_460() -> Array[String]:
 	await process_frame
 	DirAccess.remove_absolute(temp_path)
 	_scenario_completed = true
+	return failures
+
+# --- Issue #556: Stock sudden death always ends --------------------------------
+const SD556_ROCK_SCRIPT: String = "res://scripts/FallingRock.gd"
+## A tied two-player Stock round pushed into its overtime, both players
+## spawn-protected so a rock cannot end the round mid-measurement. Empty on a
+## failure (already recorded).
+func _sd556_rig(failures: Array[String], protect: bool) -> Dictionary:
+	var rig: Dictionary = _stock_rig(2, 3, 120)
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return {}
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+		failures.append("a tie at the timeout did not start an overtime")
+		await _stock_finish(rig)
+		return {}
+	if protect:
+		for player: RigidBody2D in rig["players"]:
+			player.spawn_protected = true
+			# A rock's knock must not ring a player out mid-measurement.
+			player.freeze = true
+	rig["mode"] = mode
+	return rig
+func _sd556_rocks(root: Node) -> int:
+	var count: int = 0
+	for node: Node in root.find_children("*", "Node2D", true, false):
+		if node.get_script() != null and (node.get_script() as Script).resource_path == SD556_ROCK_SCRIPT:
+			count += 1
+	return count
+func _scenario_stock_tie_sudden_death_rocks_start_at_15_s_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, true)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var announcer: Node = _callout_announcer()
+	await _await_ticks(10)
+	if mode.rocks_dropped != 0 or mode.live_rock_count() != 0:
+		failures.append("rocks were out at the start of the overtime (%d dropped)" % mode.rocks_dropped)
+	mode.overtime_elapsed = mode.RAIN_START_SEC - 0.5
+	await _await_ticks(20)
+	if mode.rocks_dropped != 0:
+		failures.append("a rock dropped at %.1f s, before the rain starts at %.0f s" % [mode.overtime_elapsed, mode.RAIN_START_SEC])
+	mode.overtime_elapsed = mode.RAIN_START_SEC
+	await _await_ticks(5)
+	if mode.rocks_dropped < 1 or mode.live_rock_count() < 1 or _sd556_rocks(rig["rm"]) < 1:
+		failures.append("no rock was out at %.0f s of overtime (%d dropped, %d live)" % [mode.RAIN_START_SEC, mode.rocks_dropped, mode.live_rock_count()])
+	if announcer != null and not await _await_condition(func() -> bool: return announcer.said.has("announce_sudden_death"), 6000):
+		failures.append("the rain was not announced 'Sudden Death!': %s" % [announcer.said])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_rock_rate_rises_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, true)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var gaps: Array[float] = []
+	for elapsed: float in [15.0, 20.0, 25.0, 30.0, 59.0]:
+		gaps.append(mode.rain_interval(elapsed))
+	for i in range(1, gaps.size()):
+		if gaps[i] > gaps[i - 1]:
+			failures.append("the gap between rocks grew: %s" % [gaps])
+	if not gaps[1] < gaps[0] or not gaps[2] < gaps[1]:
+		failures.append("the gap did not shrink every ramp step: %s" % [gaps])
+	if gaps[4] < mode.RAIN_MIN_INTERVAL_SEC:
+		failures.append("the gap fell below its floor: %s" % [gaps])
+	mode.overtime_elapsed = 15.0
+	await _await_ticks(240)
+	var early: int = mode.rocks_dropped
+	mode.overtime_elapsed = 40.0
+	var before: int = mode.rocks_dropped
+	await _await_ticks(240)
+	var late: int = mode.rocks_dropped - before
+	print("      rocks in 4 s: %d at 15 s, %d at 40 s" % [early, late])
+	if early < 1 or late <= early:
+		failures.append("the rain did not get heavier: %d rocks in 4 s at 15 s, %d at 40 s" % [early, late])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_60_s_backstop_is_a_draw_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, true)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var rm: Node = rig["rm"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	var announcer: Node = _callout_announcer()
+	var called: Dictionary = {"draw": false}
+	mode.callout.connect(func(sound: StringName) -> void:
+		if sound == &"announce_draw":
+			called["draw"] = true)
+	mode.overtime_elapsed = mode.OVERTIME_BACKSTOP_SEC - 1.0
+	await _await_ticks(30)
+	if called["draw"]:
+		failures.append("the overtime was called a draw before 60 s")
+	mode.overtime_elapsed = mode.OVERTIME_BACKSTOP_SEC - 0.05
+	if not await _await_condition(func() -> bool: return called["draw"], 3000):
+		failures.append("a still-tied overtime did not end at the 60 s backstop")
+	await _await_ticks(30)
+	if rm.score_of(0) != 0 or rm.score_of(1) != 0 or not wins.is_empty():
+		failures.append("the draw scored: %d / %d, wins %s" % [rm.score_of(0), rm.score_of(1), wins])
+	for player: RigidBody2D in rig["players"]:
+		if player.alive:
+			failures.append("%s was still fighting after the draw" % player.name)
+	if announcer != null and not await _await_condition(func() -> bool: return announcer.said.has("announce_draw"), 6000):
+		failures.append("the draw was not announced: %s" % [announcer.said])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_double_ko_replays_overtime_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, false)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	await _await_ticks(4)
+	players[0].eliminate()
+	players[1].eliminate()
+	await _await_ticks(6)
+	if not mode.is_pending(0) or not mode.is_pending(1):
+		failures.append("a double KO in overtime did not queue both players back")
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, 4000):
+		failures.append("the double KO did not bring both players back")
+	if not wins.is_empty() or not mode.overtime or mode.drawn:
+		failures.append("the double KO ended the round (wins %s, overtime %s)" % [wins, mode.overtime])
+	if players[0].alive and players[1].alive:
+		players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+		if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+			failures.append("one hit in the replayed overtime did not decide the round")
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, false)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	mode.overtime_elapsed = 30.0
+	for player: RigidBody2D in players:
+		player.spawn_protected = true
+	if not await _await_condition(func() -> bool: return mode.live_rock_count() >= 2, 3000):
+		failures.append("the rain never put two rocks out")
+	players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+	if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+		failures.append("one hit in overtime did not decide the round")
+	await _await_ticks(10)
+	var left: int = _sd556_rocks(rm.get_tree().root)
+	if left != 0:
+		failures.append("%d rocks outlived the round" % left)
+	if is_instance_valid(mode) and (mode.live_rock_count() != 0 or mode.rocks_dropped != 0):
+		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
+	await _stock_finish(rig)
 	return failures
