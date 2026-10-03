@@ -681,10 +681,18 @@ func slot_released(slot: int) -> bool:
 
 ## Issue #481: an action press throws a held boomerang, else toggles release.
 func _action_press(slot: int) -> void:
-	if slot >= 0 and slot < _players.size() and _players[slot] != null \
-			and _players[slot].try_action_throw():
+	if _try_throw(slot):
 		return
 	_toggle_release(slot)
+
+## An action throw; a fresh throw starts held, not released: an earlier retract
+## tap left the toggle on, which would pull the new hook home at once (#513).
+func _try_throw(slot: int) -> bool:
+	if slot < 0 or slot >= _players.size() or _players[slot] == null \
+			or not _players[slot].try_action_throw():
+		return false
+	_slot_release_toggle[slot] = 0
+	return true
 
 func _toggle_release(slot: int) -> void:
 	if slot >= 0 and slot < _slot_release_toggle.size():
@@ -2320,8 +2328,8 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 			_slot_release_held[slot] = 0
 			var down: int = _slot_bumper_down[slot]
 			_slot_bumper_down[slot] = -1
-			if down != -1 and _is_tap(down) and _players[slot] != null:
-				_players[slot].try_action_throw()
+			if down != -1 and _is_tap(down):
+				_try_throw(slot)
 	elif button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK:
 		if pressed:
 			_action_down(slot)
