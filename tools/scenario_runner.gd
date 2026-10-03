@@ -714,6 +714,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"dead_solo_message_is_gone_509",
 	"counter_bots_leave_when_no_human_seat_is_connected_509",
 	"controller_page_refused_4003_is_terminal_509",
+	"combat_in_flight_shot_credited_to_firing_weapon",
+	"combat_sudden_death_hit_reported_lethal",
+	"fishing_rod_cast_has_its_own_sound_not_the_gunshot",
+	"boomerang_grazing_a_player_still_hits_them",
+	"pogo_state_resets_when_a_round_starts",
+	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2534,6 +2540,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_counter_bots_leave_when_no_human_seat_is_connected_509()
 		"controller_page_refused_4003_is_terminal_509":
 			return await _scenario_controller_page_refused_4003_is_terminal_509()
+		"combat_in_flight_shot_credited_to_firing_weapon":
+			return await _scenario_combat_in_flight_shot_credited_to_firing_weapon()
+		"combat_sudden_death_hit_reported_lethal":
+			return await _scenario_combat_sudden_death_hit_reported_lethal()
+		"fishing_rod_cast_has_its_own_sound_not_the_gunshot":
+			return await _scenario_fishing_rod_cast_has_its_own_sound_not_the_gunshot()
+		"boomerang_grazing_a_player_still_hits_them":
+			return await _scenario_boomerang_grazing_a_player_still_hits_them()
+		"pogo_state_resets_when_a_round_starts":
+			return await _scenario_pogo_state_resets_when_a_round_starts()
+		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
+			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -36627,4 +36645,162 @@ func _scenario_controller_page_refused_4003_is_terminal_509() -> Array[String]:
 	elif retry_at == -1 or refused_at > retry_at:
 		failures.append("the refused branch comes after the reconnect timer")
 	_scenario_completed = true
+	return failures
+
+
+# Issue #516: a bullet that lands after its shooter swapped weapons is logged
+# against the weapon that fired it.
+func _scenario_combat_in_flight_shot_credited_to_firing_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	await _await_ticks(10)
+	for p in players:
+		p.spawn_protected = false
+	# The shooter holds the pickaxe on arrival; the bullet was fired by a boomstick.
+	players[0].land_projectile_hit(players[1], 5.0, Vector2.ZERO, "boomstick")
+	players[0].land_projectile_hit(players[1], 5.0, Vector2.ZERO)
+	var hits: Dictionary = rm._stats.weapon_hits
+	if int(hits.get("boomstick", 0)) != 1:
+		failures.append("the in-flight shot was not credited to the boomstick: %s" % [hits])
+	if int(hits.get("pickaxe", 0)) != 1:
+		failures.append("the unlabelled hit was not credited to the held pickaxe: %s" % [hits])
+	if players[0].hit_weapon_id != "":
+		failures.append("hit_weapon_id leaked past the emit: %s" % players[0].hit_weapon_id)
+	await _teardown(rig["stage"])
+	return failures
+
+# Issue #516: in Sudden Death the killing hit is reported lethal even though the
+# mode eliminates the victim after the strike is emitted.
+func _scenario_combat_sudden_death_hit_reported_lethal() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.SUDDEN_DEATH)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	for p in players:
+		p.spawn_protected = false
+	var lethal: Array = []
+	players[0].strike_landed.connect(func(_v: Node, _a: float, _p: Vector2, l: bool) -> void: lethal.append(l))
+	players[0].land_projectile_hit(players[1], 10.0, Vector2(123, 45))
+	if players[1].alive:
+		failures.append("the victim survived a Sudden Death hit")
+	if lethal != [true]:
+		failures.append("the hit was reported lethal=%s, want [true]" % [lethal])
+	if not rm._has_lethal_point or rm._last_lethal_point != Vector2(123, 45):
+		failures.append("the round manager never recorded the lethal point")
+	await _teardown(rig["stage"])
+	return failures
+
+## Issue #517: casting the fishing rod asks for its own cast sound, not the
+## boomstick's gunshot.
+func _scenario_fishing_rod_cast_has_its_own_sound_not_the_gunshot() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, FISHING_ROD_PATH)
+	await _await_ticks(20)
+	sfx.start_recording()
+	await _flick(player, Vector2.UP)
+	await _await_ticks(4)
+	sfx.stop_recording()
+	print("      requested: %s" % [sfx.recorded_names()])
+	if player.launched_hook() == null:
+		failures.append("a flick did not cast the hook")
+	if _sfx_count(sfx, "fire_boomstick") > 0:
+		failures.append("casting the fishing rod played the boomstick's gunshot")
+	if _sfx_count(sfx, "fire_fishing_rod") == 0:
+		failures.append("casting the fishing rod never asked for fire_fishing_rod")
+	await _teardown(stage)
+	return failures
+## Issue #517: a boomerang whose sweep ends in a graze on a player (no rest
+## info) must still hit them, not turn back as if at a wall. Throws at a
+## victim offset across and past the boomerang's edge.
+func _scenario_boomerang_grazing_a_player_still_hits_them() -> Array[String]:
+	var failures: Array[String] = []
+	for dy: float in [-30.0, -24.0, -18.0, -12.0, -6.0, 6.0, 12.0, 18.0, 24.0, 30.0]:
+		var stage: Node2D = _new_stage()
+		var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, dy))
+		await _await_ticks(2)
+		await _equip(thrower, BOOMERANG_PATH)
+		_brace(thrower)
+		_brace(victim)
+		await _flick(thrower, Vector2.RIGHT)
+		var boomerang: Node2D = thrower.launched_boomerang()
+		if boomerang == null:
+			failures.append("dy %.0f: a flick did not throw the boomerang" % dy)
+			await _teardown(stage)
+			continue
+		var turned_x: float = INF
+		for i in 240:
+			if not is_instance_valid(boomerang):
+				break
+			if boomerang.leg == 1 and turned_x == INF:
+				turned_x = boomerang.global_position.x
+			await physics_frame
+		print("      dy %.0f: victim took %.1f, turned at x %.0f (victim x %.0f)" % [dy, victim.damage, turned_x, victim.global_position.x])
+		if victim.damage <= 0.0 and turned_x < victim.global_position.x + 10.0:
+			failures.append("dy %.0f: the boomerang turned back at the player without hurting them" % dy)
+		await _teardown(stage)
+	return failures
+## Issue #517: pogo charge, rebound cooldown and stomp lock do not carry into
+## the next round.
+func _scenario_pogo_state_resets_when_a_round_starts() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, POGO_PATH)
+	player.set("_pogo_charge", 0.8)
+	player.set("_pogo_cooldown", 5.0)
+	player.set("_stomp_lock", 5.0)
+	player.start_round(DEEP_PARK_POSITION, true)
+	await _await_ticks(2)
+	print("      after start_round: charge %s cooldown %s stomp lock %s" % [player.get("_pogo_charge"), player.get("_pogo_cooldown"), player.get("_stomp_lock")])
+	if float(player.get("_pogo_charge")) > 0.0:
+		failures.append("pogo charge carried into the new round")
+	if float(player.get("_pogo_cooldown")) > 0.0:
+		failures.append("pogo rebound cooldown carried into the new round")
+	if float(player.get("_stomp_lock")) > 0.0:
+		failures.append("pogo stomp lock carried into the new round")
+	await _teardown(stage)
+	return failures
+
+# --- Shield hitbox under head-size modifiers (issue #515) ----------------------
+## The shield collides as `head_polygon`; Big Heads and Tiny Weapons must scale
+## it with the art, and undoing must restore it.
+func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	var base: PackedVector2Array = player.weapon_head_polygon_shape().points.duplicate()
+	for case: Array in [[RoundModifiersScript.BIG_HEADS, RoundModifiersScript.BIG_HEAD_SCALE], [RoundModifiersScript.TINY_WEAPONS, RoundModifiersScript.TINY_HEAD_SCALE]]:
+		var modifier: RefCounted = RoundModifiersScript.create(case[0])
+		modifier.apply(null, [player], stage)
+		await _await_ticks(2)
+		var scaled: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
+		if scaled == null or scaled.points.size() != base.size():
+			failures.append("%s: shield polygon missing or reshaped" % case[0])
+		else:
+			for i in base.size():
+				if scaled.points[i].distance_to(base[i] * float(case[1])) > 0.01:
+					failures.append("%s: point %d is %s, expected %s" % [case[0], i, scaled.points[i], base[i] * float(case[1])])
+					break
+		modifier.undo()
+		await _await_ticks(2)
+		var restored: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
+		if restored == null or restored.points != base:
+			failures.append("%s: shield polygon not restored after undo" % case[0])
+	await _teardown(stage)
 	return failures
