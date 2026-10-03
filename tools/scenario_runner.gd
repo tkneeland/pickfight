@@ -702,6 +702,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
 	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
+	"solo_never_creates_or_opens_the_relay_link",
+	"solo_lobby_shows_no_room_code_qr_or_url",
+	"solo_refuses_phone_and_remote_joins",
+	"solo_plays_a_full_match_back_to_the_lobby",
+	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
 ]
@@ -2500,6 +2505,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		"pad_bumper_cycling_picker_does_not_release_weapon":
 			return await _scenario_pad_bumper_cycling_picker_does_not_release_weapon()
+		"solo_never_creates_or_opens_the_relay_link":
+			return await _scenario_solo_never_creates_or_opens_the_relay_link()
+		"solo_lobby_shows_no_room_code_qr_or_url":
+			return await _scenario_solo_lobby_shows_no_room_code_qr_or_url()
+		"solo_refuses_phone_and_remote_joins":
+			return await _scenario_solo_refuses_phone_and_remote_joins()
+		"solo_plays_a_full_match_back_to_the_lobby":
+			return await _scenario_solo_plays_a_full_match_back_to_the_lobby()
+		"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay":
+			return await _scenario_solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay()
 		"relay_host_keepalive_holds_idle_room_open":
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
@@ -23403,8 +23418,8 @@ func _scenario_online_toggle_ignored_mid_match() -> Array[String]:
 	server.set_lobby_state({"phase": "playing", "players": [{"slot": 0, "name": "", "ready": false}]})
 	phone.send_text(JSON.stringify({"t": "host", "cmd": "online", "v": true}))
 	await _poll_phones(phones, 20)
-	if server.online_requested() or server.relay_link.link_state() != "offline":
-		failures.append("Go online was taken mid-match (link %s)" % server.relay_link.link_state())
+	if server.online_requested() or server.relay_state() != "offline":
+		failures.append("Go online was taken mid-match (link %s)" % server.relay_state())
 	if server.apply_host_command("online", true):
 		failures.append("apply_host_command('online') returned true mid-match")
 	# Back in the lobby it works; then the match starts and it cannot be turned off.
@@ -33966,7 +33981,7 @@ func _scenario_title_screen_offers_couch_online_and_solo_and_no_pc_seat_control(
 		failures.append("two D-pad downs reached %s, expected Solo" % (focused.name if focused != null else "nothing"))
 	await _pad_tap_368(0, JOY_BUTTON_A)
 	await _await_ticks(3)
-	if server.match_kind() != "online" or not server.room_closed():
+	if server.match_kind() != "solo" or not server.room_closed():
 		failures.append("Solo gave kind '%s', room closed %s" % [server.match_kind(), server.room_closed()])
 	if server.bot_director.bot_count() != server.SOLO_BOTS:
 		failures.append("Solo seated %d bots, expected %d" % [server.bot_director.bot_count(), server.SOLO_BOTS])
@@ -36202,14 +36217,145 @@ func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[Stri
 	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
 	await _teardown(rig["stage"])
 	return failures
-
+# --- Solo is fully offline (#522, ADR-0023) ------------------------------------------
+## Solo from the title: no RelayLink is created, none is opened, and no way is left to ask for one.
+func _scenario_solo_never_creates_or_opens_the_relay_link() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(30)
+	if server.match_kind() != "solo":
+		failures.append("Solo from the title gave kind '%s'" % server.match_kind())
+	if server.relay_link != null or server.get_node_or_null("RelayLink") != null:
+		failures.append("Solo created a RelayLink")
+	if server.apply_host_command("online", true) or server.go_online("ws://127.0.0.1:1") == OK:
+		failures.append("Solo accepted a request to go online")
+	await _await_ticks(5)
+	if server.relay_link != null or server.online_requested() or server.online_status() != "off" or server.online_room_code() != "":
+		failures.append("Solo reached for the relay (link %s, requested %s, status '%s')" % [server.relay_link, server.online_requested(), server.online_status()])
+	await _kind_close_435(rig)
+	return failures
+## The Solo lobby carries no room code, QR or LAN URL, on screen or to the lobby state.
+func _scenario_solo_lobby_shows_no_room_code_qr_or_url() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.press_title("solo")
+	screen.show_panel("lobby")
+	screen.refresh_lobby(_lobby_state_425(1), 2, server)
+	screen.refresh_controls()
+	await _await_ticks(3)
+	var qr: Control = screen.lobby_panel().find_child("JoinQr", true, false) as Control
+	var url: Label = screen.get("_lobby_url") as Label
+	var code: Label = screen.get("_room_label") as Label
+	if qr == null or qr.is_visible_in_tree():
+		failures.append("the join QR shows in the Solo lobby")
+	if url == null or url.is_visible_in_tree():
+		failures.append("the LAN join URL shows in the Solo lobby")
+	if code != null and code.is_visible_in_tree():
+		failures.append("a room code shows in the Solo lobby ('%s')" % code.text)
+	var state: Dictionary = JSON.parse_string(server._lobby_text())
+	if str(state.get("room", "x")) != "" or state.get("kind") != "solo":
+		failures.append("the lobby state carries room '%s' kind '%s'" % [state.get("room"), state.get("kind")])
+	await _kind_close_435(rig)
+	return failures
+## A phone is turned away from Solo with its own reason, and no remote seat can arrive: there is no relay to arrive by.
+func _scenario_solo_refuses_phone_and_remote_joins() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var phones: Array[WebSocketPeer] = []
+	rig["screen"].press_title("solo")
+	await _await_ticks(3)
+	var phone := WebSocketPeer.new()
+	var got: Dictionary = await _join_phone(phone, "solo522-phone", phones)
+	phones.append(phone)
+	if int(got["slot"]) >= 0 or not got["closed"] or got["reason"] != server.SOLO_MATCH_REASON:
+		failures.append("a phone joining Solo got slot %s, closed %s ('%s')" % [got["slot"], got["closed"], got["reason"]])
+	if server.claimed_slots() != [server.host_pc_slot()] + server.virtual_slots() and server.claimed_slots().size() != 1 + server.virtual_slots().size():
+		failures.append("claims after the refusals: %s" % [server.claimed_slots()])
+	if server.relay_link != null:
+		failures.append("a RelayLink exists in Solo")
+	await _kind_close_435(rig, phones)
+	return failures
+## Solo plays through: the host readies, the countdown runs, a round is won (first to 1), the victory screen shows and Continue returns to the lobby.
+func _scenario_solo_plays_a_full_match_back_to_the_lobby() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("target", 1)
+	server.apply_host_command("start")
+	await _await_ticks(2)
+	if rm.lobby_phase() != "countdown":
+		failures.append("Start did not begin the countdown (phase '%s')" % rm.lobby_phase())
+	if not await _wait_for_239(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 30000):
+		failures.append("the countdown never ended in a round (state %d)" % rm._state)
+		await _kind_close_435(rig)
+		return failures
+	for bot: int in server.virtual_slots():
+		var body: Node = server.player_in_slot(bot)
+		if body != null:
+			body.eliminate()
+	var seen_victory: bool = await _wait_for_239(func() -> bool: return rm.lobby_phase() == "victory", 30000)
+	var winner: int = rm.match_winner_slot()
+	if seen_victory:
+		await _await_ticks(30)
+		if rm.lobby_phase() != "victory":
+			failures.append("the victory screen did not wait for the Solo host (phase '%s')" % rm.lobby_phase())
+		var key := InputEventKey.new()
+		key.keycode = KEY_SPACE
+		key.pressed = true
+		rm._unhandled_key_input(key)
+		await _await_ticks(5)
+	if not seen_victory:
+		failures.append("the host beating the bots never reached victory")
+	elif winner != server.host_pc_slot():
+		failures.append("victory went to slot %d, expected the host seat %d" % [winner, server.host_pc_slot()])
+	if rm.lobby_phase() != "lobby":
+		failures.append("the match never returned to the lobby (phase '%s')" % rm.lobby_phase())
+	if server.match_kind() != "solo" or server.relay_link != null or server.bot_director.bot_count() != 3:
+		failures.append("after the match: kind '%s', relay %s, %d bots" % [server.match_kind(), server.relay_link, server.bot_director.bot_count()])
+	await _kind_close_435(rig)
+	return failures
+## Solo to Online sends the bots away and opens the room; Online back to Solo closes it again.
+func _scenario_solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	rig["screen"].press_title("solo")
+	await _await_ticks(5)
+	server.apply_host_command("kind", "online")
+	if server.match_kind() != "online" or server.bot_director.bot_count() != 0 or server.room_closed():
+		failures.append("Solo to Online: kind '%s' with %d bots" % [server.match_kind(), server.bot_director.bot_count()])
+	if not await _wait_for_239(func() -> bool: return server.is_online(), 10000):
+		failures.append("Online after Solo never opened the room")
+	server.apply_host_command("kind", "solo")
+	await _await_ticks(5)
+	if server.match_kind() != "solo" or server.bot_director.bot_count() != 3 or server.online_room_code() != "" or server.relay_state() != "offline":
+		failures.append("Online to Solo: kind '%s', %d bots, code '%s', link %s" % [server.match_kind(), server.bot_director.bot_count(), server.online_room_code(), server.relay_state()])
+	await _kind_close_435(rig)
+	return failures
 # --- Relay keepalive and retry (issue #519) --------------------------------
 ## Waits `sec` of wall-clock time (the relay and RelayLink read the wall clock).
 func _wait_wall_519(sec: float) -> void:
 	var until: int = Time.get_ticks_msec() + int(sec * 1000.0)
 	while Time.get_ticks_msec() < until:
 		await process_frame
-
 ## A host with no remote seat sends nothing of its own; the keepalive must keep
 ## the room alive past the relay's idle timeout.
 func _scenario_relay_host_keepalive_holds_idle_room_open() -> Array[String]:
@@ -36233,7 +36379,6 @@ func _scenario_relay_host_keepalive_holds_idle_room_open() -> Array[String]:
 	relay.queue_free()
 	_scenario_completed = true
 	return failures
-
 ## With no keepalive the relay idles the room out; RelayLink then retries a
 ## bounded number of times, each time with a fresh room code, and stops.
 func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[String]:
