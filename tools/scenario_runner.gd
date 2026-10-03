@@ -36094,6 +36094,8 @@ func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats
 	player = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	# Bumpers cycle the lobby picker (#511); throw mid-round.
+	server.set_lobby_state({"phase": "playing", "players": []})
 	await _equip(player, GRAPPLE_PATH)
 	server._test_pad_axes[0] = Vector2.ZERO
 	await _await_ticks(30)
@@ -36104,6 +36106,7 @@ func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats
 		var button: int = JOY_BUTTON_LEFT_STICK if player.launched_hook() != null else JOY_BUTTON_RIGHT_SHOULDER
 		await _pad_button_261(0, button, true)
 		await _pad_button_261(0, button, false))
+	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _teardown(rig["stage"])
 	return failures
 func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, server: Node, tap: Callable) -> void:
