@@ -110,7 +110,6 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Joining someone else's online game from the host screen: "Join someone else's game (J)" heads the lobby's host controls and opens the PC client's room-code entry. It works while the only seat taken is the host's own (the Online host-PC seat) or bots, and in an Online match (the open room is closed on the way out); once anyone else is seated it is off, with the caption "Off while players are in your lobby". The online room code now sits beside the match control (formerly Go online) at 26 px instead of under the URL at 64 px, so the whole lobby fits 1600 x 900, 1080p and the Steam Deck with online on, the PC seat on and eight players seated (#425 playtest)
 - How-to-play explainer with animated demos (#149, #219)
 - First-join tip on the phone: looping drag-to-swing animation, shown once per device (#291)
-- Live lobby sandbox: seated players move, swing and fight on a stage under the lobby; nothing scores, KOs respawn, the match starts clean (#291)
 
 ## Settings
 - Music and settings menu: volume, fullscreen (#118, ADR-0017, #167)

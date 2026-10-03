@@ -631,7 +631,7 @@ func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	if not keeps_weapon:
 		_assign_weapon_stats(DEFAULT_WEAPON_STATS)
 	freeze = false
-	# A leave_round() earlier this frame (the lobby sandbox ending as the first
+	# A leave_round() earlier this frame (an End match re-seating the lobby as the first
 	# round starts) queued set_deferred("freeze", true); it would flush after
 	# this and leave the body frozen at its spawn (#505). Queued later, this
 	# one flushes after it.
