@@ -4,7 +4,9 @@ extends RefCounted
 ## host PC's own cosmetics picker (#441), split out of `LobbyScreen.gd` (#543).
 ##
 ## For a PC-only match with no phone: clickable buttons and keys for the match
-## kind (O, Couch or Online, #435), Mode (T), First to (- and =) and Start (Enter).
+## kind (C, O and S: the Couch / Online / Solo switch in the top bar, #435), the
+## Host panel (the mode's target with - and = , Bots with B, Teams with T), Join
+## someone's game (J, Online only), How to play, Your look and Start (Enter) (#547).
 ## Each calls ControllerServer.apply_host_command(), the same function the host
 ## phone's menu ends up in, so nothing is decided here.
 ##
@@ -21,19 +23,22 @@ extends RefCounted
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 const CONTROL_KEYS: Dictionary = {
-	"online": KEY_O, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
+	"local": KEY_C, "online": KEY_O, "solo": KEY_S, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
 	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
 }
+const KIND_IDS: Array[String] = ["local", "online", "solo"] # the switch's cells, left to right
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
-## The online room code, on Go online's own row (#425 playtest): at 64 px under the URL it pushed Start and Join off a 900 px screen.
-const ROOM_CODE_FONT_SIZE: int = 26
+## The big online room code on the join card (the mockup's 96 px, outlined).
+const ROOM_CODE_FONT_SIZE: int = 96
+const STEP_BUTTON_PX: float = 44.0
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
-const PAD_ORDER: Array[String] = ["online", "mode", "bots", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
+const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
 
 var _screen # the LobbyScreen
 var _controls: Dictionary = {}
@@ -45,6 +50,14 @@ var start_notice: String = ""
 var start_notice_until_msec: int = 0
 
 var _host_picker: Control = null
+var _mode_buttons: Dictionary = {} # game mode id -> the card's flat click Button
+var _target_label: Label
+var _target_value: Label
+var _target_kind: String = "first_to"
+var _target_number: int = 5
+var _start_ready: bool = false
+var _kind_cells: Dictionary = {} # "local" / "online" / "solo" -> Button
+var _focus_signature: String = ""
 
 var _pad_active: bool = false
 var _pad_menu_open: bool = false
@@ -52,63 +65,191 @@ var _pad_menu_open: bool = false
 func _init(screen) -> void:
 	_screen = screen
 
-## Builds the controls (once) under the QR and points them at `server`. A
-## server without `apply_host_command` (a test stub) gets none.
+## Builds the controls (once) and points them at `server`. A server without
+## `apply_host_command` (a test stub) gets none.
 func attach(server: Object) -> void:
 	var lobby_right: VBoxContainer = _screen._lobby_right
 	if lobby_right == null or _screen._server != null or server == null or not server.has_method("apply_host_command"):
 		return
 	_screen._server = server
-	var box := VBoxContainer.new()
-	box.name = "HostControls"
-	box.add_theme_constant_override("separation", 6) # was 8: the Join caption's room (#425 playtest)
-	lobby_right.add_child(box)
-	# First, not last (#425 playtest): the way into someone else's room code, with why it is off when it is.
-	box.add_child(_control_button("join", _screen.tr("HOST_JOIN_ONLINE")))
-	_join_blocked = ScreenKitScript.big_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, Color(0.8, 0.82, 0.88))
+	_build_kind_switch()
+	_build_room_widgets()
+	_build_host_panel(lobby_right)
+	var look: Button = _action_button("look", _screen.tr("PICKER_TITLE"), UiThemeScript.SKY_BUTTON)
+	lobby_right.add_child(look)
+	lobby_right.add_child(_action_button("how_to_play", _screen.tr("HOW_TO_PLAY_BUTTON"), UiThemeScript.PINK_BUTTON))
+	# The way into someone else's room code (Online only), with why it is off when it is.
+	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
+	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
 	_join_blocked.name = "JoinBlocked"
+	_join_blocked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_join_blocked.visible = false
-	box.add_child(_join_blocked)
-	var online_row := HBoxContainer.new()
-	online_row.add_theme_constant_override("separation", 12)
-	box.add_child(online_row)
-	online_row.add_child(_control_button("online", _screen.tr("HOST_MATCH_KIND_STATE") % _screen.tr("MATCH_COUCH")))
-	_online_status = ScreenKitScript.big_label("", 24, Color(0.8, 0.82, 0.88))
-	online_row.add_child(_online_status)
-	_room_label = ScreenKitScript.big_label("", ROOM_CODE_FONT_SIZE, ScreenKitScript.LOBBY_ACCENT)
-	_room_label.name = "RoomCode"
-	_room_label.visible = false
-	online_row.add_child(_room_label)
-	var pad_hint := ScreenKitScript.big_label(_screen.tr("HOST_GAMEPAD_HINT"), 24, Color(0.8, 0.82, 0.88))
+	lobby_right.add_child(_join_blocked)
+	var spacer := Control.new()
+	spacer.name = "Spacer"
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lobby_right.add_child(spacer)
+	var start_button: Button = ScreenKitScript.themed_button(_screen.tr("HOST_START_MATCH"), UiThemeScript.START_BUTTON_OFF, "start")
+	start_button.pressed.connect(press_control.bind("start"))
+	_controls["start"] = start_button
+	lobby_right.add_child(start_button)
+	lobby_right.move_child(_screen._lobby_status, lobby_right.get_child_count() - 1) # the hint under START
+	var pad_hint := ScreenKitScript.themed_label(_screen.tr("HOST_GAMEPAD_HINT"), ScreenKitScript.DECK_MIN_FONT_SIZE, &"", HORIZONTAL_ALIGNMENT_CENTER)
 	pad_hint.name = "GamepadHint"
-	box.add_child(pad_hint)
+	pad_hint.add_theme_color_override("font_color", Color("8F96BD"))
+	pad_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	pad_hint.offset_top = -30.0
+	pad_hint.offset_bottom = -8.0
+	_screen._lobby_panel.add_child(pad_hint)
 	_pad_active = not Input.get_connected_joypads().is_empty()
-	box.add_child(_control_button("mode", _screen.tr("HOST_MODE")))
-	box.add_child(_control_button("bots", _screen.tr("HOST_BOTS_STATE") % 0)) # #445: the one bot counter, Couch and Online
-	var target_row := HBoxContainer.new()
-	target_row.add_theme_constant_override("separation", 12)
-	box.add_child(target_row)
-	target_row.add_child(_control_button("target_down", _screen.tr("HOST_FIRST_TO_DOWN")))
-	target_row.add_child(_control_button("target_up", "+"))
-	# Start shares the First-to row (#425), which buys the room for the mode-card grid and the 340 px QR.
-	var start_button: Button = _control_button("start", _screen.tr("HOST_START_MATCH"))
-	start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	target_row.add_child(start_button)
 	_screen._title_screen.build()
+	_place_kind_notice()
 	refresh()
 
-func _control_button(id: String, text: String) -> Button:
-	var button := Button.new()
-	button.name = id
-	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", CONTROL_BUTTON_FONT_SIZE)
+## The top-left Couch / Online / Solo switch (#435): one cream frame, three cells
+## split by ink rules, the picked one yellow. C, O and S press them too.
+func _build_kind_switch() -> void:
+	var frame := PanelContainer.new()
+	frame.name = "KindSwitch"
+	frame.theme_type_variation = UiThemeScript.SWITCH_FRAME
+	frame.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_screen._top_left.add_child(frame)
+	var cells := HBoxContainer.new()
+	cells.add_theme_constant_override("separation", 0)
+	frame.add_child(cells)
+	var labels: Dictionary = {"local": "MATCH_COUCH", "online": "MATCH_ONLINE", "solo": "MATCH_SOLO"}
+	for i in KIND_IDS.size():
+		var id: String = KIND_IDS[i]
+		if i > 0:
+			var rule := ColorRect.new()
+			rule.color = UiThemeScript.INK
+			rule.custom_minimum_size = Vector2(4, 0)
+			rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cells.add_child(rule)
+		var cell: Button = ScreenKitScript.themed_button(_screen.tr(labels[id]), UiThemeScript.SEG_BUTTON, id)
+		cell.pressed.connect(press_control.bind(id))
+		_controls[id] = cell
+		_kind_cells[id] = cell
+		cells.add_child(cell)
+
+## The big room code and its link status, on the join card (Online).
+func _build_room_widgets() -> void:
+	var box: VBoxContainer = _screen._join_box
+	_room_label = ScreenKitScript.themed_label("", ROOM_CODE_FONT_SIZE, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_room_label.name = "RoomCode"
+	_room_label.add_theme_color_override("font_color", UiThemeScript.BLUE)
+	_room_label.add_theme_color_override("font_outline_color", UiThemeScript.INK)
+	_room_label.add_theme_constant_override("outline_size", 12)
+	_room_label.visible = false
+	box.add_child(_room_label)
+	_online_status = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_online_status.name = "OnlineStatus"
+	box.add_child(_online_status)
+	box.move_child(_room_label, _screen._join_note.get_index())
+	box.move_child(_online_status, _screen._join_note.get_index())
+
+## The Host panel: the mode's target (First to / Lives / Goals to win / Captures
+## to win), Bots and Teams, each a stepper or a switch (#547).
+func _build_host_panel(parent: Control) -> void:
+	var card := PanelContainer.new()
+	card.name = "HostPanel"
+	card.theme_type_variation = UiThemeScript.CARD_PANEL
+	parent.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	card.add_child(box)
+	box.add_child(ScreenKitScript.themed_label(_screen.tr("LOBBY_HOST_TITLE"), 28, UiThemeScript.INK_HEADING_LABEL))
+	_target_label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_FIRST_TO"), 22, UiThemeScript.INK_BOLD_LABEL)
+	_target_label.name = "TargetLabel"
+	_target_value = ScreenKitScript.themed_label("5", 34, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_target_value.name = "TargetValue"
+	_target_value.custom_minimum_size.x = 40.0
+	box.add_child(_stepper_row(_target_label, _step_button("target_down", "-"), _target_value, _step_button("target_up", "+")))
+	var bots_count: Button = ScreenKitScript.themed_button("0", UiThemeScript.VALUE_BUTTON, "bots")
+	bots_count.custom_minimum_size = Vector2(40, STEP_BUTTON_PX)
+	bots_count.pressed.connect(press_control.bind("bots"))
+	_controls["bots"] = bots_count
+	box.add_child(_stepper_row(ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_BOTS"), 22, UiThemeScript.INK_BOLD_LABEL),
+		_step_button("bots_down", "-"), bots_count, _step_button("bots_up", "+")))
+	var teams_row := HBoxContainer.new()
+	teams_row.add_theme_constant_override("separation", 10)
+	var teams_label: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_TEAMS"), 22, UiThemeScript.INK_BOLD_LABEL)
+	teams_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	teams_row.add_child(teams_label)
+	var teams: Button = ScreenKitScript.themed_button(_screen.tr("LOBBY_OFF"), UiThemeScript.SWITCH_BUTTON, "mode")
+	teams.custom_minimum_size.x = 84.0
+	teams.pressed.connect(press_control.bind("mode"))
+	_controls["mode"] = teams
+	teams_row.add_child(teams)
+	box.add_child(teams_row)
+
+func _step_button(id: String, text: String) -> Button:
+	var button: Button = ScreenKitScript.themed_button(text, UiThemeScript.STEP_BUTTON, id)
+	button.custom_minimum_size = Vector2(STEP_BUTTON_PX, STEP_BUTTON_PX)
 	button.pressed.connect(press_control.bind(id))
 	_controls[id] = button
 	return button
 
-## The control button `id` ("online", "pc_seat", "mode", "bots", "target_down",
-## "target_up", "start"), or null.
+func _stepper_row(label: Label, less: Button, value: Control, more: Button) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	row.add_child(less)
+	row.add_child(value)
+	row.add_child(more)
+	return row
+
+func _action_button(id: String, text: String, variation: StringName) -> Button:
+	var button: Button = ScreenKitScript.themed_button(text, variation, id)
+	button.pressed.connect(press_control.bind(id))
+	_controls[id] = button
+	return button
+
+## The "N players left" notice the title screen owns sits under the top bar now,
+## not over the wordmark.
+func _place_kind_notice() -> void:
+	var notice: Node = _screen._lobby_panel.find_child("KindNotice", true, false)
+	if notice is Control:
+		(notice as Control).offset_top = 112.0
+
+## A mode card's flat click Button, so the gamepad menu can focus it.
+func register_mode_button(id: String, button: Button) -> void:
+	_mode_buttons[id] = button
+	_controls["mode_" + (id if id != "" else "classic")] = button
+
+## What a click on a game mode card does: pick the mode, switching Teams on or
+## off first when the mode only plays in the other format.
+func press_game_mode(id: String) -> void:
+	var server: Object = _screen._server
+	if server == null or not server.has_method("game_mode") or id == "\u0001":
+		return
+	if not preload("res://scripts/GameModes.gd").fits_format(id, server.team_mode()):
+		server.apply_host_command("mode", "ffa" if server.team_mode() else "teams")
+	server.apply_host_command("gamemode", id)
+	refresh()
+
+## The Host panel's target row follows the mode: its label and value.
+func set_target(kind: String, value: int) -> void:
+	_target_kind = kind
+	_target_number = value
+	if _target_label != null:
+		_target_label.text = _screen.tr(preload("res://scripts/GameModes.gd").target_row_key(kind))
+		_target_value.text = str(value)
+
+## Whether START is lit: every human ready and the lobby able to start.
+func set_start_ready(on: bool) -> void:
+	_start_ready = on
+
+func _control_button_text(id: String) -> String:
+	return (_controls[id] as Button).text
+
+## The control button `id` ("local", "online", "solo", "mode", "bots", "bots_down",
+## "bots_up", "target_down", "target_up", "look", "how_to_play", "join", "start"), or null.
 func control_button(id: String) -> Button:
 	return _controls.get(id) as Button
 
@@ -124,15 +265,20 @@ func press_control(id: String) -> void:
 	if server == null:
 		return
 	match id:
-		"online":
-			# #435: Couch <-> Online (Solo flips to Couch). The room opens with Online.
-			server.apply_host_command("kind", "local" if TitleScreenScript.online_kind(server) else "online")
+		"local", "online", "solo":
+			# #435: Couch, Online or Solo. Online opens the room; Solo stays off the relay (#522).
+			if _kind_of(server) != id:
+				server.apply_host_command("kind", id)
 		"mode":
 			server.apply_host_command("mode", "ffa" if server.team_mode() else "teams")
 		"bots":
 			# #445: one more bot, back to none after the last free seat.
 			var count: int = server.bot_director.bot_count()
 			server.apply_host_command("bots", count + 1 if count < server.bot_capacity() else 0)
+		"bots_down":
+			server.apply_host_command("bots", maxi(0, server.bot_director.bot_count() - 1))
+		"bots_up":
+			server.apply_host_command("bots", mini(server.bot_capacity(), server.bot_director.bot_count() + 1))
 		"target_down":
 			server.apply_host_command("target", server.mode_target() - 1)
 		"target_up":
@@ -140,17 +286,29 @@ func press_control(id: String) -> void:
 		"start":
 			if server.apply_host_command("start"):
 				_note_start_blocked()
+		"look":
+			if server.has_method("host_picker_shown") and server.host_picker_shown():
+				_popup_opener = id
+				_screen.set_popup("look")
+		"how_to_play":
+			_popup_opener = id
+			_screen.set_popup("help")
 		"join":
 			# Issue #241: leave this host's lobby for the PC client's join
-			# screen. Only while nobody but the host's own seat (and bots) is
-			# in it, so a click cannot end a match someone is in. An open
-			# room is closed on the way out.
-			if _can_join_online():
+			# screen. Online only (#547), and only while nobody but the host's
+			# own seat (and bots) is in it, so a click cannot end a match
+			# someone is in. An open room is closed on the way out.
+			if _kind_of(server) == "online" and _can_join_online():
 				if server.online_requested():
 					server.apply_host_command("online", false)
 				_screen.get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE)
 				return
 	refresh()
+
+## The match kind as the switch reads it: "local" until the host picks one.
+func _kind_of(server: Object) -> String:
+	var kind: String = server.match_kind() if server.has_method("match_kind") else ""
+	return "local" if kind == "" else kind
 
 func _note_start_blocked() -> void:
 	var server: Object = _screen._server
@@ -194,21 +352,32 @@ func refresh() -> void:
 		return
 	var status: String = server.online_status()
 	var code: String = server.online_room_code()
-	control_button("online").text = _screen.tr("HOST_MATCH_KIND_STATE") % TitleScreenScript.match_kind_text(server)
-	_online_status.text = {"connecting": _screen.tr("ONLINE_CONNECTING"), "online": _screen.tr("ONLINE_ONLINE"), "unreachable": _screen.tr("ONLINE_UNREACHABLE")}.get(status, "")
-	_room_label.text = _screen.tr("ONLINE_ROOM") % code
+	var kind: String = _kind_of(server)
+	for id: String in KIND_IDS:
+		_set_variation(_kind_cells[id], UiThemeScript.SEG_BUTTON_ON if id == kind else UiThemeScript.SEG_BUTTON)
+	_online_status.text = {"connecting": _screen.tr("ONLINE_CONNECTING"), "unreachable": _screen.tr("ONLINE_UNREACHABLE")}.get(status, "")
+	_room_label.text = code
 	_room_label.visible = code != "" and not (server.has_method("room_code_hidden") and server.room_code_hidden())
 	# The code says "online" already; the status stays for connecting or a blip.
-	_online_status.visible = not (_room_label.visible and status == "online")
+	_online_status.visible = _online_status.text != "" and kind == "online"
 	_screen._apply_streamer_mode(server)
 	_screen._title_screen.refresh_kind_notice()
-	control_button("mode").text = _screen.tr("HOST_MODE_STATE") % (_screen.tr("MODE_TEAMS") if server.team_mode() else _screen.tr("MODE_FFA"))
-	control_button("bots").text = _screen.tr("HOST_BOTS_STATE") % server.bot_director.bot_count()
-	control_button("join").disabled = not _can_join_online()
+	var teams_on: bool = server.team_mode()
+	control_button("mode").text = _screen.tr("LOBBY_ON") if teams_on else _screen.tr("LOBBY_OFF")
+	_set_variation(control_button("mode"), UiThemeScript.SWITCH_BUTTON_ON if teams_on else UiThemeScript.SWITCH_BUTTON)
+	control_button("bots").text = str(server.bot_director.bot_count())
+	var join: Button = control_button("join")
+	join.disabled = not _can_join_online()
+	join.visible = kind == "online"
 	_sync_host_picker()
-	_join_blocked.visible = control_button("join").disabled
+	_join_blocked.visible = join.visible and join.disabled
+	var start: Button = control_button("start")
 	# No keyboard glyph while a gamepad is the active input (#368).
-	control_button("start").text = _screen.tr("HOST_START_MATCH_PAD") if _pad_active else _screen.tr("HOST_START_MATCH")
+	start.text = _screen.tr("HOST_START_MATCH") if _start_ready else _screen.tr("HOST_START_WAITING")
+	join.text = _screen.tr("HOST_JOIN_ONLINE_PAD") if _pad_active else _screen.tr("HOST_JOIN_ONLINE")
+	_set_variation(start, UiThemeScript.START_BUTTON if _start_ready else UiThemeScript.START_BUTTON_OFF)
+	if _pad_menu_open:
+		_chain_pad_focus()
 	if server.has_method("pc_runs_room") and server.pc_runs_room() != _screen._rows_have_kick and not _screen._last_lobby_args.is_empty():
 		_screen.refresh_lobby.callv(_screen._last_lobby_args) # Kick on the rows (#458)
 
@@ -230,18 +399,16 @@ func _sync_host_picker() -> void:
 	var seat: int = server.host_pc_slot() if server.has_method("host_pc_slot") else -1
 	var show: bool = server.has_method("host_picker_shown") and server.host_picker_shown()
 	if show and _host_picker == null:
-		_host_picker = preload("res://scripts/OnlineCosmeticsPanel.gd").new()
-		_host_picker.name = "HostPicker"
-		_screen._lobby_right.add_child(_host_picker) # where the QR is in a Couch lobby
-		_screen._lobby_right.move_child(_host_picker, 0)
-		_host_picker.set_compact(true)
+		_host_picker = _screen._popups.look_panel() # the Your look popup's panel (#547)
 	if show and _host_picker.own_slot != seat:
 		_host_picker.bind_server(server, seat)
 		if not _host_picker.picked.is_connected(_save_host_pick):
 			_host_picker.picked.connect(_save_host_pick) # after the server has applied the pick
 	if _host_picker != null:
 		_host_picker.visible = show
-		_screen._mode_grid.visible = not show # the room the panel needs; the cards come back with the QR
+	control_button("look").visible = show
+	if not show and _screen.popup_open() == "look":
+		_screen.set_popup("")
 
 func _save_host_pick(kind: String, _value: Variant) -> void:
 	var server: Object = _screen._server
@@ -268,36 +435,79 @@ func input(event: InputEvent) -> void:
 	var lobby_panel: Control = _screen._lobby_panel
 	if _screen._server == null or lobby_panel == null or not lobby_panel.visible or _screen.title_visible():
 		return
-	if PadMenuScript.pressed(event, JOY_BUTTON_Y):
+	var popup: String = _screen.popup_open()
+	if PadMenuScript.pressed(event, JOY_BUTTON_B) and popup != "":
+		_screen.set_popup("") # B leaves a popup first, then the menu
+		_restore_focus_after_popup()
+		_screen.get_viewport().set_input_as_handled()
+	elif PadMenuScript.pressed(event, JOY_BUTTON_Y) and popup == "":
 		set_pad_menu(not _pad_menu_open)
 		_screen.get_viewport().set_input_as_handled()
 	elif _pad_menu_open and PadMenuScript.pressed(event, JOY_BUTTON_B):
 		set_pad_menu(false)
 		_screen.get_viewport().set_input_as_handled()
 
-## Explicit D-pad links: down the column, with First-to's minus and plus side
-## by side. Geometric neighbours skip the small minus button.
+## Explicit D-pad links (#368, #547). The Host panel and the buttons under it
+## are rows: left and right along a row, up and down between rows. The switch
+## runs along the top, and the mode cards form a 2-column grid; the right edge of
+## the top bar and of the cards leads into the Host panel, so every control is
+## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
-	var column: Array[String] = ["join", "online", "mode", "bots", "target_down"]
-	var buttons: Array[Button] = []
-	for id: String in column:
-		buttons.append(_controls[id])
-	for i in column.size():
-		if i > 0:
-			buttons[i].focus_neighbor_top = buttons[i].get_path_to(buttons[i - 1])
-		if i < column.size() - 1:
-			buttons[i].focus_neighbor_bottom = buttons[i].get_path_to(buttons[i + 1])
-	var down: Button = _controls["target_down"]
-	var up: Button = _controls["target_up"]
-	down.focus_neighbor_right = down.get_path_to(up)
-	up.focus_neighbor_left = up.get_path_to(down)
-	up.focus_neighbor_top = up.get_path_to(_controls["bots"])
-	# Start sits right of the plus (#425): left goes back to it, up to Mode.
-	# Join heads the column now, so the bottom row has nothing below it.
-	var start: Button = _controls["start"]
-	up.focus_neighbor_right = up.get_path_to(start)
-	start.focus_neighbor_left = start.get_path_to(up)
-	start.focus_neighbor_top = start.get_path_to(_controls["bots"])
+	var rows: Array = []
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["mode"], ["look"], ["how_to_play"], ["join"], ["start"]]:
+		var row: Array[Button] = []
+		for id: String in ids:
+			var button: Button = _controls[id]
+			if button.is_visible_in_tree():
+				row.append(button)
+		if not row.is_empty():
+			rows.append(row)
+	var signature: String = ""
+	for row: Array in rows:
+		for button: Button in row:
+			signature += str(button.name) + ","
+		signature += "|"
+	if signature == _focus_signature:
+		return
+	_focus_signature = signature
+	for r in rows.size():
+		var row: Array = rows[r]
+		for c in row.size():
+			var button: Button = row[c]
+			_link(button, SIDE_LEFT, row[c - 1] if c > 0 else null)
+			_link(button, SIDE_RIGHT, row[c + 1] if c < row.size() - 1 else null)
+			_link(button, SIDE_TOP, rows[r - 1][mini(c, rows[r - 1].size() - 1)] if r > 0 else null)
+			_link(button, SIDE_BOTTOM, rows[r + 1][mini(c, rows[r + 1].size() - 1)] if r < rows.size() - 1 else null)
+	# The top bar's switch: along, down to the mode cards, and over into the Host panel.
+	var cards: Array[Button] = []
+	for row_dict: Dictionary in preload("res://scripts/GameModes.gd").picker_rows():
+		cards.append(_mode_buttons[str(row_dict["id"])])
+	var first_target: Button = rows[0][0] if not rows.is_empty() else null
+	for i in KIND_IDS.size():
+		var cell: Button = _kind_cells[KIND_IDS[i]]
+		_link(cell, SIDE_LEFT, _kind_cells[KIND_IDS[i - 1]] if i > 0 else null)
+		_link(cell, SIDE_RIGHT, _kind_cells[KIND_IDS[i + 1]] if i < KIND_IDS.size() - 1 else first_target)
+		_link(cell, SIDE_BOTTOM, cards[mini(i, cards.size() - 1)] if not cards.is_empty() else null)
+	for i in cards.size():
+		_link(cards[i], SIDE_LEFT, cards[i - 1] if i % 2 == 1 else null)
+		_link(cards[i], SIDE_RIGHT, cards[i + 1] if i % 2 == 0 and i + 1 < cards.size() else first_target)
+		_link(cards[i], SIDE_TOP, cards[i - 2] if i >= 2 else _kind_cells[KIND_IDS[mini(i, KIND_IDS.size() - 1)]])
+		_link(cards[i], SIDE_BOTTOM, cards[i + 2] if i + 2 < cards.size() else null)
+	if first_target != null and not cards.is_empty():
+		_link(first_target, SIDE_LEFT, cards[0])
+
+## Points `button`'s focus neighbour on `side` at `target`, or back to Godot's own search for null.
+func _link(button: Button, side: Side, target: Control) -> void:
+	var path: NodePath = button.get_path_to(target) if target != null else NodePath()
+	match side:
+		SIDE_LEFT:
+			button.focus_neighbor_left = path
+		SIDE_RIGHT:
+			button.focus_neighbor_right = path
+		SIDE_TOP:
+			button.focus_neighbor_top = path
+		SIDE_BOTTOM:
+			button.focus_neighbor_bottom = path
 
 ## Opens or closes the gamepad-driven host menu: the lobby control buttons
 ## become focusable and take focus (first enabled one), or give it back.
@@ -309,16 +519,33 @@ func set_pad_menu(on: bool) -> void:
 	for id: String in _controls:
 		(_controls[id] as Button).focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
 	if on:
+		_focus_signature = ""
 		_chain_pad_focus()
-		for id: String in PAD_ORDER:
+		var first: String = _kind_of(_screen._server)
+		for id: String in [first] + PAD_ORDER:
 			var button: Button = _controls[id]
-			if not button.disabled:
+			if not button.disabled and button.is_visible_in_tree():
 				button.grab_focus()
 				break
 	else:
 		var focused: Control = _screen.get_viewport().gui_get_focus_owner()
 		if focused != null:
 			focused.release_focus()
+
+## Sets a button's theme variation only when it changes (it costs a theme lookup).
+static func _set_variation(button: Control, variation: StringName) -> void:
+	if button.theme_type_variation != variation:
+		button.theme_type_variation = variation
+
+## After a popup closes under an open gamepad menu, focus goes back to the control that opened it.
+func _restore_focus_after_popup() -> void:
+	if not _pad_menu_open:
+		return
+	var back: Button = _controls.get(_popup_opener) as Button
+	if back != null and back.is_visible_in_tree():
+		back.grab_focus()
+
+var _popup_opener: String = "how_to_play"
 
 ## Join swaps Main for the PC client under an open pad menu: let go of
 ## PadMenu on the way out, or the seat code would ignore A and B from then on.
@@ -333,6 +560,8 @@ func unhandled_key_input(event: InputEvent) -> void:
 	var lobby_panel: Control = _screen._lobby_panel
 	if _screen._server == null or key == null or not key.pressed or key.echo or lobby_panel == null or not lobby_panel.visible:
 		return
+	if _screen.popup_open() != "":
+		return # a popup is up: the lobby's keys wait
 	if _screen.title_visible():
 		for kind: String in TitleScreenScript.TITLE_KEYS:
 			if key.physical_keycode == TitleScreenScript.TITLE_KEYS[kind]:

@@ -12,8 +12,7 @@ extends SceneTree
 ##
 ## States: title; lobby in Couch, Online and Solo with 0, 3 and 8 seats (Couch
 ## with 3 has a gamepad seat, which carries the pad picker); how_to_play and
-## your_look (crops of the lobby's How to play column and the Online host
-## picker); settings; esc_menu (settings open over a live Solo match); the
+## your_look (the lobby with its How to play and Your look popups open); settings; esc_menu (settings open over a live Solo match); the
 ## PC join screen; the in-match HUD with 8 players; victory with 8 players.
 ## Online has no empty room (the host PC always holds a seat), so its "0" is
 ## the host alone. A 0/3/8 seat count is the bots the host's counter seats,
@@ -203,8 +202,10 @@ func _title_and_couch() -> void:
 	screen.press_title("local")
 	await _seats(rig, 0)
 	await _shot("lobby_couch_0")
-	var how: Control = screen.how_to_play_panel()
-	await _shot("how_to_play", how.get_global_rect() if how != null else Rect2())
+	screen.set_popup("help") # the popup holds the four live demos (#547)
+	await _frames(60) # the demos need a moment to play
+	await _shot("how_to_play")
+	screen.set_popup("")
 	await _pad_claim(4) # a gamepad seat first: its card carries the pad picker
 	await _seats(rig, 3)
 	await _shot("lobby_couch_3_pad")
@@ -222,8 +223,9 @@ func _online() -> void:
 	await _wait_until(func() -> bool: return server.is_online(), 8000)
 	await _seats(rig, 1) # the host's own seat is always there
 	await _shot("lobby_online_0")
-	var picker: Control = screen.host_picker()
-	await _shot("your_look", picker.get_global_rect() if picker != null and picker.is_visible_in_tree() else Rect2())
+	screen.set_popup("look")
+	await _shot("your_look")
+	screen.set_popup("")
 	await _seats(rig, 3)
 	await _shot("lobby_online_3")
 	await _seats(rig, 8)

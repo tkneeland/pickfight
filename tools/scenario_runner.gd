@@ -738,6 +738,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_double_ko_replays_overtime_556",
 	"stock_sudden_death_leaves_no_rocks_behind_556",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
+	"lobby_empty_seat_label_stays_on_one_line_at_1280x800_547",
+	"lobby_eight_seats_with_pad_picker_fit_the_viewport_couch_and_online_547",
+	"pad_left_stick_drives_the_lobby_picker_like_the_dpad_547",
+	"lobby_pad_picker_arrows_only_on_the_selected_row_547",
+	"lobby_kind_keys_and_join_only_online_547",
+	"lobby_mode_card_click_picks_the_mode_and_its_format_547",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2603,6 +2609,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
+		"lobby_empty_seat_label_stays_on_one_line_at_1280x800_547":
+			return await _scenario_lobby_empty_seat_label_stays_on_one_line_at_1280x800_547()
+		"lobby_eight_seats_with_pad_picker_fit_the_viewport_couch_and_online_547":
+			return await _scenario_lobby_eight_seats_with_pad_picker_fit_the_viewport_couch_and_online_547()
+		"pad_left_stick_drives_the_lobby_picker_like_the_dpad_547":
+			return await _scenario_pad_left_stick_drives_the_lobby_picker_like_the_dpad_547()
+		"lobby_pad_picker_arrows_only_on_the_selected_row_547":
+			return await _scenario_lobby_pad_picker_arrows_only_on_the_selected_row_547()
+		"lobby_kind_keys_and_join_only_online_547":
+			return await _scenario_lobby_kind_keys_and_join_only_online_547()
+		"lobby_mode_card_click_picks_the_mode_and_its_format_547":
+			return await _scenario_lobby_mode_card_click_picks_the_mode_and_its_format_547()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -13934,6 +13952,8 @@ func _scenario_lobby_how_to_play_on_host_screen_only() -> Array[String]:
 	var roster: Node = loop["roster"]
 	var rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm.get("_lobby_screen").set_popup("help") # the explainer is the How to play popup (#547)
+	await _await_ticks(2)
 	var panel: Control = rm.how_to_play_panel()
 	if panel == null or not panel.is_visible_in_tree():
 		failures.append("the lobby shows no how-to-play panel")
@@ -21425,32 +21445,22 @@ const HOWTO_DEMO_MIN_TRAVEL: float = 30.0
 ## The how-to-play demos under the lobby's panel (HowToPlayDemo.gd).
 func _howto_demos(rm: Node) -> Array[Node]:
 	var out: Array[Node] = []
-	var panel: Control = rm.how_to_play_panel()
-	if panel == null:
-		return out
-	for child: Node in panel.get_children():
-		if child.has_method("demo_players") and not child.is_queued_for_deletion():
-			out.append(child)
+	for demo: Node in rm.get("_lobby_screen").how_to_play_demos(): # inside the How to play popup (#547)
+		if not demo.is_queued_for_deletion():
+			out.append(demo)
 	return out
 ## Issue #219: the lobby shows four looping demos with captions. Each is a
 ## SubViewport with a World2D of its own (not the match's, not another
 ## demo's), a real player on it that its canned thumb moves -- body or head
 ## travels -- and a caption. The lobby still fits the 1600x900 screen, and the
-## demos sit clear of the join QR and URL.
+## demos stand inside the How to play popup, on the screen (#547).
 func _scenario_lobby_how_to_play_demos_run_while_lobby_shows() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = _new_lobby_round(3)
 	var rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
-	# A join QR and URL as a networked host shows them (the stub roster has
-	# none), to keep clear of.
-	var qr: Array[Node] = rm.lobby_panel().find_children("*", "TextureRect", true, false)
-	if not qr.is_empty():
-		(qr[0] as TextureRect).texture = ImageTexture.create_from_image(Image.create(33, 33, false, Image.FORMAT_L8))
-		(qr[0] as TextureRect).visible = true
-		var url_label: Label = (qr[0] as Control).get_parent().get_child((qr[0] as Control).get_index() + 1) as Label
-		if url_label != null:
-			url_label.text = "http://192.168.100.200:8080/"
+	rm.get("_lobby_screen").set_popup("help") # the demos run while the popup is open (#547)
+	await _await_ticks(2)
 	var demos: Array[Node] = _howto_demos(rm)
 	if demos.size() != 4:
 		failures.append("the lobby shows %d how-to-play demos, expected 4" % demos.size())
@@ -21493,19 +21503,11 @@ func _scenario_lobby_how_to_play_demos_run_while_lobby_shows() -> Array[String]:
 	print("      lobby content %s on a %s screen" % [size, SCREEN_SIZE])
 	if size.x > SCREEN_SIZE.x or size.y > SCREEN_SIZE.y:
 		failures.append("the lobby with the demos needs %s, more than the %s screen" % [size, SCREEN_SIZE])
-	if qr.is_empty() or not (qr[0] as Control).is_visible_in_tree():
-		failures.append("the lobby shows no join QR to keep clear of")
-	else:
-		var keep_clear: Rect2 = (qr[0] as Control).get_global_rect()
-		var url: Control = (qr[0] as Control).get_parent().get_child((qr[0] as Control).get_index() + 1) as Control
-		if url is Label and (url as Label).text != "":
-			keep_clear = keep_clear.merge(url.get_global_rect())
-		for demo: Node in demos:
-			var rect: Rect2 = (demo as Control).get_global_rect()
-			if rect.intersects(keep_clear):
-				failures.append("%s %s overlaps the join QR and URL %s" % [demo.name, rect, keep_clear])
-			if rect.end.x > SCREEN_SIZE.x or rect.position.x < 0.0 or rect.end.y > SCREEN_SIZE.y or rect.position.y < 0.0:
-				failures.append("%s runs off the screen: %s" % [demo.name, rect])
+	# The demos stand in the How to play popup, over the lobby (#547): inside the screen.
+	for demo: Node in demos:
+		var rect: Rect2 = (demo as Control).get_global_rect()
+		if rect.end.x > SCREEN_SIZE.x or rect.position.x < 0.0 or rect.end.y > SCREEN_SIZE.y or rect.position.y < 0.0:
+			failures.append("%s runs off the screen: %s" % [demo.name, rect])
 	await _teardown(loop["stage"])
 	_scenario_completed = true
 	return failures
@@ -21519,6 +21521,8 @@ func _scenario_lobby_how_to_play_demos_freed_when_lobby_hides() -> Array[String]
 	var roster: Node = loop["roster"]
 	var rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm.get("_lobby_screen").set_popup("help") # the demos run while the popup is open (#547)
+	await _await_ticks(2)
 	var demos: Array[Node] = _howto_demos(rm)
 	if demos.size() != 4:
 		failures.append("the lobby shows %d how-to-play demos, expected 4" % demos.size())
@@ -21571,6 +21575,8 @@ func _scenario_lobby_how_to_play_demos_leak_nothing() -> Array[String]:
 	stage.add_child(juice)
 	var sfx: Node = _sfx()
 	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm.get("_lobby_screen").set_popup("help") # the demos run while the popup is open (#547)
+	await _await_ticks(2)
 	if sfx != null:
 		# Nothing an earlier scenario's round left queued to say.
 		var announcer: Node = sfx.get_node_or_null(^"Announcer")
@@ -21728,6 +21734,8 @@ func _scenario_lobby_settings_panel_clears_how_to_play_captions() -> Array[Strin
 	if not ui.is_open():
 		ui.toggle_panel()
 	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm.get("_lobby_screen").set_popup("help") # #547: the explainer is a popup
+	await _await_ticks(2)
 	var how_to_play: Control = rm.how_to_play_panel()
 	var settings_panel: Control = ui.get_node_or_null(^"Corner/Panel") as Control
 	if how_to_play == null or not how_to_play.is_visible_in_tree() or settings_panel == null:
@@ -22009,7 +22017,7 @@ func _last_lobby_msg_236(peer: WebSocketPeer) -> Dictionary:
 ## Issue #236: each phone's own pick is honoured and everyone who has not
 ## picked is balanced onto the smaller team, Red on a tie; the lobby state
 ## tells the phones who is on which team and who picked, the lobby screen
-## shows the two rosters, and the match plays on those teams.
+## tags every player card with its team, and the match plays on those teams.
 func _scenario_teams_pick_and_auto_balance() -> Array[String]:
 	var failures: Array[String] = []
 	var cases: Array = [
@@ -22046,23 +22054,15 @@ func _scenario_teams_pick_and_auto_balance() -> Array[String]:
 		picks[int(entry["slot"])] = int(entry.get("pick", -99))
 	if picks != {0: -1, 1: 0, 2: -1}:
 		failures.append("the phones were told the picks %s, expected {0:-1, 1:0, 2:-1}" % [picks])
-	var rosters: Control = rm._lobby_screen.team_rosters() if rm._lobby_screen != null else null
-	if rosters == null:
-		failures.append("the Teams lobby screen showed no team rosters")
-	else:
-		var red: Node = rosters.get_node_or_null("RedRoster")
-		var blue: Node = rosters.get_node_or_null("BlueRoster")
-		if red == null or blue == null:
-			failures.append("the rosters had no Red and Blue columns: %s" % [rosters.get_children()])
-		else:
-			var red_header: String = (red.get_child(0) as Label).text
-			var blue_header: String = (blue.get_child(0) as Label).text
-			print("      rosters: '%s' with %d rows, '%s' with %d rows" % [red_header, red.get_child_count() - 1, blue_header, blue.get_child_count() - 1])
-			if red_header != "RED TEAM (2)" or blue_header != "BLUE TEAM (1)":
-				failures.append("the roster headers read '%s' and '%s'" % [red_header, blue_header])
-			if red.get_child_count() != 3 or blue.get_child_count() != 2:
-				failures.append("the rosters listed %d Red and %d Blue players, expected 2 and 1" % [
-					red.get_child_count() - 1, blue.get_child_count() - 1])
+	# The lobby screen tags each player card with its team: Red first, then Blue (#547).
+	var lobby_screen: CanvasLayer = rm._lobby_screen
+	var tags: Dictionary = {}
+	for slot in 3:
+		var card: Control = lobby_screen.player_card(slot) if lobby_screen != null else null
+		tags[slot] = card.meta_text() if card != null else "<no card>"
+	print("      team tags: %s" % [tags])
+	if str(tags[0]) != "BLUE TEAM (auto)" or str(tags[1]) != "RED TEAM" or str(tags[2]) != "RED TEAM (auto)":
+		failures.append("the player cards read %s, expected slot 0 on BLUE TEAM (auto), slot 1 on RED TEAM (its pick) and slot 2 on RED TEAM (auto)" % [tags])
 	# A pick changed in the lobby moves that player, and the rest rebalance.
 	roster.team_picks = {1: TeamsScript236.RED, 0: TeamsScript236.RED}
 	await _await_ticks(LOBBY_SETTLE_TICKS)
@@ -22564,8 +22564,9 @@ func _scenario_teams_ffa_unchanged_when_off() -> Array[String]:
 			if entry_keys != want_entry:
 				failures.append("a free-for-all lobby player entry had keys %s" % [entry_keys])
 				break
-	if rm._lobby_screen != null and rm._lobby_screen.team_rosters() != null:
-		failures.append("a free-for-all lobby showed team rosters")
+	for card: Control in rm._lobby_screen.player_cards():
+		if card.meta_text().contains("TEAM"):
+			failures.append("a free-for-all lobby showed a team tag: '%s'" % card.meta_text())
 	roster.ready_slots = {0: true, 1: true}
 	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("the free-for-all match never started")
@@ -23705,7 +23706,7 @@ func _scenario_host_screen_start_match_without_phone() -> Array[String]:
 		failures.append("the host-screen Go online never came up (%s)" % server.online_status())
 	rig["code"] = server.online_room_code()
 	screen.refresh_controls()
-	if not screen.control_button("online").text.ends_with("Online") or screen.get_node("LobbyPanel").find_child("RoomCode", true, false).text != "Online: " + rig["code"]:
+	if not screen.control_button("online").text.ends_with("Online") or screen.get_node("LobbyPanel").find_child("RoomCode", true, false).text != rig["code"]:
 		failures.append("the lobby screen does not show the online state / room code")
 	var remote: WebSocketPeer = await _online_remote_239(rig, "start-remote")
 	var slot_msg: Dictionary = await _online_wait_239(rig, remote, "slot") if remote != null else {}
@@ -29363,7 +29364,7 @@ func _scenario_streamer_mode_shows_room_code_and_qr_when_off() -> Array[String]:
 	var room: Label = lobby.get("_room_label") as Label
 	var url: Label = lobby.get("_lobby_url") as Label
 	var qr: TextureRect = lobby.get("_lobby_qr") as TextureRect
-	if not room.visible or room.text != "Online: " + rig["code"]:
+	if not room.visible or room.text != rig["code"]:
 		failures.append("the lobby does not show the room code (visible %s, '%s')" % [room.visible, room.text])
 	if url.text != server.join_url:
 		failures.append("the lobby URL line reads '%s', wanted %s" % [url.text, server.join_url])
@@ -30030,6 +30031,7 @@ func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
 	var rm: Node = main.get_node("RoundManager")
 	get_root().add_child(main)
 	await _await_ticks(LOBBY_SETTLE_TICKS)
+	rm.get("_lobby_screen").set_popup("help")
 	var how_to_play: Control = rm.how_to_play_panel()
 	if how_to_play == null:
 		failures.append("no how-to-play panel in the lobby")
@@ -30038,7 +30040,7 @@ func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
 		for label: Node in how_to_play.find_children("*", "Label", true, false):
 			texts.append((label as Label).text)
 		print("      lobby labels in xx: %s" % ", ".join(texts))
-		if not texts.has("[xx] HOW TO PLAY"):
+		if not texts.has("[xx] How to play"):
 			failures.append("the lobby's how-to-play title did not change: %s" % ", ".join(texts))
 	await _teardown(main)
 	TranslationServer.set_locale(was_locale)
@@ -32301,15 +32303,15 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	Input.parse_input_event(key)
 	Input.flush_buffered_events()
 	await _await_ticks(3)
-	if screen.pad_active() or not screen.control_button("start").text.contains("(Enter)"):
-		failures.append("with the keyboard active the start button reads '%s'" % screen.control_button("start").text)
+	if screen.pad_active() or not screen.control_button("join").text.contains("(J)"):
+		failures.append("with the keyboard active the join button reads '%s'" % screen.control_button("join").text)
 	await _pad_tap_368(0, JOY_BUTTON_DPAD_UP)
 	await _await_ticks(3)
 	if not screen.pad_active():
 		failures.append("a gamepad press did not make the gamepad the active input")
-	var text: String = screen.control_button("start").text
-	if text.contains("Enter") or text.contains("("):
-		failures.append("with a gamepad active the start button still reads '%s'" % text)
+	var text: String = screen.control_button("join").text
+	if text.contains("(J)") or text.contains("("):
+		failures.append("with a gamepad active the join button still reads '%s'" % text)
 	var hint: Label = screen.lobby_panel().find_child("GamepadHint", true, false) as Label
 	if hint == null or not hint.text.contains("Y"):
 		failures.append("no gamepad hint naming Y (hint %s, text '%s', locale %s)" % [hint != null, hint.text if hint != null else "", TranslationServer.get_locale()])
@@ -32375,25 +32377,25 @@ func _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players() -> Arr
 	var cards: Control = screen.lobby_panel().find_child("ModeCards", true, false) as Control
 	print("      QR %s, cards %s, %d cards" % [qr.get_global_rect(), cards.get_global_rect(), screen.mode_cards().size()])
 	failures.append_array(_lobby_rects_425(screen, qr))
-	for card: Label in screen.mode_cards():
+	for card: Label in screen.mode_rules():
 		if card.get_visible_line_count() < card.get_line_count():
 			failures.append("mode card '%s' is cut off (%d of %d lines)" % [card.text, card.get_visible_line_count(), card.get_line_count()])
 	if screen.mode_cards().size() < 7:
 		failures.append("only %d mode cards" % screen.mode_cards().size())
-	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 340.0:
-		failures.append("the QR is %s, under 340 px square" % qr.get_global_rect().size)
-	var before: Rect2 = qr.get_global_rect()
+	# The QR gives way to the cards (#547): it keeps at least the 150 px minimum, not the 340 of the old column.
+	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 150.0:
+		failures.append("the QR is %s, under 150 px square" % qr.get_global_rect().size)
 	var added: Label = screen.append_mode_card("Eighth Mode: A rule line about as long as the others are.")
 	await _await_ticks(4)
-	if screen.mode_cards().size() < 8 or not screen.mode_cards().has(added):
+	if screen.mode_cards().size() < 8 or not screen.mode_rules().has(added):
 		failures.append("the extra card did not join the grid")
-	if qr.get_global_rect() != before:
-		failures.append("adding an eighth card moved or resized the QR: %s -> %s" % [before, qr.get_global_rect()])
+	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 150.0:
+		failures.append("adding an eighth card shrank the QR to %s" % qr.get_global_rect().size)
 	failures.append_array(_lobby_rects_425(screen, qr))
 	screen.append_mode_card("Ninth Mode: Another rule line about as long as the others.")
 	await _await_ticks(4)
-	if qr.get_global_rect() != before:
-		failures.append("adding a ninth card moved or resized the QR: %s -> %s" % [before, qr.get_global_rect()])
+	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 150.0:
+		failures.append("adding a ninth card shrank the QR to %s" % qr.get_global_rect().size)
 	failures.append_array(_lobby_rects_425(screen, qr))
 	await _teardown(rig["main"])
 	return failures
@@ -32763,10 +32765,10 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 	var failures: Array[String] = []
 	var server: Node = rig["server"]
 	var screen: CanvasLayer = rig["screen"]
-	if not join.text.contains("someone else") or not join.text.contains("(J)"):
-		failures.append("the join control reads '%s', not a Join someone else's game (J) label" % join.text)
-	if join.get_global_rect().position.y >= screen.control_button("online").get_global_rect().position.y:
-		failures.append("Join %s is not above Go online %s at the top of the host controls" % [join.get_global_rect(), screen.control_button("online").get_global_rect()])
+	if not join.text.contains("someone's game") or not join.text.contains("(J)"):
+		failures.append("the join control reads '%s', not a Join someone's game (J) label" % join.text)
+	if join.visible:
+		failures.append("the Join control shows outside an Online lobby (#547)")
 	server.apply_host_command("kind", "online") # #435: the host-PC seat and the room come with it
 	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != "", 5000):
 		failures.append("Go online never came up (%s)" % server.online_status())
@@ -33951,9 +33953,9 @@ func _scenario_title_screen_offers_couch_online_and_solo_and_no_pc_seat_control(
 		failures.append("Solo opened a room (%s, '%s')" % [server.online_status(), server.online_room_code()])
 	if server.host_pc_slot() == -1:
 		failures.append("Solo has no host PC seat")
-	var kind_button: Button = screen.control_button("online")
-	if kind_button == null or not kind_button.text.ends_with(TranslationServer.translate("MATCH_SOLO")):
-		failures.append("the match control reads '%s', expected Solo" % (kind_button.text if kind_button != null else "missing"))
+	var kind_button: Button = screen.control_button("solo")
+	if kind_button == null or kind_button.theme_type_variation != &"SegButtonOn":
+		failures.append("the match switch does not show Solo picked (%s)" % (kind_button.theme_type_variation if kind_button != null else "missing"))
 	# No "Play on this PC" left anywhere in the lobby.
 	if screen.control_button("pc_seat") != null:
 		failures.append("the lobby still has a pc_seat control")
@@ -34179,8 +34181,9 @@ func _slot_of_id_441(server: Node, id: String) -> int:
 		if server._slot_client_id[slot] == id and server._slot_claimed[slot] == 1:
 			return slot
 	return -1
-## Acceptance: a pad seat cycles hat, colour and eyes with the D-pad and
-## bumpers, and its body shows each pick. Outside the lobby the bumpers do nothing.
+## Acceptance: a pad seat cycles hat, colour and eyes with the D-pad (up and
+## down pick the row, left and right change it; the bumpers are not the picker's
+## any more, #547), and its body shows each pick. Outside the lobby the D-pad does nothing.
 func _scenario_cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _phone_rig_164(4, "Pick441")
@@ -34200,21 +34203,21 @@ func _scenario_cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them() -> Arr
 	await process_frame
 	if card.selected_row() != "hat":
 		failures.append("the cursor starts on '%s', expected hat" % card.selected_row())
-	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	await _pad_button_261(3, JOY_BUTTON_DPAD_RIGHT)
 	if server.slot_hat(slot) != "crown" or body.hat_id() != "crown":
-		failures.append("RB on the hat row gave hat '%s', body '%s'; expected crown" % [server.slot_hat(slot), body.hat_id()])
-	await _pad_button_261(3, JOY_BUTTON_LEFT_SHOULDER)
-	await _pad_button_261(3, JOY_BUTTON_LEFT_SHOULDER)
+		failures.append("D-pad right on the hat row gave hat '%s', body '%s'; expected crown" % [server.slot_hat(slot), body.hat_id()])
+	await _pad_button_261(3, JOY_BUTTON_DPAD_LEFT)
+	await _pad_button_261(3, JOY_BUTTON_DPAD_LEFT)
 	if server.slot_hat(slot) != "propeller":
-		failures.append("LB twice from crown gave '%s', expected propeller (wrapping)" % server.slot_hat(slot))
+		failures.append("D-pad left twice from crown gave '%s', expected propeller (wrapping)" % server.slot_hat(slot))
 	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
-	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	await _pad_button_261(3, JOY_BUTTON_DPAD_RIGHT)
 	if server.slot_color(slot) != 1 or body.identity_color != server.palette_color(1):
-		failures.append("RB on the colour row gave colour %d, body %s; expected 1 (%s)" % [server.slot_color(slot), body.identity_color, server.palette_color(1)])
+		failures.append("D-pad right on the colour row gave colour %d, body %s; expected 1 (%s)" % [server.slot_color(slot), body.identity_color, server.palette_color(1)])
 	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
-	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	await _pad_button_261(3, JOY_BUTTON_DPAD_RIGHT)
 	if server.slot_eyes(slot) != "sleepy" or body.eyes_id() != "sleepy":
-		failures.append("RB on the eyes row gave eyes '%s', body '%s'; expected sleepy" % [server.slot_eyes(slot), body.eyes_id()])
+		failures.append("D-pad right on the eyes row gave eyes '%s', body '%s'; expected sleepy" % [server.slot_eyes(slot), body.eyes_id()])
 	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
 	if card.selected_row() != "eyes":
 		failures.append("D-pad down past the last row left the cursor on '%s'" % card.selected_row())
@@ -34228,12 +34231,12 @@ func _scenario_cosmetics_pad_cycles_hat_colour_eyes_and_body_shows_them() -> Arr
 	if not server.slot_ready(slot):
 		failures.append("A did not ready the seat beside the picker")
 	server.set_lobby_state({"phase": "playing", "players": []})
-	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	await _pad_button_261(3, JOY_BUTTON_DPAD_RIGHT)
 	await process_frame
 	if server.pad_picker_shown(slot) or card.visible:
 		failures.append("the picker still shows mid-round")
 	if server.slot_eyes(slot) != "sleepy":
-		failures.append("RB mid-round changed the eyes to '%s'" % server.slot_eyes(slot))
+		failures.append("D-pad right mid-round changed the eyes to '%s'" % server.slot_eyes(slot))
 	await _teardown(rig["stage"])
 	return failures
 ## Acceptance: a colour a phone wears is skipped by a pad cycling, a phone
@@ -34256,22 +34259,22 @@ func _scenario_cosmetics_colour_taken_by_phone_is_skipped_by_pad_and_reverse() -
 	if server.slot_color(phone) != 1:
 		failures.append("the phone could not take free colour 1 (has %d)" % server.slot_color(phone))
 	await _pad_button_261(2, JOY_BUTTON_DPAD_DOWN)
-	await _pad_button_261(2, JOY_BUTTON_RIGHT_SHOULDER)
+	await _pad_button_261(2, JOY_BUTTON_DPAD_RIGHT)
 	if server.slot_color(pad) != 2:
-		failures.append("RB from colour 0 gave %d; expected 2, skipping the phone's 1" % server.slot_color(pad))
-	await _pad_button_261(2, JOY_BUTTON_RIGHT_SHOULDER)
-	await _pad_button_261(2, JOY_BUTTON_RIGHT_SHOULDER)
+		failures.append("D-pad right from colour 0 gave %d; expected 2, skipping the phone's 1" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_DPAD_RIGHT)
+	await _pad_button_261(2, JOY_BUTTON_DPAD_RIGHT)
 	if server.slot_color(pad) != 0:
-		failures.append("RB from 3 gave %d; expected to wrap to 0" % server.slot_color(pad))
-	await _pad_button_261(2, JOY_BUTTON_LEFT_SHOULDER)
+		failures.append("D-pad right from 3 gave %d; expected to wrap to 0" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_DPAD_LEFT)
 	if server.slot_color(pad) != 3:
-		failures.append("LB from 0 gave %d; expected 3" % server.slot_color(pad))
-	await _pad_button_261(2, JOY_BUTTON_LEFT_SHOULDER)
+		failures.append("D-pad left from 0 gave %d; expected 3" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_DPAD_LEFT)
 	if server.slot_color(pad) != 2:
-		failures.append("LB from 3 gave %d; expected 2" % server.slot_color(pad))
-	await _pad_button_261(2, JOY_BUTTON_LEFT_SHOULDER)
+		failures.append("D-pad left from 3 gave %d; expected 2" % server.slot_color(pad))
+	await _pad_button_261(2, JOY_BUTTON_DPAD_LEFT)
 	if server.slot_color(pad) != 0:
-		failures.append("LB from 2 gave %d; expected 0, skipping the phone's 1" % server.slot_color(pad))
+		failures.append("D-pad left from 2 gave %d; expected 0, skipping the phone's 1" % server.slot_color(pad))
 	# The reverse: the phone asks for the pad's colour and is refused.
 	server._handle_text(phone, '{"t":"color","v":0}')
 	if server.slot_color(phone) != 1 or server.slot_color(pad) != 0:
@@ -35522,6 +35525,7 @@ func _host_picker_rig_441(saved: Dictionary, pad_first: bool) -> Dictionary:
 	screen.build_panels()
 	screen.attach_controls(server)
 	screen.show_panel("lobby") # #545: the picker only works while it is in the visible tree
+	screen.set_popup("look") # #547: the panel lives in the Your look popup
 	await process_frame
 	screen.refresh_controls()
 	rig["screen"] = screen
@@ -35661,7 +35665,7 @@ func _scenario_couch_bots_alone_never_start_a_match() -> Array[String]:
 		failures.append("two counter bots alone left the lobby (state %d)" % rm._state)
 	await _kind_close_435(rig)
 	return failures
-## #505: O from Solo goes to Couch, and Solo's bots do not come along.
+## #505: C from Solo goes to Couch (O goes to Online, #547), and Solo's bots do not come along.
 func _scenario_solo_switching_to_couch_sends_the_bots_away() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _kind_rig_435(failures)
@@ -35672,10 +35676,10 @@ func _scenario_solo_switching_to_couch_sends_the_bots_away() -> Array[String]:
 	await _await_ticks(5)
 	if server.bot_director.bot_count() != 3:
 		failures.append("solo seated %d bots, expected 3" % server.bot_director.bot_count())
-	rig["screen"].press_control("online")
+	rig["screen"].press_control("local")
 	await _await_ticks(5)
 	if server.match_kind() != "local" or server.bot_director.bot_count() != 0:
-		failures.append("after O from Solo: kind '%s' with %d bots, expected Couch and none" % [server.match_kind(), server.bot_director.bot_count()])
+		failures.append("after C from Solo: kind '%s' with %d bots, expected Couch and none" % [server.match_kind(), server.bot_director.bot_count()])
 	await _kind_close_435(rig)
 	return failures
 ## #506: Cancel on the Online join menu, pressed with a real click or Esc mid-join, aborts the join and hangs up.
@@ -36109,8 +36113,10 @@ func _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage() -> Ar
 		failures.append("strike_landed reported %.1f but the shield let through %.1f" % [reported[0], taken])
 	await _teardown(stage)
 	return failures
-## Issue #511: a pad's bumper that cycles the lobby picker does not also let the
-## weapon go; mid-round it still does.
+## Issue #511, reversed by #547: the lobby picker no longer uses the bumpers, so
+## the conflict is gone. In the lobby a bumper only lets the weapon go and never
+## changes the look; the D-pad (left and right) cycles the hat and lets nothing go.
+## Mid-round the bumper still releases.
 func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _phone_rig_164(4, "Bump511")
@@ -36124,11 +36130,17 @@ func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[Stri
 		return failures
 	var hat_before: String = server.slot_hat(slot)
 	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
-	if server.slot_hat(slot) == hat_before:
-		failures.append("RB did not cycle the hat (still '%s')" % hat_before)
-	if server.slot_released(slot):
-		failures.append("RB in the lobby picker also released the weapon")
+	if server.slot_hat(slot) != hat_before:
+		failures.append("RB changed the hat to '%s'; the bumpers are not the picker's any more" % server.slot_hat(slot))
+	if not server.slot_released(slot):
+		failures.append("RB in the lobby no longer lets the weapon go")
 	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
+	await _pad_button_261(3, JOY_BUTTON_DPAD_RIGHT)
+	if server.slot_hat(slot) == hat_before:
+		failures.append("D-pad right did not cycle the hat (still '%s')" % hat_before)
+	if server.slot_released(slot):
+		failures.append("D-pad right in the lobby picker released the weapon")
+	await _pad_button_261(3, JOY_BUTTON_DPAD_RIGHT, false)
 	server.set_lobby_state({"phase": "playing", "players": []})
 	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
 	if not server.slot_released(slot):
@@ -37011,10 +37023,10 @@ func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[Str
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	server.apply_host_command("mode", "teams")
 	var cases: Array = [
-		[GameModesType.CLASSIC, "Teams  -  first to %d" % server.match_target(), "first_to"],
-		[GameModesType.STOCK, "Lives 4", "lives"],
-		[GameModesType.SOCCER, "Goals to win 5", "goals"],
-		[GameModesType.CAPTURE_THE_FLAG, "Captures to win 6", "captures"],
+		[GameModesType.CLASSIC, "Classic - Teams - first to %d" % server.match_target(), "first_to", "First to", str(server.match_target())],
+		[GameModesType.STOCK, "Stock - Teams - 4 lives", "lives", "Lives", "4"],
+		[GameModesType.SOCCER, "Soccer - Teams - 5 goals", "goals", "Goals to win", "5"],
+		[GameModesType.CAPTURE_THE_FLAG, "Capture the Flag - Teams - 6 captures", "captures", "Captures to win", "6"],
 	]
 	for case: Array in cases:
 		if not server.set_game_mode(case[0]):
@@ -37026,7 +37038,12 @@ func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[Str
 			failures.append("%s lobby state kind is '%s', wanted %s" % [case[0], state.get("target_kind"), case[2]])
 		var label: Label = rm.get("_lobby_screen").get("_lobby_target_label")
 		if label.text != case[1]:
-			failures.append("%s lobby row reads '%s', wanted '%s'" % [case[0], label.text, case[1]])
+			failures.append("%s status line reads '%s', wanted '%s'" % [case[0], label.text, case[1]])
+		# The Host panel's row is labelled by the mode and shows the same value (#547).
+		var row_label: Label = rm.get("_lobby_screen").lobby_panel().find_child("TargetLabel", true, false) as Label
+		var row_value: Label = rm.get("_lobby_screen").lobby_panel().find_child("TargetValue", true, false) as Label
+		if row_label == null or row_value == null or row_label.text != case[3] or row_value.text != case[4]:
+			failures.append("%s Host panel row reads '%s' %s, wanted '%s' %s" % [case[0], row_label.text if row_label != null else "-", row_value.text if row_value != null else "-", case[3], case[4]])
 	await _teardown(main)
 	_mode_targets_reset_544()
 	return failures
@@ -37392,4 +37409,246 @@ func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Arr
 	if server.bot_director.bot_count() != 3:
 		failures.append("Solo seated %d bots, wanted 3" % server.bot_director.bot_count())
 	await _online_close_239(rig)
+	return failures
+
+# --- Lobby restyle (#547) ----------------------------------------------------------
+## Every visible control of the lobby, as (path, rect) pairs outside `window` once the
+## canvas is scaled into it: the screen's own check that nothing clips.
+func _lobby_clipped_547(screen: CanvasLayer, window: Rect2) -> Array[String]:
+	var out: Array[String] = []
+	var to_px: Transform2D = get_root().get_final_transform()
+	for node: Node in screen.lobby_panel().find_children("*", "Control", true, false):
+		var control: Control = node as Control
+		if not control.is_visible_in_tree() or control.is_queued_for_deletion():
+			continue
+		var rect: Rect2 = control.get_global_rect()
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			continue
+		var px: Rect2 = to_px * rect
+		if not window.grow(0.5).encloses(px):
+			out.append("%s %s is outside the window %s" % [screen.lobby_panel().get_path_to(control), px, window])
+	return out
+## The empty-seat hint is one line at every resolution (1280x800 is the tight
+## one) and sits inside its seat, in Couch, Online and Solo.
+func _scenario_lobby_empty_seat_label_stays_on_one_line_at_1280x800_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var original: Vector2i = get_root().size
+	get_root().size = Vector2i(1280, 800)
+	await _await_ticks(2)
+	var to_px: Transform2D = get_root().get_final_transform()
+	for kind: String in ["local", "solo", "online"]:
+		server.apply_host_command("kind", kind)
+		screen.show_panel("lobby")
+		for _i in 2:
+			screen.refresh_lobby(_lobby_state_425(1), 2, server)
+			await _await_ticks(2)
+		var seats: Array[Control] = screen.open_seats()
+		if seats.is_empty():
+			failures.append("%s: no open seat showing with one player" % kind)
+		for seat: Control in seats:
+			var hint: Label = seat.hint_label()
+			if hint.text.is_empty():
+				failures.append("%s: an open seat has no hint" % kind)
+			elif hint.get_line_count() != 1:
+				failures.append("%s: the hint '%s' wraps onto %d lines" % [kind, hint.text, hint.get_line_count()])
+			var seat_px: Rect2 = to_px * seat.get_global_rect()
+			var hint_px: Rect2 = to_px * hint.get_global_rect()
+			if not seat_px.encloses(hint_px):
+				failures.append("%s: the hint '%s' %s runs out of its seat %s at 1280x800" % [kind, hint.text, hint_px, seat_px])
+	get_root().size = original
+	await _await_ticks(1)
+	await _kind_close_435(rig)
+	return failures
+## Eight seats with a gamepad's picker card among them, in Couch and in Online,
+## at 1600x900, 1920x1080 and 1280x800: every control of the lobby sits inside the viewport.
+func _scenario_lobby_eight_seats_with_pad_picker_fit_the_viewport_couch_and_online_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var original: Vector2i = get_root().size
+	for kind: String in ["local", "online"]:
+		server.apply_host_command("kind", kind)
+		screen.show_panel("lobby")
+		if kind == "online":
+			server.apply_host_command("bots", 0)
+		if server.pad_slot(0) == -1:
+			await _pad_tap_368(0, JOY_BUTTON_A)
+		server.apply_host_command("bots", 8)
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if server.claimed_slots().size() != 8:
+			failures.append("%s: %d seats claimed, expected 8" % [kind, server.claimed_slots().size()])
+		var pad_cards: int = 0
+		for card: Control in screen.player_cards():
+			if card.picker() != null and card.picker().is_visible_in_tree():
+				pad_cards += 1
+		if screen.player_cards().size() != 8 or pad_cards != 1:
+			failures.append("%s: %d cards with %d showing a pad picker, expected 8 and 1" % [kind, screen.player_cards().size(), pad_cards])
+		for res: Vector2i in LOBBY_RESOLUTIONS_425B:
+			get_root().size = res
+			await _await_ticks(3)
+			for line: String in _lobby_clipped_547(screen, Rect2(Vector2.ZERO, Vector2(res))):
+				failures.append("%s at %s: %s" % [kind, res, line])
+		get_root().size = original
+		await _await_ticks(2)
+	await _kind_close_435(rig)
+	return failures
+## The left stick drives a pad's lobby picker exactly like the D-pad: up and down
+## pick the row, left and right change the value, with a repeat delay (a single
+## Joy-Con has no D-pad). A readies the seat.
+func _scenario_pad_left_stick_drives_the_lobby_picker_like_the_dpad_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Stick547")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(3)
+	if slot != 0 or not server.pad_picker_shown(slot):
+		failures.append("the pad seat %d does not show its picker" % slot)
+		await _teardown(rig["stage"])
+		return failures
+	var hat0: String = server.slot_hat(slot)
+	server._test_pad_left_axes[3] = Vector2(0.3, 0.0)
+	await _await_ticks(6)
+	if server.slot_hat(slot) != hat0:
+		failures.append("a stick inside the threshold changed the hat to '%s'" % server.slot_hat(slot))
+	server._test_pad_left_axes[3] = Vector2(1.0, 0.0)
+	await _await_ticks(3)
+	var hat1: String = server.slot_hat(slot)
+	if hat1 == hat0:
+		failures.append("the stick pushed right did not change the hat (still '%s')" % hat0)
+	await _await_ticks(10)
+	if server.slot_hat(slot) != hat1:
+		failures.append("the stick repeated after 0.2 s, before its delay: '%s' -> '%s'" % [hat1, server.slot_hat(slot)])
+	await _await_ticks(40)
+	var hat2: String = server.slot_hat(slot)
+	if hat2 == hat1:
+		failures.append("the held stick never repeated after 0.7 s (still '%s')" % hat1)
+	server._test_pad_left_axes[3] = Vector2.ZERO
+	await _await_ticks(3)
+	var settled: String = server.slot_hat(slot)
+	await _await_ticks(40)
+	if server.slot_hat(slot) != settled:
+		failures.append("the centred stick kept changing the hat")
+	server._test_pad_left_axes[3] = Vector2(-1.0, 0.0)
+	await _await_ticks(3)
+	if server.slot_hat(slot) == settled:
+		failures.append("the stick pushed left did not step the hat back")
+	server._test_pad_left_axes[3] = Vector2.ZERO
+	await _await_ticks(3)
+	server._test_pad_left_axes[3] = Vector2(0.0, 1.0)
+	await _await_ticks(3)
+	if server.cosmetics_picker.row_name(slot) != "color":
+		failures.append("the stick pushed down left the cursor on '%s', expected colour" % server.cosmetics_picker.row_name(slot))
+	server._test_pad_left_axes[3] = Vector2.ZERO
+	await _await_ticks(3)
+	server._test_pad_left_axes[3] = Vector2(0.0, -1.0)
+	await _await_ticks(3)
+	if server.cosmetics_picker.row_name(slot) != "hat":
+		failures.append("the stick pushed up left the cursor on '%s', expected hat" % server.cosmetics_picker.row_name(slot))
+	server._test_pad_left_axes[3] = Vector2.ZERO
+	await _await_ticks(2)
+	await _pad_button_261(3, JOY_BUTTON_A)
+	if not server.slot_ready(slot):
+		failures.append("A did not ready the seat")
+	server._test_pad_left_axes.clear()
+	await _teardown(rig["stage"])
+	return failures
+## The in-card picker has no instruction text: ◀ ▶ show on the picked row only.
+func _scenario_lobby_pad_picker_arrows_only_on_the_selected_row_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Arrows547")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(3)
+	var card: Control = PadPickerCardScript441.new(server, slot)
+	rig["stage"].add_child(card)
+	await process_frame
+	await process_frame
+	var want: String = "◀▶"
+	for row in 3:
+		var expected: String = want if row == 0 else ""
+		if card.arrows_of(row) != expected:
+			failures.append("row %d shows arrows '%s', expected '%s' with the cursor on the hat row" % [row, card.arrows_of(row), expected])
+	await _pad_button_261(3, JOY_BUTTON_DPAD_DOWN)
+	await process_frame
+	await process_frame
+	if card.arrows_of(0) != "" or card.arrows_of(1) != want:
+		failures.append("after D-pad down the arrows read '%s' / '%s', expected none and %s" % [card.arrows_of(0), card.arrows_of(1), want])
+	for node: Node in card.find_children("*", "Label", true, false):
+		var text: String = (node as Label).text
+		for banned: String in ["D-pad", "LB", "RB", "stick", "bumper"]:
+			if text.contains(banned):
+				failures.append("the picker carries instruction text '%s'" % text)
+	await _teardown(rig["stage"])
+	return failures
+## C, O and S switch the match kind from the lobby (O no longer toggles); J does
+## nothing and the Join button hides outside Online.
+func _scenario_lobby_kind_keys_and_join_only_online_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_panel("lobby")
+	var keys: Dictionary = {KEY_C: "local", KEY_S: "solo", KEY_O: "online"}
+	for code: int in [KEY_S, KEY_C, KEY_O, KEY_S, KEY_C]:
+		var event := InputEventKey.new()
+		event.physical_keycode = code
+		event.pressed = true
+		screen._unhandled_key_input(event)
+		await _await_ticks(3)
+		if server.match_kind() != keys[code]:
+			failures.append("key %s gave kind '%s', expected '%s'" % [OS.get_keycode_string(code), server.match_kind(), keys[code]])
+		var join: Button = screen.control_button("join")
+		if join.visible != (server.match_kind() == "online"):
+			failures.append("kind '%s': Join visible is %s" % [server.match_kind(), join.visible])
+	for kind: String in ["local", "solo"]:
+		server.apply_host_command("kind", kind)
+		await _await_ticks(3)
+		var event := InputEventKey.new()
+		event.physical_keycode = KEY_J
+		event.pressed = true
+		screen._unhandled_key_input(event)
+		await _await_ticks(2)
+		if not is_instance_valid(rig["main"]) or not (rig["main"] as Node).is_inside_tree():
+			failures.append("J left the %s lobby" % kind)
+			return failures
+	await _kind_close_435(rig)
+	return failures
+## A click on a mode card picks that mode; a mode that only plays in the other
+## format (Soccer needs Teams, Hot Potato needs Free-for-all) switches the format first.
+func _scenario_lobby_mode_card_click_picks_the_mode_and_its_format_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var cases: Array = [
+		[GameModesType.SOCCER, true], [GameModesType.CLASSIC, true], [GameModesType.HOT_POTATO, false],
+		[GameModesType.CAPTURE_THE_FLAG, true], [GameModesType.STOCK, true],
+	]
+	for case: Array in cases:
+		var card: Control = screen.mode_card(case[0])
+		if card == null:
+			failures.append("no mode card for '%s'" % case[0])
+			continue
+		(card.get_node("Pick") as Button).pressed.emit()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if server.game_mode() != case[0] or server.team_mode() != case[1]:
+			failures.append("clicking '%s' gave mode '%s', teams %s; expected teams %s" % [case[0], server.game_mode(), server.team_mode(), case[1]])
+		if card.theme_type_variation != &"ModeCardOn":
+			failures.append("the picked card '%s' is not highlighted (%s)" % [case[0], card.theme_type_variation])
+		for other: Label in screen.mode_cards():
+			if other.get_parent().get_parent() != card and other.get_parent().get_parent().theme_type_variation == &"ModeCardOn":
+				failures.append("another card is highlighted beside '%s'" % case[0])
+	await _teardown(rig["main"])
 	return failures

@@ -146,22 +146,62 @@ func move_row(slot: int, dir: int) -> void:
 
 func forget(slot: int) -> void:
 	_row.erase(slot)
+	_stick_dir.erase(slot)
+	_stick_wait.erase(slot)
 
-## A pad button on `slot`'s picker: D-pad up and down pick a row, the bumpers
-## cycle its option. True when the button was the picker's.
+## A pad button on `slot`'s picker: D-pad up and down pick a row, left and right
+## change its option (#547: the bumpers are not the picker's any more, so a bumper
+## only ever lets the weapon go). True when the button was the picker's.
 func pad_button(server: Object, slot: int, button: int) -> bool:
 	match button:
 		JOY_BUTTON_DPAD_UP:
 			move_row(slot, -1)
 		JOY_BUTTON_DPAD_DOWN:
 			move_row(slot, 1)
-		JOY_BUTTON_LEFT_SHOULDER:
+		JOY_BUTTON_DPAD_LEFT:
 			cycle(server, slot, -1)
-		JOY_BUTTON_RIGHT_SHOULDER:
+		JOY_BUTTON_DPAD_RIGHT:
 			cycle(server, slot, 1)
 		_:
 			return false
 	return true
+
+## The left stick does what the D-pad does (a single right Joy-Con has no D-pad):
+## past this deflection it counts as a press, then repeats after a delay.
+const STICK_THRESHOLD: float = 0.6
+const STICK_FIRST_REPEAT_SEC: float = 0.4
+const STICK_REPEAT_SEC: float = 0.18
+
+var _stick_dir: Dictionary = {} # slot -> Vector2i of the way the stick is held
+var _stick_wait: Dictionary = {} # slot -> seconds until it repeats
+
+## Feeds `slot`'s left stick `axis` for `delta` seconds: a press on the first
+## frame past the threshold, along the stick's stronger axis, and again after
+## STICK_FIRST_REPEAT_SEC and every STICK_REPEAT_SEC while it is held. Up and
+## down move the row, left and right change the value.
+func stick(server: Object, slot: int, axis: Vector2, delta: float) -> void:
+	var dir := Vector2i.ZERO
+	if axis.length() >= STICK_THRESHOLD:
+		dir = Vector2i(int(signf(axis.x)), 0) if absf(axis.x) >= absf(axis.y) else Vector2i(0, int(signf(axis.y)))
+	if dir == Vector2i.ZERO:
+		_stick_dir.erase(slot)
+		_stick_wait.erase(slot)
+		return
+	if _stick_dir.get(slot, Vector2i.ZERO) != dir:
+		_stick_dir[slot] = dir
+		_stick_wait[slot] = STICK_FIRST_REPEAT_SEC
+		_stick_press(server, slot, dir)
+		return
+	_stick_wait[slot] = float(_stick_wait.get(slot, STICK_REPEAT_SEC)) - delta
+	if float(_stick_wait[slot]) <= 0.0:
+		_stick_wait[slot] = float(_stick_wait[slot]) + STICK_REPEAT_SEC
+		_stick_press(server, slot, dir)
+
+func _stick_press(server: Object, slot: int, dir: Vector2i) -> void:
+	if dir.y != 0:
+		move_row(slot, dir.y)
+	else:
+		cycle(server, slot, dir.x)
 
 ## Steps `slot`'s current row one option `dir` through the server's own setters,
 ## the ones a phone's frames reach. A colour cycle skips colours another slot

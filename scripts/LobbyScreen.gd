@@ -11,8 +11,11 @@ extends CanvasLayer
 ##   - `TitleScreen.gd`: the Couch / Online / Solo title screen (#435).
 ##   - `VictoryScreen.gd`: the podium, awards row, stats table and end card.
 ##   - `RoundCards.gd`: the stage title card (#120) and the PAUSED banner (#149).
-##   - `HostControls.gd`: the lobby's host buttons and keys (#239), the gamepad
-##     host menu (#368) and the host PC's cosmetics picker (#441).
+##   - `HostControls.gd`: the lobby's top-bar kind switch, Host panel, buttons and
+##     keys (#239), the gamepad host menu (#368) and the host PC's picker (#441).
+##   - `LobbyCards.gd`, `LobbyPlayerCard.gd`, `LobbyEmptySeat.gd`: the 4x2 grid of
+##     player cards and open seats (#547).
+##   - `LobbyPopups.gd`: the How to play and Your look popups (#547).
 ##   - `ScreenKit.gd`: the palette and label / panel builders they share.
 ##
 ## Display only. RoundManager decides everything and tells this what to
@@ -35,6 +38,9 @@ const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
 const VictoryScreenScript := preload("res://scripts/VictoryScreen.gd")
 const RoundCardsScript := preload("res://scripts/RoundCards.gd")
 const HostControlsScript := preload("res://scripts/HostControls.gd")
+const LobbyCardsScript := preload("res://scripts/LobbyCards.gd")
+const LobbyPopupsScript := preload("res://scripts/LobbyPopups.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 const LOBBY_BACKGROUND: Color = ScreenKitScript.LOBBY_BACKGROUND
 const LOBBY_ACCENT: Color = ScreenKitScript.LOBBY_ACCENT
@@ -56,35 +62,37 @@ const PAD_ORDER: Array[String] = HostControlsScript.PAD_ORDER
 const TITLE_KINDS: Array[String] = TitleScreenScript.TITLE_KINDS
 const TITLE_KEYS: Dictionary = TitleScreenScript.TITLE_KEYS
 const TITLE_BUTTON_FONT_SIZE: int = TitleScreenScript.TITLE_BUTTON_FONT_SIZE
-## How wide the lobby's status line ("Scan to join: ...") runs before it
-## wraps.
-const LOBBY_STATUS_WIDTH_PX: float = 620.0
-## The lessons of the lobby's how-to-play panel, in order, each shown by a
-## looping demo (`HowToPlayDemo.gd`, #219) with its line as the caption.
+## The lessons of the How to play popup, in order, each shown by a looping demo
+## (`HowToPlayDemo.gd`, #219) with its line as the caption.
 const HOW_TO_PLAY_LINES: PackedStringArray = [
 	"Drag on your phone to swing your pick. Flick fast to hit hard.",
 	"Hook the pick on a ledge and pull to climb.",
 	"Touch a weapon pickup to grab it.",
 	"Hit them till they die, or knock them off. Last one standing wins.",
 ]
-## Issue #230. How much of the screen's bottom the how-to-play column keeps
-## clear: the host's Settings panel (`SfxSettings.gd`) opens upward from the
-## bottom-right corner, over this column, and covered the last caption. The
-## column centres itself in the height above this, so the open panel (its
-## volume sliders, boxes and button, about 265 px of the 900 px screen)
-## never reaches a caption.
-const SETTINGS_CORNER_RESERVE_PX: int = 280
-## The lobby's mode-card grid (#425): this many rows, this wide, each card this tall, so the QR above never shrinks for a new card.
-const MODE_GRID_ROWS: int = 4
-const MODE_GRID_WIDTH_PX: float = 436.0
-const MODE_CARD_HEIGHT_PX: float = 49.0
-const MODE_CARD_GAP_PX: int = 8
 const HOW_TO_PLAY_KINDS: Array[int] = [
 	HowToPlayDemoScript.Kind.SWING,
 	HowToPlayDemoScript.Kind.CLIMB,
 	HowToPlayDemoScript.Kind.PICKUP,
 	HowToPlayDemoScript.Kind.WIN,
 ]
+## The layout, in design px at 1600x900 (the mockup's): page margins, the three
+## columns' widths and the gaps (#547).
+const PAGE_MARGIN_SIDE_PX: int = 36
+const PAGE_MARGIN_TOP_PX: int = 16
+const PAGE_MARGIN_BOTTOM_PX: int = 34
+const LEFT_COLUMN_PX: float = 360.0
+const RIGHT_COLUMN_PX: float = 320.0
+const COLUMN_GAP_PX: int = 28
+const QR_MIN_PX: float = 150.0
+const QR_PX: float = 176.0
+const MODE_GRID_COLUMNS: int = 2
+const MODE_GRID_ROWS: int = 4
+const MODE_GRID_GAP_PX: int = 12
+## The wordmark's visible height on the top bar; its image has air above and below.
+const LOGO_BAR_SIZE: Vector2 = Vector2(560, 84)
+const LOGO_DRAW_SIZE: Vector2 = Vector2(560, 140)
+const LOGO_DRAW_OFFSET: Vector2 = Vector2(0, -16)
 
 var _slot_name: Callable
 var _slot_color: Callable
@@ -93,17 +101,26 @@ var _title_screen # TitleScreen.gd
 var _victory # VictoryScreen.gd
 var _cards # RoundCards.gd
 var _host # HostControls.gd
+var _players # LobbyCards.gd
+var _popups # LobbyPopups.gd
 
 var _lobby_panel: Control
-var _lobby_rows: VBoxContainer
+## The hint under START ("N players not ready yet", why Start did nothing).
 var _lobby_status: Label
+## The mode summary at the top right: "Classic - Teams - first to 5".
 var _lobby_target_label: Label
 var _lobby_qr: TextureRect
 var _lobby_url: Label
 var _lobby_right: VBoxContainer
+var _join_box: VBoxContainer
+var _join_title: Label
+var _join_note: Label
 var _mode_grid: GridContainer
-var _how_to_play: Control
+var _top_left: HBoxContainer
 var _lobby_logo: TextureRect
+var _countdown_label: Label
+var _countdown_shown: int = 0
+var _mode_cards_by_id: Dictionary = {}
 
 ## The ControllerServer the host controls command, set by `attach_controls()`.
 var _server: Object = null
@@ -125,6 +142,8 @@ func _init(slot_name: Callable = Callable(), slot_color: Callable = Callable()) 
 	_victory = VictoryScreenScript.new(self, slot_name, slot_color)
 	_cards = RoundCardsScript.new(self)
 	_host = HostControlsScript.new(self)
+	_players = LobbyCardsScript.new(self)
+	_popups = LobbyPopupsScript.new(self)
 
 func lobby_panel() -> Control:
 	return _lobby_panel
@@ -139,7 +158,7 @@ func end_card_panel() -> Control:
 
 ## The lobby's how-to-play panel, or null before the lobby was ever shown.
 func how_to_play_panel() -> Control:
-	return _how_to_play
+	return _popups.help_panel() if _popups != null else null
 
 ## The wordmark on the lobby, or null before the lobby was ever built.
 func lobby_logo() -> TextureRect:
@@ -174,47 +193,134 @@ func awards_row() -> Control:
 func panels_built() -> bool:
 	return _lobby_panel != null
 
-## The lobby's mode cards, its how-to-play explainer's game-mode lines (#352), one per `GameModes.TABLE` row.
+## The lobby's mode cards: the name Label of each, one per mode (#352).
 func mode_cards() -> Array[Label]:
 	var out: Array[Label] = []
-	if _lobby_right != null and _lobby_right.has_node("ModeCards"):
-		for child: Node in _lobby_right.get_node("ModeCards").get_children():
-			if child.has_meta("mode_card"):
-				out.append(child as Label)
+	if _mode_grid != null:
+		for card: Node in _mode_grid.get_children():
+			var title: Variant = card.get_meta("name_label", null)
+			if title is Label:
+				out.append(title)
 	return out
 
-## Adds one mode card to the lobby's grid (#425). The grid keeps `MODE_GRID_ROWS` rows and opens
-## a column when the rows are full, so an added card never makes the column above it taller.
-func append_mode_card(text: String) -> Label:
-	var card: Label = ScreenKitScript.big_label(text, DECK_MIN_FONT_SIZE, Color(0.8, 0.82, 0.88))
-	card.set_meta("mode_card", true)
-	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	card.max_lines_visible = 2
-	card.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	card.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+## The rule line under each mode card's name: wrapped, never cut off, no numbers.
+func mode_rules() -> Array[Label]:
+	var out: Array[Label] = []
+	if _mode_grid != null:
+		for card: Node in _mode_grid.get_children():
+			var rule: Variant = card.get_meta("rule_label", null)
+			if rule is Label:
+				out.append(rule)
+	return out
+
+## The mode card for game mode `id` ("" is Classic), or null.
+func mode_card(id: String) -> Control:
+	return _mode_cards_by_id.get(id) as Control
+
+## Adds one mode card to the lobby's grid (#425). `text` is "Name: rule"; the grid keeps its
+## two columns and grows downwards.
+func append_mode_card(text: String, id: String = "\u0001") -> Label:
+	var split: int = text.find(": ")
+	var card_name: String = text.substr(0, split) if split >= 0 else text
+	var rule: String = text.substr(split + 2) if split >= 0 else ""
+	return _add_mode_card(id, card_name, rule)
+
+func _add_mode_card(id: String, card_name: String, rule: String) -> Label:
+	var card := PanelContainer.new()
+	card.name = "Mode_" + (id if id != "" else "classic")
+	card.theme_type_variation = UiThemeScript.MODE_CARD
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(0, 0)
+	card.pivot_offset_ratio = Vector2(0.5, 0.5)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", 0)
+	card.add_child(box)
+	var title: Label = ScreenKitScript.themed_label(card_name, 22, UiThemeScript.INK_HEADING_LABEL)
+	title.name = "Name"
+	title.clip_text = true
+	box.add_child(title)
+	var rule_label: Label = ScreenKitScript.themed_label(rule, DECK_MIN_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL)
+	rule_label.name = "Rule"
+	rule_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rule_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(rule_label)
+	var click := Button.new()
+	click.name = "Pick"
+	click.flat = true
+	click.focus_mode = Control.FOCUS_NONE
+	click.mouse_filter = Control.MOUSE_FILTER_STOP
+	var empty := StyleBoxEmpty.new()
+	var ring := UiThemeScript.box(Color.TRANSPARENT, 14, 4)
+	ring.border_color = UiThemeScript.SKY
+	for state: String in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
+		click.add_theme_stylebox_override(state, empty)
+	click.add_theme_stylebox_override("focus", ring)
+	click.pressed.connect(_on_mode_card_pressed.bind(id))
+	for grow_signal: Signal in [click.mouse_entered, click.focus_entered]:
+		grow_signal.connect(_scale_card.bind(1.04, card))
+	for shrink_signal: Signal in [click.mouse_exited, click.focus_exited]:
+		shrink_signal.connect(_scale_card.bind(1.0, card))
+	card.add_child(click)
+	card.set_meta("rule_label", rule_label)
+	card.set_meta("name_label", title)
+	card.set_meta("mode_id", id)
 	_mode_grid.add_child(card)
-	var columns: int = maxi(1, ceili(float(_mode_grid.get_child_count()) / float(MODE_GRID_ROWS)))
-	_mode_grid.columns = columns
-	# The grid is as wide as it was for two columns, so a third column narrows the cards instead of the room around it.
-	var width: float = floorf((MODE_GRID_WIDTH_PX - MODE_CARD_GAP_PX * (columns - 1)) / columns)
-	for each: Node in _mode_grid.get_children():
-		(each as Label).custom_minimum_size = Vector2(width, MODE_CARD_HEIGHT_PX)
-	return card
+	# The grid keeps MODE_GRID_ROWS rows and opens a column when they are full, so a
+	# ninth mode never pushes the left column off the screen (#425).
+	_mode_grid.columns = maxi(MODE_GRID_COLUMNS, ceili(float(_mode_grid.get_child_count()) / float(MODE_GRID_ROWS)))
+	if id != "\u0001":
+		_mode_cards_by_id[id] = card
+	_host.register_mode_button(id, click)
+	return rule_label
 
-## The how-to-play demos running now: four while the lobby shows, none
-## otherwise.
+func _scale_card(target: float, card: Control) -> void:
+	if not card.is_inside_tree():
+		return
+	var tween: Tween = card.create_tween()
+	tween.tween_property(card, "scale", Vector2(target, target), 0.09)
+
+func _on_mode_card_pressed(id: String) -> void:
+	_host.press_game_mode(id)
+
+## Highlights the picked mode card: yellow, a lift and a slight tilt.
+func _select_mode_card(id: String) -> void:
+	for card: Node in _mode_grid.get_children():
+		var on: bool = str(card.get_meta("mode_id", "\u0001")) == id
+		var wanted: StringName = UiThemeScript.MODE_CARD_ON if on else UiThemeScript.MODE_CARD
+		if (card as Control).theme_type_variation != wanted:
+			(card as Control).theme_type_variation = wanted
+			var tween: Tween = card.create_tween() if card.is_inside_tree() else null
+			var angle: float = deg_to_rad(-1.5) if on else 0.0
+			if tween != null:
+				tween.tween_property(card, "rotation", angle, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			else:
+				(card as Control).rotation = angle
+
+## The how-to-play demos running now: four while the How to play popup is open,
+## none otherwise.
 func how_to_play_demos() -> Array[Node]:
-	var out: Array[Node] = []
-	if _how_to_play != null:
-		for child: Node in _how_to_play.get_children():
-			if child.get_script() == HowToPlayDemoScript:
-				out.append(child)
-	return out
+	return _popups.demos() if _popups != null else []
+
+## The How to play popup, or null before the lobby was ever built.
+func how_to_play_popup() -> Control:
+	return _popups.help_panel() if _popups != null else null
+
+## The Your look popup, or null before the lobby was ever built.
+func look_popup() -> Control:
+	return _popups.look_overlay() if _popups != null else null
+
+## Opens the popup `which` ("help" or "look"), or closes any with "".
+func set_popup(which: String) -> void:
+	_popups.open(which)
+
+func popup_open() -> String:
+	return _popups.current() if _popups != null else ""
 
 ## Which full-screen panel shows: "lobby", "victory" or neither ("").
-## The how-to-play demos run only while the lobby shows: they are built
-## when it appears and freed the moment it goes (#219), so no demo body is
-## simulated behind a round or the podium.
+## The how-to-play demos run only while their popup is open: they are built
+## when it opens and freed the moment it closes or the lobby goes (#219), so no
+## demo body is simulated behind a round or the podium.
 func show_panel(which: String) -> void:
 	_lobby_panel.visible = which == "lobby"
 	_victory.victory_panel().visible = which == "victory"
@@ -222,23 +328,8 @@ func show_panel(which: String) -> void:
 		_victory.end_card_panel().visible = which == "end_card"
 	if which != "lobby" and title_visible():
 		show_title(false) # a match began under the title: let go of PadMenu (#545)
-	if which == "lobby":
-		_start_demos()
-	else:
-		_stop_demos()
-
-func _start_demos() -> void:
-	if _how_to_play == null or not how_to_play_demos().is_empty():
-		return
-	for i in HOW_TO_PLAY_LINES.size():
-		_how_to_play.add_child(HowToPlayDemoScript.new(HOW_TO_PLAY_KINDS[i], tr("HOW_TO_PLAY_LINE_%d" % (i + 1)), i))
-
-func _stop_demos() -> void:
-	for demo: Node in how_to_play_demos():
-		# Out of the tree at once, not at the end of the frame: its bodies
-		# leave their worlds, and its players the "players" group, now.
-		_how_to_play.remove_child(demo)
-		demo.queue_free()
+	if which != "lobby":
+		_popups.open("")
 
 ## Redraws the lobby from the state the phones are sent. `min_players` is
 ## how many it takes to start; `join_source` (the ControllerServer, or null)
@@ -246,30 +337,41 @@ func _stop_demos() -> void:
 func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> void:
 	_last_lobby_args = [state, min_players, join_source]
 	_rows_have_kick = _server != null and _server.has_method("pc_runs_room") and _server.pc_runs_room()
-	for child: Node in _lobby_rows.get_children():
-		child.queue_free()
 	var teams: bool = bool(state.get("teams", false))
-	if teams:
-		_team_rosters(state)
-	else:
-		for entry: Dictionary in state["players"]:
-			_lobby_rows.add_child(_lobby_row(state, entry, 36 if state["players"].size() <= 4 else 28))
-	var target_key: String = GameModesScript.target_label_key(str(state.get("target_kind", "first_to")))
-	_lobby_target_label.text = tr(target_key) % state["target"]
-	if teams and target_key == "LOBBY_FIRST_TO":
-		_lobby_target_label.text = tr("LOBBY_TEAMS_FIRST_TO") % state["target"]
-	var joined: int = state["players"].size()
 	var online: bool = _online_kind(join_source)
+	var solo: bool = online and join_source.has_method("room_closed") and join_source.room_closed()
+	_players.set_hint(tr("LOBBY_SEAT_HINT_SOLO") if solo else (tr("LOBBY_SEAT_HINT_ONLINE") if online else tr("LOBBY_SEAT_HINT_COUCH")))
+	_players.refresh(state, join_source)
+	# The mode summary: "Classic - Teams - first to 5", and the Host panel's row.
+	var mode_id: String = str(state.get("game_mode", GameModesScript.CLASSIC))
+	var target_kind: String = str(state.get("target_kind", "first_to"))
+	var target_text: String = tr(GameModesScript.target_status_key(target_kind)) % state["target"]
+	_lobby_target_label.text = "%s%s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text]
+	_host.set_target(target_kind, int(state["target"]))
+	_select_mode_card(mode_id)
+	_popups.set_mode(mode_id, target_kind, int(state["target"]))
+	# The hint under START, and whether START is lit.
+	var humans_waiting: int = 0
+	for entry: Dictionary in state["players"]:
+		var is_bot: bool = _server != null and _server.has_method("is_virtual") and _server.is_virtual(int(entry["slot"]))
+		if not is_bot and not bool(entry["ready"]):
+			humans_waiting += 1
+	var joined: int = state["players"].size()
+	var can_start: bool = state["phase"] != "countdown" and joined >= min_players and humans_waiting == 0 and (not teams or both_teams_manned(state))
 	if state["phase"] == "countdown":
-		_lobby_status.text = str(state["count"])
+		_lobby_status.text = tr("LOBBY_STARTING")
 	elif joined < min_players:
 		_lobby_status.text = (tr("LOBBY_ONLINE_WAITING") if online else tr("LOBBY_SCAN_TO_JOIN")) % [joined, min_players]
 	elif teams and not both_teams_manned(state):
 		_lobby_status.text = tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
+	elif humans_waiting > 0:
+		_lobby_status.text = tr("LOBBY_NOT_READY_ONE") if humans_waiting == 1 else tr("LOBBY_NOT_READY_N") % humans_waiting
 	else:
-		_lobby_status.text = tr("LOBBY_PRESS_READY_ONLINE") if online else tr("LOBBY_PRESS_READY")
+		_lobby_status.text = tr("LOBBY_ENTER_OR_START")
 	if state["phase"] != "countdown" and Time.get_ticks_msec() < _host.start_notice_until_msec:
 		_lobby_status.text = _host.start_notice
+	_host.set_start_ready(can_start)
+	_show_countdown(int(state["count"]) if state["phase"] == "countdown" else 0)
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
 		_lobby_qr.texture = qr as Texture2D
@@ -277,8 +379,20 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		_lobby_url.text = str(url) if url != null else ""
 	_apply_streamer_mode(join_source)
 
+## The big countdown number over the lobby, punching in on each tick.
+func _show_countdown(count: int) -> void:
+	if _countdown_label == null:
+		return
+	_countdown_label.visible = count > 0
+	if count > 0 and count != _countdown_shown:
+		_countdown_label.text = str(count)
+		ScreenKitScript.punch(_countdown_label)
+	_countdown_shown = count
+
 ## Streamer mode (#369): with "Hide room code" on, the join QR, URL and online
 ## room code give way to a notice; the host phone's menu still has the code.
+## Also what the join card shows per match kind (#435): a Couch match its QR and
+## URL, an Online one the big room code, Solo (#522) neither.
 func _apply_streamer_mode(join_source: Object) -> void:
 	if join_source == null:
 		return
@@ -291,71 +405,58 @@ func _apply_streamer_mode(join_source: Object) -> void:
 		_lobby_url.text = str(join_source.get("join_url"))
 	if _room_label != null and hidden:
 		_room_label.visible = false
-	# #435: an Online match has no QR and no LAN join URL; a Couch one gets them back.
 	var online: bool = _online_kind(join_source)
+	var solo: bool = online and join_source.has_method("room_closed") and join_source.room_closed()
 	_lobby_url.visible = not online
 	if online:
 		_lobby_qr.visible = false
+	if online and hidden:
+		_lobby_url.visible = true # the notice stands where the code was
+	_join_title.text = tr("LOBBY_SOLO_TITLE") if solo else (tr("LOBBY_ROOM_CODE_TITLE") if online else tr("LOBBY_SCAN_TITLE"))
+	_join_note.text = tr("LOBBY_SOLO_NOTE") if solo else tr("LOBBY_ROOM_CODE_NOTE")
+	_join_note.visible = online and not (hidden and not solo)
+	if solo:
+		_join_note.add_theme_font_size_override("font_size", 22)
+	else:
+		_join_note.add_theme_font_size_override("font_size", 20)
 
-## One lobby row: the player's swatch, name, host tag and ready state.
-func _lobby_row(state: Dictionary, entry: Dictionary, font_size: int) -> HBoxContainer:
-	var slot: int = entry["slot"]
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
-	var swatch := ColorRect.new()
-	swatch.custom_minimum_size = Vector2(40, 40)
-	swatch.color = _slot_color.call(slot)
-	row.add_child(swatch)
-	var tag: String = tr("LOBBY_HOST_TAG") if slot == state["host"] else ""
-	var label := ScreenKitScript.big_label("%s%s  -  %s" % [entry["name"], tag, tr("LOBBY_READY") if entry["ready"] else tr("LOBBY_NOT_READY")],
-		font_size, LOBBY_ACCENT if entry["ready"] else Color(0.8, 0.82, 0.88))
-	row.add_child(label)
-	if entry.has("ping"):
-		var ping_label := ScreenKitScript.big_label(ping_text(int(entry["ping"])), maxi(font_size - 8, 18), ping_color(int(entry["ping"])))
-		ping_label.name = "Ping"
-		row.add_child(ping_label)
-	if bool(entry.get("tip", false)):
-		row.add_child(ScreenKitScript.big_label(tr("LOBBY_PAD_TIP"), 22, Color(0.8, 0.82, 0.88)))
-	# Issue #441: a gamepad claim's card carries its cosmetics picker (it hides itself while unplugged).
-	if _server != null and _server.has_method("pad_claim") and _server.pad_claim(slot):
-		row.add_child(preload("res://scripts/PadPickerCard.gd").new(_server, slot))
-	_add_kick_button(row, slot)
-	return row
+func _on_card_clicked(slot: int) -> void:
+	if _server != null and _server.has_method("host_pc_slot") and slot == _server.host_pc_slot() and _server.host_picker_shown():
+		set_popup("look")
 
-## Issue #458: running the room (Online, ADR-0021), the host PC kicks from the
-## lobby row itself: a Kick on every row but its own seat's.
-func _add_kick_button(row: HBoxContainer, slot: int) -> void:
-	if _server == null or not _server.has_method("pc_runs_room") or not _server.pc_runs_room() or slot == _server.host_pc_slot():
-		return
-	var kick: Button = Button.new()
-	kick.name = "Kick"
-	kick.text = tr("HOST_KICK")
-	kick.focus_mode = Control.FOCUS_NONE
-	kick.add_theme_font_size_override("font_size", CONTROL_BUTTON_FONT_SIZE)
-	kick.pressed.connect(func() -> void: _server.host_pc_command("kick", slot))
-	row.set_meta("kick_slot", slot)
-	row.add_child(kick)
+func _on_badge_pressed(slot: int) -> void:
+	if _server != null and _server.has_method("room_closed") and _server.room_closed() and slot == _server.host_pc_slot():
+		_server.set_slot_ready(slot, not _server.slot_ready(slot))
+		if not _last_lobby_args.is_empty():
+			refresh_lobby.callv(_last_lobby_args)
 
-## Issue #458: the last `refresh_lobby()` arguments, and whether its rows had
-## Kick buttons, so Go online turning them on or off redraws the rows.
+func _on_kick_pressed(slot: int) -> void:
+	if _server != null:
+		_server.host_pc_command("kick", slot)
+
+## Issue #458: the last `refresh_lobby()` arguments, and whether the cards had
+## Kick buttons, so Go online turning them on or off redraws the cards.
 var _last_lobby_args: Array = []
 var _rows_have_kick: bool = false
 
-## Issue #458: the Kick button on `slot`'s lobby row, or null.
+## Issue #458: the Kick button on `slot`'s player card, or null.
 func kick_button(slot: int) -> Button:
-	if _lobby_rows == null:
+	if _players == null:
 		return null
-	for node: Node in _lobby_rows.find_children("*", "HBoxContainer", true, false):
-		if node.has_meta("kick_slot") and int(node.get_meta("kick_slot")) == slot and not _queued(node):
-			return node.get_node_or_null("Kick") as Button
-	return null
+	var card: Control = _players.card(slot)
+	return card.kick_button() if card != null else null
 
-static func _queued(node: Node) -> bool:
-	while node != null:
-		if node.is_queued_for_deletion():
-			return true
-		node = node.get_parent()
-	return false
+## The player card for `slot`, or null.
+func player_card(slot: int) -> Control:
+	return _players.card(slot) if _players != null else null
+
+## The player cards now, in grid order.
+func player_cards() -> Array[Control]:
+	return _players.cards() if _players != null else []
+
+## The dashed open seats now.
+func open_seats() -> Array[Control]:
+	return _players.open_seats() if _players != null else []
 
 ## Issue #446: a remote seat's round trip as text, and the colour it is shown
 ## in: a warning colour above 150 ms.
@@ -367,42 +468,6 @@ static func ping_text(ms: int) -> String:
 static func ping_color(ms: int) -> Color:
 	return PING_WARN_COLOR if ms > PING_WARN_MSEC else PING_OK_COLOR
 
-## Issue #236: a Teams lobby's two rosters side by side, Red then Blue, each
-## under its team's name in its colour; a player who has not picked a team is
-## listed where auto-balance puts them, marked "(auto)".
-func _team_rosters(state: Dictionary) -> void:
-	var columns := HBoxContainer.new()
-	columns.name = "TeamRosters"
-	columns.set_meta("team_rosters", true)
-	columns.alignment = BoxContainer.ALIGNMENT_CENTER
-	columns.add_theme_constant_override("separation", 40)
-	_lobby_rows.add_child(columns)
-	for team in TeamsScript.COUNT:
-		var column := VBoxContainer.new()
-		column.name = "%sRoster" % TeamsScript.team_name(team).capitalize()
-		column.add_theme_constant_override("separation", 8)
-		var members: Array = state["players"].filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) == team)
-		column.add_child(ScreenKitScript.big_label(tr("LOBBY_TEAM_HEADER") % [TeamsScript.team_name(team), members.size()], 40, TeamsScript.team_color(team)))
-		for entry: Dictionary in members:
-			var row: HBoxContainer = _lobby_row(state, entry, 28)
-			if int(entry.get("pick", team)) == TeamsScript.NONE:
-				row.add_child(ScreenKitScript.big_label(tr("LOBBY_AUTO"), 22, Color(0.8, 0.82, 0.88)))
-			column.add_child(row)
-		if members.is_empty():
-			column.add_child(ScreenKitScript.big_label(tr("LOBBY_NOBODY_YET"), 26, Color(0.6, 0.62, 0.68)))
-		columns.add_child(column)
-
-## Issue #236: the lobby's two team rosters, or null outside a Teams lobby.
-## (A redraw frees the old rosters at the end of the frame, so the live one
-## is the one not queued for deletion.)
-func team_rosters() -> Control:
-	if _lobby_rows == null:
-		return null
-	for child: Node in _lobby_rows.get_children():
-		if child.has_meta("team_rosters") and not child.is_queued_for_deletion():
-			return child as Control
-	return null
-
 ## Issue #236: whether a Teams lobby state has somebody on each team.
 static func both_teams_manned(state: Dictionary) -> bool:
 	var counts: Array[int] = [0, 0]
@@ -411,6 +476,7 @@ static func both_teams_manned(state: Dictionary) -> bool:
 		if team >= 0 and team < TeamsScript.COUNT:
 			counts[team] += 1
 	return counts[0] > 0 and counts[1] > 0
+
 ## The victory screen's title, or null before the panels are built.
 func victory_title() -> Label:
 	return _victory.victory_title()
@@ -431,76 +497,143 @@ func stats_table() -> Control:
 func build_panels() -> void:
 	if _lobby_panel != null:
 		return
-	_lobby_panel = ScreenKitScript.full_screen_panel(self, "LobbyPanel")
+	_lobby_panel = ScreenKitScript.striped_panel(self, "LobbyPanel")
+	var page := MarginContainer.new()
+	page.name = "Page"
+	page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	page.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page.add_theme_constant_override("margin_left", PAGE_MARGIN_SIDE_PX)
+	page.add_theme_constant_override("margin_right", PAGE_MARGIN_SIDE_PX)
+	page.add_theme_constant_override("margin_top", PAGE_MARGIN_TOP_PX)
+	page.add_theme_constant_override("margin_bottom", PAGE_MARGIN_BOTTOM_PX)
+	_lobby_panel.add_child(page)
+	var page_box := VBoxContainer.new()
+	page_box.name = "PageBox"
+	page_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page_box.add_theme_constant_override("separation", 14)
+	page.add_child(page_box)
+	page_box.add_child(_build_top_bar())
 	var columns := HBoxContainer.new()
-	columns.set_anchors_preset(Control.PRESET_FULL_RECT)
-	columns.alignment = BoxContainer.ALIGNMENT_CENTER
-	columns.add_theme_constant_override("separation", 48)
-	_lobby_panel.add_child(columns)
-	var left := VBoxContainer.new()
-	left.alignment = BoxContainer.ALIGNMENT_CENTER
-	left.add_theme_constant_override("separation", 24)
-	columns.add_child(left)
-	_lobby_logo = ScreenKitScript.logo_rect("Logo", LOGO_LOBBY_SIZE)
-	left.add_child(_lobby_logo)
-	_lobby_target_label = ScreenKitScript.big_label(tr("LOBBY_FIRST_TO") % 5, 44, Color.WHITE)
-	left.add_child(_lobby_target_label)
-	_lobby_rows = VBoxContainer.new()
-	_lobby_rows.add_theme_constant_override("separation", 12)
-	left.add_child(_lobby_rows)
-	_lobby_status = ScreenKitScript.big_label("", 56, LOBBY_ACCENT)
-	# Wrapped rather than one long line, so the how-to-play column fits
-	# beside the QR (#219).
+	columns.name = "Columns"
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	columns.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	columns.add_theme_constant_override("separation", COLUMN_GAP_PX)
+	page_box.add_child(columns)
+	columns.add_child(_build_left_column())
+	var centre := VBoxContainer.new()
+	centre.name = "CentreColumn"
+	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	centre.add_theme_constant_override("separation", 16)
+	columns.add_child(centre)
+	_players.build(centre)
+	_lobby_right = VBoxContainer.new()
+	_lobby_right.name = "RightColumn"
+	_lobby_right.custom_minimum_size.x = RIGHT_COLUMN_PX
+	_lobby_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lobby_right.add_theme_constant_override("separation", 14)
+	columns.add_child(_lobby_right)
+	_lobby_status = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_lobby_status.name = "StartHint"
 	_lobby_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_lobby_status.custom_minimum_size.x = LOBBY_STATUS_WIDTH_PX
-	left.add_child(_lobby_status)
-	var right := VBoxContainer.new()
-	_lobby_right = right
-	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	# Tightened for the sixth and seventh mode cards (#402, #403): eight players still fit the screen.
-	right.add_theme_constant_override("separation", 10)
-	columns.add_child(right)
+	_lobby_right.add_child(_lobby_status)
+	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_countdown_label.name = "Countdown"
+	_countdown_label.set_anchors_preset(Control.PRESET_CENTER)
+	_countdown_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_countdown_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_countdown_label.add_theme_color_override("font_color", UiThemeScript.YELLOW)
+	_countdown_label.add_theme_color_override("font_outline_color", UiThemeScript.INK)
+	_countdown_label.add_theme_constant_override("outline_size", 24)
+	_countdown_label.visible = false
+	_lobby_panel.add_child(_countdown_label)
+	_popups.build(_lobby_panel)
+	_victory.build()
+
+## The top bar: the Couch / Online / Solo switch at the left (HostControls fills
+## it), the wordmark in the middle and the mode summary at the right (#547).
+func _build_top_bar() -> Control:
+	var bar := HBoxContainer.new()
+	bar.name = "TopBar"
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_constant_override("separation", 24)
+	_top_left = HBoxContainer.new()
+	_top_left.name = "TopLeft"
+	_top_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_top_left.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_top_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(_top_left)
+	var logo_holder := Control.new()
+	logo_holder.name = "LogoHolder"
+	logo_holder.custom_minimum_size = LOGO_BAR_SIZE
+	logo_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(logo_holder)
+	_lobby_logo = ScreenKitScript.logo_rect("Logo", LOGO_DRAW_SIZE)
+	_lobby_logo.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_lobby_logo.position = LOGO_DRAW_OFFSET
+	_lobby_logo.size = LOGO_DRAW_SIZE
+	logo_holder.add_child(_lobby_logo)
+	_lobby_target_label = ScreenKitScript.themed_label("", 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_RIGHT)
+	_lobby_target_label.name = "StatusLine"
+	_lobby_target_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lobby_target_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_lobby_target_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bar.add_child(_lobby_target_label)
+	return bar
+
+## The left column: the join card (QR and URL, the room code or Solo practice)
+## over the 2-column grid of mode cards.
+func _build_left_column() -> Control:
+	var left := VBoxContainer.new()
+	left.name = "LeftColumn"
+	left.custom_minimum_size.x = LEFT_COLUMN_PX
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left.add_theme_constant_override("separation", 14)
+	var card := PanelContainer.new()
+	card.name = "JoinCard"
+	card.theme_type_variation = UiThemeScript.CARD_PANEL
+	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(card)
+	_join_box = VBoxContainer.new()
+	_join_box.name = "JoinBox"
+	_join_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_join_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_join_box.add_theme_constant_override("separation", 8)
+	card.add_child(_join_box)
+	_join_title = ScreenKitScript.themed_label(tr("LOBBY_SCAN_TITLE"), 30, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_join_title.name = "JoinTitle"
+	_join_box.add_child(_join_title)
 	_lobby_qr = TextureRect.new()
 	_lobby_qr.name = "JoinQr"
-	_lobby_qr.custom_minimum_size = Vector2(340, 340) # 372, then 320 for the 16 px mode cards (#368) and CTF (#403); the card grid (#425) frees the room
+	_lobby_qr.custom_minimum_size = Vector2(QR_MIN_PX, QR_MIN_PX)
+	_lobby_qr.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_lobby_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	right.add_child(_lobby_qr)
-	_lobby_url = ScreenKitScript.big_label("", 28, Color(0.8, 0.82, 0.88))
-	right.add_child(_lobby_url)
-	# One card per game mode (#352), from `GameModes.TABLE`, under the QR:
-	# the how-to-play column is already as tall as the screen allows.
+	_join_box.add_child(_lobby_qr)
+	_lobby_url = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_lobby_url.name = "JoinUrl"
+	_lobby_url.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	_join_box.add_child(_lobby_url)
+	_join_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_join_note.name = "JoinNote"
+	_join_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_join_note.visible = false
+	_join_box.add_child(_join_note)
+	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL)
+	mode_title.name = "ModeTitle"
+	left.add_child(mode_title)
+	# One card per game mode (#352), from `GameModes.picker_rows()`.
 	_mode_grid = GridContainer.new()
 	_mode_grid.name = "ModeCards"
-	_mode_grid.add_theme_constant_override("h_separation", MODE_CARD_GAP_PX)
-	_mode_grid.add_theme_constant_override("v_separation", 0)
-	# Fixed height for the rows (#425): a new card fills a free cell or opens a new column, so it never pushes the QR.
-	_mode_grid.custom_minimum_size.y = MODE_GRID_ROWS * MODE_CARD_HEIGHT_PX
-	right.add_child(_mode_grid)
-	for row: Dictionary in GameModesScript.TABLE:
-		append_mode_card("%s: %s" % [GameModesScript.display_name(row["id"]), GameModesScript.rule_line(row["id"])])
-	# A column of its own, beside the QR and never over it (#219).
-	# Clear of the Settings corner below it (#230).
-	_how_to_play = _build_how_to_play()
-	var how_to_play_slot := MarginContainer.new()
-	how_to_play_slot.name = "HowToPlaySlot"
-	how_to_play_slot.add_theme_constant_override("margin_bottom", SETTINGS_CORNER_RESERVE_PX)
-	how_to_play_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	how_to_play_slot.add_child(_how_to_play)
-	columns.add_child(how_to_play_slot)
-
-	_victory.build()
-
-## The how-to-play column: its heading, and the demos while the lobby shows.
-func _build_how_to_play() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "HowToPlay"
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	# Tighter than it was (14 px) to make room for SETTINGS_CORNER_RESERVE_PX.
-	box.add_theme_constant_override("separation", 10)
-	box.add_child(ScreenKitScript.big_label(tr("HOW_TO_PLAY_TITLE"), 30, LOBBY_ACCENT)) # 34 before the Nunito metrics (#541)
-	return box
+	_mode_grid.columns = MODE_GRID_COLUMNS
+	_mode_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mode_grid.add_theme_constant_override("h_separation", MODE_GRID_GAP_PX)
+	_mode_grid.add_theme_constant_override("v_separation", MODE_GRID_GAP_PX)
+	left.add_child(_mode_grid)
+	for row: Dictionary in GameModesScript.picker_rows():
+		_add_mode_card(str(row["id"]), GameModesScript.display_name(row["id"]), GameModesScript.blurb(row["id"]))
+	return left
 
 # --- Forwards to the split-out screens (#543) --------------------------------
 
