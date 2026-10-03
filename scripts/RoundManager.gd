@@ -1117,6 +1117,23 @@ func _host_slot() -> int:
 		return _controller_server.host_slot()
 	return -1
 
+## The Host panel's target row (#544): the mode's own value for Stock, Soccer
+## and Capture the Flag, else the round target.
+func _state_target(in_lobby: bool) -> int:
+	var picked: int = GameModesScript.target_setting(_state_mode_id())
+	if picked >= 0:
+		return picked
+	return _requested_target() if in_lobby else _match_target
+
+func _state_target_kind() -> String:
+	return GameModesScript.target_kind(_state_mode_id())
+
+func _state_mode_id() -> String:
+	if (_state == State.LOBBY or _state == State.COUNTDOWN or _state == State.VICTORY) \
+			and _controller_server != null and _controller_server.has_method("game_mode"):
+		return str(_controller_server.game_mode())
+	return game_mode
+
 ## What the host phone has typed, or the current value with no host to ask.
 func _requested_target() -> int:
 	if _controller_server != null and _controller_server.has_method("match_target"):
@@ -1337,7 +1354,7 @@ func _publish_lobby_state() -> void:
 	var state: Dictionary = {
 		"phase": lobby_phase(),
 		"host": _host_slot(),
-		"target": _requested_target() if in_lobby else _match_target,
+		"target": _state_target(in_lobby),
 		"players": players,
 		"count": _countdown_left() if _state == State.COUNTDOWN else 0,
 		"winner": _match_winner_slot,
@@ -1349,6 +1366,8 @@ func _publish_lobby_state() -> void:
 		# Issue #149: the host phone's menu offers Resume instead of Pause.
 		"paused": _paused,
 	}
+	if _state_target_kind() != "first_to":  # only a mode with its own target adds the key (#544)
+		state["target_kind"] = _state_target_kind()
 	_add_team_state(state, roster, in_lobby)
 	_add_game_mode_state(state, in_lobby)
 	var picked_mode: String = game_mode
@@ -1450,7 +1469,7 @@ func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
 	_screen().show_stage_title(_stage_display_name(str(_current_stage.name)), stage_title_sec,
-		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.rule_line(game_mode)])
+		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)])
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #

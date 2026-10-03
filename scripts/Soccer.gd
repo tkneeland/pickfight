@@ -17,6 +17,7 @@ extends Node
 ## it. Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -62,6 +63,7 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
+	goals_to_win = int(HostSettingsScript.shared().soccer_goals)
 	scores = {0: 0, 1: 0}
 	scorers.clear()
 	_finished = false
