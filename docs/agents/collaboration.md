@@ -67,6 +67,10 @@ the dispatcher; don't reorder), `CONTEXT.md`.
 - **Fallback:** if the integrator is unavailable (for example, out of
   usage), tommykneeland's or Austin's Claude may merge its own green PRs by
   the same steps.
+- **Owner's call, 2026-10-03:** while Austin's machine is down, tommykneeland's
+  Claude merges its own green PRs by the same steps, without waiting for the
+  integrator. Tickets reassigned to tommykneeland belong to it: other agents
+  drop any unpushed work on them.
 
 ## Shared decisions
 
