@@ -702,6 +702,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
 	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
+	"relay_host_keepalive_holds_idle_room_open",
+	"relay_link_retries_after_idle_timeout_error_bounded",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2498,6 +2500,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		"pad_bumper_cycling_picker_does_not_release_weapon":
 			return await _scenario_pad_bumper_cycling_picker_does_not_release_weapon()
+		"relay_host_keepalive_holds_idle_room_open":
+			return await _scenario_relay_host_keepalive_holds_idle_room_open()
+		"relay_link_retries_after_idle_timeout_error_bounded":
+			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -36195,4 +36201,70 @@ func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[Stri
 		failures.append("RB mid-round no longer releases the weapon")
 	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
 	await _teardown(rig["stage"])
+	return failures
+
+# --- Relay keepalive and retry (issue #519) --------------------------------
+## Waits `sec` of wall-clock time (the relay and RelayLink read the wall clock).
+func _wait_wall_519(sec: float) -> void:
+	var until: int = Time.get_ticks_msec() + int(sec * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await process_frame
+
+## A host with no remote seat sends nothing of its own; the keepalive must keep
+## the room alive past the relay's idle timeout.
+func _scenario_relay_host_keepalive_holds_idle_room_open() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	relay.idle_timeout_sec = 1.2
+	var link: Node = preload("res://scripts/RelayLink.gd").new()
+	link.set("keepalive_interval_sec", 0.25)
+	root.add_child(link)
+	link.go_online("ws://127.0.0.1:%d" % _relay_port_next)
+	await _wait_wall_519(3.5)
+	if link.link_state() != "online":
+		failures.append("an idle host's link was %s after 3x the idle timeout, wanted online" % link.link_state())
+	if relay.room_count() != 1:
+		failures.append("room_count %d after 3x the idle timeout, wanted 1" % relay.room_count())
+	link.go_offline()
+	link.queue_free()
+	relay.stop()
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+## With no keepalive the relay idles the room out; RelayLink then retries a
+## bounded number of times, each time with a fresh room code, and stops.
+func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	relay.idle_timeout_sec = 0.4
+	var link: Node = preload("res://scripts/RelayLink.gd").new()
+	link.set("keepalive_interval_sec", 1000.0)
+	link.set("retry_backoff_sec", [0.1, 0.1] as Array[float])
+	root.add_child(link)
+	var codes: Array[String] = []
+	var states: Array[String] = []
+	link.room_code_changed.connect(func(c: String) -> void:
+		if c != "":
+			codes.append(c))
+	link.link_state_changed.connect(func(st: String) -> void: states.append(st))
+	link.go_online("ws://127.0.0.1:%d" % _relay_port_next)
+	await _wait_wall_519(4.0)
+	if codes.size() != 3:
+		failures.append("room codes handed out: %s, wanted 3 (first try + 2 retries)" % [codes])
+	if link.link_state() != "error":
+		failures.append("link %s after retries ran out, wanted error" % link.link_state())
+	if not states.has("error"):
+		failures.append("the idle_timeout failure was never reported as error: %s" % [states])
+	if relay.room_count() != 0:
+		failures.append("room_count %d after retries ran out, wanted 0" % relay.room_count())
+	link.go_offline()
+	link.queue_free()
+	relay.stop()
+	relay.queue_free()
+	_scenario_completed = true
 	return failures
