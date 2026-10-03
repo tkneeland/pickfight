@@ -699,6 +699,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
+	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
 	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
 ]
@@ -2491,6 +2492,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gif_writer_encodes_valid_animated_gif()
 		"replay_save_writes_clip_gif_beside_pngs":
 			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
+		"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats":
+			return await _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats()
 		"shield_ranged_hit_does_not_recoil_and_reports_real_damage":
 			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		"pad_bumper_cycling_picker_does_not_release_weapon":
@@ -36067,6 +36070,72 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 	rb.queue_free()
 	_scenario_completed = true
 	return failures
+## Issue #513: throw, retract, throw on a PC seat and a pad seat -- the second
+## hook flies instead of being pulled home by the retract's leftover release.
+func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "Retoss513")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	var size: Vector2 = get_root().get_visible_rect().size
+	var radius: float = 0.35 * minf(size.x, size.y)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
+	await _await_ticks(30)
+	await _retoss_513("PC", failures, player, server, func() -> void: await _tap_485(KEY_SPACE))
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	# The pad seat.
+	rig = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadRetoss513")
+	server = rig["server"]
+	players = rig["players"]
+	player = players[0]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	# Bumpers cycle the lobby picker (#511); throw mid-round.
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(30)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(30)
+	# A bumper tap throws; a stick click retracts (toggles release).
+	await _retoss_513("pad", failures, player, server, func() -> void:
+		var button: int = JOY_BUTTON_LEFT_STICK if player.launched_hook() != null else JOY_BUTTON_RIGHT_SHOULDER
+		await _pad_button_261(0, button, true)
+		await _pad_button_261(0, button, false))
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
+	return failures
+func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, server: Node, tap: Callable) -> void:
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("%s: the first tap did not fire the grapple" % label)
+		return
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
+		failures.append("%s: the second tap did not retract the hook" % label)
+		return
+	await _await_ticks(60)
+	await tap.call()
+	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
+		failures.append("%s: the third tap did not throw a second hook" % label)
+		return
+	var hook: Node2D = player.launched_hook()
+	var start: Vector2 = hook.global_position
+	await _await_ticks(10)
+	hook = player.launched_hook()
+	if hook == null:
+		failures.append("%s: the second hook was pulled home at once" % label)
+	elif hook.global_position.distance_to(start) < 20.0:
+		failures.append("%s: the second hook moved only %.1f px" % [label, hook.global_position.distance_to(start)])
+	if server.slot_released(0):
+		failures.append("%s: the throw left the seat released" % label)
 # --- Shield: ranged hits and reported damage (issue #514) --------------------
 ## A bullet on a shield's face never shoves the shooter, and `strike_landed`
 ## carries the damage that got through the shield, not the damage dealt.
