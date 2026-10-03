@@ -711,6 +711,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
+	"fishing_rod_cast_has_its_own_sound_not_the_gunshot",
+	"boomerang_grazing_a_player_still_hits_them",
+	"pogo_state_resets_when_a_round_starts",
 	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -2526,6 +2529,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
 			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
+		"fishing_rod_cast_has_its_own_sound_not_the_gunshot":
+			return await _scenario_fishing_rod_cast_has_its_own_sound_not_the_gunshot()
+		"boomerang_grazing_a_player_still_hits_them":
+			return await _scenario_boomerang_grazing_a_player_still_hits_them()
+		"pogo_state_resets_when_a_round_starts":
+			return await _scenario_pogo_state_resets_when_a_round_starts()
 		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
 			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
 		_:
@@ -36528,6 +36537,86 @@ func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[St
 	relay.stop()
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+
+## Issue #517: casting the fishing rod asks for its own cast sound, not the
+## boomstick's gunshot.
+func _scenario_fishing_rod_cast_has_its_own_sound_not_the_gunshot() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, FISHING_ROD_PATH)
+	await _await_ticks(20)
+	sfx.start_recording()
+	await _flick(player, Vector2.UP)
+	await _await_ticks(4)
+	sfx.stop_recording()
+	print("      requested: %s" % [sfx.recorded_names()])
+	if player.launched_hook() == null:
+		failures.append("a flick did not cast the hook")
+	if _sfx_count(sfx, "fire_boomstick") > 0:
+		failures.append("casting the fishing rod played the boomstick's gunshot")
+	if _sfx_count(sfx, "fire_fishing_rod") == 0:
+		failures.append("casting the fishing rod never asked for fire_fishing_rod")
+	await _teardown(stage)
+	return failures
+## Issue #517: a boomerang whose sweep ends in a graze on a player (no rest
+## info) must still hit them, not turn back as if at a wall. Throws at a
+## victim offset across and past the boomerang's edge.
+func _scenario_boomerang_grazing_a_player_still_hits_them() -> Array[String]:
+	var failures: Array[String] = []
+	for dy: float in [-30.0, -24.0, -18.0, -12.0, -6.0, 6.0, 12.0, 18.0, 24.0, 30.0]:
+		var stage: Node2D = _new_stage()
+		var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, dy))
+		await _await_ticks(2)
+		await _equip(thrower, BOOMERANG_PATH)
+		_brace(thrower)
+		_brace(victim)
+		await _flick(thrower, Vector2.RIGHT)
+		var boomerang: Node2D = thrower.launched_boomerang()
+		if boomerang == null:
+			failures.append("dy %.0f: a flick did not throw the boomerang" % dy)
+			await _teardown(stage)
+			continue
+		var turned_x: float = INF
+		for i in 240:
+			if not is_instance_valid(boomerang):
+				break
+			if boomerang.leg == 1 and turned_x == INF:
+				turned_x = boomerang.global_position.x
+			await physics_frame
+		print("      dy %.0f: victim took %.1f, turned at x %.0f (victim x %.0f)" % [dy, victim.damage, turned_x, victim.global_position.x])
+		if victim.damage <= 0.0 and turned_x < victim.global_position.x + 10.0:
+			failures.append("dy %.0f: the boomerang turned back at the player without hurting them" % dy)
+		await _teardown(stage)
+	return failures
+## Issue #517: pogo charge, rebound cooldown and stomp lock do not carry into
+## the next round.
+func _scenario_pogo_state_resets_when_a_round_starts() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, POGO_PATH)
+	player.set("_pogo_charge", 0.8)
+	player.set("_pogo_cooldown", 5.0)
+	player.set("_stomp_lock", 5.0)
+	player.start_round(DEEP_PARK_POSITION, true)
+	await _await_ticks(2)
+	print("      after start_round: charge %s cooldown %s stomp lock %s" % [player.get("_pogo_charge"), player.get("_pogo_cooldown"), player.get("_stomp_lock")])
+	if float(player.get("_pogo_charge")) > 0.0:
+		failures.append("pogo charge carried into the new round")
+	if float(player.get("_pogo_cooldown")) > 0.0:
+		failures.append("pogo rebound cooldown carried into the new round")
+	if float(player.get("_stomp_lock")) > 0.0:
+		failures.append("pogo stomp lock carried into the new round")
+	await _teardown(stage)
 	return failures
 
 # --- Shield hitbox under head-size modifiers (issue #515) ----------------------
