@@ -738,6 +738,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_60_s_backstop_is_a_draw_556",
 	"stock_sudden_death_double_ko_replays_overtime_556",
 	"stock_sudden_death_leaves_no_rocks_behind_556",
+	"online_to_solo_drops_connected_and_held_remote_seats_552",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2606,6 +2607,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_sudden_death_double_ko_replays_overtime_556()
 		"stock_sudden_death_leaves_no_rocks_behind_556":
 			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
+		"online_to_solo_drops_connected_and_held_remote_seats_552":
+			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37481,4 +37484,34 @@ func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
 	if is_instance_valid(mode) and (mode.live_rock_count() != 0 or mode.rocks_dropped != 0):
 		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
 	await _stock_finish(rig)
+	return failures
+## #552: Online to Solo must not leave remote seats (connected or held after a
+## disconnect, #459) claimed in the Solo lobby, where they would eat bot capacity.
+func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_rig_239(4, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var held: WebSocketPeer = await _online_remote_239(rig, "held-552")
+	await _online_wait_239(rig, held, "slot")
+	var live: WebSocketPeer = await _online_remote_239(rig, "live-552")
+	await _online_wait_239(rig, live, "slot")
+	server.set_match_kind("online")
+	held.close()
+	await _online_frames_239(20)
+	var before: Array = server.claimed_slots()
+	if before.size() < 2:
+		failures.append("setup: expected a held and a live remote claim, got %s" % [before])
+	server.set_match_kind("solo")
+	await _online_frames_239(10)
+	var human: Array = []
+	for slot: int in server.claimed_slots():
+		if not server.virtual_slots().has(slot) and slot != server.host_pc_slot():
+			human.append(slot)
+	if not human.is_empty():
+		failures.append("Online to Solo left remote seats claimed: %s" % [human])
+	if server.bot_director.bot_count() != 3:
+		failures.append("Solo seated %d bots, wanted 3" % server.bot_director.bot_count())
+	await _online_close_239(rig)
 	return failures
