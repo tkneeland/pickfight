@@ -711,6 +711,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
+	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2525,6 +2526,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
 			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
+		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
+			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -36525,4 +36528,33 @@ func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[St
 	relay.stop()
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+
+# --- Shield hitbox under head-size modifiers (issue #515) ----------------------
+## The shield collides as `head_polygon`; Big Heads and Tiny Weapons must scale
+## it with the art, and undoing must restore it.
+func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, SHIELD_PATH)
+	var base: PackedVector2Array = player.weapon_head_polygon_shape().points.duplicate()
+	for case: Array in [[RoundModifiersScript.BIG_HEADS, RoundModifiersScript.BIG_HEAD_SCALE], [RoundModifiersScript.TINY_WEAPONS, RoundModifiersScript.TINY_HEAD_SCALE]]:
+		var modifier: RefCounted = RoundModifiersScript.create(case[0])
+		modifier.apply(null, [player], stage)
+		await _await_ticks(2)
+		var scaled: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
+		if scaled == null or scaled.points.size() != base.size():
+			failures.append("%s: shield polygon missing or reshaped" % case[0])
+		else:
+			for i in base.size():
+				if scaled.points[i].distance_to(base[i] * float(case[1])) > 0.01:
+					failures.append("%s: point %d is %s, expected %s" % [case[0], i, scaled.points[i], base[i] * float(case[1])])
+					break
+		modifier.undo()
+		await _await_ticks(2)
+		var restored: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
+		if restored == null or restored.points != base:
+			failures.append("%s: shield polygon not restored after undo" % case[0])
+	await _teardown(stage)
 	return failures
