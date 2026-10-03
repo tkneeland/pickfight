@@ -691,6 +691,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_bots_only_match_starts_offline_and_says_so",
 	"remote_join_cancel_button_click_aborts_join_and_closes_link",
 	"remote_join_cancel_idle_and_rejoin_wait_paths",
+	"gif_writer_encodes_valid_animated_gif",
+	"replay_save_writes_clip_gif_beside_pngs",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2465,6 +2467,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_join_cancel_button_click_aborts_join_and_closes_link()
 		"remote_join_cancel_idle_and_rejoin_wait_paths":
 			return await _scenario_remote_join_cancel_idle_and_rejoin_wait_paths()
+		"gif_writer_encodes_valid_animated_gif":
+			return await _scenario_gif_writer_encodes_valid_animated_gif()
+		"replay_save_writes_clip_gif_beside_pngs":
+			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -27971,6 +27977,7 @@ func _scenario_replay_buffer_bounded_and_saves_clip() -> Array[String]:
 	root.add_child(rb)
 	var scratch := "user://scenario_clips_329"
 	rb.clips_dir = scratch
+	rb.encode_gif = false
 	if rb.save_clip("empty") != "":
 		failures.append("an empty buffer saved a clip")
 	for i in 500:
@@ -34002,7 +34009,6 @@ func _scenario_remote_client_gamepad_stick_drives_arm() -> Array[String]:
 			failures.append("the centred stick left the arm at %s" % client.input_vector)
 	await _rc_close_241(rig)
 	return failures
-
 ## Issue #459: a remote seat that drops mid-match is held. It rejoins the
 ## same slot under the same claim, with its score, nickname, hat and colour,
 ## even after 20 s of game time and a round boundary's expiry pass.
@@ -34684,8 +34690,6 @@ func _snap_mismatches_240(got: Variant, want: Variant, path: String) -> Array[St
 	elif typeof(got) != typeof(want) or got != want:
 		failures.append("%s: got %s, wanted %s" % [path, got, want])
 	return failures
-
-
 # --- Shield shape (issue #465) -----------------------------------------------
 const SHIELD_MIN_WIDTH_465: float = 48.0
 ## The shield head collides as a convex polygon at least 48 px across (it was
@@ -34718,9 +34722,7 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 	# scenario and change the physics of whatever runs next (#493).
 	await _teardown(stage)
 	return failures
-
 # --- Explicit release input (issue #463, ADR-0022) ---------------------------
-
 ## A phone rig on a real arena, with a bar at `bar_at` and slot 0's player
 ## parked at `stand_at`; slot 1's player is moved out of the way.
 func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictionary:
@@ -34733,7 +34735,6 @@ func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictio
 	players[1].start_round(stand_at + Vector2(1500, 0))
 	await _await_ticks(6)
 	return rig
-
 func _key_463(keycode: Key) -> void:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = keycode
@@ -34742,7 +34743,6 @@ func _key_463(keycode: Key) -> void:
 	Input.parse_input_event(ev)
 	Input.flush_buffered_events()
 	await process_frame
-
 ## A PC seat's mouse never reports zero, so a Space tap is what lets go.
 func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Array[String]:
 	var failures: Array[String] = []
@@ -34789,7 +34789,6 @@ func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Arr
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rc_rig_241(7, failures)
@@ -34821,7 +34820,6 @@ func _scenario_remote_client_space_tap_releases_on_host() -> Array[String]:
 		failures.append("a second Space tap never un-released the host-side player")
 	await _rc_close_241(rig)
 	return failures
-
 ## Phones send eight bytes and no flag: a nonzero vector is held, zero is released.
 func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> Array[String]:
 	var failures: Array[String] = []
@@ -34856,9 +34854,7 @@ func _scenario_phone_packet_without_release_flag_keeps_zero_vector_release() -> 
 	await _close_phones(phones)
 	await _teardown(rig["stage"])
 	return failures
-
 # --- The action press throws the boomerang (issue #481, ADR-0022 amendment) ---
-
 ## Space on the host PC seat throws it along the aim, with no flick, and does
 ## not leave the seat released.
 func _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing() -> Array[String]:
@@ -34892,7 +34888,6 @@ func _scenario_pc_space_press_throws_boomerang_along_aim_without_releasing() -> 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## A pad's bumper press throws it and is not held as a release; a stick click
 ## throws once it is home again.
 func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
@@ -34916,7 +34911,6 @@ func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
 		failures.append("a bumper tap that threw the boomerang counts as a release hold")
 	await _teardown(rig["stage"])
 	return failures
-
 ## The Online client's Space press reaches the host as the action count and
 ## throws there; it does not release.
 func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[String]:
@@ -34946,9 +34940,7 @@ func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[Str
 		failures.append("the throwing press left the remote seat released")
 	await _rc_close_241(rig)
 	return failures
-
 # --- Tap for the weapon's job, hold to unstick (issue #485, ADR-0022 amendment 2) ---
-
 ## A keyboard key going down or up, as the host sees it.
 func _key_485(keycode: Key, pressed: bool) -> void:
 	var ev := InputEventKey.new()
@@ -34958,18 +34950,15 @@ func _key_485(keycode: Key, pressed: bool) -> void:
 	Input.parse_input_event(ev)
 	Input.flush_buffered_events()
 	await process_frame
-
 ## Down and up in the next frame: well inside TAP_MAX_SEC.
 func _tap_485(keycode: Key) -> void:
 	await _key_485(keycode, true)
 	await _key_485(keycode, false)
-
 func _space_up_485() -> InputEventKey:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = false
 	return ev
-
 ## Holding Space with the boomerang counts as released (so the cut-off head
 ## phases home after the gridlock delay) and never throws; coming up after a
 ## hold does not toggle release on.
@@ -35028,7 +35017,6 @@ func _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws() 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## A tap fires on key-up, not on key-down.
 func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
 	var failures: Array[String] = []
@@ -35057,7 +35045,6 @@ func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## Online: the client decides tap vs hold. A hold sets the host's released flag
 ## and throws nothing; a tap is counted and throws.
 func _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang() -> Array[String]:
@@ -35098,7 +35085,6 @@ func _scenario_remote_client_space_hold_releases_and_tap_throws_boomerang() -> A
 		failures.append("the client's throwing tap left the seat released")
 	await _rc_close_241(rig)
 	return failures
-
 ## A bumper is released while held; a tap throws on key-up, a hold never does.
 func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[String]:
 	var failures: Array[String] = []
@@ -35134,14 +35120,10 @@ func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[
 		failures.append("a bumper tap did not throw the boomerang on key-up")
 	await _teardown(rig["stage"])
 	return failures
-
-
 # --- No flick launches on button seats (issue #487, ADR-0022 amendment 3) ---
-
 ## Whether `player`'s launcher is out (a hook or a boomerang).
 func _launcher_out_487(player: RigidBody2D) -> bool:
 	return player.launched_hook() != null or player.launched_boomerang() != null
-
 ## A fast flick on the host PC seat launches neither the grapple nor the
 ## boomerang; a Space tap fires the grapple along the aim, a second tap (hook
 ## out) retracts it.
@@ -35190,7 +35172,6 @@ func _scenario_flick_launch_off_on_button_seats_host_pc_tap_fires_and_retracts_g
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
-
 ## A pad's flick launches nothing; a bumper tap fires the grapple.
 func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Array[String]:
 	var failures: Array[String] = []
@@ -35219,7 +35200,6 @@ func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Ar
 		failures.append("a bumper tap did not fire the grapple")
 	await _teardown(rig["stage"])
 	return failures
-
 ## An Online client's flick launches nothing on the host; its Space tap fires
 ## the grapple there.
 func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host() -> Array[String]:
@@ -35260,7 +35240,6 @@ func _scenario_flick_launch_off_on_remote_client_seat_tap_fires_grapple_on_host(
 		failures.append("a client Space tap never fired the host-side grapple (vec %s, ready %s, presses %d, seen %d, phased %s, cd %.2f, alive %s)" % [player.input_vector, player.special_ready(), client.action_presses, server._slot_press_seen[client.slot], player.is_head_phased(), player._launch_cooldown, player.alive])
 	await _rc_close_241(rig)
 	return failures
-
 ## A phone has no button, so its flick still launches the grapple and the
 ## boomerang (issue #487 leaves phones unchanged).
 func _scenario_phone_seat_flick_still_launches_grapple_and_boomerang() -> Array[String]:
@@ -35292,7 +35271,6 @@ func _scenario_phone_seat_flick_still_launches_grapple_and_boomerang() -> Array[
 	peer.close()
 	await _teardown(rig["stage"])
 	return failures
-
 func _packet_for_487(v: Vector2) -> PackedByteArray:
 	var pkt := PackedByteArray()
 	pkt.resize(8)
@@ -35323,7 +35301,6 @@ func _scenario_bot_overshoot_fixture_replays_identically_in_one_process() -> Arr
 			failures.append("start %d differs between runs: '%s' then '%s'" % [i, first[i], second[i]])
 	_scenario_completed = true
 	return failures
-
 # --- Host bot counter (issue #445) -----------------------------------------------
 ## A lobby for the counter scenarios: Main with no `--bots`, one Couch or
 ## Online match picked on the title screen. Online goes through a real relay
@@ -35512,7 +35489,6 @@ func _scenario_online_bots_only_match_starts_offline_and_says_so() -> Array[Stri
 		failures.append("the match never started offline (state %d)" % int(rm.get("_state")))
 	await _bots_close_445(rig)
 	return failures
-
 # --- The host PC seat's cosmetics picker (issue #441) ----------------------------
 const HostSettingsScript441 := preload("res://scripts/HostSettings.gd")
 const BARE_PICK_441: Dictionary = {"hat": "none", "eyes": "round", "color": -1}
@@ -35717,4 +35693,192 @@ func _scenario_remote_join_cancel_idle_and_rejoin_wait_paths() -> Array[String]:
 	rig["nodes"].clear() # the scene change freed the client
 	await process_frame
 	_rc_close_241(rig)
+	return failures
+## #502: independent GIF89a reader for the scenarios. Returns size, frame
+## count, loop flag, trailer flag, and each frame's decoded palette indices.
+func _gif_parse_502(b: PackedByteArray) -> Dictionary:
+	var r := {"ok": false, "w": 0, "h": 0, "frames": [], "loop": false, "delay": -1, "trailer": false, "palette": PackedByteArray()}
+	if b.size() < 14 or b.slice(0, 6).get_string_from_ascii() != "GIF89a":
+		return r
+	r["w"] = b[6] | (b[7] << 8)
+	r["h"] = b[8] | (b[9] << 8)
+	var pos := 13
+	if b[10] & 0x80:
+		var n := 3 * (1 << ((b[10] & 7) + 1))
+		r["palette"] = b.slice(13, 13 + n)
+		pos += n
+	while pos < b.size():
+		var t: int = b[pos]
+		if t == 0x3B:
+			r["trailer"] = pos == b.size() - 1
+			r["ok"] = true
+			return r
+		if t == 0x21:
+			var label: int = b[pos + 1]
+			if label == 0xF9:
+				r["delay"] = b[pos + 4] | (b[pos + 5] << 8)
+			elif label == 0xFF and b.slice(pos + 3, pos + 14).get_string_from_ascii() == "NETSCAPE2.0":
+				r["loop"] = true
+			pos += 2
+			while b[pos] != 0:
+				pos += b[pos] + 1
+			pos += 1
+		elif t == 0x2C:
+			var min_size: int = b[pos + 10]
+			pos += 11
+			var data := PackedByteArray()
+			while b[pos] != 0:
+				data.append_array(b.slice(pos + 1, pos + 1 + b[pos]))
+				pos += b[pos] + 1
+			pos += 1
+			r["frames"].append(_gif_lzw_decode_502(data, min_size, r["w"] * r["h"]))
+		else:
+			return r
+	return r
+func _gif_lzw_decode_502(data: PackedByteArray, min_size: int, want: int) -> PackedByteArray:
+	var out := PackedByteArray()
+	var clear := 1 << min_size
+	var eoi := clear + 1
+	var table: Array = []
+	var size := min_size + 1
+	var acc := 0
+	var nbits := 0
+	var prev: PackedByteArray = PackedByteArray()
+	var have_prev := false
+	var p := 0
+	while true:
+		while nbits < size and p < data.size():
+			acc |= data[p] << nbits
+			nbits += 8
+			p += 1
+		if nbits < size:
+			break
+		var code := acc & ((1 << size) - 1)
+		acc >>= size
+		nbits -= size
+		if code == clear:
+			table.clear()
+			for i in clear + 2:
+				table.append(PackedByteArray([i]) if i < clear else PackedByteArray())
+			size = min_size + 1
+			have_prev = false
+			continue
+		if code == eoi:
+			break
+		var entry: PackedByteArray
+		if code < table.size():
+			entry = table[code]
+		elif have_prev:
+			entry = prev.duplicate()
+			entry.append(prev[0])
+		else:
+			break
+		out.append_array(entry)
+		if have_prev and table.size() < 4096:
+			var ne := prev.duplicate()
+			ne.append(entry[0])
+			table.append(ne)
+		prev = entry
+		have_prev = true
+		if table.size() == (1 << size) and size < 12:
+			size += 1
+	if out.size() != want:
+		out.resize(0)
+	return out
+## #502: a tiny clip encodes to a structurally valid, looping GIF whose
+## frames decode back to the colours that went in.
+func _scenario_gif_writer_encodes_valid_animated_gif() -> Array[String]:
+	var failures: Array[String] = []
+	var gif_script := preload("res://scripts/GifWriter.gd")
+	var cols := [Color8(255, 0, 0), Color8(0, 255, 0), Color8(0, 0, 255)]
+	var frames: Array = []
+	for c in cols:
+		var img := Image.create(16, 16, false, Image.FORMAT_RGB8)
+		img.fill(c)
+		img.fill_rect(Rect2i(3, 4, 6, 4), Color8(255, 255, 255))
+		frames.append(img)
+	var bytes: PackedByteArray = gif_script.encode(frames, 8)
+	if bytes.size() < 20 or bytes.slice(0, 6).get_string_from_ascii() != "GIF89a":
+		failures.append("bytes do not start with GIF89a")
+	if bytes.is_empty() or bytes[bytes.size() - 1] != 0x3B:
+		failures.append("bytes do not end with the 0x3B trailer")
+	var g := _gif_parse_502(bytes)
+	if not g["ok"] or not g["trailer"]:
+		failures.append("block walk did not reach a clean trailer")
+	if g["w"] != 16 or g["h"] != 16:
+		failures.append("logical screen %dx%d, expected 16x16" % [g["w"], g["h"]])
+	if g["frames"].size() != 3:
+		failures.append("%d image descriptors, expected 3" % g["frames"].size())
+	if not g["loop"]:
+		failures.append("NETSCAPE2.0 loop extension missing")
+	if g["delay"] != 8:
+		failures.append("frame delay %d cs, expected 8" % g["delay"])
+	var pal: PackedByteArray = g["palette"]
+	for f in g["frames"].size():
+		var px: PackedByteArray = g["frames"][f]
+		if px.size() != 256:
+			failures.append("frame %d did not decode to 256 pixels" % f)
+			continue
+		var at := func(x: int, y: int) -> Color:
+			var i: int = px[y * 16 + x]
+			return Color8(pal[i * 3], pal[i * 3 + 1], pal[i * 3 + 2])
+		var want: Color = cols[f]
+		var got: Color = at.call(0, 0)
+		if absf(got.r - want.r) > 0.05 or absf(got.g - want.g) > 0.05 or absf(got.b - want.b) > 0.05:
+			failures.append("frame %d background decoded as %s, expected %s" % [f, got, want])
+		if at.call(3, 4).r < 0.9 or at.call(3, 4).g < 0.9 or at.call(3, 4).b < 0.9:
+			failures.append("frame %d marker pixel is not white" % f)
+	_scenario_completed = true
+	return failures
+## #502: F9 (save_and_toast) writes clip.gif beside the PNGs; also times a
+## full-size 120-frame encode and round-trips it through the decoder.
+func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	rb.clips_dir = "user://scenario_clips_502"
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 502
+	for i in 120:
+		var img := Image.create(256, 144, false, Image.FORMAT_RGB8)
+		img.fill(Color8((i * 7) % 256, (i * 3) % 256, 90))
+		for k in 40:
+			img.fill_rect(Rect2i(rng.randi_range(0, 240), rng.randi_range(0, 130), 12, 10), Color8(rng.randi() % 256, rng.randi() % 256, rng.randi() % 256))
+		rb.push_frame(img)
+	var t0 := Time.get_ticks_msec()
+	var dir: String = rb.save_and_toast()
+	var abs_dir := ProjectSettings.globalize_path(dir)
+	if not rb.toast_text().contains("clip.gif"):
+		failures.append("toast does not show the GIF path: '%s'" % rb.toast_text())
+	var path: String = await rb.gif_saved
+	var ms := Time.get_ticks_msec() - t0
+	print("      120 frames 256x144 saved + encoded in %d ms" % ms)
+	var gif_path := abs_dir + "/clip.gif"
+	if path != gif_path:
+		failures.append("gif_saved gave '%s', expected '%s'" % [path, gif_path])
+	var bytes := FileAccess.get_file_as_bytes(gif_path)
+	if bytes.is_empty():
+		failures.append("clip.gif missing or empty")
+	else:
+		var g := _gif_parse_502(bytes)
+		if g["frames"].size() != 120 or g["w"] != 256 or g["h"] != 144 or not g["loop"] or not g["trailer"]:
+			failures.append("clip.gif malformed: %d frames, %dx%d, loop %s" % [g["frames"].size(), g["w"], g["h"], g["loop"]])
+		elif (g["frames"][119] as PackedByteArray).size() != 256 * 144:
+			failures.append("last frame did not decode")
+		var out_path := OS.get_environment("PF502_GIF")
+		if out_path != "":
+			var f := FileAccess.open(out_path, FileAccess.WRITE)
+			f.store_buffer(bytes)
+			f.close()
+	var pngs := 0
+	for f in DirAccess.get_files_at(abs_dir):
+		if f.ends_with(".png"):
+			pngs += 1
+		DirAccess.remove_absolute(abs_dir + "/" + f)
+	if pngs != 120:
+		failures.append("%d PNGs beside the gif, expected 120" % pngs)
+	DirAccess.remove_absolute(abs_dir)
+	rb.queue_free()
+	_scenario_completed = true
 	return failures
