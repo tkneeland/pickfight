@@ -2320,6 +2320,9 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 	if button == JOY_BUTTON_LEFT_SHOULDER or button == JOY_BUTTON_RIGHT_SHOULDER:
 		# Released while held; a tap (up within TAP_MAX_SEC) throws the boomerang.
 		if pressed:
+			# Issue #511: the picker or the host menu owns the bumper right now.
+			if pad_picker_shown(slot) or PadMenuScript.is_open():
+				return
 			_slot_release_held[slot] = 1
 			_slot_bumper_down[slot] = GameClockScript459.now_msec()
 		else:
