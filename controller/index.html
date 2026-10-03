@@ -1158,6 +1158,8 @@
   // a reload (issue #164): it stops reconnecting too, or two tabs would keep
   // taking the slot off each other.
   var replacedOut = false;
+  // Set once the host refused this phone for the match kind (close code 4003, #509).
+  var refusedOut = false;
   var stateTimer = null;
   // Issue #194: why the host last closed this phone's socket, kept until it
   // is given a slot, so a refused phone keeps saying so while it retries.
@@ -1168,6 +1170,8 @@
       text = t("STATE_KICKED");
     } else if (replacedOut) {
       text = t("STATE_REPLACED");
+    } else if (refusedOut) {
+      text = closeReason.charAt(0).toUpperCase() + closeReason.slice(1);
     } else if (slot >= 0 && lobby && lobby.paused) {
       text = t("STATE_PAUSED");
     } else if (slot < 0) {
@@ -1867,6 +1871,10 @@
   // Must match the reason ControllerServer closes a phone with when every
   // slot is taken (issue #194): shown as "Waiting for a free slot".
   var NO_SLOT_REASON = "no free player slot";
+  // Must match ControllerServer.REFUSED_CODE (#509): the host refused this
+  // phone for the match kind (online, couch, solo, room closed). Retrying
+  // cannot change that, so it is terminal like a kick.
+  var REFUSED_CODE = 4003;
 
   function connect() {
     setStatus(t("STATUS_CONNECTING"));
@@ -1913,9 +1921,10 @@
       var reason = (ev && ev.reason) ? String(ev.reason) : "";
       var kicked = reason === KICKED_REASON;
       var replaced = reason === REPLACED_REASON;
+      var refused = ev && ev.code === REFUSED_CODE;
       closeReason = kicked || replaced ? "" : reason;
       setStatus(kicked ? t("STATUS_KICKED") : (replaced ? t("STATUS_REPLACED") :
-        (reason ? t("STATUS_RETRYING", reason) : t("STATUS_RECONNECTING"))));
+        (refused ? reason : (reason ? t("STATUS_RETRYING", reason) : t("STATUS_RECONNECTING")))));
       setSlot(-1);
       lobbyEl.className = "";
       lookEl.classList.remove("show");
@@ -1926,6 +1935,7 @@
       release();
       if (kicked) { kickedOut = true; showState(); return; }
       if (replaced) { replacedOut = true; showState(); return; }
+      if (refused) { refusedOut = true; showState(); return; }
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
     sock.onerror = function () { /* onclose does the reconnecting */ };
