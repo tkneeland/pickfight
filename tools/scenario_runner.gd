@@ -737,6 +737,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_60_s_backstop_is_a_draw_556",
 	"stock_sudden_death_double_ko_replays_overtime_556",
 	"stock_sudden_death_leaves_no_rocks_behind_556",
+	"remote_shoulder_throw_clears_retract_toggle_551",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -2601,6 +2602,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_sudden_death_double_ko_replays_overtime_556()
 		"stock_sudden_death_leaves_no_rocks_behind_556":
 			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
+		"remote_shoulder_throw_clears_retract_toggle_551":
+			return await _scenario_remote_shoulder_throw_clears_retract_toggle_551()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
 		_:
@@ -37363,6 +37366,73 @@ func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
 		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
 	await _stock_finish(rig)
 	return failures
+
+## Issue #551: on a remote seat a stick click retracts (toggle on), and a later
+## shoulder-button throw must start held, not pulled home by that leftover toggle.
+class _FakePeer551 extends RefCounted:
+	var packets: Array[PackedByteArray] = []
+	func get_available_packet_count() -> int:
+		return packets.size()
+	func get_packet() -> PackedByteArray:
+		return packets.pop_front()
+	func was_string_packet() -> bool:
+		return false
+func _packet_551(count: int, hold: bool) -> PackedByteArray:
+	var pkt := PackedByteArray()
+	pkt.resize(10)
+	pkt.encode_float(0, 0.0)
+	pkt.encode_float(4, -1.0)
+	pkt[8] = 0
+	pkt[9] = (count & 0x7F) | (0x80 if hold else 0)
+	return pkt
+func _scenario_remote_shoulder_throw_clears_retract_toggle_551() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "RemoteShoulder551")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	# A pad claims the seat and holds the aim; the packets below are the remote
+	# client's action presses, which is the path under test.
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(30)
+	player.flick_launch_enabled = false  # a remote seat throws on its action button
+	var peer := _FakePeer551.new()
+	# Count 0 only adopts the seat's press count; the wait lets the aim ease in.
+	peer.packets.append(_packet_551(0, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(40)
+	peer.packets.append(_packet_551(1, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() == null:
+		failures.append("the stick-click throw did not fire the grapple")
+	peer.packets.append(_packet_551(2, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() != null:
+		failures.append("the second stick click did not retract the hook")
+	if not server._slot_release_toggle[0] == 1:
+		failures.append("setup: the retract left no toggle on")
+	await _await_ticks(60)
+	peer.packets.append(_packet_551(3, true))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() == null:
+		failures.append("the shoulder throw's hook was pulled home at once")
+	if server.slot_released(0):
+		failures.append("the shoulder throw left the seat released")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
+	return failures
+
 ## #552: Online to Solo must not leave remote seats (connected or held after a
 ## disconnect, #459) claimed in the Solo lobby, where they would eat bot capacity.
 func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Array[String]:
