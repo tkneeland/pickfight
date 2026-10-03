@@ -115,6 +115,14 @@ const _WORLD_LAYER: int = 1
 const _PLAYERS_GROUP: StringName = &"players"
 const _ROCK_SIDES: int = 9
 
+## Spawn API (issue #556): a rock a mode drops on demand -- Stock's sudden
+## death rain -- instead of on the part's own timer. `auto_drop` false stops
+## the idle timer starting a warning; `drop_now()` starts one at once; with
+## `one_shot` the part frees itself when that one rock has landed, so a rain
+## leaves nothing behind. Set before the part enters the tree.
+var auto_drop: bool = true
+var one_shot: bool = false
+
 var _state: _RockState = _RockState.IDLE
 var _timer_remaining: float = 0.0
 var _fall_speed: float = 0.0
@@ -204,6 +212,8 @@ func hit_count() -> int:
 func _physics_process(delta: float) -> void:
 	match _state:
 		_RockState.IDLE:
+			if not auto_drop:
+				return
 			_timer_remaining -= delta
 			if _timer_remaining <= 0.0:
 				_begin_warning()
@@ -220,6 +230,14 @@ func _physics_process(delta: float) -> void:
 			_rock_visual.modulate.a = clampf(_timer_remaining / SHATTER_SEC, 0.0, 1.0)
 			if _timer_remaining <= 0.0:
 				_rest()
+
+## Starts a drop now, with its usual warning, if the rock is idle. Returns
+## whether it started.
+func drop_now() -> bool:
+	if _state != _RockState.IDLE or _rock == null:
+		return false
+	_begin_warning()
+	return true
 
 func _begin_warning() -> void:
 	_state = _RockState.WARNING
@@ -316,6 +334,11 @@ func _shatter() -> void:
 
 func _rest() -> void:
 	_state = _RockState.IDLE
+	if one_shot:
+		_rock.visible = false
+		_marker.visible = false
+		queue_free()
+		return
 	_timer_remaining = interval_sec
 	_rock.visible = false
 	_marker.visible = false

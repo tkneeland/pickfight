@@ -226,6 +226,8 @@ const SOUNDS: Dictionary = {
 	"announce_last_life": {"files": ["announcer/last_life.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_stolen": {"files": ["announcer/stolen.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_overtime": {"files": ["announcer/overtime.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	# No recorded voice clip for the Stock draw yet (#556): a UI sound stands in.
+	"announce_draw": {"files": ["kenney_interface/bong_001.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
 	"announce_soccer": {"files": ["announcer/soccer.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_goal": {"files": ["announcer/goal.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	# No recorded voice clips for Capture the Flag yet (#403): UI sounds stand in.

@@ -731,6 +731,18 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_hat_only_pick_keeps_colour_automatic_545",
 	"cosmetics_panel_idle_when_not_visible_in_tree_545",
 	"kick_never_removes_the_host_pc_seat_545",
+	"ui_theme_loads_with_bundled_fonts",
+	"mode_targets_settings_clamp_persist_and_host_commands_544",
+	"mode_targets_lobby_label_value_and_status_line_544",
+	"mode_targets_reach_the_round_and_the_remote_hud_544",
+	"remote_client_remembers_name_460",
+	"remote_ready_focused_pad_a_and_space_act_once_550",
+	"remote_ready_click_survives_stale_lobby_550",
+	"stock_tie_sudden_death_rocks_start_at_15_s_556",
+	"stock_sudden_death_rock_rate_rises_556",
+	"stock_sudden_death_60_s_backstop_is_a_draw_556",
+	"stock_sudden_death_double_ko_replays_overtime_556",
+	"stock_sudden_death_leaves_no_rocks_behind_556",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2585,6 +2597,30 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_cosmetics_panel_idle_when_not_visible_in_tree_545()
 		"kick_never_removes_the_host_pc_seat_545":
 			return await _scenario_kick_never_removes_the_host_pc_seat_545()
+		"ui_theme_loads_with_bundled_fonts":
+			return await _scenario_ui_theme_loads_with_bundled_fonts()
+		"mode_targets_settings_clamp_persist_and_host_commands_544":
+			return await _scenario_mode_targets_settings_clamp_persist_and_host_commands_544()
+		"mode_targets_lobby_label_value_and_status_line_544":
+			return await _scenario_mode_targets_lobby_label_value_and_status_line_544()
+		"mode_targets_reach_the_round_and_the_remote_hud_544":
+			return await _scenario_mode_targets_reach_the_round_and_the_remote_hud_544()
+		"remote_client_remembers_name_460":
+			return await _scenario_remote_client_remembers_name_460()
+		"remote_ready_focused_pad_a_and_space_act_once_550":
+			return await _scenario_remote_ready_focused_pad_a_and_space_act_once_550()
+		"remote_ready_click_survives_stale_lobby_550":
+			return await _scenario_remote_ready_click_survives_stale_lobby_550()
+		"stock_tie_sudden_death_rocks_start_at_15_s_556":
+			return await _scenario_stock_tie_sudden_death_rocks_start_at_15_s_556()
+		"stock_sudden_death_rock_rate_rises_556":
+			return await _scenario_stock_sudden_death_rock_rate_rises_556()
+		"stock_sudden_death_60_s_backstop_is_a_draw_556":
+			return await _scenario_stock_sudden_death_60_s_backstop_is_a_draw_556()
+		"stock_sudden_death_double_ko_replays_overtime_556":
+			return await _scenario_stock_sudden_death_double_ko_replays_overtime_556()
+		"stock_sudden_death_leaves_no_rocks_behind_556":
+			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -31868,8 +31904,8 @@ func _scenario_ctf_two_captures_end_the_round() -> Array[String]:
 	var mode: Node = await _ctf_start(rig, failures)
 	if mode == null:
 		return failures
-	if mode.captures_to_win != 2:
-		failures.append("the round is first to %d, wanted 2" % mode.captures_to_win)
+	if mode.captures_to_win != HostSettingsScript352.shared().ctf_captures:
+		failures.append("the round is first to %d, wanted the setting %d" % [mode.captures_to_win, HostSettingsScript352.shared().ctf_captures])
 	var stage: Node2D = rm._current_stage
 	var red: RigidBody2D = rig["players"][0]
 	for capture in 2:
@@ -37073,4 +37109,494 @@ func _scenario_kick_never_removes_the_host_pc_seat_545() -> Array[String]:
 	if server.host_pc_slot() != pc or not server.claimed_slots().has(pc):
 		failures.append("the host PC seat is gone after the kick")
 	await _host_picker_free_441(rig)
+	return failures
+
+
+# --- Shared UI theme and fonts (#541) ---------------------------------------------
+const UiThemeScript541 := preload("res://scripts/UiTheme.gd")
+func _scenario_ui_theme_loads_with_bundled_fonts() -> Array[String]:
+	var failures: Array[String] = []
+	var configured: String = str(ProjectSettings.get_setting("gui/theme/custom", ""))
+	if configured != UiThemeScript541.THEME_PATH:
+		failures.append("project gui/theme/custom is '%s', expected %s" % [configured, UiThemeScript541.THEME_PATH])
+	var theme := load(UiThemeScript541.THEME_PATH) as Theme
+	if theme == null:
+		failures.append("the theme resource does not load")
+		_scenario_completed = true
+		return failures
+	if theme.default_font == null or theme.default_font.resource_path != UiThemeScript541.BODY_FONT_PATH:
+		failures.append("the theme's default font is not the bundled Nunito")
+	if theme.default_font_size < UiThemeScript541.MIN_FONT_SIZE:
+		failures.append("the theme's default font size %d is below the %d px floor" % [theme.default_font_size, UiThemeScript541.MIN_FONT_SIZE])
+	var heading: Font = theme.get_font("font", UiThemeScript541.HEADING_LABEL)
+	if heading == null or heading.resource_path != UiThemeScript541.HEADING_FONT_PATH:
+		failures.append("the HeadingLabel variation does not use the bundled Lilita One")
+	for style_type: String in ["Button", "Panel", "PanelContainer", "LineEdit"]:
+		var style_name: String = "normal" if style_type in ["Button", "LineEdit"] else "panel"
+		if not theme.has_stylebox(style_name, style_type):
+			failures.append("the theme has no %s style for %s" % [style_name, style_type])
+	for path: String in [UiThemeScript541.HEADING_FONT_PATH, UiThemeScript541.BODY_FONT_PATH,
+			"res://art/fonts/OFL-LilitaOne.txt", "res://art/fonts/OFL-Nunito.txt"]:
+		if not FileAccess.file_exists(path):
+			failures.append("%s is missing" % path)
+	# A live control resolves the project theme and measures text with the bundled font.
+	var label := Label.new()
+	get_root().add_child(label)
+	label.text = "Pickfight"
+	var resolved: Font = label.get_theme_font("font")
+	if resolved == null or resolved.resource_path != UiThemeScript541.BODY_FONT_PATH:
+		failures.append("a plain Label does not resolve to the bundled Nunito")
+	if label.get_theme_font_size("font_size") < UiThemeScript541.MIN_FONT_SIZE:
+		failures.append("a plain Label's font size is below the floor")
+	label.theme_type_variation = UiThemeScript541.HEADING_LABEL
+	var heading_resolved: Font = label.get_theme_font("font")
+	if heading_resolved == null or heading_resolved.resource_path != UiThemeScript541.HEADING_FONT_PATH:
+		failures.append("a HeadingLabel does not resolve to Lilita One")
+	label.queue_free()
+	_scenario_completed = true
+	return failures
+
+# --- Per-mode match targets (issue #544) ---------------------------------------
+func _mode_targets_reset_544() -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.set_stock_lives(3)
+	settings.set_soccer_goals(3)
+	settings.set_ctf_captures(2)
+	settings.game_mode = ""
+## Goals and captures default to 3 and 2, clamp to 1-10, survive a reload, and
+## the host commands (and the mode-aware "target") set them.
+func _scenario_mode_targets_settings_clamp_persist_and_host_commands_544() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://mode_targets_544.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	if fresh.soccer_goals != 3 or fresh.ctf_captures != 2:
+		failures.append("defaults were %d goals, %d captures; want 3 and 2" % [fresh.soccer_goals, fresh.ctf_captures])
+	fresh.set_soccer_goals(0)
+	fresh.set_ctf_captures(99)
+	if fresh.soccer_goals != 1 or fresh.ctf_captures != 10:
+		failures.append("0 goals / 99 captures kept as %d / %d; want 1 / 10" % [fresh.soccer_goals, fresh.ctf_captures])
+	fresh.persist = true
+	fresh.set_soccer_goals(6)
+	fresh.set_ctf_captures(4)
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.soccer_goals != 6 or reloaded.ctf_captures != 4:
+		failures.append("reloaded %d goals, %d captures; want 6 and 4" % [reloaded.soccer_goals, reloaded.ctf_captures])
+	DirAccess.remove_absolute(path)
+	_mode_targets_reset_544()
+	var shared: RefCounted = StockSettingsScript.shared()
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("soccer_goals", 5) or shared.soccer_goals != 5:
+		failures.append("the soccer_goals command did not set 5")
+	if not server.apply_host_command("ctf_captures", 7) or shared.ctf_captures != 7:
+		failures.append("the ctf_captures command did not set 7")
+	if server.apply_host_command("soccer_goals", "x"):
+		failures.append("a non-number goal count was taken")
+	server.apply_host_command("mode", "teams")
+	server.set_game_mode(GameModesType.SOCCER)
+	server.apply_host_command("target", 4)
+	if shared.soccer_goals != 4 or server.mode_target() != 4:
+		failures.append("target in Soccer left goals at %d, mode_target %d" % [shared.soccer_goals, server.mode_target()])
+	server.set_game_mode(GameModesType.CAPTURE_THE_FLAG)
+	server.apply_host_command("target", 3)
+	if shared.ctf_captures != 3 or shared.soccer_goals != 4:
+		failures.append("target in CTF left captures %d, goals %d" % [shared.ctf_captures, shared.soccer_goals])
+	server.set_game_mode(GameModesType.STOCK)
+	server.apply_host_command("target", 8)
+	if shared.stock_lives != 8:
+		failures.append("target in Stock left lives at %d" % shared.stock_lives)
+	server.set_game_mode(GameModesType.CLASSIC)
+	server.apply_host_command("target", 6)
+	if server.match_target() != 6 or shared.stock_lives != 8 or server.mode_target() != 6:
+		failures.append("target in Classic left rounds at %d, lives %d" % [server.match_target(), shared.stock_lives])
+	server.free()
+	_mode_targets_reset_544()
+	_scenario_completed = true
+	return failures
+## Each mode's lobby row reads its own label and value, the title-card line
+## carries the saved number and the mode cards carry none.
+func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[String]:
+	var failures: Array[String] = []
+	_mode_targets_reset_544()
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.set_stock_lives(4)
+	shared.set_soccer_goals(5)
+	shared.set_ctf_captures(6)
+	var want_line: Dictionary = {
+		GameModesType.STOCK: "Lose all 4 lives and you are out.",
+		GameModesType.SOCCER: "First team to 5 goals wins.",
+		GameModesType.CAPTURE_THE_FLAG: "First team to 6 captures wins.",
+		GameModesType.CLASSIC: "Last one standing wins.",
+	}
+	for id: String in want_line:
+		if GameModesType.status_line(id) != want_line[id]:
+			failures.append("%s status line reads '%s'" % [id, GameModesType.status_line(id)])
+	for row: Dictionary in GameModesType.TABLE:
+		var card: String = GameModesType.rule_line(str(row["id"]))
+		for ch: String in "0123456789":
+			if card.contains(ch):
+				failures.append("%s mode-card rule carries a number: '%s'" % [row["id"], card])
+				break
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var server: Node = main.get_node("ControllerServer")
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	server.apply_host_command("mode", "teams")
+	var cases: Array = [
+		[GameModesType.CLASSIC, "Teams  -  first to %d" % server.match_target(), "first_to"],
+		[GameModesType.STOCK, "Lives 4", "lives"],
+		[GameModesType.SOCCER, "Goals to win 5", "goals"],
+		[GameModesType.CAPTURE_THE_FLAG, "Captures to win 6", "captures"],
+	]
+	for case: Array in cases:
+		if not server.set_game_mode(case[0]):
+			failures.append("could not pick %s" % case[0])
+			continue
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		var state: Dictionary = rm.get("_last_lobby_state")
+		if str(state.get("target_kind", "first_to")) != case[2]:
+			failures.append("%s lobby state kind is '%s', wanted %s" % [case[0], state.get("target_kind"), case[2]])
+		var label: Label = rm.get("_lobby_screen").get("_lobby_target_label")
+		if label.text != case[1]:
+			failures.append("%s lobby row reads '%s', wanted '%s'" % [case[0], label.text, case[1]])
+	await _teardown(main)
+	_mode_targets_reset_544()
+	return failures
+## A Soccer or CTF round plays to the saved count, the remote HUD sends it, and
+## the remote client's host row labels the value by kind.
+func _scenario_mode_targets_reach_the_round_and_the_remote_hud_544() -> Array[String]:
+	var failures: Array[String] = []
+	_mode_targets_reset_544()
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.set_soccer_goals(5)
+	shared.set_ctf_captures(1)
+	var rig: Dictionary = _soccer_rig(4)
+	if await _mode_started(rig):
+		var mode: Node = rig["rm"].game_mode_node()
+		var hud: Dictionary = preload("res://scripts/RemoteHud.gd")._mode(GameModesType.SOCCER, mode, rig["rm"])
+		if mode.goals_to_win != 5 or int(hud.get("win", -1)) != 5:
+			failures.append("Soccer plays to %d, remote HUD says %s; want 5" % [mode.goals_to_win, hud.get("win")])
+	else:
+		failures.append("the Soccer round never started")
+	await _teardown(rig["stage"])
+	rig = _ctf_rig(4)
+	if await _mode_started(rig):
+		var flag_mode: Node = rig["rm"].game_mode_node()
+		var flag_hud: Dictionary = preload("res://scripts/RemoteHud.gd")._mode(GameModesType.CAPTURE_THE_FLAG, flag_mode, rig["rm"])
+		if flag_mode.captures_to_win != 1 or int(flag_hud.get("win", -1)) != 1:
+			failures.append("CTF plays to %d, remote HUD says %s; want 1" % [flag_mode.captures_to_win, flag_hud.get("win")])
+	else:
+		failures.append("the Capture the Flag round never started")
+	await _teardown(rig["stage"])
+	var client_rig: Dictionary = {"nodes": []}
+	var client: Node = await _rc_client_241(client_rig, "ws://127.0.0.1:1")
+	client.room_code = "ABCD"
+	client.slot = 0
+	client.state = RcState241.PLAYING
+	for case: Array in [["lives", "Lives 3"], ["goals", "Goals to win 3"], ["captures", "Captures to win 3"], ["first_to", "First to 3"]]:
+		client.lobby = {"phase": "lobby", "count": 0, "host": 0, "mode": "ffa", "target": 3, "target_kind": case[0],
+			"paused": false, "players": [{"name": "Ann", "slot": 0, "ready": false, "color": "ff0000"}]}
+		client._refresh_lobby()
+		if client._target_label.text != case[1]:
+			failures.append("remote host row for %s reads '%s', wanted '%s'" % [case[0], client._target_label.text, case[1]])
+	await _rc_close_241(client_rig)
+	_mode_targets_reset_544()
+	return failures
+
+## #460: the PC join screen pre-fills the last name used, joining saves it, and
+## an empty or junk name falls back to the default. Runs on a temp settings
+## file, never the owner's `user://remote_client.cfg` (#195).
+func _scenario_remote_client_remembers_name_460() -> Array[String]:
+	var failures: Array[String] = []
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_remote_client_460_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	var first: Node = RemoteClientScene241.instantiate()
+	first.settings_path = temp_path
+	first.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(first)
+	await process_frame
+	if first._name_edit.text != "":
+		failures.append("a fresh install pre-filled '%s'" % first._name_edit.text)
+	first.join("ABCD", "Zelda")
+	first.queue_free()
+	await process_frame
+	var second: Node = RemoteClientScene241.instantiate()
+	second.settings_path = temp_path
+	second.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(second)
+	await process_frame
+	if second._name_edit.text != "Zelda":
+		failures.append("relaunch shows '%s', expected 'Zelda'" % second._name_edit.text)
+	second.join("ABCD", "")
+	if second.player_name != "Player":
+		failures.append("an empty name joined as '%s', expected the default" % second.player_name)
+	second.queue_free()
+	await process_frame
+	var junk := ConfigFile.new()
+	junk.load(temp_path)
+	junk.set_value(RemoteClientScript241.SECTION, "name", "\u0001\u0002")
+	junk.save(temp_path)
+	var third: Node = RemoteClientScene241.instantiate()
+	third.settings_path = temp_path
+	third.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(third)
+	await process_frame
+	if third._name_edit.text != "":
+		failures.append("a junk saved name pre-filled '%s'" % third._name_edit.text)
+	third.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+
+## #550: with the Ready button focused (after a click), pad A and Space reach it
+## as ui_accept too; each must act exactly once (A flips Ready once, Space not at all).
+func _scenario_remote_ready_focused_pad_a_and_space_act_once_550() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	var ready_btn: Button = client._ready_button
+	ready_btn.grab_focus()
+	# Headless Godot may lack the stock pad-A ui_accept binding a real build has.
+	var accept_pad := InputEventJoypadButton.new()
+	accept_pad.button_index = JOY_BUTTON_A
+	var added_accept: bool = not InputMap.action_has_event("ui_accept", accept_pad)
+	if added_accept:
+		InputMap.action_add_event("ui_accept", accept_pad)
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	pad.pressed = true
+	Input.parse_input_event(pad)
+	await process_frame
+	await process_frame
+	var release := InputEventJoypadButton.new()
+	release.button_index = JOY_BUTTON_A
+	release.pressed = false
+	Input.parse_input_event(release)
+	await process_frame
+	if added_accept:
+		InputMap.action_erase_event("ui_accept", accept_pad)
+	if not ready_btn.button_pressed:
+		failures.append("pad A on a focused Ready did not leave it pressed (double toggle)")
+	ready_btn.set_pressed_no_signal(false)
+	ready_btn.grab_focus()
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.keycode = KEY_SPACE
+	space.pressed = true
+	Input.parse_input_event(space)
+	await process_frame
+	await process_frame
+	var space_up := InputEventKey.new()
+	space_up.physical_keycode = KEY_SPACE
+	space_up.keycode = KEY_SPACE
+	space_up.pressed = false
+	Input.parse_input_event(space_up)
+	await process_frame
+	await process_frame
+	if ready_btn.button_pressed:
+		failures.append("Space toggled the focused Ready button")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #550: a lobby message in flight when Ready is clicked must not redraw it
+## unpressed; the host's echo (or a lapse) restores mirroring.
+func _scenario_remote_ready_click_survives_stale_lobby_550() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	var ready_btn: Button = client._ready_button
+	ready_btn.button_pressed = true
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	if not ready_btn.button_pressed:
+		failures.append("a stale lobby message unpressed Ready before the host echoed")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": true}]}))
+	if not ready_btn.button_pressed:
+		failures.append("Ready unpressed when the host echoed ready")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "playing", "players": [{"slot": 2, "ready": false}]}))
+	if ready_btn.button_pressed:
+		failures.append("Ready did not mirror the host after the echo")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+# --- Issue #556: Stock sudden death always ends --------------------------------
+const SD556_ROCK_SCRIPT: String = "res://scripts/FallingRock.gd"
+## A tied two-player Stock round pushed into its overtime, both players
+## spawn-protected so a rock cannot end the round mid-measurement. Empty on a
+## failure (already recorded).
+func _sd556_rig(failures: Array[String], protect: bool) -> Dictionary:
+	var rig: Dictionary = _stock_rig(2, 3, 120)
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return {}
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+		failures.append("a tie at the timeout did not start an overtime")
+		await _stock_finish(rig)
+		return {}
+	if protect:
+		for player: RigidBody2D in rig["players"]:
+			player.spawn_protected = true
+			# A rock's knock must not ring a player out mid-measurement.
+			player.freeze = true
+	rig["mode"] = mode
+	return rig
+func _sd556_rocks(root: Node) -> int:
+	var count: int = 0
+	for node: Node in root.find_children("*", "Node2D", true, false):
+		if node.get_script() != null and (node.get_script() as Script).resource_path == SD556_ROCK_SCRIPT:
+			count += 1
+	return count
+func _scenario_stock_tie_sudden_death_rocks_start_at_15_s_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, true)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var announcer: Node = _callout_announcer()
+	await _await_ticks(10)
+	if mode.rocks_dropped != 0 or mode.live_rock_count() != 0:
+		failures.append("rocks were out at the start of the overtime (%d dropped)" % mode.rocks_dropped)
+	mode.overtime_elapsed = mode.RAIN_START_SEC - 0.5
+	await _await_ticks(20)
+	if mode.rocks_dropped != 0:
+		failures.append("a rock dropped at %.1f s, before the rain starts at %.0f s" % [mode.overtime_elapsed, mode.RAIN_START_SEC])
+	mode.overtime_elapsed = mode.RAIN_START_SEC
+	await _await_ticks(5)
+	if mode.rocks_dropped < 1 or mode.live_rock_count() < 1 or _sd556_rocks(rig["rm"]) < 1:
+		failures.append("no rock was out at %.0f s of overtime (%d dropped, %d live)" % [mode.RAIN_START_SEC, mode.rocks_dropped, mode.live_rock_count()])
+	if announcer != null and not await _await_condition(func() -> bool: return announcer.said.has("announce_sudden_death"), 6000):
+		failures.append("the rain was not announced 'Sudden Death!': %s" % [announcer.said])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_rock_rate_rises_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, true)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var gaps: Array[float] = []
+	for elapsed: float in [15.0, 20.0, 25.0, 30.0, 59.0]:
+		gaps.append(mode.rain_interval(elapsed))
+	for i in range(1, gaps.size()):
+		if gaps[i] > gaps[i - 1]:
+			failures.append("the gap between rocks grew: %s" % [gaps])
+	if not gaps[1] < gaps[0] or not gaps[2] < gaps[1]:
+		failures.append("the gap did not shrink every ramp step: %s" % [gaps])
+	if gaps[4] < mode.RAIN_MIN_INTERVAL_SEC:
+		failures.append("the gap fell below its floor: %s" % [gaps])
+	mode.overtime_elapsed = 15.0
+	await _await_ticks(240)
+	var early: int = mode.rocks_dropped
+	mode.overtime_elapsed = 40.0
+	var before: int = mode.rocks_dropped
+	await _await_ticks(240)
+	var late: int = mode.rocks_dropped - before
+	print("      rocks in 4 s: %d at 15 s, %d at 40 s" % [early, late])
+	if early < 1 or late <= early:
+		failures.append("the rain did not get heavier: %d rocks in 4 s at 15 s, %d at 40 s" % [early, late])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_60_s_backstop_is_a_draw_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, true)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var rm: Node = rig["rm"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	var announcer: Node = _callout_announcer()
+	var called: Dictionary = {"draw": false}
+	mode.callout.connect(func(sound: StringName) -> void:
+		if sound == &"announce_draw":
+			called["draw"] = true)
+	mode.overtime_elapsed = mode.OVERTIME_BACKSTOP_SEC - 1.0
+	await _await_ticks(30)
+	if called["draw"]:
+		failures.append("the overtime was called a draw before 60 s")
+	mode.overtime_elapsed = mode.OVERTIME_BACKSTOP_SEC - 0.05
+	if not await _await_condition(func() -> bool: return called["draw"], 3000):
+		failures.append("a still-tied overtime did not end at the 60 s backstop")
+	await _await_ticks(30)
+	if rm.score_of(0) != 0 or rm.score_of(1) != 0 or not wins.is_empty():
+		failures.append("the draw scored: %d / %d, wins %s" % [rm.score_of(0), rm.score_of(1), wins])
+	for player: RigidBody2D in rig["players"]:
+		if player.alive:
+			failures.append("%s was still fighting after the draw" % player.name)
+	if announcer != null and not await _await_condition(func() -> bool: return announcer.said.has("announce_draw"), 6000):
+		failures.append("the draw was not announced: %s" % [announcer.said])
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_double_ko_replays_overtime_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, false)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	await _await_ticks(4)
+	players[0].eliminate()
+	players[1].eliminate()
+	await _await_ticks(6)
+	if not mode.is_pending(0) or not mode.is_pending(1):
+		failures.append("a double KO in overtime did not queue both players back")
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, 4000):
+		failures.append("the double KO did not bring both players back")
+	if not wins.is_empty() or not mode.overtime or mode.drawn:
+		failures.append("the double KO ended the round (wins %s, overtime %s)" % [wins, mode.overtime])
+	if players[0].alive and players[1].alive:
+		players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+		if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+			failures.append("one hit in the replayed overtime did not decide the round")
+	await _stock_finish(rig)
+	return failures
+func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, false)
+	if rig.is_empty():
+		return failures
+	var mode: Node = rig["mode"]
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	mode.overtime_elapsed = 30.0
+	for player: RigidBody2D in players:
+		player.spawn_protected = true
+	if not await _await_condition(func() -> bool: return mode.live_rock_count() >= 2, 3000):
+		failures.append("the rain never put two rocks out")
+	players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+	if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+		failures.append("one hit in overtime did not decide the round")
+	await _await_ticks(10)
+	var left: int = _sd556_rocks(rm.get_tree().root)
+	if left != 0:
+		failures.append("%d rocks outlived the round" % left)
+	if is_instance_valid(mode) and (mode.live_rock_count() != 0 or mode.rocks_dropped != 0):
+		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
+	await _stock_finish(rig)
 	return failures

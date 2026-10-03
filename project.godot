@@ -32,6 +32,10 @@ window/size/viewport_height=900
 window/size/mode=2
 window/stretch/mode="canvas_items"
 
+[gui]
+
+theme/custom="res://art/ui/pickfight_theme.tres"
+
 [internationalization]
 
 locale/translations=PackedStringArray("res://translations/strings.en.translation")

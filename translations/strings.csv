@@ -119,6 +119,9 @@ JOIN_YOUR_NAME,Your name
 LOBBY_AUTO,(auto)
 LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone
 LOBBY_FIRST_TO,First to %d
+LOBBY_CAPTURES_TO_WIN,Captures to win %d
+LOBBY_GOALS_TO_WIN,Goals to win %d
+LOBBY_LIVES,Lives %d
 LOBBY_HOST_TAG,  (host)
 LOBBY_NOBODY_YET,nobody yet
 LOBBY_NOT_READY,not ready
@@ -235,14 +238,14 @@ STAGE_RELAY,Relay
 STAGE_ROUNDABOUT,Roundabout
 STAGE_SUMMIT,Summit
 MODE_SOCCER_NAME,Soccer
-MODE_SOCCER_RULE,First team to 3 goals wins.
+MODE_SOCCER_RULE,Reach the goal target to win.
 SOCCER_GOAL,GOAL!
 AWARD_CATEGORY_SCORER,SCORER
 STAGE_PITCH,Pitch
 STAGE_CAGE,Cage
 STAGE_DUNES,Dunes
 MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag
-MODE_CAPTURE_THE_FLAG_RULE,First team to 2 captures wins.
+MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.
 AWARD_CATEGORY_CAPTURER,CAPTURER
 STAGE_BASTION,Bastion
 STAGE_STRONGHOLD,Stronghold
@@ -289,3 +292,6 @@ REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s
 REPLAY_GIF_SAVED,GIF saved: %s
 LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d)
 LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect
+MODE_STOCK_RULE_N,Lose all %d lives and you are out.
+MODE_SOCCER_RULE_N,First team to %d goals wins.
+MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.
