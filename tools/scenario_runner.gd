@@ -20435,6 +20435,19 @@ func _scenario_axe_wins_clash_against_every_weapon() -> Array[String]:
 		return failures
 	_brace(left)
 	_brace(right)
+	# Cold start: the very first clash after the two players spawn is not like
+	# the rest. On macOS the axe on the left gave 8.6 px against the pickaxe
+	# there and 3.6 px in the identical clash with the sides swapped, while
+	# every later pair gave 3.0 to 3.8 px. Run one discarded clash first so the
+	# rigs and the contact solver are settled; the measured clashes below are
+	# unchanged and no threshold moves (#496).
+	for path: String in WEAPON_RESOURCE_PATHS:
+		if path != AXE_PATH:
+			var warm: WeaponStatsType = load(path)
+			if warm != null:
+				await _roster_clash(left, right, centre, axe, warm, axe.max_reach + _stats_forward_extent(axe) \
+						+ warm.max_reach + _stats_forward_extent(warm) - AXE_CLASH_OVERLAP)
+			break
 	for path: String in WEAPON_RESOURCE_PATHS:
 		if path == AXE_PATH:
 			continue
@@ -27060,13 +27073,17 @@ func _weapon_theme_director(windy: bool, seed_value: int) -> Node:
 	director.rng.seed = seed_value
 	rm.add_child(director)
 	return director
-## Draws `count` weapons and tallies them by file stem.
+## Draws `count` weapons and tallies them by file stem, then frees the director
+## and the stand-in round manager (and wind zone) it hangs from. Left in the
+## tree they outlast the scenario, and a live WindZone changes the physics of
+## whatever runs next (#493).
 func _weapon_theme_tally(director: Node, offered: Array[Resource], count: int) -> Dictionary:
 	var tally: Dictionary = {}
 	for i in count:
 		var weapon: Resource = director.draw_weapon(offered)
 		var stem: String = weapon.resource_path.get_file().get_basename()
 		tally[stem] = int(tally.get(stem, 0)) + 1
+	director.get_parent().queue_free()
 	return tally
 func _scenario_windy_stage_favours_umbrella_pickups() -> Array[String]:
 	var failures: Array[String] = []
@@ -34660,7 +34677,7 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 	var shape: ConvexPolygonShape2D = player.weapon_head_polygon_shape()
 	if shape == null:
 		failures.append("the shield head has no convex polygon collision shape")
-		_scenario_completed = true
+		await _teardown(stage)
 		return failures
 	var low: float = INF
 	var high: float = -INF
@@ -34676,7 +34693,9 @@ func _scenario_shield_head_is_wide_and_shield_shaped() -> Array[String]:
 		xs[snappedf(point.x, 0.1)] = true
 	if shape.points.size() <= 4 or xs.size() <= 2:
 		failures.append("shield collision is a plain rectangle (%d points)" % shape.points.size())
-	_scenario_completed = true
+	# Freed, not left in the tree: a live player and its weapon rig outlast the
+	# scenario and change the physics of whatever runs next (#493).
+	await _teardown(stage)
 	return failures
 
 # --- Explicit release input (issue #463, ADR-0022) ---------------------------
