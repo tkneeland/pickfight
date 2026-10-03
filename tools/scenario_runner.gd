@@ -739,6 +739,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_leaves_no_rocks_behind_556",
 	"remote_shoulder_throw_clears_retract_toggle_551",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
+	"title_screen_restyle_fits_every_resolution_546",
 	"umbrella_canopy_reduces_a_falling_rock_569",
 	"umbrella_canopy_reduces_a_meteor_569",
 	"sudden_death_block_does_not_eliminate_569",
@@ -2609,6 +2610,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_shoulder_throw_clears_retract_toggle_551()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
+		"title_screen_restyle_fits_every_resolution_546":
+			return await _scenario_title_screen_restyle_fits_every_resolution_546()
 		"umbrella_canopy_reduces_a_falling_rock_569":
 			return await _scenario_umbrella_canopy_reduces_a_falling_rock_569()
 		"umbrella_canopy_reduces_a_meteor_569":
@@ -37472,6 +37475,62 @@ func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Arr
 		failures.append("Solo seated %d bots, wanted 3" % server.bot_director.bot_count())
 	await _online_close_239(rig)
 	return failures
+## Issue #546: the restyled title screen (cards, key badges, logo, footer)
+## keeps every visible control inside the window at 1600x900, 1920x1080 and
+## 1280x800, the three cards sit side by side without overlapping, each card
+## encloses its own labels, nothing of the lobby shows through, and the keys
+## still pick.
+func _scenario_title_screen_restyle_fits_every_resolution_546() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var was_size: Vector2i = get_root().size
+	screen.show_title(true)
+	for size: Vector2i in [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]:
+		get_root().size = size
+		await _await_ticks(4)
+		var canvas := Rect2(Vector2.ZERO, get_root().get_visible_rect().size)
+		var panel: Control = screen.title_panel()
+		var cards: Array[Rect2] = []
+		for node: Node in panel.find_children("*", "Control", true, false):
+			var control: Control = node as Control
+			if not control.is_visible_in_tree():
+				continue
+			var rect: Rect2 = control.get_global_rect()
+			if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+				continue
+			if control.name != "Ground" and not canvas.encloses(rect):
+				failures.append("%s: %s %s is outside the window %s" % [size, control.get_path(), rect, canvas])
+		for kind: String in ["local", "online", "solo"]:
+			var button: Button = screen.title_button(kind)
+			cards.append(button.get_global_rect())
+			for label: Node in button.find_children("*", "Label", true, false):
+				if not button.get_global_rect().encloses((label as Label).get_global_rect()):
+					failures.append("%s: the %s card does not hold its label '%s'" % [size, kind, (label as Label).text])
+		if cards[0].intersects(cards[1]) or cards[1].intersects(cards[2]) or cards[0].get_center().x > cards[1].get_center().x:
+			failures.append("%s: the title cards overlap: %s" % [size, cards])
+		# The focused card is popped (tilted, scaled a little), so compare row centres loosely.
+		if absf(cards[0].get_center().y - cards[1].get_center().y) > 6.0 or absf(cards[1].get_center().y - cards[2].get_center().y) > 6.0:
+			failures.append("%s: the title cards are not in one row: %s" % [size, cards])
+		var ground: Control = panel.get_node("Ground") as Control
+		if not ground.get_global_rect().encloses(canvas):
+			failures.append("%s: the title ground %s does not cover the window" % [size, ground.get_global_rect()])
+		print("      %s: cards %s" % [size, cards])
+	get_root().size = was_size
+	# The keys and the pad focus still work on the restyled cards.
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_O
+	event.pressed = true
+	screen._unhandled_key_input(event)
+	await _await_ticks(2)
+	if server.match_kind() != "online" or screen.title_visible():
+		failures.append("the O key gave kind '%s', title showing %s" % [server.match_kind(), screen.title_visible()])
+	await _kind_close_435(rig)
+	return failures
+
 
 ## #569: a rock that lands on an open umbrella's canopy face is reduced like any
 ## other hit (the part used to call take_damage without a hit point).
