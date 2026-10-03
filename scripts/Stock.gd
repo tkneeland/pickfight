@@ -14,7 +14,8 @@ extends Node
 ##
 ## The time limit (`HostSettings.stock_time_limit`, 0 for none) ends in the
 ## player or team with the most lives winning; a tie plays a one-hit overtime
-## among the tied, reusing `SuddenDeath.gd`.
+## among the tied, on the Sudden Death tiebreaker (`Tiebreaker.gd`, #554), whose
+## meteors end it in bounded time.
 ##
 ## Like every mode it never touches `RoundManager._scores`. There is no rise
 ## (the rising lava, ADR-0012): `RoundManager` does not start it in Stock.
@@ -22,7 +23,7 @@ extends Node
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
-const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
+const TiebreakerScript := preload("res://scripts/Tiebreaker.gd")
 const RespawnScript := preload("res://scripts/Respawn.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
@@ -195,6 +196,11 @@ func steal_life(slot: int) -> bool:
 
 # --- Time limit and overtime ---------------------------------------------------
 
+## A drawn round's tiebreaker began (#554, run by `RoundManager`): the tied
+## players are back on their last life, the clock stops and reads "OVERTIME".
+func begin_tiebreak() -> void:
+	overtime = true
+
 ## The clock ran out: most lives wins (a team's lives added up in Teams). The
 ## others are eliminated for good; if several are level the round goes on as a
 ## one-hit overtime between them.
@@ -226,7 +232,7 @@ func _timeout() -> void:
 	for slot: int in tied:
 		tied_units[_team(slot) if _team(slot) != -1 else slot] = true
 	if tied_units.size() > 1:
-		_overtime_mode = SuddenDeathScript.new()
+		_overtime_mode = TiebreakerScript.new()
 		_overtime_mode.announce_start = false
 		add_child(_overtime_mode)
 		_overtime_mode.setup(round_manager)

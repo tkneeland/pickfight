@@ -725,6 +725,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_grazing_a_player_still_hits_them",
 	"pogo_state_resets_when_a_round_starts",
 	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
+	"tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2567,6 +2568,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_state_resets_when_a_round_starts()
 		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
 			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
+		"tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554":
+			return await _scenario_tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -16043,7 +16046,8 @@ func _scenario_stage_freed_under_victory_and_lobby() -> Array[String]:
 ## survivor falling on the tick after the deciding KO used to leave nobody
 ## standing when the check ran, and the round scored nobody. Driven here with
 ## the check held off across two ticks: P1 falls, a tick later P2 falls, then
-## the check runs -- P2 scores. Two falling on the same tick is still a draw.
+## the check runs -- P2 scores. Two falling on the same tick is a draw, played
+## off as a Sudden Death tiebreaker (#554): nobody scores until one hit decides it.
 func _scenario_last_survivor_scores_when_falling_a_tick_later() -> Array[String]:
 	var failures: Array[String] = []
 	var scenes: Array[PackedScene] = [_make_stub_stage("StubA", [Vector2(-100, -2000), Vector2(100, -2000)]),
@@ -16066,6 +16070,14 @@ func _scenario_last_survivor_scores_when_falling_a_tick_later() -> Array[String]
 		var second_tick: int = Engine.get_physics_frames()
 		players[1].eliminate()
 		rm.set_process(true)
+		if case == "the same tick":
+			if not await _await_condition(func() -> bool: return rm.tiebreaker() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+				failures.append("both fell on the same tick, yet no tiebreaker brought them back")
+				break
+			if [rm.score_of(0), rm.score_of(1)] != scores_before:
+				failures.append("the tiebreaker started, yet scores moved")
+			await _await_ticks(2)
+			players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
 		var ended: bool = await _await_condition(func() -> bool:
 			return int(rm.get("_round_number")) > round_before or rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC)
 		var scored: Array[int] = [rm.score_of(0) - scores_before[0], rm.score_of(1) - scores_before[1]]
@@ -16077,8 +16089,8 @@ func _scenario_last_survivor_scores_when_falling_a_tick_later() -> Array[String]
 				failures.append("the two falls landed on the same physics frame; the race was not exercised")
 			if scored != [0, 1]:
 				failures.append("P2 outlived P1 by a tick and should have scored the round; scores moved by %s" % [scored])
-		elif scored != [0, 0]:
-			failures.append("both fell on the same tick, a draw, yet scores moved by %s" % [scored])
+		elif scored != [1, 0]:
+			failures.append("P1 landed the one tiebreaker hit and should have scored; scores moved by %s" % [scored])
 	await _teardown(fixture["holder"])
 	_scenario_completed = true
 	return failures
@@ -29185,6 +29197,14 @@ func _scenario_stock_timeout_most_lives_wins_tie_overtime() -> Array[String]:
 			failures.append("overtime: alive %s %s %s, want only slots 0 and 2" % [players[0].alive, players[1].alive, players[2].alive])
 		if mode.clock_text() != "OVERTIME":
 			failures.append("the clock read '%s' in overtime" % mode.clock_text())
+		# The overtime is the Sudden Death tiebreaker (#554): meteors cap it.
+		var overtime_node: Node = mode.get("_overtime_mode")
+		if overtime_node == null or not overtime_node.has_method("pressure_on"):
+			failures.append("the overtime is not the Sudden Death tiebreaker")
+		else:
+			overtime_node.elapsed = overtime_node.pressure_delay_sec
+			if not await _await_condition(func() -> bool: return overtime_node.pressure_on(), 1000):
+				failures.append("the overtime's meteors never started")
 		players[0].strike_landed.emit(players[2], 5.0, Vector2.ZERO, false)
 		if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
 			failures.append("one hit in overtime did not decide the round")
@@ -36927,4 +36947,60 @@ func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[S
 		if restored == null or restored.points != base:
 			failures.append("%s: shield polygon not restored after undo" % case[0])
 	await _teardown(stage)
+	return failures
+
+## Issue #554: a round whose last two go down on the same tick is played off,
+## Smash-style. Of three players, P3 falls first; P1 and P2 then fall together:
+## only P1 and P2 come back, one hit KOs, nobody has scored. A second double KO
+## replays it among the same two. Meteors start after the delay, and one hit
+## then decides the round for P2. The tiebreaker is gone with the round.
+func _scenario_tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554() -> Array[String]:
+	var failures: Array[String] = []
+	var spawns: Array[Vector2] = [Vector2(-200, -2000), Vector2(0, -2000), Vector2(200, -2000)]
+	var scenes: Array[PackedScene] = [_make_stub_stage("StubA", spawns), _make_stub_stage("StubB", spawns)]
+	var fixture: Dictionary = _round_flow_fixture(3, [0, 1, 2], scenes)
+	var rm: Node = fixture["round_manager"]
+	var players: Array[RigidBody2D] = fixture["players"]
+	if not await _await_condition(func() -> bool: return _round_live(fixture, [0, 1, 2]), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("no round started")
+		await _teardown(fixture["holder"])
+		_scenario_completed = true
+		return failures
+	var round_before: int = rm.get("_round_number")
+	players[2].eliminate()
+	await _await_ticks(2)
+	for attempt: String in ["first double KO", "replayed double KO"]:
+		rm.set_process(false)
+		players[0].eliminate()
+		players[1].eliminate()
+		rm.set_process(true)
+		if not await _await_condition(func() -> bool: return rm.tiebreaker() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("%s: P1 and P2 were not brought back for a tiebreaker" % attempt)
+			break
+		await _await_ticks(2)
+		if players[2].alive:
+			failures.append("%s: P3, out before the draw, came back too" % attempt)
+		if int(rm.get("_round_number")) != round_before or rm.lobby_phase() == "round_end":
+			failures.append("%s: the round ended instead of playing off" % attempt)
+		if rm.score_of(0) + rm.score_of(1) + rm.score_of(2) != 0:
+			failures.append("%s: someone scored a draw" % attempt)
+		if not players[0].has_meta("one_hit_ko") or not players[1].has_meta("one_hit_ko"):
+			failures.append("%s: the tied players are not on one-hit KOs" % attempt)
+	var breaker: Node = rm.tiebreaker()
+	if breaker != null:
+		if breaker.pressure_on():
+			failures.append("meteors fell before the delay")
+		breaker.elapsed = breaker.pressure_delay_sec
+		if not await _await_condition(func() -> bool: return breaker.pressure_on(), 1000):
+			failures.append("the meteors never started")
+		players[1].strike_landed.emit(players[0], 5.0, Vector2.ZERO, false)
+		if not await _await_condition(func() -> bool: return rm.score_of(1) == 1, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("one tiebreaker hit did not win P2 the round; scores %d %d %d" % [rm.score_of(0), rm.score_of(1), rm.score_of(2)])
+		elif rm.score_of(0) != 0:
+			failures.append("the KO'd P1 scored too")
+		await _await_ticks(2)
+		if rm.tiebreaker() != null:
+			failures.append("the tiebreaker outlived its round")
+	await _teardown(fixture["holder"])
+	_scenario_completed = true
 	return failures
