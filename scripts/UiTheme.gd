@@ -39,6 +39,7 @@ const CORNER_RADIUS: int = 10
 const HEADING_LABEL: StringName = &"HeadingLabel" # Lilita One, light text
 const INK_LABEL: StringName = &"InkLabel" # Nunito, ink text, for cream panels
 const CREAM_PANEL: StringName = &"CreamPanel" # cream fill; pair with InkLabel
+const INK_HEADING_LABEL: StringName = &"InkHeadingLabel" # Lilita One, ink text, for cream panels
 
 
 static func _box(fill: Color, shadow: bool = true, shadow_offset: Vector2 = SHADOW_OFFSET) -> StyleBoxFlat:
@@ -74,6 +75,9 @@ static func build() -> Theme:
 	theme.set_color("font_color", HEADING_LABEL, CREAM)
 	theme.set_type_variation(INK_LABEL, "Label")
 	theme.set_color("font_color", INK_LABEL, INK)
+	theme.set_type_variation(INK_HEADING_LABEL, "Label")
+	theme.set_font("font", INK_HEADING_LABEL, heading)
+	theme.set_color("font_color", INK_HEADING_LABEL, INK)
 
 	# Panels: bare Panel/PanelContainer are indigo with an ink outline (existing
 	# screens put light text on them); CreamPanel is the cream one.
