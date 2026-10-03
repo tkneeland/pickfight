@@ -31,6 +31,7 @@ const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
 const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
+const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
@@ -968,18 +969,23 @@ func _build_ui() -> void:
 	_build_menu_panel()
 	_build_join_panel()
 
-func _label(text: String, size: int = 20, color: Color = Color.WHITE) -> Label:
+## `variation` is a UiTheme type variation ("" keeps the theme's plain Label,
+## cream text for the dark ground); a colour of WHITE leaves the variation's own.
+func _label(text: String, size: int = 20, color: Color = Color.WHITE, variation: StringName = &"") -> Label:
 	var label := Label.new()
 	label.text = text
+	label.theme_type_variation = variation
 	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
+	if color != Color.WHITE:
+		label.add_theme_color_override("font_color", color)
 	return label
 
-func _centered_panel(parent: Control, min_width: float) -> VBoxContainer:
+func _centered_panel(parent: Control, min_width: float, panel_variation: StringName = UiThemeScript.CREAM_PANEL) -> VBoxContainer:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(center)
 	var panel := PanelContainer.new()
+	panel.theme_type_variation = panel_variation
 	center.add_child(panel)
 	var margin := MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
@@ -996,13 +1002,13 @@ func _build_join_panel() -> void:
 	_join_panel.name = "JoinScreen"
 	_join_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var shade := ColorRect.new()
-	shade.color = Color(0.08, 0.09, 0.12)
+	shade.color = UiThemeScript.INDIGO
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_join_panel.add_child(shade)
 	_ui.add_child(_join_panel)
 	var box: VBoxContainer = _centered_panel(_join_panel, 360)
-	box.add_child(_label(tr("JOIN_TITLE"), 30))
-	box.add_child(_label(tr("JOIN_ROOM_CODE_LABEL")))
+	box.add_child(_label(tr("JOIN_TITLE"), 30, Color.WHITE, UiThemeScript.INK_HEADING_LABEL))
+	box.add_child(_label(tr("JOIN_ROOM_CODE_LABEL"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_room_edit = LineEdit.new()
 	_room_edit.name = "RoomCode"
 	_room_edit.placeholder_text = "ABCD"
@@ -1010,7 +1016,7 @@ func _build_join_panel() -> void:
 	_room_edit.text_changed.connect(_on_room_text_changed)
 	_room_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_room_edit)
-	box.add_child(_label(tr("JOIN_YOUR_NAME")))
+	box.add_child(_label(tr("JOIN_YOUR_NAME"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
 	_name_edit.placeholder_text = tr("JOIN_NAME_PLACEHOLDER")
@@ -1018,7 +1024,7 @@ func _build_join_panel() -> void:
 	_name_edit.text = player_name
 	_name_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_name_edit)
-	_status_label = _label("", 18, Color(1.0, 0.7, 0.5))
+	_status_label = _label("", 18, UiThemeScript.VERMILION, UiThemeScript.INK_LABEL)
 	_status_label.name = "Status"
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_status_label)
@@ -1066,21 +1072,21 @@ func _build_hud() -> void:
 	_feed_label.position = Vector2(-16, 12)
 	_feed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_hud.add_child(_feed_label)
-	_banner_label = _label("", 36, Color(1, 0.9, 0.4))
+	_banner_label = _label("", 36, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
 	_banner_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_banner_label.position = Vector2(0, 12)
 	_hud.add_child(_banner_label)
-	_mode_label = _label("", 22, Color(0.8, 0.95, 1.0))
+	_mode_label = _label("", 22, UiThemeScript.SKY, UiThemeScript.HEADING_LABEL)
 	_mode_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_mode_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_mode_label.position = Vector2(0, 58)
 	_hud.add_child(_mode_label)
-	_result_label = _label("", 40, Color(1, 0.9, 0.4))
+	_result_label = _label("", 40, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
 	_result_label.set_anchors_preset(Control.PRESET_CENTER)
 	_result_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_result_label)
-	_wait_label = _label(tr("JOIN_WAITING"), 28)
+	_wait_label = _label(tr("JOIN_WAITING"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	_wait_label.set_anchors_preset(Control.PRESET_CENTER)
 	_wait_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_wait_label)
@@ -1091,8 +1097,8 @@ func _build_lobby_panel() -> void:
 	_lobby_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_lobby_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(_lobby_panel)
-	var box: VBoxContainer = _centered_panel(_lobby_panel, 380)
-	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28)
+	var box: VBoxContainer = _centered_panel(_lobby_panel, 380, &"")
+	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	box.add_child(_lobby_title)
 	_lobby_list = VBoxContainer.new()
 	# Issue #441: the cosmetics panel sits beside the player list.
@@ -1148,17 +1154,17 @@ func _build_menu_panel() -> void:
 	_menu_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_ui.add_child(_menu_panel)
 	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.55)
+	shade.color = Color(UiThemeScript.INDIGO, 0.75)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_menu_panel.add_child(shade)
 	var box: VBoxContainer = _centered_panel(_menu_panel, 320)
-	box.add_child(_label(tr("JOIN_PAUSED"), 28))
+	box.add_child(_label(tr("JOIN_PAUSED"), 28, Color.WHITE, UiThemeScript.INK_HEADING_LABEL))
 	var resume_button := Button.new()
 	resume_button.name = "Resume"
 	resume_button.text = tr("JOIN_RESUME")
 	resume_button.pressed.connect(resume)
 	box.add_child(resume_button)
-	box.add_child(_label(tr("JOIN_MOUSE_SENS")))
+	box.add_child(_label(tr("JOIN_MOUSE_SENS"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_sens_slider = HSlider.new()
 	_sens_slider.name = "Sensitivity"
 	_sens_slider.min_value = 0.1

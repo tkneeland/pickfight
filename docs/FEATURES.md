@@ -124,6 +124,8 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - The last enabled stage and weapon cannot be switched off; choices persist in `user://audio.cfg` (#294)
 - All text is translatable (English only for now): host-screen strings go through `tr()` and `translations/strings.csv`, the phone page through its `STRINGS` table (#367)
 
+- Settings panel, feedback box, telemetry notice and the PC join screen, online lobby and Esc menu use the shared UI theme: indigo or cream panels with ink outlines and hard shadows, Lilita One headings, Nunito body text (#549, part of #507). Looks only; no behaviour change
+
 ## Audio
 - Sound effects for combat, round and UI (#75, ADR-0016) and stage parts (#76); mix tuned (#93)
 - Distinct, fitting hit sounds for every weapon; no placeholder copies (#288)
