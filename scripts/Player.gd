@@ -1520,7 +1520,7 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 	amount = victim.take_damage(amount, point, self)
 	if _stats.special == &"shield":
 		_shield_bash(victim)
-	strike_landed.emit(victim, amount, point, not victim.alive)
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
 ## straight out along the haft rather than across it. Read here, not off
@@ -1604,6 +1604,8 @@ func _fire() -> void:
 	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
 	var bullet: Node2D = ProjectileScene.instantiate() as Node2D
 	bullet.setup(self, _head.global_position, axis, _stats)
+	if weapon_stats != null and weapon_stats.resource_path != "":
+		bullet.weapon_id = weapon_stats.resource_path.get_file().get_basename()
 	host.add_child(bullet)
 	# Forget bullets already gone. Untyped on purpose: a freed bullet is no
 	# longer a Node, and a typed loop variable would refuse it.
@@ -1620,7 +1622,7 @@ func _fire() -> void:
 ## `strike_landed`, so the hitmarker (#33) and the phones' buzz (#34) treat a
 ## bullet exactly as they treat a swing. Public because the bullet, not the
 ## player, is what noticed the hit.
-func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
+func land_projectile_hit(victim: Node, amount: float, point: Vector2, weapon_id: String = "") -> void:
 	if victim == self or not victim.alive:
 		return
 	if is_teammate(victim):
@@ -1628,7 +1630,21 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2) -> void:
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	amount = victim.take_damage(amount, point, self, false)
-	strike_landed.emit(victim, amount, point, not victim.alive)
+	# Issue #516: the weapon that fired the bullet, not the one held on arrival.
+	hit_weapon_id = weapon_id
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	hit_weapon_id = ""
+
+## Issue #516: weapon id (file basename) credited with the hit being reported
+## by `strike_landed` right now, or "" for the weapon held. Set only for the
+## synchronous emit of an in-flight shot.
+var hit_weapon_id: String = ""
+
+## Whether a reported hit eliminated `victim`. A one-hit-KO mode (Sudden Death
+## marks its players with the `one_hit_ko` meta) eliminates in its own
+## `strike_landed` handler, after this is read, so a damaging hit counts.
+func _strike_was_lethal(victim: Node, amount: float) -> bool:
+	return not victim.alive or (amount > 0.0 and victim.has_meta("one_hit_ko"))
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
 func is_teammate(other: Node) -> bool:
@@ -2071,7 +2087,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	amount = victim.take_damage(amount, point, self)
-	strike_landed.emit(victim, amount, point, not victim.alive)
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
 
 # --- Umbrella (issue #269) ---------------------------------------------------
 #

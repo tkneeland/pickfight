@@ -35,6 +35,7 @@ func start_round(slots: Array[int]) -> void:
 			continue
 		var handler: Callable = _on_strike
 		_watched[slot] = player
+		player.set_meta("one_hit_ko", true)
 		_handlers[slot] = handler
 		player.strike_landed.connect(handler)
 
@@ -42,6 +43,8 @@ func end_round() -> void:
 	for slot: int in _handlers.keys():
 		var player: Variant = _watched.get(slot)
 		var handler: Callable = _handlers[slot]
+		if player != null and is_instance_valid(player):
+			player.remove_meta("one_hit_ko")
 		if player != null and is_instance_valid(player) and player.strike_landed.is_connected(handler):
 			player.strike_landed.disconnect(handler)
 	_handlers.clear()

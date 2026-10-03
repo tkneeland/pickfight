@@ -711,6 +711,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
+	"combat_in_flight_shot_credited_to_firing_weapon",
+	"combat_sudden_death_hit_reported_lethal",
 	"fishing_rod_cast_has_its_own_sound_not_the_gunshot",
 	"boomerang_grazing_a_player_still_hits_them",
 	"pogo_state_resets_when_a_round_starts",
@@ -2529,6 +2531,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
 			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
+		"combat_in_flight_shot_credited_to_firing_weapon":
+			return await _scenario_combat_in_flight_shot_credited_to_firing_weapon()
+		"combat_sudden_death_hit_reported_lethal":
+			return await _scenario_combat_sudden_death_hit_reported_lethal()
 		"fishing_rod_cast_has_its_own_sound_not_the_gunshot":
 			return await _scenario_fishing_rod_cast_has_its_own_sound_not_the_gunshot()
 		"boomerang_grazing_a_player_still_hits_them":
@@ -36537,6 +36543,54 @@ func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[St
 	relay.stop()
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+
+# Issue #516: a bullet that lands after its shooter swapped weapons is logged
+# against the weapon that fired it.
+func _scenario_combat_in_flight_shot_credited_to_firing_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	await _await_ticks(10)
+	for p in players:
+		p.spawn_protected = false
+	# The shooter holds the pickaxe on arrival; the bullet was fired by a boomstick.
+	players[0].land_projectile_hit(players[1], 5.0, Vector2.ZERO, "boomstick")
+	players[0].land_projectile_hit(players[1], 5.0, Vector2.ZERO)
+	var hits: Dictionary = rm._stats.weapon_hits
+	if int(hits.get("boomstick", 0)) != 1:
+		failures.append("the in-flight shot was not credited to the boomstick: %s" % [hits])
+	if int(hits.get("pickaxe", 0)) != 1:
+		failures.append("the unlabelled hit was not credited to the held pickaxe: %s" % [hits])
+	if players[0].hit_weapon_id != "":
+		failures.append("hit_weapon_id leaked past the emit: %s" % players[0].hit_weapon_id)
+	await _teardown(rig["stage"])
+	return failures
+
+# Issue #516: in Sudden Death the killing hit is reported lethal even though the
+# mode eliminates the victim after the strike is emitted.
+func _scenario_combat_sudden_death_hit_reported_lethal() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.SUDDEN_DEATH)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	for p in players:
+		p.spawn_protected = false
+	var lethal: Array = []
+	players[0].strike_landed.connect(func(_v: Node, _a: float, _p: Vector2, l: bool) -> void: lethal.append(l))
+	players[0].land_projectile_hit(players[1], 10.0, Vector2(123, 45))
+	if players[1].alive:
+		failures.append("the victim survived a Sudden Death hit")
+	if lethal != [true]:
+		failures.append("the hit was reported lethal=%s, want [true]" % [lethal])
+	if not rm._has_lethal_point or rm._last_lethal_point != Vector2(123, 45):
+		failures.append("the round manager never recorded the lethal point")
+	await _teardown(rig["stage"])
 	return failures
 
 ## Issue #517: casting the fishing rod asks for its own cast sound, not the
