@@ -1506,6 +1506,8 @@ func kick(slot: int, by_host_pc: bool = false) -> bool:
 		return false
 	if slot == (_host_pc_slot if by_host_pc else host_slot()):
 		return false
+	if slot == _host_pc_slot:
+		return false # #545: the host PC's own seat is never kickable
 	if is_virtual(slot):
 		# A bot (issue #152): its director sends it away.
 		bot_director.remove_bot(slot)
@@ -2721,6 +2723,10 @@ func set_match_kind(kind: String) -> bool:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
 	var dropped: int = _drop_seats_for(target) if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
+	if kind == KIND_SOLO and _match_kind == KIND_ONLINE:
+		# Solo refuses phones and remote seats alike (#552): drop the live ones and
+		# the held claims (#459), which would otherwise eat bot capacity.
+		dropped += _drop_seats_for(KIND_LOCAL) + _drop_seats_for(KIND_ONLINE)
 	_match_kind = kind
 	if target == KIND_LOCAL:
 		if _host_pc_slot != -1:
