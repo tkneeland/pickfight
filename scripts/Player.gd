@@ -1520,7 +1520,7 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 	amount = victim.take_damage(amount, point, self)
 	if _stats.special == &"shield":
 		_shield_bash(victim)
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
 ## straight out along the haft rather than across it. Read here, not off
@@ -1632,7 +1632,7 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2, weapon_id:
 	amount = victim.take_damage(amount, point, self, false)
 	# Issue #516: the weapon that fired the bullet, not the one held on arrival.
 	hit_weapon_id = weapon_id
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
 	hit_weapon_id = ""
 
 ## Issue #516: weapon id (file basename) credited with the hit being reported
@@ -1643,8 +1643,10 @@ var hit_weapon_id: String = ""
 ## Whether a reported hit eliminated `victim`. A one-hit-KO mode (Sudden Death
 ## marks its players with the `one_hit_ko` meta) eliminates in its own
 ## `strike_landed` handler, after this is read, so a damaging hit counts.
-func _strike_was_lethal(victim: Node, amount: float) -> bool:
-	return not victim.alive or (amount > 0.0 and victim.has_meta("one_hit_ko"))
+## A hit taken on a shield face or open canopy face does not count as lethal
+## there (issue #569), the same test `SuddenDeath` applies before eliminating.
+func _strike_was_lethal(victim: Node, amount: float, point: Vector2 = Vector2.INF) -> bool:
+	return not victim.alive or (amount > 0.0 and victim.has_meta("one_hit_ko") and not victim.hit_blocked(point))
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
 func is_teammate(other: Node) -> bool:
@@ -2087,7 +2089,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	amount = victim.take_damage(amount, point, self)
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
 
 # --- Umbrella (issue #269) ---------------------------------------------------
 #
@@ -2243,6 +2245,13 @@ func shield_blocks(point: Vector2) -> bool:
 	if offset.length() <= 1.0 or to_point.length() <= 0.0:
 		return false
 	return offset.normalized().dot(to_point.normalized()) >= SHIELD_FACE_COS
+
+## Whether a hit at `point` (world) lands on an open canopy's face or a
+## shield's face: the hits that never eliminate in a one-hit mode (issue #569).
+func hit_blocked(point: Vector2) -> bool:
+	if point == Vector2.INF:
+		return false
+	return (canopy_open() and canopy_faces(point)) or shield_blocks(point)
 
 func _shield_bash(victim: Node) -> void:
 	if not victim.alive or not (victim is RigidBody2D):
