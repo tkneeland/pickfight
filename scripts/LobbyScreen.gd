@@ -249,8 +249,9 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	else:
 		for entry: Dictionary in state["players"]:
 			_lobby_rows.add_child(_lobby_row(state, entry, 36 if state["players"].size() <= 4 else 28))
-	_lobby_target_label.text = tr("LOBBY_FIRST_TO") % state["target"]
-	if teams:
+	var target_key: String = GameModesScript.target_label_key(str(state.get("target_kind", "first_to")))
+	_lobby_target_label.text = tr(target_key) % state["target"]
+	if teams and target_key == "LOBBY_FIRST_TO":
 		_lobby_target_label.text = tr("LOBBY_TEAMS_FIRST_TO") % state["target"]
 	var joined: int = state["players"].size()
 	var online: bool = _online_kind(join_source)
@@ -576,7 +577,7 @@ func build_panels() -> void:
 	_victory_logo.position = Vector2(24, 16)
 	_victory_logo.size = LOGO_VICTORY_SIZE
 	_victory_panel.add_child(_victory_logo)
-	_victory_title = _big_label("", 110, LOBBY_ACCENT)
+	_victory_title = _big_label("", 96, LOBBY_ACCENT) # 110 before the Nunito metrics (#541); a 12-W name must still fit 1600
 	stack.add_child(_victory_title)
 	_podium = HBoxContainer.new()
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -617,7 +618,7 @@ func _build_how_to_play() -> Control:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	# Tighter than it was (14 px) to make room for SETTINGS_CORNER_RESERVE_PX.
 	box.add_theme_constant_override("separation", 10)
-	box.add_child(_big_label(tr("HOW_TO_PLAY_TITLE"), 34, LOBBY_ACCENT))
+	box.add_child(_big_label(tr("HOW_TO_PLAY_TITLE"), 30, LOBBY_ACCENT)) # 34 before the Nunito metrics (#541)
 	return box
 
 func _big_label(text: String, font_size: int, color: Color) -> Label:
@@ -803,9 +804,9 @@ func press_control(id: String) -> void:
 			var count: int = _server.bot_director.bot_count()
 			_server.apply_host_command("bots", count + 1 if count < _server.bot_capacity() else 0)
 		"target_down":
-			_server.apply_host_command("target", _server.match_target() - 1)
+			_server.apply_host_command("target", _server.mode_target() - 1)
 		"target_up":
-			_server.apply_host_command("target", _server.match_target() + 1)
+			_server.apply_host_command("target", _server.mode_target() + 1)
 		"start":
 			_server.apply_host_command("start")
 		"join":

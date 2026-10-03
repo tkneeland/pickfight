@@ -202,3 +202,9 @@ Its test fixtures (`tools/qr_fixtures.txt`) were captured from
 **python-qrcode 8.2**, https://pypi.org/project/qrcode/ (BSD licence), by
 `tools/gen_qr_fixtures.py`. python-qrcode is a test-time reference only; the
 game does not ship or run it.
+
+## Fonts
+
+`art/fonts/` bundles **Lilita One** (headings) and **Nunito** (body text), both
+licensed under the SIL Open Font License 1.1 (`OFL-LilitaOne.txt`,
+`OFL-Nunito.txt` alongside), taken from the google/fonts repository.

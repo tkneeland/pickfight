@@ -451,6 +451,12 @@ const MODE_PHASES: PackedStringArray = ["lobby", "countdown", "victory"]
 ## Issue #236: a phone picks its team in the lobby (or its countdown, which a
 ## new pick cancels, as an un-ready does).
 const TEAM_PICK_PHASES: PackedStringArray = ["lobby", "countdown"]
+## The number the Host panel's target row shows and steps (#544): the round
+## target, or the mode's own lives / goals / captures.
+func mode_target() -> int:
+	var picked: int = GameModesScript.target_setting(_game_mode)
+	return picked if picked >= 0 else _match_target
+
 ## Issue #236: whether the host phone chose Teams for the next match.
 var _team_mode: bool = false
 ## Issue #352: the `GameModes` id the host phone chose ("" is Classic), kept in
@@ -2076,9 +2082,25 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false
 			return HostSettingsScript.shared().set_stock_stage(arg)
+		"soccer_goals", "ctf_captures":
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
+				return false
+			if cmd == "soccer_goals":
+				HostSettingsScript.shared().set_soccer_goals(int(arg))
+			else:
+				HostSettingsScript.shared().set_ctf_captures(int(arg))
+			return true
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false
+			# The row's meaning follows the mode (#544): lives, goals or captures.
+			match GameModesScript.target_kind(_game_mode):
+				"lives":
+					return apply_host_command("stock_lives", arg)
+				"goals":
+					return apply_host_command("soccer_goals", arg)
+				"captures":
+					return apply_host_command("ctf_captures", arg)
 			_match_target = clampi(int(arg), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
 			return true
 		"start":

@@ -726,6 +726,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_grazing_a_player_still_hits_them",
 	"pogo_state_resets_when_a_round_starts",
 	"shield_hitbox_follows_big_heads_and_tiny_weapons_515",
+	"ui_theme_loads_with_bundled_fonts",
+	"mode_targets_settings_clamp_persist_and_host_commands_544",
+	"mode_targets_lobby_label_value_and_status_line_544",
+	"mode_targets_reach_the_round_and_the_remote_hud_544",
 	"remote_client_remembers_name_460",
 	"stock_tie_sudden_death_rocks_start_at_15_s_556",
 	"stock_sudden_death_rock_rate_rises_556",
@@ -2576,6 +2580,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_state_resets_when_a_round_starts()
 		"shield_hitbox_follows_big_heads_and_tiny_weapons_515":
 			return await _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515()
+		"ui_theme_loads_with_bundled_fonts":
+			return await _scenario_ui_theme_loads_with_bundled_fonts()
+		"mode_targets_settings_clamp_persist_and_host_commands_544":
+			return await _scenario_mode_targets_settings_clamp_persist_and_host_commands_544()
+		"mode_targets_lobby_label_value_and_status_line_544":
+			return await _scenario_mode_targets_lobby_label_value_and_status_line_544()
+		"mode_targets_reach_the_round_and_the_remote_hud_544":
+			return await _scenario_mode_targets_reach_the_round_and_the_remote_hud_544()
 		"remote_client_remembers_name_460":
 			return await _scenario_remote_client_remembers_name_460()
 		"stock_tie_sudden_death_rocks_start_at_15_s_556":
@@ -31871,8 +31883,8 @@ func _scenario_ctf_two_captures_end_the_round() -> Array[String]:
 	var mode: Node = await _ctf_start(rig, failures)
 	if mode == null:
 		return failures
-	if mode.captures_to_win != 2:
-		failures.append("the round is first to %d, wanted 2" % mode.captures_to_win)
+	if mode.captures_to_win != HostSettingsScript352.shared().ctf_captures:
+		failures.append("the round is first to %d, wanted the setting %d" % [mode.captures_to_win, HostSettingsScript352.shared().ctf_captures])
 	var stage: Node2D = rm._current_stage
 	var red: RigidBody2D = rig["players"][0]
 	for capture in 2:
@@ -36974,6 +36986,202 @@ func _scenario_shield_hitbox_follows_big_heads_and_tiny_weapons_515() -> Array[S
 		if restored == null or restored.points != base:
 			failures.append("%s: shield polygon not restored after undo" % case[0])
 	await _teardown(stage)
+	return failures
+
+# --- Shared UI theme and fonts (#541) ---------------------------------------------
+const UiThemeScript541 := preload("res://scripts/UiTheme.gd")
+func _scenario_ui_theme_loads_with_bundled_fonts() -> Array[String]:
+	var failures: Array[String] = []
+	var configured: String = str(ProjectSettings.get_setting("gui/theme/custom", ""))
+	if configured != UiThemeScript541.THEME_PATH:
+		failures.append("project gui/theme/custom is '%s', expected %s" % [configured, UiThemeScript541.THEME_PATH])
+	var theme := load(UiThemeScript541.THEME_PATH) as Theme
+	if theme == null:
+		failures.append("the theme resource does not load")
+		_scenario_completed = true
+		return failures
+	if theme.default_font == null or theme.default_font.resource_path != UiThemeScript541.BODY_FONT_PATH:
+		failures.append("the theme's default font is not the bundled Nunito")
+	if theme.default_font_size < UiThemeScript541.MIN_FONT_SIZE:
+		failures.append("the theme's default font size %d is below the %d px floor" % [theme.default_font_size, UiThemeScript541.MIN_FONT_SIZE])
+	var heading: Font = theme.get_font("font", UiThemeScript541.HEADING_LABEL)
+	if heading == null or heading.resource_path != UiThemeScript541.HEADING_FONT_PATH:
+		failures.append("the HeadingLabel variation does not use the bundled Lilita One")
+	for style_type: String in ["Button", "Panel", "PanelContainer", "LineEdit"]:
+		var style_name: String = "normal" if style_type in ["Button", "LineEdit"] else "panel"
+		if not theme.has_stylebox(style_name, style_type):
+			failures.append("the theme has no %s style for %s" % [style_name, style_type])
+	for path: String in [UiThemeScript541.HEADING_FONT_PATH, UiThemeScript541.BODY_FONT_PATH,
+			"res://art/fonts/OFL-LilitaOne.txt", "res://art/fonts/OFL-Nunito.txt"]:
+		if not FileAccess.file_exists(path):
+			failures.append("%s is missing" % path)
+	# A live control resolves the project theme and measures text with the bundled font.
+	var label := Label.new()
+	get_root().add_child(label)
+	label.text = "Pickfight"
+	var resolved: Font = label.get_theme_font("font")
+	if resolved == null or resolved.resource_path != UiThemeScript541.BODY_FONT_PATH:
+		failures.append("a plain Label does not resolve to the bundled Nunito")
+	if label.get_theme_font_size("font_size") < UiThemeScript541.MIN_FONT_SIZE:
+		failures.append("a plain Label's font size is below the floor")
+	label.theme_type_variation = UiThemeScript541.HEADING_LABEL
+	var heading_resolved: Font = label.get_theme_font("font")
+	if heading_resolved == null or heading_resolved.resource_path != UiThemeScript541.HEADING_FONT_PATH:
+		failures.append("a HeadingLabel does not resolve to Lilita One")
+	label.queue_free()
+	_scenario_completed = true
+	return failures
+
+# --- Per-mode match targets (issue #544) ---------------------------------------
+func _mode_targets_reset_544() -> void:
+	var settings: RefCounted = StockSettingsScript.shared()
+	settings.set_stock_lives(3)
+	settings.set_soccer_goals(3)
+	settings.set_ctf_captures(2)
+	settings.game_mode = ""
+## Goals and captures default to 3 and 2, clamp to 1-10, survive a reload, and
+## the host commands (and the mode-aware "target") set them.
+func _scenario_mode_targets_settings_clamp_persist_and_host_commands_544() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://mode_targets_544.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	if fresh.soccer_goals != 3 or fresh.ctf_captures != 2:
+		failures.append("defaults were %d goals, %d captures; want 3 and 2" % [fresh.soccer_goals, fresh.ctf_captures])
+	fresh.set_soccer_goals(0)
+	fresh.set_ctf_captures(99)
+	if fresh.soccer_goals != 1 or fresh.ctf_captures != 10:
+		failures.append("0 goals / 99 captures kept as %d / %d; want 1 / 10" % [fresh.soccer_goals, fresh.ctf_captures])
+	fresh.persist = true
+	fresh.set_soccer_goals(6)
+	fresh.set_ctf_captures(4)
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.soccer_goals != 6 or reloaded.ctf_captures != 4:
+		failures.append("reloaded %d goals, %d captures; want 6 and 4" % [reloaded.soccer_goals, reloaded.ctf_captures])
+	DirAccess.remove_absolute(path)
+	_mode_targets_reset_544()
+	var shared: RefCounted = StockSettingsScript.shared()
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("soccer_goals", 5) or shared.soccer_goals != 5:
+		failures.append("the soccer_goals command did not set 5")
+	if not server.apply_host_command("ctf_captures", 7) or shared.ctf_captures != 7:
+		failures.append("the ctf_captures command did not set 7")
+	if server.apply_host_command("soccer_goals", "x"):
+		failures.append("a non-number goal count was taken")
+	server.apply_host_command("mode", "teams")
+	server.set_game_mode(GameModesType.SOCCER)
+	server.apply_host_command("target", 4)
+	if shared.soccer_goals != 4 or server.mode_target() != 4:
+		failures.append("target in Soccer left goals at %d, mode_target %d" % [shared.soccer_goals, server.mode_target()])
+	server.set_game_mode(GameModesType.CAPTURE_THE_FLAG)
+	server.apply_host_command("target", 3)
+	if shared.ctf_captures != 3 or shared.soccer_goals != 4:
+		failures.append("target in CTF left captures %d, goals %d" % [shared.ctf_captures, shared.soccer_goals])
+	server.set_game_mode(GameModesType.STOCK)
+	server.apply_host_command("target", 8)
+	if shared.stock_lives != 8:
+		failures.append("target in Stock left lives at %d" % shared.stock_lives)
+	server.set_game_mode(GameModesType.CLASSIC)
+	server.apply_host_command("target", 6)
+	if server.match_target() != 6 or shared.stock_lives != 8 or server.mode_target() != 6:
+		failures.append("target in Classic left rounds at %d, lives %d" % [server.match_target(), shared.stock_lives])
+	server.free()
+	_mode_targets_reset_544()
+	_scenario_completed = true
+	return failures
+## Each mode's lobby row reads its own label and value, the title-card line
+## carries the saved number and the mode cards carry none.
+func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[String]:
+	var failures: Array[String] = []
+	_mode_targets_reset_544()
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.set_stock_lives(4)
+	shared.set_soccer_goals(5)
+	shared.set_ctf_captures(6)
+	var want_line: Dictionary = {
+		GameModesType.STOCK: "Lose all 4 lives and you are out.",
+		GameModesType.SOCCER: "First team to 5 goals wins.",
+		GameModesType.CAPTURE_THE_FLAG: "First team to 6 captures wins.",
+		GameModesType.CLASSIC: "Last one standing wins.",
+	}
+	for id: String in want_line:
+		if GameModesType.status_line(id) != want_line[id]:
+			failures.append("%s status line reads '%s'" % [id, GameModesType.status_line(id)])
+	for row: Dictionary in GameModesType.TABLE:
+		var card: String = GameModesType.rule_line(str(row["id"]))
+		for ch: String in "0123456789":
+			if card.contains(ch):
+				failures.append("%s mode-card rule carries a number: '%s'" % [row["id"], card])
+				break
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	_set_phone_ports(main.get_node("ControllerServer"))
+	var server: Node = main.get_node("ControllerServer")
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	server.apply_host_command("mode", "teams")
+	var cases: Array = [
+		[GameModesType.CLASSIC, "Teams  -  first to %d" % server.match_target(), "first_to"],
+		[GameModesType.STOCK, "Lives 4", "lives"],
+		[GameModesType.SOCCER, "Goals to win 5", "goals"],
+		[GameModesType.CAPTURE_THE_FLAG, "Captures to win 6", "captures"],
+	]
+	for case: Array in cases:
+		if not server.set_game_mode(case[0]):
+			failures.append("could not pick %s" % case[0])
+			continue
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		var state: Dictionary = rm.get("_last_lobby_state")
+		if str(state.get("target_kind", "first_to")) != case[2]:
+			failures.append("%s lobby state kind is '%s', wanted %s" % [case[0], state.get("target_kind"), case[2]])
+		var label: Label = rm.get("_lobby_screen").get("_lobby_target_label")
+		if label.text != case[1]:
+			failures.append("%s lobby row reads '%s', wanted '%s'" % [case[0], label.text, case[1]])
+	await _teardown(main)
+	_mode_targets_reset_544()
+	return failures
+## A Soccer or CTF round plays to the saved count, the remote HUD sends it, and
+## the remote client's host row labels the value by kind.
+func _scenario_mode_targets_reach_the_round_and_the_remote_hud_544() -> Array[String]:
+	var failures: Array[String] = []
+	_mode_targets_reset_544()
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.set_soccer_goals(5)
+	shared.set_ctf_captures(1)
+	var rig: Dictionary = _soccer_rig(4)
+	if await _mode_started(rig):
+		var mode: Node = rig["rm"].game_mode_node()
+		var hud: Dictionary = preload("res://scripts/RemoteHud.gd")._mode(GameModesType.SOCCER, mode, rig["rm"])
+		if mode.goals_to_win != 5 or int(hud.get("win", -1)) != 5:
+			failures.append("Soccer plays to %d, remote HUD says %s; want 5" % [mode.goals_to_win, hud.get("win")])
+	else:
+		failures.append("the Soccer round never started")
+	await _teardown(rig["stage"])
+	rig = _ctf_rig(4)
+	if await _mode_started(rig):
+		var flag_mode: Node = rig["rm"].game_mode_node()
+		var flag_hud: Dictionary = preload("res://scripts/RemoteHud.gd")._mode(GameModesType.CAPTURE_THE_FLAG, flag_mode, rig["rm"])
+		if flag_mode.captures_to_win != 1 or int(flag_hud.get("win", -1)) != 1:
+			failures.append("CTF plays to %d, remote HUD says %s; want 1" % [flag_mode.captures_to_win, flag_hud.get("win")])
+	else:
+		failures.append("the Capture the Flag round never started")
+	await _teardown(rig["stage"])
+	var client_rig: Dictionary = {"nodes": []}
+	var client: Node = await _rc_client_241(client_rig, "ws://127.0.0.1:1")
+	client.room_code = "ABCD"
+	client.slot = 0
+	client.state = RcState241.PLAYING
+	for case: Array in [["lives", "Lives 3"], ["goals", "Goals to win 3"], ["captures", "Captures to win 3"], ["first_to", "First to 3"]]:
+		client.lobby = {"phase": "lobby", "count": 0, "host": 0, "mode": "ffa", "target": 3, "target_kind": case[0],
+			"paused": false, "players": [{"name": "Ann", "slot": 0, "ready": false, "color": "ff0000"}]}
+		client._refresh_lobby()
+		if client._target_label.text != case[1]:
+			failures.append("remote host row for %s reads '%s', wanted '%s'" % [case[0], client._target_label.text, case[1]])
+	await _rc_close_241(client_rig)
+	_mode_targets_reset_544()
 	return failures
 
 ## #460: the PC join screen pre-fills the last name used, joining saves it, and
