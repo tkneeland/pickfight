@@ -359,6 +359,7 @@ class BigHeads extends WeaponStatsModifier:
 		big.head_circle_offsets = offsets
 		big.head_circle_radii = radii
 		big.art_outline = outline
+		big.head_polygon = _scaled_points(stats.head_polygon, BIG_HEAD_SCALE)
 		# The boomstick's bullet grows with its head (owner, hackathon playtest).
 		big.projectile_radius = stats.projectile_radius * BIG_HEAD_SCALE
 		_scale_special_art(big, stats, BIG_HEAD_SCALE)
@@ -414,6 +415,7 @@ class TinyWeapons extends WeaponStatsModifier:
 		tiny.head_circle_offsets = offsets
 		tiny.head_circle_radii = radii
 		tiny.art_outline = outline
+		tiny.head_polygon = _scaled_points(stats.head_polygon, TINY_HEAD_SCALE)
 		tiny.projectile_radius = stats.projectile_radius * TINY_HEAD_SCALE
 		tiny.max_reach = maxf(stats.min_reach, stats.max_reach * TINY_REACH_SCALE)
 		_scale_special_art(tiny, stats, TINY_HEAD_SCALE)
