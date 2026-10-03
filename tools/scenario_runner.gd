@@ -711,6 +711,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay",
 	"relay_host_keepalive_holds_idle_room_open",
 	"relay_link_retries_after_idle_timeout_error_bounded",
+	"gamepad_identical_pad_cannot_take_held_seat_while_twin_connected",
 	"stock_kicking_last_opponent_mid_respawn_scores_nobody",
 	"lobby_sandbox_players_carry_no_round_team",
 	"mode_win_eliminations_are_not_counted_as_kos",
@@ -2539,6 +2540,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_host_keepalive_holds_idle_room_open()
 		"relay_link_retries_after_idle_timeout_error_bounded":
 			return await _scenario_relay_link_retries_after_idle_timeout_error_bounded()
+		"gamepad_identical_pad_cannot_take_held_seat_while_twin_connected":
+			return await _scenario_gamepad_identical_pad_cannot_take_held_seat_while_twin_connected()
 		"stock_kicking_last_opponent_mid_respawn_scores_nobody":
 			return await _scenario_stock_kicking_last_opponent_mid_respawn_scores_nobody()
 		"lobby_sandbox_players_carry_no_round_team":
@@ -36568,6 +36571,32 @@ func _scenario_relay_link_retries_after_idle_timeout_error_bounded() -> Array[St
 	relay.queue_free()
 	_scenario_completed = true
 	return failures
+func _scenario_gamepad_identical_pad_cannot_take_held_seat_while_twin_connected() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(3, "PadTwin512")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	server._test_pad_guids[1] = "guid-xbox"
+	server._test_pad_guids[2] = "guid-xbox"
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(2)
+	Input.joy_connection_changed.emit(2, false)
+	await _await_ticks(5)
+	# A third identical pad joins while pad 1 (same GUID) is still connected.
+	server._test_pad_guids[5] = "guid-xbox"
+	Input.joy_connection_changed.emit(5, true)
+	await _await_ticks(5)
+	if server.pad_slot(5) != -1:
+		failures.append("an identical pad took the held seat without pressing A (slot %d)" % server.pad_slot(5))
+	# The original pad replugged on its own index still reclaims.
+	Input.joy_connection_changed.emit(2, true)
+	await _await_ticks(5)
+	if server.pad_slot(2) != slot:
+		failures.append("the original pad did not reclaim its seat on the same index (slot %d, wanted %d)" % [server.pad_slot(2), slot])
+	await _teardown(rig["stage"])
+	return failures
+
 ## Issue #521: in Stock, kicking the last opponent while they wait to respawn
 ## handed the survivor a point (breaking #193): the kicked player still counted
 ## as standing until the respawn timer ran out. The kick cancels the respawn.
