@@ -691,6 +691,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_bots_only_match_starts_offline_and_says_so",
 	"gif_writer_encodes_valid_animated_gif",
 	"replay_save_writes_clip_gif_beside_pngs",
+	"pad_bumper_cycling_picker_does_not_release_weapon",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2465,6 +2466,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_gif_writer_encodes_valid_animated_gif()
 		"replay_save_writes_clip_gif_beside_pngs":
 			return await _scenario_replay_save_writes_clip_gif_beside_pngs()
+		"pad_bumper_cycling_picker_does_not_release_weapon":
+			return await _scenario_pad_bumper_cycling_picker_does_not_release_weapon()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -34904,6 +34907,7 @@ func _scenario_gamepad_bumper_press_throws_boomerang() -> Array[String]:
 	var player: RigidBody2D = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # #511: bumpers release mid-round, not in the lobby picker
 	await _equip(player, BOOMERANG_PATH)
 	server._test_pad_axes[0] = Vector2(0.6, 0.0)
 	await _await_ticks(30)
@@ -35109,6 +35113,7 @@ func _scenario_gamepad_bumper_tap_throws_boomerang_and_hold_releases() -> Array[
 	var player: RigidBody2D = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # #511: bumpers release mid-round, not in the lobby picker
 	await _equip(player, BOOMERANG_PATH)
 	server._test_pad_axes[0] = Vector2(0.6, 0.0)
 	await _await_ticks(30)
@@ -35201,6 +35206,7 @@ func _scenario_flick_launch_off_on_gamepad_seat_bumper_tap_fires_grapple() -> Ar
 	var player: RigidBody2D = players[0]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # #511: bumpers release mid-round, not in the lobby picker
 	if player.flick_launch_enabled:
 		failures.append("a gamepad seat still has flick launches enabled")
 	for path: String in [GRAPPLE_PATH, BOOMERANG_PATH]:
@@ -35819,4 +35825,32 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 	DirAccess.remove_absolute(abs_dir)
 	rb.queue_free()
 	_scenario_completed = true
+	return failures
+
+## Issue #511: a pad's bumper that cycles the lobby picker does not also let the
+## weapon go; mid-round it still does.
+func _scenario_pad_bumper_cycling_picker_does_not_release_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Bump511")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(3)
+	if slot != 0 or not server.pad_picker_shown(slot):
+		failures.append("the pad seat %d does not show its picker" % slot)
+		await _teardown(rig["stage"])
+		return failures
+	var hat_before: String = server.slot_hat(slot)
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_hat(slot) == hat_before:
+		failures.append("RB did not cycle the hat (still '%s')" % hat_before)
+	if server.slot_released(slot):
+		failures.append("RB in the lobby picker also released the weapon")
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER)
+	if not server.slot_released(slot):
+		failures.append("RB mid-round no longer releases the weapon")
+	await _pad_button_261(3, JOY_BUTTON_RIGHT_SHOULDER, false)
+	await _teardown(rig["stage"])
 	return failures
