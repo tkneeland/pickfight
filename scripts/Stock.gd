@@ -33,6 +33,7 @@ extends Node
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
 const RespawnScript := preload("res://scripts/Respawn.gd")
+const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const FallingRockScene: PackedScene = preload("res://scenes/parts/FallingRock.tscn")
 
 ## Seconds of overtime before the first rock.
@@ -400,9 +401,7 @@ func _build_hud() -> void:
 	_clock_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
 	_clock_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_clock_label.add_theme_font_size_override("font_size", 44)
-	_clock_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_clock_label.add_theme_constant_override("outline_size", 8)
+	ScreenKitScript.style_hud_pill(_clock_label)
 	_clock_label.visible = false
 	_hud.add_child(_clock_label)
 	add_child(_hud)
@@ -426,14 +425,14 @@ func _update_clock() -> void:
 	var text: String = clock_text()
 	_clock_label.text = text
 	_clock_label.visible = text != ""
-	var tint: Color = Color.WHITE
+	var tint: Color = Color("14181D") # ink on the cream pill (#548)
 	var pulse: float = 1.0
 	if overtime:
-		tint = Color(1.0, 0.35, 0.2)
+		tint = Color("D55E00")
 	elif clock_pulsing():
 		var beat: float = 0.5 + 0.5 * sin(time_left * TAU)
 		pulse = 1.0 + 0.2 * beat
-		tint = Color(1.0, 0.3, 0.3).lerp(Color.WHITE, 1.0 - beat)
+		tint = Color("D55E00").lerp(Color("14181D"), 1.0 - beat)
 	_clock_label.add_theme_color_override("font_color", tint)
 	_clock_label.pivot_offset = _clock_label.size * 0.5
 	_clock_label.scale = Vector2(pulse, pulse)
