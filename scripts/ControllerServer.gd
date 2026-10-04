@@ -2346,6 +2346,8 @@ func _pad_axis(device: int) -> Vector2:
 	var left := Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y))
 	if _test_pad_left_axes.has(device):
 		left = _test_pad_left_axes[device]
+	if pad_picker_shown(pad_slot(device)):
+		left = Vector2.ZERO # the left stick drives the picker there, not the arm (#611)
 	return pad_stick(raw, left)
 
 ## #600: the right stick swings the arm; a lone Joy-Con reports its one stick as
