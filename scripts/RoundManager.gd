@@ -1240,6 +1240,9 @@ func _enter_victory() -> void:
 	_end_card_up = false
 	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
+	var victory_feed: Control = kill_feed()
+	if victory_feed != null and victory_feed.has_method("clear_banners"):
+		victory_feed.clear_banners() # nothing queued from the last round over victory (#613)
 	_write_balance_log()
 	send_telemetry()
 	_play_lobby_music()
@@ -1977,7 +1980,7 @@ func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 
 func _on_ko_eliminated(slot: int) -> void:
 	# A mode's scripted win eliminates the losers; that is a score, not a KO (#521).
-	if _game_mode_node != null and _game_mode_node.has_method("is_won") and _game_mode_node.is_won():
+	if mode_won():
 		return
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()
@@ -2005,6 +2008,7 @@ func _flush_kos() -> void:
 
 func _ko_match_started() -> void:
 	_stats.begin_match()
+	_stats.tie_seed = match_seed_value() # full award ties break by the match seed (#613)
 	_pending_kos.clear()
 	var feed: Control = kill_feed()
 	if feed != null:
@@ -2031,8 +2035,16 @@ func _on_slot_claimed_fresh(slot: int) -> void:
 	_pending_kos = _pending_kos.filter(func(entry: Array) -> bool: return entry[0] != slot)
 	_update_score_label()
 
+## True once the round's mode has scored its win. That ends the round by
+## eliminating the losers, which is a score, not a KO (#521, #613).
+func mode_won() -> bool:
+	return _game_mode_node != null and _game_mode_node.has_method("is_won") and _game_mode_node.is_won()
+
 func _ko_round_started() -> void:
 	_pending_kos.clear()
+	var stale_feed: Control = kill_feed()
+	if stale_feed != null and stale_feed.has_method("clear_banners"):
+		stale_feed.clear_banners() # a late banner must not land in this round (#613)
 	_stats.begin_round(_in_round, GameClockScript.now_msec())
 
 ## A round won by the last of three or more is a big moment; one of two
@@ -2046,7 +2058,7 @@ func _ko_round_ended(winner_slot: int) -> void:
 				tr("BANNER_TEAM_SCORE") % [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]],
 				TeamsScript.team_color(_last_winner_team))
 		return
-	if feed != null and winner_slot != -1 and _in_round.size() >= 3:
+	if feed != null and winner_slot != -1 and _in_round.size() >= 3 and not mode_won():
 		feed.show_banner(tr("BANNER_LAST_ONE_STANDING"), _slot_name(winner_slot), _slot_color(winner_slot))
 
 # --- Match seed (issue #187) ---------------------------------------------------
