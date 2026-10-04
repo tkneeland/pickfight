@@ -202,6 +202,10 @@ const VIRTUAL_ADAPTER_HINTS: PackedStringArray = [
 ## No well-formed packet for this long and the bound controller is considered
 ## gone. Sized above a few dropped frames but well below "a player noticed".
 @export var controller_timeout_sec: float = 2.0
+## Issue #579: a remote seat (relay peer) goes quiet for longer than a phone before
+## it is dropped -- a window drag or a hitch on a PC stalls its input past 2 s. The
+## dropped seat is held (#459) and its client rejoins by itself.
+@export var remote_timeout_sec: float = 10.0
 ## How long a socket may sit without completing an HTTP request or a WebSocket
 ## handshake before it is dropped.
 @export var connection_timeout_sec: float = 5.0
@@ -942,7 +946,7 @@ func _process_websocket() -> void:
 		if state == WebSocketPeer.STATE_OPEN:
 			_drain(slot, peer)
 			var silent_for: int = now - _slot_last_packet_msec[slot]
-			if silent_for > timeout_msec:
+			if silent_for > (int(remote_timeout_sec * 1000.0) if peer is RemoteSeat else timeout_msec):
 				# The decisive case: the phone screen-locked or left Wi-Fi
 				# mid-drag, so the (0,0) release frame never arrived and the
 				# socket still looks open. Treat it as gone.
@@ -2525,6 +2529,7 @@ var _snapshot_frame: int = 0
 var _snapshot_bound: Dictionary = {} # RemoteSeat -> true, the seats already sent a full frame
 var _snapshot_previous: Dictionary = {}
 var _hud_last: Dictionary = {}
+var _stream_link_was_up: bool = false
 var _hud_tick: int = 0
 ## Hud text frames sent to remote seats (issue #436), for scenarios.
 var hud_frames_sent: int = 0
@@ -2545,6 +2550,11 @@ func _stream_snapshots(delta: float) -> void:
 		return
 	_listen_for_sounds(true)
 	var fresh: bool = false
+	# Issue #579: frames sent while the host's link was down were dropped, so the
+	# link coming back sends a full frame and the HUD again.
+	var link_up: bool = is_online()
+	fresh = link_up and not _stream_link_was_up
+	_stream_link_was_up = link_up
 	for seat: RemoteSeat in bound:
 		fresh = fresh or not _snapshot_bound.has(seat)
 	_snapshot_bound.clear()

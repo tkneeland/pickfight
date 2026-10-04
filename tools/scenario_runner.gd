@@ -746,6 +746,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bullet_outlives_eliminated_shooter_570",
 	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
 	"round_end_clears_dead_shooters_bullet_570",
+	"remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579",
+	"remote_client_rejoins_when_snapshots_stop_579",
+	"hud_and_full_frame_resent_after_host_relink_579",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2627,6 +2630,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570()
 		"round_end_clears_dead_shooters_bullet_570":
 			return await _scenario_round_end_clears_dead_shooters_bullet_570()
+		"remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579":
+			return await _scenario_remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579()
+		"remote_client_rejoins_when_snapshots_stop_579":
+			return await _scenario_remote_client_rejoins_when_snapshots_stop_579()
+		"hud_and_full_frame_resent_after_host_relink_579":
+			return await _scenario_hud_and_full_frame_resent_after_host_relink_579()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37754,4 +37763,104 @@ func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
 	if not _projectiles_of(p1).is_empty():
 		failures.append("the dead shooter's bullet survived the end of the round")
 	await _teardown(stage)
+	return failures
+
+## Issue #579: a remote seat is not dropped by a 3 s stall (phones keep 2 s); past
+## the remote timeout the host closes it and the client rejoins its held seat.
+func _scenario_remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	server.controller_timeout_sec = 2.0 # the rig loosens it; phones keep 2 s
+	if server.remote_timeout_sec <= server.controller_timeout_sec:
+		failures.append("remote timeout %.1f s is not longer than the phone's %.1f s" % [server.remote_timeout_sec, server.controller_timeout_sec])
+	client.set_process(false)
+	client.set_physics_process(false)
+	await _wait_wall_519(3.0)
+	if server._slot_peers[slot] == null:
+		failures.append("a 3 s stall dropped the remote seat")
+	server.remote_timeout_sec = 0.5
+	server.remote_seat_hold_msec = 600000
+	await _wait_wall_519(1.0)
+	if server._slot_peers[slot] != null:
+		failures.append("the seat was not dropped past the remote timeout")
+	client.set_process(true)
+	client.set_physics_process(true)
+	server.remote_timeout_sec = 10.0
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 3000):
+		failures.append("the client never saw the close")
+	elif not client.rejoining():
+		failures.append("an input-timeout close left the client not rejoining ('%s')" % client.status_text)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000) or client.slot != slot:
+		failures.append("the client did not rejoin its held slot %d (state %d, slot %d)" % [slot, client.state, client.slot])
+	await _rc_close_241(rig)
+	return failures
+## Issue #579: a client that gets no snapshot for about 5 s rejoins by itself.
+func _scenario_remote_client_rejoins_when_snapshots_stop_579() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	if not await _wait_for_239(func() -> bool: return client.frames_applied > 0, 3000):
+		failures.append("the client never got a snapshot")
+	server.remote_seat_hold_msec = 600000
+	server.set_physics_process(false)
+	server.set_process(false)
+	await _wait_wall_519(3.0)
+	if client.state != RcState241.PLAYING:
+		failures.append("the client left after only 3 s without snapshots")
+	await _wait_wall_519(3.0)
+	if client.state != RcState241.JOIN or not client.rejoining():
+		failures.append("after 6 s without snapshots the client is state %d, rejoining %s" % [client.state, client.rejoining()])
+	server.set_physics_process(true)
+	server.set_process(true)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000):
+		failures.append("the client never rejoined (state %d, '%s')" % [client.state, client.status_text])
+	await _rc_close_241(rig)
+	return failures
+## Issue #579: HUD and full frames sent while the host's link was down are lost,
+## so the link coming back resends both.
+func _scenario_hud_and_full_frame_resent_after_host_relink_579() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	if not await _wait_for_239(func() -> bool: return client.frames_applied > 0 and not client.hud.is_empty(), 3000):
+		failures.append("the client never got a snapshot and a HUD")
+	rig["relay"].host_grace_sec = 5.0
+	server.relay_link.host_grace_sec = 5.0
+	server.relay_link.drop_socket_for_test()
+	if not await _wait_for_239(func() -> bool: return server.relay_state() == "reconnecting", 3000):
+		failures.append("the host link never went down")
+	rm._scores[slot] = 7 # changes while the link is down
+	await _wait_wall_519(0.5)
+	if not await _wait_for_239(func() -> bool: return server.is_online(), 8000):
+		failures.append("the host link never came back")
+	var shown := func() -> bool:
+		for row: Array in client.hud.get("board", []):
+			if int(row[0]) == slot and int(row[2]) == 7:
+				return true
+		return false
+	if not await _wait_for_239(shown, 3000):
+		failures.append("the HUD change made during the relink never reached the client: %s (online %s, client state %d '%s')" % [client.hud, server.is_online(), client.state, client.status_text])
+	await _rc_close_241(rig)
 	return failures
