@@ -758,6 +758,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"relay_proxy_protocol_supplies_real_client_ip_580",
 	"remote_seat_close_drops_relay_peer_580",
 	"online_remote_seat_never_hosts_578",
+	"controller_fonts_served_589",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2663,6 +2664,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_seat_close_drops_relay_peer_580()
 		"online_remote_seat_never_hosts_578":
 			return await _scenario_online_remote_seat_never_hosts_578()
+		"controller_fonts_served_589":
+			return await _scenario_controller_fonts_served_589()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37729,8 +37732,8 @@ func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> A
 	for family: String in ["Lilita One", "Nunito"]:
 		if not page.contains('font-family: "%s";\n    font-weight' % family):
 			failures.append("no @font-face for %s" % family)
-	if page.count("src: url(data:font/woff2;base64,") != 2:
-		failures.append("the two theme fonts are not embedded as base64 WOFF2")
+	if page.count("src: url(/fonts/") != 2:
+		failures.append("the two theme fonts are not linked as served WOFF2 files (#589)")
 	for external: String in ["fonts.googleapis", "fonts.gstatic", "src: url(http", "@import"]:
 		if page.contains(external):
 			failures.append("the page reaches for the network: '%s'" % external)
@@ -38244,3 +38247,62 @@ func _scenario_online_remote_seat_never_hosts_578() -> Array[String]:
 		failures.append("the phone seat is not host after joining behind a remote (host_slot=%d)" % server.host_slot())
 	await _online_close_239(rig)
 	return failures
+
+## #589: the controller page links its fonts by URL; the host serves exactly the
+## two allowlisted woff2 files with the right type and a cache header, and
+## nothing else under /fonts/ (no traversal).
+func _scenario_controller_fonts_served_589() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(1, "Fonts589")
+	var server: Node = rig["server"]
+	var page: String = (await _http_get_589(server.http_port, "/"))["body"].get_string_from_utf8()
+	if page.contains("data:font"):
+		failures.append("the page still embeds base64 fonts")
+	for font: String in ["/fonts/LilitaOne-Latin.woff2", "/fonts/Nunito-Latin.woff2"]:
+		if not page.contains("url(%s)" % font):
+			failures.append("page does not link %s" % font)
+		var res: Dictionary = await _http_get_589(server.http_port, font)
+		if res["status"] != 200:
+			failures.append("%s answered %d" % [font, res["status"]])
+			continue
+		if not res["head"].contains("Content-Type: font/woff2"):
+			failures.append("%s wrong Content-Type" % font)
+		if not res["head"].contains("max-age="):
+			failures.append("%s has no max-age cache header" % font)
+		if res["body"].slice(0, 4).get_string_from_ascii() != "wOF2":
+			failures.append("%s body is not a woff2" % font)
+	for bad: String in ["/fonts/../index.html", "/fonts/other.woff2", "/fonts/", "/fonts/%2e%2e/project.godot"]:
+		var res: Dictionary = await _http_get_589(server.http_port, bad)
+		if res["status"] != 404:
+			failures.append("%s answered %d, wanted 404" % [bad, res["status"]])
+	await _teardown(rig["stage"])
+	return failures
+func _http_get_589(port: int, path: String) -> Dictionary:
+	var tcp := StreamPeerTCP.new()
+	var out: Dictionary = {"status": 0, "head": "", "body": PackedByteArray()}
+	if tcp.connect_to_host("127.0.0.1", port) != OK:
+		return out
+	var deadline: int = Time.get_ticks_msec() + 3000
+	var sent: bool = false
+	var raw := PackedByteArray()
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		tcp.poll()
+		var st: int = tcp.get_status()
+		if st == StreamPeerTCP.STATUS_CONNECTED and not sent:
+			tcp.put_data(("GET %s HTTP/1.1\r\nHost: x\r\n\r\n" % path).to_utf8_buffer())
+			sent = true
+		if st == StreamPeerTCP.STATUS_CONNECTED:
+			var n: int = tcp.get_available_bytes()
+			if n > 0:
+				raw.append_array(tcp.get_data(n)[1])
+		elif st == StreamPeerTCP.STATUS_NONE or st == StreamPeerTCP.STATUS_ERROR:
+			break
+	var text: String = raw.get_string_from_ascii()
+	var split: int = text.find("\r\n\r\n")
+	if split < 0:
+		return out
+	out["head"] = text.substr(0, split)
+	out["status"] = int(out["head"].get_slice(" ", 1))
+	out["body"] = raw.slice(split + 4)
+	return out

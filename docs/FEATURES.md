@@ -77,7 +77,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Controllers and input
 - Phone browser controller page over LAN, served by the host (#1, ADR-0002)
-- Phone controller page restyle (#576, #507): the same chunky look as the lobby (deep indigo ground with faint stripes, cream panels, ink outlines with hard offset shadows, the player's own colour as the accent), Lilita One headings and buttons over Nunito body text. The fonts are Latin WOFF2 subsets embedded in the page (about 40 KB), so it works with no internet; the drag pad, touch handling and layout are unchanged
+- Phone controller page restyle (#576, #507): the same chunky look as the lobby (deep indigo ground with faint stripes, cream panels, ink outlines with hard offset shadows, the player's own colour as the accent), Lilita One headings and buttons over Nunito body text. The fonts are Latin WOFF2 subsets (about 30 KB) served by the host itself from `/fonts/*.woff2` (#589; they were base64 in the page, which blocked the commit hook), so it works with no internet; the drag pad, touch handling and layout are unchanged
 - Multi-touch, drag smoothing against Wi-Fi jitter (#29, #113)
 - Phone buzz feedback, e.g. on round win (#34, ADR-0013)
 - Phone damage bar: a thin strip showing how close you are to KO, turning red near the end; phone only, resets each round (#331)
