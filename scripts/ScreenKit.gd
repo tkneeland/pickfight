@@ -59,3 +59,57 @@ static func big_label(text: String, font_size: int, color: Color) -> Label:
 	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
 	label.add_theme_constant_override("outline_size", maxi(4, font_size / 10))
 	return label
+
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
+
+## A Lilita One label with the thick ink outline the in-match screens use
+## (#548), for text drawn over the stage or the dark ground.
+static func ink_label(text: String, font_size: int, color: Color, outline: int = 0) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_constant_override("outline_size", outline if outline > 0 else maxi(UiThemeScript.HUD_OUTLINE_SIZE, font_size / 8))
+	return label
+
+## A light "punch" on appearance (#548): `node` pops from 1.3x to 1x about its
+## centre over a fifth of a second. Display only; nothing waits on it.
+static func punch(node: Control, tree_owner: Node) -> void:
+	node.pivot_offset = node.size * 0.5
+	node.scale = Vector2(1.3, 1.3)
+	var tween: Tween = tree_owner.create_tween()
+	tween.tween_property(node, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+## A mode HUD's top-centre readout (#548): Lilita One ink text on a cream pill
+## with an ink outline and hard shadow. It keeps the label's size and anchors;
+## only the look changes.
+static func style_hud_pill(label: Label, font_size: int = 44) -> void:
+	label.theme_type_variation = UiThemeScript.INK_HEADING_LABEL
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_stylebox_override("normal", UiThemeScript.plate(UiThemeScript.CREAM, 22, 0, true, 18))
+
+## The chunky-party ground (#546, #507 decision 1): flat deep indigo with faint
+## diagonal stripes, as a full-rect, input-transparent control.
+static func striped_background(node_name: String = "Ground") -> Control:
+	var ground := Control.new()
+	ground.name = node_name
+	ground.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ground.draw.connect(func() -> void:
+		var size: Vector2 = ground.size
+		ground.draw_rect(Rect2(Vector2.ZERO, size), Color("232A4A"))
+		# 135deg stripes, 28 px band every 56 px (measured along x), 3.5% white.
+		var stripe := Color(1.0, 1.0, 1.0, 0.035)
+		var step: float = 56.0
+		var x: float = -size.y
+		while x < size.x:
+			ground.draw_colored_polygon(PackedVector2Array([
+				Vector2(x, 0.0), Vector2(x + step * 0.5, 0.0),
+				Vector2(x + step * 0.5 + size.y, size.y), Vector2(x + size.y, size.y)]), stripe)
+			x += step
+	)
+	ground.resized.connect(ground.queue_redraw)
+	return ground

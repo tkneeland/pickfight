@@ -31,11 +31,9 @@ extends Node2D
 ## the barrel. Since #92 no head stops a bullet, so the exclusion only
 ## matters if heads go back into the cast.
 ##
-## **Gone when its shooter leaves play.** Elimination and the end of a round
-## both put the shooter through `Player._go_inert()`, which frees every
-## bullet it has in flight. Each bullet also checks its shooter every tick
-## before it moves, so none can land a hit for a player who is out of the
-## round.
+## **Outlives its shooter's elimination (#570).** A bullet already fired keeps
+## flying and can still hit, credited to the shooter. Round end and a kick
+## (`Player.clear_shots()`) and the shooter node leaving the tree still free it.
 
 ## Player.LAYER_WORLD and Player.LAYER_HEAD, repeated rather than read so
 ## this script need not preload the player: terrain and player bodies, and
@@ -103,7 +101,7 @@ func _ready() -> void:
 	_shape.radius = radius
 
 func _physics_process(delta: float) -> void:
-	if not _shooter_in_play():
+	if not is_instance_valid(shooter):
 		queue_free()
 		return
 	var motion: Vector2 = direction * speed * delta

@@ -53,9 +53,12 @@ func end_round() -> void:
 func connected_count() -> int:
 	return _handlers.size()
 
-func _on_strike(victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+func _on_strike(victim: Node, amount: float, point: Vector2, _lethal: bool) -> void:
 	if amount <= 0.0 or victim == null or not is_instance_valid(victim):
 		return
 	if not _watched.values().has(victim) or not bool(victim.get("alive")):
+		return
+	# A hit on the shield face or open canopy face is a block, not a kill (#569).
+	if victim.has_method("hit_blocked") and victim.hit_blocked(point):
 		return
 	victim.eliminate()
