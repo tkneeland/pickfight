@@ -2393,7 +2393,7 @@ func _note_tie_candidates(slot: int) -> void:
 ## as before) unless two or more of them, on two or more teams in Teams, are
 ## still rostered.
 func _start_tiebreaker(tied: Array[int]) -> bool:
-	if _state != State.ROUND_ACTIVE or _sandbox_active:
+	if _state != State.ROUND_ACTIVE:
 		return false
 	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
 	var back: Array[int] = []
