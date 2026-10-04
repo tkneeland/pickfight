@@ -397,6 +397,10 @@ func _swap_stage() -> void:
 	if container == null:
 		return
 	if _current_stage != null:
+		# Out of the tree first: a queued free leaves it there until frame end and
+		# the same-named new stage would be auto-renamed (#594).
+		if _current_stage.get_parent() != null:
+			_current_stage.get_parent().remove_child(_current_stage)
 		_current_stage.queue_free()
 	_pin_stock_stage()
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()

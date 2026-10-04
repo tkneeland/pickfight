@@ -772,6 +772,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hot_potato_blocked_hit_does_not_pass_the_tag_595",
 	"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"controller_page_refused_phone_rejoins_slowly_581",
+	"swap_stage_same_stage_keeps_name_594",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2705,6 +2706,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_timeout_losers_are_not_counted_as_kos_595()
 		"hot_potato_blocked_hit_does_not_pass_the_tag_595":
 			return await _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595()
+		"swap_stage_same_stage_keeps_name_594":
+			return await _scenario_swap_stage_same_stage_keeps_name_594()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -38803,4 +38806,30 @@ func _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595() -> Array[Strin
 	if mode.it_slot != 1:
 		failures.append("an unblocked hit did not pass the tag")
 	await _teardown(rig["stage"])
+	return failures
+
+
+## Issue #594: swapping to the same single stage twice must not leave the new
+## instance auto-renamed (e.g. "@Node2D@2") by the still-in-tree old one.
+func _scenario_swap_stage_same_stage_keeps_name_594() -> Array[String]:
+	var failures: Array[String] = []
+	var root := Node2D.new()
+	get_root().add_child(root)
+	var container := Node2D.new()
+	container.name = "Container"
+	root.add_child(container)
+	var stub_scenes: Array[PackedScene] = [_make_stub_stage("OnlyStage", [Vector2.ZERO, Vector2(50, 0)])]
+	var round_manager := Node.new()
+	round_manager.set_script(RoundManagerType)
+	round_manager.stage_scenes = stub_scenes
+	round_manager.arena_container_path = NodePath("../Container")
+	root.add_child(round_manager)
+	await physics_frame
+	for swap in 3:
+		round_manager._swap_stage()
+		var shown: String = round_manager.current_stage_name()
+		if shown != "OnlyStage":
+			failures.append("swap %d: stage name is '%s', expected 'OnlyStage'" % [swap, shown])
+		await physics_frame
+	await _teardown(root)
 	return failures
