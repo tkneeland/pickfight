@@ -578,6 +578,11 @@ func sensitivity() -> float:
 
 # --- Esc menu -----------------------------------------------------------------------
 
+func _let_go_held() -> void:
+	_pad_shoulder_held = false
+	_shoulder_down_msec = -1
+	_action_down.clear()
+
 func toggle_menu() -> void:
 	if state != State.PLAYING:
 		return
@@ -585,6 +590,7 @@ func toggle_menu() -> void:
 		resume()
 		return
 	menu_open = true
+	_let_go_held() # a button-up while the menu is open is never seen (#599)
 	_mouse.reset()
 	input_vector = Vector2.ZERO
 	_set_captured(false)
@@ -595,6 +601,7 @@ func resume() -> void:
 	if state != State.PLAYING:
 		return
 	menu_open = false
+	_let_go_held()
 	_menu_panel.visible = false
 	_mouse.reset()
 	_sync_capture()

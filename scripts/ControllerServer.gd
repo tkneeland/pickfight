@@ -2288,7 +2288,8 @@ func _input(event: InputEvent) -> void:
 	# Issue #463, ADR-0022: a Space tap is the host PC's finger lifting (and
 	# touching again), since a mouse never sends a zero vector.
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
-			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+			and not _input_gated() and not _host_menu_open():
 		_action_down(_host_pc_slot)
 		return
 	if key != null and not key.pressed and key.physical_keycode == KEY_SPACE and _host_pc_slot != -1:
@@ -2375,10 +2376,19 @@ func _step_pad_pickers(delta: float) -> void:
 				axis = _test_pad_left_axes[device]
 		cosmetics_picker.stick(self, slot, axis, delta)
 
+## Issue #599: a pause or an open host menu owns the pads; presses and stick
+## pushes are dropped (releases are not, so nothing sticks).
+func _input_gated() -> bool:
+	return bool(_lobby_state.get("paused", false)) or PadMenuScript.is_open()
+
 func _push_pad_sticks() -> void:
+	var gated: bool = _input_gated()
 	for device: int in _pad_seats.keys():
 		var slot: int = pad_slot(device)
 		if slot == -1:
+			continue
+		if gated:
+			_smoothers[slot].push(Vector2.ZERO)
 			continue
 		if _pad_axis(device) != Vector2.ZERO:
 			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
@@ -2401,7 +2411,7 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 		if pressed:
 			# Issue #511: the host menu owns the bumper right now. (The lobby picker
 			# no longer does: it uses the D-pad and the left stick, #547.)
-			if PadMenuScript.is_open():
+			if _input_gated():
 				return
 			_slot_release_held[slot] = 1
 			_slot_bumper_down[slot] = GameClockScript459.now_msec()
@@ -2413,7 +2423,8 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 				_try_throw(slot)
 	elif button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK:
 		if pressed:
-			_action_down(slot)
+			if not _input_gated():
+				_action_down(slot)
 		else:
 			_action_up(slot)
 
