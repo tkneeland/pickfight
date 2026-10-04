@@ -167,6 +167,7 @@ const NameTagsScript := preload("res://scripts/NameTags.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
 ## Teams mode's rules (issue #236, ADR-0018).
 const TeamsScript := preload("res://scripts/Teams.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 ## Every deadline this node and its pieces keep (`*_msec`) is game time
 ## (#182), read from here: it stops while the tree is paused and runs at
 ## `Engine.time_scale`, so none of them needs pushing back after a pause.
@@ -537,6 +538,7 @@ func _check_round_end() -> void:
 	_end_round_modifier()
 	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
+	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
@@ -984,10 +986,10 @@ func _build_modifier_label() -> void:
 	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_modifier_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_modifier_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_modifier_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL # Lilita One, ink outline (#548)
 	_modifier_label.add_theme_font_size_override("font_size", 96)
-	_modifier_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 1.0))
-	_modifier_label.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0, 1.0))
-	_modifier_label.add_theme_constant_override("outline_size", 16)
+	_modifier_label.add_theme_color_override("font_color", UiThemeScript.YELLOW)
+	_modifier_label.add_theme_constant_override("outline_size", 18)
 	_modifier_label.visible = false
 	_modifier_layer.add_child(_modifier_label)
 	_modifier_timer = Timer.new()
@@ -1552,6 +1554,9 @@ func _on_host_command(cmd: String, slot: int) -> void:
 			# Already out of the roster; out of the round too, without a death.
 			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
 				_players[slot].leave_round()
+			# Issue #570: a kicked player's shots in flight go with them.
+			if slot >= 0 and slot < _players.size() and _players[slot] != null:
+				_players[slot].clear_shots()
 			# Issue #521: a kicked Stock player still waiting to respawn is out
 			# now, not when the timer runs down, or the survivor scores.
 			if _game_mode_node != null and _game_mode_node.has_method("cancel_respawn"):
@@ -1822,6 +1827,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_end_round_modifier()
 	_ko_round_ended(-1)
 	_show_scoreboard()
+	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
@@ -2318,3 +2324,9 @@ func _clear_ghosts() -> void:
 		if is_instance_valid(ghost):
 			(ghost as Node).queue_free()
 	_ghosts.clear()
+
+## Issue #570: shots outlive an eliminated shooter, but never the round.
+func _clear_all_shots() -> void:
+	for player: Variant in _players:
+		if player != null and is_instance_valid(player):
+			player.clear_shots()
