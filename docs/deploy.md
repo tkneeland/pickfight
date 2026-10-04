@@ -16,7 +16,7 @@ The Settings panel's Feedback button files GitHub issues through the relay. Unti
 1. `fly secrets set GITHUB_FEEDBACK_TOKEN=<fine-grained token, Issues: write on tkneeland/pickfight> -a pickfight-relay`
 2. `fly deploy . --config relay/fly.toml --dockerfile relay/Dockerfile --ha=false --yes`
 
-The token lives only on the relay, never in the game. Limits: 5 filings per IP per hour, 2000 characters. The relay reads the real client IP from the PROXY protocol line Fly sends on port 443 (`proxy_proto` in `relay/fly.toml`, switched on in the relay by `PICKFIGHT_PROXY_PROTO=1`, #580); the two settings must be deployed together.
+The token lives only on the relay, never in the game. Limits: 5 filings per IP per hour, 2000 characters. Behind Fly's proxy the relay sees Fly's address, not the player's, so these per-IP limits (and the #580 per-IP seat cap, which only applies when the real IP is known) act roughly globally. The relay can read the real client IP from Fly's PROXY protocol line (#580), but this is **off by default** and untested on Fly. To turn it on: apply `docs/relay-proxy-proto-flytoml.diff` to `relay/fly.toml` (a `[[services]]` block whose port 443 has the handlers `["tls","proxy_proto"]`) **and** set `PICKFIGHT_PROXY_PROTO=1` in the same deploy. Both must ship together, or every connection fails. Afterwards, host a room to confirm it still connects; if not, redeploy the previous commit.
 
 ## PC builds
 
