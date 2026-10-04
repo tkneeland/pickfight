@@ -245,9 +245,6 @@ func set_target(kind: String, value: int) -> void:
 func set_start_ready(on: bool) -> void:
 	_start_ready = on
 
-func _control_button_text(id: String) -> String:
-	return (_controls[id] as Button).text
-
 ## The control button `id` ("local", "online", "solo", "mode", "bots", "bots_down",
 ## "bots_up", "target_down", "target_up", "look", "how_to_play", "join", "start"), or null.
 func control_button(id: String) -> Button:

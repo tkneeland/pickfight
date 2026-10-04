@@ -745,6 +745,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_kind_keys_and_join_only_online_547",
 	"lobby_mode_card_click_picks_the_mode_and_its_format_547",
 	"lobby_pad_menu_opens_and_closes_popups_547",
+	"lobby_own_card_opens_your_look_and_solo_badge_readies_547",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2624,6 +2625,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_mode_card_click_picks_the_mode_and_its_format_547()
 		"lobby_pad_menu_opens_and_closes_popups_547":
 			return await _scenario_lobby_pad_menu_opens_and_closes_popups_547()
+		"lobby_own_card_opens_your_look_and_solo_badge_readies_547":
+			return await _scenario_lobby_own_card_opens_your_look_and_solo_badge_readies_547()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37692,4 +37695,64 @@ func _scenario_lobby_pad_menu_opens_and_closes_popups_547() -> Array[String]:
 		failures.append("a pad press seated or readied behind the popup: %s" % [server.claimed_slots()])
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
+	return failures
+## Online: clicking the host's own player card or the Your look button opens the
+## Your look popup (its Done button closes it) and clicking another card does
+## not; Solo: the host's READY pill readies the host seat, a bot's pill does nothing.
+func _scenario_lobby_own_card_opens_your_look_and_solo_badge_readies_547() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.press_control("online")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	server.apply_host_command("bots", 2)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var host: int = server.host_pc_slot()
+	var own: Control = screen.player_card(host)
+	var other_slot: int = server.virtual_slots()[0] if not server.virtual_slots().is_empty() else -1
+	var other: Control = screen.player_card(other_slot)
+	if own == null or other == null:
+		failures.append("no cards for the host seat %d (%s) and a bot seat %d (%s)" % [host, own, other_slot, other])
+		await _kind_close_435(rig)
+		return failures
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	other._gui_input(click)
+	if screen.popup_open() != "":
+		failures.append("clicking a bot's card opened popup '%s'" % screen.popup_open())
+	own._gui_input(click)
+	await _await_ticks(2)
+	if screen.popup_open() != "look" or not screen.look_popup().is_visible_in_tree():
+		failures.append("clicking the host's own card opened '%s'" % screen.popup_open())
+	var done: Button = screen.host_picker().done_button() if screen.host_picker() != null else null
+	if done == null or not done.is_visible_in_tree():
+		failures.append("the Your look popup shows no Done button")
+	else:
+		done.pressed.emit()
+		if screen.popup_open() != "":
+			failures.append("Done left popup '%s' open" % screen.popup_open())
+	screen.control_button("look").pressed.emit()
+	if screen.popup_open() != "look":
+		failures.append("the Your look button opened '%s'" % screen.popup_open())
+	screen.set_popup("")
+	screen.press_control("solo")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	host = server.host_pc_slot()
+	own = screen.player_card(host)
+	if own == null:
+		failures.append("no host card in Solo")
+	else:
+		var was: bool = server.slot_ready(host)
+		own.badge().pressed.emit()
+		if server.slot_ready(host) == was:
+			failures.append("the Solo host's pill did not toggle ready (still %s)" % was)
+	var bot_slot: int = server.virtual_slots()[0] if not server.virtual_slots().is_empty() else -1
+	var bot_card: Control = screen.player_card(bot_slot)
+	if bot_card != null and bot_card.badge().mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		failures.append("a bot's pill takes clicks")
+	await _kind_close_435(rig)
 	return failures

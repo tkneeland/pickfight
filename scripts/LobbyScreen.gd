@@ -370,7 +370,7 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		_lobby_status.text = tr("LOBBY_ENTER_OR_START")
 	if state["phase"] != "countdown" and Time.get_ticks_msec() < _host.start_notice_until_msec:
 		_lobby_status.text = _host.start_notice
-	_host.set_start_ready(can_start)
+	_host.set_start_ready(can_start or state["phase"] == "countdown") # lit while the countdown runs
 	_show_countdown(int(state["count"]) if state["phase"] == "countdown" else 0)
 	if join_source != null:
 		var qr: Variant = join_source.get("join_qr_texture")
