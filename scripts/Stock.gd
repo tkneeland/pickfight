@@ -82,6 +82,8 @@ var _rain_rng: RandomNumberGenerator
 var _down_slots: Array[int] = []
 var _down_frame: int = -1
 var _hud: CanvasLayer
+## True while `_timeout()` eliminates the losers: a score, not KOs (#595).
+var _resolving: bool = false
 var _clock_label: Label
 
 func setup(manager: Node) -> void:
@@ -285,9 +287,15 @@ func _timeout() -> void:
 	else:
 		overtime = false
 		time_limit_sec = 0.0
+	_resolving = true
 	for slot: int in losers:
 		if bool(_watched[slot].alive):
 			_watched[slot].eliminate()
+	_resolving = false
+
+## `RoundManager` skips KO records while this is true (#595).
+func is_won() -> bool:
+	return _resolving
 
 # --- Sudden death escalation (#556) --------------------------------------------
 

@@ -115,10 +115,13 @@ func _physics_process(delta: float) -> void:
 		_pick_it()
 
 ## `striker_slot` is bound last: `strike_landed` is emitted by the striker.
-func _on_strike(victim: Node, amount: float, _point: Vector2, _lethal: bool, striker_slot: int) -> void:
+func _on_strike(victim: Node, amount: float, point: Vector2, _lethal: bool, striker_slot: int) -> void:
 	if not _active or amount <= 0.0 or _cooldown_left > 0.0:
 		return
 	if striker_slot != it_slot or victim == null or not is_instance_valid(victim):
+		return
+	# A hit on the shield face or open canopy face is a block (#569, #595).
+	if victim.has_method("hit_blocked") and victim.hit_blocked(point):
 		return
 	for slot: int in _watched.keys():
 		if _watched[slot] == victim and slot != it_slot and _is_alive(slot):
