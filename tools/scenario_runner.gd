@@ -12453,19 +12453,25 @@ func _send_until_input_changes(peer: WebSocketPeer, player: RigidBody2D, v: Vect
 		if player.input_vector != before:
 			return player.input_vector
 	return before
-## Sends `v` every frame until `player.input_vector` is within 0.001 of it.
+## Sends `v` every frame until `player.input_vector` is within 0.001 of it AND
+## has stopped moving. Within 0.001 the ease still has one more step to snap
+## onto its target (INPUT_SETTLE_EPSILON is 0.001), so returning at the first
+## near-enough frame left a caller's "before" a hair off the settled value (#583).
 func _send_until_input_reaches(peer: WebSocketPeer, player: RigidBody2D, v: Vector2) -> bool:
 	var buf := PackedByteArray()
 	buf.resize(8)
 	buf.encode_float(0, v.x)
 	buf.encode_float(4, v.y)
 	var deadline: int = Time.get_ticks_msec() + SMOOTH_WAIT_MSEC
+	var last: Vector2 = Vector2(INF, INF)
 	while Time.get_ticks_msec() < deadline:
 		peer.put_packet(buf)
 		await process_frame
 		peer.poll()
-		if player.input_vector.distance_to(v) < 0.001:
+		var now: Vector2 = player.input_vector
+		if now.distance_to(v) < 0.001 and now == last:
 			return true
+		last = now
 	return false
 ## Issue #113, the real seam: over a real ControllerServer and WebSocket, a
 ## small drag change is eased (the first new input is part-way there) yet
@@ -35993,7 +35999,9 @@ func _scenario_replay_save_writes_clip_gif_beside_pngs() -> Array[String]:
 	var script := preload("res://scripts/ReplayBuffer.gd")
 	var rb: Node = script.new()
 	root.add_child(rb)
-	rb.clips_dir = "user://scenario_clips_502"
+	# Per process: runs sharing one user data dir would write, count and delete each
+	# other's PNGs under the same-second clip stamp (#583).
+	rb.clips_dir = "user://scenario_clips_502_%d" % OS.get_process_id()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 502
 	for i in 120:
