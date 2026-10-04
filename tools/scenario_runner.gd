@@ -774,6 +774,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_page_refused_phone_rejoins_slowly_581",
 	"swap_stage_same_stage_keeps_name_594",
 	"gamepad_left_stick_swings_when_right_idle_600",
+	"pause_gates_pad_clicks_and_sticks_599",
+	"remote_client_menu_clears_held_release_599",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1173,6 +1175,10 @@ func _run_all() -> void:
 	var fail_count: int = 0
 	for name: String in to_run:
 		var failures: Array[String] = await _run_one(name)
+		# #599: a scenario that leaves the host Esc menu open must not gate the next one's input.
+		var esc_menu: Node = get_root().get_node_or_null(^"Sfx/SfxSettings")
+		if esc_menu != null and esc_menu.is_open():
+			esc_menu.toggle_panel()
 		if failures.is_empty():
 			print("PASS  %s" % name)
 			pass_count += 1
@@ -2711,6 +2717,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_swap_stage_same_stage_keeps_name_594()
 		"gamepad_left_stick_swings_when_right_idle_600":
 			return await _scenario_gamepad_left_stick_swings_when_right_idle_600()
+		"pause_gates_pad_clicks_and_sticks_599":
+			return await _scenario_pause_gates_pad_clicks_and_sticks_599()
+		"remote_client_menu_clears_held_release_599":
+			return await _scenario_remote_client_menu_clears_held_release_599()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -38847,6 +38857,7 @@ func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
 	var players: Array[RigidBody2D] = rig["players"]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+<<<<<<< HEAD
 	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
 	await _await_ticks(30)
 	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
@@ -38861,4 +38872,103 @@ func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
 	if players[0].input_vector.length() > 0.01:
 		failures.append("both sticks in the deadzone gave %s" % players[0].input_vector)
 	await _teardown(rig["stage"])
+	return failures
+
+## Issue #599: while paused, stick clicks, bumpers, Space and the right stick do
+## nothing on the host; live play (unpaused) still takes them.
+func _scenario_pause_gates_pad_clicks_and_sticks_599() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "Gate599")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
+		failures.append("only the left stick out gave %s, expected (1, 0)" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.0, 1.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.0, 1.0)) > 0.01:
+		failures.append("both sticks out gave %s, the right stick (0, 1) should win" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.1, 0.0)
+	server._test_pad_left_axes[0] = Vector2(0.1, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("both sticks in the deadzone gave %s" % players[0].input_vector)
+	await _teardown(rig["stage"])
+	return failures
+	server.set_lobby_state({"phase": "lobby", "paused": true, "players": []})
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK)
+	if server._slot_action_down[0] != -1:
+		failures.append("a stick click while paused started an action")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, false)
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER)
+	if server.slot_released(0):
+		failures.append("a bumper while paused let the weapon go")
+	await _pad_button_261(0, JOY_BUTTON_RIGHT_SHOULDER, false)
+	server._host_pc_slot = 0
+	server.set_lobby_state({"phase": "playing", "paused": true, "players": []})
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.pressed = true
+	server._input(space)
+	if server._slot_action_down[0] != -1:
+		failures.append("Space while paused started an action")
+	server._host_pc_slot = -1
+	server.set_lobby_state({"phase": "lobby", "paused": true, "players": []})
+	server._test_pad_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("the right stick while paused gave %s" % players[0].input_vector)
+	server.set_lobby_state({"phase": "lobby", "paused": false, "players": []})
+	await _await_ticks(30)
+	if players[0].input_vector.x < 0.9:
+		failures.append("the stick did not drive the arm once unpaused (%s)" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK)
+	if server._slot_action_down[0] == -1:
+		failures.append("a stick click in live play no longer starts an action")
+	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, false)
+	await _teardown(rig["stage"])
+	return failures
+
+
+## Issue #599: a bumper or Space held when the Esc menu opens must not stay
+## "released" after the button-up is swallowed by the menu.
+func _scenario_remote_client_menu_clears_held_release_599() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(0, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if await _rc_joined_241(rig, client, failures):
+		var down := InputEventJoypadButton.new()
+		down.button_index = JOY_BUTTON_RIGHT_SHOULDER
+		down.pressed = true
+		client._input(down)
+		if not client.input_released():
+			failures.append("a held bumper does not read as released")
+		client.toggle_menu()
+		var up := InputEventJoypadButton.new()
+		up.button_index = JOY_BUTTON_RIGHT_SHOULDER
+		up.pressed = false
+		client._input(up)
+		client.resume()
+		if client.input_released():
+			failures.append("the weapon stays released after resume")
+		var space := InputEventKey.new()
+		space.physical_keycode = KEY_SPACE
+		space.pressed = true
+		client._input(space)
+		await _await_ticks(30)
+		client.toggle_menu()
+		space = InputEventKey.new()
+		space.physical_keycode = KEY_SPACE
+		space.pressed = false
+		client._input(space)
+		client.resume()
+		if client.input_released():
+			failures.append("Space held across the menu stays released after resume")
+	await _rc_close_241(rig)
 	return failures
