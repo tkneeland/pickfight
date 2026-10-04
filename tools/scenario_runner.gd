@@ -769,6 +769,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_fonts_served_589",
 	"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593",
+	"controller_page_refused_phone_rejoins_slowly_581",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2696,6 +2697,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kick_mid_respawn_scores_nobody_593(true)
 		"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593":
 			return await _scenario_kick_mid_respawn_scores_nobody_593(false)
+		"controller_page_refused_phone_rejoins_slowly_581":
+			return await _scenario_controller_page_refused_phone_rejoins_slowly_581()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -38716,4 +38719,31 @@ func _scenario_kick_mid_respawn_scores_nobody_593(soccer: bool) -> Array[String]
 	if rm.score_of(0) != 0 or rm.score_of(2) != 0 or not wins.is_empty():
 		failures.append("kicking the last opponents mid-respawn scored: %d/%d, wins %s" % [rm.score_of(0), rm.score_of(2), wins])
 	await _teardown(rig["stage"])
+	return failures
+
+
+## Issue #581: a phone refused (4003) on a Couch to Online to Couch round trip
+## must rejoin without a reload. The page keeps a slow retry, says it is waiting
+## for Couch, and forgets the refusal once the host hands it a slot again.
+func _scenario_controller_page_refused_phone_rejoins_slowly_581() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var close_body: String = page.substr(page.find("sock.onclose = function"))
+	close_body = close_body.substr(0, close_body.find("sock.onerror"))
+	var refused_at: int = close_body.find("if (refused) { refusedOut = true;")
+	var slow_at: int = close_body.find("setTimeout(connect, REFUSED_RETRY_MS)")
+	var fast_at: int = close_body.find("setTimeout(connect, RECONNECT_DELAY_MS)")
+	if refused_at == -1 or slow_at == -1 or slow_at < refused_at:
+		failures.append("the refused branch does not schedule a slow retry")
+	elif fast_at != -1 and slow_at > fast_at:
+		failures.append("the slow retry comes after the fast reconnect timer, so it is unreachable")
+	if not page.contains("var REFUSED_RETRY_MS = 10000;"):
+		failures.append("the refused retry is not every 10 s")
+	var msg_body: String = page.substr(page.find("sock.onmessage = function"))
+	msg_body = msg_body.substr(0, msg_body.find("sock.onclose"))
+	if msg_body.find("refusedOut = false;") == -1:
+		failures.append("a slot from the host does not clear refusedOut, so a rejoined phone stays 'refused'")
+	if not page.contains("Waiting for the host to switch back to Couch"):
+		failures.append("the refusal text does not say it is waiting for Couch")
+	_scenario_completed = true
 	return failures
