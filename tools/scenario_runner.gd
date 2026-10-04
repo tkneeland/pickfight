@@ -739,10 +739,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_leaves_no_rocks_behind_556",
 	"remote_shoulder_throw_clears_retract_toggle_551",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
+	"hud_uses_theme_look_548",
 	"title_screen_restyle_fits_every_resolution_546",
 	"umbrella_canopy_reduces_a_falling_rock_569",
 	"umbrella_canopy_reduces_a_meteor_569",
 	"sudden_death_block_does_not_eliminate_569",
+	"controller_page_wears_theme_and_labels_target_per_mode_576",
 	"bullet_outlives_eliminated_shooter_570",
 	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
 	"round_end_clears_dead_shooters_bullet_570",
@@ -752,6 +754,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"relay_reclaim_beats_half_dead_host_socket_580",
 	"relay_proxy_protocol_supplies_real_client_ip_580",
 	"remote_seat_close_drops_relay_peer_580",
+	"online_remote_seat_never_hosts_578",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2619,6 +2622,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_shoulder_throw_clears_retract_toggle_551()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
+		"hud_uses_theme_look_548":
+			return await _scenario_hud_uses_theme_look_548()
 		"title_screen_restyle_fits_every_resolution_546":
 			return await _scenario_title_screen_restyle_fits_every_resolution_546()
 		"umbrella_canopy_reduces_a_falling_rock_569":
@@ -2627,6 +2632,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_canopy_reduces_a_meteor_569()
 		"sudden_death_block_does_not_eliminate_569":
 			return await _scenario_sudden_death_block_does_not_eliminate_569()
+		"controller_page_wears_theme_and_labels_target_per_mode_576":
+			return _scenario_controller_page_wears_theme_and_labels_target_per_mode_576()
 		"bullet_outlives_eliminated_shooter_570":
 			return await _scenario_bullet_outlives_eliminated_shooter_570()
 		"shots_cleared_on_leave_round_and_dead_shooter_clear_570":
@@ -2645,6 +2652,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_proxy_protocol_supplies_real_client_ip_580()
 		"remote_seat_close_drops_relay_peer_580":
 			return await _scenario_remote_seat_close_drops_relay_peer_580()
+		"online_remote_seat_never_hosts_578":
+			return await _scenario_online_remote_seat_never_hosts_578()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -23268,8 +23277,8 @@ func _scenario_online_remote_claims_slot() -> Array[String]:
 		failures.append("remote nickname was '%s', expected Ranger" % server.slot_name(0))
 	if not server.slot_ready(0):
 		failures.append("remote Ready did not register")
-	if server.host_slot() != 0:
-		failures.append("the only seat, a remote one, is not host (host_slot=%d)" % server.host_slot())
+	if server.host_slot() != -1:
+		failures.append("the only seat, a remote one, became host (host_slot=%d); #578" % server.host_slot())
 	server.send_buzz(0, "win") # a no-op for remote seats; must not error
 	await _online_close_239(rig)
 	return failures
@@ -23859,14 +23868,14 @@ func _scenario_online_toggle_refused_from_remote_host() -> Array[String]:
 	rig["code"] = server.online_room_code()
 	var remote: WebSocketPeer = await _online_remote_239(rig, "refuse-remote")
 	var slot_msg: Dictionary = await _online_wait_239(rig, remote, "slot") if remote != null else {}
-	if int(slot_msg.get("slot", -1)) != 0 or server.host_slot() != 0:
-		failures.append("the remote was told %s / host_slot %d, expected it to be the host" % [slot_msg, server.host_slot()])
+	if int(slot_msg.get("slot", -1)) != 0 or server.host_slot() != -1:
+		failures.append("the remote was told %s / host_slot %d, expected slot 0 and no host (#578)" % [slot_msg, server.host_slot()])
 	_online_send_239(remote, 1, JSON.stringify({"t": "host", "cmd": "online", "v": false}).to_utf8_buffer())
 	await _online_frames_239(20)
 	for c: WebSocketPeer in rig["clients"]:
 		c.poll()
 	if not server.online_requested() or not server.is_online():
-		failures.append("a remote host turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
+		failures.append("a remote seat turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	server.apply_host_command("online", false)
 	await _online_close_239(rig)
@@ -34165,6 +34174,12 @@ func _scenario_remote_client_rejoins_its_held_seat_by_itself() -> Array[String]:
 	# The client retries on the wall clock; under --fixed-fps game time can run
 	# many times faster, so the host's game-time hold is lengthened here.
 	server.remote_seat_hold_msec = 600000
+	# Issue #572: the drop-to-rejoin window spans 15-35 s of game time under
+	# --fixed-fps, long enough for the bot, or this limp seat on 3 of 5 points,
+	# to win the match. A finished match is no match phase, so nothing holds the
+	# seat any more and it is freed (a fresh claim, score 0). That is #459's
+	# rule, not this scenario's subject: keep the match from ending.
+	rm._match_target = 1000
 	var serial: int = server.claim_serial(slot)
 	client._socket.close(4001, "test drop")
 	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
@@ -37504,6 +37519,49 @@ func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Arr
 		failures.append("Solo seated %d bots, wanted 3" % server.bot_director.bot_count())
 	await _online_close_239(rig)
 	return failures
+
+## Issue #548: the in-match HUD and the victory screen wear the shared theme
+## (#507): ticker entries are plates with an ink outline and a hard shadow, the
+## heading text is Lilita One, the victory ground is the indigo, and the text
+## stays at or above the 16 px floor.
+func _scenario_hud_uses_theme_look_548() -> Array[String]:
+	var failures: Array[String] = []
+	var UiTheme548 := preload("res://scripts/UiTheme.gd")
+	var feed: Control = KillFeedScript.new()
+	get_root().add_child(feed)
+	feed.push_ko("Alice", Color.ORANGE, "Bob", Color.SKY_BLUE)
+	feed.show_banner("FIRST BLOOD", "Alice", Color.ORANGE)
+	await _await_ticks(2)
+	var entry: PanelContainer = feed.feed().get_child(0) as PanelContainer
+	var box: StyleBoxFlat = entry.get_theme_stylebox("panel") as StyleBoxFlat
+	if box == null or box.border_color != UiTheme548.INK or box.shadow_offset == Vector2.ZERO or box.shadow_size != 0:
+		failures.append("the ticker entry is not an ink-outlined plate with a hard shadow")
+	var heading: Font = load(UiTheme548.HEADING_FONT_PATH) as Font
+	var headline: Label = feed.banner().get_child(0) as Label
+	if headline.get_theme_font("font") != heading:
+		failures.append("the banner headline is not set in Lilita One")
+	for label: Node in entry.get_child(0).get_children():
+		if (label as Label).get_theme_font_size("font_size") < UiTheme548.MIN_FONT_SIZE:
+			failures.append("a ticker label is under the %d px floor" % UiTheme548.MIN_FONT_SIZE)
+	var table: Control = KillFeedScript.stat_table([{"slot": 0, "kos": 1, "damage_dealt": 2, "damage_taken": 3, "self_kos": 0, "pickups": 0, "weapon": ""}], func(_s: int) -> String: return "A", func(_s: int) -> Color: return Color.WHITE)
+	for column: Node in table.get_children():
+		for line: Node in column.get_children():
+			if (line as Label).get_theme_font_size("font_size") < UiTheme548.MIN_FONT_SIZE:
+				failures.append("a stats line is under the %d px floor" % UiTheme548.MIN_FONT_SIZE)
+	table.free()
+	var screen := CanvasLayer.new()
+	get_root().add_child(screen)
+	var victory: RefCounted = preload("res://scripts/VictoryScreen.gd").new(screen, func(slot: int) -> String: return "P%d" % slot, func(_s: int) -> Color: return Color.WHITE)
+	victory.build()
+	if (victory.victory_panel() as ColorRect).color != UiTheme548.INDIGO:
+		failures.append("the victory ground is not the theme indigo")
+	if victory.victory_title().get_theme_font("font") != heading:
+		failures.append("the victory title is not set in Lilita One")
+	feed.queue_free()
+	screen.queue_free()
+	_scenario_completed = true
+	return failures
+
 ## Issue #546: the restyled title screen (cards, key badges, logo, footer)
 ## keeps every visible control inside the window at 1600x900, 1920x1080 and
 ## 1280x800, the three cards sit side by side without overlapping, each card
@@ -37653,6 +37711,39 @@ func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
 	players[0].strike_landed.disconnect(on_report)
 	await _teardown(rig["stage"])
 	return failures
+## Issue #576: the phone controller page wears the #507 look with fonts it
+## carries itself (the host's LAN may have no internet), and the host row's
+## target label follows the lobby state's `target_kind` like the lobby's.
+func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	for family: String in ["Lilita One", "Nunito"]:
+		if not page.contains('font-family: "%s";\n    font-weight' % family):
+			failures.append("no @font-face for %s" % family)
+	if page.count("src: url(data:font/woff2;base64,") != 2:
+		failures.append("the two theme fonts are not embedded as base64 WOFF2")
+	for external: String in ["fonts.googleapis", "fonts.gstatic", "src: url(http", "@import"]:
+		if page.contains(external):
+			failures.append("the page reaches for the network: '%s'" % external)
+	for colour: String in ["#232A4A", "#FBF6EA", "#14181d", "#F5E24A"]:
+		if not page.contains(colour):
+			failures.append("the page lacks the #507 colour %s" % colour)
+	if not page.contains("var(--display)"):
+		failures.append("headings and buttons do not use the display face")
+	if page.length() > 200000:
+		failures.append("the page grew to %d bytes; keep it small" % page.length())
+	for needle: String in ['id="target-label"', "TARGET_LABELS[msg.target_kind]", '"PHONE_TARGET_LIVES": "Lives"',
+			'"PHONE_TARGET_GOALS": "Goals to win"', '"PHONE_TARGET_CAPTURES": "Captures to win"']:
+		if not page.contains(needle):
+			failures.append("the per-mode target label is missing '%s'" % needle)
+	# Its kinds are the ones the host sends (GameModes.target_kind).
+	for mode_id: String in [GameModesScript361.STOCK, GameModesScript361.SOCCER, GameModesScript361.CAPTURE_THE_FLAG]:
+		var kind: String = GameModesScript361.target_kind(mode_id)
+		if not page.contains("%s: \"PHONE_TARGET_" % kind):
+			failures.append("the page has no label for target_kind '%s'" % kind)
+	_scenario_completed = true
+	return failures
+
 
 ## Issue #570: a bullet already fired keeps flying when its shooter is rung out
 ## and still hits, credited to the shooter and to the weapon that fired it.
@@ -38013,4 +38104,34 @@ func _scenario_remote_seat_close_drops_relay_peer_580() -> Array[String]:
 	link.queue_free()
 	_relay_stop(relay, clients)
 	_scenario_completed = true
+	return failures
+
+## #578: in an Online match a remote seat is never host and its `host` frames
+## are ignored, even when it joined before any phone; a phone seat still hosts.
+func _scenario_online_remote_seat_never_hosts_578() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_rig_239(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	var commands: Array = []
+	server.host_command.connect(func(cmd: String, slot: int) -> void: commands.append([cmd, slot]))
+	var remote: WebSocketPeer = await _online_remote_239(rig, "remote-578")
+	if remote != null:
+		await _online_wait_239(rig, remote, "slot")
+	for cmd in ["pause", "end", "kick"]:
+		_online_send_239(remote, 1, JSON.stringify({"t": "host", "cmd": cmd, "slot": 0}).to_utf8_buffer())
+	await _online_frames_239(10)
+	if server.host_slot() != -1:
+		failures.append("a lone remote seat became host (host_slot=%d)" % server.host_slot())
+	if not commands.is_empty():
+		failures.append("remote host frames were honoured: %s" % [commands])
+	var phone := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	var joined: Dictionary = await _join_phone(phone, "phone-578", phones)
+	phones.append(phone)
+	if server.host_slot() != int(joined.get("slot", -2)) or server.host_slot() < 0:
+		failures.append("the phone seat is not host after joining behind a remote (host_slot=%d)" % server.host_slot())
+	await _online_close_239(rig)
 	return failures

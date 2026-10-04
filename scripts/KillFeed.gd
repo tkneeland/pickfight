@@ -35,7 +35,15 @@ const BANNER_ANCHOR: float = 0.63
 const BANNER_HEADLINE_FONT: int = 64
 const BANNER_NAME_FONT: int = 40
 const ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
-const ENTRY_BACKGROUND: Color = Color(0.0, 0.0, 0.0, 0.45)
+## The theme look (#548): ticker entries and victory cards sit on indigo plates
+## with an ink outline and a hard shadow; text is cream, the accent or the
+## player's colour.
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const PLATE_FILL: Color = UiThemeScript.INDIGO_PANEL
+## Victory cards and the stats table hold small coloured text, so they take a
+## darker plate than the ticker for contrast against every player colour.
+const CARD_FILL: Color = Color("171B2E")
+const MUTED_TEXT: Color = Color("C9CCE0")
 
 var _feed: VBoxContainer
 var _banner: VBoxContainer
@@ -69,10 +77,10 @@ func _ready() -> void:
 	_banner.anchor_bottom = BANNER_ANCHOR
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_banner.add_theme_constant_override("separation", 0)
-	_banner_headline = _label("", BANNER_HEADLINE_FONT, ACCENT)
+	_banner_headline = _label("", BANNER_HEADLINE_FONT, ACCENT, true)
 	_banner_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.add_child(_banner_headline)
-	_banner_name = _label("", BANNER_NAME_FONT, Color.WHITE)
+	_banner_name = _label("", BANNER_NAME_FONT, UiThemeScript.CREAM, true)
 	_banner_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.add_child(_banner_name)
 	_banner.visible = false
@@ -98,26 +106,19 @@ func _process(delta: float) -> void:
 ## `killer_name` is empty.
 func push_ko(killer_name: String, killer_color: Color, victim_name: String, victim_color: Color) -> void:
 	var panel := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = ENTRY_BACKGROUND
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 1
-	style.content_margin_bottom = 1
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", UiThemeScript.plate(PLATE_FILL, 12, 1, true, 8))
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_END
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 	if killer_name.is_empty():
-		row.add_child(_label(victim_name, FEED_FONT, victim_color))
-		row.add_child(_label(tr("FEED_SELF_KO"), FEED_FONT, Color(0.8, 0.82, 0.88)))
+		row.add_child(_label(victim_name, FEED_FONT, victim_color, true))
+		row.add_child(_label(tr("FEED_SELF_KO"), FEED_FONT, MUTED_TEXT))
 	else:
-		row.add_child(_label(killer_name, FEED_FONT, killer_color))
-		row.add_child(_label(tr("FEED_KO"), FEED_FONT, ACCENT))
-		row.add_child(_label(victim_name, FEED_FONT, victim_color))
+		row.add_child(_label(killer_name, FEED_FONT, killer_color, true))
+		row.add_child(_label(tr("FEED_KO"), FEED_FONT, ACCENT, true))
+		row.add_child(_label(victim_name, FEED_FONT, victim_color, true))
 	panel.set_meta("age", 0.0)
 	_feed.add_child(panel)
 	while _feed.get_child_count() > MAX_ENTRIES:
@@ -164,11 +165,28 @@ func banner() -> Control:
 func _show_next_banner() -> void:
 	var next: Dictionary = _banner_queue.pop_front()
 	_banner_headline.text = next["headline"]
+	_punch_banner()
 	_banner_name.text = next["who"]
 	_banner_name.add_theme_color_override("font_color", next["color"])
 	_banner_name.visible = not str(next["who"]).is_empty()
 	_banner.visible = true
 	_banner_left = BANNER_SEC
+
+## The banner flashes in light (#548): bright, settling over a fifth of a
+## second. Colour only: a scale pop would push its rect past the screen edge.
+func _punch_banner() -> void:
+	if not is_inside_tree():
+		return
+	_banner.modulate = Color(1.7, 1.7, 1.7, 1.0)
+	var tween: Tween = create_tween()
+	tween.tween_property(_banner, "modulate", Color.WHITE, 0.2)
+
+## Draws a plate behind `node`, `grow` px past its edges, so a plain container
+## gets the panel look without a wrapper node changing its child layout.
+static func plate_behind(node: Control, grow: float = 10.0) -> void:
+	var style: StyleBoxFlat = UiThemeScript.plate(CARD_FILL, 0, 0, true, 12)
+	node.draw.connect(func() -> void:
+		node.draw_style_box(style, Rect2(Vector2(-grow, -grow * 0.5), node.size + Vector2(grow * 2.0, grow))))
 
 ## One card per award, side by side, for the victory screen: the category
 ## small, the award's title, then the winner's name in their colour and what
@@ -177,15 +195,16 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 	var row := HBoxContainer.new()
 	row.name = "Awards"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else 16)
+	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else 32)
 	for award: Dictionary in awards:
 		var card := VBoxContainer.new()
 		card.name = "Award" + str(award["category"]).capitalize()
 		card.add_theme_constant_override("separation", 0)
-		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18, Color(0.8, 0.82, 0.88))
+		plate_behind(card)
+		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18, MUTED_TEXT)
 		category.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(category)
-		var title: Label = _label(str(award["title"]), 30, ACCENT)
+		var title: Label = _label(str(award["title"]), 30, ACCENT, true)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(title)
 		var slot: int = int(award["slot"])
@@ -203,13 +222,14 @@ static func stat_table(rows: Array, name_of: Callable, color_of: Callable) -> HB
 	var table := HBoxContainer.new()
 	table.name = "StatRows"
 	table.alignment = BoxContainer.ALIGNMENT_CENTER
-	table.add_theme_constant_override("separation", 48)
+	table.add_theme_constant_override("separation", 56)
 	var per_column: int = rows.size() if rows.size() <= 4 else (rows.size() + 1) / 2
 	var column: VBoxContainer = null
 	for i in rows.size():
 		if i % per_column == 0:
 			column = VBoxContainer.new()
 			column.add_theme_constant_override("separation", 0)
+			plate_behind(column, 12.0)
 			table.add_child(column)
 		var row: Dictionary = rows[i]
 		var slot: int = int(row["slot"])
@@ -220,12 +240,13 @@ static func stat_table(rows: Array, name_of: Callable, color_of: Callable) -> HB
 		column.add_child(line)
 	return table
 
-static func _label(text: String, font_size: int, color: Color) -> Label:
+static func _label(text: String, font_size: int, color: Color, heading: bool = false) -> Label:
 	var label := Label.new()
+	label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL if heading else UiThemeScript.HUD_LABEL
 	label.text = text
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
-	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
-	label.add_theme_constant_override("outline_size", maxi(4, font_size / 8))
+	# Body text sits on a plate, so only headings carry the ink outline.
+	label.add_theme_constant_override("outline_size", maxi(3, font_size / 8) if heading else 0)
 	return label

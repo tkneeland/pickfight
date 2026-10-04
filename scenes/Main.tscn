@@ -140,6 +140,7 @@ script = ExtResource("40")
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="JoinLabel" type="Label" parent="UI"]
+theme_type_variation = &"HudLabel"
 offset_left = 12.0
 offset_top = 8.0
 offset_right = 620.0
@@ -147,6 +148,7 @@ offset_bottom = 70.0
 text = "Join on your phone: starting server..."
 
 [node name="ScoreLabel" type="Label" parent="UI"]
+theme_type_variation = &"HudLabel"
 offset_left = 12.0
 offset_top = 8.0
 offset_right = 620.0
@@ -154,6 +156,7 @@ offset_bottom = 44.0
 text = ""
 
 [node name="WaitingLabel" type="Label" parent="UI"]
+theme_type_variation = &"HudHeadingLabel"
 anchor_right = 1.0
 anchor_bottom = 1.0
 theme_override_font_sizes/font_size = 32
@@ -190,10 +193,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot0"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot0"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -205,10 +210,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot1"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot1"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -220,10 +227,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot2"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot2"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -235,10 +244,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot3"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot3"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -250,10 +261,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot4"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot4"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -265,10 +278,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot5"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot5"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -280,10 +295,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot6"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot6"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 
@@ -295,10 +312,12 @@ custom_minimum_size = Vector2(56, 56)
 color = Color(1, 1, 1, 1)
 
 [node name="Score" type="Label" parent="UI/Scoreboard/Slot7"]
+theme_type_variation = &"HudHeadingLabel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
 [node name="Name" type="Label" parent="UI/Scoreboard/Slot7"]
+theme_type_variation = &"HudLabel"
 theme_override_font_sizes/font_size = 20
 text = ""
 

@@ -6,6 +6,7 @@ extends RefCounted
 ## (layers 10 and 12). Display only.
 
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 var _screen: CanvasLayer
 
@@ -44,22 +45,15 @@ func show_stage_title(text: String, duration: float, rule: String = "") -> void:
 		_title_layer.name = "StageTitleLayer"
 		_title_layer.layer = 10
 		_screen.add_child(_title_layer)
-		_title_label = Label.new()
+		_title_label = ScreenKitScript.ink_label("", 80, UiThemeScript.CREAM, 16)
 		_title_label.name = "StageTitle"
-		_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_title_label.add_theme_font_size_override("font_size", 80)
-		_title_label.add_theme_color_override("font_color", Color.WHITE)
-		_title_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
-		_title_label.add_theme_constant_override("outline_size", 14)
 		_title_layer.add_child(_title_label)
 		# A child of the title, so the sweep carries it along.
-		_title_rule_label = Label.new()
+		_title_rule_label = ScreenKitScript.ink_label("", 32, UiThemeScript.YELLOW, 0)
 		_title_rule_label.name = "StageTitleRule"
-		_title_rule_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_title_rule_label.add_theme_font_size_override("font_size", 32)
-		_title_rule_label.add_theme_color_override("font_color", ScreenKitScript.LOBBY_ACCENT)
-		_title_rule_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1, 1.0))
-		_title_rule_label.add_theme_constant_override("outline_size", 8)
+		# The rule sits on an indigo plate so it reads over any stage sky.
+		_title_rule_label.add_theme_constant_override("outline_size", 0)
+		_title_rule_label.add_theme_stylebox_override("normal", UiThemeScript.plate(UiThemeScript.INDIGO_PANEL, 16, 2, true, 12))
 		_title_label.add_child(_title_rule_label)
 	_title_label.text = text
 	_title_label.reset_size()
@@ -101,7 +95,7 @@ func show_pause_banner(on: bool) -> void:
 		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 		dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_pause_layer.add_child(dim)
-		_pause_label = ScreenKitScript.big_label(_screen.tr("PAUSED"), 120, ScreenKitScript.LOBBY_ACCENT)
+		_pause_label = ScreenKitScript.ink_label(_screen.tr("PAUSED"), 120, UiThemeScript.YELLOW, 18)
 		_pause_label.name = "PauseLabel"
 		_pause_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

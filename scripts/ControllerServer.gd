@@ -1550,11 +1550,11 @@ func clear_ready() -> void:
 		_slot_ready[slot] = 0
 
 ## The host phone's slot: the earliest-joined claimed slot with a controller
-## connected right now (never the host-PC seat), or -1 with no phones at all.
+## connected right now (never the host-PC seat or a remote seat), or -1 with no phones at all.
 func host_slot() -> int:
 	for slot: int in _join_order:
-		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat:
-			return slot
+		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat and not _slot_peers[slot] is RemoteSeat:
+			return slot # #578: a remote seat never hosts; the host PC runs an Online room
 	return -1
 
 ## The match length the host phone chose ("first to N"), 5 by default.
