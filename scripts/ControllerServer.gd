@@ -400,6 +400,7 @@ class RemoteSeat extends RefCounted:
 	func close(code: int = 1000, reason: String = "") -> void:
 		if open:
 			link.send_text_to(peer, JSON.stringify({"t": "closed", "code": code, "reason": reason}))
+			link.drop_peer(peer) # free the relay slot too (#580)
 			open = false
 
 ## The host PC's own seat (issue #239, "Play on this PC"): a transport with
@@ -1967,6 +1968,7 @@ func _process_remote() -> void:
 			_remote_awaiting.erase(seat)
 			if not _is_number(hello.get("proto")) or int(hello["proto"]) != PROTOCOL_VERSION:
 				seat.send_text(JSON.stringify({"t": "error", "reason": "version"}))
+				relay_link.drop_peer(seat.peer)
 				seat.open = false
 				_remote_seats.erase(seat.peer)
 				if _log_input:
@@ -1975,6 +1977,7 @@ func _process_remote() -> void:
 			var build_reason: String = build_mismatch_reason(hello)
 			if not build_reason.is_empty():
 				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
+				relay_link.drop_peer(seat.peer)
 				seat.open = false
 				_remote_seats.erase(seat.peer)
 				if _log_input:

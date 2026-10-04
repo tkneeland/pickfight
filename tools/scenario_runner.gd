@@ -746,6 +746,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bullet_outlives_eliminated_shooter_570",
 	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
 	"round_end_clears_dead_shooters_bullet_570",
+	"relay_drops_oversized_client_frames_580",
+	"relay_host_can_drop_a_peer_and_free_its_slot_580",
+	"relay_caps_client_seats_per_ip_580",
+	"relay_reclaim_beats_half_dead_host_socket_580",
+	"relay_proxy_protocol_supplies_real_client_ip_580",
+	"remote_seat_close_drops_relay_peer_580",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2627,6 +2633,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570()
 		"round_end_clears_dead_shooters_bullet_570":
 			return await _scenario_round_end_clears_dead_shooters_bullet_570()
+		"relay_drops_oversized_client_frames_580":
+			return await _scenario_relay_drops_oversized_client_frames_580()
+		"relay_host_can_drop_a_peer_and_free_its_slot_580":
+			return await _scenario_relay_host_can_drop_a_peer_and_free_its_slot_580()
+		"relay_caps_client_seats_per_ip_580":
+			return await _scenario_relay_caps_client_seats_per_ip_580()
+		"relay_reclaim_beats_half_dead_host_socket_580":
+			return await _scenario_relay_reclaim_beats_half_dead_host_socket_580()
+		"relay_proxy_protocol_supplies_real_client_ip_580":
+			return await _scenario_relay_proxy_protocol_supplies_real_client_ip_580()
+		"remote_seat_close_drops_relay_peer_580":
+			return await _scenario_remote_seat_close_drops_relay_peer_580()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37754,4 +37772,245 @@ func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
 	if not _projectiles_of(p1).is_empty():
 		failures.append("the dead shooter's bullet survived the end of the round")
 	await _teardown(stage)
+	return failures
+
+## Issue #580: waits up to `msec` for `cond` while polling every client.
+func _relay580_wait(clients: Array, cond: Callable, msec: int = 3000) -> bool:
+	var deadline: int = Time.get_ticks_msec() + msec
+	while Time.get_ticks_msec() < deadline:
+		for c: WebSocketPeer in clients:
+			c.poll()
+		if cond.call():
+			return true
+		await process_frame
+	return false
+
+func _scenario_relay_drops_oversized_client_frames_580() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(1, failures)
+	if room.is_empty():
+		return failures
+	var clients: Array = room["clients"]
+	var client: WebSocketPeer = room["peers"][0]
+	var big := PackedByteArray()
+	big.resize(4097)
+	client.send(big)
+	var edge := PackedByteArray()
+	edge.resize(4096)
+	edge.fill(7)
+	client.send(edge)
+	client.send(PackedByteArray([9]))
+	var first: Dictionary = await _relay_next(room["host"], clients, false)
+	var data: PackedByteArray = first.get("data", PackedByteArray())
+	if data.size() != 4097 or data[0] != 1 or data[1] != 7:
+		failures.append("the host's first frame was %d bytes, wanted the 4096-byte frame (4097 with the peer id): the oversized one must be dropped" % data.size())
+	var second: Dictionary = await _relay_next(room["host"], clients, false)
+	if second.get("data") != PackedByteArray([1, 9]):
+		failures.append("the frame after the big ones was %s, wanted [1, 9]" % [second.get("data")])
+	if client.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("an oversized frame closed the client")
+	_relay_stop(room["relay"], clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_host_can_drop_a_peer_and_free_its_slot_580() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(2, failures)
+	if room.is_empty():
+		return failures
+	var clients: Array = room["clients"]
+	var host: WebSocketPeer = room["host"]
+	var victim: WebSocketPeer = room["peers"][0]
+	var bystander: WebSocketPeer = room["peers"][1]
+	# A frame sent before the drop must still reach the client.
+	host.send(PackedByteArray([1, 42]))
+	host.send_text(JSON.stringify({"t": "drop", "peer": 1}))
+	var last: Dictionary = await _relay_next(victim, clients, false)
+	if last.get("data") != PackedByteArray([42]):
+		failures.append("the dropped client got %s before the close, wanted [42]" % [last.get("data")])
+	var left: Dictionary = await _relay_next(host, clients)
+	if left.get("t") != "left" or int(left.get("peer", 0)) != 1:
+		failures.append("the host was told %s after dropping peer 1, wanted left 1" % left)
+	var closed: bool = await _relay580_wait(clients, func() -> bool: return victim.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+	if not closed:
+		failures.append("the dropped client's socket stayed open")
+	if bystander.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("dropping peer 1 closed peer 2")
+	# Dropping an unknown or already-gone peer is ignored.
+	host.send_text(JSON.stringify({"t": "drop", "peer": 99}))
+	host.send_text(JSON.stringify({"t": "drop", "peer": 1}))
+	host.send_text("not json")
+	# The freed slot is reusable.
+	var again: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var welcome: Dictionary = await _relay_next(again, clients)
+	if welcome.get("t") != "welcome" or int(welcome.get("peer", 0)) != 1:
+		failures.append("a new client got %s, wanted peer 1 back" % welcome)
+	_relay_stop(room["relay"], clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_caps_client_seats_per_ip_580() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(0, failures)
+	if room.is_empty():
+		return failures
+	var relay: Node = room["relay"]
+	var clients: Array = room["clients"]
+	relay.ip_cap_enabled = true
+	relay.join_cap_per_ip = 2
+	for i in 2:
+		var ok: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+		var welcome: Dictionary = await _relay_next(ok, clients)
+		if welcome.get("t") != "welcome":
+			failures.append("join %d under the cap got %s" % [i, welcome])
+	var third: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var refused: Dictionary = await _relay_next(third, clients)
+	if refused.get("t") != "error" or refused.get("reason") != "room_full":
+		failures.append("the third seat from one IP got %s, wanted room_full" % refused)
+	# Without a trusted IP (no PROXY protocol) the cap is off, as before.
+	relay.ip_cap_enabled = false
+	var fourth: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var welcome4: Dictionary = await _relay_next(fourth, clients)
+	if welcome4.get("t") != "welcome":
+		failures.append("with the cap off a join got %s" % welcome4)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_reclaim_beats_half_dead_host_socket_580() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var clients: Array = []
+	var old_host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var made: Dictionary = await _relay_next(old_host, clients)
+	var code: String = str(made.get("code", ""))
+	var token: String = str(made.get("token", ""))
+	var guest: WebSocketPeer = await _relay_connect({"t": "join", "room": code}, clients)
+	await _relay_next(guest, clients)
+	await _relay_next(old_host, clients) # joined
+	# The old host socket still looks open; a thief with the wrong token gets nothing of the room.
+	var thief: WebSocketPeer = await _relay_connect({"t": "host", "room": code, "token": "0000000000000000"}, clients)
+	var stolen: Dictionary = await _relay_next(thief, clients)
+	if stolen.get("code") == code:
+		failures.append("a wrong token took over a live room")
+	var fresh: WebSocketPeer = await _relay_connect({"t": "host", "room": code, "token": token}, clients)
+	var back: Dictionary = await _relay_next(fresh, clients)
+	if back.get("t") != "room" or back.get("code") != code or back.get("token") != token:
+		failures.append("a valid token on a live-looking room got %s, wanted the same room back" % back)
+	var peers: Array = back.get("peers", [])
+	if peers.size() != 1 or int(peers[0]) != 1:
+		failures.append("the reclaimed room listed peers %s, wanted [1]" % [peers])
+	var closed: bool = await _relay580_wait(clients, func() -> bool: return old_host.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+	if not closed:
+		failures.append("the old host socket was left open")
+	if guest.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the client was dropped by the reclaim")
+	# Traffic now flows to the new host.
+	guest.send(PackedByteArray([5]))
+	var up: Dictionary = await _relay_next(fresh, clients, false)
+	if up.get("data") != PackedByteArray([1, 5]):
+		failures.append("the new host got %s, wanted [1, 5]" % [up.get("data")])
+	if relay.room_count() != 2:
+		failures.append("room_count %d, wanted 2 (the reclaimed room and the thief's)" % relay.room_count())
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_proxy_protocol_supplies_real_client_ip_580() -> Array[String]:
+	var failures: Array[String] = []
+	var parse: Script = preload("res://relay/Relay.gd")
+	var cases: Dictionary = {
+		"PROXY TCP4 203.0.113.7 10.0.0.1 51234 443\r\n": "203.0.113.7",
+		"PROXY TCP6 2001:db8::1 fdaa::1 51234 443\r\n": "2001:db8::1",
+		"PROXY UNKNOWN\r\n": "unknown",
+		"GET / HTTP/1.1\r\n": "",
+		"PROXY TCP4 1.2.3.4\r\n": "",
+		"": "",
+	}
+	for line: String in cases:
+		var got: String = parse.parse_proxy_line(line)
+		if got != cases[line]:
+			failures.append("parse_proxy_line(%s) was '%s', wanted '%s'" % [line.c_escape(), got, cases[line]])
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		return failures
+	relay.proxy_protocol = true
+	var upgrade: String = "GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+	var good := StreamPeerTCP.new()
+	good.connect_to_host("127.0.0.1", _relay_port_next)
+	var bad := StreamPeerTCP.new()
+	bad.connect_to_host("127.0.0.1", _relay_port_next)
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline:
+		good.poll()
+		bad.poll()
+		if good.get_status() == StreamPeerTCP.STATUS_CONNECTED and bad.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			break
+		await process_frame
+	good.put_data(("PROXY TCP4 9.9.9.9 10.0.0.1 1234 443\r\n" + upgrade).to_ascii_buffer())
+	bad.put_data(upgrade.to_ascii_buffer()) # a connection that skips the PROXY line
+	var reply: String = ""
+	var bad_closed: bool = false
+	deadline = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and not (reply.contains("101") and bad_closed):
+		good.poll()
+		bad.poll()
+		if good.get_available_bytes() > 0:
+			reply += good.get_utf8_string(good.get_available_bytes())
+		bad_closed = bad.get_status() != StreamPeerTCP.STATUS_CONNECTED
+		await process_frame
+	if not reply.begins_with("HTTP/1.1 101"):
+		failures.append("the upgrade after a PROXY line got '%s', wanted 101" % reply.left(40))
+	if not bad_closed:
+		failures.append("a connection with no PROXY line was kept")
+	var ips: Array = relay._pending.map(func(p: Variant) -> String: return p.ip)
+	if ips != ["9.9.9.9"]:
+		failures.append("the pending sockets' IPs were %s, wanted [9.9.9.9]" % [ips])
+	good.disconnect_from_host()
+	bad.disconnect_from_host()
+	relay.stop()
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_remote_seat_close_drops_relay_peer_580() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var link: Node = preload("res://scripts/RelayLink.gd").new()
+	root.add_child(link)
+	link.go_online("ws://127.0.0.1:%d" % _relay_port_next)
+	var clients: Array = []
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and link.room_code() == "":
+		await process_frame
+	var guest: WebSocketPeer = await _relay_connect({"t": "join", "room": link.room_code()}, clients)
+	await _relay_next(guest, clients) # welcome
+	deadline = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and link.peers().is_empty():
+		await process_frame
+	if link.peers().is_empty():
+		failures.append("the host link never saw the client join")
+	else:
+		var seat = preload("res://scripts/ControllerServer.gd").RemoteSeat.new()
+		seat.peer = link.peers()[0]
+		seat.link = link
+		seat.close(4001, "kicked")
+		var notice: Dictionary = await _relay_next(guest, clients, false)
+		if not (notice.get("data", PackedByteArray()) as PackedByteArray).get_string_from_utf8().contains("closed"):
+			failures.append("the kicked client got no closed notice before the drop: %s" % [notice])
+		var closed: bool = await _relay580_wait(clients, func() -> bool: return guest.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+		if not closed:
+			failures.append("the kicked client kept its relay socket")
+		var freed: bool = await _relay580_wait(clients, func() -> bool: return link.peers().is_empty())
+		if not freed:
+			failures.append("the host link still lists the kicked peer")
+	link.go_offline()
+	link.queue_free()
+	_relay_stop(relay, clients)
+	_scenario_completed = true
 	return failures
