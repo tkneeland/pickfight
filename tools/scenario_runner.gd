@@ -767,6 +767,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_seat_close_drops_relay_peer_580",
 	"online_remote_seat_never_hosts_578",
 	"controller_fonts_served_589",
+	"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593",
+	"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"controller_page_refused_phone_rejoins_slowly_581",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -2691,6 +2693,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_remote_seat_never_hosts_578()
 		"controller_fonts_served_589":
 			return await _scenario_controller_fonts_served_589()
+		"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593":
+			return await _scenario_kick_mid_respawn_scores_nobody_593(true)
+		"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593":
+			return await _scenario_kick_mid_respawn_scores_nobody_593(false)
 		"controller_page_refused_phone_rejoins_slowly_581":
 			return await _scenario_controller_page_refused_phone_rejoins_slowly_581()
 		_:
@@ -38680,6 +38686,40 @@ func _http_get_589(port: int, path: String) -> Dictionary:
 	out["status"] = int(out["head"].get_slice(" ", 1))
 	out["body"] = raw.slice(split + 4)
 	return out
+
+## Issue #593: kicking the last opposing players while they wait to respawn in
+## Teams Soccer / CTF handed the other team the round (breaking #193/#521).
+func _scenario_kick_mid_respawn_scores_nobody_593(soccer: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(4) if soccer else _ctf_rig(4)
+	var mode: Node
+	if soccer:
+		if not await _mode_started(rig):
+			failures.append("the Soccer round never started")
+			await _teardown(rig["stage"])
+			return failures
+		mode = rig["rm"].game_mode_node()
+	else:
+		mode = await _ctf_start(rig, failures)
+		if mode == null:
+			return failures
+	var rm: Node = rig["rm"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	for slot: int in [1, 3]:
+		(rig["players"][slot] as RigidBody2D).eliminate()
+	await _await_ticks(2)
+	for slot: int in [1, 3]:
+		if not mode.is_pending(slot):
+			failures.append("slot %d was not waiting to respawn" % slot)
+		(rig["roster"].slots as Array).erase(slot)
+		rm.call("_on_host_command", "kick", slot)
+	await _await_ticks(180)
+	print("      kicked mid-respawn: scores %d/%d, wins %s" % [rm.score_of(0), rm.score_of(2), wins])
+	if rm.score_of(0) != 0 or rm.score_of(2) != 0 or not wins.is_empty():
+		failures.append("kicking the last opponents mid-respawn scored: %d/%d, wins %s" % [rm.score_of(0), rm.score_of(2), wins])
+	await _teardown(rig["stage"])
+	return failures
 
 
 ## Issue #581: a phone refused (4003) on a Couch to Online to Couch round trip

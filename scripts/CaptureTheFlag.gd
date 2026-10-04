@@ -155,6 +155,12 @@ func connected_count() -> int:
 func is_pending(slot: int) -> bool:
 	return _respawner != null and _respawner.is_pending(slot)
 
+## The host kicked `slot` (#593, as Stock #521): it does not come back, and a
+## pending respawn must not keep it standing while the other team is handed the round.
+func cancel_respawn(slot: int) -> void:
+	if _respawner != null:
+		_respawner.cancel(slot)
+
 ## `slot`'s team: its Teams team, or by slot parity outside a Teams match (a
 ## scenario seam).
 func team_of(slot: int) -> int:
