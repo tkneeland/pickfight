@@ -737,8 +737,16 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_60_s_backstop_is_a_draw_556",
 	"stock_sudden_death_double_ko_replays_overtime_556",
 	"stock_sudden_death_leaves_no_rocks_behind_556",
+	"remote_shoulder_throw_clears_retract_toggle_551",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
 	"hud_uses_theme_look_548",
+	"title_screen_restyle_fits_every_resolution_546",
+	"umbrella_canopy_reduces_a_falling_rock_569",
+	"umbrella_canopy_reduces_a_meteor_569",
+	"sudden_death_block_does_not_eliminate_569",
+	"bullet_outlives_eliminated_shooter_570",
+	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
+	"round_end_clears_dead_shooters_bullet_570",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2602,10 +2610,26 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_sudden_death_double_ko_replays_overtime_556()
 		"stock_sudden_death_leaves_no_rocks_behind_556":
 			return await _scenario_stock_sudden_death_leaves_no_rocks_behind_556()
+		"remote_shoulder_throw_clears_retract_toggle_551":
+			return await _scenario_remote_shoulder_throw_clears_retract_toggle_551()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
 		"hud_uses_theme_look_548":
 			return await _scenario_hud_uses_theme_look_548()
+		"title_screen_restyle_fits_every_resolution_546":
+			return await _scenario_title_screen_restyle_fits_every_resolution_546()
+		"umbrella_canopy_reduces_a_falling_rock_569":
+			return await _scenario_umbrella_canopy_reduces_a_falling_rock_569()
+		"umbrella_canopy_reduces_a_meteor_569":
+			return await _scenario_umbrella_canopy_reduces_a_meteor_569()
+		"sudden_death_block_does_not_eliminate_569":
+			return await _scenario_sudden_death_block_does_not_eliminate_569()
+		"bullet_outlives_eliminated_shooter_570":
+			return await _scenario_bullet_outlives_eliminated_shooter_570()
+		"shots_cleared_on_leave_round_and_dead_shooter_clear_570":
+			return await _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570()
+		"round_end_clears_dead_shooters_bullet_570":
+			return await _scenario_round_end_clears_dead_shooters_bullet_570()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -8592,8 +8616,10 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 		var after: Dictionary = await _await_boomstick_shot(shooter, quick_ticks * 3)
 		print("      after %s: %d bullet(s) still in flight, %s over three intervals" % [
 			way, in_flight, "a shot" if after["bullet"] != null else "no shot"])
-		if in_flight != 0:
-			failures.append("%s: %d bullet(s) still in flight after the shooter left play" % [way, in_flight])
+		# Issue #570: a bullet already fired outlives an elimination; leaving the round clears it.
+		var expected_in_flight: int = 1 if way == "eliminate" else 0
+		if in_flight != expected_in_flight:
+			failures.append("%s: %d bullet(s) in flight after the shooter left play, expected %d" % [way, in_flight, expected_in_flight])
 		if after["bullet"] != null:
 			failures.append("%s: the boomstick fired while its holder was out of play" % way)
 		# Back for the next round with the weapon kept, as a winner is.
@@ -37366,6 +37392,73 @@ func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
 		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
 	await _stock_finish(rig)
 	return failures
+
+## Issue #551: on a remote seat a stick click retracts (toggle on), and a later
+## shoulder-button throw must start held, not pulled home by that leftover toggle.
+class _FakePeer551 extends RefCounted:
+	var packets: Array[PackedByteArray] = []
+	func get_available_packet_count() -> int:
+		return packets.size()
+	func get_packet() -> PackedByteArray:
+		return packets.pop_front()
+	func was_string_packet() -> bool:
+		return false
+func _packet_551(count: int, hold: bool) -> PackedByteArray:
+	var pkt := PackedByteArray()
+	pkt.resize(10)
+	pkt.encode_float(0, 0.0)
+	pkt.encode_float(4, -1.0)
+	pkt[8] = 0
+	pkt[9] = (count & 0x7F) | (0x80 if hold else 0)
+	return pkt
+func _scenario_remote_shoulder_throw_clears_retract_toggle_551() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "RemoteShoulder551")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	# A pad claims the seat and holds the aim; the packets below are the remote
+	# client's action presses, which is the path under test.
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _equip(player, GRAPPLE_PATH)
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(30)
+	player.flick_launch_enabled = false  # a remote seat throws on its action button
+	var peer := _FakePeer551.new()
+	# Count 0 only adopts the seat's press count; the wait lets the aim ease in.
+	peer.packets.append(_packet_551(0, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(40)
+	peer.packets.append(_packet_551(1, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() == null:
+		failures.append("the stick-click throw did not fire the grapple")
+	peer.packets.append(_packet_551(2, false))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() != null:
+		failures.append("the second stick click did not retract the hook")
+	if not server._slot_release_toggle[0] == 1:
+		failures.append("setup: the retract left no toggle on")
+	await _await_ticks(60)
+	peer.packets.append(_packet_551(3, true))
+	server._drain(0, peer)
+	server._apply_smoothed_input(0.0)  # as _process does right after draining
+	await _await_ticks(8)
+	if player.launched_hook() == null:
+		failures.append("the shoulder throw's hook was pulled home at once")
+	if server.slot_released(0):
+		failures.append("the shoulder throw left the seat released")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
+	return failures
+
 ## #552: Online to Solo must not leave remote seats (connected or held after a
 ## disconnect, #459) claimed in the Solo lobby, where they would eat bot capacity.
 func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Array[String]:
@@ -37437,4 +37530,274 @@ func _scenario_hud_uses_theme_look_548() -> Array[String]:
 	feed.queue_free()
 	screen.queue_free()
 	_scenario_completed = true
+	return failures
+
+## Issue #546: the restyled title screen (cards, key badges, logo, footer)
+## keeps every visible control inside the window at 1600x900, 1920x1080 and
+## 1280x800, the three cards sit side by side without overlapping, each card
+## encloses its own labels, nothing of the lobby shows through, and the keys
+## still pick.
+func _scenario_title_screen_restyle_fits_every_resolution_546() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var was_size: Vector2i = get_root().size
+	screen.show_title(true)
+	for size: Vector2i in [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]:
+		get_root().size = size
+		await _await_ticks(4)
+		var canvas := Rect2(Vector2.ZERO, get_root().get_visible_rect().size)
+		var panel: Control = screen.title_panel()
+		var cards: Array[Rect2] = []
+		for node: Node in panel.find_children("*", "Control", true, false):
+			var control: Control = node as Control
+			if not control.is_visible_in_tree():
+				continue
+			var rect: Rect2 = control.get_global_rect()
+			if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+				continue
+			if control.name != "Ground" and not canvas.encloses(rect):
+				failures.append("%s: %s %s is outside the window %s" % [size, control.get_path(), rect, canvas])
+		for kind: String in ["local", "online", "solo"]:
+			var button: Button = screen.title_button(kind)
+			cards.append(button.get_global_rect())
+			for label: Node in button.find_children("*", "Label", true, false):
+				if not button.get_global_rect().encloses((label as Label).get_global_rect()):
+					failures.append("%s: the %s card does not hold its label '%s'" % [size, kind, (label as Label).text])
+		if cards[0].intersects(cards[1]) or cards[1].intersects(cards[2]) or cards[0].get_center().x > cards[1].get_center().x:
+			failures.append("%s: the title cards overlap: %s" % [size, cards])
+		# The focused card is popped (tilted, scaled a little), so compare row centres loosely.
+		if absf(cards[0].get_center().y - cards[1].get_center().y) > 6.0 or absf(cards[1].get_center().y - cards[2].get_center().y) > 6.0:
+			failures.append("%s: the title cards are not in one row: %s" % [size, cards])
+		var ground: Control = panel.get_node("Ground") as Control
+		if not ground.get_global_rect().encloses(canvas):
+			failures.append("%s: the title ground %s does not cover the window" % [size, ground.get_global_rect()])
+		print("      %s: cards %s" % [size, cards])
+	get_root().size = was_size
+	# The keys and the pad focus still work on the restyled cards.
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_O
+	event.pressed = true
+	screen._unhandled_key_input(event)
+	await _await_ticks(2)
+	if server.match_kind() != "online" or screen.title_visible():
+		failures.append("the O key gave kind '%s', title showing %s" % [server.match_kind(), screen.title_visible()])
+	await _kind_close_435(rig)
+	return failures
+
+
+## #569: a rock that lands on an open umbrella's canopy face is reduced like any
+## other hit (the part used to call take_damage without a hit point).
+func _scenario_umbrella_canopy_reduces_a_falling_rock_569() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var rock: Node2D = FallingRockScene.instantiate()
+	rock.auto_drop = false
+	rock.one_shot = true
+	rock.warning_sec = 0.1
+	rock.damage = 40.0
+	rock.position = ROCK_COLUMN_TOP
+	stage.add_child(rock)
+	var player: RigidBody2D = _spawn_player(stage, Vector2(ROCK_COLUMN_TOP.x, GROUND_TOP - PLAYER_RADIUS))
+	await _equip(player, UMBRELLA_PATH)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(SETTLE_TICKS)
+	if not player.canopy_open():
+		failures.append("the umbrella aimed up is not open; the fixture is wrong")
+	rock.drop_now()
+	for _i in ROCK_FALL_TICKS + 60:
+		await physics_frame
+		if player.damage > 0.0:
+			break
+	print("      40-damage rock on an open canopy: took %.1f" % player.damage)
+	if player.damage <= 0.0:
+		failures.append("the rock never hit the umbrella holder")
+	elif player.damage > 20.0:
+		failures.append("a rock on the canopy face took %.1f of 40, expected it reduced" % player.damage)
+	await _teardown(stage)
+	return failures
+
+## #569: the same for a meteor.
+func _scenario_umbrella_canopy_reduces_a_meteor_569() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(600.0, GROUND_TOP - PLAYER_RADIUS))
+	await _equip(player, UMBRELLA_PATH)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(SETTLE_TICKS)
+	var meteor: Node2D = preload("res://scripts/Meteor.gd").new()
+	meteor.setup(player.global_position + Vector2(0.0, -300.0), Vector2(0.0, 900.0), 40.0, 650.0, 16.0, 4000.0)
+	stage.add_child(meteor)
+	for _i in 90:
+		await physics_frame
+		if player.damage > 0.0:
+			break
+	print("      40-damage meteor on an open canopy: took %.1f" % player.damage)
+	if player.damage <= 0.0:
+		failures.append("the meteor never hit the umbrella holder")
+	elif player.damage > 20.0:
+		failures.append("a meteor on the canopy face took %.1f of 40, expected it reduced" % player.damage)
+	await _teardown(stage)
+	return failures
+
+## #569: in Sudden Death a hit on the shield face or open canopy face does not
+## eliminate; an unblocked hit still does, and is reported lethal.
+func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.SUDDEN_DEATH)
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Sudden Death round never started")
+		await _teardown(rig["stage"])
+		return failures
+	await _equip(players[1], SHIELD_PATH)
+	players[1].set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var face: Vector2 = players[1].global_position + Vector2.RIGHT * 40.0
+	var behind: Vector2 = players[1].global_position + Vector2.LEFT * 40.0
+	if not players[1].shield_blocks(face):
+		failures.append("the shield does not cover its face; the fixture is wrong")
+	var lethal: Array[bool] = []
+	var on_report := func(_v: Node, _a: float, _p: Vector2, was_lethal: bool) -> void:
+		lethal.append(was_lethal)
+	players[0].strike_landed.connect(on_report)
+	players[1].spawn_protected = false
+	players[1].damage = 0.0
+	var dealt: float = players[1].take_damage(10.0, face, players[0])
+	players[0].strike_landed.emit(players[1], dealt, face, players[0]._strike_was_lethal(players[1], dealt, face))
+	if not players[1].alive:
+		failures.append("a hit blocked by the shield eliminated the victim in Sudden Death")
+	if lethal.size() == 1 and lethal[0]:
+		failures.append("a shield-blocked hit was reported lethal")
+	dealt = players[1].take_damage(10.0, behind, players[0])
+	players[0].strike_landed.emit(players[1], dealt, behind, players[0]._strike_was_lethal(players[1], dealt, behind))
+	if players[1].alive:
+		failures.append("an unblocked hit from behind the shield did not eliminate")
+	if lethal.size() == 2 and not lethal[1]:
+		failures.append("an unblocked hit was not reported lethal")
+	players[0].strike_landed.disconnect(on_report)
+	await _teardown(rig["stage"])
+	return failures
+
+## Issue #570: a bullet already fired keeps flying when its shooter is rung out
+## and still hits, credited to the shooter and to the weapon that fired it.
+func _scenario_bullet_outlives_eliminated_shooter_570() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	var credited: Array = []
+	shooter.strike_landed.connect(func(v: Node, _a: float, _p: Vector2, _l: bool) -> void:
+		credited.append([v, shooter.hit_weapon_id]))
+	var hold := func() -> void:
+		victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	shooter.eliminate()
+	await physics_frame
+	if _projectiles_of(shooter).is_empty() and victim.damage <= 0.0:
+		failures.append("the bullet vanished the tick its shooter was eliminated")
+	for i in BOOMSTICK_SHOVE_TICKS:
+		if victim.damage > 0.0:
+			break
+		victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		await physics_frame
+	if absf(victim.damage - BOOMSTICK_BULLET_DAMAGE) > BOOMSTICK_DAMAGE_TOLERANCE:
+		failures.append("the eliminated shooter's bullet dealt %.2f, not %.0f" % [victim.damage, BOOMSTICK_BULLET_DAMAGE])
+	if credited.size() != 1 or credited[0][0] != victim or credited[0][1] != "boomstick":
+		failures.append("the hit was credited as %s, expected one strike_landed on the victim with weapon boomstick" % [credited])
+	await _teardown(stage)
+	return failures
+
+## Issue #570: a shooter leaving the round (kick, quit, round end) takes its
+## bullets with it, and `clear_shots()` reaches a shooter who is already dead.
+func _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	shooter.leave_round()
+	await _await_ticks(2)
+	if not _projectiles_of(shooter).is_empty():
+		failures.append("a bullet survived its shooter leaving the round")
+	shooter.start_round(centre, false)
+	shooter.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	shot = await _await_boomstick_shot(shooter, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired a second time")
+		await _teardown(stage)
+		return failures
+	shooter.eliminate()
+	await physics_frame
+	if _projectiles_of(shooter).is_empty():
+		failures.append("the bullet was gone before the dead shooter's shots were cleared")
+	shooter.clear_shots()
+	await _await_ticks(2)
+	if not _projectiles_of(shooter).is_empty():
+		failures.append("clear_shots() left a dead shooter's bullet flying")
+	await _teardown(stage)
+	return failures
+
+## Issue #570: when the shooter's ringout ends the round, its bullet goes with
+## the round rather than flying into the next one.
+func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "Bullet570Container"
+	stage.add_child(container)
+	var p1: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_A)
+	p1.name = "Bullet570P1"
+	var p2: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_B)
+	p2.name = "Bullet570P2"
+	var roster := StubRosterScript.new()
+	roster.name = "Bullet570Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "Bullet570RoundManager"
+	round_manager.player_paths = [NodePath("../Bullet570P1"), NodePath("../Bullet570P2")]
+	round_manager.stage_scenes = [_make_stub_stage("Bullet570Stage", [ROUND_WINNER_SPAWN_A, ROUND_WINNER_SPAWN_B])]
+	round_manager.arena_container_path = NodePath("../Bullet570Container")
+	round_manager.controller_server_path = NodePath("../Bullet570Roster")
+	round_manager.round_end_pause_sec = 5.0
+	round_manager.min_players_to_start = 2
+	stage.add_child(round_manager)
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+	p1.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_aim(p1, PI)
+	var shot: Dictionary = await _await_boomstick_shot(p1, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	p1.eliminate()
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+	if not _projectiles_of(p1).is_empty():
+		failures.append("the dead shooter's bullet survived the end of the round")
+	await _teardown(stage)
 	return failures

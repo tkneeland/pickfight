@@ -90,3 +90,26 @@ static func style_hud_pill(label: Label, font_size: int = 44) -> void:
 	label.theme_type_variation = UiThemeScript.INK_HEADING_LABEL
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_stylebox_override("normal", UiThemeScript.plate(UiThemeScript.CREAM, 22, 0, true, 18))
+
+## The chunky-party ground (#546, #507 decision 1): flat deep indigo with faint
+## diagonal stripes, as a full-rect, input-transparent control.
+static func striped_background(node_name: String = "Ground") -> Control:
+	var ground := Control.new()
+	ground.name = node_name
+	ground.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ground.draw.connect(func() -> void:
+		var size: Vector2 = ground.size
+		ground.draw_rect(Rect2(Vector2.ZERO, size), Color("232A4A"))
+		# 135deg stripes, 28 px band every 56 px (measured along x), 3.5% white.
+		var stripe := Color(1.0, 1.0, 1.0, 0.035)
+		var step: float = 56.0
+		var x: float = -size.y
+		while x < size.x:
+			ground.draw_colored_polygon(PackedVector2Array([
+				Vector2(x, 0.0), Vector2(x + step * 0.5, 0.0),
+				Vector2(x + step * 0.5 + size.y, size.y), Vector2(x + size.y, size.y)]), stripe)
+			x += step
+	)
+	ground.resized.connect(ground.queue_redraw)
+	return ground

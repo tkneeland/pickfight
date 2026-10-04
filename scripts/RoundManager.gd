@@ -538,6 +538,7 @@ func _check_round_end() -> void:
 	_end_round_modifier()
 	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
+	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
@@ -1553,6 +1554,9 @@ func _on_host_command(cmd: String, slot: int) -> void:
 			# Already out of the roster; out of the round too, without a death.
 			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
 				_players[slot].leave_round()
+			# Issue #570: a kicked player's shots in flight go with them.
+			if slot >= 0 and slot < _players.size() and _players[slot] != null:
+				_players[slot].clear_shots()
 			# Issue #521: a kicked Stock player still waiting to respawn is out
 			# now, not when the timer runs down, or the survivor scores.
 			if _game_mode_node != null and _game_mode_node.has_method("cancel_respawn"):
@@ -1823,6 +1827,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_end_round_modifier()
 	_ko_round_ended(-1)
 	_show_scoreboard()
+	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
@@ -2319,3 +2324,9 @@ func _clear_ghosts() -> void:
 		if is_instance_valid(ghost):
 			(ghost as Node).queue_free()
 	_ghosts.clear()
+
+## Issue #570: shots outlive an eliminated shooter, but never the round.
+func _clear_all_shots() -> void:
+	for player: Variant in _players:
+		if player != null and is_instance_valid(player):
+			player.clear_shots()
