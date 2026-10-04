@@ -115,6 +115,10 @@ var _hud_signature: String = ""
 const REJOIN_RETRY_MSEC: int = 1500
 var _rejoin_until_msec: int = 0
 var _rejoin_next_msec: int = 0
+## Issue #579: a client with no snapshot for this long assumes the host's room is
+## gone (a frozen world, its own input keeping the relay awake) and rejoins.
+const SNAPSHOT_WATCHDOG_MSEC: int = 5000
+var _last_snapshot_msec: int = 0
 
 var _camera: Camera2D
 var _world_root: Node2D
@@ -237,6 +241,7 @@ func _process(_delta: float) -> void:
 	if _socket != null:
 		_poll_socket()
 	_tick_rejoin()
+	_watch_snapshots()
 	if state == State.PLAYING:
 		_render()
 
@@ -495,7 +500,10 @@ func _on_host_text(text: String) -> void:
 		"release":
 			pass # the host owns the toggle now (#481)
 		"closed":
-			_return_to_join(reason_text(str(msg.get("reason", "closed"))))
+			var closed_reason: String = str(msg.get("reason", "closed"))
+			_return_to_join(reason_text(closed_reason))
+			if closed_reason == "input timeout": # #579: the host holds the seat; come back
+				_keep_rejoining(Time.get_ticks_msec() + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
 		"error":
 			var reason: String = str(msg.get("reason", "unknown"))
 			_return_to_join(reason_text(reason), reason == "version")
@@ -631,6 +639,7 @@ func apply_snapshot(snap: Dictionary) -> void:
 			return
 		_apply_delta(snap.get("delta_entities", []))
 	frames_applied += 1
+	_last_snapshot_msec = Time.get_ticks_msec()
 	_push_sample()
 	_refresh_hud()
 
@@ -1417,6 +1426,18 @@ func _keep_rejoining(until: int) -> void:
 	_rejoin_next_msec = Time.get_ticks_msec() + REJOIN_RETRY_MSEC
 	var lost: String = tr("JOIN_LOST") if status_text.is_empty() else status_text
 	_set_status(lost + " " + tr("JOIN_REJOINING"))
+
+func _watch_snapshots() -> void:
+	if state != State.PLAYING:
+		_last_snapshot_msec = 0
+		return
+	var now: int = Time.get_ticks_msec()
+	if _last_snapshot_msec == 0:
+		_last_snapshot_msec = now
+	elif now - _last_snapshot_msec > SNAPSHOT_WATCHDOG_MSEC:
+		_last_snapshot_msec = 0
+		_return_to_join(tr("JOIN_LOST"))
+		_keep_rejoining(now + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
 
 func _tick_rejoin() -> void:
 	if _rejoin_until_msec == 0 or state != State.JOIN:
