@@ -295,3 +295,4 @@ LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect
 MODE_STOCK_RULE_N,Lose all %d lives and you are out.
 MODE_SOCCER_RULE_N,First team to %d goals wins.
 MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.
+TITLE_FOOTER,"Click, press a key, or D-pad + A"
