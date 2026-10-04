@@ -127,6 +127,15 @@ func send_to(peer: int, kind: int, payload: PackedByteArray) -> void:
 	frame.append_array(payload)
 	_socket.send(frame, WebSocketPeer.WRITE_MODE_BINARY)
 
+## Asks the relay to close relay peer `peer`'s socket and free its slot (#580),
+## after the frames already sent to it. A relay that predates this ignores the
+## message, so the peer then just stays as it did before; `left` follows when the
+## relay acts on it.
+func drop_peer(peer: int) -> void:
+	if _socket == null or _socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_socket.send_text(JSON.stringify({"t": "drop", "peer": peer}))
+
 ## Sends `text` to relay peer `peer` as a KIND_TEXT envelope.
 func send_text_to(peer: int, text: String) -> void:
 	send_to(peer, KIND_TEXT, text.to_utf8_buffer())

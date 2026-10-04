@@ -752,9 +752,21 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"umbrella_canopy_reduces_a_falling_rock_569",
 	"umbrella_canopy_reduces_a_meteor_569",
 	"sudden_death_block_does_not_eliminate_569",
+	"controller_page_wears_theme_and_labels_target_per_mode_576",
 	"bullet_outlives_eliminated_shooter_570",
 	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
 	"round_end_clears_dead_shooters_bullet_570",
+	"remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579",
+	"remote_client_rejoins_when_snapshots_stop_579",
+	"hud_and_full_frame_resent_after_host_relink_579",
+	"relay_drops_oversized_client_frames_580",
+	"relay_host_can_drop_a_peer_and_free_its_slot_580",
+	"relay_caps_client_seats_per_ip_580",
+	"relay_reclaim_beats_half_dead_host_socket_580",
+	"relay_proxy_protocol_supplies_real_client_ip_580",
+	"remote_seat_close_drops_relay_peer_580",
+	"online_remote_seat_never_hosts_578",
+	"controller_fonts_served_589",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2648,12 +2660,36 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_canopy_reduces_a_meteor_569()
 		"sudden_death_block_does_not_eliminate_569":
 			return await _scenario_sudden_death_block_does_not_eliminate_569()
+		"controller_page_wears_theme_and_labels_target_per_mode_576":
+			return _scenario_controller_page_wears_theme_and_labels_target_per_mode_576()
 		"bullet_outlives_eliminated_shooter_570":
 			return await _scenario_bullet_outlives_eliminated_shooter_570()
 		"shots_cleared_on_leave_round_and_dead_shooter_clear_570":
 			return await _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570()
 		"round_end_clears_dead_shooters_bullet_570":
 			return await _scenario_round_end_clears_dead_shooters_bullet_570()
+		"remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579":
+			return await _scenario_remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579()
+		"remote_client_rejoins_when_snapshots_stop_579":
+			return await _scenario_remote_client_rejoins_when_snapshots_stop_579()
+		"hud_and_full_frame_resent_after_host_relink_579":
+			return await _scenario_hud_and_full_frame_resent_after_host_relink_579()
+		"relay_drops_oversized_client_frames_580":
+			return await _scenario_relay_drops_oversized_client_frames_580()
+		"relay_host_can_drop_a_peer_and_free_its_slot_580":
+			return await _scenario_relay_host_can_drop_a_peer_and_free_its_slot_580()
+		"relay_caps_client_seats_per_ip_580":
+			return await _scenario_relay_caps_client_seats_per_ip_580()
+		"relay_reclaim_beats_half_dead_host_socket_580":
+			return await _scenario_relay_reclaim_beats_half_dead_host_socket_580()
+		"relay_proxy_protocol_supplies_real_client_ip_580":
+			return await _scenario_relay_proxy_protocol_supplies_real_client_ip_580()
+		"remote_seat_close_drops_relay_peer_580":
+			return await _scenario_remote_seat_close_drops_relay_peer_580()
+		"online_remote_seat_never_hosts_578":
+			return await _scenario_online_remote_seat_never_hosts_578()
+		"controller_fonts_served_589":
+			return await _scenario_controller_fonts_served_589()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -23260,8 +23296,8 @@ func _scenario_online_remote_claims_slot() -> Array[String]:
 		failures.append("remote nickname was '%s', expected Ranger" % server.slot_name(0))
 	if not server.slot_ready(0):
 		failures.append("remote Ready did not register")
-	if server.host_slot() != 0:
-		failures.append("the only seat, a remote one, is not host (host_slot=%d)" % server.host_slot())
+	if server.host_slot() != -1:
+		failures.append("the only seat, a remote one, became host (host_slot=%d); #578" % server.host_slot())
 	server.send_buzz(0, "win") # a no-op for remote seats; must not error
 	await _online_close_239(rig)
 	return failures
@@ -23851,14 +23887,14 @@ func _scenario_online_toggle_refused_from_remote_host() -> Array[String]:
 	rig["code"] = server.online_room_code()
 	var remote: WebSocketPeer = await _online_remote_239(rig, "refuse-remote")
 	var slot_msg: Dictionary = await _online_wait_239(rig, remote, "slot") if remote != null else {}
-	if int(slot_msg.get("slot", -1)) != 0 or server.host_slot() != 0:
-		failures.append("the remote was told %s / host_slot %d, expected it to be the host" % [slot_msg, server.host_slot()])
+	if int(slot_msg.get("slot", -1)) != 0 or server.host_slot() != -1:
+		failures.append("the remote was told %s / host_slot %d, expected slot 0 and no host (#578)" % [slot_msg, server.host_slot()])
 	_online_send_239(remote, 1, JSON.stringify({"t": "host", "cmd": "online", "v": false}).to_utf8_buffer())
 	await _online_frames_239(20)
 	for c: WebSocketPeer in rig["clients"]:
 		c.poll()
 	if not server.online_requested() or not server.is_online():
-		failures.append("a remote host turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
+		failures.append("a remote seat turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	server.apply_host_command("online", false)
 	await _online_close_239(rig)
@@ -34158,6 +34194,12 @@ func _scenario_remote_client_rejoins_its_held_seat_by_itself() -> Array[String]:
 	# The client retries on the wall clock; under --fixed-fps game time can run
 	# many times faster, so the host's game-time hold is lengthened here.
 	server.remote_seat_hold_msec = 600000
+	# Issue #572: the drop-to-rejoin window spans 15-35 s of game time under
+	# --fixed-fps, long enough for the bot, or this limp seat on 3 of 5 points,
+	# to win the match. A finished match is no match phase, so nothing holds the
+	# seat any more and it is freed (a fresh claim, score 0). That is #459's
+	# rule, not this scenario's subject: keep the match from ending.
+	rm._match_target = 1000
 	var serial: int = server.claim_serial(slot)
 	client._socket.close(4001, "test drop")
 	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
@@ -37704,6 +37746,39 @@ func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
 	players[0].strike_landed.disconnect(on_report)
 	await _teardown(rig["stage"])
 	return failures
+## Issue #576: the phone controller page wears the #507 look with fonts it
+## carries itself (the host's LAN may have no internet), and the host row's
+## target label follows the lobby state's `target_kind` like the lobby's.
+func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	for family: String in ["Lilita One", "Nunito"]:
+		if not page.contains('font-family: "%s";\n    font-weight' % family):
+			failures.append("no @font-face for %s" % family)
+	if page.count("src: url(/fonts/") != 2:
+		failures.append("the two theme fonts are not linked as served WOFF2 files (#589)")
+	for external: String in ["fonts.googleapis", "fonts.gstatic", "src: url(http", "@import"]:
+		if page.contains(external):
+			failures.append("the page reaches for the network: '%s'" % external)
+	for colour: String in ["#232A4A", "#FBF6EA", "#14181d", "#F5E24A"]:
+		if not page.contains(colour):
+			failures.append("the page lacks the #507 colour %s" % colour)
+	if not page.contains("var(--display)"):
+		failures.append("headings and buttons do not use the display face")
+	if page.length() > 200000:
+		failures.append("the page grew to %d bytes; keep it small" % page.length())
+	for needle: String in ['id="target-label"', "TARGET_LABELS[msg.target_kind]", '"PHONE_TARGET_LIVES": "Lives"',
+			'"PHONE_TARGET_GOALS": "Goals to win"', '"PHONE_TARGET_CAPTURES": "Captures to win"']:
+		if not page.contains(needle):
+			failures.append("the per-mode target label is missing '%s'" % needle)
+	# Its kinds are the ones the host sends (GameModes.target_kind).
+	for mode_id: String in [GameModesScript361.STOCK, GameModesScript361.SOCCER, GameModesScript361.CAPTURE_THE_FLAG]:
+		var kind: String = GameModesScript361.target_kind(mode_id)
+		if not page.contains("%s: \"PHONE_TARGET_" % kind):
+			failures.append("the page has no label for target_kind '%s'" % kind)
+	_scenario_completed = true
+	return failures
+
 
 # --- Lobby restyle (#547) ----------------------------------------------------------
 ## Every visible control of the lobby, as (path, rect) pairs outside `window` once the
@@ -38164,3 +38239,433 @@ func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
 		failures.append("the dead shooter's bullet survived the end of the round")
 	await _teardown(stage)
 	return failures
+
+## Issue #579: a remote seat is not dropped by a 3 s stall (phones keep 2 s); past
+## the remote timeout the host closes it and the client rejoins its held seat.
+func _scenario_remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	server.controller_timeout_sec = 2.0 # the rig loosens it; phones keep 2 s
+	if server.remote_timeout_sec <= server.controller_timeout_sec:
+		failures.append("remote timeout %.1f s is not longer than the phone's %.1f s" % [server.remote_timeout_sec, server.controller_timeout_sec])
+	client.set_process(false)
+	client.set_physics_process(false)
+	await _wait_wall_519(3.0)
+	if server._slot_peers[slot] == null:
+		failures.append("a 3 s stall dropped the remote seat")
+	server.remote_timeout_sec = 0.5
+	server.remote_seat_hold_msec = 600000
+	await _wait_wall_519(1.0)
+	if server._slot_peers[slot] != null:
+		failures.append("the seat was not dropped past the remote timeout")
+	client.set_process(true)
+	client.set_physics_process(true)
+	server.remote_timeout_sec = 10.0
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 3000):
+		failures.append("the client never saw the close")
+	elif not client.rejoining():
+		failures.append("an input-timeout close left the client not rejoining ('%s')" % client.status_text)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000) or client.slot != slot:
+		failures.append("the client did not rejoin its held slot %d (state %d, slot %d)" % [slot, client.state, client.slot])
+	await _rc_close_241(rig)
+	return failures
+## Issue #579: a client that gets no snapshot for about 5 s rejoins by itself.
+func _scenario_remote_client_rejoins_when_snapshots_stop_579() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	if not await _wait_for_239(func() -> bool: return client.frames_applied > 0, 3000):
+		failures.append("the client never got a snapshot")
+	server.remote_seat_hold_msec = 600000
+	server.set_physics_process(false)
+	server.set_process(false)
+	await _wait_wall_519(3.0)
+	if client.state != RcState241.PLAYING:
+		failures.append("the client left after only 3 s without snapshots")
+	await _wait_wall_519(3.0)
+	if client.state != RcState241.JOIN or not client.rejoining():
+		failures.append("after 6 s without snapshots the client is state %d, rejoining %s" % [client.state, client.rejoining()])
+	server.set_physics_process(true)
+	server.set_process(true)
+	if not await _wait_for_239(func() -> bool: return client.state == RcState241.PLAYING, 8000):
+		failures.append("the client never rejoined (state %d, '%s')" % [client.state, client.status_text])
+	await _rc_close_241(rig)
+	return failures
+## Issue #579: HUD and full frames sent while the host's link was down are lost,
+## so the link coming back resends both.
+func _scenario_hud_and_full_frame_resent_after_host_relink_579() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	if not await _wait_for_239(func() -> bool: return client.frames_applied > 0 and not client.hud.is_empty(), 3000):
+		failures.append("the client never got a snapshot and a HUD")
+	rig["relay"].host_grace_sec = 5.0
+	server.relay_link.host_grace_sec = 5.0
+	server.relay_link.drop_socket_for_test()
+	if not await _wait_for_239(func() -> bool: return server.relay_state() == "reconnecting", 3000):
+		failures.append("the host link never went down")
+	rm._scores[slot] = 7 # changes while the link is down
+	await _wait_wall_519(0.5)
+	if not await _wait_for_239(func() -> bool: return server.is_online(), 8000):
+		failures.append("the host link never came back")
+	var shown := func() -> bool:
+		for row: Array in client.hud.get("board", []):
+			if int(row[0]) == slot and int(row[2]) == 7:
+				return true
+		return false
+	if not await _wait_for_239(shown, 3000):
+		failures.append("the HUD change made during the relink never reached the client: %s (online %s, client state %d '%s')" % [client.hud, server.is_online(), client.state, client.status_text])
+	await _rc_close_241(rig)
+	return failures
+
+## Issue #580: waits up to `msec` for `cond` while polling every client.
+func _relay580_wait(clients: Array, cond: Callable, msec: int = 3000) -> bool:
+	var deadline: int = Time.get_ticks_msec() + msec
+	while Time.get_ticks_msec() < deadline:
+		for c: WebSocketPeer in clients:
+			c.poll()
+		if cond.call():
+			return true
+		await process_frame
+	return false
+
+func _scenario_relay_drops_oversized_client_frames_580() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(1, failures)
+	if room.is_empty():
+		return failures
+	var clients: Array = room["clients"]
+	var client: WebSocketPeer = room["peers"][0]
+	var big := PackedByteArray()
+	big.resize(4097)
+	client.send(big)
+	var edge := PackedByteArray()
+	edge.resize(4096)
+	edge.fill(7)
+	client.send(edge)
+	client.send(PackedByteArray([9]))
+	var first: Dictionary = await _relay_next(room["host"], clients, false)
+	var data: PackedByteArray = first.get("data", PackedByteArray())
+	if data.size() != 4097 or data[0] != 1 or data[1] != 7:
+		failures.append("the host's first frame was %d bytes, wanted the 4096-byte frame (4097 with the peer id): the oversized one must be dropped" % data.size())
+	var second: Dictionary = await _relay_next(room["host"], clients, false)
+	if second.get("data") != PackedByteArray([1, 9]):
+		failures.append("the frame after the big ones was %s, wanted [1, 9]" % [second.get("data")])
+	if client.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("an oversized frame closed the client")
+	_relay_stop(room["relay"], clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_host_can_drop_a_peer_and_free_its_slot_580() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(2, failures)
+	if room.is_empty():
+		return failures
+	var clients: Array = room["clients"]
+	var host: WebSocketPeer = room["host"]
+	var victim: WebSocketPeer = room["peers"][0]
+	var bystander: WebSocketPeer = room["peers"][1]
+	# A frame sent before the drop must still reach the client.
+	host.send(PackedByteArray([1, 42]))
+	host.send_text(JSON.stringify({"t": "drop", "peer": 1}))
+	var last: Dictionary = await _relay_next(victim, clients, false)
+	if last.get("data") != PackedByteArray([42]):
+		failures.append("the dropped client got %s before the close, wanted [42]" % [last.get("data")])
+	var left: Dictionary = await _relay_next(host, clients)
+	if left.get("t") != "left" or int(left.get("peer", 0)) != 1:
+		failures.append("the host was told %s after dropping peer 1, wanted left 1" % left)
+	var closed: bool = await _relay580_wait(clients, func() -> bool: return victim.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+	if not closed:
+		failures.append("the dropped client's socket stayed open")
+	if bystander.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("dropping peer 1 closed peer 2")
+	# Dropping an unknown or already-gone peer is ignored.
+	host.send_text(JSON.stringify({"t": "drop", "peer": 99}))
+	host.send_text(JSON.stringify({"t": "drop", "peer": 1}))
+	host.send_text("not json")
+	# The freed slot is reusable.
+	var again: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var welcome: Dictionary = await _relay_next(again, clients)
+	if welcome.get("t") != "welcome" or int(welcome.get("peer", 0)) != 1:
+		failures.append("a new client got %s, wanted peer 1 back" % welcome)
+	_relay_stop(room["relay"], clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_caps_client_seats_per_ip_580() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(0, failures)
+	if room.is_empty():
+		return failures
+	var relay: Node = room["relay"]
+	var clients: Array = room["clients"]
+	relay.ip_cap_enabled = true
+	relay.join_cap_per_ip = 2
+	for i in 2:
+		var ok: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+		var welcome: Dictionary = await _relay_next(ok, clients)
+		if welcome.get("t") != "welcome":
+			failures.append("join %d under the cap got %s" % [i, welcome])
+	var third: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var refused: Dictionary = await _relay_next(third, clients)
+	if refused.get("t") != "error" or refused.get("reason") != "room_full":
+		failures.append("the third seat from one IP got %s, wanted room_full" % refused)
+	# Without a trusted IP (no PROXY protocol) the cap is off, as before.
+	relay.ip_cap_enabled = false
+	var fourth: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var welcome4: Dictionary = await _relay_next(fourth, clients)
+	if welcome4.get("t") != "welcome":
+		failures.append("with the cap off a join got %s" % welcome4)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_reclaim_beats_half_dead_host_socket_580() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var clients: Array = []
+	var old_host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var made: Dictionary = await _relay_next(old_host, clients)
+	var code: String = str(made.get("code", ""))
+	var token: String = str(made.get("token", ""))
+	var guest: WebSocketPeer = await _relay_connect({"t": "join", "room": code}, clients)
+	await _relay_next(guest, clients)
+	await _relay_next(old_host, clients) # joined
+	# The old host socket still looks open; a thief with the wrong token gets nothing of the room.
+	var thief: WebSocketPeer = await _relay_connect({"t": "host", "room": code, "token": "0000000000000000"}, clients)
+	var stolen: Dictionary = await _relay_next(thief, clients)
+	if stolen.get("code") == code:
+		failures.append("a wrong token took over a live room")
+	var fresh: WebSocketPeer = await _relay_connect({"t": "host", "room": code, "token": token}, clients)
+	var back: Dictionary = await _relay_next(fresh, clients)
+	if back.get("t") != "room" or back.get("code") != code or back.get("token") != token:
+		failures.append("a valid token on a live-looking room got %s, wanted the same room back" % back)
+	var peers: Array = back.get("peers", [])
+	if peers.size() != 1 or int(peers[0]) != 1:
+		failures.append("the reclaimed room listed peers %s, wanted [1]" % [peers])
+	var closed: bool = await _relay580_wait(clients, func() -> bool: return old_host.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+	if not closed:
+		failures.append("the old host socket was left open")
+	if guest.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the client was dropped by the reclaim")
+	# Traffic now flows to the new host.
+	guest.send(PackedByteArray([5]))
+	var up: Dictionary = await _relay_next(fresh, clients, false)
+	if up.get("data") != PackedByteArray([1, 5]):
+		failures.append("the new host got %s, wanted [1, 5]" % [up.get("data")])
+	if relay.room_count() != 2:
+		failures.append("room_count %d, wanted 2 (the reclaimed room and the thief's)" % relay.room_count())
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+func _scenario_relay_proxy_protocol_supplies_real_client_ip_580() -> Array[String]:
+	var failures: Array[String] = []
+	var parse: Script = preload("res://relay/Relay.gd")
+	var cases: Dictionary = {
+		"PROXY TCP4 203.0.113.7 10.0.0.1 51234 443\r\n": "203.0.113.7",
+		"PROXY TCP6 2001:db8::1 fdaa::1 51234 443\r\n": "2001:db8::1",
+		"PROXY UNKNOWN\r\n": "unknown",
+		"GET / HTTP/1.1\r\n": "",
+		"PROXY TCP4 1.2.3.4\r\n": "",
+		"": "",
+	}
+	for line: String in cases:
+		var got: String = parse.parse_proxy_line(line)
+		if got != cases[line]:
+			failures.append("parse_proxy_line(%s) was '%s', wanted '%s'" % [line.c_escape(), got, cases[line]])
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		return failures
+	relay.proxy_protocol = true
+	var upgrade: String = "GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+	var good := StreamPeerTCP.new()
+	good.connect_to_host("127.0.0.1", _relay_port_next)
+	var bad := StreamPeerTCP.new()
+	bad.connect_to_host("127.0.0.1", _relay_port_next)
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline:
+		good.poll()
+		bad.poll()
+		if good.get_status() == StreamPeerTCP.STATUS_CONNECTED and bad.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			break
+		await process_frame
+	good.put_data(("PROXY TCP4 9.9.9.9 10.0.0.1 1234 443\r\n" + upgrade).to_ascii_buffer())
+	bad.put_data(upgrade.to_ascii_buffer()) # a connection that skips the PROXY line
+	var reply: String = ""
+	var bad_closed: bool = false
+	deadline = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and not (reply.contains("101") and bad_closed):
+		good.poll()
+		bad.poll()
+		if good.get_available_bytes() > 0:
+			reply += good.get_utf8_string(good.get_available_bytes())
+		bad_closed = bad.get_status() != StreamPeerTCP.STATUS_CONNECTED
+		await process_frame
+	if not reply.begins_with("HTTP/1.1 101"):
+		failures.append("the upgrade after a PROXY line got '%s', wanted 101" % reply.left(40))
+	if not bad_closed:
+		failures.append("a connection with no PROXY line was kept")
+	var ips: Array = relay._pending.map(func(p: Variant) -> String: return p.ip)
+	if ips != ["9.9.9.9"]:
+		failures.append("the pending sockets' IPs were %s, wanted [9.9.9.9]" % [ips])
+	good.disconnect_from_host()
+	bad.disconnect_from_host()
+	relay.stop()
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_remote_seat_close_drops_relay_peer_580() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var link: Node = preload("res://scripts/RelayLink.gd").new()
+	root.add_child(link)
+	link.go_online("ws://127.0.0.1:%d" % _relay_port_next)
+	var clients: Array = []
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and link.room_code() == "":
+		await process_frame
+	var guest: WebSocketPeer = await _relay_connect({"t": "join", "room": link.room_code()}, clients)
+	await _relay_next(guest, clients) # welcome
+	deadline = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline and link.peers().is_empty():
+		await process_frame
+	if link.peers().is_empty():
+		failures.append("the host link never saw the client join")
+	else:
+		var seat = preload("res://scripts/ControllerServer.gd").RemoteSeat.new()
+		seat.peer = link.peers()[0]
+		seat.link = link
+		seat.close(4001, "kicked")
+		var notice: Dictionary = await _relay_next(guest, clients, false)
+		if not (notice.get("data", PackedByteArray()) as PackedByteArray).get_string_from_utf8().contains("closed"):
+			failures.append("the kicked client got no closed notice before the drop: %s" % [notice])
+		var closed: bool = await _relay580_wait(clients, func() -> bool: return guest.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+		if not closed:
+			failures.append("the kicked client kept its relay socket")
+		var freed: bool = await _relay580_wait(clients, func() -> bool: return link.peers().is_empty())
+		if not freed:
+			failures.append("the host link still lists the kicked peer")
+	link.go_offline()
+	link.queue_free()
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+
+## #578: in an Online match a remote seat is never host and its `host` frames
+## are ignored, even when it joined before any phone; a phone seat still hosts.
+func _scenario_online_remote_seat_never_hosts_578() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_rig_239(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	var commands: Array = []
+	server.host_command.connect(func(cmd: String, slot: int) -> void: commands.append([cmd, slot]))
+	var remote: WebSocketPeer = await _online_remote_239(rig, "remote-578")
+	if remote != null:
+		await _online_wait_239(rig, remote, "slot")
+	for cmd in ["pause", "end", "kick"]:
+		_online_send_239(remote, 1, JSON.stringify({"t": "host", "cmd": cmd, "slot": 0}).to_utf8_buffer())
+	await _online_frames_239(10)
+	if server.host_slot() != -1:
+		failures.append("a lone remote seat became host (host_slot=%d)" % server.host_slot())
+	if not commands.is_empty():
+		failures.append("remote host frames were honoured: %s" % [commands])
+	var phone := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	var joined: Dictionary = await _join_phone(phone, "phone-578", phones)
+	phones.append(phone)
+	if server.host_slot() != int(joined.get("slot", -2)) or server.host_slot() < 0:
+		failures.append("the phone seat is not host after joining behind a remote (host_slot=%d)" % server.host_slot())
+	await _online_close_239(rig)
+	return failures
+
+## #589: the controller page links its fonts by URL; the host serves exactly the
+## two allowlisted woff2 files with the right type and a cache header, and
+## nothing else under /fonts/ (no traversal).
+func _scenario_controller_fonts_served_589() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(1, "Fonts589")
+	var server: Node = rig["server"]
+	var page: String = (await _http_get_589(server.http_port, "/"))["body"].get_string_from_utf8()
+	if page.contains("data:font"):
+		failures.append("the page still embeds base64 fonts")
+	for font: String in ["/fonts/LilitaOne-Latin.woff2", "/fonts/Nunito-Latin.woff2"]:
+		if not page.contains("url(%s)" % font):
+			failures.append("page does not link %s" % font)
+		var res: Dictionary = await _http_get_589(server.http_port, font)
+		if res["status"] != 200:
+			failures.append("%s answered %d" % [font, res["status"]])
+			continue
+		if not res["head"].contains("Content-Type: font/woff2"):
+			failures.append("%s wrong Content-Type" % font)
+		if not res["head"].contains("max-age="):
+			failures.append("%s has no max-age cache header" % font)
+		if res["body"].slice(0, 4).get_string_from_ascii() != "wOF2":
+			failures.append("%s body is not a woff2" % font)
+	for bad: String in ["/fonts/../index.html", "/fonts/other.woff2", "/fonts/", "/fonts/%2e%2e/project.godot"]:
+		var res: Dictionary = await _http_get_589(server.http_port, bad)
+		if res["status"] != 404:
+			failures.append("%s answered %d, wanted 404" % [bad, res["status"]])
+	await _teardown(rig["stage"])
+	return failures
+func _http_get_589(port: int, path: String) -> Dictionary:
+	var tcp := StreamPeerTCP.new()
+	var out: Dictionary = {"status": 0, "head": "", "body": PackedByteArray()}
+	if tcp.connect_to_host("127.0.0.1", port) != OK:
+		return out
+	var deadline: int = Time.get_ticks_msec() + 3000
+	var sent: bool = false
+	var raw := PackedByteArray()
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		tcp.poll()
+		var st: int = tcp.get_status()
+		if st == StreamPeerTCP.STATUS_CONNECTED and not sent:
+			tcp.put_data(("GET %s HTTP/1.1\r\nHost: x\r\n\r\n" % path).to_utf8_buffer())
+			sent = true
+		if st == StreamPeerTCP.STATUS_CONNECTED:
+			var n: int = tcp.get_available_bytes()
+			if n > 0:
+				raw.append_array(tcp.get_data(n)[1])
+		elif st == StreamPeerTCP.STATUS_NONE or st == StreamPeerTCP.STATUS_ERROR:
+			break
+	var text: String = raw.get_string_from_ascii()
+	var split: int = text.find("\r\n\r\n")
+	if split < 0:
+		return out
+	out["head"] = text.substr(0, split)
+	out["status"] = int(out["head"].get_slice(" ", 1))
+	out["body"] = raw.slice(split + 4)
+	return out

@@ -6,6 +6,31 @@
 <meta name="color-scheme" content="dark">
 <title>Pickfight Controller</title>
 <style>
+  /* #576: the #507 type, embedded because the host serves this page over the
+     LAN with no internet guarantee. Latin subsets of the OFL fonts in
+     art/fonts/ (Lilita One for headings and buttons, Nunito 600-900 for body). */
+  @font-face {
+    font-family: "Lilita One";
+    font-weight: 400;
+    font-display: swap;
+    src: url(/fonts/LilitaOne-Latin.woff2) format("woff2");
+  }
+  @font-face {
+    font-family: "Nunito";
+    font-weight: 600 900;
+    font-display: swap;
+    src: url(/fonts/Nunito-Latin.woff2) format("woff2");
+  }
+  :root {
+    --ground: #232A4A;
+    --cream: #FBF6EA;
+    --ink: #14181d;
+    --yellow: #F5E24A;
+    --muted: #C9CCE0;
+    --dim: #5A628C;
+    --stripes: repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 28px, transparent 28px 56px);
+    --display: "Lilita One", "Arial Rounded MT Bold", system-ui, sans-serif;
+  }
   html, body {
     height: 100%;
     margin: 0;
@@ -14,9 +39,9 @@
     -webkit-user-select: none;
     -webkit-touch-callout: none;
     overscroll-behavior: none;
-    background: #0d0f14;
-    color: #e8ecf4;
-    font: 16px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--ground);
+    color: var(--cream);
+    font: 800 16px/1.3 "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   #pad {
     position: fixed;
@@ -104,8 +129,8 @@
     padding: 14px 26px;
     border: 0;
     border-radius: 14px;
-    color: #0d0f14;
-    background: #ffd933;
+    color: var(--ink);
+    background: var(--yellow);
   }
   #mouse-sens-row { font-size: 14px; opacity: 0.85; display: flex; align-items: center; gap: 10px; }
   #hint {
@@ -157,8 +182,8 @@
   #menu-stock-lives[hidden], #menu-stock-time[hidden], #menu-stockstages[hidden] { display: none !important; }
   #menu-stockstages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   #host-menu #menu-stockstages button { padding: 8px 4px; font-size: 13px; }
-  #host-menu #menu-stockstages button.on { color: #0d0f14; background: #ffd933; }
-  #host-menu #menu-stockstages button.comp { border-color: #ffd933; }
+  #host-menu #menu-stockstages button.on { color: var(--ink); background: var(--yellow); }
+  #host-menu #menu-stockstages button.comp { border-color: var(--yellow); }
   #lives.show { display: block; }
   #steal {
     position: fixed;
@@ -184,7 +209,7 @@
     padding: 24px;
     /* Issue #194: clear of the HUD (badge + name) now drawn on top of it. */
     padding-top: calc(env(safe-area-inset-top, 0px) + 15vmin + 64px);
-    background: rgba(13, 15, 20, 0.97);
+    background: rgba(35, 42, 74, 0.97);
     text-align: center;
   }
   #lobby.show { display: flex; }
@@ -214,9 +239,9 @@
     padding: 22px 28px;
     border: 0;
     border-radius: 16px;
-    color: #0d0f14;
+    color: var(--ink);
     /* Playtest 2026-09-27: yellow is the call to action, grey once pressed. */
-    background: #ffd933;
+    background: var(--yellow);
   }
   #ready-btn.on { background: #59606e; }
   #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
@@ -263,7 +288,7 @@
     justify-content: flex-start;
     gap: 18px;
     padding: 24px;
-    background: #0d0f14;
+    background: var(--ground);
     text-align: center;
   }
   #name-prompt.show { display: flex; }
@@ -292,7 +317,7 @@
     border-radius: 16px;
   }
   #name-shuffle { color: #e8ecf4; background: #2a303d; }
-  #name-go { color: #0d0f14; background: #ffd933; min-width: 40vw; }
+  #name-go { color: var(--ink); background: var(--yellow); min-width: 40vw; }
   /* Host controls (issue #149): a small gear, on the host's phone only, that
      opens a hidden menu. Tucked under the status line (HUD padding 12px +
      its 18px line = 30px, so 44px leaves a gap), clear of the lobby's
@@ -317,7 +342,7 @@
     opacity: 0.8;
   }
   #gear.show { display: flex; }
-  #gear.pressed { border-color: #ffd933; box-shadow: 0 0 0 4px rgba(255, 217, 51, 0.35); }
+  #gear.pressed { border-color: var(--yellow); box-shadow: 0 0 0 4px rgba(245, 226, 74, 0.45); }
   #gear svg { width: 24px; height: 24px; pointer-events: none; }
   #host-menu {
     position: fixed;
@@ -329,7 +354,7 @@
     justify-content: flex-start;
     gap: 16px;
     padding: 24px;
-    background: rgba(13, 15, 20, 0.97);
+    background: rgba(35, 42, 74, 0.97);
     text-align: center;
   }
   #host-menu.show { display: flex; }
@@ -350,8 +375,8 @@
   #host-menu button:disabled { opacity: 0.35; }
   /* Issue #352: the game-mode picker, one button per mode, the chosen one lit. */
   #menu-gamemodes { display: flex; flex-direction: column; gap: 8px; }
-  #host-menu #menu-gamemodes button.on { color: #0d0f14; background: #ffd933; }
-  #host-menu button.primary { color: #0d0f14; background: #ffd933; }
+  #host-menu #menu-gamemodes button.on { color: var(--ink); background: var(--yellow); }
+  #host-menu button.primary { color: var(--ink); background: var(--yellow); }
   #host-menu button.danger { color: #fff; background: #c62f3a; }
   #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
   /* Hat and colour (issue #151): the second step of joining, straight after
@@ -368,7 +393,7 @@
     justify-content: flex-start;
     gap: 16px;
     padding: 20px;
-    background: #0d0f14;
+    background: var(--ground);
     text-align: center;
   }
   #look-prompt.show { display: flex; }
@@ -389,7 +414,7 @@
     align-items: center;
     gap: 2px;
   }
-  #hat-grid button.on, #eyes-grid button.on { border-color: #ffd933; background: #2a303d; }
+  #hat-grid button.on, #eyes-grid button.on { border-color: var(--yellow); background: #2a303d; }
   #hat-grid canvas, #eyes-grid canvas { width: 72px; height: 56px; pointer-events: none; }
   #color-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: min(92vw, 420px); }
   #color-row button {
@@ -400,7 +425,7 @@
     font: inherit;
     font-size: 13px;
     font-weight: 800;
-    color: #0d0f14;
+    color: var(--ink);
   }
   #color-row button.on { border-color: #ffffff; box-shadow: 0 0 0 3px #0d0f14 inset; }
   /* A colour another player holds: dimmed, crossed out and not tappable. */
@@ -421,7 +446,7 @@
     justify-content: center;
     gap: 18px;
     padding: 20px;
-    background: rgba(13, 15, 20, 0.96);
+    background: rgba(35, 42, 74, 0.96);
     text-align: center;
   }
   #tip.show { display: flex; }
@@ -448,8 +473,8 @@
     min-width: 50vw;
     border: 0;
     border-radius: 16px;
-    color: #0d0f14;
-    background: #ffd933;
+    color: var(--ink);
+    background: var(--yellow);
   }
   #look-go {
     font: inherit;
@@ -459,8 +484,8 @@
     min-width: 50vw;
     border: 0;
     border-radius: 16px;
-    color: #0d0f14;
-    background: #ffd933;
+    color: var(--ink);
+    background: var(--yellow);
   }
   #look-btn {
     font: inherit;
@@ -472,6 +497,115 @@
     color: #e8ecf4;
     background: #2a303d;
   }
+
+  /* ---- #507 look (issue #576) ------------------------------------------------
+     Chunky party style: indigo ground with faint stripes, cream panels, thick
+     ink outlines and hard offset shadows, the player's own colour as the
+     accent. Paint only: no rule here touches layout that the pad depends on,
+     pointer-events or touch-action, and nothing animates per frame. Placed
+     last so it wins over the structural rules above at equal specificity. */
+  html, body { background-image: var(--stripes); }
+  #lobby, #name-prompt, #look-prompt, #host-menu, #tip { background-image: var(--stripes); }
+  #slot, #lobby-title, #name-prompt-title, #look-title, #host-menu-title, #state, #lobby-count, #confirm-text, #tip-text {
+    font-family: var(--display);
+    font-weight: 400;
+    color: var(--cream);
+  }
+  #slot { color: var(--dim); text-shadow: 3px 3px 0 var(--ink); }
+  #name { font-family: var(--display); font-weight: 400; text-decoration: none; text-shadow: 2px 2px 0 var(--ink); color: var(--dim); }
+  #name:not(.locked) { text-decoration: underline dotted; text-underline-offset: 5px; text-decoration-thickness: 2px; }
+  #status { color: var(--muted); opacity: 1; font-weight: 800; }
+  #hint, .look-label, #name-prompt-info, #lobby-info { color: var(--muted); opacity: 1; font-weight: 800; }
+  #hint { opacity: 0.75; }
+  #lobby-title, #name-prompt-title, #look-title, #host-menu-title { font-size: 32px; text-shadow: 3px 3px 0 var(--ink); }
+  #state { font-size: 32px; opacity: 1; text-shadow: 3px 3px 0 var(--ink); }
+  #lobby-count { font-size: 30vmin; color: var(--yellow); text-shadow: 6px 6px 0 var(--ink); }
+  #lives { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
+  #dmgbar { background: rgba(20, 24, 29, 0.55); border-bottom: 1px solid var(--ink); }
+
+  /* Every button: cream face, ink outline, hard shadow that the press eats. */
+  #ready-btn, #look-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
+  #host-menu button, #team-row button, #target-row button, #hat-grid button, #eyes-grid button, #color-row button {
+    font-family: var(--display);
+    font-weight: 400;
+    color: var(--ink);
+    background: var(--cream);
+    border: 4px solid var(--ink);
+    border-radius: 16px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  #ready-btn:active, #look-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
+  #steal:active, #mouse-capture:active, #host-menu button:active, #team-row button:active, #target-row button:active,
+  #hat-grid button:active, #eyes-grid button:active, #color-row button:active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+  #ready-btn { font-size: 32px; border-width: 5px; border-radius: 22px; box-shadow: 6px 6px 0 var(--ink); background: var(--yellow); }
+  #ready-btn:active { box-shadow: 2px 2px 0 var(--ink); transform: translate(4px, 4px); }
+  #ready-btn.on { background: var(--muted); }
+  #name-go, #look-go, #tip-go, #steal, #mouse-capture, #host-menu button.primary { background: var(--yellow); }
+  #host-menu button.danger { background: #D55E00; color: var(--ink); }
+  #host-menu button:disabled { opacity: 0.45; box-shadow: 2px 2px 0 var(--ink); }
+  #host-menu #menu-gamemodes button.on, #host-menu #menu-stockstages button.on { background: var(--yellow); color: var(--ink); }
+  #host-menu #menu-stockstages button.comp { border-color: var(--ink); background: #CC79A7; }
+  #host-menu #menu-stockstages button.comp.on { background: var(--yellow); }
+
+  /* Host/team/target rows sit on a cream panel so their text reads on any phone. */
+  #target-row, #team-row {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 22px;
+    color: var(--ink);
+    background: var(--cream);
+    border: 5px solid var(--ink);
+    border-radius: 20px;
+    box-shadow: 6px 6px 0 var(--ink);
+    padding: 10px 14px;
+  }
+  #target-row button, #target-input { background: var(--yellow); font-size: 28px; line-height: 1; padding: 0; }
+  #target-input {
+    font-family: var(--display);
+    font-weight: 400;
+    background: #fff;
+    color: var(--ink);
+    border: 4px solid var(--ink);
+    border-radius: 12px;
+    box-shadow: inset 2px 2px 0 rgba(20, 24, 29, 0.18);
+  }
+  #team-row button { padding: 8px 14px; font-size: 22px; box-shadow: 3px 3px 0 var(--ink); }
+  #team-row button.on { background: var(--yellow); }
+  #team-red { background: #f24545 !important; color: var(--ink) !important; }
+  #team-blue { background: #4d8cff !important; color: var(--ink) !important; }
+  #team-row button:not(.on) { opacity: 0.6; }
+  #team-row button.on { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink), 4px 4px 0 6px var(--ink); }
+  #team-line { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
+
+  #look-btn { font-size: 20px; }
+  #name-input {
+    font-family: var(--display);
+    font-weight: 400;
+    color: var(--ink);
+    background: var(--cream);
+    border: 5px solid var(--ink);
+    border-radius: 18px;
+    box-shadow: 5px 5px 0 var(--ink);
+  }
+  #name-shuffle, #name-go, #look-go, #tip-go { font-size: 26px; border-radius: 18px; box-shadow: 5px 5px 0 var(--ink); }
+  #host-menu button { font-size: 24px; border-radius: 18px; }
+
+  /* The host gear: a small cream badge, ink-outlined. */
+  #gear { background: var(--cream); color: var(--ink); border: 4px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); opacity: 1; }
+  #gear.pressed { border-color: var(--ink); background: var(--yellow); box-shadow: 1px 1px 0 var(--ink); transform: translate(2px, 2px); }
+
+  /* Hat, eyes and colour pickers. */
+  #hat-grid button, #eyes-grid button { font-family: "Nunito", system-ui, sans-serif; font-weight: 900; font-size: 14px; border-width: 3px; border-radius: 16px; box-shadow: 3px 3px 0 var(--ink); }
+  #hat-grid button.on, #eyes-grid button.on { background: var(--yellow); border-color: var(--ink); }
+  #hat-grid canvas, #eyes-grid canvas { background: var(--ground); border-radius: 10px; }
+  #color-row button { border-width: 4px; border-radius: 16px; font-family: "Nunito", system-ui, sans-serif; font-weight: 900; }
+  #color-row button.on { border-color: var(--cream); box-shadow: 0 0 0 4px var(--ink), 0 0 0 8px var(--cream); transform: scale(1.05); }
+  #color-row button.taken { background-image: linear-gradient(135deg, transparent 46%, var(--ink) 46%, var(--ink) 54%, transparent 54%) !important; }
+
+  #mouse-sens-row { color: var(--cream); opacity: 1; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -491,7 +625,7 @@
   <div id="lobby-title">Lobby</div>
   <div id="lobby-count"></div>
   <div id="lobby-info"></div>
-  <div id="target-row">First to
+  <div id="target-row"><span id="target-label">First to</span>
     <button id="target-down" type="button">-</button>
     <input id="target-input" type="number" inputmode="numeric" min="1" max="99" value="5">
     <button id="target-up" type="button">+</button>
@@ -526,10 +660,10 @@
 </div>
 <div id="tip">
   <svg id="tip-art" viewBox="0 0 280 200" aria-hidden="true">
-    <rect x="10" y="150" width="260" height="8" rx="4" fill="#3a3f4b"/>
-    <circle cx="140" cy="130" r="16" fill="#ffd933"/>
+    <rect x="10" y="150" width="260" height="8" rx="4" fill="#5A628C"/>
+    <circle cx="140" cy="130" r="16" fill="var(--yellow)"/>
     <g id="tip-pick">
-      <rect x="138" y="30" width="5" height="100" rx="2" fill="#c9a36a"/>
+      <rect x="138" y="30" width="5" height="100" rx="2" fill="#c9a36a" stroke="#14181d" stroke-width="2"/>
       <path d="M118 36 Q140 14 164 36" stroke="#cfd3dc" stroke-width="6" fill="none" stroke-linecap="round"/>
     </g>
     <circle id="tip-finger" cx="140" cy="100" r="22" fill="#ffffff" fill-opacity="0.35" stroke="#ffffff" stroke-width="3"/>
@@ -581,6 +715,9 @@
       "STEAL_LIFE": "Steal a life",
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "First to",
+      "PHONE_TARGET_LIVES": "Lives",
+      "PHONE_TARGET_GOALS": "Goals to win",
+      "PHONE_TARGET_CAPTURES": "Captures to win",
       "PHONE_TEAM": "Team",
       "PHONE_TEAM_RED": "Red",
       "PHONE_TEAM_BLUE": "Blue",
@@ -698,7 +835,7 @@
   var MARKUP_TEXT = {
       "STEAL_LIFE": "#steal",
       "LOBBY_TITLE": "#lobby-title",
-      "PHONE_FIRST_TO": "#target-row",
+      "PHONE_FIRST_TO": "#target-label",
       "PHONE_TEAM": "#team-row",
       "PHONE_TEAM_RED": "#team-red",
       "PHONE_TEAM_BLUE": "#team-blue",
@@ -1252,6 +1389,10 @@
   var lobbyCountEl = document.getElementById("lobby-count");
   var targetRowEl = document.getElementById("target-row");
   var targetInput = document.getElementById("target-input");
+  var targetLabelEl = document.getElementById("target-label");
+  // The host row's label follows the mode (#544, #576), from the lobby state's
+  // `target_kind`; a state without the key (Classic and its kin) is First to.
+  var TARGET_LABELS = { lives: "PHONE_TARGET_LIVES", goals: "PHONE_TARGET_GOALS", captures: "PHONE_TARGET_CAPTURES" };
   var readyBtn = document.getElementById("ready-btn");
   var lobby = null;
   var amReady = false;
@@ -1291,6 +1432,7 @@
     lobbyCountEl.style.display = phase === "countdown" ? "block" : "none";
     lobbyCountEl.textContent = String(msg.count);
     targetRowEl.style.display = phase === "victory" ? "none" : "flex";
+    targetLabelEl.textContent = t(TARGET_LABELS[msg.target_kind] || "PHONE_FIRST_TO");
     targetInput.disabled = !isHost;
     document.getElementById("target-down").style.display = isHost ? "" : "none";
     document.getElementById("target-up").style.display = isHost ? "" : "none";
