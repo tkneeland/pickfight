@@ -153,6 +153,12 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
 
 const PAGE_PATH: String = "res://controller/index.html"
+## The only other files the HTTP server hands out: the controller page's fonts,
+## by exact URL path (an allowlist, so no path can reach anything else).
+const CONTROLLER_FONTS: Dictionary = {
+	"/fonts/LilitaOne-Latin.woff2": "res://controller/fonts/LilitaOne-Latin.woff2",
+	"/fonts/Nunito-Latin.woff2": "res://controller/fonts/Nunito-Latin.woff2",
+}
 const WS_PORT_TOKEN: String = "__WS_PORT__"
 const MAX_HEADER_BYTES: int = 8192
 const PACKET_SIZE: int = 8
@@ -850,6 +856,14 @@ func _answer_http(conn: HttpConn, request_line: String) -> void:
 		_send_http(conn, 200, "OK", "text/html; charset=utf-8", page.to_utf8_buffer())
 		return
 
+	if method == "GET" and CONTROLLER_FONTS.has(path):
+		var font: FileAccess = FileAccess.open(CONTROLLER_FONTS[path], FileAccess.READ)
+		if font != null:
+			var bytes: PackedByteArray = font.get_buffer(font.get_length())
+			font.close()
+			_send_http(conn, 200, "OK", "font/woff2", bytes, "public, max-age=86400")
+			return
+
 	_send_http(conn, 404, "Not Found", "text/plain; charset=utf-8", "404 Not Found".to_utf8_buffer())
 
 ## Read from disk on every request, so the page can be tuned (drag radius, feel)
@@ -863,11 +877,11 @@ func _load_page() -> String:
 	file.close()
 	return html.replace(WS_PORT_TOKEN, str(ws_port))
 
-func _send_http(conn: HttpConn, code: int, reason: String, content_type: String, body: PackedByteArray) -> void:
+func _send_http(conn: HttpConn, code: int, reason: String, content_type: String, body: PackedByteArray, cache_control: String = "no-store") -> void:
 	var header: String = "HTTP/1.1 %d %s\r\n" % [code, reason]
 	header += "Content-Type: %s\r\n" % content_type
 	header += "Content-Length: %d\r\n" % body.size()
-	header += "Cache-Control: no-store\r\n"
+	header += "Cache-Control: %s\r\n" % cache_control
 	header += "Connection: close\r\n\r\n"
 	var out: PackedByteArray = header.to_utf8_buffer()
 	out.append_array(body)
