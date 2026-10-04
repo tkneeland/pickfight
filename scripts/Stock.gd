@@ -180,6 +180,7 @@ func _on_eliminated(slot: int) -> void:
 	lives[slot] = 0 if overtime else maxi(int(lives.get(slot, 0)) - 1, 0)
 	if overtime:
 		_replay_if_double_ko(slot)
+		_clear_shots_if_decided()
 	if int(lives[slot]) > 0:
 		_respawner.queue(slot)
 	if int(lives[slot]) == 1 and not overtime:
@@ -378,6 +379,19 @@ func _end_in_draw() -> void:
 func _forget_survivors() -> void:
 	round_manager.set("_survivor_slot", -1)
 	round_manager.set("_survivor_team", -1)
+
+## Overtime: once at most one player is standing, no bullet still in flight may
+## kill them on a later tick than the shooter's own KO, which the same-tick
+## double-KO rule would miss and leave the round winnerless (#611).
+func _clear_shots_if_decided() -> void:
+	var standing: int = 0
+	for other: int in _watched.keys():
+		if bool(_watched[other].alive):
+			standing += 1
+	if standing > 1:
+		return
+	for shot: Node in get_tree().get_nodes_in_group(&"projectiles"):
+		shot.queue_free()
 
 ## A double KO in overtime (everyone still standing went down on this same
 ## physics tick) replays the overtime: they all come back.

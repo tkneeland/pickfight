@@ -1259,7 +1259,13 @@ func _danger_rects() -> Array[Rect2]:
 		if is_instance_valid(saw) and saw.is_inside_tree():
 			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
 			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
-	for rock: Node2D in _rocks:
+	var all_rocks: Array[Node2D] = _rocks.duplicate()
+	if is_inside_tree():
+		# Rocks spawned mid-round (the overtime rain) are not in the stage read (#611).
+		for node: Node in get_tree().get_nodes_in_group(&"falling_rocks"):
+			if node is Node2D and not all_rocks.has(node):
+				all_rocks.append(node as Node2D)
+	for rock: Node2D in all_rocks:
 		if not is_instance_valid(rock) or not rock.is_inside_tree():
 			continue
 		var state: String = rock.call("state_name")

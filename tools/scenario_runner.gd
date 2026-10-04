@@ -784,6 +784,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
+	"pad_left_stick_in_lobby_keeps_arm_tip_611",
+	"stock_overtime_clears_shots_when_one_stands_611",
+	"bot_sees_rocks_spawned_mid_round_611",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2745,6 +2748,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_first_thinks_are_staggered_607()
 		"bot_keeps_stage_read_across_respawns_607":
 			return await _scenario_bot_keeps_stage_read_across_respawns_607()
+		"pad_left_stick_in_lobby_keeps_arm_tip_611":
+			return await _scenario_pad_left_stick_in_lobby_keeps_arm_tip_611()
+		"stock_overtime_clears_shots_when_one_stands_611":
+			return await _scenario_stock_overtime_clears_shots_when_one_stands_611()
+		"bot_sees_rocks_spawned_mid_round_611":
+			return await _scenario_bot_sees_rocks_spawned_mid_round_611()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -38881,6 +38890,7 @@ func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
 	var players: Array[RigidBody2D] = rig["players"]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # the picker owns the left stick in the lobby (#611)
 	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
 	await _await_ticks(30)
 	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
@@ -38906,6 +38916,7 @@ func _scenario_pause_gates_pad_clicks_and_sticks_599() -> Array[String]:
 	var players: Array[RigidBody2D] = rig["players"]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []}) # the picker owns the left stick in the lobby (#611)
 	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
 	await _await_ticks(30)
 	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
@@ -39283,6 +39294,71 @@ func _scenario_bot_keeps_stage_read_across_respawns_607() -> Array[String]:
 	print("      stage lookups over 3 respawns: %d" % int(bot.lava_lookups))
 	if int(bot.lava_lookups) != 1:
 		failures.append("the bot re-read the stage %d times over 3 respawns, expected once" % int(bot.lava_lookups))
+	holder.queue_free()
+	await _await_ticks(1)
+	_scenario_completed = true
+	return failures
+## Issue #611 (2): the left stick drives the lobby picker, so it must not also
+## count as the arm and retire the "right stick swings" tip.
+func _scenario_pad_left_stick_in_lobby_keeps_arm_tip_611() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(4, "Tip611")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(3, JOY_BUTTON_A)
+	var slot: int = server.pad_slot(3)
+	if slot != 0 or not server.pad_picker_shown(slot):
+		failures.append("the pad seat %d does not show its picker" % slot)
+	else:
+		server._test_pad_left_axes[3] = Vector2(1.0, 0.0)
+		await _await_ticks(6)
+		if not server.pad_tip_pending(slot):
+			failures.append("the left stick driving the picker retired the right-stick tip")
+		server._test_pad_left_axes.clear()
+		server._test_pad_axes[3] = Vector2(1.0, 0.0)
+		await _await_ticks(6)
+		if server.pad_tip_pending(slot):
+			failures.append("the right stick did not retire the tip")
+		server._test_pad_axes.clear()
+	await _teardown(rig["stage"])
+	return failures
+## Issue #611 (3): in overtime, once an elimination leaves one player standing,
+## shots still in flight are cleared so none can kill the survivor later.
+func _scenario_stock_overtime_clears_shots_when_one_stands_611() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _sd556_rig(failures, false)
+	if rig.is_empty():
+		return failures
+	var shot := Node2D.new()
+	shot.add_to_group(&"projectiles")
+	rig["rm"].add_child(shot)
+	var players: Array[RigidBody2D] = rig["players"]
+	players[0].eliminate()
+	await _await_ticks(3)
+	if is_instance_valid(shot) and not shot.is_queued_for_deletion():
+		failures.append("a bullet outlived the elimination that left one player standing")
+	await _stock_finish(rig)
+	return failures
+## Issue #611 (4): a rock spawned mid-round (the overtime rain) outside the
+## stage is still in the bot's danger list.
+func _scenario_bot_sees_rocks_spawned_mid_round_611() -> Array[String]:
+	var failures: Array[String] = []
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	holder.add_child(player)
+	var bot: Node = BotScript.new()
+	bot.player = player
+	holder.add_child(bot)
+	await _await_ticks(2)
+	var rock: Node2D = FallingRockScene.instantiate()
+	rock.set("auto_drop", false)
+	rock.set("one_shot", true)
+	holder.add_child(rock)
+	if not rock.drop_now():
+		failures.append("the test rock would not drop")
+	if bot._danger_rects().is_empty():
+		failures.append("a rock spawned after the bot's stage read is not in its danger list")
 	holder.queue_free()
 	await _await_ticks(1)
 	_scenario_completed = true

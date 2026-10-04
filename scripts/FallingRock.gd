@@ -65,6 +65,9 @@ extends Node2D
 ## Exports, and only these: a stage author sets numbers and never edits the
 ## sub-resources `_ready()` builds from them.
 
+## Every rock, wherever it was parented (Stock's overtime rain is not under the stage), for bots (#611).
+const GROUP: StringName = &"falling_rocks"
+
 ## Seconds between drops: from the part entering the round to the first
 ## warning, and from each rock's landing to the next warning.
 @export var interval_sec: float = 6.0
@@ -139,6 +142,7 @@ var _marker: Node2D
 var _query: PhysicsShapeQueryParameters2D
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	_rock = Node2D.new()
 	_rock.name = "Rock"
 	_rock_visual = Polygon2D.new()
