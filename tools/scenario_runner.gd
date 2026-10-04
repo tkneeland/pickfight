@@ -38857,7 +38857,6 @@ func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
 	var players: Array[RigidBody2D] = rig["players"]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
-<<<<<<< HEAD
 	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
 	await _await_ticks(30)
 	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
