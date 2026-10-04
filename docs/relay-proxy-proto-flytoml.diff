@@ -1,0 +1,45 @@
+diff --git a/relay/fly.toml b/relay/fly.toml
+index d13c574..e945153 100644
+--- a/relay/fly.toml
++++ b/relay/fly.toml
+@@ -7,14 +7,30 @@ primary_region = "iad"
+   # Deploy from the repository root: the Dockerfile copies the whole repo (docs/deploy.md).
+   dockerfile = "Dockerfile"
+ 
+-[http_service]
++# The relay needs the caller's real IP for its rate limits and per-IP seat cap
++# (#580), and Godot cannot read the WebSocket handshake headers, so the TLS port
++# also turns on Fly's PROXY protocol: every connection starts with one
++# "PROXY TCP4 <client ip> ..." line, which Relay.gd reads when
++# PICKFIGHT_PROXY_PROTO=1 (see [env]). Keep the two settings together: with the
++# handler on and the variable off, every connection fails; with the variable on
++# and the handler off, the same. Port 80 only redirects to https.
++[[services]]
++  protocol = "tcp"
+   internal_port = 9080
+-  force_https = true
+   # The relay holds WebSocket rooms in memory; never stop or scale to zero.
+   auto_stop_machines = "off"
+   auto_start_machines = true
+   min_machines_running = 1
+ 
++  [[services.ports]]
++    port = 443
++    handlers = ["tls", "proxy_proto"]
++
++  [[services.ports]]
++    port = 80
++    handlers = ["http"]
++    force_https = true
++
+ # Match telemetry (#372) appends one JSON line per match to PICKFIGHT_STATS_PATH
+ # (default user://match_stats.jsonl inside the container, which a deploy wipes).
+ # The volume persists the file across deploys (created 2026-10-02).
+@@ -26,6 +42,7 @@ primary_region = "iad"
+ 
+ [env]
+   PICKFIGHT_STATS_PATH = "/data/match_stats.jsonl"
++  PICKFIGHT_PROXY_PROTO = "1"
+ 
+ [[vm]]
+   size = "shared-cpu-1x"

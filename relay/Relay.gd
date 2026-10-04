@@ -30,6 +30,20 @@ extends Node
 ##              "peers":[ids] and is followed by a "joined" per current peer), {"t":"joined","peer":N}, {"t":"left","peer":N}
 ##   to client: {"t":"welcome","peer":N}, {"t":"error","reason":"bad_room"|"room_full"|"host_left"|"idle_timeout"}
 ##              (an error is followed by a close)
+##   from host: {"t":"drop","peer":N} (issue #580) closes client N's relay socket
+##              after anything the host already sent it is flushed, frees its
+##              slot and answers {"t":"left","peer":N}. An old relay ignores host
+##              text frames (it only counts them as traffic), so a new host on an
+##              old relay just keeps today's behaviour; an old host never sends it.
+##
+## Hardening (issue #580): a client frame over CLIENT_FRAME_MAX_BYTES is dropped
+## (the host's inbound buffer is the same size as the relay's); a valid reclaim
+## token wins even while the old host socket still looks open (the old socket is
+## closed); one IP may hold at most `join_cap_per_ip` client seats when the real
+## IP is known; and the feedback/stats rate limits key on the real client IP.
+## Godot cannot read the WebSocket handshake headers server-side, so the real IP
+## comes from the PROXY protocol (v1) header Fly prepends when fly.toml enables
+## the `proxy_proto` handler and PICKFIGHT_PROXY_PROTO=1 is set (`proxy_protocol`).
 ##
 ## Payloads (binary frames):
 ##   client -> host: relay prepends the 1-byte peer id.
@@ -50,6 +64,21 @@ const HANDSHAKE_TIMEOUT_SEC: float = 10.0
 const CLOSE_GRACE_MSEC: int = 150
 ## Inbound buffer per peer, bytes.
 const INBOUND_BUFFER_BYTES: int = 1 << 18
+## Largest client frame the relay forwards to the host, bytes (issue #580). Real
+## frames are an 8-byte input or a short JSON text envelope.
+const CLIENT_FRAME_MAX_BYTES: int = 4096
+## Longest PROXY protocol v1 line, bytes (the spec's own limit).
+const PROXY_LINE_MAX_BYTES: int = 108
+
+## Whether each connection starts with a PROXY protocol v1 line from the front
+## proxy (Fly's `proxy_proto` handler), which carries the real client IP. Off by
+## default so a relay behind no proxy, and the local dev relay, work unchanged.
+@export var proxy_protocol: bool = OS.get_environment("PICKFIGHT_PROXY_PROTO") == "1"
+## Most client seats one IP may hold across all rooms. Only enforced when the IP
+## is the real one (`ip_cap_enabled`): behind a proxy without PROXY protocol every
+## caller shares one address and a cap would throttle everybody together.
+@export var join_cap_per_ip: int = 12
+var ip_cap_enabled: bool = proxy_protocol
 
 ## How long a room waits for its host to reclaim it after the host's socket
 ## drops abnormally (no close frame, or any code but 1000), seconds. A host
@@ -104,6 +133,8 @@ static func _default_stats_path() -> String:
 class Pending:
 	var peer: WebSocketPeer
 	var deadline_msec: int
+	## The caller's IP (the real one behind PROXY protocol), for rate limits.
+	var ip: String = ""
 	func _init(p_peer: WebSocketPeer, p_deadline_msec: int) -> void:
 		peer = p_peer
 		deadline_msec = p_deadline_msec
@@ -113,6 +144,7 @@ class Room:
 	var code: String = ""
 	var host: WebSocketPeer
 	var clients: Dictionary = {} # peer id (int) -> WebSocketPeer
+	var client_ips: Dictionary = {} # peer id (int) -> IP String
 	var last_traffic_msec: int = 0
 	var token: String = ""
 	## When the host socket was lost, msec; 0 while the host is present.
@@ -122,6 +154,7 @@ var _server: TCPServer = null
 var _pending: Array[Pending] = []
 var _rooms: Dictionary = {} # code -> Room
 var _closing: Array[Pending] = [] # refused peers, flushed then closed
+var _proxy_pending: Array = [] # [StreamPeerTCP, PackedByteArray line, deadline msec]
 
 ## Listens on `port`; returns an Error code (OK on success).
 func start(port: int) -> int:
@@ -141,6 +174,9 @@ func stop() -> void:
 	for p: Pending in _pending:
 		all.append(p.peer)
 	_pending.clear()
+	for entry: Array in _proxy_pending:
+		(entry[0] as StreamPeerTCP).disconnect_from_host()
+	_proxy_pending.clear()
 	for room: Room in _rooms.values():
 		_close_room(room, "host_left", false)
 		all.append(room.host)
@@ -178,11 +214,12 @@ func _process(_delta: float) -> void:
 		if tcp == null:
 			continue
 		tcp.set_no_delay(true)
-		var peer := WebSocketPeer.new()
-		peer.heartbeat_interval = HEARTBEAT_SEC
-		peer.inbound_buffer_size = INBOUND_BUFFER_BYTES
-		if peer.accept_stream(tcp) == OK:
-			_pending.append(Pending.new(peer, now + int(HANDSHAKE_TIMEOUT_SEC * 1000.0)))
+		if proxy_protocol:
+			_proxy_pending.append([tcp, PackedByteArray(), now + int(HANDSHAKE_TIMEOUT_SEC * 1000.0)])
+		else:
+			_accept(tcp, tcp.get_connected_host(), now)
+	for entry: Array in _proxy_pending.duplicate():
+		_read_proxy_line(entry, now)
 
 	for p: Pending in _pending.duplicate():
 		p.peer.poll()
@@ -215,6 +252,61 @@ func _process(_delta: float) -> void:
 		elif now - room.last_traffic_msec > int(idle_timeout_sec * 1000.0):
 			_close_room(room, "idle_timeout", true)
 
+func _accept(tcp: StreamPeerTCP, ip: String, now: int) -> void:
+	var peer := WebSocketPeer.new()
+	peer.heartbeat_interval = HEARTBEAT_SEC
+	peer.inbound_buffer_size = INBOUND_BUFFER_BYTES
+	if peer.accept_stream(tcp) == OK:
+		var pending := Pending.new(peer, now + int(HANDSHAKE_TIMEOUT_SEC * 1000.0))
+		pending.ip = ip
+		_pending.append(pending)
+
+## Reads a connection's PROXY protocol line one byte at a time, so the bytes
+## after it (the WebSocket upgrade) stay in the stream for `accept_stream`. A
+## connection that sends something else, too long a line, or nothing in time is
+## closed: with the proxy enabled every real connection starts with the line.
+func _read_proxy_line(entry: Array, now: int) -> void:
+	var tcp: StreamPeerTCP = entry[0]
+	var line: PackedByteArray = entry[1]
+	tcp.poll()
+	var status: int = tcp.get_status()
+	if status == StreamPeerTCP.STATUS_ERROR or status == StreamPeerTCP.STATUS_NONE \
+			or now > int(entry[2]):
+		_proxy_pending.erase(entry)
+		tcp.disconnect_from_host()
+		return
+	while tcp.get_available_bytes() > 0:
+		var got: Array = tcp.get_partial_data(1)
+		if int(got[0]) != OK or (got[1] as PackedByteArray).is_empty():
+			break
+		line.append((got[1] as PackedByteArray)[0])
+		if line[line.size() - 1] == 10:
+			_proxy_pending.erase(entry)
+			var ip: String = parse_proxy_line(line.get_string_from_ascii())
+			if ip.is_empty():
+				tcp.disconnect_from_host()
+			else:
+				_accept(tcp, tcp.get_connected_host() if ip == "unknown" else ip, now)
+			return
+		if line.size() > PROXY_LINE_MAX_BYTES:
+			_proxy_pending.erase(entry)
+			tcp.disconnect_from_host()
+			return
+	entry[1] = line
+
+## The source address of a PROXY protocol v1 line ("PROXY TCP4 src dst sport
+## dport\r\n"), "unknown" for "PROXY UNKNOWN" (the proxy had no address), or ""
+## when the line is not a PROXY line at all.
+static func parse_proxy_line(line: String) -> String:
+	var parts: PackedStringArray = line.strip_edges().split(" ", false)
+	if parts.size() < 2 or parts[0] != "PROXY":
+		return ""
+	if parts[1] == "UNKNOWN":
+		return "unknown"
+	if (parts[1] == "TCP4" or parts[1] == "TCP6") and parts.size() == 6 and parts[2].length() <= 45:
+		return parts[2]
+	return ""
+
 ## True once the pending peer has said who it is (and has been placed or refused).
 func _read_hello(p: Pending, now: int) -> bool:
 	while p.peer.get_available_packet_count() > 0:
@@ -233,12 +325,12 @@ func _read_hello(p: Pending, now: int) -> bool:
 				_start_feedback(p, msg, now)
 				return true
 			"stats":
-				var status: int = int(handle_stats(p.peer.get_connected_host(), msg)["status"])
+				var status: int = int(handle_stats(p.ip, msg)["status"])
 				_send_json(p.peer, {"t": "stats_result", "status": status})
 				_closing.append(Pending.new(p.peer, now + CLOSE_GRACE_MSEC))
 				return true
 			"join":
-				_join_room(p.peer, str(msg.get("room", "")).to_upper(), now)
+				_join_room(p.peer, str(msg.get("room", "")).to_upper(), now, p.ip)
 				return true
 	return false
 
@@ -323,7 +415,7 @@ static func _append_line(path: String, line: String) -> bool:
 func _start_feedback(p: Pending, msg: Dictionary, now: int) -> void:
 	var closing := Pending.new(p.peer, now + FEEDBACK_REPLY_MSEC)
 	_closing.append(closing)
-	var ip: String = p.peer.get_connected_host()
+	var ip: String = p.ip
 	var result: Dictionary = await handle_feedback(ip, msg)
 	_send_json(p.peer, {"t": "feedback_result", "status": int(result["status"])})
 	closing.deadline_msec = Time.get_ticks_msec() + CLOSE_GRACE_MSEC
@@ -407,9 +499,13 @@ func _open_room(peer: WebSocketPeer, now: int) -> void:
 ## when there is nothing to reclaim (wrong token, unknown room, host present).
 func _reclaim_room(peer: WebSocketPeer, msg: Dictionary, now: int) -> bool:
 	var room: Room = _rooms.get(str(msg.get("room", "")).to_upper())
-	if room == null or room.host_gone_msec == 0 or room.token == "" \
-			or str(msg.get("token", "")) != room.token:
+	if room == null or room.token == "" or str(msg.get("token", "")) != room.token:
 		return false
+	# A valid token wins even while the old socket still looks open (a half-dead
+	# link after a network change, #580): the old socket is closed, not kept.
+	if room.host != peer:
+		room.host.close(4002, "replaced")
+		_closing.append(Pending.new(room.host, now + CLOSE_GRACE_MSEC))
 	room.host = peer
 	room.host_gone_msec = 0
 	room.last_traffic_msec = now
@@ -419,7 +515,7 @@ func _reclaim_room(peer: WebSocketPeer, msg: Dictionary, now: int) -> bool:
 		_send_json(peer, {"t": "joined", "peer": id})
 	return true
 
-func _join_room(peer: WebSocketPeer, code: String, now: int) -> void:
+func _join_room(peer: WebSocketPeer, code: String, now: int, ip: String = "") -> void:
 	var room: Room = _rooms.get(code)
 	if room == null:
 		_refuse(peer, "bad_room")
@@ -427,13 +523,27 @@ func _join_room(peer: WebSocketPeer, code: String, now: int) -> void:
 	if room.clients.size() >= MAX_CLIENTS:
 		_refuse(peer, "room_full")
 		return
+	# Reuses "room_full" so an older client shows a known reason (#580).
+	if ip_cap_enabled and not ip.is_empty() and _seats_held_by(ip) >= join_cap_per_ip:
+		_refuse(peer, "room_full")
+		return
 	var id: int = 1
 	while room.clients.has(id):
 		id += 1
 	room.clients[id] = peer
+	room.client_ips[id] = ip
 	room.last_traffic_msec = now
 	_send_json(peer, {"t": "welcome", "peer": id})
 	_send_json(room.host, {"t": "joined", "peer": id})
+
+## Client seats the IP holds across every room.
+func _seats_held_by(ip: String) -> int:
+	var held: int = 0
+	for room: Room in _rooms.values():
+		for id: int in room.clients.keys():
+			if room.client_ips.get(id, "") == ip:
+				held += 1
+	return held
 
 func _refuse(peer: WebSocketPeer, reason: String) -> void:
 	# close() straight after send_text() can drop the text; keep polling the
@@ -449,6 +559,7 @@ func _pump_room(room: Room, now: int) -> void:
 			if room.host.was_string_packet():
 				# Text/control frames count as traffic too (#519).
 				room.last_traffic_msec = now
+				_host_control(room, pkt.get_string_from_utf8(), now)
 				continue
 			if pkt.size() < 1:
 				continue
@@ -470,12 +581,31 @@ func _pump_room(room: Room, now: int) -> void:
 				room.last_traffic_msec = now
 				if client.was_string_packet():
 					continue
+				if pkt.size() > CLIENT_FRAME_MAX_BYTES:
+					continue # #580: never forward what could overflow the host's buffer
 				var framed := PackedByteArray([id])
 				framed.append_array(pkt)
 				_send_binary(room.host, framed)
 		elif state == WebSocketPeer.STATE_CLOSED:
 			room.clients.erase(id)
+			room.client_ips.erase(id)
 			_send_json(room.host, {"t": "left", "peer": id})
+
+## A host control message (issue #580). Only {"t":"drop","peer":N} exists.
+func _host_control(room: Room, text: String, now: int) -> void:
+	var msg: Variant = _parse_json(text)
+	if not (msg is Dictionary) or str(msg.get("t", "")) != "drop":
+		return
+	var id: int = int(msg.get("peer", 0))
+	if not room.clients.has(id):
+		return
+	var client: WebSocketPeer = room.clients[id]
+	room.clients.erase(id)
+	room.client_ips.erase(id)
+	# Closed through _closing so what the host sent it first (the "closed" notice)
+	# is flushed before the socket goes.
+	_closing.append(Pending.new(client, now + CLOSE_GRACE_MSEC))
+	_send_json(room.host, {"t": "left", "peer": id})
 
 func _close_room(room: Room, reason: String, erase: bool) -> void:
 	for client: WebSocketPeer in room.clients.values():
