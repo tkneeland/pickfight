@@ -147,6 +147,34 @@ static func rule_line(id: String) -> String:
 		return ""
 	return TranslationServer.translate("MODE_%s_RULE" % (id if id != CLASSIC else "classic").to_upper())
 
+## The lobby mode card's short line for `id` (#547): no numbers, short enough to
+## wrap to two lines under the mode's name.
+static func blurb(id: String) -> String:
+	return TranslationServer.translate("MODE_%s_BLURB" % (id if id != CLASSIC else "classic").to_upper())
+
+## The translation key of the lobby status line's target phrase for a `target_kind`
+## ("first to 5", "3 lives", "3 goals", "2 captures").
+static func target_status_key(kind: String) -> String:
+	match kind:
+		"lives":
+			return "LOBBY_STATUS_LIVES"
+		"goals":
+			return "LOBBY_STATUS_GOALS"
+		"captures":
+			return "LOBBY_STATUS_CAPTURES"
+	return "LOBBY_STATUS_FIRST_TO"
+
+## The translation key of the Host panel's target row label for a `target_kind`.
+static func target_row_key(kind: String) -> String:
+	match kind:
+		"lives":
+			return "LOBBY_ROW_LIVES"
+		"goals":
+			return "LOBBY_ROW_GOALS"
+		"captures":
+			return "LOBBY_ROW_CAPTURES"
+	return "LOBBY_ROW_FIRST_TO"
+
 ## Whether the rising lava runs in `id`.
 static func has_rise(id: String) -> bool:
 	return bool(entry(id).get("rise", true))

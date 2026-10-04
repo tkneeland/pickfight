@@ -729,8 +729,9 @@ func _apply_smoothed_input(delta: float) -> void:
 ## A slot is reported while a controller is bound, and afterwards until its weapon
 ## has settled back to rest -- otherwise the easing that follows a disconnect
 ## would happen entirely off the record.
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_push_pad_sticks()
+	_step_pad_pickers(delta)
 	for slot in _slot_peers.size():
 		if _slot_peers[slot] == null and not _weapon_away_from_rest(slot):
 			continue
@@ -2355,6 +2356,25 @@ func pad_slot(device: int) -> int:
 		_pad_seats.erase(device)
 	return slot
 
+## Test seam: a pad's left stick, by device, in place of the real one.
+var _test_pad_left_axes: Dictionary = {}
+
+## #547: the left stick drives a pad's lobby picker like the D-pad (up and down
+## pick the row, left and right change the value, with a repeat delay), for a
+## single Joy-Con held sideways, which has no D-pad. The stick is read only while
+## the picker shows and no host menu is open; otherwise its state is let go.
+func _step_pad_pickers(delta: float) -> void:
+	for device: int in _pad_seats.keys():
+		var slot: int = pad_slot(device)
+		if slot == -1:
+			continue
+		var axis := Vector2.ZERO
+		if pad_picker_shown(slot) and not PadMenuScript.is_open():
+			axis = Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y))
+			if _test_pad_left_axes.has(device):
+				axis = _test_pad_left_axes[device]
+		cosmetics_picker.stick(self, slot, axis, delta)
+
 func _push_pad_sticks() -> void:
 	for device: int in _pad_seats.keys():
 		var slot: int = pad_slot(device)
@@ -2379,8 +2399,9 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 	if button == JOY_BUTTON_LEFT_SHOULDER or button == JOY_BUTTON_RIGHT_SHOULDER:
 		# Released while held; a tap (up within TAP_MAX_SEC) throws the boomerang.
 		if pressed:
-			# Issue #511: the picker or the host menu owns the bumper right now.
-			if pad_picker_shown(slot) or PadMenuScript.is_open():
+			# Issue #511: the host menu owns the bumper right now. (The lobby picker
+			# no longer does: it uses the D-pad and the left stick, #547.)
+			if PadMenuScript.is_open():
 				return
 			_slot_release_held[slot] = 1
 			_slot_bumper_down[slot] = GameClockScript459.now_msec()
@@ -2408,7 +2429,7 @@ func _pad_button_pressed(device: int, button: int) -> void:
 		if device == HOST_PAD_DEVICE:
 			host_command.emit("resume" if paused else "pause", -1)
 		return
-	# Issue #441: in the lobby the D-pad and bumpers drive the seat's cosmetics picker.
+	# Issue #441: in the lobby the D-pad drives the seat's cosmetics picker (#547: not the bumpers).
 	if slot != -1 and pad_picker_shown(slot) and cosmetics_picker.pad_button(self, slot, button):
 		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:

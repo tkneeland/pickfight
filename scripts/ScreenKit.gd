@@ -60,7 +60,79 @@ static func big_label(text: String, font_size: int, color: Color) -> Label:
 	label.add_theme_constant_override("outline_size", maxi(4, font_size / 10))
 	return label
 
+# --- Lobby look (#547): themed labels, the striped ground, light motion ----------
+
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const UiGroundScript := preload("res://scripts/UiGround.gd")
+
+## A label in a `UiTheme` variation (the theme gives font and colour), `font_size` px.
+static func themed_label(text: String, font_size: int, variation: StringName = &"", align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = align
+	if variation != &"":
+		label.theme_type_variation = variation
+	label.add_theme_font_size_override("font_size", font_size)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+## A button in a `UiTheme` variation. No focus until a gamepad menu asks for it.
+static func themed_button(text: String, variation: StringName, node_name: String = "") -> Button:
+	var button := Button.new()
+	button.text = text
+	button.theme_type_variation = variation
+	button.focus_mode = Control.FOCUS_NONE
+	button.pivot_offset_ratio = Vector2(0.5, 0.5)
+	if not node_name.is_empty():
+		button.name = node_name
+	hover_pop(button)
+	return button
+
+## An opaque full-screen panel on the striped indigo ground, hidden. The lobby's.
+static func striped_panel(parent: Node, node_name: String) -> Control:
+	var panel := Control.new()
+	panel.name = node_name
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.visible = false
+	parent.add_child(panel)
+	panel.add_child(UiGroundScript.new())
+	return panel
+
+## Light hover / focus motion: the control grows a little while the mouse or the
+## gamepad focus is on it. Never delays input (it is only a scale).
+static func hover_pop(control: Control, grow: float = 1.04) -> void:
+	control.pivot_offset_ratio = Vector2(0.5, 0.5)
+	var on: Callable = func() -> void: _scale_to(control, Vector2(grow, grow), 0.09)
+	var off: Callable = func() -> void: _scale_to(control, Vector2.ONE, 0.09)
+	control.mouse_entered.connect(on)
+	control.mouse_exited.connect(off)
+	control.focus_entered.connect(on)
+	control.focus_exited.connect(off)
+
+static func _scale_to(control: Control, target: Vector2, seconds: float) -> void:
+	if not control.is_inside_tree():
+		control.scale = target
+		return
+	if control.has_meta("pop_tween"):
+		var old: Variant = control.get_meta("pop_tween")
+		if old is Tween and (old as Tween).is_valid():
+			(old as Tween).kill()
+	var tween: Tween = control.create_tween()
+	control.set_meta("pop_tween", tween)
+	tween.tween_property(control, "scale", target, seconds).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+## A card or popup popping in: from 0.85 up past 1 and back (220 ms).
+static func pop_in(control: Control) -> void:
+	control.pivot_offset_ratio = Vector2(0.5, 0.5)
+	control.scale = Vector2(0.85, 0.85)
+	if not control.is_inside_tree():
+		control.scale = Vector2.ONE
+		return
+	var tween: Tween = control.create_tween()
+	control.set_meta("pop_tween", tween)
+	tween.tween_property(control, "scale", Vector2(1.05, 1.05), 0.154).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(control, "scale", Vector2.ONE, 0.066).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 
 ## A Lilita One label with the thick ink outline the in-match screens use
 ## (#548), for text drawn over the stage or the dark ground.
