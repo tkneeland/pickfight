@@ -739,6 +739,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_sudden_death_leaves_no_rocks_behind_556",
 	"remote_shoulder_throw_clears_retract_toggle_551",
 	"online_to_solo_drops_connected_and_held_remote_seats_552",
+	"hud_uses_theme_look_548",
 	"title_screen_restyle_fits_every_resolution_546",
 	"umbrella_canopy_reduces_a_falling_rock_569",
 	"umbrella_canopy_reduces_a_meteor_569",
@@ -2613,6 +2614,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_shoulder_throw_clears_retract_toggle_551()
 		"online_to_solo_drops_connected_and_held_remote_seats_552":
 			return await _scenario_online_to_solo_drops_connected_and_held_remote_seats_552()
+		"hud_uses_theme_look_548":
+			return await _scenario_hud_uses_theme_look_548()
 		"title_screen_restyle_fits_every_resolution_546":
 			return await _scenario_title_screen_restyle_fits_every_resolution_546()
 		"umbrella_canopy_reduces_a_falling_rock_569":
@@ -37486,6 +37489,49 @@ func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Arr
 		failures.append("Solo seated %d bots, wanted 3" % server.bot_director.bot_count())
 	await _online_close_239(rig)
 	return failures
+
+## Issue #548: the in-match HUD and the victory screen wear the shared theme
+## (#507): ticker entries are plates with an ink outline and a hard shadow, the
+## heading text is Lilita One, the victory ground is the indigo, and the text
+## stays at or above the 16 px floor.
+func _scenario_hud_uses_theme_look_548() -> Array[String]:
+	var failures: Array[String] = []
+	var UiTheme548 := preload("res://scripts/UiTheme.gd")
+	var feed: Control = KillFeedScript.new()
+	get_root().add_child(feed)
+	feed.push_ko("Alice", Color.ORANGE, "Bob", Color.SKY_BLUE)
+	feed.show_banner("FIRST BLOOD", "Alice", Color.ORANGE)
+	await _await_ticks(2)
+	var entry: PanelContainer = feed.feed().get_child(0) as PanelContainer
+	var box: StyleBoxFlat = entry.get_theme_stylebox("panel") as StyleBoxFlat
+	if box == null or box.border_color != UiTheme548.INK or box.shadow_offset == Vector2.ZERO or box.shadow_size != 0:
+		failures.append("the ticker entry is not an ink-outlined plate with a hard shadow")
+	var heading: Font = load(UiTheme548.HEADING_FONT_PATH) as Font
+	var headline: Label = feed.banner().get_child(0) as Label
+	if headline.get_theme_font("font") != heading:
+		failures.append("the banner headline is not set in Lilita One")
+	for label: Node in entry.get_child(0).get_children():
+		if (label as Label).get_theme_font_size("font_size") < UiTheme548.MIN_FONT_SIZE:
+			failures.append("a ticker label is under the %d px floor" % UiTheme548.MIN_FONT_SIZE)
+	var table: Control = KillFeedScript.stat_table([{"slot": 0, "kos": 1, "damage_dealt": 2, "damage_taken": 3, "self_kos": 0, "pickups": 0, "weapon": ""}], func(_s: int) -> String: return "A", func(_s: int) -> Color: return Color.WHITE)
+	for column: Node in table.get_children():
+		for line: Node in column.get_children():
+			if (line as Label).get_theme_font_size("font_size") < UiTheme548.MIN_FONT_SIZE:
+				failures.append("a stats line is under the %d px floor" % UiTheme548.MIN_FONT_SIZE)
+	table.free()
+	var screen := CanvasLayer.new()
+	get_root().add_child(screen)
+	var victory: RefCounted = preload("res://scripts/VictoryScreen.gd").new(screen, func(slot: int) -> String: return "P%d" % slot, func(_s: int) -> Color: return Color.WHITE)
+	victory.build()
+	if (victory.victory_panel() as ColorRect).color != UiTheme548.INDIGO:
+		failures.append("the victory ground is not the theme indigo")
+	if victory.victory_title().get_theme_font("font") != heading:
+		failures.append("the victory title is not set in Lilita One")
+	feed.queue_free()
+	screen.queue_free()
+	_scenario_completed = true
+	return failures
+
 ## Issue #546: the restyled title screen (cards, key badges, logo, footer)
 ## keeps every visible control inside the window at 1600x900, 1920x1080 and
 ## 1280x800, the three cards sit side by side without overlapping, each card
