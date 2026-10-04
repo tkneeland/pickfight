@@ -216,23 +216,35 @@ func set_cosmetic_pick(pick: Dictionary) -> void:
 	cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).clean_pick(pick)
 	save_settings()
 
+## A stored string list, or empty when it is any other type (#609).
+static func _strings(v: Variant) -> PackedStringArray:
+	var out := PackedStringArray()
+	if v is PackedStringArray:
+		return v
+	if v is Array:
+		for item: Variant in v:
+			if item is String:
+				out.append(item)
+	return out
+
 func load_settings() -> void:
 	var config := ConfigFile.new()
 	var err: Error = config.load(path)
 	if err == OK:
 		var size: Variant = config.get_value(SECTION, "resolution", Vector2i.ZERO)
-		resolution = size if size is Vector2i else Vector2i.ZERO
-		disabled_stages = PackedStringArray(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
-		disabled_weapons = PackedStringArray(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
+		resolution = size if size is Vector2i and size.x > 0 and size.y > 0 else Vector2i.ZERO
+		disabled_stages = _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
+		disabled_weapons = _strings(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
 		disabled_modifiers = {}
 		var stored: Variant = config.get_value(SECTION, "disabled_modifiers", {})
 		if stored is Dictionary:
 			for mode_id: Variant in stored:
-				var ids := PackedStringArray(stored[mode_id])
+				var ids := _strings(stored[mode_id])
 				if not ids.is_empty():
 					disabled_modifiers[str(mode_id)] = ids
-		share_stats = bool(config.get_value(SECTION, "share_stats", true))
+		var share: Variant = config.get_value(SECTION, "share_stats", true)
+		share_stats = share if share is bool else true
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3

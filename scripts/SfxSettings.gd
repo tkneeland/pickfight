@@ -543,7 +543,13 @@ func apply_resolution() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	DisplayServer.window_set_size(host.resolution)
+	DisplayServer.window_set_size(fit_resolution(host.resolution, DisplayServer.screen_get_size()))
+
+## A saved window size kept inside `screen` (#609); a degenerate one is ZERO.
+static func fit_resolution(size: Vector2i, screen: Vector2i) -> Vector2i:
+	if size.x < 1 or size.y < 1:
+		return Vector2i.ZERO
+	return Vector2i(mini(size.x, maxi(screen.x, 1)), mini(size.y, maxi(screen.y, 1)))
 
 ## The Rules section (#378): a mode selector and one box per round modifier.
 func _build_rules(content: VBoxContainer) -> void:
