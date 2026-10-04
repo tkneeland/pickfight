@@ -743,6 +743,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"umbrella_canopy_reduces_a_falling_rock_569",
 	"umbrella_canopy_reduces_a_meteor_569",
 	"sudden_death_block_does_not_eliminate_569",
+	"bullet_outlives_eliminated_shooter_570",
+	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
+	"round_end_clears_dead_shooters_bullet_570",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2618,6 +2621,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_canopy_reduces_a_meteor_569()
 		"sudden_death_block_does_not_eliminate_569":
 			return await _scenario_sudden_death_block_does_not_eliminate_569()
+		"bullet_outlives_eliminated_shooter_570":
+			return await _scenario_bullet_outlives_eliminated_shooter_570()
+		"shots_cleared_on_leave_round_and_dead_shooter_clear_570":
+			return await _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570()
+		"round_end_clears_dead_shooters_bullet_570":
+			return await _scenario_round_end_clears_dead_shooters_bullet_570()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -8604,8 +8613,10 @@ func _scenario_boomstick_stops_when_shooter_leaves_play() -> Array[String]:
 		var after: Dictionary = await _await_boomstick_shot(shooter, quick_ticks * 3)
 		print("      after %s: %d bullet(s) still in flight, %s over three intervals" % [
 			way, in_flight, "a shot" if after["bullet"] != null else "no shot"])
-		if in_flight != 0:
-			failures.append("%s: %d bullet(s) still in flight after the shooter left play" % [way, in_flight])
+		# Issue #570: a bullet already fired outlives an elimination; leaving the round clears it.
+		var expected_in_flight: int = 1 if way == "eliminate" else 0
+		if in_flight != expected_in_flight:
+			failures.append("%s: %d bullet(s) in flight after the shooter left play, expected %d" % [way, in_flight, expected_in_flight])
 		if after["bullet"] != null:
 			failures.append("%s: the boomstick fired while its holder was out of play" % way)
 		# Back for the next round with the weapon kept, as a winner is.
@@ -37623,4 +37634,124 @@ func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
 		failures.append("an unblocked hit was not reported lethal")
 	players[0].strike_landed.disconnect(on_report)
 	await _teardown(rig["stage"])
+	return failures
+
+## Issue #570: a bullet already fired keeps flying when its shooter is rung out
+## and still hits, credited to the shooter and to the weapon that fired it.
+func _scenario_bullet_outlives_eliminated_shooter_570() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	var credited: Array = []
+	shooter.strike_landed.connect(func(v: Node, _a: float, _p: Vector2, _l: bool) -> void:
+		credited.append([v, shooter.hit_weapon_id]))
+	var hold := func() -> void:
+		victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	shooter.eliminate()
+	await physics_frame
+	if _projectiles_of(shooter).is_empty() and victim.damage <= 0.0:
+		failures.append("the bullet vanished the tick its shooter was eliminated")
+	for i in BOOMSTICK_SHOVE_TICKS:
+		if victim.damage > 0.0:
+			break
+		victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		await physics_frame
+	if absf(victim.damage - BOOMSTICK_BULLET_DAMAGE) > BOOMSTICK_DAMAGE_TOLERANCE:
+		failures.append("the eliminated shooter's bullet dealt %.2f, not %.0f" % [victim.damage, BOOMSTICK_BULLET_DAMAGE])
+	if credited.size() != 1 or credited[0][0] != victim or credited[0][1] != "boomstick":
+		failures.append("the hit was credited as %s, expected one strike_landed on the victim with weapon boomstick" % [credited])
+	await _teardown(stage)
+	return failures
+
+## Issue #570: a shooter leaving the round (kick, quit, round end) takes its
+## bullets with it, and `clear_shots()` reaches a shooter who is already dead.
+func _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var centre: Vector2 = DEEP_PARK_POSITION
+	var shooter: RigidBody2D = _spawn_player(stage, centre)
+	shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	shooter.leave_round()
+	await _await_ticks(2)
+	if not _projectiles_of(shooter).is_empty():
+		failures.append("a bullet survived its shooter leaving the round")
+	shooter.start_round(centre, false)
+	shooter.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	_aim(shooter, 0.0)
+	shot = await _await_boomstick_shot(shooter, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired a second time")
+		await _teardown(stage)
+		return failures
+	shooter.eliminate()
+	await physics_frame
+	if _projectiles_of(shooter).is_empty():
+		failures.append("the bullet was gone before the dead shooter's shots were cleared")
+	shooter.clear_shots()
+	await _await_ticks(2)
+	if not _projectiles_of(shooter).is_empty():
+		failures.append("clear_shots() left a dead shooter's bullet flying")
+	await _teardown(stage)
+	return failures
+
+## Issue #570: when the shooter's ringout ends the round, its bullet goes with
+## the round rather than flying into the next one.
+func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var container := Node2D.new()
+	container.name = "Bullet570Container"
+	stage.add_child(container)
+	var p1: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_A)
+	p1.name = "Bullet570P1"
+	var p2: RigidBody2D = _spawn_player(stage, ROUND_WINNER_SPAWN_B)
+	p2.name = "Bullet570P2"
+	var roster := StubRosterScript.new()
+	roster.name = "Bullet570Roster"
+	roster.slots = [0, 1]
+	stage.add_child(roster)
+	var round_manager := RoundManagerScript.new()
+	round_manager.name = "Bullet570RoundManager"
+	round_manager.player_paths = [NodePath("../Bullet570P1"), NodePath("../Bullet570P2")]
+	round_manager.stage_scenes = [_make_stub_stage("Bullet570Stage", [ROUND_WINNER_SPAWN_A, ROUND_WINNER_SPAWN_B])]
+	round_manager.arena_container_path = NodePath("../Bullet570Container")
+	round_manager.controller_server_path = NodePath("../Bullet570Roster")
+	round_manager.round_end_pause_sec = 5.0
+	round_manager.min_players_to_start = 2
+	stage.add_child(round_manager)
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+	p1.set_weapon_stats(_quick_boomstick())
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_aim(p1, PI)
+	var shot: Dictionary = await _await_boomstick_shot(p1, _boomstick_quick_ticks() + BOOMSTICK_FIRE_SLACK_TICKS)
+	if shot["bullet"] == null:
+		failures.append("the boomstick never fired")
+		await _teardown(stage)
+		return failures
+	p1.eliminate()
+	await _await_ticks(ROUND_TRANSITION_TICKS)
+	if not _projectiles_of(p1).is_empty():
+		failures.append("the dead shooter's bullet survived the end of the round")
+	await _teardown(stage)
 	return failures

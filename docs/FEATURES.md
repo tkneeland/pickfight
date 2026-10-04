@@ -24,7 +24,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Shield: a wide (50 px, was 36) heater-shaped plate with a matching polygon hitbox (#465); blocks hits landing on its face; a bash does little damage but big knockback (#275)
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy, falling rocks and meteors included; a short poker otherwise (#269, #569)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271)
-- Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014)
+- Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014). A bullet already fired keeps flying and can still hit (credited to the shooter) after the shooter is eliminated; round end or a kick clears it (#570)
 - Grappling hook (#150)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150; #481/#485: also thrown along the aim by an action tap -- PC Space, gamepad bumper or stick click, fired on key-up within 0.25 s -- instead of toggling release; holding the button never throws; the flick throw stays on phones, but is off on PC, Online and gamepad seats, #487)

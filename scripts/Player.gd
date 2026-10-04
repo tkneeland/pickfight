@@ -569,7 +569,8 @@ func eliminate() -> void:
 		return
 	deaths += 1
 	_spawn_death_burst()
-	_go_inert()
+	# Issue #570: shots already fired keep flying and can still land.
+	_go_inert(true)
 	eliminated.emit()
 
 ## The elimination effect goes on the player's parent at the body's last
@@ -595,15 +596,27 @@ func leave_round() -> void:
 		return
 	_go_inert()
 
+## Issue #570: free every shot (bullets, a thrown boomerang) this player has in
+## flight, alive or not. Round end and a kick call it, so nothing outlives them.
+func clear_shots() -> void:
+	_clear_projectiles()
+	_clear_launched()
+
 ## The state an out-of-play player sits in: no rig, no collision, invisible,
 ## frozen in place. Shared by `eliminate()` (which also counts a death) and
 ## `leave_round()` (which does not) so there is exactly one description of
 ## what "out of the round" looks like.
-func _go_inert() -> void:
+func _go_inert(keep_shots: bool = false) -> void:
 	alive = false
 	_clear_rig()
-	_clear_projectiles()
-	_clear_launched()
+	if keep_shots:
+		# Issue #570: only the tether (the hook) is tied to its owner.
+		if is_instance_valid(_hook):
+			(_hook as Node).queue_free()
+		_hook = null
+	else:
+		_clear_projectiles()
+		_clear_launched()
 	# Deferred: eliminate() can run from KillZone's body_entered, which fires
 	# mid-physics-step while the physics server is still flushing queries --
 	# changing a RigidBody2D's mode synchronously from there is refused
