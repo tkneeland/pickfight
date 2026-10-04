@@ -10,8 +10,9 @@ const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
-const PODIUM_INK: Color = Color("#14181d")
+const PODIUM_INK: Color = UiThemeScript.INK
 ## Podium block heights by place, as a fraction of the tallest.
 const PODIUM_HEIGHTS: Array[float] = [1.0, 0.72, 0.5, 0.34]
 const PODIUM_TALLEST_PX: float = 260.0
@@ -60,6 +61,7 @@ func stats_table() -> Control:
 ## Builds the victory panel and the end card, both hidden.
 func build() -> void:
 	_victory_panel = ScreenKitScript.full_screen_panel(_screen, "VictoryPanel")
+	(_victory_panel as ColorRect).color = UiThemeScript.INDIGO
 	var stack := VBoxContainer.new()
 	stack.set_anchors_preset(Control.PRESET_FULL_RECT)
 	stack.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -70,18 +72,29 @@ func build() -> void:
 	_victory_logo.position = Vector2(24, 16)
 	_victory_logo.size = ScreenKitScript.LOGO_VICTORY_SIZE
 	_victory_panel.add_child(_victory_logo)
-	_victory_title = ScreenKitScript.big_label("", 96, ScreenKitScript.LOBBY_ACCENT) # 110 before the Nunito metrics (#541); a 12-W name must still fit 1600
+	_victory_title = ScreenKitScript.ink_label("", 96, UiThemeScript.YELLOW, 14) # 110 before the Nunito metrics (#541); a 12-W name must still fit 1600
 	stack.add_child(_victory_title)
 	_podium = HBoxContainer.new()
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
 	_podium.add_theme_constant_override("separation", 40)
 	stack.add_child(_podium)
-	stack.add_child(ScreenKitScript.big_label(_screen.tr("VICTORY_TAP_CONTINUE"), 40, Color.WHITE))
+	stack.add_child(_continue_prompt())
 	_build_end_card()
+
+## "Tap Continue": ink Lilita text on a cream pill (the theme's cream panel).
+func _continue_prompt() -> Label:
+	var prompt: Label = ScreenKitScript.ink_label(_screen.tr("VICTORY_TAP_CONTINUE"), 40, UiThemeScript.INK, 1)
+	prompt.name = "ContinuePrompt"
+	prompt.theme_type_variation = UiThemeScript.INK_HEADING_LABEL
+	prompt.add_theme_constant_override("outline_size", 0)
+	prompt.add_theme_stylebox_override("normal", UiThemeScript.plate(UiThemeScript.CREAM, 28, 2, true, 22))
+	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return prompt
 
 ## The demo build's end card (#361): logo over the thank-you and wishlist line.
 func _build_end_card() -> void:
 	_end_card_panel = ScreenKitScript.full_screen_panel(_screen, "EndCardPanel")
+	(_end_card_panel as ColorRect).color = UiThemeScript.INDIGO
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -90,7 +103,7 @@ func _build_end_card() -> void:
 	var logo: TextureRect = ScreenKitScript.logo_rect("Logo", ScreenKitScript.LOGO_LOBBY_SIZE)
 	logo.custom_minimum_size = ScreenKitScript.LOGO_LOBBY_SIZE
 	box.add_child(logo)
-	var text: Label = ScreenKitScript.big_label(DemoBuildScript.end_card_text(), 64, ScreenKitScript.LOBBY_ACCENT)
+	var text: Label = ScreenKitScript.ink_label(DemoBuildScript.end_card_text(), 64, UiThemeScript.YELLOW, 12)
 	text.name = "EndCardText"
 	box.add_child(text)
 
@@ -114,7 +127,7 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 		var column := VBoxContainer.new()
 		column.alignment = BoxContainer.ALIGNMENT_END
 		column.add_theme_constant_override("separation", 8)
-		var name_label: Label = ScreenKitScript.big_label("%s\n%d" % [_slot_name.call(slot), scores[slot]], 24 if crowded else 36, Color.WHITE)
+		var name_label: Label = ScreenKitScript.ink_label("%s\n%d" % [_slot_name.call(slot), scores[slot]], 24 if crowded else 36, UiThemeScript.CREAM)
 		if not teams.is_empty():
 			var team: int = int(teams.get(slot, TeamsScript.NONE))
 			name_label.text = "%s\n%s" % [_slot_name.call(slot), TeamsScript.team_name(team)]
@@ -127,7 +140,7 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 		var block := Panel.new()
 		block.add_theme_stylebox_override("panel", _podium_block_style(_slot_color.call(slot)))
 		var cap := ColorRect.new()
-		cap.color = Color(1.0, 1.0, 1.0, 0.25)
+		cap.color = Color(1.0, 1.0, 1.0, 0.3)
 		cap.set_anchors_preset(Control.PRESET_TOP_WIDE)
 		cap.offset_left = 5.0
 		cap.offset_right = -5.0
@@ -137,7 +150,7 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 		block.add_child(cap)
 		block.custom_minimum_size = Vector2(120 if crowded else 160, PODIUM_TALLEST_PX * (0.55 if not stat_rows.is_empty() else 1.0) * PODIUM_HEIGHTS[mini(place, PODIUM_HEIGHTS.size() - 1)])
 		column.add_child(block)
-		column.add_child(ScreenKitScript.big_label(str(place + 1), 28, Color.WHITE))
+		column.add_child(ScreenKitScript.ink_label(str(place + 1), 28, UiThemeScript.CREAM))
 		_podium.add_child(column)
 	if winner_team != -1:
 		_victory_title.text = _screen.tr("VICTORY_TEAM_WINS") % TeamsScript.team_name(winner_team)
@@ -150,13 +163,17 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 	_refresh_awards(awards)
 	_refresh_stat_table(stat_rows)
 
-## A podium block in the flat style: the player's colour, a hard ink outline,
-## square corners.
+## A podium block in the theme style: the player's colour, a thick ink outline,
+## rounded corners and a hard offset shadow.
 func _podium_block_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
-	style.set_border_width_all(5)
+	style.set_border_width_all(UiThemeScript.OUTLINE_WIDTH + 2)
 	style.border_color = PODIUM_INK
+	style.set_corner_radius_all(UiThemeScript.CORNER_RADIUS)
+	style.shadow_color = PODIUM_INK
+	style.shadow_size = 0
+	style.shadow_offset = Vector2(6, 6)
 	return style
 
 func _refresh_stat_table(stat_rows: Array[Dictionary]) -> void:

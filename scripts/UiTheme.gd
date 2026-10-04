@@ -40,6 +40,24 @@ const HEADING_LABEL: StringName = &"HeadingLabel" # Lilita One, light text
 const INK_LABEL: StringName = &"InkLabel" # Nunito, ink text, for cream panels
 const CREAM_PANEL: StringName = &"CreamPanel" # cream fill; pair with InkLabel
 const INK_HEADING_LABEL: StringName = &"InkHeadingLabel" # Lilita One, ink text, for cream panels
+## In-match HUD text (#548): drawn straight over the stage, so it carries a
+## thick ink outline instead of sitting on a panel.
+const HUD_HEADING_LABEL: StringName = &"HudHeadingLabel" # Lilita One, cream, ink outline
+const HUD_LABEL: StringName = &"HudLabel" # Nunito, cream, ink outline
+const HUD_OUTLINE_SIZE: int = 8
+
+
+## A code-built panel in the shared look for the HUD (#548): `fill`, an ink
+## outline, a hard offset shadow. `shadow` is false for panels that must not
+## grow past their rect.
+static func plate(fill: Color, margin_x: int = 12, margin_y: int = 2, shadow: bool = true, radius: int = CORNER_RADIUS) -> StyleBoxFlat:
+	var box := _box(fill, shadow)
+	box.set_corner_radius_all(radius)
+	box.content_margin_left = margin_x
+	box.content_margin_right = margin_x
+	box.content_margin_top = margin_y
+	box.content_margin_bottom = margin_y
+	return box
 
 
 static func _box(fill: Color, shadow: bool = true, shadow_offset: Vector2 = SHADOW_OFFSET) -> StyleBoxFlat:
@@ -78,6 +96,16 @@ static func build() -> Theme:
 	theme.set_type_variation(INK_HEADING_LABEL, "Label")
 	theme.set_font("font", INK_HEADING_LABEL, heading)
 	theme.set_color("font_color", INK_HEADING_LABEL, INK)
+
+	theme.set_type_variation(HUD_HEADING_LABEL, "Label")
+	theme.set_font("font", HUD_HEADING_LABEL, heading)
+	theme.set_color("font_color", HUD_HEADING_LABEL, CREAM)
+	theme.set_color("font_outline_color", HUD_HEADING_LABEL, INK)
+	theme.set_constant("outline_size", HUD_HEADING_LABEL, HUD_OUTLINE_SIZE)
+	theme.set_type_variation(HUD_LABEL, "Label")
+	theme.set_color("font_color", HUD_LABEL, CREAM)
+	theme.set_color("font_outline_color", HUD_LABEL, INK)
+	theme.set_constant("outline_size", HUD_LABEL, HUD_OUTLINE_SIZE)
 
 	# Panels: bare Panel/PanelContainer are indigo with an ink outline (existing
 	# screens put light text on them); CreamPanel is the cream one.

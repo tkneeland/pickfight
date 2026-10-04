@@ -167,6 +167,7 @@ const NameTagsScript := preload("res://scripts/NameTags.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
 ## Teams mode's rules (issue #236, ADR-0018).
 const TeamsScript := preload("res://scripts/Teams.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 ## Every deadline this node and its pieces keep (`*_msec`) is game time
 ## (#182), read from here: it stops while the tree is paused and runs at
 ## `Engine.time_scale`, so none of them needs pushing back after a pause.
@@ -984,10 +985,10 @@ func _build_modifier_label() -> void:
 	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_modifier_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_modifier_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_modifier_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL # Lilita One, ink outline (#548)
 	_modifier_label.add_theme_font_size_override("font_size", 96)
-	_modifier_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 1.0))
-	_modifier_label.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0, 1.0))
-	_modifier_label.add_theme_constant_override("outline_size", 16)
+	_modifier_label.add_theme_color_override("font_color", UiThemeScript.YELLOW)
+	_modifier_label.add_theme_constant_override("outline_size", 18)
 	_modifier_label.visible = false
 	_modifier_layer.add_child(_modifier_label)
 	_modifier_timer = Timer.new()
