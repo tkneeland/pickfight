@@ -1336,7 +1336,10 @@ func _drain(slot: int, peer: Variant) -> void:
 		var hold: bool = latest[RELEASE_PACKET_SIZE] & 0x80 != 0
 		if _slot_press_seen[slot] != -1 and count != _slot_press_seen[slot]:
 			if not hold:
-				_action_press(slot)
+				# #601: a burst keeps only the last packet; fire once per
+				# counter step (7-bit, wraps), capped at 3.
+				for _i in mini((count - _slot_press_seen[slot]) & 0x7F, 3):
+					_action_press(slot)
 			else:
 				_try_throw(slot)
 		_slot_press_seen[slot] = count
