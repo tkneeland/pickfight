@@ -17,6 +17,8 @@ extends RefCounted
 
 ## How recent the last hit must be for its attacker to get the KO.
 const KO_CREDIT_WINDOW_MSEC: int = 3000
+## The balance log rotates to `<name>.1` past this size (#609).
+const LOG_MAX_BYTES: int = 1000000
 ## A second KO by the same player within this of their last is a multi-KO.
 const MULTI_KO_WINDOW_MSEC: int = 3000
 
@@ -412,6 +414,8 @@ func best_weapon_of(slots: Array) -> String:
 static func append_line(path: String, line: String) -> bool:
 	if line == "":
 		return false
+	if FileAccess.file_exists(path) and FileAccess.get_file_as_bytes(path).size() > LOG_MAX_BYTES:
+		DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(path) + ".1")  # rotate (#609)
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
 	if file == null:
 		return false

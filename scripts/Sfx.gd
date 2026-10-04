@@ -726,18 +726,24 @@ static func headless_settings_path() -> String:
 ## put into effect with the game's scene (`_build_settings_ui_if_in_game`),
 ## so a scenario run never resizes a window. A missing file means the
 ## defaults; any other load error is reported and also leaves the defaults.
+static func _num(v: Variant, fallback: float) -> float:
+	return float(v) if (v is float or v is int) and is_finite(float(v)) else fallback
+
+static func _flag(v: Variant, fallback: bool) -> bool:
+	return v if v is bool else fallback
+
 func load_settings() -> void:
 	var config := ConfigFile.new()
 	var err: Error = config.load(settings_path)
 	if err == OK:
-		master_volume = clampf(float(config.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
-		muted = bool(config.get_value("audio", "muted", false))
-		sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
-		fullscreen = bool(config.get_value("display", "fullscreen", false))
-		screen_shake = bool(config.get_value("display", "screen_shake", true))
-		reduce_flash = bool(config.get_value("display", "reduce_flash", false))
-		ui_scale = _nearest_ui_scale(float(config.get_value("display", "ui_scale", 1.0)))
-		hide_room_code = bool(config.get_value("display", "hide_room_code", false))
+		master_volume = clampf(_num(config.get_value("audio", "master_volume", 1.0), 1.0), 0.0, 1.0)
+		muted = _flag(config.get_value("audio", "muted", false), false)
+		sfx_volume = clampf(_num(config.get_value("audio", "sfx_volume", 1.0), 1.0), 0.0, 1.0)
+		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
+		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
+		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
+		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
+		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()

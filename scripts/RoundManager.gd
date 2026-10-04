@@ -1240,7 +1240,7 @@ func _enter_victory() -> void:
 	_end_card_up = false
 	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
-	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
+	_write_balance_log()
 	send_telemetry()
 	_play_lobby_music()
 	_state = State.VICTORY
@@ -1947,6 +1947,12 @@ func send_telemetry() -> bool:
 
 ## Where the per-match balance tallies are appended (issue #316).
 var balance_log_path: String = "user://balance_stats.jsonl"
+
+## The local balance log, only with stats sharing on (#609).
+func _write_balance_log() -> bool:
+	if not HostSettingsScript.shared().share_stats:
+		return false
+	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	var victim_slot: int = _players.find(victim)

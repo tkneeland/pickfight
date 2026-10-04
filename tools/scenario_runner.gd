@@ -780,6 +780,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"respawn_skips_spawns_with_no_floor_605",
 	"respawn_stays_on_own_half_605",
 	"respawn_alone_does_not_always_pick_spawn0_605",
+	"settings_hygiene_609",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -2736,6 +2737,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_stays_on_own_half_605()
 		"respawn_alone_does_not_always_pick_spawn0_605":
 			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
+		"settings_hygiene_609":
+			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
 			return await _scenario_bot_holds_hill_and_flag_without_hopping_607()
 		"bot_first_thinks_are_staggered_607":
@@ -39115,6 +39118,84 @@ func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 		failures.append("alone, died at Spawn1, did not move to Spawn0")
 	await _teardown(rig["stage"])
 	return failures
+
+func _scenario_settings_hygiene_609() -> Array[String]:
+	var failures: Array[String] = []
+	var tmp: String = OS.get_temp_dir().path_join("pf_609_%d" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(tmp)
+	# 1. clips: only the newest 20 folders stay.
+	var clips: String = tmp.path_join("clips")
+	for i in 25:
+		var d: String = clips.path_join("clip_2026-01-01T00-00-%02d" % i)
+		DirAccess.make_dir_recursive_absolute(d)
+		FileAccess.open(d.path_join("frame_0000.png"), FileAccess.WRITE).close()
+	(load("res://scripts/ReplayBuffer.gd") as GDScript).prune_clips(clips)
+	var left: PackedStringArray = DirAccess.get_directories_at(clips)
+	if left.size() != 20 or left.has("clip_2026-01-01T00-00-04") or not left.has("clip_2026-01-01T00-00-24"):
+		failures.append("clip pruning kept %d folders, not the newest 20" % left.size())
+	# 2. resolution: clamped to the screen, degenerate dropped.
+	var fit: Callable = (load("res://scripts/SfxSettings.gd") as GDScript).fit_resolution
+	if fit.call(Vector2i(2560, 1440), Vector2i(1280, 800)) != Vector2i(1280, 800):
+		failures.append("an oversized resolution was not clamped")
+	if fit.call(Vector2i(0, 1), Vector2i(1280, 800)) != Vector2i.ZERO:
+		failures.append("a degenerate resolution was not dropped")
+	# 3. wrong-typed config values do not abort the load.
+	var cfg_path: String = tmp.path_join("host.cfg")
+	var cfg := ConfigFile.new()
+	cfg.set_value("host", "resolution", Vector2i(0, 1))
+	cfg.set_value("host", "disabled_stages", 7)
+	cfg.set_value("host", "disabled_weapons", ["spear", 3])
+	cfg.set_value("host", "game_mode", "ffa")
+	cfg.set_value("host", "share_stats", "yes")
+	cfg.save(cfg_path)
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	host.path = cfg_path
+	host.persist = false
+	host.load_settings()
+	if host.resolution != Vector2i.ZERO or not host.disabled_stages.is_empty() or host.disabled_weapons != PackedStringArray(["spear"]):
+		failures.append("HostSettings did not tolerate wrong-typed values")
+	var sfx_path: String = tmp.path_join("sfx.cfg")
+	var scfg := ConfigFile.new()
+	scfg.set_value("audio", "master_volume", "loud")
+	scfg.set_value("audio", "muted", 5)
+	scfg.set_value("display", "ui_scale", [1])
+	scfg.save(sfx_path)
+	var sfx_node: Node = (load("res://scripts/Sfx.gd") as GDScript).new()
+	sfx_node.persist_settings = false
+	sfx_node.settings_path = sfx_path
+	sfx_node.load_settings()
+	if sfx_node.master_volume != 1.0 or sfx_node.muted:
+		failures.append("Sfx did not fall back on wrong-typed values")
+	sfx_node.free()
+	# 4. balance log: rotates past the cap, skipped with sharing off.
+	var stats_script: GDScript = load("res://scripts/MatchStats.gd") as GDScript
+	var log_path: String = tmp.path_join("balance.jsonl")
+	var blob := PackedByteArray()
+	blob.resize(stats_script.LOG_MAX_BYTES + 1)
+	var big := FileAccess.open(log_path, FileAccess.WRITE)
+	big.store_buffer(blob)
+	big.close()
+	stats_script.append_line(log_path, "{}")
+	if not FileAccess.file_exists(log_path + ".1") or FileAccess.get_file_as_bytes(log_path).size() > 10:
+		failures.append("the balance log did not rotate past the cap")
+	var rm: Node = (load("res://scripts/RoundManager.gd") as GDScript).new()
+	rm.balance_log_path = tmp.path_join("gated.jsonl")
+	rm._stats.weapon_damage = {"pickaxe": 5.0}
+	var shared: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = shared.share_stats
+	shared.share_stats = false
+	var off_wrote: bool = rm._write_balance_log()
+	shared.share_stats = true
+	var on_wrote: bool = rm._write_balance_log()
+	shared.share_stats = was
+	rm.free()
+	if off_wrote or not on_wrote:
+		failures.append("the balance log is not gated on share_stats")
+	for f: String in DirAccess.get_files_at(tmp):
+		DirAccess.remove_absolute(tmp.path_join(f))
+	_scenario_completed = true
+	return failures
+
 ## Issue #607 (1): a bot resting on its goal is not stuck. Holding the hill
 ## with no rival near, it stays in the zone for 10 s; a CTF defender stays by its flag.
 func _scenario_bot_holds_hill_and_flag_without_hopping_607() -> Array[String]:
