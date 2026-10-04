@@ -24,6 +24,7 @@ extends Node2D
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 ## The debug switch. Damage numbers are a testing aid, not part of the game;
 ## flip this to hide them. Hitmarkers are always on.
@@ -86,7 +87,7 @@ func _ready() -> void:
 func _warm_number_sizes() -> void:
 	if not show_damage_numbers:
 		return
-	var font: Font = ThemeDB.fallback_font
+	var font: Font = _number_font_face()
 	if font == null:
 		return
 	for size in range(NUMBER_MIN_FONT, NUMBER_MAX_FONT + 1):
@@ -131,6 +132,12 @@ func _retire(node: Variant) -> void:
 	else:
 		_free_numbers.append(node)
 
+## The damage numbers' font (#548): Lilita One, the theme's heading face. The
+## font Godot falls back to when the file is missing.
+static func _number_font_face() -> Font:
+	var font: Font = load(UiThemeScript.HEADING_FONT_PATH) as Font
+	return font if font != null else ThemeDB.fallback_font
+
 ## One shared LabelSettings per font size (and one for the grey `0`).
 func _settings_for(amount: float, font_size: int) -> LabelSettings:
 	var key: int = font_size if amount > 0.0 else ZERO_SETTINGS_KEY
@@ -140,7 +147,8 @@ func _settings_for(amount: float, font_size: int) -> LabelSettings:
 		settings.font_size = font_size
 		settings.font_color = Color.WHITE if amount > 0.0 else ZERO_NUMBER_COLOR
 		settings.outline_size = maxi(4, font_size / 5)
-		settings.outline_color = Color(0, 0, 0, 0.9)
+		settings.outline_color = UiThemeScript.INK
+		settings.font = _number_font_face()
 		_label_settings[key] = settings
 	return settings
 
@@ -256,7 +264,8 @@ class DamageNumber extends Label:
 			settings.font_size = font_size
 			settings.font_color = Color.WHITE if dealt > 0.0 else ZERO_NUMBER_COLOR
 			settings.outline_size = maxi(4, font_size / 5)
-			settings.outline_color = Color(0, 0, 0, 0.9)
+			settings.outline_color = UiThemeScript.INK
+			settings.font = load(UiThemeScript.HEADING_FONT_PATH) as Font
 		label_settings = settings
 		horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vertical_alignment = VERTICAL_ALIGNMENT_CENTER

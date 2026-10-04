@@ -404,6 +404,7 @@ class RemoteSeat extends RefCounted:
 	func close(code: int = 1000, reason: String = "") -> void:
 		if open:
 			link.send_text_to(peer, JSON.stringify({"t": "closed", "code": code, "reason": reason}))
+			link.drop_peer(peer) # free the relay slot too (#580)
 			open = false
 
 ## The host PC's own seat (issue #239, "Play on this PC"): a transport with
@@ -1553,11 +1554,11 @@ func clear_ready() -> void:
 		_slot_ready[slot] = 0
 
 ## The host phone's slot: the earliest-joined claimed slot with a controller
-## connected right now (never the host-PC seat), or -1 with no phones at all.
+## connected right now (never the host-PC seat or a remote seat), or -1 with no phones at all.
 func host_slot() -> int:
 	for slot: int in _join_order:
-		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat:
-			return slot
+		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat and not _slot_peers[slot] is RemoteSeat:
+			return slot # #578: a remote seat never hosts; the host PC runs an Online room
 	return -1
 
 ## The match length the host phone chose ("first to N"), 5 by default.
@@ -1971,6 +1972,7 @@ func _process_remote() -> void:
 			_remote_awaiting.erase(seat)
 			if not _is_number(hello.get("proto")) or int(hello["proto"]) != PROTOCOL_VERSION:
 				seat.send_text(JSON.stringify({"t": "error", "reason": "version"}))
+				relay_link.drop_peer(seat.peer)
 				seat.open = false
 				_remote_seats.erase(seat.peer)
 				if _log_input:
@@ -1979,6 +1981,7 @@ func _process_remote() -> void:
 			var build_reason: String = build_mismatch_reason(hello)
 			if not build_reason.is_empty():
 				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
+				relay_link.drop_peer(seat.peer)
 				seat.open = false
 				_remote_seats.erase(seat.peer)
 				if _log_input:
