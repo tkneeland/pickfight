@@ -34121,6 +34121,12 @@ func _scenario_remote_client_rejoins_its_held_seat_by_itself() -> Array[String]:
 	# The client retries on the wall clock; under --fixed-fps game time can run
 	# many times faster, so the host's game-time hold is lengthened here.
 	server.remote_seat_hold_msec = 600000
+	# Issue #572: the drop-to-rejoin window spans 15-35 s of game time under
+	# --fixed-fps, long enough for the bot, or this limp seat on 3 of 5 points,
+	# to win the match. A finished match is no match phase, so nothing holds the
+	# seat any more and it is freed (a fresh claim, score 0). That is #459's
+	# rule, not this scenario's subject: keep the match from ending.
+	rm._match_target = 1000
 	var serial: int = server.claim_serial(slot)
 	client._socket.close(4001, "test drop")
 	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
