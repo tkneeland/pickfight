@@ -744,6 +744,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"umbrella_canopy_reduces_a_falling_rock_569",
 	"umbrella_canopy_reduces_a_meteor_569",
 	"sudden_death_block_does_not_eliminate_569",
+	"controller_page_wears_theme_and_labels_target_per_mode_576",
 	"bullet_outlives_eliminated_shooter_570",
 	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
 	"round_end_clears_dead_shooters_bullet_570",
@@ -2624,6 +2625,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_canopy_reduces_a_meteor_569()
 		"sudden_death_block_does_not_eliminate_569":
 			return await _scenario_sudden_death_block_does_not_eliminate_569()
+		"controller_page_wears_theme_and_labels_target_per_mode_576":
+			return _scenario_controller_page_wears_theme_and_labels_target_per_mode_576()
 		"bullet_outlives_eliminated_shooter_570":
 			return await _scenario_bullet_outlives_eliminated_shooter_570()
 		"shots_cleared_on_leave_round_and_dead_shooter_clear_570":
@@ -37687,6 +37690,39 @@ func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
 	players[0].strike_landed.disconnect(on_report)
 	await _teardown(rig["stage"])
 	return failures
+## Issue #576: the phone controller page wears the #507 look with fonts it
+## carries itself (the host's LAN may have no internet), and the host row's
+## target label follows the lobby state's `target_kind` like the lobby's.
+func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	for family: String in ["Lilita One", "Nunito"]:
+		if not page.contains('font-family: "%s";\n    font-weight' % family):
+			failures.append("no @font-face for %s" % family)
+	if page.count("src: url(data:font/woff2;base64,") != 2:
+		failures.append("the two theme fonts are not embedded as base64 WOFF2")
+	for external: String in ["fonts.googleapis", "fonts.gstatic", "src: url(http", "@import"]:
+		if page.contains(external):
+			failures.append("the page reaches for the network: '%s'" % external)
+	for colour: String in ["#232A4A", "#FBF6EA", "#14181d", "#F5E24A"]:
+		if not page.contains(colour):
+			failures.append("the page lacks the #507 colour %s" % colour)
+	if not page.contains("var(--display)"):
+		failures.append("headings and buttons do not use the display face")
+	if page.length() > 200000:
+		failures.append("the page grew to %d bytes; keep it small" % page.length())
+	for needle: String in ['id="target-label"', "TARGET_LABELS[msg.target_kind]", '"PHONE_TARGET_LIVES": "Lives"',
+			'"PHONE_TARGET_GOALS": "Goals to win"', '"PHONE_TARGET_CAPTURES": "Captures to win"']:
+		if not page.contains(needle):
+			failures.append("the per-mode target label is missing '%s'" % needle)
+	# Its kinds are the ones the host sends (GameModes.target_kind).
+	for mode_id: String in [GameModesScript361.STOCK, GameModesScript361.SOCCER, GameModesScript361.CAPTURE_THE_FLAG]:
+		var kind: String = GameModesScript361.target_kind(mode_id)
+		if not page.contains("%s: \"PHONE_TARGET_" % kind):
+			failures.append("the page has no label for target_kind '%s'" % kind)
+	_scenario_completed = true
+	return failures
+
 
 ## Issue #570: a bullet already fired keeps flying when its shooter is rung out
 ## and still hits, credited to the shooter and to the weapon that fired it.
