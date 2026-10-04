@@ -386,7 +386,7 @@ func _show_countdown(count: int) -> void:
 	_countdown_label.visible = count > 0
 	if count > 0 and count != _countdown_shown:
 		_countdown_label.text = str(count)
-		ScreenKitScript.punch(_countdown_label)
+		ScreenKitScript.punch(_countdown_label, self)
 	_countdown_shown = count
 
 ## Streamer mode (#369): with "Hide room code" on, the join QR, URL and online

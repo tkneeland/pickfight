@@ -19,6 +19,7 @@ extends Node
 ## referenced by `class_name` (CLAUDE.md).
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
+const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
@@ -447,9 +448,7 @@ func _build_hud() -> void:
 	_score_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
 	_score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_score_label.add_theme_font_size_override("font_size", 44)
-	_score_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_score_label.add_theme_constant_override("outline_size", 8)
+	ScreenKitScript.style_hud_pill(_score_label)
 	_hud.add_child(_score_label)
 	add_child(_hud)
 
