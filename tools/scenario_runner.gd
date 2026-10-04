@@ -787,6 +787,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pad_left_stick_in_lobby_keeps_arm_tip_611",
 	"stock_overtime_clears_shots_when_one_stands_611",
 	"bot_sees_rocks_spawned_mid_round_611",
+	"mode_win_is_not_a_ko_to_the_announcer_613",
+	"award_full_tie_breaks_by_match_seed_613",
+	"round_start_and_victory_clear_stale_banners_613",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2754,6 +2757,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_overtime_clears_shots_when_one_stands_611()
 		"bot_sees_rocks_spawned_mid_round_611":
 			return await _scenario_bot_sees_rocks_spawned_mid_round_611()
+		"mode_win_is_not_a_ko_to_the_announcer_613":
+			return await _scenario_mode_win_is_not_a_ko_to_the_announcer_613()
+		"award_full_tie_breaks_by_match_seed_613":
+			return await _scenario_award_full_tie_breaks_by_match_seed_613()
+		"round_start_and_victory_clear_stale_banners_613":
+			return await _scenario_round_start_and_victory_clear_stale_banners_613()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39361,5 +39370,94 @@ func _scenario_bot_sees_rocks_spawned_mid_round_611() -> Array[String]:
 		failures.append("a rock spawned after the bot's stage read is not in its danger list")
 	holder.queue_free()
 	await _await_ticks(1)
+	_scenario_completed = true
+	return failures
+## Issue #613 (1): a Soccer win eliminates the losers, which the announcer must
+## not call a KO, and the round manager reports the mode's win.
+func _scenario_mode_win_is_not_a_ko_to_the_announcer_613() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var sfx: Node = _sfx()
+	var announcer: Node = sfx.get_node_or_null(^"Announcer") if sfx != null else null
+	if announcer == null:
+		failures.append("no Announcer to listen to")
+		await _teardown(rig["stage"])
+		return failures
+	announcer.call("clear")
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 0.1
+	var won_seen: bool = false
+	for _goal in 3:
+		mode.score_goal(0)
+		won_seen = won_seen or rm.mode_won()
+		await _await_msec(300)
+	if not won_seen:
+		failures.append("mode_won() was false when the mode scored its win")
+	await _await_msec(1500)
+	var said: PackedStringArray = announcer.get("said")
+	if "announce_ko" in said or "announce_double_ko" in said:
+		failures.append("the announcer called a goal a KO: %s" % [said])
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## Issue #613 (2): a full award tie no longer always goes to the lowest slot;
+## the same seed always picks the same slot.
+func _scenario_award_full_tie_breaks_by_match_seed_613() -> Array[String]:
+	var failures: Array[String] = []
+	var picks: Dictionary = {}
+	for seed_value in 24:
+		var stats: RefCounted = MatchStatsScript.new()
+		stats.tie_seed = seed_value
+		for slot in 4:
+			stats.kos[slot] = 2
+			stats.damage_dealt[slot] = 50
+		var first: int = stats._leader([0, 1, 2, 3], stats.kos, stats.damage_dealt, false)
+		var again: int = stats._leader([0, 1, 2, 3], stats.kos, stats.damage_dealt, false)
+		if first != again:
+			failures.append("seed %d picked %d then %d" % [seed_value, first, again])
+		picks[first] = true
+	if picks.size() < 3:
+		failures.append("24 seeds only ever picked slots %s from a 4-way tie" % [picks.keys()])
+	var plain: RefCounted = MatchStatsScript.new()
+	for slot in 4:
+		plain.kos[slot] = 2
+		plain.damage_dealt[slot] = 50
+	if plain._leader([0, 1, 2, 3], plain.kos, plain.damage_dealt, false) != 0:
+		failures.append("with no seed the tie no longer falls to the lowest slot")
+	plain.kos[2] = 3
+	plain.tie_seed = 5
+	if plain._leader([0, 1, 2, 3], plain.kos, plain.damage_dealt, false) != 2:
+		failures.append("a real leader lost to the tie-break")
+	_scenario_completed = true
+	return failures
+## Issue #613 (4): banners still queued from the last round are dropped when a
+## round starts and when the victory screen opens.
+func _scenario_round_start_and_victory_clear_stale_banners_613() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed613"
+	rig["stage"].add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	await _await_ticks(2)
+	feed.show_banner("LAST ONE STANDING", "P1", Color.WHITE)
+	feed.show_banner("FIRST BLOOD", "P2", Color.WHITE)
+	if (feed.get("_banner_queue") as Array).is_empty():
+		failures.append("test setup: nothing queued behind the first banner")
+	rm.call("_ko_round_started")
+	if not (feed.get("_banner_queue") as Array).is_empty() or feed.get("_banner").visible:
+		failures.append("a banner survived into the next round")
+	feed.show_banner("LAST ONE STANDING", "P1", Color.WHITE)
+	feed.show_banner("FIRST BLOOD", "P2", Color.WHITE)
+	rm.call("_enter_victory")
+	if not (feed.get("_banner_queue") as Array).is_empty() or feed.get("_banner").visible:
+		failures.append("a banner survived into the victory screen")
+	await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures

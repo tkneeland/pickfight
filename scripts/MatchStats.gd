@@ -80,6 +80,9 @@ var goals: Dictionary = {}
 var captures: Dictionary = {}
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
+## Seeds the break of a full tie between award candidates (#613); -1 keeps the
+## lowest slot. Each call redraws from the seed, so a refresh never reshuffles.
+var tie_seed: int = -1
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
 var _last_hit: Dictionary = {}
@@ -357,6 +360,11 @@ func _air_scores() -> Dictionary:
 ## -1 when nobody scored above zero.
 func _leader(slots: Array, primary: Dictionary, secondary: Dictionary, secondary_low: bool) -> int:
 	var best: int = -1
+	var tied: int = 1
+	var tie_rng: RandomNumberGenerator = null
+	if tie_seed != -1:
+		tie_rng = RandomNumberGenerator.new()
+		tie_rng.seed = hash([tie_seed, primary.size(), secondary_low])
 	var ordered: Array = slots.duplicate()
 	ordered.sort()
 	for slot: int in ordered:
@@ -369,11 +377,17 @@ func _leader(slots: Array, primary: Dictionary, secondary: Dictionary, secondary
 		var top: float = float(primary.get(best, 0))
 		if value > top:
 			best = slot
+			tied = 1
 		elif value == top:
 			var a: float = float(secondary.get(slot, 0))
 			var b: float = float(secondary.get(best, 0))
 			if (a < b) if secondary_low else (a > b):
 				best = slot
+				tied = 1
+			elif a == b and tie_rng != null:
+				tied += 1
+				if tie_rng.randi() % tied == 0:
+					best = slot # reservoir pick: each tied slot is equally likely
 	return best
 
 func _award(category: String, title: String, slot: int, detail: String) -> Dictionary:
