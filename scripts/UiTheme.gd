@@ -185,6 +185,7 @@ static func build() -> Theme:
 	theme.set_color("caret_color", "LineEdit", INK)
 	theme.set_color("selection_color", "LineEdit", Color(SKY, 0.6))
 	theme.set_color("font_placeholder_color", "LineEdit", Color("5A5E66"))
+	_add_lobby_variations(theme)
 
 	# Title screen (#546).
 	_card_variation(theme, TITLE_CARD_ORANGE, ORANGE)
@@ -219,3 +220,154 @@ static func build() -> Theme:
 	theme.set_font_size("font_size", MUTED_HINT_LABEL, 20)
 	theme.set_color("font_color", MUTED_HINT_LABEL, MUTED)
 	return theme
+
+
+# --- Lobby variations (#547) ----------------------------------------------------
+# Chunky cream cards and buttons for the lobby, its popups and the Host panel.
+# Colours that change per player (a card's strip, a swatch) are set in code.
+
+const CARD_PANEL: StringName = &"CardPanel" # cream card: thick outline, big hard shadow
+const DIALOG_CARD: StringName = &"DialogCard" # the same, bigger, for popups
+const SWITCH_FRAME: StringName = &"SwitchFrame" # the frame round the Couch / Online / Solo cells
+const DEMO_STAGE_FRAME: StringName = &"DemoStageFrame" # the ink frame round a How to play demo's stage
+const PREVIEW_STAGE: StringName = &"PreviewStage" # the dark stage a live character preview stands on
+const DEMO_CARD_COLORS: Array[Color] = [ORANGE, SKY, GREEN, PINK] # the four How to play cards
+const RULE_BOX: StringName = &"RuleBox" # the yellow strip under the How to play demos
+const PICK_ROW: StringName = &"PickRow" # a pad picker row on a player card
+const PICK_ROW_ON: StringName = &"PickRowOn" # the row the cursor is on
+const SEG_BUTTON: StringName = &"SegButton" # one cell of the Couch / Online / Solo switch
+const SEG_BUTTON_ON: StringName = &"SegButtonOn"
+const SWITCH_BUTTON: StringName = &"SwitchButton" # Teams Off / On
+const SWITCH_BUTTON_ON: StringName = &"SwitchButtonOn"
+const STEP_BUTTON: StringName = &"StepButton" # the - and + of a stepper
+const VALUE_BUTTON: StringName = &"ValueButton" # a stepper's number, flat
+const ACTION_BUTTON: StringName = &"ActionButton" # a big cream button
+const SKY_BUTTON: StringName = &"SkyButton"
+const PINK_BUTTON: StringName = &"PinkButton"
+const YELLOW_BUTTON: StringName = &"YellowButton" # Done, close, a primary pick
+const START_BUTTON: StringName = &"StartButton"
+const START_BUTTON_OFF: StringName = &"StartButtonOff"
+const PICK_BUTTON: StringName = &"PickButton" # a toggle in a picker grid: yellow when picked
+const PILL_ON: StringName = &"PillOn" # READY
+const PILL_OFF: StringName = &"PillOff" # not ready
+const PILL_BOT: StringName = &"PillBot"
+const MODE_CARD: StringName = &"ModeCard" # a game mode card (a panel)
+const MODE_CARD_ON: StringName = &"ModeCardOn"
+const BOLD_LABEL: StringName = &"BoldLabel" # Nunito 800, light text, for the ground
+const INK_BOLD_LABEL: StringName = &"InkBoldLabel" # Nunito 800, ink text, for cream panels
+const MUTED_LABEL: StringName = &"MutedLabel" # light grey-blue body text on the ground
+const HINT_LABEL: StringName = &"HintLabel" # muted ink text on cream
+
+const MUTED_INK: Color = Color("5A628C")
+const DASH: Color = Color("5A628C")
+const STRIP_GREY: Color = Color("9CA0B8")
+
+
+## A cream-style box with `radius`, `border` and a hard shadow `shadow` px down-right.
+static func box(fill: Color, radius: int, border: int, shadow: Vector2 = Vector2.ZERO, margin: Vector4 = Vector4(10, 4, 10, 4)) -> StyleBoxFlat:
+	var b := StyleBoxFlat.new()
+	b.bg_color = fill
+	b.set_border_width_all(border)
+	b.border_color = INK
+	b.set_corner_radius_all(radius)
+	b.content_margin_left = margin.x
+	b.content_margin_top = margin.y
+	b.content_margin_right = margin.z
+	b.content_margin_bottom = margin.w
+	if shadow != Vector2.ZERO:
+		b.shadow_color = INK
+		b.shadow_size = 0
+		b.shadow_offset = shadow
+	return b
+
+
+## Sets a button variation: `normal`, with hover / focus lifting its shadow, pressed sinking.
+static func _button_variation(theme: Theme, variation: StringName, font: Font, font_size: int, fill: Color, radius: int, border: int,
+		shadow: Vector2, margin: Vector4, hover_fill: Color = Color.TRANSPARENT) -> void:
+	theme.set_type_variation(variation, "Button")
+	var hover_color: Color = hover_fill if hover_fill.a > 0.0 else fill.lightened(0.25)
+	var lift: Vector2 = shadow + Vector2(0, 3) if shadow != Vector2.ZERO else Vector2.ZERO
+	var normal := box(fill, radius, border, shadow, margin)
+	var hover := box(hover_color, radius, border, lift, margin)
+	var focus := box(hover_color, radius, border, lift, margin)
+	focus.border_color = YELLOW if fill != YELLOW else CREAM
+	var pressed := box(fill.darkened(0.1), radius, border, Vector2(shadow.x * 0.25, 1) if shadow != Vector2.ZERO else Vector2.ZERO, margin)
+	var disabled := box(Color("B9B3A3"), radius, border, Vector2.ZERO, margin)
+	theme.set_stylebox("normal", variation, normal)
+	theme.set_stylebox("hover", variation, hover)
+	theme.set_stylebox("focus", variation, focus)
+	theme.set_stylebox("pressed", variation, pressed)
+	theme.set_stylebox("hover_pressed", variation, pressed)
+	theme.set_stylebox("disabled", variation, disabled)
+	theme.set_font("font", variation, font)
+	theme.set_font_size("font_size", variation, font_size)
+	for color_name: String in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		theme.set_color(color_name, variation, INK)
+	theme.set_color("font_disabled_color", variation, Color("5A5E66"))
+
+
+static func _add_lobby_variations(theme: Theme) -> void:
+	var heading: Font = load(HEADING_FONT_PATH)
+	var body: Font = load(BODY_FONT_PATH)
+	# Panels.
+	theme.set_type_variation(CARD_PANEL, "PanelContainer")
+	theme.set_stylebox("panel", CARD_PANEL, box(CREAM, 20, 5, Vector2(6, 6), Vector4(16, 14, 16, 14)))
+	theme.set_type_variation(DIALOG_CARD, "PanelContainer")
+	theme.set_stylebox("panel", DIALOG_CARD, box(CREAM, 26, 6, Vector2(10, 10), Vector4(40, 26, 40, 26)))
+	theme.set_type_variation(SWITCH_FRAME, "PanelContainer")
+	theme.set_stylebox("panel", SWITCH_FRAME, box(CREAM, 14, 4, Vector2(4, 4), Vector4(4, 4, 4, 4)))
+	theme.set_type_variation(DEMO_STAGE_FRAME, "PanelContainer")
+	theme.set_stylebox("panel", DEMO_STAGE_FRAME, box(Color("212642"), 12, 4, Vector2.ZERO, Vector4(4, 4, 4, 4)))
+	theme.set_type_variation(PREVIEW_STAGE, "PanelContainer")
+	theme.set_stylebox("panel", PREVIEW_STAGE, box(INDIGO, 20, 5, Vector2.ZERO, Vector4(8, 8, 8, 8)))
+	for i in DEMO_CARD_COLORS.size():
+		theme.set_type_variation(StringName("DemoCard%d" % i), "PanelContainer")
+		theme.set_stylebox("panel", StringName("DemoCard%d" % i), box(DEMO_CARD_COLORS[i], 18, 4, Vector2.ZERO, Vector4(12, 12, 12, 12)))
+	theme.set_type_variation(RULE_BOX, "PanelContainer")
+	theme.set_stylebox("panel", RULE_BOX, box(YELLOW, 14, 4, Vector2.ZERO, Vector4(18, 12, 18, 12)))
+	theme.set_type_variation(PICK_ROW, "PanelContainer")
+	theme.set_stylebox("panel", PICK_ROW, box(CREAM, 10, 3, Vector2.ZERO, Vector4(2, 0, 2, 0)))
+	theme.set_type_variation(PICK_ROW_ON, "PanelContainer")
+	theme.set_stylebox("panel", PICK_ROW_ON, box(YELLOW, 10, 3, Vector2.ZERO, Vector4(2, 0, 2, 0)))
+	theme.set_type_variation(MODE_CARD, "PanelContainer")
+	theme.set_stylebox("panel", MODE_CARD, box(CREAM, 14, 4, Vector2(3, 3), Vector4(10, 6, 10, 6)))
+	theme.set_type_variation(MODE_CARD_ON, "PanelContainer")
+	theme.set_stylebox("panel", MODE_CARD_ON, box(YELLOW, 14, 4, Vector2(5, 5), Vector4(10, 6, 10, 6)))
+	# Labels. The mockup's body text is Nunito 800.
+	var bold := FontVariation.new()
+	bold.base_font = body
+	bold.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 800}
+	theme.set_type_variation(BOLD_LABEL, "Label")
+	theme.set_font("font", BOLD_LABEL, bold)
+	theme.set_type_variation(INK_BOLD_LABEL, "Label")
+	theme.set_font("font", INK_BOLD_LABEL, bold)
+	theme.set_color("font_color", INK_BOLD_LABEL, INK)
+	theme.set_type_variation(MUTED_LABEL, "Label")
+	theme.set_font("font", MUTED_LABEL, bold)
+	theme.set_color("font_color", MUTED_LABEL, MUTED)
+	theme.set_type_variation(HINT_LABEL, "Label")
+	theme.set_font("font", HINT_LABEL, bold)
+	theme.set_color("font_color", HINT_LABEL, MUTED_INK)
+	# Buttons.
+	_button_variation(theme, SEG_BUTTON, heading, 24, CREAM, 0, 0, Vector2.ZERO, Vector4(22, 10, 22, 10), Color("FFFFFF"))
+	_button_variation(theme, SEG_BUTTON_ON, heading, 24, YELLOW, 0, 0, Vector2.ZERO, Vector4(22, 10, 22, 10), Color("FFF07A"))
+	_button_variation(theme, SWITCH_BUTTON, heading, 22, CREAM, 12, 4, Vector2(3, 3), Vector4(14, 6, 14, 6))
+	_button_variation(theme, SWITCH_BUTTON_ON, heading, 22, SKY, 12, 4, Vector2(3, 3), Vector4(14, 6, 14, 6))
+	_button_variation(theme, STEP_BUTTON, heading, 24, CREAM, 12, 4, Vector2(3, 3), Vector4(0, 0, 0, 0))
+	_button_variation(theme, ACTION_BUTTON, heading, 22, CREAM, 16, 4, Vector2(4, 4), Vector4(14, 10, 14, 10))
+	_button_variation(theme, SKY_BUTTON, heading, 24, SKY, 16, 4, Vector2(4, 4), Vector4(14, 10, 14, 10))
+	_button_variation(theme, PINK_BUTTON, heading, 24, PINK, 16, 4, Vector2(4, 4), Vector4(14, 10, 14, 10))
+	_button_variation(theme, YELLOW_BUTTON, heading, 28, YELLOW, 14, 4, Vector2(4, 4), Vector4(14, 8, 14, 8))
+	_button_variation(theme, START_BUTTON, heading, 44, YELLOW, 20, 5, Vector2(6, 6), Vector4(16, 16, 16, 16))
+	_button_variation(theme, START_BUTTON_OFF, heading, 44, STRIP_GREY, 20, 5, Vector2(6, 6), Vector4(16, 16, 16, 16))
+	_button_variation(theme, PICK_BUTTON, bold, 18, CREAM, 10, 3, Vector2(2, 2), Vector4(8, 4, 8, 4))
+	var picked := box(YELLOW, 10, 3, Vector2(2, 2), Vector4(8, 4, 8, 4))
+	theme.set_stylebox("pressed", PICK_BUTTON, picked)
+	theme.set_stylebox("hover_pressed", PICK_BUTTON, picked)
+	_button_variation(theme, PILL_ON, heading, 19, CREAM, 999, 4, Vector2.ZERO, Vector4(14, 1, 14, 1))
+	_button_variation(theme, PILL_OFF, heading, 19, Color(CREAM, 0.0), 999, 4, Vector2.ZERO, Vector4(14, 1, 14, 1), Color(CREAM, 0.5))
+	_button_variation(theme, PILL_BOT, heading, 19, INK, 999, 4, Vector2.ZERO, Vector4(14, 1, 14, 1), INK)
+	for state: String in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		theme.set_color(state, PILL_BOT, CREAM)
+	_button_variation(theme, VALUE_BUTTON, heading, 34, Color(CREAM, 0.0), 8, 0, Vector2.ZERO, Vector4(0, 0, 0, 0), Color(CREAM, 0.0))
+	theme.set_stylebox("focus", VALUE_BUTTON, box(Color(YELLOW, 0.0), 8, 3, Vector2.ZERO, Vector4(0, 0, 0, 0)))
