@@ -2343,7 +2343,16 @@ func _pad_axis(device: int) -> Vector2:
 	var raw := Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y))
 	if _test_pad_axes.has(device):
 		raw = _test_pad_axes[device]
-	return stick_vector(raw)
+	var left := Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y))
+	if _test_pad_left_axes.has(device):
+		left = _test_pad_left_axes[device]
+	return pad_stick(raw, left)
+
+## #600: the right stick swings the arm; a lone Joy-Con reports its one stick as
+## the left, so the left takes over only while the right reads idle.
+static func pad_stick(right: Vector2, left: Vector2) -> Vector2:
+	var v: Vector2 = stick_vector(right)
+	return v if v != Vector2.ZERO else stick_vector(left)
 
 ## A raw right stick as that vector; the PC client's gamepad uses it too (#435).
 static func stick_vector(raw: Vector2) -> Vector2:

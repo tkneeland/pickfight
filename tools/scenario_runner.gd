@@ -773,6 +773,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"controller_page_refused_phone_rejoins_slowly_581",
 	"swap_stage_same_stage_keeps_name_594",
+	"gamepad_left_stick_swings_when_right_idle_600",
 	"pause_gates_pad_clicks_and_sticks_599",
 	"remote_client_menu_clears_held_release_599",
 	"burst_of_action_taps_counts_each_press_601",
@@ -2715,6 +2716,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595()
 		"swap_stage_same_stage_keeps_name_594":
 			return await _scenario_swap_stage_same_stage_keeps_name_594()
+		"gamepad_left_stick_swings_when_right_idle_600":
+			return await _scenario_gamepad_left_stick_swings_when_right_idle_600()
 		"pause_gates_pad_clicks_and_sticks_599":
 			return await _scenario_pause_gates_pad_clicks_and_sticks_599()
 		"remote_client_menu_clears_held_release_599":
@@ -38848,6 +38851,31 @@ func _scenario_swap_stage_same_stage_keeps_name_594() -> Array[String]:
 	return failures
 
 
+## Issue #600: a lone Joy-Con reports its one stick as the left stick, so the
+## left swings the arm when the right is idle; with both out, the right wins.
+func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _phone_rig_164(2, "PadLeft600")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
+		failures.append("only the left stick out gave %s, expected (1, 0)" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.0, 1.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.0, 1.0)) > 0.01:
+		failures.append("both sticks out gave %s, the right stick (0, 1) should win" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.1, 0.0)
+	server._test_pad_left_axes[0] = Vector2(0.1, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("both sticks in the deadzone gave %s" % players[0].input_vector)
+	await _teardown(rig["stage"])
+	return failures
+
 ## Issue #599: while paused, stick clicks, bumpers, Space and the right stick do
 ## nothing on the host; live play (unpaused) still takes them.
 func _scenario_pause_gates_pad_clicks_and_sticks_599() -> Array[String]:
@@ -38857,6 +38885,21 @@ func _scenario_pause_gates_pad_clicks_and_sticks_599() -> Array[String]:
 	var players: Array[RigidBody2D] = rig["players"]
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _pad_button_261(0, JOY_BUTTON_A)
+	server._test_pad_left_axes[0] = Vector2(1.0, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(1.0, 0.0)) > 0.01:
+		failures.append("only the left stick out gave %s, expected (1, 0)" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.0, 1.0)
+	await _await_ticks(30)
+	if players[0].input_vector.distance_to(Vector2(0.0, 1.0)) > 0.01:
+		failures.append("both sticks out gave %s, the right stick (0, 1) should win" % players[0].input_vector)
+	server._test_pad_axes[0] = Vector2(0.1, 0.0)
+	server._test_pad_left_axes[0] = Vector2(0.1, 0.0)
+	await _await_ticks(30)
+	if players[0].input_vector.length() > 0.01:
+		failures.append("both sticks in the deadzone gave %s" % players[0].input_vector)
+	await _teardown(rig["stage"])
+	return failures
 	server.set_lobby_state({"phase": "lobby", "paused": true, "players": []})
 	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK)
 	if server._slot_action_down[0] != -1:

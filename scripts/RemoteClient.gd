@@ -253,16 +253,17 @@ func _physics_process(_delta: float) -> void:
 ## #435: a gamepad's right stick drives the arm too, as a gamepad seat's does on
 ## the host (#261). While the stick is out it sets the vector; let go, and the
 ## arm rests until the stick or the mouse moves again.
+var test_pad_left_stick: Vector2 = Vector2.ZERO # #600: the left stick's stand-in
 var test_pad_stick: Variant = null # a Vector2 here stands in for a real pad (headless has none)
 var _pad_driving: bool = false
 
 func _pad_input() -> void:
 	var stick := Vector2.ZERO
 	if test_pad_stick is Vector2:
-		stick = ControllerServerScript.stick_vector(test_pad_stick)
+		stick = ControllerServerScript.pad_stick(test_pad_stick, test_pad_left_stick)
 	else:
 		for device: int in Input.get_connected_joypads():
-			stick = ControllerServerScript.stick_vector(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)))
+			stick = ControllerServerScript.pad_stick(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)), Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y)))
 			if stick != Vector2.ZERO:
 				break
 	if stick != Vector2.ZERO:
