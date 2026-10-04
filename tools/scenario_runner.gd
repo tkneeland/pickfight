@@ -746,6 +746,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bullet_outlives_eliminated_shooter_570",
 	"shots_cleared_on_leave_round_and_dead_shooter_clear_570",
 	"round_end_clears_dead_shooters_bullet_570",
+	"online_remote_seat_never_hosts_578",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2627,6 +2628,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570()
 		"round_end_clears_dead_shooters_bullet_570":
 			return await _scenario_round_end_clears_dead_shooters_bullet_570()
+		"online_remote_seat_never_hosts_578":
+			return await _scenario_online_remote_seat_never_hosts_578()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -23250,8 +23253,8 @@ func _scenario_online_remote_claims_slot() -> Array[String]:
 		failures.append("remote nickname was '%s', expected Ranger" % server.slot_name(0))
 	if not server.slot_ready(0):
 		failures.append("remote Ready did not register")
-	if server.host_slot() != 0:
-		failures.append("the only seat, a remote one, is not host (host_slot=%d)" % server.host_slot())
+	if server.host_slot() != -1:
+		failures.append("the only seat, a remote one, became host (host_slot=%d); #578" % server.host_slot())
 	server.send_buzz(0, "win") # a no-op for remote seats; must not error
 	await _online_close_239(rig)
 	return failures
@@ -23841,14 +23844,14 @@ func _scenario_online_toggle_refused_from_remote_host() -> Array[String]:
 	rig["code"] = server.online_room_code()
 	var remote: WebSocketPeer = await _online_remote_239(rig, "refuse-remote")
 	var slot_msg: Dictionary = await _online_wait_239(rig, remote, "slot") if remote != null else {}
-	if int(slot_msg.get("slot", -1)) != 0 or server.host_slot() != 0:
-		failures.append("the remote was told %s / host_slot %d, expected it to be the host" % [slot_msg, server.host_slot()])
+	if int(slot_msg.get("slot", -1)) != 0 or server.host_slot() != -1:
+		failures.append("the remote was told %s / host_slot %d, expected slot 0 and no host (#578)" % [slot_msg, server.host_slot()])
 	_online_send_239(remote, 1, JSON.stringify({"t": "host", "cmd": "online", "v": false}).to_utf8_buffer())
 	await _online_frames_239(20)
 	for c: WebSocketPeer in rig["clients"]:
 		c.poll()
 	if not server.online_requested() or not server.is_online():
-		failures.append("a remote host turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
+		failures.append("a remote seat turned Go online off (requested %s, online %s)" % [server.online_requested(), server.is_online()])
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	server.apply_host_command("online", false)
 	await _online_close_239(rig)
@@ -37754,4 +37757,34 @@ func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
 	if not _projectiles_of(p1).is_empty():
 		failures.append("the dead shooter's bullet survived the end of the round")
 	await _teardown(stage)
+	return failures
+
+## #578: in an Online match a remote seat is never host and its `host` frames
+## are ignored, even when it joined before any phone; a phone seat still hosts.
+func _scenario_online_remote_seat_never_hosts_578() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_rig_239(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	var commands: Array = []
+	server.host_command.connect(func(cmd: String, slot: int) -> void: commands.append([cmd, slot]))
+	var remote: WebSocketPeer = await _online_remote_239(rig, "remote-578")
+	if remote != null:
+		await _online_wait_239(rig, remote, "slot")
+	for cmd in ["pause", "end", "kick"]:
+		_online_send_239(remote, 1, JSON.stringify({"t": "host", "cmd": cmd, "slot": 0}).to_utf8_buffer())
+	await _online_frames_239(10)
+	if server.host_slot() != -1:
+		failures.append("a lone remote seat became host (host_slot=%d)" % server.host_slot())
+	if not commands.is_empty():
+		failures.append("remote host frames were honoured: %s" % [commands])
+	var phone := WebSocketPeer.new()
+	var phones: Array[WebSocketPeer] = []
+	var joined: Dictionary = await _join_phone(phone, "phone-578", phones)
+	phones.append(phone)
+	if server.host_slot() != int(joined.get("slot", -2)) or server.host_slot() < 0:
+		failures.append("the phone seat is not host after joining behind a remote (host_slot=%d)" % server.host_slot())
+	await _online_close_239(rig)
 	return failures
