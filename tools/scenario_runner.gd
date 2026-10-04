@@ -781,6 +781,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"respawn_stays_on_own_half_605",
 	"respawn_alone_does_not_always_pick_spawn0_605",
 	"settings_hygiene_609",
+	"bot_holds_hill_and_flag_without_hopping_607",
+	"bot_first_thinks_are_staggered_607",
+	"bot_keeps_stage_read_across_respawns_607",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2736,6 +2739,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
+		"bot_holds_hill_and_flag_without_hopping_607":
+			return await _scenario_bot_holds_hill_and_flag_without_hopping_607()
+		"bot_first_thinks_are_staggered_607":
+			return await _scenario_bot_first_thinks_are_staggered_607()
+		"bot_keeps_stage_read_across_respawns_607":
+			return await _scenario_bot_keeps_stage_read_across_respawns_607()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39184,5 +39193,97 @@ func _scenario_settings_hygiene_609() -> Array[String]:
 		failures.append("the balance log is not gated on share_stats")
 	for f: String in DirAccess.get_files_at(tmp):
 		DirAccess.remove_absolute(tmp.path_join(f))
+	_scenario_completed = true
+	return failures
+
+## Issue #607 (1): a bot resting on its goal is not stuck. Holding the hill
+## with no rival near, it stays in the zone for 10 s; a CTF defender stays by its flag.
+func _scenario_bot_holds_hill_and_flag_without_hopping_607() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.KING_OF_THE_HILL, [Vector2(-620.0, 274.0), Vector2(0.0, 274.0)])
+	if not rig["started"]:
+		return ["the King of the Hill round never started"]
+	var bot_player: RigidBody2D = rig["players"][1]
+	var hill_at: Vector2 = rig["node"].hill_position
+	var worst: float = 0.0
+	for t in 600:
+		await physics_frame
+		worst = maxf(worst, bot_player.global_position.distance_to(hill_at))
+	print("      hill holder: farthest from the hill centre in 10 s %.0f px (radius 150)" % worst)
+	if worst > 150.0:
+		failures.append("the bot holding the hill left the zone (%.0f px out, radius 150)" % worst)
+	await _teardown(rig["stage"])
+	var crig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(crig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = crig["rm"]._current_stage
+	var home: Vector2 = stage.get_flag_home(0)
+	var defender := BotScript.new()
+	defender.rng.seed = BOT_SEED
+	defender.player = crig["players"][0]
+	defender.output = crig["players"][0].set_input_vector
+	crig["stage"].add_child(defender)
+	var far_x: float = 600.0 if home.x < 0.0 else -600.0
+	crig["players"][1].teleport_to(Vector2(far_x, 240.0))
+	crig["players"][2].teleport_to(Vector2(far_x + 40.0, 240.0))
+	crig["players"][3].teleport_to(Vector2(far_x + 80.0, 240.0))
+	crig["players"][0].teleport_to(home + Vector2(0.0, -20.0))
+	var worst_flag: float = 0.0
+	for t in 600:
+		await physics_frame
+		worst_flag = maxf(worst_flag, crig["players"][0].global_position.distance_to(home))
+	print("      CTF defender: farthest from its flag in 10 s %.0f px (home %s, now %s, mode %s)" % [worst_flag, home, crig["players"][0].global_position, defender.mode])
+	if worst_flag > 150.0:
+		failures.append("the CTF defender wandered %.0f px from its flag" % worst_flag)
+	await _teardown(crig["stage"])
+	return failures
+## Issue #607 (2): bots' first thinks are spread by roster slot, not all on frame one.
+func _scenario_bot_first_thinks_are_staggered_607() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var lefts: Array[float] = []
+	for i in 4:
+		var bot := BotScript.new()
+		bot.rng.seed = BOT_SEED
+		bot.player = rig["players"][i]
+		bot.output = rig["players"][i].set_input_vector
+		bot.set_physics_process(false)
+		rig["stage"].add_child(bot)
+		bot.think(0.0)
+		lefts.append(bot._think_left)
+	print("      think timers after the first tick: %s" % [lefts])
+	for i in range(1, 4):
+		if lefts[i] <= 0.0 or lefts[i] <= lefts[i - 1] and i > 1:
+			failures.append("bot %d's first think was not staggered after bot %d (%s)" % [i, i - 1, lefts])
+	if lefts[1] >= BotScript.THINK_SEC:
+		failures.append("a stagger offset reached a whole think period: %s" % [lefts])
+	await _teardown(rig["stage"])
+	return failures
+## Issue #607 (3): a respawn does not make the bot re-read the stage.
+func _scenario_bot_keeps_stage_read_across_respawns_607() -> Array[String]:
+	var failures: Array[String] = []
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	holder.add_child(player)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	holder.add_child(bot)
+	await _await_msec(600)
+	for i in 3:
+		player.alive = false
+		await _await_ticks(2)
+		player.alive = true
+		await _await_msec(600)
+	print("      stage lookups over 3 respawns: %d" % int(bot.lava_lookups))
+	if int(bot.lava_lookups) != 1:
+		failures.append("the bot re-read the stage %d times over 3 respawns, expected once" % int(bot.lava_lookups))
+	holder.queue_free()
+	await _await_ticks(1)
 	_scenario_completed = true
 	return failures
