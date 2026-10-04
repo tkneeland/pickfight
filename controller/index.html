@@ -755,6 +755,7 @@
       "STATE_REPLACED": "This controller was opened somewhere else. Reload the page to play here.",
       "STATE_PAUSED": "Paused by the host",
       "STATE_WAITING_SLOT": "Waiting for a free slot",
+      "STATE_REFUSED_WAIT": "{0}. Waiting for the host to switch back to Couch…",
       "STATE_REASON_RECONNECTING": "{0} — reconnecting…",
       "STATE_NEXT_ROUND_IN": "Next round in {0}…",
       "STATE_WAITING_ROUND": "Waiting for the next round",
@@ -884,6 +885,9 @@
   // host restart -- just reload the page.
   var DRAG_RADIUS_FRACTION = 0.35;
   var RECONNECT_DELAY_MS = 1000;
+  // A refused phone (close code 4003) retries this slowly, so it rejoins by
+  // itself when the host switches back to Couch (#581).
+  var REFUSED_RETRY_MS = 10000;
   // Must stay in sync with each Player's identity_color in scenes/Main.tscn:
   // slot N = PlayerN+1, and both match Palette.PLAYERS in scripts/Palette.gd (#255). The host paints that same colour on each
   // player's persistent outline and weapon head (ADR-0005)
@@ -1308,7 +1312,7 @@
     } else if (replacedOut) {
       text = t("STATE_REPLACED");
     } else if (refusedOut) {
-      text = closeReason.charAt(0).toUpperCase() + closeReason.slice(1);
+      text = t("STATE_REFUSED_WAIT", closeReason.charAt(0).toUpperCase() + closeReason.slice(1));
     } else if (slot >= 0 && lobby && lobby.paused) {
       text = t("STATE_PAUSED");
     } else if (slot < 0) {
@@ -2014,8 +2018,8 @@
   // slot is taken (issue #194): shown as "Waiting for a free slot".
   var NO_SLOT_REASON = "no free player slot";
   // Must match ControllerServer.REFUSED_CODE (#509): the host refused this
-  // phone for the match kind (online, couch, solo, room closed). Retrying
-  // cannot change that, so it is terminal like a kick.
+  // phone for the match kind (online, couch, solo, room closed). The fast
+  // retry loop stops; a slow one (REFUSED_RETRY_MS) keeps going (#581).
   var REFUSED_CODE = 4003;
 
   function connect() {
@@ -2038,6 +2042,7 @@
       try {
         var msg = JSON.parse(ev.data);
         if (typeof msg.slot === "number") {
+          refusedOut = false;
           setSlot(msg.slot);
           sendName();
           sendLook();
@@ -2077,7 +2082,7 @@
       release();
       if (kicked) { kickedOut = true; showState(); return; }
       if (replaced) { replacedOut = true; showState(); return; }
-      if (refused) { refusedOut = true; showState(); return; }
+      if (refused) { refusedOut = true; showState(); setTimeout(connect, REFUSED_RETRY_MS); return; }
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
     sock.onerror = function () { /* onclose does the reconnecting */ };
