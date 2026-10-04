@@ -153,6 +153,12 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
 
 const PAGE_PATH: String = "res://controller/index.html"
+## The only other files the HTTP server hands out: the controller page's fonts,
+## by exact URL path (an allowlist, so no path can reach anything else).
+const CONTROLLER_FONTS: Dictionary = {
+	"/fonts/LilitaOne-Latin.woff2": "res://controller/fonts/LilitaOne-Latin.woff2",
+	"/fonts/Nunito-Latin.woff2": "res://controller/fonts/Nunito-Latin.woff2",
+}
 const WS_PORT_TOKEN: String = "__WS_PORT__"
 const MAX_HEADER_BYTES: int = 8192
 const PACKET_SIZE: int = 8
@@ -202,6 +208,10 @@ const VIRTUAL_ADAPTER_HINTS: PackedStringArray = [
 ## No well-formed packet for this long and the bound controller is considered
 ## gone. Sized above a few dropped frames but well below "a player noticed".
 @export var controller_timeout_sec: float = 2.0
+## Issue #579: a remote seat (relay peer) goes quiet for longer than a phone before
+## it is dropped -- a window drag or a hitch on a PC stalls its input past 2 s. The
+## dropped seat is held (#459) and its client rejoins by itself.
+@export var remote_timeout_sec: float = 10.0
 ## How long a socket may sit without completing an HTTP request or a WebSocket
 ## handshake before it is dropped.
 @export var connection_timeout_sec: float = 5.0
@@ -400,6 +410,7 @@ class RemoteSeat extends RefCounted:
 	func close(code: int = 1000, reason: String = "") -> void:
 		if open:
 			link.send_text_to(peer, JSON.stringify({"t": "closed", "code": code, "reason": reason}))
+			link.drop_peer(peer) # free the relay slot too (#580)
 			open = false
 
 ## The host PC's own seat (issue #239, "Play on this PC"): a transport with
@@ -451,6 +462,12 @@ const MODE_PHASES: PackedStringArray = ["lobby", "countdown", "victory"]
 ## Issue #236: a phone picks its team in the lobby (or its countdown, which a
 ## new pick cancels, as an un-ready does).
 const TEAM_PICK_PHASES: PackedStringArray = ["lobby", "countdown"]
+## The number the Host panel's target row shows and steps (#544): the round
+## target, or the mode's own lives / goals / captures.
+func mode_target() -> int:
+	var picked: int = GameModesScript.target_setting(_game_mode)
+	return picked if picked >= 0 else _match_target
+
 ## Issue #236: whether the host phone chose Teams for the next match.
 var _team_mode: bool = false
 ## Issue #352: the `GameModes` id the host phone chose ("" is Classic), kept in
@@ -712,8 +729,9 @@ func _apply_smoothed_input(delta: float) -> void:
 ## A slot is reported while a controller is bound, and afterwards until its weapon
 ## has settled back to rest -- otherwise the easing that follows a disconnect
 ## would happen entirely off the record.
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_push_pad_sticks()
+	_step_pad_pickers(delta)
 	for slot in _slot_peers.size():
 		if _slot_peers[slot] == null and not _weapon_away_from_rest(slot):
 			continue
@@ -844,6 +862,14 @@ func _answer_http(conn: HttpConn, request_line: String) -> void:
 		_send_http(conn, 200, "OK", "text/html; charset=utf-8", page.to_utf8_buffer())
 		return
 
+	if method == "GET" and CONTROLLER_FONTS.has(path):
+		var font: FileAccess = FileAccess.open(CONTROLLER_FONTS[path], FileAccess.READ)
+		if font != null:
+			var bytes: PackedByteArray = font.get_buffer(font.get_length())
+			font.close()
+			_send_http(conn, 200, "OK", "font/woff2", bytes, "public, max-age=86400")
+			return
+
 	_send_http(conn, 404, "Not Found", "text/plain; charset=utf-8", "404 Not Found".to_utf8_buffer())
 
 ## Read from disk on every request, so the page can be tuned (drag radius, feel)
@@ -857,11 +883,11 @@ func _load_page() -> String:
 	file.close()
 	return html.replace(WS_PORT_TOKEN, str(ws_port))
 
-func _send_http(conn: HttpConn, code: int, reason: String, content_type: String, body: PackedByteArray) -> void:
+func _send_http(conn: HttpConn, code: int, reason: String, content_type: String, body: PackedByteArray, cache_control: String = "no-store") -> void:
 	var header: String = "HTTP/1.1 %d %s\r\n" % [code, reason]
 	header += "Content-Type: %s\r\n" % content_type
 	header += "Content-Length: %d\r\n" % body.size()
-	header += "Cache-Control: no-store\r\n"
+	header += "Cache-Control: %s\r\n" % cache_control
 	header += "Connection: close\r\n\r\n"
 	var out: PackedByteArray = header.to_utf8_buffer()
 	out.append_array(body)
@@ -936,7 +962,7 @@ func _process_websocket() -> void:
 		if state == WebSocketPeer.STATE_OPEN:
 			_drain(slot, peer)
 			var silent_for: int = now - _slot_last_packet_msec[slot]
-			if silent_for > timeout_msec:
+			if silent_for > (int(remote_timeout_sec * 1000.0) if peer is RemoteSeat else timeout_msec):
 				# The decisive case: the phone screen-locked or left Wi-Fi
 				# mid-drag, so the (0,0) release frame never arrived and the
 				# socket still looks open. Treat it as gone.
@@ -1310,9 +1336,12 @@ func _drain(slot: int, peer: Variant) -> void:
 		var hold: bool = latest[RELEASE_PACKET_SIZE] & 0x80 != 0
 		if _slot_press_seen[slot] != -1 and count != _slot_press_seen[slot]:
 			if not hold:
-				_action_press(slot)
-			elif _players[slot] != null:
-				_players[slot].try_action_throw()
+				# #601: a burst keeps only the last packet; fire once per
+				# counter step (7-bit, wraps), capped at 3.
+				for _i in mini((count - _slot_press_seen[slot]) & 0x7F, 3):
+					_action_press(slot)
+			else:
+				_try_throw(slot)
 		_slot_press_seen[slot] = count
 	if _log_input:
 		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])
@@ -1500,6 +1529,8 @@ func kick(slot: int, by_host_pc: bool = false) -> bool:
 		return false
 	if slot == (_host_pc_slot if by_host_pc else host_slot()):
 		return false
+	if slot == _host_pc_slot:
+		return false # #545: the host PC's own seat is never kickable
 	if is_virtual(slot):
 		# A bot (issue #152): its director sends it away.
 		bot_director.remove_bot(slot)
@@ -1541,11 +1572,11 @@ func clear_ready() -> void:
 		_slot_ready[slot] = 0
 
 ## The host phone's slot: the earliest-joined claimed slot with a controller
-## connected right now (never the host-PC seat), or -1 with no phones at all.
+## connected right now (never the host-PC seat or a remote seat), or -1 with no phones at all.
 func host_slot() -> int:
 	for slot: int in _join_order:
-		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat:
-			return slot
+		if _slot_peers[slot] != null and not _slot_peers[slot] is LocalSeat and not _slot_peers[slot] is RemoteSeat:
+			return slot # #578: a remote seat never hosts; the host PC runs an Online room
 	return -1
 
 ## The match length the host phone chose ("first to N"), 5 by default.
@@ -1959,6 +1990,7 @@ func _process_remote() -> void:
 			_remote_awaiting.erase(seat)
 			if not _is_number(hello.get("proto")) or int(hello["proto"]) != PROTOCOL_VERSION:
 				seat.send_text(JSON.stringify({"t": "error", "reason": "version"}))
+				relay_link.drop_peer(seat.peer)
 				seat.open = false
 				_remote_seats.erase(seat.peer)
 				if _log_input:
@@ -1967,6 +1999,7 @@ func _process_remote() -> void:
 			var build_reason: String = build_mismatch_reason(hello)
 			if not build_reason.is_empty():
 				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
+				relay_link.drop_peer(seat.peer)
 				seat.open = false
 				_remote_seats.erase(seat.peer)
 				if _log_input:
@@ -2076,9 +2109,25 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false
 			return HostSettingsScript.shared().set_stock_stage(arg)
+		"soccer_goals", "ctf_captures":
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
+				return false
+			if cmd == "soccer_goals":
+				HostSettingsScript.shared().set_soccer_goals(int(arg))
+			else:
+				HostSettingsScript.shared().set_ctf_captures(int(arg))
+			return true
 		"target":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false
+			# The row's meaning follows the mode (#544): lives, goals or captures.
+			match GameModesScript.target_kind(_game_mode):
+				"lives":
+					return apply_host_command("stock_lives", arg)
+				"goals":
+					return apply_host_command("soccer_goals", arg)
+				"captures":
+					return apply_host_command("ctf_captures", arg)
 			_match_target = clampi(int(arg), MIN_MATCH_TARGET, MAX_MATCH_TARGET)
 			return true
 		"start":
@@ -2242,7 +2291,8 @@ func _input(event: InputEvent) -> void:
 	# Issue #463, ADR-0022: a Space tap is the host PC's finger lifting (and
 	# touching again), since a mouse never sends a zero vector.
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
-			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+			and not _input_gated() and not _host_menu_open():
 		_action_down(_host_pc_slot)
 		return
 	if key != null and not key.pressed and key.physical_keycode == KEY_SPACE and _host_pc_slot != -1:
@@ -2293,7 +2343,18 @@ func _pad_axis(device: int) -> Vector2:
 	var raw := Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y))
 	if _test_pad_axes.has(device):
 		raw = _test_pad_axes[device]
-	return stick_vector(raw)
+	var left := Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y))
+	if _test_pad_left_axes.has(device):
+		left = _test_pad_left_axes[device]
+	if pad_picker_shown(pad_slot(device)):
+		left = Vector2.ZERO # the left stick drives the picker there, not the arm (#611)
+	return pad_stick(raw, left)
+
+## #600: the right stick swings the arm; a lone Joy-Con reports its one stick as
+## the left, so the left takes over only while the right reads idle.
+static func pad_stick(right: Vector2, left: Vector2) -> Vector2:
+	var v: Vector2 = stick_vector(right)
+	return v if v != Vector2.ZERO else stick_vector(left)
 
 ## A raw right stick as that vector; the PC client's gamepad uses it too (#435).
 static func stick_vector(raw: Vector2) -> Vector2:
@@ -2310,10 +2371,38 @@ func pad_slot(device: int) -> int:
 		_pad_seats.erase(device)
 	return slot
 
-func _push_pad_sticks() -> void:
+## Test seam: a pad's left stick, by device, in place of the real one.
+var _test_pad_left_axes: Dictionary = {}
+
+## #547: the left stick drives a pad's lobby picker like the D-pad (up and down
+## pick the row, left and right change the value, with a repeat delay), for a
+## single Joy-Con held sideways, which has no D-pad. The stick is read only while
+## the picker shows and no host menu is open; otherwise its state is let go.
+func _step_pad_pickers(delta: float) -> void:
 	for device: int in _pad_seats.keys():
 		var slot: int = pad_slot(device)
 		if slot == -1:
+			continue
+		var axis := Vector2.ZERO
+		if pad_picker_shown(slot) and not PadMenuScript.is_open():
+			axis = Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y))
+			if _test_pad_left_axes.has(device):
+				axis = _test_pad_left_axes[device]
+		cosmetics_picker.stick(self, slot, axis, delta)
+
+## Issue #599: a pause or an open host menu owns the pads; presses and stick
+## pushes are dropped (releases are not, so nothing sticks).
+func _input_gated() -> bool:
+	return bool(_lobby_state.get("paused", false)) or PadMenuScript.is_open()
+
+func _push_pad_sticks() -> void:
+	var gated: bool = _input_gated()
+	for device: int in _pad_seats.keys():
+		var slot: int = pad_slot(device)
+		if slot == -1:
+			continue
+		if gated:
+			_smoothers[slot].push(Vector2.ZERO)
 			continue
 		if _pad_axis(device) != Vector2.ZERO:
 			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
@@ -2334,8 +2423,9 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 	if button == JOY_BUTTON_LEFT_SHOULDER or button == JOY_BUTTON_RIGHT_SHOULDER:
 		# Released while held; a tap (up within TAP_MAX_SEC) throws the boomerang.
 		if pressed:
-			# Issue #511: the picker or the host menu owns the bumper right now.
-			if pad_picker_shown(slot) or PadMenuScript.is_open():
+			# Issue #511: the host menu owns the bumper right now. (The lobby picker
+			# no longer does: it uses the D-pad and the left stick, #547.)
+			if _input_gated():
 				return
 			_slot_release_held[slot] = 1
 			_slot_bumper_down[slot] = GameClockScript459.now_msec()
@@ -2347,7 +2437,8 @@ func _pad_release_button(device: int, button: int, pressed: bool) -> void:
 				_try_throw(slot)
 	elif button == JOY_BUTTON_LEFT_STICK or button == JOY_BUTTON_RIGHT_STICK:
 		if pressed:
-			_action_down(slot)
+			if not _input_gated():
+				_action_down(slot)
 		else:
 			_action_up(slot)
 
@@ -2363,7 +2454,7 @@ func _pad_button_pressed(device: int, button: int) -> void:
 		if device == HOST_PAD_DEVICE:
 			host_command.emit("resume" if paused else "pause", -1)
 		return
-	# Issue #441: in the lobby the D-pad and bumpers drive the seat's cosmetics picker.
+	# Issue #441: in the lobby the D-pad drives the seat's cosmetics picker (#547: not the bumpers).
 	if slot != -1 and pad_picker_shown(slot) and cosmetics_picker.pad_button(self, slot, button):
 		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
@@ -2501,6 +2592,7 @@ var _snapshot_frame: int = 0
 var _snapshot_bound: Dictionary = {} # RemoteSeat -> true, the seats already sent a full frame
 var _snapshot_previous: Dictionary = {}
 var _hud_last: Dictionary = {}
+var _stream_link_was_up: bool = false
 var _hud_tick: int = 0
 ## Hud text frames sent to remote seats (issue #436), for scenarios.
 var hud_frames_sent: int = 0
@@ -2521,6 +2613,11 @@ func _stream_snapshots(delta: float) -> void:
 		return
 	_listen_for_sounds(true)
 	var fresh: bool = false
+	# Issue #579: frames sent while the host's link was down were dropped, so the
+	# link coming back sends a full frame and the HUD again.
+	var link_up: bool = is_online()
+	fresh = link_up and not _stream_link_was_up
+	_stream_link_was_up = link_up
 	for seat: RemoteSeat in bound:
 		fresh = fresh or not _snapshot_bound.has(seat)
 	_snapshot_bound.clear()
@@ -2699,6 +2796,10 @@ func set_match_kind(kind: String) -> bool:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
 	var dropped: int = _drop_seats_for(target) if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
+	if kind == KIND_SOLO and _match_kind == KIND_ONLINE:
+		# Solo refuses phones and remote seats alike (#552): drop the live ones and
+		# the held claims (#459), which would otherwise eat bot capacity.
+		dropped += _drop_seats_for(KIND_LOCAL) + _drop_seats_for(KIND_ONLINE)
 	_match_kind = kind
 	if target == KIND_LOCAL:
 		if _host_pc_slot != -1:

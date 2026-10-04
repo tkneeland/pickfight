@@ -17,6 +17,9 @@ extends Node
 ## it. Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
+const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -62,12 +65,15 @@ func start_round(slots: Array[int]) -> void:
 	end_round()
 	if round_manager == null:
 		return
+	goals_to_win = int(HostSettingsScript.shared().soccer_goals)
 	scores = {0: 0, 1: 0}
 	scorers.clear()
 	_finished = false
 	_pause_left = 0.0
 	_last_touch = -1
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
+	_respawner.team_of = team_of
+	_respawner.centre_x = func() -> float: return _ball_spawn().x
 	for slot: int in slots:
 		if slot < 0 or slot >= round_manager._players.size():
 			continue
@@ -121,6 +127,12 @@ func connected_count() -> int:
 ## manager counts such a player as still standing (as in Stock).
 func is_pending(slot: int) -> bool:
 	return _respawner != null and _respawner.is_pending(slot)
+
+## The host kicked `slot` (#593, as Stock #521): it does not come back, and a
+## pending respawn must not keep it standing while the other team is handed the round.
+func cancel_respawn(slot: int) -> void:
+	if _respawner != null:
+		_respawner.cancel(slot)
 
 ## `slot`'s team: its Teams team, or by slot parity outside a Teams match (a
 ## scenario seam).
@@ -337,9 +349,7 @@ func _build_hud() -> void:
 	_score_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
 	_score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_score_label.add_theme_font_size_override("font_size", 44)
-	_score_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_score_label.add_theme_constant_override("outline_size", 8)
+	ScreenKitScript.style_hud_pill(_score_label)
 	_hud.add_child(_score_label)
 	_goal_label = Label.new()
 	_goal_label.name = "SoccerGoal"
@@ -347,10 +357,10 @@ func _build_hud() -> void:
 	_goal_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_goal_label.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_goal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_goal_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
 	_goal_label.add_theme_font_size_override("font_size", 120)
-	_goal_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
-	_goal_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_goal_label.add_theme_constant_override("outline_size", 14)
+	_goal_label.add_theme_color_override("font_color", UiThemeScript.YELLOW)
+	_goal_label.add_theme_constant_override("outline_size", 18)
 	_goal_label.text = tr("SOCCER_GOAL")
 	_goal_label.visible = false
 	_hud.add_child(_goal_label)

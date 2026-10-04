@@ -62,18 +62,18 @@ HOST_END_MATCH,End match
 HOST_FIRST_TO_DOWN,First to  -
 HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
 HOST_JOIN_BLOCKED,Off while players are in your lobby
-HOST_JOIN_ONLINE,Join someone else's game (J)
+HOST_JOIN_ONLINE,Join someone's game (J)
+HOST_JOIN_ONLINE_PAD,Join someone's game
 HOST_KICK,Kick
 HOST_MODE,Mode (T)
 HOST_MODE_STATE,Mode (T): %s
 HOST_BOTS_STATE,Bots (B): %d
-HOST_START_MATCH,Start match (Enter)
-HOST_START_MATCH_PAD,Start match
+HOST_START_MATCH,START!
 HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.
 HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.
 HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.
 HOW_TO_PLAY_LINE_4,"Hit them till they die, or knock them off. Last one standing wins."
-HOW_TO_PLAY_TITLE,HOW TO PLAY
+HOW_TO_PLAY_TITLE,How to play
 JOIN_BUTTON,Join
 JOIN_CANCEL,Cancel
 JOIN_CLOSED_EARLY,The connection closed before the match was joined.
@@ -119,6 +119,9 @@ JOIN_YOUR_NAME,Your name
 LOBBY_AUTO,(auto)
 LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone
 LOBBY_FIRST_TO,First to %d
+LOBBY_CAPTURES_TO_WIN,Captures to win %d
+LOBBY_GOALS_TO_WIN,Goals to win %d
+LOBBY_LIVES,Lives %d
 LOBBY_HOST_TAG,  (host)
 LOBBY_NOBODY_YET,nobody yet
 LOBBY_NOT_READY,not ready
@@ -236,14 +239,14 @@ STAGE_RELAY,Relay
 STAGE_ROUNDABOUT,Roundabout
 STAGE_SUMMIT,Summit
 MODE_SOCCER_NAME,Soccer
-MODE_SOCCER_RULE,First team to 3 goals wins.
+MODE_SOCCER_RULE,Reach the goal target to win.
 SOCCER_GOAL,GOAL!
 AWARD_CATEGORY_SCORER,SCORER
 STAGE_PITCH,Pitch
 STAGE_CAGE,Cage
 STAGE_DUNES,Dunes
 MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag
-MODE_CAPTURE_THE_FLAG_RULE,First team to 2 captures wins.
+MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.
 AWARD_CATEGORY_CAPTURER,CAPTURER
 STAGE_BASTION,Bastion
 STAGE_STRONGHOLD,Stronghold
@@ -265,7 +268,6 @@ HUD_FLAG_2,dropped
 HUD_SOCCER,Red %d - Blue %d (first to %d)
 HUD_POTATO,%s has the potato: %ds
 HUD_LIVES,%s x%d
-PICKER_PAD_HINT,D-pad row / LB RB change
 PICKER_TITLE,Your look
 PICKER_HAT,Hat
 PICKER_COLOUR,Colour
@@ -288,3 +290,55 @@ PICKER_EYES_VISOR,Visor
 JOIN_REJOINING,Rejoining your seat...
 REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s
 REPLAY_GIF_SAVED,GIF saved: %s
+LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d)
+LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect
+MODE_STOCK_RULE_N,Lose all %d lives and you are out.
+MODE_SOCCER_RULE_N,First team to %d goals wins.
+MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.
+HOST_START_WAITING,Waiting...
+HOW_TO_PLAY_BUTTON,How to play
+LOBBY_YOU_TAG," (you)"
+LOBBY_BOT,BOT
+LOBBY_OPEN_SEAT,Open seat
+LOBBY_SEAT_HINT_COUCH,Scan QR or press A
+LOBBY_SEAT_HINT_SOLO,Add a bot with B
+LOBBY_SEAT_HINT_ONLINE,Share the room code
+LOBBY_PLAYERS,Players
+LOBBY_COUNT,"%d joined, %d bots"
+LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot"
+LOBBY_TEAM_TAG,%s TEAM
+LOBBY_STARTING,Get ready!
+LOBBY_NOT_READY_ONE,1 player not ready yet
+LOBBY_NOT_READY_N,%d players not ready yet
+LOBBY_ENTER_OR_START,Enter or Start
+LOBBY_SCAN_TITLE,Scan to join
+LOBBY_ROOM_CODE_TITLE,Room code
+LOBBY_SOLO_TITLE,Solo practice
+LOBBY_ROOM_CODE_NOTE,"Friends open Pickfight, pick Online, then Join a game"
+LOBBY_SOLO_NOTE,Just you and the bots on this computer. No room code and nothing online.
+LOBBY_MODE_TITLE,Mode
+LOBBY_HOST_TITLE,Host
+LOBBY_ROW_FIRST_TO,First to
+LOBBY_ROW_LIVES,Lives
+LOBBY_ROW_GOALS,Goals to win
+LOBBY_ROW_CAPTURES,Captures to win
+LOBBY_ROW_BOTS,Bots
+LOBBY_ROW_TEAMS,Teams
+LOBBY_ON,On
+LOBBY_OFF,Off
+LOBBY_STATUS_FIRST_TO,first to %d
+LOBBY_STATUS_LIVES,%d lives
+LOBBY_STATUS_GOALS,%d goals
+LOBBY_STATUS_CAPTURES,%d captures
+LOBBY_HELP_FIRST_TO,First to %d rounds takes the match.
+MODE_CLASSIC_BLURB,Last one standing
+MODE_KING_OF_THE_HILL_BLURB,Hold the hill alone
+MODE_HOT_POTATO_BLURB,Pass the tag
+MODE_SUDDEN_DEATH_BLURB,"One hit, you are out"
+MODE_STOCK_BLURB,Last one with lives left
+MODE_SOCCER_BLURB,Teams: score goals
+MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag
+PICKER_LIVE_NOTE,"In the game this is the real character, live"
+PICKER_TAKEN_NOTE,Greyed colours are taken by other players
+PICKER_DONE,Done
+TITLE_FOOTER,"Click, press a key, or D-pad + A"

@@ -103,7 +103,7 @@ func _ready() -> void:
 	_shape.radius = maxf(0.5, float(_stats.projectile_radius))
 
 func _physics_process(delta: float) -> void:
-	if not _shooter_in_play():
+	if not is_instance_valid(shooter):
 		queue_free()
 		return
 	age += delta

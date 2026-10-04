@@ -31,6 +31,7 @@ const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
 const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
+const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
@@ -114,6 +115,10 @@ var _hud_signature: String = ""
 const REJOIN_RETRY_MSEC: int = 1500
 var _rejoin_until_msec: int = 0
 var _rejoin_next_msec: int = 0
+## Issue #579: a client with no snapshot for this long assumes the host's room is
+## gone (a frozen world, its own input keeping the relay awake) and rejoins.
+const SNAPSHOT_WATCHDOG_MSEC: int = 5000
+var _last_snapshot_msec: int = 0
 
 var _camera: Camera2D
 var _world_root: Node2D
@@ -140,6 +145,8 @@ var _lobby_panel: Control
 var _lobby_title: Label
 var _lobby_list: VBoxContainer
 var _ready_button: Button
+var _ready_want: int = -1 # the clicked Ready (0/1) awaiting the host's echo, else -1 (#550)
+var _ready_want_msec: int = 0
 var _host_row: HBoxContainer
 var _mode_button: Button
 var _target_label: Label
@@ -234,6 +241,7 @@ func _process(_delta: float) -> void:
 	if _socket != null:
 		_poll_socket()
 	_tick_rejoin()
+	_watch_snapshots()
 	if state == State.PLAYING:
 		_render()
 
@@ -245,16 +253,17 @@ func _physics_process(_delta: float) -> void:
 ## #435: a gamepad's right stick drives the arm too, as a gamepad seat's does on
 ## the host (#261). While the stick is out it sets the vector; let go, and the
 ## arm rests until the stick or the mouse moves again.
+var test_pad_left_stick: Vector2 = Vector2.ZERO # #600: the left stick's stand-in
 var test_pad_stick: Variant = null # a Vector2 here stands in for a real pad (headless has none)
 var _pad_driving: bool = false
 
 func _pad_input() -> void:
 	var stick := Vector2.ZERO
 	if test_pad_stick is Vector2:
-		stick = ControllerServerScript.stick_vector(test_pad_stick)
+		stick = ControllerServerScript.pad_stick(test_pad_stick, test_pad_left_stick)
 	else:
 		for device: int in Input.get_connected_joypads():
-			stick = ControllerServerScript.stick_vector(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)))
+			stick = ControllerServerScript.pad_stick(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)), Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y)))
 			if stick != Vector2.ZERO:
 				break
 	if stick != Vector2.ZERO:
@@ -313,6 +322,7 @@ func _input(event: InputEvent) -> void:
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
+		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
 		return
 	if pad_button != null and not menu_open:
 		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
@@ -334,6 +344,8 @@ func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key != null and key.physical_keycode == KEY_SPACE and not key.echo and (not key.pressed or not menu_open):
 		_action_edge(-KEY_SPACE, key.pressed)
+		if _ready_button != null and _ready_button.is_visible_in_tree() and _ready_button.has_focus():
+			get_viewport().set_input_as_handled() # Space is the action key, not Ready's accept (#550)
 		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
@@ -489,7 +501,10 @@ func _on_host_text(text: String) -> void:
 		"release":
 			pass # the host owns the toggle now (#481)
 		"closed":
-			_return_to_join(reason_text(str(msg.get("reason", "closed"))))
+			var closed_reason: String = str(msg.get("reason", "closed"))
+			_return_to_join(reason_text(closed_reason))
+			if closed_reason == "input timeout": # #579: the host holds the seat; come back
+				_keep_rejoining(Time.get_ticks_msec() + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
 		"error":
 			var reason: String = str(msg.get("reason", "unknown"))
 			_return_to_join(reason_text(reason), reason == "version")
@@ -564,6 +579,11 @@ func sensitivity() -> float:
 
 # --- Esc menu -----------------------------------------------------------------------
 
+func _let_go_held() -> void:
+	_pad_shoulder_held = false
+	_shoulder_down_msec = -1
+	_action_down.clear()
+
 func toggle_menu() -> void:
 	if state != State.PLAYING:
 		return
@@ -571,6 +591,7 @@ func toggle_menu() -> void:
 		resume()
 		return
 	menu_open = true
+	_let_go_held() # a button-up while the menu is open is never seen (#599)
 	_mouse.reset()
 	input_vector = Vector2.ZERO
 	_set_captured(false)
@@ -581,6 +602,7 @@ func resume() -> void:
 	if state != State.PLAYING:
 		return
 	menu_open = false
+	_let_go_held()
 	_menu_panel.visible = false
 	_mouse.reset()
 	_sync_capture()
@@ -625,6 +647,7 @@ func apply_snapshot(snap: Dictionary) -> void:
 			return
 		_apply_delta(snap.get("delta_entities", []))
 	frames_applied += 1
+	_last_snapshot_msec = Time.get_ticks_msec()
 	_push_sample()
 	_refresh_hud()
 
@@ -963,18 +986,23 @@ func _build_ui() -> void:
 	_build_menu_panel()
 	_build_join_panel()
 
-func _label(text: String, size: int = 20, color: Color = Color.WHITE) -> Label:
+## `variation` is a UiTheme type variation ("" keeps the theme's plain Label,
+## cream text for the dark ground); a colour of WHITE leaves the variation's own.
+func _label(text: String, size: int = 20, color: Color = Color.WHITE, variation: StringName = &"") -> Label:
 	var label := Label.new()
 	label.text = text
+	label.theme_type_variation = variation
 	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
+	if color != Color.WHITE:
+		label.add_theme_color_override("font_color", color)
 	return label
 
-func _centered_panel(parent: Control, min_width: float) -> VBoxContainer:
+func _centered_panel(parent: Control, min_width: float, panel_variation: StringName = UiThemeScript.CREAM_PANEL) -> VBoxContainer:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(center)
 	var panel := PanelContainer.new()
+	panel.theme_type_variation = panel_variation
 	center.add_child(panel)
 	var margin := MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
@@ -991,13 +1019,13 @@ func _build_join_panel() -> void:
 	_join_panel.name = "JoinScreen"
 	_join_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var shade := ColorRect.new()
-	shade.color = Color(0.08, 0.09, 0.12)
+	shade.color = UiThemeScript.INDIGO
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_join_panel.add_child(shade)
 	_ui.add_child(_join_panel)
 	var box: VBoxContainer = _centered_panel(_join_panel, 360)
-	box.add_child(_label(tr("JOIN_TITLE"), 30))
-	box.add_child(_label(tr("JOIN_ROOM_CODE_LABEL")))
+	box.add_child(_label(tr("JOIN_TITLE"), 30, Color.WHITE, UiThemeScript.INK_HEADING_LABEL))
+	box.add_child(_label(tr("JOIN_ROOM_CODE_LABEL"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_room_edit = LineEdit.new()
 	_room_edit.name = "RoomCode"
 	_room_edit.placeholder_text = "ABCD"
@@ -1005,7 +1033,7 @@ func _build_join_panel() -> void:
 	_room_edit.text_changed.connect(_on_room_text_changed)
 	_room_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_room_edit)
-	box.add_child(_label(tr("JOIN_YOUR_NAME")))
+	box.add_child(_label(tr("JOIN_YOUR_NAME"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
 	_name_edit.placeholder_text = tr("JOIN_NAME_PLACEHOLDER")
@@ -1013,7 +1041,7 @@ func _build_join_panel() -> void:
 	_name_edit.text = player_name
 	_name_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_name_edit)
-	_status_label = _label("", 18, Color(1.0, 0.7, 0.5))
+	_status_label = _label("", 18, UiThemeScript.VERMILION, UiThemeScript.INK_LABEL)
 	_status_label.name = "Status"
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_status_label)
@@ -1061,21 +1089,21 @@ func _build_hud() -> void:
 	_feed_label.position = Vector2(-16, 12)
 	_feed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_hud.add_child(_feed_label)
-	_banner_label = _label("", 36, Color(1, 0.9, 0.4))
+	_banner_label = _label("", 36, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
 	_banner_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_banner_label.position = Vector2(0, 12)
 	_hud.add_child(_banner_label)
-	_mode_label = _label("", 22, Color(0.8, 0.95, 1.0))
+	_mode_label = _label("", 22, UiThemeScript.SKY, UiThemeScript.HEADING_LABEL)
 	_mode_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_mode_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_mode_label.position = Vector2(0, 58)
 	_hud.add_child(_mode_label)
-	_result_label = _label("", 40, Color(1, 0.9, 0.4))
+	_result_label = _label("", 40, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
 	_result_label.set_anchors_preset(Control.PRESET_CENTER)
 	_result_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_result_label)
-	_wait_label = _label(tr("JOIN_WAITING"), 28)
+	_wait_label = _label(tr("JOIN_WAITING"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	_wait_label.set_anchors_preset(Control.PRESET_CENTER)
 	_wait_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_wait_label)
@@ -1086,8 +1114,8 @@ func _build_lobby_panel() -> void:
 	_lobby_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_lobby_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(_lobby_panel)
-	var box: VBoxContainer = _centered_panel(_lobby_panel, 380)
-	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28)
+	var box: VBoxContainer = _centered_panel(_lobby_panel, 380, &"")
+	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	box.add_child(_lobby_title)
 	_lobby_list = VBoxContainer.new()
 	# Issue #441: the cosmetics panel sits beside the player list.
@@ -1102,7 +1130,10 @@ func _build_lobby_panel() -> void:
 	_ready_button.name = "Ready"
 	_ready_button.toggle_mode = true
 	_ready_button.text = tr("JOIN_READY")
-	_ready_button.toggled.connect(func(on: bool) -> void: _send_json({"t": "ready", "v": on}))
+	_ready_button.toggled.connect(func(on: bool) -> void:
+		_ready_want = 1 if on else 0
+		_ready_want_msec = GameClockScript.now_msec()
+		_send_json({"t": "ready", "v": on}))
 	box.add_child(_ready_button)
 	_host_row = HBoxContainer.new()
 	_host_row.name = "HostMenu"
@@ -1140,17 +1171,17 @@ func _build_menu_panel() -> void:
 	_menu_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_ui.add_child(_menu_panel)
 	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.55)
+	shade.color = Color(UiThemeScript.INDIGO, 0.75)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_menu_panel.add_child(shade)
 	var box: VBoxContainer = _centered_panel(_menu_panel, 320)
-	box.add_child(_label(tr("JOIN_PAUSED"), 28))
+	box.add_child(_label(tr("JOIN_PAUSED"), 28, Color.WHITE, UiThemeScript.INK_HEADING_LABEL))
 	var resume_button := Button.new()
 	resume_button.name = "Resume"
 	resume_button.text = tr("JOIN_RESUME")
 	resume_button.pressed.connect(resume)
 	box.add_child(resume_button)
-	box.add_child(_label(tr("JOIN_MOUSE_SENS")))
+	box.add_child(_label(tr("JOIN_MOUSE_SENS"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_sens_slider = HSlider.new()
 	_sens_slider.name = "Sensitivity"
 	_sens_slider.min_value = 0.1
@@ -1238,12 +1269,15 @@ func _refresh_lobby() -> void:
 	var host: bool = _is_host()
 	_host_row.visible = host
 	_mode_button.text = tr("MODE_TEAMS") if lobby.get("mode") == "teams" else tr("MODE_FFA")
-	_target_label.text = tr("LOBBY_FIRST_TO") % int(lobby.get("target", 5))
+	_target_label.text = tr(_target_label_key(str(lobby.get("target_kind", "first_to")))) % int(lobby.get("target", 5))
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
 	_cosmetics_panel.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
-	_ready_button.set_pressed_no_signal(_own_ready()) # mirror the server: it clears ready at match start and victory (#518)
+	if _ready_want != -1 and (_own_ready() == (_ready_want == 1) or GameClockScript.now_msec() - _ready_want_msec > 3000):
+		_ready_want = -1 # the host's echo arrived (or never will): mirror again (#550)
+	if _ready_want == -1:
+		_ready_button.set_pressed_no_signal(_own_ready()) # mirror the server: it clears ready at match start and victory (#518)
 	_sync_capture()
 
 func _refresh_hud() -> void:
@@ -1401,6 +1435,18 @@ func _keep_rejoining(until: int) -> void:
 	var lost: String = tr("JOIN_LOST") if status_text.is_empty() else status_text
 	_set_status(lost + " " + tr("JOIN_REJOINING"))
 
+func _watch_snapshots() -> void:
+	if state != State.PLAYING:
+		_last_snapshot_msec = 0
+		return
+	var now: int = Time.get_ticks_msec()
+	if _last_snapshot_msec == 0:
+		_last_snapshot_msec = now
+	elif now - _last_snapshot_msec > SNAPSHOT_WATCHDOG_MSEC:
+		_last_snapshot_msec = 0
+		_return_to_join(tr("JOIN_LOST"))
+		_keep_rejoining(now + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
+
 func _tick_rejoin() -> void:
 	if _rejoin_until_msec == 0 or state != State.JOIN:
 		return
@@ -1414,3 +1460,14 @@ func _tick_rejoin() -> void:
 	var until: int = _rejoin_until_msec
 	if not join(room_code, player_name):
 		_keep_rejoining(until)
+
+## The host row's target label per `target_kind` (#544), as `GameModes.target_label_key`.
+func _target_label_key(kind: String) -> String:
+	match kind:
+		"lives":
+			return "LOBBY_LIVES"
+		"goals":
+			return "LOBBY_GOALS_TO_WIN"
+		"captures":
+			return "LOBBY_CAPTURES_TO_WIN"
+	return "LOBBY_FIRST_TO"

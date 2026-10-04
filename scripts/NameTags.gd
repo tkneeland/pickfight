@@ -32,6 +32,7 @@ const TEAM_RING_RADIUS: float = 33.0
 const TEAM_RING_WIDTH: float = 5.0
 const TEAM_OUTLINE_SIZE: int = 8
 const TeamsScript := preload("res://scripts/Teams.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 ## Issue #236: [centre, team] per team ring drawn this frame.
 var _rings: Array = []
 
@@ -65,9 +66,10 @@ func build() -> void:
 		var tag := Label.new()
 		tag.name = "NameTag%d" % slot
 		tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tag.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
 		tag.add_theme_font_size_override("font_size", 22)
 		tag.add_theme_color_override("font_color", _slot_color.call(slot))
-		tag.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
+		tag.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0)) # black, not ink: the tags sit over any stage
 		tag.add_theme_constant_override("outline_size", 6)
 		tag.visible = false
 		add_child(tag)

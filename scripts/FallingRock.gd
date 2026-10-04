@@ -65,6 +65,9 @@ extends Node2D
 ## Exports, and only these: a stage author sets numbers and never edits the
 ## sub-resources `_ready()` builds from them.
 
+## Every rock, wherever it was parented (Stock's overtime rain is not under the stage), for bots (#611).
+const GROUP: StringName = &"falling_rocks"
+
 ## Seconds between drops: from the part entering the round to the first
 ## warning, and from each rock's landing to the next warning.
 @export var interval_sec: float = 6.0
@@ -115,6 +118,14 @@ const _WORLD_LAYER: int = 1
 const _PLAYERS_GROUP: StringName = &"players"
 const _ROCK_SIDES: int = 9
 
+## Spawn API (issue #556): a rock a mode drops on demand -- Stock's sudden
+## death rain -- instead of on the part's own timer. `auto_drop` false stops
+## the idle timer starting a warning; `drop_now()` starts one at once; with
+## `one_shot` the part frees itself when that one rock has landed, so a rain
+## leaves nothing behind. Set before the part enters the tree.
+var auto_drop: bool = true
+var one_shot: bool = false
+
 var _state: _RockState = _RockState.IDLE
 var _timer_remaining: float = 0.0
 var _fall_speed: float = 0.0
@@ -131,6 +142,7 @@ var _marker: Node2D
 var _query: PhysicsShapeQueryParameters2D
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	_rock = Node2D.new()
 	_rock.name = "Rock"
 	_rock_visual = Polygon2D.new()
@@ -204,6 +216,8 @@ func hit_count() -> int:
 func _physics_process(delta: float) -> void:
 	match _state:
 		_RockState.IDLE:
+			if not auto_drop:
+				return
 			_timer_remaining -= delta
 			if _timer_remaining <= 0.0:
 				_begin_warning()
@@ -220,6 +234,14 @@ func _physics_process(delta: float) -> void:
 			_rock_visual.modulate.a = clampf(_timer_remaining / SHATTER_SEC, 0.0, 1.0)
 			if _timer_remaining <= 0.0:
 				_rest()
+
+## Starts a drop now, with its usual warning, if the rock is idle. Returns
+## whether it started.
+func drop_now() -> bool:
+	if _state != _RockState.IDLE or _rock == null:
+		return false
+	_begin_warning()
+	return true
 
 func _begin_warning() -> void:
 	_state = _RockState.WARNING
@@ -292,7 +314,7 @@ func _strike(victim: Node) -> void:
 	# phantom number on screen and buzz their phone. Nothing dealt, nothing
 	# reported; the shove still lands.
 	var before: Variant = victim.get("damage")
-	victim.take_damage(damage)
+	victim.take_damage(damage, point)
 	var after: Variant = victim.get("damage")
 	var dealt: float = damage
 	if before != null and after != null:
@@ -316,6 +338,11 @@ func _shatter() -> void:
 
 func _rest() -> void:
 	_state = _RockState.IDLE
+	if one_shot:
+		_rock.visible = false
+		_marker.visible = false
+		queue_free()
+		return
 	_timer_remaining = interval_sec
 	_rock.visible = false
 	_marker.visible = false

@@ -569,7 +569,8 @@ func eliminate() -> void:
 		return
 	deaths += 1
 	_spawn_death_burst()
-	_go_inert()
+	# Issue #570: shots already fired keep flying and can still land.
+	_go_inert(true)
 	eliminated.emit()
 
 ## The elimination effect goes on the player's parent at the body's last
@@ -595,15 +596,27 @@ func leave_round() -> void:
 		return
 	_go_inert()
 
+## Issue #570: free every shot (bullets, a thrown boomerang) this player has in
+## flight, alive or not. Round end and a kick call it, so nothing outlives them.
+func clear_shots() -> void:
+	_clear_projectiles()
+	_clear_launched()
+
 ## The state an out-of-play player sits in: no rig, no collision, invisible,
 ## frozen in place. Shared by `eliminate()` (which also counts a death) and
 ## `leave_round()` (which does not) so there is exactly one description of
 ## what "out of the round" looks like.
-func _go_inert() -> void:
+func _go_inert(keep_shots: bool = false) -> void:
 	alive = false
 	_clear_rig()
-	_clear_projectiles()
-	_clear_launched()
+	if keep_shots:
+		# Issue #570: only the tether (the hook) is tied to its owner.
+		if is_instance_valid(_hook):
+			(_hook as Node).queue_free()
+		_hook = null
+	else:
+		_clear_projectiles()
+		_clear_launched()
 	# Deferred: eliminate() can run from KillZone's body_entered, which fires
 	# mid-physics-step while the physics server is still flushing queries --
 	# changing a RigidBody2D's mode synchronously from there is refused
@@ -631,7 +644,7 @@ func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	if not keeps_weapon:
 		_assign_weapon_stats(DEFAULT_WEAPON_STATS)
 	freeze = false
-	# A leave_round() earlier this frame (the lobby sandbox ending as the first
+	# A leave_round() earlier this frame (an End match re-seating the lobby as the first
 	# round starts) queued set_deferred("freeze", true); it would flush after
 	# this and leave the body frozen at its spawn (#505). Queued later, this
 	# one flushes after it.
@@ -1520,7 +1533,7 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 	amount = victim.take_damage(amount, point, self)
 	if _stats.special == &"shield":
 		_shield_bash(victim)
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
 ## straight out along the haft rather than across it. Read here, not off
@@ -1632,7 +1645,7 @@ func land_projectile_hit(victim: Node, amount: float, point: Vector2, weapon_id:
 	amount = victim.take_damage(amount, point, self, false)
 	# Issue #516: the weapon that fired the bullet, not the one held on arrival.
 	hit_weapon_id = weapon_id
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
 	hit_weapon_id = ""
 
 ## Issue #516: weapon id (file basename) credited with the hit being reported
@@ -1643,8 +1656,10 @@ var hit_weapon_id: String = ""
 ## Whether a reported hit eliminated `victim`. A one-hit-KO mode (Sudden Death
 ## marks its players with the `one_hit_ko` meta) eliminates in its own
 ## `strike_landed` handler, after this is read, so a damaging hit counts.
-func _strike_was_lethal(victim: Node, amount: float) -> bool:
-	return not victim.alive or (amount > 0.0 and victim.has_meta("one_hit_ko"))
+## A hit taken on a shield face or open canopy face does not count as lethal
+## there (issue #569), the same test `SuddenDeath` applies before eliminating.
+func _strike_was_lethal(victim: Node, amount: float, point: Vector2 = Vector2.INF) -> bool:
+	return not victim.alive or (amount > 0.0 and victim.has_meta("one_hit_ko") and not victim.hit_blocked(point))
 
 ## Issue #236: whether `other` is on this player's team in a Teams match.
 func is_teammate(other: Node) -> bool:
@@ -2087,7 +2102,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
 	amount = victim.take_damage(amount, point, self)
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount))
+	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
 
 # --- Umbrella (issue #269) ---------------------------------------------------
 #
@@ -2243,6 +2258,13 @@ func shield_blocks(point: Vector2) -> bool:
 	if offset.length() <= 1.0 or to_point.length() <= 0.0:
 		return false
 	return offset.normalized().dot(to_point.normalized()) >= SHIELD_FACE_COS
+
+## Whether a hit at `point` (world) lands on an open canopy's face or a
+## shield's face: the hits that never eliminate in a one-hit mode (issue #569).
+func hit_blocked(point: Vector2) -> bool:
+	if point == Vector2.INF:
+		return false
+	return (canopy_open() and canopy_faces(point)) or shield_blocks(point)
 
 func _shield_bash(victim: Node) -> void:
 	if not victim.alive or not (victim is RigidBody2D):

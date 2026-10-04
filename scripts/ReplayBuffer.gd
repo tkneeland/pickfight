@@ -90,8 +90,28 @@ func save_clip(stamp: String = "") -> String:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 	for i in _frames.size():
 		_frames[i].save_png("%s/frame_%04d.png" % [dir, i])
+	prune_clips(clips_dir)
 	clip_saved.emit(dir)
 	return dir
+
+## Keep the newest `keep` `clip_*` folders in `dir` and delete the rest (#609).
+## Stamps sort by time, so the name order is the age order.
+static func prune_clips(dir: String, keep: int = 20) -> void:
+	var da := DirAccess.open(ProjectSettings.globalize_path(dir))
+	if da == null:
+		return
+	var names: Array[String] = []
+	for n: String in da.get_directories():
+		if n.begins_with("clip_"):
+			names.append(n)
+	names.sort()
+	for i in maxi(names.size() - keep, 0):
+		var old := ProjectSettings.globalize_path(dir).path_join(names[i])
+		var sub := DirAccess.open(old)
+		if sub != null:
+			for f: String in sub.get_files():
+				sub.remove(f)
+		DirAccess.remove_absolute(old)
 
 ## Encode the buffered frames to `<dir>/clip.gif` on a worker thread;
 ## `gif_saved` fires on the main thread when it is done. Returns false if a

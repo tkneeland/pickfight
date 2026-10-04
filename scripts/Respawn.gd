@@ -11,6 +11,12 @@ extends RefCounted
 const GameClockScript := preload("res://scripts/GameClock.gd")
 
 var respawn_sec: float = 1.5
+## Optional own-half filter for team modes (#605): `team_of.call(slot)` is 0
+## (left half) or 1, `centre_x.call()` the dividing x. Unset, any spawn is fine.
+var team_of: Callable
+var centre_x: Callable
+## How far below a spawn point a floor still counts as under it.
+const GROUND_PROBE: float = 400.0
 var round_manager: Node
 ## slot -> player node; the mode's own dictionary, shared.
 var watched: Dictionary = {}
@@ -67,23 +73,56 @@ func _still_claimed(slot: int) -> bool:
 		return true
 	return (server.claimed_slots() as Array).has(slot)
 
-## The stage spawn point whose nearest standing player is farthest away.
+## The stage spawn point whose nearest standing player is farthest away,
+## among the safe ones (#605): on the player's own half when a team filter is
+## set, and with a floor under it. Falls back to the best of what is left if
+## nothing is safe. With nobody else standing, the farthest from where the
+## player went down.
 func farthest_spawn(slot: int) -> Vector2:
 	var points: Array[Vector2] = round_manager._stage_spawn_points
 	var here: Vector2 = watched[slot].global_position
 	if points.is_empty():
 		return here
-	var best: Vector2 = points[0]
+	var pool: Array[Vector2] = points
+	if team_of.is_valid() and centre_x.is_valid():
+		var cx: float = float(centre_x.call())
+		var left: bool = int(team_of.call(slot)) == 0
+		var own: Array[Vector2] = []
+		for point: Vector2 in points:
+			if (point.x < cx) == left:
+				own.append(point)
+		if not own.is_empty():
+			pool = own
+	var grounded: Array[Vector2] = []
+	for point: Vector2 in pool:
+		if _has_floor(point):
+			grounded.append(point)
+	if not grounded.is_empty():
+		pool = grounded
+	var best: Vector2 = pool[0]
 	var best_gap: float = -1.0
-	for point: Vector2 in points:
+	for point: Vector2 in pool:
 		var gap: float = INF
 		for other: int in watched.keys():
 			if other != slot and bool(watched[other].alive):
 				gap = minf(gap, point.distance_to(watched[other].global_position))
+		if is_inf(gap):
+			gap = point.distance_to(here)
 		if gap > best_gap:
 			best_gap = gap
 			best = point
 	return best
+
+## Whether solid ground lies within GROUND_PROBE below `point`. True when the
+## space cannot be asked.
+func _has_floor(point: Vector2) -> bool:
+	if round_manager == null or not is_instance_valid(round_manager) or not round_manager.is_inside_tree():
+		return true
+	var world: World2D = round_manager.get_viewport().find_world_2d()
+	if world == null:
+		return true
+	var query := PhysicsRayQueryParameters2D.create(point, point + Vector2(0.0, GROUND_PROBE), 1)
+	return not world.direct_space_state.intersect_ray(query).is_empty()
 
 func _tick_protection() -> void:
 	var now: int = GameClockScript.now_msec()

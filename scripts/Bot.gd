@@ -286,6 +286,9 @@ var goal: Vector2 = Vector2.ZERO
 var last_input: Vector2 = Vector2.ZERO
 
 var _think_left: float = 0.0
+var _staggered: bool = false
+## Instance id of the stage the cached stage read belongs to (#607).
+var _read_stage_id: int = 0
 var _target: Node2D = null
 var _phase: int = 0
 var _phase_left: float = 0.0
@@ -382,16 +385,9 @@ func think(delta: float) -> Vector2:
 	if not _alive(player):
 		mode = "idle"
 		_target = null
-		_lava = null
-		_lava_looked_up = false
-		_hazard_rects.clear()
-		_soft_rects.clear()
-		_walls.clear()
+		# The stage read (lava, hazards, walls, rocks...) is kept across
+		# respawns: it is re-read only when the round's stage changes (#607).
 		_wall_target = null
-		_rocks.clear()
-		_pads.clear()
-		_saws.clear()
-		_gusts.clear()
 		_danger_frame = -1
 		_pad_route = false
 		_edge_wait = 0.0
@@ -405,6 +401,11 @@ func think(delta: float) -> Vector2:
 	_desperate_left = maxf(_desperate_left - delta, 0.0)
 	_leap_left = maxf(_leap_left - delta, 0.0)
 	_soft_pass_left = maxf(_soft_pass_left - delta, 0.0)
+	if not _staggered:
+		# Spread the first thinks over the think period so 7 bots do not all
+		# ray-cast on the same frame (#607).
+		_staggered = true
+		_think_left = THINK_SEC * float(_my_slot() % 8) / 8.0
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
 		_aggression = _aggression_now()
@@ -1258,7 +1259,13 @@ func _danger_rects() -> Array[Rect2]:
 		if is_instance_valid(saw) and saw.is_inside_tree():
 			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
 			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
-	for rock: Node2D in _rocks:
+	var all_rocks: Array[Node2D] = _rocks.duplicate()
+	if is_inside_tree():
+		# Rocks spawned mid-round (the overtime rain) are not in the stage read (#611).
+		for node: Node in get_tree().get_nodes_in_group(&"falling_rocks"):
+			if node is Node2D and not all_rocks.has(node):
+				all_rocks.append(node as Node2D)
+	for rock: Node2D in all_rocks:
 		if not is_instance_valid(rock) or not rock.is_inside_tree():
 			continue
 		var state: String = rock.call("state_name")
@@ -1394,7 +1401,9 @@ func _track_progress(delta: float) -> void:
 			_soft_pass_left = DESPERATE_HOLD_SEC
 	else:
 		_edge_wait = 0.0
-	if (mode != "move" and mode != "flee") or _held_at_edge:
+	# Resting on the goal (holding the hill, keeping away, defending a flag)
+	# is not being stuck (#607).
+	if (mode != "move" and mode != "flee") or _held_at_edge or _resting_on_goal():
 		_progress_from = player.global_position
 		_progress_left = STUCK_SEC
 		return
@@ -1406,12 +1415,44 @@ func _track_progress(delta: float) -> void:
 		_wiggle_left = WIGGLE_SEC
 		_progress_left = STUCK_SEC
 
+## Within ARRIVED_X of the goal along x and no climb away from it, with no
+## rival being chased or held off (that wiggle is wanted, #302) (#607).
+func _resting_on_goal() -> bool:
+	var to_goal: Vector2 = goal - player.global_position
+	return _target == null and absf(to_goal.x) <= ARRIVED_X and to_goal.y >= -CLIMB_THRESHOLD
+
+## The round manager's current stage, or 0 with none: the key the cached
+## stage read is valid for (#607).
+func _stage_instance_id() -> int:
+	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	if rm == null:
+		return 0
+	var stage: Variant = rm.get("_current_stage")
+	if stage == null or not is_instance_valid(stage):
+		return 0
+	return (stage as Node).get_instance_id()
+
+## This bot's roster slot, or 0 with no round manager.
+func _my_slot() -> int:
+	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	if rm == null:
+		return 0
+	var players: Variant = rm.get("_players")
+	if players == null:
+		return 0
+	return maxi((players as Array).find(player), 0)
+
 ## The top of the stage's floor kill zone, or INF where there is none.
 func _lava_top() -> float:
 	if _lava != null and (not is_instance_valid(_lava) or not _lava.is_inside_tree()):
 		_lava = null
+	var stage_id: int = _stage_instance_id()
+	if _lava_looked_up and stage_id != _read_stage_id:
+		_lava = null
+		_lava_looked_up = false
 	if _lava == null and not _lava_looked_up:
 		_lava_looked_up = true
+		_read_stage_id = stage_id
 		lava_lookups += 1
 		for node: Node in player.get_tree().root.find_children("KillZone", "Area2D", true, false):
 			if node.has_method("is_rising"):

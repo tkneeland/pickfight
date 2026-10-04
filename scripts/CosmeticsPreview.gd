@@ -12,6 +12,8 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 ## The tallest hat above the body's top edge, and the body's half side.
 const HEADROOM: float = 41.0
 const HALF: float = 24.0
+const OUTLINE_PX: float = 4.0
+const INK: Color = Color("14181D")
 
 var color: Color = Color.WHITE
 var hat_id: String = HatScript.NONE
@@ -31,6 +33,15 @@ func _init() -> void:
 	_body = Polygon2D.new()
 	_body.polygon = PackedVector2Array([Vector2(-HALF, -HALF), Vector2(HALF, -HALF), Vector2(HALF, HALF), Vector2(-HALF, HALF)])
 	_figure.add_child(_body)
+	# The ink outline the lobby cards and the Your look popup draw round the square (#547).
+	var outline := Line2D.new()
+	outline.name = "Outline"
+	outline.points = _body.polygon
+	outline.closed = true
+	outline.width = OUTLINE_PX
+	outline.default_color = INK
+	outline.joint_mode = Line2D.LINE_JOINT_SHARP
+	_figure.add_child(outline)
 	_face = PlayerFaceScript.new()
 	_figure.add_child(_face)
 	_hat = HatScript.new()
@@ -56,9 +67,10 @@ func _apply() -> void:
 	_face.set_eyes(eyes_id)
 
 func _fit() -> void:
-	var tall: float = HEADROOM + HALF * 2.0
+	# The ink outline (half of it outside the body) needs room too (#547).
+	var tall: float = HEADROOM + HALF * 2.0 + OUTLINE_PX
 	var s: float = minf(size.x / (HatScript.HALF_WIDTH * 2.0), size.y / tall)
 	if s <= 0.0:
 		s = 1.0
 	_figure.scale = Vector2(s, s)
-	_figure.position = Vector2(size.x * 0.5, (size.y - tall * s) * 0.5 + (HEADROOM + HALF) * s)
+	_figure.position = Vector2(size.x * 0.5, (size.y - tall * s) * 0.5 + (HEADROOM + HALF + OUTLINE_PX * 0.5) * s)

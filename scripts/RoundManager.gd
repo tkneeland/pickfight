@@ -127,13 +127,6 @@ extends Node
 @export var lobby_countdown_sec: float = 3.0
 ## How long the victory screen waits for every phone's Continue (#337).
 @export var victory_continue_sec: float = 30.0
-## Issue #291: seated players are live in the lobby, on a sandbox stage. They
-## move, swing and hit each other, but nothing counts and a KO respawns after
-## `lobby_respawn_sec`. Off by default: a fixture without a stage to stand on
-## keeps its players inert in the lobby, as it always was.
-@export var lobby_sandbox: bool = false
-@export var lobby_respawn_sec: float = 1.5
-@export var lobby_sandbox_stage_index: int = 0
 
 ## How long the stage name takes to sweep across. 0 turns it off.
 @export var stage_title_sec: float = 1.1
@@ -174,6 +167,7 @@ const NameTagsScript := preload("res://scripts/NameTags.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
 ## Teams mode's rules (issue #236, ADR-0018).
 const TeamsScript := preload("res://scripts/Teams.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 ## Every deadline this node and its pieces keep (`*_msec`) is game time
 ## (#182), read from here: it stops while the tree is paused and runs at
 ## `Engine.time_scale`, so none of them needs pushing back after a pause.
@@ -406,6 +400,10 @@ func _swap_stage() -> void:
 	if container == null:
 		return
 	if _current_stage != null:
+		# Out of the tree first: a queued free leaves it there until frame end and
+		# the same-named new stage would be auto-renamed (#594).
+		if _current_stage.get_parent() != null:
+			_current_stage.get_parent().remove_child(_current_stage)
 		_current_stage.queue_free()
 	_pin_stock_stage()
 	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
@@ -552,6 +550,7 @@ func _check_round_end() -> void:
 	_end_round_modifier()
 	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
+	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
@@ -1002,10 +1001,10 @@ func _build_modifier_label() -> void:
 	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_modifier_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_modifier_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_modifier_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL # Lilita One, ink outline (#548)
 	_modifier_label.add_theme_font_size_override("font_size", 96)
-	_modifier_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 1.0))
-	_modifier_label.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0, 1.0))
-	_modifier_label.add_theme_constant_override("outline_size", 16)
+	_modifier_label.add_theme_color_override("font_color", UiThemeScript.YELLOW)
+	_modifier_label.add_theme_constant_override("outline_size", 18)
 	_modifier_label.visible = false
 	_modifier_layer.add_child(_modifier_label)
 	_modifier_timer = Timer.new()
@@ -1130,6 +1129,23 @@ func _host_slot() -> int:
 		return _controller_server.host_slot()
 	return -1
 
+## The Host panel's target row (#544): the mode's own value for Stock, Soccer
+## and Capture the Flag, else the round target.
+func _state_target(in_lobby: bool) -> int:
+	var picked: int = GameModesScript.target_setting(_state_mode_id())
+	if picked >= 0:
+		return picked
+	return _requested_target() if in_lobby else _match_target
+
+func _state_target_kind() -> String:
+	return GameModesScript.target_kind(_state_mode_id())
+
+func _state_mode_id() -> String:
+	if (_state == State.LOBBY or _state == State.COUNTDOWN or _state == State.VICTORY) \
+			and _controller_server != null and _controller_server.has_method("game_mode"):
+		return str(_controller_server.game_mode())
+	return game_mode
+
 ## What the host phone has typed, or the current value with no host to ask.
 func _requested_target() -> int:
 	if _controller_server != null and _controller_server.has_method("match_target"):
@@ -1175,7 +1191,6 @@ func _enter_lobby() -> void:
 	_build_lobby_ui()
 	_lobby_screen.show_panel("lobby")
 	_set_join_corner_visible(false)
-	_start_lobby_sandbox()
 	_last_lobby_state = {}
 	_tick_lobby()
 
@@ -1236,11 +1251,10 @@ func _enter_victory() -> void:
 	_end_card_up = false
 	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
-	_stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
+	_write_balance_log()
 	send_telemetry()
 	_play_lobby_music()
 	_state = State.VICTORY
-	_end_lobby_sandbox()
 	_clear_stage()
 	if _controller_server != null and _controller_server.has_method("clear_ready"):
 		_controller_server.clear_ready()
@@ -1268,7 +1282,6 @@ func _clear_stage() -> void:
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
 ## victory screen's Continue needs tapping afresh), and the first round.
 func _begin_match() -> void:
-	_end_lobby_sandbox()
 	_match_target = _requested_target()
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
@@ -1299,8 +1312,6 @@ func _begin_match() -> void:
 
 func _tick_lobby() -> void:
 	var roster: Array[int] = _roster()
-	if _sandbox_active and (_state == State.LOBBY or _state == State.COUNTDOWN):
-		_tick_lobby_sandbox(roster)
 	match _state:
 		State.LOBBY:
 			if _everyone_ready(roster) and _teams_can_start(roster):
@@ -1354,7 +1365,7 @@ func _publish_lobby_state() -> void:
 	var state: Dictionary = {
 		"phase": lobby_phase(),
 		"host": _host_slot(),
-		"target": _requested_target() if in_lobby else _match_target,
+		"target": _state_target(in_lobby),
 		"players": players,
 		"count": _countdown_left() if _state == State.COUNTDOWN else 0,
 		"winner": _match_winner_slot,
@@ -1366,6 +1377,8 @@ func _publish_lobby_state() -> void:
 		# Issue #149: the host phone's menu offers Resume instead of Pause.
 		"paused": _paused,
 	}
+	if _state_target_kind() != "first_to":  # only a mode with its own target adds the key (#544)
+		state["target_kind"] = _state_target_kind()
 	_add_team_state(state, roster, in_lobby)
 	_add_game_mode_state(state, in_lobby)
 	var picked_mode: String = game_mode
@@ -1467,7 +1480,7 @@ func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
 	_screen().show_stage_title(_stage_display_name(str(_current_stage.name)), stage_title_sec,
-		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.rule_line(game_mode)])
+		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)])
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -1556,6 +1569,9 @@ func _on_host_command(cmd: String, slot: int) -> void:
 			# Already out of the roster; out of the round too, without a death.
 			if slot >= 0 and slot < _players.size() and _players[slot] != null and _players[slot].alive:
 				_players[slot].leave_round()
+			# Issue #570: a kicked player's shots in flight go with them.
+			if slot >= 0 and slot < _players.size() and _players[slot] != null:
+				_players[slot].clear_shots()
 			# Issue #521: a kicked Stock player still waiting to respawn is out
 			# now, not when the timer runs down, or the survivor scores.
 			if _game_mode_node != null and _game_mode_node.has_method("cancel_respawn"):
@@ -1828,6 +1844,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_end_round_modifier()
 	_ko_round_ended(-1)
 	_show_scoreboard()
+	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	if lobby_enabled:
@@ -1944,9 +1961,13 @@ func send_telemetry() -> bool:
 ## Where the per-match balance tallies are appended (issue #316).
 var balance_log_path: String = "user://balance_stats.jsonl"
 
+## The local balance log, only with stats sharing on (#609).
+func _write_balance_log() -> bool:
+	if not HostSettingsScript.shared().share_stats:
+		return false
+	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
+
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
-	if _sandbox_active:
-		return
 	var victim_slot: int = _players.find(victim)
 	# Issue #311: a teammate never earns the KO for a teammate's death.
 	if _team_mode and attacker_slot >= 0 and victim_slot >= 0 and attacker_slot != victim_slot and team_of(attacker_slot) == team_of(victim_slot):
@@ -1968,8 +1989,6 @@ func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 	_stats.record_pickup(slot, weapon_name)
 
 func _on_ko_eliminated(slot: int) -> void:
-	if _sandbox_active:
-		return
 	# A mode's scripted win eliminates the losers; that is a score, not a KO (#521).
 	if _game_mode_node != null and _game_mode_node.has_method("is_won") and _game_mode_node.is_won():
 		return
@@ -2120,92 +2139,6 @@ func _seed_match(announce: bool) -> void:
 		sfx.reseed(hash([seed_value, "sfx"]))
 	if announce:
 		print("RoundManager: match seed %d (replay with -- --seed=%d)" % [seed_value, seed_value])
-
-# --- Lobby sandbox (issue #291) ------------------------------------------------
-#
-# With `lobby_sandbox` the lobby runs a stage under its (translucent) panel and
-# every seated player is spawned on it, live: they can move, swing and hit each
-# other while waiting. None of it counts: hits and KOs are not recorded (no
-# stats, kill feed or awards), scores are never touched, a KO respawns the
-# player after `lobby_respawn_sec`, and the start of a match frees the stage
-# and sends everyone back to inert, so `_try_start_round()` begins from the
-# same state it always did. It draws nothing from the match RNG streams.
-
-const LOBBY_PANEL_SANDBOX_ALPHA: float = 0.6
-
-## A global off switch for the sandbox, in the way of `modifier_rolls_enabled`:
-## the scenario suite turns it off for every scenario that reads a player being
-## `alive` in the lobby as "a round has started", and on for its own.
-static var lobby_sandbox_allowed: bool = true
-
-var _sandbox_active: bool = false
-## Slots that have been spawned into this sandbox, and slot -> game msec a
-## fallen one comes back at.
-var _sandbox_seated: Dictionary = {}
-var _sandbox_respawn_at: Dictionary = {}
-
-## Whether the lobby sandbox is running (scenarios read it).
-func lobby_sandbox_active() -> bool:
-	return _sandbox_active
-
-func _start_lobby_sandbox() -> void:
-	_sandbox_active = false
-	_sandbox_seated.clear()
-	_sandbox_respawn_at.clear()
-	if not lobby_sandbox or not lobby_sandbox_allowed or stage_scenes.is_empty():
-		return
-	var container: Node = get_node_or_null(arena_container_path)
-	if container == null:
-		return
-	var index: int = clampi(lobby_sandbox_stage_index, 0, stage_scenes.size() - 1)
-	_current_stage = stage_scenes[index].instantiate()
-	_current_stage.set("stage_index", index)
-	container.add_child(_current_stage)
-	var ink: Color = PaletteScript.mood_for_stage(index)["ink"]
-	for player in _players:
-		if player != null:
-			player.leave_round()
-			if player.has_method("set_ink"):
-				player.set_ink(ink)
-	_stage_spawn_points = _current_stage.get_spawn_points()
-	_fit_camera_to_stage()
-	var panel: Control = lobby_panel()
-	if panel is ColorRect:
-		(panel as ColorRect).color.a = LOBBY_PANEL_SANDBOX_ALPHA
-	_sandbox_active = true
-
-func _end_lobby_sandbox() -> void:
-	if not _sandbox_active:
-		return
-	_sandbox_active = false
-	_sandbox_seated.clear()
-	_sandbox_respawn_at.clear()
-	for player in _players:
-		if player != null:
-			player.leave_round()
-	_clear_stage()
-
-func _tick_lobby_sandbox(roster: Array[int]) -> void:
-	var now: int = GameClockScript.now_msec()
-	for slot in _players.size():
-		var player: Variant = _players[slot]
-		if player == null:
-			continue
-		if not roster.has(slot):
-			player.leave_round()
-			_sandbox_seated.erase(slot)
-			_sandbox_respawn_at.erase(slot)
-			continue
-		if player.alive:
-			continue
-		if _sandbox_seated.has(slot):
-			if not _sandbox_respawn_at.has(slot):
-				_sandbox_respawn_at[slot] = now + int(lobby_respawn_sec * 1000.0)
-			if now < int(_sandbox_respawn_at[slot]):
-				continue
-		_sandbox_respawn_at.erase(slot)
-		_sandbox_seated[slot] = true
-		player.start_round(_spawn_point(roster.find(slot)), false)
 
 # --- Game modes (issues #276-#278) -------------------------------------------------
 # An optional rules layer over each round (`GameModes.gd`): King of the Hill,
@@ -2415,6 +2348,12 @@ func _clear_ghosts() -> void:
 		if is_instance_valid(ghost):
 			(ghost as Node).queue_free()
 	_ghosts.clear()
+
+## Issue #570: shots outlive an eliminated shooter, but never the round.
+func _clear_all_shots() -> void:
+	for player: Variant in _players:
+		if player != null and is_instance_valid(player):
+			player.clear_shots()
 
 # --- Sudden Death tiebreaker (issue #554) ------------------------------------
 #

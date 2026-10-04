@@ -64,6 +64,12 @@ var stock_time_limit: int = 480
 ## The stage a Stock match is played on (#375): a stage's base name, or ""
 ## for Random.
 var stock_stage: String = ""
+## Match targets for the team modes (#544): goals to win a Soccer round
+## and captures to win a Capture the Flag round (1-10 each).
+const MIN_MODE_TARGET: int = 1
+const MAX_MODE_TARGET: int = 10
+var soccer_goals: int = 3
+var ctf_captures: int = 2
 ## The host PC seat's saved look (#441): {"hat", "eyes", "color"} as
 ## `CosmeticsPicker.clean_pick` cleans it, put on whenever the seat is claimed.
 var cosmetic_pick: Dictionary = {"hat": "none", "eyes": "round", "color": -1}
@@ -148,6 +154,14 @@ func set_stock_lives(lives: int) -> void:
 	stock_lives = clampi(lives, STOCK_MIN_LIVES, STOCK_MAX_LIVES)
 	save_settings()
 
+func set_soccer_goals(goals: int) -> void:
+	soccer_goals = clampi(goals, MIN_MODE_TARGET, MAX_MODE_TARGET)
+	save_settings()
+
+func set_ctf_captures(captures: int) -> void:
+	ctf_captures = clampi(captures, MIN_MODE_TARGET, MAX_MODE_TARGET)
+	save_settings()
+
 ## Returns false (changing nothing) for a limit that is not on offer.
 func set_stock_time_limit(seconds: int) -> bool:
 	if not STOCK_TIME_LIMITS.has(seconds):
@@ -202,26 +216,42 @@ func set_cosmetic_pick(pick: Dictionary) -> void:
 	cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).clean_pick(pick)
 	save_settings()
 
+## A stored string list, or empty when it is any other type (#609).
+static func _strings(v: Variant) -> PackedStringArray:
+	var out := PackedStringArray()
+	if v is PackedStringArray:
+		return v
+	if v is Array:
+		for item: Variant in v:
+			if item is String:
+				out.append(item)
+	return out
+
 func load_settings() -> void:
 	var config := ConfigFile.new()
 	var err: Error = config.load(path)
 	if err == OK:
 		var size: Variant = config.get_value(SECTION, "resolution", Vector2i.ZERO)
-		resolution = size if size is Vector2i else Vector2i.ZERO
-		disabled_stages = PackedStringArray(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
-		disabled_weapons = PackedStringArray(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
+		resolution = size if size is Vector2i and size.x > 0 and size.y > 0 else Vector2i.ZERO
+		disabled_stages = _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
+		disabled_weapons = _strings(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
 		disabled_modifiers = {}
 		var stored: Variant = config.get_value(SECTION, "disabled_modifiers", {})
 		if stored is Dictionary:
 			for mode_id: Variant in stored:
-				var ids := PackedStringArray(stored[mode_id])
+				var ids := _strings(stored[mode_id])
 				if not ids.is_empty():
 					disabled_modifiers[str(mode_id)] = ids
-		share_stats = bool(config.get_value(SECTION, "share_stats", true))
+		var share: Variant = config.get_value(SECTION, "share_stats", true)
+		share_stats = share if share is bool else true
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
+		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
+		soccer_goals = clampi(int(goals), MIN_MODE_TARGET, MAX_MODE_TARGET) if goals is int else 3
+		var captures: Variant = config.get_value(SECTION, "ctf_captures", 2)
+		ctf_captures = clampi(int(captures), MIN_MODE_TARGET, MAX_MODE_TARGET) if captures is int else 2
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
 		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
 		stock_stage = str(config.get_value(SECTION, "stock_stage", ""))
@@ -245,6 +275,8 @@ func save_settings() -> void:
 	config.set_value(SECTION, "share_stats", share_stats)
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "stock_lives", stock_lives)
+	config.set_value(SECTION, "soccer_goals", soccer_goals)
+	config.set_value(SECTION, "ctf_captures", ctf_captures)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
 	config.set_value(SECTION, "stock_stage", stock_stage)
 	(load("res://scripts/CosmeticsPicker.gd") as GDScript).write_pick(config, SECTION, cosmetic_pick)

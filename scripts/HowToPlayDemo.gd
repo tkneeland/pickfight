@@ -1,8 +1,10 @@
-extends HBoxContainer
+extends VBoxContainer
 
-## One lesson of the lobby's how-to-play panel, shown rather than told
-## (#219): a phone with the thumb that is dragging on it, a tiny stage where a
-## real `Player` does what that drag makes it do, and a one-line caption.
+## One lesson of the How to play popup, shown rather than told (#219): a phone
+## with the thumb that is dragging on it, a tiny stage where a real `Player`
+## does what that drag makes it do, and a caption under them. Since #547 it is
+## a card in the popup's 2x2 grid: the phone and the stage side by side, the
+## caption underneath, in ink on the card's colour.
 ##
 ## The stage is a puppet show, not a recording. It lives in its own
 ## `SubViewport` with its own `World2D`, so its bodies share no physics space
@@ -38,10 +40,14 @@ enum Kind { SWING, CLIMB, PICKUP, WIN }
 ## The stage window, in screen pixels, and how much of the world it shows.
 const VIEW_SIZE: Vector2i = Vector2i(224, 126)
 const VIEW_SCALE: float = 0.5
+## What the stage and the phone are drawn at on the card (#547): the same world
+## area as VIEW_SIZE, magnified. The viewport is rendered at this size.
+const DISPLAY_SIZE: Vector2i = Vector2i(310, 174)
+const PHONE_DISPLAY_SIZE: Vector2 = Vector2(56, 99)
 ## Each demo's world is centred this far out along x per demo (and down by
 ## the same), well clear of any stage and of each other's heads.
 const WORLD_SPACING: float = 20000.0
-const CAPTION_WIDTH_PX: float = 156.0
+const CAPTION_FONT_SIZE: int = 20
 const PHONE_SIZE: Vector2 = Vector2(44, 78)
 ## Thumb trail length, in physics ticks.
 const TRAIL_TICKS: int = 14
@@ -156,8 +162,8 @@ func _init(demo_kind: int = Kind.SWING, text: String = "", demo_index: int = 0) 
 	caption = text
 	index = demo_index
 	name = "HowToPlayDemo%d" % demo_index
-	add_theme_constant_override("separation", 10)
-	alignment = BoxContainer.ALIGNMENT_BEGIN
+	add_theme_constant_override("separation", 8)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_origin = Vector2(WORLD_SPACING * float(demo_index + 1), WORLD_SPACING)
 	match kind:
 		Kind.SWING:
@@ -176,23 +182,35 @@ func _init(demo_kind: int = Kind.SWING, text: String = "", demo_index: int = 0) 
 			rival_at = Vector2(70.0, -PLAYER_RADIUS)
 
 func _ready() -> void:
+	var row := HBoxContainer.new()
+	row.name = "Row"
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(row)
 	_phone = Control.new()
 	_phone.name = "Phone"
-	_phone.custom_minimum_size = PHONE_SIZE
+	_phone.custom_minimum_size = PHONE_DISPLAY_SIZE
 	_phone.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_phone.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_phone.draw.connect(_draw_phone)
-	add_child(_phone)
+	row.add_child(_phone)
 
+	var stage_frame := PanelContainer.new()
+	stage_frame.name = "StageFrame"
+	stage_frame.theme_type_variation = &"DemoStageFrame"
+	stage_frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stage_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(stage_frame)
 	var frame := SubViewportContainer.new()
 	frame.name = "Stage"
-	frame.custom_minimum_size = Vector2(VIEW_SIZE)
+	frame.custom_minimum_size = Vector2(DISPLAY_SIZE)
 	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(frame)
+	stage_frame.add_child(frame)
 	_viewport = SubViewport.new()
 	_viewport.name = "DemoViewport"
-	_viewport.size = VIEW_SIZE
+	_viewport.size = DISPLAY_SIZE
 	_viewport.set_meta(DEMO_VIEWPORT_META, true)
 	_viewport.world_2d = World2D.new()
 	_viewport.audio_listener_enable_2d = false
@@ -200,19 +218,18 @@ func _ready() -> void:
 	_viewport.physics_object_picking = false
 	frame.add_child(_viewport)
 	# Set once it is in the tree: the canvas it moves only exists from then.
-	_viewport.canvas_transform = Transform2D(0.0, Vector2(VIEW_SCALE, VIEW_SCALE), 0.0,
-		Vector2(VIEW_SIZE) * 0.5 - (_origin + _view_centre()) * VIEW_SCALE)
+	var view_scale: float = VIEW_SCALE * float(DISPLAY_SIZE.x) / float(VIEW_SIZE.x)
+	_viewport.canvas_transform = Transform2D(0.0, Vector2(view_scale, view_scale), 0.0,
+		Vector2(DISPLAY_SIZE) * 0.5 - (_origin + _view_centre()) * view_scale)
 
 	var label := Label.new()
 	label.name = "Caption"
 	label.text = caption
-	label.custom_minimum_size.x = CAPTION_WIDTH_PX
+	label.theme_type_variation = &"InkBoldLabel"
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	label.add_theme_font_size_override("font_size", 20)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
-	label.add_theme_constant_override("outline_size", 4)
+	label.add_theme_font_size_override("font_size", CAPTION_FONT_SIZE)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(label)
 
 	_build_stage()
