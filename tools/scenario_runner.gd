@@ -768,6 +768,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_remote_seat_never_hosts_578",
 	"controller_fonts_served_589",
 	"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593",
+	"stock_timeout_losers_are_not_counted_as_kos_595",
+	"hot_potato_blocked_hit_does_not_pass_the_tag_595",
 	"ctf_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"controller_page_refused_phone_rejoins_slowly_581",
 	"swap_stage_same_stage_keeps_name_594",
@@ -2700,6 +2702,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kick_mid_respawn_scores_nobody_593(false)
 		"controller_page_refused_phone_rejoins_slowly_581":
 			return await _scenario_controller_page_refused_phone_rejoins_slowly_581()
+		"stock_timeout_losers_are_not_counted_as_kos_595":
+			return await _scenario_stock_timeout_losers_are_not_counted_as_kos_595()
+		"hot_potato_blocked_hit_does_not_pass_the_tag_595":
+			return await _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595()
 		"swap_stage_same_stage_keeps_name_594":
 			return await _scenario_swap_stage_same_stage_keeps_name_594()
 		_:
@@ -38749,6 +38755,57 @@ func _scenario_controller_page_refused_phone_rejoins_slowly_581() -> Array[Strin
 	if not page.contains("Waiting for the host to switch back to Couch"):
 		failures.append("the refusal text does not say it is waiting for Couch")
 	_scenario_completed = true
+	return failures
+
+## Issue #595: a Stock timeout eliminates the losers, which is a score, not a KO.
+func _scenario_stock_timeout_losers_are_not_counted_as_kos_595() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 3, 120)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	mode.lives[1] = 1
+	mode.lives[2] = 1
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+		failures.append("the player with most lives did not win at the timeout")
+	await _await_ticks(4)
+	if int(rm._stats.deaths.get(1, 0)) != 0 or int(rm._stats.deaths.get(2, 0)) != 0:
+		failures.append("timed-out losers were counted as KOs: %s" % [rm._stats.deaths])
+	await _stock_finish(rig)
+	return failures
+
+## Issue #595: a hit the shield blocks does not pass the Hot Potato tag.
+func _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(3, GameModesType.HOT_POTATO, 99)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Hot Potato round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.it_slot = 0
+	mode._cooldown_left = 0.0
+	await _equip(players[1], SHIELD_PATH)
+	players[1].set_input_vector(Vector2.RIGHT)
+	await _await_ticks(SETTLE_TICKS)
+	var face: Vector2 = players[1].global_position + Vector2.RIGHT * 40.0
+	var behind: Vector2 = players[1].global_position + Vector2.LEFT * 40.0
+	players[1].spawn_protected = false
+	var dealt: float = players[1].take_damage(10.0, face, players[0])
+	players[0].strike_landed.emit(players[1], dealt, face, false)
+	if mode.it_slot != 0:
+		failures.append("a shield-blocked hit passed the tag")
+	dealt = players[1].take_damage(10.0, behind, players[0])
+	players[0].strike_landed.emit(players[1], dealt, behind, false)
+	if mode.it_slot != 1:
+		failures.append("an unblocked hit did not pass the tag")
+	await _teardown(rig["stage"])
 	return failures
 
 
