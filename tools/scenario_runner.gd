@@ -775,6 +775,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"swap_stage_same_stage_keeps_name_594",
 	"pause_gates_pad_clicks_and_sticks_599",
 	"remote_client_menu_clears_held_release_599",
+	"burst_of_action_taps_counts_each_press_601",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2718,6 +2719,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pause_gates_pad_clicks_and_sticks_599()
 		"remote_client_menu_clears_held_release_599":
 			return await _scenario_remote_client_menu_clears_held_release_599()
+		"burst_of_action_taps_counts_each_press_601":
+			return await _scenario_burst_of_action_taps_counts_each_press_601()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -38926,5 +38929,45 @@ func _scenario_remote_client_menu_clears_held_release_599() -> Array[String]:
 		client.resume()
 		if client.input_released():
 			failures.append("Space held across the menu stays released after resume")
+	await _rc_close_241(rig)
+	return failures
+
+## Issue #601: a lag burst that moves the action counter by 2 fires two presses
+## (capped at 3), counter wrap included.
+class BurstPeer601 extends RefCounted:
+	var queue: Array[PackedByteArray] = []
+	func get_available_packet_count() -> int:
+		return queue.size()
+	func get_packet() -> PackedByteArray:
+		return queue.pop_front()
+	func was_string_packet() -> bool:
+		return false
+	func add(count: int) -> void:
+		var pkt := PackedByteArray()
+		pkt.resize(10)
+		pkt[9] = count
+		queue.append(pkt)
+func _scenario_burst_of_action_taps_counts_each_press_601() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var slot: int = client.slot
+	# Stub the weapon away so a press toggles the release rather than throwing.
+	server._players[slot] = null
+	var peer := BurstPeer601.new()
+	for case: Array in [[5, 7, 0, "two taps"], [7, 10, 1, "three taps"], [10, 15, 1, "five taps cap at three"], [126, 1, 1, "wrap, three taps"]]:
+		server._slot_press_seen[slot] = case[0]
+		server._slot_release_toggle[slot] = 0
+		peer.add(case[0] + 1 if case[1] >= case[0] else case[0])
+		peer.add(case[1])
+		server._drain(slot, peer)
+		if server._slot_release_toggle[slot] != case[2]:
+			failures.append("%s: toggle %d, want %d" % [case[3], server._slot_release_toggle[slot], case[2]])
 	await _rc_close_241(rig)
 	return failures
