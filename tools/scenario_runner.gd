@@ -777,6 +777,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pause_gates_pad_clicks_and_sticks_599",
 	"remote_client_menu_clears_held_release_599",
 	"burst_of_action_taps_counts_each_press_601",
+	"respawn_skips_spawns_with_no_floor_605",
+	"respawn_stays_on_own_half_605",
+	"respawn_alone_does_not_always_pick_spawn0_605",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2724,6 +2727,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_menu_clears_held_release_599()
 		"burst_of_action_taps_counts_each_press_601":
 			return await _scenario_burst_of_action_taps_counts_each_press_601()
+		"respawn_skips_spawns_with_no_floor_605":
+			return await _scenario_respawn_skips_spawns_with_no_floor_605()
+		"respawn_stays_on_own_half_605":
+			return await _scenario_respawn_stays_on_own_half_605()
+		"respawn_alone_does_not_always_pick_spawn0_605":
+			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39013,4 +39022,87 @@ func _scenario_burst_of_action_taps_counts_each_press_601() -> Array[String]:
 		if server._slot_release_toggle[slot] != case[2]:
 			failures.append("%s: toggle %d, want %d" % [case[3], server._slot_release_toggle[slot], case[2]])
 	await _rc_close_241(rig)
+	return failures
+
+## A Respawn over the rig's players, with `points` as the stage spawns and a
+## floor under each x in `floors` (y 500, below the rig's own Ground at 300).
+func _respawn_rig_605(points: Array[Vector2], floors: Array[float]) -> Dictionary:
+	var rig: Dictionary = _mode_rig(2, GameModesType.STOCK)
+	if not await _mode_started(rig):
+		return {}
+	var rm: Node = rig["rm"]
+	rm._stage_spawn_points = points
+	for x: float in floors:
+		var body := StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(100.0, 20.0)
+		shape.shape = rect
+		body.add_child(shape)
+		body.position = Vector2(x, 500.0)
+		rig["stage"].add_child(body)
+	await _await_ticks(2)
+	var watched: Dictionary = {0: rig["players"][0], 1: rig["players"][1]}
+	rig["respawn"] = RespawnScript605.new(rm, watched, 1.5)
+	return rig
+const RespawnScript605 := preload("res://scripts/Respawn.gd")
+func _scenario_respawn_skips_spawns_with_no_floor_605() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(0.0, 400.0), Vector2(500.0, 400.0)]
+	var rig: Dictionary = await _respawn_rig_605(points, [500.0])
+	if rig.is_empty():
+		return ["the round never started"]
+	rig["players"][1].global_position = Vector2(500.0, 400.0)
+	var got: Vector2 = rig["respawn"].farthest_spawn(0)
+	if got != points[1]:
+		failures.append("respawned at %s, over the void; want the grounded %s" % [got, points[1]])
+	var void_points: Array[Vector2] = [Vector2(0.0, 400.0), Vector2(-500.0, 400.0)]
+	rig["respawn"].round_manager._stage_spawn_points = void_points
+	got = rig["respawn"].farthest_spawn(0)
+	if got == Vector2.INF:
+		failures.append("no fallback when every spawn is over the void")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(-300.0, 400.0), Vector2(300.0, 400.0)]
+	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0])
+	if rig.is_empty():
+		return ["the round never started"]
+	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	var respawn: RefCounted = rig["respawn"]
+	if respawn.farthest_spawn(0) != points[1]:
+		failures.append("the unfiltered pick was not the far spawn")
+	respawn.team_of = func(slot: int) -> int: return slot
+	respawn.centre_x = func() -> float: return 0.0
+	if respawn.farthest_spawn(0) != points[0]:
+		failures.append("a team-0 respawn left its own (left) half")
+	if respawn.farthest_spawn(1) != points[1]:
+		failures.append("a team-1 respawn left its own (right) half")
+	await _teardown(rig["stage"])
+	for mode_name: String in ["soccer", "ctf"]:
+		var mrig: Dictionary = _soccer_rig(2) if mode_name == "soccer" else _ctf_rig(2)
+		if not await _mode_started(mrig):
+			failures.append("the %s round never started" % mode_name)
+		else:
+			var r: Variant = mrig["rm"].game_mode_node()._respawner
+			if r == null or not r.team_of.is_valid() or not r.centre_x.is_valid():
+				failures.append("%s hands its Respawn no own-half filter" % mode_name)
+		await _teardown(mrig["stage"])
+	return failures
+func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(0.0, 400.0), Vector2(500.0, 400.0)]
+	var rig: Dictionary = await _respawn_rig_605(points, [0.0, 500.0])
+	if rig.is_empty():
+		return ["the round never started"]
+	var respawn: RefCounted = rig["respawn"]
+	respawn.watched = {0: rig["players"][0]}
+	rig["players"][0].global_position = Vector2(0.0, 400.0)
+	if respawn.farthest_spawn(0) != points[1]:
+		failures.append("alone, died at Spawn0, still respawned at Spawn0")
+	rig["players"][0].global_position = Vector2(500.0, 400.0)
+	if respawn.farthest_spawn(0) != points[0]:
+		failures.append("alone, died at Spawn1, did not move to Spawn0")
+	await _teardown(rig["stage"])
 	return failures

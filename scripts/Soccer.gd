@@ -72,6 +72,8 @@ func start_round(slots: Array[int]) -> void:
 	_pause_left = 0.0
 	_last_touch = -1
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
+	_respawner.team_of = team_of
+	_respawner.centre_x = func() -> float: return _ball_spawn().x
 	for slot: int in slots:
 		if slot < 0 or slot >= round_manager._players.size():
 			continue
