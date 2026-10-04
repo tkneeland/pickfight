@@ -1318,8 +1318,8 @@ func _drain(slot: int, peer: Variant) -> void:
 		if _slot_press_seen[slot] != -1 and count != _slot_press_seen[slot]:
 			if not hold:
 				_action_press(slot)
-			elif _players[slot] != null:
-				_players[slot].try_action_throw()
+			else:
+				_try_throw(slot)
 		_slot_press_seen[slot] = count
 	if _log_input:
 		print("slot=%d v=(%.4f, %.4f)" % [slot, v.x, v.y])

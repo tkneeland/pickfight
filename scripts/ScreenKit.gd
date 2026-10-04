@@ -143,3 +143,25 @@ static func punch(control: Control, from: float = 1.6) -> void:
 		return
 	var tween: Tween = control.create_tween()
 	tween.tween_property(control, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+## The chunky-party ground (#546, #507 decision 1): flat deep indigo with faint
+## diagonal stripes, as a full-rect, input-transparent control.
+static func striped_background(node_name: String = "Ground") -> Control:
+	var ground := Control.new()
+	ground.name = node_name
+	ground.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ground.draw.connect(func() -> void:
+		var size: Vector2 = ground.size
+		ground.draw_rect(Rect2(Vector2.ZERO, size), Color("232A4A"))
+		# 135deg stripes, 28 px band every 56 px (measured along x), 3.5% white.
+		var stripe := Color(1.0, 1.0, 1.0, 0.035)
+		var step: float = 56.0
+		var x: float = -size.y
+		while x < size.x:
+			ground.draw_colored_polygon(PackedVector2Array([
+				Vector2(x, 0.0), Vector2(x + step * 0.5, 0.0),
+				Vector2(x + step * 0.5 + size.y, size.y), Vector2(x + size.y, size.y)]), stripe)
+			x += step
+	)
+	ground.resized.connect(ground.queue_redraw)
+	return ground

@@ -340,3 +340,4 @@ MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag
 PICKER_LIVE_NOTE,"In the game this is the real character, live"
 PICKER_TAKEN_NOTE,Greyed colours are taken by other players
 PICKER_DONE,Done
+TITLE_FOOTER,"Click, press a key, or D-pad + A"

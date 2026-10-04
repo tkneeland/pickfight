@@ -40,6 +40,17 @@ const HEADING_LABEL: StringName = &"HeadingLabel" # Lilita One, light text
 const INK_LABEL: StringName = &"InkLabel" # Nunito, ink text, for cream panels
 const CREAM_PANEL: StringName = &"CreamPanel" # cream fill; pair with InkLabel
 const INK_HEADING_LABEL: StringName = &"InkHeadingLabel" # Lilita One, ink text, for cream panels
+## Title screen (#546): the three match-kind cards, a key badge, and its text.
+const TITLE_CARD_ORANGE: StringName = &"TitleCardOrange"
+const TITLE_CARD_SKY: StringName = &"TitleCardSky"
+const TITLE_CARD_GREEN: StringName = &"TitleCardGreen"
+const KEY_BADGE: StringName = &"KeyBadge" # a small cream key cap
+const KEY_BADGE_LABEL: StringName = &"KeyBadgeLabel" # Lilita One 26, ink
+const CARD_NAME_LABEL: StringName = &"CardNameLabel" # Lilita One 56, ink
+const CARD_DESC_LABEL: StringName = &"CardDescLabel" # Nunito ExtraBold 24, ink
+const TITLE_HEADING_LABEL: StringName = &"TitleHeadingLabel" # Lilita One 40, cream
+const MUTED_HINT_LABEL: StringName = &"MutedHintLabel" # Nunito ExtraBold 20, muted
+const MUTED: Color = Color("C9CCE0")
 
 
 static func _box(fill: Color, shadow: bool = true, shadow_offset: Vector2 = SHADOW_OFFSET) -> StyleBoxFlat:
@@ -57,6 +68,32 @@ static func _box(fill: Color, shadow: bool = true, shadow_offset: Vector2 = SHAD
 		box.shadow_size = 0 # a hard shadow: offset only, no blur
 		box.shadow_offset = shadow_offset
 	return box
+
+
+## A big chunky card (#546): thick outline, large radius, hard offset shadow.
+static func _card_box(fill: Color, shadow_offset: Vector2, border: Color = INK) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = fill
+	box.set_border_width_all(5)
+	box.border_color = border
+	box.set_corner_radius_all(22)
+	box.content_margin_left = 32
+	box.content_margin_right = 32
+	box.content_margin_top = 28
+	box.content_margin_bottom = 28
+	box.shadow_color = INK
+	box.shadow_size = 1 # 0 draws no shadow at all; 1 is the smallest, still hard
+	box.shadow_offset = shadow_offset
+	return box
+
+
+static func _card_variation(theme: Theme, variation: StringName, fill: Color) -> void:
+	theme.set_type_variation(variation, "Button")
+	theme.set_stylebox("normal", variation, _card_box(fill, Vector2(7, 7)))
+	theme.set_stylebox("hover", variation, _card_box(fill, Vector2(10, 12)))
+	theme.set_stylebox("focus", variation, _card_box(fill, Vector2(10, 12), CREAM))
+	theme.set_stylebox("pressed", variation, _card_box(fill, Vector2(2, 2)))
+	theme.set_stylebox("disabled", variation, _card_box(fill, Vector2(7, 7)))
 
 
 ## Builds the theme in memory. tools/build_ui_theme.gd saves it to THEME_PATH.
@@ -120,6 +157,39 @@ static func build() -> Theme:
 	theme.set_color("selection_color", "LineEdit", Color(SKY, 0.6))
 	theme.set_color("font_placeholder_color", "LineEdit", Color("5A5E66"))
 	_add_lobby_variations(theme)
+
+	# Title screen (#546).
+	_card_variation(theme, TITLE_CARD_ORANGE, ORANGE)
+	_card_variation(theme, TITLE_CARD_SKY, SKY)
+	_card_variation(theme, TITLE_CARD_GREEN, GREEN)
+	var extra_bold := FontVariation.new()
+	extra_bold.base_font = body
+	extra_bold.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("weight"): 800}
+	theme.set_type_variation(KEY_BADGE, "PanelContainer")
+	var badge := _box(CREAM, false)
+	badge.set_border_width_all(4)
+	badge.set_corner_radius_all(12)
+	theme.set_stylebox("panel", KEY_BADGE, badge)
+	theme.set_type_variation(KEY_BADGE_LABEL, "Label")
+	theme.set_font("font", KEY_BADGE_LABEL, heading)
+	theme.set_color("font_color", KEY_BADGE_LABEL, INK)
+	theme.set_font_size("font_size", KEY_BADGE_LABEL, 26)
+	theme.set_type_variation(CARD_NAME_LABEL, "Label")
+	theme.set_font("font", CARD_NAME_LABEL, heading)
+	theme.set_color("font_color", CARD_NAME_LABEL, INK)
+	theme.set_font_size("font_size", CARD_NAME_LABEL, 56)
+	theme.set_type_variation(CARD_DESC_LABEL, "Label")
+	theme.set_color("font_color", CARD_DESC_LABEL, INK)
+	theme.set_font("font", CARD_DESC_LABEL, extra_bold)
+	theme.set_font_size("font_size", CARD_DESC_LABEL, 24)
+	theme.set_type_variation(TITLE_HEADING_LABEL, "Label")
+	theme.set_font("font", TITLE_HEADING_LABEL, heading)
+	theme.set_color("font_color", TITLE_HEADING_LABEL, CREAM)
+	theme.set_font_size("font_size", TITLE_HEADING_LABEL, 40)
+	theme.set_type_variation(MUTED_HINT_LABEL, "Label")
+	theme.set_font("font", MUTED_HINT_LABEL, extra_bold)
+	theme.set_font_size("font_size", MUTED_HINT_LABEL, 20)
+	theme.set_color("font_color", MUTED_HINT_LABEL, MUTED)
 	return theme
 
 
@@ -159,7 +229,6 @@ const INK_BOLD_LABEL: StringName = &"InkBoldLabel" # Nunito 800, ink text, for c
 const MUTED_LABEL: StringName = &"MutedLabel" # light grey-blue body text on the ground
 const HINT_LABEL: StringName = &"HintLabel" # muted ink text on cream
 
-const MUTED: Color = Color("C9CCE0")
 const MUTED_INK: Color = Color("5A628C")
 const DASH: Color = Color("5A628C")
 const STRIP_GREY: Color = Color("9CA0B8")
