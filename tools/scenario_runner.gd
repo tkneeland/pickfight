@@ -790,6 +790,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_win_is_not_a_ko_to_the_announcer_613",
 	"award_full_tie_breaks_by_match_seed_613",
 	"round_start_and_victory_clear_stale_banners_613",
+	"telemetry_waits_for_the_notice_617",
+	"telemetry_notice_buttons_617",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2763,6 +2765,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_award_full_tie_breaks_by_match_seed_613()
 		"round_start_and_victory_clear_stale_banners_613":
 			return await _scenario_round_start_and_victory_clear_stale_banners_613()
+		"telemetry_waits_for_the_notice_617":
+			return await _scenario_telemetry_waits_for_the_notice_617()
+		"telemetry_notice_buttons_617":
+			return await _scenario_telemetry_notice_buttons_617()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -30901,6 +30907,7 @@ func _telemetry_settings_372(share: bool) -> RefCounted:
 	var host: RefCounted = HostSettingsScript372.new()
 	host.persist = false
 	host.share_stats = share
+	host.telemetry_notice_seen = true # the #617 gate; the notice scenarios build their own
 	return host
 ## Issue #372: the record holds weapon numbers, mode, stages, format and length
 ## and nothing that names a player, a seat, a device or an account.
@@ -31001,8 +31008,8 @@ func _scenario_telemetry_notice_shows_once() -> Array[String]:
 	ui.host = fresh
 	ui.refresh()
 	var notice: Control = ui.telemetry_notice()
-	if notice != null and notice.visible:
-		failures.append("the first-launch notice showed on a fresh settings file (#461: never)")
+	if notice == null or not notice.visible:
+		failures.append("the first-launch notice did not show on a fresh settings file (#617)")
 	if not fresh.share_stats:
 		failures.append("sharing should default to on")
 	_scenario_completed = true
@@ -32469,7 +32476,7 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	await _teardown(rig["main"])
 	return failures
 func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[String]:
-	# Amended by #461: the notice never shows, so View opens the panel as usual.
+	# Amended by #617: the notice is up on a fresh file, and Got it dismisses it.
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
 	if sfx == null:
@@ -32481,8 +32488,12 @@ func _scenario_deck_gamepad_can_dismiss_the_first_launch_notice() -> Array[Strin
 	var was_seen: bool = ui.host.telemetry_notice_seen
 	ui.host.telemetry_notice_seen = false
 	ui.refresh()
-	if ui.telemetry_notice().visible:
-		failures.append("the first-launch notice showed (#461: never)")
+	if not ui.telemetry_notice().visible:
+		failures.append("the first-launch notice did not show (#617)")
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if ui.telemetry_notice().visible or not ui.host.telemetry_notice_seen:
+		failures.append("View then A did not dismiss the notice")
 	ui.host.telemetry_notice_seen = was_seen
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
@@ -39459,5 +39470,58 @@ func _scenario_round_start_and_victory_clear_stale_banners_613() -> Array[String
 	if not (feed.get("_banner_queue") as Array).is_empty() or feed.get("_banner").visible:
 		failures.append("a banner survived into the victory screen")
 	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+# --- Issue #617: the one-time telemetry notice ---------------------------------
+## Nothing is sent until the notice has been seen; then it sends.
+func _scenario_telemetry_waits_for_the_notice_617() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = HostSettingsScript372.new()
+	host.persist = false
+	if not host.share_stats or host.telemetry_notice_seen:
+		failures.append("a fresh file should share by default with the notice unseen")
+	if StatsSenderScript372.should_send(host, false, PackedStringArray()):
+		failures.append("stats were sent before the notice was seen")
+	host.mark_telemetry_notice_seen()
+	if not StatsSenderScript372.should_send(host, false, PackedStringArray()):
+		failures.append("stats did not send after the notice was seen")
+	host.set_share_stats(false)
+	if StatsSenderScript372.should_send(host, false, PackedStringArray()):
+		failures.append("stats sent with sharing off")
+	_scenario_completed = true
+	return failures
+## Got it keeps sharing on, Turn off switches it off, both hide the notice for
+## good.
+func _scenario_telemetry_notice_buttons_617() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var was: RefCounted = ui.host
+	for turn_off: bool in [false, true]:
+		var host: RefCounted = HostSettingsScript372.new()
+		host.persist = false
+		ui.host = host
+		ui.refresh()
+		if not ui.telemetry_notice().visible:
+			failures.append("the notice was not shown on a fresh file")
+			continue
+		if StatsSenderScript372.should_send(host, false, PackedStringArray()):
+			failures.append("stats could send while the notice was up")
+		(ui.telemetry_turn_off_button() if turn_off else ui.telemetry_dismiss_button()).pressed.emit()
+		if ui.telemetry_notice().visible or not host.telemetry_notice_seen:
+			failures.append("the notice was not dismissed for good (turn_off %s)" % turn_off)
+		await physics_frame
+		ui.refresh()
+		if ui.telemetry_notice().visible:
+			failures.append("the notice came back (turn_off %s)" % turn_off)
+		if turn_off == StatsSenderScript372.should_send(host, false, PackedStringArray()):
+			failures.append("after %s sending was %s" % ["Turn off" if turn_off else "Got it", not turn_off])
+		if host.share_stats == turn_off:
+			failures.append("share_stats was %s after turn_off %s" % [host.share_stats, turn_off])
+	ui.host = was
+	ui.refresh()
 	_scenario_completed = true
 	return failures

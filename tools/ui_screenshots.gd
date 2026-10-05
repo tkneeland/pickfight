@@ -198,7 +198,16 @@ func _title_and_couch() -> void:
 	var rig: Dictionary = await _new_main()
 	var screen: CanvasLayer = rig["screen"]
 	screen.show_title(true)
+	var settings: CanvasLayer = get_root().get_node("Sfx").build_settings_ui()
+	settings.host.telemetry_notice_seen = true # the other shots are of a player who has seen it
+	settings.refresh()
 	await _shot("title")
+	settings.host.telemetry_notice_seen = false # the one-time telemetry notice (#617), nothing saved
+	settings.refresh()
+	await _frames(3)
+	await _shot("telemetry_notice")
+	settings.host.telemetry_notice_seen = true
+	settings.refresh()
 	screen.press_title("local")
 	await _seats(rig, 0)
 	await _shot("lobby_couch_0")

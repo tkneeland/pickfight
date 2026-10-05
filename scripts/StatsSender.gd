@@ -62,10 +62,10 @@ static func is_scripted(tree: SceneTree, args: PackedStringArray) -> bool:
 			return true
 	return false
 
-## The one gate: sharing is on and the run is not scripted (by `scripted`, or
-## by a `--bots` launch argument).
+## The one gate: sharing is on, the one-time notice has been seen (#617), and
+## the run is not scripted (by `scripted`, or by a `--bots` launch argument).
 static func should_send(host: RefCounted, scripted: bool, args: PackedStringArray) -> bool:
-	return host.share_stats and not scripted and not is_scripted(null, args)
+	return host.share_stats and host.telemetry_notice_seen and not scripted and not is_scripted(null, args)
 
 func is_busy() -> bool:
 	return not _done

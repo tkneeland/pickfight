@@ -28,6 +28,7 @@ const MARGIN: float = 12.0
 const SLIDER_WIDTH: float = 180.0
 const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
 const NOTICE_TEXT: String = "Pickfight sends anonymous match stats to help balance the game"
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
@@ -272,9 +273,7 @@ func refresh() -> void:
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
-	# Issue #461: the owner wants telemetry unnoticed by default, so the #372
-	# first-launch notice never shows; the Settings toggle is the only control.
-	_notice.visible = false
+	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
@@ -323,8 +322,10 @@ func _set_pad_focus(on: bool) -> void:
 	for node: Node in _panel.find_children("*", "Control", true, false):
 		if node is BaseButton or node is Slider:
 			(node as Control).focus_mode = mode
-	_notice_ok.focus_mode = mode
-	_notice_off.focus_mode = mode
+	# The notice stays reachable by keys while it is due (#617).
+	var notice_mode: Control.FocusMode = Control.FOCUS_ALL if on or _notice_due() else Control.FOCUS_NONE
+	_notice_ok.focus_mode = notice_mode
+	_notice_off.focus_mode = notice_mode
 	if on:
 		_chain_pad_focus()
 		_slider.grab_focus()
@@ -469,6 +470,38 @@ func shake_box() -> CheckBox:
 func stats_box() -> CheckBox:
 	return _stats_box
 
+## The one-time disclosure (#617): due until it has been dismissed, and only on
+## the title or in the lobby, never mid-round.
+func _notice_due() -> bool:
+	if host.telemetry_notice_seen:
+		return false
+	if not is_inside_tree():
+		return true
+	var scene: Node = get_tree().current_scene
+	var rounds: Node = scene.get_node_or_null(^"RoundManager") if scene != null else null
+	if rounds != null and rounds.has_method("lobby_phase"):
+		return rounds.lobby_phase() == "lobby"
+	return true
+
+func _refresh_notice() -> void:
+	var due: bool = _notice_due()
+	if due == _notice.visible:
+		return
+	_notice.visible = due
+	if due:
+		_notice_ok.focus_mode = Control.FOCUS_ALL
+		_notice_off.focus_mode = Control.FOCUS_ALL
+		if is_inside_tree() and not _panel.visible:
+			_notice_ok.grab_focus()
+	elif not PadMenuScript.is_open():
+		_notice_ok.focus_mode = Control.FOCUS_NONE
+		_notice_off.focus_mode = Control.FOCUS_NONE
+
+## The notice follows the round state: it appears back in the lobby and hides
+## the moment a round starts.
+func _process(_delta: float) -> void:
+	_refresh_notice()
+
 func telemetry_notice() -> Control:
 	return _notice
 
@@ -481,43 +514,54 @@ func telemetry_turn_off_button() -> Button:
 func telemetry_dismiss_button() -> Button:
 	return _notice_ok
 
-## The first-launch notice (issue #372), top centre of the host screen. Either
-## button marks it seen for good; "Turn off" also switches sharing off.
+## The one-time telemetry notice (#372, #617), top centre of the host screen in
+## the shared theme. "Got it" and "Turn off" both mark it seen for good; "Turn
+## off" also switches sharing off.
 func _build_telemetry_notice() -> void:
 	_notice = PanelContainer.new()
 	_notice.name = "TelemetryNotice"
+	_notice.theme_type_variation = UiThemeScript.CARD_PANEL
 	_notice.anchor_left = 0.5
 	_notice.anchor_right = 0.5
 	_notice.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_notice.offset_top = MARGIN
-	# The theme\'s panel look (#549): indigo, ink outline, hard shadow.
 	add_child(_notice)
-	var row := HBoxContainer.new()
-	_notice.add_child(row)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	_notice.add_child(column)
 	_notice_label = Label.new()
 	_notice_label.text = tr("TELEMETRY_NOTICE")
-	row.add_child(_notice_label)
+	_notice_label.theme_type_variation = UiThemeScript.INK_BOLD_LABEL
+	_notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_notice_label.custom_minimum_size = Vector2(620.0, 0.0)
+	column.add_child(_notice_label)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 12)
+	column.add_child(row)
 	_notice_off = Button.new()
 	_notice_off.name = "TurnOff"
 	_notice_off.text = tr("TELEMETRY_TURN_OFF")
+	_notice_off.theme_type_variation = UiThemeScript.SKY_BUTTON
 	_notice_off.focus_mode = Control.FOCUS_NONE
 	row.add_child(_notice_off)
 	_notice_ok = Button.new()
 	_notice_ok.name = "Dismiss"
 	_notice_ok.text = tr("TELEMETRY_OK")
+	_notice_ok.theme_type_variation = UiThemeScript.YELLOW_BUTTON
 	_notice_ok.focus_mode = Control.FOCUS_NONE
 	row.add_child(_notice_ok)
 	_notice_off.pressed.connect(func() -> void:
 		host.set_share_stats(false)
 		host.mark_telemetry_notice_seen()
+		refresh()
 		if not _panel.visible:
-			_set_pad_focus(false)
-		refresh())
+			_set_pad_focus(false))
 	_notice_ok.pressed.connect(func() -> void:
 		host.mark_telemetry_notice_seen()
+		refresh()
 		if not _panel.visible:
-			_set_pad_focus(false)
-		refresh())
+			_set_pad_focus(false))
 
 func flash_box() -> CheckBox:
 	return _flash_box
