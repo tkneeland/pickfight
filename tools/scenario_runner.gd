@@ -788,6 +788,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_overtime_clears_shots_when_one_stands_611",
 	"bot_sees_rocks_spawned_mid_round_611",
 	"tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554",
+	"mode_win_is_not_a_ko_to_the_announcer_613",
+	"award_full_tie_breaks_by_match_seed_613",
+	"round_start_and_victory_clear_stale_banners_613",
+	"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2757,6 +2761,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_sees_rocks_spawned_mid_round_611()
 		"tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554":
 			return await _scenario_tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_554()
+		"mode_win_is_not_a_ko_to_the_announcer_613":
+			return await _scenario_mode_win_is_not_a_ko_to_the_announcer_613()
+		"award_full_tie_breaks_by_match_seed_613":
+			return await _scenario_award_full_tie_breaks_by_match_seed_613()
+		"round_start_and_victory_clear_stale_banners_613":
+			return await _scenario_round_start_and_victory_clear_stale_banners_613()
+		"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554":
+			return await _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -37410,6 +37422,8 @@ func _sd556_rig(failures: Array[String], protect: bool) -> Dictionary:
 			# A rock's knock must not ring a player out mid-measurement.
 			player.freeze = true
 	rig["mode"] = mode
+	# The rain, backstop and replay live in the shared tiebreaker (#554).
+	rig["tb"] = rig["rm"].tiebreaker()
 	return rig
 func _sd556_rocks(root: Node) -> int:
 	var count: int = 0
@@ -37422,16 +37436,16 @@ func _scenario_stock_tie_sudden_death_rocks_start_at_15_s_556() -> Array[String]
 	var rig: Dictionary = await _sd556_rig(failures, true)
 	if rig.is_empty():
 		return failures
-	var mode: Node = rig["mode"]
+	var mode: Node = rig["tb"]
 	var announcer: Node = _callout_announcer()
 	await _await_ticks(10)
 	if mode.rocks_dropped != 0 or mode.live_rock_count() != 0:
 		failures.append("rocks were out at the start of the overtime (%d dropped)" % mode.rocks_dropped)
-	mode.overtime_elapsed = mode.RAIN_START_SEC - 0.5
+	mode.elapsed = mode.RAIN_START_SEC - 0.5
 	await _await_ticks(20)
 	if mode.rocks_dropped != 0:
-		failures.append("a rock dropped at %.1f s, before the rain starts at %.0f s" % [mode.overtime_elapsed, mode.RAIN_START_SEC])
-	mode.overtime_elapsed = mode.RAIN_START_SEC
+		failures.append("a rock dropped at %.1f s, before the rain starts at %.0f s" % [mode.elapsed, mode.RAIN_START_SEC])
+	mode.elapsed = mode.RAIN_START_SEC
 	await _await_ticks(5)
 	if mode.rocks_dropped < 1 or mode.live_rock_count() < 1 or _sd556_rocks(rig["rm"]) < 1:
 		failures.append("no rock was out at %.0f s of overtime (%d dropped, %d live)" % [mode.RAIN_START_SEC, mode.rocks_dropped, mode.live_rock_count()])
@@ -37444,7 +37458,7 @@ func _scenario_stock_sudden_death_rock_rate_rises_556() -> Array[String]:
 	var rig: Dictionary = await _sd556_rig(failures, true)
 	if rig.is_empty():
 		return failures
-	var mode: Node = rig["mode"]
+	var mode: Node = rig["tb"]
 	var gaps: Array[float] = []
 	for elapsed: float in [15.0, 20.0, 25.0, 30.0, 59.0]:
 		gaps.append(mode.rain_interval(elapsed))
@@ -37455,10 +37469,10 @@ func _scenario_stock_sudden_death_rock_rate_rises_556() -> Array[String]:
 		failures.append("the gap did not shrink every ramp step: %s" % [gaps])
 	if gaps[4] < mode.RAIN_MIN_INTERVAL_SEC:
 		failures.append("the gap fell below its floor: %s" % [gaps])
-	mode.overtime_elapsed = 15.0
+	mode.elapsed = 15.0
 	await _await_ticks(240)
 	var early: int = mode.rocks_dropped
-	mode.overtime_elapsed = 40.0
+	mode.elapsed = 40.0
 	var before: int = mode.rocks_dropped
 	await _await_ticks(240)
 	var late: int = mode.rocks_dropped - before
@@ -37472,7 +37486,7 @@ func _scenario_stock_sudden_death_60_s_backstop_is_a_draw_556() -> Array[String]
 	var rig: Dictionary = await _sd556_rig(failures, true)
 	if rig.is_empty():
 		return failures
-	var mode: Node = rig["mode"]
+	var mode: Node = rig["tb"]
 	var rm: Node = rig["rm"]
 	var wins: Array[int] = []
 	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
@@ -37481,11 +37495,11 @@ func _scenario_stock_sudden_death_60_s_backstop_is_a_draw_556() -> Array[String]
 	mode.callout.connect(func(sound: StringName) -> void:
 		if sound == &"announce_draw":
 			called["draw"] = true)
-	mode.overtime_elapsed = mode.OVERTIME_BACKSTOP_SEC - 1.0
+	mode.elapsed = mode.OVERTIME_BACKSTOP_SEC - 1.0
 	await _await_ticks(30)
 	if called["draw"]:
 		failures.append("the overtime was called a draw before 60 s")
-	mode.overtime_elapsed = mode.OVERTIME_BACKSTOP_SEC - 0.05
+	mode.elapsed = mode.OVERTIME_BACKSTOP_SEC - 0.05
 	if not await _await_condition(func() -> bool: return called["draw"], 3000):
 		failures.append("a still-tied overtime did not end at the 60 s backstop")
 	await _await_ticks(30)
@@ -37503,7 +37517,7 @@ func _scenario_stock_sudden_death_double_ko_replays_overtime_556() -> Array[Stri
 	var rig: Dictionary = await _sd556_rig(failures, false)
 	if rig.is_empty():
 		return failures
-	var mode: Node = rig["mode"]
+	var mode: Node = rig["tb"]
 	var rm: Node = rig["rm"]
 	var players: Array[RigidBody2D] = rig["players"]
 	var wins: Array[int] = []
@@ -37512,11 +37526,9 @@ func _scenario_stock_sudden_death_double_ko_replays_overtime_556() -> Array[Stri
 	players[0].eliminate()
 	players[1].eliminate()
 	await _await_ticks(6)
-	if not mode.is_pending(0) or not mode.is_pending(1):
-		failures.append("a double KO in overtime did not queue both players back")
 	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, 4000):
 		failures.append("the double KO did not bring both players back")
-	if not wins.is_empty() or not mode.overtime or mode.drawn:
+	if not wins.is_empty() or not rm.game_mode_node().overtime or mode.drawn:
 		failures.append("the double KO ended the round (wins %s, overtime %s)" % [wins, mode.overtime])
 	if players[0].alive and players[1].alive:
 		players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
@@ -37529,10 +37541,10 @@ func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
 	var rig: Dictionary = await _sd556_rig(failures, false)
 	if rig.is_empty():
 		return failures
-	var mode: Node = rig["mode"]
+	var mode: Node = rig["tb"]
 	var rm: Node = rig["rm"]
 	var players: Array[RigidBody2D] = rig["players"]
-	mode.overtime_elapsed = 30.0
+	mode.elapsed = 30.0
 	for player: RigidBody2D in players:
 		player.spawn_protected = true
 	if not await _await_condition(func() -> bool: return mode.live_rock_count() >= 2, 3000):
@@ -39422,11 +39434,11 @@ func _scenario_tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_55
 			failures.append("%s: the tied players are not on one-hit KOs" % attempt)
 	var breaker: Node = rm.tiebreaker()
 	if breaker != null:
-		if breaker.pressure_on():
-			failures.append("meteors fell before the delay")
-		breaker.elapsed = breaker.pressure_delay_sec
-		if not await _await_condition(func() -> bool: return breaker.pressure_on(), 1000):
-			failures.append("the meteors never started")
+		if breaker.rain_on():
+			failures.append("rocks fell before the delay")
+		breaker.elapsed = breaker.RAIN_START_SEC
+		if not await _await_condition(func() -> bool: return breaker.rain_on(), 1000):
+			failures.append("the rock rain never started")
 		players[1].strike_landed.emit(players[0], 5.0, Vector2.ZERO, false)
 		if not await _await_condition(func() -> bool: return rm.score_of(1) == 1, ROUND_LOOP_TIMEOUT_MSEC):
 			failures.append("one tiebreaker hit did not win P2 the round; scores %d %d %d" % [rm.score_of(0), rm.score_of(1), rm.score_of(2)])
@@ -39435,6 +39447,130 @@ func _scenario_tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_55
 		await _await_ticks(2)
 		if rm.tiebreaker() != null:
 			failures.append("the tiebreaker outlived its round")
+	await _teardown(fixture["holder"])
+	_scenario_completed = true
+	return failures
+
+## Issue #613 (1): a Soccer win eliminates the losers, which the announcer must
+## not call a KO, and the round manager reports the mode's win.
+func _scenario_mode_win_is_not_a_ko_to_the_announcer_613() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var sfx: Node = _sfx()
+	var announcer: Node = sfx.get_node_or_null(^"Announcer") if sfx != null else null
+	if announcer == null:
+		failures.append("no Announcer to listen to")
+		await _teardown(rig["stage"])
+		return failures
+	announcer.call("clear")
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 0.1
+	var won_seen: bool = false
+	for _goal in 3:
+		mode.score_goal(0)
+		won_seen = won_seen or rm.mode_won()
+		await _await_msec(300)
+	if not won_seen:
+		failures.append("mode_won() was false when the mode scored its win")
+	await _await_msec(1500)
+	var said: PackedStringArray = announcer.get("said")
+	if "announce_ko" in said or "announce_double_ko" in said:
+		failures.append("the announcer called a goal a KO: %s" % [said])
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## Issue #613 (2): a full award tie no longer always goes to the lowest slot;
+## the same seed always picks the same slot.
+func _scenario_award_full_tie_breaks_by_match_seed_613() -> Array[String]:
+	var failures: Array[String] = []
+	var picks: Dictionary = {}
+	for seed_value in 24:
+		var stats: RefCounted = MatchStatsScript.new()
+		stats.tie_seed = seed_value
+		for slot in 4:
+			stats.kos[slot] = 2
+			stats.damage_dealt[slot] = 50
+		var first: int = stats._leader([0, 1, 2, 3], stats.kos, stats.damage_dealt, false)
+		var again: int = stats._leader([0, 1, 2, 3], stats.kos, stats.damage_dealt, false)
+		if first != again:
+			failures.append("seed %d picked %d then %d" % [seed_value, first, again])
+		picks[first] = true
+	if picks.size() < 3:
+		failures.append("24 seeds only ever picked slots %s from a 4-way tie" % [picks.keys()])
+	var plain: RefCounted = MatchStatsScript.new()
+	for slot in 4:
+		plain.kos[slot] = 2
+		plain.damage_dealt[slot] = 50
+	if plain._leader([0, 1, 2, 3], plain.kos, plain.damage_dealt, false) != 0:
+		failures.append("with no seed the tie no longer falls to the lowest slot")
+	plain.kos[2] = 3
+	plain.tie_seed = 5
+	if plain._leader([0, 1, 2, 3], plain.kos, plain.damage_dealt, false) != 2:
+		failures.append("a real leader lost to the tie-break")
+	_scenario_completed = true
+	return failures
+## Issue #613 (4): banners still queued from the last round are dropped when a
+## round starts and when the victory screen opens.
+func _scenario_round_start_and_victory_clear_stale_banners_613() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed613"
+	rig["stage"].add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	await _await_ticks(2)
+	feed.show_banner("LAST ONE STANDING", "P1", Color.WHITE)
+	feed.show_banner("FIRST BLOOD", "P2", Color.WHITE)
+	if (feed.get("_banner_queue") as Array).is_empty():
+		failures.append("test setup: nothing queued behind the first banner")
+	rm.call("_ko_round_started")
+	if not (feed.get("_banner_queue") as Array).is_empty() or feed.get("_banner").visible:
+		failures.append("a banner survived into the next round")
+	feed.show_banner("LAST ONE STANDING", "P1", Color.WHITE)
+	feed.show_banner("FIRST BLOOD", "P2", Color.WHITE)
+	rm.call("_enter_victory")
+	if not (feed.get("_banner_queue") as Array).is_empty() or feed.get("_banner").visible:
+		failures.append("a banner survived into the victory screen")
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #554/#556: the one Sudden Death system serves every mode, so a Classic
+## tiebreaker that nobody settles ends at the 60 s backstop as a draw: nobody
+## scores, the tied players are out of the round and the announcer says "Draw!".
+func _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554() -> Array[String]:
+	var failures: Array[String] = []
+	var spawns: Array[Vector2] = [Vector2(-200, -2000), Vector2(0, -2000)]
+	var scenes: Array[PackedScene] = [_make_stub_stage("StubA", spawns), _make_stub_stage("StubB", spawns)]
+	var fixture: Dictionary = _round_flow_fixture(2, [0, 1], scenes)
+	var rm: Node = fixture["round_manager"]
+	var players: Array[RigidBody2D] = fixture["players"]
+	if not await _await_condition(func() -> bool: return _round_live(fixture, [0, 1]), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("no round started")
+		await _teardown(fixture["holder"])
+		_scenario_completed = true
+		return failures
+	rm.set_process(false)
+	players[0].eliminate()
+	players[1].eliminate()
+	rm.set_process(true)
+	if not await _await_condition(func() -> bool: return rm.tiebreaker() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the double KO was not played off")
+	var breaker: Node = rm.tiebreaker()
+	if breaker != null:
+		breaker.elapsed = breaker.OVERTIME_BACKSTOP_SEC - 0.05
+		if not await _await_condition(func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("a still-tied tiebreaker did not end at the backstop")
+		if rm.score_of(0) + rm.score_of(1) != 0:
+			failures.append("the draw scored")
+		if rm.tiebreaker() != null and rm.tiebreaker().connected_count() > 0 and players[0].alive:
+			failures.append("the tied players were still fighting")
 	await _teardown(fixture["holder"])
 	_scenario_completed = true
 	return failures

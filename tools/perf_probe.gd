@@ -21,6 +21,11 @@ extends SceneTree
 ##   --weapon=<name>  every player holds resources/<name>.tres from the start
 ##                    of every round (issue #150: eight flails); an unknown
 ##                    name exits with code 2 rather than timing bare heads
+##   --stage=<name>   play only scenes/stages/<name>.tscn, every round (#615);
+##                    an unknown name exits with code 2
+##   --mode=<id>      the RoundManager game_mode (classic, stock)
+##   --modifier=<id>  a round modifier every round gets (RoundManager.forced_modifier)
+##   --trace          note rounds, strikes and eliminations by frame
 ##
 ## Like the scenario runner, a `-s` run never reads or writes the owner's
 ## `user://audio.cfg` (#195). Pass `--log-file <path>` before `-s` to keep
@@ -57,6 +62,10 @@ var _eliminations: int = 0
 ## `--trace`: what happened on which frame, printed beside the spikes.
 var _trace_on: bool = false
 var _trace: Array[String] = []
+## `--stage=` / `--mode=` / `--modifier=`: empty leaves the game's own choice.
+var _stage: PackedScene = null
+var _mode: String = ""
+var _modifier: String = ""
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -66,6 +75,17 @@ func _initialize() -> void:
 			_seed = arg.trim_prefix("--seed=").to_int()
 		elif arg == "--trace":
 			_trace_on = true
+		elif arg.begins_with("--stage="):
+			var spath: String = "res://scenes/stages/%s.tscn" % arg.trim_prefix("--stage=")
+			_stage = load(spath) if ResourceLoader.exists(spath) else null
+			if _stage == null:
+				printerr("PERF: no stage at %s" % spath)
+				quit(2)
+				return
+		elif arg.begins_with("--mode="):
+			_mode = arg.trim_prefix("--mode=")
+		elif arg.begins_with("--modifier="):
+			_modifier = arg.trim_prefix("--modifier=")
 		elif arg.begins_with("--weapon="):
 			var path: String = "res://resources/%s.tres" % arg.trim_prefix("--weapon=")
 			_weapon = load(path) if ResourceLoader.exists(path) else null
@@ -93,6 +113,13 @@ func _initialize() -> void:
 	# Straight into rounds: the lobby (#120) waits for phones to ready up, and
 	# the stub roster never does.
 	round_manager.lobby_enabled = false
+	if _stage != null:
+		var only: Array[PackedScene] = [_stage]
+		round_manager.stage_scenes = only
+	if _mode != "":
+		round_manager.game_mode = "" if _mode == "classic" else _mode
+	if _modifier != "":
+		round_manager.forced_modifier = _modifier
 	# The round-end pause runs on game time (GameClock, #182), and a probe
 	# only times the frames of a round being fought: shortened so the frames
 	# the run spends go to rounds, not scoreboards.

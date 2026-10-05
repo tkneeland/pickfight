@@ -146,6 +146,11 @@ func clear() -> void:
 	_banner_queue.clear()
 	_banner.visible = false
 
+## Drops the banner up and any waiting (a new round, the victory screen).
+func clear_banners() -> void:
+	_banner_queue.clear()
+	_banner.visible = false
+
 ## The ticker's lines as plain text, oldest first, for the scenarios.
 func entries() -> PackedStringArray:
 	var out := PackedStringArray()
@@ -195,20 +200,21 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 	var row := HBoxContainer.new()
 	row.name = "Awards"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else 32)
+	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else (32 if awards.size() <= 4 else 12))
+	var who_size: int = 20 if awards.size() <= 4 else 14 # six cards must fit 1600 px (#613)
 	for award: Dictionary in awards:
 		var card := VBoxContainer.new()
 		card.name = "Award" + str(award["category"]).capitalize()
 		card.add_theme_constant_override("separation", 0)
 		plate_behind(card)
-		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18, MUTED_TEXT)
+		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18 if awards.size() <= 4 else 14, MUTED_TEXT)
 		category.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(category)
-		var title: Label = _label(str(award["title"]), 30, ACCENT, true)
+		var title: Label = _label(str(award["title"]), 30 if awards.size() <= 4 else 20, ACCENT, true)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(title)
 		var slot: int = int(award["slot"])
-		var who: Label = _label("%s  -  %s" % [name_of.call(slot), award["detail"]], 20, color_of.call(slot))
+		var who: Label = _label("%s  -  %s" % [str(name_of.call(slot)).left(10), award["detail"]], who_size, color_of.call(slot))
 		who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(who)
 		row.add_child(card)

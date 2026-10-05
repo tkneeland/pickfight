@@ -48,6 +48,7 @@ var _queue: Array[Dictionary] = []
 var _busy_until_msec: int = 0
 var _pending_kos: int = 0
 var _ko_due_msec: int = 0
+var _round_manager: Node = null
 var _lengths: Dictionary = {}
 
 func _ready() -> void:
@@ -122,6 +123,7 @@ func _on_node_added(node: Node) -> void:
 	if node.has_signal("strike_landed") and node.has_signal("eliminated"):
 		node.connect("eliminated", _on_eliminated)
 	elif node.has_signal("round_started") and node.has_signal("round_won"):
+		_round_manager = node
 		node.connect("round_started", _on_round_started)
 		node.connect("round_won", _on_round_won.bind(node))
 		if node.has_signal("modifier_announced"):
@@ -171,6 +173,9 @@ func _on_modifier_announced(title: String) -> void:
 		say(line)
 
 func _on_eliminated() -> void:
+	# A mode's scripted win eliminates the losers: a score, not a KO (#613).
+	if _round_manager != null and is_instance_valid(_round_manager) and _round_manager.has_method("mode_won") and _round_manager.mode_won():
+		return
 	if _pending_kos == 0:
 		_ko_due_msec = GameClockScript.now_msec() + int(DOUBLE_KO_WINDOW_SEC * 1000.0)
 	_pending_kos += 1
