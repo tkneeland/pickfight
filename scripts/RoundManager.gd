@@ -376,6 +376,9 @@ func _try_start_round() -> void:
 	_team_keep_weapon.clear()
 	_survivor_slot = -1
 	_survivor_team = -1
+	_tie_frame = -1
+	_tie_slots.clear()
+	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
 	_start_round_modifier()
 	_start_game_mode()
@@ -511,17 +514,22 @@ func _check_round_end() -> void:
 	# tick of this frame: they won before they fell (#163).
 	if alive_slots.is_empty() and _survivor_slot != -1:
 		alive_slots.append(_survivor_slot)
+	var abandoned: bool = false
 	if alive_slots.size() > 1:
 		if not _round_abandoned(alive_slots):
 			return
 		for slot in alive_slots:
 			_players[slot].leave_round()
 		alive_slots.clear()
+		abandoned = true
 	_survivor_slot = -1
 	if after_kick and alive_slots.size() == 1:
 		if _players[alive_slots[0]].alive:
 			_players[alive_slots[0]].leave_round()
 		alive_slots.clear()
+	# A draw is played off, not thrown away (#554).
+	if alive_slots.is_empty() and not abandoned and not after_kick and _start_tiebreaker(_tie_slots):
+		return
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
@@ -574,6 +582,7 @@ func _on_eliminated_check_survivor(slot: int) -> void:
 func _record_survivor(slot: int) -> void:
 	if _state != State.ROUND_ACTIVE:
 		return
+	_note_tie_candidates(slot)
 	if _team_mode:
 		_check_team_survivor()
 		return
@@ -858,6 +867,7 @@ func _start_kill_zone_rise() -> void:
 		push_warning("RoundManager: floor kill zone is not below the highest spawn; not rising")
 		return
 	var timing: Dictionary = kill_zone_rise_timing(game_mode)
+	_kill_zone_home_y = zone.global_position.y
 	zone.start_rising(float(timing["grace_sec"]), distance / float(timing["rise_sec"]))
 
 ## The rise under `mode_id` (issue #352): whether it runs, its grace period
@@ -928,6 +938,7 @@ func _start_round_modifier() -> void:
 ## Round end: put back everything the modifier changed and drop its name.
 func _end_round_modifier() -> void:
 	_end_game_mode()
+	_end_tiebreaker()
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
@@ -1804,6 +1815,8 @@ func _check_team_round_end(after_kick: bool) -> void:
 		winner_team = standing[0]
 	elif _survivor_team != -1:
 		winner_team = _survivor_team
+	elif not after_kick and _start_tiebreaker(_tie_slots):
+		return  # a draw is played off (#554)
 	_survivor_team = -1
 	if after_kick:
 		winner_team = -1
@@ -2318,7 +2331,8 @@ func _tick_ghosts() -> void:
 	for slot in _in_round:
 		var player: Variant = _players[slot]
 		var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
-		if stock and (player == null or player.alive or _game_mode_node.is_pending(slot)) and _ghosts.has(slot):
+		# Back in play (a Stock respawn, a tiebreaker #554): the ghost goes.
+		if (player == null or player.alive or (stock and _game_mode_node.is_pending(slot))) and _ghosts.has(slot):
 			if is_instance_valid(_ghosts[slot]):
 				(_ghosts[slot] as Node).queue_free()
 			_ghosts.erase(slot)
@@ -2352,3 +2366,99 @@ func _clear_all_shots() -> void:
 	for player: Variant in _players:
 		if player != null and is_instance_valid(player):
 			player.clear_shots()
+
+# --- Sudden Death tiebreaker (issue #554) ------------------------------------
+#
+# A round whose last players go down on the same physics tick used to be a
+# draw nobody scored. Now those players come back on the spot for a
+# Smash-style tiebreaker (`Tiebreaker.gd`, also Stock's timeout overtime): one
+# hit KOs, falling rocks after 15 s, a draw at 60 s.
+# The round stays active, so whoever is left standing wins it the usual way;
+# another double KO plays it off again among the same players.
+
+const TiebreakerScript := preload("res://scripts/Tiebreaker.gd")
+
+## The physics frame `_tie_slots` was taken on, or -1.
+var _tie_frame: int = -1
+## Everyone standing as that frame's first elimination landed (the eliminated
+## included): the players a draw on that frame is between.
+var _tie_slots: Array[int] = []
+var _tiebreaker: Node = null
+## The floor kill zone's authored height, put back for a tiebreaker so risen
+## lava does not swallow the spawns; NAN when it never rose.
+var _kill_zone_home_y: float = NAN
+
+## The current tiebreaker, or null.
+func tiebreaker() -> Node:
+	return _tiebreaker
+
+func _note_tie_candidates(slot: int) -> void:
+	var frame: int = Engine.get_physics_frames()
+	if frame == _tie_frame:
+		return
+	_tie_frame = frame
+	_tie_slots = _alive_slots()
+	if not _tie_slots.has(slot):
+		_tie_slots.append(slot)
+	_tie_slots.sort()
+
+## Brings `tied` back for a tiebreaker. Returns false (the round ends a draw
+## as before) unless two or more of them, on two or more teams in Teams, are
+## still rostered.
+func _start_tiebreaker(tied: Array[int]) -> bool:
+	if _state != State.ROUND_ACTIVE or (_tiebreaker != null and _tiebreaker.drawn):
+		return false  # a tiebreaker that hit its 60 s backstop ends the round level
+	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
+	var back: Array[int] = []
+	for slot: int in tied:
+		if slot >= 0 and slot < _players.size() and _players[slot] != null and is_instance_valid(_players[slot]) \
+				and _in_round.has(slot) and claimed.has(slot):
+			back.append(slot)
+	var sides: int = _teams_of(back).size() if _team_mode else back.size()
+	if sides < 2:
+		return false
+	_tie_frame = -1
+	_survivor_slot = -1
+	_survivor_team = -1
+	var zone: Node2D = _floor_kill_zone()
+	if zone != null:
+		zone.stop_rising()
+		if not is_nan(_kill_zone_home_y):
+			zone.global_position.y = _kill_zone_home_y
+	var offset: int = spawn_rotation_offset(back.size())
+	var now: int = GameClockScript.now_msec()
+	for i in back.size():
+		var slot: int = back[i]
+		_players[slot].start_round(_spawn_point((i + offset) % back.size()), true)
+		if _stats != null:
+			_stats.resume_round(slot, now)
+	if _game_mode_node != null and _game_mode_node.has_method("begin_tiebreak"):
+		_game_mode_node.begin_tiebreak(back)
+	var first: bool = _tiebreaker == null
+	_ensure_tiebreaker().start_round(back)
+	_start_spawn_protection()
+	# The banner and the announcer's "Sudden Death!" both come from here.
+	if first:
+		_announce_modifier("Sudden Death")
+	return true
+
+## The shared Sudden Death system, created on first use.
+func _ensure_tiebreaker() -> Node:
+	if _tiebreaker == null:
+		_tiebreaker = TiebreakerScript.new()
+		_tiebreaker.name = "Tiebreaker"
+		_tiebreaker.announce_start = false
+		add_child(_tiebreaker)
+		_tiebreaker.setup(self)
+	return _tiebreaker
+
+## Stock's time limit ran out with `tied` level on lives (#354): they play on
+## where they stand, in the same Sudden Death (the mode says "Overtime!").
+func begin_overtime(tied: Array[int]) -> void:
+	_ensure_tiebreaker().start_round(tied)
+
+func _end_tiebreaker() -> void:
+	if _tiebreaker != null and is_instance_valid(_tiebreaker):
+		_tiebreaker.end_round()
+		_tiebreaker.queue_free()
+	_tiebreaker = null
