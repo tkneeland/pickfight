@@ -39683,6 +39683,7 @@ func _scenario_pressed_head_holds_on_flat_ground() -> Array[String]:
 		print("      pressed head slide at %d deg: %.1f px" % [degrees, slide])
 		if slide > PRESSED_HOLD_MAX_SLIDE:
 			failures.append("%d deg: the pressed head slid %.1f px, expected at most %.1f" % [degrees, slide, PRESSED_HOLD_MAX_SLIDE])
+	_scenario_completed = true
 	return failures
 
 ## Issues #625: a horizontal cast with nothing in the way. The rod's hook
