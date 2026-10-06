@@ -795,6 +795,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_notice_buttons_617",
 	"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554",
 	"pressed_head_holds_on_flat_ground",
+	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
+	"pogo_chained_hops_keep_their_height",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2778,6 +2780,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554()
 		"pressed_head_holds_on_flat_ground":
 			return await _scenario_pressed_head_holds_on_flat_ground()
+		"pogo_uncharged_ground_contact_bounces_at_least_this_high":
+			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
+		"pogo_chained_hops_keep_their_height":
+			return await _scenario_pogo_chained_hops_keep_their_height()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39672,4 +39678,56 @@ func _scenario_pressed_head_holds_on_flat_ground() -> Array[String]:
 		if slide > PRESSED_HOLD_MAX_SLIDE:
 			failures.append("%d deg: the pressed head slid %.1f px, expected at most %.1f" % [degrees, slide, PRESSED_HOLD_MAX_SLIDE])
 	_scenario_completed = true
+	return failures
+# --- Pogo bounciness (issue #622) --------------------------------------------
+## Written down independently of the resource: a plain hop must rise at least
+## this many px from its low point, and stay under the on-screen ceiling.
+const POGO_HOP_MIN_RISE: float = 40.0
+const POGO_HOP_MAX_RISE: float = 400.0
+## Lets an untouched pogo hop on the arena floor and returns each hop's height,
+## px, from its low point to its apex.
+func _pogo_free_hops() -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	await _equip(player, POGO_PATH)
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(ROSTER_SETTLE_TICKS)
+	var hops: Array[float] = []
+	var trough: float = player.global_position.y
+	var prev_vy: float = 0.0
+	for _t in 400:
+		await physics_frame
+		var y: float = player.global_position.y
+		var vy: float = player.linear_velocity.y
+		trough = maxf(trough, y)
+		if prev_vy < 0.0 and vy >= 0.0:
+			hops.append(trough - y)
+			trough = y
+		prev_vy = vy
+	await _teardown(stage)
+	return hops
+func _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high() -> Array[String]:
+	var failures: Array[String] = []
+	var hops: Array[float] = await _pogo_free_hops()
+	print("      pogo free hops (px): %s" % [hops])
+	if hops.is_empty():
+		failures.append("the pogo never hopped")
+		return failures
+	if hops[0] < POGO_HOP_MIN_RISE:
+		failures.append("the uncharged pogo hop rose only %.1f px, under %.0f" % [hops[0], POGO_HOP_MIN_RISE])
+	if hops.max() > POGO_HOP_MAX_RISE:
+		failures.append("a plain pogo hop rose %.1f px, over %.0f (off screen)" % [hops.max(), POGO_HOP_MAX_RISE])
+	return failures
+## Left alone, a pogo keeps hopping: each of the first three hops stays near
+## the first's height instead of dying out.
+func _scenario_pogo_chained_hops_keep_their_height() -> Array[String]:
+	var failures: Array[String] = []
+	var hops: Array[float] = await _pogo_free_hops()
+	if hops.size() < 3:
+		failures.append("the pogo made only %d hops in 400 ticks" % hops.size())
+		return failures
+	for i in 3:
+		if hops[i] < hops[0] * 0.8 or hops[i] < POGO_HOP_MIN_RISE:
+			failures.append("hop %d rose %.1f px against the first's %.1f: it died out" % [i + 1, hops[i], hops[0]])
 	return failures
