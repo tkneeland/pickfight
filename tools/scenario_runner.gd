@@ -799,6 +799,16 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
+	"bullet_blocked_by_shield_face_631",
+	"bullet_passes_through_other_weapon_head_631",
+	"bullet_passes_through_shield_back_631",
+	"hook_blocked_by_shield_face_631",
+	"hook_passes_through_other_weapon_head_631",
+	"hook_passes_through_shield_back_631",
+	"rod_hook_blocked_by_shield_face_631",
+	"boomerang_blocked_by_shield_face_631",
+	"boomerang_passes_through_other_weapon_head_631",
+	"boomerang_passes_through_shield_back_631",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2790,6 +2800,26 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
 			return await _scenario_pogo_chained_hops_keep_their_height()
+		"bullet_blocked_by_shield_face_631":
+			return await _scenario_bullet_blocked_by_shield_face_631()
+		"bullet_passes_through_other_weapon_head_631":
+			return await _scenario_bullet_passes_through_other_weapon_head_631()
+		"bullet_passes_through_shield_back_631":
+			return await _scenario_bullet_passes_through_shield_back_631()
+		"hook_blocked_by_shield_face_631":
+			return await _scenario_hook_blocked_by_shield_face_631()
+		"hook_passes_through_other_weapon_head_631":
+			return await _scenario_hook_passes_through_other_weapon_head_631()
+		"hook_passes_through_shield_back_631":
+			return await _scenario_hook_passes_through_shield_back_631()
+		"rod_hook_blocked_by_shield_face_631":
+			return await _scenario_rod_hook_blocked_by_shield_face_631()
+		"boomerang_blocked_by_shield_face_631":
+			return await _scenario_boomerang_blocked_by_shield_face_631()
+		"boomerang_passes_through_other_weapon_head_631":
+			return await _scenario_boomerang_passes_through_other_weapon_head_631()
+		"boomerang_passes_through_shield_back_631":
+			return await _scenario_boomerang_passes_through_shield_back_631()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39774,4 +39804,109 @@ func _scenario_pogo_chained_hops_keep_their_height() -> Array[String]:
 	for i in 3:
 		if hops[i] < hops[0] * 0.8 or hops[i] < POGO_HOP_MIN_RISE:
 			failures.append("hop %d rose %.1f px against the first's %.1f: it died out" % [i + 1, hops[i], hops[0]])
+	return failures
+## Issues #631, ADR-0024: a shot fired at a player 300 px to its right who holds
+## `weapon_path` aimed `toward_shooter` (head on the shooter's side) or away from
+## it. Returns the damage the holder took over the whole flight.
+func _shot_at_holder(shot: String, weapon_path: String, toward_shooter: bool) -> float:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	await _await_ticks(2)
+	await _equip(holder, weapon_path)
+	var shot_path: String = {"hook": GRAPPLE_PATH, "rod_hook": FISHING_ROD_PATH, "boomerang": BOOMERANG_PATH}.get(shot, BOOMSTICK_PATH)
+	var stats: WeaponStatsType = await _equip(shooter, shot_path)
+	_brace(shooter)
+	_brace(holder)
+	_aim(holder, PI if toward_shooter else 0.0)
+	await _await_ticks(SETTLE_TICKS)
+	if shot == "bullet":
+		var quick: WeaponStatsType = _quick_boomstick()
+		var origin: Vector2 = shooter.global_position + Vector2.RIGHT * 20.0
+		await _watch_bullet(_launch_bullet(stage, shooter, origin, quick), _bullet_ticks(quick, 400.0))
+	else:
+		await _flick(shooter, Vector2.RIGHT)
+		await _await_ticks(240)
+	var taken: float = holder.damage
+	await _teardown(stage)
+	return taken
+func _scenario_bullet_blocked_by_shield_face_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("bullet", SHIELD_PATH, true)
+	print("      bullet_blocked_by_shield_face_631: holder took %.1f" % damage)
+	if damage > 0.0:
+		failures.append("the shield face let the shot through, holder took %.1f" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_bullet_passes_through_other_weapon_head_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("bullet", "res://resources/sword.tres", true)
+	print("      bullet_passes_through_other_weapon_head_631: holder took %.1f" % damage)
+	if damage <= 0.0:
+		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_bullet_passes_through_shield_back_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("bullet", SHIELD_PATH, false)
+	print("      bullet_passes_through_shield_back_631: holder took %.1f" % damage)
+	if damage <= 0.0:
+		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_hook_blocked_by_shield_face_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("hook", SHIELD_PATH, true)
+	print("      hook_blocked_by_shield_face_631: holder took %.1f" % damage)
+	if damage > 0.0:
+		failures.append("the shield face let the shot through, holder took %.1f" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_hook_passes_through_other_weapon_head_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("hook", "res://resources/sword.tres", true)
+	print("      hook_passes_through_other_weapon_head_631: holder took %.1f" % damage)
+	if damage <= 0.0:
+		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_hook_passes_through_shield_back_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("hook", SHIELD_PATH, false)
+	print("      hook_passes_through_shield_back_631: holder took %.1f" % damage)
+	if damage <= 0.0:
+		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_rod_hook_blocked_by_shield_face_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("rod_hook", SHIELD_PATH, true)
+	print("      rod_hook_blocked_by_shield_face_631: holder took %.1f" % damage)
+	if damage > 0.0:
+		failures.append("the shield face let the shot through, holder took %.1f" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_boomerang_blocked_by_shield_face_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("boomerang", SHIELD_PATH, true)
+	print("      boomerang_blocked_by_shield_face_631: holder took %.1f" % damage)
+	if damage > 0.0:
+		failures.append("the shield face let the shot through, holder took %.1f" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_boomerang_passes_through_other_weapon_head_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("boomerang", "res://resources/sword.tres", true)
+	print("      boomerang_passes_through_other_weapon_head_631: holder took %.1f" % damage)
+	if damage <= 0.0:
+		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+func _scenario_boomerang_passes_through_shield_back_631() -> Array[String]:
+	var failures: Array[String] = []
+	var damage: float = await _shot_at_holder("boomerang", SHIELD_PATH, false)
+	print("      boomerang_passes_through_shield_back_631: holder took %.1f" % damage)
+	if damage <= 0.0:
+		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
 	return failures
