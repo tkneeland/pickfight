@@ -342,3 +342,10 @@ PICKER_LIVE_NOTE,"In the game this is the real character, live"
 PICKER_TAKEN_NOTE,Greyed colours are taken by other players
 PICKER_DONE,Done
 TITLE_FOOTER,"Click, press a key, or D-pad + A"
+CAREER_LINE,Matches %d · Wins %d · KOs %d
+CAREER_MATCHES,Matches played: %d
+CAREER_MATCH_WINS,Match wins: %d
+CAREER_ROUND_WINS,Round wins: %d
+CAREER_KOS,KOs: %d
+CAREER_SELF_KOS,Self-KOs: %d
+CAREER_FAVOURITE,Favourite weapon: %s

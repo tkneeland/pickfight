@@ -548,6 +548,7 @@ func _check_round_end() -> void:
 	_pickup_director.clear()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
+	_send_career_round([_last_winner_slot] if _last_winner_slot != -1 else [])
 	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
 	_clear_all_shots()
@@ -1256,6 +1257,7 @@ func _enter_victory() -> void:
 		victory_feed.clear_banners() # nothing queued from the last round over victory (#613)
 	_write_balance_log()
 	send_telemetry()
+	_send_career_match()
 	_play_lobby_music()
 	_state = State.VICTORY
 	_clear_stage()
@@ -1845,6 +1847,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_pickup_director.clear()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
+	_send_career_round(winners)
 	_ko_round_ended(-1)
 	_show_scoreboard()
 	_clear_all_shots()
@@ -2005,6 +2008,7 @@ func _flush_kos() -> void:
 	var feed: Control = kill_feed()
 	for entry: Array in pending:
 		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1])
+		_tally_career_ko(ko["victim"], ko["killer"])
 		if feed == null:
 			continue
 		var victim: int = ko["victim"]
@@ -2059,6 +2063,8 @@ func _ko_round_started() -> void:
 	if stale_feed != null and stale_feed.has_method("clear_banners"):
 		stale_feed.clear_banners() # a late banner must not land in this round (#613)
 	_stats.begin_round(_in_round, GameClockScript.now_msec())
+	_career_kos.clear()
+	_career_self_kos.clear()
 
 ## A round won by the last of three or more is a big moment; one of two
 ## winning speaks for itself on the scoreboard.
@@ -2462,3 +2468,57 @@ func _end_tiebreaker() -> void:
 		_tiebreaker.end_round()
 		_tiebreaker.queue_free()
 	_tiebreaker = null
+
+# --- Lifetime stats (issue #503) -----------------------------------------------
+#
+# Each device keeps its own career totals; the host only reports deltas
+# (`Career.gd`). At every round end each seat that played the round gets its
+# round win, its KOs of human players (a bot's death credits nobody), its
+# self-KOs and the weapon it held. At the victory screen every phone / PC
+# seat gets one match played, plus a match win for the winner. A match the
+# host abandons never reaches the victory screen, so it adds only the rounds
+# that finished. `ControllerServer.send_career()` drops gamepad seats, the
+# host's own seat and bots.
+
+## This round's per-slot KO and self-KO tallies, for the career deltas.
+var _career_kos: Dictionary = {}
+var _career_self_kos: Dictionary = {}
+
+func _is_bot_slot(slot: int) -> bool:
+	return _controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot)
+
+func _tally_career_ko(victim: int, killer: int) -> void:
+	if _is_bot_slot(victim):
+		return # a bot's death is not a KO of a human, nor a self-KO that counts
+	if killer == -1:
+		_career_self_kos[victim] = int(_career_self_kos.get(victim, 0)) + 1
+	else:
+		_career_kos[killer] = int(_career_kos.get(killer, 0)) + 1
+
+func _send_career(slot: int, deltas: Dictionary) -> void:
+	if _controller_server != null and _controller_server.has_method("send_career"):
+		_controller_server.send_career(slot, deltas)
+
+func _send_career_round(winners: Array) -> void:
+	for slot: int in _in_round:
+		var deltas: Dictionary = {}
+		if winners.has(slot):
+			deltas["round_wins"] = 1
+		if int(_career_kos.get(slot, 0)) > 0:
+			deltas["kos"] = int(_career_kos[slot])
+		if int(_career_self_kos.get(slot, 0)) > 0:
+			deltas["self_kos"] = int(_career_self_kos[slot])
+		var stats: Variant = _players[slot].get("weapon_stats") if slot < _players.size() and _players[slot] != null else null
+		if stats != null and stats.resource_path != "":
+			deltas["weapons"] = {stats.resource_path.get_file().get_basename().capitalize(): 1}
+		_send_career(slot, deltas)
+
+func _send_career_match() -> void:
+	if _controller_server == null or not _controller_server.has_method("claimed_slots"):
+		return
+	for slot: int in _controller_server.claimed_slots():
+		var won: bool = slot == _match_winner_slot or (_team_mode and _match_winner_team != -1 and team_of(slot) == _match_winner_team)
+		var deltas: Dictionary = {"matches": 1}
+		if won:
+			deltas["match_wins"] = 1
+		_send_career(slot, deltas)

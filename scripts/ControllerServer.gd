@@ -1286,6 +1286,20 @@ func send_lives(slot: int, count: int, can_steal: bool) -> void:
 	_lives_sent[slot] = key
 	peer.send_text(JSON.stringify({"t": "lives", "v": count, "steal": can_steal}))
 
+## Hand the person on `slot` their lifetime-stat deltas (#503): one
+## `{"t":"career","d":{...}}` frame that their device adds to its own totals.
+## Only phones and Online PC clients keep a career: a gamepad seat, the host
+## PC's own seat and a bot are not a person with a device, so they get nothing.
+## Returns whether a frame went out; an empty `deltas` sends nothing.
+func send_career(slot: int, deltas: Dictionary) -> bool:
+	if deltas.is_empty() or not slot_has_controller(slot) or _slot_virtual[slot] == 1:
+		return false
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or peer is LocalSeat or not peer.has_method("send_text") or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return false
+	peer.send_text(JSON.stringify({"t": "career", "d": deltas}))
+	return true
+
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round
 ## that no one still in it can finish.

@@ -49,3 +49,31 @@ func slot_team_pick(slot: int) -> int:
 
 func is_virtual(slot: int) -> bool:
 	return bot_slots.has(slot)
+
+## Lifetime stats (#503): every `send_career()` the round loop made, as
+## [slot, deltas] -- bots dropped, as the real server drops them -- and the
+## host's "end match" command, emitted the way a phone's would arrive.
+signal host_command(cmd: String, slot: int)
+var career_log: Array = []
+
+func send_career(slot: int, deltas: Dictionary) -> bool:
+	if deltas.is_empty() or bot_slots.has(slot):
+		return false
+	career_log.append([slot, deltas.duplicate(true)])
+	return true
+
+## The sum of the deltas `slot` was sent, one dictionary (weapons summed too).
+func career_total(slot: int) -> Dictionary:
+	var out: Dictionary = {}
+	for entry: Array in career_log:
+		if entry[0] != slot:
+			continue
+		for key: String in entry[1].keys():
+			if key == "weapons":
+				var weapons: Dictionary = out.get("weapons", {})
+				for weapon: String in entry[1]["weapons"].keys():
+					weapons[weapon] = int(weapons.get(weapon, 0)) + int(entry[1]["weapons"][weapon])
+				out["weapons"] = weapons
+			else:
+				out[key] = int(out.get(key, 0)) + int(entry[1][key])
+	return out
