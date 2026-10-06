@@ -144,6 +144,13 @@ extends Resource
 @export var reel_speed: float = 0.0
 @export var reel_force: float = 0.0
 @export var reel_min_length: float = 40.0
+## Fishing rod (#629): the hook moves what it hits to the holder. It does not
+## stick to terrain (it comes home empty); a player it meets takes
+## `projectile_damage` and is reeled toward the holder by `reel_force` on
+## their body each tick, until the holder lets go, they get within
+## `reel_min_length`, either is KO'd, or `hook_reel_limit` seconds pass.
+@export var hook_reels_players: bool = false
+@export var hook_reel_limit: float = 1.5
 
 ## Pogo (issue #271): the head bounces the player off the ground. A head
 ## touching terrain gives an automatic small bounce (`pogo_bounce_speed`, px/s);

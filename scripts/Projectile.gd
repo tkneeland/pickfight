@@ -105,6 +105,11 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	var motion: Vector2 = direction * speed * delta
+	var blocker: Node = _shield_holder_blocking(global_position, global_position + motion, radius)
+	if blocker != null:
+		impacted.emit(blocker, global_position)
+		queue_free()
+		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _shape
@@ -174,6 +179,15 @@ func _exclusions() -> Array[RID]:
 		if head.is_valid():
 			rids.append(head)
 	return rids
+
+## Issue #631, ADR-0024: the player, other than the shooter, whose shield's
+## face turns a shot flying `from` -> `to`, or null.
+func _shield_holder_blocking(from: Vector2, to: Vector2, radius: float) -> Node:
+	for node: Node in get_tree().get_nodes_in_group("players"):
+		if node != shooter and node.has_method("shield_face_blocks") \
+				and node.shield_face_blocks(from, to, radius):
+			return node
+	return null
 
 func _shooter_in_play() -> bool:
 	return is_instance_valid(shooter) and bool(shooter.get("alive"))
