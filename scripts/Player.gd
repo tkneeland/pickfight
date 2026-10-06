@@ -1717,7 +1717,20 @@ const HEAD_YIELD_FRICTION: float = 0.5
 const HEAD_GRIP_YIELD_START: float = 0.15
 const HEAD_GRIP_YIELD_FULL: float = 0.5
 
+## How far below the body (the sine of the angle under horizontal) the head
+## must lie, and how far under it terrain must be, to count as on the floor.
+const HEAD_FLOOR_GRIP_SLOPE: float = 0.35
+const HEAD_FLOOR_PROBE: float = 20.0
+
 var _head_material: PhysicsMaterial
+
+func _head_on_floor() -> bool:
+	var head_position: Vector2 = _head.global_position
+	if (head_position - global_position).normalized().y <= HEAD_FLOOR_GRIP_SLOPE:
+		return false
+	var query := PhysicsRayQueryParameters2D.create(
+			head_position, head_position + Vector2(0.0, HEAD_FLOOR_PROBE), _head.collision_mask, [_head.get_rid()])
+	return not get_world_2d().direct_space_state.intersect_ray(query).is_empty()
 
 func _update_head_grip() -> void:
 	if _head_material == null:
@@ -1734,6 +1747,12 @@ func _update_head_grip() -> void:
 		floor_friction = HEAD_YIELD_FRICTION
 		var error: float = absf(wrapf(weapon_angle - _haft.rotation, -PI, PI))
 		grip = 1.0 - clampf(inverse_lerp(HEAD_GRIP_YIELD_START, HEAD_GRIP_YIELD_FULL, error), 0.0, 1.0)
+		# Issue #620: a head on the floor cannot wedge the rig the way one on
+		# a wall can -- the body is held up, not held back -- so it keeps its
+		# full grip however far the drag turns. On the floor means terrain
+		# right under the head, with the head below the body.
+		if _head_on_floor():
+			grip = 1.0
 	var friction: float = lerpf(floor_friction, _stats.grip_friction, grip)
 	var rough: bool = grip > 0.0
 	# Only on a change: every write re-sends the material to the server.
