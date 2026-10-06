@@ -820,6 +820,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_blocked_by_shield_face_631",
 	"boomerang_passes_through_other_weapon_head_631",
 	"boomerang_passes_through_shield_back_631",
+	"career_match_end_sends_per_seat_deltas_503",
+	"career_ko_of_bot_is_not_counted_503",
+	"career_abandoned_match_sends_rounds_not_match_503",
+	"career_gamepad_host_and_bot_seats_get_nothing_503",
+	"career_phone_page_shows_compact_line_and_expands_503",
+	"career_remote_client_keeps_totals_and_validates_503",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2853,6 +2859,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomerang_passes_through_other_weapon_head_631()
 		"boomerang_passes_through_shield_back_631":
 			return await _scenario_boomerang_passes_through_shield_back_631()
+		"career_match_end_sends_per_seat_deltas_503":
+			return await _scenario_career_match_end_sends_per_seat_deltas_503()
+		"career_ko_of_bot_is_not_counted_503":
+			return await _scenario_career_ko_of_bot_is_not_counted_503()
+		"career_abandoned_match_sends_rounds_not_match_503":
+			return await _scenario_career_abandoned_match_sends_rounds_not_match_503()
+		"career_gamepad_host_and_bot_seats_get_nothing_503":
+			return await _scenario_career_gamepad_host_and_bot_seats_get_nothing_503()
+		"career_phone_page_shows_compact_line_and_expands_503":
+			return await _scenario_career_phone_page_shows_compact_line_and_expands_503()
+		"career_remote_client_keeps_totals_and_validates_503":
+			return await _scenario_career_remote_client_keeps_totals_and_validates_503()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -40251,5 +40269,186 @@ func _scenario_boomerang_passes_through_shield_back_631() -> Array[String]:
 	print("      boomerang_passes_through_shield_back_631: holder took %.1f" % damage)
 	if damage <= 0.0:
 		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+## Issue #503: lifetime stats. Plays a three-player match to the victory screen
+## (Alice wins both rounds) and returns the roster stub, which logged every
+## delta the round loop sent. `bots` are slots the stub reports as bots.
+func _career_match_503(bots: Array[int], failures: Array[String], stop_after_round_one: bool = false) -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(2)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	rm.spawn_protection_sec = 0.0
+	roster.slots.assign([0, 1, 2])
+	roster.names = {0: "Alice", 1: "Bob", 2: "Carl"}
+	roster.bot_slots.assign(bots)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	var all_alive := func() -> bool: return players[0].alive and players[1].alive and players[2].alive
+	if not await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 1 never started")
+		return loop
+	await _await_ticks(2)
+	players[1].take_damage(1000.0)
+	players[0].strike_landed.emit(players[1], 1000.0, players[1].global_position, true)
+	await _await_ticks(2)
+	players[2].strike_landed.emit(players[2], 10.0, players[2].global_position, false)
+	players[2].eliminate()
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if not await _await_condition(all_alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 2 never started")
+		return loop
+	await _await_ticks(2)
+	if stop_after_round_one:
+		roster.host_command.emit("end", 0)
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		return loop
+	players[0].strike_landed.emit(players[1], 0.0, players[1].global_position, false)
+	players[0].strike_landed.emit(players[2], 0.0, players[2].global_position, false)
+	players[1].eliminate()
+	await _await_ticks(2)
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("two wins never reached the victory screen ('%s')" % rm.lobby_phase())
+	return loop
+func _scenario_career_match_end_sends_per_seat_deltas_503() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _career_match_503([], failures)
+	var roster: Node = loop["roster"]
+	var want: Dictionary = {
+		0: {"matches": 1, "match_wins": 1, "round_wins": 2, "kos": 3, "weapons": {"Pickaxe": 2}},
+		1: {"matches": 1, "weapons": {"Pickaxe": 2}},
+		2: {"matches": 1, "self_kos": 1, "weapons": {"Pickaxe": 2}},
+	}
+	for slot: int in want.keys():
+		var got: Dictionary = roster.career_total(slot)
+		print("      career slot %d: %s" % [slot, got])
+		if got != want[slot]:
+			failures.append("slot %d career deltas were %s, expected %s" % [slot, got, want[slot]])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_career_ko_of_bot_is_not_counted_503() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _career_match_503([2], failures)
+	var roster: Node = loop["roster"]
+	var alice: Dictionary = roster.career_total(0)
+	print("      career alice (Carl is a bot): %s" % [alice])
+	# Bob dies twice to Alice; Carl, the bot, dies once to her and once alone.
+	if int(alice.get("kos", 0)) != 2:
+		failures.append("Alice's KOs were %s, expected 2 (the bot's death must not count)" % alice.get("kos", 0))
+	if not roster.career_total(2).is_empty():
+		failures.append("the bot seat was sent career deltas: %s" % [roster.career_total(2)])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+func _scenario_career_abandoned_match_sends_rounds_not_match_503() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _career_match_503([], failures, true)
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	if rm.lobby_phase() != "lobby":
+		failures.append("the host's end command left the phase at '%s', expected the lobby" % rm.lobby_phase())
+	var alice: Dictionary = roster.career_total(0)
+	print("      career alice (abandoned): %s" % [alice])
+	if alice != {"round_wins": 1, "kos": 1, "weapons": {"Pickaxe": 1}}:
+		failures.append("Alice got %s, expected only round 1's win, KO and weapon" % [alice])
+	for slot in 3:
+		var got: Dictionary = roster.career_total(slot)
+		if got.has("matches") or got.has("match_wins"):
+			failures.append("slot %d was credited a match for an abandoned one: %s" % [slot, got])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+## A phone stand-in: an open socket that records what it is sent.
+class _CareerPhone503 extends RefCounted:
+	var sent: Array[String] = []
+	func get_ready_state() -> int:
+		return WebSocketPeer.STATE_OPEN
+	func send_text(text: String) -> void:
+		sent.append(text)
+func _scenario_career_gamepad_host_and_bot_seats_get_nothing_503() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_seat: Variant = fx[2]
+	var host_slot: int = fx[3]
+	var free: Array[int] = []
+	for slot in 3:
+		if slot != host_slot:
+			free.append(slot)
+	var phone := _CareerPhone503.new()
+	var pad: Variant = ControllerServerScript.PadSeat.new()
+	server._slot_peers[free[0]] = phone
+	server._slot_peers[free[1]] = pad
+	var deltas: Dictionary = {"kos": 2, "weapons": {"Hammer": 1}}
+	if not server.send_career(free[0], deltas):
+		failures.append("the phone seat was not sent its career deltas")
+	var frame: Variant = JSON.parse_string(phone.sent.back()) if not phone.sent.is_empty() else null
+	if not frame is Dictionary or frame.get("t") != "career" or int(frame.get("d", {}).get("kos", 0)) != 2 or int(frame.get("d", {}).get("weapons", {}).get("Hammer", 0)) != 1:
+		failures.append("the phone's frame was %s, expected a career frame carrying the deltas" % [phone.sent])
+	host_seat.last_text = ""
+	if server.send_career(host_slot, deltas) or host_seat.last_text != "":
+		failures.append("the host PC's own seat was sent career deltas")
+	pad.last_text = ""
+	if server.send_career(free[1], deltas) or pad.last_text != "":
+		failures.append("a gamepad seat was sent career deltas")
+	server._slot_peers[free[1]] = null
+	var bot_slot: int = server.add_virtual_controller("Bot")
+	if bot_slot < 0:
+		failures.append("no bot seat could be added to the fixture")
+	elif server.send_career(bot_slot, deltas):
+		failures.append("a bot seat was sent career deltas")
+	if server.send_career(free[0], {}):
+		failures.append("an empty delta was sent")
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Read off controller/index.html as shipped (a headless run has no browser):
+## the compact line sits under the name card, shows only outside a round, a
+## tap toggles it, and the host's `career` frame is validated and stored.
+func _scenario_career_phone_page_shows_compact_line_and_expands_503() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	for needle: String in [
+			'<div id="name"></div>\n    <div id="career"></div>',
+			'var CAREER_KEY = "pf_career";',
+			'msg.t === "career") { addCareer(msg.d); }',
+			'lobby.phase !== "playing"',
+			'careerEl.addEventListener("click", function () { careerOpen = !careerOpen; showCareer(); });',
+			'"CAREER_LINE": "{0} matches \\u00b7 {1} wins \\u00b7 {2} KOs"',
+			'careerCount(v, cap)']:
+		if not page.contains(needle):
+			failures.append("the phone page is missing: %s" % needle)
+	_scenario_completed = true
+	return failures
+func _scenario_career_remote_client_keeps_totals_and_validates_503() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pf503_career_test.cfg") # never the owner's user://career.cfg
+	DirAccess.remove_absolute(path)
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	client.career_path = path
+	get_root().add_child(client)
+	await _await_ticks(2)
+	client._on_host_text(JSON.stringify({"t": "career", "d": {"matches": 1, "match_wins": 1, "kos": 3, "weapons": {"Hammer": 2}}}))
+	client._on_host_text(JSON.stringify({"t": "career", "d": {"round_wins": 2, "kos": -5, "self_kos": "x", "bogus": 9, "weapons": {"Hammer": 1, "Axe": 4}}}))
+	client._on_host_text(JSON.stringify({"t": "career", "d": "junk"}))
+	var want: Dictionary = {"matches": 1, "match_wins": 1, "round_wins": 2, "kos": 3, "self_kos": 0, "weapons": {"Hammer": 3, "Axe": 4}}
+	if client.career != want:
+		failures.append("the totals were %s, expected %s" % [client.career, want])
+	if client.career_text() != "1 matches \u00b7 1 wins \u00b7 3 KOs":
+		failures.append("the compact line read '%s'" % client.career_text())
+	var saved: Dictionary = preload("res://scripts/Career.gd").load_totals(path)
+	if saved != want:
+		failures.append("the saved file read back %s, expected %s" % [saved, want])
+	client._career_button.pressed.emit()
+	if not client.career_text().contains("Favourite weapon: Axe") or client.career_text().count("\n") != 5:
+		failures.append("the expanded text was '%s'" % client.career_text())
+	DirAccess.remove_absolute(path)
+	client.queue_free()
+	await _await_ticks(2)
 	_scenario_completed = true
 	return failures

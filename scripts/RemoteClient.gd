@@ -22,6 +22,7 @@ extends Node2D
 const SnapshotScript: GDScript = preload("res://scripts/Snapshot.gd")
 const SnapshotCaptureScript: GDScript = preload("res://scripts/SnapshotCapture.gd")
 const HostMouseScript: GDScript = preload("res://scripts/HostMouse.gd")
+const CareerScript: GDScript = preload("res://scripts/Career.gd")
 const RelayLinkScript: GDScript = preload("res://scripts/RelayLink.gd")
 const ControllerServerScript: GDScript = preload("res://scripts/ControllerServer.gd")
 const PuppetScript: GDScript = preload("res://scripts/RemotePuppet.gd")
@@ -64,6 +65,11 @@ var state: int = State.JOIN
 var relay_url: String = ""
 ## "" keeps the name and sensitivity in memory only (scenarios do this).
 var settings_path: String = DEFAULT_SETTINGS_PATH
+## Lifetime stats (#503). Defaults to `user://career.cfg` unless `settings_path`
+## was emptied (scenarios, screenshot tools), which keeps these in memory too.
+var career_path: String = ""
+var career: Dictionary = {}
+var _career_open: bool = false
 var join_timeout_msec: int = JOIN_TIMEOUT_MSEC
 var client_id: String = ""
 var player_name: String = ""
@@ -143,6 +149,7 @@ var _leave_button: Button
 var _wait_label: Label
 var _lobby_panel: Control
 var _lobby_title: Label
+var _career_button: Button
 var _lobby_list: VBoxContainer
 var _ready_button: Button
 var _ready_want: int = -1 # the clicked Ready (0/1) awaiting the host's echo, else -1 (#550)
@@ -223,6 +230,9 @@ func _ready() -> void:
 		relay_url = ControllerServerScript.resolve_relay_url(OS.get_cmdline_user_args())
 	itch_url = str(ProjectSettings.get_setting("pickfight/itch_url", ""))
 	_load_settings()
+	if career_path.is_empty() and settings_path == DEFAULT_SETTINGS_PATH:
+		career_path = CareerScript.DEFAULT_PATH
+	career = CareerScript.load_totals(career_path)
 	if client_id.is_empty():
 		client_id = _random_id()
 		_save_settings()
@@ -494,6 +504,8 @@ func _on_host_text(text: String) -> void:
 		"hud":
 			hud = msg
 			_refresh_extras()
+		"career":
+			_on_career(msg)
 		"looks":
 			_on_looks(msg)
 		"ping":
@@ -1117,6 +1129,15 @@ func _build_lobby_panel() -> void:
 	var box: VBoxContainer = _centered_panel(_lobby_panel, 380, &"")
 	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	box.add_child(_lobby_title)
+	_career_button = Button.new()
+	_career_button.name = "Career"
+	_career_button.flat = true
+	_career_button.focus_mode = Control.FOCUS_NONE
+	_career_button.pressed.connect(func() -> void:
+		_career_open = not _career_open
+		_refresh_career())
+	box.add_child(_career_button)
+	_refresh_career()
 	_lobby_list = VBoxContainer.new()
 	# Issue #441: the cosmetics panel sits beside the player list.
 	var beside := HBoxContainer.new()
@@ -1242,6 +1263,30 @@ func menu_visible() -> bool:
 
 func _is_host() -> bool:
 	return slot >= 0 and int(lobby.get("host", -1)) == slot
+
+## The host's deltas for this seat (#503): added to the totals and saved.
+func _on_career(msg: Dictionary) -> void:
+	career = CareerScript.add(career, msg.get("d"))
+	CareerScript.save_totals(career_path, career)
+	_refresh_career()
+
+## The compact line under the room title; a tap opens all six stats.
+func career_text() -> String:
+	if not _career_open:
+		return tr("CAREER_LINE") % [int(career.get("matches", 0)), int(career.get("match_wins", 0)), int(career.get("kos", 0))]
+	var favourite: String = CareerScript.favourite(career)
+	return "\n".join([
+		tr("CAREER_MATCHES") % int(career.get("matches", 0)),
+		tr("CAREER_MATCH_WINS") % int(career.get("match_wins", 0)),
+		tr("CAREER_ROUND_WINS") % int(career.get("round_wins", 0)),
+		tr("CAREER_KOS") % int(career.get("kos", 0)),
+		tr("CAREER_SELF_KOS") % int(career.get("self_kos", 0)),
+		tr("CAREER_FAVOURITE") % (favourite if not favourite.is_empty() else "-"),
+	])
+
+func _refresh_career() -> void:
+	if _career_button != null:
+		_career_button.text = career_text()
 
 func _refresh_lobby() -> void:
 	if _lobby_panel == null or state != State.PLAYING:
