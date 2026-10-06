@@ -40418,7 +40418,7 @@ func _scenario_career_phone_page_shows_compact_line_and_expands_503() -> Array[S
 			'msg.t === "career") { addCareer(msg.d); }',
 			'lobby.phase !== "playing"',
 			'careerEl.addEventListener("click", function () { careerOpen = !careerOpen; showCareer(); });',
-			'"CAREER_LINE": "{0} matches \\u00b7 {1} wins \\u00b7 {2} KOs"',
+			'"CAREER_LINE": "Matches {0} \\u00b7 Wins {1} \\u00b7 KOs {2}"',
 			'careerCount(v, cap)']:
 		if not page.contains(needle):
 			failures.append("the phone page is missing: %s" % needle)
@@ -40439,7 +40439,7 @@ func _scenario_career_remote_client_keeps_totals_and_validates_503() -> Array[St
 	var want: Dictionary = {"matches": 1, "match_wins": 1, "round_wins": 2, "kos": 3, "self_kos": 0, "weapons": {"Hammer": 3, "Axe": 4}}
 	if client.career != want:
 		failures.append("the totals were %s, expected %s" % [client.career, want])
-	if client.career_text() != "1 matches \u00b7 1 wins \u00b7 3 KOs":
+	if client.career_text() != "Matches 1 \u00b7 Wins 1 \u00b7 KOs 3":
 		failures.append("the compact line read '%s'" % client.career_text())
 	var saved: Dictionary = preload("res://scripts/Career.gd").load_totals(path)
 	if saved != want:
