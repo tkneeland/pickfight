@@ -17,12 +17,17 @@
 ; enemies into unfavorable positions, making it useful for control and setup
 ; rather than raw damage.
 ;
+; Redrawn in #621 as a horseshoe, opening along the haft, with seven circles along it.
+; Rests 10 px out (was 20): the horseshoe's arms reach 15 px past the anchor, and the
+; field reels a neighbour in against the body, so at 20 px the arms were jammed by
+; the reeled-in neighbour and the head could not turn out of rest.
+;
 ; Force ceiling 8000, the same as the medium weapons (the sword included), so
 ; it meets them evenly in a clash.
 
 [resource]
 script = ExtResource("1")
-min_reach = 20.0
+min_reach = 10.0
 max_reach = 140.0
 mass = 0.3
 drive_speed = 32.0
@@ -34,6 +39,6 @@ sound_set = &"magnet"
 special = &"magnet"
 launch_range = 300.0
 reel_force = 1200.0
-head_circle_offsets = PackedVector2Array(-2, -2, 2, -2, 0, 0, -2, 2, 2, 2)
-head_circle_radii = PackedFloat32Array(3.5, 3.5, 4.0, 3.5, 3.5)
-art_outline = PackedVector2Array(-8, -8, 8, -8, 8, 8, -8, 8)
+head_circle_offsets = PackedVector2Array(-0.5, 0, 0, -4, 0, 4, 8, -6.5, 13, -6.5, 8, 6.5, 13, 6.5)
+head_circle_radii = PackedFloat32Array(2.4, 1.65, 1.65, 2.4, 2.4, 2.4, 2.4)
+art_outline = PackedVector2Array(6, -9, 16, -9, 16, -4, 6, -4, 4.5, -3.7, 3.2, -2.8, 2.3, -1.5, 2, 0, 2.3, 1.5, 3.2, 2.8, 4.5, 3.7, 6, 4, 16, 4, 16, 9, 6, 9, 3.2, 8.6, 0.7, 7.3, -1.3, 5.3, -2.6, 2.8, -3, 0, -2.6, -2.8, -1.3, -5.3, 0.7, -7.3, 3.2, -8.6)
