@@ -5,8 +5,8 @@
 ; The fishing rod (issue #273): a light launcher that fires a hook on a line.
 ; Lighter and faster than the grapple, with shorter range and less power.
 ;
-; Flick the drag to fire: the hook flies straight out along the flick at
-; 1800 px/s for up to 400 px. If it meets terrain it sticks there, and while
+; Flick the drag to fire: the hook flies out along the flick at
+; 900 px/s for up to 400 px. If it meets terrain it sticks there, and while
 ; the drag is held the rope reels in at 750 px/s, hauling the player toward
 ; the hook with at most 3500 force, down to 60 px. Release to let go; the hook
 ; reels home and can fire again 0.25 s after it arrives. A hook that meets
@@ -17,6 +17,12 @@
 ; The head is the launcher grip, a thin rod with a reel (#621) drawn as `art_outline`
 ; and filled by four circles. The hook sitting in it is `loaded_art`: drawn over the head
 ; while the hook is home, hidden while it is out, and colliding with nothing.
+;
+; The cast arcs (issue #625): speed 900 px/s over the 400 px line is a flight
+; of about 0.44 s, and gravity 900 px/s^2 drops the hook 0.5*900*0.44^2 =
+; roughly 90 px by the end of the line (about 22 px at mid range, 200 px out),
+; so a horizontal cast visibly sags yet a platform at head height half way
+; out is still hooked by a flick aimed a little high.
 ;
 ; Force ceiling 6500, under the grapple's 7300.
 
@@ -38,7 +44,8 @@ launch_cooldown = 0.25
 reel_speed = 750.0
 reel_force = 3500.0
 reel_min_length = 60.0
-projectile_speed = 1800.0
+projectile_speed = 900.0
+projectile_gravity = 900.0
 projectile_damage = 4.0
 projectile_knockback = 250.0
 projectile_radius = 4.0

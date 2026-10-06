@@ -794,6 +794,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_waits_for_the_notice_617",
 	"telemetry_notice_buttons_617",
 	"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554",
+	"fishing_rod_cast_arcs_under_gravity",
+	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
 ]
@@ -2777,6 +2779,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_notice_buttons_617()
 		"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554":
 			return await _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554()
+		"fishing_rod_cast_arcs_under_gravity":
+			return await _scenario_hook_flight_drop(FISHING_ROD_PATH, true)
+		"grapple_shot_stays_level":
+			return await _scenario_hook_flight_drop(GRAPPLE_PATH, false)
 		"pogo_uncharged_ground_contact_bounces_at_least_this_high":
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
@@ -39643,6 +39649,42 @@ func _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554() -> Ar
 		if rm.tiebreaker() != null and rm.tiebreaker().connected_count() > 0 and players[0].alive:
 			failures.append("the tied players were still fighting")
 	await _teardown(fixture["holder"])
+	_scenario_completed = true
+	return failures
+
+## Issues #625: a horizontal cast with nothing in the way. The rod's hook
+## (projectile_gravity > 0) ends well below where it started; the grapple's
+## (gravity 0) stays level within a pixel or two.
+func _scenario_hook_flight_drop(path: String, arcs: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(shooter, path)
+	_brace(shooter)
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		_scenario_completed = true
+		return failures
+	var start_y: float = hook.global_position.y
+	var last_y: float = start_y
+	var last_x: float = hook.global_position.x
+	for i in 120:
+		if not is_instance_valid(hook) or not hook.is_flying():
+			break
+		last_y = hook.global_position.y
+		last_x = hook.global_position.x
+		await physics_frame
+	var drop: float = last_y - start_y
+	print("      %s: flew %.0f px out, dropped %.1f px" % [path.get_file(), last_x - shooter.global_position.x, drop])
+	if arcs and drop < 40.0:
+		failures.append("the rod's horizontal cast dropped only %.1f px; it should arc down" % drop)
+	if not arcs and absf(drop) > 2.0:
+		failures.append("the grapple's horizontal shot drifted %.1f px; it should stay level" % drop)
+	await _teardown(stage)
 	_scenario_completed = true
 	return failures
 # --- Pogo bounciness (issue #622) --------------------------------------------

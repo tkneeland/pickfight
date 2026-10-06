@@ -4,8 +4,11 @@ extends Node2D
 ## #150). `Player` fires one when a player holding the grapple flicks, and
 ## tells it every tick whether the drag is still held.
 ##
-## - **Flying**: straight out along the flick at `projectile_speed`, no
-##   gravity, until it meets something or runs out of rope (`launch_range`).
+## - **Flying**: out along the flick at `projectile_speed` until it meets
+##   something or runs out of rope (`launch_range`, measured as distance
+##   travelled). Straight when `projectile_gravity` is 0 (the grapple); with
+##   gravity the velocity gains it every tick, so the line arcs (the fishing
+##   rod, #625), and the hook faces along its velocity.
 ## - **Stuck**: it met terrain further off than the arm reaches (terrain
 ##   closer than that the arm can plant on itself, so the hook comes home)
 ##   and holds on to it -- to the spot on that body, so a moving or
@@ -59,6 +62,8 @@ var rope_length: float = 0.0
 var travelled: float = 0.0
 
 var _stats: Resource
+## The flight velocity, px/s. Starts at `direction * projectile_speed`.
+var _velocity: Vector2 = Vector2.ZERO
 var _origin: Vector2 = Vector2.ZERO
 var _shape: CircleShape2D
 var _held: bool = true
@@ -75,6 +80,7 @@ func setup(from_shooter: RigidBody2D, origin: Vector2, flight: Vector2, stats: R
 	var identity: Variant = from_shooter.get("identity_color") if from_shooter != null else null
 	_colour = identity if identity is Color else Color.WHITE
 	_art = _centred(stats.loaded_art)
+	_velocity = direction * float(stats.projectile_speed)
 
 func _ready() -> void:
 	add_to_group(GROUP)
@@ -117,12 +123,17 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 func _fly(delta: float) -> void:
-	var step: float = float(_stats.projectile_speed) * delta
 	var left: float = float(_stats.launch_range) - travelled
 	if left <= 0.0:
 		state = State.HOME
 		return
-	var motion: Vector2 = direction * minf(step, left)
+	var gravity: float = float(_stats.projectile_gravity)
+	if gravity != 0.0:
+		_velocity.y += gravity * delta
+		if _velocity.length_squared() > 0.0:
+			direction = _velocity.normalized()
+			rotation = direction.angle()
+	var motion: Vector2 = (_velocity * delta).limit_length(left)
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _shape

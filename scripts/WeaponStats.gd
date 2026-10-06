@@ -75,7 +75,8 @@ extends Resource
 ## Damage one bullet deals when it hits a player. Flat: a bullet's speed is
 ## fixed, so there is no strike speed to scale it by.
 @export var projectile_damage: float = 0.0
-## How fast a bullet flies, in px/s. Straight, with no gravity.
+## How fast a bullet flies, in px/s. Straight, with no gravity (a launched
+## hook's gravity is `projectile_gravity`, below).
 @export var projectile_speed: float = 0.0
 ## Impulse a bullet gives the player it hits, along its line of flight.
 @export var projectile_knockback: float = 0.0
@@ -216,6 +217,12 @@ extends Resource
 ## (docs/art/weapons-whiteboard.jpg) and sized against the player body. This
 ## is what a player sees, so it is what the circles are fitted to.
 @export var art_outline: PackedVector2Array = PackedVector2Array()
+
+## Downward acceleration of a launched hook in flight, in px/s^2 (issue
+## #625). Its velocity gains this every tick, so the line arcs and the hook
+## faces along its velocity. 0 flies dead straight (the grapple); the fishing
+## rod casts in an arc. Bullets and the boomerang ignore it.
+@export var projectile_gravity: float = 0.0
 
 ## The head a bare `WeaponStats.new()` gets: the round nub the pickaxe used
 ## to be, drawn as itself. Scenarios build stub stats that way to vary reach
