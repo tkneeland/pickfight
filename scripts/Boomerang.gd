@@ -142,6 +142,19 @@ func _move(motion: Vector2) -> void:
 	if ghost:
 		global_position += motion
 		return
+	# Issue #631: a shield's face turns the boomerang back with no damage; on
+	# the way home it just flies on harmlessly, like terrain does.
+	var blocker: Node = _shield_holder_blocking(global_position, global_position + motion, _shape.radius)
+	if blocker != null and blocker != _shield_turned:
+		_shield_turned = blocker
+		impacted.emit(blocker, global_position)
+		if leg == Leg.OUT:
+			velocity = Vector2.ZERO
+			_turn_back()
+		else:
+			ghost = true
+			global_position += motion
+		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _shape
@@ -204,6 +217,18 @@ func _hit_player(victim: Node, point: Vector2) -> void:
 	if victim is RigidBody2D and velocity.length_squared() > 0.0:
 		(victim as RigidBody2D).apply_central_impulse(velocity.normalized() * float(_stats.projectile_knockback))
 	shooter.land_projectile_hit(victim, float(_stats.projectile_damage), point)
+
+## The shield holder that turned this boomerang, so it is not turned twice.
+var _shield_turned: Node = null
+
+## Issue #631, ADR-0024: the player, other than the shooter, whose shield's
+## face turns a shot flying `from` -> `to`, or null.
+func _shield_holder_blocking(from: Vector2, to: Vector2, radius: float) -> Node:
+	for node: Node in get_tree().get_nodes_in_group("players"):
+		if node != shooter and node.has_method("shield_face_blocks") \
+				and node.shield_face_blocks(from, to, radius):
+			return node
+	return null
 
 func _shooter_in_play() -> bool:
 	return is_instance_valid(shooter) and bool(shooter.get("alive"))

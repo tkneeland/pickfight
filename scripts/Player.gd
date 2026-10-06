@@ -2282,6 +2282,37 @@ func shield_blocks(point: Vector2) -> bool:
 		return false
 	return offset.normalized().dot(to_point.normalized()) >= SHIELD_FACE_COS
 
+## Issue #631, ADR-0024: whether the shield in hand turns a shot that flies
+## from `from` to `to` (world) this tick, a shot `radius` thick. Only the
+## shield's FACE does: the segment must touch the head's polygon, travelling
+## against the side the shield faces (the same cosine as `shield_blocks`), so
+## its back and its edges let a shot through. Swept: the whole segment is
+## tested, never just its end, so a fast bullet cannot skip the plate.
+func shield_face_blocks(from: Vector2, to: Vector2, radius: float = 0.0) -> bool:
+	if _stats == null or _stats.special != &"shield" or not _rig_is_live() or not alive:
+		return false
+	var plate: ConvexPolygonShape2D = weapon_head_polygon_shape()
+	if plate == null or to.is_equal_approx(from):
+		return false
+	var facing: Vector2 = _head.global_position - global_position
+	if facing.length() <= 1.0:
+		return false
+	if (to - from).normalized().dot(facing.normalized()) >= -SHIELD_FACE_COS:
+		return false
+	var world := PackedVector2Array()
+	for corner: Vector2 in plate.points:
+		world.append(_head_polygon_node.global_transform * corner)
+	if radius > 0.0:
+		var grown: Array[PackedVector2Array] = Geometry2D.offset_polygon(world, radius)
+		if not grown.is_empty():
+			world = grown[0]
+	if Geometry2D.is_point_in_polygon(from, world) or Geometry2D.is_point_in_polygon(to, world):
+		return true
+	for i in world.size():
+		if Geometry2D.segment_intersects_segment(from, to, world[i], world[(i + 1) % world.size()]) != null:
+			return true
+	return false
+
 ## Whether a hit at `point` (world) lands on an open canopy's face or a
 ## shield's face: the hits that never eliminate in a one-hit mode (issue #569).
 func hit_blocked(point: Vector2) -> bool:
