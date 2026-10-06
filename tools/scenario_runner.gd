@@ -794,6 +794,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_waits_for_the_notice_617",
 	"telemetry_notice_buttons_617",
 	"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554",
+	"pressed_head_holds_on_flat_ground",
 	"fishing_rod_cast_arcs_under_gravity",
 	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
@@ -2779,6 +2780,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_notice_buttons_617()
 		"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554":
 			return await _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554()
+		"pressed_head_holds_on_flat_ground":
+			return await _scenario_pressed_head_holds_on_flat_ground()
 		"fishing_rod_cast_arcs_under_gravity":
 			return await _scenario_hook_flight_drop(FISHING_ROD_PATH, true)
 		"grapple_shot_stays_level":
@@ -39649,6 +39652,37 @@ func _scenario_classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554() -> Ar
 		if rm.tiebreaker() != null and rm.tiebreaker().connected_count() > 0 and players[0].alive:
 			failures.append("the tied players were still fighting")
 	await _teardown(fixture["holder"])
+	_scenario_completed = true
+	return failures
+## Issue #620: a head pressed into flat ground bites in. The body stands on
+## its head with the drag nearly straight down, then the drag swings to an
+## angle off vertical, which levers the body round the planted head. Until the
+## arm is fully out the head must not slide past a small tolerance.
+const PRESSED_HOLD_DEGREES: Array[float] = [20.0, 35.0, 50.0, 60.0]
+const PRESSED_HOLD_TICKS: int = 40
+const PRESSED_HOLD_MAX_SLIDE: float = 7.0
+## The old grip slid it 8 to 50 px at these angles; the few px left are the
+## arm running out of reach at the end of the lever.
+const PRESSED_HOLD_REACH_SLACK: float = 10.0
+func _scenario_pressed_head_holds_on_flat_ground() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: WeaponStatsType = _round_head_stats()
+	for degrees: float in PRESSED_HOLD_DEGREES:
+		var stage: Node2D = _new_stage()
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0, GROUND_TOP - PLAYER_RADIUS - 2.0))
+		player.set_weapon_stats(stats)
+		player.set_input_vector(Vector2.DOWN * 0.3)
+		await _await_ticks(GRIP_PUSH_SETTLE_TICKS)
+		var start: Vector2 = player.weapon_head_position()
+		if start.y < GROUND_TOP - HEAD_RADIUS - PLANT_CLEARANCE:
+			failures.append("%d deg: the head never planted on the floor (y %.1f)" % [degrees, start.y])
+		player.set_input_vector(Vector2.DOWN.rotated(deg_to_rad(degrees)))
+		var slide: float = await _planted_slide(player, start, PRESSED_HOLD_TICKS,
+				stats.max_reach - PRESSED_HOLD_REACH_SLACK)
+		await _teardown(stage, false)
+		print("      pressed head slide at %d deg: %.1f px" % [degrees, slide])
+		if slide > PRESSED_HOLD_MAX_SLIDE:
+			failures.append("%d deg: the pressed head slid %.1f px, expected at most %.1f" % [degrees, slide, PRESSED_HOLD_MAX_SLIDE])
 	_scenario_completed = true
 	return failures
 
