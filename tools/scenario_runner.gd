@@ -799,6 +799,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
+	"fishing_rod_cast_into_wall_comes_home_without_sticking",
+	"fishing_rod_reel_drags_airborne_player_closer",
+	"fishing_rod_reel_planted_player_moves_less_but_not_zero",
+	"fishing_rod_reel_breaks_at_limit",
+	"fishing_rod_reel_breaks_on_release",
+	"fishing_rod_reels_teammate_undamaged",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2790,6 +2796,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
 			return await _scenario_pogo_chained_hops_keep_their_height()
+		"fishing_rod_cast_into_wall_comes_home_without_sticking":
+			return await _scenario_fishing_rod_cast_into_wall_comes_home_without_sticking()
+		"fishing_rod_reel_drags_airborne_player_closer":
+			return await _scenario_fishing_rod_reel_drags_airborne_player_closer()
+		"fishing_rod_reel_planted_player_moves_less_but_not_zero":
+			return await _scenario_fishing_rod_reel_planted_player_moves_less_but_not_zero()
+		"fishing_rod_reel_breaks_at_limit":
+			return await _scenario_fishing_rod_reel_breaks_at_limit()
+		"fishing_rod_reel_breaks_on_release":
+			return await _scenario_fishing_rod_reel_breaks_on_release()
+		"fishing_rod_reels_teammate_undamaged":
+			return await _scenario_fishing_rod_reels_teammate_undamaged()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -18984,7 +19002,9 @@ func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 		failures.append("the hook stuck to a player")
 	await _teardown(stage)
 	return failures
-## The fishing rod fires a hook on a line (same as grapple, different stats).
+## The fishing rod fires a hook on a line. It moves what it hits to you, so
+## unlike the grapple's it does not stick to the platform above (#629): it
+## reels home empty, and the cooldown applies as normal.
 func _scenario_fishing_rod_fires_sticks_reels_and_releases() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -18995,7 +19015,6 @@ func _scenario_fishing_rod_fires_sticks_reels_and_releases() -> Array[String]:
 	await _await_ticks(20)
 	if not player.special_loaded():
 		failures.append("the fishing rod was not drawn loaded before it was fired")
-	# A flick fires the hook.
 	await _flick(player, Vector2.UP)
 	var hook: Node2D = player.launched_hook()
 	if hook == null:
@@ -19004,34 +19023,27 @@ func _scenario_fishing_rod_fires_sticks_reels_and_releases() -> Array[String]:
 		return failures
 	if player.special_loaded():
 		failures.append("the launcher still drew its hook while the hook was out")
-	var stuck: bool = await _await_condition(func() -> bool: return is_instance_valid(hook) and hook.is_stuck(), 1000)
-	var start_distance: float = (hook.global_position - player.global_position).length() if is_instance_valid(hook) else 0.0
-	print("      hook stuck %s at %s, %.0f px above the player" % [stuck, hook.global_position if is_instance_valid(hook) else Vector2.ZERO, start_distance])
-	if not stuck:
-		failures.append("the hook never stuck in the platform above")
-		await _teardown(stage)
-		return failures
-	# Held: reel in.
-	var closest: float = start_distance
-	for i in 90:
+	var ever_stuck: bool = false
+	var start_y: float = player.global_position.y
+	var highest: float = start_y
+	for i in 180:
 		await physics_frame
-		closest = minf(closest, (hook.global_position - player.global_position).length())
-	var hanging: float = (hook.global_position - player.global_position).length()
-	print("      reeled from %.0f px to %.0f px (closest %.0f), rope min %.0f" % [start_distance, hanging, closest, stats.reel_min_length])
-	if closest > stats.reel_min_length + 20.0:
-		failures.append("holding the drag reeled the player only to %.0f px of the hook (from %.0f); it should haul them up to about %.0f" % [
-			closest, start_distance, stats.reel_min_length])
-	# Released: the hook lets go and comes home.
-	player.set_input_vector(Vector2.ZERO)
-	await physics_frame
-	if is_instance_valid(hook) and not hook.is_going_home():
-		failures.append("releasing the drag did not let go of the platform")
-	var home: bool = await _await_condition(func() -> bool: return player.launched_hook() == null, 1000)
-	if not home:
-		failures.append("the released hook never got home")
+		if is_instance_valid(hook) and hook.is_stuck():
+			ever_stuck = true
+		highest = minf(highest, player.global_position.y)
+		if player.launched_hook() == null:
+			break
+	if ever_stuck:
+		failures.append("the rod's hook stuck to the platform above")
+	if player.launched_hook() != null:
+		failures.append("the rod's hook never came home after meeting the platform")
+	if start_y - highest > 30.0:
+		failures.append("the rod hauled its holder %.0f px toward terrain; it only moves what it hits" % (start_y - highest))
 	await _await_ticks(2)
 	if not player.special_loaded():
 		failures.append("the hook came home but the launcher was not drawn loaded again")
+	if player.special_ready():
+		failures.append("the launcher could fire again the tick its hook came home, with no cooldown")
 	await _await_ticks(int(stats.launch_cooldown * 60.0) + 2)
 	if not player.special_ready():
 		failures.append("the launcher was still not ready %.2f s after its hook came home" % stats.launch_cooldown)
@@ -19059,18 +19071,19 @@ func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 	victim.linear_velocity = Vector2.ZERO
 	var hit: bool = await _await_condition(func() -> bool: return victim.damage > 0.0 or not is_instance_valid(hook) or hook.is_going_home(), 1000)
 	await physics_frame
-	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
 	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
 		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
-	# "Lightly" is a real hit, but a lighter one than the grapple's: a rod whose
-	# hook does no damage at all must not pass the check above by matching 0.
-	var grapple_damage: float = (load(GRAPPLE_PATH) as WeaponStatsType).projectile_damage
+	# "Lightly" is a real hit, about 6 flat: a rod whose hook does no damage at
+	# all must not pass the check above by matching 0.
 	if victim.damage <= 0.0 or stats.projectile_damage <= 0.0:
 		failures.append("the hook did no damage to the player it met (%.1f)" % victim.damage)
-	elif stats.projectile_damage >= grapple_damage:
-		failures.append("the fishing rod's hook does %.1f, not less than the grapple's %.1f" % [stats.projectile_damage, grapple_damage])
+	elif absf(stats.projectile_damage - 6.0) > 0.01:
+		failures.append("the fishing rod's hook does %.1f, not about 6" % stats.projectile_damage)
+	# The one-off tug is now a reel (#629): it takes a few ticks to build up.
+	await _await_ticks(15)
+	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
 	if victim.linear_velocity.x >= -50.0:
-		failures.append("the hook did not tug its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
+		failures.append("the hook did not reel its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
 	if strikes.is_empty() or strikes[0]["victim"] != victim:
 		failures.append("the hook's hit was not reported as the thrower's strike_landed")
 	if is_instance_valid(hook) and hook.is_stuck():
@@ -39774,4 +39787,163 @@ func _scenario_pogo_chained_hops_keep_their_height() -> Array[String]:
 	for i in 3:
 		if hops[i] < hops[0] * 0.8 or hops[i] < POGO_HOP_MIN_RISE:
 			failures.append("hop %d rose %.1f px against the first's %.1f: it died out" % [i + 1, hops[i], hops[0]])
+	return failures
+## #629: the rod moves what it hits to you, so a cast into a wall does not
+## stick: the hook comes home empty and the cooldown applies.
+func _scenario_fishing_rod_cast_into_wall_comes_home_without_sticking() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, DEEP_PARK_POSITION + Vector2(200, 0), Vector2(24, 300))
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(shooter, FISHING_ROD_PATH)
+	_brace(shooter)
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		return failures
+	var met_wall: bool = false
+	var stuck: bool = false
+	for i in 240:
+		await physics_frame
+		if is_instance_valid(hook):
+			stuck = stuck or hook.is_stuck()
+			met_wall = met_wall or hook.is_going_home()
+		if shooter.launched_hook() == null:
+			break
+	print("      rod into wall: met %s, ever stuck %s, home %s" % [met_wall, stuck, shooter.launched_hook() == null])
+	if stuck:
+		failures.append("the rod's hook stuck to a wall")
+	if not met_wall:
+		failures.append("the hook never turned for home after meeting the wall")
+	if shooter.launched_hook() != null:
+		failures.append("the hook never came home")
+	await _await_ticks(2)
+	if shooter.special_ready():
+		failures.append("the launcher could fire again with no cooldown after the empty cast")
+	await _await_ticks(int(stats.launch_cooldown * 60.0) + 2)
+	if not shooter.special_ready():
+		failures.append("the launcher was not ready again after its cooldown")
+	await _teardown(stage)
+	return failures
+## Casts the rod at a victim `gap` px to the right and reports what the reel
+## did. `planted`: the victim stands on the floor with its head pressed into
+## it (floor grip, #620); otherwise it hangs in clear air. `force` overrides
+## the rod's reel force (< 0 keeps it). `release_after` is the tick of the
+## reel at which the holder lets go of the drag (< 0 keeps holding).
+## Returns {damage, moved (px the victim closed in along x over `ticks`),
+## reel_ticks (how many ticks the hook was reeling), hook_fired}.
+func _rod_reel_trial(planted: bool, team_up: bool, ticks: int, force: float = -1.0, release_after: int = -1) -> Dictionary:
+	var out: Dictionary = {"damage": 0.0, "moved": 0.0, "reel_ticks": 0, "hook_fired": false}
+	var stage: Node2D = _new_stage()
+	var base: Vector2 = Vector2(0, GROUND_TOP - PLAYER_RADIUS - 2.0) if planted else DEEP_PARK_POSITION
+	var gap: float = 260.0
+	var shooter: RigidBody2D = _spawn_player(stage, base + Vector2(-gap, 0))
+	var victim: RigidBody2D = _spawn_player(stage, base)
+	if team_up:
+		shooter.team = 0
+		victim.team = 0
+	if planted:
+		victim.set_weapon_stats(_round_head_stats())
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(shooter, FISHING_ROD_PATH)
+	if force >= 0.0:
+		stats = stats.duplicate()
+		stats.reel_force = force
+		shooter.set_weapon_stats(stats)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(shooter)
+	if planted:
+		victim.set_input_vector(Vector2.DOWN)
+		for k in 8:
+			await _await_ticks(10)
+				# The planted victim stands on its head, its body well above the floor:
+		# the holder hangs level with that body, `gap` px off.
+		shooter.global_position = victim.global_position + Vector2(-gap, -4.0)
+	else:
+		victim.freeze = true
+	var start_x: float = victim.global_position.x
+	# Aimed a little high: the cast arcs down under gravity (#625).
+	await _flick(shooter, Vector2(1.0, -0.15))
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		await _teardown(stage, false)
+		return out
+	out["hook_fired"] = true
+	var reeling: bool = await _await_condition(func() -> bool: return not is_instance_valid(hook) or hook.is_reeling() or hook.is_going_home(), 1000)
+	if not reeling or not is_instance_valid(hook) or not hook.is_reeling():
+		out["damage"] = victim.damage
+		await _teardown(stage, false)
+		return out
+	victim.freeze = false
+	victim.linear_velocity = Vector2.ZERO
+	start_x = victim.global_position.x
+	var reel_ticks: int = 0
+	for i in ticks:
+		if release_after >= 0 and i == release_after:
+			shooter.set_input_vector(Vector2.ZERO)
+		await physics_frame
+		if is_instance_valid(hook) and hook.is_reeling():
+			reel_ticks += 1
+	out["damage"] = victim.damage
+	out["moved"] = victim.global_position.x - start_x
+	out["reel_ticks"] = reel_ticks
+	await _teardown(stage, false)
+	return out
+func _scenario_fishing_rod_reel_drags_airborne_player_closer() -> Array[String]:
+	var failures: Array[String] = []
+	var r: Dictionary = await _rod_reel_trial(false, false, 30)
+	print("      airborne victim reeled %.1f px in 30 ticks, damage %.1f" % [r["moved"], r["damage"]])
+	if not r["hook_fired"] or r["reel_ticks"] == 0:
+		failures.append("the rod's hook never began reeling the player it hit")
+	if r["moved"] > -40.0:
+		failures.append("the airborne victim closed in only %.1f px toward the holder (expected at least 40)" % -r["moved"])
+	if absf(r["damage"] - 6.0) > 0.01:
+		failures.append("the hit took %.1f off, not about 6" % r["damage"])
+	_scenario_completed = true
+	return failures
+func _scenario_fishing_rod_reel_planted_player_moves_less_but_not_zero() -> Array[String]:
+	var failures: Array[String] = []
+	var air: Dictionary = await _rod_reel_trial(false, false, 30)
+	var planted: Dictionary = await _rod_reel_trial(true, false, 30)
+	print("      reel pull in 30 ticks: airborne %.1f px, planted %.1f px" % [-air["moved"], -planted["moved"]])
+	if not planted["hook_fired"] or planted["reel_ticks"] == 0:
+		failures.append("the rod's hook never began reeling the planted player")
+	if -planted["moved"] < 1.0:
+		failures.append("the planted player moved %.1f px toward the holder: it must never be immovable" % -planted["moved"])
+	if -planted["moved"] > -air["moved"] * 0.6:
+		failures.append("the planted player moved %.1f px against the airborne player's %.1f: it should resist noticeably" % [-planted["moved"], -air["moved"]])
+	_scenario_completed = true
+	return failures
+func _scenario_fishing_rod_reel_breaks_at_limit() -> Array[String]:
+	var failures: Array[String] = []
+	# A feeble force, so the victim cannot arrive and only the clock ends it.
+	var r: Dictionary = await _rod_reel_trial(false, false, 150, 100.0)
+	var limit: int = int(round(1.5 * 60.0))
+	print("      reel lasted %d ticks (limit %d)" % [r["reel_ticks"], limit])
+	if absi(r["reel_ticks"] - limit) > 4:
+		failures.append("the reel lasted %d ticks, not about %d (1.5 s)" % [r["reel_ticks"], limit])
+	_scenario_completed = true
+	return failures
+func _scenario_fishing_rod_reel_breaks_on_release() -> Array[String]:
+	var failures: Array[String] = []
+	var r: Dictionary = await _rod_reel_trial(false, false, 60, 100.0, 10)
+	print("      reel lasted %d ticks, released at tick 10" % r["reel_ticks"])
+	if r["reel_ticks"] == 0 or r["reel_ticks"] > 14:
+		failures.append("the reel lasted %d ticks after a release at tick 10" % r["reel_ticks"])
+	_scenario_completed = true
+	return failures
+func _scenario_fishing_rod_reels_teammate_undamaged() -> Array[String]:
+	var failures: Array[String] = []
+	var r: Dictionary = await _rod_reel_trial(false, true, 30)
+	print("      teammate reeled %.1f px, damage %.1f" % [-r["moved"], r["damage"]])
+	if r["reel_ticks"] == 0:
+		failures.append("the rod did not reel a teammate")
+	if r["moved"] > -40.0:
+		failures.append("the teammate closed in only %.1f px" % -r["moved"])
+	if r["damage"] != 0.0:
+		failures.append("the teammate took %.1f damage" % r["damage"])
+	_scenario_completed = true
 	return failures

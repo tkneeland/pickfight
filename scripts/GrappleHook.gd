@@ -20,6 +20,13 @@ extends Node2D
 ##   `projectile_damage` off them and tugs them toward the thrower
 ##   (`projectile_knockback`), then comes home. It is a traversal tool, not a
 ##   gun.
+## - **Reeling** (the fishing rod, `hook_reels_players`, #629): the rod moves
+##   what it hits to you. It never sticks to terrain (it comes home empty); a
+##   player it meets takes the flat damage and is pulled toward the thrower by
+##   `reel_force` on their body each tick, the hook riding on them. The reel
+##   breaks when the drag is released, the victim arrives within
+##   `reel_min_length`, either player is KO'd, or `hook_reel_limit` passes. A
+##   hit on the holder does not break it. A teammate is reeled, undamaged.
 ## - **Home**: releasing the drag lets go at once: the hook stops pulling and
 ##   reels back into the launcher, colliding with nothing.
 ##
@@ -34,7 +41,7 @@ extends Node2D
 ##
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
-enum State { FLYING, STUCK, HOME }
+enum State { FLYING, STUCK, HOME, REELING }
 
 ## Player.LAYER_WORLD, repeated so this script need not preload the player.
 const LAYER_WORLD: int = 1
@@ -67,6 +74,8 @@ var _velocity: Vector2 = Vector2.ZERO
 var _origin: Vector2 = Vector2.ZERO
 var _shape: CircleShape2D
 var _held: bool = true
+var _reeled: RigidBody2D
+var _reel_time: float = 0.0
 var _stuck_to: Node2D
 var _stuck_local: Vector2 = Vector2.ZERO
 var _colour: Color = Color.WHITE
@@ -103,6 +112,13 @@ func is_stuck() -> bool:
 func is_flying() -> bool:
 	return state == State.FLYING
 
+func is_reeling() -> bool:
+	return state == State.REELING
+
+## The player being reeled in, or null.
+func reeled_player() -> RigidBody2D:
+	return _reeled if state == State.REELING and is_instance_valid(_reeled) else null
+
 func is_going_home() -> bool:
 	return state == State.HOME
 
@@ -115,6 +131,8 @@ func _physics_process(delta: float) -> void:
 			_fly(delta)
 		State.STUCK:
 			_hold(delta)
+		State.REELING:
+			_reel(delta)
 		State.HOME:
 			_go_home(delta)
 	queue_redraw()
@@ -170,6 +188,15 @@ func _meet(collider: Object, point: Vector2) -> void:
 	var node: Node = collider as Node
 	if node != null and node.is_in_group("players"):
 		if node != shooter and bool(node.get("alive")):
+			if bool(_stats.hook_reels_players) and node is RigidBody2D:
+				shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)
+				if bool(node.get("alive")):
+					_reeled = node as RigidBody2D
+					_reel_time = 0.0
+					state = State.REELING
+				else:
+					state = State.HOME
+				return
 			if node is RigidBody2D:
 				var toward: Vector2 = (shooter.global_position - (node as Node2D).global_position).normalized()
 				(node as RigidBody2D).apply_central_impulse(toward * float(_stats.projectile_knockback))
@@ -179,6 +206,9 @@ func _meet(collider: Object, point: Vector2) -> void:
 	# Terrain inside the arm's own reach is somewhere the arm can already
 	# plant, so a hook there does not hold: it would only fight the plant (a
 	# flick down to vault fires the hook into the floor underfoot).
+	if bool(_stats.hook_reels_players):
+		state = State.HOME
+		return
 	var close: bool = (global_position - shooter.global_position).length() <= float(_stats.max_reach) + STICK_MARGIN
 	if node is Node2D and _solid(node) and not close:
 		_stuck_to = node as Node2D
@@ -211,6 +241,20 @@ func _hold(delta: float) -> void:
 	var wanted: float = minf(excess / delta, float(_stats.reel_speed))
 	var force: float = clampf((wanted - toward) * shooter.mass / delta, 0.0, float(_stats.reel_force))
 	shooter.apply_central_force(along * force)
+
+func _reel(delta: float) -> void:
+	if not is_instance_valid(_reeled) or not bool(_reeled.get("alive")) or not _held:
+		state = State.HOME
+		return
+	_reel_time += delta
+	var to_holder: Vector2 = shooter.global_position - _reeled.global_position
+	var distance: float = to_holder.length()
+	if _reel_time >= float(_stats.hook_reel_limit) or distance <= float(_stats.reel_min_length):
+		state = State.HOME
+		return
+	global_position = _reeled.global_position
+	rotation = (-to_holder).angle()
+	_reeled.apply_central_force(to_holder / distance * float(_stats.reel_force))
 
 func _go_home(delta: float) -> void:
 	var home: Vector2 = shooter.weapon_head_position()
