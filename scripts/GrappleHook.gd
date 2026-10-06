@@ -152,6 +152,9 @@ func _fly(delta: float) -> void:
 			direction = _velocity.normalized()
 			rotation = direction.angle()
 	var motion: Vector2 = (_velocity * delta).limit_length(left)
+	if _shield_holder_blocking(global_position, global_position + motion, _shape.radius) != null:
+		state = State.HOME
+		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _shape
@@ -272,6 +275,15 @@ func _solid(node: Node) -> bool:
 	if node.has_method("is_solid"):
 		return bool(node.call("is_solid"))
 	return true
+
+## Issue #631, ADR-0024: the player, other than the shooter, whose shield's
+## face turns a shot flying `from` -> `to`, or null.
+func _shield_holder_blocking(from: Vector2, to: Vector2, radius: float) -> Node:
+	for node: Node in get_tree().get_nodes_in_group("players"):
+		if node != shooter and node.has_method("shield_face_blocks") \
+				and node.shield_face_blocks(from, to, radius):
+			return node
+	return null
 
 func _shooter_in_play() -> bool:
 	return is_instance_valid(shooter) and bool(shooter.get("alive"))
