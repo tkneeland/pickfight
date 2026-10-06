@@ -231,6 +231,11 @@ extends Resource
 ## rod casts in an arc. Bullets and the boomerang ignore it.
 @export var projectile_gravity: float = 0.0
 
+## Issue #630: a launched hook that meets a player sticks to them as it does
+## to terrain (damage, then the thrower zips to them) instead of tugging them
+## and coming home. True for the grapple only.
+@export var hook_anchors_to_players: bool = false
+
 ## The head a bare `WeaponStats.new()` gets: the round nub the pickaxe used
 ## to be, drawn as itself. Scenarios build stub stats that way to vary reach
 ## or force without authoring a head, so the default has to be a working

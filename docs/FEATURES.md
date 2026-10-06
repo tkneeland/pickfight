@@ -25,7 +25,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy, falling rocks and meteors included; a short poker otherwise (#269, #569)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271); bouncier hop and launch, hops keep their height (#622)
 - Boomstick: fires bullets on a 3 s interval, heavy knockback (#55, #92, ADR-0014). A bullet already fired keeps flying and can still hit (credited to the shooter) after the shooter is eliminated; round end or a kick clears it (#570)
-- Grappling hook (#150)
+- Grappling hook (#150): its hook sticks to a wall or a player and zips you toward it while you hold the drag; a player it hits takes 8 (nothing for a teammate) and feels no pull; lets go on release or a KO, no time limit (#630)
 - Flail: chain physics, boosted climb (#150, #228)
 - Boomerang (#150; #481/#485: also thrown along the aim by an action tap -- PC Space, gamepad bumper or stick click, fired on key-up within 0.25 s -- instead of toggling release; holding the button never throws; the flick throw stays on phones, but is off on PC, Online and gamepad seats, #487)
 - Fishing rod: casts a line that reels the player it hits in to you, for about 6 damage (none on a teammate); a planted head resists but still slides. The hook does not stick to the stage; the reel breaks on release, arrival, a KO, or after 1.5 s (#273, #629); the cast arcs under gravity (#625)
