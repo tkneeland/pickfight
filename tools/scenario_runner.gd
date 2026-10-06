@@ -799,6 +799,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
+	"grapple_hit_on_player_anchors_and_thrower_zips_to_them",
+	"grapple_anchored_player_feels_no_force_from_the_rope",
+	"grapple_release_lets_go_of_an_anchored_player",
+	"grapple_lets_go_when_either_player_is_knocked_out",
+	"grapple_zips_to_a_teammate_without_damage",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2790,6 +2795,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
 			return await _scenario_pogo_chained_hops_keep_their_height()
+		"grapple_hit_on_player_anchors_and_thrower_zips_to_them":
+			return await _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them()
+		"grapple_anchored_player_feels_no_force_from_the_rope":
+			return await _scenario_grapple_anchored_player_feels_no_force_from_the_rope()
+		"grapple_release_lets_go_of_an_anchored_player":
+			return await _scenario_grapple_release_lets_go_of_an_anchored_player()
+		"grapple_lets_go_when_either_player_is_knocked_out":
+			return await _scenario_grapple_lets_go_when_either_player_is_knocked_out()
+		"grapple_zips_to_a_teammate_without_damage":
+			return await _scenario_grapple_zips_to_a_teammate_without_damage()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -18950,8 +18965,8 @@ func _scenario_grapple_fires_sticks_reels_and_releases() -> Array[String]:
 		failures.append("the launcher was still not ready %.2f s after its hook came home" % stats.launch_cooldown)
 	await _teardown(stage)
 	return failures
-## A hook that meets a player: a light hit, credited to the thrower, and a tug
-## toward them; then it comes home rather than sticking.
+## A grapple hook that meets a player: a light hit, credited to the thrower;
+## it then sticks to them (#630), with no tug on them.
 func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -18976,12 +18991,12 @@ func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
 	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
 		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
-	if victim.linear_velocity.x >= -50.0:
-		failures.append("the hook did not tug its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
+	if victim.linear_velocity.x < -50.0:
+		failures.append("the hook still tugged its victim toward the thrower (victim velocity %s)" % victim.linear_velocity)
 	if strikes.is_empty() or strikes[0]["victim"] != victim:
 		failures.append("the hook's hit was not reported as the thrower's strike_landed")
-	if is_instance_valid(hook) and hook.is_stuck():
-		failures.append("the hook stuck to a player")
+	if not is_instance_valid(hook) or not hook.is_stuck():
+		failures.append("the hook did not stick to the player it hit")
 	await _teardown(stage)
 	return failures
 ## The fishing rod fires a hook on a line (same as grapple, different stats).
@@ -39774,4 +39789,160 @@ func _scenario_pogo_chained_hops_keep_their_height() -> Array[String]:
 	for i in 3:
 		if hops[i] < hops[0] * 0.8 or hops[i] < POGO_HOP_MIN_RISE:
 			failures.append("hop %d rose %.1f px against the first's %.1f: it died out" % [i + 1, hops[i], hops[0]])
+	return failures
+
+# --- Grapple zips to players (issue #630) ------------------------------------
+## Throws a grapple at a victim 260 px to the right and waits for it to land.
+## Returns {stage, shooter, victim, hook, stats}; hook is null when it never
+## fired.
+func _zip_setup(team: int = -1) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	if team >= 0:
+		shooter.team = team
+		victim.team = team
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	victim.freeze = true
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook != null:
+		await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	# Out in the deep park nothing holds either body up: weightless, so the
+	# only thing that changes their distance is the rope.
+	victim.freeze = false
+	victim.linear_velocity = Vector2.ZERO
+	victim.gravity_scale = 0.0
+	shooter.freeze = false
+	shooter.gravity_scale = 0.0
+	return {"stage": stage, "shooter": shooter, "victim": victim, "hook": hook, "stats": stats}
+
+## Holds the drag toward the victim: a steady pull on the thrower's input.
+func _zip_hold(shooter: RigidBody2D) -> void:
+	shooter.set_input_vector(Vector2.RIGHT * 0.5)
+
+func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array[String]:
+	var failures: Array[String] = []
+	var z: Dictionary = await _zip_setup()
+	var shooter: RigidBody2D = z["shooter"]
+	var victim: RigidBody2D = z["victim"]
+	var hook: Node2D = z["hook"]
+	if hook == null or not is_instance_valid(hook) or not hook.is_stuck():
+		failures.append("the hook did not stick to the player it hit")
+		await _teardown(z["stage"])
+		_scenario_completed = true
+		return failures
+	var start: float = shooter.global_position.distance_to(victim.global_position)
+	_zip_hold(shooter)
+	await _await_ticks(60)
+	var after: float = shooter.global_position.distance_to(victim.global_position)
+	print("      zip: %.0f px apart, then %.0f px, victim damage %.1f" % [start, after, victim.damage])
+	if after > start - 60.0:
+		failures.append("the thrower closed only %.0f px of %.0f toward the anchored player" % [start - after, start])
+	if absf(victim.damage - 8.0) > 0.01:
+		failures.append("the hit dealt %.1f, not 8" % victim.damage)
+	await _teardown(z["stage"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_grapple_anchored_player_feels_no_force_from_the_rope() -> Array[String]:
+	var failures: Array[String] = []
+	var z: Dictionary = await _zip_setup()
+	var shooter: RigidBody2D = z["shooter"]
+	var victim: RigidBody2D = z["victim"]
+	var hook: Node2D = z["hook"]
+	if hook == null or not is_instance_valid(hook) or not hook.is_stuck():
+		failures.append("the hook did not stick to the player it hit")
+		await _teardown(z["stage"])
+		_scenario_completed = true
+		return failures
+	# The victim is pinned in space by gravity-free freezing between samples:
+	# measure the rope's contribution as its horizontal velocity, which only a
+	# tug along the rope (x) could change.
+	victim.gravity_scale = 0.0
+	victim.linear_velocity = Vector2.ZERO
+	_zip_hold(shooter)
+	var worst: float = 0.0
+	for i in 40:
+		await physics_frame
+		# Only while apart: once they meet, body contact moves them too.
+		if shooter.global_position.distance_to(victim.global_position) > 120.0:
+			worst = maxf(worst, absf(victim.linear_velocity.x))
+	print("      anchored player's largest x velocity while zipped to: %.1f" % worst)
+	if worst > 5.0:
+		failures.append("the anchored player was pulled by the rope (x velocity reached %.1f)" % worst)
+	await _teardown(z["stage"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_grapple_release_lets_go_of_an_anchored_player() -> Array[String]:
+	var failures: Array[String] = []
+	var z: Dictionary = await _zip_setup()
+	var shooter: RigidBody2D = z["shooter"]
+	var hook: Node2D = z["hook"]
+	if hook == null or not is_instance_valid(hook) or not hook.is_stuck():
+		failures.append("the hook did not stick to the player it hit")
+		await _teardown(z["stage"])
+		_scenario_completed = true
+		return failures
+	_zip_hold(shooter)
+	await _await_ticks(20)
+	if not is_instance_valid(hook) or not hook.is_stuck():
+		failures.append("the hook let go while the drag was still held (no time limit)")
+	shooter.set_input_vector(Vector2.ZERO)
+	await physics_frame
+	await physics_frame
+	if is_instance_valid(hook) and not hook.is_going_home():
+		failures.append("releasing the drag did not let go of the player")
+	await _teardown(z["stage"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_grapple_lets_go_when_either_player_is_knocked_out() -> Array[String]:
+	var failures: Array[String] = []
+	for who: String in ["anchored", "thrower"]:
+		var z: Dictionary = await _zip_setup()
+		var shooter: RigidBody2D = z["shooter"]
+		var victim: RigidBody2D = z["victim"]
+		var hook: Node2D = z["hook"]
+		if hook == null or not is_instance_valid(hook) or not hook.is_stuck():
+			failures.append("%s: the hook did not stick to the player it hit" % who)
+			await _teardown(z["stage"])
+			continue
+		_zip_hold(shooter)
+		await _await_ticks(10)
+		if who == "anchored":
+			victim.eliminate()
+		else:
+			shooter.eliminate()
+		await _await_ticks(3)
+		if is_instance_valid(hook) and hook.is_stuck():
+			failures.append("the hook stayed stuck after the %s player was knocked out" % who)
+		await _teardown(z["stage"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_grapple_zips_to_a_teammate_without_damage() -> Array[String]:
+	var failures: Array[String] = []
+	var z: Dictionary = await _zip_setup(0)
+	var shooter: RigidBody2D = z["shooter"]
+	var victim: RigidBody2D = z["victim"]
+	var hook: Node2D = z["hook"]
+	if hook == null or not is_instance_valid(hook) or not hook.is_stuck():
+		failures.append("the hook did not stick to the teammate it hit")
+		await _teardown(z["stage"])
+		_scenario_completed = true
+		return failures
+	var start: float = shooter.global_position.distance_to(victim.global_position)
+	_zip_hold(shooter)
+	await _await_ticks(60)
+	var after: float = shooter.global_position.distance_to(victim.global_position)
+	if victim.damage != 0.0:
+		failures.append("a teammate took %.1f from the hook" % victim.damage)
+	if after > start - 60.0:
+		failures.append("the thrower closed only %.0f px toward the teammate" % (start - after))
+	await _teardown(z["stage"])
+	_scenario_completed = true
 	return failures

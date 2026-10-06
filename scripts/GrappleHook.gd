@@ -16,7 +16,12 @@ extends Node2D
 ##   in at `reel_speed`, pulling the body toward the hook with at most
 ##   `reel_force`, down to `reel_min_length`, where it holds and the player
 ##   hangs and swings. The rope only ever pulls.
-## - **A player**: a hook that meets another player takes a light, flat
+## - **A player (grapple, #630)**: a hook with `hook_anchors_to_players`
+##   deals `projectile_damage` (nothing to a teammate) and then sticks to that
+##   player's body exactly as to terrain, so the thrower zips to them. The
+##   rope pulls only the thrower; the anchor feels nothing. It lets go on
+##   release or when either player is KO'd, with no time limit.
+## - **A player (other hooks)**: a hook that meets another player takes a light, flat
 ##   `projectile_damage` off them and tugs them toward the thrower
 ##   (`projectile_knockback`), then comes home. It is a traversal tool, not a
 ##   gun.
@@ -169,6 +174,17 @@ func _meet(collider: Object, point: Vector2) -> void:
 	impacted.emit(collider, point)
 	var node: Node = collider as Node
 	if node != null and node.is_in_group("players"):
+		if bool(_stats.hook_anchors_to_players) and node != shooter and bool(node.get("alive")) and node is Node2D:
+			# Zipping (#630): the grapple moves *you* to what it hits, so a
+			# player is an anchor like a wall, even inside arm's reach (a
+			# player is not a surface the arm plants on). Teammates are
+			# anchored too; `land_projectile_hit` deals them nothing.
+			shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)
+			_stuck_to = node as Node2D
+			_stuck_local = _stuck_to.to_local(global_position)
+			state = State.STUCK
+			rope_length = maxf((global_position - shooter.global_position).length(), float(_stats.reel_min_length))
+			return
 		if node != shooter and bool(node.get("alive")):
 			if node is RigidBody2D:
 				var toward: Vector2 = (shooter.global_position - (node as Node2D).global_position).normalized()
@@ -190,6 +206,10 @@ func _meet(collider: Object, point: Vector2) -> void:
 
 func _hold(delta: float) -> void:
 	if not is_instance_valid(_stuck_to) or not _stuck_to.is_inside_tree() or not _solid(_stuck_to):
+		state = State.HOME
+		return
+	# An anchored player who is KO'd (or rung out) lets go; no time limit.
+	if _stuck_to.is_in_group("players") and not bool(_stuck_to.get("alive")):
 		state = State.HOME
 		return
 	global_position = _stuck_to.to_global(_stuck_local)
