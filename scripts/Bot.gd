@@ -845,6 +845,8 @@ const ROD_COOLDOWN_SEC: float = 3.0
 const GRAPPLE_COOLDOWN_SEC: float = 2.5
 ## A goal this far above the bot is a climb for the grapple.
 const GRAPPLE_CLIMB_MIN: float = 150.0
+## The drag is let go once the hook is this close past melee reach.
+const HOOK_RELEASE_MARGIN: float = 30.0
 
 var _hook_cd: float = 0.0
 var _hook_phase: int = 0
@@ -863,7 +865,13 @@ func _hook_drive(delta: float) -> Vector2:
 	var hook: Node2D = player.launched_hook()
 	if hook != null:
 		_hook_phase = 2
+		# Hold the drag only while the hook flies or is doing its job (stuck
+		# or reeling), and let go once the zip or reel has closed in or the
+		# hook comes home; the rest of the time the bot swings and moves as usual.
 		if hook.is_going_home():
+			return Vector2.INF
+		if (hook.is_stuck() or hook.is_reeling()) \
+				and player.global_position.distance_to(hook.global_position) <= _reach() + HOOK_RELEASE_MARGIN:
 			return Vector2.INF
 		return _hook_aim
 	if _hook_phase == 2:
