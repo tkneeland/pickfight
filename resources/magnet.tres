@@ -18,13 +18,16 @@
 ; rather than raw damage.
 ;
 ; Redrawn in #621 as a horseshoe, opening along the haft, with seven circles along it.
+; Rests 10 px out (was 20): the horseshoe's arms reach 15 px past the anchor, and the
+; field reels a neighbour in against the body, so at 20 px the arms were jammed by
+; the reeled-in neighbour and the head could not turn out of rest.
 ;
 ; Force ceiling 8000, the same as the medium weapons (the sword included), so
 ; it meets them evenly in a clash.
 
 [resource]
 script = ExtResource("1")
-min_reach = 20.0
+min_reach = 10.0
 max_reach = 140.0
 mass = 0.3
 drive_speed = 32.0
