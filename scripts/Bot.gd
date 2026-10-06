@@ -412,6 +412,9 @@ func think(delta: float) -> Vector2:
 		_think_left = lerpf(THINK_SEC, THINK_SEC_AGGRESSIVE, _aggression)
 		_choose_goal()
 	_track_progress(delta)
+	var hook_input: Vector2 = _hook_drive(delta)
+	if hook_input != Vector2.INF:
+		return hook_input
 	if mode == "attack" and _alive(_target):
 		_hooked_for = 0.0
 		var brake: Vector2 = _brake()
@@ -818,6 +821,103 @@ func _min_reach() -> float:
 func _length_for(reach: float) -> float:
 	var span: float = maxf(_reach() - _min_reach(), 1.0)
 	return clampf((reach - _min_reach()) / span, 0.05, 1.0)
+
+# --- Hooks (issue #632) ----------------------------------------------------------
+
+## A bot holding the fishing rod or the grapple fires the hook on purpose, the
+## way a phone does: a flick (the drag let go for a few ticks, then straight
+## out to full length), then the drag held while the hook is out so it reels
+## (rod) or zips (grapple).
+const HOOK_ARM_TICKS: int = 3
+const HOOK_FLICK_TICKS: int = 2
+## The rod casts at a rival within this fraction of its launch range.
+const ROD_RANGE_FRACTION: float = 0.8
+## The grapple fires at a rival or a wall within this fraction of its range.
+const GRAPPLE_RANGE_FRACTION: float = 0.9
+## Nearer than this a rival is left to the weapon.
+const ROD_MIN_RANGE: float = 100.0
+## Past melee reach plus this a rival is worth zipping to.
+const ZIP_MELEE_MARGIN: float = 60.0
+## A rival (or wall) steeper than this (rise over run) is not cast at.
+const HOOK_MAX_SLOPE: float = 0.6
+## Seconds between casts, so bots do not spam them.
+const ROD_COOLDOWN_SEC: float = 3.0
+const GRAPPLE_COOLDOWN_SEC: float = 2.5
+## A goal this far above the bot is a climb for the grapple.
+const GRAPPLE_CLIMB_MIN: float = 150.0
+
+var _hook_cd: float = 0.0
+var _hook_phase: int = 0
+var _hook_ticks: int = 0
+var _hook_aim: Vector2 = Vector2.RIGHT
+
+## The input for this tick while the bot works a hook, or Vector2.INF when
+## it has no say and the usual behaviour runs.
+func _hook_drive(delta: float) -> Vector2:
+	_hook_cd = maxf(_hook_cd - delta, 0.0)
+	var stats: Variant = player.get("weapon_stats")
+	if not (stats is Resource) or (stats as Resource).get("special") != &"grapple" \
+			or not player.has_method("launched_hook"):
+		_hook_phase = 0
+		return Vector2.INF
+	var hook: Node2D = player.launched_hook()
+	if hook != null:
+		_hook_phase = 2
+		if hook.is_going_home():
+			return Vector2.INF
+		return _hook_aim
+	if _hook_phase == 2:
+		_hook_phase = 0
+	if _hook_phase == 1:
+		_hook_ticks += 1
+		if _hook_ticks <= HOOK_ARM_TICKS:
+			return Vector2.ZERO
+		if _hook_ticks <= HOOK_ARM_TICKS + HOOK_FLICK_TICKS:
+			return _hook_aim
+		_hook_phase = 0
+		return Vector2.INF
+	if _hook_cd > 0.0 or not player.special_ready():
+		return Vector2.INF
+	var aim: Vector2 = _hook_aim_now()
+	if aim == Vector2.INF:
+		return Vector2.INF
+	_hook_aim = aim
+	_hook_phase = 1
+	_hook_ticks = 0
+	var reels: bool = bool((stats as Resource).get("hook_reels_players"))
+	_hook_cd = ROD_COOLDOWN_SEC if reels else GRAPPLE_COOLDOWN_SEC
+	return Vector2.ZERO
+
+## Where to flick, as a unit vector (aimed a little high for the hook's arc),
+## or Vector2.INF when nothing is worth a cast now.
+func _hook_aim_now() -> Vector2:
+	var reels: bool = bool((player.get("weapon_stats") as Resource).get("hook_reels_players"))
+	var launch_range: float = _stat("launch_range", 0.0)
+	var me: Vector2 = player.global_position
+	if _alive(_target) and _target.is_in_group("players"):
+		var to: Vector2 = _target.global_position - me
+		var dist: float = to.length()
+		var in_range: bool
+		if reels:
+			in_range = dist <= launch_range * ROD_RANGE_FRACTION and dist >= ROD_MIN_RANGE
+		else:
+			in_range = dist <= launch_range * GRAPPLE_RANGE_FRACTION and dist > _reach() + ZIP_MELEE_MARGIN
+		if in_range and absf(to.y) <= HOOK_MAX_SLOPE * absf(to.x) + 40.0 \
+				and not _ray_hits(me, _target.global_position):
+			var speed: float = maxf(_stat("projectile_speed", 1000.0), 1.0)
+			var t: float = dist / speed
+			var drop: float = 0.5 * _stat("projectile_gravity", 0.0) * t * t
+			return (to + Vector2(0.0, -drop)).normalized()
+	if not reels and mode != "attack" and goal != Vector2.INF \
+			and goal.y < me.y - GRAPPLE_CLIMB_MIN and me.distance_to(goal) <= launch_range * GRAPPLE_RANGE_FRACTION:
+		# A goal above and out of reach: zip to the wall face the way to it meets.
+		var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+		var query := PhysicsRayQueryParameters2D.create(me, goal, LAYER_WORLD, _player_rids())
+		var hit: Dictionary = space.intersect_ray(query)
+		if not hit.is_empty() and absf((hit["normal"] as Vector2).x) > 0.7 \
+				and (hit["position"] as Vector2).y < me.y - 60.0:
+			return ((hit["position"] as Vector2) - me).normalized()
+	return Vector2.INF
 
 # --- Fighting ------------------------------------------------------------------
 

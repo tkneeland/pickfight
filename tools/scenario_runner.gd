@@ -820,6 +820,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_blocked_by_shield_face_631",
 	"boomerang_passes_through_other_weapon_head_631",
 	"boomerang_passes_through_shield_back_631",
+	"bot_rod_casts_and_reels_rival_632",
+	"bot_grapple_zips_to_rival_out_of_reach_632",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2853,6 +2855,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomerang_passes_through_other_weapon_head_631()
 		"boomerang_passes_through_shield_back_631":
 			return await _scenario_boomerang_passes_through_shield_back_631()
+		"bot_rod_casts_and_reels_rival_632":
+			return await _scenario_bot_rod_casts_and_reels_rival_632()
+		"bot_grapple_zips_to_rival_out_of_reach_632":
+			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -40251,5 +40257,65 @@ func _scenario_boomerang_passes_through_shield_back_631() -> Array[String]:
 	print("      boomerang_passes_through_shield_back_631: holder took %.1f" % damage)
 	if damage <= 0.0:
 		failures.append("the shot was stopped though it should pass (holder took %.1f)" % damage)
+	_scenario_completed = true
+	return failures
+## Issue #632: a bot holding a hook weapon, a lone idle rival `gap` px away on
+## flat ground. Returns whether a hook went out, whether it ever reeled or stuck
+## to the rival, and the ticks until the gap first fell under `close_to`.
+func _bot_hook_run_632(weapon_path: String, gap: float, close_to: float, ticks: int) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(-gap * 0.5, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(gap * 0.5, 274.0))
+	await _await_ticks(2)
+	if weapon_path != "":
+		await _equip(player, weapon_path)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"fired": false, "reeled": false, "stuck": false, "close_at": -1, "gap": gap}
+	for t in ticks:
+		await physics_frame
+		var hook: Node2D = player.launched_hook() if player.has_method("launched_hook") else null
+		if hook != null:
+			out["fired"] = true
+			out["reeled"] = out["reeled"] or hook.is_reeling()
+			out["stuck"] = out["stuck"] or hook.is_stuck()
+		var between: float = player.global_position.distance_to(rival.global_position)
+		out["gap"] = minf(out["gap"], between)
+		if out["close_at"] < 0 and between <= close_to:
+			out["close_at"] = t
+	await _teardown(stage, false)
+	return out
+## A bot holding the fishing rod with a rival 250 px off on flat ground casts
+## and reels them in.
+func _scenario_bot_rod_casts_and_reels_rival_632() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_hook_run_632(FISHING_ROD_PATH, 250.0, 120.0, 600)
+	print("      bot_rod_casts_and_reels_rival_632: fired=%s reeled=%s closest=%.0f" % [run["fired"], run["reeled"], run["gap"]])
+	if not run["fired"]:
+		failures.append("the bot never cast the rod at a rival 250 px away")
+	if not run["reeled"]:
+		failures.append("the cast never reeled the rival")
+	if run["gap"] >= 250.0:
+		failures.append("the rival never ended closer than the 250 px start (closest %.0f)" % run["gap"])
+	_scenario_completed = true
+	return failures
+## A bot holding the grapple with a rival well out of melee reach zips to them,
+## closing the gap sooner than a bot on foot with the pickaxe does.
+func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
+	var failures: Array[String] = []
+	var zip: Dictionary = await _bot_hook_run_632(GRAPPLE_PATH, 450.0, 150.0, 600)
+	var walk: Dictionary = await _bot_hook_run_632("", 450.0, 150.0, 600)
+	print("      bot_grapple_zips_to_rival_out_of_reach_632: fired=%s stuck=%s close_at=%d walking_close_at=%d" % [zip["fired"], zip["stuck"], zip["close_at"], walk["close_at"]])
+	if not zip["fired"]:
+		failures.append("the bot never fired the grapple at a rival 450 px away")
+	if not zip["stuck"]:
+		failures.append("the grapple never stuck to the rival")
+	if zip["close_at"] < 0:
+		failures.append("the bot never closed to 150 px")
+	elif walk["close_at"] >= 0 and zip["close_at"] >= walk["close_at"]:
+		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
 	_scenario_completed = true
 	return failures
