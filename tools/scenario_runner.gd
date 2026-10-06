@@ -39710,7 +39710,9 @@ func _pogo_free_hops() -> Array[float]:
 		var vy: float = player.linear_velocity.y
 		trough = maxf(trough, y)
 		if prev_vy < 0.0 and vy >= 0.0:
-			hops.append(trough - y)
+			# A settling wobble of a pixel or so is not a hop (#621's longer head).
+			if trough - y > 2.0:
+				hops.append(trough - y)
 			trough = y
 		prev_vy = vy
 	await _teardown(stage)

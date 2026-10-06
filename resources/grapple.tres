@@ -15,7 +15,7 @@
 ; comes home (GrappleHook.gd). The launcher itself swings as a light melee
 ; weapon: reach S, damage S (12), with the sword's drive.
 ;
-; The head is the launcher, a small block drawn as `art_outline` and filled
+; The head is the launcher, a barrel with a muzzle (#621) drawn as `art_outline` and filled
 ; by three circles. The hook sitting in it is `loaded_art`: drawn over the
 ; head while the hook is home, hidden while it is out, and colliding with
 ; nothing. It is also what the flying hook is drawn as.
@@ -35,7 +35,7 @@ max_drive_force = 7300.0
 damage = 12.0
 sound_set = &"grapple"
 special = &"grapple"
-loaded_art = PackedVector2Array(7, -1.2, 13, -1.2, 11, -5, 19, 0, 11, 5, 13, 1.2, 7, 1.2)
+loaded_art = PackedVector2Array(6, -1.4, 12, -1.4, 9, -6, 5, -8.5, 5.6, -10.6, 10.5, -9.4, 14.5, -5, 16.5, -1.4, 20, 0, 16.5, 1.4, 14.5, 5, 10.5, 9.4, 5.6, 10.6, 5, 8.5, 9, 6, 12, 1.4, 6, 1.4)
 launch_range = 560.0
 launch_cooldown = 0.35
 reel_speed = 650.0
@@ -45,7 +45,7 @@ projectile_speed = 1600.0
 projectile_damage = 6.0
 projectile_knockback = 320.0
 projectile_radius = 5.0
-pickup_art = PackedVector2Array(19, 0, 11, 5, 13, 1.2, 8, 1.2, 8, 2.5, 6, 4, -6, 4, -6, -4, 6, -4, 8, -2.5, 8, -1.2, 13, -1.2, 11, -5)
+pickup_art = PackedVector2Array(-6, -3, 5, -3, 8, -5, 9.65, -5, 9, -6, 5, -8.5, 5.6, -10.6, 10.5, -9.4, 14.5, -5, 16.5, -1.4, 20, 0, 16.5, 1.4, 14.5, 5, 10.5, 9.4, 5.6, 10.6, 5, 8.5, 9, 6, 9.65, 5, 8, 5, 5, 3, -6, 3)
 head_circle_offsets = PackedVector2Array(-2.4, 0, 0.8, 0, 4, 0)
-head_circle_radii = PackedFloat32Array(3.4, 3.4, 3.4)
-art_outline = PackedVector2Array(-6, -4, 6, -4, 8, -2.5, 8, 2.5, 6, 4, -6, 4)
+head_circle_radii = PackedFloat32Array(2.9, 2.9, 2.9)
+art_outline = PackedVector2Array(-6, -3, 5, -3, 8, -5, 9, -5, 9, 0, 9, 5, 8, 5, 5, 3, -6, 3)

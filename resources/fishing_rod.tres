@@ -14,8 +14,8 @@
 ; home. The launcher itself swings as a light melee weapon: reach S, damage S (8),
 ; with a quick, light drive: faster than the grapple's (42 against 36) but weaker.
 ;
-; The head is the launcher grip, a thin shape drawn as `art_outline` and filled
-; by two circles. The hook sitting in it is `loaded_art`: drawn over the head
+; The head is the launcher grip, a thin rod with a reel (#621) drawn as `art_outline`
+; and filled by four circles. The hook sitting in it is `loaded_art`: drawn over the head
 ; while the hook is home, hidden while it is out, and colliding with nothing.
 ;
 ; The cast arcs (issue #625): speed 900 px/s over the 400 px line is a flight
@@ -38,7 +38,7 @@ max_drive_force = 6500.0
 damage = 8.0
 sound_set = &"fishing_rod"
 special = &"grapple"
-loaded_art = PackedVector2Array(6, -0.8, 12, -0.8, 10, -4, 18, 0, 10, 4, 12, 0.8, 6, 0.8)
+loaded_art = PackedVector2Array(6, -0.7, 16, -0.7, 16, 4, 15.7, 5.3, 15, 6.5, 13.8, 7.2, 12.5, 7.5, 11.2, 7.2, 10, 6.5, 9.3, 5.3, 9, 4, 9, 1.2, 10.4, 2.6, 10.4, 4, 10.7, 5.1, 11.5, 5.8, 12.5, 6.1, 13.6, 5.8, 14.3, 5.1, 14.6, 4, 14.6, 0.7, 6, 0.7)
 launch_range = 400.0
 launch_cooldown = 0.25
 reel_speed = 750.0
@@ -49,7 +49,7 @@ projectile_gravity = 900.0
 projectile_damage = 4.0
 projectile_knockback = 250.0
 projectile_radius = 4.0
-pickup_art = PackedVector2Array(18, 0, 10, 4, 12, 0.8, 7, 0.8, 7, 2, 5, 3.5, -5, 3.5, -5, -3.5, 5, -3.5, 7, -2, 7, -0.8, 12, -0.8, 10, -4)
-head_circle_offsets = PackedVector2Array(-2, 0, 2, 0)
-head_circle_radii = PackedFloat32Array(2.5, 2.5)
-art_outline = PackedVector2Array(-5, -3, 5, -3, 7, -2, 7, 2, 5, 3.5, -5, 3.5)
+pickup_art = PackedVector2Array(-6, -1.2, 8, -1.2, 8, -0.7, 16, -0.7, 16, 4, 15.7, 5.3, 15, 6.5, 13.8, 7.2, 12.5, 7.5, 11.2, 7.2, 10, 6.5, 9.3, 5.3, 9, 4, 9, 1.2, 10.4, 2.6, 10.4, 4, 10.7, 5.1, 11.5, 5.8, 12.5, 6.1, 13.6, 5.8, 14.3, 5.1, 14.6, 4, 14.6, 0.7, 8, 0.7, 8, 1.2, 2, 1.2, 2.4, 1.8, 3.2, 3.2, 3.4, 4.9, 3, 6.5, 2, 7.8, 0.6, 8.7, -1, 9, -2.6, 8.7, -4, 7.8, -5, 6.5, -5.4, 4.9, -5.2, 3.2, -4.4, 1.8, -6, 1.2)
+head_circle_offsets = PackedVector2Array(0, 0, 6, 0, 10, 0, -1, 5.4)
+head_circle_radii = PackedFloat32Array(1.1, 1.1, 1.4, 3.4)
+art_outline = PackedVector2Array(-6, -1.2, 8, -1.2, 10, -2.4, 11.5, -1.2, 11.5, 1.2, 10, 2.4, 8, 1.2, 2, 1.2, 2.4, 1.8, 3.2, 3.2, 3.4, 4.9, 3, 6.5, 2, 7.8, 0.6, 8.7, -1, 9, -2.6, 8.7, -4, 7.8, -5, 6.5, -5.4, 4.9, -5.2, 3.2, -4.4, 1.8, -6, 1.2)
