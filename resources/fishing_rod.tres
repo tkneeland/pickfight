@@ -6,7 +6,7 @@
 ; Lighter and faster than the grapple, with shorter range and less power.
 ;
 ; Flick the drag to fire: the hook flies out along the flick at
-; 900 px/s for up to 400 px. The rod moves what it hits to you (#629): a hook
+; 900 px/s for up to 800 px (#641). The rod moves what it hits to you (#629): a hook
 ; that meets terrain does not stick, it reels home empty. One that meets a
 ; player takes 6 off them (nothing off a teammate) and reels them in: while the
 ; drag is held a force of at most 3500 pulls them toward the holder, until the
@@ -19,11 +19,12 @@
 ; and filled by four circles. The hook sitting in it is `loaded_art`: drawn over the head
 ; while the hook is home, hidden while it is out, and colliding with nothing.
 ;
-; The cast arcs (issue #625): speed 900 px/s over the 400 px line is a flight
-; of about 0.44 s, and gravity 900 px/s^2 drops the hook 0.5*900*0.44^2 =
-; roughly 90 px by the end of the line (about 22 px at mid range, 200 px out),
-; so a horizontal cast visibly sags yet a platform at head height half way
-; out is still hooked by a flick aimed a little high.
+; The cast arcs (issue #625): the line used to be 400 px, a flight of about 0.44 s;
+; #641 doubled it to 800 px so the cast stays out about twice as long (roughly 0.8 s,
+; a little under double as gravity speeds the hook up). Gravity 900 px/s^2 sags the
+; hook 0.5*900*0.44^2 = roughly 90 px by the old 400 px mark (about 22 px at 200 px
+; out), so a platform at head height half way out is still hooked by a flick aimed
+; a little high; the longer line sags further the further it runs.
 ;
 ; Force ceiling 6500, under the grapple's 7300.
 
@@ -40,7 +41,7 @@ damage = 8.0
 sound_set = &"fishing_rod"
 special = &"grapple"
 loaded_art = PackedVector2Array(6, -0.7, 16, -0.7, 16, 4, 15.7, 5.3, 15, 6.5, 13.8, 7.2, 12.5, 7.5, 11.2, 7.2, 10, 6.5, 9.3, 5.3, 9, 4, 9, 1.2, 10.4, 2.6, 10.4, 4, 10.7, 5.1, 11.5, 5.8, 12.5, 6.1, 13.6, 5.8, 14.3, 5.1, 14.6, 4, 14.6, 0.7, 6, 0.7)
-launch_range = 400.0
+launch_range = 800.0
 launch_cooldown = 0.25
 reel_speed = 750.0
 reel_force = 3500.0
