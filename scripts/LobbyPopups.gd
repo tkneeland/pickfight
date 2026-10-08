@@ -17,6 +17,7 @@ const GameModesScript := preload("res://scripts/GameModes.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const StagesRulesScreenScript := preload("res://scripts/StagesRulesScreen.gd")
 
 const HELP_WIDTH_PX: float = 920.0
 const LOOK_WIDTH_PX: float = 980.0
@@ -28,6 +29,9 @@ var _look: Control
 var _look_panel: Control
 var _help_card: Control
 var _look_card: Control
+var _stages: Control
+var _stages_card: Control
+var _stages_screen # StagesRulesScreen.gd, built the first time it opens (#647)
 var _demo_grid: GridContainer
 var _rule_label: Label
 var _close_button: Button
@@ -83,6 +87,11 @@ func build(parent: Control) -> void:
 	_look_panel.done_pressed.connect(open.bind(""))
 	_look_card.add_child(_look_panel)
 
+	# Stages & Rules (#647): its contents are built the first time it opens.
+	_stages = _overlay("StagesRulesPopup", parent)
+	_stages_card = _card(_stages, StagesRulesScreenScript.CARD_WIDTH_PX)
+	_stages_screen = StagesRulesScreenScript.new(_screen)
+
 ## An overlay: a dim backdrop that closes the popup when clicked, and a centre for the card.
 func _overlay(overlay_name: String, parent: Control) -> Control:
 	var overlay := Control.new()
@@ -99,7 +108,7 @@ func _overlay(overlay_name: String, parent: Control) -> Control:
 	overlay.gui_input.connect(func(event: InputEvent) -> void:
 		var click := event as InputEventMouseButton
 		if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
-			open(""))
+			request_close())
 	parent.add_child(overlay)
 	return overlay
 
@@ -124,11 +133,19 @@ func help_panel() -> Control:
 func look_overlay() -> Control:
 	return _look
 
+## The Stages & Rules overlay (#647), or null before the lobby was built.
+func stages_overlay() -> Control:
+	return _stages
+
+## The Stages & Rules screen's model (tabs, tiles, switches), host only.
+func stages_screen():
+	return _stages_screen
+
 ## The Your look panel, bound to the host PC's seat by HostControls.
 func look_panel() -> Control:
 	return _look_panel
 
-## "help", "look" or "" for none.
+## "help", "look", "stages" or "" for none.
 func current() -> String:
 	return _open
 
@@ -142,15 +159,32 @@ func demos() -> Array[Node]:
 					out.append(child)
 	return out
 
-## Opens popup `which` ("help" or "look"), closing the other; "" closes any.
+## A user's way out (backdrop click, Done, Esc, B): closes the open popup unless
+## it is Stages & Rules with a mode left on no stage. True when it closed.
+func request_close() -> bool:
+	if _open == "stages" and not _stages_screen.can_close():
+		return false
+	open("")
+	return true
+
+## Opens popup `which` ("help", "look" or "stages"), closing the other; "" closes
+## any. Stages & Rules is the host's: it stays shut until host controls attach.
 func open(which: String) -> void:
 	if which == _open or _help == null:
+		return
+	if which == "stages" and _screen._server == null:
 		return
 	_open = which
 	# A popup owns A and B while it is up, so a gamepad cannot ready its seat behind it.
 	PadMenuScript.set_open("lobby_popup", which != "")
 	_help.visible = which == "help"
 	_look.visible = which == "look"
+	_stages.visible = which == "stages"
+	if which == "stages":
+		if not _stages_screen.is_built():
+			_stages_screen.build(_stages_card)
+		_stages_screen.on_open(_mode_id)
+		ScreenKitScript.pop_in(_stages_card)
 	if which == "help":
 		_start_demos()
 		ScreenKitScript.pop_in(_help_card)
@@ -164,7 +198,9 @@ func open(which: String) -> void:
 func _focus_for_pad(which: String) -> void:
 	if not _screen.pad_menu_open() or which == "":
 		return
-	var target: Button = _close_button if which == "help" else _look_panel.done_button()
+	var target: Control = _close_button if which == "help" else _look_panel.done_button()
+	if which == "stages":
+		target = _stages_screen.focus_target()
 	if target != null:
 		target.grab_focus()
 
