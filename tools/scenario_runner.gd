@@ -769,6 +769,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_remote_seat_never_hosts_578",
 	"controller_fonts_served_589",
 	"left_click_is_space_tap_binding_640",
+	"left_click_recaptures_mouse_after_esc_640",
+	"left_click_and_space_hold_separately_640",
+	"victory_left_click_tap_continues_640",
 	"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"stock_timeout_losers_are_not_counted_as_kos_595",
 	"hot_potato_blocked_hit_does_not_pass_the_tag_595",
@@ -2568,6 +2571,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws()
 		"left_click_is_space_tap_binding_640":
 			return await _scenario_left_click_is_space_tap_binding_640()
+		"left_click_recaptures_mouse_after_esc_640":
+			return await _scenario_left_click_recaptures_mouse_after_esc_640()
+		"left_click_and_space_hold_separately_640":
+			return await _scenario_left_click_and_space_hold_separately_640()
+		"victory_left_click_tap_continues_640":
+			return await _scenario_victory_left_click_tap_continues_640()
 		"host_pc_space_tap_throws_boomerang_on_key_up":
 			return await _scenario_host_pc_space_tap_throws_boomerang_on_key_up()
 		"remote_client_space_hold_releases_and_tap_throws_boomerang":
@@ -28592,17 +28601,17 @@ func _scenario_victory_prompt_names_only_the_seated_continue_inputs_639() -> Arr
 		failures.append("a phone-only room read '%s', expected '%s'" % [got, phone_only])
 	server.apply_host_command("pc_seat", true)
 	got = prompt_of.call()
-	if got != "Continue with Space or a tap on your phone":
+	if got != "Continue with Space or click or a tap on your phone":
 		failures.append("PC seat plus a phone read '%s'" % got)
 	server._bind_pad(0)
 	got = prompt_of.call()
-	if got != "Continue with Space, A on a gamepad or a tap on your phone":
+	if got != "Continue with Space or click, A on a gamepad or a tap on your phone":
 		failures.append("PC seat, gamepad and phone read '%s'" % got)
 	await _close_phones(phones)
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	server.set_bot_count(2)
 	got = prompt_of.call()
-	if got != "Continue with Space or A on a gamepad":
+	if got != "Continue with Space or click or A on a gamepad":
 		failures.append("PC seat, gamepad and bots (no phone) read '%s'" % got)
 	server.apply_host_command("pc_seat", false)
 	server.set_bot_count(0)
@@ -40668,4 +40677,94 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 	elif walk["close_at"] >= 0 and zip["close_at"] >= walk["close_at"]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
 	_scenario_completed = true
+	return failures
+
+## Issue #640 review: after Esc frees the mouse, the next left click recaptures
+## it and is not an action.
+func _scenario_left_click_recaptures_mouse_after_esc_640() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcRecapture640")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(10)
+	var esc := InputEventKey.new()
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	server._input(esc)
+	if not server._mouse_escaped or server._mouse_captured:
+		failures.append("Esc did not free the mouse")
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if server._mouse_escaped or not server._mouse_captured:
+		failures.append("a left click after Esc did not recapture the mouse")
+	if server.slot_released(0):
+		failures.append("the recapturing click also toggled release")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+## Issue #640 review: Space and a left click time separately on the host seat.
+func _scenario_left_click_and_space_hold_separately_640() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcSeparate640")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(10)
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.pressed = true
+	server._input(space)
+	await _await_ticks(30)
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if not server.slot_released(0):
+		failures.append("a click tap during a held Space did not toggle release on")
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if not server.slot_released(0):
+		failures.append("a click tap ended the held Space's release")
+	var up := InputEventKey.new()
+	up.physical_keycode = KEY_SPACE
+	up.pressed = false
+	server._input(up)
+	if server.slot_released(0):
+		failures.append("letting go of a held Space toggled release on")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+## Issue #640 review: on the victory screen a quick left click continues; a
+## press that began before VICTORY does not.
+func _scenario_victory_left_click_tap_continues_640() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _victory_loop()
+	var rm: Node = loop["round_manager"]
+	if rm.lobby_phase() != "victory":
+		failures.append("never reached the victory screen")
+		await _teardown(loop["stage"])
+		return failures
+	rm._victory_click(_click_640(true))
+	await _await_ticks(3)
+	rm._victory_click(_click_640(false))
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a left click tap on the victory screen did not continue")
+	await _teardown(loop["stage"])
+	var stale: Dictionary = _new_lobby_round(1)
+	var players: Array[RigidBody2D] = stale["players"]
+	var rm2: Node = stale["round_manager"]
+	stale["roster"].ready_slots = {0: true, 1: true}
+	if await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		rm2._victory_click(_click_640(true)) # pressed mid-round, released on the podium
+		players[1].eliminate()
+	await _await_condition(func() -> bool: return rm2.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+	if rm2.lobby_phase() != "victory":
+		failures.append("the second match never reached the victory screen")
+	else:
+		rm2._victory_click(_click_640(false))
+		await _await_ticks(3)
+		if rm2.lobby_phase() != "victory":
+			failures.append("a click that began before the victory screen continued it")
+	await _teardown(stale["stage"])
 	return failures
