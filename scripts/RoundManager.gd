@@ -211,7 +211,9 @@ var _last_winner_slot: int = -1
 ## a weapon added to the roster there is offered here too.
 static func playtest_weapon_paths() -> PackedStringArray:
 	var paths := PackedStringArray([PickupWeaponsScript.PICKAXE_PATH])
-	paths.append_array(PickupWeaponsScript.WEAPON_PATHS)
+	for path: String in PickupWeaponsScript.WEAPON_PATHS:
+		if not PickupWeaponsScript.RETIRED_PATHS.has(path):  # the spear is retired (#642)
+			paths.append(path)
 	return paths
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")

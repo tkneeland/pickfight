@@ -20,7 +20,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Pickaxe: everyone's starting weapon (#2, #135, #181)
 - Staff, sword, dagger (#13)
 - Axe: heavy, sluggish, double-sided head, 90 damage (#49, #90)
-- Spear: long reach, weak up close (#272)
+- Spear: long reach, weak up close (#272); retired from rotation, never spawns as a pickup or in random-weapons (#642)
 - Shield: a wide (50 px, was 36) heater-shaped plate with a matching polygon hitbox (#465); blocks hits landing on its face, and its face is the only thing that blocks shots other players fire (#631, ADR-0024): a boomstick bullet vanishes, a grapple or fishing rod hook goes home empty and a boomerang turns back, none dealing damage; every other head, the shield's back and edges, and the holder's own shield let shots through; a bash does little damage but big knockback (#275)
 - Umbrella: held overhead it slows your fall, catches wind zones and turns hits on its canopy, falling rocks and meteors included; a short poker otherwise (#269, #569)
 - Pogo stick: auto-bounce, charge-and-release launch, damage only from stomps (#271); bouncier hop and launch, hops keep their height (#622)

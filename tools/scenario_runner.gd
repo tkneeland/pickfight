@@ -390,7 +390,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"snapshot_kill_sound_reaches_remote_client",
 	"spear_head_cannot_retract_inside_minimum",
 	"spear_tip_hit_outdamages_staff",
-	"spear_is_in_the_pickup_set",
+	"spear_is_never_in_the_pickup_pool",
 	"gamepad_event_claims_seat_and_readies",
 	"gamepad_stick_moves_weapon_and_release_zeroes",
 	"gamepad_unplug_holds_claim_and_replug_rejoins",
@@ -2001,8 +2001,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_spear_head_cannot_retract_inside_minimum()
 		"spear_tip_hit_outdamages_staff":
 			return await _scenario_spear_tip_hit_outdamages_staff()
-		"spear_is_in_the_pickup_set":
-			return await _scenario_spear_is_in_the_pickup_set()
+		"spear_is_never_in_the_pickup_pool":
+			return await _scenario_spear_is_never_in_the_pickup_pool()
 		"gamepad_event_claims_seat_and_readies":
 			return await _scenario_gamepad_event_claims_seat_and_readies()
 		"gamepad_stick_moves_weapon_and_release_zeroes":
@@ -20428,7 +20428,9 @@ func _scenario_podium_order_is_strict() -> Array[String]:
 func _scenario_round_flow_drift_trimmed() -> Array[String]:
 	var failures: Array[String] = []
 	var want := PackedStringArray([PickupWeaponsScript.PICKAXE_PATH])
-	want.append_array(PickupWeaponsScript.WEAPON_PATHS)
+	for path: String in PickupWeaponsScript.WEAPON_PATHS:
+		if not PickupWeaponsScript.RETIRED_PATHS.has(path):
+			want.append(path)
 	if RoundManagerType.playtest_weapon_paths() != want:
 		failures.append("the random-weapons list is %s, expected %s" % [RoundManagerType.playtest_weapon_paths(), want])
 	var feed: Control = KillFeedScript.new()
@@ -24729,19 +24731,20 @@ func _scenario_spear_tip_hit_outdamages_staff() -> Array[String]:
 		failures.append("the spear's tip hit took %.1f off, not clearly more than the staff's %.1f" % [dealt["spear"], dealt["staff"]])
 	await _teardown(stage)
 	return failures
-## The spear is something a pickup can hand out, and it is not the starting weapon.
-func _scenario_spear_is_in_the_pickup_set() -> Array[String]:
+## The spear is retired from rotation (#642): no pickup draw, pool, or
+## random-weapons list offers it, though its resource still loads for #272's
+## scenarios that hand it to a player directly.
+func _scenario_spear_is_never_in_the_pickup_pool() -> Array[String]:
 	var failures: Array[String] = []
-	if not PickupWeaponsScript.WEAPON_PATHS.has(SPEAR_PATH):
-		failures.append("the spear is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
-	var found: bool = false
+	if not PickupWeaponsScript.RETIRED_PATHS.has(SPEAR_PATH):
+		failures.append("the spear is not listed as retired from the pickup pool")
 	for stats: Resource in PickupWeaponsScript.available_weapons():
-		found = found or stats.resource_path == SPEAR_PATH
-	if not found:
-		failures.append("the spear is not among the loaded pickup weapons")
-	var drawn: Resource = PickupWeaponsScript.choose([load(SPEAR_PATH) as Resource])
-	if drawn == null or drawn.resource_path != SPEAR_PATH:
-		failures.append("a pickup draw offered only the spear did not give it")
+		if stats.resource_path == SPEAR_PATH:
+			failures.append("the spear is among the loaded pickup weapons")
+	if RoundManagerType.playtest_weapon_paths().has(SPEAR_PATH):
+		failures.append("the random-weapons list offers the spear")
+	if not ResourceLoader.exists(SPEAR_PATH):
+		failures.append("the spear resource is gone, so it cannot be re-enabled")
 	_scenario_completed = true
 	return failures
 # --- Gamepad seats (#261) ----------------------------------------------------
@@ -30103,7 +30106,7 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
 	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
 		failures.append("the settings lost stages with the demo off")
-	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
+	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size() \
 			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
 		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
 	if GameModesScript361.picker_rows().size() != GameModesScript361.TABLE.size() or not GameModesScript361.is_valid("stock"):
