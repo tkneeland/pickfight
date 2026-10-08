@@ -84,6 +84,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"identity_colours_match_controller_page",
 	"weapon_head_circles_within_art",
 	"stage_rotates_each_round",
+	"every_stage_has_a_preview_647",
 	"stage_spawns_are_safe",
 	"waiting_expires_disconnected_claims",
 	"abandoned_round_ends_without_winner",
@@ -1413,6 +1414,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_identity_colours_match_controller_page()
 		"weapon_head_circles_within_art":
 			return await _scenario_weapon_head_circles_within_art()
+		"every_stage_has_a_preview_647":
+			return _scenario_every_stage_has_a_preview_647()
 		"stage_rotates_each_round":
 			return await _scenario_stage_rotates_each_round()
 		"stage_spawns_are_safe":
@@ -4711,6 +4714,19 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
 ]
+func _scenario_every_stage_has_a_preview_647() -> Array[String]:
+	var previews: GDScript = load("res://scripts/StagePreviews.gd")
+	var failures: Array[String] = []
+	var count: int = 0
+	for f in DirAccess.get_files_at("res://scenes/stages"):
+		if not f.ends_with(".tscn"): continue
+		count += 1
+		var stage: String = f.get_basename()
+		if previews.call("load_preview", stage) == null:
+			failures.append("stage %s has no loadable preview at %s" % [stage, previews.call("preview_path", stage)])
+	if count == 0: failures.append("no stage scenes found")
+	_scenario_completed = true
+	return failures
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
 	# and well apart from the rest (#168). Per stage nothing changed: one copy,
