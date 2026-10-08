@@ -796,6 +796,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554",
 	"pressed_head_holds_on_flat_ground",
 	"fishing_rod_cast_arcs_under_gravity",
+	"fishing_rod_cast_stays_out_twice_as_long_641",
 	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
@@ -2813,6 +2814,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pressed_head_holds_on_flat_ground()
 		"fishing_rod_cast_arcs_under_gravity":
 			return await _scenario_hook_flight_drop(FISHING_ROD_PATH, true)
+		"fishing_rod_cast_stays_out_twice_as_long_641":
+			return await _scenario_fishing_rod_cast_stays_out_twice_as_long_641()
 		"grapple_shot_stays_level":
 			return await _scenario_hook_flight_drop(GRAPPLE_PATH, false)
 		"pogo_uncharged_ground_contact_bounces_at_least_this_high":
@@ -39803,6 +39806,39 @@ func _scenario_hook_flight_drop(path: String, arcs: bool) -> Array[String]:
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
+## Issue #641: an unobstructed horizontal cast stays out about twice as long
+## before it retracts by itself. The old 400 px line flew for about 0.44 s
+## (26 ticks); written down independently of the resource, the new cast must
+## fly at least 1.6x that.
+const ROD_OLD_FLIGHT_SECONDS: float = 0.44
+func _scenario_fishing_rod_cast_stays_out_twice_as_long_641() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(shooter, FISHING_ROD_PATH)
+	_brace(shooter)
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		_scenario_completed = true
+		return failures
+	var flying_ticks: int = 0
+	for i in 240:
+		if not is_instance_valid(hook) or not hook.is_flying():
+			break
+		flying_ticks += 1
+		await physics_frame
+	var seconds: float = flying_ticks / 60.0
+	print("      rod cast stayed out %.2f s (%d ticks)" % [seconds, flying_ticks])
+	if seconds < ROD_OLD_FLIGHT_SECONDS * 1.6:
+		failures.append("the cast flew only %.2f s; expected at least %.2f s (about twice the old 0.44 s)" % [seconds, ROD_OLD_FLIGHT_SECONDS * 1.6])
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
 # --- Pogo bounciness (issue #622) --------------------------------------------
 ## Written down independently of the resource: a plain hop must rise at least
 ## this many px from its low point, and stay under the on-screen ceiling.
