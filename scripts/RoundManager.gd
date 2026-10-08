@@ -466,6 +466,8 @@ func _roll_night() -> bool:
 		return forced_night == 1
 	if not modifier_rolls_enabled or night_chance <= 0.0:
 		return false
+	if not HostSettingsScript.shared().is_modifier_enabled(game_mode, "night"):  # Rules tab (#647)
+		return false
 	if _night_rng == null:
 		_night_rng = RandomNumberGenerator.new()
 		if modifier_seed >= 0:
@@ -1444,8 +1446,9 @@ func _publish_lobby_state() -> void:
 		var settings: RefCounted = HostSettingsScript.shared()
 		state["stock"] = {
 			"lives": settings.stock_lives, "time": settings.stock_time_limit,
-			"stage": settings.stock_stage, "stages": _stage_rotation.picker_rows(),
+			"stage": _stock_single_stage(), "stages": _stage_rotation.picker_rows(),
 		}
+	state["stages_by_mode"] = _stages_by_mode()
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -2298,7 +2301,23 @@ func _pin_stock_stage() -> void:
 		_stage_rotation.pinned = -1
 	elif _stage_rotation.pinned == -1:
 		_stage_rotation.round_player_count = _roster().size()
-		_stage_rotation.pinned = _stage_rotation.resolve_pin(HostSettingsScript.shared().stock_stage)
+		_stage_rotation.pinned = _stage_rotation.resolve_stock_pin()
+
+## The one Stock stage switched on, or "" when several are (the old phone's
+## single pick, #375).
+func _stock_single_stage() -> String:
+	var on: PackedStringArray = HostSettingsScript.shared().enabled_stages_for(GameModesScript.STOCK)
+	return on[0] if on.size() == 1 else ""
+
+## Every mode's stage list for the phone / PC remote (#647):
+## {mode id: {all: [stages the mode can use], on: [the ones switched on]}}.
+func _stages_by_mode() -> Dictionary:
+	var settings: RefCounted = HostSettingsScript.shared()
+	var out: Dictionary = {}
+	for mode_id: String in ["classic", GameModesScript.KING_OF_THE_HILL, GameModesScript.SUDDEN_DEATH,
+			GameModesScript.STOCK, GameModesScript.SOCCER, GameModesScript.CAPTURE_THE_FLAG]:
+		out[mode_id] = {"all": settings.stages_for_mode(mode_id), "on": settings.enabled_stages_for(mode_id)}
+	return out
 
 ## The host phone's pick for the next match (issue #352), taken as the match's
 ## countdown runs out and held for all of it. Only a lobby match takes it, so a

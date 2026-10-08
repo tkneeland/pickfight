@@ -530,6 +530,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_match_is_one_round_then_the_podium_644",
 	"soccer_goals_are_the_match_and_each_goal_changes_pitch_646",
 	"soccer_with_one_pitch_on_stays_on_it_646",
+	"per_mode_stage_lists_persist_separately_647",
+	"stock_with_one_stage_on_always_plays_it_647",
+	"stock_with_several_stages_on_picks_one_of_them_647",
+	"soccer_and_ctf_draw_only_their_own_on_stages_647",
+	"old_stage_config_migrates_to_per_mode_lists_647",
 	"ctf_captures_are_the_match_and_each_capture_changes_hall_646",
 	"ctf_with_one_hall_on_stays_in_it_646",
 	"bot_king_of_the_hill_heads_for_the_hill",
@@ -2305,6 +2310,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_match_is_one_round_then_the_podium_644()
 		"soccer_goals_are_the_match_and_each_goal_changes_pitch_646":
 			return await _score_match_run(true, SOCCER_PITCH_PATHS, false)
+		"per_mode_stage_lists_persist_separately_647":
+			return await _scenario_per_mode_stage_lists_persist_separately_647()
+		"stock_with_one_stage_on_always_plays_it_647":
+			return await _scenario_stock_with_one_stage_on_always_plays_it_647()
+		"stock_with_several_stages_on_picks_one_of_them_647":
+			return await _scenario_stock_with_several_stages_on_picks_one_of_them_647()
+		"soccer_and_ctf_draw_only_their_own_on_stages_647":
+			return await _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647()
+		"old_stage_config_migrates_to_per_mode_lists_647":
+			return await _scenario_old_stage_config_migrates_to_per_mode_lists_647()
 		"soccer_with_one_pitch_on_stays_on_it_646":
 			return await _score_match_run(true, SOCCER_PITCH_PATHS, true)
 		"ctf_captures_are_the_match_and_each_capture_changes_hall_646":
@@ -16136,6 +16151,7 @@ func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
 ## the name tags (#121) are scaled back up so they read at their usual size.
 ## The next round, on a normal stage with two players, puts the camera back
 ## to zoom 1 on the origin.
+const SoccerCtfOwn647: PackedStringArray = ["Pitch", "Dunes", "Cage", "Bastion", "Stronghold"]
 func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String]:
 	var failures: Array[String] = []
 	var large: PackedStringArray = []
@@ -16174,6 +16190,8 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 		rm.set_script(RoundManagerType)
 		rm.player_paths = paths
 		var scenes: Array[PackedScene] = [load(path) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+		if SoccerCtfOwn647.has(path.get_file().get_basename()):  # no general mode plays these (#647)
+			scenes = [load(path) as PackedScene, load(path) as PackedScene]
 		rm.stage_scenes = scenes
 		rm.arena_container_path = NodePath("../Container")
 		rm.controller_server_path = NodePath("../Roster")
@@ -16244,6 +16262,9 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 		# A normal stage and two players: back to the unzoomed view.
 		roster.slots = [0, 1]
 		rm._stage_rotation.set("round_player_count", 2)
+		if SoccerCtfOwn647.has(path.get_file().get_basename()):
+			var normal: Array[PackedScene] = [load(STAGE_PATHS[0]) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+			rm.stage_scenes = normal
 		rm._swap_stage()
 		if camera.zoom != Vector2.ONE or camera.global_position.distance_to(Vector2.ZERO) > LARGE_VIEW_TOLERANCE:
 			failures.append("%s: on a normal stage afterwards the camera stayed at zoom %s, %s" % [
@@ -30299,8 +30320,9 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 		var index: int = rotation.next_stage_index()
 		rotation.stage_index = index
 		seen[index] = true
-	if seen.size() != scenes.size():
-		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
+	var general: int = settings.stages_for_mode("").size()  # Soccer's and CTF's five have their own lists (#647)
+	if seen.size() != general or general != scenes.size() - 5:
+		failures.append("%d of %d general stages rotated with the demo off (%d known)" % [seen.size(), general, scenes.size()])
 	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
 		failures.append("the settings lost stages with the demo off")
 	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size() \
@@ -30326,14 +30348,14 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	await _teardown(loop["stage"])
 	return failures
 ## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
-func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
+func _stock_stage_rig(on: PackedStringArray = PackedStringArray()) -> Dictionary:
 	var settings: RefCounted = StockSettingsScript.shared()
-	settings.disabled_stages = disabled
+	settings.disabled_stages_by_mode = {}
 	var rig: Dictionary = _stock_rig(2, 3, 0)
 	var rm: Node = rig["rm"]
 	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
 	rm.stage_scenes = _named_stub_stages(["StageA", "StageB", "StageC"], spawns)
-	settings.stock_stage = pick
+	settings.stock_stages_on = on
 	return rig
 ## Stub stages whose `resource_path` carries their name, as the rotation and
 ## the host settings identify a stage by its file's base name.
@@ -30347,8 +30369,8 @@ func _named_stub_stages(names: Array[String], spawns: Array[Vector2]) -> Array[P
 const StageRotationScript := preload("res://scripts/StageRotation.gd")
 func _stock_stage_reset() -> void:
 	var settings: RefCounted = StockSettingsScript.shared()
-	settings.disabled_stages = PackedStringArray()
-	settings.stock_stage = ""
+	settings.disabled_stages_by_mode = {}
+	settings.stock_stages_on = PackedStringArray()
 	_stock_settings(3, 480)
 ## The stage names RoundManager plays over `rounds` consecutive rounds.
 func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
@@ -30359,7 +30381,7 @@ func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
 	return names
 func _scenario_stock_plays_the_picked_stage_every_round() -> Array[String]:
 	var failures: Array[String] = []
-	var rig: Dictionary = _stock_stage_rig("StageB")
+	var rig: Dictionary = _stock_stage_rig(PackedStringArray(["StageB"]))
 	var rm: Node = rig["rm"]
 	rm.set_process(false)
 	var names: Array[String] = _stock_stage_names(rm, 6)
@@ -30381,12 +30403,12 @@ func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[S
 	var failures: Array[String] = []
 	var seen: Dictionary = {}
 	for _attempt in 3:
-		var rig: Dictionary = _stock_stage_rig("", PackedStringArray(["StageA"]))
+		var rig: Dictionary = _stock_stage_rig(PackedStringArray(["StageB", "StageC"]))
 		var rm: Node = rig["rm"]
 		rm.set_process(false)
 		var names: Array[String] = _stock_stage_names(rm, 4)
 		if names.has("StageA"):
-			failures.append("Random picked the switched-off StageA: %s" % [names])
+			failures.append("Stock picked the switched-off StageA: %s" % [names])
 		if names.count(names[0]) != names.size():
 			failures.append("Random changed stage inside one match: %s" % [names])
 		seen[names[0]] = true
@@ -30394,19 +30416,11 @@ func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[S
 		await _teardown(rig["stage"])
 	if seen.is_empty():
 		failures.append("Random never picked a stage")
-	# A pick the host switched off falls back to an enabled stage.
-	var rig2: Dictionary = _stock_stage_rig("StageC", PackedStringArray(["StageC"]))
-	rig2["rm"].set_process(false)
-	var fallback: Array[String] = _stock_stage_names(rig2["rm"], 2)
-	if fallback.has("StageC"):
-		failures.append("a switched-off pick was still played: %s" % [fallback])
-	_stock_stage_reset()
-	await _teardown(rig2["stage"])
 	_scenario_completed = true
 	return failures
 func _scenario_stock_never_rolls_a_modifier() -> Array[String]:
 	var failures: Array[String] = []
-	var rig: Dictionary = _stock_stage_rig("")
+	var rig: Dictionary = _stock_stage_rig()
 	var rm: Node = rig["rm"]
 	rm.set_process(false)
 	rm.modifier_rolls_enabled = true
@@ -30438,40 +30452,213 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	var fresh: RefCounted = StockSettingsScript.new()
 	fresh.path = path
 	fresh.known_stages = PackedStringArray(["StageA", "StageB"])
-	if fresh.stock_stage != "":
-		failures.append("the default pick was '%s', want Random" % fresh.stock_stage)
-	if fresh.set_stock_stage("Nowhere") or fresh.stock_stage != "":
+	if fresh.enabled_stages_for("stock").size() != 2:
+		failures.append("the default (no competitive stage) was not every stage")
+	if fresh.set_stock_stage("Nowhere"):
 		failures.append("an unknown stage was accepted")
 	if not fresh.set_stock_stage("StageB"):
 		failures.append("a known stage was refused")
 	var reloaded: RefCounted = StockSettingsScript.new()
 	reloaded.path = path
+	reloaded.known_stages = fresh.known_stages
 	reloaded.load_settings()
-	if reloaded.stock_stage != "StageB":
-		failures.append("reloaded pick '%s', want StageB" % reloaded.stock_stage)
+	if reloaded.enabled_stages_for("stock") != PackedStringArray(["StageB"]):
+		failures.append("reloaded Stock stages %s, want only StageB" % [reloaded.enabled_stages_for("stock")])
 	DirAccess.remove_absolute(path)
 	# The host phone's message reaches the shared settings.
 	var shared: RefCounted = StockSettingsScript.shared()
 	shared.known_stages = PackedStringArray(["StageA", "StageB"])
 	var server: Node = ControllerServerScript.new()
-	if not server.apply_host_command("stock_stage", "StageA") or shared.stock_stage != "StageA":
+	if not server.apply_host_command("stock_stage", "StageA") or shared.enabled_stages_for("stock") != PackedStringArray(["StageA"]):
 		failures.append("the host command did not set StageA")
-	if server.apply_host_command("stock_stage", "Nowhere") or shared.stock_stage != "StageA":
+	if server.apply_host_command("stock_stage", "Nowhere") or shared.enabled_stages_for("stock") != PackedStringArray(["StageA"]):
 		failures.append("the host command took an unknown stage")
 	server.free()
-	# The picker lists enabled stages only (no competitive stage exists yet).
+	# The picker lists every Stock stage with its on flag.
 	var rotation: RefCounted = StageRotationScript.new()
 	rotation.settings = StockSettingsScript.new()
 	rotation.settings.persist = false
 	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
 	rotation.scenes = _named_stub_stages(["StageA", "StageB"], spawns)
-	rotation.settings.set_stage_enabled("StageA", false)
+	rotation.settings.set_stage_enabled_for("stock", "StageA", false)
 	var rows: Array = rotation.picker_rows()
-	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
+	if rows.size() != 2 or rows[0]["name"] != "StageA" or rows[0]["on"] or not rows[1]["on"] or rows[1]["competitive"]:
 		failures.append("the picker rows were %s" % [rows])
 	_stock_stage_reset()
 	_scenario_completed = true
 	return failures
+## Issue #647: each mode keeps its own stage list, saved apart from the others.
+func _scenario_per_mode_stage_lists_persist_separately_647() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stage_lists_647.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var known := PackedStringArray(["Alpha", "Beta", "Gamma", "Pitch", "Dunes", "Cage", "Bastion", "Stronghold"])
+	var first: RefCounted = StockSettingsScript.new()
+	first.path = path
+	first.known_stages = known
+	first.set_stage_enabled_for("classic", "Alpha", false)
+	first.set_stage_enabled_for("king_of_the_hill", "Beta", false)
+	first.set_stage_enabled_for("soccer", "Cage", false)
+	first.set_stage_enabled_for("stock", "Gamma", false)
+	var second: RefCounted = StockSettingsScript.new()
+	second.path = path
+	second.known_stages = known
+	second.load_settings()
+	if second.is_stage_enabled_for("classic", "Alpha") or not second.is_stage_enabled_for("classic", "Beta"):
+		failures.append("classic list wrong after reload: %s" % [second.enabled_stages_for("classic")])
+	if second.is_stage_enabled_for("king_of_the_hill", "Beta") or not second.is_stage_enabled_for("king_of_the_hill", "Alpha"):
+		failures.append("king_of_the_hill list wrong after reload: %s" % [second.enabled_stages_for("king_of_the_hill")])
+	if second.enabled_stages_for("soccer") != PackedStringArray(["Pitch", "Dunes"]):
+		failures.append("soccer list wrong after reload: %s" % [second.enabled_stages_for("soccer")])
+	if second.enabled_stages_for("capture_the_flag") != PackedStringArray(["Bastion", "Stronghold"]):
+		failures.append("ctf list changed with soccer's: %s" % [second.enabled_stages_for("capture_the_flag")])
+	if second.enabled_stages_for("stock") != PackedStringArray(["Alpha", "Beta"]):
+		failures.append("stock list wrong after reload: %s" % [second.enabled_stages_for("stock")])
+	if second.stages_for_mode("sudden_death") != PackedStringArray(["Alpha", "Beta", "Gamma"]):
+		failures.append("general rotation is %s" % [second.stages_for_mode("sudden_death")])
+	if second.set_stage_enabled_for("soccer", "Alpha", true):
+		failures.append("soccer accepted a general stage")
+	second.set_all_stages_for("classic", false)
+	if second.enabled_stages_for("classic").size() != 1:
+		failures.append("all-off left %d classic stages" % second.enabled_stages_for("classic").size())
+	second.set_all_stages_for("classic", true)
+	if second.enabled_stages_for("classic").size() != 3:
+		failures.append("all-on left %d classic stages" % second.enabled_stages_for("classic").size())
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	# The host commands and the lobby state carry the lists.
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.known_stages = known
+	shared.disabled_stages_by_mode = {}
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stage_mode_toggle", {"mode": "sudden_death", "stage": "Gamma", "on": false}) \
+			or shared.is_stage_enabled_for("sudden_death", "Gamma") or not shared.is_stage_enabled_for("classic", "Gamma"):
+		failures.append("stage_mode_toggle did not touch only sudden_death")
+	if not server.apply_host_command("stage_mode_all", {"mode": "sudden_death", "on": true}) or not shared.is_stage_enabled_for("sudden_death", "Gamma"):
+		failures.append("stage_mode_all did not switch the list on")
+	server.free()
+	shared.disabled_stages_by_mode = {}
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Stock with one stage on plays only it, round after round.
+func _scenario_stock_with_one_stage_on_always_plays_it_647() -> Array[String]:
+	var failures: Array[String] = []
+	for stage_name: String in ["StageA", "StageC"]:
+		var rig: Dictionary = _stock_stage_rig()
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		var settings: RefCounted = StockSettingsScript.shared()
+		settings.set_all_stages_for("stock", false)
+		settings.set_stage_enabled_for("stock", stage_name, true)
+		for other: String in ["StageA", "StageB", "StageC"]:
+			if other != stage_name:
+				settings.set_stage_enabled_for("stock", other, false)
+		var names: Array[String] = _stock_stage_names(rm, 8)
+		for n: String in names:
+			if n != stage_name:
+				failures.append("Stock played %s with only %s on: %s" % [n, stage_name, names])
+				break
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Stock with several stages on plays one of them, held all match,
+## and over matches draws from each of them.
+func _scenario_stock_with_several_stages_on_picks_one_of_them_647() -> Array[String]:
+	var failures: Array[String] = []
+	var seen: Dictionary = {}
+	for _attempt in 12:
+		var rig: Dictionary = _stock_stage_rig(PackedStringArray(["StageA", "StageC"]))
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		rm.rotation_seed = 100 + _attempt
+		rm._stage_rotation.rng = RandomNumberGenerator.new()
+		rm._stage_rotation.rng.seed = 100 + _attempt
+		var names: Array[String] = _stock_stage_names(rm, 3)
+		if names.has("StageB"):
+			failures.append("Stock played the switched-off StageB: %s" % [names])
+		if names.count(names[0]) != names.size():
+			failures.append("Stock changed stage inside one match: %s" % [names])
+		seen[names[0]] = true
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	if seen.size() != 2:
+		failures.append("12 matches drew %s; expected both StageA and StageC" % [seen.keys()])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Soccer and CTF draw from their own on stages only, and fall back
+## to all of the mode's stages when every one is off.
+func _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var cases: Array = [
+		["soccer", ["Pitch", "Dunes", "Cage"], ["Dunes"]],
+		["soccer", ["Pitch", "Dunes", "Cage"], ["Pitch", "Cage"]],
+		["capture_the_flag", ["Bastion", "Stronghold"], ["Stronghold"]],
+	]
+	for row: Array in cases:
+		var mode_id: String = row[0]
+		var settings: RefCounted = _fresh_settings_361()
+		var rotation: RefCounted = StageRotationScript361.new()
+		rotation.settings = settings
+		rotation.scenes = scenes
+		settings.set_all_stages_for(mode_id, false)
+		for stage_name: String in row[2]:
+			settings.set_stage_enabled_for(mode_id, stage_name, true)
+		for stage_name: String in row[1]:
+			if not (row[2] as Array).has(stage_name):
+				settings.set_stage_enabled_for(mode_id, stage_name, false)
+		rotation.round_player_count = 8
+		rotation.mode_id = mode_id
+		rotation.rng = RandomNumberGenerator.new()
+		rotation.rng.seed = 5
+		var seen: Dictionary = {}
+		for _round in 60:
+			var index: int = rotation.next_stage_index()
+			rotation.stage_index = index
+			seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+		var got: Array = seen.keys()
+		got.sort()
+		var want: Array = (row[2] as Array).duplicate()
+		want.sort()
+		if got != want:
+			failures.append("%s dealt %s with %s on" % [mode_id, got, want])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: a config saved before per-mode lists seeds every general mode
+## from the old global switches, and the old Stock pick becomes "only that on".
+func _scenario_old_stage_config_migrates_to_per_mode_lists_647() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://old_stage_config_647.cfg"
+	var cfg := ConfigFile.new()
+	cfg.set_value("host", "disabled_stages", PackedStringArray(["Beta"]))
+	cfg.set_value("host", "stock_stage", "Gamma")
+	cfg.save(path)
+	var settings: RefCounted = StockSettingsScript.new()
+	settings.path = path
+	settings.persist = false
+	settings.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma", "Pitch"])
+	settings.load_settings()
+	for mode_id: String in ["classic", "king_of_the_hill", "sudden_death"]:
+		if settings.enabled_stages_for(mode_id) != PackedStringArray(["Alpha", "Gamma"]):
+			failures.append("%s kept %s, expected Beta off" % [mode_id, settings.enabled_stages_for(mode_id)])
+	if settings.enabled_stages_for("stock") != PackedStringArray(["Gamma"]):
+		failures.append("Stock kept %s, expected only Gamma" % [settings.enabled_stages_for("stock")])
+	if settings.enabled_stages_for("soccer") != PackedStringArray(["Pitch"]):
+		failures.append("Soccer lost its pitch: %s" % [settings.enabled_stages_for("soccer")])
+	var cfg2 := ConfigFile.new()
+	cfg2.set_value("host", "stock_stage", "")
+	cfg2.save(path)
+	settings.load_settings()
+	if settings.enabled_stages_for("stock").size() != 3:
+		failures.append("a Random Stock pick did not seed the default (all stages here): %s" % [settings.enabled_stages_for("stock")])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_scenario_completed = true
+	return failures
+
 ## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
 func _i18n_catalogue_367() -> Dictionary:
 	var out: Dictionary = {}
@@ -33316,8 +33503,8 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 	return failures
 ## Review sweep b: Capture the Flag and Soccer can only end on a stage with their
 ## bases or goals, so their rotation deals only the stages whose `mode_weights`
-## name the mode -- even when the host switched those off -- while every other
-## mode still deals the rest.
+## name the mode, minus any the host switched off for that mode (#647), while
+## every other mode still deals the rest.
 func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[String]:
 	var failures: Array[String] = []
 	var scenes: Array[PackedScene] = _real_stage_scenes_361()
@@ -33333,15 +33520,14 @@ func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[St
 			rotation.rng = RandomNumberGenerator.new()
 			rotation.rng.seed = 21
 			if switched_off:
-				for stage_name: String in own[mode_id]:
-					settings.set_stage_enabled(stage_name, false)
+				settings.set_stage_enabled_for(mode_id, own[mode_id][0], false)
 			var seen: Dictionary = {}
 			for _round in 60:
 				var index: int = rotation.next_stage_index()
 				rotation.stage_index = index
 				seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
 			for stage_name: Variant in seen.keys():
-				if not (own[mode_id] as Array).has(str(stage_name)):
+				if not (own[mode_id] as Array).has(str(stage_name)) or (switched_off and stage_name == own[mode_id][0]):
 					failures.append("%s dealt %s (own stages %s, switched off: %s)" % [mode_id, stage_name, own[mode_id], switched_off])
 			if seen.is_empty():
 				failures.append("%s dealt no stage" % mode_id)
@@ -39728,6 +39914,7 @@ func _scenario_settings_hygiene_609() -> Array[String]:
 	var cfg := ConfigFile.new()
 	cfg.set_value("host", "resolution", Vector2i(0, 1))
 	cfg.set_value("host", "disabled_stages", 7)
+	cfg.set_value("host", "stage_lists", 7)
 	cfg.set_value("host", "disabled_weapons", ["spear", 3])
 	cfg.set_value("host", "game_mode", "ffa")
 	cfg.set_value("host", "share_stats", "yes")
@@ -39736,7 +39923,7 @@ func _scenario_settings_hygiene_609() -> Array[String]:
 	host.path = cfg_path
 	host.persist = false
 	host.load_settings()
-	if host.resolution != Vector2i.ZERO or not host.disabled_stages.is_empty() or host.disabled_weapons != PackedStringArray(["spear"]):
+	if host.resolution != Vector2i.ZERO or not host.disabled_stages_by_mode.is_empty() or host.disabled_weapons != PackedStringArray(["spear"]):
 		failures.append("HostSettings did not tolerate wrong-typed values")
 	var sfx_path: String = tmp.path_join("sfx.cfg")
 	var scfg := ConfigFile.new()
@@ -41012,10 +41199,11 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool, modi
 	rm.game_mode = GameModesType.SOCCER if soccer else GameModesType.CAPTURE_THE_FLAG
 	rm.forced_modifier = modifier
 	var switched_off: Array[String] = []
+	var mode_key: String = String(rm.game_mode)
 	if only_first:
 		for path: String in paths.slice(1):
 			var stage_name: String = path.get_file().get_basename()
-			if settings.set_stage_enabled(stage_name, false):
+			if settings.set_stage_enabled_for(mode_key, stage_name, false):
 				switched_off.append(stage_name)
 	roster.teams_on = true
 	roster.team_picks = {0: 0, 1: 1}
@@ -41072,7 +41260,7 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool, modi
 		if rm._match_stages.size() != 3:
 			failures.append("telemetry holds %d stages, expected 3: %s" % [rm._match_stages.size(), rm._match_stages])
 	for stage_name: String in switched_off:
-		settings.set_stage_enabled(stage_name, true)
+		settings.set_stage_enabled_for(mode_key, stage_name, true)
 	settings.set_soccer_goals(old_goals)
 	settings.set_ctf_captures(old_captures)
 	await _teardown(loop["stage"])

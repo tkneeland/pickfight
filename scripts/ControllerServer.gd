@@ -1511,6 +1511,11 @@ func _handle_text(slot: int, text: String) -> void:
 					apply_host_command("stock_time", msg.get("time"))
 				if msg.get("stage") is String:
 					apply_host_command("stock_stage", msg.get("stage"))
+		"stage_mode_toggle", "stage_mode_all":
+			if slot == host_slot():
+				var body: Dictionary = msg.duplicate()
+				body.erase("t")
+				apply_host_command(str(msg.get("t")), body)
 		"pong":
 			_on_pong(slot, msg)
 		"team":
@@ -2159,6 +2164,21 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 				settings.set_stock_lives(int(arg))
 				return true
 			return settings.set_stock_time_limit(int(arg))
+		"stage_mode_toggle":
+			if not arg is Dictionary or not MODE_PHASES.has(phase):
+				return false
+			var toggle: Dictionary = arg
+			if not (toggle.get("mode") is String and toggle.get("stage") is String and toggle.get("on") is bool):
+				return false
+			return HostSettingsScript.shared().set_stage_enabled_for(toggle["mode"], toggle["stage"], toggle["on"])
+		"stage_mode_all":
+			if not arg is Dictionary or not MODE_PHASES.has(phase):
+				return false
+			var all_cmd: Dictionary = arg
+			if not (all_cmd.get("mode") is String and all_cmd.get("on") is bool):
+				return false
+			HostSettingsScript.shared().set_all_stages_for(all_cmd["mode"], all_cmd["on"])
+			return true
 		"stock_stage":
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false

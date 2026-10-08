@@ -25,6 +25,11 @@ const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const SETTINGS_PATH: String = "user://audio.cfg"
 const SECTION: String = "host"
+const CLASSIC_ID: String = "classic"
+## The stages only Soccer and Capture the Flag play (#646, #647); every other
+## mode uses the rest.
+const SOCCER_STAGES: PackedStringArray = ["Pitch", "Dunes", "Cage"]
+const CTF_STAGES: PackedStringArray = ["Bastion", "Stronghold"]
 ## Windowed sizes offered. `Vector2i.ZERO` means the project's own window.
 const RESOLUTIONS: Array[Vector2i] = [
 	Vector2i.ZERO,
@@ -40,7 +45,16 @@ var path: String = SETTINGS_PATH
 ## Off for a `-s` run, so a scenario never writes the owner's file.
 var persist: bool = true
 var resolution: Vector2i = Vector2i.ZERO
-var disabled_stages: PackedStringArray = []
+## Stage on/off is per game mode (#647): `{mode id: PackedStringArray of the
+## stages switched off}`. Modes absent here use their default (everything on,
+## except Stock, whose list is `stock_stages_on`). Ids are the `GameModes` ids,
+## with "classic" for the no-mode rotation.
+var disabled_stages_by_mode: Dictionary = {}
+## Stock's stages are a whitelist (#375, #647): empty means the default, the
+## competitive-flagged stages (every stage when none is flagged).
+var stock_stages_on: PackedStringArray = []
+## Stage names flagged competitive, set by `StageRotation` next to `known_stages`.
+var competitive_stages: PackedStringArray = []
 var disabled_weapons: PackedStringArray = []
 ## Rules tab (#378): per game mode ("" is Classic), the round modifiers the host
 ## switched off, as `{mode id: PackedStringArray of modifier ids}`. Empty by
@@ -61,9 +75,6 @@ const STOCK_MAX_LIVES: int = 10
 const STOCK_TIME_LIMITS: Array[int] = [120, 300, 480, 900, 0]
 var stock_lives: int = 3
 var stock_time_limit: int = 480
-## The stage a Stock match is played on (#375): a stage's base name, or ""
-## for Random.
-var stock_stage: String = ""
 ## Match targets for the team modes (#544): goals to win a Soccer round
 ## and captures to win a Capture the Flag round (1-10 each).
 const MIN_MODE_TARGET: int = 1
@@ -102,18 +113,118 @@ static func known_weapons() -> PackedStringArray:
 			names.append(name_of(weapon_path))
 	return names
 
+## The classic list (#294's global switch, kept for old call sites).
 func is_stage_enabled(stage_name: String) -> bool:
-	return not disabled_stages.has(stage_name) and DemoBuildScript.stage_in_slice(stage_name)
+	return is_stage_enabled_for(CLASSIC_ID, stage_name)
+
+static func mode_key(mode_id: String) -> String:
+	return CLASSIC_ID if mode_id == "" else mode_id
+
+## The stages `mode_id` can use (#647): Soccer's pitches, Capture the Flag's
+## halls, or for every other mode the general rotation (known stages minus
+## those five).
+func stages_for_mode(mode_id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var key: String = mode_key(mode_id)
+	for stage_name: String in known_stages:
+		var own: bool = SOCCER_STAGES.has(stage_name) or CTF_STAGES.has(stage_name)
+		var fits: bool = not own
+		if key == "soccer":
+			fits = SOCCER_STAGES.has(stage_name)
+		elif key == "capture_the_flag":
+			fits = CTF_STAGES.has(stage_name)
+		if fits:
+			out.append(stage_name)
+	return out
+
+func _stock_on_list() -> PackedStringArray:
+	var pool := stages_for_mode("stock")
+	var on := PackedStringArray()
+	for stage_name: String in stock_stages_on:
+		if pool.has(stage_name):
+			on.append(stage_name)
+	if not on.is_empty() or not stock_stages_on.is_empty():
+		return on
+	for stage_name: String in pool:
+		if competitive_stages.has(stage_name):
+			on.append(stage_name)
+	return on if not on.is_empty() else pool
+
+func is_stage_enabled_for(mode_id: String, stage_name: String) -> bool:
+	if not DemoBuildScript.stage_in_slice(stage_name) or not stages_for_mode(mode_id).has(stage_name):
+		return false
+	var key: String = mode_key(mode_id)
+	if key == "stock":
+		return _stock_on_list().has(stage_name)
+	return not (disabled_stages_by_mode.get(key, PackedStringArray()) as PackedStringArray).has(stage_name)
+
+## The stages `mode_id` plays, in rotation order. Never empty while the mode has
+## a stage: with all of them off, every stage of that mode.
+func enabled_stages_for(mode_id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	for stage_name: String in stages_for_mode(mode_id):
+		if is_stage_enabled_for(mode_id, stage_name):
+			out.append(stage_name)
+	return out if not out.is_empty() else stages_for_mode(mode_id)
+
+## Returns false (changing nothing) for a stage the mode cannot use, a stage
+## outside the demo's slice switched on, or when this would switch off the
+## mode's last enabled stage.
+func set_stage_enabled_for(mode_id: String, stage_name: String, on: bool) -> bool:
+	var pool := stages_for_mode(mode_id)
+	if not pool.has(stage_name) or (on and not DemoBuildScript.stage_in_slice(stage_name)):
+		return false
+	var key: String = mode_key(mode_id)
+	if key == "stock":
+		var list := _stock_on_list()
+		var index: int = list.find(stage_name)
+		if on and index == -1:
+			list.append(stage_name)
+		elif not on and index != -1:
+			if list.size() == 1:
+				return false
+			list.remove_at(index)
+		stock_stages_on = list
+		save_settings()
+		return true
+	var disabled := PackedStringArray(disabled_stages_by_mode.get(key, PackedStringArray()))
+	if not _set_enabled(disabled, pool, stage_name, on):
+		return false
+	_store_disabled(key, disabled)
+	return true
+
+## Switches every stage of the mode on or off. Off keeps the mode's first
+## stage on: a mode never has none.
+func set_all_stages_for(mode_id: String, on: bool) -> void:
+	var pool := stages_for_mode(mode_id)
+	var key: String = mode_key(mode_id)
+	if key == "stock":
+		var list := PackedStringArray()
+		for stage_name: String in pool:
+			if on and DemoBuildScript.stage_in_slice(stage_name):
+				list.append(stage_name)
+		if not on and not pool.is_empty():
+			list.append(pool[0])
+		stock_stages_on = list
+		save_settings()
+		return
+	var disabled := PackedStringArray()
+	if not on:
+		for i in range(1, pool.size()):
+			disabled.append(pool[i])
+	_store_disabled(key, disabled)
+
+func _store_disabled(key: String, disabled: PackedStringArray) -> void:
+	disabled_stages_by_mode[key] = disabled
+	save_settings()
 
 func is_weapon_enabled(weapon_name: String) -> bool:
 	return not disabled_weapons.has(weapon_name) and DemoBuildScript.weapon_in_slice(weapon_name)
 
-## Returns false (changing nothing) when this would switch off the last
-## enabled stage.
+## The classic list; false (changing nothing) when this would switch off the
+## last enabled stage.
 func set_stage_enabled(stage_name: String, enabled: bool) -> bool:
-	if enabled and not DemoBuildScript.stage_in_slice(stage_name):
-		return false  # outside the demo's slice (#361)
-	return _set_enabled(disabled_stages, known_stages, stage_name, enabled)
+	return set_stage_enabled_for(CLASSIC_ID, stage_name, enabled)
 
 ## Returns false (changing nothing) when this would switch off the last
 ## enabled pickup weapon.
@@ -172,12 +283,12 @@ func set_stock_time_limit(seconds: int) -> bool:
 	save_settings()
 	return true
 
-## Returns false (changing nothing) for a name that is neither "" (Random)
-## nor a known stage.
+## The old single Stock pick (#375): that stage only, or "" for the defaults.
+## Returns false (changing nothing) for a name that is neither "" nor a Stock stage.
 func set_stock_stage(stage_name: String) -> bool:
-	if stage_name != "" and not known_stages.has(stage_name):
+	if stage_name != "" and not stages_for_mode("stock").has(stage_name):
 		return false
-	stock_stage = stage_name
+	stock_stages_on = PackedStringArray([stage_name]) if stage_name != "" else PackedStringArray()
 	save_settings()
 	return true
 
@@ -229,13 +340,33 @@ static func _strings(v: Variant) -> PackedStringArray:
 				out.append(item)
 	return out
 
+## Per-mode stage lists (#647). A file from before them has one global
+## `disabled_stages`, which seeds every general mode's list, and a `stock_stage`
+## pick, which becomes "only that stage on" for Stock.
+func _load_stage_lists(config: ConfigFile) -> void:
+	disabled_stages_by_mode = {}
+	stock_stages_on = PackedStringArray()
+	var stored: Variant = config.get_value(SECTION, "stage_lists", "none")
+	if stored is Dictionary:
+		for mode_id: Variant in stored:
+			disabled_stages_by_mode[str(mode_id)] = _strings(stored[mode_id])
+		stock_stages_on = _strings(config.get_value(SECTION, "stock_stages_on", PackedStringArray()))
+		return
+	var old := _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
+	if not old.is_empty():
+		for mode_id: String in [CLASSIC_ID, "king_of_the_hill", "sudden_death", "hot_potato"]:
+			disabled_stages_by_mode[mode_id] = old.duplicate()
+	var pick: String = str(config.get_value(SECTION, "stock_stage", ""))
+	if pick != "":
+		stock_stages_on = PackedStringArray([pick])
+
 func load_settings() -> void:
 	var config := ConfigFile.new()
 	var err: Error = config.load(path)
 	if err == OK:
 		var size: Variant = config.get_value(SECTION, "resolution", Vector2i.ZERO)
 		resolution = size if size is Vector2i and size.x > 0 and size.y > 0 else Vector2i.ZERO
-		disabled_stages = _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
+		_load_stage_lists(config)
 		disabled_weapons = _strings(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
 		if game_mode != "" and not _game_modes().selectable(game_mode):  # a retired mode (#645)
@@ -258,7 +389,6 @@ func load_settings() -> void:
 		ctf_captures = clampi(int(captures), MIN_MODE_TARGET, MAX_MODE_TARGET) if captures is int else 2
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
 		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
-		stock_stage = str(config.get_value(SECTION, "stock_stage", ""))
 		cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).read_pick(config, SECTION)
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
@@ -272,7 +402,8 @@ func save_settings() -> void:
 		push_warning("HostSettings: not saving: %s would not load (%s)" % [path, error_string(err)])
 		return
 	config.set_value(SECTION, "resolution", resolution)
-	config.set_value(SECTION, "disabled_stages", disabled_stages)
+	config.set_value(SECTION, "stage_lists", disabled_stages_by_mode)
+	config.set_value(SECTION, "stock_stages_on", stock_stages_on)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
 	config.set_value(SECTION, "game_mode", game_mode)
 	config.set_value(SECTION, "disabled_modifiers", disabled_modifiers)
@@ -282,7 +413,6 @@ func save_settings() -> void:
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
 	config.set_value(SECTION, "ctf_captures", ctf_captures)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
-	config.set_value(SECTION, "stock_stage", stock_stage)
 	(load("res://scripts/CosmeticsPicker.gd") as GDScript).write_pick(config, SECTION, cosmetic_pick)
 	err = config.save(path)
 	if err != OK:
