@@ -393,11 +393,19 @@ func _try_start_round() -> void:
 ## caches the new stage's spawn points so `_try_start_round()`'s loop above
 ## can hand them out in roster order. A no-op with an empty `stage_scenes`, leaving
 ## `_stage_spawn_points` as it was.
-func _swap_stage() -> void:
+func _swap_stage(changing: bool = false) -> void:
 	if stage_scenes.is_empty():
 		return
 	var container: Node = get_node_or_null(arena_container_path)
 	if container == null:
+		return
+	_pin_stock_stage()
+	var previous: int = _stage_rotation.stage_index
+	var next_index: int = _stage_rotation.next_stage_index_changing() if changing else _stage_rotation.next_stage_index()
+	_stage_rotation.stage_index = next_index
+	if changing and next_index == previous and _current_stage != null and is_instance_valid(_current_stage):
+		# The only stage on (#646): play carries on in the same instance.
+		_match_stages.append(stage_scenes[next_index].resource_path.get_file().get_basename())
 		return
 	if _current_stage != null:
 		# Out of the tree first: a queued free leaves it there until frame end and
@@ -405,8 +413,6 @@ func _swap_stage() -> void:
 		if _current_stage.get_parent() != null:
 			_current_stage.get_parent().remove_child(_current_stage)
 		_current_stage.queue_free()
-	_pin_stock_stage()
-	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
 	_match_stages.append(stage_scenes[_stage_rotation.stage_index].resource_path.get_file().get_basename())
@@ -419,6 +425,20 @@ func _swap_stage() -> void:
 			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
+
+## Soccer and Capture the Flag (#646): after a score short of the target, play
+## moves to another of the mode's stages that is switched on (never the same
+## one while another is available), with its title card. The round, the score
+## and the players carry on; the mode node re-places everyone. Does nothing
+## outside a running round.
+func change_stage_mid_round() -> void:
+	if _state != State.ROUND_ACTIVE:
+		return
+	_stage_rotation.round_player_count = _roster().size()
+	_stage_rotation.mode_id = game_mode
+	_swap_stage(true)
+	_pickup_director.start()
+	_show_stage_title()
 
 # --- Night stages (issue #332) -------------------------------------------------
 #
@@ -1289,7 +1309,8 @@ func _clear_stage() -> void:
 func _begin_match() -> void:
 	# Stock is one round and done (#644): the first win is the match, whatever
 	# "first to N" the host left set for the round modes.
-	_match_target = 1 if game_mode == GameModesScript.STOCK else _requested_target()
+	# Soccer's goals and CTF's captures are the match too (#646).
+	_match_target = 1 if GameModesScript.one_round_match(game_mode) else _requested_target()
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
 	_match_winner_slot = -1

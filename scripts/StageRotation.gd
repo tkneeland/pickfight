@@ -196,6 +196,25 @@ func next_stage_index() -> int:
 			break
 	return index
 
+## The next stage for a mid-round change (Soccer and CTF, #646): like
+## `next_stage_index()`, but never the stage in play while another is allowed.
+## A weighted bag (#373) can deal the same stage twice running, so it keeps
+## drawing until it differs; with only one allowed stage it stays on it.
+func next_stage_index_changing() -> int:
+	var current: int = stage_index
+	var other_allowed: bool = false
+	for i in scenes.size():
+		if i != current and stage_allowed(i):
+			other_allowed = true
+	var index: int = next_stage_index()
+	if not other_allowed:
+		return index
+	for _attempt in 4 * scenes.size() + 4:
+		if index != current:
+			break
+		index = next_stage_index()
+	return index
+
 ## Builds a fresh shuffled bag (one Fisher-Yates pass over `rng`, never the
 ## global RNG or `Array.shuffle()`, which draws from it) covering every index
 ## into `scenes`, then fixes up a bag that would repeat `avoid` back to

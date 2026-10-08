@@ -238,3 +238,10 @@ static func create(id: String) -> Node:
 		CAPTURE_THE_FLAG:
 			return CaptureTheFlagScript.new()
 	return null
+
+## Whether the mode's own target is the whole match (#644, #646): Stock's one
+## round, Soccer's goals and Capture the Flag's captures. The match is one
+## round, so the round target is 1; Soccer and CTF move to another stage
+## after each score short of it.
+static func one_round_match(mode_id: String) -> bool:
+	return mode_id == STOCK or mode_id == SOCCER or mode_id == CAPTURE_THE_FLAG

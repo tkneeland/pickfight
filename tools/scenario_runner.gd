@@ -526,6 +526,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_timeout_most_lives_wins_tie_overtime",
 	"stock_lives_shown_as_pips_and_on_phone",
 	"stock_match_is_one_round_then_the_podium_644",
+	"soccer_goals_are_the_match_and_each_goal_changes_pitch_646",
+	"soccer_with_one_pitch_on_stays_on_it_646",
+	"ctf_captures_are_the_match_and_each_capture_changes_hall_646",
+	"ctf_with_one_hall_on_stays_in_it_646",
 	"bot_king_of_the_hill_heads_for_the_hill",
 	"bot_king_of_the_hill_fights_whoever_holds_it",
 	"bot_hot_potato_it_chases_the_nearest_rival",
@@ -2274,6 +2278,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_lives_shown_as_pips_and_on_phone()
 		"stock_match_is_one_round_then_the_podium_644":
 			return await _scenario_stock_match_is_one_round_then_the_podium_644()
+		"soccer_goals_are_the_match_and_each_goal_changes_pitch_646":
+			return await _score_match_run(true, SOCCER_PITCH_PATHS, false)
+		"soccer_with_one_pitch_on_stays_on_it_646":
+			return await _score_match_run(true, SOCCER_PITCH_PATHS, true)
+		"ctf_captures_are_the_match_and_each_capture_changes_hall_646":
+			return await _score_match_run(false, CTF_HALL_PATHS, false)
+		"ctf_with_one_hall_on_stays_in_it_646":
+			return await _score_match_run(false, CTF_HALL_PATHS, true)
 		"bot_king_of_the_hill_heads_for_the_hill":
 			return await _scenario_bot_king_of_the_hill_heads_for_the_hill()
 		"bot_king_of_the_hill_fights_whoever_holds_it":
@@ -32048,6 +32060,7 @@ func _scenario_ctf_a_capture_scores_and_resets_the_flag() -> Array[String]:
 	var mode: Node = await _ctf_start(rig, failures)
 	if mode == null:
 		return failures
+	mode.capture_pause_sec = 0.0  # no stage change between these captures (#646)
 	var stage: Node2D = rig["rm"]._current_stage
 	var red: RigidBody2D = rig["players"][0]
 	var blue: RigidBody2D = rig["players"][1]
@@ -32088,6 +32101,7 @@ func _scenario_ctf_two_captures_end_the_round() -> Array[String]:
 	var mode: Node = await _ctf_start(rig, failures)
 	if mode == null:
 		return failures
+	mode.capture_pause_sec = 0.0  # no stage change between these captures (#646)
 	if mode.captures_to_win != HostSettingsScript352.shared().ctf_captures:
 		failures.append("the round is first to %d, wanted the setting %d" % [mode.captures_to_win, HostSettingsScript352.shared().ctf_captures])
 	var stage: Node2D = rm._current_stage
@@ -40563,4 +40577,91 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 	elif walk["close_at"] >= 0 and zip["close_at"] >= walk["close_at"]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
 	_scenario_completed = true
+	return failures
+
+## Soccer and Capture the Flag (#646): the mode's target is the whole match.
+const SOCCER_PITCH_PATHS: Array[String] = [
+	"res://scenes/stages/Pitch.tscn", "res://scenes/stages/Dunes.tscn", "res://scenes/stages/Cage.tscn"]
+const CTF_HALL_PATHS: Array[String] = [
+	"res://scenes/stages/Bastion.tscn", "res://scenes/stages/Stronghold.tscn"]
+## A Teams lobby match of `soccer` (else Capture the Flag) to 3 on `paths`,
+## Red scoring every time: the stage changes after scores 1 and 2 (or stays
+## on the one stage left on with `only_first`), the third goes to the podium
+## with Red the winner, and one round is recorded.
+func _score_match_run(soccer: bool, paths: Array[String], only_first: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = HostSettingsScript352.shared()
+	var old_goals: int = settings.soccer_goals
+	var old_captures: int = settings.ctf_captures
+	settings.set_soccer_goals(3)
+	settings.set_ctf_captures(3)
+	var loop: Dictionary = _new_lobby_round(5)
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var scenes: Array[PackedScene] = []
+	for path: String in paths:
+		scenes.append(load(path))
+	rm.stage_scenes = scenes
+	rm.game_mode = GameModesType.SOCCER if soccer else GameModesType.CAPTURE_THE_FLAG
+	var switched_off: Array[String] = []
+	if only_first:
+		for path: String in paths.slice(1):
+			var stage_name: String = path.get_file().get_basename()
+			if settings.set_stage_enabled(stage_name, false):
+				switched_off.append(stage_name)
+	roster.teams_on = true
+	roster.team_picks = {0: 0, 1: 1}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	var players: Array[RigidBody2D] = loop["players"]
+	if not await _await_condition(func() -> bool: return rm.game_mode_node() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+	else:
+		var mode: Node = rm.game_mode_node()
+		if soccer:
+			mode.goal_pause_sec = 0.1
+		else:
+			mode.capture_pause_sec = 0.1
+		for n in 2:
+			if soccer:
+				mode.score_goal(0)
+			else:
+				mode.take_flag(1, 0)
+				mode.capture(0, 0)
+			var changed: bool = await _await_condition(func() -> bool: return rm._match_stages.size() == n + 2, 3000)
+			if not changed:
+				failures.append("no new kick-off after score %d" % (n + 1))
+				break
+			if rm.lobby_phase() != "playing":
+				failures.append("the match left play after score %d (phase '%s')" % [n + 1, rm.lobby_phase()])
+			await _await_ticks(3)
+		var played: Array = rm._match_stages.duplicate()
+		for i in range(1, played.size()):
+			if only_first and played[i] != played[0]:
+				failures.append("moved to %s with only %s on" % [played[i], played[0]])
+			if not only_first and played[i] == played[i - 1]:
+				failures.append("score %d stayed on %s" % [i, played[i]])
+		if rm.team_score(0) != 0 or rm.lobby_phase() == "victory":
+			failures.append("the match ended before the third score")
+		var mode_node: Node = rm.game_mode_node()
+		if mode_node != null and int(mode_node.scores[0]) != 2:
+			failures.append("the score did not carry over: %s" % [mode_node.scores])
+		if soccer:
+			mode.score_goal(0)
+		else:
+			mode.take_flag(1, 0)
+			mode.capture(0, 0)
+		if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("the third score did not reach the podium (phase '%s')" % rm.lobby_phase())
+		elif rm.match_winner_team() != 0:
+			failures.append("the podium team was %d, expected 0" % rm.match_winner_team())
+		if rm._round_number != 1:
+			failures.append("%d rounds were played, expected exactly 1" % rm._round_number)
+		if rm._match_stages.size() != 3:
+			failures.append("telemetry holds %d stages, expected 3: %s" % [rm._match_stages.size(), rm._match_stages])
+	for stage_name: String in switched_off:
+		settings.set_stage_enabled(stage_name, true)
+	settings.set_soccer_goals(old_goals)
+	settings.set_ctf_captures(old_captures)
+	await _teardown(loop["stage"])
 	return failures

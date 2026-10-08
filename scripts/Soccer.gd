@@ -3,8 +3,10 @@ extends Node
 ## Soccer (issue #402): a Teams-only mode. One physics ball sits at the centre
 ## of a pitch with a goal at each end, one per team; players bat it with their
 ## weapon heads and bodies. The first team to `goals_to_win` goals takes the
-## round. After a goal there is a short pause with a "GOAL!" callout, then the
-## ball and the players go back to their kick-off places.
+## match (#646: the goals are the match target, no rounds on top). After a goal
+## there is a short pause with a "GOAL!" callout, then play moves to another
+## pitch that is switched on and the ball and the players go to their kick-off
+## places.
 ##
 ## Team 0 (Red) defends `Goal0`, team 1 (Blue) defends `Goal1`: a ball in a
 ## team's goal is a point for the other team. A knocked-out player comes back
@@ -320,6 +322,8 @@ func is_won() -> bool:
 
 func _kick_off() -> void:
 	_show_goal(false)
+	# A different pitch for the next kick-off (#646), then its title card.
+	round_manager.change_stage_mid_round()
 	_place_ball()
 	_place_players()
 
