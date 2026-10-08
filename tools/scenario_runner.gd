@@ -30160,7 +30160,7 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
 		failures.append("the settings lost stages with the demo off")
 	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size() \
-			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
+			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size():
 		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
 	if GameModesScript361.picker_rows().size() != GameModesScript361.TABLE.size() or not GameModesScript361.is_valid("stock"):
 		failures.append("the mode picker lost modes with the demo off")
