@@ -19,7 +19,7 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/flail.tres",
 	"res://resources/boomerang.tres",
 	"res://resources/spear.tres",  # retired from rotation, see RETIRED_PATHS
-	"res://resources/pogo.tres",
+	"res://resources/pogo.tres",  # retired from rotation, see RETIRED_PATHS
 	"res://resources/fishing_rod.tres",
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
@@ -31,6 +31,7 @@ const WEAPON_PATHS: PackedStringArray = [
 ## rotation (#642); delete its line here to bring it back.
 const RETIRED_PATHS: PackedStringArray = [
 	"res://resources/spear.tres",
+	"res://resources/pogo.tres",
 ]
 
 ## The weapons as `available_weapons()` first loaded them, held for the
