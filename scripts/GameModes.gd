@@ -34,6 +34,10 @@ const CLASSIC: String = ""
 ## - no_modifiers: optional; true means no modifier is ever rolled (Stock, #375).
 ## - ffa_only: not playable in the Teams format.
 ## - teams_only: optional; true means playable only in the Teams format (Soccer, #402).
+## - retired: optional; true keeps the row (so a forced round, its cards and
+##   its translations still work) but takes the mode out of every picker and
+##   makes `selectable` false, so a saved choice of it loads as Classic (Hot
+##   Potato, #645).
 ## - own_stages: optional; true means the mode is dealt only the stages whose
 ##   `mode_weights` name it (`StageRotation`): elsewhere there is no goal or
 ##   base, and nothing could end the round (Soccer, Capture the Flag).
@@ -53,7 +57,7 @@ const TABLE: Array[Dictionary] = [
 		"id": HOT_POTATO, "name": "Hot Potato",
 		"rule": "Do not hold the tag when the fuse ends.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
-		"banned": ["weapon_roulette"], "ffa_only": true,
+		"banned": ["weapon_roulette"], "ffa_only": true, "retired": true,
 	},
 	{
 		"id": SUDDEN_DEATH, "name": "Sudden Death",
@@ -91,6 +95,10 @@ static func entry(id: String) -> Dictionary:
 ## Whether `id` is a pickable mode (Classic included).
 static func is_valid(id: String) -> bool:
 	return not entry(id).is_empty() and DemoBuildScript.mode_in_slice(id)
+
+## Whether the host can pick `id` (Classic included): valid and not retired.
+static func selectable(id: String) -> bool:
+	return is_valid(id) and not bool(entry(id).get("retired", false))
 
 static func display_name(id: String) -> String:
 	return TranslationServer.translate("MODE_%s_NAME" % (id if id != CLASSIC else "classic").to_upper())
@@ -208,7 +216,7 @@ static func bans_modifier(id: String, modifier_id: String) -> bool:
 static func picker_rows() -> Array:
 	var rows: Array = []
 	for row: Dictionary in TABLE:
-		if not DemoBuildScript.mode_in_slice(row["id"]):  # the demo's slice (#361)
+		if not DemoBuildScript.mode_in_slice(row["id"]) or bool(row.get("retired", false)):  # the demo's slice (#361)
 			continue
 		rows.append({"id": row["id"], "name": row["name"], "ffa_only": row["ffa_only"], "teams_only": bool(row.get("teams_only", false))})
 	return rows
@@ -238,3 +246,10 @@ static func create(id: String) -> Node:
 		CAPTURE_THE_FLAG:
 			return CaptureTheFlagScript.new()
 	return null
+
+## Whether the mode's own target is the whole match (#644, #646): Stock's one
+## round, Soccer's goals and Capture the Flag's captures. The match is one
+## round, so the round target is 1; Soccer and CTF move to another stage
+## after each score short of it.
+static func one_round_match(mode_id: String) -> bool:
+	return mode_id == STOCK or mode_id == SOCCER or mode_id == CAPTURE_THE_FLAG

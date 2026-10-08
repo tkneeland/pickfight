@@ -254,6 +254,17 @@ class RoundModifier extends RefCounted:
 	func is_applied() -> bool:
 		return _applied
 
+	## The round's stage was swapped mid-round (#646): re-attach to the new one.
+	## The old stage is already gone; stage-attached modifiers override `_restage`.
+	func restage(stage: Node) -> void:
+		if not _applied:
+			return
+		_stage = stage
+		_restage()
+
+	func _restage() -> void:
+		pass
+
 	## The random numbers a modifier draws with (issue #162): the round
 	## manager's own modifier RNG (`RoundManager.modifier_rng()`, seeded from
 	## `modifier_seed` when set, otherwise the match seed's "modifiers"
@@ -614,6 +625,13 @@ class DoubleDamage extends WeaponStatsModifier:
 
 	func _apply() -> void:
 		super()
+		_double_rocks()
+
+	func _restage() -> void:
+		_rocks.clear() # the old stage's rocks went with it
+		_double_rocks()
+
+	func _double_rocks() -> void:
 		if _stage == null:
 			return
 		for node: Node in _stage.find_children("*", "Node2D", true, false):
@@ -639,6 +657,13 @@ class Gale extends RoundModifier:
 	var _gust: Node2D = null
 
 	func _apply() -> void:
+		_attach_gust()
+
+	func _restage() -> void:
+		_undo()
+		_attach_gust()
+
+	func _attach_gust() -> void:
 		if _stage == null or not is_instance_valid(_stage) or not _stage is Node2D:
 			return
 		var center: Vector2 = (_stage as Node2D).global_position

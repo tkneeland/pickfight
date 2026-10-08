@@ -396,11 +396,19 @@ func _try_start_round() -> void:
 ## caches the new stage's spawn points so `_try_start_round()`'s loop above
 ## can hand them out in roster order. A no-op with an empty `stage_scenes`, leaving
 ## `_stage_spawn_points` as it was.
-func _swap_stage() -> void:
+func _swap_stage(changing: bool = false) -> void:
 	if stage_scenes.is_empty():
 		return
 	var container: Node = get_node_or_null(arena_container_path)
 	if container == null:
+		return
+	_pin_stock_stage()
+	var previous: int = _stage_rotation.stage_index
+	var next_index: int = _stage_rotation.next_stage_index_changing() if changing else _stage_rotation.next_stage_index()
+	_stage_rotation.stage_index = next_index
+	if changing and next_index == previous and _current_stage != null and is_instance_valid(_current_stage):
+		# The only stage on (#646): play carries on in the same instance.
+		_match_stages.append(stage_scenes[next_index].resource_path.get_file().get_basename())
 		return
 	if _current_stage != null:
 		# Out of the tree first: a queued free leaves it there until frame end and
@@ -408,8 +416,6 @@ func _swap_stage() -> void:
 		if _current_stage.get_parent() != null:
 			_current_stage.get_parent().remove_child(_current_stage)
 		_current_stage.queue_free()
-	_pin_stock_stage()
-	_stage_rotation.stage_index = _stage_rotation.next_stage_index()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
 	_match_stages.append(stage_scenes[_stage_rotation.stage_index].resource_path.get_file().get_basename())
@@ -422,6 +428,23 @@ func _swap_stage() -> void:
 			player.set_ink(ink)
 	_stage_spawn_points = _current_stage.get_spawn_points()
 	_fit_camera_to_stage()
+
+## Soccer and Capture the Flag (#646): after a score short of the target, play
+## moves to another of the mode's stages that is switched on (never the same
+## one while another is available), with its title card. The round, the score
+## and the players carry on; the mode node re-places everyone. Does nothing
+## outside a running round.
+func change_stage_mid_round() -> void:
+	if _state != State.ROUND_ACTIVE:
+		return
+	_stage_rotation.round_player_count = _roster().size()
+	_stage_rotation.mode_id = game_mode
+	var before: Node = _current_stage
+	_swap_stage(true)
+	if _modifier != null and _current_stage != before:
+		_modifier.restage(_current_stage) # stage-attached modifiers follow (#646)
+	_pickup_director.start()
+	_show_stage_title()
 
 # --- Night stages (issue #332) -------------------------------------------------
 #
@@ -1178,6 +1201,7 @@ func _play_lobby_music() -> void:
 		music.play_lobby()
 
 func _enter_lobby() -> void:
+	_abandon_match()
 	_end_final_ko()
 	_play_lobby_music()
 	_state = State.LOBBY
@@ -1278,6 +1302,7 @@ func _enter_victory() -> void:
 		victory_feed.clear_banners() # nothing queued from the last round over victory (#613)
 	_write_balance_log()
 	send_telemetry()
+	_match_live = false
 	_send_career_match()
 	_play_lobby_music()
 	_state = State.VICTORY
@@ -1308,12 +1333,17 @@ func _clear_stage() -> void:
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
 ## victory screen's Continue needs tapping afresh), and the first round.
 func _begin_match() -> void:
-	_match_target = _requested_target()
+	# Stock is one round and done (#644): the first win is the match, whatever
+	# "first to N" the host left set for the round modes.
+	# Soccer's goals and CTF's captures are the match too (#646).
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
+	_rounds_finished = 0
+	_match_live = true
 	_match_winner_slot = -1
 	_last_winner_slot = -1
-	_begin_team_match()
+	_begin_team_match() # latches the mode, so the target reads the right one
+	_match_target = 1 if GameModesScript.one_round_match(game_mode) else _requested_target()
 	for slot in _scores.size():
 		_scores[slot] = 0
 	# A fresh seed for a fresh match (#187), before anything draws from it.
@@ -1960,41 +1990,87 @@ var _match_started_msec: int = 0
 ## Where the record goes; empty means the game's configured relay.
 var telemetry_relay_url: String = ""
 
+## Rounds finished this match, and whether its record has gone out already, so
+## an abandon (#643) reports a match once and only after a round was played.
+var _rounds_finished: int = 0
+var _match_live: bool = false
+## An abandoned match reports with no round finished once it has been live this
+## long (Stock, Soccer and CTF are one round, #643).
+const ABANDON_MIN_PLAY_SEC: int = 60
+## When valid, the record goes here instead of the network, and the scripted-run
+## gate is skipped (the sharing toggle and the notice still apply). Scenarios
+## use it to observe what would be sent; nothing leaves the process.
+var telemetry_sink: Callable = Callable()
+
 ## Sends this match's anonymous record to the relay (issue #372), fire and
 ## forget. Returns whether a send started: false with sharing off, in a scripted
-## or `--bots` run, or when no real player landed a damaging hit.
-func send_telemetry() -> bool:
+## or `--bots` run, or when no real player landed a damaging hit. `completed`
+## false marks a match that ended without a winner (#643): no winner weapon, and
+## the rounds played so far.
+func send_telemetry(completed: bool = true) -> bool:
 	var host: RefCounted = HostSettingsScript.shared()
-	if not StatsSenderScript.should_send(host, StatsSenderScript.is_scripted(get_tree(), PackedStringArray()), OS.get_cmdline_user_args()):
+	var scripted: bool = StatsSenderScript.is_scripted(get_tree(), PackedStringArray())
+	if telemetry_sink.is_valid():
+		scripted = false
+	if not StatsSenderScript.should_send(host, scripted, OS.get_cmdline_user_args()):
 		return false
 	var winners: Array = []
-	if _team_mode:
+	if not completed:
+		pass
+	elif _team_mode:
 		for slot: int in _teams:
 			if int(_teams[slot]) == _match_winner_team:
 				winners.append(slot)
 	elif _match_winner_slot != -1:
 		winners.append(_match_winner_slot)
 	var length_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
-	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners)
+	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished)
 	if record.is_empty():
 		return false
+	if telemetry_sink.is_valid():
+		telemetry_sink.call(record)
+		return true
 	var url: String = telemetry_relay_url
 	if url.is_empty():
 		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
 	var sender: Node = StatsSenderScript.new()
+	sender.process_mode = Node.PROCESS_MODE_ALWAYS # a paused quit still sends
 	sender.finished.connect(func(_status: int) -> void: sender.queue_free())
 	add_child(sender)
 	sender.send(record, url)
 	return true
 
+## A match that ends without a winner (the host returns to the lobby mid-match,
+## or the app quits) reports its partial numbers once, if a round finished (#643).
+func _abandon_match() -> void:
+	if not _match_live:
+		return
+	_match_live = false
+	if _match_winner_slot != -1 or _match_winner_team != -1:
+		# Decided but not yet on the victory screen: a completed match.
+		_write_balance_log()
+		send_telemetry()
+		return
+	var played_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
+	if _rounds_finished < 1 and played_sec < ABANDON_MIN_PLAY_SEC:
+		return
+	_write_balance_log(false)
+	send_telemetry(false)
+
+## Quitting mid-match sends the partial record; `Music._quit_cleanly` waits a
+## moment for the sender before it quits.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_abandon_match()
+
 ## Where the per-match balance tallies are appended (issue #316).
 var balance_log_path: String = "user://balance_stats.jsonl"
 
 ## The local balance log, only with stats sharing on (#609).
-func _write_balance_log() -> bool:
+func _write_balance_log(completed: bool = true) -> bool:
 	if not HostSettingsScript.shared().share_stats:
 		return false
-	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
+	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system()), completed, _rounds_finished))
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	var victim_slot: int = _players.find(victim)
@@ -2092,6 +2168,7 @@ func _ko_round_started() -> void:
 ## A round won by the last of three or more is a big moment; one of two
 ## winning speaks for itself on the scoreboard.
 func _ko_round_ended(winner_slot: int) -> void:
+	_rounds_finished += 1
 	_stats.end_round(GameClockScript.now_msec())
 	var feed: Control = kill_feed()
 	if _team_mode:

@@ -9,7 +9,7 @@ extends Node
 ## to `captures_to_win` captures takes the round.
 ##
 ## Team 0 (Red) owns flag 0 and defends base 0, team 1 (Blue) likewise. A
-## knocked-out player comes back after about 1.5 s through the same respawn
+## knocked-out player comes back after `RESPAWN_SEC` (4 s, #648) through the same respawn
 ## Stock and Soccer use (`Respawn.gd`); they still count as standing
 ## (`is_pending`), so the round goes on.
 ##
@@ -50,7 +50,11 @@ const FLAG_COLOURS: Array[Color] = [Color(1.0, 0.3, 0.3), Color(0.35, 0.55, 1.0)
 var captures_to_win: int = 2
 ## Seconds a dropped flag lies before it returns by itself.
 var return_sec: float = 10.0
-var respawn_sec: float = 1.5
+## How long a knocked-out player waits before coming back (#648), as Soccer's.
+const RESPAWN_SEC: float = 4.0
+var respawn_sec: float = RESPAWN_SEC
+## Seconds between a capture short of the target and the next hall (#646).
+var capture_pause_sec: float = 1.5
 
 var round_manager: Node
 ## team -> captures this round.
@@ -71,6 +75,8 @@ var _handlers: Dictionary = {}
 var _respawner: RefCounted
 var _active: bool = false
 var _finished: bool = false
+var _pause_left: float = 0.0
+var _pausing: bool = false
 ## slot -> the carrier's `damage` when last looked at; any rise is a hit.
 var _damage_seen: Dictionary = {}
 ## slot -> seconds before that player may pick a flag up again.
@@ -96,6 +102,8 @@ func start_round(slots: Array[int]) -> void:
 	_damage_seen.clear()
 	_lockout.clear()
 	_finished = false
+	_pause_left = 0.0
+	_pausing = false
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.team_of = team_of
 	_respawner.centre_x = func() -> float: return (home_position(0).x + home_position(1).x) * 0.5
@@ -209,6 +217,12 @@ func _physics_process(delta: float) -> void:
 		return
 	_respawner.tick(delta)
 	if _finished:
+		return
+	if _pausing:
+		_pause_left -= delta
+		if _pause_left <= 0.0:
+			_pausing = false
+			_next_hall()
 		return
 	for slot: int in _lockout.keys():
 		_lockout[slot] = float(_lockout[slot]) - delta
@@ -341,6 +355,23 @@ func capture(team: int, slot: int) -> void:
 	_update_hud()
 	if int(scores[team]) >= captures_to_win:
 		_win(team)
+		return
+	_pause_left = capture_pause_sec
+	_pausing = true
+
+## After a capture short of the target (#646): another hall that is switched on,
+## flags home, everyone back on their own side.
+func _next_hall() -> void:
+	round_manager.change_stage_mid_round()
+	_damage_seen.clear()
+	_lockout.clear()
+	state = {0: HOME, 1: HOME}
+	carrier = {0: -1, 1: -1}
+	return_left = {0: 0.0, 1: 0.0}
+	for team: int in [0, 1]:
+		flag_position[team] = home_position(team)
+	_place_players()
+	_refresh_flags()
 
 ## The nearest walkable surface below `from`, or Vector2.INF with none (a
 ## flag lost down a pit or off the stage).

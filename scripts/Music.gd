@@ -88,6 +88,8 @@ const RELEASE_SEC: float = 1.0
 ## How long closing the game window waits for the same. The server frees a
 ## stopped playback within a few frames.
 const QUIT_RELEASE_SEC: float = 0.25
+## The longest quitting waits for the anonymous match record to go out.
+const QUIT_TELEMETRY_WAIT_MSEC: int = 2000
 ## How many frames after the game's scene is up the lobby track starts. A
 ## boot that quits on its first frame (the boot check's `--quit`) then never
 ## starts a track, so it leaves none for the audio server to free after exit.
@@ -162,7 +164,17 @@ func _quit_cleanly() -> void:
 	if sfx != null:
 		sfx.stop_all()
 	await release(QUIT_RELEASE_SEC)
+	# A match abandoned by quitting (#643) gets a moment to send its record.
+	var give_up_msec: int = Time.get_ticks_msec() + QUIT_TELEMETRY_WAIT_MSEC
+	while Time.get_ticks_msec() < give_up_msec and _telemetry_busy():
+		await get_tree().process_frame
 	get_tree().quit()
+
+func _telemetry_busy() -> bool:
+	for sender: Node in get_tree().get_nodes_in_group("telemetry_sender"):
+		if sender.has_method("is_busy") and sender.is_busy():
+			return true
+	return false
 
 func _process(delta: float) -> void:
 	_step_duck(delta)

@@ -3,12 +3,14 @@ extends Node
 ## Soccer (issue #402): a Teams-only mode. One physics ball sits at the centre
 ## of a pitch with a goal at each end, one per team; players bat it with their
 ## weapon heads and bodies. The first team to `goals_to_win` goals takes the
-## round. After a goal there is a short pause with a "GOAL!" callout, then the
-## ball and the players go back to their kick-off places.
+## match (#646: the goals are the match target, no rounds on top). After a goal
+## there is a short pause with a "GOAL!" callout, then play moves to another
+## pitch that is switched on and the ball and the players go to their kick-off
+## places.
 ##
 ## Team 0 (Red) defends `Goal0`, team 1 (Blue) defends `Goal1`: a ball in a
 ## team's goal is a point for the other team. A knocked-out player comes back
-## after about 1.5 s through the same respawn Stock uses (`Respawn.gd`), so
+## after `RESPAWN_SEC` (4 s, the team that got the KO has the edge) through the same respawn Stock uses (`Respawn.gd`), so
 ## nobody sits out; they still count as standing (`is_pending`) so the round
 ## goes on.
 ##
@@ -26,11 +28,14 @@ signal callout(sound: StringName)
 ## A goal was scored by `team`; `scorer` is the player slot credited, or -1.
 signal goal_scored(team: int, scorer: int)
 
+## How long a knocked-out player waits before coming back (#648). Longer than
+## Stock's 1.5 s (Capture the Flag waits 4 s too); tune it here.
+const RESPAWN_SEC: float = 4.0
 const BALL_RADIUS: float = 28.0
 ## How close a player's body or weapon head must be to the ball to count as
 ## the last one to touch it.
 const TOUCH_RADIUS: float = 80.0
-const BALL_MAX_SPEED: float = 1800.0
+const BALL_MAX_SPEED: float = 2400.0
 ## How far outside the stage's view the ball may be before it is put back.
 const OUT_OF_PLAY_MARGIN: float = 200.0
 const SCORE_SPACING: Vector2 = Vector2(48.0, -24.0)
@@ -38,7 +43,7 @@ const SCORE_SPACING: Vector2 = Vector2(48.0, -24.0)
 var goals_to_win: int = 3
 ## Seconds between a goal and the kick-off.
 var goal_pause_sec: float = 1.5
-var respawn_sec: float = 1.5
+var respawn_sec: float = RESPAWN_SEC
 
 var round_manager: Node
 ## team -> goals this round.
@@ -74,6 +79,7 @@ func start_round(slots: Array[int]) -> void:
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.team_of = team_of
 	_respawner.centre_x = func() -> float: return _ball_spawn().x
+	_respawner.avoid_rects = func() -> Array: return [_goal_rect(0), _goal_rect(1)]
 	for slot: int in slots:
 		if slot < 0 or slot >= round_manager._players.size():
 			continue
@@ -176,7 +182,7 @@ func _build_ball() -> void:
 	ball.collision_layer = 3
 	ball.collision_mask = 3
 	ball.continuous_cd = RigidBody2D.CCD_MODE_CAST_RAY
-	ball.mass = 1.0
+	ball.mass = 0.35
 	ball.linear_damp = 0.1
 	ball.angular_damp = 0.6
 	var material := PhysicsMaterial.new()
@@ -227,7 +233,7 @@ func _place_players() -> void:
 	for team: int in by_team.keys():
 		var mine: Array[Vector2] = []
 		for point: Vector2 in points:
-			if (point.x < centre_x) == (team == 0):
+			if (point.x < centre_x) == (team == 0) and not _in_a_goal(point):
 				mine.append(point)
 		mine.sort_custom(func(a: Vector2, b: Vector2) -> bool:
 			return a.x < b.x if team == 0 else a.x > b.x)
@@ -243,6 +249,10 @@ func _place_players() -> void:
 				spot = mine[index % mine.size()] + SCORE_SPACING * float(lap)
 			player.start_round(spot, true)
 			index += 1
+
+## Whether `point` lies inside either goal (#648): no one is placed there.
+func _in_a_goal(point: Vector2) -> bool:
+	return _goal_rect(0).has_point(point) or _goal_rect(1).has_point(point)
 
 # --- Play ----------------------------------------------------------------------
 
@@ -320,6 +330,8 @@ func is_won() -> bool:
 
 func _kick_off() -> void:
 	_show_goal(false)
+	# A different pitch for the next kick-off (#646), then its title card.
+	round_manager.change_stage_mid_round()
 	_place_ball()
 	_place_players()
 

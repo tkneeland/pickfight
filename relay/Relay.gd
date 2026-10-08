@@ -117,6 +117,7 @@ const STATS_MAX_STAGES: int = 60
 const STATS_MAX_WEAPONS: int = 40
 const STATS_MAX_NAME_CHARS: int = 40
 const STATS_MAX_LENGTH_SEC: int = 86400
+const STATS_MAX_ROUNDS: int = 1000
 ## Records allowed per IP per hour.
 @export var stats_limit_per_hour: int = 30
 ## Where records are appended. Set PICKFIGHT_STATS_PATH to a file on a mounted
@@ -393,14 +394,25 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 	var winner: Variant = rec.get("winner_weapon", "")
 	if not (winner is String) or (winner as String).length() > STATS_MAX_NAME_CHARS:
 		return {}
-	return {
+	var completed: Variant = rec.get("completed", true) # an older host sends no flag: a finished match
+	if not (completed is bool):
+		return {}
+	var cleaned: Dictionary = {
 		"mode": clean_feedback_text(rec["mode"], STATS_MAX_NAME_CHARS, false),
 		"format": rec["format"],
 		"length_sec": int(length),
 		"stages": stages,
-		"winner_weapon": clean_feedback_text(winner, STATS_MAX_NAME_CHARS, false),
+		"completed": completed,
 		"weapons": weapons,
 	}
+	if completed:
+		cleaned["winner_weapon"] = clean_feedback_text(winner, STATS_MAX_NAME_CHARS, false) # an abandoned match has no winner (#643)
+	if rec.has("rounds_played"):
+		var rounds: Variant = rec["rounds_played"]
+		if not (rounds is int or (rounds is float and float(rounds) == floorf(float(rounds)))) or float(rounds) < 0.0 or float(rounds) > STATS_MAX_ROUNDS:
+			return {}
+		cleaned["rounds_played"] = int(rounds)
+	return cleaned
 
 static func _append_line(path: String, line: String) -> bool:
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
