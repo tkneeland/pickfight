@@ -18,12 +18,19 @@ const WEAPON_PATHS: PackedStringArray = [
 	"res://resources/grapple.tres",
 	"res://resources/flail.tres",
 	"res://resources/boomerang.tres",
-	"res://resources/spear.tres",
+	"res://resources/spear.tres",  # retired from rotation, see RETIRED_PATHS
 	"res://resources/pogo.tres",
 	"res://resources/fishing_rod.tres",
 	"res://resources/umbrella.tres",
 	"res://resources/magnet.tres",
 	"res://resources/shield.tres",
+]
+
+## Weapons kept in the roster (resource, code, indices) but never handed out
+## by a pickup or the random-weapons playtest list. The spear is retired from
+## rotation (#642); delete its line here to bring it back.
+const RETIRED_PATHS: PackedStringArray = [
+	"res://resources/spear.tres",
 ]
 
 ## The weapons as `available_weapons()` first loaded them, held for the
@@ -44,6 +51,8 @@ static func available_weapons() -> Array[Resource]:
 	if not _loaded_once:
 		_loaded_once = true
 		for path: String in WEAPON_PATHS:
+			if RETIRED_PATHS.has(path):
+				continue
 			if ResourceLoader.exists(path):
 				_loaded.append(load(path))
 	var offered: Array[Resource] = []
