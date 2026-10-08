@@ -35,7 +35,7 @@ const BALL_RADIUS: float = 28.0
 ## How close a player's body or weapon head must be to the ball to count as
 ## the last one to touch it.
 const TOUCH_RADIUS: float = 80.0
-const BALL_MAX_SPEED: float = 1800.0
+const BALL_MAX_SPEED: float = 2400.0
 ## How far outside the stage's view the ball may be before it is put back.
 const OUT_OF_PLAY_MARGIN: float = 200.0
 const SCORE_SPACING: Vector2 = Vector2(48.0, -24.0)
@@ -182,7 +182,7 @@ func _build_ball() -> void:
 	ball.collision_layer = 3
 	ball.collision_mask = 3
 	ball.continuous_cd = RigidBody2D.CCD_MODE_CAST_RAY
-	ball.mass = 1.0
+	ball.mass = 0.35
 	ball.linear_damp = 0.1
 	ball.angular_damp = 0.6
 	var material := PhysicsMaterial.new()

@@ -788,6 +788,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
 	"soccer_respawn_never_lands_in_a_goal_648",
 	"ctf_respawn_waits_four_seconds_648",
+	"soccer_and_ctf_stages_are_bigger_649",
+	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
+	"soccer_ball_flies_farther_than_at_mass_one_649",
 	"settings_hygiene_609",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
@@ -2805,6 +2808,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_respawn_never_lands_in_a_goal_648()
 		"ctf_respawn_waits_four_seconds_648":
 			return await _scenario_ctf_respawn_waits_four_seconds_648()
+		"soccer_and_ctf_stages_are_bigger_649":
+			return _scenario_soccer_and_ctf_stages_are_bigger_649()
+		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
+			return await _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649()
+		"soccer_ball_flies_farther_than_at_mass_one_649":
+			return await _scenario_soccer_ball_flies_farther_than_at_mass_one_649()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -40754,5 +40763,93 @@ func _scenario_ctf_respawn_waits_four_seconds_648() -> Array[String]:
 	await _await_ticks(int(0.3 * 60.0))
 	if not red.alive:
 		failures.append("the KO'd CTF player was not back by 4.2 s")
+	await _teardown(rig["stage"])
+	return failures
+
+# --- Bigger Soccer and CTF stages, lighter ball (#649) --------------------------
+## Each stage's view width before #649 (all five used the default 1600x900 view).
+const STAGE_OLD_VIEW_WIDTH_649: Dictionary = {
+	"res://scenes/stages/Pitch.tscn": 1600.0,
+	"res://scenes/stages/Dunes.tscn": 1600.0,
+	"res://scenes/stages/Cage.tscn": 1600.0,
+	"res://scenes/stages/Bastion.tscn": 1600.0,
+	"res://scenes/stages/Stronghold.tscn": 1600.0,
+}
+## Every Soccer pitch and CTF hall has a view at least 1.3x as wide as before.
+func _scenario_soccer_and_ctf_stages_are_bigger_649() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in STAGE_OLD_VIEW_WIDTH_649:
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		var width: float = instance.get_view_rect().size.x
+		var old: float = STAGE_OLD_VIEW_WIDTH_649[path]
+		if width < old * 1.3:
+			failures.append("%s: view is %.0f wide, wants at least %.0f" % [path, width, old * 1.3])
+		instance.free()
+	_scenario_completed = true
+	return failures
+## Every spawn, pickup spot, goal, flag and base lies inside the view rect, and
+## every spawn has floor under it.
+func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in STAGE_OLD_VIEW_WIDTH_649:
+		var is_soccer: bool = SOCCER_STAGES_402.has(path)
+		var rig: Dictionary = _soccer_rig(2, path) if is_soccer else _ctf_rig(2, path)
+		if not await _mode_started(rig):
+			failures.append("%s: the round never started" % path)
+			await _teardown(rig["stage"])
+			continue
+		var stage: Node2D = rig["rm"]._current_stage
+		var view: Rect2 = stage.get_view_rect()
+		var points: Array[Vector2] = []
+		points.append_array(stage.get_pickup_spawn_points())
+		if is_soccer:
+			points.append(stage.get_ball_spawn())
+			for team in 2:
+				points.append(stage.get_goal_rect(team).position)
+				points.append(stage.get_goal_rect(team).end)
+		else:
+			for team in 2:
+				points.append(stage.get_flag_home(team))
+				points.append(stage.get_base_rect(team).position)
+				points.append(stage.get_base_rect(team).end)
+		for point: Vector2 in stage.get_spawn_points():
+			points.append(point)
+			var query := PhysicsRayQueryParameters2D.create(point, point + Vector2(0.0, 200.0))
+			query.collision_mask = 1
+			if stage.get_world_2d().direct_space_state.intersect_ray(query).is_empty():
+				failures.append("%s: spawn %s has no floor under it" % [path, point])
+		for point: Vector2 in points:
+			if not view.has_point(point):
+				failures.append("%s: point %s is outside the view %s" % [path, point, view])
+		await _teardown(rig["stage"])
+	return failures
+## One standard strike impulse sends the ball measurably farther than the same
+## strike did at the old mass of 1.0.
+func _scenario_soccer_ball_flies_farther_than_at_mass_one_649() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(2)
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var ball: RigidBody2D = rig["rm"].game_mode_node().ball
+	var real_mass: float = ball.mass
+	var strike: Vector2 = Vector2(500.0, 0.0)
+	var reach: Dictionary = {}
+	for mass: float in [1.0, real_mass]:
+		ball.mass = mass
+		ball.linear_velocity = Vector2.ZERO
+		ball.angular_velocity = 0.0
+		ball.global_position = Vector2(-300.0, -150.0)
+		await _await_ticks(2)
+		var from_x: float = ball.global_position.x
+		ball.apply_central_impulse(strike)
+		await _await_ticks(15)
+		reach[mass] = ball.global_position.x - from_x
+	ball.mass = real_mass
+	if real_mass >= 1.0:
+		failures.append("the ball's mass is %.2f, not under the old 1.0" % real_mass)
+	elif reach[real_mass] < reach[1.0] * 1.5:
+		failures.append("the light ball (mass %.2f) travelled %.0f px, the old one %.0f px: under 1.5x" % [real_mass, reach[real_mass], reach[1.0]])
 	await _teardown(rig["stage"])
 	return failures
