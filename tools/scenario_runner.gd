@@ -22404,7 +22404,7 @@ const TeamsScript236 := preload("res://scripts/Teams.gd")
 const BotScript236 := preload("res://scripts/Bot.gd")
 ## The keys a free-for-all lobby state has always had, and only those.
 const FFA_LOBBY_KEYS_236: PackedStringArray = [
-	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused"]
+	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused", "rules", "stages_by_mode"]
 const FFA_PLAYER_KEYS_236: PackedStringArray = ["slot", "ready", "name", "color"]
 ## How long a round-end pause the Teams round scenarios hold, to look at it.
 const TEAM_ROUND_PAUSE_SEC_236: float = 1.5
