@@ -237,6 +237,7 @@ var _replay: Node
 
 ## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
 func _unhandled_input(event: InputEvent) -> void:
+	_victory_click(event)
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
 		_replay.save_and_toast()
@@ -1235,6 +1236,24 @@ func _leave_victory() -> void:
 ## The host at the keyboard skips the wait (#337).
 func _unhandled_key_input(event: InputEvent) -> void:
 	if _state == State.VICTORY and event is InputEventKey and event.pressed and not event.echo:
+		_leave_victory()
+
+## Issue #640: on the victory screen a left click is Continue's second binding
+## beside a key: a tap (down and up within 0.25 s) fires on release. It reaches
+## here only when no UI control took the click.
+const VICTORY_CLICK_TAP_MSEC: int = 250
+var _victory_click_down_msec: int = -1
+
+func _victory_click(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click == null or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if click.pressed:
+		_victory_click_down_msec = GameClockScript.now_msec() if _state == State.VICTORY else -1
+		return
+	var down: int = _victory_click_down_msec
+	_victory_click_down_msec = -1
+	if _state == State.VICTORY and down != -1 and GameClockScript.now_msec() - down <= VICTORY_CLICK_TAP_MSEC:
 		_leave_victory()
 
 ## Samples every living player's body contact for the Longest airtime award.

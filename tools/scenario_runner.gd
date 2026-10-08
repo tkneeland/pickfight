@@ -767,6 +767,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_seat_close_drops_relay_peer_580",
 	"online_remote_seat_never_hosts_578",
 	"controller_fonts_served_589",
+	"left_click_is_space_tap_binding_640",
 	"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"stock_timeout_losers_are_not_counted_as_kos_595",
 	"hot_potato_blocked_hit_does_not_pass_the_tag_595",
@@ -2561,6 +2562,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_space_press_throws_boomerang_on_host()
 		"host_pc_space_hold_phases_head_with_boomerang_and_never_throws":
 			return await _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws()
+		"left_click_is_space_tap_binding_640":
+			return await _scenario_left_click_is_space_tap_binding_640()
 		"host_pc_space_tap_throws_boomerang_on_key_up":
 			return await _scenario_host_pc_space_tap_throws_boomerang_on_key_up()
 		"remote_client_space_hold_releases_and_tap_throws_boomerang":
@@ -35316,6 +35319,68 @@ func _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws() 
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
+	return failures
+# --- Left click is Space's second binding (issue #640) ---
+func _click_640(pressed: bool) -> InputEventMouseButton:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = pressed
+	return ev
+## A left click taps and holds like Space, on the host PC seat and the Online client.
+func _scenario_left_click_is_space_tap_binding_640() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcClick640")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(10)
+	server._input(_click_640(true))
+	await _await_ticks(3)
+	if server.slot_released(0):
+		failures.append("a click going down released the seat; a tap fires on release")
+	server._input(_click_640(false))
+	if not server.slot_released(0):
+		failures.append("a left click tap did not toggle the host PC seat released")
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if server.slot_released(0):
+		failures.append("a second left click tap did not toggle released back off")
+	server._input(_click_640(true))
+	await _await_ticks(30)
+	if not server.slot_released(0):
+		failures.append("a held left click did not count as released while held")
+	server._input(_click_640(false))
+	if server.slot_released(0):
+		failures.append("letting go of a held left click toggled release on")
+	var right := _click_640(true)
+	right.button_index = MOUSE_BUTTON_RIGHT
+	server._input(right)
+	right = _click_640(false)
+	right.button_index = MOUSE_BUTTON_RIGHT
+	server._input(right)
+	if server.slot_released(0):
+		failures.append("a right click acted as a Space tap")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	var rc: Dictionary = await _rc_rig_241(7, failures)
+	if rc.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rc)
+	if await _rc_joined_241(rc, client, failures) and await _rc_start_round_241(rc, client, failures):
+		client.mouse_captured = true
+		client._input(_click_640(true))
+		client._input(_click_640(false))
+		if client._action_was_hold or client.action_presses != 1:
+			failures.append("a left click tap on the client counted %d presses" % client.action_presses)
+		client._input(_click_640(true))
+		await _await_ticks(30)
+		if not client.input_released():
+			failures.append("a held left click on the client did not read as released")
+		client._input(_click_640(false))
+		if client.action_presses != 1:
+			failures.append("a held left click on the client counted as a tap")
+	await _rc_close_241(rc)
 	return failures
 ## A tap fires on key-up, not on key-down.
 func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:

@@ -2312,6 +2312,18 @@ func _input(event: InputEvent) -> void:
 	if key != null and not key.pressed and key.physical_keycode == KEY_SPACE and _host_pc_slot != -1:
 		_action_up(_host_pc_slot)
 		return
+	# Issue #640: a left click is Space's second binding: the same tap (down and
+	# up within TAP_MAX_SEC, fired on release). Only with the mouse captured, so
+	# the click that recaptures it after Esc is not an action, and never on a
+	# UI control.
+	var action_click := event as InputEventMouseButton
+	if action_click != null and action_click.button_index == MOUSE_BUTTON_LEFT and _host_pc_slot != -1:
+		if not action_click.pressed:
+			_action_up(_host_pc_slot)
+		elif _mouse_captured and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+				and not _input_gated() and not _host_menu_open() and get_viewport().gui_get_hovered_control() == null:
+			_action_down(_host_pc_slot)
+		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
 		_update_mouse_capture()

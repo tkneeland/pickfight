@@ -357,6 +357,13 @@ func _input(event: InputEvent) -> void:
 		if _ready_button != null and _ready_button.is_visible_in_tree() and _ready_button.has_focus():
 			get_viewport().set_input_as_handled() # Space is the action key, not Ready's accept (#550)
 		return
+	# Issue #640: a left click is Space's second binding (tap on release); only
+	# while the mouse is captured, so a click on Ready or a menu button is not.
+	var action_click := event as InputEventMouseButton
+	if action_click != null and action_click.button_index == MOUSE_BUTTON_LEFT \
+			and (not action_click.pressed or (mouse_captured and not menu_open and get_viewport().gui_get_hovered_control() == null)):
+		_action_edge(-MOUSE_BUTTON_LEFT, action_click.pressed)
+		return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
