@@ -25158,16 +25158,20 @@ func _scenario_pogo_sideways_hit_does_no_damage() -> Array[String]:
 		failures.append("the sideways charge never reached the victim (closest %.0f px)" % hit["closest"])
 	await _teardown(stage)
 	return failures
-## The pogo is something a pickup can hand out, and it is not the starting weapon.
+## The pogo is retired from rotation (#655): no pickup draw, pool, or
+## random-weapons list offers it, though its resource still loads for the
+## scenarios that hand it to a player directly.
 func _scenario_pogo_is_in_the_pickup_set() -> Array[String]:
 	var failures: Array[String] = []
-	if not PickupWeaponsScript.WEAPON_PATHS.has(POGO_PATH):
-		failures.append("the pogo is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
-	var found: bool = false
+	if not PickupWeaponsScript.RETIRED_PATHS.has(POGO_PATH):
+		failures.append("the pogo is not listed as retired from the pickup pool")
 	for stats: Resource in PickupWeaponsScript.available_weapons():
-		found = found or stats.resource_path == POGO_PATH
-	if not found:
-		failures.append("the pogo is not among the loaded pickup weapons")
+		if stats.resource_path == POGO_PATH:
+			failures.append("the pogo is among the loaded pickup weapons")
+	if RoundManagerType.playtest_weapon_paths().has(POGO_PATH):
+		failures.append("the random-weapons list offers the pogo")
+	if not ResourceLoader.exists(POGO_PATH):
+		failures.append("the pogo resource is gone, so it cannot be re-enabled")
 	_scenario_completed = true
 	return failures
 # --- Crumbling ledge as a stage hazard (issue #280) ---------------------------
