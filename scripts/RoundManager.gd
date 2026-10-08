@@ -1287,7 +1287,9 @@ func _clear_stage() -> void:
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
 ## victory screen's Continue needs tapping afresh), and the first round.
 func _begin_match() -> void:
-	_match_target = _requested_target()
+	# Stock is one round and done (#644): the first win is the match, whatever
+	# "first to N" the host left set for the round modes.
+	_match_target = 1 if game_mode == GameModesScript.STOCK else _requested_target()
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
 	_match_winner_slot = -1

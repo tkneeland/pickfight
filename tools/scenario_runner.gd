@@ -525,6 +525,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_teams_steal_a_life_and_team_loss",
 	"stock_timeout_most_lives_wins_tie_overtime",
 	"stock_lives_shown_as_pips_and_on_phone",
+	"stock_match_is_one_round_then_the_podium_644",
 	"bot_king_of_the_hill_heads_for_the_hill",
 	"bot_king_of_the_hill_fights_whoever_holds_it",
 	"bot_hot_potato_it_chases_the_nearest_rival",
@@ -2271,6 +2272,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_timeout_most_lives_wins_tie_overtime()
 		"stock_lives_shown_as_pips_and_on_phone":
 			return await _scenario_stock_lives_shown_as_pips_and_on_phone()
+		"stock_match_is_one_round_then_the_podium_644":
+			return await _scenario_stock_match_is_one_round_then_the_podium_644()
 		"bot_king_of_the_hill_heads_for_the_hill":
 			return await _scenario_bot_king_of_the_hill_heads_for_the_hill()
 		"bot_king_of_the_hill_fights_whoever_holds_it":
@@ -29286,6 +29289,49 @@ func _scenario_stock_has_no_rise() -> Array[String]:
 	if absf(zone.position.y - authored_y) > 0.5:
 		failures.append("the kill zone rose in Stock: y %.1f, authored %.1f" % [zone.position.y, authored_y])
 	await _stock_finish({"stage": stage})
+	return failures
+## Issue #644: a Stock match is one round: the first win reaches the podium even
+## with "first to 5" set, in Free-for-all and Teams, and Classic still plays on.
+func _scenario_stock_match_is_one_round_then_the_podium_644() -> Array[String]:
+	var failures: Array[String] = []
+	for teams: bool in [false, true]:
+		var label: String = "Teams" if teams else "FFA"
+		var loop: Dictionary = _new_lobby_round(5)
+		var players: Array[RigidBody2D] = loop["players"]
+		var roster: Node = loop["roster"]
+		var rm: Node = loop["round_manager"]
+		rm.game_mode = GameModesType.STOCK
+		_stock_settings(1, 480)
+		if teams:
+			roster.teams_on = true
+			roster.team_picks = {0: 0, 1: 1}
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		roster.ready_slots = {0: true, 1: true}
+		if not await _await_condition(func() -> bool: return rm.game_mode_node() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("%s: the Stock round never started" % label)
+			await _stock_finish(loop)
+			continue
+		players[1].eliminate()
+		if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("%s: one Stock round did not reach the podium (phase '%s', first to %d)" % [label, rm.lobby_phase(), rm.match_target()])
+		elif teams and rm.match_winner_team() != 0:
+			failures.append("%s: the podium team was %d, expected 0" % [label, rm.match_winner_team()])
+		elif not teams and rm.match_winner_slot() != 0:
+			failures.append("%s: the podium winner was slot %d, expected 0" % [label, rm.match_winner_slot()])
+		await _stock_finish(loop)
+	# Classic with the same target of 5 is not over after one round.
+	var classic: Dictionary = _new_lobby_round(5)
+	var cplayers: Array[RigidBody2D] = classic["players"]
+	var crm: Node = classic["round_manager"]
+	classic["roster"].ready_slots = {0: true, 1: true}
+	if await _await_condition(func() -> bool: return cplayers[0].alive and cplayers[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		cplayers[1].eliminate()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if crm.lobby_phase() == "victory":
+			failures.append("Classic ended after one round with first to 5")
+	else:
+		failures.append("the Classic round never started")
+	await _teardown(classic["stage"])
 	return failures
 func _scenario_stock_teams_steal_a_life_and_team_loss() -> Array[String]:
 	var failures: Array[String] = []
