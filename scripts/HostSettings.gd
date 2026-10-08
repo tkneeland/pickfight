@@ -236,6 +236,8 @@ func load_settings() -> void:
 		disabled_stages = _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
 		disabled_weapons = _strings(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
+		if game_mode != "" and not _game_modes().selectable(game_mode):  # a retired mode (#645)
+			game_mode = ""
 		disabled_modifiers = {}
 		var stored: Variant = config.get_value(SECTION, "disabled_modifiers", {})
 		if stored is Dictionary:

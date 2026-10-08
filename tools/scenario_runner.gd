@@ -512,6 +512,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_aggression_rises_as_opponents_dwindle",
 	"mode_picker_host_only_and_in_lobby_state",
 	"mode_hot_potato_is_ffa_only",
+	"hot_potato_retired_from_the_picker_645",
 	"mode_choice_persists_with_host_settings",
 	"mode_choice_holds_for_whole_match",
 	"mode_king_of_the_hill_teams_hold_together",
@@ -2245,6 +2246,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_picker_host_only_and_in_lobby_state()
 		"mode_hot_potato_is_ffa_only":
 			return await _scenario_mode_hot_potato_is_ffa_only()
+		"hot_potato_retired_from_the_picker_645":
+			return await _scenario_hot_potato_retired_from_the_picker_645()
 		"mode_choice_persists_with_host_settings":
 			return await _scenario_mode_choice_persists_with_host_settings()
 		"mode_choice_holds_for_whole_match":
@@ -28835,7 +28838,7 @@ func _scenario_mode_picker_host_only_and_in_lobby_state() -> Array[String]:
 	print("      lobby frame: game_mode %s, picker %s" % [msg.get("game_mode"), names])
 	if msg.get("game_mode") != "king_of_the_hill":
 		failures.append("the host phone was told game_mode %s" % msg.get("game_mode"))
-	if names != ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]:
+	if names != ["Classic", "King of the Hill", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]:
 		failures.append("the picker rows were %s" % [names])
 	HostSettingsScript352.shared().game_mode = ""
 	await _close_phones(joined)
@@ -28848,19 +28851,19 @@ func _scenario_mode_hot_potato_is_ffa_only() -> Array[String]:
 	var failures: Array[String] = []
 	HostSettingsScript352.shared().game_mode = ""
 	var server: Node = ControllerServerScript.new()
-	if not server.apply_host_command("gamemode", "hot_potato") or server.game_mode() != "hot_potato":
-		failures.append("Hot Potato was refused in a free-for-all")
+	# Hot Potato is retired from the picker (#645): the fixture is the table's
+	# FFA-only flag, which still stands for a forced round.
+	if not GameModesType.is_ffa_only("hot_potato") or GameModesType.fits_format("hot_potato", true):
+		failures.append("Hot Potato is no longer FFA-only in the table")
 	if not server.apply_host_command("mode", "teams"):
 		failures.append("Teams could not be switched on")
 	if server.game_mode() != "":
 		failures.append("Teams on with Hot Potato chosen left '%s', not Classic" % server.game_mode())
-	if server.apply_host_command("gamemode", "hot_potato") or server.game_mode() == "hot_potato":
-		failures.append("Hot Potato was accepted while Teams is on")
 	for id: String in ["king_of_the_hill", "sudden_death", ""]:
 		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
 			failures.append("'%s' was refused with Teams on" % id)
 	server.apply_host_command("mode", "ffa")
-	for id: String in ["hot_potato", "king_of_the_hill", "sudden_death", ""]:
+	for id: String in ["king_of_the_hill", "sudden_death", ""]:
 		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
 			failures.append("'%s' was refused in a free-for-all" % id)
 	server.apply_host_command("gamemode", "king_of_the_hill")
@@ -28869,6 +28872,37 @@ func _scenario_mode_hot_potato_is_ffa_only() -> Array[String]:
 		failures.append("switching to Teams dropped King of the Hill to '%s'" % server.game_mode())
 	server.free()
 	HostSettingsScript352.shared().game_mode = ""
+	_scenario_completed = true
+	return failures
+func _scenario_hot_potato_retired_from_the_picker_645() -> Array[String]:
+	var failures: Array[String] = []
+	for row: Dictionary in GameModesType.picker_rows():
+		if row["id"] == "hot_potato":
+			failures.append("the picker still lists Hot Potato")
+	if GameModesType.selectable("hot_potato"):
+		failures.append("Hot Potato is still selectable")
+	if not GameModesType.is_valid("hot_potato"):
+		failures.append("Hot Potato no longer resolves for a forced round")
+	for id: String in ["", "king_of_the_hill", "sudden_death", "stock"]:
+		if not GameModesType.selectable(id):
+			failures.append("'%s' is not selectable" % id)
+	HostSettingsScript352.shared().game_mode = ""
+	var server: Node = ControllerServerScript.new()
+	if server.apply_host_command("gamemode", "hot_potato") or server.game_mode() == "hot_potato":
+		failures.append("the host command accepted Hot Potato")
+	server.free()
+	var path: String = "user://scenario_hot_potato_retired_645.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var section: String = (load("res://scripts/HostSettings.gd") as GDScript).SECTION
+	var config := ConfigFile.new()
+	config.set_value(section, "game_mode", "hot_potato")
+	config.save(path)
+	var loaded: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	loaded.path = path
+	loaded.load_settings()
+	if loaded.game_mode != "":
+		failures.append("a saved Hot Potato loaded as '%s', not Classic" % loaded.game_mode)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	_scenario_completed = true
 	return failures
 ## AC1: the choice is saved with the other host settings and read back.
@@ -29099,7 +29133,7 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 	var lobby_rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	var cards: Array[Label] = lobby_rm.how_to_play_mode_cards()
-	var want: Array[String] = ["Classic", "King of the Hill", "Hot Potato", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]
+	var want: Array[String] = ["Classic", "King of the Hill", "Sudden Death", "Stock", "Soccer", "Capture the Flag"]  # Hot Potato is retired (#645)
 	if cards.size() != want.size():
 		failures.append("the how-to-play panel has %d mode cards, expected %d" % [cards.size(), want.size()])
 	else:
@@ -30106,7 +30140,9 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
 			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
 		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
-	if GameModesScript361.picker_rows().size() != GameModesScript361.TABLE.size() or not GameModesScript361.is_valid("stock"):
+	# The picker lists every mode but the retired Hot Potato (#645).
+	if GameModesScript361.picker_rows().size() != GameModesScript361.TABLE.size() - 1 \
+			or not GameModesScript361.is_valid("stock"):
 		failures.append("the mode picker lost modes with the demo off")
 	var loop: Dictionary = _new_lobby_round(3)
 	var rm: Node = loop["round_manager"]
@@ -31322,9 +31358,9 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 		return ["the Sfx autoload is missing"]
 	var panel: CanvasLayer = sfx.build_settings_ui()
 	await _await_ticks(3)
-	panel.rules_mode_button().select(panel._rules_mode_ids.find("hot_potato"))
+	panel.rules_mode_button().select(panel._rules_mode_ids.find("king_of_the_hill"))  # Hot Potato is retired from the list (#645)
 	panel._rebuild_rules()
-	var box: CheckBox = panel.rules_box("weapon_roulette")
+	var box: CheckBox = panel.rules_box("meteor_shower")
 	if box == null or not box.disabled or box.button_pressed:
 		failures.append("the banned box was not locked off in the Rules list")
 	var open_box: CheckBox = panel.rules_box("gale")
@@ -32660,14 +32696,14 @@ func _scenario_lobby_mode_card_grid_keeps_the_qr_and_fits_eight_players() -> Arr
 	for card: Label in screen.mode_rules():
 		if card.get_visible_line_count() < card.get_line_count():
 			failures.append("mode card '%s' is cut off (%d of %d lines)" % [card.text, card.get_visible_line_count(), card.get_line_count()])
-	if screen.mode_cards().size() < 7:
+	if screen.mode_cards().size() < 6:
 		failures.append("only %d mode cards" % screen.mode_cards().size())
 	# The QR gives way to the cards (#547): it keeps at least the 150 px minimum, not the 340 of the old column.
 	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 150.0:
 		failures.append("the QR is %s, under 150 px square" % qr.get_global_rect().size)
 	var added: Label = screen.append_mode_card("Eighth Mode: A rule line about as long as the others are.")
 	await _await_ticks(4)
-	if screen.mode_cards().size() < 8 or not screen.mode_rules().has(added):
+	if screen.mode_cards().size() < 7 or not screen.mode_rules().has(added):
 		failures.append("the extra card did not join the grid")
 	if minf(qr.get_global_rect().size.x, qr.get_global_rect().size.y) < 150.0:
 		failures.append("adding an eighth card shrank the QR to %s" % qr.get_global_rect().size)
@@ -38213,7 +38249,7 @@ func _scenario_lobby_mode_card_click_picks_the_mode_and_its_format_547() -> Arra
 	var server: Node = rig["server"]
 	var screen: CanvasLayer = rig["screen"]
 	var cases: Array = [
-		[GameModesType.SOCCER, true], [GameModesType.CLASSIC, true], [GameModesType.HOT_POTATO, false],
+		[GameModesType.SOCCER, true], [GameModesType.CLASSIC, true], [GameModesType.KING_OF_THE_HILL, true],
 		[GameModesType.CAPTURE_THE_FLAG, true], [GameModesType.STOCK, true],
 	]
 	for case: Array in cases:
