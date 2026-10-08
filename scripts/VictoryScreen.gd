@@ -28,6 +28,7 @@ var _victory_title: Label
 var _podium: HBoxContainer
 var _victory_logo: TextureRect
 var _end_card_panel: Control
+var _continue_prompt_label: Label
 
 func _init(screen: CanvasLayer, slot_name: Callable, slot_color: Callable) -> void:
 	_screen = screen
@@ -78,7 +79,8 @@ func build() -> void:
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
 	_podium.add_theme_constant_override("separation", 40)
 	stack.add_child(_podium)
-	stack.add_child(_continue_prompt())
+	_continue_prompt_label = _continue_prompt()
+	stack.add_child(_continue_prompt_label)
 	_build_end_card()
 
 ## "Tap Continue": ink Lilita text on a cream pill (the theme's cream panel).
@@ -90,6 +92,33 @@ func _continue_prompt() -> Label:
 	prompt.add_theme_stylebox_override("normal", UiThemeScript.plate(UiThemeScript.CREAM, 28, 2, true, 22))
 	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	return prompt
+
+## Names the Continue inputs the room has (#639): `kinds` from
+## `ControllerServer.continue_inputs()`. Phones alone (or nobody) keep the
+## original line.
+func set_continue_inputs(kinds: PackedStringArray) -> void:
+	if _continue_prompt_label != null:
+		_continue_prompt_label.text = continue_prompt_text(kinds)
+
+## The prompt for `kinds` ("pc", "pad", "phone"): "Tap Continue on your phone"
+## for phones alone, otherwise "Continue with Space, A on a gamepad or a tap on
+## your phone" naming only the kinds present.
+func continue_prompt_text(kinds: PackedStringArray) -> String:
+	if kinds.is_empty() or (kinds.size() == 1 and kinds[0] == "phone"):
+		return _screen.tr("VICTORY_TAP_CONTINUE")
+	var names: PackedStringArray = PackedStringArray()
+	for kind: String in kinds:
+		match kind:
+			"pc":
+				names.append(_screen.tr("VICTORY_INPUT_SPACE"))
+			"pad":
+				names.append(_screen.tr("VICTORY_INPUT_PAD"))
+			"phone":
+				names.append(_screen.tr("VICTORY_INPUT_PHONE"))
+	var list: String = names[0]
+	for i in range(1, names.size()):
+		list = _screen.tr("VICTORY_LIST_LAST") % [list, names[i]] if i == names.size() - 1 else "%s, %s" % [list, names[i]]
+	return _screen.tr("VICTORY_CONTINUE_WITH") % list
 
 ## The demo build's end card (#361): logo over the thank-you and wishlist line.
 func _build_end_card() -> void:

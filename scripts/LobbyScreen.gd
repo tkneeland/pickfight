@@ -489,6 +489,10 @@ func refresh_victory(slots: Array[int], scores: PackedInt32Array, winner_slot: i
 		stat_rows: Array[Dictionary] = []) -> void:
 	_victory.refresh(slots, scores, winner_slot, awards, winner_team, teams, team_scores, stat_rows)
 
+## The victory prompt names the Continue inputs the room has (#639).
+func set_victory_continue_inputs(kinds: PackedStringArray) -> void:
+	_victory.set_continue_inputs(kinds)
+
 ## The victory screen's per-player stats table, or null before any.
 func stats_table() -> Control:
 	return _victory.stats_table()

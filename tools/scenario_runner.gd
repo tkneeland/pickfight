@@ -390,7 +390,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"snapshot_kill_sound_reaches_remote_client",
 	"spear_head_cannot_retract_inside_minimum",
 	"spear_tip_hit_outdamages_staff",
-	"spear_is_in_the_pickup_set",
+	"spear_is_never_in_the_pickup_pool",
 	"gamepad_event_claims_seat_and_readies",
 	"gamepad_stick_moves_weapon_and_release_zeroes",
 	"gamepad_unplug_holds_claim_and_replug_rejoins",
@@ -504,6 +504,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_continue_waits_for_every_human_not_bots",
 	"victory_continue_times_out",
 	"victory_host_key_returns_to_lobby",
+	"victory_prompt_names_only_the_seated_continue_inputs_639",
 	"match_stats_longest_airtime_award",
 	"bot_prefers_reachable_target_and_strikes",
 	"bot_never_idles_while_opponent_alive",
@@ -767,6 +768,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_seat_close_drops_relay_peer_580",
 	"online_remote_seat_never_hosts_578",
 	"controller_fonts_served_589",
+	"left_click_is_space_tap_binding_640",
+	"left_click_recaptures_mouse_after_esc_640",
+	"left_click_and_space_hold_separately_640",
+	"victory_left_click_tap_continues_640",
 	"soccer_kicking_last_opponent_mid_respawn_scores_nobody_593",
 	"stock_timeout_losers_are_not_counted_as_kos_595",
 	"hot_potato_blocked_hit_does_not_pass_the_tag_595",
@@ -796,6 +801,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"classic_tiebreaker_backstop_ends_a_draw_nobody_scores_554",
 	"pressed_head_holds_on_flat_ground",
 	"fishing_rod_cast_arcs_under_gravity",
+	"fishing_rod_cast_stays_out_twice_as_long_641",
 	"grapple_shot_stays_level",
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
@@ -2001,8 +2007,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_spear_head_cannot_retract_inside_minimum()
 		"spear_tip_hit_outdamages_staff":
 			return await _scenario_spear_tip_hit_outdamages_staff()
-		"spear_is_in_the_pickup_set":
-			return await _scenario_spear_is_in_the_pickup_set()
+		"spear_is_never_in_the_pickup_pool":
+			return await _scenario_spear_is_never_in_the_pickup_pool()
 		"gamepad_event_claims_seat_and_readies":
 			return await _scenario_gamepad_event_claims_seat_and_readies()
 		"gamepad_stick_moves_weapon_and_release_zeroes":
@@ -2225,6 +2231,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ghost_cleared_at_round_end_and_never_for_bots()
 		"victory_continue_waits_for_every_human_not_bots":
 			return await _scenario_victory_continue_waits_for_every_human_not_bots()
+		"victory_prompt_names_only_the_seated_continue_inputs_639":
+			return await _scenario_victory_prompt_names_only_the_seated_continue_inputs_639()
 		"victory_continue_times_out":
 			return await _scenario_victory_continue_times_out()
 		"victory_host_key_returns_to_lobby":
@@ -2561,6 +2569,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_space_press_throws_boomerang_on_host()
 		"host_pc_space_hold_phases_head_with_boomerang_and_never_throws":
 			return await _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws()
+		"left_click_is_space_tap_binding_640":
+			return await _scenario_left_click_is_space_tap_binding_640()
+		"left_click_recaptures_mouse_after_esc_640":
+			return await _scenario_left_click_recaptures_mouse_after_esc_640()
+		"left_click_and_space_hold_separately_640":
+			return await _scenario_left_click_and_space_hold_separately_640()
+		"victory_left_click_tap_continues_640":
+			return await _scenario_victory_left_click_tap_continues_640()
 		"host_pc_space_tap_throws_boomerang_on_key_up":
 			return await _scenario_host_pc_space_tap_throws_boomerang_on_key_up()
 		"remote_client_space_hold_releases_and_tap_throws_boomerang":
@@ -2813,6 +2829,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pressed_head_holds_on_flat_ground()
 		"fishing_rod_cast_arcs_under_gravity":
 			return await _scenario_hook_flight_drop(FISHING_ROD_PATH, true)
+		"fishing_rod_cast_stays_out_twice_as_long_641":
+			return await _scenario_fishing_rod_cast_stays_out_twice_as_long_641()
 		"grapple_shot_stays_level":
 			return await _scenario_hook_flight_drop(GRAPPLE_PATH, false)
 		"pogo_uncharged_ground_contact_bounces_at_least_this_high":
@@ -20428,7 +20446,9 @@ func _scenario_podium_order_is_strict() -> Array[String]:
 func _scenario_round_flow_drift_trimmed() -> Array[String]:
 	var failures: Array[String] = []
 	var want := PackedStringArray([PickupWeaponsScript.PICKAXE_PATH])
-	want.append_array(PickupWeaponsScript.WEAPON_PATHS)
+	for path: String in PickupWeaponsScript.WEAPON_PATHS:
+		if not PickupWeaponsScript.RETIRED_PATHS.has(path):
+			want.append(path)
 	if RoundManagerType.playtest_weapon_paths() != want:
 		failures.append("the random-weapons list is %s, expected %s" % [RoundManagerType.playtest_weapon_paths(), want])
 	var feed: Control = KillFeedScript.new()
@@ -24729,19 +24749,20 @@ func _scenario_spear_tip_hit_outdamages_staff() -> Array[String]:
 		failures.append("the spear's tip hit took %.1f off, not clearly more than the staff's %.1f" % [dealt["spear"], dealt["staff"]])
 	await _teardown(stage)
 	return failures
-## The spear is something a pickup can hand out, and it is not the starting weapon.
-func _scenario_spear_is_in_the_pickup_set() -> Array[String]:
+## The spear is retired from rotation (#642): no pickup draw, pool, or
+## random-weapons list offers it, though its resource still loads for #272's
+## scenarios that hand it to a player directly.
+func _scenario_spear_is_never_in_the_pickup_pool() -> Array[String]:
 	var failures: Array[String] = []
-	if not PickupWeaponsScript.WEAPON_PATHS.has(SPEAR_PATH):
-		failures.append("the spear is not in the pickup weapon paths %s" % [PickupWeaponsScript.WEAPON_PATHS])
-	var found: bool = false
+	if not PickupWeaponsScript.RETIRED_PATHS.has(SPEAR_PATH):
+		failures.append("the spear is not listed as retired from the pickup pool")
 	for stats: Resource in PickupWeaponsScript.available_weapons():
-		found = found or stats.resource_path == SPEAR_PATH
-	if not found:
-		failures.append("the spear is not among the loaded pickup weapons")
-	var drawn: Resource = PickupWeaponsScript.choose([load(SPEAR_PATH) as Resource])
-	if drawn == null or drawn.resource_path != SPEAR_PATH:
-		failures.append("a pickup draw offered only the spear did not give it")
+		if stats.resource_path == SPEAR_PATH:
+			failures.append("the spear is among the loaded pickup weapons")
+	if RoundManagerType.playtest_weapon_paths().has(SPEAR_PATH):
+		failures.append("the random-weapons list offers the spear")
+	if not ResourceLoader.exists(SPEAR_PATH):
+		failures.append("the spear resource is gone, so it cannot be re-enabled")
 	_scenario_completed = true
 	return failures
 # --- Gamepad seats (#261) ----------------------------------------------------
@@ -28552,6 +28573,50 @@ func _scenario_victory_continue_waits_for_every_human_not_bots() -> Array[String
 		failures.append("the only human tapping Continue (other slot a bot) never returned to the lobby")
 	await _teardown(loop["stage"])
 	return failures
+## Issue #639: the victory prompt names only the Continue inputs the room has:
+## Space for the host PC seat, A for a gamepad, a tap for a phone; bots count
+## for nothing and a phone-only room keeps the old line.
+func _scenario_victory_prompt_names_only_the_seated_continue_inputs_639() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var prompt_of: Callable = func() -> String:
+		rm._refresh_victory()
+		var label: Label = rm._lobby_screen.victory_panel().find_child("ContinuePrompt", true, false) as Label
+		return label.text if label != null else "<no prompt>"
+	var phone_only: String = "Tap Continue on your phone"
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	await _join_phone(phone, "prompt-phone", phones)
+	phones.append(phone)
+	var got: String = prompt_of.call()
+	if got != phone_only:
+		failures.append("a phone-only room read '%s', expected '%s'" % [got, phone_only])
+	server.apply_host_command("pc_seat", true)
+	got = prompt_of.call()
+	if got != "Continue with Space or click or a tap on your phone":
+		failures.append("PC seat plus a phone read '%s'" % got)
+	server._bind_pad(0)
+	got = prompt_of.call()
+	if got != "Continue with Space or click, A on a gamepad or a tap on your phone":
+		failures.append("PC seat, gamepad and phone read '%s'" % got)
+	await _close_phones(phones)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	server.set_bot_count(2)
+	got = prompt_of.call()
+	if got != "Continue with Space or click or A on a gamepad":
+		failures.append("PC seat, gamepad and bots (no phone) read '%s'" % got)
+	server.apply_host_command("pc_seat", false)
+	server.set_bot_count(0)
+	await _teardown(main)
+	return failures
 ## Issue #337: nobody taps, the victory screen gives up after its timeout.
 func _scenario_victory_continue_times_out() -> Array[String]:
 	var failures: Array[String] = []
@@ -30103,8 +30168,8 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
 	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
 		failures.append("the settings lost stages with the demo off")
-	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() \
-			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size():
+	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size() \
+			or HostSettingsScriptDemo361.known_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size():
 		failures.append("the pickup pool is %d weapons with the demo off" % PickupWeaponsScript.available_weapons().size())
 	if GameModesScript361.picker_rows().size() != GameModesScript361.TABLE.size() or not GameModesScript361.is_valid("stock"):
 		failures.append("the mode picker lost modes with the demo off")
@@ -35317,6 +35382,68 @@ func _scenario_host_pc_space_hold_phases_head_with_boomerang_and_never_throws() 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
 	return failures
+# --- Left click is Space's second binding (issue #640) ---
+func _click_640(pressed: bool) -> InputEventMouseButton:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = pressed
+	return ev
+## A left click taps and holds like Space, on the host PC seat and the Online client.
+func _scenario_left_click_is_space_tap_binding_640() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcClick640")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(10)
+	server._input(_click_640(true))
+	await _await_ticks(3)
+	if server.slot_released(0):
+		failures.append("a click going down released the seat; a tap fires on release")
+	server._input(_click_640(false))
+	if not server.slot_released(0):
+		failures.append("a left click tap did not toggle the host PC seat released")
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if server.slot_released(0):
+		failures.append("a second left click tap did not toggle released back off")
+	server._input(_click_640(true))
+	await _await_ticks(30)
+	if not server.slot_released(0):
+		failures.append("a held left click did not count as released while held")
+	server._input(_click_640(false))
+	if server.slot_released(0):
+		failures.append("letting go of a held left click toggled release on")
+	var right := _click_640(true)
+	right.button_index = MOUSE_BUTTON_RIGHT
+	server._input(right)
+	right = _click_640(false)
+	right.button_index = MOUSE_BUTTON_RIGHT
+	server._input(right)
+	if server.slot_released(0):
+		failures.append("a right click acted as a Space tap")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	var rc: Dictionary = await _rc_rig_241(7, failures)
+	if rc.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rc)
+	if await _rc_joined_241(rc, client, failures) and await _rc_start_round_241(rc, client, failures):
+		client.mouse_captured = true
+		client._input(_click_640(true))
+		client._input(_click_640(false))
+		if client._action_was_hold or client.action_presses != 1:
+			failures.append("a left click tap on the client counted %d presses" % client.action_presses)
+		client._input(_click_640(true))
+		await _await_ticks(30)
+		if not client.input_released():
+			failures.append("a held left click on the client did not read as released")
+		client._input(_click_640(false))
+		if client.action_presses != 1:
+			failures.append("a held left click on the client counted as a tap")
+	await _rc_close_241(rc)
+	return failures
 ## A tap fires on key-up, not on key-down.
 func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
 	var failures: Array[String] = []
@@ -39803,6 +39930,39 @@ func _scenario_hook_flight_drop(path: String, arcs: bool) -> Array[String]:
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
+## Issue #641: an unobstructed horizontal cast stays out about twice as long
+## before it retracts by itself. The old 400 px line flew for about 0.44 s
+## (26 ticks); written down independently of the resource, the new cast must
+## fly at least 1.6x that.
+const ROD_OLD_FLIGHT_SECONDS: float = 0.44
+func _scenario_fishing_rod_cast_stays_out_twice_as_long_641() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(shooter, FISHING_ROD_PATH)
+	_brace(shooter)
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		_scenario_completed = true
+		return failures
+	var flying_ticks: int = 0
+	for i in 240:
+		if not is_instance_valid(hook) or not hook.is_flying():
+			break
+		flying_ticks += 1
+		await physics_frame
+	var seconds: float = flying_ticks / 60.0
+	print("      rod cast stayed out %.2f s (%d ticks)" % [seconds, flying_ticks])
+	if seconds < ROD_OLD_FLIGHT_SECONDS * 1.6:
+		failures.append("the cast flew only %.2f s; expected at least %.2f s (about twice the old 0.44 s)" % [seconds, ROD_OLD_FLIGHT_SECONDS * 1.6])
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
 # --- Pogo bounciness (issue #622) --------------------------------------------
 ## Written down independently of the resource: a plain hop must rise at least
 ## this many px from its low point, and stay under the on-screen ceiling.
@@ -40517,4 +40677,94 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 	elif walk["close_at"] >= 0 and zip["close_at"] >= walk["close_at"]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
 	_scenario_completed = true
+	return failures
+
+## Issue #640 review: after Esc frees the mouse, the next left click recaptures
+## it and is not an action.
+func _scenario_left_click_recaptures_mouse_after_esc_640() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcRecapture640")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(10)
+	var esc := InputEventKey.new()
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	server._input(esc)
+	if not server._mouse_escaped or server._mouse_captured:
+		failures.append("Esc did not free the mouse")
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if server._mouse_escaped or not server._mouse_captured:
+		failures.append("a left click after Esc did not recapture the mouse")
+	if server.slot_released(0):
+		failures.append("the recapturing click also toggled release")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+## Issue #640 review: Space and a left click time separately on the host seat.
+func _scenario_left_click_and_space_hold_separately_640() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PcSeparate640")
+	var server: Node = rig["server"]
+	server.apply_host_command("pc_seat", true)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(10)
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.pressed = true
+	server._input(space)
+	await _await_ticks(30)
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if not server.slot_released(0):
+		failures.append("a click tap during a held Space did not toggle release on")
+	server._input(_click_640(true))
+	server._input(_click_640(false))
+	if not server.slot_released(0):
+		failures.append("a click tap ended the held Space's release")
+	var up := InputEventKey.new()
+	up.physical_keycode = KEY_SPACE
+	up.pressed = false
+	server._input(up)
+	if server.slot_released(0):
+		failures.append("letting go of a held Space toggled release on")
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	return failures
+## Issue #640 review: on the victory screen a quick left click continues; a
+## press that began before VICTORY does not.
+func _scenario_victory_left_click_tap_continues_640() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _victory_loop()
+	var rm: Node = loop["round_manager"]
+	if rm.lobby_phase() != "victory":
+		failures.append("never reached the victory screen")
+		await _teardown(loop["stage"])
+		return failures
+	rm._victory_click(_click_640(true))
+	await _await_ticks(3)
+	rm._victory_click(_click_640(false))
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("a left click tap on the victory screen did not continue")
+	await _teardown(loop["stage"])
+	var stale: Dictionary = _new_lobby_round(1)
+	var players: Array[RigidBody2D] = stale["players"]
+	var rm2: Node = stale["round_manager"]
+	stale["roster"].ready_slots = {0: true, 1: true}
+	if await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		rm2._victory_click(_click_640(true)) # pressed mid-round, released on the podium
+		players[1].eliminate()
+	await _await_condition(func() -> bool: return rm2.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+	if rm2.lobby_phase() != "victory":
+		failures.append("the second match never reached the victory screen")
+	else:
+		rm2._victory_click(_click_640(false))
+		await _await_ticks(3)
+		if rm2.lobby_phase() != "victory":
+			failures.append("a click that began before the victory screen continued it")
+	await _teardown(stale["stage"])
 	return failures
