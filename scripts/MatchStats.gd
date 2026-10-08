@@ -402,13 +402,18 @@ static func _clock(msec: int) -> String:
 
 ## One JSON line for the balance log: {"t": unix time, "weapons": {id: {"damage", "hits"}}}.
 ## Empty when no real player landed a damaging hit this match.
-func balance_log_line(unix_time: int) -> String:
+## A match that ended without a winner (#643) adds `"completed": false` and `"rounds_played"`.
+func balance_log_line(unix_time: int, completed: bool = true, rounds_played: int = 0) -> String:
 	if weapon_damage.is_empty():
 		return ""
 	var weapons: Dictionary = {}
 	for id: String in weapon_damage:
 		weapons[id] = {"damage": snappedf(float(weapon_damage[id]), 0.1), "hits": int(weapon_hits.get(id, 0))}
-	return JSON.stringify({"t": unix_time, "weapons": weapons})
+	var line: Dictionary = {"t": unix_time, "weapons": weapons}
+	if not completed:
+		line["completed"] = false
+		line["rounds_played"] = maxi(0, rounds_played)
+	return JSON.stringify(line)
 
 ## The weapon landing the most hits among `slots` ("" when none landed one);
 ## the first reached wins a tie. Names the match winner's weapon for telemetry.

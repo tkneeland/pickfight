@@ -1175,6 +1175,7 @@ func _play_lobby_music() -> void:
 		music.play_lobby()
 
 func _enter_lobby() -> void:
+	_abandon_match()
 	_end_final_ko()
 	_play_lobby_music()
 	_state = State.LOBBY
@@ -1257,6 +1258,7 @@ func _enter_victory() -> void:
 		victory_feed.clear_banners() # nothing queued from the last round over victory (#613)
 	_write_balance_log()
 	send_telemetry()
+	_match_live = false
 	_send_career_match()
 	_play_lobby_music()
 	_state = State.VICTORY
@@ -1290,6 +1292,8 @@ func _begin_match() -> void:
 	_match_target = _requested_target()
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
+	_rounds_finished = 0
+	_match_live = true
 	_match_winner_slot = -1
 	_last_winner_slot = -1
 	_begin_team_match()
@@ -1937,24 +1941,43 @@ var _match_started_msec: int = 0
 ## Where the record goes; empty means the game's configured relay.
 var telemetry_relay_url: String = ""
 
+## Rounds finished this match, and whether its record has gone out already, so
+## an abandon (#643) reports a match once and only after a round was played.
+var _rounds_finished: int = 0
+var _match_live: bool = false
+## When valid, the record goes here instead of the network, and the scripted-run
+## gate is skipped (the sharing toggle and the notice still apply). Scenarios
+## use it to observe what would be sent; nothing leaves the process.
+var telemetry_sink: Callable = Callable()
+
 ## Sends this match's anonymous record to the relay (issue #372), fire and
 ## forget. Returns whether a send started: false with sharing off, in a scripted
-## or `--bots` run, or when no real player landed a damaging hit.
-func send_telemetry() -> bool:
+## or `--bots` run, or when no real player landed a damaging hit. `completed`
+## false marks a match that ended without a winner (#643): no winner weapon, and
+## the rounds played so far.
+func send_telemetry(completed: bool = true) -> bool:
 	var host: RefCounted = HostSettingsScript.shared()
-	if not StatsSenderScript.should_send(host, StatsSenderScript.is_scripted(get_tree(), PackedStringArray()), OS.get_cmdline_user_args()):
+	var scripted: bool = StatsSenderScript.is_scripted(get_tree(), PackedStringArray())
+	if telemetry_sink.is_valid():
+		scripted = false
+	if not StatsSenderScript.should_send(host, scripted, OS.get_cmdline_user_args()):
 		return false
 	var winners: Array = []
-	if _team_mode:
+	if not completed:
+		pass
+	elif _team_mode:
 		for slot: int in _teams:
 			if int(_teams[slot]) == _match_winner_team:
 				winners.append(slot)
 	elif _match_winner_slot != -1:
 		winners.append(_match_winner_slot)
 	var length_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
-	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners)
+	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished)
 	if record.is_empty():
 		return false
+	if telemetry_sink.is_valid():
+		telemetry_sink.call(record)
+		return true
 	var url: String = telemetry_relay_url
 	if url.is_empty():
 		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
@@ -1964,14 +1987,31 @@ func send_telemetry() -> bool:
 	sender.send(record, url)
 	return true
 
+## A match that ends without a winner (the host returns to the lobby mid-match,
+## or the app quits) reports its partial numbers once, if a round finished (#643).
+func _abandon_match() -> void:
+	if not _match_live:
+		return
+	_match_live = false
+	if _rounds_finished < 1:
+		return
+	_write_balance_log(false)
+	send_telemetry(false)
+
+## Quitting mid-match sends the partial record; `Music._quit_cleanly` waits a
+## moment for the sender before it quits.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_abandon_match()
+
 ## Where the per-match balance tallies are appended (issue #316).
 var balance_log_path: String = "user://balance_stats.jsonl"
 
 ## The local balance log, only with stats sharing on (#609).
-func _write_balance_log() -> bool:
+func _write_balance_log(completed: bool = true) -> bool:
 	if not HostSettingsScript.shared().share_stats:
 		return false
-	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system())))
+	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system()), completed, _rounds_finished))
 
 func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	var victim_slot: int = _players.find(victim)
@@ -2069,6 +2109,7 @@ func _ko_round_started() -> void:
 ## A round won by the last of three or more is a big moment; one of two
 ## winning speaks for itself on the scoreboard.
 func _ko_round_ended(winner_slot: int) -> void:
+	_rounds_finished += 1
 	_stats.end_round(GameClockScript.now_msec())
 	var feed: Control = kill_feed()
 	if _team_mode:

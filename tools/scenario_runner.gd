@@ -573,6 +573,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_notice_shows_once",
 	"telemetry_relay_validates_and_stores_no_ip",
 	"telemetry_sender_reaches_relay_and_fails_quietly",
+	"telemetry_abandon_after_a_round_sends_a_partial_record_643",
+	"telemetry_abandon_before_any_round_sends_nothing_643",
+	"telemetry_normal_end_still_sends_a_completed_record_643",
+	"telemetry_relay_accepts_completed_and_rounds_played_643",
 	"rules_disabled_modifier_never_rolls_in_that_mode_only",
 	"rules_modifier_toggles_persist_across_reload",
 	"rules_table_bans_cannot_be_reenabled",
@@ -2367,6 +2371,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_relay_validates_and_stores_no_ip()
 		"telemetry_sender_reaches_relay_and_fails_quietly":
 			return await _scenario_telemetry_sender_reaches_relay_and_fails_quietly()
+		"telemetry_abandon_after_a_round_sends_a_partial_record_643":
+			return await _scenario_telemetry_abandon_after_a_round_sends_a_partial_record_643()
+		"telemetry_abandon_before_any_round_sends_nothing_643":
+			return await _scenario_telemetry_abandon_before_any_round_sends_nothing_643()
+		"telemetry_normal_end_still_sends_a_completed_record_643":
+			return await _scenario_telemetry_normal_end_still_sends_a_completed_record_643()
+		"telemetry_relay_accepts_completed_and_rounds_played_643":
+			return await _scenario_telemetry_relay_accepts_completed_and_rounds_played_643()
 		"rules_disabled_modifier_never_rolls_in_that_mode_only":
 			return await _scenario_rules_disabled_modifier_never_rolls_in_that_mode_only()
 		"rules_modifier_toggles_persist_across_reload":
@@ -31033,7 +31045,7 @@ func _telemetry_settings_372(share: bool) -> RefCounted:
 func _scenario_telemetry_record_has_no_identifying_fields() -> Array[String]:
 	var failures: Array[String] = []
 	var record: Dictionary = StatsSenderScript372.build_record(_telemetry_stats_372(), "stock", ["Flatlands", "Ice"], "ffa", 95, [2])
-	var expected_keys: Array = ["format", "length_sec", "mode", "stages", "weapons", "winner_weapon"]
+	var expected_keys: Array = ["completed", "format", "length_sec", "mode", "rounds_played", "stages", "weapons", "winner_weapon"]
 	var keys: Array = record.keys()
 	keys.sort()
 	if keys != expected_keys:
@@ -34952,6 +34964,165 @@ func _scenario_telemetry_off_sends_no_record_on_still_does() -> Array[String]:
 		failures.append("sharing on did not send")
 	if StatsSenderScript372.should_send(_telemetry_settings_372(false), false, PackedStringArray()):
 		failures.append("sharing off still sent")
+	_scenario_completed = true
+	return failures
+# --- Issue #643: a match that ends without a winner still reports ------------
+## A bots match in the lobby flow with real-player numbers put straight into the
+## match's stats (bots never count), the record captured at `telemetry_sink`
+## and sharing forced on for the run. `rounds` rounds finish before `finish`:
+## "end" (the host ends the match) or "win" (a normal win).
+func _telemetry_run_643(rounds: int, finish: String) -> Dictionary:
+	var out: Dictionary = {"failures": [] as Array[String], "records": [] as Array}
+	var host: RefCounted = HostSettingsScript372.shared()
+	var was_share: bool = host.share_stats
+	var was_notice: bool = host.telemetry_notice_seen
+	var was_persist: bool = host.persist
+	host.persist = false
+	host.share_stats = true
+	host.telemetry_notice_seen = true
+	BotDirectorScript.extra_args = PackedStringArray(["--bots=%d" % SETTINGS_CLICK_BOTS])
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	BotDirectorScript.extra_args = PackedStringArray()
+	rm.balance_log_path = "user://balance_stats_scenario_643.jsonl"
+	DirAccess.remove_absolute(rm.balance_log_path)
+	rm.telemetry_sink = func(record: Dictionary) -> void: out["records"].append(record)
+	await _await_ticks(5)
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.virtual_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	var started: bool = players.size() == SETTINGS_CLICK_BOTS and await _await_condition(
+		func() -> bool: return _all_alive(players), SETTINGS_CLICK_START_MSEC)
+	if not started:
+		out["failures"].append("the bots' round never started (phase '%s')" % rm.lobby_phase())
+	else:
+		rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+		if finish == "win":
+			rm.set("_match_target", 1)
+		for round_index in rounds:
+			for player: RigidBody2D in players.slice(1):
+				player.leave_round()
+			if not await _await_condition(func() -> bool: return rm.get("_state") != RoundManagerType.State.ROUND_ACTIVE, SETTINGS_CLICK_START_MSEC):
+				out["failures"].append("round %d never ended" % (round_index + 1))
+				break
+			if round_index + 1 < rounds and not await _await_condition(func() -> bool: return rm.get("_state") == RoundManagerType.State.ROUND_ACTIVE, SETTINGS_CLICK_START_MSEC):
+				out["failures"].append("round %d never started" % (round_index + 2))
+				break
+		if finish == "win":
+			if not await _await_condition(func() -> bool: return rm.get("_state") == RoundManagerType.State.VICTORY, SETTINGS_CLICK_START_MSEC):
+				out["failures"].append("the match never reached the victory screen (state %d)" % rm.get("_state"))
+			rm.call("_leave_victory") # going on to the lobby afterwards must not send a second record
+		else:
+			if rounds > 0 and not await _await_condition(func() -> bool: return rm.get("_state") == RoundManagerType.State.ROUND_ACTIVE, SETTINGS_CLICK_START_MSEC):
+				out["failures"].append("the next round never started")
+			rm._on_host_command("end", server.host_slot())
+		await _await_ticks(5)
+	out["log"] = FileAccess.get_file_as_string(rm.balance_log_path) if FileAccess.file_exists(rm.balance_log_path) else ""
+	DirAccess.remove_absolute(rm.balance_log_path)
+	if server.bot_director != null:
+		server.bot_director.remove_bots()
+	await _teardown(main)
+	host.share_stats = was_share
+	host.telemetry_notice_seen = was_notice
+	host.persist = was_persist
+	return out
+## Issue #643: the host ending the match after one round sends one record, not
+## completed, with the rounds played and no winner weapon; the local balance log
+## gets the same partial line.
+func _scenario_telemetry_abandon_after_a_round_sends_a_partial_record_643() -> Array[String]:
+	var run: Dictionary = await _telemetry_run_643(1, "end")
+	var failures: Array[String] = []
+	failures.append_array(run["failures"])
+	var records: Array = run["records"]
+	if records.size() != 1:
+		failures.append("expected one record after an abandon past round 1, got %d" % records.size())
+	else:
+		var record: Dictionary = records[0]
+		if record.get("completed") != false:
+			failures.append("completed was %s, expected false" % [record.get("completed")])
+		if int(record.get("rounds_played", -1)) != 1:
+			failures.append("rounds_played was %s, expected 1" % [record.get("rounds_played")])
+		if record.has("winner_weapon"):
+			failures.append("an abandoned match named a winner weapon: %s" % [record.get("winner_weapon")])
+		if not (record.get("weapons", {}) as Dictionary).has("pickaxe"):
+			failures.append("the partial record lost its weapon numbers: %s" % [record])
+	var log: Variant = JSON.parse_string(String(run.get("log", "")).strip_edges())
+	if not (log is Dictionary) or log.get("completed") != false or int(log.get("rounds_played", -1)) != 1:
+		failures.append("the balance log did not get the partial line: '%s'" % run.get("log", ""))
+	_scenario_completed = true
+	return failures
+## Issue #643: ending the match before any round finished adds no noise.
+func _scenario_telemetry_abandon_before_any_round_sends_nothing_643() -> Array[String]:
+	var run: Dictionary = await _telemetry_run_643(0, "end")
+	var failures: Array[String] = []
+	failures.append_array(run["failures"])
+	if not (run["records"] as Array).is_empty():
+		failures.append("an abandon after 0 rounds sent %s" % [run["records"]])
+	if String(run.get("log", "")) != "":
+		failures.append("an abandon after 0 rounds wrote the balance log: '%s'" % run.get("log", ""))
+	_scenario_completed = true
+	return failures
+## Issue #643: a match played to its win still sends exactly one record, completed,
+## and leaving the victory screen does not send an abandon on top.
+func _scenario_telemetry_normal_end_still_sends_a_completed_record_643() -> Array[String]:
+	var run: Dictionary = await _telemetry_run_643(1, "win")
+	var failures: Array[String] = []
+	failures.append_array(run["failures"])
+	var records: Array = run["records"]
+	if records.size() != 1:
+		failures.append("expected one record for a played-out match, got %d" % records.size())
+	else:
+		var record: Dictionary = records[0]
+		if record.get("completed") != true or not record.has("winner_weapon") or int(record.get("rounds_played", -1)) != 1:
+			failures.append("the completed record was wrong: %s" % [record])
+	_scenario_completed = true
+	return failures
+## Issue #643: the relay stores completed and rounds_played, defaults an older
+## host's record to completed, accepts a record with no winner weapon, and
+## refuses a malformed flag or count.
+func _scenario_telemetry_relay_accepts_completed_and_rounds_played_643() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	var path: String = OS.get_temp_dir().path_join("pf_643_stats_%d.jsonl" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	relay.stats_path = path
+	relay.stats_limit_per_hour = 50
+	var partial: Dictionary = _telemetry_relay_record_372()
+	partial.erase("winner_weapon")
+	partial["completed"] = false
+	partial["rounds_played"] = 2
+	var status: Dictionary = relay.handle_stats("203.0.113.5", {"t": "stats", "record": partial})
+	if status.get("status") != 200:
+		failures.append("an abandoned record without a winner weapon gave %s" % [status])
+	status = relay.handle_stats("203.0.113.5", {"t": "stats", "record": _telemetry_relay_record_372()})
+	if status.get("status") != 200:
+		failures.append("an older host's record gave %s" % [status])
+	var lines: PackedStringArray = FileAccess.get_file_as_string(path).strip_edges().split("\n")
+	if lines.size() != 2:
+		failures.append("expected 2 stored lines, got %d" % lines.size())
+	else:
+		var first: Variant = JSON.parse_string(lines[0])
+		var second: Variant = JSON.parse_string(lines[1])
+		if not (first is Dictionary) or first.get("completed") != false or int(first.get("rounds_played", -1)) != 2:
+			failures.append("the abandoned record was stored as %s" % lines[0])
+		if not (second is Dictionary) or second.get("completed") != true:
+			failures.append("an older record should be stored as completed: %s" % lines[1])
+	var bad_flag: Dictionary = _telemetry_relay_record_372()
+	bad_flag["completed"] = "no"
+	var bad_rounds: Dictionary = _telemetry_relay_record_372()
+	bad_rounds["rounds_played"] = -1
+	var bad_rounds_type: Dictionary = _telemetry_relay_record_372()
+	bad_rounds_type["rounds_played"] = "3"
+	for bad: Dictionary in [bad_flag, bad_rounds, bad_rounds_type]:
+		var result: Dictionary = relay.handle_stats("198.51.100.4", {"t": "stats", "record": bad})
+		if result.get("status") != 400:
+			failures.append("%s gave %s, expected 400" % [bad, result])
+	DirAccess.remove_absolute(path)
+	relay.queue_free()
 	_scenario_completed = true
 	return failures
 # --- Snapshot field-by-field comparison (#240 quality pass) -------------------

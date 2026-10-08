@@ -29,7 +29,9 @@ var _done: bool = true
 ## The record for one match, or {} when no real player landed a damaging hit.
 ## `winner_slots` is the winning player (or team's players), used only to name
 ## the winner's weapon; no slot appears in the record.
-static func build_record(stats: RefCounted, mode: String, stages: Array, format: String, length_sec: int, winner_slots: Array) -> Dictionary:
+## `completed` false marks a match that ended without a winner (#643): the
+## record then has no `winner_weapon`.
+static func build_record(stats: RefCounted, mode: String, stages: Array, format: String, length_sec: int, winner_slots: Array, completed: bool = true, rounds_played: int = 0) -> Dictionary:
 	if stats.weapon_damage.is_empty():
 		return {}
 	var weapons: Dictionary = {}
@@ -42,14 +44,18 @@ static func build_record(stats: RefCounted, mode: String, stages: Array, format:
 	var names: Array = []
 	for stage: Variant in stages:
 		names.append(str(stage))
-	return {
+	var record: Dictionary = {
 		"mode": mode if mode != "" else "classic",
 		"stages": names,
 		"format": format,
 		"length_sec": maxi(0, length_sec),
-		"winner_weapon": stats.best_weapon_of(winner_slots),
+		"completed": completed,
+		"rounds_played": maxi(0, rounds_played),
 		"weapons": weapons,
 	}
+	if completed:
+		record["winner_weapon"] = stats.best_weapon_of(winner_slots)
+	return record
 
 ## Whether `tree` is a scripted run: a `-s` script's loop (the scenario runner,
 ## a probe) or a `--bots` launch. Mirrors the guard that keeps those off the
@@ -71,6 +77,7 @@ func is_busy() -> bool:
 	return not _done
 
 func send(record: Dictionary, relay_url: String) -> void:
+	add_to_group("telemetry_sender")
 	_payload = JSON.stringify({"t": "stats", "record": record})
 	_peer = WebSocketPeer.new()
 	_sent = false
