@@ -403,9 +403,10 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 		"length_sec": int(length),
 		"stages": stages,
 		"completed": completed,
-		"winner_weapon": clean_feedback_text(winner, STATS_MAX_NAME_CHARS, false),
 		"weapons": weapons,
 	}
+	if completed:
+		cleaned["winner_weapon"] = clean_feedback_text(winner, STATS_MAX_NAME_CHARS, false) # an abandoned match has no winner (#643)
 	if rec.has("rounds_played"):
 		var rounds: Variant = rec["rounds_played"]
 		if not (rounds is int or (rounds is float and float(rounds) == floorf(float(rounds)))) or float(rounds) < 0.0 or float(rounds) > STATS_MAX_ROUNDS:
