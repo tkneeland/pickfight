@@ -1300,6 +1300,28 @@ func send_career(slot: int, deltas: Dictionary) -> bool:
 	peer.send_text(JSON.stringify({"t": "career", "d": deltas}))
 	return true
 
+## The Continue inputs the room's human seats have, for the victory prompt
+## (#639): "pc" (the host PC's seat or an Online client, both press Space),
+## "pad" (a gamepad, A) and "phone" (a tap on Continue), in that order, each
+## only when a connected seat of that kind exists. Bots hold no peer and count
+## for nothing.
+func continue_inputs() -> PackedStringArray:
+	var has: Dictionary = {"pc": false, "pad": false, "phone": false}
+	for peer: Variant in _slot_peers:
+		if peer == null or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if peer is PadSeat:
+			has["pad"] = true
+		elif peer is LocalSeat or peer is RemoteSeat:
+			has["pc"] = true
+		else:
+			has["phone"] = true
+	var out := PackedStringArray()
+	for kind: String in ["pc", "pad", "phone"]:
+		if has[kind]:
+			out.append(kind)
+	return out
+
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round
 ## that no one still in it can finish.

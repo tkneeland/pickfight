@@ -222,6 +222,11 @@ STAGE_ZIGGURAT,Ziggurat
 STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s
 TEAM_BLUE,BLUE
 TEAM_RED,RED
+VICTORY_CONTINUE_WITH,Continue with %s
+VICTORY_INPUT_PAD,A on a gamepad
+VICTORY_INPUT_PHONE,a tap on your phone
+VICTORY_INPUT_SPACE,Space
+VICTORY_LIST_LAST,%s or %s
 VICTORY_MATCH_OVER,MATCH OVER
 VICTORY_TAP_CONTINUE,Tap Continue on your phone
 VICTORY_TEAM_WINS,%s TEAM WINS!

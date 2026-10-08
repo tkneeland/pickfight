@@ -1409,6 +1409,8 @@ func _publish_lobby_state() -> void:
 ## The podium: the match winner on the tallest block, then everyone else in
 ## the roster by final score, drawn by the lobby screen with the awards.
 func _refresh_victory() -> void:
+	if _controller_server != null and _controller_server.has_method("continue_inputs"):
+		_lobby_screen.set_victory_continue_inputs(_controller_server.continue_inputs())
 	var roster: Array[int] = _roster()
 	var slots: Array[int] = []
 	for slot in _players.size():

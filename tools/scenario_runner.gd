@@ -504,6 +504,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_continue_waits_for_every_human_not_bots",
 	"victory_continue_times_out",
 	"victory_host_key_returns_to_lobby",
+	"victory_prompt_names_only_the_seated_continue_inputs_639",
 	"match_stats_longest_airtime_award",
 	"bot_prefers_reachable_target_and_strikes",
 	"bot_never_idles_while_opponent_alive",
@@ -2225,6 +2226,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ghost_cleared_at_round_end_and_never_for_bots()
 		"victory_continue_waits_for_every_human_not_bots":
 			return await _scenario_victory_continue_waits_for_every_human_not_bots()
+		"victory_prompt_names_only_the_seated_continue_inputs_639":
+			return await _scenario_victory_prompt_names_only_the_seated_continue_inputs_639()
 		"victory_continue_times_out":
 			return await _scenario_victory_continue_times_out()
 		"victory_host_key_returns_to_lobby":
@@ -28551,6 +28554,50 @@ func _scenario_victory_continue_waits_for_every_human_not_bots() -> Array[String
 	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("the only human tapping Continue (other slot a bot) never returned to the lobby")
 	await _teardown(loop["stage"])
+	return failures
+## Issue #639: the victory prompt names only the Continue inputs the room has:
+## Space for the host PC seat, A for a gamepad, a tap for a phone; bots count
+## for nothing and a phone-only room keeps the old line.
+func _scenario_victory_prompt_names_only_the_seated_continue_inputs_639() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var prompt_of: Callable = func() -> String:
+		rm._refresh_victory()
+		var label: Label = rm._lobby_screen.victory_panel().find_child("ContinuePrompt", true, false) as Label
+		return label.text if label != null else "<no prompt>"
+	var phone_only: String = "Tap Continue on your phone"
+	var phones: Array[WebSocketPeer] = []
+	var phone := WebSocketPeer.new()
+	await _join_phone(phone, "prompt-phone", phones)
+	phones.append(phone)
+	var got: String = prompt_of.call()
+	if got != phone_only:
+		failures.append("a phone-only room read '%s', expected '%s'" % [got, phone_only])
+	server.apply_host_command("pc_seat", true)
+	got = prompt_of.call()
+	if got != "Continue with Space or a tap on your phone":
+		failures.append("PC seat plus a phone read '%s'" % got)
+	server._bind_pad(0)
+	got = prompt_of.call()
+	if got != "Continue with Space, A on a gamepad or a tap on your phone":
+		failures.append("PC seat, gamepad and phone read '%s'" % got)
+	await _close_phones(phones)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	server.set_bot_count(2)
+	got = prompt_of.call()
+	if got != "Continue with Space or A on a gamepad":
+		failures.append("PC seat, gamepad and bots (no phone) read '%s'" % got)
+	server.apply_host_command("pc_seat", false)
+	server.set_bot_count(0)
+	await _teardown(main)
 	return failures
 ## Issue #337: nobody taps, the victory screen gives up after its timeout.
 func _scenario_victory_continue_times_out() -> Array[String]:
