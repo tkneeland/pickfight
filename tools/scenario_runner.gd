@@ -581,6 +581,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"telemetry_sender_reaches_relay_and_fails_quietly",
 	"telemetry_abandon_after_a_round_sends_a_partial_record_643",
 	"telemetry_abandon_before_any_round_sends_nothing_643",
+	"mode_target_follows_the_picked_mode_at_the_countdown_644",
+	"soccer_mid_round_stage_change_keeps_the_gale_gust_646",
+	"telemetry_soccer_abandoned_after_a_minute_sends_a_record_643",
+	"telemetry_soccer_abandoned_inside_a_minute_sends_nothing_643",
 	"telemetry_normal_end_still_sends_a_completed_record_643",
 	"telemetry_relay_accepts_completed_and_rounds_played_643",
 	"rules_disabled_modifier_never_rolls_in_that_mode_only",
@@ -2397,6 +2401,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_telemetry_sender_reaches_relay_and_fails_quietly()
 		"telemetry_abandon_after_a_round_sends_a_partial_record_643":
 			return await _scenario_telemetry_abandon_after_a_round_sends_a_partial_record_643()
+		"mode_target_follows_the_picked_mode_at_the_countdown_644":
+			return await _scenario_mode_target_follows_the_picked_mode_at_the_countdown_644()
+		"soccer_mid_round_stage_change_keeps_the_gale_gust_646":
+			return await _score_match_run(true, SOCCER_PITCH_PATHS, false, "gale")
+		"telemetry_soccer_abandoned_after_a_minute_sends_a_record_643":
+			return await _telemetry_soccer_abandon_643(61.0)
+		"telemetry_soccer_abandoned_inside_a_minute_sends_nothing_643":
+			return await _telemetry_soccer_abandon_643(5.0)
 		"telemetry_abandon_before_any_round_sends_nothing_643":
 			return await _scenario_telemetry_abandon_before_any_round_sends_nothing_643()
 		"telemetry_normal_end_still_sends_a_completed_record_643":
@@ -28896,14 +28908,15 @@ func _scenario_mode_hot_potato_is_ffa_only() -> Array[String]:
 	var failures: Array[String] = []
 	HostSettingsScript352.shared().game_mode = ""
 	var server: Node = ControllerServerScript.new()
-	# Hot Potato is retired from the picker (#645): the fixture is the table's
-	# FFA-only flag, which still stands for a forced round.
+	# Hot Potato is retired from the picker (#645), so it is forced directly: the
+	# table's FFA-only flag still stands, and Teams on drops it to Classic.
 	if not GameModesType.is_ffa_only("hot_potato") or GameModesType.fits_format("hot_potato", true):
 		failures.append("Hot Potato is no longer FFA-only in the table")
+	server.set("_game_mode", "hot_potato")
 	if not server.apply_host_command("mode", "teams"):
 		failures.append("Teams could not be switched on")
 	if server.game_mode() != "":
-		failures.append("Teams on with Hot Potato chosen left '%s', not Classic" % server.game_mode())
+		failures.append("Teams on with Hot Potato forced left '%s', not Classic" % server.game_mode())
 	for id: String in ["king_of_the_hill", "sudden_death", ""]:
 		if not server.apply_host_command("gamemode", id) or server.game_mode() != id:
 			failures.append("'%s' was refused with Teams on" % id)
@@ -35212,19 +35225,28 @@ func _scenario_telemetry_relay_accepts_completed_and_rounds_played_643() -> Arra
 	var status: Dictionary = relay.handle_stats("203.0.113.5", {"t": "stats", "record": partial})
 	if status.get("status") != 200:
 		failures.append("an abandoned record without a winner weapon gave %s" % [status])
+	var named_winner: Dictionary = _telemetry_relay_record_372()
+	named_winner["completed"] = false
+	named_winner["rounds_played"] = 1
+	status = relay.handle_stats("203.0.113.6", {"t": "stats", "record": named_winner})
+	if status.get("status") != 200:
+		failures.append("an abandoned record with a winner weapon gave %s" % [status])
 	status = relay.handle_stats("203.0.113.5", {"t": "stats", "record": _telemetry_relay_record_372()})
 	if status.get("status") != 200:
 		failures.append("an older host's record gave %s" % [status])
 	var lines: PackedStringArray = FileAccess.get_file_as_string(path).strip_edges().split("\n")
-	if lines.size() != 2:
-		failures.append("expected 2 stored lines, got %d" % lines.size())
+	if lines.size() != 3:
+		failures.append("expected 3 stored lines, got %d" % lines.size())
 	else:
+		var dropped: Variant = JSON.parse_string(lines[1])
+		if not (dropped is Dictionary) or dropped.has("winner_weapon"):
+			failures.append("an abandoned record kept a winner weapon: %s" % lines[1])
 		var first: Variant = JSON.parse_string(lines[0])
-		var second: Variant = JSON.parse_string(lines[1])
+		var second: Variant = JSON.parse_string(lines[2])
 		if not (first is Dictionary) or first.get("completed") != false or int(first.get("rounds_played", -1)) != 2:
 			failures.append("the abandoned record was stored as %s" % lines[0])
 		if not (second is Dictionary) or second.get("completed") != true:
-			failures.append("an older record should be stored as completed: %s" % lines[1])
+			failures.append("an older record should be stored as completed: %s" % lines[2])
 	var bad_flag: Dictionary = _telemetry_relay_record_372()
 	bad_flag["completed"] = "no"
 	var bad_rounds: Dictionary = _telemetry_relay_record_372()
@@ -40813,7 +40835,7 @@ const CTF_HALL_PATHS: Array[String] = [
 ## Red scoring every time: the stage changes after scores 1 and 2 (or stays
 ## on the one stage left on with `only_first`), the third goes to the podium
 ## with Red the winner, and one round is recorded.
-func _score_match_run(soccer: bool, paths: Array[String], only_first: bool) -> Array[String]:
+func _score_match_run(soccer: bool, paths: Array[String], only_first: bool, modifier: String = "") -> Array[String]:
 	var failures: Array[String] = []
 	var settings: RefCounted = HostSettingsScript352.shared()
 	var old_goals: int = settings.soccer_goals
@@ -40828,6 +40850,7 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool) -> A
 		scenes.append(load(path))
 	rm.stage_scenes = scenes
 	rm.game_mode = GameModesType.SOCCER if soccer else GameModesType.CAPTURE_THE_FLAG
+	rm.forced_modifier = modifier
 	var switched_off: Array[String] = []
 	if only_first:
 		for path: String in paths.slice(1):
@@ -40857,6 +40880,10 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool) -> A
 			if not changed:
 				failures.append("no new kick-off after score %d" % (n + 1))
 				break
+			if modifier == "gale":
+				var gust: Node = rm._current_stage.get_node_or_null("GaleGust")
+				if gust == null or not gust.is_inside_tree():
+					failures.append("the new stage after score %d has no gale gust" % (n + 1))
 			if rm.lobby_phase() != "playing":
 				failures.append("the match left play after score %d (phase '%s')" % [n + 1, rm.lobby_phase()])
 			await _await_ticks(3)
@@ -41059,4 +41086,96 @@ func _scenario_soccer_ball_flies_farther_than_at_mass_one_649() -> Array[String]
 	elif reach[real_mass] < reach[1.0] * 1.5:
 		failures.append("the light ball (mass %.2f) travelled %.0f px, the old one %.0f px: under 1.5x" % [real_mass, reach[real_mass], reach[1.0]])
 	await _teardown(rig["stage"])
+	return failures
+## The lobby round loop with the host phone's picker standing in (#352): the
+## roster reports `picked_mode`, as `ControllerServer.game_mode()` does.
+func _new_picker_round_644(target: int) -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(target)
+	var roster: Node = loop["roster"]
+	roster.set_script(preload("res://tools/stub_mode_roster.gd"))
+	var claimed: Array[int] = [0, 1]
+	roster.slots = claimed
+	roster.target = target
+	return loop
+## Issue #644: a match's target is read once the host's picked mode is latched at
+## the countdown, not from the mode the last match left behind. Stock as the
+## first match is one round; Classic after it plays the host's "first to 5".
+func _scenario_mode_target_follows_the_picked_mode_at_the_countdown_644() -> Array[String]:
+	var failures: Array[String] = []
+	_stock_settings(1, 480)
+	var loop: Dictionary = _new_picker_round_644(5)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	roster.picked_mode = GameModesType.STOCK
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return rm.game_mode_node() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the first Stock match never started")
+	else:
+		if rm.match_target() != 1:
+			failures.append("Stock as the first match had a target of %d, expected 1" % rm.match_target())
+		players[1].eliminate()
+		if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("the Stock match did not end after one round (phase '%s')" % rm.lobby_phase())
+		else:
+			rm.call("_leave_victory")
+			roster.picked_mode = ""
+			await _await_ticks(LOBBY_SETTLE_TICKS)
+			roster.ready_slots = {0: true, 1: true}
+			if not await _await_condition(func() -> bool: return rm.lobby_phase() == "playing" and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+				failures.append("the Classic match after Stock never started (phase '%s')" % rm.lobby_phase())
+			elif rm.match_target() != 5:
+				failures.append("Classic after Stock had a target of %d, expected the host's 5" % rm.match_target())
+	await _stock_finish(loop)
+	_scenario_completed = true
+	return failures
+## Issue #643: a Soccer match is one round, so an abandon with no round finished
+## still sends its partial record once the match has had a minute of play, and
+## sends nothing inside that minute.
+func _telemetry_soccer_abandon_643(played_sec: float) -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = HostSettingsScript372.shared()
+	var was_share: bool = host.share_stats
+	var was_notice: bool = host.telemetry_notice_seen
+	var was_persist: bool = host.persist
+	host.persist = false
+	host.share_stats = true
+	host.telemetry_notice_seen = true
+	var records: Array = []
+	var loop: Dictionary = _new_lobby_round(5)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	rm.stage_scenes = [load("res://scenes/stages/Pitch.tscn")] as Array[PackedScene]
+	rm.game_mode = GameModesType.SOCCER
+	rm.balance_log_path = "user://balance_stats_scenario_643_soccer.jsonl"
+	rm.telemetry_sink = func(record: Dictionary) -> void: records.append(record)
+	roster.teams_on = true
+	roster.team_picks = {0: 0, 1: 1}
+	roster.host = 0
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return rm.game_mode_node() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the Soccer match never started")
+	else:
+		rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+		GameClockScript.advance(played_sec)
+		rm._on_host_command("end", 0)
+		await _await_ticks(5)
+		if played_sec >= 60.0:
+			if records.size() != 1:
+				failures.append("a Soccer match abandoned after %d s sent %d records, expected 1" % [int(played_sec), records.size()])
+			else:
+				var record: Dictionary = records[0]
+				if record.get("completed") != false or int(record.get("rounds_played", -1)) != 0 or record.has("winner_weapon"):
+					failures.append("the abandoned Soccer record was wrong: %s" % [record])
+		elif not records.is_empty():
+			failures.append("a Soccer match abandoned after %d s sent %s" % [int(played_sec), records])
+	DirAccess.remove_absolute(rm.balance_log_path)
+	await _teardown(loop["stage"])
+	host.share_stats = was_share
+	host.telemetry_notice_seen = was_notice
+	host.persist = was_persist
+	_scenario_completed = true
 	return failures

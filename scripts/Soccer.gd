@@ -29,7 +29,7 @@ signal callout(sound: StringName)
 signal goal_scored(team: int, scorer: int)
 
 ## How long a knocked-out player waits before coming back (#648). Longer than
-## Stock's and Capture the Flag's 1.5 s; tune it here.
+## Stock's 1.5 s (Capture the Flag waits 4 s too); tune it here.
 const RESPAWN_SEC: float = 4.0
 const BALL_RADIUS: float = 28.0
 ## How close a player's body or weapon head must be to the ball to count as

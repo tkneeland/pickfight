@@ -436,7 +436,10 @@ func change_stage_mid_round() -> void:
 		return
 	_stage_rotation.round_player_count = _roster().size()
 	_stage_rotation.mode_id = game_mode
+	var before: Node = _current_stage
 	_swap_stage(true)
+	if _modifier != null and _current_stage != before:
+		_modifier.restage(_current_stage) # stage-attached modifiers follow (#646)
 	_pickup_director.start()
 	_show_stage_title()
 
@@ -1312,14 +1315,14 @@ func _begin_match() -> void:
 	# Stock is one round and done (#644): the first win is the match, whatever
 	# "first to N" the host left set for the round modes.
 	# Soccer's goals and CTF's captures are the match too (#646).
-	_match_target = 1 if GameModesScript.one_round_match(game_mode) else _requested_target()
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
 	_rounds_finished = 0
 	_match_live = true
 	_match_winner_slot = -1
 	_last_winner_slot = -1
-	_begin_team_match()
+	_begin_team_match() # latches the mode, so the target reads the right one
+	_match_target = 1 if GameModesScript.one_round_match(game_mode) else _requested_target()
 	for slot in _scores.size():
 		_scores[slot] = 0
 	# A fresh seed for a fresh match (#187), before anything draws from it.
@@ -1968,6 +1971,9 @@ var telemetry_relay_url: String = ""
 ## an abandon (#643) reports a match once and only after a round was played.
 var _rounds_finished: int = 0
 var _match_live: bool = false
+## An abandoned match reports with no round finished once it has been live this
+## long (Stock, Soccer and CTF are one round, #643).
+const ABANDON_MIN_PLAY_SEC: int = 60
 ## When valid, the record goes here instead of the network, and the scripted-run
 ## gate is skipped (the sharing toggle and the notice still apply). Scenarios
 ## use it to observe what would be sent; nothing leaves the process.
@@ -2005,6 +2011,7 @@ func send_telemetry(completed: bool = true) -> bool:
 	if url.is_empty():
 		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
 	var sender: Node = StatsSenderScript.new()
+	sender.process_mode = Node.PROCESS_MODE_ALWAYS # a paused quit still sends
 	sender.finished.connect(func(_status: int) -> void: sender.queue_free())
 	add_child(sender)
 	sender.send(record, url)
@@ -2016,7 +2023,13 @@ func _abandon_match() -> void:
 	if not _match_live:
 		return
 	_match_live = false
-	if _rounds_finished < 1:
+	if _match_winner_slot != -1 or _match_winner_team != -1:
+		# Decided but not yet on the victory screen: a completed match.
+		_write_balance_log()
+		send_telemetry()
+		return
+	var played_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
+	if _rounds_finished < 1 and played_sec < ABANDON_MIN_PLAY_SEC:
 		return
 	_write_balance_log(false)
 	send_telemetry(false)
