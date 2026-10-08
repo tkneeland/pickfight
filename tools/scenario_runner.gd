@@ -41246,6 +41246,7 @@ func _scenario_soccer_ball_flies_farther_than_at_mass_one_649() -> Array[String]
 	elif reach[real_mass] < reach[1.0] * 1.5:
 		failures.append("the light ball (mass %.2f) travelled %.0f px, the old one %.0f px: under 1.5x" % [real_mass, reach[real_mass], reach[1.0]])
 	await _teardown(rig["stage"])
+	return failures
 
 ## Issue #640 review: after Esc frees the mouse, the next left click recaptures
 ## it and is not an action.
