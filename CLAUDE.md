@@ -38,7 +38,7 @@ repository keeps its own base SHA, branch, verification result, and pull request
 
 ## Repository framing
 
-**pickfight** — A same-room multiplayer platform fighter combining Stick Fight's scrappy physics combat with Getting Over It's pole/hammer movement scheme. One host machine simulates and renders the shared screen; a match is Local (phones or gamepads in one room, joined by QR) or Online (each player on their own computer, joined by room code), never mixed. Early prototype at playtest stage: up to eight phone-controlled players, an endless round loop over 43 rotating stages built from reusable parts, and fifteen weapons (the pickaxe everyone starts with, plus fourteen handed out as on-stage pickups, ADR-0009); art is placeholder.
+**pickfight** — A same-room multiplayer platform fighter combining Stick Fight's scrappy physics combat with Getting Over It's pole/hammer movement scheme. One host machine simulates and renders the shared screen; a match is Local (phones or gamepads in one room, joined by QR) or Online (each player on their own computer, joined by room code), never mixed. Early prototype at playtest stage: up to eight phone-controlled players, an endless round loop over 43 rotating stages built from reusable parts, and fifteen weapons (the pickaxe everyone starts with, plus thirteen handed out as on-stage pickups, ADR-0009, and the spear kept but retired from rotation, #642); art is placeholder.
 
 ### Structure
 

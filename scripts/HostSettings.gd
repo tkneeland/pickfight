@@ -96,6 +96,8 @@ static func name_of(resource_path: String) -> String:
 static func known_weapons() -> PackedStringArray:
 	var names := PackedStringArray()
 	for weapon_path: String in PickupWeaponsScript.WEAPON_PATHS:
+		if PickupWeaponsScript.RETIRED_PATHS.has(weapon_path):  # retired from rotation (#642)
+			continue
 		if DemoBuildScript.weapon_in_slice(name_of(weapon_path)):  # the demo's slice (#361)
 			names.append(name_of(weapon_path))
 	return names

@@ -548,6 +548,8 @@ func _ready() -> void:
 	_slot_press_seen.fill(-1)
 	_slot_action_down.resize(_players.size())
 	_slot_action_down.fill(-1)
+	_slot_click_down.resize(_players.size())
+	_slot_click_down.fill(-1)
 	_slot_bumper_down.resize(_players.size())
 	_slot_bumper_down.fill(-1)
 	_slot_was_alive.resize(_players.size())
@@ -648,6 +650,7 @@ func _clear_release(slot: int) -> void:
 	_slot_release_held[slot] = 0
 	_slot_press_seen[slot] = -1
 	_slot_action_down[slot] = -1
+	_slot_click_down[slot] = -1
 	_slot_bumper_down[slot] = -1
 
 ## Issue #485: an action button (Space, L3/R3) is a tap when it comes up within
@@ -656,28 +659,43 @@ func _clear_release(slot: int) -> void:
 ## Game-clock msec the seat's action button went down, -1 when up.
 const TAP_MAX_SEC: float = 0.25
 var _slot_action_down: PackedInt64Array = PackedInt64Array()
+## The host PC seat's left click (#640) times separately from Space, so one
+## cannot clear the other's hold; same game-clock msec, -1 when up.
+var _slot_click_down: PackedInt64Array = PackedInt64Array()
 ## Same for a bumper, which is released while held from the moment it goes down.
 var _slot_bumper_down: PackedInt64Array = PackedInt64Array()
 
 func _is_tap(down_msec: int) -> bool:
 	return float(GameClockScript459.now_msec() - down_msec) <= TAP_MAX_SEC * 1000.0
 
-func _action_down(slot: int) -> void:
-	if slot >= 0 and slot < _slot_action_down.size():
-		_slot_action_down[slot] = GameClockScript459.now_msec()
+func _action_down(slot: int, mouse: bool = false) -> void:
+	var timers: PackedInt64Array = _slot_click_down if mouse else _slot_action_down
+	if slot >= 0 and slot < timers.size():
+		timers[slot] = GameClockScript459.now_msec()
+		if mouse:
+			_slot_click_down = timers
+		else:
+			_slot_action_down = timers
 
 ## The button came up: a tap does the weapon's job, a hold already did its work.
-func _action_up(slot: int) -> void:
-	if slot < 0 or slot >= _slot_action_down.size() or _slot_action_down[slot] == -1:
+func _action_up(slot: int, mouse: bool = false) -> void:
+	var timers: PackedInt64Array = _slot_click_down if mouse else _slot_action_down
+	if slot < 0 or slot >= timers.size() or timers[slot] == -1:
 		return
-	var tap: bool = _is_tap(_slot_action_down[slot])
-	_slot_action_down[slot] = -1
+	var tap: bool = _is_tap(timers[slot])
+	timers[slot] = -1
+	if mouse:
+		_slot_click_down = timers
+	else:
+		_slot_action_down = timers
 	if tap:
 		_action_press(slot)
 
 func _action_held_long(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_action_down.size() and _slot_action_down[slot] != -1 \
-		and not _is_tap(_slot_action_down[slot])
+	for timers: PackedInt64Array in [_slot_action_down, _slot_click_down]:
+		if slot >= 0 and slot < timers.size() and timers[slot] != -1 and not _is_tap(timers[slot]):
+			return true
+	return false
 
 ## Whether `slot` is letting go right now (a test seam, like `pad_slot`).
 func slot_released(slot: int) -> bool:
@@ -1299,6 +1317,28 @@ func send_career(slot: int, deltas: Dictionary) -> bool:
 		return false
 	peer.send_text(JSON.stringify({"t": "career", "d": deltas}))
 	return true
+
+## The Continue inputs the room's human seats have, for the victory prompt
+## (#639): "pc" (the host PC's seat or an Online client, both press Space),
+## "pad" (a gamepad, A) and "phone" (a tap on Continue), in that order, each
+## only when a connected seat of that kind exists. Bots hold no peer and count
+## for nothing.
+func continue_inputs() -> PackedStringArray:
+	var has: Dictionary = {"pc": false, "pad": false, "phone": false}
+	for peer: Variant in _slot_peers:
+		if peer == null or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if peer is PadSeat:
+			has["pad"] = true
+		elif peer is LocalSeat or peer is RemoteSeat:
+			has["pc"] = true
+		else:
+			has["phone"] = true
+	var out := PackedStringArray()
+	for kind: String in ["pc", "pad", "phone"]:
+		if has[kind]:
+			out.append(kind)
+	return out
 
 ## Whether `slot` has a connected controller right now. A claimed slot can be
 ## without one mid-round (ADR-0007); the round loop uses this to spot a round
@@ -2307,11 +2347,24 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
 			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
 			and not _input_gated() and not _host_menu_open():
-		_action_down(_host_pc_slot)
+		_action_down(_host_pc_slot, false)
 		return
 	if key != null and not key.pressed and key.physical_keycode == KEY_SPACE and _host_pc_slot != -1:
-		_action_up(_host_pc_slot)
+		_action_up(_host_pc_slot, false)
 		return
+	# Issue #640: a left click is Space's second binding: the same tap (down and
+	# up within TAP_MAX_SEC, fired on release). Only with the mouse captured, so
+	# the click that recaptures it after Esc is not an action, and never on a
+	# UI control.
+	var action_click := event as InputEventMouseButton
+	if action_click != null and action_click.button_index == MOUSE_BUTTON_LEFT and _host_pc_slot != -1:
+		if not action_click.pressed:
+			_action_up(_host_pc_slot, true)
+			return
+		if _mouse_captured and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+				and not _input_gated() and not _host_menu_open() and get_viewport().gui_get_hovered_control() == null:
+			_action_down(_host_pc_slot, true)
+			return
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE and _mouse_captured:
 		_mouse_escaped = true
 		_update_mouse_capture()
