@@ -1449,6 +1449,7 @@ func _publish_lobby_state() -> void:
 			"stage": _stock_single_stage(), "stages": _stage_rotation.picker_rows(),
 		}
 	state["stages_by_mode"] = _stages_by_mode()
+	state["rules"] = _rules_state()
 	if state == _last_lobby_state:
 		return
 	_last_lobby_state = state
@@ -2316,8 +2317,38 @@ func _stages_by_mode() -> Dictionary:
 	var out: Dictionary = {}
 	for mode_id: String in ["classic", GameModesScript.KING_OF_THE_HILL, GameModesScript.SUDDEN_DEATH,
 			GameModesScript.STOCK, GameModesScript.SOCCER, GameModesScript.CAPTURE_THE_FLAG]:
-		out[mode_id] = {"all": settings.stages_for_mode(mode_id), "on": settings.enabled_stages_for(mode_id)}
+		out[mode_id] = {"all": settings.stages_for_mode(mode_id), "on": settings.on_stages_for(mode_id)}
 	return out
+
+## The Rules the host phone's Stages & Rules page shows (#647): per mode which
+## round modifiers (plus the `night` switch) are on or locked off, and the
+## global pickup weapons.
+func _rules_state() -> Dictionary:
+	var settings: RefCounted = HostSettingsScript.shared()
+	var ids: Array = []
+	var titles: Dictionary = {}
+	for id: String in RoundModifiersScript.IDS:
+		ids.append(id)
+		titles[id] = RoundModifiersScript.title_of(id)
+	ids.append("night")
+	titles["night"] = "Night Stages"
+	var modes: Dictionary = {}
+	for mode_id: String in ["classic", GameModesScript.KING_OF_THE_HILL, GameModesScript.SUDDEN_DEATH,
+			GameModesScript.STOCK, GameModesScript.SOCCER, GameModesScript.CAPTURE_THE_FLAG]:
+		var on: Array = []
+		var locked: Array = []
+		for id: String in ids:
+			if GameModesScript.bans_modifier(mode_id, id):
+				locked.append(id)
+			elif settings.is_modifier_enabled(mode_id, id):
+				on.append(id)
+		modes[mode_id] = {"on": on, "locked": locked}
+	var weapons_on: Array = []
+	for weapon_name: String in HostSettingsScript.known_weapons():
+		if settings.is_weapon_enabled(weapon_name):
+			weapons_on.append(weapon_name)
+	return {"modifiers": ids, "titles": titles, "modes": modes,
+		"weapons": Array(HostSettingsScript.known_weapons()), "weapons_on": weapons_on}
 
 ## The host phone's pick for the next match (issue #352), taken as the match's
 ## countdown runs out and held for all of it. Only a lobby match takes it, so a

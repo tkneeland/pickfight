@@ -535,6 +535,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
+	"stages_all_off_reaches_zero_in_the_lobby_state_647",
+	"stages_and_rules_messages_come_only_from_the_host_647",
+	"controller_page_has_the_stages_and_rules_screen_647",
 	"old_stage_config_migrates_to_per_mode_lists_647",
 	"ctf_captures_are_the_match_and_each_capture_changes_hall_646",
 	"ctf_with_one_hall_on_stays_in_it_646",
@@ -2321,6 +2324,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_with_several_stages_on_picks_one_of_them_647()
 		"soccer_and_ctf_draw_only_their_own_on_stages_647":
 			return await _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647()
+		"stages_all_off_reaches_zero_in_the_lobby_state_647":
+			return await _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647()
+		"stages_and_rules_messages_come_only_from_the_host_647":
+			return await _scenario_stages_and_rules_messages_come_only_from_the_host_647()
+		"controller_page_has_the_stages_and_rules_screen_647":
+			return await _scenario_controller_page_has_the_stages_and_rules_screen_647()
 		"old_stage_config_migrates_to_per_mode_lists_647":
 			return await _scenario_old_stage_config_migrates_to_per_mode_lists_647()
 		"soccer_with_one_pitch_on_stays_on_it_646":
@@ -30535,8 +30544,10 @@ func _scenario_per_mode_stage_lists_persist_separately_647() -> Array[String]:
 	if second.set_stage_enabled_for("soccer", "Alpha", true):
 		failures.append("soccer accepted a general stage")
 	second.set_all_stages_for("classic", false)
-	if second.enabled_stages_for("classic").size() != 1:
-		failures.append("all-off left %d classic stages" % second.enabled_stages_for("classic").size())
+	if not second.on_stages_for("classic").is_empty():
+		failures.append("all-off left %d classic stages on" % second.on_stages_for("classic").size())
+	if second.enabled_stages_for("classic").size() != 3:
+		failures.append("the draw did not fall back to every stage with all off")
 	second.set_all_stages_for("classic", true)
 	if second.enabled_stages_for("classic").size() != 3:
 		failures.append("all-on left %d classic stages" % second.enabled_stages_for("classic").size())
@@ -30641,6 +30652,113 @@ func _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647() -> Array[Strin
 		want.sort()
 		if got != want:
 			failures.append("%s dealt %s with %s on" % [mode_id, got, want])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: All off reaches zero on, in every mode including Stock, the
+## lobby state says so, and a round still draws from every stage.
+func _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647() -> Array[String]:
+	var failures: Array[String] = []
+	var shared: RefCounted = StockSettingsScript.shared()
+	var saved_persist: bool = shared.persist
+	shared.persist = false
+	shared.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma", "Pitch", "Dunes", "Cage", "Bastion", "Stronghold"])
+	shared.disabled_stages_by_mode = {}
+	shared.stock_stages_on = PackedStringArray()
+	var server: Node = ControllerServerScript.new()
+	for mode_id: String in ["classic", "stock", "soccer", "capture_the_flag"]:
+		if not server.apply_host_command("stage_mode_all", {"mode": mode_id, "on": false}):
+			failures.append("stage_mode_all off was refused for %s" % mode_id)
+		if not shared.on_stages_for(mode_id).is_empty():
+			failures.append("%s kept %s on after All off" % [mode_id, shared.on_stages_for(mode_id)])
+		if shared.enabled_stages_for(mode_id).is_empty():
+			failures.append("%s has no stage to draw from with all off" % mode_id)
+		server.apply_host_command("stage_mode_all", {"mode": mode_id, "on": true})
+		if shared.on_stages_for(mode_id).size() != shared.stages_for_mode(mode_id).size() and mode_id != "stock":
+			failures.append("%s All on left %s" % [mode_id, shared.on_stages_for(mode_id)])
+	# Stock with none on, then one tapped on, is just that one.
+	server.apply_host_command("stage_mode_all", {"mode": "stock", "on": false})
+	server.apply_host_command("stage_mode_toggle", {"mode": "stock", "stage": "Beta", "on": true})
+	if shared.on_stages_for("stock") != PackedStringArray(["Beta"]):
+		failures.append("stock after All off then Beta on was %s" % [shared.on_stages_for("stock")])
+	server.free()
+	# The lobby state carries the true counts.
+	var rm: Node = RoundManagerScript.new()
+	shared.disabled_stages_by_mode = {}
+	shared.set_all_stages_for("classic", false)
+	var by_mode: Dictionary = rm._stages_by_mode()
+	if not (by_mode["classic"]["on"] as PackedStringArray).is_empty() or (by_mode["classic"]["all"] as PackedStringArray).size() != 3:
+		failures.append("lobby state classic was %s" % [by_mode["classic"]])
+	var rules: Dictionary = rm._rules_state()
+	if not (rules["modes"]["stock"]["locked"] as Array).has("night") or not (rules["modes"]["classic"]["on"] as Array).has("night"):
+		failures.append("rules state lost the night switch: %s" % [rules["modes"]])
+	rm.free()
+	shared.disabled_stages_by_mode = {}
+	shared.stock_stages_on = PackedStringArray()
+	shared.persist = saved_persist
+	_scenario_completed = true
+	return failures
+
+## Issue #647: the page's modifier and weapon switches and the stage messages
+## act only when the host sends them.
+func _scenario_stages_and_rules_messages_come_only_from_the_host_647() -> Array[String]:
+	var failures: Array[String] = []
+	var shared: RefCounted = StockSettingsScript.shared()
+	var saved_persist: bool = shared.persist
+	shared.persist = false
+	shared.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma"])
+	shared.disabled_stages_by_mode = {}
+	shared.disabled_modifiers = {}
+	var server: Node = ControllerServerScript.new()
+	# No phone is host here (host_slot() is -1), so every frame is from a non-host.
+	server._handle_text(2, JSON.stringify({"t": "stage_mode_toggle", "mode": "classic", "stage": "Alpha", "on": false}))
+	server._handle_text(2, JSON.stringify({"t": "stage_mode_all", "mode": "classic", "on": false}))
+	server._handle_text(2, JSON.stringify({"t": "modifier_toggle", "mode": "classic", "id": "night", "on": false}))
+	server._handle_text(2, JSON.stringify({"t": "weapon_toggle", "name": "Axe", "on": false}))
+	if not shared.is_stage_enabled_for("classic", "Alpha") or shared.on_stages_for("classic").size() != 3:
+		failures.append("a non-host changed the stage list")
+	if not shared.is_modifier_enabled("classic", "night") or not shared.is_weapon_enabled("Axe"):
+		failures.append("a non-host changed a modifier or weapon")
+	# The host's own commands work, and bad shapes and ids are refused.
+	if not server.apply_host_command("modifier_toggle", {"mode": "classic", "id": "night", "on": false}) or shared.is_modifier_enabled("classic", "night"):
+		failures.append("the host could not switch night off")
+	if shared.is_modifier_enabled("sudden_death", "night") == false:
+		failures.append("night off leaked into another mode")
+	if server.apply_host_command("modifier_toggle", {"mode": "classic", "id": "bogus", "on": false}):
+		failures.append("an unknown modifier id was accepted")
+	if server.apply_host_command("modifier_toggle", {"mode": "stock", "id": "night", "on": true}) or shared.is_modifier_enabled("stock", "night"):
+		failures.append("Stock's locked modifier was switched on")
+	if server.apply_host_command("weapon_toggle", {"name": "Axe", "on": "no"}):
+		failures.append("a non-bool weapon switch was accepted")
+	if not server.apply_host_command("weapon_toggle", {"name": "Axe", "on": false}) or shared.is_weapon_enabled("Axe"):
+		failures.append("the host could not switch Axe off")
+	server.apply_host_command("weapon_toggle", {"name": "Axe", "on": true})
+	server.free()
+	shared.disabled_modifiers = {}
+	shared.disabled_stages_by_mode = {}
+	shared.persist = saved_persist
+	_scenario_completed = true
+	return failures
+
+## Issue #647: the controller page's Stages & Rules screen replaces the old
+## Stock grid, sends the four messages and gates Done on a stage being on.
+func _scenario_controller_page_has_the_stages_and_rules_screen_647() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	for needle: String in ['id="menu-rules-open"', 'id="menu-rules"', 'id="rules-all-off"', 'id="rules-summary"',
+			't: "stage_mode_toggle"', 't: "stage_mode_all"', 't: "modifier_toggle"', 't: "weapon_toggle"']:
+		if not page.contains(needle):
+			failures.append("the page lacks %s" % needle)
+	if page.contains("menu-stockstages") or page.contains("PHONE_STOCK_RANDOM"):
+		failures.append("the old Stock stage grid is still on the page")
+	if not _js_function_body(page, "renderRules").contains("rulesDoneBtn.disabled = st.on.length === 0"):
+		failures.append("Done is not blocked with no stage on")
+	if not _js_function_body(page, "rulesEditable").contains("amHost()"):
+		failures.append("the rules page is editable by a non-host")
+	if not _js_function_body(page, "rulesFooterText").contains("RULES_FOOTER_NONE"):
+		failures.append("the footer has no 'Switch on at least one stage' line")
+	if page.contains('id="rules-summary"') and not page.contains('<div id="rules-summary"></div>'):
+		failures.append("the summary line is not a plain line")
 	_scenario_completed = true
 	return failures
 

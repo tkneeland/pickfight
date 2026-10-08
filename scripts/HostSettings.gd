@@ -53,6 +53,9 @@ var disabled_stages_by_mode: Dictionary = {}
 ## Stock's stages are a whitelist (#375, #647): empty means the default, the
 ## competitive-flagged stages (every stage when none is flagged).
 var stock_stages_on: PackedStringArray = []
+## Stored in `stock_stages_on` when Stock's stages are all off: an empty list
+## means the default, so "none" needs a mark that names no stage (#647).
+const NONE_MARK: String = "-"
 ## Stage names flagged competitive, set by `StageRotation` next to `known_stages`.
 var competitive_stages: PackedStringArray = []
 var disabled_weapons: PackedStringArray = []
@@ -144,7 +147,7 @@ func _stock_on_list() -> PackedStringArray:
 		if pool.has(stage_name):
 			on.append(stage_name)
 	if not on.is_empty() or not stock_stages_on.is_empty():
-		return on
+		return on  # a list holding only NONE_MARK is "all off" (#647)
 	for stage_name: String in pool:
 		if competitive_stages.has(stage_name):
 			on.append(stage_name)
@@ -166,6 +169,15 @@ func enabled_stages_for(mode_id: String) -> PackedStringArray:
 		if is_stage_enabled_for(mode_id, stage_name):
 			out.append(stage_name)
 	return out if not out.is_empty() else stages_for_mode(mode_id)
+
+## The stages `mode_id` has switched on, with no fallback: empty when the host
+## switched them all off (#647). The rotation draws from `enabled_stages_for`.
+func on_stages_for(mode_id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	for stage_name: String in stages_for_mode(mode_id):
+		if is_stage_enabled_for(mode_id, stage_name):
+			out.append(stage_name)
+	return out
 
 ## Returns false (changing nothing) for a stage the mode cannot use, a stage
 ## outside the demo's slice switched on, or when this would switch off the
@@ -193,8 +205,9 @@ func set_stage_enabled_for(mode_id: String, stage_name: String, on: bool) -> boo
 	_store_disabled(key, disabled)
 	return true
 
-## Switches every stage of the mode on or off. Off keeps the mode's first
-## stage on: a mode never has none.
+## Switches every stage of the mode on or off. Off leaves none on (#647: the
+## phone then blocks Done); `enabled_stages_for` still falls back to all of
+## them, so a round never lacks a stage.
 func set_all_stages_for(mode_id: String, on: bool) -> void:
 	var pool := stages_for_mode(mode_id)
 	var key: String = mode_key(mode_id)
@@ -203,15 +216,14 @@ func set_all_stages_for(mode_id: String, on: bool) -> void:
 		for stage_name: String in pool:
 			if on and DemoBuildScript.stage_in_slice(stage_name):
 				list.append(stage_name)
-		if not on and not pool.is_empty():
-			list.append(pool[0])
+		if not on:
+			list.append(NONE_MARK)
 		stock_stages_on = list
 		save_settings()
 		return
 	var disabled := PackedStringArray()
 	if not on:
-		for i in range(1, pool.size()):
-			disabled.append(pool[i])
+		disabled = pool.duplicate()
 	_store_disabled(key, disabled)
 
 func _store_disabled(key: String, disabled: PackedStringArray) -> void:
