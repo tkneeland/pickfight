@@ -78,6 +78,12 @@ func attach(server: Object) -> void:
 	var look: Button = _action_button("look", _screen.tr("PICKER_TITLE"), UiThemeScript.SKY_BUTTON)
 	lobby_right.add_child(look)
 	lobby_right.add_child(_action_button("how_to_play", _screen.tr("HOW_TO_PLAY_BUTTON"), UiThemeScript.PINK_BUTTON))
+	# Stages & Rules (#647): the host's own button and the summary above it, in the pad menu too.
+	var stages: Button = _screen._stages_button
+	stages.visible = true
+	stages.pressed.connect(press_control.bind("stages_rules"))
+	_controls["stages_rules"] = stages
+	lobby_right.move_child(_screen._stages_box, lobby_right.get_child_count() - 1)
 	# The way into someone else's room code (Online only), with why it is off when it is.
 	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
 	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
@@ -287,6 +293,9 @@ func press_control(id: String) -> void:
 			if server.has_method("host_picker_shown") and server.host_picker_shown():
 				_popup_opener = id
 				_screen.set_popup("look")
+		"stages_rules":
+			_popup_opener = id
+			_screen.open_stages_rules()
 		"how_to_play":
 			_popup_opener = id
 			_screen.set_popup("help")
@@ -433,9 +442,17 @@ func input(event: InputEvent) -> void:
 	if _screen._server == null or lobby_panel == null or not lobby_panel.visible or _screen.title_visible():
 		return
 	var popup: String = _screen.popup_open()
-	if PadMenuScript.pressed(event, JOY_BUTTON_B) and popup != "":
-		_screen.set_popup("") # B leaves a popup first, then the menu
+	var key := event as InputEventKey
+	if popup == "stages" and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
+		# Esc closes just this screen, never the Settings panel behind it; it stays up with a mode on no stage (#647)
+		_screen.request_close_popup()
 		_restore_focus_after_popup()
+		_screen.get_viewport().set_input_as_handled()
+	elif popup == "stages" and _screen.stages_rules().handle_pad(event):
+		_screen.get_viewport().set_input_as_handled() # LB / RB step the tabs
+	elif PadMenuScript.pressed(event, JOY_BUTTON_B) and popup != "":
+		if _screen.request_close_popup(): # B leaves a popup first, then the menu
+			_restore_focus_after_popup()
 		_screen.get_viewport().set_input_as_handled()
 	elif PadMenuScript.pressed(event, JOY_BUTTON_Y) and popup == "":
 		set_pad_menu(not _pad_menu_open)
@@ -451,7 +468,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["mode"], ["look"], ["how_to_play"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]

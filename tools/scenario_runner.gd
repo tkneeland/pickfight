@@ -539,6 +539,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stages_and_rules_messages_come_only_from_the_host_647",
 	"controller_page_has_the_stages_and_rules_screen_647",
 	"old_stage_config_migrates_to_per_mode_lists_647",
+	"settings_panel_no_longer_lists_stages_weapons_or_modifiers_647",
+	"stages_rules_screen_toggles_write_per_mode_settings_647",
+	"stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647",
+	"stages_rules_zero_on_disables_done_esc_and_b_647",
+	"stages_rules_text_is_legible_on_every_tab_647",
+	"stages_rules_is_host_only_647",
+	"stages_rules_lobby_summary_and_status_line_follow_settings_647",
+	"stages_rules_gamepad_opens_navigates_and_closes_647",
 	"ctf_captures_are_the_match_and_each_capture_changes_hall_646",
 	"ctf_with_one_hall_on_stays_in_it_646",
 	"bot_king_of_the_hill_heads_for_the_hill",
@@ -2332,6 +2340,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_controller_page_has_the_stages_and_rules_screen_647()
 		"old_stage_config_migrates_to_per_mode_lists_647":
 			return await _scenario_old_stage_config_migrates_to_per_mode_lists_647()
+		"settings_panel_no_longer_lists_stages_weapons_or_modifiers_647":
+			return await _scenario_settings_panel_no_longer_lists_stages_weapons_or_modifiers_647()
+		"stages_rules_screen_toggles_write_per_mode_settings_647":
+			return await _scenario_stages_rules_screen_toggles_write_per_mode_settings_647()
+		"stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647":
+			return await _scenario_stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647()
+		"stages_rules_zero_on_disables_done_esc_and_b_647":
+			return await _scenario_stages_rules_zero_on_disables_done_esc_and_b_647()
+		"stages_rules_text_is_legible_on_every_tab_647":
+			return await _scenario_stages_rules_text_is_legible_on_every_tab_647()
+		"stages_rules_is_host_only_647":
+			return await _scenario_stages_rules_is_host_only_647()
+		"stages_rules_lobby_summary_and_status_line_follow_settings_647":
+			return await _scenario_stages_rules_lobby_summary_and_status_line_follow_settings_647()
+		"stages_rules_gamepad_opens_navigates_and_closes_647":
+			return await _scenario_stages_rules_gamepad_opens_navigates_and_closes_647()
 		"soccer_with_one_pitch_on_stays_on_it_646":
 			return await _score_match_run(true, SOCCER_PITCH_PATHS, true)
 		"ctf_captures_are_the_match_and_each_capture_changes_hall_646":
@@ -31839,21 +31863,18 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 			failures.append("Stock allowed %s" % id)
 	if not host.is_modifier_enabled("hot_potato", "gale"):
 		failures.append("an unbanned modifier should default on")
-	# The panel shows banned boxes locked off.
-	var sfx: Node = _sfx()
-	if sfx == null:
-		return ["the Sfx autoload is missing"]
-	var panel: CanvasLayer = sfx.build_settings_ui()
-	await _await_ticks(3)
-	panel.rules_mode_button().select(panel._rules_mode_ids.find("king_of_the_hill"))  # Hot Potato is retired from the list (#645)
-	panel._rebuild_rules()
-	var box: CheckBox = panel.rules_box("meteor_shower")
+	# The Stages & Rules screen (#647) shows banned switches locked off.
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	screen.stages_rules().select_tab("king_of_the_hill")  # Hot Potato is retired from the list (#645)
+	var box: Button = screen.stages_rules().modifier_button("meteor_shower")
 	if box == null or not box.disabled or box.button_pressed:
-		failures.append("the banned box was not locked off in the Rules list")
-	var open_box: CheckBox = panel.rules_box("gale")
+		failures.append("the banned switch was not locked off on the Rules screen")
+	var open_box: Button = screen.stages_rules().modifier_button("gale")
 	if open_box == null or open_box.disabled or not open_box.button_pressed:
-		failures.append("an unbanned box should be live and ticked")
-	panel.queue_free()
+		failures.append("an unbanned switch should be live and on")
+	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures
 # --- Soccer (issue #402) -------------------------------------------------------
@@ -33067,7 +33088,7 @@ func _scenario_deck_gamepad_operates_the_settings_panel() -> Array[String]:
 	ui.more_box().button_pressed = true
 	await _await_ticks(3)
 	var seen: Dictionary = _focus_reach_368(ui.volume_slider())
-	for id in ["Volume", "SfxVolume", "MusicVolume", "Mute", "Fullscreen", "MoreOptions", "Feedback", "Resolution", "ScreenShake", "HideRoomCode", "TagSize", "RulesMode"]:
+	for id in ["Volume", "SfxVolume", "MusicVolume", "Mute", "Fullscreen", "MoreOptions", "Feedback", "Resolution", "ScreenShake", "HideRoomCode", "TagSize", "ShareStats"]:
 		if not seen.has(id):
 			failures.append("the D-pad never focused '%s' in Settings (saw %s)" % [id, seen.keys()])
 	ui.mute_box().grab_focus()
@@ -38065,10 +38086,10 @@ func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[Str
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	server.apply_host_command("mode", "teams")
 	var cases: Array = [
-		[GameModesType.CLASSIC, "Classic - Teams - first to %d" % server.match_target(), "first_to", "First to", str(server.match_target())],
-		[GameModesType.STOCK, "Stock - Teams - 4 lives", "lives", "Lives", "4"],
-		[GameModesType.SOCCER, "Soccer - Teams - 5 goals", "goals", "Goals to win", "5"],
-		[GameModesType.CAPTURE_THE_FLAG, "Capture the Flag - Teams - 6 captures", "captures", "Captures to win", "6"],
+		[GameModesType.CLASSIC, "Classic - Teams - first to %d - %s" % [server.match_target(), _stage_count_text_647("")], "first_to", "First to", str(server.match_target())],
+		[GameModesType.STOCK, "Stock - Teams - 4 lives - %s" % _stage_count_text_647("stock"), "lives", "Lives", "4"],
+		[GameModesType.SOCCER, "Soccer - Teams - 5 goals - 3 stages", "goals", "Goals to win", "5"],
+		[GameModesType.CAPTURE_THE_FLAG, "Capture the Flag - Teams - 6 captures - 2 stages", "captures", "Captures to win", "6"],
 	]
 	for case: Array in cases:
 		if not server.set_game_mode(case[0]):
@@ -41749,5 +41770,311 @@ func _telemetry_soccer_abandon_643(played_sec: float) -> Array[String]:
 	host.share_stats = was_share
 	host.telemetry_notice_seen = was_notice
 	host.persist = was_persist
+	_scenario_completed = true
+	return failures
+
+# --- Stages & Rules screen (#647) ------------------------------------------------
+## The Stages & Rules screen's own settings state is the shared store's: reset it.
+func _reset_host_choices_647() -> void:
+	var host: RefCounted = StockSettingsScript.shared()
+	host.disabled_stages_by_mode = {}
+	host.stock_stages_on = PackedStringArray()
+	host.disabled_weapons = PackedStringArray()
+	host.disabled_modifiers = {}
+## "38 stages" for `mode_id` from the settings, as the status line spells it.
+func _stage_count_text_647(mode_id: String) -> String:
+	var host: RefCounted = StockSettingsScript.shared()
+	var count: int = 0
+	for stage_name: String in host.stages_for_mode(mode_id):
+		if host.is_stage_enabled_for(mode_id, stage_name):
+			count += 1
+	return "%d stage%s" % [count, "" if count == 1 else "s"]
+## A mouse click on a toggle button: it flips, then reports pressed.
+func _click_647(button: Button) -> void:
+	button.set_pressed_no_signal(not button.button_pressed)
+	button.pressed.emit()
+func _key_tap_647(keycode: Key) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = keycode
+	ev.physical_keycode = keycode
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+func _scenario_settings_panel_no_longer_lists_stages_weapons_or_modifiers_647() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var panel: CanvasLayer = sfx.build_settings_ui()
+	panel.more_box().button_pressed = true
+	await _await_ticks(3)
+	for gone: String in ["Stages", "Weapons", "Rules", "RulesMode"]:
+		if panel.find_child(gone, true, false) != null:
+			failures.append("the Settings panel still has a '%s' list" % gone)
+	for node: Node in panel.find_children("*", "CheckBox", true, false):
+		for banned_word: String in ["Low Gravity", "Gale", "Sword", "Flatlands"]:
+			if (node as CheckBox).text.contains(banned_word):
+				failures.append("Settings still carries the '%s' switch" % banned_word)
+	for kept: String in ["Resolution", "ScreenShake", "ReduceFlash", "HideRoomCode", "TagSize", "ShareStats", "Mute", "Fullscreen"]:
+		if panel.find_child(kept, true, false) == null:
+			failures.append("Settings lost its '%s' control" % kept)
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_screen_toggles_write_per_mode_settings_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var host: RefCounted = StockSettingsScript.shared()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if not screen.open_stages_rules() or screen.popup_open() != "stages":
+		failures.append("the host could not open Stages & Rules")
+		await _teardown(rig["main"])
+		return failures
+	var view = screen.stages_rules()
+	var classic_total: int = host.stages_for_mode("").size()
+	if view.tab_ids() != ["", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"]:
+		failures.append("tabs are %s" % [view.tab_ids()])
+	if view.current_tab() != "":
+		failures.append("the screen opened on '%s', not the lobby's Classic" % view.current_tab())
+	# A tile click switches that stage off in Classic only.
+	_click_647(view.tile("Pillars"))
+	if host.is_stage_enabled_for("", "Pillars") or not host.is_stage_enabled_for("king_of_the_hill", "Pillars"):
+		failures.append("switching Pillars off in Classic did not stay in Classic")
+	if view.tile("Pillars").button_pressed:
+		failures.append("the Pillars tile still looks on")
+	if view.footer_text() != "Each round draws from %d of %d stages" % [classic_total - 1, classic_total]:
+		failures.append("footer reads '%s'" % view.footer_text())
+	# All off, then All on.
+	view.all_off_button().pressed.emit()
+	if host.enabled_stages_for("").size() < 1 or _stage_count_text_647("") == ("%d stages" % classic_total):
+		failures.append("All off left every stage on")
+	view.all_on_button().pressed.emit()
+	if _stage_count_text_647("") != "%d stages" % classic_total:
+		failures.append("All on did not switch every stage on (%s)" % _stage_count_text_647(""))
+	# Modifiers and night are per mode; weapons are global.
+	_click_647(view.modifier_button("gale"))
+	_click_647(view.modifier_button("night"))
+	if host.is_modifier_enabled("", "gale") or host.is_modifier_enabled("", "night") or not host.is_modifier_enabled("sudden_death", "gale"):
+		failures.append("modifier switches did not write per mode")
+	_click_647(view.weapon_button("sword"))
+	if host.is_weapon_enabled("sword") or not host.is_weapon_enabled("axe"):
+		failures.append("the sword switch did not write the global weapon list")
+	# Another tab has its own list.
+	view.select_tab("sudden_death")
+	if not view.tile("Pillars").button_pressed or not view.modifier_button("gale").button_pressed:
+		failures.append("Sudden Death inherited Classic's switches")
+	# Stock is a multi-select with its own footer.
+	view.select_tab("stock")
+	view.all_off_button().pressed.emit()
+	if not view.footer_text().begins_with("Stock plays on ") and not view.footer_text().begins_with("Switch on"):
+		failures.append("Stock with one stage on reads '%s'" % view.footer_text())
+	view.all_on_button().pressed.emit()
+	if view.footer_text() != "Stock picks one at random from %d stages" % host.stages_for_mode("stock").size():
+		failures.append("Stock with every stage on reads '%s'" % view.footer_text())
+	if not view.modifier_button("gale").disabled or view.modifier_button("gale").button_pressed or not view.modifier_button("night").disabled:
+		failures.append("Stock's modifiers are not locked off")
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	var sorted_names := func(names: PackedStringArray) -> Array:
+		var out: Array = Array(names)
+		out.sort()
+		return out
+	view.select_tab("soccer")
+	if sorted_names.call(view.tile_names()) != ["Cage", "Dunes", "Pitch"]:
+		failures.append("Soccer shows %s" % [view.tile_names()])
+	view.select_tab("capture_the_flag")
+	if sorted_names.call(view.tile_names()) != ["Bastion", "Stronghold"]:
+		failures.append("Capture the Flag shows %s" % [view.tile_names()])
+	view.select_tab("")
+	if view.tile("Pitch") != null or view.tile("Bastion") != null or view.tile_names().size() < 30:
+		failures.append("Classic shows the Soccer or CTF stages, or too few (%d)" % view.tile_names().size())
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_zero_on_disables_done_esc_and_b_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var host: RefCounted = StockSettingsScript.shared()
+	var sfx: Node = _sfx()
+	var settings_ui: CanvasLayer = sfx.build_settings_ui()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	view.select_tab("soccer")
+	# Zero on, however the store got there: every Soccer stage disabled.
+	host.disabled_stages_by_mode["soccer"] = host.stages_for_mode("soccer")
+	view.select_tab("capture_the_flag")
+	view.select_tab("soccer")
+	if view.footer_text() != "Switch on at least one stage":
+		failures.append("zero on reads '%s'" % view.footer_text())
+	if not view.done_button().disabled:
+		failures.append("Done is enabled with no stage on")
+	if screen.request_close_popup() or screen.popup_open() != "stages":
+		failures.append("the screen closed with no stage on")
+	await _key_tap_647(KEY_ESCAPE)
+	if screen.popup_open() != "stages":
+		failures.append("Esc closed the screen with no stage on")
+	if settings_ui.is_open():
+		failures.append("Esc opened the Settings panel behind Stages & Rules")
+	PadMenuScript368.set_open("lobby", true)
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.popup_open() != "stages":
+		failures.append("B closed the screen with no stage on")
+	# Another tab with a stage on does not clear it: the message names Soccer.
+	view.select_tab("sudden_death")
+	if view.footer_text() != "Switch on at least one stage in Soccer" or not view.done_button().disabled:
+		failures.append("with Soccer empty, Sudden Death's footer reads '%s' (Done disabled %s)" % [view.footer_text(), view.done_button().disabled])
+	view.select_tab("soccer")
+	_click_647(view.tile("Pitch"))
+	if view.done_button().disabled or view.footer_text() != "Each round draws from 1 of 3 stages":
+		failures.append("one stage on: Done disabled %s, footer '%s'" % [view.done_button().disabled, view.footer_text()])
+	await _key_tap_647(KEY_ESCAPE)
+	if screen.popup_open() != "":
+		failures.append("Esc did not close the screen once a stage was on")
+	if settings_ui.is_open():
+		failures.append("Esc also opened Settings")
+	PadMenuScript368.reset()
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_text_is_legible_on_every_tab_647() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	var scale: float = minf(DECK_SCREEN_368.x / SCREEN_SIZE.x, DECK_SCREEN_368.y / SCREEN_SIZE.y)
+	var checked: int = 0
+	var roots: Array[Control] = [screen.stages_rules_popup(), screen.stages_button(), screen.stages_summary_label()]
+	for tab: String in view.tab_ids():
+		view.select_tab(tab)
+		await _await_ticks(2)
+		for root: Control in roots:
+			var found: Array[Node] = root.find_children("*", "Control", true, false)
+			found.append(root)
+			for node: Node in found:
+				if not (node is Label or node is BaseButton):
+					continue
+				var text: String = str(node.get("text"))
+				if text.is_empty():
+					continue
+				var size: int = (node as Control).get_theme_font_size("font_size")
+				checked += 1
+				if size < 16 or float(size) * scale < DECK_MIN_EM_PX_368:
+					failures.append("tab '%s': %s '%s' is %d px (%.1f at 1280x800)" % [tab, node.name, text.left(24), size, float(size) * scale])
+	if checked < 100:
+		failures.append("only %d text controls were checked; the walk is broken" % checked)
+	print("      %d text controls checked across %d tabs" % [checked, view.tab_ids().size()])
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_is_host_only_647() -> Array[String]:
+	var failures: Array[String] = []
+	# A lobby with no host controls attached (a seat's view): the summary only.
+	var bare: CanvasLayer = (load("res://scripts/LobbyScreen.gd") as GDScript).new()
+	get_root().add_child(bare)
+	bare.build_panels()
+	if bare.open_stages_rules() or bare.popup_open() != "":
+		failures.append("Stages & Rules opened without host controls")
+	bare.set_popup("stages")
+	if bare.popup_open() != "":
+		failures.append("set_popup('stages') opened it without host controls")
+	if bare.stages_button().visible:
+		failures.append("the Stages & Rules button shows without host controls")
+	if bare.stages_summary_label() == null:
+		failures.append("the summary line is missing")
+	bare.queue_free()
+	await _await_ticks(2)
+	# The host's own lobby: the button shows and opens it.
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if not screen.stages_button().visible or not screen.control_button("stages_rules").is_visible_in_tree():
+		failures.append("the host lobby has no Stages & Rules button")
+	screen.control_button("stages_rules").pressed.emit()
+	if screen.popup_open() != "stages":
+		failures.append("the button did not open the screen")
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_lobby_summary_and_status_line_follow_settings_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var host: RefCounted = StockSettingsScript.shared()
+	var total: int = host.stages_for_mode("").size()
+	var summary: Label = screen.stages_summary_label()
+	if summary.text != "%d stages on \u00B7 modifiers on" % total:
+		failures.append("summary reads '%s'" % summary.text)
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	_click_647(view.tile("Pillars"))
+	_click_647(view.modifier_button("gale"))
+	var modifier_total: int = RoundModifiersScript.IDS.size() + 1
+	if summary.text != "%d stages on \u00B7 %d of %d modifiers on" % [total - 1, modifier_total - 1, modifier_total]:
+		failures.append("after two switches the summary reads '%s'" % summary.text)
+	var status: Label = screen.get("_lobby_target_label")
+	if not status.text.ends_with("- %d stages" % (total - 1)):
+		failures.append("the status line reads '%s'" % status.text)
+	for modifier_id: String in view.modifier_ids():
+		host.set_modifier_enabled("", modifier_id, false)
+	screen.refresh_stage_summary()
+	if not summary.text.ends_with("modifiers off"):
+		failures.append("with every modifier off the summary reads '%s'" % summary.text)
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_gamepad_opens_navigates_and_closes_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	var seen: Dictionary = _focus_reach_368(get_root().gui_get_focus_owner())
+	if not seen.has("stages_rules"):
+		failures.append("the D-pad never reaches Stages & Rules (saw %s)" % [seen.keys()])
+	var button: Button = screen.control_button("stages_rules")
+	button.grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if screen.popup_open() != "stages":
+		failures.append("A on Stages & Rules did not open it")
+	if not server.claimed_slots().is_empty():
+		failures.append("A seated the gamepad instead of pressing the button")
+	var focus: Control = get_root().gui_get_focus_owner()
+	var overlay: Control = screen.stages_rules_popup()
+	if focus == null or not overlay.is_ancestor_of(focus):
+		failures.append("focus did not move into the screen (%s)" % [focus])
+	var first_tile: Control = focus
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if first_tile != null and StockSettingsScript.shared().is_stage_enabled_for("", str(first_tile.name)):
+		failures.append("A on the focused tile '%s' did not switch it off" % first_tile.name)
+	await _pad_tap_368(0, JOY_BUTTON_RIGHT_SHOULDER)
+	if screen.stages_rules().current_tab() != "king_of_the_hill":
+		failures.append("RB did not move to the next tab (on '%s')" % screen.stages_rules().current_tab())
+	await _pad_tap_368(0, JOY_BUTTON_LEFT_SHOULDER)
+	if screen.stages_rules().current_tab() != "":
+		failures.append("LB did not move back to Classic")
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.popup_open() != "":
+		failures.append("B did not close the screen")
+	if not screen.pad_menu_open() or get_root().gui_get_focus_owner() != button:
+		failures.append("after B the host menu should be open with focus back on Stages & Rules")
+	PadMenuScript368.reset()
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures
