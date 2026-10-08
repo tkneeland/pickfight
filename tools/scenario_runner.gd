@@ -785,6 +785,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"respawn_skips_spawns_with_no_floor_605",
 	"respawn_stays_on_own_half_605",
 	"respawn_alone_does_not_always_pick_spawn0_605",
+	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
+	"soccer_respawn_never_lands_in_a_goal_648",
+	"ctf_respawn_waits_four_seconds_648",
 	"settings_hygiene_609",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
@@ -2796,6 +2799,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_stays_on_own_half_605()
 		"respawn_alone_does_not_always_pick_spawn0_605":
 			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
+		"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648":
+			return await _scenario_soccer_respawn_waits_four_seconds_648()
+		"soccer_respawn_never_lands_in_a_goal_648":
+			return await _scenario_soccer_respawn_never_lands_in_a_goal_648()
+		"ctf_respawn_waits_four_seconds_648":
+			return await _scenario_ctf_respawn_waits_four_seconds_648()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -31509,8 +31518,8 @@ func _scenario_soccer_ko_respawns_the_player() -> Array[String]:
 		await _teardown(rig["stage"])
 		return failures
 	var mode: Node = rm.game_mode_node()
-	if absf(mode.respawn_sec - 1.5) > 0.001:
-		failures.append("the respawn delay is %.2f s, wanted 1.5" % mode.respawn_sec)
+	if absf(mode.respawn_sec - 4.0) > 0.001:
+		failures.append("the respawn delay is %.2f s, wanted 4" % mode.respawn_sec)
 	var blue: RigidBody2D = rig["players"][1]
 	blue.eliminate()
 	await _await_ticks(2)
@@ -31519,7 +31528,7 @@ func _scenario_soccer_ko_respawns_the_player() -> Array[String]:
 	await _await_msec(500)
 	if blue.alive:
 		failures.append("the player was back after 0.5 s, too early")
-	var back: bool = await _await_condition(func() -> bool: return blue.alive, 3000)
+	var back: bool = await _await_condition(func() -> bool: return blue.alive, 6000)
 	if not back:
 		failures.append("the knocked-out player never respawned")
 	elif not blue.spawn_protected:
@@ -32130,8 +32139,8 @@ func _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player() -> Array[String
 	var mode: Node = await _ctf_start(rig, failures)
 	if mode == null:
 		return failures
-	if absf(mode.respawn_sec - 1.5) > 0.001:
-		failures.append("the respawn delay is %.2f s, wanted 1.5" % mode.respawn_sec)
+	if absf(mode.respawn_sec - 4.0) > 0.001:
+		failures.append("the respawn delay is %.2f s, wanted 4" % mode.respawn_sec)
 	var red: RigidBody2D = rig["players"][0]
 	red.teleport_to(Vector2(0.0, 240.0))
 	mode.take_flag(1, 0)
@@ -32145,7 +32154,7 @@ func _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player() -> Array[String
 	await _await_msec(500)
 	if red.alive:
 		failures.append("the player was back after 0.5 s, too early")
-	if not await _await_condition(func() -> bool: return red.alive, 3000):
+	if not await _await_condition(func() -> bool: return red.alive, 6000):
 		failures.append("the knocked-out player never respawned")
 	elif not red.spawn_protected:
 		failures.append("the respawned player has no spawn protection")
@@ -40664,4 +40673,86 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool) -> A
 	settings.set_soccer_goals(old_goals)
 	settings.set_ctf_captures(old_captures)
 	await _teardown(loop["stage"])
+	return failures
+
+## A Soccer KO waits 4 s (#648): still down at 3.9 s, back by 4.2 s. Stock keeps 1.5 s.
+func _scenario_soccer_respawn_waits_four_seconds_648() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var mode: Node = rig["rm"].game_mode_node()
+	var blue: RigidBody2D = rig["players"][1]
+	blue.eliminate()
+	await _await_ticks(2)
+	await _await_ticks(int(3.9 * 60.0) - 2)
+	if blue.alive:
+		failures.append("the KO'd Soccer player was back before 3.9 s")
+	if not mode.is_pending(1):
+		failures.append("the KO'd Soccer player was not still waiting at 3.9 s")
+	await _await_ticks(int(0.3 * 60.0))
+	if not blue.alive:
+		failures.append("the KO'd Soccer player was not back by 4.2 s")
+	await _teardown(rig["stage"])
+	var srig: Dictionary = _mode_rig(2, GameModesType.STOCK)
+	if not await _mode_started(srig):
+		failures.append("the Stock round never started")
+	else:
+		var smode: Node = srig["rm"].game_mode_node()
+		var fresh: RefCounted = (load("res://scripts/Respawn.gd") as GDScript).new(srig["rm"], {}, 1.5)
+		if absf(fresh.respawn_sec - 1.5) > 0.001:
+			failures.append("the shared Respawn default is not 1.5 s")
+		if smode == null or absf(float(smode.get("respawn_sec")) - 1.5) > 0.001:
+			failures.append("Stock's respawn delay is not 1.5 s")
+	await _teardown(srig["stage"])
+	return failures
+## On Pitch, Dunes and Cage, no Soccer respawn point over many draws lies in a goal (#648).
+func _scenario_soccer_respawn_never_lands_in_a_goal_648() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in SOCCER_STAGES_402:
+		var rig: Dictionary = _soccer_rig(4, path)
+		if not await _mode_started(rig):
+			failures.append("%s: the Soccer round never started" % path)
+			await _teardown(rig["stage"])
+			continue
+		var rm: Node = rig["rm"]
+		var respawner: RefCounted = rm.game_mode_node()._respawner
+		var stage: Node = rm._current_stage
+		var rects: Array[Rect2] = [stage.get_goal_rect(0), stage.get_goal_rect(1)]
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 648
+		for i in 60:
+			var slot: int = i % 4
+			rig["players"][slot].global_position = Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-300.0, 300.0))
+			var spot: Vector2 = respawner.farthest_spawn(slot)
+			for rect: Rect2 in rects:
+				if rect.has_point(spot):
+					failures.append("%s: slot %d respawn %s is inside a goal" % [path, slot, spot])
+		# Every spawn in a goal: the own-half spawn nearest the centre.
+		var centre: float = stage.get_ball_spawn().x
+		var all_in: Array[Vector2] = [Vector2(centre - 500.0, 0.0), Vector2(centre - 100.0, 0.0), Vector2(centre + 300.0, 0.0)]
+		rm._stage_spawn_points = all_in
+		respawner.avoid_rects = func() -> Array: return [Rect2(centre - 1000.0, -100.0, 2000.0, 200.0)]
+		if respawner.farthest_spawn(0) != all_in[1]:
+			failures.append("%s: with every spawn in a goal, Red did not get its own-half one nearest the centre" % path)
+		await _teardown(rig["stage"])
+	return failures
+
+## A Capture the Flag KO waits 4 s too (#648): down at 3.9 s, back by 4.2 s.
+func _scenario_ctf_respawn_waits_four_seconds_648() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(2)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var red: RigidBody2D = rig["players"][0]
+	red.eliminate()
+	await _await_ticks(int(3.9 * 60.0))
+	if red.alive or not mode.is_pending(0):
+		failures.append("the KO'd CTF player was back before 3.9 s")
+	await _await_ticks(int(0.3 * 60.0))
+	if not red.alive:
+		failures.append("the KO'd CTF player was not back by 4.2 s")
+	await _teardown(rig["stage"])
 	return failures

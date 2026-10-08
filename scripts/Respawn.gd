@@ -15,6 +15,9 @@ var respawn_sec: float = 1.5
 ## (left half) or 1, `centre_x.call()` the dividing x. Unset, any spawn is fine.
 var team_of: Callable
 var centre_x: Callable
+## Optional no-go areas (#648): `avoid_rects.call()` is an Array of Rect2, the
+## Soccer goals. A spawn inside one is never picked while another is open.
+var avoid_rects: Callable
 ## How far below a spawn point a floor still counts as under it.
 const GROUND_PROBE: float = 400.0
 var round_manager: Node
@@ -93,6 +96,26 @@ func farthest_spawn(slot: int) -> Vector2:
 				own.append(point)
 		if not own.is_empty():
 			pool = own
+	if avoid_rects.is_valid():
+		var open: Array[Vector2] = []
+		var rects: Array = avoid_rects.call()
+		for point: Vector2 in pool:
+			var inside: bool = false
+			for rect: Rect2 in rects:
+				if rect.has_point(point):
+					inside = true
+			if not inside:
+				open.append(point)
+		if not open.is_empty():
+			pool = open
+		else:
+			# Every spawn is in a goal: the own-half one nearest the centre.
+			var mid: float = float(centre_x.call()) if centre_x.is_valid() else 0.0
+			var nearest: Vector2 = pool[0]
+			for point: Vector2 in pool:
+				if absf(point.x - mid) < absf(nearest.x - mid):
+					nearest = point
+			return nearest
 	var grounded: Array[Vector2] = []
 	for point: Vector2 in pool:
 		if _has_floor(point):

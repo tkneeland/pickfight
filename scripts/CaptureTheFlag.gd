@@ -9,7 +9,7 @@ extends Node
 ## to `captures_to_win` captures takes the round.
 ##
 ## Team 0 (Red) owns flag 0 and defends base 0, team 1 (Blue) likewise. A
-## knocked-out player comes back after about 1.5 s through the same respawn
+## knocked-out player comes back after `RESPAWN_SEC` (4 s, #648) through the same respawn
 ## Stock and Soccer use (`Respawn.gd`); they still count as standing
 ## (`is_pending`), so the round goes on.
 ##
@@ -50,7 +50,9 @@ const FLAG_COLOURS: Array[Color] = [Color(1.0, 0.3, 0.3), Color(0.35, 0.55, 1.0)
 var captures_to_win: int = 2
 ## Seconds a dropped flag lies before it returns by itself.
 var return_sec: float = 10.0
-var respawn_sec: float = 1.5
+## How long a knocked-out player waits before coming back (#648), as Soccer's.
+const RESPAWN_SEC: float = 4.0
+var respawn_sec: float = RESPAWN_SEC
 ## Seconds between a capture short of the target and the next hall (#646).
 var capture_pause_sec: float = 1.5
 
