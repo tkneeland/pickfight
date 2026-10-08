@@ -84,6 +84,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"identity_colours_match_controller_page",
 	"weapon_head_circles_within_art",
 	"stage_rotates_each_round",
+	"every_stage_has_a_preview_647",
 	"stage_spawns_are_safe",
 	"waiting_expires_disconnected_claims",
 	"abandoned_round_ends_without_winner",
@@ -530,6 +531,23 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_match_is_one_round_then_the_podium_644",
 	"soccer_goals_are_the_match_and_each_goal_changes_pitch_646",
 	"soccer_with_one_pitch_on_stays_on_it_646",
+	"per_mode_stage_lists_persist_separately_647",
+	"stock_with_one_stage_on_always_plays_it_647",
+	"stock_with_several_stages_on_picks_one_of_them_647",
+	"soccer_and_ctf_draw_only_their_own_on_stages_647",
+	"stages_all_off_reaches_zero_in_the_lobby_state_647",
+	"stages_and_rules_messages_come_only_from_the_host_647",
+	"controller_page_has_the_stages_and_rules_screen_647",
+	"old_stage_config_migrates_to_per_mode_lists_647",
+	"settings_panel_no_longer_lists_stages_weapons_or_modifiers_647",
+	"stages_rules_screen_toggles_write_per_mode_settings_647",
+	"stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647",
+	"stages_rules_zero_on_disables_done_esc_and_b_647",
+	"stages_rules_text_is_legible_on_every_tab_647",
+	"stages_rules_is_host_only_647",
+	"stages_rules_lobby_summary_and_status_line_follow_settings_647",
+	"stages_rules_gamepad_opens_navigates_and_closes_647",
+	"classic_all_off_never_deals_a_goal_or_flag_stage_647",
 	"ctf_captures_are_the_match_and_each_capture_changes_hall_646",
 	"ctf_with_one_hall_on_stays_in_it_646",
 	"bot_king_of_the_hill_heads_for_the_hill",
@@ -1413,6 +1431,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_identity_colours_match_controller_page()
 		"weapon_head_circles_within_art":
 			return await _scenario_weapon_head_circles_within_art()
+		"every_stage_has_a_preview_647":
+			return _scenario_every_stage_has_a_preview_647()
 		"stage_rotates_each_round":
 			return await _scenario_stage_rotates_each_round()
 		"stage_spawns_are_safe":
@@ -2305,6 +2325,40 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_match_is_one_round_then_the_podium_644()
 		"soccer_goals_are_the_match_and_each_goal_changes_pitch_646":
 			return await _score_match_run(true, SOCCER_PITCH_PATHS, false)
+		"per_mode_stage_lists_persist_separately_647":
+			return await _scenario_per_mode_stage_lists_persist_separately_647()
+		"stock_with_one_stage_on_always_plays_it_647":
+			return await _scenario_stock_with_one_stage_on_always_plays_it_647()
+		"stock_with_several_stages_on_picks_one_of_them_647":
+			return await _scenario_stock_with_several_stages_on_picks_one_of_them_647()
+		"soccer_and_ctf_draw_only_their_own_on_stages_647":
+			return await _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647()
+		"stages_all_off_reaches_zero_in_the_lobby_state_647":
+			return await _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647()
+		"stages_and_rules_messages_come_only_from_the_host_647":
+			return await _scenario_stages_and_rules_messages_come_only_from_the_host_647()
+		"controller_page_has_the_stages_and_rules_screen_647":
+			return await _scenario_controller_page_has_the_stages_and_rules_screen_647()
+		"old_stage_config_migrates_to_per_mode_lists_647":
+			return await _scenario_old_stage_config_migrates_to_per_mode_lists_647()
+		"settings_panel_no_longer_lists_stages_weapons_or_modifiers_647":
+			return await _scenario_settings_panel_no_longer_lists_stages_weapons_or_modifiers_647()
+		"stages_rules_screen_toggles_write_per_mode_settings_647":
+			return await _scenario_stages_rules_screen_toggles_write_per_mode_settings_647()
+		"stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647":
+			return await _scenario_stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647()
+		"stages_rules_zero_on_disables_done_esc_and_b_647":
+			return await _scenario_stages_rules_zero_on_disables_done_esc_and_b_647()
+		"stages_rules_text_is_legible_on_every_tab_647":
+			return await _scenario_stages_rules_text_is_legible_on_every_tab_647()
+		"stages_rules_is_host_only_647":
+			return await _scenario_stages_rules_is_host_only_647()
+		"stages_rules_lobby_summary_and_status_line_follow_settings_647":
+			return await _scenario_stages_rules_lobby_summary_and_status_line_follow_settings_647()
+		"classic_all_off_never_deals_a_goal_or_flag_stage_647":
+			return _scenario_classic_all_off_never_deals_a_goal_or_flag_stage_647()
+		"stages_rules_gamepad_opens_navigates_and_closes_647":
+			return await _scenario_stages_rules_gamepad_opens_navigates_and_closes_647()
 		"soccer_with_one_pitch_on_stays_on_it_646":
 			return await _score_match_run(true, SOCCER_PITCH_PATHS, true)
 		"ctf_captures_are_the_match_and_each_capture_changes_hall_646":
@@ -4711,6 +4765,19 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
 ]
+func _scenario_every_stage_has_a_preview_647() -> Array[String]:
+	var previews: GDScript = load("res://scripts/StagePreviews.gd")
+	var failures: Array[String] = []
+	var count: int = 0
+	for f in DirAccess.get_files_at("res://scenes/stages"):
+		if not f.ends_with(".tscn"): continue
+		count += 1
+		var stage: String = f.get_basename()
+		if previews.call("load_preview", stage) == null:
+			failures.append("stage %s has no loadable preview at %s" % [stage, previews.call("preview_path", stage)])
+	if count == 0: failures.append("no stage scenes found")
+	_scenario_completed = true
+	return failures
 func _scenario_stage_spawns_are_safe() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
 	# and well apart from the rest (#168). Per stage nothing changed: one copy,
@@ -16136,6 +16203,7 @@ func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
 ## the name tags (#121) are scaled back up so they read at their usual size.
 ## The next round, on a normal stage with two players, puts the camera back
 ## to zoom 1 on the origin.
+const SoccerCtfOwn647: PackedStringArray = ["Pitch", "Dunes", "Cage", "Bastion", "Stronghold"]
 func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String]:
 	var failures: Array[String] = []
 	var large: PackedStringArray = []
@@ -16174,6 +16242,8 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 		rm.set_script(RoundManagerType)
 		rm.player_paths = paths
 		var scenes: Array[PackedScene] = [load(path) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+		if SoccerCtfOwn647.has(path.get_file().get_basename()):  # no general mode plays these (#647)
+			scenes = [load(path) as PackedScene, load(path) as PackedScene]
 		rm.stage_scenes = scenes
 		rm.arena_container_path = NodePath("../Container")
 		rm.controller_server_path = NodePath("../Roster")
@@ -16244,6 +16314,9 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 		# A normal stage and two players: back to the unzoomed view.
 		roster.slots = [0, 1]
 		rm._stage_rotation.set("round_player_count", 2)
+		if SoccerCtfOwn647.has(path.get_file().get_basename()):
+			var normal: Array[PackedScene] = [load(STAGE_PATHS[0]) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+			rm.stage_scenes = normal
 		rm._swap_stage()
 		if camera.zoom != Vector2.ONE or camera.global_position.distance_to(Vector2.ZERO) > LARGE_VIEW_TOLERANCE:
 			failures.append("%s: on a normal stage afterwards the camera stayed at zoom %s, %s" % [
@@ -22331,7 +22404,7 @@ const TeamsScript236 := preload("res://scripts/Teams.gd")
 const BotScript236 := preload("res://scripts/Bot.gd")
 ## The keys a free-for-all lobby state has always had, and only those.
 const FFA_LOBBY_KEYS_236: PackedStringArray = [
-	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused"]
+	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused", "rules", "stages_by_mode"]
 const FFA_PLAYER_KEYS_236: PackedStringArray = ["slot", "ready", "name", "color"]
 ## How long a round-end pause the Teams round scenarios hold, to look at it.
 const TEAM_ROUND_PAUSE_SEC_236: float = 1.5
@@ -30303,8 +30376,9 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 		var index: int = rotation.next_stage_index()
 		rotation.stage_index = index
 		seen[index] = true
-	if seen.size() != scenes.size():
-		failures.append("%d of %d stages rotated with the demo off" % [seen.size(), scenes.size()])
+	var general: int = settings.stages_for_mode("").size()  # Soccer's and CTF's five have their own lists (#647)
+	if seen.size() != general or general != scenes.size() - 5:
+		failures.append("%d of %d general stages rotated with the demo off (%d known)" % [seen.size(), general, scenes.size()])
 	if settings.known_stages.size() != scenes.size() or not settings.is_stage_enabled("Gauntlet"):
 		failures.append("the settings lost stages with the demo off")
 	if PickupWeaponsScript.available_weapons().size() != PickupWeaponsScript.WEAPON_PATHS.size() - PickupWeaponsScript.RETIRED_PATHS.size() \
@@ -30330,14 +30404,14 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	await _teardown(loop["stage"])
 	return failures
 ## Issue #375: a Stock rig with three stub stages, the host's stage pick set.
-func _stock_stage_rig(pick: String, disabled: PackedStringArray = PackedStringArray()) -> Dictionary:
+func _stock_stage_rig(on: PackedStringArray = PackedStringArray()) -> Dictionary:
 	var settings: RefCounted = StockSettingsScript.shared()
-	settings.disabled_stages = disabled
+	settings.disabled_stages_by_mode = {}
 	var rig: Dictionary = _stock_rig(2, 3, 0)
 	var rm: Node = rig["rm"]
 	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
 	rm.stage_scenes = _named_stub_stages(["StageA", "StageB", "StageC"], spawns)
-	settings.stock_stage = pick
+	settings.stock_stages_on = on
 	return rig
 ## Stub stages whose `resource_path` carries their name, as the rotation and
 ## the host settings identify a stage by its file's base name.
@@ -30351,8 +30425,8 @@ func _named_stub_stages(names: Array[String], spawns: Array[Vector2]) -> Array[P
 const StageRotationScript := preload("res://scripts/StageRotation.gd")
 func _stock_stage_reset() -> void:
 	var settings: RefCounted = StockSettingsScript.shared()
-	settings.disabled_stages = PackedStringArray()
-	settings.stock_stage = ""
+	settings.disabled_stages_by_mode = {}
+	settings.stock_stages_on = PackedStringArray()
 	_stock_settings(3, 480)
 ## The stage names RoundManager plays over `rounds` consecutive rounds.
 func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
@@ -30363,7 +30437,7 @@ func _stock_stage_names(rm: Node, rounds: int) -> Array[String]:
 	return names
 func _scenario_stock_plays_the_picked_stage_every_round() -> Array[String]:
 	var failures: Array[String] = []
-	var rig: Dictionary = _stock_stage_rig("StageB")
+	var rig: Dictionary = _stock_stage_rig(PackedStringArray(["StageB"]))
 	var rm: Node = rig["rm"]
 	rm.set_process(false)
 	var names: Array[String] = _stock_stage_names(rm, 6)
@@ -30385,12 +30459,12 @@ func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[S
 	var failures: Array[String] = []
 	var seen: Dictionary = {}
 	for _attempt in 3:
-		var rig: Dictionary = _stock_stage_rig("", PackedStringArray(["StageA"]))
+		var rig: Dictionary = _stock_stage_rig(PackedStringArray(["StageB", "StageC"]))
 		var rm: Node = rig["rm"]
 		rm.set_process(false)
 		var names: Array[String] = _stock_stage_names(rm, 4)
 		if names.has("StageA"):
-			failures.append("Random picked the switched-off StageA: %s" % [names])
+			failures.append("Stock picked the switched-off StageA: %s" % [names])
 		if names.count(names[0]) != names.size():
 			failures.append("Random changed stage inside one match: %s" % [names])
 		seen[names[0]] = true
@@ -30398,19 +30472,11 @@ func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[S
 		await _teardown(rig["stage"])
 	if seen.is_empty():
 		failures.append("Random never picked a stage")
-	# A pick the host switched off falls back to an enabled stage.
-	var rig2: Dictionary = _stock_stage_rig("StageC", PackedStringArray(["StageC"]))
-	rig2["rm"].set_process(false)
-	var fallback: Array[String] = _stock_stage_names(rig2["rm"], 2)
-	if fallback.has("StageC"):
-		failures.append("a switched-off pick was still played: %s" % [fallback])
-	_stock_stage_reset()
-	await _teardown(rig2["stage"])
 	_scenario_completed = true
 	return failures
 func _scenario_stock_never_rolls_a_modifier() -> Array[String]:
 	var failures: Array[String] = []
-	var rig: Dictionary = _stock_stage_rig("")
+	var rig: Dictionary = _stock_stage_rig()
 	var rm: Node = rig["rm"]
 	rm.set_process(false)
 	rm.modifier_rolls_enabled = true
@@ -30442,40 +30508,373 @@ func _scenario_stock_stage_pick_persists_and_reaches_the_host_phone() -> Array[S
 	var fresh: RefCounted = StockSettingsScript.new()
 	fresh.path = path
 	fresh.known_stages = PackedStringArray(["StageA", "StageB"])
-	if fresh.stock_stage != "":
-		failures.append("the default pick was '%s', want Random" % fresh.stock_stage)
-	if fresh.set_stock_stage("Nowhere") or fresh.stock_stage != "":
+	if fresh.enabled_stages_for("stock").size() != 2:
+		failures.append("the default (no competitive stage) was not every stage")
+	if fresh.set_stock_stage("Nowhere"):
 		failures.append("an unknown stage was accepted")
 	if not fresh.set_stock_stage("StageB"):
 		failures.append("a known stage was refused")
 	var reloaded: RefCounted = StockSettingsScript.new()
 	reloaded.path = path
+	reloaded.known_stages = fresh.known_stages
 	reloaded.load_settings()
-	if reloaded.stock_stage != "StageB":
-		failures.append("reloaded pick '%s', want StageB" % reloaded.stock_stage)
+	if reloaded.enabled_stages_for("stock") != PackedStringArray(["StageB"]):
+		failures.append("reloaded Stock stages %s, want only StageB" % [reloaded.enabled_stages_for("stock")])
 	DirAccess.remove_absolute(path)
 	# The host phone's message reaches the shared settings.
 	var shared: RefCounted = StockSettingsScript.shared()
 	shared.known_stages = PackedStringArray(["StageA", "StageB"])
 	var server: Node = ControllerServerScript.new()
-	if not server.apply_host_command("stock_stage", "StageA") or shared.stock_stage != "StageA":
+	if not server.apply_host_command("stock_stage", "StageA") or shared.enabled_stages_for("stock") != PackedStringArray(["StageA"]):
 		failures.append("the host command did not set StageA")
-	if server.apply_host_command("stock_stage", "Nowhere") or shared.stock_stage != "StageA":
+	if server.apply_host_command("stock_stage", "Nowhere") or shared.enabled_stages_for("stock") != PackedStringArray(["StageA"]):
 		failures.append("the host command took an unknown stage")
 	server.free()
-	# The picker lists enabled stages only (no competitive stage exists yet).
+	# The picker lists every Stock stage with its on flag.
 	var rotation: RefCounted = StageRotationScript.new()
 	rotation.settings = StockSettingsScript.new()
 	rotation.settings.persist = false
 	var spawns: Array[Vector2] = [MODE_SPAWNS[0], MODE_SPAWNS[1]]
 	rotation.scenes = _named_stub_stages(["StageA", "StageB"], spawns)
-	rotation.settings.set_stage_enabled("StageA", false)
+	rotation.settings.set_stage_enabled_for("stock", "StageA", false)
 	var rows: Array = rotation.picker_rows()
-	if rows.size() != 1 or rows[0]["name"] != "StageB" or rows[0]["competitive"]:
+	if rows.size() != 2 or rows[0]["name"] != "StageA" or rows[0]["on"] or not rows[1]["on"] or rows[1]["competitive"]:
 		failures.append("the picker rows were %s" % [rows])
 	_stock_stage_reset()
 	_scenario_completed = true
 	return failures
+## Issue #647: each mode keeps its own stage list, saved apart from the others.
+func _scenario_per_mode_stage_lists_persist_separately_647() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://stage_lists_647.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var known := PackedStringArray(["Alpha", "Beta", "Gamma", "Pitch", "Dunes", "Cage", "Bastion", "Stronghold"])
+	var first: RefCounted = StockSettingsScript.new()
+	first.path = path
+	first.known_stages = known
+	first.set_stage_enabled_for("classic", "Alpha", false)
+	first.set_stage_enabled_for("king_of_the_hill", "Beta", false)
+	first.set_stage_enabled_for("soccer", "Cage", false)
+	first.set_stage_enabled_for("stock", "Gamma", false)
+	var second: RefCounted = StockSettingsScript.new()
+	second.path = path
+	second.known_stages = known
+	second.load_settings()
+	if second.is_stage_enabled_for("classic", "Alpha") or not second.is_stage_enabled_for("classic", "Beta"):
+		failures.append("classic list wrong after reload: %s" % [second.enabled_stages_for("classic")])
+	if second.is_stage_enabled_for("king_of_the_hill", "Beta") or not second.is_stage_enabled_for("king_of_the_hill", "Alpha"):
+		failures.append("king_of_the_hill list wrong after reload: %s" % [second.enabled_stages_for("king_of_the_hill")])
+	if second.enabled_stages_for("soccer") != PackedStringArray(["Pitch", "Dunes"]):
+		failures.append("soccer list wrong after reload: %s" % [second.enabled_stages_for("soccer")])
+	if second.enabled_stages_for("capture_the_flag") != PackedStringArray(["Bastion", "Stronghold"]):
+		failures.append("ctf list changed with soccer's: %s" % [second.enabled_stages_for("capture_the_flag")])
+	if second.enabled_stages_for("stock") != PackedStringArray(["Alpha", "Beta"]):
+		failures.append("stock list wrong after reload: %s" % [second.enabled_stages_for("stock")])
+	if second.stages_for_mode("sudden_death") != PackedStringArray(["Alpha", "Beta", "Gamma"]):
+		failures.append("general rotation is %s" % [second.stages_for_mode("sudden_death")])
+	if second.set_stage_enabled_for("soccer", "Alpha", true):
+		failures.append("soccer accepted a general stage")
+	second.set_all_stages_for("classic", false)
+	if not second.on_stages_for("classic").is_empty():
+		failures.append("all-off left %d classic stages on" % second.on_stages_for("classic").size())
+	if second.enabled_stages_for("classic").size() != 3:
+		failures.append("the draw did not fall back to every stage with all off")
+	second.set_all_stages_for("classic", true)
+	if second.enabled_stages_for("classic").size() != 3:
+		failures.append("all-on left %d classic stages" % second.enabled_stages_for("classic").size())
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	# The host commands and the lobby state carry the lists.
+	var shared: RefCounted = StockSettingsScript.shared()
+	shared.known_stages = known
+	shared.disabled_stages_by_mode = {}
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("stage_mode_toggle", {"mode": "sudden_death", "stage": "Gamma", "on": false}) \
+			or shared.is_stage_enabled_for("sudden_death", "Gamma") or not shared.is_stage_enabled_for("classic", "Gamma"):
+		failures.append("stage_mode_toggle did not touch only sudden_death")
+	if not server.apply_host_command("stage_mode_all", {"mode": "sudden_death", "on": true}) or not shared.is_stage_enabled_for("sudden_death", "Gamma"):
+		failures.append("stage_mode_all did not switch the list on")
+	server.free()
+	shared.disabled_stages_by_mode = {}
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Stock with one stage on plays only it, round after round.
+func _scenario_stock_with_one_stage_on_always_plays_it_647() -> Array[String]:
+	var failures: Array[String] = []
+	for stage_name: String in ["StageA", "StageC"]:
+		var rig: Dictionary = _stock_stage_rig()
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		var settings: RefCounted = StockSettingsScript.shared()
+		settings.set_all_stages_for("stock", false)
+		settings.set_stage_enabled_for("stock", stage_name, true)
+		for other: String in ["StageA", "StageB", "StageC"]:
+			if other != stage_name:
+				settings.set_stage_enabled_for("stock", other, false)
+		var names: Array[String] = _stock_stage_names(rm, 8)
+		for n: String in names:
+			if n != stage_name:
+				failures.append("Stock played %s with only %s on: %s" % [n, stage_name, names])
+				break
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Stock with several stages on plays one of them, held all match,
+## and over matches draws from each of them.
+func _scenario_stock_with_several_stages_on_picks_one_of_them_647() -> Array[String]:
+	var failures: Array[String] = []
+	var seen: Dictionary = {}
+	for _attempt in 12:
+		var rig: Dictionary = _stock_stage_rig(PackedStringArray(["StageA", "StageC"]))
+		var rm: Node = rig["rm"]
+		rm.set_process(false)
+		rm.rotation_seed = 100 + _attempt
+		rm._stage_rotation.rng = RandomNumberGenerator.new()
+		rm._stage_rotation.rng.seed = 100 + _attempt
+		var names: Array[String] = _stock_stage_names(rm, 3)
+		if names.has("StageB"):
+			failures.append("Stock played the switched-off StageB: %s" % [names])
+		if names.count(names[0]) != names.size():
+			failures.append("Stock changed stage inside one match: %s" % [names])
+		seen[names[0]] = true
+		_stock_stage_reset()
+		await _teardown(rig["stage"])
+	if seen.size() != 2:
+		failures.append("12 matches drew %s; expected both StageA and StageC" % [seen.keys()])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Soccer and CTF draw from their own on stages only, and fall back
+## to all of the mode's stages when every one is off.
+func _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var cases: Array = [
+		["soccer", ["Pitch", "Dunes", "Cage"], ["Dunes"]],
+		["soccer", ["Pitch", "Dunes", "Cage"], ["Pitch", "Cage"]],
+		["capture_the_flag", ["Bastion", "Stronghold"], ["Stronghold"]],
+	]
+	for row: Array in cases:
+		var mode_id: String = row[0]
+		var settings: RefCounted = _fresh_settings_361()
+		var rotation: RefCounted = StageRotationScript361.new()
+		rotation.settings = settings
+		rotation.scenes = scenes
+		settings.set_all_stages_for(mode_id, false)
+		for stage_name: String in row[2]:
+			settings.set_stage_enabled_for(mode_id, stage_name, true)
+		for stage_name: String in row[1]:
+			if not (row[2] as Array).has(stage_name):
+				settings.set_stage_enabled_for(mode_id, stage_name, false)
+		rotation.round_player_count = 8
+		rotation.mode_id = mode_id
+		rotation.rng = RandomNumberGenerator.new()
+		rotation.rng.seed = 5
+		var seen: Dictionary = {}
+		for _round in 60:
+			var index: int = rotation.next_stage_index()
+			rotation.stage_index = index
+			seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
+		var got: Array = seen.keys()
+		got.sort()
+		var want: Array = (row[2] as Array).duplicate()
+		want.sort()
+		if got != want:
+			failures.append("%s dealt %s with %s on" % [mode_id, got, want])
+	_scenario_completed = true
+	return failures
+
+## Issue #647: Classic with every stage off falls back to Classic's own pool,
+## never a Soccer or Capture the Flag stage.
+func _scenario_classic_all_off_never_deals_a_goal_or_flag_stage_647() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var settings: RefCounted = _fresh_settings_361()
+	var names := PackedStringArray()
+	for scene: PackedScene in scenes:
+		names.append(HostSettingsScriptDemo361.name_of(scene.resource_path))
+	settings.known_stages = names
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	rotation.scenes = scenes
+	rotation.mode_id = ""
+	rotation.round_player_count = 8
+	settings.set_all_stages_for("classic", false)
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 9
+	for _round in 80:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		var stage_name: String = HostSettingsScriptDemo361.name_of(scenes[index].resource_path)
+		if not settings.stages_for_mode("").has(stage_name):
+			failures.append("Classic with all off dealt %s" % stage_name)
+			break
+	_scenario_completed = true
+	return failures
+
+## Issue #647: All off reaches zero on, in every mode including Stock, the
+## lobby state says so, and a round still draws from every stage.
+func _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647() -> Array[String]:
+	var failures: Array[String] = []
+	var shared: RefCounted = StockSettingsScript.shared()
+	var saved_persist: bool = shared.persist
+	shared.persist = false
+	shared.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma", "Pitch", "Dunes", "Cage", "Bastion", "Stronghold"])
+	shared.disabled_stages_by_mode = {}
+	shared.stock_stages_on = PackedStringArray()
+	var server: Node = ControllerServerScript.new()
+	for mode_id: String in ["classic", "stock", "soccer", "capture_the_flag"]:
+		if not server.apply_host_command("stage_mode_all", {"mode": mode_id, "on": false}):
+			failures.append("stage_mode_all off was refused for %s" % mode_id)
+		if not shared.on_stages_for(mode_id).is_empty():
+			failures.append("%s kept %s on after All off" % [mode_id, shared.on_stages_for(mode_id)])
+		if shared.enabled_stages_for(mode_id).is_empty():
+			failures.append("%s has no stage to draw from with all off" % mode_id)
+		server.apply_host_command("stage_mode_all", {"mode": mode_id, "on": true})
+		if shared.on_stages_for(mode_id).size() != shared.stages_for_mode(mode_id).size() and mode_id != "stock":
+			failures.append("%s All on left %s" % [mode_id, shared.on_stages_for(mode_id)])
+	# Stock with none on, then one tapped on, is just that one.
+	server.apply_host_command("stage_mode_all", {"mode": "stock", "on": false})
+	server.apply_host_command("stage_mode_toggle", {"mode": "stock", "stage": "Beta", "on": true})
+	if shared.on_stages_for("stock") != PackedStringArray(["Beta"]):
+		failures.append("stock after All off then Beta on was %s" % [shared.on_stages_for("stock")])
+	server.free()
+	# The lobby state carries the true counts.
+	var rm: Node = RoundManagerScript.new()
+	shared.disabled_stages_by_mode = {}
+	shared.set_all_stages_for("classic", false)
+	var by_mode: Dictionary = rm._stages_by_mode()
+	if not (by_mode["classic"]["on"] as PackedStringArray).is_empty() or (by_mode["classic"]["all"] as PackedStringArray).size() != 3:
+		failures.append("lobby state classic was %s" % [by_mode["classic"]])
+	var rules: Dictionary = rm._rules_state()
+	if not (rules["modes"]["stock"]["locked"] as Array).has("night") or not (rules["modes"]["classic"]["on"] as Array).has("night"):
+		failures.append("rules state lost the night switch: %s" % [rules["modes"]])
+	rm.free()
+	shared.disabled_stages_by_mode = {}
+	shared.stock_stages_on = PackedStringArray()
+	shared.persist = saved_persist
+	_scenario_completed = true
+	return failures
+
+## Issue #647: the page's modifier and weapon switches and the stage messages
+## act only when the host sends them.
+func _scenario_stages_and_rules_messages_come_only_from_the_host_647() -> Array[String]:
+	var failures: Array[String] = []
+	var shared: RefCounted = StockSettingsScript.shared()
+	var saved_persist: bool = shared.persist
+	shared.persist = false
+	shared.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma"])
+	shared.disabled_stages_by_mode = {}
+	shared.disabled_modifiers = {}
+	var server: Node = ControllerServerScript.new()
+	# No phone is host here (host_slot() is -1), so every frame is from a non-host.
+	server._handle_text(2, JSON.stringify({"t": "stage_mode_toggle", "mode": "classic", "stage": "Alpha", "on": false}))
+	server._handle_text(2, JSON.stringify({"t": "stage_mode_all", "mode": "classic", "on": false}))
+	server._handle_text(2, JSON.stringify({"t": "modifier_toggle", "mode": "classic", "id": "night", "on": false}))
+	server._handle_text(2, JSON.stringify({"t": "weapon_toggle", "name": "Axe", "on": false}))
+	if not shared.is_stage_enabled_for("classic", "Alpha") or shared.on_stages_for("classic").size() != 3:
+		failures.append("a non-host changed the stage list")
+	if not shared.is_modifier_enabled("classic", "night") or not shared.is_weapon_enabled("Axe"):
+		failures.append("a non-host changed a modifier or weapon")
+	# The host's own commands work, and bad shapes and ids are refused.
+	if not server.apply_host_command("modifier_toggle", {"mode": "classic", "id": "night", "on": false}) or shared.is_modifier_enabled("classic", "night"):
+		failures.append("the host could not switch night off")
+	# The round reads Classic as GameModes.CLASSIC (""), not the phone's "classic".
+	if shared.is_modifier_enabled("", "night"):
+		failures.append("a phone-sent Classic toggle did not reach the key the round reads")
+	var classic_json: String = JSON.stringify(shared.disabled_modifiers)
+	if shared.disabled_modifiers.has(""):
+		failures.append("Classic modifiers stored under a second key: %s" % classic_json)
+	if shared.is_modifier_enabled("sudden_death", "night") == false:
+		failures.append("night off leaked into another mode")
+	for bad_mode: String in ["bogus", "hot_potato_x"]:
+		if server.apply_host_command("stage_mode_toggle", {"mode": bad_mode, "stage": "Alpha", "on": false}) \
+				or server.apply_host_command("stage_mode_all", {"mode": bad_mode, "on": false}) \
+				or server.apply_host_command("modifier_toggle", {"mode": bad_mode, "id": "night", "on": false}):
+			failures.append("unknown mode id '%s' was accepted" % bad_mode)
+	if shared.disabled_stages_by_mode.has("bogus") or shared.disabled_modifiers.has("bogus"):
+		failures.append("an unknown mode id was stored")
+	if server.apply_host_command("modifier_toggle", {"mode": "classic", "id": "bogus", "on": false}):
+		failures.append("an unknown modifier id was accepted")
+	if server.apply_host_command("modifier_toggle", {"mode": "stock", "id": "night", "on": true}) or shared.is_modifier_enabled("stock", "night"):
+		failures.append("Stock's locked modifier was switched on")
+	if server.apply_host_command("weapon_toggle", {"name": "Axe", "on": "no"}):
+		failures.append("a non-bool weapon switch was accepted")
+	if not server.apply_host_command("weapon_toggle", {"name": "Axe", "on": false}) or shared.is_weapon_enabled("Axe"):
+		failures.append("the host could not switch Axe off")
+	server.apply_host_command("weapon_toggle", {"name": "Axe", "on": true})
+	server.free()
+	shared.disabled_modifiers = {}
+	shared.disabled_stages_by_mode = {}
+	shared.persist = saved_persist
+	_scenario_completed = true
+	return failures
+
+## Issue #647: the controller page's Stages & Rules screen replaces the old
+## Stock grid, sends the four messages and gates Done on a stage being on.
+func _scenario_controller_page_has_the_stages_and_rules_screen_647() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	for needle: String in ['id="menu-rules-open"', 'id="menu-rules"', 'id="rules-all-off"', 'id="rules-summary"',
+			't: "stage_mode_toggle"', 't: "stage_mode_all"', 't: "modifier_toggle"', 't: "weapon_toggle"']:
+		if not page.contains(needle):
+			failures.append("the page lacks %s" % needle)
+	if page.contains("menu-stockstages") or page.contains("PHONE_STOCK_RANDOM"):
+		failures.append("the old Stock stage grid is still on the page")
+	if not _js_function_body(page, "renderRules").contains('rulesDoneBtn.disabled = emptyRulesMode() !== ""'):
+		failures.append("Done is not blocked while any mode has no stage on")
+	if not _js_function_body(page, "rulesFooterText").contains("RULES_FOOTER_NONE_IN"):
+		failures.append("the footer does not name the empty mode")
+	if _js_function_body(page, "renderRules").contains("rulesDoneBtn.disabled = st.on.length === 0"):
+		failures.append("Done still looks only at the shown tab")
+	if not _js_function_body(page, "rulesEditable").contains("amHost()"):
+		failures.append("the rules page is editable by a non-host")
+	if not _js_function_body(page, "rulesFooterText").contains("RULES_FOOTER_NONE"):
+		failures.append("the footer has no 'Switch on at least one stage' line")
+	if page.contains('id="rules-summary"') and not page.contains('<div id="rules-summary"></div>'):
+		failures.append("the summary line is not a plain line")
+	_scenario_completed = true
+	return failures
+
+## Issue #647: a config saved before per-mode lists seeds every general mode
+## from the old global switches, and the old Stock pick becomes "only that on".
+func _scenario_old_stage_config_migrates_to_per_mode_lists_647() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://old_stage_config_647.cfg"
+	var cfg := ConfigFile.new()
+	cfg.set_value("host", "disabled_stages", PackedStringArray(["Beta"]))
+	cfg.set_value("host", "stock_stage", "Gamma")
+	cfg.save(path)
+	var settings: RefCounted = StockSettingsScript.new()
+	settings.path = path
+	settings.persist = false
+	settings.known_stages = PackedStringArray(["Alpha", "Beta", "Gamma", "Pitch"])
+	settings.load_settings()
+	for mode_id: String in ["classic", "king_of_the_hill", "sudden_death"]:
+		if settings.enabled_stages_for(mode_id) != PackedStringArray(["Alpha", "Gamma"]):
+			failures.append("%s kept %s, expected Beta off" % [mode_id, settings.enabled_stages_for(mode_id)])
+	if settings.enabled_stages_for("stock") != PackedStringArray(["Gamma"]):
+		failures.append("Stock kept %s, expected only Gamma" % [settings.enabled_stages_for("stock")])
+	if settings.enabled_stages_for("soccer") != PackedStringArray(["Pitch"]):
+		failures.append("Soccer lost its pitch: %s" % [settings.enabled_stages_for("soccer")])
+	var cfg2 := ConfigFile.new()
+	cfg2.set_value("host", "stock_stage", "")
+	cfg2.save(path)
+	settings.load_settings()
+	if settings.enabled_stages_for("stock").size() != 3:
+		failures.append("a Random Stock pick did not seed the default (all stages here): %s" % [settings.enabled_stages_for("stock")])
+	var cfg3 := ConfigFile.new()
+	cfg3.set_value("host", "stock_stage", "Pitch")  # a stage Stock no longer offers
+	cfg3.save(path)
+	settings.load_settings()
+	if settings.enabled_stages_for("stock").size() != 3 or settings.on_stages_for("stock").size() != 3:
+		failures.append("a stale Stock pick left %s on, expected the default" % [settings.on_stages_for("stock")])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_scenario_completed = true
+	return failures
+
 ## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
 func _i18n_catalogue_367() -> Dictionary:
 	var out: Dictionary = {}
@@ -31522,21 +31921,18 @@ func _scenario_rules_table_bans_cannot_be_reenabled() -> Array[String]:
 			failures.append("Stock allowed %s" % id)
 	if not host.is_modifier_enabled("hot_potato", "gale"):
 		failures.append("an unbanned modifier should default on")
-	# The panel shows banned boxes locked off.
-	var sfx: Node = _sfx()
-	if sfx == null:
-		return ["the Sfx autoload is missing"]
-	var panel: CanvasLayer = sfx.build_settings_ui()
-	await _await_ticks(3)
-	panel.rules_mode_button().select(panel._rules_mode_ids.find("king_of_the_hill"))  # Hot Potato is retired from the list (#645)
-	panel._rebuild_rules()
-	var box: CheckBox = panel.rules_box("meteor_shower")
+	# The Stages & Rules screen (#647) shows banned switches locked off.
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	screen.stages_rules().select_tab("king_of_the_hill")  # Hot Potato is retired from the list (#645)
+	var box: Button = screen.stages_rules().modifier_button("meteor_shower")
 	if box == null or not box.disabled or box.button_pressed:
-		failures.append("the banned box was not locked off in the Rules list")
-	var open_box: CheckBox = panel.rules_box("gale")
+		failures.append("the banned switch was not locked off on the Rules screen")
+	var open_box: Button = screen.stages_rules().modifier_button("gale")
 	if open_box == null or open_box.disabled or not open_box.button_pressed:
-		failures.append("an unbanned box should be live and ticked")
-	panel.queue_free()
+		failures.append("an unbanned switch should be live and on")
+	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures
 # --- Soccer (issue #402) -------------------------------------------------------
@@ -32750,7 +33146,7 @@ func _scenario_deck_gamepad_operates_the_settings_panel() -> Array[String]:
 	ui.more_box().button_pressed = true
 	await _await_ticks(3)
 	var seen: Dictionary = _focus_reach_368(ui.volume_slider())
-	for id in ["Volume", "SfxVolume", "MusicVolume", "Mute", "Fullscreen", "MoreOptions", "Feedback", "Resolution", "ScreenShake", "HideRoomCode", "TagSize", "RulesMode"]:
+	for id in ["Volume", "SfxVolume", "MusicVolume", "Mute", "Fullscreen", "MoreOptions", "Feedback", "Resolution", "ScreenShake", "HideRoomCode", "TagSize", "ShareStats"]:
 		if not seen.has(id):
 			failures.append("the D-pad never focused '%s' in Settings (saw %s)" % [id, seen.keys()])
 	ui.mute_box().grab_focus()
@@ -33320,8 +33716,8 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 	return failures
 ## Review sweep b: Capture the Flag and Soccer can only end on a stage with their
 ## bases or goals, so their rotation deals only the stages whose `mode_weights`
-## name the mode -- even when the host switched those off -- while every other
-## mode still deals the rest.
+## name the mode, minus any the host switched off for that mode (#647), while
+## every other mode still deals the rest.
 func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[String]:
 	var failures: Array[String] = []
 	var scenes: Array[PackedScene] = _real_stage_scenes_361()
@@ -33337,15 +33733,14 @@ func _scenario_rotation_deals_ctf_and_soccer_only_their_own_stages() -> Array[St
 			rotation.rng = RandomNumberGenerator.new()
 			rotation.rng.seed = 21
 			if switched_off:
-				for stage_name: String in own[mode_id]:
-					settings.set_stage_enabled(stage_name, false)
+				settings.set_stage_enabled_for(mode_id, own[mode_id][0], false)
 			var seen: Dictionary = {}
 			for _round in 60:
 				var index: int = rotation.next_stage_index()
 				rotation.stage_index = index
 				seen[HostSettingsScriptDemo361.name_of(scenes[index].resource_path)] = true
 			for stage_name: Variant in seen.keys():
-				if not (own[mode_id] as Array).has(str(stage_name)):
+				if not (own[mode_id] as Array).has(str(stage_name)) or (switched_off and stage_name == own[mode_id][0]):
 					failures.append("%s dealt %s (own stages %s, switched off: %s)" % [mode_id, stage_name, own[mode_id], switched_off])
 			if seen.is_empty():
 				failures.append("%s dealt no stage" % mode_id)
@@ -37749,10 +38144,10 @@ func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[Str
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	server.apply_host_command("mode", "teams")
 	var cases: Array = [
-		[GameModesType.CLASSIC, "Classic - Teams - first to %d" % server.match_target(), "first_to", "First to", str(server.match_target())],
-		[GameModesType.STOCK, "Stock - Teams - 4 lives", "lives", "Lives", "4"],
-		[GameModesType.SOCCER, "Soccer - Teams - 5 goals", "goals", "Goals to win", "5"],
-		[GameModesType.CAPTURE_THE_FLAG, "Capture the Flag - Teams - 6 captures", "captures", "Captures to win", "6"],
+		[GameModesType.CLASSIC, "Classic - Teams - first to %d - %s" % [server.match_target(), _stage_count_text_647("")], "first_to", "First to", str(server.match_target())],
+		[GameModesType.STOCK, "Stock - Teams - 4 lives - %s" % _stage_count_text_647("stock"), "lives", "Lives", "4"],
+		[GameModesType.SOCCER, "Soccer - Teams - 5 goals - 3 stages", "goals", "Goals to win", "5"],
+		[GameModesType.CAPTURE_THE_FLAG, "Capture the Flag - Teams - 6 captures - 2 stages", "captures", "Captures to win", "6"],
 	]
 	for case: Array in cases:
 		if not server.set_game_mode(case[0]):
@@ -39732,6 +40127,7 @@ func _scenario_settings_hygiene_609() -> Array[String]:
 	var cfg := ConfigFile.new()
 	cfg.set_value("host", "resolution", Vector2i(0, 1))
 	cfg.set_value("host", "disabled_stages", 7)
+	cfg.set_value("host", "stage_lists", 7)
 	cfg.set_value("host", "disabled_weapons", ["spear", 3])
 	cfg.set_value("host", "game_mode", "ffa")
 	cfg.set_value("host", "share_stats", "yes")
@@ -39740,7 +40136,7 @@ func _scenario_settings_hygiene_609() -> Array[String]:
 	host.path = cfg_path
 	host.persist = false
 	host.load_settings()
-	if host.resolution != Vector2i.ZERO or not host.disabled_stages.is_empty() or host.disabled_weapons != PackedStringArray(["spear"]):
+	if host.resolution != Vector2i.ZERO or not host.disabled_stages_by_mode.is_empty() or host.disabled_weapons != PackedStringArray(["spear"]):
 		failures.append("HostSettings did not tolerate wrong-typed values")
 	var sfx_path: String = tmp.path_join("sfx.cfg")
 	var scfg := ConfigFile.new()
@@ -41016,10 +41412,11 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool, modi
 	rm.game_mode = GameModesType.SOCCER if soccer else GameModesType.CAPTURE_THE_FLAG
 	rm.forced_modifier = modifier
 	var switched_off: Array[String] = []
+	var mode_key: String = String(rm.game_mode)
 	if only_first:
 		for path: String in paths.slice(1):
 			var stage_name: String = path.get_file().get_basename()
-			if settings.set_stage_enabled(stage_name, false):
+			if settings.set_stage_enabled_for(mode_key, stage_name, false):
 				switched_off.append(stage_name)
 	roster.teams_on = true
 	roster.team_picks = {0: 0, 1: 1}
@@ -41076,7 +41473,7 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool, modi
 		if rm._match_stages.size() != 3:
 			failures.append("telemetry holds %d stages, expected 3: %s" % [rm._match_stages.size(), rm._match_stages])
 	for stage_name: String in switched_off:
-		settings.set_stage_enabled(stage_name, true)
+		settings.set_stage_enabled_for(mode_key, stage_name, true)
 	settings.set_soccer_goals(old_goals)
 	settings.set_ctf_captures(old_captures)
 	await _teardown(loop["stage"])
@@ -41431,5 +41828,329 @@ func _telemetry_soccer_abandon_643(played_sec: float) -> Array[String]:
 	host.share_stats = was_share
 	host.telemetry_notice_seen = was_notice
 	host.persist = was_persist
+	_scenario_completed = true
+	return failures
+
+# --- Stages & Rules screen (#647) ------------------------------------------------
+## The Stages & Rules screen's own settings state is the shared store's: reset it.
+func _reset_host_choices_647() -> void:
+	var host: RefCounted = StockSettingsScript.shared()
+	host.disabled_stages_by_mode = {}
+	host.stock_stages_on = PackedStringArray()
+	host.disabled_weapons = PackedStringArray()
+	host.disabled_modifiers = {}
+## "38 stages" for `mode_id` from the settings, as the status line spells it.
+func _stage_count_text_647(mode_id: String) -> String:
+	var host: RefCounted = StockSettingsScript.shared()
+	var count: int = 0
+	for stage_name: String in host.stages_for_mode(mode_id):
+		if host.is_stage_enabled_for(mode_id, stage_name):
+			count += 1
+	return "%d stage%s" % [count, "" if count == 1 else "s"]
+## A mouse click on a toggle button: it flips, then reports pressed.
+func _click_647(button: Button) -> void:
+	button.set_pressed_no_signal(not button.button_pressed)
+	button.pressed.emit()
+func _key_tap_647(keycode: Key) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = keycode
+	ev.physical_keycode = keycode
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+func _scenario_settings_panel_no_longer_lists_stages_weapons_or_modifiers_647() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var panel: CanvasLayer = sfx.build_settings_ui()
+	panel.more_box().button_pressed = true
+	await _await_ticks(3)
+	for gone: String in ["Stages", "Weapons", "Rules", "RulesMode"]:
+		if panel.find_child(gone, true, false) != null:
+			failures.append("the Settings panel still has a '%s' list" % gone)
+	for node: Node in panel.find_children("*", "CheckBox", true, false):
+		for banned_word: String in ["Low Gravity", "Gale", "Sword", "Flatlands"]:
+			if (node as CheckBox).text.contains(banned_word):
+				failures.append("Settings still carries the '%s' switch" % banned_word)
+	for kept: String in ["Resolution", "ScreenShake", "ReduceFlash", "HideRoomCode", "TagSize", "ShareStats", "Mute", "Fullscreen"]:
+		if panel.find_child(kept, true, false) == null:
+			failures.append("Settings lost its '%s' control" % kept)
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_screen_toggles_write_per_mode_settings_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var host: RefCounted = StockSettingsScript.shared()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if not screen.open_stages_rules() or screen.popup_open() != "stages":
+		failures.append("the host could not open Stages & Rules")
+		await _teardown(rig["main"])
+		return failures
+	var view = screen.stages_rules()
+	var classic_total: int = host.stages_for_mode("").size()
+	if view.tab_ids() != ["", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"]:
+		failures.append("tabs are %s" % [view.tab_ids()])
+	if view.current_tab() != "":
+		failures.append("the screen opened on '%s', not the lobby's Classic" % view.current_tab())
+	# A tile click switches that stage off in Classic only.
+	_click_647(view.tile("Pillars"))
+	if host.is_stage_enabled_for("", "Pillars") or not host.is_stage_enabled_for("king_of_the_hill", "Pillars"):
+		failures.append("switching Pillars off in Classic did not stay in Classic")
+	if view.tile("Pillars").button_pressed:
+		failures.append("the Pillars tile still looks on")
+	if view.footer_text() != "Each round draws from %d of %d stages" % [classic_total - 1, classic_total]:
+		failures.append("footer reads '%s'" % view.footer_text())
+	# All off, then All on.
+	view.all_off_button().pressed.emit()
+	if host.enabled_stages_for("").size() < 1 or _stage_count_text_647("") == ("%d stages" % classic_total):
+		failures.append("All off left every stage on")
+	view.all_on_button().pressed.emit()
+	if _stage_count_text_647("") != "%d stages" % classic_total:
+		failures.append("All on did not switch every stage on (%s)" % _stage_count_text_647(""))
+	# Modifiers and night are per mode; weapons are global.
+	_click_647(view.modifier_button("gale"))
+	_click_647(view.modifier_button("night"))
+	if host.is_modifier_enabled("", "gale") or host.is_modifier_enabled("", "night") or not host.is_modifier_enabled("sudden_death", "gale"):
+		failures.append("modifier switches did not write per mode")
+	_click_647(view.weapon_button("sword"))
+	if host.is_weapon_enabled("sword") or not host.is_weapon_enabled("axe"):
+		failures.append("the sword switch did not write the global weapon list")
+	# Another tab has its own list.
+	view.select_tab("sudden_death")
+	if not view.tile("Pillars").button_pressed or not view.modifier_button("gale").button_pressed:
+		failures.append("Sudden Death inherited Classic's switches")
+	# Stock is a multi-select with its own footer.
+	view.select_tab("stock")
+	view.all_off_button().pressed.emit()
+	if not view.footer_text().begins_with("Stock plays on ") and not view.footer_text().begins_with("Switch on"):
+		failures.append("Stock with one stage on reads '%s'" % view.footer_text())
+	view.all_on_button().pressed.emit()
+	if view.footer_text() != "Stock picks one at random from %d stages" % host.stages_for_mode("stock").size():
+		failures.append("Stock with every stage on reads '%s'" % view.footer_text())
+	if not view.modifier_button("gale").disabled or view.modifier_button("gale").button_pressed or not view.modifier_button("night").disabled:
+		failures.append("Stock's modifiers are not locked off")
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_soccer_and_ctf_tabs_show_only_their_stages_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	var sorted_names := func(names: PackedStringArray) -> Array:
+		var out: Array = Array(names)
+		out.sort()
+		return out
+	view.select_tab("soccer")
+	if sorted_names.call(view.tile_names()) != ["Cage", "Dunes", "Pitch"]:
+		failures.append("Soccer shows %s" % [view.tile_names()])
+	view.select_tab("capture_the_flag")
+	if sorted_names.call(view.tile_names()) != ["Bastion", "Stronghold"]:
+		failures.append("Capture the Flag shows %s" % [view.tile_names()])
+	view.select_tab("")
+	if view.tile("Pitch") != null or view.tile("Bastion") != null or view.tile_names().size() < 30:
+		failures.append("Classic shows the Soccer or CTF stages, or too few (%d)" % view.tile_names().size())
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_zero_on_disables_done_esc_and_b_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var host: RefCounted = StockSettingsScript.shared()
+	var sfx: Node = _sfx()
+	var settings_ui: CanvasLayer = sfx.build_settings_ui()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	view.select_tab("soccer")
+	# Zero on, however the store got there: every Soccer stage disabled.
+	host.disabled_stages_by_mode["soccer"] = host.stages_for_mode("soccer")
+	view.select_tab("capture_the_flag")
+	view.select_tab("soccer")
+	if view.footer_text() != "Switch on at least one stage":
+		failures.append("zero on reads '%s'" % view.footer_text())
+	if not view.done_button().disabled:
+		failures.append("Done is enabled with no stage on")
+	if screen.request_close_popup() or screen.popup_open() != "stages":
+		failures.append("the screen closed with no stage on")
+	await _key_tap_647(KEY_ESCAPE)
+	if screen.popup_open() != "stages":
+		failures.append("Esc closed the screen with no stage on")
+	if settings_ui.is_open():
+		failures.append("Esc opened the Settings panel behind Stages & Rules")
+	PadMenuScript368.set_open("lobby", true)
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.popup_open() != "stages":
+		failures.append("B closed the screen with no stage on")
+	# Another tab with a stage on does not clear it: the message names Soccer.
+	view.select_tab("sudden_death")
+	if view.footer_text() != "Switch on at least one stage in Soccer" or not view.done_button().disabled:
+		failures.append("with Soccer empty, Sudden Death's footer reads '%s' (Done disabled %s)" % [view.footer_text(), view.done_button().disabled])
+	view.select_tab("soccer")
+	_click_647(view.tile("Pitch"))
+	if view.done_button().disabled or view.footer_text() != "Each round draws from 1 of 3 stages":
+		failures.append("one stage on: Done disabled %s, footer '%s'" % [view.done_button().disabled, view.footer_text()])
+	await _key_tap_647(KEY_ESCAPE)
+	if screen.popup_open() != "":
+		failures.append("Esc did not close the screen once a stage was on")
+	if settings_ui.is_open():
+		failures.append("Esc also opened Settings")
+	PadMenuScript368.reset()
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_text_is_legible_on_every_tab_647() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	var scale: float = minf(DECK_SCREEN_368.x / SCREEN_SIZE.x, DECK_SCREEN_368.y / SCREEN_SIZE.y)
+	var checked: int = 0
+	var roots: Array[Control] = [screen.stages_rules_popup(), screen.stages_button(), screen.stages_summary_label()]
+	for tab: String in view.tab_ids():
+		view.select_tab(tab)
+		await _await_ticks(2)
+		for root: Control in roots:
+			var found: Array[Node] = root.find_children("*", "Control", true, false)
+			found.append(root)
+			for node: Node in found:
+				if not (node is Label or node is BaseButton):
+					continue
+				var text: String = str(node.get("text"))
+				if text.is_empty():
+					continue
+				var size: int = (node as Control).get_theme_font_size("font_size")
+				checked += 1
+				if size < 16 or float(size) * scale < DECK_MIN_EM_PX_368:
+					failures.append("tab '%s': %s '%s' is %d px (%.1f at 1280x800)" % [tab, node.name, text.left(24), size, float(size) * scale])
+	if checked < 100:
+		failures.append("only %d text controls were checked; the walk is broken" % checked)
+	print("      %d text controls checked across %d tabs" % [checked, view.tab_ids().size()])
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_is_host_only_647() -> Array[String]:
+	var failures: Array[String] = []
+	# A lobby with no host controls attached (a seat's view): the summary only.
+	var bare: CanvasLayer = (load("res://scripts/LobbyScreen.gd") as GDScript).new()
+	get_root().add_child(bare)
+	bare.build_panels()
+	if bare.open_stages_rules() or bare.popup_open() != "":
+		failures.append("Stages & Rules opened without host controls")
+	bare.set_popup("stages")
+	if bare.popup_open() != "":
+		failures.append("set_popup('stages') opened it without host controls")
+	if bare.stages_button().visible:
+		failures.append("the Stages & Rules button shows without host controls")
+	if bare.stages_summary_label() == null:
+		failures.append("the summary line is missing")
+	bare.queue_free()
+	await _await_ticks(2)
+	# The host's own lobby: the button shows and opens it.
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if not screen.stages_button().visible or not screen.control_button("stages_rules").is_visible_in_tree():
+		failures.append("the host lobby has no Stages & Rules button")
+	screen.control_button("stages_rules").pressed.emit()
+	if screen.popup_open() != "stages":
+		failures.append("the button did not open the screen")
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_lobby_summary_and_status_line_follow_settings_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var host: RefCounted = StockSettingsScript.shared()
+	var total: int = host.stages_for_mode("").size()
+	var summary: Label = screen.stages_summary_label()
+	if summary.text != "%d stages on \u00B7 modifiers on" % total:
+		failures.append("summary reads '%s'" % summary.text)
+	screen.open_stages_rules()
+	var view = screen.stages_rules()
+	_click_647(view.tile("Pillars"))
+	_click_647(view.modifier_button("gale"))
+	var modifier_total: int = RoundModifiersScript.IDS.size() + 1
+	if summary.text != "%d stages on \u00B7 %d of %d modifiers on" % [total - 1, modifier_total - 1, modifier_total]:
+		failures.append("after two switches the summary reads '%s'" % summary.text)
+	var status: Label = screen.get("_lobby_target_label")
+	if not status.text.ends_with("- %d stages" % (total - 1)):
+		failures.append("the status line reads '%s'" % status.text)
+	for modifier_id: String in view.modifier_ids():
+		host.set_modifier_enabled("", modifier_id, false)
+	screen.refresh_stage_summary()
+	if not summary.text.ends_with("modifiers off"):
+		failures.append("with every modifier off the summary reads '%s'" % summary.text)
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_stages_rules_gamepad_opens_navigates_and_closes_647() -> Array[String]:
+	var failures: Array[String] = []
+	_reset_host_choices_647()
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	var seen: Dictionary = _focus_reach_368(get_root().gui_get_focus_owner())
+	if not seen.has("stages_rules"):
+		failures.append("the D-pad never reaches Stages & Rules (saw %s)" % [seen.keys()])
+	var button: Button = screen.control_button("stages_rules")
+	button.grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if screen.popup_open() != "stages":
+		failures.append("A on Stages & Rules did not open it")
+	if not server.claimed_slots().is_empty():
+		failures.append("A seated the gamepad instead of pressing the button")
+	var focus: Control = get_root().gui_get_focus_owner()
+	var overlay: Control = screen.stages_rules_popup()
+	if focus == null or not overlay.is_ancestor_of(focus):
+		failures.append("focus did not move into the screen (%s)" % [focus])
+	var first_tile: Control = focus
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if first_tile != null and StockSettingsScript.shared().is_stage_enabled_for("", str(first_tile.name)):
+		failures.append("A on the focused tile '%s' did not switch it off" % first_tile.name)
+	await _pad_tap_368(0, JOY_BUTTON_RIGHT_SHOULDER)
+	if screen.stages_rules().current_tab() != "king_of_the_hill":
+		failures.append("RB did not move to the next tab (on '%s')" % screen.stages_rules().current_tab())
+	await get_root().get_tree().process_frame
+	var rb_focus: Control = get_root().gui_get_focus_owner()
+	if rb_focus == null or not rb_focus.is_inside_tree() or rb_focus.is_queued_for_deletion() or not overlay.is_ancestor_of(rb_focus):
+		failures.append("after RB focus is not on a live tile of the new tab (%s)" % [rb_focus])
+	else:
+		var before: bool = StockSettingsScript.shared().is_stage_enabled_for("king_of_the_hill", str(rb_focus.name))
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		if StockSettingsScript.shared().is_stage_enabled_for("king_of_the_hill", str(rb_focus.name)) == before:
+			failures.append("A after RB did not toggle '%s'" % rb_focus.name)
+	await _pad_tap_368(0, JOY_BUTTON_LEFT_SHOULDER)
+	if screen.stages_rules().current_tab() != "":
+		failures.append("LB did not move back to Classic")
+	await get_root().get_tree().process_frame
+	var lb_focus: Control = get_root().gui_get_focus_owner()
+	if lb_focus == null or not lb_focus.is_inside_tree() or lb_focus.is_queued_for_deletion() or not overlay.is_ancestor_of(lb_focus):
+		failures.append("after LB focus is not on a live tile of the new tab (%s)" % [lb_focus])
+	else:
+		var before_lb: bool = StockSettingsScript.shared().is_stage_enabled_for("", str(lb_focus.name))
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		if StockSettingsScript.shared().is_stage_enabled_for("", str(lb_focus.name)) == before_lb:
+			failures.append("A after LB did not toggle '%s'" % lb_focus.name)
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.popup_open() != "":
+		failures.append("B did not close the screen")
+	if not screen.pad_menu_open() or get_root().gui_get_focus_owner() != button:
+		failures.append("after B the host menu should be open with focus back on Stages & Rules")
+	PadMenuScript368.reset()
+	_reset_host_choices_647()
+	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures

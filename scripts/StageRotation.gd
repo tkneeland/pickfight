@@ -32,6 +32,11 @@ var scenes: Array[PackedScene] = []:
 			if DemoBuildScript.stage_in_slice(stage_name):  # the demo's slice (#361)
 				names.append(stage_name)
 		settings.known_stages = names
+		var comp := PackedStringArray()
+		for scene: PackedScene in value:
+			if StageScript.competitive_of(scene) and names.has(HostSettingsScript.name_of(scene.resource_path)):
+				comp.append(HostSettingsScript.name_of(scene.resource_path))
+		settings.competitive_stages = comp
 		_mode_fit_id = ""
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5
@@ -60,38 +65,40 @@ var _bag_large_eligible: bool = false
 ## `Stage.view_size_of()` per stage scene, so a scene's state is read once.
 var _large_stage_cache: Dictionary = {}
 
-## The stage a Stock match is pinned to (#375): an index into `scenes`, or -1
+## The stage a Stock match is pinned to (#375, #647): an index into `scenes`, or -1
 ## for the ordinary rotation. RoundManager resolves it once per match.
 var pinned: int = -1
 
-## The stage index for `stage_name` (a base name) when it exists and is
-## enabled, otherwise a random allowed one (the Random tile, or a pick the host
-## has since switched off). Draws from `rng`.
-func resolve_pin(stage_name: String) -> int:
-	if stage_name != "":
-		for i in scenes.size():
-			if HostSettingsScript.name_of(scenes[i].resource_path) == stage_name and _stage_enabled(i):
-				return i
+## Stock's stage for the match (#375, #647): one of the stages the host
+## switched on for Stock, drawn from `rng`. With one on, always that one.
+func resolve_stock_pin() -> int:
 	var options: Array[int] = []
+	var all: Array[int] = []
 	for i in scenes.size():
-		if stage_allowed(i):
-			options.append(i)
+		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
+		if settings.stages_for_mode(GameModesScript.STOCK).has(stage_name):
+			all.append(i)
+			if settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name):
+				options.append(i)
+	if options.is_empty():
+		options = all
 	if options.is_empty():
 		return 0
 	var pick: int = rng.randi() if rng != null else randi()
 	return options[pick % options.size()]
 
-## The host phone's Stock stage grid (#375): every enabled stage as
-## {name, competitive}, competitive ones first, the rest in rotation order.
+## The host phone's Stock stage grid (#375): every stage Stock can use as
+## {name, competitive, on}, competitive ones first, the rest in rotation order.
 func picker_rows() -> Array:
 	var comp: Array = []
 	var rest: Array = []
 	for i in scenes.size():
 		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
-		if not _stage_enabled(i):
+		if not settings.stages_for_mode(GameModesScript.STOCK).has(stage_name):
 			continue
 		var is_comp: bool = StageScript.competitive_of(scenes[i])
-		(comp if is_comp else rest).append({"name": stage_name, "competitive": is_comp})
+		var on: bool = settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name)
+		(comp if is_comp else rest).append({"name": stage_name, "competitive": is_comp, "on": on})
 	return comp + rest
 
 ## Throws away what is left of the bag, so the next deal starts a fresh one
@@ -147,11 +154,17 @@ func stage_allowed(index: int) -> bool:
 ## every stage off (the settings refuse that) ignores the switches, and so
 ## does an `own_stages` mode with all of its own stages off.
 func _stage_enabled(index: int) -> bool:
-	if settings.is_stage_enabled(HostSettingsScript.name_of(scenes[index].resource_path)):
+	if settings.is_stage_enabled_for(mode_id, HostSettingsScript.name_of(scenes[index].resource_path)):
 		return true
 	for i in scenes.size():
-		if _fits_mode(i) and settings.is_stage_enabled(HostSettingsScript.name_of(scenes[i].resource_path)):
+		if _fits_mode(i) and settings.is_stage_enabled_for(mode_id, HostSettingsScript.name_of(scenes[i].resource_path)):
 			return false
+	# Nothing is on: fall back to the mode's own pool (`stages_for_mode`), so
+	# Classic never lands on a Soccer or Capture the Flag stage.
+	var pool: PackedStringArray = settings.stages_for_mode(mode_id)
+	for i in scenes.size():
+		if pool.has(HostSettingsScript.name_of(scenes[i].resource_path)):
+			return pool.has(HostSettingsScript.name_of(scenes[index].resource_path))
 	return true
 
 ## Picks the next stage index (ADR-0011): `scenes[0]` opens every match

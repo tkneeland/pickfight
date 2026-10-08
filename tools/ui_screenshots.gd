@@ -11,8 +11,8 @@ extends SceneTree
 ## every PNG is saved and non-blank; exits 1 and names the state otherwise.
 ##
 ## States: title; lobby in Couch, Online and Solo with 0, 3 and 8 seats (Couch
-## with 3 has a gamepad seat, which carries the pad picker); how_to_play and
-## your_look (the lobby with its How to play and Your look popups open); settings; esc_menu (settings open over a live Solo match); the
+## with 3 has a gamepad seat, which carries the pad picker); how_to_play,
+## your_look and stages_rules (the lobby with its How to play, Your look and Stages & Rules popups open); settings; esc_menu (settings open over a live Solo match); the
 ## PC join screen; the in-match HUD with 8 players; victory with 8 players.
 ## Online has no empty room (the host PC always holds a seat), so its "0" is
 ## the host alone. A 0/3/8 seat count is the bots the host's counter seats,
@@ -214,6 +214,22 @@ func _title_and_couch() -> void:
 	screen.set_popup("help") # the popup holds the four live demos (#547)
 	await _frames(60) # the demos need a moment to play
 	await _shot("how_to_play")
+	screen.set_popup("")
+	screen.set_popup("stages") # Stages & Rules (#647), Classic then Stock
+	await _frames(10)
+	await _shot("stages_rules")
+	screen.stages_rules().select_tab("stock")
+	await _shot("stages_rules_stock")
+	var host: RefCounted = screen.stages_rules().settings()
+	for off: String in ["Pillars", "Ferry", "Slant", "Bowl", "Mill"]:
+		host.set_stage_enabled_for("", off, false)
+	host.set_weapon_enabled("sword", false)
+	host.set_modifier_enabled("", "gale", false)
+	screen.stages_rules().select_tab("sudden_death")
+	screen.stages_rules().select_tab("")
+	await _shot("stages_rules_some_off")
+	screen.stages_rules().select_tab("soccer")
+	await _shot("stages_rules_soccer")
 	screen.set_popup("")
 	await _pad_claim(4) # a gamepad seat first: its card carries the pad picker
 	await _seats(rig, 3)

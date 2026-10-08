@@ -30,6 +30,7 @@ extends CanvasLayer
 ## as it always was: the panels on entering the lobby or the victory screen,
 ## the title card at the first round start, the banner at the first pause.
 
+const StagesRulesScreenScript := preload("res://scripts/StagesRulesScreen.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
@@ -121,6 +122,11 @@ var _lobby_logo: TextureRect
 var _countdown_label: Label
 var _countdown_shown: int = 0
 var _mode_cards_by_id: Dictionary = {}
+## The Stages & Rules button (host only) and the summary line above it (#647).
+var _stages_button: Button
+var _stages_box: VBoxContainer
+var _stages_summary: Label
+var _picked_mode: String = GameModesScript.CLASSIC
 
 ## The ControllerServer the host controls command, set by `attach_controls()`.
 var _server: Object = null
@@ -310,9 +316,44 @@ func how_to_play_popup() -> Control:
 func look_popup() -> Control:
 	return _popups.look_overlay() if _popups != null else null
 
-## Opens the popup `which` ("help" or "look"), or closes any with "".
+## Opens the popup `which` ("help", "look" or "stages"), or closes any with "".
 func set_popup(which: String) -> void:
 	_popups.open(which)
+
+## Closes the open popup the way a player would (Esc, B, a click outside): the
+## Stages & Rules screen refuses while a mode has no stage on. True when closed.
+func request_close_popup() -> bool:
+	return _popups.request_close()
+
+## Opens Stages & Rules (#647). Host only: false, and nothing shown, until the
+## host controls are attached (a screen with no host to command).
+func open_stages_rules() -> bool:
+	if _server == null:
+		return false
+	_popups.open("stages")
+	return _popups.current() == "stages"
+
+## The Stages & Rules popup's overlay and screen model, or null before the lobby was built.
+func stages_rules_popup() -> Control:
+	return _popups.stages_overlay() if _popups != null else null
+
+func stages_rules():
+	return _popups.stages_screen() if _popups != null else null
+
+## The summary under the mode cards and the status line, from the saved settings.
+func refresh_stage_summary() -> void:
+	if _stages_summary != null:
+		_stages_summary.text = StagesRulesScreenScript.summary(_picked_mode)
+	if _lobby_target_label != null and not _last_lobby_args.is_empty():
+		refresh_lobby.callv(_last_lobby_args) # the status line carries the stage count too
+
+## The lobby's Stages & Rules button (host only, hidden until host controls attach), or null.
+func stages_button() -> Button:
+	return _stages_button
+
+## The one-line stage and modifier summary, shown to every seat.
+func stages_summary_label() -> Label:
+	return _stages_summary
 
 func popup_open() -> String:
 	return _popups.current() if _popups != null else ""
@@ -346,7 +387,9 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	var mode_id: String = str(state.get("game_mode", GameModesScript.CLASSIC))
 	var target_kind: String = str(state.get("target_kind", "first_to"))
 	var target_text: String = tr(GameModesScript.target_status_key(target_kind)) % state["target"]
-	_lobby_target_label.text = "%s%s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text]
+	_picked_mode = mode_id
+	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text, StagesRulesScreenScript.stage_count_text(mode_id)]
+	_stages_summary.text = StagesRulesScreenScript.summary(mode_id)
 	_host.set_target(target_kind, int(state["target"]))
 	_select_mode_card(mode_id)
 	_popups.set_mode(mode_id, target_kind, int(state["target"]))
@@ -541,6 +584,20 @@ func build_panels() -> void:
 	_lobby_status.name = "StartHint"
 	_lobby_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lobby_right.add_child(_lobby_status)
+	# Stages & Rules (#647): the summary for every seat and the host's button. The
+	# left column has no room for them under the mode cards at eight modes (#425).
+	_stages_box = VBoxContainer.new()
+	_stages_box.name = "StagesBox"
+	_stages_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stages_box.add_theme_constant_override("separation", 6)
+	_lobby_right.add_child(_stages_box)
+	_stages_summary = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
+	_stages_summary.name = "StagesSummary"
+	_stages_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stages_box.add_child(_stages_summary)
+	_stages_button = ScreenKitScript.themed_button("Stages & Rules \u25B8", UiThemeScript.ACTION_BUTTON, "stages_rules")
+	_stages_button.visible = false # the host's: HostControls shows it once attached
+	_stages_box.add_child(_stages_button)
 	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
 	_countdown_label.name = "Countdown"
 	_countdown_label.set_anchors_preset(Control.PRESET_CENTER)

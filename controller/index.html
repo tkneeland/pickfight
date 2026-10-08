@@ -184,11 +184,19 @@
     font: 700 20px sans-serif;
     pointer-events: none;
   }
-  #menu-stock-lives[hidden], #menu-stock-time[hidden], #menu-stockstages[hidden] { display: none !important; }
-  #menu-stockstages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  #host-menu #menu-stockstages button { padding: 8px 4px; font-size: 13px; }
-  #host-menu #menu-stockstages button.on { color: var(--ink); background: var(--yellow); }
-  #host-menu #menu-stockstages button.comp { border-color: var(--yellow); }
+  #menu-stock-lives[hidden], #menu-stock-time[hidden] { display: none !important; }
+  /* Issue #647: the host's Stages & Rules page, one tab per mode. Names only. */
+  #menu-rules { width: 100%; max-width: 560px; }
+  #menu-rules > * { width: 100%; }
+  #rules-tabs, #rules-stages { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  #rules-switches { display: flex; flex-direction: column; gap: 8px; }
+  #rules-all { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  #host-menu #menu-rules button { padding: 10px 6px; font-size: 16px; }
+  #host-menu #menu-rules button.on { color: var(--ink); background: var(--yellow); }
+  #host-menu #menu-rules button.locked { opacity: 0.35; }
+  .rules-heading { font-size: 18px; font-weight: 800; text-align: left; margin-top: 6px; }
+  #rules-footer, #rules-summary { font-size: 16px; font-weight: 700; }
+  #rules-summary:empty { display: none; }
   #lives.show { display: block; }
   #steal {
     position: fixed;
@@ -551,9 +559,7 @@
   #name-go, #look-go, #tip-go, #steal, #mouse-capture, #host-menu button.primary { background: var(--yellow); }
   #host-menu button.danger { background: #D55E00; color: var(--ink); }
   #host-menu button:disabled { opacity: 0.45; box-shadow: 2px 2px 0 var(--ink); }
-  #host-menu #menu-gamemodes button.on, #host-menu #menu-stockstages button.on { background: var(--yellow); color: var(--ink); }
-  #host-menu #menu-stockstages button.comp { border-color: var(--ink); background: #CC79A7; }
-  #host-menu #menu-stockstages button.comp.on { background: var(--yellow); }
+  #host-menu #menu-gamemodes button.on, #host-menu #menu-rules button.on { background: var(--yellow); color: var(--ink); }
 
   /* Host/team/target rows sit on a cream panel so their text reads on any phone. */
   #target-row, #team-row {
@@ -631,6 +637,7 @@
   <div id="lobby-title">Lobby</div>
   <div id="lobby-count"></div>
   <div id="lobby-info"></div>
+  <div id="rules-summary"></div>
   <div id="target-row"><span id="target-label">First to</span>
     <button id="target-down" type="button">-</button>
     <input id="target-input" type="number" inputmode="numeric" min="1" max="99" value="5">
@@ -688,9 +695,24 @@
     <div id="menu-gamemodes"></div>
     <button id="menu-stock-lives" type="button" hidden>Lives: 3</button>
     <button id="menu-stock-time" type="button" hidden>Time: 8 min</button>
-    <div id="menu-stockstages" hidden></div>
+    <button id="menu-rules-open" type="button">Stages &amp; Rules &#9656;</button>
+    <div id="menu-rules-summary"></div>
     <button id="menu-online" type="button">Go online: off</button>
     <button id="menu-close" type="button">Close</button>
+  </div>
+  <div id="menu-rules" class="menu-view">
+    <div id="rules-tabs"></div>
+    <div id="rules-stages"></div>
+    <div id="rules-all">
+      <button id="rules-all-on" type="button">All on</button>
+      <button id="rules-all-off" type="button">All off</button>
+    </div>
+    <div class="rules-heading" id="rules-mod-heading">Round modifiers</div>
+    <div id="rules-switches"></div>
+    <div class="rules-heading" id="rules-weapon-heading">Weapons</div>
+    <div id="rules-weapons" class="rules-grid"></div>
+    <div id="rules-footer"></div>
+    <button id="rules-done" type="button" class="primary">Done</button>
   </div>
   <div id="menu-kick-list" class="menu-view"></div>
   <div id="menu-confirm" class="menu-view">
@@ -831,7 +853,22 @@
       "STATUS_REPLACED": "Opened somewhere else",
       "STATUS_RETRYING": "{0} — retrying",
       "STATUS_RECONNECTING": "reconnecting",
-      "PHONE_STOCK_RANDOM": "Random"
+      "RULES_OPEN": "Stages & Rules \u25B8",
+      "RULES_SUMMARY": "{0} stages on \u00B7 {1}",
+      "RULES_MODS_ON": "modifiers on",
+      "RULES_MODS_OFF": "modifiers off",
+      "RULES_MODS_SOME": "{0} of {1} modifiers on",
+      "RULES_ALL_ON": "All on",
+      "RULES_ALL_OFF": "All off",
+      "RULES_MODIFIERS": "Round modifiers",
+      "RULES_WEAPONS": "Weapons",
+      "RULES_LOCKED": "{0} (off in this mode)",
+      "RULES_FOOTER_DRAW": "Each round draws from {0} of {1} stages",
+      "RULES_FOOTER_STOCK_ONE": "Stock plays on {0}",
+      "RULES_FOOTER_STOCK_MANY": "Stock picks one at random from {0} stages",
+      "RULES_FOOTER_NONE": "Switch on at least one stage",
+      "RULES_FOOTER_NONE_IN": "Switch on at least one stage in {0}",
+      "RULES_DONE": "Done"
   };
   function t(key) {
     var text = Object.prototype.hasOwnProperty.call(STRINGS, key) ? STRINGS[key] : key;
@@ -876,6 +913,9 @@
       "PHONE_TIME": "#menu-stock-time",
       "PHONE_GO_ONLINE_OFF": "#menu-online",
       "PHONE_CLOSE": "#menu-close",
+      "RULES_ALL_ON": "#rules-all-on",
+      "RULES_ALL_OFF": "#rules-all-off",
+      "RULES_DONE": "#rules-done",
       "PHONE_YES": "#confirm-yes",
       "PHONE_NO": "#confirm-no",
       "PHONE_MOUSE_CAPTURE": "#mouse-capture",
@@ -1501,6 +1541,7 @@
     if (stateTimer === null) { stateTimer = setInterval(showState, 250); }
     showState();
     refreshHostControls();
+    refreshRulesSummary();
     if (inPlay()) { closePrompts(); }
     if (phase === "playing" || phase === "round_end") { lobbyEl.className = ""; return; }
     // A drag in progress would otherwise stay held under the overlay.
@@ -1901,7 +1942,8 @@
     menuModeBtn.textContent = lobby.mode === "teams" ? t("PHONE_FORMAT_TEAMS") : t("PHONE_FORMAT_FFA");
     menuModeBtn.disabled = inMatch();
     refreshGameModes();
-    refreshStockStages();
+    refreshRulesSummary();
+    if (viewShown("menu-rules")) { renderRules(); }
     var stock = lobby.stock;
     menuStockLivesBtn.hidden = menuStockTimeBtn.hidden = !stock;
     if (stock) {
@@ -2030,38 +2072,132 @@
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });
   });
-  // Issue #375: a Stock match is played on one stage, picked from a grid
-  // (lobby.stock.stages, competitive first, plus a Random tile; stock.stage
-  // "" is Random).
-  var stockStagesEl = document.getElementById("menu-stockstages");
-  function refreshStockStages() {
-    var stock = lobby.stock;
-    stockStagesEl.hidden = !stock;
-    if (!stock) { return; }
-    var tiles = [{ name: "", label: t("PHONE_STOCK_RANDOM"), comp: false }];
-    (stock.stages || []).forEach(function (row) {
-      tiles.push({ name: row.name, label: row.name, comp: !!row.competitive });
-    });
-    // Competitive stages come first, then Random, then the rest.
-    var comps = tiles.filter(function (t) { return t.comp; });
-    var others = tiles.filter(function (t) { return !t.comp; });
-    tiles = comps.concat(others);
-    var key = JSON.stringify([tiles, stock.stage || "", inMatch()]);
-    if (key === stockStagesEl.dataset.key) { return; }
-    stockStagesEl.dataset.key = key;
-    stockStagesEl.innerHTML = "";
-    tiles.forEach(function (t) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = t.label;
-      btn.className = (t.name === (stock.stage || "") ? "on " : "") + (t.comp ? "comp" : "");
-      btn.disabled = inMatch();
-      btn.addEventListener("click", function () {
-        if (inMatch()) { return; }
-        sendText({ t: "stock", stage: t.name });
+  // Issue #647: the Stages & Rules page. The host lists each mode's stages
+  // (lobby.stages_by_mode: {mode: {all, on}}) and the Rules (lobby.rules); a
+  // tap sends stage_mode_toggle / stage_mode_all / modifier_toggle /
+  // weapon_toggle. Names only: a phone shows no preview images.
+  var RULES_MODES = ["classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"];
+  var rulesTab = "classic";
+  var rulesTabsEl = document.getElementById("rules-tabs");
+  var rulesStagesEl = document.getElementById("rules-stages");
+  var rulesSwitchesEl = document.getElementById("rules-switches");
+  var rulesWeaponsEl = document.getElementById("rules-weapons");
+  var rulesFooterEl = document.getElementById("rules-footer");
+  var rulesDoneBtn = document.getElementById("rules-done");
+  var rulesSummaryEl = document.getElementById("rules-summary");
+  var menuRulesSummaryEl = document.getElementById("menu-rules-summary");
+  rulesWeaponsEl.style.cssText = "display:grid;grid-template-columns:repeat(2,1fr);gap:8px";
+  function rulesModeName(id) { return t("MODE_" + id.toUpperCase() + "_NAME"); }
+  function currentRulesMode() { return (lobby && lobby.game_mode) || "classic"; }
+  function modeStages(mode) {
+    var by = (lobby && lobby.stages_by_mode) || {};
+    return by[mode] || { all: [], on: [] };
+  }
+  // "N stages on · modifiers on" for the mode the room is set to.
+  function rulesSummaryText() {
+    if (!lobby || !lobby.stages_by_mode || !lobby.rules) { return ""; }
+    var mode = currentRulesMode();
+    var rules = lobby.rules;
+    var row = (rules.modes || {})[mode] || { on: [], locked: [] };
+    var total = (rules.modifiers || []).length - (row.locked || []).length;
+    var mods = row.on.length >= total ? (total === 0 ? t("RULES_MODS_OFF") : t("RULES_MODS_ON")) :
+      (row.on.length === 0 ? t("RULES_MODS_OFF") : t("RULES_MODS_SOME", row.on.length, total));
+    return t("RULES_SUMMARY", modeStages(mode).on.length, mods);
+  }
+  function rulesEditable() { return amHost() && lobby.phase !== "playing" && lobby.phase !== "round_end"; }
+  // The first mode with stages to pick from but none on (the PC's empty_tabs()).
+  function emptyRulesMode() {
+    for (var i = 0; i < RULES_MODES.length; i++) {
+      var s = modeStages(RULES_MODES[i]);
+      if (s.all.length > 0 && s.on.length === 0) { return RULES_MODES[i]; }
+    }
+    return "";
+  }
+  function rulesFooterText(mode) {
+    var st = modeStages(mode);
+    var empty = emptyRulesMode();
+    if (empty !== "") {
+      return empty === mode ? t("RULES_FOOTER_NONE") : t("RULES_FOOTER_NONE_IN", rulesModeName(empty));
+    }
+    if (st.on.length === 0) { return t("RULES_FOOTER_NONE"); }
+    if (mode === "stock") {
+      return st.on.length === 1 ? t("RULES_FOOTER_STOCK_ONE", st.on[0]) : t("RULES_FOOTER_STOCK_MANY", st.on.length);
+    }
+    return t("RULES_FOOTER_DRAW", st.on.length, st.all.length);
+  }
+  function rulesButton(parent, label, on, locked, handler) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.className = (on ? "on " : "") + (locked ? "locked" : "");
+    btn.disabled = locked || !rulesEditable();
+    btn.addEventListener("click", function () { if (rulesEditable()) { handler(); } });
+    parent.appendChild(btn);
+    return btn;
+  }
+  function renderRules() {
+    if (!lobby || !lobby.stages_by_mode || !lobby.rules) { return; }
+    var mode = rulesTab;
+    var st = modeStages(mode);
+    var rules = lobby.rules;
+    var row = (rules.modes || {})[mode] || { on: [], locked: [] };
+    var key = JSON.stringify([mode, st, rules, rulesEditable()]);
+    if (key !== rulesFooterEl.dataset.key) {
+      rulesFooterEl.dataset.key = key;
+      rulesTabsEl.innerHTML = rulesStagesEl.innerHTML = rulesSwitchesEl.innerHTML = rulesWeaponsEl.innerHTML = "";
+      RULES_MODES.forEach(function (id) {
+        var tab = document.createElement("button");
+        tab.type = "button";
+        tab.textContent = rulesModeName(id);
+        tab.className = id === mode ? "on" : "";
+        tab.addEventListener("click", function () { rulesTab = id; renderRules(); });
+        rulesTabsEl.appendChild(tab);
       });
-      stockStagesEl.appendChild(btn);
-    });
+      st.all.forEach(function (name) {
+        var on = st.on.indexOf(name) !== -1;
+        rulesButton(rulesStagesEl, name, on, false, function () {
+          sendText({ t: "stage_mode_toggle", mode: mode, stage: name, on: !on });
+        });
+      });
+      document.getElementById("rules-all-on").disabled = document.getElementById("rules-all-off").disabled = !rulesEditable();
+      (rules.modifiers || []).forEach(function (id) {
+        var locked = (row.locked || []).indexOf(id) !== -1;
+        var on = !locked && row.on.indexOf(id) !== -1;
+        var title = (rules.titles || {})[id] || id;
+        rulesButton(rulesSwitchesEl, locked ? t("RULES_LOCKED", title) : title, on, locked, function () {
+          sendText({ t: "modifier_toggle", mode: mode, id: id, on: !on });
+        });
+      });
+      (rules.weapons || []).forEach(function (name) {
+        var on = (rules.weapons_on || []).indexOf(name) !== -1;
+        rulesButton(rulesWeaponsEl, name, on, false, function () {
+          sendText({ t: "weapon_toggle", name: name, on: !on });
+        });
+      });
+    }
+    // The footer follows the tab, not the match's mode; Done waits for a stage.
+    rulesFooterEl.textContent = rulesFooterText(mode);
+    rulesDoneBtn.disabled = emptyRulesMode() !== "";
+  }
+  document.getElementById("menu-rules-open").addEventListener("click", function () {
+    rulesTab = currentRulesMode();
+    if (RULES_MODES.indexOf(rulesTab) === -1) { rulesTab = "classic"; }
+    rulesFooterEl.dataset.key = "";
+    showMenuView("menu-rules");
+    renderRules();
+  });
+  document.getElementById("rules-all-on").addEventListener("click", function () {
+    if (rulesEditable()) { sendText({ t: "stage_mode_all", mode: rulesTab, on: true }); }
+  });
+  document.getElementById("rules-all-off").addEventListener("click", function () {
+    if (rulesEditable()) { sendText({ t: "stage_mode_all", mode: rulesTab, on: false }); }
+  });
+  rulesDoneBtn.addEventListener("click", function () { if (!rulesDoneBtn.disabled) { showMenuView("menu-main"); } });
+  // The summary line: everyone sees it in the lobby; only the host gets the button.
+  function refreshRulesSummary() {
+    var text = rulesSummaryText();
+    rulesSummaryEl.textContent = text;
+    menuRulesSummaryEl.textContent = text;
   }
   menuStockLivesBtn.addEventListener("click", function () {
     if (inMatch() || !lobby.stock) { return; }

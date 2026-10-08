@@ -7,9 +7,9 @@ extends CanvasLayer
 ## - master, SFX and music volume sliders;
 ## - a mute box;
 ## - a fullscreen box;
-## - a window size for windowed mode, and scrolling lists of stages and
-##   pickup weapons to switch on or off (issue #294, `HostSettings`). The last
-##   enabled stage or weapon refuses to switch off.
+## - a window size for windowed mode, and the comfort and streamer options.
+##   (The stage, weapon and round-modifier switches live on the lobby's
+##   Stages & Rules screen since #647.)
 ##
 ## A voice volume slider (#290) goes in the audio rows above, beside music.
 ##
@@ -31,27 +31,19 @@ const NOTICE_TEXT: String = "Pickfight sends anonymous match stats to help balan
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
-const GameModesScript := preload("res://scripts/GameModes.gd")
-const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
-## Height of the scrolling window-size, stage and weapon area.
+## Height of the scrolling window-size and options area.
 const LIST_HEIGHT: float = 130.0
 
 var sfx: Node
 ## The `Music` autoload, or null. Without it the music slider is hidden.
 var music: Node
 
-## The host's resolution, stage and weapon choices (#294).
+## The host's resolution choice (#294). Stages, modifiers and weapons moved to the lobby's Stages & Rules screen (#647).
 var host: RefCounted = HostSettingsScript.shared()
 var _more: CheckBox
 var _more_area: ScrollContainer
 var _resolution: OptionButton
-var _stage_list: VBoxContainer
-var _weapon_list: VBoxContainer
-var _rules_mode: OptionButton
-var _rules_list: VBoxContainer
-## The game mode ids the Rules selector offers, by item index ("" is Classic).
-var _rules_mode_ids: PackedStringArray = []
 var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
@@ -128,8 +120,8 @@ func _ready() -> void:
 	rows.add_child(toggles)
 	_mute = _add_box(toggles, "Mute", tr("SETTINGS_MUTE"))
 	_fullscreen = _add_box(toggles, "Fullscreen", tr("SETTINGS_FULLSCREEN"))
-	# One scrolling area for the window size and both lists, so the panel
-	# grows by LIST_HEIGHT whatever the stage count (24+).
+	# One scrolling area for the window size and the options, so the panel
+	# grows by LIST_HEIGHT whatever their count.
 	_more = CheckBox.new()
 	_more.name = "MoreOptions"
 	_more.text = tr("SETTINGS_MORE_OPTIONS")
@@ -158,9 +150,6 @@ func _ready() -> void:
 	for option: float in sfx.UI_SCALES:
 		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
-	_stage_list = _add_list(content, "Stages")
-	_weapon_list = _add_list(content, "Weapons")
-	_build_rules(content)
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 
@@ -277,9 +266,6 @@ func refresh() -> void:
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
-	_rebuild_list(_stage_list, host.known_stages, host.is_stage_enabled, host.set_stage_enabled)
-	_rebuild_list(_weapon_list, HostSettingsScript.known_weapons(), host.is_weapon_enabled, host.set_weapon_enabled)
-	_rebuild_rules()
 	_host_match.refresh()
 	if PadMenuScript.is_open():
 		_chain_pad_focus()
@@ -459,7 +445,7 @@ func mute_box() -> CheckBox:
 func fullscreen_box() -> CheckBox:
 	return _fullscreen
 
-## The box that opens the window-size, stage and weapon area, shut by default
+## The box that opens the window-size and options area, shut by default
 ## so the lobby's how-to-play column keeps its room above the panel.
 func more_box() -> CheckBox:
 	return _more
@@ -572,13 +558,6 @@ func tag_size_button() -> OptionButton:
 func resolution_button() -> OptionButton:
 	return _resolution
 
-## The on/off box for a stage or pickup weapon, by name; null if not listed.
-func stage_box(stage_name: String) -> CheckBox:
-	return _stage_list.get_node_or_null(stage_name) as CheckBox
-
-func weapon_box(weapon_name: String) -> CheckBox:
-	return _weapon_list.get_node_or_null(weapon_name) as CheckBox
-
 ## Put the chosen window size into effect: windowed only, never fullscreen,
 ## never a headless run, and nothing for the default.
 func apply_resolution() -> void:
@@ -594,77 +573,6 @@ static func fit_resolution(size: Vector2i, screen: Vector2i) -> Vector2i:
 	if size.x < 1 or size.y < 1:
 		return Vector2i.ZERO
 	return Vector2i(mini(size.x, maxi(screen.x, 1)), mini(size.y, maxi(screen.y, 1)))
-
-## The Rules section (#378): a mode selector and one box per round modifier.
-func _build_rules(content: VBoxContainer) -> void:
-	var label := Label.new()
-	label.text = "Rules: modifiers that can roll (untick to skip)"
-	content.add_child(label)
-	_rules_mode = OptionButton.new()
-	_rules_mode.name = "RulesMode"
-	_rules_mode_ids = PackedStringArray([GameModesScript.CLASSIC])
-	_rules_mode.add_item("Classic")
-	for row: Dictionary in GameModesScript.picker_rows():
-		_rules_mode_ids.append(str(row["id"]))
-		_rules_mode.add_item(str(row["name"]))
-	content.add_child(_rules_mode)
-	_rules_list = VBoxContainer.new()
-	_rules_list.name = "Rules"
-	_rules_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_child(_rules_list)
-	_rules_mode.item_selected.connect(func(_index: int) -> void: _rebuild_rules())
-
-func _rebuild_rules() -> void:
-	var mode_id: String = _rules_mode_ids[maxi(_rules_mode.selected, 0)]
-	for child in _rules_list.get_children():
-		_rules_list.remove_child(child)
-		child.queue_free()
-	for id: String in RoundModifiersScript.IDS:
-		var box := CheckBox.new()
-		box.name = id
-		box.text = RoundModifiersScript.title_of(id)
-		var banned: bool = GameModesScript.bans_modifier(mode_id, id)
-		box.set_pressed_no_signal(host.is_modifier_enabled(mode_id, id))
-		if banned:
-			box.disabled = true  # the mode's table bans it: locked off
-			box.text += " (banned in this mode)"
-		box.toggled.connect(func(pressed: bool) -> void:
-			if not host.set_modifier_enabled(mode_id, id, pressed):
-				box.set_pressed_no_signal(false))
-		_rules_list.add_child(box)
-
-## The mode selector and the modifier box for `modifier_id` in the Rules section.
-func rules_mode_button() -> OptionButton:
-	return _rules_mode
-
-func rules_box(modifier_id: String) -> CheckBox:
-	return _rules_list.get_node_or_null(modifier_id) as CheckBox
-
-func _add_list(content: VBoxContainer, title: String) -> VBoxContainer:
-	var label := Label.new()
-	label.text = tr("SETTINGS_%s_LIST" % title.to_upper())
-	content.add_child(label)
-	var list := VBoxContainer.new()
-	list.name = title
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_child(list)
-	return list
-
-## Rebuild a list's boxes from the store. A box that the store refuses (the
-## last one on) snaps back to ticked.
-func _rebuild_list(list: VBoxContainer, names: PackedStringArray, is_on: Callable, set_on: Callable) -> void:
-	for child in list.get_children():
-		list.remove_child(child)
-		child.queue_free()
-	for item_name: String in names:
-		var box := CheckBox.new()
-		box.name = item_name
-		box.text = item_name.capitalize()
-		box.set_pressed_no_signal(is_on.call(item_name))
-		box.toggled.connect(func(pressed: bool) -> void:
-			if not set_on.call(item_name, pressed):
-				box.set_pressed_no_signal(true))
-		list.add_child(box)
 
 func _on_resolution_selected(index: int) -> void:
 	host.set_resolution(HostSettingsScript.RESOLUTIONS[index])

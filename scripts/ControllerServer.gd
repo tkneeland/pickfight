@@ -148,6 +148,7 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 const HatScript := preload("res://scripts/Hat.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 ## The eye styles a phone may pick (issue #297), by path (CLAUDE.md).
 const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 const QrEncoderScript := preload("res://scripts/QrEncoder.gd")
@@ -1511,6 +1512,11 @@ func _handle_text(slot: int, text: String) -> void:
 					apply_host_command("stock_time", msg.get("time"))
 				if msg.get("stage") is String:
 					apply_host_command("stock_stage", msg.get("stage"))
+		"stage_mode_toggle", "stage_mode_all", "modifier_toggle", "weapon_toggle":
+			if slot == host_slot():
+				var body: Dictionary = msg.duplicate()
+				body.erase("t")
+				apply_host_command(str(msg.get("t")), body)
 		"pong":
 			_on_pong(slot, msg)
 		"team":
@@ -2159,6 +2165,45 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 				settings.set_stock_lives(int(arg))
 				return true
 			return settings.set_stock_time_limit(int(arg))
+		"stage_mode_toggle":
+			if not arg is Dictionary or not MODE_PHASES.has(phase):
+				return false
+			var toggle: Dictionary = arg
+			if not (toggle.get("mode") is String and toggle.get("stage") is String and toggle.get("on") is bool):
+				return false
+			if not HostSettingsScript.is_known_mode(toggle["mode"]):
+				return false
+			return HostSettingsScript.shared().set_stage_enabled_for(toggle["mode"], toggle["stage"], toggle["on"])
+		"stage_mode_all":
+			if not arg is Dictionary or not MODE_PHASES.has(phase):
+				return false
+			var all_cmd: Dictionary = arg
+			if not (all_cmd.get("mode") is String and all_cmd.get("on") is bool):
+				return false
+			if not HostSettingsScript.is_known_mode(all_cmd["mode"]):
+				return false
+			HostSettingsScript.shared().set_all_stages_for(all_cmd["mode"], all_cmd["on"])
+			return true
+		"modifier_toggle":
+			if not arg is Dictionary or not MODE_PHASES.has(phase):
+				return false
+			var mod: Dictionary = arg
+			if not (mod.get("mode") is String and mod.get("id") is String and mod.get("on") is bool):
+				return false
+			if not HostSettingsScript.is_known_mode(mod["mode"]):
+				return false
+			var known: Array = ["night"]
+			known.append_array(Array(RoundModifiersScript.IDS))
+			if not known.has(mod["id"]):
+				return false
+			return HostSettingsScript.shared().set_modifier_enabled(mod["mode"], mod["id"], mod["on"])
+		"weapon_toggle":
+			if not arg is Dictionary or not MODE_PHASES.has(phase):
+				return false
+			var weapon: Dictionary = arg
+			if not (weapon.get("name") is String and weapon.get("on") is bool):
+				return false
+			return HostSettingsScript.shared().set_weapon_enabled(weapon["name"], weapon["on"])
 		"stock_stage":
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false
