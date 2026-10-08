@@ -427,6 +427,7 @@ func handle_pad(event: InputEvent) -> bool:
 	if step == 0:
 		return false
 	select_tab(_tab_ids[posmod(_tab_ids.find(_tab_id) + step, _tab_ids.size())])
+	focus_target().grab_focus()  # the old tiles were freed with the focus on one
 	return true
 
 # --- Showing the settings ------------------------------------------------------------

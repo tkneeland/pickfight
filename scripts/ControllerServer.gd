@@ -2171,12 +2171,16 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			var toggle: Dictionary = arg
 			if not (toggle.get("mode") is String and toggle.get("stage") is String and toggle.get("on") is bool):
 				return false
+			if not HostSettingsScript.is_known_mode(toggle["mode"]):
+				return false
 			return HostSettingsScript.shared().set_stage_enabled_for(toggle["mode"], toggle["stage"], toggle["on"])
 		"stage_mode_all":
 			if not arg is Dictionary or not MODE_PHASES.has(phase):
 				return false
 			var all_cmd: Dictionary = arg
 			if not (all_cmd.get("mode") is String and all_cmd.get("on") is bool):
+				return false
+			if not HostSettingsScript.is_known_mode(all_cmd["mode"]):
 				return false
 			HostSettingsScript.shared().set_all_stages_for(all_cmd["mode"], all_cmd["on"])
 			return true
@@ -2185,6 +2189,8 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 				return false
 			var mod: Dictionary = arg
 			if not (mod.get("mode") is String and mod.get("id") is String and mod.get("on") is bool):
+				return false
+			if not HostSettingsScript.is_known_mode(mod["mode"]):
 				return false
 			var known: Array = ["night"]
 			known.append_array(Array(RoundModifiersScript.IDS))

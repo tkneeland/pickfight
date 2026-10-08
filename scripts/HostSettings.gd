@@ -123,6 +123,17 @@ func is_stage_enabled(stage_name: String) -> bool:
 static func mode_key(mode_id: String) -> String:
 	return CLASSIC_ID if mode_id == "" else mode_id
 
+## The ids the Stages & Rules screens (PC and phone) edit: Classic as "classic"
+## (which `mode_key` also reads from the round's ""), plus the modes with lists.
+const KNOWN_MODES: PackedStringArray = ["classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"]
+
+static func is_known_mode(mode_id: String) -> bool:
+	return KNOWN_MODES.has(mode_key(mode_id))
+
+## `GameModes`' own id for a settings key: Classic is "" there.
+static func game_mode_id(mode_id: String) -> String:
+	return "" if mode_id == CLASSIC_ID else mode_id
+
 ## The stages `mode_id` can use (#647): Soccer's pitches, Capture the Flag's
 ## halls, or for every other mode the general rotation (known stages minus
 ## those five).
@@ -146,7 +157,7 @@ func _stock_on_list() -> PackedStringArray:
 	for stage_name: String in stock_stages_on:
 		if pool.has(stage_name):
 			on.append(stage_name)
-	if not on.is_empty() or not stock_stages_on.is_empty():
+	if not on.is_empty() or stock_stages_on == PackedStringArray([NONE_MARK]):
 		return on  # a list holding only NONE_MARK is "all off" (#647)
 	for stage_name: String in pool:
 		if competitive_stages.has(stage_name):
@@ -248,16 +259,17 @@ func set_weapon_enabled(weapon_name: String, enabled: bool) -> bool:
 ## Whether `modifier_id` may roll in `mode_id`: the mode's table bans win,
 ## then the host's per-mode switches.
 func is_modifier_enabled(mode_id: String, modifier_id: String) -> bool:
-	if _game_modes().bans_modifier(mode_id, modifier_id):
+	if _game_modes().bans_modifier(game_mode_id(mode_id), modifier_id):
 		return false
-	return not (disabled_modifiers.get(mode_id, PackedStringArray()) as PackedStringArray).has(modifier_id)
+	return not (disabled_modifiers.get(mode_key(mode_id), PackedStringArray()) as PackedStringArray).has(modifier_id)
 
 ## Returns false (changing nothing) for a modifier the mode's table bans:
 ## those stay locked off. Switching every modifier off is allowed; then none
 ## rolls.
 func set_modifier_enabled(mode_id: String, modifier_id: String, enabled: bool) -> bool:
-	if _game_modes().bans_modifier(mode_id, modifier_id):
+	if _game_modes().bans_modifier(game_mode_id(mode_id), modifier_id):
 		return false
+	mode_id = mode_key(mode_id)
 	var list := PackedStringArray(disabled_modifiers.get(mode_id, PackedStringArray()))
 	var index: int = list.find(modifier_id)
 	if enabled and index != -1:
@@ -361,7 +373,7 @@ func _load_stage_lists(config: ConfigFile) -> void:
 	var stored: Variant = config.get_value(SECTION, "stage_lists", "none")
 	if stored is Dictionary:
 		for mode_id: Variant in stored:
-			disabled_stages_by_mode[str(mode_id)] = _strings(stored[mode_id])
+			disabled_stages_by_mode[mode_key(str(mode_id))] = _strings(stored[mode_id])
 		stock_stages_on = _strings(config.get_value(SECTION, "stock_stages_on", PackedStringArray()))
 		return
 	var old := _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
@@ -389,7 +401,7 @@ func load_settings() -> void:
 			for mode_id: Variant in stored:
 				var ids := _strings(stored[mode_id])
 				if not ids.is_empty():
-					disabled_modifiers[str(mode_id)] = ids
+					disabled_modifiers[mode_key(str(mode_id))] = ids
 		var share: Variant = config.get_value(SECTION, "share_stats", true)
 		share_stats = share if share is bool else true
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))

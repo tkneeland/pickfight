@@ -547,6 +547,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stages_rules_is_host_only_647",
 	"stages_rules_lobby_summary_and_status_line_follow_settings_647",
 	"stages_rules_gamepad_opens_navigates_and_closes_647",
+	"classic_all_off_never_deals_a_goal_or_flag_stage_647",
 	"ctf_captures_are_the_match_and_each_capture_changes_hall_646",
 	"ctf_with_one_hall_on_stays_in_it_646",
 	"bot_king_of_the_hill_heads_for_the_hill",
@@ -2354,6 +2355,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stages_rules_is_host_only_647()
 		"stages_rules_lobby_summary_and_status_line_follow_settings_647":
 			return await _scenario_stages_rules_lobby_summary_and_status_line_follow_settings_647()
+		"classic_all_off_never_deals_a_goal_or_flag_stage_647":
+			return _scenario_classic_all_off_never_deals_a_goal_or_flag_stage_647()
 		"stages_rules_gamepad_opens_navigates_and_closes_647":
 			return await _scenario_stages_rules_gamepad_opens_navigates_and_closes_647()
 		"soccer_with_one_pitch_on_stays_on_it_646":
@@ -30683,6 +30686,34 @@ func _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647() -> Array[Strin
 	_scenario_completed = true
 	return failures
 
+## Issue #647: Classic with every stage off falls back to Classic's own pool,
+## never a Soccer or Capture the Flag stage.
+func _scenario_classic_all_off_never_deals_a_goal_or_flag_stage_647() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: Array[PackedScene] = _real_stage_scenes_361()
+	var settings: RefCounted = _fresh_settings_361()
+	var names := PackedStringArray()
+	for scene: PackedScene in scenes:
+		names.append(HostSettingsScriptDemo361.name_of(scene.resource_path))
+	settings.known_stages = names
+	var rotation: RefCounted = StageRotationScript361.new()
+	rotation.settings = settings
+	rotation.scenes = scenes
+	rotation.mode_id = ""
+	rotation.round_player_count = 8
+	settings.set_all_stages_for("classic", false)
+	rotation.rng = RandomNumberGenerator.new()
+	rotation.rng.seed = 9
+	for _round in 80:
+		var index: int = rotation.next_stage_index()
+		rotation.stage_index = index
+		var stage_name: String = HostSettingsScriptDemo361.name_of(scenes[index].resource_path)
+		if not settings.stages_for_mode("").has(stage_name):
+			failures.append("Classic with all off dealt %s" % stage_name)
+			break
+	_scenario_completed = true
+	return failures
+
 ## Issue #647: All off reaches zero on, in every mode including Stock, the
 ## lobby state says so, and a round still draws from every stage.
 func _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647() -> Array[String]:
@@ -30750,8 +30781,21 @@ func _scenario_stages_and_rules_messages_come_only_from_the_host_647() -> Array[
 	# The host's own commands work, and bad shapes and ids are refused.
 	if not server.apply_host_command("modifier_toggle", {"mode": "classic", "id": "night", "on": false}) or shared.is_modifier_enabled("classic", "night"):
 		failures.append("the host could not switch night off")
+	# The round reads Classic as GameModes.CLASSIC (""), not the phone's "classic".
+	if shared.is_modifier_enabled("", "night"):
+		failures.append("a phone-sent Classic toggle did not reach the key the round reads")
+	var classic_json: String = JSON.stringify(shared.disabled_modifiers)
+	if shared.disabled_modifiers.has(""):
+		failures.append("Classic modifiers stored under a second key: %s" % classic_json)
 	if shared.is_modifier_enabled("sudden_death", "night") == false:
 		failures.append("night off leaked into another mode")
+	for bad_mode: String in ["bogus", "hot_potato_x"]:
+		if server.apply_host_command("stage_mode_toggle", {"mode": bad_mode, "stage": "Alpha", "on": false}) \
+				or server.apply_host_command("stage_mode_all", {"mode": bad_mode, "on": false}) \
+				or server.apply_host_command("modifier_toggle", {"mode": bad_mode, "id": "night", "on": false}):
+			failures.append("unknown mode id '%s' was accepted" % bad_mode)
+	if shared.disabled_stages_by_mode.has("bogus") or shared.disabled_modifiers.has("bogus"):
+		failures.append("an unknown mode id was stored")
 	if server.apply_host_command("modifier_toggle", {"mode": "classic", "id": "bogus", "on": false}):
 		failures.append("an unknown modifier id was accepted")
 	if server.apply_host_command("modifier_toggle", {"mode": "stock", "id": "night", "on": true}) or shared.is_modifier_enabled("stock", "night"):
@@ -30779,8 +30823,12 @@ func _scenario_controller_page_has_the_stages_and_rules_screen_647() -> Array[St
 			failures.append("the page lacks %s" % needle)
 	if page.contains("menu-stockstages") or page.contains("PHONE_STOCK_RANDOM"):
 		failures.append("the old Stock stage grid is still on the page")
-	if not _js_function_body(page, "renderRules").contains("rulesDoneBtn.disabled = st.on.length === 0"):
-		failures.append("Done is not blocked with no stage on")
+	if not _js_function_body(page, "renderRules").contains('rulesDoneBtn.disabled = emptyRulesMode() !== ""'):
+		failures.append("Done is not blocked while any mode has no stage on")
+	if not _js_function_body(page, "rulesFooterText").contains("RULES_FOOTER_NONE_IN"):
+		failures.append("the footer does not name the empty mode")
+	if _js_function_body(page, "renderRules").contains("rulesDoneBtn.disabled = st.on.length === 0"):
+		failures.append("Done still looks only at the shown tab")
 	if not _js_function_body(page, "rulesEditable").contains("amHost()"):
 		failures.append("the rules page is editable by a non-host")
 	if not _js_function_body(page, "rulesFooterText").contains("RULES_FOOTER_NONE"):
@@ -30817,6 +30865,12 @@ func _scenario_old_stage_config_migrates_to_per_mode_lists_647() -> Array[String
 	settings.load_settings()
 	if settings.enabled_stages_for("stock").size() != 3:
 		failures.append("a Random Stock pick did not seed the default (all stages here): %s" % [settings.enabled_stages_for("stock")])
+	var cfg3 := ConfigFile.new()
+	cfg3.set_value("host", "stock_stage", "Pitch")  # a stage Stock no longer offers
+	cfg3.save(path)
+	settings.load_settings()
+	if settings.enabled_stages_for("stock").size() != 3 or settings.on_stages_for("stock").size() != 3:
+		failures.append("a stale Stock pick left %s on, expected the default" % [settings.on_stages_for("stock")])
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	_scenario_completed = true
 	return failures
@@ -42069,9 +42123,27 @@ func _scenario_stages_rules_gamepad_opens_navigates_and_closes_647() -> Array[St
 	await _pad_tap_368(0, JOY_BUTTON_RIGHT_SHOULDER)
 	if screen.stages_rules().current_tab() != "king_of_the_hill":
 		failures.append("RB did not move to the next tab (on '%s')" % screen.stages_rules().current_tab())
+	await get_root().get_tree().process_frame
+	var rb_focus: Control = get_root().gui_get_focus_owner()
+	if rb_focus == null or not rb_focus.is_inside_tree() or rb_focus.is_queued_for_deletion() or not overlay.is_ancestor_of(rb_focus):
+		failures.append("after RB focus is not on a live tile of the new tab (%s)" % [rb_focus])
+	else:
+		var before: bool = StockSettingsScript.shared().is_stage_enabled_for("king_of_the_hill", str(rb_focus.name))
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		if StockSettingsScript.shared().is_stage_enabled_for("king_of_the_hill", str(rb_focus.name)) == before:
+			failures.append("A after RB did not toggle '%s'" % rb_focus.name)
 	await _pad_tap_368(0, JOY_BUTTON_LEFT_SHOULDER)
 	if screen.stages_rules().current_tab() != "":
 		failures.append("LB did not move back to Classic")
+	await get_root().get_tree().process_frame
+	var lb_focus: Control = get_root().gui_get_focus_owner()
+	if lb_focus == null or not lb_focus.is_inside_tree() or lb_focus.is_queued_for_deletion() or not overlay.is_ancestor_of(lb_focus):
+		failures.append("after LB focus is not on a live tile of the new tab (%s)" % [lb_focus])
+	else:
+		var before_lb: bool = StockSettingsScript.shared().is_stage_enabled_for("", str(lb_focus.name))
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		if StockSettingsScript.shared().is_stage_enabled_for("", str(lb_focus.name)) == before_lb:
+			failures.append("A after LB did not toggle '%s'" % lb_focus.name)
 	await _pad_tap_368(0, JOY_BUTTON_B)
 	if screen.popup_open() != "":
 		failures.append("B did not close the screen")

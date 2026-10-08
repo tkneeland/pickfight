@@ -159,6 +159,12 @@ func _stage_enabled(index: int) -> bool:
 	for i in scenes.size():
 		if _fits_mode(i) and settings.is_stage_enabled_for(mode_id, HostSettingsScript.name_of(scenes[i].resource_path)):
 			return false
+	# Nothing is on: fall back to the mode's own pool (`stages_for_mode`), so
+	# Classic never lands on a Soccer or Capture the Flag stage.
+	var pool: PackedStringArray = settings.stages_for_mode(mode_id)
+	for i in scenes.size():
+		if pool.has(HostSettingsScript.name_of(scenes[i].resource_path)):
+			return pool.has(HostSettingsScript.name_of(scenes[index].resource_path))
 	return true
 
 ## Picks the next stage index (ADR-0011): `scenes[0]` opens every match

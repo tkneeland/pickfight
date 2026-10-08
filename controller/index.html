@@ -867,6 +867,7 @@
       "RULES_FOOTER_STOCK_ONE": "Stock plays on {0}",
       "RULES_FOOTER_STOCK_MANY": "Stock picks one at random from {0} stages",
       "RULES_FOOTER_NONE": "Switch on at least one stage",
+      "RULES_FOOTER_NONE_IN": "Switch on at least one stage in {0}",
       "RULES_DONE": "Done"
   };
   function t(key) {
@@ -2104,8 +2105,20 @@
     return t("RULES_SUMMARY", modeStages(mode).on.length, mods);
   }
   function rulesEditable() { return amHost() && lobby.phase !== "playing" && lobby.phase !== "round_end"; }
+  // The first mode with stages to pick from but none on (the PC's empty_tabs()).
+  function emptyRulesMode() {
+    for (var i = 0; i < RULES_MODES.length; i++) {
+      var s = modeStages(RULES_MODES[i]);
+      if (s.all.length > 0 && s.on.length === 0) { return RULES_MODES[i]; }
+    }
+    return "";
+  }
   function rulesFooterText(mode) {
     var st = modeStages(mode);
+    var empty = emptyRulesMode();
+    if (empty !== "") {
+      return empty === mode ? t("RULES_FOOTER_NONE") : t("RULES_FOOTER_NONE_IN", rulesModeName(empty));
+    }
     if (st.on.length === 0) { return t("RULES_FOOTER_NONE"); }
     if (mode === "stock") {
       return st.on.length === 1 ? t("RULES_FOOTER_STOCK_ONE", st.on[0]) : t("RULES_FOOTER_STOCK_MANY", st.on.length);
@@ -2164,7 +2177,7 @@
     }
     // The footer follows the tab, not the match's mode; Done waits for a stage.
     rulesFooterEl.textContent = rulesFooterText(mode);
-    rulesDoneBtn.disabled = st.on.length === 0;
+    rulesDoneBtn.disabled = emptyRulesMode() !== "";
   }
   document.getElementById("menu-rules-open").addEventListener("click", function () {
     rulesTab = currentRulesMode();

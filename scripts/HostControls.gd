@@ -445,8 +445,8 @@ func input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if popup == "stages" and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		# Esc closes just this screen, never the Settings panel behind it; it stays up with a mode on no stage (#647)
-		_screen.request_close_popup()
-		_restore_focus_after_popup()
+		if _screen.request_close_popup():
+			_restore_focus_after_popup()
 		_screen.get_viewport().set_input_as_handled()
 	elif popup == "stages" and _screen.stages_rules().handle_pad(event):
 		_screen.get_viewport().set_input_as_handled() # LB / RB step the tabs
