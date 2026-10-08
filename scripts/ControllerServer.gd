@@ -520,7 +520,7 @@ func join_qr_rect() -> TextureRect:
 
 func _ready() -> void:
 	var saved: String = HostSettingsScript.shared().game_mode
-	_game_mode = saved if GameModesScript.is_valid(saved) else ""
+	_game_mode = saved if GameModesScript.selectable(saved) else ""
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	_log_input = OS.get_cmdline_user_args().has("--log-input")
 	# The host phone's Resume has to reach a paused game (issue #149).
@@ -1614,7 +1614,7 @@ func game_mode() -> String:
 ## seam). Returns false, changing nothing, for an unknown id or one the Teams
 ## format rules out.
 func set_game_mode(id: String) -> bool:
-	if not GameModesScript.is_valid(id) or not GameModesScript.fits_format(id, _team_mode):
+	if not GameModesScript.selectable(id) or not GameModesScript.fits_format(id, _team_mode):
 		return false
 	_game_mode = id
 	HostSettingsScript.shared().set_game_mode(id)
