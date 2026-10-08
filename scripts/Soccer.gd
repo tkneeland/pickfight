@@ -8,7 +8,7 @@ extends Node
 ##
 ## Team 0 (Red) defends `Goal0`, team 1 (Blue) defends `Goal1`: a ball in a
 ## team's goal is a point for the other team. A knocked-out player comes back
-## after about 1.5 s through the same respawn Stock uses (`Respawn.gd`), so
+## after `RESPAWN_SEC` (4 s, the team that got the KO has the edge) through the same respawn Stock uses (`Respawn.gd`), so
 ## nobody sits out; they still count as standing (`is_pending`) so the round
 ## goes on.
 ##
@@ -26,6 +26,9 @@ signal callout(sound: StringName)
 ## A goal was scored by `team`; `scorer` is the player slot credited, or -1.
 signal goal_scored(team: int, scorer: int)
 
+## How long a knocked-out player waits before coming back (#648). Longer than
+## Stock's and Capture the Flag's 1.5 s; tune it here.
+const RESPAWN_SEC: float = 4.0
 const BALL_RADIUS: float = 28.0
 ## How close a player's body or weapon head must be to the ball to count as
 ## the last one to touch it.
@@ -38,7 +41,7 @@ const SCORE_SPACING: Vector2 = Vector2(48.0, -24.0)
 var goals_to_win: int = 3
 ## Seconds between a goal and the kick-off.
 var goal_pause_sec: float = 1.5
-var respawn_sec: float = 1.5
+var respawn_sec: float = RESPAWN_SEC
 
 var round_manager: Node
 ## team -> goals this round.
@@ -74,6 +77,7 @@ func start_round(slots: Array[int]) -> void:
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.team_of = team_of
 	_respawner.centre_x = func() -> float: return _ball_spawn().x
+	_respawner.avoid_rects = func() -> Array: return [_goal_rect(0), _goal_rect(1)]
 	for slot: int in slots:
 		if slot < 0 or slot >= round_manager._players.size():
 			continue
@@ -227,7 +231,7 @@ func _place_players() -> void:
 	for team: int in by_team.keys():
 		var mine: Array[Vector2] = []
 		for point: Vector2 in points:
-			if (point.x < centre_x) == (team == 0):
+			if (point.x < centre_x) == (team == 0) and not _in_a_goal(point):
 				mine.append(point)
 		mine.sort_custom(func(a: Vector2, b: Vector2) -> bool:
 			return a.x < b.x if team == 0 else a.x > b.x)
@@ -243,6 +247,10 @@ func _place_players() -> void:
 				spot = mine[index % mine.size()] + SCORE_SPACING * float(lap)
 			player.start_round(spot, true)
 			index += 1
+
+## Whether `point` lies inside either goal (#648): no one is placed there.
+func _in_a_goal(point: Vector2) -> bool:
+	return _goal_rect(0).has_point(point) or _goal_rect(1).has_point(point)
 
 # --- Play ----------------------------------------------------------------------
 
