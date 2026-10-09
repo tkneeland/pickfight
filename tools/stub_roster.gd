@@ -37,6 +37,12 @@ func send_buzz(slot: int, kind: String) -> void:
 var lives_sent: Array = []
 var damage_sent: Array = []
 
+## Every `send_hill()` call as `[slot, seconds, target]` (King of the Hill, #662).
+var hill_sent: Array = []
+
+func send_hill(slot: int, seconds: int, target: int) -> void:
+	hill_sent.append([slot, seconds, target])
+
 func send_lives(slot: int, lives: int, can_steal: bool) -> void:
 	lives_sent.append([slot, lives, can_steal])
 

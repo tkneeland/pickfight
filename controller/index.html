@@ -199,6 +199,18 @@
   #rules-footer, #rules-summary { font-size: 16px; font-weight: 700; }
   #rules-summary:empty { display: none; }
   #lives.show { display: block; }
+  /* King of the Hill (#662): "Hill N / 15 s", the player's own hold time. */
+  #hill {
+    position: fixed;
+    z-index: 3;
+    top: 8px;
+    left: 10px;
+    display: none;
+    color: #ffd733;
+    font: 700 20px sans-serif;
+    pointer-events: none;
+  }
+  #hill.show { display: block; }
   #steal {
     position: fixed;
     z-index: 4;
@@ -534,7 +546,7 @@
   #lobby-title, #name-prompt-title, #look-title, #host-menu-title { font-size: 32px; text-shadow: 3px 3px 0 var(--ink); }
   #state { font-size: 32px; opacity: 1; text-shadow: 3px 3px 0 var(--ink); }
   #lobby-count { font-size: 30vmin; color: var(--yellow); text-shadow: 6px 6px 0 var(--ink); }
-  #lives { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
+  #lives, #hill { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
   #dmgbar { background: rgba(20, 24, 29, 0.55); border-bottom: 1px solid var(--ink); }
 
   /* Every button: cream face, ink outline, hard shadow that the press eats. */
@@ -625,6 +637,7 @@
 <div id="flash"></div>
 <div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="lives"></div>
+<div id="hill"></div>
 <button id="steal" type="button">Steal a life</button>
 <div id="hud">
   <div id="who">
@@ -1501,6 +1514,14 @@
   }
   stealBtn.addEventListener("click", function () { sendText({ t: "steal" }); });
 
+  // King of the Hill (issue #662): {t:"hill", v:N, win:T}; N < 0 hides it.
+  var hillEl = document.getElementById("hill");
+  function showHill(msg) {
+    var n = typeof msg.v === "number" ? msg.v : -1;
+    hillEl.classList.toggle("show", n >= 0);
+    hillEl.textContent = "Hill " + n + " / " + (typeof msg.win === "number" ? msg.win : 15) + " s";
+  }
+
   function buzz(kind) {
     var b = BUZZ[kind];
     if (!b || slot < 0) { return; }
@@ -2286,6 +2307,7 @@
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
+        else if (msg.t === "hill") { showHill(msg); }
         else if (msg.t === "career") { addCareer(msg.d); }
         else if (msg.t === "lobby") { showLobby(msg); }
       } catch (err) { /* ignore anything that is not a known message */ }

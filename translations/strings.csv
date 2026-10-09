@@ -137,7 +137,7 @@ MODE_FFA,Free-for-all
 MODE_HOT_POTATO_NAME,Hot Potato
 MODE_HOT_POTATO_RULE,Do not hold the tag when the fuse ends.
 MODE_KING_OF_THE_HILL_NAME,King of the Hill
-MODE_KING_OF_THE_HILL_RULE,Hold the hill alone to win.
+MODE_KING_OF_THE_HILL_RULE,Stand in the gold circle alone. First to 15 s total wins.
 MODE_STOCK_NAME,Stock
 MODE_STOCK_RULE,Lose all your lives and you are out.
 MODE_SUDDEN_DEATH_NAME,Sudden Death
@@ -266,6 +266,8 @@ HUD_TEAM_WINS_MATCH,%s team wins the match
 HUD_PODIUM_ROW,%d. %s  %d
 HUD_HOLD,%s %d/%ds
 HUD_HILL_MOVING,Hill is moving!
+HILL_CONTESTED,CONTESTED
+BANNER_HOLDS_THE_HILL,%s holds the hill!
 HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s
 HUD_FLAG_0,home
 HUD_FLAG_1,carried

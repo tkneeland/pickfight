@@ -826,6 +826,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
 	"soccer_respawn_never_lands_in_a_goal_648",
 	"ctf_respawn_waits_four_seconds_648",
+	"koth_target_fifteen_win_freezes_without_eliminations_662",
+	"koth_ko_respawns_after_four_seconds_at_farthest_floored_spawn_keeps_hold_662",
+	"koth_last_standing_does_not_end_the_round_662",
+	"koth_time_out_most_hold_wins_662",
+	"koth_time_out_tie_runs_overtime_until_solo_hold_662",
+	"koth_teams_time_out_and_win_without_eliminations_662",
+	"koth_hill_state_colour_ring_clock_and_holds_row_662",
+	"koth_phone_receives_its_own_hold_662",
 	"soccer_and_ctf_stages_are_bigger_649",
 	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
 	"soccer_ball_flies_farther_than_at_mass_one_649",
@@ -2923,6 +2931,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_respawn_never_lands_in_a_goal_648()
 		"ctf_respawn_waits_four_seconds_648":
 			return await _scenario_ctf_respawn_waits_four_seconds_648()
+		"koth_target_fifteen_win_freezes_without_eliminations_662":
+			return await _scenario_koth_target_fifteen_win_freezes_without_eliminations_662()
+		"koth_ko_respawns_after_four_seconds_at_farthest_floored_spawn_keeps_hold_662":
+			return await _scenario_koth_ko_respawns_after_four_seconds_at_farthest_floored_spawn_keeps_hold_662()
+		"koth_last_standing_does_not_end_the_round_662":
+			return await _scenario_koth_last_standing_does_not_end_the_round_662()
+		"koth_time_out_most_hold_wins_662":
+			return await _scenario_koth_time_out_most_hold_wins_662()
+		"koth_time_out_tie_runs_overtime_until_solo_hold_662":
+			return await _scenario_koth_time_out_tie_runs_overtime_until_solo_hold_662()
+		"koth_teams_time_out_and_win_without_eliminations_662":
+			return await _scenario_koth_teams_time_out_and_win_without_eliminations_662()
+		"koth_hill_state_colour_ring_clock_and_holds_row_662":
+			return await _scenario_koth_hill_state_colour_ring_clock_and_holds_row_662()
+		"koth_phone_receives_its_own_hold_662":
+			return await _scenario_koth_phone_receives_its_own_hold_662()
 		"soccer_and_ctf_stages_are_bigger_649":
 			return _scenario_soccer_and_ctf_stages_are_bigger_649()
 		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
@@ -26416,11 +26440,15 @@ func _scenario_mode_king_of_the_hill_scores_and_wins() -> Array[String]:
 	for s in 3:
 		if rm.score_of(s) != 0:
 			failures.append("the match tally moved before the round ended: slot %d has %d" % [s, rm.score_of(s)])
+	var kos_old: Array[int] = [0]
+	for p in players:
+		p.eliminated.connect(func() -> void: kos_old[0] += 1)
 	if not await _await_condition(func() -> bool: return not players[0].alive and not players[2].alive, 3000):
 		failures.append("the occupant never reached the hold target")
 	await _await_ticks(5)
-	# The winner is put out of play at round end (`leave_round()`), so the proof
-	# the others were eliminated is that slot 1 alone scored the round.
+	# The others are frozen at round end (`leave_round()`), not knocked out (#662).
+	if kos_old[0] != 0:
+		failures.append("the hold win eliminated %d players" % kos_old[0])
 	if rm.score_of(1) != 1 or rm.score_of(0) != 0 or rm.score_of(2) != 0:
 		failures.append("the round was not scored once to slot 1: %d %d %d" % [rm.score_of(0), rm.score_of(1), rm.score_of(2)])
 	if rm.game_mode_node() != null:
@@ -29459,8 +29487,13 @@ func _scenario_mode_king_of_the_hill_teams_hold_together() -> Array[String]:
 	if hill.team_hold_of(0) <= frozen + 0.1:
 		failures.append("Red did not resume banking after the contest: %f vs %f" % [hill.team_hold_of(0), frozen])
 	hill.seconds_to_win = hill.team_hold_of(0) + 0.3
+	var kos_old: Array[int] = [0]
+	for p in players:
+		p.eliminated.connect(func() -> void: kos_old[0] += 1)
 	if not await _await_condition(func() -> bool: return not players[2].alive, 3000):
-		failures.append("Red reached the target but Blue was not eliminated")
+		failures.append("Red reached the target but Blue was not frozen")
+	if kos_old[0] != 0:
+		failures.append("the team win eliminated %d players" % kos_old[0])
 	await _await_ticks(5)
 	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
 		failures.append("the round scored red %d blue %d, expected 1-0" % [rm.team_score(0), rm.team_score(1)])
@@ -33126,10 +33159,10 @@ func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failure
 ## round; waiting at an edge it now steps onto the see-saws.
 func _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel() -> Array[String]:
 	var failures: Array[String] = []
-	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 120.0, failures)
+	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 200.0, failures)
 	print("      King of the Hill round with four bots on Carousel took %.1f s" % took)
 	if took < 0.0 and failures.is_empty():
-		failures.append("four bots did not finish a King of the Hill round on Carousel in 120 s")
+		failures.append("four bots did not finish a King of the Hill round on Carousel in 200 s (the 3 min clock must end it)")
 	return failures
 ## Issue #360: a hit flashes the body white for about 0.1 s of game time, and
 ## the flash is off with "Reduce flashes" on. Visual only: the physics body is
@@ -33598,7 +33631,7 @@ func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_tim
 	elif seen_winner[0] < 0 and seen_hold[0] < 9.9:
 		failures.append("the Reactor round ended without a hold win (no hill winner seen; most hold time seen %.1f s)" % seen_hold[0])
 	else:
-		print("      Reactor round ended by hold time (a rider banked %.1f s of 10 s)" % seen_hold[0])
+		print("      Reactor round ended by hold time (a rider banked %.1f s of 15 s)" % seen_hold[0])
 	await _teardown(stage)
 	return failures
 # --- Lobby-only join corner, host-pad Start pauses (#430) --------------------
@@ -34610,11 +34643,13 @@ func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[Stri
 		failures.append("the host refused King of the Hill")
 	var client: Node = await _rc_client_241(rig)
 	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		rig["server"].set_game_mode("")
 		await _rc_close_241(rig)
 		return failures
 	var hill: Node = rm.game_mode_node()
 	if hill == null or rm.active_game_mode_id() != "king_of_the_hill":
 		failures.append("the host is not playing King of the Hill ('%s')" % rm.active_game_mode_id())
+		rig["server"].set_game_mode("")
 		await _rc_close_241(rig)
 		return failures
 	var holder: int = int(rm.get("_in_round")[0])
@@ -34638,6 +34673,7 @@ func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[Stri
 	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": "1:30"}}
 	if client.mode_text() != "1:30  Ann x3  Bo x1":
 		failures.append("Stock line reads '%s'" % client.mode_text())
+	rig["server"].set_game_mode("")
 	await _rc_close_241(rig)
 	return failures
 ## The match result, the podium and the way back to the menu on the client.
@@ -38371,6 +38407,8 @@ func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[Str
 			failures.append("%s status line reads '%s'" % [id, GameModesType.status_line(id)])
 	for row: Dictionary in GameModesType.TABLE:
 		var card: String = GameModesType.rule_line(str(row["id"]))
+		if str(row["id"]) == GameModesType.KING_OF_THE_HILL:
+			continue  # the hill's 15 s target is fixed, not a host setting (#662)
 		for ch: String in "0123456789":
 			if card.contains(ch):
 				failures.append("%s mode-card rule carries a number: '%s'" % [row["id"], card])
@@ -42392,4 +42430,296 @@ func _scenario_stages_rules_gamepad_opens_navigates_and_closes_647() -> Array[St
 	_reset_host_choices_647()
 	await _teardown(rig["main"])
 	_scenario_completed = true
+	return failures
+
+## Issue #662: King of the Hill readable. Scenarios share this rig: the round
+## started, players parked away from the hill with gravity off, a wide hill.
+func _koth_rig_662(count: int, teams: bool = false) -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, GameModesType.KING_OF_THE_HILL)
+	if teams:
+		rig["rm"]._team_mode = true
+		var assigned: Dictionary = {}
+		for i in count:
+			assigned[i] = i % 2
+		rig["rm"]._teams = assigned
+	rig["started"] = await _mode_started(rig)
+	if not rig["started"]:
+		return rig
+	await _await_ticks(10)
+	var hill: Node = rig["rm"].game_mode_node()
+	hill.hill_radius = 150.0
+	hill.hill_moves = false
+	rig["hill"] = hill
+	_koth_park_662(rig)
+	await _await_ticks(3)
+	for slot: int in hill.hold_time.keys():
+		hill.hold_time[slot] = 0.0
+	hill.team_hold = {}
+	return rig
+func _koth_park_662(rig: Dictionary) -> void:
+	var players: Array[RigidBody2D] = rig["players"]
+	for i in players.size():
+		players[i].gravity_scale = 0.0
+		players[i].linear_velocity = Vector2.ZERO
+		players[i].teleport_to(Vector2(-900.0 + 450.0 * i, -700.0))
+func _koth_count_kos_662(players: Array[RigidBody2D]) -> Array[int]:
+	var count: Array[int] = [0]
+	for p in players:
+		p.eliminated.connect(func() -> void: count[0] += 1)
+	return count
+## The target is 15 s; reaching it ends the round with a banner and freezes the others, with no KO.
+func _scenario_koth_target_fifteen_win_freezes_without_eliminations_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if hill.seconds_to_win != 15.0:
+		failures.append("the target is %s s, want 15" % hill.seconds_to_win)
+	var kos: Array[int] = _koth_count_kos_662(players)
+	var hud: Dictionary = preload("res://scripts/RemoteHud.gd")._mode(GameModesType.KING_OF_THE_HILL, hill, rm)
+	if int(hud.get("win", 0)) != 15:
+		failures.append("the remote HUD target is %s, want 15" % hud.get("win"))
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	hill.hold_time[1] = 14.9
+	if not await _await_condition(func() -> bool: return rm.score_of(1) == 1, 3000):
+		failures.append("the holder reaching 15 s did not take the round")
+	if kos[0] != 0:
+		failures.append("the win eliminated %d players" % kos[0])
+	if players[0].alive or players[2].alive:
+		failures.append("the others were not frozen out of play at the win")
+	var feed: Control = rm.kill_feed()
+	if feed != null and not str(feed.banner_log).contains("holds the hill!"):
+		failures.append("no 'holds the hill!' banner: %s" % [feed.banner_log])
+	await _teardown(rig["stage"])
+	return failures
+## A KO respawns after 4 s at the floored spawn farthest from the hill, hold time kept.
+func _scenario_koth_ko_respawns_after_four_seconds_at_farthest_floored_spawn_keeps_hold_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var players: Array[RigidBody2D] = rig["players"]
+	# Spawns at -500, 0 and 500; floor only under the first two. The hill sits at
+	# -500, so the farthest spawn overall (500) has no floor: the answer is 0.
+	var points: Array[Vector2] = [Vector2(-500.0, 400.0), Vector2(0.0, 400.0), Vector2(500.0, 400.0)]
+	rm._stage_spawn_points = points
+	for x: float in [-500.0, 0.0]:
+		var body := StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(100.0, 20.0)
+		shape.shape = rect
+		body.add_child(shape)
+		body.position = Vector2(x, 500.0)
+		rig["stage"].add_child(body)
+	hill.hill_position = Vector2(-500.0, 400.0)
+	await _await_ticks(2)
+	hill.hold_time[0] = 3.0
+	players[0].eliminate()
+	await _await_ticks(int(3.9 * 60.0))
+	if players[0].alive or not hill.is_pending(0):
+		failures.append("the KO'd player was back, or not waiting, at 3.9 s")
+	await _await_ticks(int(0.4 * 60.0))
+	if not players[0].alive:
+		failures.append("the KO'd player was not back by 4.3 s")
+	elif players[0].global_position.distance_to(points[1]) > 40.0:
+		failures.append("respawned at %s, want the floored spawn farthest from the hill %s" % [players[0].global_position, points[1]])
+	if hill.hold_of(0) < 3.0:
+		failures.append("the KO cost hold time: %s" % hill.hold_of(0))
+	await _teardown(rig["stage"])
+	return failures
+## A player standing alone does not win the round just because everyone else is down.
+func _scenario_koth_last_standing_does_not_end_the_round_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var players: Array[RigidBody2D] = rig["players"]
+	players[1].eliminate()
+	players[2].eliminate()
+	await _await_ticks(90)
+	if rm.game_mode_node() == null or rm.score_of(0) != 0:
+		failures.append("the round ended with one player left standing")
+	if not hill.is_pending(1) or not hill.is_pending(2):
+		failures.append("the knocked-out players are not waiting to respawn")
+	players[0].eliminate()
+	await _await_ticks(30)
+	if rm.game_mode_node() == null:
+		failures.append("the round ended with everyone down")
+	await _await_ticks(240)
+	for p in players:
+		if not p.alive:
+			failures.append("%s never respawned" % p.name)
+	await _teardown(rig["stage"])
+	return failures
+## At time-out the player with the most hold time wins.
+func _scenario_koth_time_out_most_hold_wins_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	if hill.time_limit_sec != 180.0:
+		failures.append("the time limit is %s s, want 180" % hill.time_limit_sec)
+	hill.hold_time[1] = 2.0
+	hill.hold_time[2] = 5.0
+	hill.time_left = 0.2
+	if not await _await_condition(func() -> bool: return rm.score_of(2) == 1, 3000):
+		failures.append("the time-out did not give the round to the most hold time")
+	if rm.score_of(1) != 0 or rm.score_of(0) != 0:
+		failures.append("the time-out scored the wrong player")
+	await _teardown(rig["stage"])
+	return failures
+## A tie at time-out is overtime: the round goes on until anyone holds the hill alone.
+func _scenario_koth_time_out_tie_runs_overtime_until_solo_hold_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var players: Array[RigidBody2D] = rig["players"]
+	hill.hold_time[0] = 4.0
+	hill.hold_time[1] = 4.0
+	hill.time_left = 0.1
+	await _await_ticks(30)
+	if not hill.overtime or hill.is_won() or rm.game_mode_node() == null:
+		failures.append("a tie did not run overtime (overtime %s, won %s)" % [hill.overtime, hill.is_won()])
+	if hill.clock_text() != tr("OVERTIME"):
+		failures.append("the clock reads '%s' in overtime" % hill.clock_text())
+	players[0].teleport_to(hill.hill_position + Vector2(30.0, 0.0))
+	players[1].teleport_to(hill.hill_position - Vector2(30.0, 0.0))
+	await _await_ticks(30)
+	if hill.is_won():
+		failures.append("a contested hill ended overtime")
+	players[0].teleport_to(Vector2(-900.0, -700.0))
+	if not await _await_condition(func() -> bool: return rm.score_of(1) == 1, 3000):
+		failures.append("the first solo holder did not win overtime")
+	await _teardown(rig["stage"])
+	return failures
+## Teams: time-out goes to the team with the most total, and a team win freezes the other without KOs.
+func _scenario_koth_teams_time_out_and_win_without_eliminations_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3, true)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the Teams King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var kos: Array[int] = _koth_count_kos_662(players)
+	hill.team_hold[0] = 3.0
+	hill.team_hold[1] = 5.0
+	hill.time_left = 0.2
+	if not await _await_condition(func() -> bool: return rm.team_score(1) == 1, 3000):
+		failures.append("the time-out did not give the round to the team with the most hold time")
+	if rm.team_score(0) != 0 or kos[0] != 0:
+		failures.append("time-out scored red %d with %d KOs" % [rm.team_score(0), kos[0]])
+	await _teardown(rig["stage"])
+	var rig2: Dictionary = await _koth_rig_662(3, true)
+	if not rig2["started"]:
+		await _teardown(rig2["stage"])
+		return failures + ["the second Teams round never started"]
+	var rm2: Node = rig2["rm"]
+	var hill2: Node = rig2["hill"]
+	var players2: Array[RigidBody2D] = rig2["players"]
+	var kos2: Array[int] = _koth_count_kos_662(players2)
+	players2[0].teleport_to(hill2.hill_position + Vector2(0.0, 40.0))
+	players2[2].teleport_to(hill2.hill_position + Vector2(0.0, -40.0))
+	await _await_ticks(3)
+	players2[2].teleport_to(Vector2(0.0, -700.0))
+	hill2.team_hold[0] = 14.9
+	if not await _await_condition(func() -> bool: return rm2.team_score(0) == 1, 3000):
+		failures.append("Red reaching 15 s did not win the round")
+	if kos2[0] != 0:
+		failures.append("the team win eliminated %d players" % kos2[0])
+	await _teardown(rig2["stage"])
+	return failures
+## Hill states, the holder's colour and fill ring, the clock and the top row.
+func _scenario_koth_hill_state_colour_ring_clock_and_holds_row_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if hill.hill_state() != &"empty":
+		failures.append("an empty hill reads %s" % hill.hill_state())
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(5)
+	hill.hold_time[1] = 6.0
+	if hill.hill_state() != &"held":
+		failures.append("a hill with one player reads %s" % hill.hill_state())
+	if hill.holder_colour() != rm._slot_color(1):
+		failures.append("the held hill is %s, want slot 1's colour %s" % [hill.holder_colour(), rm._slot_color(1)])
+	if absf(hill.fill_fraction() - 6.0 / 15.0) > 0.03:
+		failures.append("the fill ring is %f, want 0.4" % hill.fill_fraction())
+	await _await_ticks(3)
+	var row: String = hill.holds_text()
+	if not row.contains("%s 6/15" % rm._slot_name(1)):
+		failures.append("the top row reads '%s', want it to hold '%s 6/15'" % [row, rm._slot_name(1)])
+	if hill._holds_label == null or not hill._holds_label.visible or hill._holds_label.text != hill.holds_text():
+		failures.append("the host screen's top row label is not showing the holds")
+	players[2].teleport_to(hill.hill_position + Vector2(40.0, 0.0))
+	await _await_ticks(3)
+	if hill.hill_state() != &"contested":
+		failures.append("a hill with two rivals reads %s" % hill.hill_state())
+	hill.time_left = 100.0
+	if hill.clock_text() != "":
+		failures.append("the clock shows '%s' with 100 s left" % hill.clock_text())
+	hill.time_left = 25.0
+	if hill.clock_text() != "0:25":
+		failures.append("the clock reads '%s' with 25 s left" % hill.clock_text())
+	await _teardown(rig["stage"])
+	var trig: Dictionary = await _koth_rig_662(3, true)
+	if trig["started"]:
+		var thill: Node = trig["hill"]
+		trig["players"][0].teleport_to(thill.hill_position)
+		await _await_ticks(5)
+		if thill.hill_state() != &"held" or thill.holder_colour() != preload("res://scripts/Teams.gd").team_color(0):
+			failures.append("a Teams hill is not held in the team colour")
+	await _teardown(trig["stage"])
+	return failures
+## The phone gets its own hold out of the target, and the counter hides at round end.
+func _scenario_koth_phone_receives_its_own_hold_662() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var roster: Node = rig["roster"]
+	hill.hold_time[1] = 6.5
+	await _await_ticks(3)
+	var told: Array = []
+	for entry: Array in roster.hill_sent:
+		if entry[0] == 1:
+			told = entry
+	if told != [1, 6, 15]:
+		failures.append("slot 1's phone was last told %s, want [1, 6, 15]" % [told])
+	rm._end_game_mode()
+	told = []
+	for entry: Array in roster.hill_sent:
+		if entry[0] == 1:
+			told = entry
+	if told.size() != 3 or int(told[1]) != -1:
+		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [told])
+	await _teardown(rig["stage"])
 	return failures

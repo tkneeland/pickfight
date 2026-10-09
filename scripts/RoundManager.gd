@@ -538,6 +538,15 @@ func _check_round_end() -> void:
 		return
 	_flush_kos()
 	var alive_slots: Array[int] = _alive_slots()
+	if _mode_win_slot != -1:
+		# A mode decided the round (King of the Hill, #662): everyone else
+		# freezes in place with no KO, and the winner takes the round.
+		for other: int in alive_slots:
+			if other != _mode_win_slot and _players[other].alive:
+				_players[other].leave_round()
+		alive_slots = [_mode_win_slot]
+		_survivor_slot = -1
+	_mode_win_slot = -1
 	# Nobody left, but someone was the last one standing on an earlier physics
 	# tick of this frame: they won before they fell (#163).
 	if alive_slots.is_empty() and _survivor_slot != -1:
@@ -607,6 +616,20 @@ func _on_eliminated_check_survivor(slot: int) -> void:
 	if _game_mode_node != null and _game_mode_node.has_method("is_pending"):
 		return
 	_record_survivor(slot)
+
+## A mode that ends the round itself (King of the Hill, #662) names the winner
+## here; the next `_check_round_end()` scores it and freezes everyone else
+## without eliminating them. `team` is -1 in a free-for-all.
+var _mode_win_slot: int = -1
+var _mode_win_team: int = -1
+
+func declare_mode_win(slot: int, team: int = -1) -> void:
+	if _state != State.ROUND_ACTIVE:
+		return
+	if _team_mode:
+		_mode_win_team = team
+	else:
+		_mode_win_slot = slot
 
 func _record_survivor(slot: int) -> void:
 	if _state != State.ROUND_ACTIVE:
@@ -1865,6 +1888,18 @@ func _check_team_survivor() -> void:
 func _check_team_round_end(after_kick: bool) -> void:
 	_flush_kos()
 	var alive_slots: Array[int] = _alive_slots()
+	if _mode_win_team != -1:
+		# A mode decided the round (King of the Hill, #662): the other team
+		# freezes in place with no KO.
+		var on_team: Array[int] = []
+		for other: int in alive_slots:
+			if int(_teams.get(other, TeamsScript.NONE)) == _mode_win_team:
+				on_team.append(other)
+			elif _players[other].alive:
+				_players[other].leave_round()
+		alive_slots = on_team
+		_survivor_team = _mode_win_team
+	_mode_win_team = -1
 	var standing: Array[int] = _teams_of(alive_slots)
 	var winner_team: int = -1
 	if standing.size() > 1:
