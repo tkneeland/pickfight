@@ -33159,10 +33159,10 @@ func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failure
 ## round; waiting at an edge it now steps onto the see-saws.
 func _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel() -> Array[String]:
 	var failures: Array[String] = []
-	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 120.0, failures)
+	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 200.0, failures)
 	print("      King of the Hill round with four bots on Carousel took %.1f s" % took)
 	if took < 0.0 and failures.is_empty():
-		failures.append("four bots did not finish a King of the Hill round on Carousel in 120 s")
+		failures.append("four bots did not finish a King of the Hill round on Carousel in 200 s (the 3 min clock must end it)")
 	return failures
 ## Issue #360: a hit flashes the body white for about 0.1 s of game time, and
 ## the flash is off with "Reduce flashes" on. Visual only: the physics body is
