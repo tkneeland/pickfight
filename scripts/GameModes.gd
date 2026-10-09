@@ -49,7 +49,7 @@ const TABLE: Array[Dictionary] = [
 	},
 	{
 		"id": KING_OF_THE_HILL, "name": "King of the Hill",
-		"rule": "Hold the hill alone to win.",
+		"rule": "Stand in the gold circle alone. First to 15 s total wins.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
 		"banned": ["meteor_shower"], "ffa_only": false,
 	},

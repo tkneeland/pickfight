@@ -543,6 +543,8 @@ func _ready() -> void:
 	_damage_sent_msec.resize(_players.size())
 	_lives_sent.resize(_players.size())
 	_lives_sent.fill("")
+	_hill_sent.resize(_players.size())
+	_hill_sent.fill(-2)
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
@@ -1199,6 +1201,8 @@ func _remember_leaver(slot: int) -> void:
 func _attach(slot: int, peer: Variant) -> void:
 	_slot_peers[slot] = peer
 	_lives_sent[slot] = ""
+	if slot < _hill_sent.size():
+		_hill_sent[slot] = -2
 	_damage_sent[slot] = -1  # a newly bound page has no bar yet: the next call sends it
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
@@ -1295,6 +1299,22 @@ func send_damage(slot: int, fraction: float) -> void:
 	peer.send_text(JSON.stringify({"t": "dmg", "v": percent / 100.0}))
 
 var _lives_sent: Array[String] = []
+var _hill_sent: Array[int] = []
+
+## Tell the phone on `slot` its hold time (King of the Hill, #662): one
+## `{"t":"hill","v":<seconds>,"win":<target>}` frame, `v` -1 to hide it. Sent
+## only when it changed since the last frame to that seat.
+func send_hill(slot: int, seconds: int, target: int) -> void:
+	if not slot_has_controller(slot) or slot >= _hill_sent.size():
+		return
+	var key: int = seconds * 1000 + target
+	if _hill_sent[slot] == key:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_hill_sent[slot] = key
+	peer.send_text(JSON.stringify({"t": "hill", "v": seconds, "win": target}))
 
 ## Tell the phone on `slot` its player's lives (Stock, #354): one
 ## `{"t":"lives","v":<n>,"steal":<bool>}` frame, `n` -1 to hide the counter.

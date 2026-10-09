@@ -41,7 +41,7 @@ static func _mode(id: String, node: Object, rm: Node) -> Dictionary:
 			for slot: int in node.get("hold_time"):
 				hold[slot] = roundi(float(node.hold_time[slot]))
 			return {"hold": hold, "win": roundi(float(node.seconds_to_win)),
-				"moving": bool(node.get("hill_warning")),
+				"moving": bool(node.get("hill_warning")), "clock": str(node.clock_text()),
 				"team_hold": [roundi(node.team_hold_of(0)), roundi(node.team_hold_of(1))]}
 		"capture_the_flag":
 			return {"score": [int(node.scores[0]), int(node.scores[1])], "flag": [int(node.state[0]), int(node.state[1])],

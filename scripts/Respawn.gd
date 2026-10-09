@@ -18,6 +18,9 @@ var centre_x: Callable
 ## Optional no-go areas (#648): `avoid_rects.call()` is an Array of Rect2, the
 ## Soccer goals. A spawn inside one is never picked while another is open.
 var avoid_rects: Callable
+## Optional (#662): `far_from.call()` is a world point (King of the Hill's
+## hill); the spawn chosen is the safe one farthest from it, not from players.
+var far_from: Callable
 ## How far below a spawn point a floor still counts as under it.
 const GROUND_PROBE: float = 400.0
 var round_manager: Node
@@ -125,6 +128,12 @@ func farthest_spawn(slot: int) -> Vector2:
 	var best: Vector2 = pool[0]
 	var best_gap: float = -1.0
 	for point: Vector2 in pool:
+		if far_from.is_valid():
+			var away: float = point.distance_to(far_from.call() as Vector2)
+			if away > best_gap:
+				best_gap = away
+				best = point
+			continue
 		var gap: float = INF
 		for other: int in watched.keys():
 			if other != slot and bool(watched[other].alive):
