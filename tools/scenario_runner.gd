@@ -500,7 +500,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickups_skip_occupied_spots",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
-	"ghost_cannot_hurt_and_only_nudges_pickups",
+	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
+	"ghost_mouse_motion_moves_it_one_to_one_and_stops_660",
+	"ghost_grabs_carries_and_drops_one_pickup_at_a_time_660",
+	"ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660",
+	"ghost_boo_skips_teammates_660",
+	"ghost_round_end_drops_what_it_carries_660",
+	"ghost_phone_tap_and_pad_a_do_the_context_action_660",
 	"ghost_cleared_at_round_end_and_never_for_bots",
 	"victory_continue_waits_for_every_human_not_bots",
 	"victory_continue_times_out",
@@ -2265,8 +2271,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
 			return await _scenario_ghost_hidden_until_touch_then_fades()
-		"ghost_cannot_hurt_and_only_nudges_pickups":
-			return await _scenario_ghost_cannot_hurt_and_only_nudges_pickups()
+		"ghost_cannot_hurt_and_leaves_loose_pickups_alone":
+			return await _scenario_ghost_cannot_hurt_and_leaves_loose_pickups_alone()
+		"ghost_mouse_motion_moves_it_one_to_one_and_stops_660":
+			return await _scenario_ghost_mouse_motion_moves_it_one_to_one_and_stops_660()
+		"ghost_grabs_carries_and_drops_one_pickup_at_a_time_660":
+			return await _scenario_ghost_grabs_carries_and_drops_one_pickup_at_a_time_660()
+		"ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660":
+			return await _scenario_ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660()
+		"ghost_boo_skips_teammates_660":
+			return await _scenario_ghost_boo_skips_teammates_660()
+		"ghost_round_end_drops_what_it_carries_660":
+			return await _scenario_ghost_round_end_drops_what_it_carries_660()
+		"ghost_phone_tap_and_pad_a_do_the_context_action_660":
+			return await _scenario_ghost_phone_tap_and_pad_a_do_the_context_action_660()
 		"ghost_cleared_at_round_end_and_never_for_bots":
 			return await _scenario_ghost_cleared_at_round_end_and_never_for_bots()
 		"victory_continue_waits_for_every_human_not_bots":
@@ -28610,7 +28628,7 @@ func _scenario_ghost_hidden_until_touch_then_fades() -> Array[String]:
 		failures.append("a living player got a ghost")
 	await _teardown(loop["stage"])
 	return failures
-func _scenario_ghost_cannot_hurt_and_only_nudges_pickups() -> Array[String]:
+func _scenario_ghost_cannot_hurt_and_leaves_loose_pickups_alone() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = await _ghost_round()
 	var rm: Node = loop["round_manager"]
@@ -28628,21 +28646,242 @@ func _scenario_ghost_cannot_hurt_and_only_nudges_pickups() -> Array[String]:
 	await _await_ticks(90)
 	if players[1].damage != health_before or not players[1].alive:
 		failures.append("a ghost sitting on a player changed their health (%.1f -> %.1f)" % [health_before, players[1].damage])
-	var pickup_scene: PackedScene = load("res://scenes/Pickup.tscn")
-	var pickup: Area2D = pickup_scene.instantiate() as Area2D
-	pickup.set_weapon(_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
-	loop["stage"].add_child(pickup)
-	pickup.global_position = ghost.global_position + Vector2(20.0, 0.0)
+	var pickup: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(20.0, 0.0))
 	var start: Vector2 = pickup.global_position
 	await _await_ticks(60)
-	var moved: float = pickup.global_position.distance_to(start)
-	print("      pickup nudged %.1f px in 1 s of ghost contact (ghost moved far more)" % moved)
-	if moved < 1.0:
-		failures.append("the ghost did not nudge a pickup it was carrying along")
-	await _await_ticks(600)
-	var drift: float = pickup.global_position.distance_to(start)
-	if drift > 61.0:
-		failures.append("a pickup was pushed %.1f px; the cap is 60" % drift)
+	if pickup.global_position.distance_to(start) > 0.01:
+		failures.append("a ghost flying past shoved a loose pickup %.1f px (the weak nudge is gone, #660)" % pickup.global_position.distance_to(start))
+	await _teardown(loop["stage"])
+	return failures
+## A loose pickup on the ghost round's stage.
+func _ghost_pickup_660(loop: Dictionary, at: Vector2) -> Area2D:
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = at
+	return pickup
+## Issue #660: a mouse moves the ghost like a cursor, 1:1, and it stops with the mouse.
+func _scenario_ghost_mouse_motion_moves_it_one_to_one_and_stops_660() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.global_position = ghost.bounds.get_center()
+	var p0: Vector2 = ghost.global_position
+	players[0].push_ghost_mouse(Vector2(40.0, -25.0))
+	await _await_ticks(2)
+	var moved: Vector2 = ghost.global_position - p0
+	print("      ghost moved %s for a mouse motion of (40, -25)" % moved)
+	if not moved.is_equal_approx(Vector2(40.0, -25.0)):
+		failures.append("a mouse motion of (40, -25) moved the ghost %s, expected exactly that" % moved)
+	if not ghost.is_shown():
+		failures.append("the ghost was not visible while the mouse moved it")
+	# The mouse vector stays out like a held drag (a mouse never sends zero), but the ghost must not coast on it.
+	players[0].set_input_vector(Vector2(1.0, 0.0))
+	var rest: Vector2 = ghost.global_position
+	await _await_ticks(45)
+	if ghost.global_position.distance_to(rest) > 0.01:
+		failures.append("the ghost kept flying after the mouse stopped (%s)" % (ghost.global_position - rest))
+	players[0].push_ghost_mouse(Vector2(-10.0, 0.0))
+	players[0].push_ghost_mouse(Vector2(-10.0, 5.0))
+	await _await_ticks(2)
+	var back: Vector2 = ghost.global_position - rest
+	if not back.is_equal_approx(Vector2(-20.0, 5.0)):
+		failures.append("two motions of (-10, 0) and (-10, 5) moved the ghost %s, expected (-20, 5)" % back)
+	await _teardown(loop["stage"])
+	return failures
+## Issue #660: one action near a pickup grabs it, it follows, another drops it, one at a time.
+func _scenario_ghost_grabs_carries_and_drops_one_pickup_at_a_time_660() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.global_position = ghost.bounds.get_center() + Vector2(-300.0, 0.0)
+	var near: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(45.0, 0.0))
+	var also_near: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(-50.0, 0.0))
+	var far: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(300.0, 0.0))
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	var grabbed: Array = [near, also_near].filter(func(p: Area2D) -> bool: return p.global_position.distance_to(ghost.global_position) < 30.0)
+	if grabbed.size() != 1:
+		failures.append("%d pickups ride the ghost after one action beside two, expected exactly one" % grabbed.size())
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	# A second action drops the carried one rather than taking the other.
+	var dropped: Area2D = grabbed[0] if grabbed.size() == 1 else near
+	var other: Area2D = also_near if dropped == near else near
+	if other.global_position.distance_to(ghost.global_position) < 30.0:
+		failures.append("a ghost already carrying one grabbed a second")
+	var y_drop: float = dropped.global_position.y
+	await _await_ticks(30)
+	if dropped.global_position.y <= y_drop + 5.0:
+		failures.append("a dropped pickup did not fall (y %.1f -> %.1f)" % [y_drop, dropped.global_position.y])
+	# Carried: it follows the ghost wherever it goes.
+	ghost.global_position = ghost.bounds.get_center() + Vector2(100.0, -100.0)
+	far.global_position = ghost.global_position + Vector2(30.0, 0.0)
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	players[0].push_ghost_mouse(Vector2(80.0, 40.0))
+	await _await_ticks(3)
+	if far.global_position.distance_to(ghost.global_position) > 30.0:
+		failures.append("a carried pickup lagged %.1f px behind the ghost" % far.global_position.distance_to(ghost.global_position))
+	if players[0].ghost_actions != 0:
+		failures.append("actions were left unconsumed")
+	await _teardown(loop["stage"])
+	return failures
+## Issue #660: with nothing to grab, the action boos the nearest living rival.
+## Puts the ghost `offset` from `victim`, queues one action, lets two ticks
+## pass and returns how much the victim's horizontal velocity changed.
+func _boo_660(ghost: Node2D, owner_player: RigidBody2D, victim: RigidBody2D, offset: Vector2) -> float:
+	ghost.global_position = victim.global_position + offset
+	var before: float = victim.linear_velocity.x
+	owner_player.push_ghost_action()
+	await _await_ticks(2)
+	return victim.linear_velocity.x - before
+func _scenario_ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	var victim: RigidBody2D = players[1]
+	var damage_before: float = victim.damage
+	# Out of range: a boo reaches ~120 px, not 200.
+	var dv: float = await _boo_660(ghost, players[0], victim, Vector2(-200.0, 0.0))
+	if absf(dv) > 20.0:
+		failures.append("a boo from 200 px shoved a player (dvx %.1f)" % dv)
+	dv = await _boo_660(ghost, players[0], victim, Vector2(-80.0, 0.0))
+	print("      boo from 80 px changed the rival's x velocity by %.1f" % dv)
+	if dv < 100.0:
+		failures.append("a boo from 80 px away did not shove the rival away from the ghost (dvx %.1f)" % dv)
+	if victim.damage != damage_before:
+		failures.append("a boo did damage (%.1f -> %.1f)" % [damage_before, victim.damage])
+	dv = await _boo_660(ghost, players[0], victim, Vector2(-80.0, 0.0))
+	if absf(dv) > 20.0:
+		failures.append("a second boo inside the 3 s cooldown shoved again (dvx %.1f)" % dv)
+	await _await_ticks(190)
+	dv = await _boo_660(ghost, players[0], victim, Vector2(-80.0, 0.0))
+	if dv < 100.0:
+		failures.append("the boo did not come back after the cooldown (dvx %.1f)" % dv)
+	# Not a hit: knocking the booed player out later credits nobody.
+	victim.eliminate()
+	await _await_ticks(6)
+	if int(rm.match_stats().kos.get(0, 0)) != 0:
+		failures.append("a boo earned the ghost's owner a KO")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_ghost_boo_skips_teammates_660() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	players[0].team = 0
+	players[1].team = 0
+	players[2].team = 1
+	players[3].team = 1
+	# The spawns are hundreds of px apart, so one ghost is only ever near one player.
+	var dv: float = await _boo_660(ghost, players[0], players[1], Vector2(-20.0, 0.0))
+	if absf(dv) > 20.0:
+		failures.append("a boo shoved the ghost owner's teammate (dvx %.1f)" % dv)
+	dv = await _boo_660(ghost, players[0], players[2], Vector2(-20.0, 0.0))
+	if dv < 100.0:
+		failures.append("a boo at a rival on the other team did not shove (dvx %.1f)" % dv)
+	await _teardown(loop["stage"])
+	return failures
+## Issue #660: the ghost going away at round end lets go of what it carries.
+func _scenario_ghost_round_end_drops_what_it_carries_660() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.global_position = ghost.bounds.get_center() + Vector2(-300.0, 0.0)
+	var pickup: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(20.0, 0.0))
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if pickup.global_position.distance_to(ghost.global_position) > 30.0:
+		failures.append("setup: the ghost did not pick the pickup up")
+	rm.round_end_pause_sec = 60.0
+	players[2].eliminate()
+	players[3].eliminate()
+	await _await_ticks(10)
+	if rm.ghost_of(0) != null:
+		failures.append("the ghost survived the end of the round")
+	if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+		var y0: float = pickup.global_position.y
+		await _await_ticks(20)
+		if is_instance_valid(pickup) and pickup.global_position.y <= y0 + 5.0:
+			failures.append("a pickup the ghost carried when the round ended hung in the air")
+	await _teardown(loop["stage"])
+	return failures
+## Issue #660: the phone's tap and the gamepad's A are the one context action.
+func _scenario_ghost_phone_tap_and_pad_a_do_the_context_action_660() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _pad_loop_442(3)
+	var server: Node = loop["server"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _pad_button_261(1, JOY_BUTTON_A)
+	await _pad_button_261(2, JOY_BUTTON_A)
+	for d in 3:
+		await _pad_button_261(d, JOY_BUTTON_A)
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive and players[2].alive and rm.lobby_phase() == "playing", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the three-pad match never started (phase %s)" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	players[0].eliminate()
+	await _await_ticks(6)
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("a KO'd pad player got no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	var stage: Node = ghost.get_parent()
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(_make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	stage.add_child(pickup)
+	pickup.global_position = ghost.global_position + Vector2(30.0, 0.0)
+	await _pad_button_261(0, JOY_BUTTON_A)
+	await _await_ticks(3)
+	if pickup.global_position.distance_to(ghost.global_position) > 30.0:
+		failures.append("A on a KO'd pad seat did not grab the pickup beside its ghost")
+	server._handle_text(0, JSON.stringify({"t": "ghost_act"}))
+	await _await_ticks(3)
+	var y0: float = pickup.global_position.y
+	await _await_ticks(20)
+	if pickup.global_position.y <= y0 + 5.0:
+		failures.append("a phone-style ghost_act tap did not drop what the ghost carried")
+	# A living player's ghost_act is nothing.
+	server._handle_text(1, JSON.stringify({"t": "ghost_act"}))
+	await _await_ticks(3)
+	if players[1].ghost_actions != 0:
+		failures.append("a living player queued a ghost action")
 	await _teardown(loop["stage"])
 	return failures
 func _scenario_ghost_cleared_at_round_end_and_never_for_bots() -> Array[String]:

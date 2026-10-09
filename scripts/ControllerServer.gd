@@ -171,6 +171,10 @@ const RELEASE_PACKET_SIZE: int = 9
 ## action presses (Space, L3/R3). A count that moved since the last packet is a
 ## press, so one is not lost between packets. Older packets carry no count.
 const ACTION_PACKET_SIZE: int = 10
+## Issue #660: an Online PC client's frame also carries its raw mouse motion
+## since the last frame, two little-endian int16 (screen px), which only a KO'd
+## seat's ghost reads. Bytes 0-9 are the action frame.
+const MOUSE_PACKET_SIZE: int = 14
 ## Every `kind` `send_buzz()` is sent with, strongest first; the controller
 ## page has a vibration pattern and a flash for each.
 const BUZZ_KINDS: PackedStringArray = ["win", "eliminated", "struck", "hit"]
@@ -712,6 +716,8 @@ func _action_press(slot: int) -> void:
 ## An action throw; a fresh throw starts held, not released: an earlier retract
 ## tap left the toggle on, which would pull the new hook home at once (#513).
 func _try_throw(slot: int) -> bool:
+	if _ghost_action(slot):
+		return true
 	if slot < 0 or slot >= _players.size() or _players[slot] == null \
 			or not _players[slot].try_action_throw():
 		return false
@@ -1368,6 +1374,7 @@ func expire_disconnected_claims() -> void:
 func _drain(slot: int, peer: Variant) -> void:
 	var latest: PackedByteArray = PackedByteArray()
 	var got: bool = false
+	var mouse_px: Vector2 = Vector2.ZERO
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
 		if peer.was_string_packet():
@@ -1376,8 +1383,11 @@ func _drain(slot: int, peer: Variant) -> void:
 			if _take_text_budget(slot) and pkt.size() <= MAX_TEXT_FRAME_BYTES:
 				_handle_text(slot, pkt.get_string_from_utf8())
 			continue
-		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE and pkt.size() != ACTION_PACKET_SIZE:
+		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE and pkt.size() != ACTION_PACKET_SIZE \
+				and pkt.size() != MOUSE_PACKET_SIZE:
 			continue
+		if pkt.size() == MOUSE_PACKET_SIZE:
+			mouse_px += Vector2(pkt.decode_s16(ACTION_PACKET_SIZE), pkt.decode_s16(ACTION_PACKET_SIZE + 2))
 		latest = pkt
 		got = true
 	if not got:
@@ -1386,7 +1396,9 @@ func _drain(slot: int, peer: Variant) -> void:
 	var v: Vector2 = Vector2(latest.decode_float(0), latest.decode_float(4))
 	_smoothers[slot].push(v)
 	_slot_release_remote[slot] = 1 if latest.size() >= RELEASE_PACKET_SIZE and latest[PACKET_SIZE] != 0 else 0
-	if latest.size() == ACTION_PACKET_SIZE:
+	if mouse_px != Vector2.ZERO and slot < _players.size() and _players[slot] != null:
+		_players[slot].push_ghost_mouse(mouse_px)
+	if latest.size() >= ACTION_PACKET_SIZE:
 		var count: int = latest[RELEASE_PACKET_SIZE] & 0x7F
 		var hold: bool = latest[RELEASE_PACKET_SIZE] & 0x80 != 0
 		if _slot_press_seen[slot] != -1 and count != _slot_press_seen[slot]:
@@ -1479,6 +1491,8 @@ func _handle_text(slot: int, text: String) -> void:
 					print("slot %d set match target %d" % [slot, _match_target])
 		"host":
 			_handle_host_command(slot, msg)
+		"ghost_act":
+			_ghost_action(slot) # a KO'd phone's tap (#660); a live player's is nothing
 		"hat":
 			var hat: Variant = msg.get("v")
 			if hat is String:
@@ -2357,6 +2371,14 @@ func _release_host_pc_seat() -> void:
 	_update_mouse_capture()
 	_send_lobby_to_all()
 
+## Issue #660: a KO'd seat's action input is its ghost's one context action
+## (grab / drop a pickup, else boo). True when `slot` is a ghost and took it.
+func _ghost_action(slot: int) -> bool:
+	if slot < 0 or slot >= _players.size() or _players[slot] == null or _players[slot].alive:
+		return false
+	_players[slot].push_ghost_action()
+	return true
+
 ## The seat is gone from under the toggle (a kick, say): forget it.
 func _check_host_pc_seat() -> void:
 	if _host_pc_slot != -1 and (_slot_claimed[_host_pc_slot] != 1 or _slot_peers[_host_pc_slot] != _host_pc_seat):
@@ -2371,6 +2393,8 @@ func host_pc_mouse_motion(relative: Vector2) -> void:
 	var v: Vector2 = _host_mouse.move(relative, HostMouseScript.drag_radius(edge))
 	_slot_last_packet_msec[_host_pc_slot] = Time.get_ticks_msec()
 	_smoothers[_host_pc_slot].push(v)
+	if _players[_host_pc_slot] != null:
+		_players[_host_pc_slot].push_ghost_mouse(relative) # a KO'd seat's ghost follows it 1:1 (#660)
 
 func _input(event: InputEvent) -> void:
 	var pad_button := event as InputEventJoypadButton
@@ -2568,6 +2592,10 @@ func _pad_button_pressed(device: int, button: int) -> void:
 		return
 	# Issue #441: in the lobby the D-pad drives the seat's cosmetics picker (#547: not the bumpers).
 	if slot != -1 and pad_picker_shown(slot) and cosmetics_picker.pad_button(self, slot, button):
+		return
+	# Issue #660: A is a KO'd pad seat's ghost action.
+	if button == JOY_BUTTON_A and slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+			and not _input_gated() and _ghost_action(slot):
 		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:

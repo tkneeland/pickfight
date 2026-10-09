@@ -266,6 +266,8 @@ func _physics_process(_delta: float) -> void:
 var test_pad_left_stick: Vector2 = Vector2.ZERO # #600: the left stick's stand-in
 var test_pad_stick: Variant = null # a Vector2 here stands in for a real pad (headless has none)
 var _pad_driving: bool = false
+## Mouse px since the last input frame, for a KO'd seat's ghost (#660).
+var _mouse_px_pending: Vector2 = Vector2.ZERO
 
 func _pad_input() -> void:
 	var stick := Vector2.ZERO
@@ -574,7 +576,13 @@ func _send_input() -> void:
 	var v: Vector2 = Vector2.ZERO if menu_open else input_vector
 	var released: bool = input_released() and not menu_open
 	var body := PackedByteArray()
-	body.resize(10)
+	# Issue #660: raw mouse motion rides along (two int16 px) for a KO'd seat's ghost.
+	var px := Vector2i(clampi(roundi(_mouse_px_pending.x), -32768, 32767), clampi(roundi(_mouse_px_pending.y), -32768, 32767))
+	_mouse_px_pending = Vector2.ZERO
+	body.resize(14 if px != Vector2i.ZERO else 10)
+	if px != Vector2i.ZERO:
+		body.encode_s16(10, px.x)
+		body.encode_s16(12, px.y)
 	body.encode_float(0, v.x)
 	body.encode_float(4, v.y)
 	body[8] = 1 if released else 0
@@ -584,6 +592,7 @@ func _send_input() -> void:
 
 ## The mouse moved by `relative` pixels while captured (what `_input` calls).
 func mouse_motion(relative: Vector2) -> void:
+	_mouse_px_pending += relative
 	var edge: float = minf(get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y)
 	input_vector = _mouse.move(relative, HostMouseScript.drag_radius(edge))
 

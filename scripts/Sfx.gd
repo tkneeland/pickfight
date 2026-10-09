@@ -158,6 +158,8 @@ const SOUNDS: Dictionary = {
 	"lava_rise": {"files": [
 		"kenney_scifi/lowFrequency_explosion_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},
 	# --- Stage parts (#76) --------------------------------------------------
+	"ghost_boo": {"files": [
+		"kenney_scifi/forceField_001.ogg"], "db": -8.0, "max_sec": 0.6},
 	"bounce_launch": {"files": [
 		"kenney_scifi/forceField_000.ogg",
 		"kenney_scifi/forceField_001.ogg"], "db": -4.0, "max_sec": 0.6},
