@@ -55,7 +55,7 @@ position = Vector2(400, 286)
 size = Vector2(72, 28)
 
 [node name="PlatformLeft" type="StaticBody2D" parent="."]
-position = Vector2(-320, 164)
+position = Vector2(-320, 124)
 
 [node name="PlatformLeftShape" type="CollisionShape2D" parent="PlatformLeft"]
 shape = SubResource("RectangleShape2D_platform")
@@ -65,7 +65,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
 [node name="PlatformRight" type="StaticBody2D" parent="."]
-position = Vector2(320, 200)
+position = Vector2(320, 160)
 
 [node name="PlatformRightShape" type="CollisionShape2D" parent="PlatformRight"]
 shape = SubResource("RectangleShape2D_platform")
@@ -110,12 +110,12 @@ shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). On the two platforms, not the ground between the spawns: the first weapon of a round goes to whoever climbs, not whoever lands.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-320, 116)
+position = Vector2(-320, 76)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(320, 152)
+position = Vector2(320, 112)
 
 ; Crumbling ledge (issue #315): a perch up on the left, clear of every spawn drop line.
 [node name="PerchLedge" parent="." instance=ExtResource("ledge315")]
-position = Vector2(-400, 170)
+position = Vector2(-335, -10)
 size = Vector2(100, 24)
