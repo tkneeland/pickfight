@@ -79,6 +79,54 @@ var _trigger_radius: float = 0.0
 func set_weapon(stats: Resource) -> void:
 	weapon_stats = stats
 
+## Issue #660: a KO'd player's ghost can pick a pickup up and put it down. While
+## carried it is moved by its carrier (no physics fight); once dropped it falls
+## under gravity until it meets terrain, like a thrown thing, and a live player
+## can still collect it on the way.
+const DROP_GRAVITY: float = 1400.0
+const DROP_REST_CLEARANCE: float = 16.0
+## A pickup that never finds ground is freed this far below where it was dropped.
+const DROP_MAX_FALL: float = 4000.0
+var carrier: Node = null
+var _falling: bool = false
+var _fall_speed: float = 0.0
+var _fall_start_y: float = 0.0
+
+func is_carried() -> bool:
+	return carrier != null and is_instance_valid(carrier)
+
+func is_falling() -> bool:
+	return _falling
+
+func carry_by(who: Node) -> void:
+	carrier = who
+	_falling = false
+
+func drop() -> void:
+	carrier = null
+	_falling = true
+	_fall_speed = 0.0
+	_fall_start_y = global_position.y
+
+func _physics_process(delta: float) -> void:
+	if not _falling:
+		return
+	_fall_speed += DROP_GRAVITY * delta
+	var from: Vector2 = global_position
+	var to: Vector2 = from + Vector2(0.0, _fall_speed * delta)
+	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD)
+	for body: Node in get_tree().get_nodes_in_group("players"): # bodies share the world layer; land on terrain only
+		if body is CollisionObject2D:
+			query.exclude.append((body as CollisionObject2D).get_rid())
+	var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		global_position = (hit["position"] as Vector2) - Vector2(0.0, DROP_REST_CLEARANCE)
+		_falling = false
+		return
+	global_position = to
+	if to.y - _fall_start_y > DROP_MAX_FALL:
+		queue_free()
+
 func _ready() -> void:
 	add_to_group("pickups")
 	collision_layer = 0

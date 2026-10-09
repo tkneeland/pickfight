@@ -112,6 +112,7 @@
     font-weight: 800;
     pointer-events: none;
     opacity: 0.9;
+    white-space: pre-line;
   }
   /* Issue #244: the laptop-mouse affordance, only ever shown for a fine
      pointer (a desktop browser) while this player is in play. */
@@ -795,6 +796,7 @@
       "STATE_NEXT_ROUND_IN": "Next round in {0}…",
       "STATE_WAITING_ROUND": "Waiting for the next round",
       "STATE_ELIMINATED": "Eliminated — next round soon",
+      "STATE_GHOST_HINT": "Tap to grab a weapon or boo",
       "VICTORY_TEAM_WINS": "Match over — {0} team wins",
       "VICTORY_YOU_WIN_SUFFIX": " — you win!",
       "VICTORY_YOU_WIN": "Match over — you win!",
@@ -1095,7 +1097,16 @@
   // the drag or releasing it when the stray finger comes up.
   var activePointer = null;
 
+  // Issue #660: a quick, still tap while knocked out is the ghost's one action
+  // (grab / drop a pickup, else boo); the host ignores it from a live player.
+  var GHOST_TAP_MAX_MS = 250, GHOST_TAP_MAX_PX = 14;
+  var tapStart = null;
+  function knockedOut() {
+    return inPlay() && (lobby.alive || []).indexOf(slot) === -1;
+  }
+
   function begin(e) {
+    tapStart = { t: Date.now(), x: e.clientX, y: e.clientY };
     activePointer = e.pointerId;
     anchor = { x: e.clientX, y: e.clientY };
     point = { x: e.clientX, y: e.clientY };
@@ -1123,7 +1134,12 @@
   }
 
   function releaseIfActive(e) {
-    if (e.pointerId === activePointer) { release(); }
+    if (e.pointerId === activePointer && e.type === "pointerup" && tapStart && knockedOut() &&
+        Date.now() - tapStart.t <= GHOST_TAP_MAX_MS &&
+        Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) <= GHOST_TAP_MAX_PX) {
+      sendText({ t: "ghost_act" });
+    }
+    if (e.pointerId === activePointer) { tapStart = null; release(); }
   }
 
   // ---- laptop mouse (issue #244) ---------------------------------------------
@@ -1383,7 +1399,7 @@
       } else if (!inRound) {
         text = t("STATE_WAITING_ROUND");
       } else if (!alive) {
-        text = t("STATE_ELIMINATED");
+        text = t("STATE_ELIMINATED") + "\n" + t("STATE_GHOST_HINT");
       }
     }
     stateEl.textContent = text;

@@ -416,6 +416,34 @@ func _rig_is_live() -> bool:
 ## divide-by-zero packet) are rejected as `Vector2.ZERO`: `limit_length` lets
 ## NaN through, and one NaN reaching a force call destroys the RigidBody2D for
 ## the rest of the session.
+## Issue #660: what a KO'd seat's controller says to its ghost. A mouse's raw
+## motion (screen px) and queued action presses wait here, written by the
+## input routing (ControllerServer) and drained by the Ghost each tick. Ignored
+## while alive: only a ghost listens.
+const GHOST_MAX_QUEUED_ACTIONS: int = 3
+var ghost_mouse_px: Vector2 = Vector2.ZERO
+var ghost_actions: int = 0
+
+func push_ghost_mouse(px: Vector2) -> void:
+	if alive or not is_finite(px.x) or not is_finite(px.y):
+		return
+	ghost_mouse_px += px
+
+func push_ghost_action() -> void:
+	if alive:
+		return
+	ghost_actions = mini(ghost_actions + 1, GHOST_MAX_QUEUED_ACTIONS)
+
+func take_ghost_mouse() -> Vector2:
+	var px: Vector2 = ghost_mouse_px
+	ghost_mouse_px = Vector2.ZERO
+	return px
+
+func take_ghost_actions() -> int:
+	var n: int = ghost_actions
+	ghost_actions = 0
+	return n
+
 func set_input_vector(v: Vector2) -> void:
 	if not is_finite(v.x) or not is_finite(v.y):
 		input_vector = Vector2.ZERO
