@@ -33631,7 +33631,7 @@ func _scenario_bot_four_bots_end_a_king_of_the_hill_round_on_reactor_by_hold_tim
 	elif seen_winner[0] < 0 and seen_hold[0] < 9.9:
 		failures.append("the Reactor round ended without a hold win (no hill winner seen; most hold time seen %.1f s)" % seen_hold[0])
 	else:
-		print("      Reactor round ended by hold time (a rider banked %.1f s of 10 s)" % seen_hold[0])
+		print("      Reactor round ended by hold time (a rider banked %.1f s of 15 s)" % seen_hold[0])
 	await _teardown(stage)
 	return failures
 # --- Lobby-only join corner, host-pad Start pauses (#430) --------------------
@@ -34643,11 +34643,13 @@ func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[Stri
 		failures.append("the host refused King of the Hill")
 	var client: Node = await _rc_client_241(rig)
 	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		rig["server"].set_game_mode("")
 		await _rc_close_241(rig)
 		return failures
 	var hill: Node = rm.game_mode_node()
 	if hill == null or rm.active_game_mode_id() != "king_of_the_hill":
 		failures.append("the host is not playing King of the Hill ('%s')" % rm.active_game_mode_id())
+		rig["server"].set_game_mode("")
 		await _rc_close_241(rig)
 		return failures
 	var holder: int = int(rm.get("_in_round")[0])
@@ -34671,6 +34673,7 @@ func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[Stri
 	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": "1:30"}}
 	if client.mode_text() != "1:30  Ann x3  Bo x1":
 		failures.append("Stock line reads '%s'" % client.mode_text())
+	rig["server"].set_game_mode("")
 	await _rc_close_241(rig)
 	return failures
 ## The match result, the podium and the way back to the menu on the client.
