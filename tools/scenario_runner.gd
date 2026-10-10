@@ -10603,7 +10603,7 @@ func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
 		player.set_input_vector(Vector2.UP)
 		var launch_y: float = NAN
 		var peak: float = INF
-		for tick in PAD_WATCH_TICKS:
+		for tick in PAD_WATCH_TICKS * 3:  # an open umbrella drifts down slowly, so give its drop time too (#666)
 			await physics_frame
 			if is_nan(launch_y):
 				if pad.launch_count() > 0:
