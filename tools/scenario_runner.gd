@@ -207,6 +207,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"spawn_protection_blocks_damage_then_expires",
 	"roster_heads_do_not_clip_platform_in_play",
 	"trapped_head_phases_home_after_release",
+	"wedged_head_swung_into_wall_frees_on_release",
+	"wedged_head_frees_after_release_for_every_pickup_weapon",
+	"wedged_head_phases_free_with_input_held",
 	"juice_sparks_on_clash_capped",
 	"juice_dust_on_hard_landing_only",
 	"juice_trail_capped_and_frees",
@@ -230,6 +233,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kill_feed_and_awards_fit_eight_long_names",
 	"every_stage_has_eight_safe_spawns",
 	"every_stage_terrain_spans_the_view",
+	"stage_platforms_leave_headroom_over_the_floor",
 	"phone_hat_choice_reaches_player",
 	"phone_colour_first_come_first_served",
 	"name_tags_on_for_every_living_player_all_round",
@@ -1694,6 +1698,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_clip_platform_in_play()
 		"trapped_head_phases_home_after_release":
 			return await _scenario_trapped_head_phases_home_after_release()
+		"wedged_head_swung_into_wall_frees_on_release":
+			return await _scenario_wedged_head_swung_into_wall_frees_on_release()
+		"wedged_head_frees_after_release_for_every_pickup_weapon":
+			return await _scenario_wedged_head_frees_after_release_for_every_pickup_weapon()
+		"wedged_head_phases_free_with_input_held":
+			return await _scenario_wedged_head_phases_free_with_input_held()
 		"juice_sparks_on_clash_capped":
 			return await _scenario_juice_sparks_on_clash_capped()
 		"juice_dust_on_hard_landing_only":
@@ -1740,6 +1750,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_eight_safe_spawns()
 		"every_stage_terrain_spans_the_view":
 			return await _scenario_every_stage_terrain_spans_the_view()
+		"stage_platforms_leave_headroom_over_the_floor":
+			return await _scenario_stage_platforms_leave_headroom_over_the_floor()
 		"phone_hat_choice_reaches_player":
 			return await _scenario_phone_hat_choice_reaches_player()
 		"phone_colour_first_come_first_served":
@@ -9827,6 +9839,10 @@ func _step_platform_tunnel_lane(lane: Dictionary, breaches: Dictionary) -> void:
 	elif tick > go_at and tick <= done_at and player != null:
 		if is_instance_valid(player) and player.alive:
 			var crossed: String = _update_platform_sides(player, lane["slab"], lane["sides"])
+			# A ghost head (#115, #664) goes through terrain on purpose.
+			if player.is_head_phased():
+				lane["sides"] = {}
+				crossed = ""
 			if crossed != "":
 				var weapon: String = trial["weapon"]
 				if not breaches.has(weapon):
@@ -10606,7 +10622,7 @@ func _scenario_bounce_pad_launch_same_for_every_weapon() -> Array[String]:
 		player.set_input_vector(Vector2.UP)
 		var launch_y: float = NAN
 		var peak: float = INF
-		for tick in PAD_WATCH_TICKS:
+		for tick in PAD_WATCH_TICKS * 3:  # an open umbrella drifts down slowly, so give its drop time too (#666)
 			await physics_frame
 			if is_nan(launch_y):
 				if pad.launch_count() > 0:
@@ -14848,6 +14864,112 @@ func _covered_width(spans: Array[Vector2]) -> float:
 	if end > start:
 		total += end - start
 	return total
+# --- Headroom under floating platforms (issue #665) -----------------------------
+## Issue #665: the least gap Flatlands (#658) leaves between its floor top and
+## a platform's underside: the right platform, centre y 160, underside 172,
+## over a floor top at 300. A player with a long weapon passes under that.
+const PLATFORM_HEADROOM_MIN: float = 128.0
+## A floor only counts when this much of it lies under the platform (a body's width).
+const HEADROOM_MIN_OVERLAP: float = 40.0
+## A gap this small is a platform resting on its support, not floating over it.
+const HEADROOM_ATTACHED_GAP: float = 2.0
+## Static solid rects of a stage in global space: bodies that are exactly a
+## StaticBody2D (not the moving AnimatableBody2D parts), shape by shape.
+func _collect_static_rects(node: Node, rects: Array[Dictionary]) -> void:
+	for child: Node in node.get_children():
+		var body: Node = child.get_parent()
+		if body.get_class() == "StaticBody2D":
+			var rect: Rect2 = Rect2()
+			var found: bool = false
+			if child is CollisionShape2D and not child.disabled and child.shape != null:
+				rect = (child as CollisionShape2D).global_transform * (child as CollisionShape2D).shape.get_rect()
+				found = true
+			elif child is CollisionPolygon2D and not child.disabled:
+				var points: PackedVector2Array = (child as CollisionPolygon2D).global_transform * (child as CollisionPolygon2D).polygon
+				if not points.is_empty():
+					rect = Rect2(points[0], Vector2.ZERO)
+					for point: Vector2 in points:
+						rect = rect.expand(point)
+					found = true
+			if found:
+				rects.append({"rect": rect, "node": str(body.name)})
+		_collect_static_rects(child, rects)
+## Issue #665: the swept envelope of every moving or rotating platform at its
+## authored position (read before the first physics tick): the x range it ever
+## covers and its underside at the lowest point of its patrol, tilt or spin.
+func _collect_moving_envelopes(node: Node, rects: Array[Dictionary]) -> void:
+	for child: Node in node.get_children():
+		if child is AnimatableBody2D:
+			var at: Vector2 = (child as AnimatableBody2D).global_position
+			var size: Vector2 = child.get("size")
+			if child.get("travel") != null:
+				var offsets: Array[Vector2] = [Vector2.ZERO, child.get("travel")]
+				if not (child.get("loop_points") as PackedVector2Array).is_empty():
+					offsets = [Vector2.ZERO]
+					for point: Vector2 in child.get("loop_points"):
+						offsets.append(point)
+				var low: float = -INF
+				var left: float = INF
+				var right: float = -INF
+				for o: Vector2 in offsets:
+					low = maxf(low, at.y + o.y + size.y / 2.0)
+					left = minf(left, at.x + o.x - size.x / 2.0)
+					right = maxf(right, at.x + o.x + size.x / 2.0)
+				rects.append({"rect": Rect2(left, low - size.y, right - left, size.y), "node": str(child.name)})
+			elif child.get("max_tilt_deg") != null:
+				var reach: float = size.length() / 2.0
+				if int(child.get("mode")) == 1:
+					var tilt: float = deg_to_rad(float(child.get("max_tilt_deg")))
+					reach = size.x / 2.0 * sin(tilt) + size.y / 2.0 * cos(tilt)
+				rects.append({"rect": Rect2(at.x - size.x / 2.0, at.y + reach - size.y, size.x, size.y), "node": str(child.name)})
+		_collect_moving_envelopes(child, rects)
+## Issue #665: every static platform with walkable floor beneath it leaves at
+## least PLATFORM_HEADROOM_MIN between that floor's top and its own underside,
+## so nobody gets stuck travelling under it. The floor is the nearest static
+## solid below that shares HEADROOM_MIN_OVERLAP of x with the platform; a
+## platform resting on its support (gap under HEADROOM_ATTACHED_GAP) and one
+## with nothing beneath it are not floating over floor. Offenders are listed
+## by stage and node. Floors are static solids only (a ledge or lower platform
+## a player can stand on counts, so stacked tiers are measured too); moving and
+## rotating platforms are measured as platforms at the lowest point of their
+## sweep (`_collect_moving_envelopes`) but are never taken as floor.
+func _scenario_stage_platforms_leave_headroom_over_the_floor() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in STAGE_PATHS:
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		var moving: Array[Dictionary] = []
+		_collect_moving_envelopes(instance, moving)
+		await _await_ticks(2)
+		var rects: Array[Dictionary] = []
+		_collect_static_rects(instance, rects)
+		var checked: int = 0
+		var candidates: Array[Dictionary] = rects.duplicate()
+		candidates.append_array(moving)
+		for p: Dictionary in candidates:
+			var plat: Rect2 = p["rect"]
+			var best_gap: float = INF
+			for f: Dictionary in rects:
+				var floor_rect: Rect2 = f["rect"]
+				if f["node"] == p["node"] and floor_rect == plat:
+					continue
+				var overlap: float = minf(plat.end.x, floor_rect.end.x) - maxf(plat.position.x, floor_rect.position.x)
+				if overlap < HEADROOM_MIN_OVERLAP or floor_rect.position.y < plat.end.y - HEADROOM_ATTACHED_GAP:
+					continue
+				best_gap = minf(best_gap, floor_rect.position.y - plat.end.y)
+			if best_gap == INF or best_gap <= HEADROOM_ATTACHED_GAP:
+				continue
+			checked += 1
+			if best_gap < PLATFORM_HEADROOM_MIN:
+				failures.append("%s %s: %.0f px under its underside to the floor, need %.0f (x %.0f..%.0f, top %.0f, underside %.0f)" % [
+					path.get_file(), p["node"], best_gap, PLATFORM_HEADROOM_MIN,
+					plat.position.x, plat.end.x, plat.position.y, plat.end.y])
+		print("      %s: %d floating platform(s) checked" % [path.get_file(), checked])
+		await _teardown(stage)
+	return failures
 # --- Hats, colour choice and always-on name tags (issue #151) -----------------
 const HatScript := preload("res://scripts/Hat.gd")
 ## Spacing of the row of frozen fighters the tag-stacking check lines up: a
@@ -25768,15 +25890,16 @@ const PICKAXE_STARTER_PATH: String = "res://resources/pickaxe.tres"
 const UMBRELLA_FALL_TICKS: int = 90
 ## Falls for UMBRELLA_FALL_TICKS with `path` held, aim as given, and returns
 ## the fastest downward speed seen.
-func _umbrella_fall_speed(path: String, aim: Vector2) -> float:
+func _umbrella_fall_speed(path: String, aim: Vector2, skip_ticks: int = 0) -> float:
 	var stage: Node2D = _new_empty_stage()
 	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
 	await _equip(player, path)
 	player.set_input_vector(aim)
 	var fastest: float = 0.0
-	for _t in UMBRELLA_FALL_TICKS:
+	for t in UMBRELLA_FALL_TICKS:
 		await physics_frame
-		fastest = maxf(fastest, player.linear_velocity.y)
+		if t >= skip_ticks:
+			fastest = maxf(fastest, player.linear_velocity.y)
 	await _teardown(stage, false)
 	return fastest
 ## Falling with the umbrella overhead is slower than with the pickaxe held the
@@ -25791,6 +25914,12 @@ func _scenario_umbrella_overhead_slows_the_fall() -> Array[String]:
 		failures.append("an open umbrella fell at %.0f px/s, not clearly slower than the pickaxe's %.0f" % [open_speed, pickaxe_speed])
 	if open_speed > closed_speed * 0.6:
 		failures.append("an open umbrella fell at %.0f px/s, not clearly slower than closed (%.0f)" % [open_speed, closed_speed])
+	# #666: once open, the canopy holds a steady fall to about half its old
+	# ~167 px/s (the cap plus one tick of gravity).
+	var steady: float = await _umbrella_fall_speed(UMBRELLA_PATH, Vector2.UP, 40)
+	print("      steady fall under the open umbrella %.0f px/s" % steady)
+	if steady > 95.0:
+		failures.append("an open umbrella settled at %.0f px/s, expected about 85 or less (#666)" % steady)
 	_scenario_completed = true
 	return failures
 ## How far a steady sideways wind carries `path`'s holder in a fall, aim up.
@@ -30872,7 +31001,6 @@ func _scenario_per_mode_stage_lists_persist_separately_647() -> Array[String]:
 	shared.disabled_stages_by_mode = {}
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: Stock with one stage on plays only it, round after round.
 func _scenario_stock_with_one_stage_on_always_plays_it_647() -> Array[String]:
 	var failures: Array[String] = []
@@ -30895,7 +31023,6 @@ func _scenario_stock_with_one_stage_on_always_plays_it_647() -> Array[String]:
 		await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: Stock with several stages on plays one of them, held all match,
 ## and over matches draws from each of them.
 func _scenario_stock_with_several_stages_on_picks_one_of_them_647() -> Array[String]:
@@ -30920,7 +31047,6 @@ func _scenario_stock_with_several_stages_on_picks_one_of_them_647() -> Array[Str
 		failures.append("12 matches drew %s; expected both StageA and StageC" % [seen.keys()])
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: Soccer and CTF draw from their own on stages only, and fall back
 ## to all of the mode's stages when every one is off.
 func _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647() -> Array[String]:
@@ -30960,7 +31086,6 @@ func _scenario_soccer_and_ctf_draw_only_their_own_on_stages_647() -> Array[Strin
 			failures.append("%s dealt %s with %s on" % [mode_id, got, want])
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: Classic with every stage off falls back to Classic's own pool,
 ## never a Soccer or Capture the Flag stage.
 func _scenario_classic_all_off_never_deals_a_goal_or_flag_stage_647() -> Array[String]:
@@ -30988,7 +31113,6 @@ func _scenario_classic_all_off_never_deals_a_goal_or_flag_stage_647() -> Array[S
 			break
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: All off reaches zero on, in every mode including Stock, the
 ## lobby state says so, and a round still draws from every stage.
 func _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647() -> Array[String]:
@@ -31032,7 +31156,6 @@ func _scenario_stages_all_off_reaches_zero_in_the_lobby_state_647() -> Array[Str
 	shared.persist = saved_persist
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: the page's modifier and weapon switches and the stage messages
 ## act only when the host sends them.
 func _scenario_stages_and_rules_messages_come_only_from_the_host_647() -> Array[String]:
@@ -31086,7 +31209,6 @@ func _scenario_stages_and_rules_messages_come_only_from_the_host_647() -> Array[
 	shared.persist = saved_persist
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: the controller page's Stages & Rules screen replaces the old
 ## Stock grid, sends the four messages and gates Done on a stage being on.
 func _scenario_controller_page_has_the_stages_and_rules_screen_647() -> Array[String]:
@@ -31112,7 +31234,6 @@ func _scenario_controller_page_has_the_stages_and_rules_screen_647() -> Array[St
 		failures.append("the summary line is not a plain line")
 	_scenario_completed = true
 	return failures
-
 ## Issue #647: a config saved before per-mode lists seeds every general mode
 ## from the old global switches, and the old Stock pick becomes "only that on".
 func _scenario_old_stage_config_migrates_to_per_mode_lists_647() -> Array[String]:
@@ -31149,7 +31270,6 @@ func _scenario_old_stage_config_migrates_to_per_mode_lists_647() -> Array[String
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	_scenario_completed = true
 	return failures
-
 ## Issue #367: the catalogue as {key: English}, read off translations/strings.csv.
 func _i18n_catalogue_367() -> Dictionary:
 	var out: Dictionary = {}
@@ -37822,7 +37942,6 @@ func _scenario_gamepad_identical_pad_cannot_take_held_seat_while_twin_connected(
 		failures.append("the original pad did not reclaim its seat on the same index (slot %d, wanted %d)" % [server.pad_slot(2), slot])
 	await _teardown(rig["stage"])
 	return failures
-
 ## Issue #521: in Stock, kicking the last opponent while they wait to respawn
 ## handed the survivor a point (breaking #193): the kicked player still counted
 ## as standing until the respawn timer ran out. The kick cancels the respawn.
@@ -37931,7 +38050,6 @@ func _scenario_own_hazard_strike_buzzes_the_victim_once() -> Array[String]:
 		failures.append("a hit on someone else should buzz both phones: %s" % [rig["roster"].buzzes])
 	await _teardown(rig["stage"])
 	return failures
-
 ## Stands in for the retired `{"t":"solo"}` phone message (#509) in the older
 ## bot scenarios: on, the host's counter fills the lobby to SOLO_PLAYERS and
 ## the host is readied; off, every bot goes.
@@ -38025,8 +38143,6 @@ func _scenario_controller_page_refused_4003_is_terminal_509() -> Array[String]:
 		failures.append("the refused branch comes after the reconnect timer")
 	_scenario_completed = true
 	return failures
-
-
 # Issue #516: a bullet that lands after its shooter swapped weapons is logged
 # against the weapon that fired it.
 func _scenario_combat_in_flight_shot_credited_to_firing_weapon() -> Array[String]:
@@ -38049,7 +38165,6 @@ func _scenario_combat_in_flight_shot_credited_to_firing_weapon() -> Array[String
 		failures.append("hit_weapon_id leaked past the emit: %s" % players[0].hit_weapon_id)
 	await _teardown(rig["stage"])
 	return failures
-
 # Issue #516: in Sudden Death the killing hit is reported lethal even though the
 # mode eliminates the victim after the strike is emitted.
 func _scenario_combat_sudden_death_hit_reported_lethal() -> Array[String]:
@@ -38074,7 +38189,6 @@ func _scenario_combat_sudden_death_hit_reported_lethal() -> Array[String]:
 		failures.append("the round manager never recorded the lethal point")
 	await _teardown(rig["stage"])
 	return failures
-
 ## Issue #517: casting the fishing rod asks for its own cast sound, not the
 ## boomstick's gunshot.
 func _scenario_fishing_rod_cast_has_its_own_sound_not_the_gunshot() -> Array[String]:
@@ -38154,7 +38268,6 @@ func _scenario_pogo_state_resets_when_a_round_starts() -> Array[String]:
 		failures.append("pogo stomp lock carried into the new round")
 	await _teardown(stage)
 	return failures
-
 # --- Shield hitbox under head-size modifiers (issue #515) ----------------------
 ## The shield collides as `head_polygon`; Big Heads and Tiny Weapons must scale
 ## it with the art, and undoing must restore it.
@@ -38284,8 +38397,6 @@ func _scenario_kick_never_removes_the_host_pc_seat_545() -> Array[String]:
 		failures.append("the host PC seat is gone after the kick")
 	await _host_picker_free_441(rig)
 	return failures
-
-
 # --- Shared UI theme and fonts (#541) ---------------------------------------------
 const UiThemeScript541 := preload("res://scripts/UiTheme.gd")
 func _scenario_ui_theme_loads_with_bundled_fonts() -> Array[String]:
@@ -38329,7 +38440,6 @@ func _scenario_ui_theme_loads_with_bundled_fonts() -> Array[String]:
 	label.queue_free()
 	_scenario_completed = true
 	return failures
-
 # --- Per-mode match targets (issue #544) ---------------------------------------
 func _mode_targets_reset_544() -> void:
 	var settings: RefCounted = StockSettingsScript.shared()
@@ -38488,7 +38598,6 @@ func _scenario_mode_targets_reach_the_round_and_the_remote_hud_544() -> Array[St
 	await _rc_close_241(client_rig)
 	_mode_targets_reset_544()
 	return failures
-
 ## #460: the PC join screen pre-fills the last name used, joining saves it, and
 ## an empty or junk name falls back to the default. Runs on a temp settings
 ## file, never the owner's `user://remote_client.cfg` (#195).
@@ -38535,7 +38644,6 @@ func _scenario_remote_client_remembers_name_460() -> Array[String]:
 	DirAccess.remove_absolute(temp_path)
 	_scenario_completed = true
 	return failures
-
 ## #550: with the Ready button focused (after a click), pad A and Space reach it
 ## as ui_accept too; each must act exactly once (A flips Ready once, Space not at all).
 func _scenario_remote_ready_focused_pad_a_and_space_act_once_550() -> Array[String]:
@@ -38592,7 +38700,6 @@ func _scenario_remote_ready_focused_pad_a_and_space_act_once_550() -> Array[Stri
 	await process_frame
 	_scenario_completed = true
 	return failures
-
 ## #550: a lobby message in flight when Ready is clicked must not redraw it
 ## unpressed; the host's echo (or a lapse) restores mirroring.
 func _scenario_remote_ready_click_survives_stale_lobby_550() -> Array[String]:
@@ -38619,7 +38726,6 @@ func _scenario_remote_ready_click_survives_stale_lobby_550() -> Array[String]:
 	await process_frame
 	_scenario_completed = true
 	return failures
-
 # --- Issue #556: Stock sudden death always ends --------------------------------
 const SD556_ROCK_SCRIPT: String = "res://scripts/FallingRock.gd"
 ## A tied two-player Stock round pushed into its overtime, both players
@@ -38781,7 +38887,6 @@ func _scenario_stock_sudden_death_leaves_no_rocks_behind_556() -> Array[String]:
 		failures.append("the mode still held rocks after the round (%d live)" % mode.live_rock_count())
 	await _stock_finish(rig)
 	return failures
-
 ## Issue #551: on a remote seat a stick click retracts (toggle on), and a later
 ## shoulder-button throw must start held, not pulled home by that leftover toggle.
 class _FakePeer551 extends RefCounted:
@@ -38847,7 +38952,6 @@ func _scenario_remote_shoulder_throw_clears_retract_toggle_551() -> Array[String
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _teardown(rig["stage"])
 	return failures
-
 ## #552: Online to Solo must not leave remote seats (connected or held after a
 ## disconnect, #459) claimed in the Solo lobby, where they would eat bot capacity.
 func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Array[String]:
@@ -38878,7 +38982,6 @@ func _scenario_online_to_solo_drops_connected_and_held_remote_seats_552() -> Arr
 		failures.append("Solo seated %d bots, wanted 3" % server.bot_director.bot_count())
 	await _online_close_239(rig)
 	return failures
-
 ## Issue #548: the in-match HUD and the victory screen wear the shared theme
 ## (#507): ticker entries are plates with an ink outline and a hard shadow, the
 ## heading text is Lilita One, the victory ground is the indigo, and the text
@@ -38920,7 +39023,6 @@ func _scenario_hud_uses_theme_look_548() -> Array[String]:
 	screen.queue_free()
 	_scenario_completed = true
 	return failures
-
 ## Issue #546: the restyled title screen (cards, key badges, logo, footer)
 ## keeps every visible control inside the window at 1600x900, 1920x1080 and
 ## 1280x800, the three cards sit side by side without overlapping, each card
@@ -38976,8 +39078,6 @@ func _scenario_title_screen_restyle_fits_every_resolution_546() -> Array[String]
 		failures.append("the O key gave kind '%s', title showing %s" % [server.match_kind(), screen.title_visible()])
 	await _kind_close_435(rig)
 	return failures
-
-
 ## #569: a rock that lands on an open umbrella's canopy face is reduced like any
 ## other hit (the part used to call take_damage without a hit point).
 func _scenario_umbrella_canopy_reduces_a_falling_rock_569() -> Array[String]:
@@ -39008,7 +39108,6 @@ func _scenario_umbrella_canopy_reduces_a_falling_rock_569() -> Array[String]:
 		failures.append("a rock on the canopy face took %.1f of 40, expected it reduced" % player.damage)
 	await _teardown(stage)
 	return failures
-
 ## #569: the same for a meteor.
 func _scenario_umbrella_canopy_reduces_a_meteor_569() -> Array[String]:
 	var failures: Array[String] = []
@@ -39031,7 +39130,6 @@ func _scenario_umbrella_canopy_reduces_a_meteor_569() -> Array[String]:
 		failures.append("a meteor on the canopy face took %.1f of 40, expected it reduced" % player.damage)
 	await _teardown(stage)
 	return failures
-
 ## #569: in Sudden Death a hit on the shield face or open canopy face does not
 ## eliminate; an unblocked hit still does, and is reported lethal.
 func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
@@ -39102,8 +39200,6 @@ func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> A
 			failures.append("the page has no label for target_kind '%s'" % kind)
 	_scenario_completed = true
 	return failures
-
-
 # --- Lobby restyle (#547) ----------------------------------------------------------
 ## Every visible control of the lobby, as (path, rect) pairs outside `window` once the
 ## canvas is scaled into it: the screen's own check that nothing clips.
@@ -39443,7 +39539,6 @@ func _scenario_lobby_own_card_opens_your_look_and_solo_badge_readies_547() -> Ar
 		failures.append("a bot's pill takes clicks")
 	await _kind_close_435(rig)
 	return failures
-
 ## Issue #570: a bullet already fired keeps flying when its shooter is rung out
 ## and still hits, credited to the shooter and to the weapon that fired it.
 func _scenario_bullet_outlives_eliminated_shooter_570() -> Array[String]:
@@ -39481,7 +39576,6 @@ func _scenario_bullet_outlives_eliminated_shooter_570() -> Array[String]:
 		failures.append("the hit was credited as %s, expected one strike_landed on the victim with weapon boomstick" % [credited])
 	await _teardown(stage)
 	return failures
-
 ## Issue #570: a shooter leaving the round (kick, quit, round end) takes its
 ## bullets with it, and `clear_shots()` reaches a shooter who is already dead.
 func _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570() -> Array[String]:
@@ -39522,7 +39616,6 @@ func _scenario_shots_cleared_on_leave_round_and_dead_shooter_clear_570() -> Arra
 		failures.append("clear_shots() left a dead shooter's bullet flying")
 	await _teardown(stage)
 	return failures
-
 ## Issue #570: when the shooter's ringout ends the round, its bullet goes with
 ## the round rather than flying into the next one.
 func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
@@ -39563,7 +39656,6 @@ func _scenario_round_end_clears_dead_shooters_bullet_570() -> Array[String]:
 		failures.append("the dead shooter's bullet survived the end of the round")
 	await _teardown(stage)
 	return failures
-
 ## Issue #579: a remote seat is not dropped by a 3 s stall (phones keep 2 s); past
 ## the remote timeout the host closes it and the client rejoins its held seat.
 func _scenario_remote_seat_survives_a_3s_stall_and_rejoins_after_input_timeout_579() -> Array[String]:
@@ -39663,7 +39755,6 @@ func _scenario_hud_and_full_frame_resent_after_host_relink_579() -> Array[String
 		failures.append("the HUD change made during the relink never reached the client: %s (online %s, client state %d '%s')" % [client.hud, server.is_online(), client.state, client.status_text])
 	await _rc_close_241(rig)
 	return failures
-
 ## Issue #580: waits up to `msec` for `cond` while polling every client.
 func _relay580_wait(clients: Array, cond: Callable, msec: int = 3000) -> bool:
 	var deadline: int = Time.get_ticks_msec() + msec
@@ -39674,7 +39765,6 @@ func _relay580_wait(clients: Array, cond: Callable, msec: int = 3000) -> bool:
 			return true
 		await process_frame
 	return false
-
 func _scenario_relay_drops_oversized_client_frames_580() -> Array[String]:
 	var failures: Array[String] = []
 	var room: Dictionary = await _relay_room(1, failures)
@@ -39702,7 +39792,6 @@ func _scenario_relay_drops_oversized_client_frames_580() -> Array[String]:
 	_relay_stop(room["relay"], clients)
 	_scenario_completed = true
 	return failures
-
 func _scenario_relay_host_can_drop_a_peer_and_free_its_slot_580() -> Array[String]:
 	var failures: Array[String] = []
 	var room: Dictionary = await _relay_room(2, failures)
@@ -39738,7 +39827,6 @@ func _scenario_relay_host_can_drop_a_peer_and_free_its_slot_580() -> Array[Strin
 	_relay_stop(room["relay"], clients)
 	_scenario_completed = true
 	return failures
-
 func _scenario_relay_caps_client_seats_per_ip_580() -> Array[String]:
 	var failures: Array[String] = []
 	var room: Dictionary = await _relay_room(0, failures)
@@ -39766,7 +39854,6 @@ func _scenario_relay_caps_client_seats_per_ip_580() -> Array[String]:
 	_relay_stop(relay, clients)
 	_scenario_completed = true
 	return failures
-
 func _scenario_relay_reclaim_beats_half_dead_host_socket_580() -> Array[String]:
 	var failures: Array[String] = []
 	var relay: Node = _relay_start()
@@ -39807,7 +39894,6 @@ func _scenario_relay_reclaim_beats_half_dead_host_socket_580() -> Array[String]:
 	_relay_stop(relay, clients)
 	_scenario_completed = true
 	return failures
-
 func _scenario_relay_proxy_protocol_supplies_real_client_ip_580() -> Array[String]:
 	var failures: Array[String] = []
 	var parse: Script = preload("res://relay/Relay.gd")
@@ -39865,7 +39951,6 @@ func _scenario_relay_proxy_protocol_supplies_real_client_ip_580() -> Array[Strin
 	relay.queue_free()
 	_scenario_completed = true
 	return failures
-
 func _scenario_remote_seat_close_drops_relay_peer_580() -> Array[String]:
 	var failures: Array[String] = []
 	var relay: Node = _relay_start()
@@ -39904,7 +39989,6 @@ func _scenario_remote_seat_close_drops_relay_peer_580() -> Array[String]:
 	_relay_stop(relay, clients)
 	_scenario_completed = true
 	return failures
-
 ## #578: in an Online match a remote seat is never host and its `host` frames
 ## are ignored, even when it joined before any phone; a phone seat still hosts.
 func _scenario_online_remote_seat_never_hosts_578() -> Array[String]:
@@ -39934,7 +40018,6 @@ func _scenario_online_remote_seat_never_hosts_578() -> Array[String]:
 		failures.append("the phone seat is not host after joining behind a remote (host_slot=%d)" % server.host_slot())
 	await _online_close_239(rig)
 	return failures
-
 ## #589: the controller page links its fonts by URL; the host serves exactly the
 ## two allowlisted woff2 files with the right type and a cache header, and
 ## nothing else under /fonts/ (no traversal).
@@ -39993,7 +40076,6 @@ func _http_get_589(port: int, path: String) -> Dictionary:
 	out["status"] = int(out["head"].get_slice(" ", 1))
 	out["body"] = raw.slice(split + 4)
 	return out
-
 ## Issue #593: kicking the last opposing players while they wait to respawn in
 ## Teams Soccer / CTF handed the other team the round (breaking #193/#521).
 func _scenario_kick_mid_respawn_scores_nobody_593(soccer: bool) -> Array[String]:
@@ -40027,8 +40109,6 @@ func _scenario_kick_mid_respawn_scores_nobody_593(soccer: bool) -> Array[String]
 		failures.append("kicking the last opponents mid-respawn scored: %d/%d, wins %s" % [rm.score_of(0), rm.score_of(2), wins])
 	await _teardown(rig["stage"])
 	return failures
-
-
 ## Issue #581: a phone refused (4003) on a Couch to Online to Couch round trip
 ## must rejoin without a reload. The page keeps a slow retry, says it is waiting
 ## for Couch, and forgets the refusal once the host hands it a slot again.
@@ -40054,7 +40134,6 @@ func _scenario_controller_page_refused_phone_rejoins_slowly_581() -> Array[Strin
 		failures.append("the refusal text does not say it is waiting for Couch")
 	_scenario_completed = true
 	return failures
-
 ## Issue #595: a Stock timeout eliminates the losers, which is a score, not a KO.
 func _scenario_stock_timeout_losers_are_not_counted_as_kos_595() -> Array[String]:
 	var failures: Array[String] = []
@@ -40075,7 +40154,6 @@ func _scenario_stock_timeout_losers_are_not_counted_as_kos_595() -> Array[String
 		failures.append("timed-out losers were counted as KOs: %s" % [rm._stats.deaths])
 	await _stock_finish(rig)
 	return failures
-
 ## Issue #595: a hit the shield blocks does not pass the Hot Potato tag.
 func _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595() -> Array[String]:
 	var failures: Array[String] = []
@@ -40105,8 +40183,6 @@ func _scenario_hot_potato_blocked_hit_does_not_pass_the_tag_595() -> Array[Strin
 		failures.append("an unblocked hit did not pass the tag")
 	await _teardown(rig["stage"])
 	return failures
-
-
 ## Issue #594: swapping to the same single stage twice must not leave the new
 ## instance auto-renamed (e.g. "@Node2D@2") by the still-in-tree old one.
 func _scenario_swap_stage_same_stage_keeps_name_594() -> Array[String]:
@@ -40131,8 +40207,6 @@ func _scenario_swap_stage_same_stage_keeps_name_594() -> Array[String]:
 		await physics_frame
 	await _teardown(root)
 	return failures
-
-
 ## Issue #600: a lone Joy-Con reports its one stick as the left stick, so the
 ## left swings the arm when the right is idle; with both out, the right wins.
 func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
@@ -40158,7 +40232,6 @@ func _scenario_gamepad_left_stick_swings_when_right_idle_600() -> Array[String]:
 		failures.append("both sticks in the deadzone gave %s" % players[0].input_vector)
 	await _teardown(rig["stage"])
 	return failures
-
 ## Issue #599: while paused, stick clicks, bumpers, Space and the right stick do
 ## nothing on the host; live play (unpaused) still takes them.
 func _scenario_pause_gates_pad_clicks_and_sticks_599() -> Array[String]:
@@ -40218,8 +40291,6 @@ func _scenario_pause_gates_pad_clicks_and_sticks_599() -> Array[String]:
 	await _pad_button_261(0, JOY_BUTTON_LEFT_STICK, false)
 	await _teardown(rig["stage"])
 	return failures
-
-
 ## Issue #599: a bumper or Space held when the Esc menu opens must not stay
 ## "released" after the button-up is swallowed by the menu.
 func _scenario_remote_client_menu_clears_held_release_599() -> Array[String]:
@@ -40258,7 +40329,6 @@ func _scenario_remote_client_menu_clears_held_release_599() -> Array[String]:
 			failures.append("Space held across the menu stays released after resume")
 	await _rc_close_241(rig)
 	return failures
-
 ## Issue #601: a lag burst that moves the action counter by 2 fires two presses
 ## (capped at 3), counter wrap included.
 class BurstPeer601 extends RefCounted:
@@ -40298,7 +40368,6 @@ func _scenario_burst_of_action_taps_counts_each_press_601() -> Array[String]:
 			failures.append("%s: toggle %d, want %d" % [case[3], server._slot_release_toggle[slot], case[2]])
 	await _rc_close_241(rig)
 	return failures
-
 ## A Respawn over the rig's players, with `points` as the stage spawns and a
 ## floor under each x in `floors` (y 500, below the rig's own Ground at 300).
 func _respawn_rig_605(points: Array[Vector2], floors: Array[float]) -> Dictionary:
@@ -40381,7 +40450,6 @@ func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 		failures.append("alone, died at Spawn1, did not move to Spawn0")
 	await _teardown(rig["stage"])
 	return failures
-
 func _scenario_settings_hygiene_609() -> Array[String]:
 	var failures: Array[String] = []
 	var tmp: String = OS.get_temp_dir().path_join("pf_609_%d" % OS.get_process_id())
@@ -40459,7 +40527,6 @@ func _scenario_settings_hygiene_609() -> Array[String]:
 		DirAccess.remove_absolute(tmp.path_join(f))
 	_scenario_completed = true
 	return failures
-
 ## Issue #607 (1): a bot resting on its goal is not stuck. Holding the hill
 ## with no rival near, it stays in the zone for 10 s; a CTF defender stays by its flag.
 func _scenario_bot_holds_hill_and_flag_without_hopping_607() -> Array[String]:
@@ -40616,7 +40683,6 @@ func _scenario_bot_sees_rocks_spawned_mid_round_611() -> Array[String]:
 	await _await_ticks(1)
 	_scenario_completed = true
 	return failures
-
 ## Issue #554: a round whose last two go down on the same tick is played off,
 ## Smash-style. Of three players, P3 falls first; P1 and P2 then fall together:
 ## only P1 and P2 come back, one hit KOs, nobody has scored. A second double KO
@@ -40672,7 +40738,6 @@ func _scenario_tiebreaker_replays_double_ko_among_the_tied_then_rains_meteors_55
 	await _teardown(fixture["holder"])
 	_scenario_completed = true
 	return failures
-
 ## Issue #613 (1): a Soccer win eliminates the losers, which the announcer must
 ## not call a KO, and the round manager reports the mode's win.
 func _scenario_mode_win_is_not_a_ko_to_the_announcer_613() -> Array[String]:
@@ -40815,8 +40880,6 @@ func _scenario_telemetry_notice_buttons_617() -> Array[String]:
 	ui.refresh()
 	_scenario_completed = true
 	return failures
-
-
 ## Issue #554/#556: the one Sudden Death system serves every mode, so a Classic
 ## tiebreaker that nobody settles ends at the 60 s backstop as a draw: nobody
 ## scores, the tied players are out of the round and the announcer says "Draw!".
@@ -40881,7 +40944,6 @@ func _scenario_pressed_head_holds_on_flat_ground() -> Array[String]:
 			failures.append("%d deg: the pressed head slid %.1f px, expected at most %.1f" % [degrees, slide, PRESSED_HOLD_MAX_SLIDE])
 	_scenario_completed = true
 	return failures
-
 ## Issues #625: a horizontal cast with nothing in the way. The rod's hook
 ## (projectile_gravity > 0) ends well below where it started; the grapple's
 ## (gravity 0) stays level within a pixel or two.
@@ -40949,7 +41011,6 @@ func _scenario_fishing_rod_cast_stays_out_twice_as_long_641() -> Array[String]:
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
-
 # --- Pogo bounciness (issue #622) --------------------------------------------
 ## Written down independently of the resource: a plain hop must rise at least
 ## this many px from its low point, and stay under the on-screen ceiling.
@@ -41004,7 +41065,6 @@ func _scenario_pogo_chained_hops_keep_their_height() -> Array[String]:
 		if hops[i] < hops[0] * 0.8 or hops[i] < POGO_HOP_MIN_RISE:
 			failures.append("hop %d rose %.1f px against the first's %.1f: it died out" % [i + 1, hops[i], hops[0]])
 	return failures
-
 # --- Grapple zips to players (issue #630) ------------------------------------
 ## Throws a grapple at a victim 260 px to the right and waits for it to land.
 ## Returns {stage, shooter, victim, hook, stats}; hook is null when it never
@@ -41032,11 +41092,9 @@ func _zip_setup(team: int = -1) -> Dictionary:
 	shooter.freeze = false
 	shooter.gravity_scale = 0.0
 	return {"stage": stage, "shooter": shooter, "victim": victim, "hook": hook, "stats": stats}
-
 ## Holds the drag toward the victim: a steady pull on the thrower's input.
 func _zip_hold(shooter: RigidBody2D) -> void:
 	shooter.set_input_vector(Vector2.RIGHT * 0.5)
-
 func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array[String]:
 	var failures: Array[String] = []
 	var z: Dictionary = await _zip_setup()
@@ -41060,7 +41118,6 @@ func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array
 	await _teardown(z["stage"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_grapple_anchored_player_feels_no_force_from_the_rope() -> Array[String]:
 	var failures: Array[String] = []
 	var z: Dictionary = await _zip_setup()
@@ -41090,7 +41147,6 @@ func _scenario_grapple_anchored_player_feels_no_force_from_the_rope() -> Array[S
 	await _teardown(z["stage"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_grapple_release_lets_go_of_an_anchored_player() -> Array[String]:
 	var failures: Array[String] = []
 	var z: Dictionary = await _zip_setup()
@@ -41113,7 +41169,6 @@ func _scenario_grapple_release_lets_go_of_an_anchored_player() -> Array[String]:
 	await _teardown(z["stage"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_grapple_lets_go_when_either_player_is_knocked_out() -> Array[String]:
 	var failures: Array[String] = []
 	for who: String in ["anchored", "thrower"]:
@@ -41137,7 +41192,6 @@ func _scenario_grapple_lets_go_when_either_player_is_knocked_out() -> Array[Stri
 		await _teardown(z["stage"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_grapple_zips_to_a_teammate_without_damage() -> Array[String]:
 	var failures: Array[String] = []
 	var z: Dictionary = await _zip_setup(0)
@@ -41665,7 +41719,6 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
 	_scenario_completed = true
 	return failures
-
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
 const SOCCER_PITCH_PATHS: Array[String] = [
 	"res://scenes/stages/Pitch.tscn", "res://scenes/stages/Dunes.tscn", "res://scenes/stages/Cage.tscn"]
@@ -41758,7 +41811,6 @@ func _score_match_run(soccer: bool, paths: Array[String], only_first: bool, modi
 	settings.set_ctf_captures(old_captures)
 	await _teardown(loop["stage"])
 	return failures
-
 ## A Soccer KO waits 4 s (#648): still down at 3.9 s, back by 4.2 s. Stock keeps 1.5 s.
 func _scenario_soccer_respawn_waits_four_seconds_648() -> Array[String]:
 	var failures: Array[String] = []
@@ -41822,7 +41874,6 @@ func _scenario_soccer_respawn_never_lands_in_a_goal_648() -> Array[String]:
 			failures.append("%s: with every spawn in a goal, Red did not get its own-half one nearest the centre" % path)
 		await _teardown(rig["stage"])
 	return failures
-
 ## A Capture the Flag KO waits 4 s too (#648): down at 3.9 s, back by 4.2 s.
 func _scenario_ctf_respawn_waits_four_seconds_648() -> Array[String]:
 	var failures: Array[String] = []
@@ -41840,7 +41891,6 @@ func _scenario_ctf_respawn_waits_four_seconds_648() -> Array[String]:
 		failures.append("the KO'd CTF player was not back by 4.2 s")
 	await _teardown(rig["stage"])
 	return failures
-
 # --- Bigger Soccer and CTF stages, lighter ball (#649) --------------------------
 ## Each stage's view width before #649 (all five used the default 1600x900 view).
 const STAGE_OLD_VIEW_WIDTH_649: Dictionary = {
@@ -41928,7 +41978,6 @@ func _scenario_soccer_ball_flies_farther_than_at_mass_one_649() -> Array[String]
 		failures.append("the light ball (mass %.2f) travelled %.0f px, the old one %.0f px: under 1.5x" % [real_mass, reach[real_mass], reach[1.0]])
 	await _teardown(rig["stage"])
 	return failures
-
 ## Issue #640 review: after Esc frees the mouse, the next left click recaptures
 ## it and is not an action.
 func _scenario_left_click_recaptures_mouse_after_esc_640() -> Array[String]:
@@ -42110,7 +42159,6 @@ func _telemetry_soccer_abandon_643(played_sec: float) -> Array[String]:
 	host.persist = was_persist
 	_scenario_completed = true
 	return failures
-
 # --- Stages & Rules screen (#647) ------------------------------------------------
 ## The Stages & Rules screen's own settings state is the shared store's: reset it.
 func _reset_host_choices_647() -> void:
@@ -42434,7 +42482,6 @@ func _scenario_stages_rules_gamepad_opens_navigates_and_closes_647() -> Array[St
 	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures
-
 ## Issue #662: King of the Hill readable. Scenarios share this rig: the round
 ## started, players parked away from the hill with gravity off, a wide hill.
 func _koth_rig_662(count: int, teams: bool = false) -> Dictionary:
@@ -42726,7 +42773,6 @@ func _scenario_koth_phone_receives_its_own_hold_662() -> Array[String]:
 		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [told])
 	await _teardown(rig["stage"])
 	return failures
-
 # --- Issue #667: a steady circle swing propels the player with the swing -----
 ## Revolutions per trial, ticks per revolution (a slow and a quick thumb), and
 ## the least net travel (px) that counts as moving. Clockwise on the phone's
@@ -42806,3 +42852,116 @@ func _circle_lap_travel(stats: WeaponStatsType, sign_dir: float, ticks_per_rev: 
 	stage.queue_free()
 	await physics_frame
 	return laps
+# --- Wedged long heads (issue #664) -----------------------------------------
+## A head whose barrel or blade is sunk into a wall is stuck for good -- the
+## body is not cut off from the anchor, so the gridlock phase of #115 never
+## fired. A head with circle centres inside terrain phases after the gridlock
+## delay, held or released.
+const WEDGE_PICKUP_PATHS: Array[String] = [
+	"res://resources/sword.tres", "res://resources/boomstick.tres", "res://resources/axe.tres",
+	"res://resources/dagger.tres", "res://resources/staff.tres", "res://resources/umbrella.tres"]
+## Ticks after the release in which a wedged head must be free: 2 s.
+const WEDGE_FREE_TICKS: int = 120
+## Wall face this far from the body's centre, and the player's standing floor.
+const WEDGE_WALL_GAP: float = 40.0
+## A stage with a floor under the player and a tall wall to its right.
+func _wedge_stage_664(dist: float, thickness: float = 24.0) -> Node2D:
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0.0, 130.0), Vector2(600.0, 24.0))
+	_add_bar(stage, Vector2(dist + thickness * 0.5 + PLAYER_RADIUS, 0.0), Vector2(thickness, 400.0))
+	return stage
+## Whether the player's weapon is free of the wall: solid, not embedded.
+func _wedge_free_664(player: RigidBody2D) -> bool:
+	var head: RigidBody2D = player.get("_head")
+	return not player.is_head_phased() and not head.call("is_embedded") \
+		and head.collision_layer != 0 and head.collision_mask != 0
+## The boomstick wedged for real in play: spun at the wall at swing speed and
+## let go at several moments of the swing. Every one must be free in 2 s.
+func _scenario_wedged_head_swung_into_wall_frees_on_release() -> Array[String]:
+	var failures: Array[String] = []
+	var wedged: int = 0
+	for path: String in ["res://resources/sword.tres", BOOMSTICK_PATH]:
+		for rate: float in [12.0, 25.0]:
+			for stop: int in [0, 7, 23, 31]:
+				var stage: Node2D = _wedge_stage_664(WEDGE_WALL_GAP)
+				var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 100.0))
+				await _equip(player, path)
+				var ang: float = -150.0
+				for i in 40 + stop:
+					ang += rate
+					if ang > 90.0:
+						ang -= 360.0
+					player.set_input_vector(Vector2.RIGHT.rotated(deg_to_rad(ang)))
+					await physics_frame
+				player.set_input_vector(Vector2.ZERO)
+				await _await_ticks(WEDGE_FREE_TICKS)
+				if not player.is_head_phased() and player.get("_head").call("is_embedded"):
+					failures.append("%s swung at rate %d, released at +%d ticks, still solid and wedged 2 s later" % [path.get_file(), rate, stop])
+				if not await _wedge_aim_away_664(player):
+					failures.append("%s swung at rate %d, released at +%d ticks, not clear after aiming away" % [path.get_file(), rate, stop])
+				await _teardown(stage, false)
+				wedged += 1
+	print("      %d swing-and-release cases" % wedged)
+	_scenario_completed = true
+	return failures
+## Stands flush to a wall, aims at it and holds `hold_ticks`, returning whether
+## the head got embedded in it.
+func _wedge_into_wall_664(player: RigidBody2D, path: String, hold_ticks: int) -> bool:
+	await _equip(player, path)
+	player.set_input_vector(Vector2.RIGHT)
+	var embedded: bool = false
+	for i in hold_ticks:
+		await physics_frame
+		embedded = embedded or player.get("_head").call("is_embedded")
+	return embedded
+## Aims away from the wall and returns whether the head is solid and out of it
+## within half a second.
+func _wedge_aim_away_664(player: RigidBody2D) -> bool:
+	player.set_input_vector(Vector2.LEFT)
+	await _await_ticks(30)
+	return _wedge_free_664(player)
+## Each pickup weapon's head sunk into a wall, then released. Within 2 s the
+## head is out of the wall or a harmless ghost, and aiming away makes it solid.
+func _scenario_wedged_head_frees_after_release_for_every_pickup_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var wedged: Array[String] = []
+	for path: String in WEDGE_PICKUP_PATHS:
+		var stage: Node2D = _wedge_stage_664(10.0)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 100.0))
+		var embedded: bool = await _wedge_into_wall_664(player, path, 20)
+		if embedded:
+			wedged.append(path.get_file())
+		player.set_input_vector(Vector2.ZERO)
+		await _await_ticks(WEDGE_FREE_TICKS)
+		var head: RigidBody2D = player.get("_head")
+		if not player.is_head_phased() and head.call("is_embedded"):
+			failures.append("%s head still solid and wedged 2 s after release" % path.get_file())
+		if not await _wedge_aim_away_664(player):
+			failures.append("%s head not solid and clear of the wall after aiming away" % path.get_file())
+		await _teardown(stage, false)
+	print("      wedged at the wall: %s" % [wedged])
+	for needed: String in ["sword.tres", "boomstick.tres"]:
+		if not needed in wedged:
+			failures.append("setup: %s never got embedded in the wall" % needed)
+	_scenario_completed = true
+	return failures
+## No release: the drag stays held into the wall. The head still phases after
+## the embedded delay, and not before it.
+func _scenario_wedged_head_phases_free_with_input_held() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in ["res://resources/sword.tres", BOOMSTICK_PATH]:
+		var stage: Node2D = _wedge_stage_664(10.0)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 100.0))
+		var embedded: bool = await _wedge_into_wall_664(player, path, 20)
+		if not embedded:
+			failures.append("setup: %s never got embedded" % path.get_file())
+		if player.is_head_phased():
+			failures.append("%s head phased after 0.3 s, before the delay" % path.get_file())
+		await _await_ticks(90)
+		if not player.is_head_phased():
+			failures.append("%s head still solid and wedged 1.8 s into a held drag" % path.get_file())
+		if not await _wedge_aim_away_664(player):
+			failures.append("%s head not solid and clear after aiming away" % path.get_file())
+		await _teardown(stage, false)
+	_scenario_completed = true
+	return failures

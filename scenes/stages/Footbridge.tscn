@@ -66,7 +66,7 @@ position = Vector2(310, 286)
 size = Vector2(36, 28)
 
 [node name="Overhead" parent="." instance=ExtResource("5")]
-position = Vector2(-170, 170)
+position = Vector2(-170, 160)
 size = Vector2(200, 24)
 travel = Vector2(340, 0)
 one_way_sec = 3.0
@@ -112,5 +112,5 @@ position = Vector2(-200, 264)
 position = Vector2(200, 264)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
-position = Vector2(0, 100)
+position = Vector2(0, 90)
 

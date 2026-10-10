@@ -372,6 +372,52 @@ func overlaps_world() -> bool:
 			return true
 	return false
 
+var _embed_query: PhysicsPointQueryParameters2D
+
+## How far inside terrain a circle centre must be, on every side, to count as
+## embedded. A head planted on a surface is held with its circles' centres a
+## hair either side of it by the solver's give, so a bare point test would call
+## a plant a wedge.
+const EMBED_DEPTH: float = 3.0
+const EMBED_PROBES: Array[Vector2] = [
+	Vector2.ZERO, Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]
+
+## Whether any of the head's circles is sunk into terrain (issue #664): its
+## centre and the four points `EMBED_DEPTH` around it are all inside solid
+## ground. Touching, planting and a few pixels of solver give do not qualify;
+## a long head turned or driven into a wall with its barrel or blade inside it
+## does, and the solver cannot always push it back out.
+func is_embedded() -> bool:
+	if not is_inside_tree():
+		return false
+	if _embed_query == null:
+		_embed_query = PhysicsPointQueryParameters2D.new()
+		_embed_query.collide_with_areas = false
+	_embed_query.collision_mask = sweep_mask
+	_embed_query.exclude = sweep_exclude + [get_rid()]
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	for node: CollisionShape2D in sweep_shapes:
+		if node == null or node.shape == null:
+			continue
+		var centre: Vector2 = (global_transform * node.transform).origin
+		var inside: bool = true
+		for probe: Vector2 in EMBED_PROBES:
+			if not _point_in_terrain(space, centre + probe * EMBED_DEPTH):
+				inside = false
+				break
+		if inside:
+			return true
+	return false
+
+func _point_in_terrain(space: PhysicsDirectSpaceState2D, point: Vector2) -> bool:
+	_embed_query.position = point
+	for hit: Dictionary in space.intersect_point(_embed_query, 4):
+		var collider: Object = hit["collider"]
+		# A head inside someone's body is a strike, not a wedge.
+		if not (collider is Node and (collider as Node).is_in_group("players")):
+			return true
+	return false
+
 # --- The turn ----------------------------------------------------------------
 
 ## Issue #48. Everything above sweeps the head's *body*, and the body only

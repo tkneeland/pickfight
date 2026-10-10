@@ -56,11 +56,11 @@ position = Vector2(200, 286)
 size = Vector2(72, 28)
 
 [node name="PerchLeft" parent="." instance=ExtResource("6")]
-position = Vector2(-300, 170)
+position = Vector2(-300, 160)
 size = Vector2(200, 24)
 
 [node name="PerchRight" parent="." instance=ExtResource("6")]
-position = Vector2(300, 170)
+position = Vector2(300, 160)
 size = Vector2(200, 24)
 
 [node name="Spawn0" type="Marker2D" parent="."]
@@ -98,10 +98,10 @@ shape = SubResource("RectangleShape2D_kill")
 position = Vector2(0, 250)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(-300, 120)
+position = Vector2(-300, 110)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(300, 120)
+position = Vector2(300, 110)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
 position = Vector2(-100, 270)

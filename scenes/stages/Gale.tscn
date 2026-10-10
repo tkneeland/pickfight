@@ -106,7 +106,7 @@ polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
 ; of both wind zones' boxes. Drops back onto Middle on either side, so it is
 ; a lookout, not a trap.
 [node name="Overlook" type="StaticBody2D" parent="."]
-position = Vector2(0, 170)
+position = Vector2(0, 160)
 
 [node name="OverlookShape" type="CollisionShape2D" parent="Overlook"]
 shape = SubResource("RectangleShape2D_overlook")
@@ -183,4 +183,4 @@ position = Vector2(-240, 200)
 position = Vector2(240, 200)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
-position = Vector2(0, 115)
+position = Vector2(0, 105)

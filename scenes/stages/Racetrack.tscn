@@ -95,7 +95,7 @@ polygon = PackedVector2Array(640, 200, 300, 400, 300, 424, 640, 224)
 
 ; Stepping ledges from the decks up to the bridge, 130 px above a deck and 110 below the bridge.
 [node name="StepLeft" type="StaticBody2D" parent="."]
-position = Vector2(-520, 82)
+position = Vector2(-520, 60)
 
 [node name="StepLeftShape" type="CollisionShape2D" parent="StepLeft"]
 shape = SubResource("RectangleShape2D_140x24")
@@ -105,7 +105,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-70, -12, 70, -12, 70, 12, -70, 12)
 
 [node name="StepRight" type="StaticBody2D" parent="."]
-position = Vector2(520, 82)
+position = Vector2(520, 60)
 
 [node name="StepRightShape" type="CollisionShape2D" parent="StepRight"]
 shape = SubResource("RectangleShape2D_140x24")
@@ -180,10 +180,10 @@ position = Vector2(0, -90)
 position = Vector2(0, 200)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(-520, 20)
+position = Vector2(-520, -2)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
-position = Vector2(520, 20)
+position = Vector2(520, -2)
 
 [node name="PickupSpawn4" type="Marker2D" parent="."]
 position = Vector2(0, 350)

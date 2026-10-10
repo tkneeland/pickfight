@@ -131,7 +131,7 @@ one_way_sec = 2.2
 ; Platform2 runs y=20..220 and this one y=210..300, so they still share
 ; the 10 px at 210..220 where a climber changes platforms.
 [node name="Platform3" parent="." instance=ExtResource("3")]
-position = Vector2(-150, 210)
+position = Vector2(-150, 150)
 size = Vector2(200, 24)
 travel = Vector2(0, 90)
 one_way_sec = 2.0
