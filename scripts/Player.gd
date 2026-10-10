@@ -1821,6 +1821,11 @@ func _update_head_grip() -> void:
 ## Seconds the drag must stay released, with the head still cut off from its
 ## body by terrain, before the head phases.
 const GRIDLOCK_PHASE_DELAY: float = 1.5
+## Seconds a head must stay embedded in terrain before it phases (#664): a head
+## with its circle centres 3 px inside a wall is never a plant. Held or
+## released, and whether or not the body is cut off from the anchor. It stays
+## a ghost, even at home, until its circles are out of the wall.
+const EMBEDDED_PHASE_DELAY: float = 1.5
 ## Alpha of the head's art while it is phased.
 const PHASED_HEAD_ALPHA: float = 0.4
 ## How far past `min_reach` a head still counts as home for turning solid.
@@ -1833,6 +1838,8 @@ const GRIDLOCK_MAX_SKIPS: int = 4
 ## stayed released.
 var _drag_released: bool = true
 var _release_time: float = 0.0
+## How long the head has stayed embedded in terrain (#664).
+var _embedded_time: float = 0.0
 
 ## Whether this player's head is phased right now (issue #115).
 func is_head_phased() -> bool:
@@ -1843,10 +1850,20 @@ func _update_gridlock_phase(delta: float) -> void:
 		_release_time += delta
 	else:
 		_release_time = 0.0
+	# A head with its circle centres inside terrain is wedged whether or not
+	# the body is cut off from its anchor (#664): a long barrel or blade sunk
+	# into a wall by a swing sits there held or released.
+	if not _head.phased and _head.is_embedded():
+		_embedded_time += delta
+	else:
+		_embedded_time = 0.0
 	if _head.phased:
-		if not _head_cut_off() and (not _head.overlaps_world() or _head_is_home()):
+		if not _head_cut_off() and not _head.is_embedded() \
+				and (not _head.overlaps_world() or _head_is_home()):
 			_head.set_phased(false)
 	elif _drag_released and _release_time >= GRIDLOCK_PHASE_DELAY and _head_cut_off():
+		_head.set_phased(true)
+	elif _embedded_time >= EMBEDDED_PHASE_DELAY:
 		_head.set_phased(true)
 	if _head_visual != null:
 		var alpha: float = PHASED_HEAD_ALPHA if _head.phased else 1.0

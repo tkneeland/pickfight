@@ -10,6 +10,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Weapon heads bite into surfaces for traction; weapons and traversal made more responsive (#110, #136, #180, #181)
 - Weapon turn guard and anti-tunnelling vs terrain and other heads (#23, #82, #103, #109)
 - Trapped weapon head phases home after a delay (#115)
+- A long head (sword, boomstick) wedged into a wall phases free after 1.5 s, held or released, and turns solid again once its circles are out of the wall (#664)
 - Spawn protection: about 1 s invulnerable, blinking (#114)
 - Round winner keeps their weapon; everyone else respawns with the pickaxe (#6, ADR-0005)
 - Rising lava kill zone ends stalling (#22, #45, ADR-0012)
