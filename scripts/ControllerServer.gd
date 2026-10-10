@@ -80,7 +80,11 @@ extends Node
 ## twitch. Each slot's packets therefore set a target that the input vector
 ## follows with a short exponential ease (`INPUT_SMOOTHING_SEC`), stepped every
 ## frame. A release (a (0,0) packet) and a deliberate flick (a jump of at least
-## `INPUT_FLICK_SNAP`) are passed through at once, never eased. Only packets
+## `INPUT_FLICK_SNAP`) are passed through at once, never eased. Packets that
+## arrive bunched are not collapsed to the newest (issue #669): they are queued
+## and played out in order, one per frame, two per frame while more than
+## `INPUT_QUEUE_CALM` wait, so a stall's catch-up is a few small steps, not
+## one jump. Only packets
 ## go through this: a direct `Player.set_input_vector()` call is unsmoothed.
 ##
 ## Run the host with `-- --log-input` to print every decoded packet, every
@@ -191,6 +195,13 @@ const INPUT_FLICK_SNAP: float = 0.5
 ## Within this distance of its target the eased input snaps onto it, so a
 ## held drag reaches exactly what the phone sends.
 const INPUT_SETTLE_EPSILON: float = 0.001
+## A phone's packets are played one per frame; while more than INPUT_QUEUE_CALM
+## are waiting (a stall just ended), INPUT_QUEUE_CATCH_UP per frame, and never
+## more than INPUT_QUEUE_MAX queued -- the oldest are dropped, which bounds the
+## delay a long stall can leave behind (#669).
+const INPUT_QUEUE_CALM: int = 2
+const INPUT_QUEUE_CATCH_UP: int = 2
+const INPUT_QUEUE_MAX: int = 10
 ## Physics frames between "weapon steady" lines. Steadiness has to be provable
 ## from a line that is present, not from the absence of change lines.
 const STEADY_LOG_FRAMES: int = 30
@@ -249,25 +260,56 @@ class PendingConn extends RefCounted:
 ## packet, `step()` advances the ease by `delta` seconds and returns the input
 ## vector to apply. Pure, so a scenario can feed it a jitter pattern directly.
 class InputSmoother extends RefCounted:
+	## The newest packet pushed, whether or not it has been played yet.
 	var target: Vector2 = Vector2.ZERO
 	var value: Vector2 = Vector2.ZERO
+	## What `value` is easing toward: the newest packet played out of `_queue`.
+	var _aim: Vector2 = Vector2.ZERO
+	## Packets that arrived bunched, waiting to be played in order (#669).
+	var _queue: PackedVector2Array = PackedVector2Array()
 
+	## Latest value wins: for a source that is not a packet stream (a mouse,
+	## a stick, a bot), and for a release.
 	func push(v: Vector2) -> void:
 		# A NaN target would poison the ease for good, not just one frame.
 		target = v.limit_length(1.0) if is_finite(v.x) and is_finite(v.y) else Vector2.ZERO
+		_queue.clear()
+		_aim = target
 		if target == Vector2.ZERO or value.distance_to(target) >= INPUT_FLICK_SNAP:
 			value = target
 
+	## A packet from a phone's stream (issue #669). Wi-Fi hands over a stall's
+	## worth of packets at once; taking only the newest turned every stall into
+	## a jump of several frames' sweep. They are queued instead and played out
+	## in order by `step()`, a few per frame while a backlog lasts so the delay
+	## a burst adds drains within a few frames. A release is never queued.
+	func push_packet(v: Vector2) -> void:
+		if not is_finite(v.x) or not is_finite(v.y) or v == Vector2.ZERO:
+			push(v)
+			return
+		target = v.limit_length(1.0)
+		_queue.append(target)
+		if _queue.size() > INPUT_QUEUE_MAX:
+			_queue = _queue.slice(_queue.size() - INPUT_QUEUE_MAX)
+
 	func step(delta: float) -> Vector2:
-		if value.distance_to(target) <= INPUT_SETTLE_EPSILON:
-			value = target
+		var take: int = mini(_queue.size(), 1 if _queue.size() <= INPUT_QUEUE_CALM else INPUT_QUEUE_CATCH_UP)
+		if take > 0:
+			_aim = _queue[take - 1]
+			_queue = _queue.slice(take)
+			if value.distance_to(_aim) >= INPUT_FLICK_SNAP:
+				value = _aim
+		if value.distance_to(_aim) <= INPUT_SETTLE_EPSILON:
+			value = _aim
 		else:
-			value = value.lerp(target, 1.0 - exp(-delta / INPUT_SMOOTHING_SEC))
+			value = value.lerp(_aim, 1.0 - exp(-delta / INPUT_SMOOTHING_SEC))
 		return value
 
 	func reset() -> void:
 		target = Vector2.ZERO
 		value = Vector2.ZERO
+		_aim = Vector2.ZERO
+		_queue.clear()
 
 var _log_input: bool = false
 
@@ -1388,12 +1430,15 @@ func expire_disconnected_claims() -> void:
 	if released:
 		_broadcast_looks()
 
-## Latest value wins: drain everything queued this frame and keep only the last
-## well-formed packet, so a burst never replays stale input. The packet sets
-## the slot's smoothing target; `_apply_smoothed_input` applies it (#113).
+## Drain everything queued this frame. Every well-formed vector goes to the
+## slot's smoother in order (#669: a burst after a Wi-Fi stall used to collapse
+## to its newest packet, a jump of several frames' sweep); the newest packet
+## still carries the flags and the action bytes. `_apply_smoothed_input` plays
+## the queue out (#113).
 func _drain(slot: int, peer: Variant) -> void:
 	var latest: PackedByteArray = PackedByteArray()
 	var got: bool = false
+	var vectors: PackedVector2Array = PackedVector2Array()
 	var mouse_px: Vector2 = Vector2.ZERO
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
@@ -1410,11 +1455,13 @@ func _drain(slot: int, peer: Variant) -> void:
 			mouse_px += Vector2(pkt.decode_s16(ACTION_PACKET_SIZE), pkt.decode_s16(ACTION_PACKET_SIZE + 2))
 		latest = pkt
 		got = true
+		vectors.append(Vector2(pkt.decode_float(0), pkt.decode_float(4)))
 	if not got:
 		return
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
-	var v: Vector2 = Vector2(latest.decode_float(0), latest.decode_float(4))
-	_smoothers[slot].push(v)
+	for queued: Vector2 in vectors:
+		_smoothers[slot].push_packet(queued)
+	var v: Vector2 = vectors[vectors.size() - 1]
 	_slot_release_remote[slot] = 1 if latest.size() >= RELEASE_PACKET_SIZE and latest[PACKET_SIZE] != 0 else 0
 	if mouse_px != Vector2.ZERO and slot < _players.size() and _players[slot] != null:
 		_players[slot].push_ghost_mouse(mouse_px)
