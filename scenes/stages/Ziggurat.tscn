@@ -73,7 +73,7 @@ polygon = PackedVector2Array(-420, -40, 420, -40, 420, 40, -420, 40)
 ; round -- the king of the hill gets a short reign.
 
 [node name="Throne" parent="." instance=ExtResource("2")]
-position = Vector2(0, 184)
+position = Vector2(0, 140)
 size = Vector2(220, 24)
 stand_sec = 3.0
 warn_sec = 1.0
@@ -129,7 +129,7 @@ shape = SubResource("RectangleShape2D_kill")
 ; tier on each side, under a rock column's reach.
 
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(0, 110)
+position = Vector2(0, 66)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(-640, 310)

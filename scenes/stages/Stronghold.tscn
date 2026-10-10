@@ -104,7 +104,7 @@ polygon = PackedVector2Array(-112.0, -70.0, 112.0, -70.0, 112.0, 70.0, -112.0, 7
 
 ; Low ledges to vault from onto the bridge.
 [node name="LedgeLeft" type="StaticBody2D" parent="."]
-position = Vector2(-308, 190)
+position = Vector2(-308, 142)
 
 [node name="LedgeLeftShape" type="CollisionShape2D" parent="LedgeLeft"]
 shape = SubResource("RectangleShape2D_140x20")
@@ -114,7 +114,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-98.0, -10.0, 98.0, -10.0, 98.0, 10.0, -98.0, 10.0)
 
 [node name="LedgeRight" type="StaticBody2D" parent="."]
-position = Vector2(308, 190)
+position = Vector2(308, 142)
 
 [node name="LedgeRightShape" type="CollisionShape2D" parent="LedgeRight"]
 shape = SubResource("RectangleShape2D_140x20")
@@ -125,7 +125,7 @@ polygon = PackedVector2Array(-98.0, -10.0, 98.0, -10.0, 98.0, 10.0, -98.0, 10.0)
 
 ; A bridge between the towers' reach.
 [node name="Bridge" type="StaticBody2D" parent="."]
-position = Vector2(0, 60)
+position = Vector2(0, -6)
 
 [node name="BridgeShape" type="CollisionShape2D" parent="Bridge"]
 shape = SubResource("RectangleShape2D_560x20")
@@ -197,13 +197,13 @@ position = Vector2(448, 225)
 
 ; Pickups on the ledges and over the middle.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-308, 140)
+position = Vector2(-308, 92)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(308, 140)
+position = Vector2(308, 92)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(0, 10)
+position = Vector2(0, -56)
 
 [node name="KillZone" type="Area2D" parent="."]
 position = Vector2(0, 700)

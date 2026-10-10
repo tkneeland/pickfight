@@ -57,7 +57,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
 
 [node name="Left" type="StaticBody2D" parent="."]
-position = Vector2(-480, 290)
+position = Vector2(-480, 240)
 
 [node name="LeftShape" type="CollisionShape2D" parent="Left"]
 shape = SubResource("R_260x24")
@@ -67,7 +67,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
 
 [node name="Right" type="StaticBody2D" parent="."]
-position = Vector2(480, 290)
+position = Vector2(480, 240)
 
 [node name="RightShape" type="CollisionShape2D" parent="Right"]
 shape = SubResource("R_260x24")
@@ -129,19 +129,19 @@ shape = SubResource("RectangleShape2D_kill")
 position = Vector2(0, 150)
 
 [node name="HillSpot1" type="Marker2D" parent="."]
-position = Vector2(-480, 200)
+position = Vector2(-480, 150)
 
 [node name="HillSpot2" type="Marker2D" parent="."]
-position = Vector2(480, 200)
+position = Vector2(480, 150)
 
 [node name="PickupSpawn0" type="Marker2D" parent="."]
 position = Vector2(0, 10)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(-480, 230)
+position = Vector2(-480, 180)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(480, 230)
+position = Vector2(480, 180)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
 position = Vector2(0, 330)

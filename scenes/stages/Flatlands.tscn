@@ -117,5 +117,5 @@ position = Vector2(320, 112)
 
 ; Crumbling ledge (issue #315): a perch up on the left, clear of every spawn drop line.
 [node name="PerchLedge" parent="." instance=ExtResource("ledge315")]
-position = Vector2(-335, -10)
+position = Vector2(-335, -28)
 size = Vector2(100, 24)

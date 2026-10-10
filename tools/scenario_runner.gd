@@ -230,6 +230,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kill_feed_and_awards_fit_eight_long_names",
 	"every_stage_has_eight_safe_spawns",
 	"every_stage_terrain_spans_the_view",
+	"stage_platforms_leave_headroom_over_the_floor",
 	"phone_hat_choice_reaches_player",
 	"phone_colour_first_come_first_served",
 	"name_tags_on_for_every_living_player_all_round",
@@ -1739,6 +1740,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_eight_safe_spawns()
 		"every_stage_terrain_spans_the_view":
 			return await _scenario_every_stage_terrain_spans_the_view()
+		"stage_platforms_leave_headroom_over_the_floor":
+			return await _scenario_stage_platforms_leave_headroom_over_the_floor()
 		"phone_hat_choice_reaches_player":
 			return await _scenario_phone_hat_choice_reaches_player()
 		"phone_colour_first_come_first_served":
@@ -14845,6 +14848,112 @@ func _covered_width(spans: Array[Vector2]) -> float:
 	if end > start:
 		total += end - start
 	return total
+# --- Headroom under floating platforms (issue #665) -----------------------------
+## Issue #665: the least gap Flatlands (#658) leaves between its floor top and
+## a platform's underside: the right platform, centre y 160, underside 172,
+## over a floor top at 300. A player with a long weapon passes under that.
+const PLATFORM_HEADROOM_MIN: float = 128.0
+## A floor only counts when this much of it lies under the platform (a body's width).
+const HEADROOM_MIN_OVERLAP: float = 40.0
+## A gap this small is a platform resting on its support, not floating over it.
+const HEADROOM_ATTACHED_GAP: float = 2.0
+## Static solid rects of a stage in global space: bodies that are exactly a
+## StaticBody2D (not the moving AnimatableBody2D parts), shape by shape.
+func _collect_static_rects(node: Node, rects: Array[Dictionary]) -> void:
+	for child: Node in node.get_children():
+		var body: Node = child.get_parent()
+		if body.get_class() == "StaticBody2D":
+			var rect: Rect2 = Rect2()
+			var found: bool = false
+			if child is CollisionShape2D and not child.disabled and child.shape != null:
+				rect = (child as CollisionShape2D).global_transform * (child as CollisionShape2D).shape.get_rect()
+				found = true
+			elif child is CollisionPolygon2D and not child.disabled:
+				var points: PackedVector2Array = (child as CollisionPolygon2D).global_transform * (child as CollisionPolygon2D).polygon
+				if not points.is_empty():
+					rect = Rect2(points[0], Vector2.ZERO)
+					for point: Vector2 in points:
+						rect = rect.expand(point)
+					found = true
+			if found:
+				rects.append({"rect": rect, "node": str(body.name)})
+		_collect_static_rects(child, rects)
+## Issue #665: the swept envelope of every moving or rotating platform at its
+## authored position (read before the first physics tick): the x range it ever
+## covers and its underside at the lowest point of its patrol, tilt or spin.
+func _collect_moving_envelopes(node: Node, rects: Array[Dictionary]) -> void:
+	for child: Node in node.get_children():
+		if child is AnimatableBody2D:
+			var at: Vector2 = (child as AnimatableBody2D).global_position
+			var size: Vector2 = child.get("size")
+			if child.get("travel") != null:
+				var offsets: Array[Vector2] = [Vector2.ZERO, child.get("travel")]
+				if not (child.get("loop_points") as PackedVector2Array).is_empty():
+					offsets = [Vector2.ZERO]
+					for point: Vector2 in child.get("loop_points"):
+						offsets.append(point)
+				var low: float = -INF
+				var left: float = INF
+				var right: float = -INF
+				for o: Vector2 in offsets:
+					low = maxf(low, at.y + o.y + size.y / 2.0)
+					left = minf(left, at.x + o.x - size.x / 2.0)
+					right = maxf(right, at.x + o.x + size.x / 2.0)
+				rects.append({"rect": Rect2(left, low - size.y, right - left, size.y), "node": str(child.name)})
+			elif child.get("max_tilt_deg") != null:
+				var reach: float = size.length() / 2.0
+				if int(child.get("mode")) == 1:
+					var tilt: float = deg_to_rad(float(child.get("max_tilt_deg")))
+					reach = size.x / 2.0 * sin(tilt) + size.y / 2.0 * cos(tilt)
+				rects.append({"rect": Rect2(at.x - size.x / 2.0, at.y + reach - size.y, size.x, size.y), "node": str(child.name)})
+		_collect_moving_envelopes(child, rects)
+## Issue #665: every static platform with walkable floor beneath it leaves at
+## least PLATFORM_HEADROOM_MIN between that floor's top and its own underside,
+## so nobody gets stuck travelling under it. The floor is the nearest static
+## solid below that shares HEADROOM_MIN_OVERLAP of x with the platform; a
+## platform resting on its support (gap under HEADROOM_ATTACHED_GAP) and one
+## with nothing beneath it are not floating over floor. Offenders are listed
+## by stage and node. Floors are static solids only (a ledge or lower platform
+## a player can stand on counts, so stacked tiers are measured too); moving and
+## rotating platforms are measured as platforms at the lowest point of their
+## sweep (`_collect_moving_envelopes`) but are never taken as floor.
+func _scenario_stage_platforms_leave_headroom_over_the_floor() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in STAGE_PATHS:
+		_scenario_completed = false
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var instance: Node2D = (load(path) as PackedScene).instantiate()
+		stage.add_child(instance)
+		var moving: Array[Dictionary] = []
+		_collect_moving_envelopes(instance, moving)
+		await _await_ticks(2)
+		var rects: Array[Dictionary] = []
+		_collect_static_rects(instance, rects)
+		var checked: int = 0
+		var candidates: Array[Dictionary] = rects.duplicate()
+		candidates.append_array(moving)
+		for p: Dictionary in candidates:
+			var plat: Rect2 = p["rect"]
+			var best_gap: float = INF
+			for f: Dictionary in rects:
+				var floor_rect: Rect2 = f["rect"]
+				if f["node"] == p["node"] and floor_rect == plat:
+					continue
+				var overlap: float = minf(plat.end.x, floor_rect.end.x) - maxf(plat.position.x, floor_rect.position.x)
+				if overlap < HEADROOM_MIN_OVERLAP or floor_rect.position.y < plat.end.y - HEADROOM_ATTACHED_GAP:
+					continue
+				best_gap = minf(best_gap, floor_rect.position.y - plat.end.y)
+			if best_gap == INF or best_gap <= HEADROOM_ATTACHED_GAP:
+				continue
+			checked += 1
+			if best_gap < PLATFORM_HEADROOM_MIN:
+				failures.append("%s %s: %.0f px under its underside to the floor, need %.0f (x %.0f..%.0f, top %.0f, underside %.0f)" % [
+					path.get_file(), p["node"], best_gap, PLATFORM_HEADROOM_MIN,
+					plat.position.x, plat.end.x, plat.position.y, plat.end.y])
+		print("      %s: %d floating platform(s) checked" % [path.get_file(), checked])
+		await _teardown(stage)
+	return failures
 # --- Hats, colour choice and always-on name tags (issue #151) -----------------
 const HatScript := preload("res://scripts/Hat.gd")
 ## Spacing of the row of frozen fighters the tag-stacking check lines up: a
