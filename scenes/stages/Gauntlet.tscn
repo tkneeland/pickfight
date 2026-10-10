@@ -154,7 +154,7 @@ polygon = PackedVector2Array(-330, -20, 330, -20, 330, 20, -330, 20)
 position = Vector2(0, 114)
 
 [node name="LedgeLowLeft" type="StaticBody2D" parent="."]
-position = Vector2(-705, 202)
+position = Vector2(-705, 160)
 
 [node name="LedgeLowLeftShape" type="CollisionShape2D" parent="LedgeLowLeft"]
 shape = SubResource("RectangleShape2D_ledge_low")
@@ -174,7 +174,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
 
 [node name="LedgeLowRight" type="StaticBody2D" parent="."]
-position = Vector2(705, 202)
+position = Vector2(705, 160)
 
 [node name="LedgeLowRightShape" type="CollisionShape2D" parent="LedgeLowRight"]
 shape = SubResource("RectangleShape2D_ledge_low")

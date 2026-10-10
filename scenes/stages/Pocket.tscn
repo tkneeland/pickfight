@@ -39,7 +39,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-360, -20, 360, -20, 360, 20, -360, 20)
 
 [node name="PlatformCentre" type="StaticBody2D" parent="."]
-position = Vector2(0, 190)
+position = Vector2(0, 160)
 
 [node name="PlatformCentreShape" type="CollisionShape2D" parent="PlatformCentre"]
 shape = SubResource("RectangleShape2D_200x24")
@@ -100,7 +100,7 @@ script = ExtResource("2")
 shape = SubResource("RectangleShape2D_8000x40")
 
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(0, 138)
+position = Vector2(0, 108)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(-505, 178)

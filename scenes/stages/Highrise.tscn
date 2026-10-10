@@ -75,7 +75,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
 
 [node name="Ledge1" type="StaticBody2D" parent="."]
-position = Vector2(-190, 280)
+position = Vector2(-190, 240)
 
 [node name="Ledge1Shape" type="CollisionShape2D" parent="Ledge1"]
 shape = SubResource("RectangleShape2D_ledge")
@@ -116,7 +116,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 
 [node name="Summit" type="StaticBody2D" parent="."]
-position = Vector2(0, -240)
+position = Vector2(0, -242)
 
 [node name="SummitShape" type="CollisionShape2D" parent="Summit"]
 shape = SubResource("RectangleShape2D_summit")
@@ -166,11 +166,11 @@ shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). One on each lower rung and one on the summit: the climb pays out on the way up.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-250, 232)
+position = Vector2(-250, 192)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
 position = Vector2(220, 112)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(0, -288)
+position = Vector2(0, -290)
 

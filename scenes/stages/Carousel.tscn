@@ -92,7 +92,7 @@ mode = 1
 max_tilt_deg = 20.0
 
 [node name="Spinner" parent="." instance=ExtResource("3")]
-position = Vector2(0, 140)
+position = Vector2(0, 38)
 spin_deg_per_sec = 25.0
 
 ; Issue #281: a fan on the pit floor between the hub and the left seesaw,
