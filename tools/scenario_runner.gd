@@ -207,6 +207,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"spawn_protection_blocks_damage_then_expires",
 	"roster_heads_do_not_clip_platform_in_play",
 	"trapped_head_phases_home_after_release",
+	"wedged_head_swung_into_wall_frees_on_release",
+	"wedged_head_frees_after_release_for_every_pickup_weapon",
+	"wedged_head_phases_free_with_input_held",
 	"juice_sparks_on_clash_capped",
 	"juice_dust_on_hard_landing_only",
 	"juice_trail_capped_and_frees",
@@ -1693,6 +1696,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_clip_platform_in_play()
 		"trapped_head_phases_home_after_release":
 			return await _scenario_trapped_head_phases_home_after_release()
+		"wedged_head_swung_into_wall_frees_on_release":
+			return await _scenario_wedged_head_swung_into_wall_frees_on_release()
+		"wedged_head_frees_after_release_for_every_pickup_weapon":
+			return await _scenario_wedged_head_frees_after_release_for_every_pickup_weapon()
+		"wedged_head_phases_free_with_input_held":
+			return await _scenario_wedged_head_phases_free_with_input_held()
 		"juice_sparks_on_clash_capped":
 			return await _scenario_juice_sparks_on_clash_capped()
 		"juice_dust_on_hard_landing_only":
@@ -9824,6 +9833,10 @@ func _step_platform_tunnel_lane(lane: Dictionary, breaches: Dictionary) -> void:
 	elif tick > go_at and tick <= done_at and player != null:
 		if is_instance_valid(player) and player.alive:
 			var crossed: String = _update_platform_sides(player, lane["slab"], lane["sides"])
+			# A ghost head (#115, #664) goes through terrain on purpose.
+			if player.is_head_phased():
+				lane["sides"] = {}
+				crossed = ""
 			if crossed != "":
 				var weapon: String = trial["weapon"]
 				if not breaches.has(weapon):
@@ -42722,4 +42735,118 @@ func _scenario_koth_phone_receives_its_own_hold_662() -> Array[String]:
 	if told.size() != 3 or int(told[1]) != -1:
 		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [told])
 	await _teardown(rig["stage"])
+	return failures
+
+# --- Wedged long heads (issue #664) -----------------------------------------
+## A head whose barrel or blade is sunk into a wall is stuck for good -- the
+## body is not cut off from the anchor, so the gridlock phase of #115 never
+## fired. A head with circle centres inside terrain phases after the gridlock
+## delay, held or released.
+const WEDGE_PICKUP_PATHS: Array[String] = [
+	"res://resources/sword.tres", "res://resources/boomstick.tres", "res://resources/axe.tres",
+	"res://resources/dagger.tres", "res://resources/staff.tres", "res://resources/umbrella.tres"]
+## Ticks after the release in which a wedged head must be free: 2 s.
+const WEDGE_FREE_TICKS: int = 120
+## Wall face this far from the body's centre, and the player's standing floor.
+const WEDGE_WALL_GAP: float = 40.0
+## A stage with a floor under the player and a tall wall to its right.
+func _wedge_stage_664(dist: float, thickness: float = 24.0) -> Node2D:
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0.0, 130.0), Vector2(600.0, 24.0))
+	_add_bar(stage, Vector2(dist + thickness * 0.5 + PLAYER_RADIUS, 0.0), Vector2(thickness, 400.0))
+	return stage
+## Whether the player's weapon is free of the wall: solid, not embedded.
+func _wedge_free_664(player: RigidBody2D) -> bool:
+	var head: RigidBody2D = player.get("_head")
+	return not player.is_head_phased() and not head.call("is_embedded") \
+		and head.collision_layer != 0 and head.collision_mask != 0
+## The boomstick wedged for real in play: spun at the wall at swing speed and
+## let go at several moments of the swing. Every one must be free in 2 s.
+func _scenario_wedged_head_swung_into_wall_frees_on_release() -> Array[String]:
+	var failures: Array[String] = []
+	var wedged: int = 0
+	for path: String in ["res://resources/sword.tres", BOOMSTICK_PATH]:
+		for rate: float in [12.0, 25.0]:
+			for stop: int in [0, 7, 23, 31]:
+				var stage: Node2D = _wedge_stage_664(WEDGE_WALL_GAP)
+				var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 100.0))
+				await _equip(player, path)
+				var ang: float = -150.0
+				for i in 40 + stop:
+					ang += rate
+					if ang > 90.0:
+						ang -= 360.0
+					player.set_input_vector(Vector2.RIGHT.rotated(deg_to_rad(ang)))
+					await physics_frame
+				player.set_input_vector(Vector2.ZERO)
+				await _await_ticks(WEDGE_FREE_TICKS)
+				if not player.is_head_phased() and player.get("_head").call("is_embedded"):
+					failures.append("%s swung at rate %d, released at +%d ticks, still solid and wedged 2 s later" % [path.get_file(), rate, stop])
+				if not await _wedge_aim_away_664(player):
+					failures.append("%s swung at rate %d, released at +%d ticks, not clear after aiming away" % [path.get_file(), rate, stop])
+				await _teardown(stage, false)
+				wedged += 1
+	print("      %d swing-and-release cases" % wedged)
+	_scenario_completed = true
+	return failures
+## Stands flush to a wall, aims at it and holds `hold_ticks`, returning whether
+## the head got embedded in it.
+func _wedge_into_wall_664(player: RigidBody2D, path: String, hold_ticks: int) -> bool:
+	await _equip(player, path)
+	player.set_input_vector(Vector2.RIGHT)
+	var embedded: bool = false
+	for i in hold_ticks:
+		await physics_frame
+		embedded = embedded or player.get("_head").call("is_embedded")
+	return embedded
+## Aims away from the wall and returns whether the head is solid and out of it
+## within half a second.
+func _wedge_aim_away_664(player: RigidBody2D) -> bool:
+	player.set_input_vector(Vector2.LEFT)
+	await _await_ticks(30)
+	return _wedge_free_664(player)
+## Each pickup weapon's head sunk into a wall, then released. Within 2 s the
+## head is out of the wall or a harmless ghost, and aiming away makes it solid.
+func _scenario_wedged_head_frees_after_release_for_every_pickup_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var wedged: Array[String] = []
+	for path: String in WEDGE_PICKUP_PATHS:
+		var stage: Node2D = _wedge_stage_664(10.0)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 100.0))
+		var embedded: bool = await _wedge_into_wall_664(player, path, 20)
+		if embedded:
+			wedged.append(path.get_file())
+		player.set_input_vector(Vector2.ZERO)
+		await _await_ticks(WEDGE_FREE_TICKS)
+		var head: RigidBody2D = player.get("_head")
+		if not player.is_head_phased() and head.call("is_embedded"):
+			failures.append("%s head still solid and wedged 2 s after release" % path.get_file())
+		if not await _wedge_aim_away_664(player):
+			failures.append("%s head not solid and clear of the wall after aiming away" % path.get_file())
+		await _teardown(stage, false)
+	print("      wedged at the wall: %s" % [wedged])
+	for needed: String in ["sword.tres", "boomstick.tres"]:
+		if not needed in wedged:
+			failures.append("setup: %s never got embedded in the wall" % needed)
+	_scenario_completed = true
+	return failures
+## No release: the drag stays held into the wall. The head still phases after
+## the embedded delay, and not before it.
+func _scenario_wedged_head_phases_free_with_input_held() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in ["res://resources/sword.tres", BOOMSTICK_PATH]:
+		var stage: Node2D = _wedge_stage_664(10.0)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 100.0))
+		var embedded: bool = await _wedge_into_wall_664(player, path, 20)
+		if not embedded:
+			failures.append("setup: %s never got embedded" % path.get_file())
+		if player.is_head_phased():
+			failures.append("%s head phased after 0.3 s, before the delay" % path.get_file())
+		await _await_ticks(90)
+		if not player.is_head_phased():
+			failures.append("%s head still solid and wedged 1.8 s into a held drag" % path.get_file())
+		if not await _wedge_aim_away_664(player):
+			failures.append("%s head not solid and clear after aiming away" % path.get_file())
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
