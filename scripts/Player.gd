@@ -985,6 +985,78 @@ func _hold_min_reach() -> void:
 	if onto > allowed:
 		linear_velocity -= axis * (onto - allowed)
 
+## Issue #667: which way the drag is circling, and whether the ground may
+## shove the player against it.
+##
+## A steady circle swung on flat ground is meant to roll the player along
+## the way it turns: the planted head bites and the angle drive's reaction
+## carries the body round it. But the extension drive is an actuator between
+## head and body too, and a head planted ahead of the body, pushing out,
+## throws the body *back* (the reaction is the other way along the haft).
+## Circling with a thumb that wanders off the stick's centre makes the drag
+## length swell exactly as the head comes down in front of the player, so
+## that push-off cancelled or beat the bite and the player went the wrong
+## way (measured: the magnet and boomstick backed off flat ground on every
+## lap of an off-centre circle, in both directions).
+##
+## So while the drag is clearly circling (`SWING_MIN_RATE`) and the head is
+## on terrain, the part of the extension drive that would throw the body
+## against the circling is faded out, fully once the haft is `SWING_YIELD`
+## off vertical. A push straight down (a vault), or any drag not turning,
+## is untouched.
+const SWING_MIN_RATE: float = 2.0
+const SWING_RATE_SMOOTHING: float = 0.4
+const SWING_MIN_DRAG: float = 0.15
+const SWING_YIELD: float = 0.5
+## A drag that turns faster than this (rad/s) between two ticks has been
+## snapped to a new aim, not swung, and carries no direction.
+const SWING_MAX_RATE: float = 30.0
+var _swing_rate: float = 0.0
+var _swing_last_angle: float = 0.0
+var _swing_tracking: bool = false
+
+## The drag's turning rate (rad/s, positive clockwise on screen), smoothed.
+func _track_swing(drag: Vector2, delta: float) -> void:
+	if drag.length() < SWING_MIN_DRAG or _drag_released:
+		_swing_rate = 0.0
+		_swing_tracking = false
+		return
+	var angle: float = drag.angle()
+	if _swing_tracking:
+		var rate: float = wrapf(angle - _swing_last_angle, -PI, PI) / delta
+		_swing_rate = 0.0 if absf(rate) > SWING_MAX_RATE else lerpf(_swing_rate, rate, SWING_RATE_SMOOTHING)
+	_swing_last_angle = angle
+	_swing_tracking = true
+
+## +1 or -1 while the drag is circling, 0 otherwise.
+func _swing_sign() -> float:
+	return signf(_swing_rate) if absf(_swing_rate) >= SWING_MIN_RATE else 0.0
+
+## A circling head hops on the floor, touching it every other tick, and a
+## long head (the sword's blade) touches it with its centre well off the
+## ground, so a probe under the centre misses it. The head counts as planted
+## for SWING_PLANTED_TICKS after it last touched terrain.
+const SWING_PLANTED_TICKS: int = 4
+var _head_terrain_ticks: int = 0
+
+func _track_head_terrain_contact() -> void:
+	_head_terrain_ticks = maxi(_head_terrain_ticks - 1, 0)
+	for body: Node2D in _head.get_colliding_bodies():
+		if not body.is_in_group("players") and not body is WeaponHeadType:
+			_head_terrain_ticks = SWING_PLANTED_TICKS
+			return
+
+## How much of `force` along `axis` to keep, so that the reaction on the body
+## never runs against the circling. 1.0 when it does not.
+func _swing_force_scale(axis: Vector2, force: float) -> float:
+	var swing: float = _swing_sign()
+	if swing == 0.0:
+		return 1.0
+	var against: float = swing * signf(force) * axis.x
+	if against <= 0.0 or _head_terrain_ticks <= 0:
+		return 1.0
+	return 1.0 - clampf(against / SWING_YIELD, 0.0, 1.0)
+
 ## Extension drive: clamped force along the haft, per ADR-0006.
 ##
 ## Applied as an actuator between the two ends of the weapon -- the head takes
@@ -1025,6 +1097,7 @@ func _drive_extension(delta: float) -> void:
 	var drive_mass: float = _stalled_mass(axis * signf(target_v - relative_v), reduced_mass,
 			max_force * delta / _stats.extend_speed, 0.0, 1.0)
 	var force: float = clampf((target_v - relative_v) * drive_mass / delta, -max_force, max_force)
+	force *= _swing_force_scale(axis, force)
 	_head.apply_central_force(axis * force)
 	apply_central_force(-axis * force)
 
@@ -1411,6 +1484,7 @@ func _update_weapon_input(delta: float) -> void:
 	var effective_vector: Vector2 = _get_effective_vector(delta)
 	_effective_input = effective_vector
 	_drag_released = effective_vector == Vector2.ZERO or (has_controller and input_released)
+	_track_swing(effective_vector, delta)
 	if effective_vector != Vector2.ZERO:
 		weapon_angle = effective_vector.angle()
 		weapon_length = lerp(_stats.min_reach, _stats.max_reach, effective_vector.length())
@@ -1765,6 +1839,7 @@ func _head_on_floor() -> bool:
 func _update_head_grip() -> void:
 	if _head_material == null:
 		return
+	_track_head_terrain_contact()
 	var grip: float = 0.0
 	var bodies: Array[Node2D] = _head.get_colliding_bodies()
 	for body: Node2D in bodies:

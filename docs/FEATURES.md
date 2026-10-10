@@ -8,6 +8,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Weapon is the arm: force-driven jointed weapon, relative-vector drag aim (#1, #2, ADR-0003/0005/0006)
 - Damage, blocking, knockback, ring-out deaths (#2)
 - Weapon heads bite into surfaces for traction; weapons and traversal made more responsive (#110, #136, #180, #181)
+- A steady circular swing on flat ground always rolls the player the way it turns, for every weapon, however the thumb circles (#667): while the drag is circling and the head is over the floor, the part of the extension push that would throw the body against the circling (head planted ahead, pushing out) is faded out; a straight push down (a vault) is unchanged
 - Weapon turn guard and anti-tunnelling vs terrain and other heads (#23, #82, #103, #109)
 - Trapped weapon head phases home after a delay (#115)
 - A long head (sword, boomstick) wedged into a wall phases free after 1.5 s, held or released, and turns solid again once its circles are out of the wall (#664)
