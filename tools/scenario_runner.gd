@@ -25765,15 +25765,16 @@ const PICKAXE_STARTER_PATH: String = "res://resources/pickaxe.tres"
 const UMBRELLA_FALL_TICKS: int = 90
 ## Falls for UMBRELLA_FALL_TICKS with `path` held, aim as given, and returns
 ## the fastest downward speed seen.
-func _umbrella_fall_speed(path: String, aim: Vector2) -> float:
+func _umbrella_fall_speed(path: String, aim: Vector2, skip_ticks: int = 0) -> float:
 	var stage: Node2D = _new_empty_stage()
 	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
 	await _equip(player, path)
 	player.set_input_vector(aim)
 	var fastest: float = 0.0
-	for _t in UMBRELLA_FALL_TICKS:
+	for t in UMBRELLA_FALL_TICKS:
 		await physics_frame
-		fastest = maxf(fastest, player.linear_velocity.y)
+		if t >= skip_ticks:
+			fastest = maxf(fastest, player.linear_velocity.y)
 	await _teardown(stage, false)
 	return fastest
 ## Falling with the umbrella overhead is slower than with the pickaxe held the
@@ -25788,6 +25789,12 @@ func _scenario_umbrella_overhead_slows_the_fall() -> Array[String]:
 		failures.append("an open umbrella fell at %.0f px/s, not clearly slower than the pickaxe's %.0f" % [open_speed, pickaxe_speed])
 	if open_speed > closed_speed * 0.6:
 		failures.append("an open umbrella fell at %.0f px/s, not clearly slower than closed (%.0f)" % [open_speed, closed_speed])
+	# #666: once open, the canopy holds a steady fall to about half its old
+	# ~167 px/s (the cap plus one tick of gravity).
+	var steady: float = await _umbrella_fall_speed(UMBRELLA_PATH, Vector2.UP, 40)
+	print("      steady fall under the open umbrella %.0f px/s" % steady)
+	if steady > 95.0:
+		failures.append("an open umbrella settled at %.0f px/s, expected about 85 or less (#666)" % steady)
 	_scenario_completed = true
 	return failures
 ## How far a steady sideways wind carries `path`'s holder in a fall, aim up.
