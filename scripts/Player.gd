@@ -2165,8 +2165,8 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 ## How far from straight up the aim may be, as the cosine, and still count as
 ## held overhead (about 45 degrees).
 const CANOPY_OVERHEAD_COS: float = 0.7
-## The fastest an open canopy lets the body fall, in px/s.
-const CANOPY_FALL_CAP: float = 140.0
+## The fastest an open canopy lets the body fall, in px/s (down from 140 in #666; a steady fall settles about one tick of gravity above it).
+const CANOPY_FALL_CAP: float = 60.0
 ## How much harder a wind zone pushes a body under an open canopy.
 const CANOPY_WIND_MULTIPLIER: float = 4.0
 ## Share of a hit's damage that gets through the canopy face.
