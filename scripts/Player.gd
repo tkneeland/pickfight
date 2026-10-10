@@ -1000,7 +1000,7 @@ func _hold_min_reach() -> void:
 ## lap of an off-centre circle, in both directions).
 ##
 ## So while the drag is clearly circling (`SWING_MIN_RATE`) and the head is
-## over the floor, the part of the extension drive that would throw the body
+## on terrain, the part of the extension drive that would throw the body
 ## against the circling is faded out, fully once the haft is `SWING_YIELD`
 ## off vertical. A push straight down (a vault), or any drag not turning,
 ## is untouched.
@@ -1032,13 +1032,19 @@ func _track_swing(drag: Vector2, delta: float) -> void:
 func _swing_sign() -> float:
 	return signf(_swing_rate) if absf(_swing_rate) >= SWING_MIN_RATE else 0.0
 
-## Terrain within the probe straight under the head, however far below or
-## beside the body it is.
-func _head_over_floor() -> bool:
-	var head_position: Vector2 = _head.global_position
-	var query := PhysicsRayQueryParameters2D.create(
-			head_position, head_position + Vector2(0.0, HEAD_FLOOR_PROBE), _head.collision_mask, [_head.get_rid()])
-	return not get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+## A circling head hops on the floor, touching it every other tick, and a
+## long head (the sword's blade) touches it with its centre well off the
+## ground, so a probe under the centre misses it. The head counts as planted
+## for SWING_PLANTED_TICKS after it last touched terrain.
+const SWING_PLANTED_TICKS: int = 4
+var _head_terrain_ticks: int = 0
+
+func _track_head_terrain_contact() -> void:
+	_head_terrain_ticks = maxi(_head_terrain_ticks - 1, 0)
+	for body: Node2D in _head.get_colliding_bodies():
+		if not body.is_in_group("players") and not body is WeaponHeadType:
+			_head_terrain_ticks = SWING_PLANTED_TICKS
+			return
 
 ## How much of `force` along `axis` to keep, so that the reaction on the body
 ## never runs against the circling. 1.0 when it does not.
@@ -1047,7 +1053,7 @@ func _swing_force_scale(axis: Vector2, force: float) -> float:
 	if swing == 0.0:
 		return 1.0
 	var against: float = swing * signf(force) * axis.x
-	if against <= 0.0 or not _head_over_floor():
+	if against <= 0.0 or _head_terrain_ticks <= 0:
 		return 1.0
 	return 1.0 - clampf(against / SWING_YIELD, 0.0, 1.0)
 
@@ -1833,6 +1839,7 @@ func _head_on_floor() -> bool:
 func _update_head_grip() -> void:
 	if _head_material == null:
 		return
+	_track_head_terrain_contact()
 	var grip: float = 0.0
 	var bodies: Array[Node2D] = _head.get_colliding_bodies()
 	for body: Node2D in bodies:
