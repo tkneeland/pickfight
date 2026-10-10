@@ -200,6 +200,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_persist_to_config_file",
 	"settings_fullscreen_toggle_asks_display_server",
 	"phone_jitter_is_smoothed",
+	"jittery_input_moves_head_without_steps",
+	"jittery_swing_near_edge_stays_on_stage",
 	"phone_release_and_flick_are_not_smoothed",
 	"stage_backgrounds_draw_behind_everything",
 	"pickup_spots_skip_player_spawns",
@@ -1684,6 +1686,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_settings_fullscreen_toggle_asks_display_server()
 		"phone_jitter_is_smoothed":
 			return await _scenario_phone_jitter_is_smoothed()
+		"jittery_input_moves_head_without_steps":
+			return await _scenario_jittery_input_moves_head_without_steps()
+		"jittery_swing_near_edge_stays_on_stage":
+			return await _scenario_jittery_swing_near_edge_stays_on_stage()
 		"phone_release_and_flick_are_not_smoothed":
 			return await _scenario_phone_release_and_flick_are_not_smoothed()
 		"stage_backgrounds_draw_behind_everything":
@@ -12835,6 +12841,153 @@ func _scenario_phone_jitter_is_smoothed() -> Array[String]:
 		failures.append("smoothed input reached the final value %d ticks after raw input, over the %d allowed" % [
 			smooth_settled - raw_settled, JITTER_SETTLE_TICKS])
 	await _teardown(stage)
+	return failures
+# --- Jittery phone input drives smooth motion (issue #669) -------------------
+## Phone-like input: the phone sends one frame per display refresh, Wi-Fi holds
+## a frame for 0 to JANK_MAX_GAP_TICKS ticks (in order, so a held frame lands
+## together with the ones behind it), and some frames repeat the last value.
+const JANK_SEED: int = 669
+const JANK_TICKS: int = 600
+const JANK_MAX_GAP_TICKS: int = 7
+const JANK_STALL_CHANCE: float = 0.12
+const JANK_REPEAT_CHANCE: float = 0.12
+## Fastest sweep a thumb makes, radians per sent frame, and its radius.
+const JANK_SWEEP_RATE: float = 0.09
+const JANK_SWEEP_RADIUS: float = 0.9
+## The largest step the commanded vector may take between two ticks (unit
+## disc), and the largest step the head may take between two ticks, in px.
+const JANK_MAX_COMMAND_STEP: float = 0.17
+const JANK_MAX_HEAD_STEP: float = 27.0
+## Per-tick list of the vectors that reach the host that tick.
+func _jank_deliveries(seed_value: int, ticks: int, rate: float, reverse_every: int = 150, start_angle: float = 0.0) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var out: Array = []
+	for i in ticks + JANK_MAX_GAP_TICKS + 1:
+		out.append([])
+	var angle: float = start_angle
+	var dir: float = 1.0
+	var sent: Vector2 = Vector2.from_angle(angle) * JANK_SWEEP_RADIUS
+	var last_arrival: int = 0
+	for i in ticks:
+		if i % reverse_every == 0 and i > 0:
+			dir = -dir
+		if rng.randf() >= JANK_REPEAT_CHANCE:
+			angle += dir * rate
+			sent = Vector2.from_angle(angle) * JANK_SWEEP_RADIUS
+		var delay: int = rng.randi_range(1, JANK_MAX_GAP_TICKS) if rng.randf() < JANK_STALL_CHANCE else 0
+		last_arrival = maxi(last_arrival, i + delay)
+		out[last_arrival].append(sent)
+	return out
+## Replays the jittery stream into `player` for `ticks` ticks, through the
+## host's smoothing when `smoothed`, and returns the largest per-tick steps of
+## the commanded vector and of the head, plus the largest head-drive-side
+## velocity jump. `stats` keys: command_step, head_step, body_step, x_min, x_max, y_max, alive.
+func _jank_replay(player: RigidBody2D, deliveries: Array, ticks: int, smoothed: bool) -> Dictionary:
+	var smoother: RefCounted = ControllerServerScript.InputSmoother.new()
+	var raw: Vector2 = Vector2.ZERO
+	var prev_cmd: Vector2 = Vector2.ZERO
+	var prev_head: Vector2 = player.weapon_head_position()
+	var prev_body: Vector2 = player.global_position
+	var command_step: float = 0.0
+	var head_step: float = 0.0
+	var body_step: float = 0.0
+	var head_jerk: float = 0.0
+	var prev_head_step: Vector2 = Vector2.ZERO
+	var x_min: float = player.global_position.x
+	var x_max: float = x_min
+	var y_max: float = player.global_position.y
+	for i in ticks:
+		for v: Vector2 in deliveries[i]:
+			raw = v
+			smoother.push_packet(v)
+		var cmd: Vector2 = smoother.step(1.0 / 60.0) if smoothed else raw
+		player.set_input_vector(cmd)
+		await physics_frame
+		if not is_instance_valid(player) or not player.alive:
+			break
+		if i > 0:
+			command_step = maxf(command_step, cmd.distance_to(prev_cmd))
+			head_step = maxf(head_step, player.weapon_head_position().distance_to(prev_head))
+			var this_step: Vector2 = player.weapon_head_position() - prev_head
+			if i > 1:
+				head_jerk = maxf(head_jerk, this_step.distance_to(prev_head_step))
+			prev_head_step = this_step
+			body_step = maxf(body_step, player.global_position.distance_to(prev_body))
+		x_min = minf(x_min, player.global_position.x)
+		x_max = maxf(x_max, player.global_position.x)
+		y_max = maxf(y_max, player.global_position.y)
+		prev_cmd = cmd
+		prev_head = player.weapon_head_position()
+		prev_body = player.global_position
+	return {"command_step": command_step, "head_step": head_step, "body_step": body_step,
+		"head_jerk": head_jerk, "x_min": x_min, "x_max": x_max, "y_max": y_max, "alive": is_instance_valid(player) and player.alive}
+## Issue #669: a phone's stream arrives in gaps and bursts. Swinging on flat
+## ground, no tick may step the commanded vector or the head further than a
+## bound -- and the host's smoothing must beat feeding the stream raw.
+func _scenario_jittery_input_moves_head_without_steps() -> Array[String]:
+	var failures: Array[String] = []
+	var deliveries: Array = _jank_deliveries(JANK_SEED, JANK_TICKS, JANK_SWEEP_RATE)
+	var results: Dictionary = {}
+	for smoothed: bool in [false, true]:
+		var stage: Node2D = _new_empty_stage()
+		_add_bar(stage, Vector2(0, 20.0), Vector2(20000, 40))
+		var player: RigidBody2D = _spawn_player(stage, Vector2(0, -PLAYER_RADIUS))
+		await _await_ticks(ROSTER_SETTLE_TICKS)
+		var stats: Dictionary = await _jank_replay(player, deliveries, JANK_TICKS, smoothed)
+		results[smoothed] = stats
+		print("      %s: largest command step %.3f, head step %.1f px, head step change (jerk) %.1f px, body step %.1f px" % [
+			"smoothed" if smoothed else "raw", stats["command_step"], stats["head_step"], stats["head_jerk"], stats["body_step"]])
+		player.queue_free()
+		await _teardown(stage, false)
+	var smoothed_stats: Dictionary = results[true]
+	if smoothed_stats["command_step"] > JANK_MAX_COMMAND_STEP:
+		failures.append("smoothed commanded vector stepped %.3f in one tick, over %.3f" % [smoothed_stats["command_step"], JANK_MAX_COMMAND_STEP])
+	if smoothed_stats["head_step"] > JANK_MAX_HEAD_STEP:
+		failures.append("smoothed head stepped %.1f px in one tick, over %.1f" % [smoothed_stats["head_step"], JANK_MAX_HEAD_STEP])
+	if smoothed_stats["head_jerk"] > results[false]["head_jerk"]:
+		failures.append("smoothing made the head's step change worse (%.1f px vs raw %.1f)" % [smoothed_stats["head_jerk"], results[false]["head_jerk"]])
+	if smoothed_stats["command_step"] >= results[false]["command_step"]:
+		failures.append("smoothing did not reduce the largest command step (%.3f vs raw %.3f)" % [smoothed_stats["command_step"], results[false]["command_step"]])
+	_scenario_completed = true
+	return failures
+## Half the width of the platform the edge scenario swings on, and how far in
+## from its right edge the player starts.
+const JANK_EDGE_HALF_WIDTH: float = 300.0
+const JANK_EDGE_START_MARGIN: float = 90.0
+## The edge swing is a back-and-forth arc over the player's head, not a lap:
+## a steady circle walks a player along the ground by design (#667).
+const JANK_ARC_FRAMES: int = 25
+const JANK_ARC_START: float = -2.2
+const JANK_EDGE_SEEDS: Array[int] = [669, 670, 671]
+## Issue #669: swinging on flat ground near an edge under the same jittery
+## stream, a player must stay on the stage, over a seeded run. Raw and
+## smoothed numbers are printed side by side.
+func _scenario_jittery_swing_near_edge_stays_on_stage() -> Array[String]:
+	var failures: Array[String] = []
+	for smoothed: bool in [false, true]:
+		var worst_margin: float = INF
+		var falls: int = 0
+		for seed_value: int in JANK_EDGE_SEEDS:
+			var deliveries: Array = _jank_deliveries(seed_value, JANK_TICKS, JANK_SWEEP_RATE, JANK_ARC_FRAMES, JANK_ARC_START)
+			var stage: Node2D = _new_empty_stage()
+			_add_bar(stage, Vector2(0, 20.0), Vector2(JANK_EDGE_HALF_WIDTH * 2.0, 40))
+			var player: RigidBody2D = _spawn_player(stage, Vector2(JANK_EDGE_HALF_WIDTH - JANK_EDGE_START_MARGIN, -PLAYER_RADIUS))
+			await _await_ticks(ROSTER_SETTLE_TICKS)
+			var stats: Dictionary = await _jank_replay(player, deliveries, JANK_TICKS, smoothed)
+			var margin: float = minf(JANK_EDGE_HALF_WIDTH - float(stats["x_max"]), float(stats["x_min"]) + JANK_EDGE_HALF_WIDTH)
+			worst_margin = minf(worst_margin, margin)
+			var fell: bool = float(stats["y_max"]) > 60.0 or not bool(stats["alive"])
+			if fell:
+				falls += 1
+				if smoothed:
+					failures.append("seed %d: smoothed player left the stage (x %.0f..%.0f, lowest y %.0f)" % [seed_value, stats["x_min"], stats["x_max"], stats["y_max"]])
+			if is_instance_valid(player):
+				player.queue_free()
+			await _teardown(stage, false)
+		print("      %s: %d of %d runs left the stage, closest approach to an edge %.0f px" % [
+			"smoothed" if smoothed else "raw", falls, JANK_EDGE_SEEDS.size(), worst_margin])
+	_scenario_completed = true
 	return failures
 ## How long a phone scenario waits for input it sent to show up.
 const SMOOTH_WAIT_MSEC: int = 2000
