@@ -101,7 +101,7 @@ polygon = PackedVector2Array(-112.0, -30.0, 112.0, -30.0, 112.0, 30.0, -112.0, 3
 
 ; Ledges to vault onto and strike down from.
 [node name="LedgeLeft" type="StaticBody2D" parent="."]
-position = Vector2(-350, 170)
+position = Vector2(-350, 142)
 
 [node name="LedgeLeftShape" type="CollisionShape2D" parent="LedgeLeft"]
 shape = SubResource("RectangleShape2D_200x20")
@@ -111,7 +111,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-140.0, -10.0, 140.0, -10.0, 140.0, 10.0, -140.0, 10.0)
 
 [node name="LedgeRight" type="StaticBody2D" parent="."]
-position = Vector2(350, 170)
+position = Vector2(350, 142)
 
 [node name="LedgeRightShape" type="CollisionShape2D" parent="LedgeRight"]
 shape = SubResource("RectangleShape2D_200x20")
@@ -194,10 +194,10 @@ position = Vector2(448, 225)
 
 ; Pickups on the ledges and over the middle.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-350, 120)
+position = Vector2(-350, 92)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(350, 120)
+position = Vector2(350, 92)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
 position = Vector2(0, 40)

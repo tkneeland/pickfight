@@ -53,7 +53,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-160, -12, 160, -12, 160, 12, -160, 12)
 
 [node name="StepLeft" type="StaticBody2D" parent="."]
-position = Vector2(-330, 290)
+position = Vector2(-330, 240)
 
 [node name="StepLeftShape" type="CollisionShape2D" parent="StepLeft"]
 shape = SubResource("R_200x24")
@@ -63,7 +63,7 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
 
 [node name="StepRight" type="StaticBody2D" parent="."]
-position = Vector2(330, 290)
+position = Vector2(330, 240)
 
 [node name="StepRightShape" type="CollisionShape2D" parent="StepRight"]
 shape = SubResource("R_200x24")
