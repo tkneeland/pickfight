@@ -36,6 +36,10 @@ const BALL_RADIUS: float = 28.0
 ## the last one to touch it.
 const TOUCH_RADIUS: float = 80.0
 const BALL_MAX_SPEED: float = 2400.0
+## The ball's mass and how hard gravity pulls it (#674: down from 0.35 and 1.0,
+## so it gets launched upward and stays up more easily).
+const BALL_MASS: float = 0.2
+const BALL_GRAVITY_SCALE: float = 0.75
 ## How far outside the stage's view the ball may be before it is put back.
 const OUT_OF_PLAY_MARGIN: float = 200.0
 const SCORE_SPACING: Vector2 = Vector2(48.0, -24.0)
@@ -182,7 +186,9 @@ func _build_ball() -> void:
 	ball.collision_layer = 3
 	ball.collision_mask = 3
 	ball.continuous_cd = RigidBody2D.CCD_MODE_CAST_RAY
-	ball.mass = 0.35
+	# Light and floaty so a strike lifts it into the air (#649, #674).
+	ball.mass = BALL_MASS
+	ball.gravity_scale = BALL_GRAVITY_SCALE
 	ball.linear_damp = 0.1
 	ball.angular_damp = 0.6
 	var material := PhysicsMaterial.new()

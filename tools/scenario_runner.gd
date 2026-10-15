@@ -844,6 +844,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_and_ctf_stages_are_bigger_649",
 	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
 	"soccer_ball_flies_farther_than_at_mass_one_649",
+	"soccer_ball_lifts_higher_than_before_674",
 	"settings_hygiene_609",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
@@ -2972,6 +2973,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_soccer_and_ctf_stages_are_bigger_649()
 		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
 			return await _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649()
+		"soccer_ball_lifts_higher_than_before_674":
+			return await _scenario_soccer_ball_lifts_higher_than_before_674()
 		"soccer_ball_flies_farther_than_at_mass_one_649":
 			return await _scenario_soccer_ball_flies_farther_than_at_mass_one_649()
 		"settings_hygiene_609":
@@ -42100,6 +42103,45 @@ func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array
 			if not view.has_point(point):
 				failures.append("%s: point %s is outside the view %s" % [path, point, view])
 		await _teardown(rig["stage"])
+	return failures
+## Issue #674: the same upward strike lifts the ball at least 1.5x higher than
+## at the old mass 0.35 and full gravity.
+func _scenario_soccer_ball_lifts_higher_than_before_674() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(2)
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var ball: RigidBody2D = rig["rm"].game_mode_node().ball
+	var real_mass: float = ball.mass
+	var real_gravity: float = ball.gravity_scale
+	var strike: Vector2 = Vector2(0.0, -120.0)
+	var rise: Dictionary = {}
+	for setting: Vector2 in [Vector2(0.35, 1.0), Vector2(real_mass, real_gravity)]:
+		ball.mass = setting.x
+		ball.gravity_scale = setting.y
+		ball.linear_velocity = Vector2.ZERO
+		ball.angular_velocity = 0.0
+		ball.global_position = Vector2(-300.0, -150.0)
+		await _await_ticks(2)
+		var from_y: float = ball.global_position.y
+		var top: float = from_y
+		ball.apply_central_impulse(strike)
+		for _t in 120:
+			await physics_frame
+			top = minf(top, ball.global_position.y)
+			if ball.linear_velocity.y > 0.0:
+				break
+		rise[setting] = from_y - top
+	ball.mass = real_mass
+	ball.gravity_scale = real_gravity
+	var old_rise: float = rise[Vector2(0.35, 1.0)]
+	var new_rise: float = rise[Vector2(real_mass, real_gravity)]
+	print("      upward strike: old ball rose %.0f px, new ball %.0f px" % [old_rise, new_rise])
+	if new_rise < old_rise * 1.5:
+		failures.append("the new ball rose %.0f px against the old %.0f px: under 1.5x" % [new_rise, old_rise])
+	await _teardown(rig["stage"])
 	return failures
 ## One standard strike impulse sends the ball measurably farther than the same
 ## strike did at the old mass of 1.0.
