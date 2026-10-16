@@ -438,6 +438,8 @@ func input(event: InputEvent) -> void:
 		_pad_active = true
 	elif event is InputEventKey or event is InputEventMouseButton:
 		_pad_active = false
+	if _screen.title_visible():
+		_screen._title_screen.input(event)
 	var lobby_panel: Control = _screen._lobby_panel
 	if _screen._server == null or lobby_panel == null or not lobby_panel.visible or _screen.title_visible():
 		return
