@@ -741,6 +741,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"replay_save_writes_clip_gif_beside_pngs",
 	"remote_ready_capture_mirror_and_pad_518",
 	"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats",
+	"grapple_rethrow_straight_after_retract_fires_678",
 	"shield_ranged_hit_does_not_recoil_and_reports_real_damage",
 	"pad_bumper_cycling_picker_does_not_release_weapon",
 	"fresh_claim_does_not_inherit_round_winner_weapon_or_match_win",
@@ -2777,6 +2778,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_ready_capture_mirror_and_pad_518()
 		"grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats":
 			return await _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats()
+		"grapple_rethrow_straight_after_retract_fires_678":
+			return await _scenario_grapple_rethrow_straight_after_retract_fires_678()
 		"shield_ranged_hit_does_not_recoil_and_reports_real_damage":
 			return await _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage()
 		"pad_bumper_cycling_picker_does_not_release_weapon":
@@ -37709,6 +37712,16 @@ func _scenario_remote_ready_capture_mirror_and_pad_518() -> Array[String]:
 ## hook flies instead of being pulled home by the retract's leftover release.
 func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats() -> Array[String]:
 	var failures: Array[String] = []
+	await _retoss_both_seats_513(failures, false)
+	return failures
+## Issue #678: the re-throw tap lands straight after the retract, while the
+## first hook is still flying home: it throws a new hook rather than toggling
+## release on (playtest: "ungrapple, launch again straight away, always fails").
+func _scenario_grapple_rethrow_straight_after_retract_fires_678() -> Array[String]:
+	var failures: Array[String] = []
+	await _retoss_both_seats_513(failures, true)
+	return failures
+func _retoss_both_seats_513(failures: Array[String], quick: bool) -> void:
 	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "Retoss513")
 	var server: Node = rig["server"]
 	var players: Array[RigidBody2D] = rig["players"]
@@ -37721,7 +37734,7 @@ func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats
 	await _await_ticks(20)
 	server.host_pc_mouse_motion(Vector2(0.0, -radius * 3.0))
 	await _await_ticks(30)
-	await _retoss_513("PC", failures, player, server, func() -> void: await _tap_485(KEY_SPACE))
+	await _retoss_513("PC", failures, player, server, quick, func() -> void: await _tap_485(KEY_SPACE))
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _teardown(rig["stage"])
@@ -37740,23 +37753,29 @@ func _scenario_grapple_throw_retract_throw_second_hook_flies_on_pc_and_pad_seats
 	server._test_pad_axes[0] = Vector2(0.0, -1.0)
 	await _await_ticks(30)
 	# A bumper tap throws; a stick click retracts (toggles release).
-	await _retoss_513("pad", failures, player, server, func() -> void:
+	await _retoss_513("pad", failures, player, server, quick, func() -> void:
 		var button: int = JOY_BUTTON_LEFT_STICK if player.launched_hook() != null else JOY_BUTTON_RIGHT_SHOULDER
 		await _pad_button_261(0, button, true)
 		await _pad_button_261(0, button, false))
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _teardown(rig["stage"])
-	return failures
-func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, server: Node, tap: Callable) -> void:
+func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, server: Node, quick: bool, tap: Callable) -> void:
 	await tap.call()
 	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
 		failures.append("%s: the first tap did not fire the grapple" % label)
 		return
 	await tap.call()
-	if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
-		failures.append("%s: the second tap did not retract the hook" % label)
-		return
-	await _await_ticks(60)
+	if quick:
+		var first: Node2D = player.launched_hook()
+		if not await _await_condition(func() -> bool: return first == null or not is_instance_valid(first) or first.is_going_home(), 500):
+			failures.append("%s: the second tap did not retract the hook" % label)
+			return
+		await _await_ticks(2)
+	else:
+		if not await _await_condition(func() -> bool: return player.launched_hook() == null, 1500):
+			failures.append("%s: the second tap did not retract the hook" % label)
+			return
+		await _await_ticks(60)
 	await tap.call()
 	if not await _await_condition(func() -> bool: return player.launched_hook() != null, 1000):
 		failures.append("%s: the third tap did not throw a second hook" % label)
@@ -37765,7 +37784,7 @@ func _retoss_513(label: String, failures: Array[String], player: RigidBody2D, se
 	var start: Vector2 = hook.global_position
 	await _await_ticks(10)
 	hook = player.launched_hook()
-	if hook == null:
+	if hook == null or hook.is_going_home():
 		failures.append("%s: the second hook was pulled home at once" % label)
 	elif hook.global_position.distance_to(start) < 20.0:
 		failures.append("%s: the second hook moved only %.1f px" % [label, hook.global_position.distance_to(start)])

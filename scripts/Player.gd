@@ -2018,6 +2018,9 @@ var _loaded_visual: Polygon2D
 var _effective_input: Vector2 = Vector2.ZERO
 var _flick_history: PackedVector2Array = PackedVector2Array()
 var _flick_armed: bool = false
+## A flick made while the launcher cooled down, kept this long (#678).
+const FLICK_BUFFER_TIME: float = 0.4
+var _flick_buffer: float = 0.0
 
 ## The held weapon's `special`, or empty.
 func weapon_special() -> StringName:
@@ -2054,6 +2057,7 @@ func _build_special(axis: Vector2) -> void:
 	_stomp_lock = 0.0
 	# A drag held through a weapon swap is not a flick.
 	_flick_armed = false
+	_flick_buffer = 0.0
 	_flick_history.clear()
 	match _stats.special:
 		&"flail":
@@ -2085,6 +2089,9 @@ func _tick_special(delta: float) -> void:
 
 func _tick_launcher(delta: float) -> void:
 	var flicked: bool = _detect_flick()
+	if flicked and flick_launch_enabled and _recall_homing_hook():
+		_launch_special() # a re-flick while the hook flies home fires at once (#678)
+		return
 	if _is_out(_hook):
 		_hook.set_held(not _drag_released)
 		return
@@ -2098,10 +2105,38 @@ func _tick_launcher(delta: float) -> void:
 		_set_loaded(true)
 	if _launch_cooldown > 0.0:
 		_launch_cooldown = maxf(0.0, _launch_cooldown - delta)
+	# A flick during the cooldown is kept a moment and fires once it is over,
+	# while the drag is still held (#678).
+	if flicked and _launch_cooldown > 0.0:
+		_flick_buffer = FLICK_BUFFER_TIME
+	elif _flick_buffer > 0.0:
+		_flick_buffer = maxf(0.0, _flick_buffer - delta)
+		flicked = _launch_cooldown <= 0.0 and not _drag_released
 	# Not from a phased head (issue #115): a ghost scores nothing and grips
 	# nothing, and it may be inside the slab it was trapped under.
 	if flicked and flick_launch_enabled and _launch_cooldown <= 0.0 and not _head.phased:
+		_flick_buffer = 0.0
 		_launch_special()
+
+## #678: a grapple hook flying home after a let-go is dropped so a new launch
+## can go at once, with no cooldown. True when it was (or nothing is out and
+## the hook is only cooling down); false while a hook is flying, stuck or
+## reeling, or for any other weapon.
+func _recall_homing_hook() -> bool:
+	if _stats.special != &"grapple" or _head == null or _head.phased:
+		return false
+	if _is_out(_hook):
+		if not _hook.is_going_home():
+			return false
+		_hook.queue_free()
+	elif not _was_launched and _launch_cooldown <= 0.0:
+		return false # nothing to recall: the ordinary path launches
+	_hook = null
+	_was_launched = false
+	_launch_cooldown = 0.0
+	_flick_buffer = 0.0
+	_set_loaded(true)
+	return true
 
 ## Whether this tick's drag completes a flick. Called every tick so the history
 ## stays current; a flick is spent whether or not anything could launch.
@@ -2142,6 +2177,9 @@ func try_action_throw() -> bool:
 		return false
 	if _stats.special != &"boomerang" and not (_stats.special == &"grapple" and not flick_launch_enabled):
 		return false
+	# A press while the hook flies home, or in its cooldown, throws again rather
+	# than toggling release (#678).
+	_recall_homing_hook()
 	if not special_ready() or _head == null or _head.phased:
 		return false
 	_launch_special()
