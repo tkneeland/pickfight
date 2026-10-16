@@ -35361,9 +35361,25 @@ func _scenario_title_screen_offers_couch_online_and_solo_and_no_pc_seat_control(
 		var button: Button = screen.title_button(kind)
 		if button == null or not button.is_visible_in_tree():
 			failures.append("no visible title button for %s" % kind)
+	# It shows with no card focused, so none looks hovered under the mouse (#676);
+	# the first pad press focuses Couch and goes no further.
 	var focused: Control = get_root().gui_get_focus_owner()
+	if focused != null and screen.title_panel().is_ancestor_of(focused):
+		failures.append("the title showed with %s focused, expected nothing" % focused.name)
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
+	focused = get_root().gui_get_focus_owner()
 	if focused != screen.title_button("local"):
-		failures.append("the title focus is on %s, expected Couch" % (focused.name if focused != null else "nothing"))
+		failures.append("the first D-pad press focused %s, expected Couch" % (focused.name if focused != null else "nothing"))
+	# Moving the mouse lets go of it.
+	var motion := InputEventMouseMotion.new()
+	motion.position = Vector2(4, 4)
+	motion.relative = Vector2(3, 0)
+	Input.parse_input_event(motion)
+	await _await_ticks(2)
+	focused = get_root().gui_get_focus_owner()
+	if focused != null and screen.title_panel().is_ancestor_of(focused):
+		failures.append("mouse motion left %s focused" % focused.name)
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
 	# A on the focused Couch button picks it; the pad does not take a seat on the way.
 	# (Device 0: PadMenu binds A to ui_accept for the first pad, as the Deck has.)
 	await _pad_tap_368(0, JOY_BUTTON_A)
@@ -35375,8 +35391,8 @@ func _scenario_title_screen_offers_couch_online_and_solo_and_no_pc_seat_control(
 	# Back to the title; the D-pad walks down to Solo.
 	screen.show_title(true)
 	await _await_ticks(1)
-	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
-	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
+	for i: int in 3: # the first press focuses Couch, two more reach Solo
+		await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
 	focused = get_root().gui_get_focus_owner()
 	if focused != screen.title_button("solo"):
 		failures.append("two D-pad downs reached %s, expected Solo" % (focused.name if focused != null else "nothing"))

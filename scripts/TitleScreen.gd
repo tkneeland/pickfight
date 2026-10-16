@@ -46,18 +46,37 @@ func title_visible() -> bool:
 func title_button(kind: String) -> Button:
 	return _title_buttons.get(kind) as Button
 
-## Shows or hides the title screen; showing it puts focus on Couch.
+## Shows or hides the title screen. It shows with nothing focused, so no card
+## looks hovered under the mouse; the first D-pad, arrow or A press focuses Couch
+## (#676).
 func show_title(on: bool) -> void:
 	if _title_panel == null:
 		return
 	_title_panel.visible = on
 	PadMenuScript.set_open("title", on)
-	if on:
-		(_title_buttons["local"] as Button).grab_focus()
-	else:
-		var focused: Control = _screen.get_viewport().gui_get_focus_owner() if _screen.is_inside_tree() else null
-		if focused != null and _title_panel.is_ancestor_of(focused):
+	var focused: Control = _screen.get_viewport().gui_get_focus_owner() if _screen.is_inside_tree() else null
+	if focused != null and _title_panel.is_ancestor_of(focused):
+		focused.release_focus()
+
+## While the title shows: moving the mouse lets go of a card's focus (the mouse
+## pops cards by hover), and with no card focused the first D-pad, arrow or
+## A/Enter press focuses Couch and goes no further (#676).
+func input(event: InputEvent) -> void:
+	if not title_visible():
+		return
+	var focused: Control = _screen.get_viewport().gui_get_focus_owner()
+	var ours: bool = focused != null and _title_panel.is_ancestor_of(focused)
+	if event is InputEventMouseMotion:
+		if ours and (event as InputEventMouseMotion).relative != Vector2.ZERO:
 			focused.release_focus()
+		return
+	if ours:
+		return
+	for action: StringName in [&"ui_left", &"ui_right", &"ui_up", &"ui_down", &"ui_accept"]:
+		if event.is_action_pressed(action, false, true):
+			(_title_buttons["local"] as Button).grab_focus()
+			_screen.get_viewport().set_input_as_handled()
+			return
 
 ## What picking `kind` on the title screen does: that match kind, then the lobby.
 func press_title(kind: String) -> void:
