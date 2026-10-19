@@ -21,6 +21,7 @@ extends RefCounted
 
 const SfxScript := preload("res://scripts/Sfx.gd")
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const LanguagesScript := preload("res://scripts/Languages.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 
 const SETTINGS_PATH: String = "user://audio.cfg"
@@ -66,6 +67,9 @@ var disabled_weapons: PackedStringArray = []
 var disabled_modifiers: Dictionary = {}
 ## The `GameModes` id the host last picked (issue #352); "" is Classic.
 var game_mode: String = ""
+## The host screen's language (#688): "auto" (the system's) or a
+## `Languages.OPTIONS` code. `set_language` applies it to `TranslationServer`.
+var language: String = LanguagesScript.AUTO
 ## Anonymous match stats (issue #372): sent to the relay at match end unless
 ## switched off in Settings. `telemetry_notice_seen` is set once the first-launch
 ## notice has been dismissed or acted on.
@@ -106,6 +110,7 @@ static func shared() -> RefCounted:
 			_shared.path = SfxScript.headless_settings_path()
 		else:
 			_shared.load_settings()
+			LanguagesScript.apply(_shared.language)
 	return _shared
 
 static func name_of(resource_path: String) -> String:
@@ -339,6 +344,16 @@ func mark_telemetry_notice_seen() -> void:
 	telemetry_notice_seen = true
 	save_settings()
 
+## Returns false (changing nothing) for a language that is not on offer.
+## Otherwise saves it and switches the live locale straight away.
+func set_language(code: String) -> bool:
+	if not LanguagesScript.is_valid(code):
+		return false
+	language = code
+	save_settings()
+	LanguagesScript.apply(language)
+	return true
+
 func set_game_mode(id: String) -> void:
 	game_mode = id
 	save_settings()
@@ -404,6 +419,8 @@ func load_settings() -> void:
 		_load_stage_lists(config)
 		disabled_weapons = _strings(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
+		var chosen: String = str(config.get_value(SECTION, "language", LanguagesScript.AUTO))
+		language = chosen if LanguagesScript.is_valid(chosen) else LanguagesScript.AUTO
 		if game_mode != "" and not _game_modes().selectable(game_mode):  # a retired mode (#645)
 			game_mode = ""
 		disabled_modifiers = {}
@@ -443,6 +460,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "stock_stages_on", stock_stages_on)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
 	config.set_value(SECTION, "game_mode", game_mode)
+	config.set_value(SECTION, "language", language)
 	config.set_value(SECTION, "disabled_modifiers", disabled_modifiers)
 	config.set_value(SECTION, "share_stats", share_stats)
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)

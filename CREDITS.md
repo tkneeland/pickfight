@@ -208,3 +208,22 @@ game does not ship or run it.
 `art/fonts/` bundles **Lilita One** (headings) and **Nunito** (body text), both
 licensed under the SIL Open Font License 1.1 (`OFL-LilitaOne.txt`,
 `OFL-Nunito.txt` alongside), taken from the google/fonts repository.
+
+## Translations
+
+The German, French, Latin American Spanish, Brazilian Portuguese, Simplified
+Chinese, Japanese, Korean and Russian text (the
+host-screen columns of `translations/strings.csv` and the per-language tables in
+`controller/index.html`, issue #688) is **machine-translated**, not yet checked
+by native speakers. Community proofreaders who correct it will be credited here.
+
+| Language | Proofread by |
+|---|---|
+| Deutsch | (open) |
+| Français | (open) |
+| Español (Latinoamérica) | (open) |
+| Português (Brasil) | (open) |
+| 简体中文 | (open) |
+| 日本語 | (open) |
+| 한국어 | (open) |
+| Русский | (open) |

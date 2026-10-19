@@ -1,370 +1,380 @@
-keys,en
-AWARD_BUTTERFINGERS,Butterfingers
-AWARD_CATEGORY_AIRBORNE,AIRBORNE
-AWARD_CATEGORY_CLUMSY,CLUMSY
-AWARD_CATEGORY_COLLECTOR,COLLECTOR
-AWARD_CATEGORY_COMBAT,COMBAT
-AWARD_CATEGORY_SURVIVOR,SURVIVOR
-AWARD_HARD_TO_KILL,Hard to Kill
-AWARD_HEAVY_HITTER,Heavy Hitter
-AWARD_LONGEST_AIRTIME,Longest Airtime
-AWARD_MAGPIE,Magpie
-AWARD_PUNCHING_BAG,Punching Bag
-AWARD_TOP_BRAWLER,Top Brawler
-BANNER_DOUBLE_KO,DOUBLE KO!
-BANNER_FIRST_BLOOD,FIRST BLOOD
-BANNER_LAST_ONE_STANDING,LAST ONE STANDING
-BANNER_MULTI_KO,MULTI KO!
-BANNER_TEAM_SCORE,RED %d - %d BLUE
-BANNER_TEAM_WINS,%s TEAM WINS
-BANNER_TRIPLE_KO,TRIPLE KO!
+keys,en,de,fr,es,pt_BR,zh_CN,ja,ko,ru
+AWARD_BUTTERFINGERS,Butterfingers,Butterfinger,Doigts de beurre,Manos de mantequilla,Mão de manteiga,手滑王,うっかり屋,손미끄럼,Растяпа
+AWARD_CATEGORY_AIRBORNE,AIRBORNE,LUFTIG,EN L'AIR,AÉREO,NO AR,腾空,空中,공중,ВОЗДУХ
+AWARD_CATEGORY_CLUMSY,CLUMSY,TOLPATSCH,MALADROIT,TORPE,DESAJEITADO,笨手笨脚,ドジ,덤벙,НЕУКЛЮЖИЙ
+AWARD_CATEGORY_COLLECTOR,COLLECTOR,SAMMLER,COLLECTIONNEUR,COLECCIONISTA,COLECIONADOR,收集,コレクター,수집,КОЛЛЕКЦИОНЕР
+AWARD_CATEGORY_COMBAT,COMBAT,KAMPF,COMBAT,COMBATE,COMBATE,战斗,バトル,전투,БОЙ
+AWARD_CATEGORY_SURVIVOR,SURVIVOR,ÜBERLEBER,SURVIVANT,SOBREVIVIENTE,SOBREVIVENTE,生存,サバイバー,생존,ВЫЖИВШИЙ
+AWARD_HARD_TO_KILL,Hard to Kill,Nicht totzukriegen,Dur à cuire,Duro de matar,Duro na queda,打不死,不死身,불사신,Живучий
+AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesado,重拳出击,強打者,강타자,Тяжёлая рука
+AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar,滞空最久,最長滞空,최장 체공,Дольше всех в полёте
+AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega,喜鹊,カササギ,까치,Сорока
+AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada,人肉沙包,サンドバッグ,샌드백,Груша для битья
+AWARD_TOP_BRAWLER,Top Brawler,Top-Raufbold,Roi de la baston,Mejor peleador,Rei da briga,最强斗士,最強ファイター,최고의 싸움꾼,Лучший боец
+BANNER_DOUBLE_KO,DOUBLE KO!,DOPPEL-KO!,DOUBLE KO !,¡DOBLE KO!,DOUBLE KO!,双杀!,ダブルKO!,더블 KO!,ДВОЙНОЙ НОКАУТ!
+BANNER_FIRST_BLOOD,FIRST BLOOD,ERSTES BLUT,PREMIER SANG,PRIMERA SANGRE,PRIMEIRO SANGUE,第一滴血,ファーストブラッド,퍼스트 블러드,ПЕРВАЯ КРОВЬ
+BANNER_LAST_ONE_STANDING,LAST ONE STANDING,LETZTER ÜBERLEBENDER,DERNIER DEBOUT,ÚLTIMO EN PIE,ÚLTIMO DE PÉ,最后的幸存者,最後の生き残り,마지막 생존자,ПОСЛЕДНИЙ НА НОГАХ
+BANNER_MULTI_KO,MULTI KO!,MULTI-KO!,MULTI KO !,¡MULTI KO!,MULTI KO!,多杀!,マルチKO!,멀티 KO!,МУЛЬТИ-НОКАУТ!
+BANNER_TEAM_SCORE,RED %d - %d BLUE,ROT %d - %d BLAU,ROUGE %d - %d BLEU,ROJO %d - %d AZUL,VERMELHO %d - %d AZUL,红队 %d - %d 蓝队,赤 %d - %d 青,레드 %d - %d 블루,КРАСНЫЕ %d - %d СИНИЕ
+BANNER_TEAM_WINS,%s TEAM WINS,TEAM %s GEWINNT,L'ÉQUIPE %s GAGNE,¡GANA EL EQUIPO %s!,TIME %s VENCE,%s队获胜,%sチームの勝ち,%s팀 승리,КОМАНДА %s ПОБЕЖДАЕТ
+BANNER_TRIPLE_KO,TRIPLE KO!,DREIFACH-KO!,TRIPLE KO !,¡TRIPLE KO!,TRIPLE KO!,三杀!,トリプルKO!,트리플 KO!,ТРОЙНОЙ НОКАУТ!
 DEMO_END_CARD,"Thanks for playing the Pickfight demo!
-Wishlist the full game on Steam"
-HOST_MATCH_KIND_STATE,Match (O): %s
-JOIN_ERR_COUCH,"That host is playing a Couch match, not Online."
-JOIN_ERR_ROOM_CLOSED,That room is closed.
-LOBBY_KIND_DROPPED_PHONES,Online match: %d phone players left the lobby
-LOBBY_KIND_DROPPED_REMOTE,Couch match: %d online players left the lobby
-LOBBY_ONLINE_WAITING,Share the room code: %d joined (need %d)
-LOBBY_PRESS_READY_ONLINE,Waiting for everyone to ready up
-MATCH_COUCH,Couch
-MATCH_ONLINE,Online
-MATCH_SOLO,Solo
-TITLE_COUCH,Couch (C)
-TITLE_COUCH_HINT,One screen: phones and gamepads in this room
-TITLE_ONLINE,Online (O)
-TITLE_ONLINE_HINT,Everyone plays on their own computer
-TITLE_PICK,How are you playing?
-TITLE_SOLO,Solo (S)
-TITLE_SOLO_HINT,You against 3 bots
-DETAIL_AIRBORNE,%.1fs airborne
-DETAIL_ALIVE,%s alive
-DETAIL_DAMAGE,%d damage
-DETAIL_DAMAGE_TAKEN,%d damage taken
-DETAIL_KO_MANY,%d KOs
-DETAIL_KO_ONE,%d KO
-DETAIL_PICKUP_MANY,%d pickups
-DETAIL_PICKUP_ONE,%d pickup
-DETAIL_SELF_KO_MANY,%d self-KOs
-DETAIL_SELF_KO_ONE,%d self-KO
-FEEDBACK_EMPTY,Type something first.
-FEEDBACK_FAILED,Could not send feedback. Try again later.
-FEEDBACK_OFFLINE,Feedback is offline right now
-FEEDBACK_PLACEHOLDER,What would make this better?
-FEEDBACK_RATE_LIMITED,Too much feedback for now. Try again later.
-FEEDBACK_SEND,Send
-FEEDBACK_SENDING,Sending...
-FEEDBACK_SENT,Thanks! Feedback sent.
-FEEDBACK_TITLE,Send feedback to the developers
-FEED_KO,KO
-FEED_SELF_KO,self-KO
-HOST_END_MATCH,End match
-HOST_FIRST_TO_DOWN,First to  -
-HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
-HOST_JOIN_BLOCKED,Off while players are in your lobby
-HOST_JOIN_ONLINE,Join someone's game (J)
-HOST_JOIN_ONLINE_PAD,Join someone's game
-HOST_KICK,Kick
-HOST_MODE,Mode (T)
-HOST_MODE_STATE,Mode (T): %s
-HOST_BOTS_STATE,Bots (B): %d
-HOST_START_MATCH,START!
-HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.
-HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.
-HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.
-HOW_TO_PLAY_LINE_4,"Hit them till they die, or knock them off. Last one standing wins."
-HOW_TO_PLAY_TITLE,How to play
-JOIN_BUTTON,Join
-JOIN_CANCEL,Cancel
-JOIN_CLOSED_EARLY,The connection closed before the match was joined.
-JOIN_CONNECTING,Connecting to the relay...
-JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.
-JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.
-JOIN_ERR_DEMO_ONLY,This room is running the demo. Join it from the demo.
-JOIN_ERR_DISCONNECTED,Disconnected: %s
-JOIN_ERR_ELSEWHERE,You joined from somewhere else.
-JOIN_ERR_FULL_ONLY,Get the full game to join this room
-JOIN_ERR_HOST_LEFT,Host left.
-JOIN_ERR_IDLE,The room closed after sitting idle.
-JOIN_ERR_NO_HELLO,The host did not accept the join in time.
-JOIN_ERR_NO_SLOT,That match has no free player slot.
-JOIN_ERR_REMOVED,The host removed you from the match.
-JOIN_ERR_ROOM_FULL,That room is full.
-JOIN_ERR_VERSION,Update your game: this version does not match the host's.
-JOIN_JOINING_ROOM,Joining room %s...
-JOIN_LEAVE_MATCH,Leave match
-JOIN_LOBBY_TITLE,Lobby
-JOIN_LOST,Lost the connection to the host.
-JOIN_MOUSE_SENS,Mouse sensitivity
-JOIN_NAME_PLACEHOLDER,Player
-JOIN_ON_PHONE,Join on your phone:
-JOIN_PAUSED,Paused
-JOIN_PAUSE_MATCH,Pause match
-JOIN_PLAYER_READY,%s  ready
-JOIN_READY,Ready
-JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).
-JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.
-JOIN_RESUME,Resume
-JOIN_RESUME_MATCH,Resume match
-JOIN_ROOM_CODE_LABEL,Room code (from the host's screen)
-JOIN_ROOM_OVER,Room %s  match over
-JOIN_ROOM_STARTING,Room %s  starting in %d
-JOIN_ROOM_TITLE,Room %s
-JOIN_TIMEOUT,Timed out waiting for the host. Check the code and try again.
-JOIN_TITLE,Join online game
-JOIN_UPDATE_LINK,Get the latest version
-JOIN_WAITING,Waiting for the host...
-JOIN_WAITING_HOST,"Joined room %s, waiting for the host..."
-JOIN_YOUR_NAME,Your name
-LOBBY_AUTO,(auto)
-LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone
-LOBBY_FIRST_TO,First to %d
-LOBBY_CAPTURES_TO_WIN,Captures to win %d
-LOBBY_GOALS_TO_WIN,Goals to win %d
-LOBBY_LIVES,Lives %d
-LOBBY_HOST_TAG,  (host)
-LOBBY_NOBODY_YET,nobody yet
-LOBBY_NOT_READY,not ready
-LOBBY_PAD_TIP,"Right stick swings, a bumper lets go"
-LOBBY_PRESS_READY,Press Ready on your phone
-LOBBY_READY,READY
-LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d)
-LOBBY_TEAMS_FIRST_TO,Teams  -  first to %d
-LOBBY_TEAM_HEADER,%s TEAM (%d)
-MODE_CLASSIC_NAME,Classic
-MODE_CLASSIC_RULE,Last one standing wins.
-MODE_FFA,Free-for-all
-MODE_HOT_POTATO_NAME,Hot Potato
-MODE_HOT_POTATO_RULE,Do not hold the tag when the fuse ends.
-MODE_KING_OF_THE_HILL_NAME,King of the Hill
-MODE_KING_OF_THE_HILL_RULE,Stand in the gold circle alone. First to 15 s total wins.
-MODE_STOCK_NAME,Stock
-MODE_STOCK_RULE,Lose all your lives and you are out.
-MODE_SUDDEN_DEATH_NAME,Sudden Death
-MODE_SUDDEN_DEATH_RULE,One hit and you are out.
-MODE_TEAMS,Teams
-MODIFIER_BIG_HEADS,Big Heads
-MODIFIER_BOUNCY,Bouncy
-MODIFIER_DOUBLE_DAMAGE,Double Damage
-MODIFIER_FAST_LAVA,Fast Lava
-MODIFIER_GALE,Gale
-MODIFIER_HEAVY_WEAPONS,Heavy Weapons
-MODIFIER_LOW_GRAVITY,Low Gravity
-MODIFIER_METEOR_SHOWER,Meteor Shower
-MODIFIER_SLIPPERY_FLOOR,Slippery Floor
-MODIFIER_SUDDEN_DEATH,Sudden Death!
-MODIFIER_TINY_WEAPONS,Tiny Weapons
-MODIFIER_WEAPON_ROULETTE,Weapon Roulette
-OFF,off
-ON,on
-ONLINE_CONNECTING,connecting…
-ONLINE_ONLINE,online
-ONLINE_ROOM,Online: %s
-ONLINE_ROOM_RECONNECTING,Online: %s (reconnecting...)
-ONLINE_UNREACHABLE,relay unreachable: playing offline
-OVERTIME,OVERTIME
-PAUSED,PAUSED
-PHONE_STOCK_RANDOM,Random
-PING_MS,%d ms
-REPLAY_NOTHING,Replay: nothing recorded yet
-REPLAY_SAVED,Replay saved: %s
-ROOM_CODE_HIDDEN,Code hidden: see host phone
-SCORE_PLAYER,P%d: %d
-SCORE_TEAM,%s: %d
-SETTINGS,Settings
-SETTINGS_FEEDBACK,Feedback
-SETTINGS_FULLSCREEN,Full (F11)
-SETTINGS_HIDE_ROOM_CODE,Hide room code
-SETTINGS_MASTER_VOLUME,Master volume
-SETTINGS_MORE_OPTIONS,More options
-SETTINGS_MUSIC,Music
-SETTINGS_MUTE,Mute (M)
-SETTINGS_MUTED,Settings (muted)
-SETTINGS_NAME_TAGS,Name tags: %sx
-SETTINGS_REDUCE_FLASHES,Reduce flashes
-SETTINGS_SCREEN_SHAKE,Screen shake
-SETTINGS_SFX,Sound effects
-SETTINGS_STAGES_LIST,Stages (untick to skip)
-SETTINGS_WEAPONS_LIST,Weapons (untick to skip)
-SETTINGS_WINDOW_DEFAULT,Window: default
-SETTINGS_WINDOW_SIZE,Window: %d x %d
-STAGE_BATTLEFIELD,Battlefield
-STAGE_BOWL,Bowl
-STAGE_BULWARK,Bulwark
-STAGE_CAROUSEL,Carousel
-STAGE_CASCADE,Cascade
-STAGE_COLOSSEUM,Colosseum
-STAGE_EROSION,Erosion
-STAGE_FERRY,Ferry
-STAGE_FINALDESTINATION,Final Destination
-STAGE_FLATLANDS,Flatlands
-STAGE_FOOTBRIDGE,Footbridge
-STAGE_FURNACE,Furnace
-STAGE_GALE,Gale
-STAGE_GANTRY,Gantry
-STAGE_GAUNTLET,Gauntlet
-STAGE_HIGHRISE,Highrise
-STAGE_ISLANDS,Islands
-STAGE_MILL,Mill
-STAGE_OVERPASS,Overpass
-STAGE_PILLARS,Pillars
-STAGE_PISTONS,Pistons
-STAGE_POCKET,Pocket
-STAGE_QUARRY,Quarry
-STAGE_REACTOR,Reactor
-STAGE_ROCKFALL,Rockfall
-STAGE_SINKHOLE,Sinkhole
-STAGE_SLANT,Slant
-STAGE_SPRINGBOARD,Springboard
-STAGE_UPDRAFT,Updraft
-STAGE_VENT,Vent
-STAGE_ZIGGURAT,Ziggurat
-STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s
-TEAM_BLUE,BLUE
-TEAM_RED,RED
-VICTORY_CONTINUE_WITH,Continue with %s
-VICTORY_INPUT_PAD,A on a gamepad
-VICTORY_INPUT_PHONE,a tap on your phone
-VICTORY_INPUT_SPACE,Space or click
-VICTORY_LIST_LAST,%s or %s
-VICTORY_MATCH_OVER,MATCH OVER
-VICTORY_TAP_CONTINUE,Tap Continue on your phone
-VICTORY_TEAM_WINS,%s TEAM WINS!
-VICTORY_WINS,%s WINS!
-WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d)
-STAGE_RACETRACK,Racetrack
-STAGE_SWITCHYARD,Switchyard
-STAGE_ORBIT,Orbit
-SETTINGS_SHARE_STATS,Share anonymous match stats
-TELEMETRY_NOTICE,"Pickfight sends anonymous match stats (weapon damage, hits and KOs, mode, stages and match length; no names or IDs) to help balance the game. Change it any time in Settings > More options > Share anonymous match stats."
-TELEMETRY_TURN_OFF,Turn off
-TELEMETRY_OK,Got it
-STAGE_MESA,Mesa
-STAGE_RELAY,Relay
-STAGE_ROUNDABOUT,Roundabout
-STAGE_SUMMIT,Summit
-MODE_SOCCER_NAME,Soccer
-MODE_SOCCER_RULE,Reach the goal target to win.
-SOCCER_GOAL,GOAL!
-AWARD_CATEGORY_SCORER,SCORER
-STAGE_PITCH,Pitch
-STAGE_CAGE,Cage
-STAGE_DUNES,Dunes
-MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag
-MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.
-AWARD_CATEGORY_CAPTURER,CAPTURER
-STAGE_BASTION,Bastion
-STAGE_STRONGHOLD,Stronghold
-AWARD_CATEGORY_HILL,HILL
-AWARD_CATEGORY_TAGGER,TAGGER
-AWARD_CATEGORY_LIVES,LIVES
-HUD_TAKES_ROUND,%s takes the round
-HUD_TEAM_TAKES_ROUND,%s team takes the round
-HUD_ROUND_DRAWN,Round drawn
-HUD_WINS_MATCH,%s wins the match
-HUD_TEAM_WINS_MATCH,%s team wins the match
-HUD_PODIUM_ROW,%d. %s  %d
-HUD_HOLD,%s %d/%ds
-HUD_HILL_MOVING,Hill is moving!
-HILL_CONTESTED,CONTESTED
-BANNER_HOLDS_THE_HILL,%s holds the hill!
-HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s
-HUD_FLAG_0,home
-HUD_FLAG_1,carried
-HUD_FLAG_2,dropped
-HUD_SOCCER,Red %d - Blue %d (first to %d)
-HUD_POTATO,%s has the potato: %ds
-HUD_LIVES,%s x%d
-PICKER_TITLE,Your look
-PICKER_HAT,Hat
-PICKER_COLOUR,Colour
-PICKER_EYES,Eyes
-PICKER_HAT_NONE,None
-PICKER_HAT_CROWN,Crown
-PICKER_HAT_TOP_HAT,Top hat
-PICKER_HAT_CAP,Cap
-PICKER_HAT_BEANIE,Beanie
-PICKER_HAT_VIKING,Viking
-PICKER_HAT_PARTY,Party hat
-PICKER_HAT_HALO,Halo
-PICKER_HAT_PROPELLER,Propeller
-PICKER_EYES_ROUND,Round
-PICKER_EYES_SLEEPY,Sleepy
-PICKER_EYES_ANGRY,Angry
-PICKER_EYES_WIDE,Wide
-PICKER_EYES_DOT,Dot
-PICKER_EYES_VISOR,Visor
-JOIN_REJOINING,Rejoining your seat...
-REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s
-REPLAY_GIF_SAVED,GIF saved: %s
-LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d)
-LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect
-MODE_STOCK_RULE_N,Lose all %d lives and you are out.
-MODE_SOCCER_RULE_N,First team to %d goals wins.
-MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.
-HOST_START_WAITING,Waiting...
-HOW_TO_PLAY_BUTTON,How to play
-LOBBY_YOU_TAG," (you)"
-LOBBY_BOT,BOT
-LOBBY_OPEN_SEAT,Open seat
-LOBBY_SEAT_HINT_COUCH,Scan QR or press A
-LOBBY_SEAT_HINT_SOLO,Add a bot with B
-LOBBY_SEAT_HINT_ONLINE,Share the room code
-LOBBY_PLAYERS,Players
-LOBBY_COUNT,"%d joined, %d bots"
-LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot"
-LOBBY_TEAM_TAG,%s TEAM
-LOBBY_STARTING,Get ready!
-LOBBY_NOT_READY_ONE,1 player not ready yet
-LOBBY_NOT_READY_N,%d players not ready yet
-LOBBY_ENTER_OR_START,Enter or Start
-LOBBY_SCAN_TITLE,Scan to join
-LOBBY_ROOM_CODE_TITLE,Room code
-LOBBY_SOLO_TITLE,Solo practice
-LOBBY_ROOM_CODE_NOTE,"Friends open Pickfight, pick Online, then Join a game"
-LOBBY_SOLO_NOTE,Just you and the bots on this computer. No room code and nothing online.
-LOBBY_MODE_TITLE,Mode
-LOBBY_HOST_TITLE,Host
-LOBBY_ROW_FIRST_TO,First to
-LOBBY_ROW_LIVES,Lives
-LOBBY_ROW_GOALS,Goals to win
-LOBBY_ROW_CAPTURES,Captures to win
-LOBBY_ROW_BOTS,Bots
-BOT_SKILL_EASY,Easy
-BOT_SKILL_NORMAL,Normal
-BOT_SKILL_HARD,Hard
-LOBBY_ROW_TEAMS,Teams
-LOBBY_ON,On
-LOBBY_OFF,Off
-LOBBY_STATUS_FIRST_TO,first to %d
-LOBBY_STATUS_LIVES,%d lives
-LOBBY_STATUS_GOALS,%d goals
-LOBBY_STATUS_CAPTURES,%d captures
-LOBBY_HELP_FIRST_TO,First to %d rounds takes the match.
-MODE_CLASSIC_BLURB,Last one standing
-MODE_KING_OF_THE_HILL_BLURB,Hold the hill alone
-MODE_HOT_POTATO_BLURB,Pass the tag
-MODE_SUDDEN_DEATH_BLURB,"One hit, you are out"
-MODE_STOCK_BLURB,Last one with lives left
-MODE_SOCCER_BLURB,Teams: score goals
-MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag
-PICKER_LIVE_NOTE,"In the game this is the real character, live"
-PICKER_TAKEN_NOTE,Greyed colours are taken by other players
-PICKER_DONE,Done
-TITLE_FOOTER,"Click, press a key, or D-pad + A"
-CAREER_LINE,Matches %d · Wins %d · KOs %d
-CAREER_MATCHES,Matches played: %d
-CAREER_MATCH_WINS,Match wins: %d
-CAREER_ROUND_WINS,Round wins: %d
-CAREER_KOS,KOs: %d
-CAREER_SELF_KOS,Self-KOs: %d
-CAREER_FAVOURITE,Favourite weapon: %s
-JOIN_HELP_BUTTON,Phones can't join?
-JOIN_HELP_TITLE,Phones can't join?
-JOIN_HELP_FIREWALL,"Firewall: allow Pickfight through when your computer asks (Windows ""Allow access"", macOS incoming connections)."
-JOIN_HELP_ISOLATION,"Guest, hotel or school Wi-Fi often blocks phones from reaching other devices (client isolation): use another network."
-JOIN_HELP_ADAPTER,Wrong network: a VPN or a second adapter can hide the right address. Try another address listed below.
-JOIN_HELP_PHONE_NETWORK,Phone on mobile data or a different Wi-Fi: switch it to the same Wi-Fi as this computer.
-JOIN_HELP_HOTSPOT,Still stuck: start a hotspot on a phone and connect this computer and the other phones to it.
-JOIN_HELP_ADDRESSES,Type one of these into the phone's browser if the QR code fails:
-JOIN_HELP_NO_ADDRESS,No network address found: connect this computer to Wi-Fi or Ethernet.
+Wishlist the full game on Steam","Danke fürs Spielen der Pickfight-Demo!
+Wunschliste das ganze Spiel auf Steam","Merci d'avoir joué à la démo de Pickfight !
+Ajoute le jeu complet à ta liste de souhaits Steam","¡Gracias por jugar la demo de Pickfight!
+Agrega el juego completo a tu lista de deseados en Steam","Valeu por jogar a demo de Pickfight!
+Adicione o jogo completo à lista de desejos na Steam","感谢试玩 Pickfight 试玩版!
+快去 Steam 愿望单添加完整版","Pickfightのデモを遊んでくれてありがとう!
+Steamで製品版をウィッシュリストに追加しよう","Pickfight 데모를 플레이해 줘서 고마워요!
+스팀에서 정식판을 위시리스트에 담아 주세요","Спасибо, что сыграли в демо Pickfight!
+Добавьте полную игру в желаемое в Steam"
+HOST_MATCH_KIND_STATE,Match (O): %s,Match (O): %s,Match (O) : %s,Partida (O): %s,Partida (O): %s,对局 (O): %s,マッチ (O): %s,대전 (O): %s,Матч (O): %s
+JOIN_ERR_COUCH,"That host is playing a Couch match, not Online.","Dieser Host spielt ein Couch-Match, kein Online-Match.","Cet hôte joue en mode Canapé, pas en ligne.","Ese anfitrión juega una partida de Sofá, no en línea.","Esse anfitrião está numa partida de Sofá, não Online.","该主机正在进行同屏对战,不是联机对战。",そのホストはオンラインではなくカウチ対戦中です。,그 호스트는 온라인이 아니라 같은 방 대전 중이에요.,"Этот хозяин играет в матч на одном экране, а не онлайн."
+JOIN_ERR_ROOM_CLOSED,That room is closed.,Dieser Raum ist geschlossen.,Ce salon est fermé.,Esa sala está cerrada.,Essa sala está fechada.,该房间已关闭。,そのルームは閉じられました。,그 방은 닫혔어요.,Эта комната закрыта.
+LOBBY_KIND_DROPPED_PHONES,Online match: %d phone players left the lobby,Online-Match: %d Handy-Spieler haben die Lobby verlassen,Match en ligne : %d joueurs sur téléphone ont quitté le lobby,Partida en línea: %d jugadores con celular salieron del lobby,Partida online: %d jogadores de celular saíram do lobby,联机对战:%d 位手机玩家离开了大厅,オンライン対戦: スマホ勢%d人がロビーを抜けました,온라인 대전: 폰 플레이어 %d명이 로비를 떠났어요,Онлайн-матч: %d игроков с телефонов вышли из лобби
+LOBBY_KIND_DROPPED_REMOTE,Couch match: %d online players left the lobby,Couch-Match: %d Online-Spieler haben die Lobby verlassen,Match Canapé : %d joueurs en ligne ont quitté le lobby,Partida de Sofá: %d jugadores en línea salieron del lobby,Partida de Sofá: %d jogadores online saíram do lobby,同屏对战:%d 位联机玩家离开了大厅,カウチ対戦: オンライン勢%d人がロビーを抜けました,같은 방 대전: 온라인 플레이어 %d명이 로비를 떠났어요,Матч на одном экране: %d онлайн-игроков вышли из лобби
+LOBBY_ONLINE_WAITING,Share the room code: %d joined (need %d),Teile den Raumcode: %d dabei (nötig: %d),Partage le code du salon : %d connectés (il en faut %d),Comparte el código de la sala: %d unidos (mínimo %d),Compartilhe o código da sala: %d entraram (mínimo %d),分享房间码:已加入 %d 人(需要 %d),ルームコードを共有: %d人参加(必要: %d人),방 코드를 공유하세요: %d명 참가 (필요 %d명),Поделитесь кодом комнаты: зашли %d (нужно %d)
+LOBBY_PRESS_READY_ONLINE,Waiting for everyone to ready up,"Warten, bis alle bereit sind",On attend que tout le monde soit prêt,Esperando a que todos estén listos,Esperando todo mundo ficar pronto,等待大家准备,みんなの準備待ち,모두 준비할 때까지 대기 중,"Ждём, пока все будут готовы"
+MATCH_COUCH,Couch,Couch,Canapé,Sofá,Sofá,同屏,カウチ,같은 방,На одном экране
+MATCH_ONLINE,Online,Online,En ligne,En línea,Online,联机,オンライン,온라인,Онлайн
+MATCH_SOLO,Solo,Solo,Solo,Solo,Solo,单人,ソロ,솔로,Один
+TITLE_COUCH,Couch (C),Couch (C),Canapé (C),Sofá (C),Sofá (C),同屏 (C),カウチ (C),같은 방 (C),Один экран (C)
+TITLE_COUCH_HINT,One screen: phones and gamepads in this room,Ein Bildschirm: Handys und Gamepads in diesem Raum,Un écran : téléphones et manettes dans cette pièce,Una pantalla: celulares y controles en esta sala,Uma tela: celulares e controles nesta sala,一块屏幕:本房间的手机和手柄,1つの画面で: この部屋のスマホとゲームパッド,화면 하나로: 이 방의 폰과 게임패드,Один экран: телефоны и геймпады в этой комнате
+TITLE_ONLINE,Online (O),Online (O),En ligne (O),En línea (O),Online (O),联机 (O),オンライン (O),온라인 (O),Онлайн (O)
+TITLE_ONLINE_HINT,Everyone plays on their own computer,Alle spielen am eigenen Computer,Chacun joue sur son ordinateur,Cada quien juega en su computadora,Cada um joga no seu computador,大家各用各的电脑,みんな自分のパソコンで,모두 각자 컴퓨터로,Каждый играет на своём компьютере
+TITLE_PICK,How are you playing?,Wie spielt ihr?,Comment on joue ?,¿Cómo van a jugar?,Como vocês vão jogar?,怎么玩?,どうやって遊ぶ?,어떻게 할래요?,Как играем?
+TITLE_SOLO,Solo (S),Solo (S),Solo (S),Solo (S),Solo (S),单人 (S),ソロ (S),솔로 (S),Один (S)
+TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 3 bots,Você contra 3 bots,你对战 3 个电脑,あなた対ボット3体,나 혼자 봇 3명과,Вы против 3 ботов
+DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
+DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
+DETAIL_DAMAGE,%d damage,%d Schaden,%d de dégâts,%d de daño,%d de dano,伤害 %d,ダメージ %d,피해 %d,Урон: %d
+DETAIL_DAMAGE_TAKEN,%d damage taken,%d Schaden kassiert,%d de dégâts subis,%d de daño recibido,%d de dano sofrido,承受伤害 %d,被ダメージ %d,받은 피해 %d,Получено урона: %d
+DETAIL_KO_MANY,%d KOs,%d KOs,%d KO,%d KO,%d KOs,%d 次击倒,%d KO,%d KO,%d нокаутов
+DETAIL_KO_ONE,%d KO,%d KO,%d KO,%d KO,%d KO,%d 次击倒,%d KO,%d KO,%d нокаут
+DETAIL_PICKUP_MANY,%d pickups,%d Pickups,%d objets,%d objetos,%d itens,%d 个道具,アイテム %d個,아이템 %d개,%d подборов
+DETAIL_PICKUP_ONE,%d pickup,%d Pickup,%d objet,%d objeto,%d item,%d 个道具,アイテム %d個,아이템 %d개,%d подбор
+DETAIL_SELF_KO_MANY,%d self-KOs,%d Selbst-KOs,%d auto-KO,%d autoKO,%d autoKOs,%d 次自爆,自滅 %d回,자멸 %d회,%d самонокаутов
+DETAIL_SELF_KO_ONE,%d self-KO,%d Selbst-KO,%d auto-KO,%d autoKO,%d autoKO,%d 次自爆,自滅 %d回,자멸 %d회,%d самонокаут
+FEEDBACK_EMPTY,Type something first.,Schreib erst etwas.,Écris d'abord quelque chose.,Escribe algo primero.,Escreva algo primeiro.,先写点什么吧。,先に何か書いてね。,먼저 뭐라도 적어 주세요.,Сначала напишите что-нибудь.
+FEEDBACK_FAILED,Could not send feedback. Try again later.,Feedback konnte nicht gesendet werden. Versuch es später nochmal.,Impossible d'envoyer l'avis. Réessaie plus tard.,No se pudo enviar el comentario. Inténtalo más tarde.,Não deu para enviar o feedback. Tente de novo mais tarde.,"反馈发送失败,请稍后再试。",フィードバックを送れませんでした。あとでもう一度試してね。,피드백을 보내지 못했어요. 나중에 다시 해 보세요.,Не удалось отправить отзыв. Попробуйте позже.
+FEEDBACK_OFFLINE,Feedback is offline right now,Feedback ist gerade offline,Les avis sont hors ligne pour l'instant,Los comentarios están fuera de línea por ahora,O feedback está offline agora,反馈功能暂时离线,フィードバックは今オフラインです,지금은 피드백을 받을 수 없어요,Отзывы сейчас недоступны
+FEEDBACK_PLACEHOLDER,What would make this better?,Was würde das hier besser machen?,Qu'est-ce qui rendrait ça meilleur ?,¿Qué lo mejoraría?,O que deixaria isto melhor?,怎样能让它更好?,どうしたらもっと良くなる?,어떻게 하면 더 좋아질까요?,Что сделать лучше?
+FEEDBACK_RATE_LIMITED,Too much feedback for now. Try again later.,Gerade zu viel Feedback. Versuch es später nochmal.,Trop d'avis pour l'instant. Réessaie plus tard.,Demasiados comentarios por ahora. Inténtalo más tarde.,Feedback demais por enquanto. Tente de novo mais tarde.,"反馈太多了,请稍后再试。",フィードバックが多すぎます。あとでもう一度試してね。,피드백이 너무 많아요. 나중에 다시 해 보세요.,Слишком много отзывов. Попробуйте позже.
+FEEDBACK_SEND,Send,Senden,Envoyer,Enviar,Enviar,发送,送信,보내기,Отправить
+FEEDBACK_SENDING,Sending...,Sende...,Envoi...,Enviando...,Enviando...,发送中...,送信中...,보내는 중...,Отправка...
+FEEDBACK_SENT,Thanks! Feedback sent.,Danke! Feedback gesendet.,Merci ! Avis envoyé.,¡Gracias! Comentario enviado.,Valeu! Feedback enviado.,谢谢!反馈已发送。,ありがとう! 送信しました。,고마워요! 피드백을 보냈어요.,Спасибо! Отзыв отправлен.
+FEEDBACK_TITLE,Send feedback to the developers,Feedback an die Entwickler senden,Envoyer un avis aux développeurs,Enviar comentarios a los desarrolladores,Enviar feedback para os desenvolvedores,给开发者发送反馈,開発者にフィードバックを送る,개발자에게 피드백 보내기,Отправить отзыв разработчикам
+FEED_KO,KO,KO,KO,KO,KO,击倒,KO,KO,нокаут
+FEED_SELF_KO,self-KO,Selbst-KO,auto-KO,autoKO,autoKO,自爆,自滅,자멸,самонокаут
+HOST_END_MATCH,End match,Match beenden,Finir le match,Terminar partida,Encerrar partida,结束对局,マッチを終了,대전 종료,Закончить матч
+HOST_FIRST_TO_DOWN,First to  -,Erster bis  -,Premier à  -,El primero a  -,O primeiro a  -,先到  -,先取  -,선취  -,До  -
+HOST_GAMEPAD_HINT,"Press A to join, Y for menu","A zum Beitreten, Y fürs Menü","A pour rejoindre, Y pour le menu","A para unirte, Y para el menú","A para entrar, Y para o menu","按 A 加入,按 Y 打开菜单",Aで参加、Yでメニュー,"A로 참가, Y로 메뉴","A — войти, Y — меню"
+HOST_JOIN_BLOCKED,Off while players are in your lobby,"Aus, solange Spieler in deiner Lobby sind",Désactivé tant que des joueurs sont dans ton lobby,Desactivado con jugadores en tu lobby,Desativado com jogadores no seu lobby,大厅里有玩家时不可用,ロビーに人がいる間は使えません,로비에 플레이어가 있으면 쓸 수 없어요,"Недоступно, пока в вашем лобби есть игроки"
+HOST_JOIN_ONLINE,Join someone's game (J),Spiel beitreten (J),Rejoindre une partie (J),Unirse a una partida (J),Entrar no jogo de alguém (J),加入别人的游戏 (J),他の人のゲームに参加 (J),다른 사람 게임에 참가 (J),Зайти в чужую игру (J)
+HOST_JOIN_ONLINE_PAD,Join someone's game,Spiel beitreten,Rejoindre une partie,Unirse a una partida,Entrar no jogo de alguém,加入别人的游戏,他の人のゲームに参加,다른 사람 게임에 참가,Зайти в чужую игру
+HOST_KICK,Kick,Rauswerfen,Virer,Expulsar,Expulsar,踢出,キック,내보내기,Выгнать
+HOST_MODE,Mode (T),Modus (T),Mode (T),Modo (T),Modo (T),模式 (T),モード (T),모드 (T),Режим (T)
+HOST_MODE_STATE,Mode (T): %s,Modus (T): %s,Mode (T) : %s,Modo (T): %s,Modo (T): %s,模式 (T): %s,モード (T): %s,모드 (T): %s,Режим (T): %s
+HOST_BOTS_STATE,Bots (B): %d,Bots (B): %d,Bots (B) : %d,Bots (B): %d,Bots (B): %d,电脑 (B): %d,ボット (B): %d,봇 (B): %d,Боты (B): %d
+HOST_START_MATCH,START!,LOS!,C'EST PARTI !,¡VAMOS!,VAI!,开始!,スタート!,시작!,СТАРТ!
+HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.,"Zieh auf dem Handy, um die Spitzhacke zu schwingen. Schnell wischen für harte Treffer.",Glisse le doigt sur ton téléphone pour balancer ton pic. Un coup sec frappe fort.,Arrastra en tu celular para girar el pico. Un movimiento rápido pega fuerte.,Arraste no celular para girar o pico. Um movimento rápido bate forte.,"在手机上拖动来挥动镐子。快速一甩,打得更狠。",スマホをドラッグしてツルハシを振ろう。素早く弾くと強く当たる。,폰을 드래그해서 곡괭이를 휘두르세요. 빠르게 튕기면 세게 때려요.,"Води пальцем по телефону, чтобы махать киркой. Резкий взмах — сильный удар."
+HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.,Hak die Hacke an einer Kante ein und zieh dich hoch.,Accroche le pic à un rebord et tire pour grimper.,Engancha el pico en un borde y jala para trepar.,Engate o pico numa beirada e puxe para escalar.,"把镐子钩在平台边缘,往回拉就能爬上去。",ツルハシを足場の縁に引っかけて、引っ張って登ろう。,곡괭이를 발판 끝에 걸고 당겨서 올라가세요.,"Зацепи кирку за уступ и подтянись, чтобы залезть."
+HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.,"Berühre ein Waffen-Pickup, um es zu schnappen.",Touche une arme au sol pour la ramasser.,Toca un arma del piso para agarrarla.,Toque numa arma no chão para pegá-la.,碰到武器道具就能捡起来。,武器アイテムに触れると拾える。,무기 아이템에 닿으면 주워요.,"Коснись оружия на земле, чтобы подобрать."
+HOW_TO_PLAY_LINE_4,"Hit them till they die, or knock them off. Last one standing wins.","Hau sie platt oder wirf sie runter. Wer zuletzt steht, gewinnt.","Frappe-les jusqu'au KO, ou envoie-les valser. Le dernier debout gagne.",Golpéalos hasta el KO o tíralos del escenario. Gana el último en pie.,Bata até nocautear ou jogue todo mundo para fora. Vence o último de pé.,"打到对手倒下,或把他们打下台。最后站着的获胜。",倒れるまで殴るか、場外に叩き落とそう。最後に立っていた人が勝ち。,죽을 때까지 때리거나 밖으로 날려 버리세요. 마지막까지 서 있으면 승리!,"Бей, пока не умрут, или сбрось их с арены. Побеждает последний на ногах."
+HOW_TO_PLAY_TITLE,How to play,So wird gespielt,Comment jouer,Cómo jugar,Como jogar,玩法,遊び方,게임 방법,Как играть
+JOIN_BUTTON,Join,Beitreten,Rejoindre,Unirse,Entrar,加入,参加,참가,Войти
+JOIN_CANCEL,Cancel,Abbrechen,Annuler,Cancelar,Cancelar,取消,キャンセル,취소,Отмена
+JOIN_CLOSED_EARLY,The connection closed before the match was joined.,"Die Verbindung wurde getrennt, bevor das Match beigetreten war.",La connexion s'est fermée avant d'entrer dans le match.,La conexión se cerró antes de entrar a la partida.,A conexão fechou antes de entrar na partida.,在加入对局之前连接就断开了。,マッチに参加する前に接続が切れました。,대전에 참가하기 전에 연결이 끊겼어요.,Соединение закрылось до входа в матч.
+JOIN_CONNECTING,Connecting to the relay...,Verbinde mit dem Relay...,Connexion au relais...,Conectando con el relay...,Conectando ao relay...,正在连接中继服务器...,リレーに接続中...,릴레이에 연결하는 중...,Подключаемся к ретранслятору...
+JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.,Gib den %d-stelligen Raumcode vom Host-Bildschirm ein.,Saisis le code de %d lettres affiché sur l'écran de l'hôte.,Ingresa el código de %d letras de la pantalla del anfitrión.,Digite o código de %d letras da tela do anfitrião.,请输入主机屏幕上的 %d 位房间码。,ホスト画面の%d文字のルームコードを入力してね。,호스트 화면에 나온 %d자리 방 코드를 입력하세요.,Введите %d-буквенный код комнаты с экрана хозяина.
+JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.,Kein Raum mit diesem Code. Prüf den Code auf dem Host-Bildschirm.,Aucun salon avec ce code. Vérifie le code sur l'écran de l'hôte.,No hay sala con ese código. Revisa el código en la pantalla del anfitrión.,Nenhuma sala com esse código. Confira o código na tela do anfitrião.,没有这个房间码对应的房间。请核对主机屏幕上的房间码。,そのコードのルームはありません。ホスト画面のコードを確認してね。,그 코드의 방이 없어요. 호스트 화면의 코드를 확인하세요.,Комнаты с таким кодом нет. Проверьте код на экране хозяина.
+JOIN_ERR_DEMO_ONLY,This room is running the demo. Join it from the demo.,Dieser Raum läuft in der Demo. Tritt aus der Demo bei.,Ce salon tourne en démo. Rejoins-le depuis la démo.,Esta sala usa la demo. Únete desde la demo.,Esta sala roda a demo. Entre pela demo.,"该房间运行的是试玩版,请用试玩版加入。",このルームはデモで動いています。デモから参加してね。,이 방은 데모로 열려 있어요. 데모에서 참가하세요.,Эта комната работает на демо. Входите из демо.
+JOIN_ERR_DISCONNECTED,Disconnected: %s,Getrennt: %s,Déconnecté : %s,Desconectado: %s,Desconectado: %s,已断开连接:%s,切断されました: %s,연결이 끊겼어요: %s,Отключено: %s
+JOIN_ERR_ELSEWHERE,You joined from somewhere else.,Du bist von woanders beigetreten.,Tu t'es connecté depuis un autre endroit.,Entraste desde otro lugar.,Você entrou de outro lugar.,你在别处加入了。,別の場所から参加しました。,다른 곳에서 참가했어요.,Вы зашли с другого устройства.
+JOIN_ERR_FULL_ONLY,Get the full game to join this room,"Hol dir das Vollspiel, um diesem Raum beizutreten",Prends le jeu complet pour rejoindre ce salon,Consigue el juego completo para unirte a esta sala,Compre o jogo completo para entrar nesta sala,购买完整版才能加入此房间,このルームに入るには製品版が必要です,이 방에 들어가려면 정식판이 필요해요,"Чтобы войти в эту комнату, нужна полная игра"
+JOIN_ERR_HOST_LEFT,Host left.,Host ist weg.,L'hôte est parti.,El anfitrión se fue.,O anfitrião saiu.,主机已离开。,ホストが退出しました。,호스트가 나갔어요.,Хозяин вышел.
+JOIN_ERR_IDLE,The room closed after sitting idle.,Der Raum wurde nach Leerlauf geschlossen.,Le salon s'est fermé après inactivité.,La sala se cerró por inactividad.,A sala fechou por inatividade.,房间因长时间无人操作而关闭。,ルームは放置されて閉じられました。,방이 오래 비어 있어서 닫혔어요.,Комната закрылась из-за долгого простоя.
+JOIN_ERR_NO_HELLO,The host did not accept the join in time.,Der Host hat den Beitritt nicht rechtzeitig angenommen.,L'hôte n'a pas accepté la connexion à temps.,El anfitrión no aceptó la conexión a tiempo.,O anfitrião não aceitou a entrada a tempo.,主机没有及时接受你的加入。,ホストが時間内に参加を受け付けませんでした。,호스트가 제시간에 참가를 받아주지 않았어요.,Хозяин не принял вход вовремя.
+JOIN_ERR_NO_SLOT,That match has no free player slot.,In diesem Match ist kein Spielerplatz frei.,Ce match n'a plus de place libre.,Esa partida no tiene lugar libre.,Essa partida não tem vaga livre.,该对局没有空余的玩家位。,そのマッチに空きスロットはありません。,그 대전에는 빈 자리가 없어요.,В этом матче нет свободных мест.
+JOIN_ERR_REMOVED,The host removed you from the match.,Der Host hat dich aus dem Match entfernt.,L'hôte t'a retiré du match.,El anfitrión te sacó de la partida.,O anfitrião removeu você da partida.,主机把你移出了对局。,ホストにマッチから外されました。,호스트가 당신을 대전에서 내보냈어요.,Хозяин убрал вас из матча.
+JOIN_ERR_ROOM_FULL,That room is full.,Dieser Raum ist voll.,Ce salon est plein.,Esa sala está llena.,Essa sala está cheia.,该房间已满。,そのルームは満員です。,그 방은 꽉 찼어요.,Эта комната заполнена.
+JOIN_ERR_VERSION,Update your game: this version does not match the host's.,Aktualisier dein Spiel: Diese Version passt nicht zu der des Hosts.,Mets ton jeu à jour : cette version ne correspond pas à celle de l'hôte.,Actualiza tu juego: esta versión no coincide con la del anfitrión.,Atualize seu jogo: esta versão não é a mesma do anfitrião.,请更新游戏:你的版本与主机不一致。,ゲームを更新してね: ホストとバージョンが合っていません。,게임을 업데이트하세요: 호스트와 버전이 달라요.,Обновите игру: ваша версия не совпадает с версией хозяина.
+JOIN_JOINING_ROOM,Joining room %s...,Trete Raum %s bei...,Connexion au salon %s...,Uniéndose a la sala %s...,Entrando na sala %s...,正在加入房间 %s...,ルーム %s に参加中...,방 %s에 참가하는 중...,Заходим в комнату %s...
+JOIN_LEAVE_MATCH,Leave match,Match verlassen,Quitter le match,Salir de la partida,Sair da partida,离开对局,マッチを抜ける,대전 나가기,Выйти из матча
+JOIN_LOBBY_TITLE,Lobby,Lobby,Lobby,Lobby,Lobby,大厅,ロビー,로비,Лобби
+JOIN_LOST,Lost the connection to the host.,Verbindung zum Host verloren.,Connexion à l'hôte perdue.,Se perdió la conexión con el anfitrión.,Perdeu a conexão com o anfitrião.,与主机的连接丢失了。,ホストとの接続が切れました。,호스트와의 연결을 잃었어요.,Соединение с хозяином потеряно.
+JOIN_MOUSE_SENS,Mouse sensitivity,Mausempfindlichkeit,Sensibilité de la souris,Sensibilidad del mouse,Sensibilidade do mouse,鼠标灵敏度,マウス感度,마우스 감도,Чувствительность мыши
+JOIN_NAME_PLACEHOLDER,Player,Spieler,Joueur,Jugador,Jogador,玩家,プレイヤー,플레이어,Игрок
+JOIN_ON_PHONE,Join on your phone:,Tritt per Handy bei:,Rejoins sur ton téléphone :,Únete desde tu celular:,Entre pelo celular:,用手机加入:,スマホで参加:,폰으로 참가:,Зайти с телефона:
+JOIN_PAUSED,Paused,Pausiert,En pause,En pausa,Pausado,已暂停,一時停止中,일시정지,Пауза
+JOIN_PAUSE_MATCH,Pause match,Match pausieren,Mettre en pause,Pausar partida,Pausar partida,暂停对局,マッチを一時停止,대전 일시정지,Поставить матч на паузу
+JOIN_PLAYER_READY,%s  ready,%s  bereit,%s  prêt,%s  listo,%s  pronto,%s  已准备,%s  準備OK,%s  준비 완료,%s  готов
+JOIN_READY,Ready,Bereit,Prêt,Listo,Pronto,准备,準備OK,준비,Готов
+JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).,Relay unter %s nicht erreichbar (keine Antwort).,Relais injoignable à %s (pas de réponse).,No se pudo contactar el relay en %s (sin respuesta).,Não foi possível alcançar o relay em %s (sem resposta).,无法连接到 %s 的中继服务器(无响应)。,%s のリレーに届きません(応答なし)。,%s의 릴레이에 닿지 않아요 (응답 없음).,Не удалось связаться с ретранслятором %s (нет ответа).
+JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.,Relay unter %s nicht erreichbar.,Relais injoignable à %s.,No se pudo contactar el relay en %s.,Não foi possível alcançar o relay em %s.,无法连接到 %s 的中继服务器。,%s のリレーに届きません。,%s의 릴레이에 닿지 않아요.,Не удалось связаться с ретранслятором %s.
+JOIN_RESUME,Resume,Weiter,Reprendre,Seguir,Continuar,继续,再開,계속,Продолжить
+JOIN_RESUME_MATCH,Resume match,Match fortsetzen,Reprendre le match,Reanudar partida,Retomar partida,继续对局,マッチを再開,대전 계속하기,Продолжить матч
+JOIN_ROOM_CODE_LABEL,Room code (from the host's screen),Raumcode (vom Host-Bildschirm),Code du salon (sur l'écran de l'hôte),Código de sala (de la pantalla del anfitrión),Código da sala (da tela do anfitrião),房间码(见主机屏幕),ルームコード(ホスト画面にあるよ),방 코드 (호스트 화면에 있어요),Код комнаты (на экране хозяина)
+JOIN_ROOM_OVER,Room %s  match over,Raum %s  Match vorbei,Salon %s  match terminé,Sala %s  partida terminada,Sala %s  partida encerrada,房间 %s  对局结束,ルーム %s  マッチ終了,방 %s  대전 종료,Комната %s  матч окончен
+JOIN_ROOM_STARTING,Room %s  starting in %d,Raum %s  Start in %d,Salon %s  départ dans %d,Sala %s  empieza en %d,Sala %s  começa em %d,房间 %s  %d 秒后开始,ルーム %s  %d秒後に開始,방 %s  %d초 후 시작,Комната %s  старт через %d
+JOIN_ROOM_TITLE,Room %s,Raum %s,Salon %s,Sala %s,Sala %s,房间 %s,ルーム %s,방 %s,Комната %s
+JOIN_TIMEOUT,Timed out waiting for the host. Check the code and try again.,Zeitüberschreitung beim Warten auf den Host. Prüf den Code und versuch es nochmal.,L'hôte n'a pas répondu à temps. Vérifie le code et réessaie.,Se agotó la espera al anfitrión. Revisa el código e inténtalo de nuevo.,Tempo esgotado esperando o anfitrião. Confira o código e tente de novo.,等待主机超时。请检查房间码后重试。,ホストの応答待ちでタイムアウトしました。コードを確認してもう一度試してね。,호스트를 기다리다 시간이 초과됐어요. 코드를 확인하고 다시 해 보세요.,Хозяин не ответил вовремя. Проверьте код и попробуйте снова.
+JOIN_TITLE,Join online game,Online-Spiel beitreten,Rejoindre une partie en ligne,Unirse a partida en línea,Entrar em jogo online,加入联机游戏,オンラインゲームに参加,온라인 게임 참가,Войти в онлайн-игру
+JOIN_UPDATE_LINK,Get the latest version,Neueste Version holen,Télécharger la dernière version,Descargar la última versión,Baixar a versão mais recente,获取最新版本,最新版を入手,최신 버전 받기,Скачать последнюю версию
+JOIN_WAITING,Waiting for the host...,Warte auf den Host...,En attente de l'hôte...,Esperando al anfitrión...,Esperando o anfitrião...,等待主机...,ホストを待っています...,호스트를 기다리는 중...,Ждём хозяина...
+JOIN_WAITING_HOST,"Joined room %s, waiting for the host...","Raum %s beigetreten, warte auf den Host...","Salon %s rejoint, en attente de l'hôte...","Te uniste a la sala %s, esperando al anfitrión...","Entrou na sala %s, esperando o anfitrião...","已加入房间 %s,等待主机...",ルーム %s に参加しました。ホストを待っています...,방 %s에 들어왔어요. 호스트를 기다리는 중...,"Вы в комнате %s, ждём хозяина..."
+JOIN_YOUR_NAME,Your name,Dein Name,Ton nom,Tu nombre,Seu nome,你的名字,あなたの名前,내 이름,Ваше имя
+LOBBY_AUTO,(auto),(auto),(auto),(auto),(auto),(自动),(自動),(자동),(авто)
+LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone,Beide Teams brauchen einen Spieler: Wähl auf dem Handy ein Team,Chaque équipe veut un joueur : choisis une équipe sur ton téléphone,Ambos equipos necesitan un jugador: elige equipo en tu celular,Os dois times precisam de um jogador: escolha um time no celular,两队都需要玩家:请在手机上选队伍,両チームに最低1人必要です: スマホでチームを選んでね,양 팀 모두 플레이어가 필요해요: 폰에서 팀을 고르세요,В обеих командах нужен игрок: выберите команду на телефоне
+LOBBY_FIRST_TO,First to %d,Erster bis %d,Premier à %d,El primero a %d,O primeiro a %d,先到 %d,先取 %d,선취 %d,До %d
+LOBBY_CAPTURES_TO_WIN,Captures to win %d,Captures zum Sieg %d,Captures pour gagner %d,Capturas para ganar %d,Capturas para vencer %d,夺旗 %d 次获胜,%d回奪取で勝ち,%d회 탈취 승리,Захватов для победы: %d
+LOBBY_GOALS_TO_WIN,Goals to win %d,Tore zum Sieg %d,Buts pour gagner %d,Goles para ganar %d,Gols para vencer %d,进 %d 球获胜,%dゴールで勝ち,%d골 승리,Голов для победы: %d
+LOBBY_LIVES,Lives %d,Leben %d,Vies %d,Vidas %d,Vidas %d,命数 %d,ライフ %d,목숨 %d,Жизни: %d
+LOBBY_HOST_TAG,  (host),  (Host),  (hôte),  (anfitrión),  (anfitrião),  (房主),  (ホスト),  (호스트),  (хозяин)
+LOBBY_NOBODY_YET,nobody yet,noch niemand,personne,nadie aún,ninguém ainda,还没有人,まだ誰もいません,아직 아무도 없어요,пока никого
+LOBBY_NOT_READY,not ready,nicht bereit,pas prêt,no listo,não pronto,未准备,準備まだ,준비 안 됨,не готов
+LOBBY_PAD_TIP,"Right stick swings, a bumper lets go","Rechter Stick schwingt, ein Bumper lässt los","Stick droit pour frapper, une gâchette pour lâcher","El stick derecho golpea, un gatillo suelta","Analógico direito bate, um gatilho solta","右摇杆挥动,按肩键松手",右スティックで振る、バンパーで離す,"오른쪽 스틱으로 휘두르고, 범퍼로 놓아요","Правый стик — взмах, бампер — отпустить"
+LOBBY_PRESS_READY,Press Ready on your phone,Drück auf dem Handy auf Bereit,Appuie sur Prêt sur ton téléphone,Toca Listo en tu celular,Toque em Pronto no celular,请在手机上点“准备”,スマホで「準備OK」を押してね,폰에서 '준비'를 누르세요,Нажмите «Готов» на телефоне
+LOBBY_READY,READY,BEREIT,PRÊT,LISTO,PRONTO,已准备,準備OK,준비 완료,ГОТОВ
+LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d),Zum Beitreten scannen: %d dabei (nötig: %d),Scanne pour rejoindre : %d connectés (il en faut %d),Escanea para unirte: %d unidos (mínimo %d),Escaneie para entrar: %d entraram (mínimo %d),扫码加入:已加入 %d 人(需要 %d),スキャンして参加: %d人参加(必要: %d人),스캔해서 참가: %d명 참가 (필요 %d명),Сканируйте и заходите: зашли %d (нужно %d)
+LOBBY_TEAMS_FIRST_TO,Teams  -  first to %d,Teams  -  erster bis %d,Équipes  -  premier à %d,Equipos  -  el primero a %d,Times  -  o primeiro a %d,团队  -  先到 %d,チーム戦  -  先取 %d,팀전  -  선취 %d,Команды  -  до %d
+LOBBY_TEAM_HEADER,%s TEAM (%d),TEAM %s (%d),ÉQUIPE %s (%d),EQUIPO %s (%d),TIME %s (%d),%s队 (%d),%sチーム (%d),%s팀 (%d),КОМАНДА %s (%d)
+MODE_CLASSIC_NAME,Classic,Klassisch,Classique,Clásico,Clássico,经典,クラシック,클래식,Классика
+MODE_CLASSIC_RULE,Last one standing wins.,"Wer zuletzt steht, gewinnt.",Le dernier debout gagne.,Gana el último en pie.,Vence o último de pé.,最后站着的获胜。,最後まで立っていた人の勝ち。,마지막까지 서 있으면 승리.,Побеждает последний на ногах.
+MODE_FFA,Free-for-all,Jeder gegen jeden,Chacun pour soi,Todos contra todos,Todos contra todos,混战,バトルロイヤル,개인전,Каждый за себя
+MODE_HOT_POTATO_NAME,Hot Potato,Heiße Kartoffel,Patate chaude,Papa caliente,Batata quente,烫手山芋,ホットポテト,뜨거운 감자,Горячая картошка
+MODE_HOT_POTATO_RULE,Do not hold the tag when the fuse ends.,"Halt den Tag nicht, wenn die Lunte abbrennt.",Ne tiens pas le jeton quand la mèche s'éteint.,No tengas la marca cuando se acabe la mecha.,Não fique com a marca quando o pavio acabar.,"引线烧完时,别拿着标记。",導火線が切れた時にタグを持っていたらアウト。,심지가 다 타 버렸을 때 태그를 들고 있으면 안 돼요.,"Не держи метку, когда догорит фитиль."
+MODE_KING_OF_THE_HILL_NAME,King of the Hill,König des Hügels,Roi de la colline,Rey de la colina,Rei da colina,山丘之王,キング・オブ・ザ・ヒル,언덕의 왕,Царь горы
+MODE_KING_OF_THE_HILL_RULE,Stand in the gold circle alone. First to 15 s total wins.,"Steh allein im goldenen Kreis. Wer zuerst 15 s insgesamt hat, gewinnt.",Reste seul dans le cercle doré. Le premier à 15 s cumulées gagne.,Quédate solo en el círculo dorado. Gana el primero en sumar 15 s.,Fique sozinho no círculo dourado. Vence o primeiro a somar 15 s.,"独自站在金圈里,累计满 15 秒者获胜。",金の円に1人で立とう。合計15秒で勝ち。,금색 원 안에 혼자 서 있으세요. 합계 15초를 먼저 채우면 승리.,"Стой в золотом круге в одиночку. Побеждает тот, кто первым наберёт 15 с."
+MODE_STOCK_NAME,Stock,Stock,Stock,Stock,Stock,命数制,ストック,스톡,Жизни
+MODE_STOCK_RULE,Lose all your lives and you are out.,Verlier alle Leben und du bist raus.,Perds toutes tes vies et tu es éliminé.,Pierde todas tus vidas y quedas fuera.,"Perdeu todas as vidas, está fora.",命用光就出局。,ライフが尽きたら脱落。,목숨을 다 잃으면 탈락.,Потеряешь все жизни — выбываешь.
+MODE_SUDDEN_DEATH_NAME,Sudden Death,Sudden Death,Mort subite,Muerte súbita,Morte súbita,一击必杀,サドンデス,서든 데스,Один удар
+MODE_SUDDEN_DEATH_RULE,One hit and you are out.,Ein Treffer und du bist raus.,Un coup et tu es éliminé.,Un golpe y quedas fuera.,Um golpe e você está fora.,挨一下就出局。,1回当たったら脱落。,한 대 맞으면 탈락.,Один удар — и ты вылетаешь.
+MODE_TEAMS,Teams,Teams,Équipes,Equipos,Times,团队,チーム戦,팀전,Команды
+MODIFIER_BIG_HEADS,Big Heads,Riesenköpfe,Grosses têtes,Cabezones,Cabeçudos,大头,でっかい頭,큰 머리,Большие головы
+MODIFIER_BOUNCY,Bouncy,Sprungfedern,Rebondissant,Rebotón,Pula-pula,弹弹弹,バウンド,통통 튀기,Прыгучесть
+MODIFIER_DOUBLE_DAMAGE,Double Damage,Doppelter Schaden,Dégâts doublés,Daño doble,Dano em dobro,双倍伤害,ダメージ2倍,피해 2배,Двойной урон
+MODIFIER_FAST_LAVA,Fast Lava,Schnelle Lava,Lave rapide,Lava veloz,Lava veloz,岩浆加速,急上昇ラヴァ,빠른 용암,Быстрая лава
+MODIFIER_GALE,Gale,Sturm,Tempête,Vendaval,Vendaval,狂风,強風,강풍,Шквал
+MODIFIER_HEAVY_WEAPONS,Heavy Weapons,Schwere Waffen,Armes lourdes,Armas pesadas,Armas pesadas,重型武器,重い武器,무거운 무기,Тяжёлое оружие
+MODIFIER_LOW_GRAVITY,Low Gravity,Wenig Schwerkraft,Faible gravité,Poca gravedad,Baixa gravidade,低重力,低重力,저중력,Низкая гравитация
+MODIFIER_METEOR_SHOWER,Meteor Shower,Meteoritenschauer,Pluie de météores,Lluvia de meteoros,Chuva de meteoros,流星雨,流星群,유성우,Метеоритный дождь
+MODIFIER_SLIPPERY_FLOOR,Slippery Floor,Glatter Boden,Sol glissant,Piso resbaloso,Chão escorregadio,地面打滑,ツルツル床,미끄러운 바닥,Скользкий пол
+MODIFIER_SUDDEN_DEATH,Sudden Death!,Sudden Death!,Mort subite !,¡Muerte súbita!,Morte súbita!,一击必杀!,サドンデス!,서든 데스!,Внезапная смерть!
+MODIFIER_TINY_WEAPONS,Tiny Weapons,Winzige Waffen,Armes minuscules,Armas diminutas,Armas minúsculas,迷你武器,ちびっこ武器,작은 무기,Крошечное оружие
+MODIFIER_WEAPON_ROULETTE,Weapon Roulette,Waffenroulette,Roulette d'armes,Ruleta de armas,Roleta de armas,武器轮盘,武器ルーレット,무기 룰렛,Рулетка оружия
+OFF,off,aus,non,no,não,关,オフ,끔,выкл.
+ON,on,an,oui,sí,sim,开,オン,켬,вкл.
+ONLINE_CONNECTING,connecting…,verbinde…,connexion…,conectando…,conectando…,连接中…,接続中…,연결 중…,подключение…
+ONLINE_ONLINE,online,online,en ligne,en línea,online,在线,オンライン,온라인,онлайн
+ONLINE_ROOM,Online: %s,Online: %s,En ligne : %s,En línea: %s,Online: %s,联机:%s,オンライン: %s,온라인: %s,Онлайн: %s
+ONLINE_ROOM_RECONNECTING,Online: %s (reconnecting...),Online: %s (verbinde neu...),En ligne : %s (reconnexion...),En línea: %s (reconectando...),Online: %s (reconectando...),联机:%s(重新连接中...),オンライン: %s(再接続中...),온라인: %s (다시 연결 중...),Онлайн: %s (переподключение...)
+ONLINE_UNREACHABLE,relay unreachable: playing offline,Relay nicht erreichbar: Spiel offline,relais injoignable : jeu hors ligne,relay inaccesible: jugando sin conexión,relay inacessível: jogando offline,无法连接中继服务器:离线游玩,リレーに届きません: オフラインで遊びます,릴레이에 닿지 않아요: 오프라인으로 플레이,ретранслятор недоступен: играем офлайн
+OVERTIME,OVERTIME,VERLÄNGERUNG,PROLONGATION,TIEMPO EXTRA,PRORROGAÇÃO,加时赛,延長戦,연장전,ОВЕРТАЙМ
+PAUSED,PAUSED,PAUSIERT,PAUSE,PAUSA,PAUSADO,已暂停,一時停止,일시정지,ПАУЗА
+PHONE_STOCK_RANDOM,Random,Zufällig,Aléatoire,Al azar,Aleatório,随机,ランダム,무작위,Случайно
+PING_MS,%d ms,%d ms,%d ms,%d ms,%d ms,%d 毫秒,%d ms,%d ms,%d мс
+REPLAY_NOTHING,Replay: nothing recorded yet,Replay: noch nichts aufgenommen,Replay : rien d'enregistré,Repetición: aún no hay nada grabado,Replay: nada gravado ainda,回放:还没有录到内容,リプレイ: まだ記録がありません,리플레이: 아직 녹화된 게 없어요,Повтор: пока ничего не записано
+REPLAY_SAVED,Replay saved: %s,Replay gespeichert: %s,Replay enregistré : %s,Repetición guardada: %s,Replay salvo: %s,回放已保存:%s,リプレイを保存しました: %s,리플레이 저장됨: %s,Повтор сохранён: %s
+ROOM_CODE_HIDDEN,Code hidden: see host phone,Code versteckt: siehe Host-Handy,Code masqué : voir le téléphone de l'hôte,Código oculto: mira el celular del anfitrión,Código oculto: veja o celular do anfitrião,房间码已隐藏:请看房主的手机,コード非表示: ホストのスマホを見てね,코드 숨김: 호스트 폰을 보세요,Код скрыт: смотрите на телефоне хозяина
+SCORE_PLAYER,P%d: %d,S%d: %d,J%d : %d,J%d: %d,J%d: %d,P%d:%d,P%d: %d,P%d: %d,И%d: %d
+SCORE_TEAM,%s: %d,%s: %d,%s : %d,%s: %d,%s: %d,%s:%d,%s: %d,%s: %d,%s: %d
+SETTINGS,Settings,Einstellungen,Réglages,Ajustes,Ajustes,设置,設定,설정,Настройки
+SETTINGS_FEEDBACK,Feedback,Feedback,Avis,Comentarios,Feedback,反馈,フィードバック,피드백,Отзыв
+SETTINGS_FULLSCREEN,Full (F11),Voll (F11),Plein (F11),Completa (F11),Cheia (F11),全屏 (F11),フルスクリーン (F11),전체 화면 (F11),Во весь экран (F11)
+SETTINGS_HIDE_ROOM_CODE,Hide room code,Raumcode verstecken,Masquer le code du salon,Ocultar código de sala,Ocultar código da sala,隐藏房间码,ルームコードを隠す,방 코드 숨기기,Скрыть код комнаты
+SETTINGS_MASTER_VOLUME,Master volume,Gesamtlautstärke,Volume général,Volumen general,Volume geral,主音量,マスター音量,마스터 볼륨,Общая громкость
+SETTINGS_MORE_OPTIONS,More options,Mehr Optionen,Plus d'options,Más opciones,Mais opções,更多选项,その他のオプション,더 많은 옵션,Ещё настройки
+SETTINGS_MUSIC,Music,Musik,Musique,Música,Música,音乐,音楽,음악,Музыка
+SETTINGS_MUTE,Mute (M),Stumm (M),Muet (M),Silenciar (M),Mudo (M),静音 (M),ミュート (M),음소거 (M),Без звука (M)
+SETTINGS_MUTED,Settings (muted),Einstellungen (stumm),Réglages (muet),Ajustes (silencio),Ajustes (mudo),设置(已静音),設定(ミュート中),설정 (음소거 중),Настройки (звук выключен)
+SETTINGS_NAME_TAGS,Name tags: %sx,Namensschilder: %sx,Pseudos : %sx,Nombres: %sx,Nomes: %sx,名牌:%sx,ネームタグ: %sx,이름표: %sx,Имена: %sx
+SETTINGS_REDUCE_FLASHES,Reduce flashes,Weniger Blitze,Moins d'éclairs,Menos destellos,Menos clarões,减少闪光,点滅を減らす,번쩍임 줄이기,Меньше вспышек
+SETTINGS_SCREEN_SHAKE,Screen shake,Bildschirmwackeln,Tremblement d'écran,Temblor de pantalla,Tremor de tela,屏幕震动,画面揺れ,화면 흔들림,Тряска экрана
+SETTINGS_SFX,Sound effects,Soundeffekte,Effets sonores,Efectos de sonido,Efeitos sonoros,音效,効果音,효과음,Звуковые эффекты
+SETTINGS_STAGES_LIST,Stages (untick to skip),Stages (abwählen zum Überspringen),Arènes (décoche pour passer),Escenarios (desmarca para omitir),Cenários (desmarque para pular),关卡(取消勾选即跳过),ステージ(チェックを外すとスキップ),스테이지 (체크 해제하면 건너뜀),"Арены (снимите галочку, чтобы пропустить)"
+SETTINGS_WEAPONS_LIST,Weapons (untick to skip),Waffen (abwählen zum Überspringen),Armes (décoche pour passer),Armas (desmarca para omitir),Armas (desmarque para pular),武器(取消勾选即跳过),武器(チェックを外すとスキップ),무기 (체크 해제하면 건너뜀),"Оружие (снимите галочку, чтобы пропустить)"
+SETTINGS_WINDOW_DEFAULT,Window: default,Fenster: Standard,Fenêtre : défaut,Ventana: predeterminada,Janela: padrão,窗口:默认,ウィンドウ: デフォルト,창: 기본,Окно: по умолчанию
+SETTINGS_WINDOW_SIZE,Window: %d x %d,Fenster: %d x %d,Fenêtre : %d x %d,Ventana: %d x %d,Janela: %d x %d,窗口:%d x %d,ウィンドウ: %d x %d,창: %d x %d,Окно: %d x %d
+STAGE_BATTLEFIELD,Battlefield,Schlachtfeld,Champ de bataille,Campo de batalla,Campo de batalha,战场,バトルフィールド,배틀필드,Поле боя
+STAGE_BOWL,Bowl,Schüssel,Cuvette,Cuenco,Tigela,碗池,ボウル,볼,Чаша
+STAGE_BULWARK,Bulwark,Bollwerk,Rempart,Baluarte,Baluarte,壁垒,ブルワーク,보루,Оплот
+STAGE_CAROUSEL,Carousel,Karussell,Carrousel,Carrusel,Carrossel,旋转木马,カルーセル,회전목마,Карусель
+STAGE_CASCADE,Cascade,Kaskade,Cascade,Cascada,Cascata,瀑布,カスケード,폭포,Каскад
+STAGE_COLOSSEUM,Colosseum,Kolosseum,Colisée,Coliseo,Coliseu,竞技场,コロシアム,콜로세움,Колизей
+STAGE_EROSION,Erosion,Erosion,Érosion,Erosión,Erosão,侵蚀,エロージョン,침식,Эрозия
+STAGE_FERRY,Ferry,Fähre,Ferry,Ferri,Balsa,渡船,フェリー,페리,Паром
+STAGE_FINALDESTINATION,Final Destination,Endstation,Destination finale,Destino final,Destino final,终点,終点,종착점,Конечная
+STAGE_FLATLANDS,Flatlands,Flachland,Plaines,Llanuras,Planície,平原,フラットランド,평원,Равнины
+STAGE_FOOTBRIDGE,Footbridge,Fußgängerbrücke,Passerelle,Pasarela,Passarela,人行桥,歩道橋,인도교,Мостик
+STAGE_FURNACE,Furnace,Hochofen,Fournaise,Horno,Fornalha,熔炉,ファーネス,용광로,Печь
+STAGE_GALE,Gale,Sturm,Tempête,Vendaval,Vendaval,狂风,ゲイル,강풍,Шквал
+STAGE_GANTRY,Gantry,Portalkran,Portique,Grúa pórtico,Pórtico,龙门架,ガントリー,갠트리,Портал
+STAGE_GAUNTLET,Gauntlet,Spießrutenlauf,Parcours du combattant,Gauntlet,Corredor da morte,火线,ガントレット,건틀릿,Испытание
+STAGE_HIGHRISE,Highrise,Hochhaus,Tour,Rascacielos,Arranha-céu,高楼,ハイライズ,고층 빌딩,Высотка
+STAGE_ISLANDS,Islands,Inseln,Îles,Islas,Ilhas,群岛,アイランド,섬들,Острова
+STAGE_MILL,Mill,Mühle,Moulin,Molino,Moinho,磨坊,ミル,방앗간,Мельница
+STAGE_OVERPASS,Overpass,Überführung,Viaduc,Paso elevado,Viaduto,立交桥,オーバーパス,고가도로,Эстакада
+STAGE_PILLARS,Pillars,Säulen,Piliers,Pilares,Pilares,石柱,ピラー,기둥,Столбы
+STAGE_PISTONS,Pistons,Kolben,Pistons,Pistones,Pistões,活塞,ピストン,피스톤,Поршни
+STAGE_POCKET,Pocket,Tasche,Poche,Bolsillo,Bolso,口袋,ポケット,포켓,Карман
+STAGE_QUARRY,Quarry,Steinbruch,Carrière,Cantera,Pedreira,采石场,採石場,채석장,Карьер
+STAGE_REACTOR,Reactor,Reaktor,Réacteur,Reactor,Reator,反应堆,リアクター,원자로,Реактор
+STAGE_ROCKFALL,Rockfall,Steinschlag,Éboulement,Derrumbe,Queda de pedras,落石,ロックフォール,낙석,Камнепад
+STAGE_SINKHOLE,Sinkhole,Senkloch,Gouffre,Sumidero,Sumidouro,天坑,シンクホール,싱크홀,Провал
+STAGE_SLANT,Slant,Schräge,Pente,Pendiente,Ladeira,斜坡,スラント,경사,Уклон
+STAGE_SPRINGBOARD,Springboard,Sprungbrett,Tremplin,Trampolín,Trampolim,跳板,スプリングボード,스프링보드,Трамплин
+STAGE_UPDRAFT,Updraft,Aufwind,Courant ascendant,Corriente ascendente,Corrente de ar,上升气流,アップドラフト,상승기류,Восходящий поток
+STAGE_VENT,Vent,Schacht,Conduit,Ducto,Duto,通风口,ベント,환기구,Вентиляция
+STAGE_ZIGGURAT,Ziggurat,Zikkurat,Ziggourat,Zigurat,Zigurate,金字神塔,ジッグラト,지구라트,Зиккурат
+STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s,%s  %d KO  %d verteilt  %d kassiert  %d selbst  %d Pick  %s,%s  %d KO  %d infligés  %d subis  %d auto  %d obj  %s,%s  %d KO  %d causado  %d recibido  %d auto  %d obj  %s,%s  %d KO  %d causado  %d sofrido  %d auto  %d item  %s,%s  %d 击倒  造成 %d  承受 %d  自爆 %d  道具 %d  %s,%s  %d KO  与 %d  被 %d  自滅 %d  取得 %d  %s,%s  %d KO  준 피해 %d  받은 피해 %d  자멸 %d  획득 %d  %s,%s  %d нок.  нанёс %d  получил %d  сам %d  подборов %d  %s
+TEAM_BLUE,BLUE,BLAU,BLEU,AZUL,AZUL,蓝,青,블루,СИНИЕ
+TEAM_RED,RED,ROT,ROUGE,ROJO,VERMELHO,红,赤,레드,КРАСНЫЕ
+VICTORY_CONTINUE_WITH,Continue with %s,Weiter mit %s,Continuer avec %s,Continuar con %s,Continuar com %s,用 %s 继续,%s で続ける,%s(으)로 계속,Продолжить: %s
+VICTORY_INPUT_PAD,A on a gamepad,A am Gamepad,A sur une manette,A en un control,A no controle,手柄上的 A 键,ゲームパッドのA,게임패드의 A,A на геймпаде
+VICTORY_INPUT_PHONE,a tap on your phone,ein Tipp aufs Handy,un tap sur ton téléphone,un toque en tu celular,um toque no celular,在手机上点一下,スマホをタップ,폰을 탭하세요,касание на телефоне
+VICTORY_INPUT_SPACE,Space or click,Leertaste oder Klick,Espace ou clic,Espacio o clic,Espaço ou clique,空格键或点击,スペースキーかクリック,스페이스바 또는 클릭,Пробел или клик
+VICTORY_LIST_LAST,%s or %s,%s oder %s,%s ou %s,%s o %s,%s ou %s,%s 或 %s,%s か %s,%s 또는 %s,%s или %s
+VICTORY_MATCH_OVER,MATCH OVER,MATCH VORBEI,MATCH TERMINÉ,FIN DE LA PARTIDA,FIM DA PARTIDA,对局结束,マッチ終了,대전 종료,МАТЧ ОКОНЧЕН
+VICTORY_TAP_CONTINUE,Tap Continue on your phone,Tipp auf dem Handy auf Weiter,Touche Continuer sur ton téléphone,Toca Continuar en tu celular,Toque em Continuar no celular,请在手机上点“继续”,スマホで「続ける」をタップ,폰에서 '계속'을 탭하세요,Нажмите «Продолжить» на телефоне
+VICTORY_TEAM_WINS,%s TEAM WINS!,TEAM %s GEWINNT!,L'ÉQUIPE %s GAGNE !,¡GANA EL EQUIPO %s!,TIME %s VENCE!,%s队获胜!,%sチームの勝ち!,%s팀 승리!,КОМАНДА %s ПОБЕЖДАЕТ!
+VICTORY_WINS,%s WINS!,%s GEWINNT!,%s GAGNE !,¡GANA %s!,%s VENCE!,%s 获胜!,%s の勝ち!,%s 승리!,%s ПОБЕЖДАЕТ!
+WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d),Warte auf Spieler: %d verbunden (nötig: %d),En attente de joueurs : %d connectés (il en faut %d),Esperando jugadores: %d conectados (mínimo %d),Esperando jogadores: %d conectados (mínimo %d),等待玩家:已连接 %d 人(需要 %d),プレイヤー待ち: %d人接続(必要: %d人),플레이어 기다리는 중: %d명 연결됨 (필요 %d명),Ждём игроков: подключено %d (нужно %d)
+STAGE_RACETRACK,Racetrack,Rennstrecke,Circuit,Pista de carreras,Autódromo,赛道,レーストラック,경주로,Трасса
+STAGE_SWITCHYARD,Switchyard,Rangierbahnhof,Gare de triage,Patio de maniobras,Pátio de manobras,调车场,スイッチヤード,조차장,Сортировочная
+STAGE_ORBIT,Orbit,Orbit,Orbite,Órbita,Órbita,轨道,オービット,궤도,Орбита
+SETTINGS_SHARE_STATS,Share anonymous match stats,Anonyme Matchstatistiken teilen,Partager des stats de match anonymes,Compartir estadísticas anónimas,Compartilhar estatísticas anônimas,分享匿名对局数据,匿名のマッチ統計を共有,익명 대전 통계 공유,Делиться анонимной статистикой матчей
+TELEMETRY_NOTICE,"Pickfight sends anonymous match stats (weapon damage, hits and KOs, mode, stages and match length; no names or IDs) to help balance the game. Change it any time in Settings > More options > Share anonymous match stats.","Pickfight sendet anonyme Matchstatistiken (Waffenschaden, Treffer und KOs, Modus, Stages und Matchdauer; keine Namen oder IDs), um das Spiel auszubalancieren. Änderbar jederzeit unter Einstellungen > Mehr Optionen > Anonyme Matchstatistiken teilen.","Pickfight envoie des stats de match anonymes (dégâts d'armes, coups et KO, mode, arènes et durée du match ; ni noms ni identifiants) pour équilibrer le jeu. Modifiable à tout moment dans Réglages > Plus d'options > Partager des stats de match anonymes.","Pickfight envía estadísticas anónimas de las partidas (daño de armas, golpes y KO, modo, escenarios y duración; sin nombres ni IDs) para equilibrar el juego. Cámbialo cuando quieras en Ajustes > Más opciones > Compartir estadísticas anónimas.","O Pickfight envia estatísticas anônimas das partidas (dano de armas, golpes e KOs, modo, cenários e duração; sem nomes nem IDs) para equilibrar o jogo. Mude quando quiser em Ajustes > Mais opções > Compartilhar estatísticas anônimas.","Pickfight 会发送匿名对局数据(武器伤害、命中与击倒、模式、关卡和对局时长,不含名字或ID),用来平衡游戏。随时可在 设置 > 更多选项 > 分享匿名对局数据 中更改。",Pickfightは、ゲームバランス調整のために匿名のマッチ統計(武器のダメージ、ヒットとKO、モード、ステージ、マッチ時間。名前やIDは含みません)を送信します。いつでも 設定 > その他のオプション > 匿名のマッチ統計を共有 で変更できます。,"Pickfight는 게임 밸런스를 맞추려고 익명 대전 통계(무기 피해, 적중과 KO, 모드, 스테이지, 대전 시간. 이름이나 ID는 없어요)를 보내요. 설정 > 더 많은 옵션 > 익명 대전 통계 공유에서 언제든 바꿀 수 있어요.","Pickfight отправляет анонимную статистику матчей (урон оружия, попадания и нокауты, режим, арены и длительность матча; без имён и ID), чтобы балансировать игру. Это можно изменить в любой момент: Настройки > Ещё настройки > Делиться анонимной статистикой матчей."
+TELEMETRY_TURN_OFF,Turn off,Ausschalten,Désactiver,Desactivar,Desativar,关闭,オフにする,끄기,Выключить
+TELEMETRY_OK,Got it,Verstanden,Compris,Entendido,Entendi,知道了,了解,알겠어요,Понятно
+STAGE_MESA,Mesa,Mesa,Mesa,Mesa,Mesa,平顶山,メサ,메사,Меса
+STAGE_RELAY,Relay,Staffel,Relais,Relevo,Revezamento,接力,リレー,릴레이,Эстафета
+STAGE_ROUNDABOUT,Roundabout,Kreisverkehr,Rond-point,Glorieta,Rotatória,环岛,ラウンドアバウト,로터리,Кольцо
+STAGE_SUMMIT,Summit,Gipfel,Sommet,Cumbre,Cume,山顶,サミット,정상,Вершина
+MODE_SOCCER_NAME,Soccer,Fußball,Football,Fútbol,Futebol,足球,サッカー,축구,Футбол
+MODE_SOCCER_RULE,Reach the goal target to win.,"Erreich das Torziel, um zu gewinnen.",Atteins l'objectif de buts pour gagner.,Llega a la meta de goles para ganar.,Chegue à meta de gols para vencer.,先达到目标进球数者获胜。,目標ゴール数に先に届いたら勝ち。,목표 골 수를 먼저 채우면 승리.,"Побеждает тот, кто первым забьёт нужное число голов."
+SOCCER_GOAL,GOAL!,TOR!,BUT !,¡GOL!,GOL!,进球!,ゴール!,골!,ГОЛ!
+AWARD_CATEGORY_SCORER,SCORER,TORJÄGER,BUTEUR,GOLEADOR,ARTILHEIRO,射手,得点王,득점,БОМБАРДИР
+STAGE_PITCH,Pitch,Spielfeld,Terrain,Cancha,Campo,球场,ピッチ,경기장,Поле
+STAGE_CAGE,Cage,Käfig,Cage,Jaula,Jaula,铁笼,ケージ,철창,Клетка
+STAGE_DUNES,Dunes,Dünen,Dunes,Dunas,Dunas,沙丘,デューン,사구,Дюны
+MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag,Capture the Flag,Capture du drapeau,Captura la bandera,Capture a bandeira,夺旗,キャプチャー・ザ・フラッグ,깃발 뺏기,Захват флага
+MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.,"Erreich das Capture-Ziel, um zu gewinnen.",Atteins l'objectif de captures pour gagner.,Llega a la meta de capturas para ganar.,Chegue à meta de capturas para vencer.,先达到目标夺旗数者获胜。,目標の奪取数に先に届いたら勝ち。,목표 탈취 수를 먼저 채우면 승리.,"Побеждает тот, кто первым наберёт нужное число захватов."
+AWARD_CATEGORY_CAPTURER,CAPTURER,FLAGGENRÄUBER,CAPTUREUR,CAPTURADOR,CAPTURADOR,夺旗手,奪取王,탈취,ЗАХВАТЧИК
+STAGE_BASTION,Bastion,Bastion,Bastion,Bastión,Bastião,堡垒,バスティオン,요새,Бастион
+STAGE_STRONGHOLD,Stronghold,Festung,Forteresse,Fortaleza,Fortaleza,据点,ストロングホールド,거점,Цитадель
+AWARD_CATEGORY_HILL,HILL,HÜGEL,COLLINE,COLINA,COLINA,山丘,ヒル,언덕,ГОРА
+AWARD_CATEGORY_TAGGER,TAGGER,FÄNGER,PORTEUR,MARCADO,MARCADO,标记者,タッガー,술래,ВОДЯЩИЙ
+AWARD_CATEGORY_LIVES,LIVES,LEBEN,VIES,VIDAS,VIDAS,命数,ライフ,목숨,ЖИЗНИ
+HUD_TAKES_ROUND,%s takes the round,%s holt die Runde,%s remporte la manche,%s se lleva la ronda,%s leva a rodada,%s 赢下本回合,%s がラウンドを取った,%s 라운드 승리,%s берёт раунд
+HUD_TEAM_TAKES_ROUND,%s team takes the round,Team %s holt die Runde,L'équipe %s remporte la manche,El equipo %s se lleva la ronda,O time %s leva a rodada,%s队赢下本回合,%sチームがラウンドを取った,%s팀 라운드 승리,Команда %s берёт раунд
+HUD_ROUND_DRAWN,Round drawn,Runde unentschieden,Manche nulle,Ronda empatada,Rodada empatada,本回合平局,ラウンド引き分け,라운드 무승부,Раунд вничью
+HUD_WINS_MATCH,%s wins the match,%s gewinnt das Match,%s remporte le match,%s gana la partida,%s vence a partida,%s 赢得对局,%s がマッチに勝利,%s 대전 승리,%s выигрывает матч
+HUD_TEAM_WINS_MATCH,%s team wins the match,Team %s gewinnt das Match,L'équipe %s remporte le match,El equipo %s gana la partida,O time %s vence a partida,%s队赢得对局,%sチームがマッチに勝利,%s팀 대전 승리,Команда %s выигрывает матч
+HUD_PODIUM_ROW,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d
+HUD_HOLD,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds
+HUD_HILL_MOVING,Hill is moving!,Der Hügel wandert!,La colline bouge !,¡La colina se mueve!,A colina está se movendo!,山丘在移动!,ヒルが動いてる!,언덕이 움직여요!,Гора движется!
+HILL_CONTESTED,CONTESTED,UMKÄMPFT,DISPUTÉE,EN DISPUTA,DISPUTADA,争夺中,競り合い中,경합 중,СПОР
+BANNER_HOLDS_THE_HILL,%s holds the hill!,%s hält den Hügel!,%s tient la colline !,¡%s domina la colina!,%s domina a colina!,%s 占住了山丘!,%s がヒルを守ってる!,%s 언덕을 차지했어요!,%s удерживает гору!
+HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s,Rot %d - Blau %d  Flaggen: rot %s / blau %s,Rouge %d - Bleu %d  Drapeaux : rouge %s / bleu %s,Rojo %d - Azul %d  Banderas: roja %s / azul %s,Vermelho %d - Azul %d  Bandeiras: vermelha %s / azul %s,红 %d - 蓝 %d  旗:红 %s / 蓝 %s,赤 %d - 青 %d  旗: 赤 %s / 青 %s,레드 %d - 블루 %d  깃발: 레드 %s / 블루 %s,Красные %d - Синие %d  Флаги: красный %s / синий %s
+HUD_FLAG_0,home,zu Hause,au camp,en base,na base,在家,自陣,기지,на базе
+HUD_FLAG_1,carried,getragen,porté,llevada,carregada,被带走,運搬中,운반 중,несут
+HUD_FLAG_2,dropped,fallen gelassen,lâché,caída,caída,掉落,落下,떨어짐,брошен
+HUD_SOCCER,Red %d - Blue %d (first to %d),Rot %d - Blau %d (erster bis %d),Rouge %d - Bleu %d (premier à %d),Rojo %d - Azul %d (primero a %d),Vermelho %d - Azul %d (primeiro a %d),红 %d - 蓝 %d(先到 %d),赤 %d - 青 %d(先取 %d),레드 %d - 블루 %d (선취 %d),Красные %d - Синие %d (до %d)
+HUD_POTATO,%s has the potato: %ds,%s hat die Kartoffel: %ds,%s a la patate : %ds,%s tiene la papa: %ds,%s está com a batata: %ds,%s 拿着山芋:%d 秒,%s がポテトを持ってる: %d秒,%s 감자를 들고 있어요: %d초,У %s картошка: %d с
+HUD_LIVES,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d
+PICKER_TITLE,Your look,Dein Look,Ton style,Tu look,Seu visual,你的造型,あなたの見た目,내 모습,Ваш вид
+PICKER_HAT,Hat,Hut,Chapeau,Sombrero,Chapéu,帽子,帽子,모자,Шапка
+PICKER_COLOUR,Colour,Farbe,Couleur,Color,Cor,颜色,カラー,색상,Цвет
+PICKER_EYES,Eyes,Augen,Yeux,Ojos,Olhos,眼睛,目,눈,Глаза
+PICKER_HAT_NONE,None,Keiner,Aucun,Ninguno,Nenhum,无,なし,없음,Нет
+PICKER_HAT_CROWN,Crown,Krone,Couronne,Corona,Coroa,王冠,王冠,왕관,Корона
+PICKER_HAT_TOP_HAT,Top hat,Zylinder,Haut-de-forme,Chistera,Cartola,礼帽,シルクハット,중절모,Цилиндр
+PICKER_HAT_CAP,Cap,Kappe,Casquette,Gorra,Boné,鸭舌帽,キャップ,야구모자,Кепка
+PICKER_HAT_BEANIE,Beanie,Mütze,Bonnet,Gorro,Gorro,毛线帽,ニット帽,비니,Шапка-бини
+PICKER_HAT_VIKING,Viking,Wikinger,Viking,Vikingo,Viking,维京帽,バイキング,바이킹,Викинг
+PICKER_HAT_PARTY,Party hat,Partyhut,Chapeau de fête,Gorro de fiesta,Chapéu de festa,派对帽,パーティー帽,파티 모자,Колпак
+PICKER_HAT_HALO,Halo,Heiligenschein,Auréole,Aureola,Auréola,光环,ハロー,후광,Нимб
+PICKER_HAT_PROPELLER,Propeller,Propeller,Hélice,Hélice,Hélice,螺旋桨,プロペラ,프로펠러,Пропеллер
+PICKER_EYES_ROUND,Round,Rund,Ronds,Redondos,Redondos,圆眼,まるい目,동그란 눈,Круглые
+PICKER_EYES_SLEEPY,Sleepy,Müde,Endormis,Dormidos,Sonolentos,困倦,ねむそう,졸린 눈,Сонные
+PICKER_EYES_ANGRY,Angry,Wütend,Furieux,Enojados,Bravos,愤怒,おこり目,화난 눈,Злые
+PICKER_EYES_WIDE,Wide,Weit,Écarquillés,Abiertos,Arregalados,瞪眼,ぱっちり,왕눈이,Широкие
+PICKER_EYES_DOT,Dot,Punkt,Points,Puntos,Pontinhos,圆点,ドット,점 눈,Точки
+PICKER_EYES_VISOR,Visor,Visier,Visière,Visor,Visor,护目镜,バイザー,바이저,Визор
+JOIN_REJOINING,Rejoining your seat...,Kehre auf deinen Platz zurück...,Retour à ta place...,Volviendo a tu lugar...,Voltando ao seu lugar...,正在回到你的座位...,席に戻っています...,자리로 돌아가는 중...,Возвращаем вас на место...
+REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s,Replay gespeichert. Kodiere GIF: %s,Replay enregistré. Encodage du GIF : %s,Repetición guardada. Codificando GIF: %s,Replay salvo. Codificando GIF: %s,回放已保存。正在编码 GIF:%s,リプレイを保存しました。GIFを変換中: %s,리플레이 저장됨. GIF 변환 중: %s,Повтор сохранён. Кодируем GIF: %s
+REPLAY_GIF_SAVED,GIF saved: %s,GIF gespeichert: %s,GIF enregistré : %s,GIF guardado: %s,GIF salvo: %s,GIF 已保存:%s,GIFを保存しました: %s,GIF 저장됨: %s,GIF сохранён: %s
+LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d),Start noch nicht möglich: %d dabei (nötig: %d),Départ impossible : %d connectés (il en faut %d),Aún no se puede empezar: %d unidos (mínimo %d),Ainda não dá para começar: %d entraram (mínimo %d),还不能开始:已加入 %d 人(需要 %d),まだ始められません: %d人参加(必要: %d人),아직 시작할 수 없어요: %d명 참가 (필요 %d명),Пока нельзя начать: зашли %d (нужно %d)
+LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect,Start noch nicht möglich: warte auf %d reservierte(n) Platz/Plätze,Départ impossible : on attend %d place(s) réservée(s),Aún no se puede empezar: esperando %d lugar(es) reservado(s),Ainda não dá para começar: esperando %d vaga(s) reservada(s),还不能开始:等待 %d 个保留座位重新连接,まだ始められません: 保留中の席%d人の再接続待ち,아직 시작할 수 없어요: 자리를 비운 %d명이 다시 연결되길 기다리는 중,Пока нельзя начать: ждём переподключения занятых мест: %d
+MODE_STOCK_RULE_N,Lose all %d lives and you are out.,Verlier alle %d Leben und du bist raus.,Perds tes %d vies et tu es éliminé.,Pierde tus %d vidas y quedas fuera.,"Perdeu as %d vidas, está fora.",%d 条命全部用光就出局。,ライフ%dつを全部失ったら脱落。,목숨 %d개를 다 잃으면 탈락.,Потеряешь все %d жизней — выбываешь.
+MODE_SOCCER_RULE_N,First team to %d goals wins.,Das erste Team mit %d Toren gewinnt.,La première équipe à %d buts gagne.,Gana el primer equipo en llegar a %d goles.,O primeiro time com %d gols vence.,先进 %d 球的队伍获胜。,先に%dゴール決めたチームの勝ち。,%d골을 먼저 넣는 팀이 승리.,"Побеждает команда, первой забившая %d голов."
+MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.,Das erste Team mit %d Captures gewinnt.,La première équipe à %d captures gagne.,Gana el primer equipo en llegar a %d capturas.,O primeiro time com %d capturas vence.,先夺旗 %d 次的队伍获胜。,先に%d回奪取したチームの勝ち。,깃발을 %d번 먼저 뺏는 팀이 승리.,"Побеждает команда, первой совершившая %d захватов."
+HOST_START_WAITING,Waiting...,Warten...,Patience...,Esperando...,Esperando...,等待中...,待機中...,대기 중...,Ждём...
+HOW_TO_PLAY_BUTTON,How to play,So wird gespielt,Comment jouer,Cómo jugar,Como jogar,玩法,遊び方,게임 방법,Как играть
+LOBBY_YOU_TAG, (you), (du), (toi), (tú), (você), (你), (あなた), (나), (вы)
+LOBBY_BOT,BOT,BOT,BOT,BOT,BOT,电脑,ボット,봇,БОТ
+LOBBY_OPEN_SEAT,Open seat,Freier Platz,Place libre,Lugar libre,Vaga livre,空位,空席,빈 자리,Свободно
+LOBBY_SEAT_HINT_COUCH,Scan QR or press A,QR scannen oder A drücken,Scanne le QR ou appuie sur A,Escanea el QR o pulsa A,Escaneie o QR ou aperte A,扫二维码或按 A,QRをスキャンかAを押す,QR 스캔 또는 A 누르기,QR-код или A
+LOBBY_SEAT_HINT_SOLO,Add a bot with B,Bot mit B hinzufügen,Ajoute un bot avec B,Agrega un bot con B,Adicione um bot com B,按 B 添加电脑,Bでボットを追加,B로 봇 추가,B — добавить бота
+LOBBY_SEAT_HINT_ONLINE,Share the room code,Teile den Raumcode,Partage le code du salon,Comparte el código de sala,Compartilhe o código da sala,分享房间码,ルームコードを共有,방 코드를 공유하세요,Поделитесь кодом комнаты
+LOBBY_PLAYERS,Players,Spieler,Joueurs,Jugadores,Jogadores,玩家,プレイヤー,플레이어,Игроки
+LOBBY_COUNT,"%d joined, %d bots","%d dabei, %d Bots","%d connectés, %d bots","%d unidos, %d bots","%d entraram, %d bots","%d 人加入,%d 个电脑",%d人参加、ボット%d体,"%d명 참가, 봇 %d명","Зашли: %d, ботов: %d"
+LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot","%d dabei, 1 Bot","%d connectés, 1 bot","%d unidos, 1 bot","%d entraram, 1 bot","%d 人加入,1 个电脑",%d人参加、ボット1体,"%d명 참가, 봇 1명","Зашли: %d, ботов: 1"
+LOBBY_TEAM_TAG,%s TEAM,TEAM %s,ÉQUIPE %s,EQUIPO %s,TIME %s,%s队,%sチーム,%s팀,КОМАНДА %s
+LOBBY_STARTING,Get ready!,Macht euch bereit!,Prêts ?,¡Prepárense!,Preparem-se!,准备!,よーい!,준비하세요!,Приготовьтесь!
+LOBBY_NOT_READY_ONE,1 player not ready yet,1 Spieler noch nicht bereit,1 joueur pas encore prêt,1 jugador aún no está listo,1 jogador ainda não está pronto,还有 1 位玩家没准备好,まだ1人準備できていません,아직 1명이 준비 안 했어요,Ещё 1 игрок не готов
+LOBBY_NOT_READY_N,%d players not ready yet,%d Spieler noch nicht bereit,%d joueurs pas encore prêts,%d jugadores aún no están listos,%d jogadores ainda não estão prontos,还有 %d 位玩家没准备好,まだ%d人準備できていません,아직 %d명이 준비 안 했어요,Ещё %d игроков не готовы
+LOBBY_ENTER_OR_START,Enter or Start,Enter oder Start,Entrée ou Start,Enter o Start,Enter ou Start,回车或 Start,EnterかStart,Enter 또는 Start,Enter или Start
+LOBBY_SCAN_TITLE,Scan to join,Zum Beitreten scannen,Scanne pour rejoindre,Escanea para unirte,Escaneie para entrar,扫码加入,スキャンして参加,스캔해서 참가,Сканируйте и заходите
+LOBBY_ROOM_CODE_TITLE,Room code,Raumcode,Code du salon,Código de sala,Código da sala,房间码,ルームコード,방 코드,Код комнаты
+LOBBY_SOLO_TITLE,Solo practice,Solo-Training,Entraînement solo,Práctica en solitario,Treino solo,单人练习,ソロ練習,솔로 연습,Тренировка в одиночку
+LOBBY_ROOM_CODE_NOTE,"Friends open Pickfight, pick Online, then Join a game","Freunde öffnen Pickfight, wählen Online und dann Spiel beitreten","Tes amis ouvrent Pickfight, choisissent En ligne, puis Rejoindre une partie","Tus amigos abren Pickfight, eligen En línea y luego Unirse a una partida","Seus amigos abrem o Pickfight, escolhem Online e depois Entrar em um jogo","朋友打开 Pickfight,选“联机”,再点“加入游戏”",友達はPickfightを開いて「オンライン」→「ゲームに参加」を選ぶ,친구들은 Pickfight를 열고 '온라인' 고른 뒤 '게임 참가'를 누르세요,"Друзья открывают Pickfight, выбирают «Онлайн», затем «Войти в игру»"
+LOBBY_SOLO_NOTE,Just you and the bots on this computer. No room code and nothing online.,Nur du und die Bots auf diesem Computer. Kein Raumcode und nichts online.,"Toi et les bots sur cet ordinateur. Pas de code de salon, rien en ligne.",Solo tú y los bots en esta computadora. Sin código de sala y nada en línea.,Só você e os bots neste computador. Sem código de sala e nada online.,"这台电脑上只有你和电脑对手。没有房间码,也不联网。",このパソコンにはあなたとボットだけ。ルームコードもネットも不要。,"이 컴퓨터엔 나와 봇뿐이에요. 방 코드도, 온라인도 없어요.",Только вы и боты на этом компьютере. Без кода комнаты и без сети.
+LOBBY_MODE_TITLE,Mode,Modus,Mode,Modo,Modo,模式,モード,모드,Режим
+LOBBY_HOST_TITLE,Host,Host,Hôte,Anfitrión,Anfitrião,房主,ホスト,호스트,Хозяин
+LOBBY_ROW_FIRST_TO,First to,Erster bis,Premier à,El primero a,O primeiro a,先到,先取,선취,До скольки
+LOBBY_ROW_LIVES,Lives,Leben,Vies,Vidas,Vidas,命数,ライフ,목숨,Жизни
+LOBBY_ROW_GOALS,Goals to win,Tore zum Sieg,Buts pour gagner,Goles para ganar,Gols para vencer,获胜进球数,勝利ゴール数,승리 골 수,Голов для победы
+LOBBY_ROW_CAPTURES,Captures to win,Captures zum Sieg,Captures pour gagner,Capturas para ganar,Capturas para vencer,获胜夺旗数,勝利奪取数,승리 탈취 수,Захватов для победы
+LOBBY_ROW_BOTS,Bots,Bots,Bots,Bots,Bots,电脑,ボット,봇,Боты
+BOT_SKILL_EASY,Easy,Leicht,Facile,Fácil,Fácil,简单,かんたん,쉬움,Лёгкий
+BOT_SKILL_NORMAL,Normal,Normal,Normal,Normal,Normal,普通,ふつう,보통,Обычный
+BOT_SKILL_HARD,Hard,Schwer,Difficile,Difícil,Difícil,困难,むずかしい,어려움,Сложный
+LOBBY_ROW_TEAMS,Teams,Teams,Équipes,Equipos,Times,团队,チーム戦,팀전,Команды
+LOBBY_ON,On,An,Oui,Sí,Sim,开,オン,켬,Вкл.
+LOBBY_OFF,Off,Aus,Non,No,Não,关,オフ,끔,Выкл.
+LOBBY_STATUS_FIRST_TO,first to %d,erster bis %d,premier à %d,el primero a %d,o primeiro a %d,先到 %d,先取 %d,선취 %d,до %d
+LOBBY_STATUS_LIVES,%d lives,%d Leben,%d vies,%d vidas,%d vidas,%d 条命,ライフ%d,목숨 %d개,%d жизней
+LOBBY_STATUS_GOALS,%d goals,%d Tore,%d buts,%d goles,%d gols,%d 球,%dゴール,%d골,%d голов
+LOBBY_STATUS_CAPTURES,%d captures,%d Captures,%d captures,%d capturas,%d capturas,%d 次夺旗,%d回奪取,%d회 탈취,%d захватов
+LOBBY_HELP_FIRST_TO,First to %d rounds takes the match.,"Wer zuerst %d Runden gewinnt, holt das Match.",Le premier à %d manches gagne le match.,El primero en ganar %d rondas se lleva la partida.,Quem vencer %d rodadas primeiro leva a partida.,先赢下 %d 回合者获胜。,先に%dラウンド取った人がマッチの勝ち。,%d라운드를 먼저 이기면 대전 승리.,"Побеждает тот, кто первым выиграет %d раундов."
+MODE_CLASSIC_BLURB,Last one standing,Wer zuletzt steht,Le dernier debout,El último en pie,O último de pé,最后站着的人,最後の生き残り,마지막 생존자,Последний на ногах
+MODE_KING_OF_THE_HILL_BLURB,Hold the hill alone,Halt den Hügel allein,Tiens la colline seul,Domina la colina solo,Domine a colina sozinho,独占山丘,ヒルを独り占め,언덕 독차지,Держи гору в одиночку
+MODE_HOT_POTATO_BLURB,Pass the tag,Gib den Tag weiter,Refile le jeton,Pasa la marca,Passe a marca,传递标记,タグをパス,태그 넘기기,Передай метку
+MODE_SUDDEN_DEATH_BLURB,"One hit, you are out","Ein Treffer, du bist raus","Un coup, tu sors",Un golpe y fuera,Um golpe e fora,一击出局,1発で脱落,한 방이면 탈락,Один удар — вылет
+MODE_STOCK_BLURB,Last one with lives left,Wer zuletzt Leben hat,Le dernier avec des vies,El último con vidas,O último com vidas,命最后剩下的人,ライフが残った人の勝ち,목숨이 끝까지 남은 사람,Последний с жизнями
+MODE_SOCCER_BLURB,Teams: score goals,Teams: Tore schießen,Équipes : marquez des buts,Equipos: anota goles,Times: faça gols,团队:比拼进球,チーム戦: ゴールを決めろ,팀전: 골을 넣어라,Команды: забивайте голы
+MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag,Teams: ihre Flagge klauen,Équipes : volez leur drapeau,Equipos: roba su bandera,Times: roube a bandeira deles,团队:抢走对方的旗,チーム戦: 敵の旗を奪え,팀전: 상대 깃발을 훔쳐라,Команды: своруйте их флаг
+PICKER_LIVE_NOTE,"In the game this is the real character, live","Im Spiel ist das der echte Charakter, live","Dans le jeu, c'est le vrai personnage, en direct","En el juego es el personaje real, en vivo","No jogo, este é o personagem de verdade, ao vivo",游戏里就是这个角色的实时模样,ゲーム中はこのキャラがそのまま動くよ,게임에서도 이 캐릭터가 그대로 나와요,"В игре это настоящий персонаж, вживую"
+PICKER_TAKEN_NOTE,Greyed colours are taken by other players,Ausgegraute Farben haben andere Spieler,Les couleurs grisées sont prises par d'autres joueurs,Los colores en gris ya los tienen otros jugadores,Cores em cinza já estão com outros jogadores,灰色的颜色已被其他玩家选走,グレーの色は他のプレイヤーが使用中,회색 색상은 다른 플레이어가 골랐어요,Серые цвета заняты другими игроками
+PICKER_DONE,Done,Fertig,Terminé,Listo,Pronto,完成,完了,완료,Готово
+TITLE_FOOTER,"Click, press a key, or D-pad + A","Klick, Taste oder Steuerkreuz + A","Clique, appuie sur une touche, ou croix + A","Haz clic, pulsa una tecla, o cruceta + A","Clique, aperte uma tecla, ou direcional + A","点击、按任意键,或方向键 + A",クリック、キー、または十字キー + A,"클릭하거나, 아무 키나 누르거나, 방향키 + A","Клик, любая клавиша или крестовина + A"
+CAREER_LINE,Matches %d · Wins %d · KOs %d,Matches %d · Siege %d · KOs %d,Matchs %d · Victoires %d · KO %d,Partidas %d · Victorias %d · KO %d,Partidas %d · Vitórias %d · KOs %d,对局 %d · 胜场 %d · 击倒 %d,マッチ %d · 勝利 %d · KO %d,대전 %d · 승리 %d · KO %d,Матчей %d · Побед %d · Нокаутов %d
+CAREER_MATCHES,Matches played: %d,Gespielte Matches: %d,Matchs joués : %d,Partidas jugadas: %d,Partidas jogadas: %d,对局场数:%d,プレイしたマッチ: %d,플레이한 대전: %d,Сыграно матчей: %d
+CAREER_MATCH_WINS,Match wins: %d,Match-Siege: %d,Matchs gagnés : %d,Partidas ganadas: %d,Partidas vencidas: %d,对局胜场:%d,マッチ勝利: %d,대전 승리: %d,Побед в матчах: %d
+CAREER_ROUND_WINS,Round wins: %d,Rundensiege: %d,Manches gagnées : %d,Rondas ganadas: %d,Rodadas vencidas: %d,回合胜场:%d,ラウンド勝利: %d,라운드 승리: %d,Побед в раундах: %d
+CAREER_KOS,KOs: %d,KOs: %d,KO : %d,KO: %d,KOs: %d,击倒:%d,KO: %d,KO: %d,Нокаутов: %d
+CAREER_SELF_KOS,Self-KOs: %d,Selbst-KOs: %d,Auto-KO : %d,AutoKO: %d,AutoKOs: %d,自爆:%d,自滅: %d,자멸: %d,Самонокаутов: %d
+CAREER_FAVOURITE,Favourite weapon: %s,Lieblingswaffe: %s,Arme préférée : %s,Arma favorita: %s,Arma favorita: %s,最爱武器:%s,お気に入りの武器: %s,가장 좋아하는 무기: %s,Любимое оружие: %s
+JOIN_HELP_BUTTON,Phones can't join?,Handys kommen nicht rein?,Les téléphones ne se connectent pas ?,¿Los celulares no entran?,Celulares não entram?,手机加入不了?,スマホで参加できない?,폰으로 참가가 안 되나요?,Телефоны не заходят?
+JOIN_HELP_TITLE,Phones can't join?,Handys kommen nicht rein?,Les téléphones ne se connectent pas ?,¿Los celulares no entran?,Celulares não entram?,手机加入不了?,スマホで参加できない?,폰으로 참가가 안 되나요?,Телефоны не заходят?
+JOIN_HELP_FIREWALL,"Firewall: allow Pickfight through when your computer asks (Windows ""Allow access"", macOS incoming connections).","Firewall: Erlaub Pickfight, wenn dein Computer fragt (Windows „Zugriff zulassen“, macOS eingehende Verbindungen).","Pare-feu : autorise Pickfight quand ton ordinateur le demande (Windows « Autoriser l'accès », macOS connexions entrantes).","Firewall: permite Pickfight cuando tu computadora lo pida (Windows «Permitir acceso», macOS conexiones entrantes).","Firewall: permita o Pickfight quando o computador perguntar (Windows ""Permitir acesso"", macOS conexões de entrada).","防火墙:电脑询问时,请允许 Pickfight 通过(Windows 的“允许访问”,macOS 的传入连接)。",ファイアウォール: パソコンに聞かれたらPickfightを許可してね(Windowsの「アクセスを許可」、macOSの受信接続)。,"방화벽: 컴퓨터가 물어보면 Pickfight를 허용하세요 (Windows의 '액세스 허용', macOS의 들어오는 연결).","Брандмауэр: когда компьютер спросит, разрешите Pickfight (в Windows «Разрешить доступ», в macOS — входящие подключения)."
+JOIN_HELP_ISOLATION,"Guest, hotel or school Wi-Fi often blocks phones from reaching other devices (client isolation): use another network.","Gast-, Hotel- oder Schul-WLAN blockiert Handys oft gegenüber anderen Geräten (Client-Isolation): Nimm ein anderes Netz.","Les Wi-Fi invités, d'hôtel ou d'école bloquent souvent les téléphones vers les autres appareils (isolation des clients) : change de réseau.","El Wi-Fi de invitados, hoteles o escuelas suele bloquear que los celulares vean otros dispositivos (aislamiento de clientes): usa otra red.","Wi-Fi de visitantes, hotel ou escola costuma impedir que celulares alcancem outros aparelhos (isolamento de clientes): use outra rede.",访客、酒店或学校的 Wi-Fi 常常不让手机访问其他设备(客户端隔离):换个网络试试。,ゲスト用・ホテル・学校のWi-Fiは、スマホが他の機器に届かないことが多い(クライアント分離)。別のネットワークを使ってね。,"게스트, 호텔, 학교 와이파이는 폰이 다른 기기에 닿지 못하게 막는 경우가 많아요 (클라이언트 격리). 다른 네트워크를 쓰세요.","Гостевой, гостиничный или школьный Wi-Fi часто не пускает телефоны к другим устройствам (изоляция клиентов): возьмите другую сеть."
+JOIN_HELP_ADAPTER,Wrong network: a VPN or a second adapter can hide the right address. Try another address listed below.,Falsches Netz: Ein VPN oder ein zweiter Adapter kann die richtige Adresse verstecken. Probier eine andere Adresse unten.,Mauvais réseau : un VPN ou une seconde carte peut cacher la bonne adresse. Essaie une autre adresse ci-dessous.,Red equivocada: una VPN o un segundo adaptador pueden ocultar la dirección correcta. Prueba otra dirección de abajo.,Rede errada: uma VPN ou um segundo adaptador pode esconder o endereço certo. Tente outro endereço da lista abaixo.,网络不对:VPN 或第二块网卡可能会让正确的地址看不到。试试下面列出的其他地址。,ネットワーク違い: VPNや2つ目のアダプターで正しいアドレスが隠れることがあります。下に出ている別のアドレスを試してね。,네트워크가 달라요: VPN이나 두 번째 어댑터 때문에 올바른 주소가 가려질 수 있어요. 아래에 나온 다른 주소를 써 보세요.,Не та сеть: VPN или второй адаптер могут скрыть нужный адрес. Попробуйте другой адрес из списка ниже.
+JOIN_HELP_PHONE_NETWORK,Phone on mobile data or a different Wi-Fi: switch it to the same Wi-Fi as this computer.,Handy im Mobilfunk oder anderem WLAN: Wechsle zum selben WLAN wie dieser Computer.,Téléphone en données mobiles ou sur un autre Wi-Fi : passe sur le même Wi-Fi que cet ordinateur.,Celular con datos móviles u otro Wi-Fi: cámbialo al mismo Wi-Fi que esta computadora.,Celular no 4G/5G ou em outro Wi-Fi: troque para o mesmo Wi-Fi deste computador.,手机用的是移动数据或别的 Wi-Fi:请切换到和这台电脑相同的 Wi-Fi。,スマホがモバイルデータか別のWi-Fiにつながってる: このパソコンと同じWi-Fiに切り替えてね。,폰이 모바일 데이터나 다른 와이파이에 연결돼 있어요: 이 컴퓨터와 같은 와이파이로 바꾸세요.,"Телефон на мобильном интернете или в другой сети Wi-Fi: переключите его на тот же Wi-Fi, что и компьютер."
+JOIN_HELP_HOTSPOT,Still stuck: start a hotspot on a phone and connect this computer and the other phones to it.,Immer noch nichts: Starte einen Hotspot auf einem Handy und verbinde diesen Computer und die anderen Handys damit.,Toujours bloqué : lance un point d'accès sur un téléphone et connecte-y cet ordinateur et les autres téléphones.,Sigue sin funcionar: activa una zona Wi-Fi en un celular y conecta a ella esta computadora y los demás celulares.,Ainda não rolou: ative um hotspot num celular e conecte este computador e os outros celulares nele.,"还是不行:用一部手机开热点,让这台电脑和其他手机都连上它。",それでもダメなら: スマホでホットスポットを作って、このパソコンと他のスマホをつなごう。,그래도 안 되면: 폰 하나로 핫스팟을 켜고 이 컴퓨터와 다른 폰들을 거기에 연결하세요.,Всё равно не выходит: включите точку доступа на одном телефоне и подключите к ней этот компьютер и остальные телефоны.
+JOIN_HELP_ADDRESSES,Type one of these into the phone's browser if the QR code fails:,"Gib eine davon im Handy-Browser ein, falls der QR-Code nicht klappt:",Tape l'une de ces adresses dans le navigateur du téléphone si le QR code échoue :,Escribe una de estas en el navegador del celular si el QR falla:,Digite um destes no navegador do celular se o QR falhar:,"如果二维码扫不了,请在手机浏览器里输入下面任意一个地址:",QRコードがダメなら、次のどれかをスマホのブラウザに入力してね:,QR 코드가 안 되면 아래 주소 중 하나를 폰 브라우저에 입력하세요:,"Если QR-код не работает, введите один из этих адресов в браузере телефона:"
+JOIN_HELP_NO_ADDRESS,No network address found: connect this computer to Wi-Fi or Ethernet.,Keine Netzwerkadresse gefunden: Verbinde diesen Computer mit WLAN oder Ethernet.,Aucune adresse réseau trouvée : connecte cet ordinateur au Wi-Fi ou à l'Ethernet.,No hay dirección de red: conecta esta computadora a Wi-Fi o Ethernet.,Nenhum endereço de rede encontrado: conecte este computador ao Wi-Fi ou à Ethernet.,没有找到网络地址:请把这台电脑连上 Wi-Fi 或网线。,ネットワークアドレスが見つかりません: このパソコンをWi-FiかLANにつないでね。,네트워크 주소를 찾지 못했어요: 이 컴퓨터를 와이파이나 이더넷에 연결하세요.,Сетевой адрес не найден: подключите компьютер к Wi-Fi или Ethernet.
+SETTINGS_LANGUAGE,Language,Sprache,Langue,Idioma,Idioma,语言,言語,언어,Язык
+LANGUAGE_AUTO,Auto (system),Auto (System),Auto (système),Auto (sistema),Auto (sistema),自动(跟随系统),自動(システム),자동 (시스템),Авто (система)
