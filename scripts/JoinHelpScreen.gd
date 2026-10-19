@@ -28,6 +28,14 @@ var _url_head: Label
 var _url_labels: Array[Label] = []
 var _urls: PackedStringArray = PackedStringArray()
 var _hidden: bool = false
+## The "Join over the internet instead" fallback (#683, ADR-0025).
+var _net_button: Button
+var _net_stop: Button
+var _net_live: HBoxContainer
+var _net_qr: TextureRect
+var _net_status: Label
+var _net_url: Label
+var _net_room: Label
 
 func _init(screen) -> void:
 	_screen = screen
@@ -74,6 +82,98 @@ func build(card: Control, on_close: Callable) -> void:
 	_url_head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_url_box.add_child(_url_head)
 	_rebuild_urls()
+	_build_internet(box)
+
+## The internet fallback: a button, then (once pressed) the QR, the short link,
+## the room code and a Stop control. Every button takes focus for the pad.
+func _build_internet(box: VBoxContainer) -> void:
+	var net := VBoxContainer.new()
+	net.name = "Internet"
+	net.add_theme_constant_override("separation", 10)
+	box.add_child(net)
+	var note: Label = ScreenKitScript.themed_label(_screen.tr("JOIN_NET_NOTE"), 22, UiThemeScript.INK_BOLD_LABEL)
+	note.name = "NetNote"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	net.add_child(note)
+	_net_button = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinInternetButton")
+	_net_button.focus_mode = Control.FOCUS_ALL
+	_net_button.pressed.connect(_set_internet.bind(true))
+	net.add_child(_net_button)
+	_net_live = HBoxContainer.new()
+	_net_live.name = "NetLive"
+	_net_live.add_theme_constant_override("separation", 20)
+	_net_live.visible = false
+	net.add_child(_net_live)
+	_net_qr = TextureRect.new()
+	_net_qr.name = "NetQr"
+	_net_qr.custom_minimum_size = Vector2(220, 220)
+	_net_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_net_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_net_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_net_live.add_child(_net_qr)
+	var side := VBoxContainer.new()
+	side.name = "NetSide"
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side.add_theme_constant_override("separation", 6)
+	_net_live.add_child(side)
+	_net_status = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL)
+	_net_status.name = "NetStatus"
+	side.add_child(_net_status)
+	_net_url = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_HEADING_LABEL)
+	_net_url.name = "NetUrl"
+	_net_url.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	side.add_child(_net_url)
+	_net_room = ScreenKitScript.themed_label("", 40, UiThemeScript.INK_HEADING_LABEL)
+	_net_room.name = "NetRoom"
+	side.add_child(_net_room)
+	_net_stop = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_STOP"), UiThemeScript.ACTION_BUTTON, "StopInternetButton")
+	_net_stop.focus_mode = Control.FOCUS_ALL
+	_net_stop.pressed.connect(_set_internet.bind(false))
+	side.add_child(_net_stop)
+
+func _set_internet(on: bool) -> void:
+	var server: Object = _screen._server
+	if server != null:
+		server.apply_host_command("internet", on)
+		refresh_internet(server)
+
+func internet_button() -> Button:
+	return _net_button
+
+func internet_stop_button() -> Button:
+	return _net_stop
+
+## The shown link, room code and status of the internet fallback ("" when off or hidden).
+func internet_url_text() -> String:
+	return _net_url.text if _net_url != null else ""
+
+func internet_room_text() -> String:
+	return _net_room.text if _net_room != null else ""
+
+func internet_qr_visible() -> bool:
+	return _net_qr != null and _net_qr.visible
+
+func internet_live_visible() -> bool:
+	return _net_live != null and _net_live.visible
+
+## Redraws the fallback block from `server` (streamer mode hides the link,
+## QR and code, as it does the LAN addresses).
+func refresh_internet(server: Object) -> void:
+	if not _built or server == null or not server.has_method("internet_join_on"):
+		return
+	var on: bool = server.internet_join_on()
+	_net_live.visible = on
+	if not on:
+		return
+	var status: String = server.internet_join_status()
+	_net_status.text = {"connecting": _screen.tr("ONLINE_CONNECTING"), "unreachable": _screen.tr("ONLINE_UNREACHABLE")}.get(status, _screen.tr("JOIN_NET_OPEN"))
+	var code: String = server.internet_join_room()
+	var hidden: bool = _hidden
+	_net_qr.texture = server.internet_join_qr_texture() if not hidden else null
+	_net_qr.visible = _net_qr.texture != null
+	_net_url.text = _screen.tr("ROOM_CODE_HIDDEN") if hidden else server.internet_join_url()
+	_net_room.text = "" if hidden or code.is_empty() else _screen.tr("ONLINE_ROOM") % code
+	_net_room.visible = _net_room.text != ""
 
 func close_button() -> Button:
 	return _close_button

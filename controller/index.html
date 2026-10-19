@@ -757,6 +757,10 @@
   // are replaced by the extra arguments of t().
   var STRINGS = {
     en: {
+        "PHONE_RELAY_NO_ROOM": "Room not found — check the code on the TV",
+        "PHONE_RELAY_HOST_LEFT": "The host left the room",
+        "PHONE_RELAY_FULL": "The room is full",
+        "PHONE_RELAY_BAD_URL": "This link's relay is not allowed",
         "STEAL_LIFE": "Steal a life",
         "LOBBY_TITLE": "Lobby",
         "PHONE_FIRST_TO": "First to",
@@ -889,6 +893,10 @@
         "RULES_DONE": "Done"
     },
     de: {
+      "PHONE_RELAY_NO_ROOM": "Raum nicht gefunden — prüfe den Code auf dem Fernseher",
+      "PHONE_RELAY_HOST_LEFT": "Der Host hat den Raum verlassen",
+      "PHONE_RELAY_FULL": "Der Raum ist voll",
+      "PHONE_RELAY_BAD_URL": "Das Relay dieses Links ist nicht erlaubt",
       "STEAL_LIFE": "Leben stehlen",
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "Erster bis",
@@ -1021,6 +1029,10 @@
       "RULES_DONE": "Fertig"
     },
     fr: {
+      "PHONE_RELAY_NO_ROOM": "Salon introuvable — vérifie le code sur la télé",
+      "PHONE_RELAY_HOST_LEFT": "L'hôte a quitté le salon",
+      "PHONE_RELAY_FULL": "Le salon est plein",
+      "PHONE_RELAY_BAD_URL": "Le relais de ce lien n'est pas autorisé",
       "STEAL_LIFE": "Voler une vie",
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "Premier à",
@@ -1153,6 +1165,10 @@
       "RULES_DONE": "Terminé"
     },
     es: {
+      "PHONE_RELAY_NO_ROOM": "Sala no encontrada — revisa el código en la tele",
+      "PHONE_RELAY_HOST_LEFT": "El anfitrión salió de la sala",
+      "PHONE_RELAY_FULL": "La sala está llena",
+      "PHONE_RELAY_BAD_URL": "El relay de este enlace no está permitido",
       "STEAL_LIFE": "Robar una vida",
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "El primero a",
@@ -1285,6 +1301,10 @@
       "RULES_DONE": "Listo"
     },
     pt: {
+      "PHONE_RELAY_NO_ROOM": "Sala não encontrada — confira o código na TV",
+      "PHONE_RELAY_HOST_LEFT": "O anfitrião saiu da sala",
+      "PHONE_RELAY_FULL": "A sala está cheia",
+      "PHONE_RELAY_BAD_URL": "O relay deste link não é permitido",
       "STEAL_LIFE": "Roubar uma vida",
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "O primeiro a",
@@ -1417,6 +1437,10 @@
       "RULES_DONE": "Pronto"
     },
     zh: {
+      "PHONE_RELAY_NO_ROOM": "找不到房间 — 请检查电视上的代码",
+      "PHONE_RELAY_HOST_LEFT": "房主已离开房间",
+      "PHONE_RELAY_FULL": "房间已满",
+      "PHONE_RELAY_BAD_URL": "此链接的中继不被允许",
       "STEAL_LIFE": "偷一条命",
       "LOBBY_TITLE": "大厅",
       "PHONE_FIRST_TO": "先到",
@@ -1549,6 +1573,10 @@
       "RULES_DONE": "完成"
     },
     ja: {
+      "PHONE_RELAY_NO_ROOM": "ルームが見つかりません — TVのコードを確認してください",
+      "PHONE_RELAY_HOST_LEFT": "ホストがルームを離れました",
+      "PHONE_RELAY_FULL": "ルームが満員です",
+      "PHONE_RELAY_BAD_URL": "このリンクのリレーは許可されていません",
       "STEAL_LIFE": "ライフを奪う",
       "LOBBY_TITLE": "ロビー",
       "PHONE_FIRST_TO": "先取",
@@ -1681,6 +1709,10 @@
       "RULES_DONE": "完了"
     },
     ko: {
+      "PHONE_RELAY_NO_ROOM": "방을 찾을 수 없어요 — TV의 코드를 확인하세요",
+      "PHONE_RELAY_HOST_LEFT": "호스트가 방을 떠났어요",
+      "PHONE_RELAY_FULL": "방이 가득 찼어요",
+      "PHONE_RELAY_BAD_URL": "이 링크의 릴레이는 허용되지 않아요",
       "STEAL_LIFE": "목숨 훔치기",
       "LOBBY_TITLE": "로비",
       "PHONE_FIRST_TO": "선취",
@@ -1813,6 +1845,10 @@
       "RULES_DONE": "완료"
     },
     ru: {
+      "PHONE_RELAY_NO_ROOM": "Комната не найдена — проверь код на телевизоре",
+      "PHONE_RELAY_HOST_LEFT": "Хост покинул комнату",
+      "PHONE_RELAY_FULL": "Комната полна",
+      "PHONE_RELAY_BAD_URL": "Релей этой ссылки не разрешён",
       "STEAL_LIFE": "Украсть жизнь",
       "LOBBY_TITLE": "Лобби",
       "PHONE_FIRST_TO": "До",
@@ -2066,7 +2102,20 @@
     hit:        { rank: 1, vibrate: 25,            alpha: 0.18, ms: 120 }
   };
 
-  var WS_PORT = __WS_PORT__;
+  // The host replaces the token with its WebSocket port; the same file served
+  // raw (GitHub Pages, for a phone joining over the relay, #683) reads 0.
+  var WS_PORT = (function () { var p = "__WS_PORT__"; return /^[0-9]+$/.test(p) ? parseInt(p, 10) : 0; })();
+  // Issue #683: ?room=ABCD&relay=<wss url> joins a Couch match over the relay.
+  // Only wss:// (and ws://127.0.0.1 for tests) is accepted.
+  function relayUrlAllowed(u) { return /^wss:\/\/[^\s\/]+/i.test(u) || /^ws:\/\/127\.0\.0\.1(:[0-9]+)?(\/|$)/.test(u); }
+  var RELAY = (function () {
+    var q;
+    try { q = new URLSearchParams(window.location.search); } catch (err) { return null; }
+    var room = q.get("room"), url = q.get("relay");
+    if (!room || !url) { return null; }
+    return { room: room.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8), url: url, ok: relayUrlAllowed(url) };
+  })();
+  var KIND_INPUT = 0, KIND_TEXT = 1; // the relay envelope's kind byte (RelayLink.gd)
   var NAME_KEY = "pickfight-name";
   // Set once this phone's player has picked a name in the prompt (issue
   // #139), so a reconnect or a later game goes straight to the controls.
@@ -2642,9 +2691,20 @@
   var lobby = null;
   var amReady = false;
 
-  function sendText(obj) {
-    if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(obj)); }
+  // Over the relay every frame is binary, [kind byte][payload] (RemoteClient.gd's
+  // wire); on the LAN a text message is a text frame and input is the bare 8 bytes.
+  function xmit(kind, bytes) {
+    var out = new Uint8Array(bytes.length + 1);
+    out[0] = kind;
+    out.set(bytes, 1);
+    ws.send(out.buffer);
   }
+  function sendText(obj) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) { return; }
+    if (!RELAY) { ws.send(JSON.stringify(obj)); }
+    else if (relayJoined) { xmit(KIND_TEXT, new TextEncoder().encode(JSON.stringify(obj))); }
+  }
+  var relayJoined = false;
 
   function slotName(n) {
     if (lobby) {
@@ -3361,23 +3421,42 @@
 
   function connect() {
     setStatus(t("STATUS_CONNECTING"));
+    if (RELAY && !RELAY.ok) { setStatus(t("PHONE_RELAY_BAD_URL")); return; }
     // Every handler checks it still belongs to the current socket: a late
     // event from an old one must not undo the new one's state.
-    var sock = new WebSocket("ws://" + window.location.hostname + ":" + WS_PORT);
+    var sock = new WebSocket(RELAY ? RELAY.url : "ws://" + window.location.hostname + ":" + WS_PORT);
     ws = sock;
     sock.binaryType = "arraybuffer";
+    relayJoined = false;
+    // Set by the relay's error or the host's "closed" notice: the socket's own
+    // close event carries neither over the relay.
+    var relayNote = null;
     sock.onopen = function () {
       if (sock !== ws) { return; }
+      if (RELAY) {
+        // Join the room; the hello follows the relay's welcome.
+        sock.send(JSON.stringify({ t: "join", room: RELAY.room }));
+        return;
+      }
       // Identify ourselves before any binary input frame, so the host's
       // id-await stage (ControllerServer._process_websocket) has our id to
       // match before it ever needs to fall back to binding us as new.
-      sock.send(JSON.stringify({ id: CLIENT_ID }));
+      sock.send(JSON.stringify({ id: CLIENT_ID, client: "phone" }));
       setStatus(t("STATUS_CONNECTED"));
     };
     sock.onmessage = function (ev) {
-      if (sock !== ws || typeof ev.data !== "string") { return; }
+      if (sock !== ws) { return; }
+      if (!RELAY) {
+        if (typeof ev.data === "string") { hostText(ev.data); }
+        return;
+      }
+      if (typeof ev.data === "string") { relayText(ev.data); return; }
+      var bytes = new Uint8Array(ev.data);
+      if (bytes.length > 1 && bytes[0] === KIND_TEXT) { hostText(new TextDecoder().decode(bytes.subarray(1))); }
+    };
+    function hostText(text) {
       try {
-        var msg = JSON.parse(ev.data);
+        var msg = JSON.parse(text);
         if (typeof msg.slot === "number") {
           refusedOut = false;
           setSlot(msg.slot);
@@ -3394,23 +3473,44 @@
         else if (msg.t === "hill") { showHill(msg); }
         else if (msg.t === "career") { addCareer(msg.d); }
         else if (msg.t === "lobby") { showLobby(msg); }
+        else if (msg.t === "closed" && RELAY) { relayNote = { code: Number(msg.code) || 0, reason: String(msg.reason || "") }; }
       } catch (err) { /* ignore anything that is not a known message */ }
-    };
+    }
+    // The relay's own text messages: welcome, or an error that ends the join.
+    function relayText(text) {
+      var msg;
+      try { msg = JSON.parse(text); } catch (err) { return; }
+      if (msg.t === "welcome") {
+        relayJoined = true;
+        xmit(KIND_TEXT, new TextEncoder().encode(JSON.stringify({ id: CLIENT_ID, client: "phone" })));
+        setStatus(t("STATUS_CONNECTED"));
+      } else if (msg.t === "error") {
+        var friendly = { bad_room: "PHONE_RELAY_NO_ROOM", host_left: "PHONE_RELAY_HOST_LEFT",
+          idle_timeout: "PHONE_RELAY_HOST_LEFT", room_full: "PHONE_RELAY_FULL" }[msg.reason];
+        relayNote = { code: 0, reason: friendly ? t(friendly) : String(msg.reason || ""), relayError: true };
+      }
+    }
     // The host drops us for reasons a player needs to be told about: every
     // slot is taken (one phone more than the host has players), or our input
     // went quiet long enough to look like a locked screen. Show the server's
     // reason, then keep retrying -- a dropped controller must be able to
     // rejoin by itself once a slot frees up or the phone wakes. Not after a
     // kick, and not once this phone's id connected again somewhere else.
+    // Over the relay the retry rejoins the room the same way (connect()).
     sock.onclose = function (ev) {
       if (sock !== ws) { return; }
+      var code = ev ? ev.code : 0;
       var reason = (ev && ev.reason) ? String(ev.reason) : "";
+      if (relayNote) { code = relayNote.code; reason = relayNote.reason; }
+      var relayError = !!(relayNote && relayNote.relayError);
+      relayJoined = false;
       var kicked = reason === KICKED_REASON;
       var replaced = reason === REPLACED_REASON;
-      var refused = ev && ev.code === REFUSED_CODE;
+      var refused = code === REFUSED_CODE;
       closeReason = kicked || replaced ? "" : reason;
+      if (relayError) { closeReason = ""; } // the relay's own error is the status line, not a host reason
       setStatus(kicked ? t("STATUS_KICKED") : (replaced ? t("STATUS_REPLACED") :
-        (refused ? reason : (reason ? t("STATUS_RETRYING", reason) : t("STATUS_RECONNECTING")))));
+        (relayError ? reason : (refused ? reason : (reason ? t("STATUS_RETRYING", reason) : t("STATUS_RECONNECTING"))))));
       setSlot(-1);
       lobbyEl.className = "";
       lookEl.classList.remove("show");
@@ -3422,6 +3522,7 @@
       if (kicked) { kickedOut = true; showState(); return; }
       if (replaced) { replacedOut = true; showState(); return; }
       if (refused) { refusedOut = true; showState(); setTimeout(connect, REFUSED_RETRY_MS); return; }
+      if (relayError) { showState(); setTimeout(connect, REFUSED_RETRY_MS); return; }
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
     sock.onerror = function () { /* onclose does the reconnecting */ };
@@ -3474,7 +3575,7 @@
       var view = new DataView(buf);
       view.setFloat32(0, vx, true);
       view.setFloat32(4, vy, true);
-      ws.send(buf);
+      if (!RELAY) { ws.send(buf); } else if (relayJoined) { xmit(KIND_INPUT, new Uint8Array(buf)); }
     }
     draw();
     window.requestAnimationFrame(frame);

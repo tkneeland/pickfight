@@ -418,6 +418,9 @@ class RemoteSeat extends RefCounted:
 	var peer: int = 0
 	var link: Node = null
 	var open: bool = true
+	## Issue #683: a phone's page joining a Couch match over the relay (hello
+	## `"client": "phone"`), not a PC client. It plays like a LAN phone.
+	var is_phone: bool = false
 	var deadline_msec: int = 0
 	var _inbox: Array = [] # [is_text, PackedByteArray]
 	## Issue #446: the last measured round trip in ms (-1 until a pong
@@ -779,7 +782,7 @@ func _reset_release_on_respawn(slot: int) -> void:
 	if now_alive == 1 and _slot_was_alive[slot] == 0:
 		_slot_release_toggle[slot] = 0
 		_slot_release_remote[slot] = 0
-		if _slot_peers[slot] is RemoteSeat:
+		if _is_pc_remote(_slot_peers[slot]):
 			_slot_peers[slot].send_text(JSON.stringify({"t": "release", "v": false}))
 	_slot_was_alive[slot] = now_alive
 
@@ -1260,7 +1263,7 @@ func _attach(slot: int, peer: Variant) -> void:
 	_smoothers[slot].reset()
 	_players[slot].bind_controller()
 	# Issue #487: only a phone (no action button) flicks to launch.
-	_players[slot].flick_launch_enabled = peer is not LocalSeat and peer is not RemoteSeat
+	_players[slot].flick_launch_enabled = peer is not LocalSeat and not _is_pc_remote(peer)
 	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if not _lobby_state.is_empty():
@@ -1404,7 +1407,7 @@ func continue_inputs() -> PackedStringArray:
 			continue
 		if peer is PadSeat:
 			has["pad"] = true
-		elif peer is LocalSeat or peer is RemoteSeat:
+		elif peer is LocalSeat or _is_pc_remote(peer):
 			has["pc"] = true
 		else:
 			has["phone"] = true
@@ -2087,7 +2090,7 @@ func go_offline() -> void:
 
 ## The room code the relay gave this host, or "" when not online.
 func online_room_code() -> String:
-	return relay_link.room_code() if relay_link != null else ""
+	return relay_link.room_code() if relay_link != null and not _relay_fallback else ""
 
 ## Whether the relay link is up and the room open.
 func is_online() -> bool:
@@ -2134,6 +2137,12 @@ func _process_remote() -> void:
 		var hello: Variant = _read_remote_hello(seat)
 		if hello != null:
 			_remote_awaiting.erase(seat)
+			# Issue #683: a phone's page over the relay says so; it is exempt from
+			# the PC client's version and build checks, like a LAN phone.
+			seat.is_phone = hello.get("client") == PHONE_CLIENT
+			if seat.is_phone:
+				_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
+				continue
 			if not _is_number(hello.get("proto")) or int(hello["proto"]) != PROTOCOL_VERSION:
 				seat.send_text(JSON.stringify({"t": "error", "reason": "version"}))
 				relay_link.drop_peer(seat.peer)
@@ -2179,6 +2188,103 @@ func _read_remote_hello(seat: RemoteSeat) -> Variant:
 			return parsed
 	return null
 
+# --- Phones over the relay in a Couch match (issue #683, ADR-0025) -------------
+#
+# The host's explicit fallback for a LAN that blocks phones: the Couch match
+# opens a relay room, and phones load the controller page from GitHub Pages and
+# join that room. They are RemoteSeats flagged `is_phone`, so everything past
+# the transport treats them as the phones they are. PC remote clients stay out.
+
+## The hello a phone page sends over the relay: `"client": "phone"`.
+const PHONE_CLIENT: String = "phone"
+## Where phones joining over the internet load the controller page from.
+const PAGES_CONTROLLER_URL: String = "https://tkneeland.github.io/pickfight/controller/index.html"
+
+var _relay_fallback: bool = false
+var _fallback_relay_url: String = ""
+var _fallback_qr_for: String = ""
+var _fallback_qr: ImageTexture = null
+
+## A PC remote client's seat: a relay seat that is not a phone (#683).
+func _is_pc_remote(peer: Variant) -> bool:
+	return peer is RemoteSeat and not peer.is_phone
+
+## A phone's seat over the relay (#683).
+func _is_phone_seat(peer: Variant) -> bool:
+	return peer is RemoteSeat and peer.is_phone
+
+## Whether `slot` is held by a phone that joined over the relay (the lobby card's "(internet)" tag).
+func slot_over_relay(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _is_phone_seat(_slot_peers[slot])
+
+## Opens a relay room for phones while the match stays Couch. Returns an Error
+## code; ERR_UNAVAILABLE outside a Couch match.
+func open_internet_join() -> int:
+	if _match_kind == KIND_ONLINE or _match_kind == KIND_SOLO:
+		return ERR_UNAVAILABLE
+	if _relay_fallback:
+		return OK
+	_relay_fallback = true
+	_fallback_relay_url = resolve_relay_url(OS.get_cmdline_user_args())
+	var err: int = _ensure_relay_link().go_online(_fallback_relay_url)
+	_send_lobby_to_all()
+	return err
+
+## Closes the fallback room. Phones that joined over it lose their socket and
+## keep their seat claim (ADR-0007). Always true.
+func _close_internet_join() -> bool:
+	if not _relay_fallback:
+		return true
+	_relay_fallback = false
+	for seat: RemoteSeat in _remote_awaiting:
+		seat.close(REFUSED_CODE, COUCH_MATCH_REASON)
+	_remote_awaiting.clear()
+	go_offline()
+	_fallback_qr = null
+	_fallback_qr_for = ""
+	_send_lobby_to_all()
+	return true
+
+func close_internet_join() -> bool:
+	return _close_internet_join()
+
+## Whether the Couch relay fallback is on (the room may still be coming up).
+func internet_join_on() -> bool:
+	return _relay_fallback
+
+## "off", "connecting", "online" or "unreachable" for the fallback room.
+func internet_join_status() -> String:
+	if not _relay_fallback or relay_link == null:
+		return "off"
+	match relay_link.link_state():
+		"online":
+			return "online"
+		"connecting", "reconnecting":
+			return "connecting"
+	return "unreachable"
+
+## The fallback room's code, or "" until the relay has given one.
+func internet_join_room() -> String:
+	return relay_link.room_code() if _relay_fallback and relay_link != null else ""
+
+## The link phones open to join over the internet, or "" with no room yet:
+## `<Pages controller page>?room=ABCD&relay=<urlencoded relay url>`.
+func internet_join_url() -> String:
+	var code: String = internet_join_room()
+	if code.is_empty():
+		return ""
+	return "%s?room=%s&relay=%s" % [PAGES_CONTROLLER_URL, code.uri_encode(), _fallback_relay_url.uri_encode()]
+
+## The QR of `internet_join_url()`, or null with no room (cached per link).
+func internet_join_qr_texture() -> ImageTexture:
+	var url: String = internet_join_url()
+	if url.is_empty():
+		return null
+	if url != _fallback_qr_for:
+		_fallback_qr_for = url
+		_fallback_qr = _generate_qr_texture(url)
+	return _fallback_qr
+
 # --- Going online and playing on this PC (issue #239) ---------------------------
 #
 # Both are host powers of the lobby. The host phone's menu sends them as host
@@ -2220,6 +2326,10 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind == KIND_LOCAL or _match_kind == KIND_SOLO:
 				return false
 			return _set_online_requested(arg)
+		"internet":
+			if not arg is bool or not SOLO_PHASES.has(phase):
+				return false
+			return open_internet_join() == OK if arg else _close_internet_join()
 		"pc_seat":
 			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind != "":
 				return false # #435: the match kind owns the host-PC seat now
@@ -2819,7 +2929,7 @@ var hud_frames_sent: int = 0
 func _stream_snapshots(delta: float) -> void:
 	var bound: Array = []
 	for seat: RemoteSeat in _remote_seats.values():
-		if seat.open and _slot_peers.has(seat):
+		if seat.open and not seat.is_phone and _slot_peers.has(seat):
 			bound.append(seat)
 	if bound.is_empty():
 		_snapshot_bound.clear()
@@ -2908,7 +3018,7 @@ func _ping_remote_seats() -> void:
 	var now: int = Time.get_ticks_msec()
 	for slot in _slot_peers.size():
 		var seat: Variant = _slot_peers[slot]
-		if not seat is RemoteSeat or not seat.open:
+		if not _is_pc_remote(seat) or not seat.open:
 			continue
 		if seat.ping_n != 0 and now - seat.ping_sent_msec < ping_interval_msec:
 			continue
@@ -3017,12 +3127,14 @@ func set_match_kind(kind: String) -> bool:
 		# the held claims (#459), which would otherwise eat bot capacity.
 		dropped += _drop_seats_for(KIND_LOCAL) + _drop_seats_for(KIND_ONLINE)
 	_match_kind = kind
+	if kind != KIND_LOCAL:
+		_close_internet_join() # #683: the fallback is a Couch thing; its seats went above
 	if target == KIND_LOCAL:
 		if _host_pc_slot != -1:
 			_release_host_pc_seat()
 		_set_online_requested(false)
-		if relay_state() != RelayLinkScript.STATE_OFFLINE:
-			go_offline() # the relay is never left up in a Couch match
+		if relay_state() != RelayLinkScript.STATE_OFFLINE and not _relay_fallback:
+			go_offline() # the relay is never left up in a Couch match, bar the fallback (#683)
 	else:
 		_set_host_pc_seat(true)
 		_set_online_requested(kind == KIND_ONLINE) # Solo stays off the relay
@@ -3056,11 +3168,14 @@ func set_bot_count(count: int) -> int:
 ## Whether `peer` may not join this kind of match; a refused peer is closed.
 func _refused_by_match_kind(peer: Variant) -> bool:
 	var reason: String = ""
-	if peer is WebSocketPeer and _match_kind == KIND_SOLO:
+	var phone: bool = peer is WebSocketPeer or _is_phone_seat(peer)
+	if phone and _match_kind == KIND_SOLO:
 		reason = SOLO_MATCH_REASON
-	elif peer is WebSocketPeer and _match_kind == KIND_ONLINE:
+	elif phone and _match_kind == KIND_ONLINE:
 		reason = ONLINE_MATCH_REASON
-	elif peer is RemoteSeat and _match_kind == KIND_LOCAL:
+	elif peer is RemoteSeat and _relay_fallback and not peer.is_phone and not room_closed():
+		reason = COUCH_MATCH_REASON # #683: only phones ride the Couch relay fallback
+	elif peer is RemoteSeat and _match_kind == KIND_LOCAL and not (_relay_fallback and peer.is_phone):
 		reason = COUCH_MATCH_REASON
 	elif peer is RemoteSeat and room_closed():
 		reason = ROOM_CLOSED_REASON
@@ -3083,7 +3198,7 @@ func _drop_seats_for(target: String) -> int:
 		var peer: Variant = _slot_peers[slot]
 		if peer is LocalSeat or _slot_client_id[slot].begins_with(PAD_ID_PREFIX) or _slot_client_id[slot] == HOST_PC_ID:
 			continue
-		if peer != null and not (target == KIND_ONLINE and peer is WebSocketPeer) and not (target == KIND_LOCAL and peer is RemoteSeat):
+		if peer != null and not (target == KIND_ONLINE and (peer is WebSocketPeer or _is_phone_seat(peer))) and not (target == KIND_LOCAL and peer is RemoteSeat):
 			continue
 		if peer != null:
 			peer.close(REFUSED_CODE, reason)
@@ -3130,7 +3245,7 @@ var _remote_dropped_msec: Dictionary = {} # slot -> game msec its remote seat dr
 
 func _note_remote_attach(slot: int, peer: Variant) -> void:
 	_remote_dropped_msec.erase(slot)
-	if peer is RemoteSeat:
+	if _is_pc_remote(peer):
 		_remote_claim[slot] = true
 	else:
 		_remote_claim.erase(slot)

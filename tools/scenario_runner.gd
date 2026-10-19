@@ -905,6 +905,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_grapple_zips_to_rival_out_of_reach_632",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
+	"internet_join_button_opens_room_and_stops_683",
+	"internet_join_closes_going_online_or_solo_683",
+	"internet_phone_binds_pc_client_refused_683",
+	"internet_phone_page_relay_branch_683",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3108,6 +3112,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
 			return await _scenario_join_help_hidden_online_and_streamer_680()
+		"internet_join_button_opens_room_and_stops_683":
+			return await _scenario_internet_join_button_opens_room_and_stops_683()
+		"internet_join_closes_going_online_or_solo_683":
+			return await _scenario_internet_join_closes_going_online_or_solo_683()
+		"internet_phone_binds_pc_client_refused_683":
+			return await _scenario_internet_phone_binds_pc_client_refused_683()
+		"internet_phone_page_relay_branch_683":
+			return await _scenario_internet_phone_page_relay_branch_683()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -43270,6 +43282,14 @@ func _scenario_join_help_opens_lists_urls_and_closes_680() -> Array[String]:
 	await _pad_tap_368(0, JOY_BUTTON_A)
 	if screen.popup_open() != "join_help":
 		failures.append("A on the focused button did not open the popup (open: '%s')" % screen.popup_open())
+	# #683: the internet button is the next stop after X, and A on it takes it.
+	if screen.join_help().close_button().find_next_valid_focus() != screen.join_help().internet_button():
+		failures.append("the pad cannot reach the internet button from X")
+	screen.join_help().internet_button().grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if not server.internet_join_on():
+		failures.append("A on the focused internet button did not turn the fallback on")
+	server.close_internet_join()
 	screen.set_popup("")
 	await _pad_tap_368(0, JOY_BUTTON_Y)
 	PadMenuScript368.reset()
@@ -43333,6 +43353,220 @@ func _scenario_join_help_hidden_online_and_streamer_680() -> Array[String]:
 	if lobby.popup_open() == "join_help":
 		failures.append("H opened the popup in an Online lobby")
 	await _streamer_close_369(online_rig)
+	_scenario_completed = true
+	return failures
+
+# --- Join over the internet instead (#683, ADR-0025)
+const PAGES_URL_683: String = "https://tkneeland.github.io/pickfight/controller/index.html"
+## A Couch match on the Main scene with a local relay standing by for the fallback.
+func _internet_rig_683(failures: Array[String]) -> Dictionary:
+	var relay: Node = _relay_start()
+	if relay == null:
+		failures.append("no free port for the relay")
+		return {}
+	var old_setting: Variant = _relay_setting_239(_relay_port_next)
+	var rig: Dictionary = await _deck_rig_368()
+	rig["relay"] = relay
+	rig["old_setting"] = old_setting
+	rig["clients"] = []
+	rig["port"] = _relay_port_next
+	_phone_ws_port = rig["server"].ws_port
+	rig["server"].apply_host_command("kind", "local")
+	return rig
+func _internet_close_683(rig: Dictionary) -> void:
+	rig["server"].close_internet_join()
+	ProjectSettings.set_setting("pickfight/relay_url", rig["old_setting"])
+	_relay_stop(rig["relay"], rig["clients"])
+	await _teardown(rig["main"])
+## A phone page joining over the relay: join, welcome, then the hello envelope.
+func _internet_phone_683(rig: Dictionary, hello: Dictionary) -> WebSocketPeer:
+	var peer: WebSocketPeer = await _relay_connect({"t": "join", "room": rig["server"].internet_join_room()}, rig["clients"])
+	if peer == null or (await _relay_next(peer, rig["clients"])).get("t") != "welcome":
+		return null
+	_online_send_239(peer, 1, JSON.stringify(hello).to_utf8_buffer())
+	return peer
+func _scenario_internet_join_button_opens_room_and_stops_683() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _internet_rig_683(failures)
+	if rig.is_empty():
+		return failures
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	screen.join_help_button().pressed.emit()
+	var help = screen.join_help()
+	if help.internet_button().text != "Join over the internet instead":
+		failures.append("the button reads '%s'" % help.internet_button().text)
+	if help.internet_live_visible() or server.internet_join_on():
+		failures.append("the room is open before the button is pressed")
+	help.internet_button().pressed.emit()
+	if not await _wait_for_239(func() -> bool: return server.internet_join_room() != ""):
+		failures.append("pressing the button opened no relay room")
+		await _internet_close_683(rig)
+		return failures
+	var code: String = server.internet_join_room()
+	if server.match_kind() != "local":
+		failures.append("the match is '%s' after the button, not local" % server.match_kind())
+	if server.online_room_code() != "" or server.online_requested():
+		failures.append("the fallback was reported as an Online room")
+	await _await_ticks(3)
+	var want: String = "%s?room=%s&relay=ws%%3A%%2F%%2F127.0.0.1%%3A%d" % [PAGES_URL_683, code, rig["port"]]
+	if help.internet_url_text() != want:
+		failures.append("popup link '%s', want '%s'" % [help.internet_url_text(), want])
+	if not help.internet_room_text().contains(code):
+		failures.append("popup room text '%s' lacks the code %s" % [help.internet_room_text(), code])
+	if not help.internet_qr_visible():
+		failures.append("no QR for the link")
+	# A second press and closing the popup both leave it open.
+	help.internet_button().pressed.emit()
+	if server.internet_join_room() != code:
+		failures.append("a second press changed the room")
+	await _key_tap_647(KEY_ESCAPE)
+	if not server.internet_join_on() or server.internet_join_room() != code:
+		failures.append("closing the popup closed the room")
+	# Streamer mode hides the link and the code.
+	_sfx().set_hide_room_code(true)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if help.internet_url_text().contains(code) or help.internet_room_text().contains(code) or help.internet_qr_visible():
+		failures.append("streamer mode still shows the room")
+	_sfx().set_hide_room_code(false)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	# The pad reaches both buttons: close, Join over the internet, Stop.
+	screen.set_popup("join_help")
+	if help.close_button().find_next_valid_focus() != help.internet_button():
+		failures.append("the pad's next focus after X is not the internet button")
+	if help.internet_button().find_next_valid_focus() != help.internet_stop_button():
+		failures.append("the pad's next focus after the internet button is not Stop")
+	help.internet_stop_button().pressed.emit()
+	if server.internet_join_on() or server.relay_state() != "offline" or server.internet_join_room() != "":
+		failures.append("Stop internet join left the room open (%s)" % server.relay_state())
+	if help.internet_live_visible():
+		failures.append("the room block stays after Stop")
+	if help.internet_button().find_next_valid_focus() == help.internet_stop_button():
+		failures.append("Stop is still reachable with no room open")
+	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_internet_join_closes_going_online_or_solo_683() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _internet_rig_683(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	for kind: String in ["online", "solo"]:
+		server.apply_host_command("kind", "local")
+		if server.apply_host_command("internet", true) != true or not await _wait_for_239(func() -> bool: return server.internet_join_room() != ""):
+			failures.append("%s: the room did not open from Couch" % kind)
+			continue
+		var code: String = server.internet_join_room()
+		server.apply_host_command("kind", kind)
+		if server.internet_join_on():
+			failures.append("%s: the fallback is still on" % kind)
+		if kind == "solo":
+			if server.relay_state() != "offline":
+				failures.append("solo: the relay is %s" % server.relay_state())
+			if server.apply_host_command("internet", true):
+				failures.append("solo: the internet command was taken")
+		else:
+			if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+				failures.append("online: the Online room did not open")
+			elif server.online_room_code() == code:
+				failures.append("online: the old fallback room is still the room")
+	server.apply_host_command("kind", "local")
+	if server.relay_state() != "offline":
+		failures.append("back in Couch the relay is %s" % server.relay_state())
+	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_internet_phone_binds_pc_client_refused_683() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _internet_rig_683(failures)
+	if rig.is_empty():
+		return failures
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	server.apply_host_command("internet", true)
+	if not await _wait_for_239(func() -> bool: return server.internet_join_room() != ""):
+		failures.append("no relay room")
+		await _internet_close_683(rig)
+		return failures
+	# A LAN phone is unaffected by the open fallback.
+	var lan := WebSocketPeer.new()
+	var lan_join: Dictionary = await _join_phone(lan, "lan-683", [])
+	if int(lan_join["slot"]) < 0:
+		failures.append("the LAN phone got no seat with the fallback on: %s" % lan_join)
+	# A PC client's hello is refused with the Couch refusal.
+	var refused_before: int = server.refused_joins
+	var pc: WebSocketPeer = await _internet_phone_683(rig, {"id": "pc-683", "proto": 1, "demo": false})
+	var closed: Dictionary = await _online_wait_239(rig, pc, "code") if pc != null else {}
+	if int(closed.get("code", 0)) != 4003 or str(closed.get("reason", "")) != "couch match":
+		failures.append("PC client not refused with 4003 / couch match: %s" % closed)
+	if server.refused_joins != refused_before + 1:
+		failures.append("the refusal was not counted")
+	# A phone's hello binds a seat, tagged as joined over the internet.
+	var phone: WebSocketPeer = await _internet_phone_683(rig, {"id": "net-683", "client": "phone"})
+	var seat: Dictionary = await _online_wait_239(rig, phone, "slot") if phone != null else {}
+	if not seat.has("slot"):
+		failures.append("a phone hello over the relay got no seat")
+		await _internet_close_683(rig)
+		return failures
+	var slot: int = int(seat["slot"])
+	if not server.slot_over_relay(slot) or server.slot_over_relay(int(lan_join["slot"])):
+		failures.append("slot_over_relay is wrong for slot %d / the LAN phone" % slot)
+	_online_send_239(phone, 1, JSON.stringify({"t": "name", "v": "Netty"}).to_utf8_buffer())
+	await _await_ticks(20)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	var tagged: bool = false
+	for label: Label in screen.find_children("*", "Label", true, false):
+		if label.text.contains("Netty") and label.text.contains("(internet)"):
+			tagged = true
+	if not tagged:
+		failures.append("no lobby card reads 'Netty (internet)'")
+	# Stop: the relay phone loses its socket, and keeps its claim.
+	server.apply_host_command("internet", false)
+	await _await_ticks(10)
+	if server.slot_has_controller(slot):
+		failures.append("after Stop the relay phone still has a controller")
+	if server.slot_has_controller(int(lan_join["slot"])) != true:
+		failures.append("Stop touched the LAN phone")
+	# The same phone coming back through a new room is the same player (ADR-0007).
+	server.apply_host_command("internet", true)
+	if await _wait_for_239(func() -> bool: return server.internet_join_room() != ""):
+		var back: WebSocketPeer = await _internet_phone_683(rig, {"id": "net-683", "client": "phone"})
+		var again: Dictionary = await _online_wait_239(rig, back, "slot") if back != null else {}
+		if int(again.get("slot", -1)) != slot:
+			failures.append("the relay phone rejoined as %s, not slot %d" % [again.get("slot"), slot])
+	else:
+		failures.append("the room did not reopen")
+	lan.close()
+	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_internet_phone_page_relay_branch_683() -> Array[String]:
+	var failures: Array[String] = []
+	var html: String = FileAccess.get_file_as_string("res://controller/index.html")
+	for needle: String in [
+		"JSON.stringify({ t: \"join\", room: RELAY.room })",
+		"new WebSocket(RELAY ? RELAY.url :",
+		"if (RELAY && !RELAY.ok)",
+		"client: \"phone\"",
+		"q.get(\"room\")",
+		"q.get(\"relay\")",
+	]:
+		if not html.contains(needle):
+			failures.append("the phone page lacks: %s" % needle)
+	var regex := RegEx.new()
+	regex.compile("function relayUrlAllowed\\(u\\) \\{ return ([^;]*);")
+	var found: RegExMatch = regex.search(html)
+	if found == null:
+		failures.append("no relayUrlAllowed function")
+	else:
+		var body: String = found.get_string(1)
+		if not body.contains("wss:") or not body.contains("127\\.0\\.0\\.1") or body.contains("ws:\\/\\/[^"):
+			failures.append("relayUrlAllowed is not wss plus 127.0.0.1 only: %s" % body)
+		if body.contains("|| true") or body.count("||") != 1:
+			failures.append("relayUrlAllowed has an extra branch: %s" % body)
+	if html.contains("var WS_PORT = __WS_PORT__;"):
+		failures.append("the raw page would fail on Pages: __WS_PORT__ is a bare identifier")
 	_scenario_completed = true
 	return failures
 

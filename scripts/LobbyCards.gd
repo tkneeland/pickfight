@@ -111,7 +111,7 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 			"hat": server.slot_hat(slot) if server != null and server.has_method("slot_hat") else "none",
 			"eyes": server.slot_eyes(slot) if server != null and server.has_method("slot_eyes") else "round",
 			"ready": bool(entry["ready"]), "bot": is_bot, "host": slot == int(state["host"]) and not own and not is_bot,
-			"own": own, "ping": int(entry.get("ping", -1)), "tip": bool(entry.get("tip", false)),
+			"own": own, "ping": int(entry.get("ping", -1)), "tip": bool(entry.get("tip", false)), "relay": bool(entry.get("relay", false)),
 			"clickable": own, "badge_clickable": solo_host_ready, "kickable": can_kick and slot != host_pc,
 			"dim": not bool(entry["ready"]) and not is_bot,
 		}
