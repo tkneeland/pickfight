@@ -31,8 +31,8 @@ Steamで製品版をウィッシュリストに追加しよう","Pickfight 데�
 HOST_MATCH_KIND_STATE,Match (O): %s,Match (O): %s,Match (O) : %s,Partida (O): %s,Partida (O): %s,对局 (O): %s,マッチ (O): %s,대전 (O): %s,Матч (O): %s
 JOIN_ERR_COUCH,"That host is playing a Couch match, not Online.","Dieser Host spielt ein Couch-Match, kein Online-Match.","Cet hôte joue en mode Canapé, pas en ligne.","Ese anfitrión juega una partida de Sofá, no en línea.","Esse anfitrião está numa partida de Sofá, não Online.","该主机正在进行同屏对战,不是联机对战。",そのホストはオンラインではなくカウチ対戦中です。,그 호스트는 온라인이 아니라 같은 방 대전 중이에요.,"Этот хозяин играет в матч на одном экране, а не онлайн."
 JOIN_ERR_ROOM_CLOSED,That room is closed.,Dieser Raum ist geschlossen.,Ce salon est fermé.,Esa sala está cerrada.,Essa sala está fechada.,该房间已关闭。,そのルームは閉じられました。,그 방은 닫혔어요.,Эта комната закрыта.
-LOBBY_KIND_DROPPED_PHONES,Online match: %d phone players left the lobby,Online-Match: %d Handy-Spieler haben die Lobby verlassen,Match en ligne : %d joueurs sur téléphone ont quitté le lobby,Partida en línea: %d jugadores con celular salieron del lobby,Partida online: %d jogadores de celular saíram do lobby,联机对战:%d 位手机玩家离开了大厅,オンライン対戦: スマホ勢%d人がロビーを抜けました,온라인 대전: 폰 플레이어 %d명이 로비를 떠났어요,Онлайн-матч: %d игроков с телефонов вышли из лобби
-LOBBY_KIND_DROPPED_REMOTE,Couch match: %d online players left the lobby,Couch-Match: %d Online-Spieler haben die Lobby verlassen,Match Canapé : %d joueurs en ligne ont quitté le lobby,Partida de Sofá: %d jugadores en línea salieron del lobby,Partida de Sofá: %d jogadores online saíram do lobby,同屏对战:%d 位联机玩家离开了大厅,カウチ対戦: オンライン勢%d人がロビーを抜けました,같은 방 대전: 온라인 플레이어 %d명이 로비를 떠났어요,Матч на одном экране: %d онлайн-игроков вышли из лобби
+LOBBY_KIND_DROPPED_PHONES,Online match: %d phone players left the lobby,Online-Match: %d Handy-Spieler haben die Lobby verlassen,Match en ligne : %d joueurs sur téléphone ont quitté le lobby,Partida en línea: %d jugadores con celular salieron del lobby,Partida online: %d jogadores de celular saíram do lobby,联机对战:%d 位手机玩家离开了大厅,オンライン対戦: スマホ勢%d人がロビーを抜けました,온라인 대전: 폰 플레이어 %d명이 로비를 떠났어요,Онлайн-матч: из лобби вышли игроки с телефонов (%d)
+LOBBY_KIND_DROPPED_REMOTE,Couch match: %d online players left the lobby,Couch-Match: %d Online-Spieler haben die Lobby verlassen,Match Canapé : %d joueurs en ligne ont quitté le lobby,Partida de Sofá: %d jugadores en línea salieron del lobby,Partida de Sofá: %d jogadores online saíram do lobby,同屏对战:%d 位联机玩家离开了大厅,カウチ対戦: オンライン勢%d人がロビーを抜けました,같은 방 대전: 온라인 플레이어 %d명이 로비를 떠났어요,Матч на одном экране: из лобби вышли онлайн-игроки (%d)
 LOBBY_ONLINE_WAITING,Share the room code: %d joined (need %d),Teile den Raumcode: %d dabei (nötig: %d),Partage le code du salon : %d connectés (il en faut %d),Comparte el código de la sala: %d unidos (mínimo %d),Compartilhe o código da sala: %d entraram (mínimo %d),分享房间码:已加入 %d 人(需要 %d),ルームコードを共有: %d人参加(必要: %d人),방 코드를 공유하세요: %d명 참가 (필요 %d명),Поделитесь кодом комнаты: зашли %d (нужно %d)
 LOBBY_PRESS_READY_ONLINE,Waiting for everyone to ready up,"Warten, bis alle bereit sind",On attend que tout le monde soit prêt,Esperando a que todos estén listos,Esperando todo mundo ficar pronto,等待大家准备,みんなの準備待ち,모두 준비할 때까지 대기 중,"Ждём, пока все будут готовы"
 MATCH_COUCH,Couch,Couch,Canapé,Sofá,Sofá,同屏,カウチ,같은 방,На одном экране
@@ -49,12 +49,12 @@ DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el ai
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_DAMAGE,%d damage,%d Schaden,%d de dégâts,%d de daño,%d de dano,伤害 %d,ダメージ %d,피해 %d,Урон: %d
 DETAIL_DAMAGE_TAKEN,%d damage taken,%d Schaden kassiert,%d de dégâts subis,%d de daño recibido,%d de dano sofrido,承受伤害 %d,被ダメージ %d,받은 피해 %d,Получено урона: %d
-DETAIL_KO_MANY,%d KOs,%d KOs,%d KO,%d KO,%d KOs,%d 次击倒,%d KO,%d KO,%d нокаутов
-DETAIL_KO_ONE,%d KO,%d KO,%d KO,%d KO,%d KO,%d 次击倒,%d KO,%d KO,%d нокаут
-DETAIL_PICKUP_MANY,%d pickups,%d Pickups,%d objets,%d objetos,%d itens,%d 个道具,アイテム %d個,아이템 %d개,%d подборов
-DETAIL_PICKUP_ONE,%d pickup,%d Pickup,%d objet,%d objeto,%d item,%d 个道具,アイテム %d個,아이템 %d개,%d подбор
-DETAIL_SELF_KO_MANY,%d self-KOs,%d Selbst-KOs,%d auto-KO,%d autoKO,%d autoKOs,%d 次自爆,自滅 %d回,자멸 %d회,%d самонокаутов
-DETAIL_SELF_KO_ONE,%d self-KO,%d Selbst-KO,%d auto-KO,%d autoKO,%d autoKO,%d 次自爆,自滅 %d回,자멸 %d회,%d самонокаут
+DETAIL_KO_MANY,%d KOs,%d KOs,%d KO,%d KO,%d KOs,%d 次击倒,%d KO,%d KO,Нокауты: %d
+DETAIL_KO_ONE,%d KO,%d KO,%d KO,%d KO,%d KO,%d 次击倒,%d KO,%d KO,Нокауты: %d
+DETAIL_PICKUP_MANY,%d pickups,%d Pickups,%d objets,%d objetos,%d itens,%d 个道具,アイテム %d個,아이템 %d개,Подборы: %d
+DETAIL_PICKUP_ONE,%d pickup,%d Pickup,%d objet,%d objeto,%d item,%d 个道具,アイテム %d個,아이템 %d개,Подборы: %d
+DETAIL_SELF_KO_MANY,%d self-KOs,%d Selbst-KOs,%d auto-KO,%d autoKO,%d autoKOs,%d 次自爆,自滅 %d回,자멸 %d회,Самонокауты: %d
+DETAIL_SELF_KO_ONE,%d self-KO,%d Selbst-KO,%d auto-KO,%d autoKO,%d autoKO,%d 次自爆,自滅 %d回,자멸 %d회,Самонокауты: %d
 FEEDBACK_EMPTY,Type something first.,Schreib erst etwas.,Écris d'abord quelque chose.,Escribe algo primero.,Escreva algo primeiro.,先写点什么吧。,先に何か書いてね。,먼저 뭐라도 적어 주세요.,Сначала напишите что-нибудь.
 FEEDBACK_FAILED,Could not send feedback. Try again later.,Feedback konnte nicht gesendet werden. Versuch es später nochmal.,Impossible d'envoyer l'avis. Réessaie plus tard.,No se pudo enviar el comentario. Inténtalo más tarde.,Não deu para enviar o feedback. Tente de novo mais tarde.,"反馈发送失败,请稍后再试。",フィードバックを送れませんでした。あとでもう一度試してね。,피드백을 보내지 못했어요. 나중에 다시 해 보세요.,Не удалось отправить отзыв. Попробуйте позже.
 FEEDBACK_OFFLINE,Feedback is offline right now,Feedback ist gerade offline,Les avis sont hors ligne pour l'instant,Los comentarios están fuera de línea por ahora,O feedback está offline agora,反馈功能暂时离线,フィードバックは今オフラインです,지금은 피드백을 받을 수 없어요,Отзывы сейчас недоступны
