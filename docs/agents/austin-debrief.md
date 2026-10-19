@@ -1,6 +1,6 @@
 # Debrief for Austin (agage-JG), written 2026-10-19
 
-**Agent instruction:** if you are Austin's Claude (GitHub user `agage-JG`) and Austin has not yet confirmed he has read this, show him the "For Austin" section below at the start of the session, in full and in plain words. Then ask him to tick the checkbox in pinned issue "Austin: start here" so later sessions skip it. The "For Austin's agent" section is for you.
+**Agent instruction:** if you are Austin's Claude (GitHub user `agage-JG`) and Austin has not yet confirmed he has read this, show him the "For Austin" section below at the start of the session, in full and in plain words. Then ask him to tick the checkbox in pinned issue #702 ("Austin: start here") so later sessions skip it. The "For Austin's agent" section is for you.
 
 ## For Austin
 
