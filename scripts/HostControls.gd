@@ -181,19 +181,16 @@ func _build_host_panel(parent: Control) -> void:
 	bots_count.custom_minimum_size = Vector2(40, STEP_BUTTON_PX)
 	bots_count.pressed.connect(press_control.bind("bots"))
 	_controls["bots"] = bots_count
-	box.add_child(_stepper_row(ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_BOTS"), 22, UiThemeScript.INK_BOLD_LABEL),
-		_step_button("bots_down", "-"), bots_count, _step_button("bots_up", "+")))
+	var bots_row: HBoxContainer = _stepper_row(ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_BOTS"), 22, UiThemeScript.INK_BOLD_LABEL),
+		_step_button("bots_down", "-"), bots_count, _step_button("bots_up", "+"))
+	(bots_row.get_child(0) as Label).autowrap_mode = TextServer.AUTOWRAP_OFF # the extra button must not squeeze "Bots" onto two lines
+	box.add_child(bots_row)
+	# #682: the bot skill (Easy / Normal / Hard) cycles on a button in the Bots row.
 	var skill: Button = ScreenKitScript.themed_button(_screen.tr("BOT_SKILL_NORMAL"), UiThemeScript.VALUE_BUTTON, "bot_skill")
-	skill.custom_minimum_size = Vector2(110, STEP_BUTTON_PX)
+	skill.custom_minimum_size = Vector2(0, STEP_BUTTON_PX)
 	skill.pressed.connect(press_control.bind("bot_skill"))
 	_controls["bot_skill"] = skill
-	var skill_row := HBoxContainer.new()
-	skill_row.add_theme_constant_override("separation", 10)
-	var skill_label: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_BOT_SKILL"), 22, UiThemeScript.INK_BOLD_LABEL)
-	skill_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	skill_row.add_child(skill_label)
-	skill_row.add_child(skill)
-	box.add_child(skill_row)
+	bots_row.add_child(skill)
 	var teams_row := HBoxContainer.new()
 	teams_row.add_theme_constant_override("separation", 10)
 	var teams_label: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_TEAMS"), 22, UiThemeScript.INK_BOLD_LABEL)
@@ -496,7 +493,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join_help"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join_help"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]
