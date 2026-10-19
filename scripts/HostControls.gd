@@ -27,7 +27,7 @@ const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 const CONTROL_KEYS: Dictionary = {
 	"local": KEY_C, "online": KEY_O, "solo": KEY_S, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
-	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J,
+	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J, "join_help": KEY_H,
 }
 const KIND_IDS: Array[String] = ["local", "online", "solo"] # the switch's cells, left to right
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
@@ -85,8 +85,8 @@ func attach(server: Object) -> void:
 	_controls["stages_rules"] = stages
 	lobby_right.move_child(_screen._stages_box, lobby_right.get_child_count() - 1)
 	# Phones can't join? (#680): the button under the join QR, in the pad menu chain too.
-	_screen._join_help_button.pressed.connect(press_control.bind("join_help"))
-	_controls["join_help"] = _screen._join_help_button
+	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
+	_controls["join_help"] = _screen.join_help_button()
 	# The way into someone else's room code (Online only), with why it is off when it is.
 	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
 	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
@@ -300,6 +300,8 @@ func press_control(id: String) -> void:
 			_popup_opener = id
 			_screen.open_stages_rules()
 		"join_help":
+			if not _screen.join_help_button().visible:
+				return # Online or Solo: no LAN join to help with, so H does nothing
 			_popup_opener = id
 			_screen.set_popup("join_help")
 		"how_to_play":

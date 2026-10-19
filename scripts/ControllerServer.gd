@@ -831,11 +831,6 @@ func _weapon_away_from_rest(slot: int) -> bool:
 ## whose names mark them as virtual (WSL, Hyper-V, Docker, VPNs) are kept but
 ## sorted last. Deliberately not ranked by address range: a real Wi-Fi network
 ## can hand out 172.16/12 or 10/8 just as happily as 192.168/16.
-## Every join address the host serves on, in `_join_urls()` order (the QR uses
-## the first). Read-only: the lobby's "Phones can't join?" popup lists them (#680).
-func join_urls() -> PackedStringArray:
-	return _join_urls()
-
 func _join_urls() -> PackedStringArray:
 	var preferred: PackedStringArray = PackedStringArray()
 	var virtual: PackedStringArray = PackedStringArray()
@@ -858,6 +853,11 @@ func _join_urls() -> PackedStringArray:
 				preferred.append(url)
 	preferred.append_array(virtual)
 	return preferred
+
+## Every join address the host serves on, in `_join_urls()` order (the QR uses
+## the first). Read-only: the lobby's "Phones can't join?" popup lists them (#680).
+func join_urls() -> PackedStringArray:
+	return _join_urls()
 
 ## The join QR, encoded in-process by scripts/QrEncoder.gd (#214) and drawn
 ## 8 px a module with a 2-module quiet zone. It used to shell out to

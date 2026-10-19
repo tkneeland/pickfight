@@ -338,10 +338,11 @@ func open_stages_rules() -> bool:
 func join_help_button() -> Button:
 	return _join_help_button
 
-## The Phones can't join? popup's overlay and contents, or null before the lobby was built.
+## The Phones can't join? popup's overlay, or null before the lobby was built.
 func join_help_popup() -> Control:
 	return _popups.join_help_overlay() if _popups != null else null
 
+## The Phones can't join? popup's contents (address labels, close button), or null before the lobby was built.
 func join_help():
 	return _popups.join_help_screen() if _popups != null else null
 

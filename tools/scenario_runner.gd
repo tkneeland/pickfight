@@ -43235,6 +43235,20 @@ func _scenario_join_help_opens_lists_urls_and_closes_680() -> Array[String]:
 	await _key_tap_647(KEY_ESCAPE)
 	if screen.popup_open() != "":
 		failures.append("Esc did not close the popup")
+	# The keyboard opens it too: H, like the lobby's other letter keys.
+	await _key_tap_647(KEY_H)
+	if screen.popup_open() != "join_help":
+		failures.append("H did not open the popup (open: '%s')" % screen.popup_open())
+	screen.set_popup("")
+	# The pad menu: Y opens it, then A on the focused button.
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	button.grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if screen.popup_open() != "join_help":
+		failures.append("A on the focused button did not open the popup (open: '%s')" % screen.popup_open())
+	screen.set_popup("")
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	PadMenuScript368.reset()
 	button.pressed.emit()
 	PadMenuScript368.set_open("lobby", true)
 	await _pad_tap_368(0, JOY_BUTTON_B)
@@ -43283,11 +43297,17 @@ func _scenario_join_help_hidden_online_and_streamer_680() -> Array[String]:
 	if online_rig.is_empty():
 		return failures
 	var lobby: Object = online_rig["main"].get_node("RoundManager").get("_lobby_screen")
+	lobby.set_popup("join_help") # open when the match goes Online under it
 	online_rig["server"].apply_host_command("kind", "online")
 	await _await_ticks(5)
 	lobby.refresh_lobby.callv(lobby._last_lobby_args)
 	if lobby.join_help_button().visible:
 		failures.append("the button shows in an Online lobby")
+	if lobby.popup_open() == "join_help":
+		failures.append("the popup stayed open after the match went Online")
+	await _key_tap_647(KEY_H)
+	if lobby.popup_open() == "join_help":
+		failures.append("H opened the popup in an Online lobby")
 	await _streamer_close_369(online_rig)
 	_scenario_completed = true
 	return failures
