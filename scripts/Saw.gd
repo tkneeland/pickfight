@@ -29,13 +29,30 @@ func _ready() -> void:
 	_visual.name = "SawVisual"
 	_visual.color = DEFAULT_COLOR
 	var points := PackedVector2Array()
+	# Hooked teeth (#687): each rises slowly and drops sharply, so the blade
+	# reads as cutting in its spin direction.
 	var teeth: int = 12
-	for i in teeth * 2:
-		var angle: float = TAU * float(i) / float(teeth * 2)
-		var r: float = radius if i % 2 == 0 else radius * 0.72
-		points.append(Vector2(cos(angle), sin(angle)) * r)
+	for i in teeth:
+		var a: float = TAU * float(i) / float(teeth)
+		var step: float = TAU / float(teeth)
+		points.append(Vector2(cos(a), sin(a)) * radius * 0.72)
+		points.append(Vector2(cos(a + step * 0.75), sin(a + step * 0.75)) * radius)
 	_visual.polygon = points
 	add_child(_visual)
+	# Spins with the blade: a lit disc, a dark hub and a bright axle.
+	_visual.add_child(_disc("SawFace", radius * 0.6, Color(1, 1, 1, 0.16)))
+	_visual.add_child(_disc("SawHub", radius * 0.3, Color(0, 0, 0, 0.55)))
+	_visual.add_child(_disc("SawAxle", radius * 0.1, Color(1, 1, 1, 0.6)))
+
+func _disc(node_name: String, r: float, colour: Color) -> Polygon2D:
+	var disc := Polygon2D.new()
+	disc.name = node_name
+	disc.color = colour
+	var ring := PackedVector2Array()
+	for i in 16:
+		ring.append(Vector2.RIGHT.rotated(TAU * float(i) / 16.0) * r)
+	disc.polygon = ring
+	return disc
 
 func set_hazard_color(colour: Color) -> void:
 	if _visual != null:

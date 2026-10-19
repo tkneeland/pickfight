@@ -59,6 +59,8 @@ var _speed: float = 0.0
 var _surface: Polygon2D
 var _surface_color: Color = SURFACE_COLOR
 var _edge_color: Color = EDGE_COLOR
+const LavaSurfaceType := preload("res://scripts/LavaSurface.gd")
+var _lava: Node2D
 
 ## Takes the stage mood's kill colour (#255): the lava surface keeps its
 ## translucency, the edge line is the colour itself.
@@ -79,6 +81,7 @@ func _ready() -> void:
 	# Idle until start_rising(): hazards, and every stage outside a round
 	# (the ring-out and spawn scenarios included), never pay for a tick.
 	set_physics_process(false)
+	_dress_hazard_tile()
 
 ## Hold still for `grace_sec`, then climb at `speed` px/s until the round
 ## ends. Draws the rising surface on first call. Physics ticks rather than
@@ -155,6 +158,7 @@ func _ensure_surface() -> void:
 			size = child.shape.size
 			offset = child.position
 			break
+	# The flat body starts WAVE_PAD below the top; the animated crest fills the gap.
 	var top: float = offset.y - size.y * 0.5
 	var left: float = offset.x - size.x * 0.5
 	var right: float = offset.x + size.x * 0.5
@@ -162,9 +166,12 @@ func _ensure_surface() -> void:
 	_surface.name = "RisingSurface"
 	_surface.color = _surface_color
 	_surface.polygon = PackedVector2Array([
-		Vector2(left, top), Vector2(right, top),
+		Vector2(left, top + LavaSurfaceType.WAVE_PAD), Vector2(right, top + LavaSurfaceType.WAVE_PAD),
 		Vector2(right, top + surface_depth), Vector2(left, top + surface_depth)])
 	add_child(_surface)
+	_lava = LavaSurfaceType.new()
+	_lava.name = "LavaArt"
+	_surface.add_child(_lava)
 	# A child of the surface, so it rides up with it.
 	var edge := Line2D.new()
 	edge.name = "SurfaceEdge"
@@ -172,6 +179,22 @@ func _ensure_surface() -> void:
 	edge.default_color = _edge_color
 	edge.points = PackedVector2Array([Vector2(left, top), Vector2(right, top)])
 	_surface.add_child(edge)
+	_lava.setup_pool(left, right, top, surface_depth - LavaSurfaceType.WAVE_PAD, edge, _edge_color)
+
+## A `Hazard.tscn` block (it has a HazardVisual): drifting glow blobs over the
+## flat polygon. Pure decoration.
+func _dress_hazard_tile() -> void:
+	var visual: Node = get_node_or_null("HazardVisual")
+	if not (visual is Polygon2D):
+		return
+	for child in get_children():
+		if child is CollisionShape2D and child.shape is RectangleShape2D:
+			_lava = LavaSurfaceType.new()
+			_lava.name = "LavaArt"
+			visual.add_child(_lava)
+			_lava.setup_tile(child.shape.size)
+			_lava.set_glow(EDGE_COLOR)
+			return
 
 func _on_body_entered(body: Node) -> void:
 	if body.is_in_group("players"):
