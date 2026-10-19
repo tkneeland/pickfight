@@ -30,6 +30,7 @@ const FeedbackSenderScript := preload("res://scripts/FeedbackSender.gd")
 const NOTICE_TEXT: String = "Pickfight sends anonymous match stats to help balance the game"
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const LanguagesScript := preload("res://scripts/Languages.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
 ## Height of the scrolling window-size and options area.
@@ -44,6 +45,8 @@ var host: RefCounted = HostSettingsScript.shared()
 var _more: CheckBox
 var _more_area: ScrollContainer
 var _resolution: OptionButton
+## The Language row (#688): Auto (system), then every `Languages.OPTIONS` entry.
+var _language: OptionButton
 var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
@@ -137,6 +140,10 @@ func _ready() -> void:
 	var content := VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(content)
+	_language = OptionButton.new()
+	_language.name = "Language"
+	_fill_language_items()
+	content.add_child(_language)
 	_resolution = OptionButton.new()
 	_resolution.name = "Resolution"
 	for size: Vector2i in HostSettingsScript.RESOLUTIONS:
@@ -180,6 +187,7 @@ func _ready() -> void:
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
 	_resolution.item_selected.connect(_on_resolution_selected)
+	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
@@ -266,6 +274,7 @@ func refresh() -> void:
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
+	_language.select(_language_index(host.language))
 	_host_match.refresh()
 	if PadMenuScript.is_open():
 		_chain_pad_focus()
@@ -577,6 +586,53 @@ static func fit_resolution(size: Vector2i, screen: Vector2i) -> Vector2i:
 func _on_resolution_selected(index: int) -> void:
 	host.set_resolution(HostSettingsScript.RESOLUTIONS[index])
 	apply_resolution()
+
+## The language picker: Auto first (translated), then each language in its
+## own name, in `Languages.OPTIONS` order.
+func _fill_language_items() -> void:
+	_language.clear()
+	_language.add_item(tr("LANGUAGE_AUTO"))
+	for option: Dictionary in LanguagesScript.OPTIONS:
+		_language.add_item(str(option["name"]))
+
+func _language_index(setting: String) -> int:
+	return LanguagesScript.codes().find(setting) + 1  # Auto (or unknown) is 0
+
+func language_button() -> OptionButton:
+	return _language
+
+func _on_language_selected(index: int) -> void:
+	var setting: String = LanguagesScript.AUTO if index <= 0 else str(LanguagesScript.OPTIONS[index - 1]["code"])
+	host.set_language(setting)
+	_retranslate()
+
+## Re-words the panel in the language just chosen. The controls were given
+## `tr()`'d text when built, which Godot does not redo on a locale change.
+func _retranslate() -> void:
+	for slider: HSlider in [_slider, _sfx_slider, _music_slider]:
+		var title := slider.get_parent().get_child(0) as Label
+		title.text = tr({_slider: "SETTINGS_MASTER_VOLUME", _sfx_slider: "SETTINGS_SFX", _music_slider: "SETTINGS_MUSIC"}[slider])
+	_mute.text = tr("SETTINGS_MUTE")
+	_fullscreen.text = tr("SETTINGS_FULLSCREEN")
+	_more.text = tr("SETTINGS_MORE_OPTIONS")
+	_shake_box.text = tr("SETTINGS_SCREEN_SHAKE")
+	_flash_box.text = tr("SETTINGS_REDUCE_FLASHES")
+	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
+	_stats_box.text = tr("SETTINGS_SHARE_STATS")
+	_feedback_button.text = tr("SETTINGS_FEEDBACK")
+	_feedback_send.text = tr("FEEDBACK_SEND")
+	_feedback_edit.placeholder_text = tr("FEEDBACK_PLACEHOLDER")
+	((_feedback_send.get_parent() as Node).get_child(0) as Label).text = tr("FEEDBACK_TITLE")
+	_notice_label.text = tr("TELEMETRY_NOTICE")
+	_notice_off.text = tr("TELEMETRY_TURN_OFF")
+	_notice_ok.text = tr("TELEMETRY_OK")
+	for i in HostSettingsScript.RESOLUTIONS.size():
+		var size: Vector2i = HostSettingsScript.RESOLUTIONS[i]
+		_resolution.set_item_text(i, tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
+	for i in sfx.UI_SCALES.size():
+		_scale_button.set_item_text(i, tr("SETTINGS_NAME_TAGS") % str(sfx.UI_SCALES[i]))
+	_language.set_item_text(0, tr("LANGUAGE_AUTO"))
+	refresh()
 
 func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlider:
 	var group := VBoxContainer.new()

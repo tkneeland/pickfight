@@ -1,370 +1,376 @@
-keys,en
-AWARD_BUTTERFINGERS,Butterfingers
-AWARD_CATEGORY_AIRBORNE,AIRBORNE
-AWARD_CATEGORY_CLUMSY,CLUMSY
-AWARD_CATEGORY_COLLECTOR,COLLECTOR
-AWARD_CATEGORY_COMBAT,COMBAT
-AWARD_CATEGORY_SURVIVOR,SURVIVOR
-AWARD_HARD_TO_KILL,Hard to Kill
-AWARD_HEAVY_HITTER,Heavy Hitter
-AWARD_LONGEST_AIRTIME,Longest Airtime
-AWARD_MAGPIE,Magpie
-AWARD_PUNCHING_BAG,Punching Bag
-AWARD_TOP_BRAWLER,Top Brawler
-BANNER_DOUBLE_KO,DOUBLE KO!
-BANNER_FIRST_BLOOD,FIRST BLOOD
-BANNER_LAST_ONE_STANDING,LAST ONE STANDING
-BANNER_MULTI_KO,MULTI KO!
-BANNER_TEAM_SCORE,RED %d - %d BLUE
-BANNER_TEAM_WINS,%s TEAM WINS
-BANNER_TRIPLE_KO,TRIPLE KO!
+keys,en,de,fr,es,pt_BR
+AWARD_BUTTERFINGERS,Butterfingers,Butterfinger,Doigts de beurre,Manos de mantequilla,Mão de manteiga
+AWARD_CATEGORY_AIRBORNE,AIRBORNE,LUFTIG,EN L'AIR,AÉREO,NO AR
+AWARD_CATEGORY_CLUMSY,CLUMSY,TOLPATSCH,MALADROIT,TORPE,DESAJEITADO
+AWARD_CATEGORY_COLLECTOR,COLLECTOR,SAMMLER,COLLECTIONNEUR,COLECCIONISTA,COLECIONADOR
+AWARD_CATEGORY_COMBAT,COMBAT,KAMPF,COMBAT,COMBATE,COMBATE
+AWARD_CATEGORY_SURVIVOR,SURVIVOR,ÜBERLEBER,SURVIVANT,SOBREVIVIENTE,SOBREVIVENTE
+AWARD_HARD_TO_KILL,Hard to Kill,Nicht totzukriegen,Dur à cuire,Duro de matar,Duro na queda
+AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesado
+AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar
+AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega
+AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada
+AWARD_TOP_BRAWLER,Top Brawler,Top-Raufbold,Roi de la baston,Mejor peleador,Rei da briga
+BANNER_DOUBLE_KO,DOUBLE KO!,DOPPEL-KO!,DOUBLE KO !,¡DOBLE KO!,DOUBLE KO!
+BANNER_FIRST_BLOOD,FIRST BLOOD,ERSTES BLUT,PREMIER SANG,PRIMERA SANGRE,PRIMEIRO SANGUE
+BANNER_LAST_ONE_STANDING,LAST ONE STANDING,LETZTER ÜBERLEBENDER,DERNIER DEBOUT,ÚLTIMO EN PIE,ÚLTIMO DE PÉ
+BANNER_MULTI_KO,MULTI KO!,MULTI-KO!,MULTI KO !,¡MULTI KO!,MULTI KO!
+BANNER_TEAM_SCORE,RED %d - %d BLUE,ROT %d - %d BLAU,ROUGE %d - %d BLEU,ROJO %d - %d AZUL,VERMELHO %d - %d AZUL
+BANNER_TEAM_WINS,%s TEAM WINS,TEAM %s GEWINNT,L'ÉQUIPE %s GAGNE,¡GANA EL EQUIPO %s!,TIME %s VENCE
+BANNER_TRIPLE_KO,TRIPLE KO!,DREIFACH-KO!,TRIPLE KO !,¡TRIPLE KO!,TRIPLE KO!
 DEMO_END_CARD,"Thanks for playing the Pickfight demo!
-Wishlist the full game on Steam"
-HOST_MATCH_KIND_STATE,Match (O): %s
-JOIN_ERR_COUCH,"That host is playing a Couch match, not Online."
-JOIN_ERR_ROOM_CLOSED,That room is closed.
-LOBBY_KIND_DROPPED_PHONES,Online match: %d phone players left the lobby
-LOBBY_KIND_DROPPED_REMOTE,Couch match: %d online players left the lobby
-LOBBY_ONLINE_WAITING,Share the room code: %d joined (need %d)
-LOBBY_PRESS_READY_ONLINE,Waiting for everyone to ready up
-MATCH_COUCH,Couch
-MATCH_ONLINE,Online
-MATCH_SOLO,Solo
-TITLE_COUCH,Couch (C)
-TITLE_COUCH_HINT,One screen: phones and gamepads in this room
-TITLE_ONLINE,Online (O)
-TITLE_ONLINE_HINT,Everyone plays on their own computer
-TITLE_PICK,How are you playing?
-TITLE_SOLO,Solo (S)
-TITLE_SOLO_HINT,You against 3 bots
-DETAIL_AIRBORNE,%.1fs airborne
-DETAIL_ALIVE,%s alive
-DETAIL_DAMAGE,%d damage
-DETAIL_DAMAGE_TAKEN,%d damage taken
-DETAIL_KO_MANY,%d KOs
-DETAIL_KO_ONE,%d KO
-DETAIL_PICKUP_MANY,%d pickups
-DETAIL_PICKUP_ONE,%d pickup
-DETAIL_SELF_KO_MANY,%d self-KOs
-DETAIL_SELF_KO_ONE,%d self-KO
-FEEDBACK_EMPTY,Type something first.
-FEEDBACK_FAILED,Could not send feedback. Try again later.
-FEEDBACK_OFFLINE,Feedback is offline right now
-FEEDBACK_PLACEHOLDER,What would make this better?
-FEEDBACK_RATE_LIMITED,Too much feedback for now. Try again later.
-FEEDBACK_SEND,Send
-FEEDBACK_SENDING,Sending...
-FEEDBACK_SENT,Thanks! Feedback sent.
-FEEDBACK_TITLE,Send feedback to the developers
-FEED_KO,KO
-FEED_SELF_KO,self-KO
-HOST_END_MATCH,End match
-HOST_FIRST_TO_DOWN,First to  -
-HOST_GAMEPAD_HINT,"Press A to join, Y for menu"
-HOST_JOIN_BLOCKED,Off while players are in your lobby
-HOST_JOIN_ONLINE,Join someone's game (J)
-HOST_JOIN_ONLINE_PAD,Join someone's game
-HOST_KICK,Kick
-HOST_MODE,Mode (T)
-HOST_MODE_STATE,Mode (T): %s
-HOST_BOTS_STATE,Bots (B): %d
-HOST_START_MATCH,START!
-HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.
-HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.
-HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.
-HOW_TO_PLAY_LINE_4,"Hit them till they die, or knock them off. Last one standing wins."
-HOW_TO_PLAY_TITLE,How to play
-JOIN_BUTTON,Join
-JOIN_CANCEL,Cancel
-JOIN_CLOSED_EARLY,The connection closed before the match was joined.
-JOIN_CONNECTING,Connecting to the relay...
-JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.
-JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.
-JOIN_ERR_DEMO_ONLY,This room is running the demo. Join it from the demo.
-JOIN_ERR_DISCONNECTED,Disconnected: %s
-JOIN_ERR_ELSEWHERE,You joined from somewhere else.
-JOIN_ERR_FULL_ONLY,Get the full game to join this room
-JOIN_ERR_HOST_LEFT,Host left.
-JOIN_ERR_IDLE,The room closed after sitting idle.
-JOIN_ERR_NO_HELLO,The host did not accept the join in time.
-JOIN_ERR_NO_SLOT,That match has no free player slot.
-JOIN_ERR_REMOVED,The host removed you from the match.
-JOIN_ERR_ROOM_FULL,That room is full.
-JOIN_ERR_VERSION,Update your game: this version does not match the host's.
-JOIN_JOINING_ROOM,Joining room %s...
-JOIN_LEAVE_MATCH,Leave match
-JOIN_LOBBY_TITLE,Lobby
-JOIN_LOST,Lost the connection to the host.
-JOIN_MOUSE_SENS,Mouse sensitivity
-JOIN_NAME_PLACEHOLDER,Player
-JOIN_ON_PHONE,Join on your phone:
-JOIN_PAUSED,Paused
-JOIN_PAUSE_MATCH,Pause match
-JOIN_PLAYER_READY,%s  ready
-JOIN_READY,Ready
-JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).
-JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.
-JOIN_RESUME,Resume
-JOIN_RESUME_MATCH,Resume match
-JOIN_ROOM_CODE_LABEL,Room code (from the host's screen)
-JOIN_ROOM_OVER,Room %s  match over
-JOIN_ROOM_STARTING,Room %s  starting in %d
-JOIN_ROOM_TITLE,Room %s
-JOIN_TIMEOUT,Timed out waiting for the host. Check the code and try again.
-JOIN_TITLE,Join online game
-JOIN_UPDATE_LINK,Get the latest version
-JOIN_WAITING,Waiting for the host...
-JOIN_WAITING_HOST,"Joined room %s, waiting for the host..."
-JOIN_YOUR_NAME,Your name
-LOBBY_AUTO,(auto)
-LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone
-LOBBY_FIRST_TO,First to %d
-LOBBY_CAPTURES_TO_WIN,Captures to win %d
-LOBBY_GOALS_TO_WIN,Goals to win %d
-LOBBY_LIVES,Lives %d
-LOBBY_HOST_TAG,  (host)
-LOBBY_NOBODY_YET,nobody yet
-LOBBY_NOT_READY,not ready
-LOBBY_PAD_TIP,"Right stick swings, a bumper lets go"
-LOBBY_PRESS_READY,Press Ready on your phone
-LOBBY_READY,READY
-LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d)
-LOBBY_TEAMS_FIRST_TO,Teams  -  first to %d
-LOBBY_TEAM_HEADER,%s TEAM (%d)
-MODE_CLASSIC_NAME,Classic
-MODE_CLASSIC_RULE,Last one standing wins.
-MODE_FFA,Free-for-all
-MODE_HOT_POTATO_NAME,Hot Potato
-MODE_HOT_POTATO_RULE,Do not hold the tag when the fuse ends.
-MODE_KING_OF_THE_HILL_NAME,King of the Hill
-MODE_KING_OF_THE_HILL_RULE,Stand in the gold circle alone. First to 15 s total wins.
-MODE_STOCK_NAME,Stock
-MODE_STOCK_RULE,Lose all your lives and you are out.
-MODE_SUDDEN_DEATH_NAME,Sudden Death
-MODE_SUDDEN_DEATH_RULE,One hit and you are out.
-MODE_TEAMS,Teams
-MODIFIER_BIG_HEADS,Big Heads
-MODIFIER_BOUNCY,Bouncy
-MODIFIER_DOUBLE_DAMAGE,Double Damage
-MODIFIER_FAST_LAVA,Fast Lava
-MODIFIER_GALE,Gale
-MODIFIER_HEAVY_WEAPONS,Heavy Weapons
-MODIFIER_LOW_GRAVITY,Low Gravity
-MODIFIER_METEOR_SHOWER,Meteor Shower
-MODIFIER_SLIPPERY_FLOOR,Slippery Floor
-MODIFIER_SUDDEN_DEATH,Sudden Death!
-MODIFIER_TINY_WEAPONS,Tiny Weapons
-MODIFIER_WEAPON_ROULETTE,Weapon Roulette
-OFF,off
-ON,on
-ONLINE_CONNECTING,connecting…
-ONLINE_ONLINE,online
-ONLINE_ROOM,Online: %s
-ONLINE_ROOM_RECONNECTING,Online: %s (reconnecting...)
-ONLINE_UNREACHABLE,relay unreachable: playing offline
-OVERTIME,OVERTIME
-PAUSED,PAUSED
-PHONE_STOCK_RANDOM,Random
-PING_MS,%d ms
-REPLAY_NOTHING,Replay: nothing recorded yet
-REPLAY_SAVED,Replay saved: %s
-ROOM_CODE_HIDDEN,Code hidden: see host phone
-SCORE_PLAYER,P%d: %d
-SCORE_TEAM,%s: %d
-SETTINGS,Settings
-SETTINGS_FEEDBACK,Feedback
-SETTINGS_FULLSCREEN,Full (F11)
-SETTINGS_HIDE_ROOM_CODE,Hide room code
-SETTINGS_MASTER_VOLUME,Master volume
-SETTINGS_MORE_OPTIONS,More options
-SETTINGS_MUSIC,Music
-SETTINGS_MUTE,Mute (M)
-SETTINGS_MUTED,Settings (muted)
-SETTINGS_NAME_TAGS,Name tags: %sx
-SETTINGS_REDUCE_FLASHES,Reduce flashes
-SETTINGS_SCREEN_SHAKE,Screen shake
-SETTINGS_SFX,Sound effects
-SETTINGS_STAGES_LIST,Stages (untick to skip)
-SETTINGS_WEAPONS_LIST,Weapons (untick to skip)
-SETTINGS_WINDOW_DEFAULT,Window: default
-SETTINGS_WINDOW_SIZE,Window: %d x %d
-STAGE_BATTLEFIELD,Battlefield
-STAGE_BOWL,Bowl
-STAGE_BULWARK,Bulwark
-STAGE_CAROUSEL,Carousel
-STAGE_CASCADE,Cascade
-STAGE_COLOSSEUM,Colosseum
-STAGE_EROSION,Erosion
-STAGE_FERRY,Ferry
-STAGE_FINALDESTINATION,Final Destination
-STAGE_FLATLANDS,Flatlands
-STAGE_FOOTBRIDGE,Footbridge
-STAGE_FURNACE,Furnace
-STAGE_GALE,Gale
-STAGE_GANTRY,Gantry
-STAGE_GAUNTLET,Gauntlet
-STAGE_HIGHRISE,Highrise
-STAGE_ISLANDS,Islands
-STAGE_MILL,Mill
-STAGE_OVERPASS,Overpass
-STAGE_PILLARS,Pillars
-STAGE_PISTONS,Pistons
-STAGE_POCKET,Pocket
-STAGE_QUARRY,Quarry
-STAGE_REACTOR,Reactor
-STAGE_ROCKFALL,Rockfall
-STAGE_SINKHOLE,Sinkhole
-STAGE_SLANT,Slant
-STAGE_SPRINGBOARD,Springboard
-STAGE_UPDRAFT,Updraft
-STAGE_VENT,Vent
-STAGE_ZIGGURAT,Ziggurat
-STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s
-TEAM_BLUE,BLUE
-TEAM_RED,RED
-VICTORY_CONTINUE_WITH,Continue with %s
-VICTORY_INPUT_PAD,A on a gamepad
-VICTORY_INPUT_PHONE,a tap on your phone
-VICTORY_INPUT_SPACE,Space or click
-VICTORY_LIST_LAST,%s or %s
-VICTORY_MATCH_OVER,MATCH OVER
-VICTORY_TAP_CONTINUE,Tap Continue on your phone
-VICTORY_TEAM_WINS,%s TEAM WINS!
-VICTORY_WINS,%s WINS!
-WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d)
-STAGE_RACETRACK,Racetrack
-STAGE_SWITCHYARD,Switchyard
-STAGE_ORBIT,Orbit
-SETTINGS_SHARE_STATS,Share anonymous match stats
-TELEMETRY_NOTICE,"Pickfight sends anonymous match stats (weapon damage, hits and KOs, mode, stages and match length; no names or IDs) to help balance the game. Change it any time in Settings > More options > Share anonymous match stats."
-TELEMETRY_TURN_OFF,Turn off
-TELEMETRY_OK,Got it
-STAGE_MESA,Mesa
-STAGE_RELAY,Relay
-STAGE_ROUNDABOUT,Roundabout
-STAGE_SUMMIT,Summit
-MODE_SOCCER_NAME,Soccer
-MODE_SOCCER_RULE,Reach the goal target to win.
-SOCCER_GOAL,GOAL!
-AWARD_CATEGORY_SCORER,SCORER
-STAGE_PITCH,Pitch
-STAGE_CAGE,Cage
-STAGE_DUNES,Dunes
-MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag
-MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.
-AWARD_CATEGORY_CAPTURER,CAPTURER
-STAGE_BASTION,Bastion
-STAGE_STRONGHOLD,Stronghold
-AWARD_CATEGORY_HILL,HILL
-AWARD_CATEGORY_TAGGER,TAGGER
-AWARD_CATEGORY_LIVES,LIVES
-HUD_TAKES_ROUND,%s takes the round
-HUD_TEAM_TAKES_ROUND,%s team takes the round
-HUD_ROUND_DRAWN,Round drawn
-HUD_WINS_MATCH,%s wins the match
-HUD_TEAM_WINS_MATCH,%s team wins the match
-HUD_PODIUM_ROW,%d. %s  %d
-HUD_HOLD,%s %d/%ds
-HUD_HILL_MOVING,Hill is moving!
-HILL_CONTESTED,CONTESTED
-BANNER_HOLDS_THE_HILL,%s holds the hill!
-HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s
-HUD_FLAG_0,home
-HUD_FLAG_1,carried
-HUD_FLAG_2,dropped
-HUD_SOCCER,Red %d - Blue %d (first to %d)
-HUD_POTATO,%s has the potato: %ds
-HUD_LIVES,%s x%d
-PICKER_TITLE,Your look
-PICKER_HAT,Hat
-PICKER_COLOUR,Colour
-PICKER_EYES,Eyes
-PICKER_HAT_NONE,None
-PICKER_HAT_CROWN,Crown
-PICKER_HAT_TOP_HAT,Top hat
-PICKER_HAT_CAP,Cap
-PICKER_HAT_BEANIE,Beanie
-PICKER_HAT_VIKING,Viking
-PICKER_HAT_PARTY,Party hat
-PICKER_HAT_HALO,Halo
-PICKER_HAT_PROPELLER,Propeller
-PICKER_EYES_ROUND,Round
-PICKER_EYES_SLEEPY,Sleepy
-PICKER_EYES_ANGRY,Angry
-PICKER_EYES_WIDE,Wide
-PICKER_EYES_DOT,Dot
-PICKER_EYES_VISOR,Visor
-JOIN_REJOINING,Rejoining your seat...
-REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s
-REPLAY_GIF_SAVED,GIF saved: %s
-LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d)
-LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect
-MODE_STOCK_RULE_N,Lose all %d lives and you are out.
-MODE_SOCCER_RULE_N,First team to %d goals wins.
-MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.
-HOST_START_WAITING,Waiting...
-HOW_TO_PLAY_BUTTON,How to play
-LOBBY_YOU_TAG," (you)"
-LOBBY_BOT,BOT
-LOBBY_OPEN_SEAT,Open seat
-LOBBY_SEAT_HINT_COUCH,Scan QR or press A
-LOBBY_SEAT_HINT_SOLO,Add a bot with B
-LOBBY_SEAT_HINT_ONLINE,Share the room code
-LOBBY_PLAYERS,Players
-LOBBY_COUNT,"%d joined, %d bots"
-LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot"
-LOBBY_TEAM_TAG,%s TEAM
-LOBBY_STARTING,Get ready!
-LOBBY_NOT_READY_ONE,1 player not ready yet
-LOBBY_NOT_READY_N,%d players not ready yet
-LOBBY_ENTER_OR_START,Enter or Start
-LOBBY_SCAN_TITLE,Scan to join
-LOBBY_ROOM_CODE_TITLE,Room code
-LOBBY_SOLO_TITLE,Solo practice
-LOBBY_ROOM_CODE_NOTE,"Friends open Pickfight, pick Online, then Join a game"
-LOBBY_SOLO_NOTE,Just you and the bots on this computer. No room code and nothing online.
-LOBBY_MODE_TITLE,Mode
-LOBBY_HOST_TITLE,Host
-LOBBY_ROW_FIRST_TO,First to
-LOBBY_ROW_LIVES,Lives
-LOBBY_ROW_GOALS,Goals to win
-LOBBY_ROW_CAPTURES,Captures to win
-LOBBY_ROW_BOTS,Bots
-BOT_SKILL_EASY,Easy
-BOT_SKILL_NORMAL,Normal
-BOT_SKILL_HARD,Hard
-LOBBY_ROW_TEAMS,Teams
-LOBBY_ON,On
-LOBBY_OFF,Off
-LOBBY_STATUS_FIRST_TO,first to %d
-LOBBY_STATUS_LIVES,%d lives
-LOBBY_STATUS_GOALS,%d goals
-LOBBY_STATUS_CAPTURES,%d captures
-LOBBY_HELP_FIRST_TO,First to %d rounds takes the match.
-MODE_CLASSIC_BLURB,Last one standing
-MODE_KING_OF_THE_HILL_BLURB,Hold the hill alone
-MODE_HOT_POTATO_BLURB,Pass the tag
-MODE_SUDDEN_DEATH_BLURB,"One hit, you are out"
-MODE_STOCK_BLURB,Last one with lives left
-MODE_SOCCER_BLURB,Teams: score goals
-MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag
-PICKER_LIVE_NOTE,"In the game this is the real character, live"
-PICKER_TAKEN_NOTE,Greyed colours are taken by other players
-PICKER_DONE,Done
-TITLE_FOOTER,"Click, press a key, or D-pad + A"
-CAREER_LINE,Matches %d · Wins %d · KOs %d
-CAREER_MATCHES,Matches played: %d
-CAREER_MATCH_WINS,Match wins: %d
-CAREER_ROUND_WINS,Round wins: %d
-CAREER_KOS,KOs: %d
-CAREER_SELF_KOS,Self-KOs: %d
-CAREER_FAVOURITE,Favourite weapon: %s
-JOIN_HELP_BUTTON,Phones can't join?
-JOIN_HELP_TITLE,Phones can't join?
-JOIN_HELP_FIREWALL,"Firewall: allow Pickfight through when your computer asks (Windows ""Allow access"", macOS incoming connections)."
-JOIN_HELP_ISOLATION,"Guest, hotel or school Wi-Fi often blocks phones from reaching other devices (client isolation): use another network."
-JOIN_HELP_ADAPTER,Wrong network: a VPN or a second adapter can hide the right address. Try another address listed below.
-JOIN_HELP_PHONE_NETWORK,Phone on mobile data or a different Wi-Fi: switch it to the same Wi-Fi as this computer.
-JOIN_HELP_HOTSPOT,Still stuck: start a hotspot on a phone and connect this computer and the other phones to it.
-JOIN_HELP_ADDRESSES,Type one of these into the phone's browser if the QR code fails:
-JOIN_HELP_NO_ADDRESS,No network address found: connect this computer to Wi-Fi or Ethernet.
+Wishlist the full game on Steam","Danke fürs Spielen der Pickfight-Demo!
+Wunschliste das ganze Spiel auf Steam","Merci d'avoir joué à la démo de Pickfight !
+Ajoute le jeu complet à ta liste de souhaits Steam","¡Gracias por jugar la demo de Pickfight!
+Agrega el juego completo a tu lista de deseados en Steam","Valeu por jogar a demo de Pickfight!
+Adicione o jogo completo à lista de desejos na Steam"
+HOST_MATCH_KIND_STATE,Match (O): %s,Match (O): %s,Match (O) : %s,Partida (O): %s,Partida (O): %s
+JOIN_ERR_COUCH,"That host is playing a Couch match, not Online.","Dieser Host spielt ein Couch-Match, kein Online-Match.","Cet hôte joue en mode Canapé, pas en ligne.","Ese anfitrión juega una partida de Sofá, no en línea.","Esse anfitrião está numa partida de Sofá, não Online."
+JOIN_ERR_ROOM_CLOSED,That room is closed.,Dieser Raum ist geschlossen.,Ce salon est fermé.,Esa sala está cerrada.,Essa sala está fechada.
+LOBBY_KIND_DROPPED_PHONES,Online match: %d phone players left the lobby,Online-Match: %d Handy-Spieler haben die Lobby verlassen,Match en ligne : %d joueurs sur téléphone ont quitté le lobby,Partida en línea: %d jugadores con celular salieron del lobby,Partida online: %d jogadores de celular saíram do lobby
+LOBBY_KIND_DROPPED_REMOTE,Couch match: %d online players left the lobby,Couch-Match: %d Online-Spieler haben die Lobby verlassen,Match Canapé : %d joueurs en ligne ont quitté le lobby,Partida de Sofá: %d jugadores en línea salieron del lobby,Partida de Sofá: %d jogadores online saíram do lobby
+LOBBY_ONLINE_WAITING,Share the room code: %d joined (need %d),Teile den Raumcode: %d dabei (nötig: %d),Partage le code du salon : %d connectés (il en faut %d),Comparte el código de la sala: %d unidos (mínimo %d),Compartilhe o código da sala: %d entraram (mínimo %d)
+LOBBY_PRESS_READY_ONLINE,Waiting for everyone to ready up,"Warten, bis alle bereit sind",On attend que tout le monde soit prêt,Esperando a que todos estén listos,Esperando todo mundo ficar pronto
+MATCH_COUCH,Couch,Couch,Canapé,Sofá,Sofá
+MATCH_ONLINE,Online,Online,En ligne,En línea,Online
+MATCH_SOLO,Solo,Solo,Solo,Solo,Solo
+TITLE_COUCH,Couch (C),Couch (C),Canapé (C),Sofá (C),Sofá (C)
+TITLE_COUCH_HINT,One screen: phones and gamepads in this room,Ein Bildschirm: Handys und Gamepads in diesem Raum,Un écran : téléphones et manettes dans cette pièce,Una pantalla: celulares y controles en esta sala,Uma tela: celulares e controles nesta sala
+TITLE_ONLINE,Online (O),Online (O),En ligne (O),En línea (O),Online (O)
+TITLE_ONLINE_HINT,Everyone plays on their own computer,Alle spielen am eigenen Computer,Chacun joue sur son ordinateur,Cada quien juega en su computadora,Cada um joga no seu computador
+TITLE_PICK,How are you playing?,Wie spielt ihr?,Comment on joue ?,¿Cómo van a jugar?,Como vocês vão jogar?
+TITLE_SOLO,Solo (S),Solo (S),Solo (S),Solo (S),Solo (S)
+TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 3 bots,Você contra 3 bots
+DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar
+DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos
+DETAIL_DAMAGE,%d damage,%d Schaden,%d de dégâts,%d de daño,%d de dano
+DETAIL_DAMAGE_TAKEN,%d damage taken,%d Schaden kassiert,%d de dégâts subis,%d de daño recibido,%d de dano sofrido
+DETAIL_KO_MANY,%d KOs,%d KOs,%d KO,%d KO,%d KOs
+DETAIL_KO_ONE,%d KO,%d KO,%d KO,%d KO,%d KO
+DETAIL_PICKUP_MANY,%d pickups,%d Pickups,%d objets,%d objetos,%d itens
+DETAIL_PICKUP_ONE,%d pickup,%d Pickup,%d objet,%d objeto,%d item
+DETAIL_SELF_KO_MANY,%d self-KOs,%d Selbst-KOs,%d auto-KO,%d autoKO,%d autoKOs
+DETAIL_SELF_KO_ONE,%d self-KO,%d Selbst-KO,%d auto-KO,%d autoKO,%d autoKO
+FEEDBACK_EMPTY,Type something first.,Schreib erst etwas.,Écris d'abord quelque chose.,Escribe algo primero.,Escreva algo primeiro.
+FEEDBACK_FAILED,Could not send feedback. Try again later.,Feedback konnte nicht gesendet werden. Versuch es später nochmal.,Impossible d'envoyer l'avis. Réessaie plus tard.,No se pudo enviar el comentario. Inténtalo más tarde.,Não deu para enviar o feedback. Tente de novo mais tarde.
+FEEDBACK_OFFLINE,Feedback is offline right now,Feedback ist gerade offline,Les avis sont hors ligne pour l'instant,Los comentarios están fuera de línea por ahora,O feedback está offline agora
+FEEDBACK_PLACEHOLDER,What would make this better?,Was würde das hier besser machen?,Qu'est-ce qui rendrait ça meilleur ?,¿Qué lo mejoraría?,O que deixaria isto melhor?
+FEEDBACK_RATE_LIMITED,Too much feedback for now. Try again later.,Gerade zu viel Feedback. Versuch es später nochmal.,Trop d'avis pour l'instant. Réessaie plus tard.,Demasiados comentarios por ahora. Inténtalo más tarde.,Feedback demais por enquanto. Tente de novo mais tarde.
+FEEDBACK_SEND,Send,Senden,Envoyer,Enviar,Enviar
+FEEDBACK_SENDING,Sending...,Sende...,Envoi...,Enviando...,Enviando...
+FEEDBACK_SENT,Thanks! Feedback sent.,Danke! Feedback gesendet.,Merci ! Avis envoyé.,¡Gracias! Comentario enviado.,Valeu! Feedback enviado.
+FEEDBACK_TITLE,Send feedback to the developers,Feedback an die Entwickler senden,Envoyer un avis aux développeurs,Enviar comentarios a los desarrolladores,Enviar feedback para os desenvolvedores
+FEED_KO,KO,KO,KO,KO,KO
+FEED_SELF_KO,self-KO,Selbst-KO,auto-KO,autoKO,autoKO
+HOST_END_MATCH,End match,Match beenden,Finir le match,Terminar partida,Encerrar partida
+HOST_FIRST_TO_DOWN,First to  -,Erster bis  -,Premier à  -,El primero a  -,O primeiro a  -
+HOST_GAMEPAD_HINT,"Press A to join, Y for menu","A zum Beitreten, Y fürs Menü","A pour rejoindre, Y pour le menu","A para unirte, Y para el menú","A para entrar, Y para o menu"
+HOST_JOIN_BLOCKED,Off while players are in your lobby,"Aus, solange Spieler in deiner Lobby sind",Désactivé tant que des joueurs sont dans ton lobby,Desactivado con jugadores en tu lobby,Desativado com jogadores no seu lobby
+HOST_JOIN_ONLINE,Join someone's game (J),Spiel beitreten (J),Rejoindre une partie (J),Unirse a una partida (J),Entrar no jogo de alguém (J)
+HOST_JOIN_ONLINE_PAD,Join someone's game,Spiel beitreten,Rejoindre une partie,Unirse a una partida,Entrar no jogo de alguém
+HOST_KICK,Kick,Rauswerfen,Virer,Expulsar,Expulsar
+HOST_MODE,Mode (T),Modus (T),Mode (T),Modo (T),Modo (T)
+HOST_MODE_STATE,Mode (T): %s,Modus (T): %s,Mode (T) : %s,Modo (T): %s,Modo (T): %s
+HOST_BOTS_STATE,Bots (B): %d,Bots (B): %d,Bots (B) : %d,Bots (B): %d,Bots (B): %d
+HOST_START_MATCH,START!,LOS!,C'EST PARTI !,¡VAMOS!,VAI!
+HOW_TO_PLAY_LINE_1,Drag on your phone to swing your pick. Flick fast to hit hard.,"Zieh auf dem Handy, um die Spitzhacke zu schwingen. Schnell wischen für harte Treffer.",Glisse le doigt sur ton téléphone pour balancer ton pic. Un coup sec frappe fort.,Arrastra en tu celular para girar el pico. Un movimiento rápido pega fuerte.,Arraste no celular para girar o pico. Um movimento rápido bate forte.
+HOW_TO_PLAY_LINE_2,Hook the pick on a ledge and pull to climb.,Hak die Hacke an einer Kante ein und zieh dich hoch.,Accroche le pic à un rebord et tire pour grimper.,Engancha el pico en un borde y jala para trepar.,Engate o pico numa beirada e puxe para escalar.
+HOW_TO_PLAY_LINE_3,Touch a weapon pickup to grab it.,"Berühre ein Waffen-Pickup, um es zu schnappen.",Touche une arme au sol pour la ramasser.,Toca un arma del piso para agarrarla.,Toque numa arma no chão para pegá-la.
+HOW_TO_PLAY_LINE_4,"Hit them till they die, or knock them off. Last one standing wins.","Hau sie platt oder wirf sie runter. Wer zuletzt steht, gewinnt.","Frappe-les jusqu'au KO, ou envoie-les valser. Le dernier debout gagne.",Golpéalos hasta el KO o tíralos del escenario. Gana el último en pie.,Bata até nocautear ou jogue todo mundo para fora. Vence o último de pé.
+HOW_TO_PLAY_TITLE,How to play,So wird gespielt,Comment jouer,Cómo jugar,Como jogar
+JOIN_BUTTON,Join,Beitreten,Rejoindre,Unirse,Entrar
+JOIN_CANCEL,Cancel,Abbrechen,Annuler,Cancelar,Cancelar
+JOIN_CLOSED_EARLY,The connection closed before the match was joined.,"Die Verbindung wurde getrennt, bevor das Match beigetreten war.",La connexion s'est fermée avant d'entrer dans le match.,La conexión se cerró antes de entrar a la partida.,A conexão fechou antes de entrar na partida.
+JOIN_CONNECTING,Connecting to the relay...,Verbinde mit dem Relay...,Connexion au relais...,Conectando con el relay...,Conectando ao relay...
+JOIN_ENTER_CODE,Enter the %d-letter room code from the host's screen.,Gib den %d-stelligen Raumcode vom Host-Bildschirm ein.,Saisis le code de %d lettres affiché sur l'écran de l'hôte.,Ingresa el código de %d letras de la pantalla del anfitrión.,Digite o código de %d letras da tela do anfitrião.
+JOIN_ERR_BAD_ROOM,No room with that code. Check the code on the host's screen.,Kein Raum mit diesem Code. Prüf den Code auf dem Host-Bildschirm.,Aucun salon avec ce code. Vérifie le code sur l'écran de l'hôte.,No hay sala con ese código. Revisa el código en la pantalla del anfitrión.,Nenhuma sala com esse código. Confira o código na tela do anfitrião.
+JOIN_ERR_DEMO_ONLY,This room is running the demo. Join it from the demo.,Dieser Raum läuft in der Demo. Tritt aus der Demo bei.,Ce salon tourne en démo. Rejoins-le depuis la démo.,Esta sala usa la demo. Únete desde la demo.,Esta sala roda a demo. Entre pela demo.
+JOIN_ERR_DISCONNECTED,Disconnected: %s,Getrennt: %s,Déconnecté : %s,Desconectado: %s,Desconectado: %s
+JOIN_ERR_ELSEWHERE,You joined from somewhere else.,Du bist von woanders beigetreten.,Tu t'es connecté depuis un autre endroit.,Entraste desde otro lugar.,Você entrou de outro lugar.
+JOIN_ERR_FULL_ONLY,Get the full game to join this room,"Hol dir das Vollspiel, um diesem Raum beizutreten",Prends le jeu complet pour rejoindre ce salon,Consigue el juego completo para unirte a esta sala,Compre o jogo completo para entrar nesta sala
+JOIN_ERR_HOST_LEFT,Host left.,Host ist weg.,L'hôte est parti.,El anfitrión se fue.,O anfitrião saiu.
+JOIN_ERR_IDLE,The room closed after sitting idle.,Der Raum wurde nach Leerlauf geschlossen.,Le salon s'est fermé après inactivité.,La sala se cerró por inactividad.,A sala fechou por inatividade.
+JOIN_ERR_NO_HELLO,The host did not accept the join in time.,Der Host hat den Beitritt nicht rechtzeitig angenommen.,L'hôte n'a pas accepté la connexion à temps.,El anfitrión no aceptó la conexión a tiempo.,O anfitrião não aceitou a entrada a tempo.
+JOIN_ERR_NO_SLOT,That match has no free player slot.,In diesem Match ist kein Spielerplatz frei.,Ce match n'a plus de place libre.,Esa partida no tiene lugar libre.,Essa partida não tem vaga livre.
+JOIN_ERR_REMOVED,The host removed you from the match.,Der Host hat dich aus dem Match entfernt.,L'hôte t'a retiré du match.,El anfitrión te sacó de la partida.,O anfitrião removeu você da partida.
+JOIN_ERR_ROOM_FULL,That room is full.,Dieser Raum ist voll.,Ce salon est plein.,Esa sala está llena.,Essa sala está cheia.
+JOIN_ERR_VERSION,Update your game: this version does not match the host's.,Aktualisier dein Spiel: Diese Version passt nicht zu der des Hosts.,Mets ton jeu à jour : cette version ne correspond pas à celle de l'hôte.,Actualiza tu juego: esta versión no coincide con la del anfitrión.,Atualize seu jogo: esta versão não é a mesma do anfitrião.
+JOIN_JOINING_ROOM,Joining room %s...,Trete Raum %s bei...,Connexion au salon %s...,Uniéndose a la sala %s...,Entrando na sala %s...
+JOIN_LEAVE_MATCH,Leave match,Match verlassen,Quitter le match,Salir de la partida,Sair da partida
+JOIN_LOBBY_TITLE,Lobby,Lobby,Lobby,Lobby,Lobby
+JOIN_LOST,Lost the connection to the host.,Verbindung zum Host verloren.,Connexion à l'hôte perdue.,Se perdió la conexión con el anfitrión.,Perdeu a conexão com o anfitrião.
+JOIN_MOUSE_SENS,Mouse sensitivity,Mausempfindlichkeit,Sensibilité de la souris,Sensibilidad del mouse,Sensibilidade do mouse
+JOIN_NAME_PLACEHOLDER,Player,Spieler,Joueur,Jugador,Jogador
+JOIN_ON_PHONE,Join on your phone:,Tritt per Handy bei:,Rejoins sur ton téléphone :,Únete desde tu celular:,Entre pelo celular:
+JOIN_PAUSED,Paused,Pausiert,En pause,En pausa,Pausado
+JOIN_PAUSE_MATCH,Pause match,Match pausieren,Mettre en pause,Pausar partida,Pausar partida
+JOIN_PLAYER_READY,%s  ready,%s  bereit,%s  prêt,%s  listo,%s  pronto
+JOIN_READY,Ready,Bereit,Prêt,Listo,Pronto
+JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).,Relay unter %s nicht erreichbar (keine Antwort).,Relais injoignable à %s (pas de réponse).,No se pudo contactar el relay en %s (sin respuesta).,Não foi possível alcançar o relay em %s (sem resposta).
+JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.,Relay unter %s nicht erreichbar.,Relais injoignable à %s.,No se pudo contactar el relay en %s.,Não foi possível alcançar o relay em %s.
+JOIN_RESUME,Resume,Weiter,Reprendre,Seguir,Continuar
+JOIN_RESUME_MATCH,Resume match,Match fortsetzen,Reprendre le match,Reanudar partida,Retomar partida
+JOIN_ROOM_CODE_LABEL,Room code (from the host's screen),Raumcode (vom Host-Bildschirm),Code du salon (sur l'écran de l'hôte),Código de sala (de la pantalla del anfitrión),Código da sala (da tela do anfitrião)
+JOIN_ROOM_OVER,Room %s  match over,Raum %s  Match vorbei,Salon %s  match terminé,Sala %s  partida terminada,Sala %s  partida encerrada
+JOIN_ROOM_STARTING,Room %s  starting in %d,Raum %s  Start in %d,Salon %s  départ dans %d,Sala %s  empieza en %d,Sala %s  começa em %d
+JOIN_ROOM_TITLE,Room %s,Raum %s,Salon %s,Sala %s,Sala %s
+JOIN_TIMEOUT,Timed out waiting for the host. Check the code and try again.,Zeitüberschreitung beim Warten auf den Host. Prüf den Code und versuch es nochmal.,L'hôte n'a pas répondu à temps. Vérifie le code et réessaie.,Se agotó la espera al anfitrión. Revisa el código e inténtalo de nuevo.,Tempo esgotado esperando o anfitrião. Confira o código e tente de novo.
+JOIN_TITLE,Join online game,Online-Spiel beitreten,Rejoindre une partie en ligne,Unirse a partida en línea,Entrar em jogo online
+JOIN_UPDATE_LINK,Get the latest version,Neueste Version holen,Télécharger la dernière version,Descargar la última versión,Baixar a versão mais recente
+JOIN_WAITING,Waiting for the host...,Warte auf den Host...,En attente de l'hôte...,Esperando al anfitrión...,Esperando o anfitrião...
+JOIN_WAITING_HOST,"Joined room %s, waiting for the host...","Raum %s beigetreten, warte auf den Host...","Salon %s rejoint, en attente de l'hôte...","Te uniste a la sala %s, esperando al anfitrión...","Entrou na sala %s, esperando o anfitrião..."
+JOIN_YOUR_NAME,Your name,Dein Name,Ton nom,Tu nombre,Seu nome
+LOBBY_AUTO,(auto),(auto),(auto),(auto),(auto)
+LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone,Beide Teams brauchen einen Spieler: Wähl auf dem Handy ein Team,Chaque équipe veut un joueur : choisis une équipe sur ton téléphone,Ambos equipos necesitan un jugador: elige equipo en tu celular,Os dois times precisam de um jogador: escolha um time no celular
+LOBBY_FIRST_TO,First to %d,Erster bis %d,Premier à %d,El primero a %d,O primeiro a %d
+LOBBY_CAPTURES_TO_WIN,Captures to win %d,Captures zum Sieg %d,Captures pour gagner %d,Capturas para ganar %d,Capturas para vencer %d
+LOBBY_GOALS_TO_WIN,Goals to win %d,Tore zum Sieg %d,Buts pour gagner %d,Goles para ganar %d,Gols para vencer %d
+LOBBY_LIVES,Lives %d,Leben %d,Vies %d,Vidas %d,Vidas %d
+LOBBY_HOST_TAG,  (host),  (Host),  (hôte),  (anfitrión),  (anfitrião)
+LOBBY_NOBODY_YET,nobody yet,noch niemand,personne,nadie aún,ninguém ainda
+LOBBY_NOT_READY,not ready,nicht bereit,pas prêt,no listo,não pronto
+LOBBY_PAD_TIP,"Right stick swings, a bumper lets go","Rechter Stick schwingt, ein Bumper lässt los","Stick droit pour frapper, une gâchette pour lâcher","El stick derecho golpea, un gatillo suelta","Analógico direito bate, um gatilho solta"
+LOBBY_PRESS_READY,Press Ready on your phone,Drück auf dem Handy auf Bereit,Appuie sur Prêt sur ton téléphone,Toca Listo en tu celular,Toque em Pronto no celular
+LOBBY_READY,READY,BEREIT,PRÊT,LISTO,PRONTO
+LOBBY_SCAN_TO_JOIN,Scan to join: %d joined (need %d),Zum Beitreten scannen: %d dabei (nötig: %d),Scanne pour rejoindre : %d connectés (il en faut %d),Escanea para unirte: %d unidos (mínimo %d),Escaneie para entrar: %d entraram (mínimo %d)
+LOBBY_TEAMS_FIRST_TO,Teams  -  first to %d,Teams  -  erster bis %d,Équipes  -  premier à %d,Equipos  -  el primero a %d,Times  -  o primeiro a %d
+LOBBY_TEAM_HEADER,%s TEAM (%d),TEAM %s (%d),ÉQUIPE %s (%d),EQUIPO %s (%d),TIME %s (%d)
+MODE_CLASSIC_NAME,Classic,Klassisch,Classique,Clásico,Clássico
+MODE_CLASSIC_RULE,Last one standing wins.,"Wer zuletzt steht, gewinnt.",Le dernier debout gagne.,Gana el último en pie.,Vence o último de pé.
+MODE_FFA,Free-for-all,Jeder gegen jeden,Chacun pour soi,Todos contra todos,Todos contra todos
+MODE_HOT_POTATO_NAME,Hot Potato,Heiße Kartoffel,Patate chaude,Papa caliente,Batata quente
+MODE_HOT_POTATO_RULE,Do not hold the tag when the fuse ends.,"Halt den Tag nicht, wenn die Lunte abbrennt.",Ne tiens pas le jeton quand la mèche s'éteint.,No tengas la marca cuando se acabe la mecha.,Não fique com a marca quando o pavio acabar.
+MODE_KING_OF_THE_HILL_NAME,King of the Hill,König des Hügels,Roi de la colline,Rey de la colina,Rei da colina
+MODE_KING_OF_THE_HILL_RULE,Stand in the gold circle alone. First to 15 s total wins.,"Steh allein im goldenen Kreis. Wer zuerst 15 s insgesamt hat, gewinnt.",Reste seul dans le cercle doré. Le premier à 15 s cumulées gagne.,Quédate solo en el círculo dorado. Gana el primero en sumar 15 s.,Fique sozinho no círculo dourado. Vence o primeiro a somar 15 s.
+MODE_STOCK_NAME,Stock,Stock,Stock,Stock,Stock
+MODE_STOCK_RULE,Lose all your lives and you are out.,Verlier alle Leben und du bist raus.,Perds toutes tes vies et tu es éliminé.,Pierde todas tus vidas y quedas fuera.,"Perdeu todas as vidas, está fora."
+MODE_SUDDEN_DEATH_NAME,Sudden Death,Sudden Death,Mort subite,Muerte súbita,Morte súbita
+MODE_SUDDEN_DEATH_RULE,One hit and you are out.,Ein Treffer und du bist raus.,Un coup et tu es éliminé.,Un golpe y quedas fuera.,Um golpe e você está fora.
+MODE_TEAMS,Teams,Teams,Équipes,Equipos,Times
+MODIFIER_BIG_HEADS,Big Heads,Riesenköpfe,Grosses têtes,Cabezones,Cabeçudos
+MODIFIER_BOUNCY,Bouncy,Sprungfedern,Rebondissant,Rebotón,Pula-pula
+MODIFIER_DOUBLE_DAMAGE,Double Damage,Doppelter Schaden,Dégâts doublés,Daño doble,Dano em dobro
+MODIFIER_FAST_LAVA,Fast Lava,Schnelle Lava,Lave rapide,Lava veloz,Lava veloz
+MODIFIER_GALE,Gale,Sturm,Tempête,Vendaval,Vendaval
+MODIFIER_HEAVY_WEAPONS,Heavy Weapons,Schwere Waffen,Armes lourdes,Armas pesadas,Armas pesadas
+MODIFIER_LOW_GRAVITY,Low Gravity,Wenig Schwerkraft,Faible gravité,Poca gravedad,Baixa gravidade
+MODIFIER_METEOR_SHOWER,Meteor Shower,Meteoritenschauer,Pluie de météores,Lluvia de meteoros,Chuva de meteoros
+MODIFIER_SLIPPERY_FLOOR,Slippery Floor,Glatter Boden,Sol glissant,Piso resbaloso,Chão escorregadio
+MODIFIER_SUDDEN_DEATH,Sudden Death!,Sudden Death!,Mort subite !,¡Muerte súbita!,Morte súbita!
+MODIFIER_TINY_WEAPONS,Tiny Weapons,Winzige Waffen,Armes minuscules,Armas diminutas,Armas minúsculas
+MODIFIER_WEAPON_ROULETTE,Weapon Roulette,Waffenroulette,Roulette d'armes,Ruleta de armas,Roleta de armas
+OFF,off,aus,non,no,não
+ON,on,an,oui,sí,sim
+ONLINE_CONNECTING,connecting…,verbinde…,connexion…,conectando…,conectando…
+ONLINE_ONLINE,online,online,en ligne,en línea,online
+ONLINE_ROOM,Online: %s,Online: %s,En ligne : %s,En línea: %s,Online: %s
+ONLINE_ROOM_RECONNECTING,Online: %s (reconnecting...),Online: %s (verbinde neu...),En ligne : %s (reconnexion...),En línea: %s (reconectando...),Online: %s (reconectando...)
+ONLINE_UNREACHABLE,relay unreachable: playing offline,Relay nicht erreichbar: Spiel offline,relais injoignable : jeu hors ligne,relay inaccesible: jugando sin conexión,relay inacessível: jogando offline
+OVERTIME,OVERTIME,VERLÄNGERUNG,PROLONGATION,TIEMPO EXTRA,PRORROGAÇÃO
+PAUSED,PAUSED,PAUSIERT,PAUSE,PAUSA,PAUSADO
+PHONE_STOCK_RANDOM,Random,Zufällig,Aléatoire,Al azar,Aleatório
+PING_MS,%d ms,%d ms,%d ms,%d ms,%d ms
+REPLAY_NOTHING,Replay: nothing recorded yet,Replay: noch nichts aufgenommen,Replay : rien d'enregistré,Repetición: aún no hay nada grabado,Replay: nada gravado ainda
+REPLAY_SAVED,Replay saved: %s,Replay gespeichert: %s,Replay enregistré : %s,Repetición guardada: %s,Replay salvo: %s
+ROOM_CODE_HIDDEN,Code hidden: see host phone,Code versteckt: siehe Host-Handy,Code masqué : voir le téléphone de l'hôte,Código oculto: mira el celular del anfitrión,Código oculto: veja o celular do anfitrião
+SCORE_PLAYER,P%d: %d,S%d: %d,J%d : %d,J%d: %d,J%d: %d
+SCORE_TEAM,%s: %d,%s: %d,%s : %d,%s: %d,%s: %d
+SETTINGS,Settings,Einstellungen,Réglages,Ajustes,Ajustes
+SETTINGS_FEEDBACK,Feedback,Feedback,Avis,Comentarios,Feedback
+SETTINGS_FULLSCREEN,Full (F11),Voll (F11),Plein (F11),Completa (F11),Cheia (F11)
+SETTINGS_HIDE_ROOM_CODE,Hide room code,Raumcode verstecken,Masquer le code du salon,Ocultar código de sala,Ocultar código da sala
+SETTINGS_MASTER_VOLUME,Master volume,Gesamtlautstärke,Volume général,Volumen general,Volume geral
+SETTINGS_MORE_OPTIONS,More options,Mehr Optionen,Plus d'options,Más opciones,Mais opções
+SETTINGS_MUSIC,Music,Musik,Musique,Música,Música
+SETTINGS_MUTE,Mute (M),Stumm (M),Muet (M),Silenciar (M),Mudo (M)
+SETTINGS_MUTED,Settings (muted),Einstellungen (stumm),Réglages (muet),Ajustes (silencio),Ajustes (mudo)
+SETTINGS_NAME_TAGS,Name tags: %sx,Namensschilder: %sx,Pseudos : %sx,Nombres: %sx,Nomes: %sx
+SETTINGS_REDUCE_FLASHES,Reduce flashes,Weniger Blitze,Moins d'éclairs,Menos destellos,Menos clarões
+SETTINGS_SCREEN_SHAKE,Screen shake,Bildschirmwackeln,Tremblement d'écran,Temblor de pantalla,Tremor de tela
+SETTINGS_SFX,Sound effects,Soundeffekte,Effets sonores,Efectos de sonido,Efeitos sonoros
+SETTINGS_STAGES_LIST,Stages (untick to skip),Stages (abwählen zum Überspringen),Arènes (décoche pour passer),Escenarios (desmarca para omitir),Cenários (desmarque para pular)
+SETTINGS_WEAPONS_LIST,Weapons (untick to skip),Waffen (abwählen zum Überspringen),Armes (décoche pour passer),Armas (desmarca para omitir),Armas (desmarque para pular)
+SETTINGS_WINDOW_DEFAULT,Window: default,Fenster: Standard,Fenêtre : défaut,Ventana: predeterminada,Janela: padrão
+SETTINGS_WINDOW_SIZE,Window: %d x %d,Fenster: %d x %d,Fenêtre : %d x %d,Ventana: %d x %d,Janela: %d x %d
+STAGE_BATTLEFIELD,Battlefield,Schlachtfeld,Champ de bataille,Campo de batalla,Campo de batalha
+STAGE_BOWL,Bowl,Schüssel,Cuvette,Cuenco,Tigela
+STAGE_BULWARK,Bulwark,Bollwerk,Rempart,Baluarte,Baluarte
+STAGE_CAROUSEL,Carousel,Karussell,Carrousel,Carrusel,Carrossel
+STAGE_CASCADE,Cascade,Kaskade,Cascade,Cascada,Cascata
+STAGE_COLOSSEUM,Colosseum,Kolosseum,Colisée,Coliseo,Coliseu
+STAGE_EROSION,Erosion,Erosion,Érosion,Erosión,Erosão
+STAGE_FERRY,Ferry,Fähre,Ferry,Ferri,Balsa
+STAGE_FINALDESTINATION,Final Destination,Endstation,Destination finale,Destino final,Destino final
+STAGE_FLATLANDS,Flatlands,Flachland,Plaines,Llanuras,Planície
+STAGE_FOOTBRIDGE,Footbridge,Fußgängerbrücke,Passerelle,Pasarela,Passarela
+STAGE_FURNACE,Furnace,Hochofen,Fournaise,Horno,Fornalha
+STAGE_GALE,Gale,Sturm,Tempête,Vendaval,Vendaval
+STAGE_GANTRY,Gantry,Portalkran,Portique,Grúa pórtico,Pórtico
+STAGE_GAUNTLET,Gauntlet,Spießrutenlauf,Parcours du combattant,Gauntlet,Corredor da morte
+STAGE_HIGHRISE,Highrise,Hochhaus,Tour,Rascacielos,Arranha-céu
+STAGE_ISLANDS,Islands,Inseln,Îles,Islas,Ilhas
+STAGE_MILL,Mill,Mühle,Moulin,Molino,Moinho
+STAGE_OVERPASS,Overpass,Überführung,Viaduc,Paso elevado,Viaduto
+STAGE_PILLARS,Pillars,Säulen,Piliers,Pilares,Pilares
+STAGE_PISTONS,Pistons,Kolben,Pistons,Pistones,Pistões
+STAGE_POCKET,Pocket,Tasche,Poche,Bolsillo,Bolso
+STAGE_QUARRY,Quarry,Steinbruch,Carrière,Cantera,Pedreira
+STAGE_REACTOR,Reactor,Reaktor,Réacteur,Reactor,Reator
+STAGE_ROCKFALL,Rockfall,Steinschlag,Éboulement,Derrumbe,Queda de pedras
+STAGE_SINKHOLE,Sinkhole,Senkloch,Gouffre,Sumidero,Sumidouro
+STAGE_SLANT,Slant,Schräge,Pente,Pendiente,Ladeira
+STAGE_SPRINGBOARD,Springboard,Sprungbrett,Tremplin,Trampolín,Trampolim
+STAGE_UPDRAFT,Updraft,Aufwind,Courant ascendant,Corriente ascendente,Corrente de ar
+STAGE_VENT,Vent,Schacht,Conduit,Ducto,Duto
+STAGE_ZIGGURAT,Ziggurat,Zikkurat,Ziggourat,Zigurat,Zigurate
+STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s,%s  %d KO  %d verteilt  %d kassiert  %d selbst  %d Pick  %s,%s  %d KO  %d infligés  %d subis  %d auto  %d obj  %s,%s  %d KO  %d causado  %d recibido  %d auto  %d obj  %s,%s  %d KO  %d causado  %d sofrido  %d auto  %d item  %s
+TEAM_BLUE,BLUE,BLAU,BLEU,AZUL,AZUL
+TEAM_RED,RED,ROT,ROUGE,ROJO,VERMELHO
+VICTORY_CONTINUE_WITH,Continue with %s,Weiter mit %s,Continuer avec %s,Continuar con %s,Continuar com %s
+VICTORY_INPUT_PAD,A on a gamepad,A am Gamepad,A sur une manette,A en un control,A no controle
+VICTORY_INPUT_PHONE,a tap on your phone,ein Tipp aufs Handy,un tap sur ton téléphone,un toque en tu celular,um toque no celular
+VICTORY_INPUT_SPACE,Space or click,Leertaste oder Klick,Espace ou clic,Espacio o clic,Espaço ou clique
+VICTORY_LIST_LAST,%s or %s,%s oder %s,%s ou %s,%s o %s,%s ou %s
+VICTORY_MATCH_OVER,MATCH OVER,MATCH VORBEI,MATCH TERMINÉ,FIN DE LA PARTIDA,FIM DA PARTIDA
+VICTORY_TAP_CONTINUE,Tap Continue on your phone,Tipp auf dem Handy auf Weiter,Touche Continuer sur ton téléphone,Toca Continuar en tu celular,Toque em Continuar no celular
+VICTORY_TEAM_WINS,%s TEAM WINS!,TEAM %s GEWINNT!,L'ÉQUIPE %s GAGNE !,¡GANA EL EQUIPO %s!,TIME %s VENCE!
+VICTORY_WINS,%s WINS!,%s GEWINNT!,%s GAGNE !,¡GANA %s!,%s VENCE!
+WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d),Warte auf Spieler: %d verbunden (nötig: %d),En attente de joueurs : %d connectés (il en faut %d),Esperando jugadores: %d conectados (mínimo %d),Esperando jogadores: %d conectados (mínimo %d)
+STAGE_RACETRACK,Racetrack,Rennstrecke,Circuit,Pista de carreras,Autódromo
+STAGE_SWITCHYARD,Switchyard,Rangierbahnhof,Gare de triage,Patio de maniobras,Pátio de manobras
+STAGE_ORBIT,Orbit,Orbit,Orbite,Órbita,Órbita
+SETTINGS_SHARE_STATS,Share anonymous match stats,Anonyme Matchstatistiken teilen,Partager des stats de match anonymes,Compartir estadísticas anónimas,Compartilhar estatísticas anônimas
+TELEMETRY_NOTICE,"Pickfight sends anonymous match stats (weapon damage, hits and KOs, mode, stages and match length; no names or IDs) to help balance the game. Change it any time in Settings > More options > Share anonymous match stats.","Pickfight sendet anonyme Matchstatistiken (Waffenschaden, Treffer und KOs, Modus, Stages und Matchdauer; keine Namen oder IDs), um das Spiel auszubalancieren. Änderbar jederzeit unter Einstellungen > Mehr Optionen > Anonyme Matchstatistiken teilen.","Pickfight envoie des stats de match anonymes (dégâts d'armes, coups et KO, mode, arènes et durée du match ; ni noms ni identifiants) pour équilibrer le jeu. Modifiable à tout moment dans Réglages > Plus d'options > Partager des stats de match anonymes.","Pickfight envía estadísticas anónimas de las partidas (daño de armas, golpes y KO, modo, escenarios y duración; sin nombres ni IDs) para equilibrar el juego. Cámbialo cuando quieras en Ajustes > Más opciones > Compartir estadísticas anónimas.","O Pickfight envia estatísticas anônimas das partidas (dano de armas, golpes e KOs, modo, cenários e duração; sem nomes nem IDs) para equilibrar o jogo. Mude quando quiser em Ajustes > Mais opções > Compartilhar estatísticas anônimas."
+TELEMETRY_TURN_OFF,Turn off,Ausschalten,Désactiver,Desactivar,Desativar
+TELEMETRY_OK,Got it,Verstanden,Compris,Entendido,Entendi
+STAGE_MESA,Mesa,Mesa,Mesa,Mesa,Mesa
+STAGE_RELAY,Relay,Staffel,Relais,Relevo,Revezamento
+STAGE_ROUNDABOUT,Roundabout,Kreisverkehr,Rond-point,Glorieta,Rotatória
+STAGE_SUMMIT,Summit,Gipfel,Sommet,Cumbre,Cume
+MODE_SOCCER_NAME,Soccer,Fußball,Football,Fútbol,Futebol
+MODE_SOCCER_RULE,Reach the goal target to win.,"Erreich das Torziel, um zu gewinnen.",Atteins l'objectif de buts pour gagner.,Llega a la meta de goles para ganar.,Chegue à meta de gols para vencer.
+SOCCER_GOAL,GOAL!,TOR!,BUT !,¡GOL!,GOL!
+AWARD_CATEGORY_SCORER,SCORER,TORJÄGER,BUTEUR,GOLEADOR,ARTILHEIRO
+STAGE_PITCH,Pitch,Spielfeld,Terrain,Cancha,Campo
+STAGE_CAGE,Cage,Käfig,Cage,Jaula,Jaula
+STAGE_DUNES,Dunes,Dünen,Dunes,Dunas,Dunas
+MODE_CAPTURE_THE_FLAG_NAME,Capture the Flag,Capture the Flag,Capture du drapeau,Captura la bandera,Capture a bandeira
+MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.,"Erreich das Capture-Ziel, um zu gewinnen.",Atteins l'objectif de captures pour gagner.,Llega a la meta de capturas para ganar.,Chegue à meta de capturas para vencer.
+AWARD_CATEGORY_CAPTURER,CAPTURER,FLAGGENRÄUBER,CAPTUREUR,CAPTURADOR,CAPTURADOR
+STAGE_BASTION,Bastion,Bastion,Bastion,Bastión,Bastião
+STAGE_STRONGHOLD,Stronghold,Festung,Forteresse,Fortaleza,Fortaleza
+AWARD_CATEGORY_HILL,HILL,HÜGEL,COLLINE,COLINA,COLINA
+AWARD_CATEGORY_TAGGER,TAGGER,FÄNGER,PORTEUR,MARCADO,MARCADO
+AWARD_CATEGORY_LIVES,LIVES,LEBEN,VIES,VIDAS,VIDAS
+HUD_TAKES_ROUND,%s takes the round,%s holt die Runde,%s remporte la manche,%s se lleva la ronda,%s leva a rodada
+HUD_TEAM_TAKES_ROUND,%s team takes the round,Team %s holt die Runde,L'équipe %s remporte la manche,El equipo %s se lleva la ronda,O time %s leva a rodada
+HUD_ROUND_DRAWN,Round drawn,Runde unentschieden,Manche nulle,Ronda empatada,Rodada empatada
+HUD_WINS_MATCH,%s wins the match,%s gewinnt das Match,%s remporte le match,%s gana la partida,%s vence a partida
+HUD_TEAM_WINS_MATCH,%s team wins the match,Team %s gewinnt das Match,L'équipe %s remporte le match,El equipo %s gana la partida,O time %s vence a partida
+HUD_PODIUM_ROW,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d,%d. %s  %d
+HUD_HOLD,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds,%s %d/%ds
+HUD_HILL_MOVING,Hill is moving!,Der Hügel wandert!,La colline bouge !,¡La colina se mueve!,A colina está se movendo!
+HILL_CONTESTED,CONTESTED,UMKÄMPFT,DISPUTÉE,EN DISPUTA,DISPUTADA
+BANNER_HOLDS_THE_HILL,%s holds the hill!,%s hält den Hügel!,%s tient la colline !,¡%s domina la colina!,%s domina a colina!
+HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s,Rot %d - Blau %d  Flaggen: rot %s / blau %s,Rouge %d - Bleu %d  Drapeaux : rouge %s / bleu %s,Rojo %d - Azul %d  Banderas: roja %s / azul %s,Vermelho %d - Azul %d  Bandeiras: vermelha %s / azul %s
+HUD_FLAG_0,home,zu Hause,au camp,en base,na base
+HUD_FLAG_1,carried,getragen,porté,llevada,carregada
+HUD_FLAG_2,dropped,fallen gelassen,lâché,caída,caída
+HUD_SOCCER,Red %d - Blue %d (first to %d),Rot %d - Blau %d (erster bis %d),Rouge %d - Bleu %d (premier à %d),Rojo %d - Azul %d (primero a %d),Vermelho %d - Azul %d (primeiro a %d)
+HUD_POTATO,%s has the potato: %ds,%s hat die Kartoffel: %ds,%s a la patate : %ds,%s tiene la papa: %ds,%s está com a batata: %ds
+HUD_LIVES,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d
+PICKER_TITLE,Your look,Dein Look,Ton style,Tu look,Seu visual
+PICKER_HAT,Hat,Hut,Chapeau,Sombrero,Chapéu
+PICKER_COLOUR,Colour,Farbe,Couleur,Color,Cor
+PICKER_EYES,Eyes,Augen,Yeux,Ojos,Olhos
+PICKER_HAT_NONE,None,Keiner,Aucun,Ninguno,Nenhum
+PICKER_HAT_CROWN,Crown,Krone,Couronne,Corona,Coroa
+PICKER_HAT_TOP_HAT,Top hat,Zylinder,Haut-de-forme,Chistera,Cartola
+PICKER_HAT_CAP,Cap,Kappe,Casquette,Gorra,Boné
+PICKER_HAT_BEANIE,Beanie,Mütze,Bonnet,Gorro,Gorro
+PICKER_HAT_VIKING,Viking,Wikinger,Viking,Vikingo,Viking
+PICKER_HAT_PARTY,Party hat,Partyhut,Chapeau de fête,Gorro de fiesta,Chapéu de festa
+PICKER_HAT_HALO,Halo,Heiligenschein,Auréole,Aureola,Auréola
+PICKER_HAT_PROPELLER,Propeller,Propeller,Hélice,Hélice,Hélice
+PICKER_EYES_ROUND,Round,Rund,Ronds,Redondos,Redondos
+PICKER_EYES_SLEEPY,Sleepy,Müde,Endormis,Dormidos,Sonolentos
+PICKER_EYES_ANGRY,Angry,Wütend,Furieux,Enojados,Bravos
+PICKER_EYES_WIDE,Wide,Weit,Écarquillés,Abiertos,Arregalados
+PICKER_EYES_DOT,Dot,Punkt,Points,Puntos,Pontinhos
+PICKER_EYES_VISOR,Visor,Visier,Visière,Visor,Visor
+JOIN_REJOINING,Rejoining your seat...,Kehre auf deinen Platz zurück...,Retour à ta place...,Volviendo a tu lugar...,Voltando ao seu lugar...
+REPLAY_GIF_ENCODING,Replay saved. Encoding GIF: %s,Replay gespeichert. Kodiere GIF: %s,Replay enregistré. Encodage du GIF : %s,Repetición guardada. Codificando GIF: %s,Replay salvo. Codificando GIF: %s
+REPLAY_GIF_SAVED,GIF saved: %s,GIF gespeichert: %s,GIF enregistré : %s,GIF guardado: %s,GIF salvo: %s
+LOBBY_START_NEED_PLAYERS,Cannot start yet: %d joined (need %d),Start noch nicht möglich: %d dabei (nötig: %d),Départ impossible : %d connectés (il en faut %d),Aún no se puede empezar: %d unidos (mínimo %d),Ainda não dá para começar: %d entraram (mínimo %d)
+LOBBY_START_HELD_SEAT,Cannot start yet: waiting for %d held seat(s) to reconnect,Start noch nicht möglich: warte auf %d reservierte(n) Platz/Plätze,Départ impossible : on attend %d place(s) réservée(s),Aún no se puede empezar: esperando %d lugar(es) reservado(s),Ainda não dá para começar: esperando %d vaga(s) reservada(s)
+MODE_STOCK_RULE_N,Lose all %d lives and you are out.,Verlier alle %d Leben und du bist raus.,Perds tes %d vies et tu es éliminé.,Pierde tus %d vidas y quedas fuera.,"Perdeu as %d vidas, está fora."
+MODE_SOCCER_RULE_N,First team to %d goals wins.,Das erste Team mit %d Toren gewinnt.,La première équipe à %d buts gagne.,Gana el primer equipo en llegar a %d goles.,O primeiro time com %d gols vence.
+MODE_CAPTURE_THE_FLAG_RULE_N,First team to %d captures wins.,Das erste Team mit %d Captures gewinnt.,La première équipe à %d captures gagne.,Gana el primer equipo en llegar a %d capturas.,O primeiro time com %d capturas vence.
+HOST_START_WAITING,Waiting...,Warten...,Patience...,Esperando...,Esperando...
+HOW_TO_PLAY_BUTTON,How to play,So wird gespielt,Comment jouer,Cómo jugar,Como jogar
+LOBBY_YOU_TAG, (you), (du), (toi), (tú), (você)
+LOBBY_BOT,BOT,BOT,BOT,BOT,BOT
+LOBBY_OPEN_SEAT,Open seat,Freier Platz,Place libre,Lugar libre,Vaga livre
+LOBBY_SEAT_HINT_COUCH,Scan QR or press A,QR scannen oder A drücken,Scanne le QR ou appuie sur A,Escanea el QR o pulsa A,Escaneie o QR ou aperte A
+LOBBY_SEAT_HINT_SOLO,Add a bot with B,Bot mit B hinzufügen,Ajoute un bot avec B,Agrega un bot con B,Adicione um bot com B
+LOBBY_SEAT_HINT_ONLINE,Share the room code,Teile den Raumcode,Partage le code du salon,Comparte el código de sala,Compartilhe o código da sala
+LOBBY_PLAYERS,Players,Spieler,Joueurs,Jugadores,Jogadores
+LOBBY_COUNT,"%d joined, %d bots","%d dabei, %d Bots","%d connectés, %d bots","%d unidos, %d bots","%d entraram, %d bots"
+LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot","%d dabei, 1 Bot","%d connectés, 1 bot","%d unidos, 1 bot","%d entraram, 1 bot"
+LOBBY_TEAM_TAG,%s TEAM,TEAM %s,ÉQUIPE %s,EQUIPO %s,TIME %s
+LOBBY_STARTING,Get ready!,Macht euch bereit!,Prêts ?,¡Prepárense!,Preparem-se!
+LOBBY_NOT_READY_ONE,1 player not ready yet,1 Spieler noch nicht bereit,1 joueur pas encore prêt,1 jugador aún no está listo,1 jogador ainda não está pronto
+LOBBY_NOT_READY_N,%d players not ready yet,%d Spieler noch nicht bereit,%d joueurs pas encore prêts,%d jugadores aún no están listos,%d jogadores ainda não estão prontos
+LOBBY_ENTER_OR_START,Enter or Start,Enter oder Start,Entrée ou Start,Enter o Start,Enter ou Start
+LOBBY_SCAN_TITLE,Scan to join,Zum Beitreten scannen,Scanne pour rejoindre,Escanea para unirte,Escaneie para entrar
+LOBBY_ROOM_CODE_TITLE,Room code,Raumcode,Code du salon,Código de sala,Código da sala
+LOBBY_SOLO_TITLE,Solo practice,Solo-Training,Entraînement solo,Práctica en solitario,Treino solo
+LOBBY_ROOM_CODE_NOTE,"Friends open Pickfight, pick Online, then Join a game","Freunde öffnen Pickfight, wählen Online und dann Spiel beitreten","Tes amis ouvrent Pickfight, choisissent En ligne, puis Rejoindre une partie","Tus amigos abren Pickfight, eligen En línea y luego Unirse a una partida","Seus amigos abrem o Pickfight, escolhem Online e depois Entrar em um jogo"
+LOBBY_SOLO_NOTE,Just you and the bots on this computer. No room code and nothing online.,Nur du und die Bots auf diesem Computer. Kein Raumcode und nichts online.,"Toi et les bots sur cet ordinateur. Pas de code de salon, rien en ligne.",Solo tú y los bots en esta computadora. Sin código de sala y nada en línea.,Só você e os bots neste computador. Sem código de sala e nada online.
+LOBBY_MODE_TITLE,Mode,Modus,Mode,Modo,Modo
+LOBBY_HOST_TITLE,Host,Host,Hôte,Anfitrión,Anfitrião
+LOBBY_ROW_FIRST_TO,First to,Erster bis,Premier à,El primero a,O primeiro a
+LOBBY_ROW_LIVES,Lives,Leben,Vies,Vidas,Vidas
+LOBBY_ROW_GOALS,Goals to win,Tore zum Sieg,Buts pour gagner,Goles para ganar,Gols para vencer
+LOBBY_ROW_CAPTURES,Captures to win,Captures zum Sieg,Captures pour gagner,Capturas para ganar,Capturas para vencer
+LOBBY_ROW_BOTS,Bots,Bots,Bots,Bots,Bots
+BOT_SKILL_EASY,Easy,Leicht,Facile,Fácil,Fácil
+BOT_SKILL_NORMAL,Normal,Normal,Normal,Normal,Normal
+BOT_SKILL_HARD,Hard,Schwer,Difficile,Difícil,Difícil
+LOBBY_ROW_TEAMS,Teams,Teams,Équipes,Equipos,Times
+LOBBY_ON,On,An,Oui,Sí,Sim
+LOBBY_OFF,Off,Aus,Non,No,Não
+LOBBY_STATUS_FIRST_TO,first to %d,erster bis %d,premier à %d,el primero a %d,o primeiro a %d
+LOBBY_STATUS_LIVES,%d lives,%d Leben,%d vies,%d vidas,%d vidas
+LOBBY_STATUS_GOALS,%d goals,%d Tore,%d buts,%d goles,%d gols
+LOBBY_STATUS_CAPTURES,%d captures,%d Captures,%d captures,%d capturas,%d capturas
+LOBBY_HELP_FIRST_TO,First to %d rounds takes the match.,"Wer zuerst %d Runden gewinnt, holt das Match.",Le premier à %d manches gagne le match.,El primero en ganar %d rondas se lleva la partida.,Quem vencer %d rodadas primeiro leva a partida.
+MODE_CLASSIC_BLURB,Last one standing,Wer zuletzt steht,Le dernier debout,El último en pie,O último de pé
+MODE_KING_OF_THE_HILL_BLURB,Hold the hill alone,Halt den Hügel allein,Tiens la colline seul,Domina la colina solo,Domine a colina sozinho
+MODE_HOT_POTATO_BLURB,Pass the tag,Gib den Tag weiter,Refile le jeton,Pasa la marca,Passe a marca
+MODE_SUDDEN_DEATH_BLURB,"One hit, you are out","Ein Treffer, du bist raus","Un coup, tu sors",Un golpe y fuera,Um golpe e fora
+MODE_STOCK_BLURB,Last one with lives left,Wer zuletzt Leben hat,Le dernier avec des vies,El último con vidas,O último com vidas
+MODE_SOCCER_BLURB,Teams: score goals,Teams: Tore schießen,Équipes : marquez des buts,Equipos: anota goles,Times: faça gols
+MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag,Teams: ihre Flagge klauen,Équipes : volez leur drapeau,Equipos: roba su bandera,Times: roube a bandeira deles
+PICKER_LIVE_NOTE,"In the game this is the real character, live","Im Spiel ist das der echte Charakter, live","Dans le jeu, c'est le vrai personnage, en direct","En el juego es el personaje real, en vivo","No jogo, este é o personagem de verdade, ao vivo"
+PICKER_TAKEN_NOTE,Greyed colours are taken by other players,Ausgegraute Farben haben andere Spieler,Les couleurs grisées sont prises par d'autres joueurs,Los colores en gris ya los tienen otros jugadores,Cores em cinza já estão com outros jogadores
+PICKER_DONE,Done,Fertig,Terminé,Listo,Pronto
+TITLE_FOOTER,"Click, press a key, or D-pad + A","Klick, Taste oder Steuerkreuz + A","Clique, appuie sur une touche, ou croix + A","Haz clic, pulsa una tecla, o cruceta + A","Clique, aperte uma tecla, ou direcional + A"
+CAREER_LINE,Matches %d · Wins %d · KOs %d,Matches %d · Siege %d · KOs %d,Matchs %d · Victoires %d · KO %d,Partidas %d · Victorias %d · KO %d,Partidas %d · Vitórias %d · KOs %d
+CAREER_MATCHES,Matches played: %d,Gespielte Matches: %d,Matchs joués : %d,Partidas jugadas: %d,Partidas jogadas: %d
+CAREER_MATCH_WINS,Match wins: %d,Match-Siege: %d,Matchs gagnés : %d,Partidas ganadas: %d,Partidas vencidas: %d
+CAREER_ROUND_WINS,Round wins: %d,Rundensiege: %d,Manches gagnées : %d,Rondas ganadas: %d,Rodadas vencidas: %d
+CAREER_KOS,KOs: %d,KOs: %d,KO : %d,KO: %d,KOs: %d
+CAREER_SELF_KOS,Self-KOs: %d,Selbst-KOs: %d,Auto-KO : %d,AutoKO: %d,AutoKOs: %d
+CAREER_FAVOURITE,Favourite weapon: %s,Lieblingswaffe: %s,Arme préférée : %s,Arma favorita: %s,Arma favorita: %s
+JOIN_HELP_BUTTON,Phones can't join?,Handys kommen nicht rein?,Les téléphones ne se connectent pas ?,¿Los celulares no entran?,Celulares não entram?
+JOIN_HELP_TITLE,Phones can't join?,Handys kommen nicht rein?,Les téléphones ne se connectent pas ?,¿Los celulares no entran?,Celulares não entram?
+JOIN_HELP_FIREWALL,"Firewall: allow Pickfight through when your computer asks (Windows ""Allow access"", macOS incoming connections).","Firewall: Erlaub Pickfight, wenn dein Computer fragt (Windows „Zugriff zulassen“, macOS eingehende Verbindungen).","Pare-feu : autorise Pickfight quand ton ordinateur le demande (Windows « Autoriser l'accès », macOS connexions entrantes).","Firewall: permite Pickfight cuando tu computadora lo pida (Windows «Permitir acceso», macOS conexiones entrantes).","Firewall: permita o Pickfight quando o computador perguntar (Windows ""Permitir acesso"", macOS conexões de entrada)."
+JOIN_HELP_ISOLATION,"Guest, hotel or school Wi-Fi often blocks phones from reaching other devices (client isolation): use another network.","Gast-, Hotel- oder Schul-WLAN blockiert Handys oft gegenüber anderen Geräten (Client-Isolation): Nimm ein anderes Netz.","Les Wi-Fi invités, d'hôtel ou d'école bloquent souvent les téléphones vers les autres appareils (isolation des clients) : change de réseau.","El Wi-Fi de invitados, hoteles o escuelas suele bloquear que los celulares vean otros dispositivos (aislamiento de clientes): usa otra red.","Wi-Fi de visitantes, hotel ou escola costuma impedir que celulares alcancem outros aparelhos (isolamento de clientes): use outra rede."
+JOIN_HELP_ADAPTER,Wrong network: a VPN or a second adapter can hide the right address. Try another address listed below.,Falsches Netz: Ein VPN oder ein zweiter Adapter kann die richtige Adresse verstecken. Probier eine andere Adresse unten.,Mauvais réseau : un VPN ou une seconde carte peut cacher la bonne adresse. Essaie une autre adresse ci-dessous.,Red equivocada: una VPN o un segundo adaptador pueden ocultar la dirección correcta. Prueba otra dirección de abajo.,Rede errada: uma VPN ou um segundo adaptador pode esconder o endereço certo. Tente outro endereço da lista abaixo.
+JOIN_HELP_PHONE_NETWORK,Phone on mobile data or a different Wi-Fi: switch it to the same Wi-Fi as this computer.,Handy im Mobilfunk oder anderem WLAN: Wechsle zum selben WLAN wie dieser Computer.,Téléphone en données mobiles ou sur un autre Wi-Fi : passe sur le même Wi-Fi que cet ordinateur.,Celular con datos móviles u otro Wi-Fi: cámbialo al mismo Wi-Fi que esta computadora.,Celular no 4G/5G ou em outro Wi-Fi: troque para o mesmo Wi-Fi deste computador.
+JOIN_HELP_HOTSPOT,Still stuck: start a hotspot on a phone and connect this computer and the other phones to it.,Immer noch nichts: Starte einen Hotspot auf einem Handy und verbinde diesen Computer und die anderen Handys damit.,Toujours bloqué : lance un point d'accès sur un téléphone et connecte-y cet ordinateur et les autres téléphones.,Sigue sin funcionar: activa una zona Wi-Fi en un celular y conecta a ella esta computadora y los demás celulares.,Ainda não rolou: ative um hotspot num celular e conecte este computador e os outros celulares nele.
+JOIN_HELP_ADDRESSES,Type one of these into the phone's browser if the QR code fails:,"Gib eine davon im Handy-Browser ein, falls der QR-Code nicht klappt:",Tape l'une de ces adresses dans le navigateur du téléphone si le QR code échoue :,Escribe una de estas en el navegador del celular si el QR falla:,Digite um destes no navegador do celular se o QR falhar:
+JOIN_HELP_NO_ADDRESS,No network address found: connect this computer to Wi-Fi or Ethernet.,Keine Netzwerkadresse gefunden: Verbinde diesen Computer mit WLAN oder Ethernet.,Aucune adresse réseau trouvée : connecte cet ordinateur au Wi-Fi ou à l'Ethernet.,No hay dirección de red: conecta esta computadora a Wi-Fi o Ethernet.,Nenhum endereço de rede encontrado: conecte este computador ao Wi-Fi ou à Ethernet.
+SETTINGS_LANGUAGE,Language,Sprache,Langue,Idioma,Idioma
+LANGUAGE_AUTO,Auto (system),Auto (System),Auto (système),Auto (sistema),Auto (sistema)
