@@ -556,6 +556,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_and_hud_show_no_untranslated_english_693",
 	"steam_platform_is_dormant_under_the_runner_428",
 	"steam_platform_autoload_registered_and_loads_without_steam_428",
+	"crash_reporting_never_inits_under_the_runner_681",
+	"crash_reporting_needs_a_dsn_and_every_other_condition_681",
+	"crash_reports_opt_out_persists_681",
+	"crash_reports_settings_row_681",
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
@@ -2413,6 +2417,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_steam_dormant_428()
 		"steam_platform_autoload_registered_and_loads_without_steam_428":
 			return _scenario_steam_autoload_428()
+		"crash_reporting_never_inits_under_the_runner_681":
+			return _scenario_crash_reporting_never_inits_under_the_runner_681()
+		"crash_reporting_needs_a_dsn_and_every_other_condition_681":
+			return _scenario_crash_reporting_needs_a_dsn_and_every_other_condition_681()
+		"crash_reports_opt_out_persists_681":
+			return _scenario_crash_reports_opt_out_persists_681()
+		"crash_reports_settings_row_681":
+			return await _scenario_crash_reports_settings_row_681()
 		"per_mode_stage_lists_persist_separately_647":
 			return await _scenario_per_mode_stage_lists_persist_separately_647()
 		"stock_with_one_stage_on_always_plays_it_647":
@@ -44066,6 +44078,10 @@ func _scenario_crash_reports_settings_row_681() -> Array[String]:
 	box.button_pressed = false
 	if host.send_crash_reports:
 		failures.append("unticking did not turn off host.send_crash_reports")
+	ui.more_box().button_pressed = true
+	if ui.is_open():
+		ui.toggle_panel()
+	ui.telemetry_notice().visible = false
 	ui.pad_toggle()
 	if box.focus_mode != Control.FOCUS_ALL:
 		failures.append("the box is not focusable with the gamepad")
@@ -44073,6 +44089,7 @@ func _scenario_crash_reports_settings_row_681() -> Array[String]:
 	if down != ui.stats_box():
 		failures.append("the box is not chained above the stats box")
 	ui.pad_toggle()
+	ui.more_box().button_pressed = false
 	ui.host = was
 	ui.refresh()
 	_scenario_completed = true
