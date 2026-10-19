@@ -211,7 +211,8 @@ licensed under the SIL Open Font License 1.1 (`OFL-LilitaOne.txt`,
 
 ## Translations
 
-The German, French, Latin American Spanish and Brazilian Portuguese text (the
+The German, French, Latin American Spanish, Brazilian Portuguese, Simplified
+Chinese, Japanese, Korean and Russian text (the
 host-screen columns of `translations/strings.csv` and the per-language tables in
 `controller/index.html`, issue #688) is **machine-translated**, not yet checked
 by native speakers. Community proofreaders who correct it will be credited here.
@@ -222,3 +223,7 @@ by native speakers. Community proofreaders who correct it will be credited here.
 | Français | (open) |
 | Español (Latinoamérica) | (open) |
 | Português (Brasil) | (open) |
+| 简体中文 | (open) |
+| 日本語 | (open) |
+| 한국어 | (open) |
+| Русский | (open) |

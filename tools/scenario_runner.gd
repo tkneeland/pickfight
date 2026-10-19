@@ -552,6 +552,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"language_setting_persists_and_switching_it_changes_locale_688",
 	"settings_panel_language_row_lists_languages_and_switches_live_688",
 	"phone_page_has_every_english_string_in_every_language_688",
+	"ui_fonts_allow_system_fallback_for_cjk_688",
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
@@ -2397,6 +2398,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_language_row_688()
 		"phone_page_has_every_english_string_in_every_language_688":
 			return _scenario_phone_languages_688()
+		"ui_fonts_allow_system_fallback_for_cjk_688":
+			return _scenario_font_fallback_688()
 		"per_mode_stage_lists_persist_separately_647":
 			return await _scenario_per_mode_stage_lists_persist_separately_647()
 		"stock_with_one_stage_on_always_plays_it_647":
@@ -43401,7 +43404,7 @@ func _scenario_csv_values_688() -> Array[String]:
 	var failures: Array[String] = []
 	var rows: Array[PackedStringArray] = _csv_rows_688()
 	var header: PackedStringArray = rows[0]
-	for locale: String in ["en", "de", "fr", "es", "pt_BR"]:
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
 		if not header.has(locale):
 			failures.append("strings.csv has no '%s' column" % locale)
 	for r in range(1, rows.size()):
@@ -43470,7 +43473,7 @@ func _scenario_language_setting_688() -> Array[String]:
 	fresh.set_language("en")
 	if TranslationServer.translate("TITLE_PICK") != "How are you playing?":
 		failures.append("English did not come back")
-	for case: Array in [["auto", "de_AT", "de"], ["auto", "fr-CA", "fr"], ["auto", "es_MX", "es"], ["auto", "pt_PT", "pt_BR"], ["auto", "zh_CN", "en"], ["auto", "", "en"], ["fr", "de_DE", "fr"]]:
+	for case: Array in [["auto", "de_AT", "de"], ["auto", "fr-CA", "fr"], ["auto", "es_MX", "es"], ["auto", "pt_PT", "pt_BR"], ["auto", "zh_CN", "zh_CN"], ["auto", "zh-SG", "zh_CN"], ["auto", "zh_Hans_CN", "zh_CN"], ["auto", "zh-Hans", "zh_CN"], ["auto", "zh_TW", "en"], ["auto", "zh_HK", "en"], ["auto", "zh-Hant", "en"], ["auto", "zh_Hant_TW", "en"], ["auto", "zh", "en"], ["auto", "ja_JP", "ja"], ["auto", "ko_KR", "ko"], ["auto", "ru_RU", "ru"], ["auto", "", "en"], ["fr", "de_DE", "fr"]]:
 		var got: String = languages.resolve(case[0], case[1])
 		if got != case[2]:
 			failures.append("resolve(%s, %s) gave %s; want %s" % [case[0], case[1], got, case[2]])
@@ -43493,7 +43496,7 @@ func _scenario_language_row_688() -> Array[String]:
 	var shown: Array[String] = []
 	for i in row.item_count:
 		shown.append(row.get_item_text(i))
-	var want: Array[String] = ["Auto (system)", "English", "Deutsch", "Fran\u00e7ais", "Espa\u00f1ol (Latinoam\u00e9rica)", "Portugu\u00eas (Brasil)"]
+	var want: Array[String] = ["Auto (system)", "English", "Deutsch", "Fran\u00e7ais", "Espa\u00f1ol (Latinoam\u00e9rica)", "Portugu\u00eas (Brasil)", "\u7b80\u4f53\u4e2d\u6587", "\u65e5\u672c\u8a9e", "\ud55c\uad6d\uc5b4", "\u0420\u0443\u0441\u0441\u043a\u0438\u0439"]
 	if shown != want:
 		failures.append("Language row lists %s; want %s" % [shown, want])
 	var host: RefCounted = panel.host
@@ -43539,7 +43542,7 @@ func _scenario_phone_languages_688() -> Array[String]:
 		for m: RegExMatch in key.search_all(block.substr(heads[i].get_end(), to - heads[i].get_end())):
 			values[m.get_string(1)] = m.get_string(2)
 		tables[heads[i].get_string(1)] = values
-	for lang: String in ["en", "de", "fr", "es", "pt"]:
+	for lang: String in ["en", "de", "fr", "es", "pt", "zh", "ja", "ko", "ru"]:
 		if not tables.has(lang):
 			failures.append("the phone page has no '%s' table" % lang)
 	if not failures.is_empty():
@@ -43547,7 +43550,7 @@ func _scenario_phone_languages_688() -> Array[String]:
 	var english: Dictionary = tables["en"]
 	if english.size() < 100:
 		failures.append("only %d English phone strings found" % english.size())
-	for lang: String in ["de", "fr", "es", "pt"]:
+	for lang: String in ["de", "fr", "es", "pt", "zh", "ja", "ko", "ru"]:
 		var table: Dictionary = tables[lang]
 		for k: String in english:
 			if not table.has(k) or str(table[k]).strip_edges() == "":
@@ -43560,5 +43563,56 @@ func _scenario_phone_languages_688() -> Array[String]:
 		for k: String in table:
 			if not english.has(k):
 				failures.append("%s has phone string %s that English lacks" % [lang, k])
+	_scenario_completed = true
+	return failures
+
+## CJK and Cyrillic text has no glyphs in the bundled Lilita One and Nunito, so
+## it renders only through the operating system's fonts. Every font the theme
+## uses (its default font, every font a type or variation sets, and each
+## FontVariation's base) must leave `allow_system_fallback` on.
+func _scenario_font_fallback_688() -> Array[String]:
+	var failures: Array[String] = []
+	var theme: Theme = load("res://art/ui/pickfight_theme.tres")
+	if theme == null:
+		return ["could not load the UI theme"]
+	var fonts: Array[Font] = []
+	if theme.default_font != null:
+		fonts.append(theme.default_font)
+	for type_name: String in theme.get_font_type_list():
+		for font_name: String in theme.get_font_list(type_name):
+			fonts.append(theme.get_font(font_name, type_name))
+	var files: Array[FontFile] = []
+	for font: Font in fonts:
+		var seen: Font = font
+		while seen is FontVariation:
+			seen = (seen as FontVariation).base_font
+		if seen is FontFile and not files.has(seen):
+			files.append(seen)
+	if files.size() < 2:
+		failures.append("expected the theme to use at least the two bundled fonts, found %d" % files.size())
+	for file: FontFile in files:
+		if not file.allow_system_fallback:
+			failures.append("%s turns system font fallback off" % file.resource_path)
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var was: Dictionary = {}
+	for file: FontFile in files:
+		was[file] = file.fallbacks.duplicate()
+	for code: String in ["ja", "zh_CN", "ko"]:
+		languages.apply_fonts(code)
+		for file: FontFile in files:
+			var wanted: PackedStringArray = languages.fallback_font_names(code)
+			var any_installed: bool = false
+			for name: String in wanted:
+				any_installed = any_installed or OS.get_system_fonts().has(name)
+			if (any_installed and file.fallbacks.is_empty()) or not file.allow_system_fallback:
+				failures.append("%s has no system fallback chain for %s" % [file.resource_path, code])
+	for file: FontFile in files:
+		file.fallbacks = was[file] # later scenarios measure text with these fonts
+	if not languages.fallback_font_names("ru").is_empty() or not languages.fallback_font_names("en").is_empty():
+		failures.append("only the CJK languages get a system font chain")
+	var zh: PackedStringArray = languages.fallback_font_names("zh_CN")
+	var ja: PackedStringArray = languages.fallback_font_names("ja")
+	if zh.find("Hiragino Sans GB") > zh.find("Hiragino Sans") or ja.find("Hiragino Sans") > ja.find("Hiragino Sans GB"):
+		failures.append("each language's own system font should lead its fallback chain")
 	_scenario_completed = true
 	return failures
