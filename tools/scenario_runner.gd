@@ -895,6 +895,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"career_remote_client_keeps_totals_and_validates_503",
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
+	"join_help_opens_lists_urls_and_closes_680",
+	"join_help_hidden_online_and_streamer_680",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3078,6 +3080,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_rod_casts_and_reels_rival_632()
 		"bot_grapple_zips_to_rival_out_of_reach_632":
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
+		"join_help_opens_lists_urls_and_closes_680":
+			return await _scenario_join_help_opens_lists_urls_and_closes_680()
+		"join_help_hidden_online_and_streamer_680":
+			return await _scenario_join_help_hidden_online_and_streamer_680()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -43193,5 +43199,115 @@ func _scenario_wedged_head_phases_free_with_input_held() -> Array[String]:
 		if not await _wedge_aim_away_664(player):
 			failures.append("%s head not solid and clear after aiming away" % path.get_file())
 		await _teardown(stage, false)
+	_scenario_completed = true
+	return failures
+
+# --- Phones can't join? help popup (#680)
+func _join_help_urls_shown_680(view) -> Array[String]:
+	var shown: Array[String] = []
+	for label: Label in view.url_labels():
+		shown.append(label.text)
+	return shown
+func _scenario_join_help_opens_lists_urls_and_closes_680() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	var button: Button = screen.join_help_button()
+	if button == null or not button.visible:
+		failures.append("the Phones can't join? button is not shown in a Couch lobby")
+		await _teardown(rig["main"])
+		return failures
+	if button.text != "Phones can't join?":
+		failures.append("the button reads '%s'" % button.text)
+	if screen.join_help_popup().visible:
+		failures.append("the popup is open before the button is pressed")
+	button.pressed.emit()
+	if screen.popup_open() != "join_help" or not screen.join_help_popup().visible:
+		failures.append("the button did not open the popup (open: '%s')" % screen.popup_open())
+	var expected: Array[String] = []
+	for url: String in server.join_urls():
+		expected.append(url)
+	var shown: Array[String] = _join_help_urls_shown_680(screen.join_help())
+	if shown != expected:
+		failures.append("popup lists %s, the server serves on %s" % [shown, expected])
+	# Every way out: Esc, B, the X, a click on the backdrop.
+	await _key_tap_647(KEY_ESCAPE)
+	if screen.popup_open() != "":
+		failures.append("Esc did not close the popup")
+	# The keyboard opens it too: H, like the lobby's other letter keys.
+	await _key_tap_647(KEY_H)
+	if screen.popup_open() != "join_help":
+		failures.append("H did not open the popup (open: '%s')" % screen.popup_open())
+	screen.set_popup("")
+	# The pad menu: Y opens it, then A on the focused button.
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	button.grab_focus()
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	if screen.popup_open() != "join_help":
+		failures.append("A on the focused button did not open the popup (open: '%s')" % screen.popup_open())
+	screen.set_popup("")
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	PadMenuScript368.reset()
+	button.pressed.emit()
+	PadMenuScript368.set_open("lobby", true)
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.popup_open() != "":
+		failures.append("B did not close the popup")
+	PadMenuScript368.reset()
+	button.pressed.emit()
+	screen.join_help().close_button().pressed.emit()
+	if screen.popup_open() != "":
+		failures.append("the X did not close the popup")
+	button.pressed.emit()
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	screen.join_help_popup().gui_input.emit(click)
+	if screen.popup_open() != "":
+		failures.append("a click outside the card did not close the popup")
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_join_help_hidden_online_and_streamer_680() -> Array[String]:
+	var failures: Array[String] = []
+	# Streamer mode: the addresses give way to the notice, like the lobby URL.
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	_sfx().set_hide_room_code(true)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	screen.join_help_button().pressed.emit()
+	if screen.popup_open() != "join_help":
+		failures.append("the popup did not open with streamer mode on")
+	if not _join_help_urls_shown_680(screen.join_help()).is_empty():
+		failures.append("streamer mode still lists %s" % [_join_help_urls_shown_680(screen.join_help())])
+	for url: String in server.join_urls():
+		for label: Label in screen.join_help_popup().find_children("*", "Label", true, false):
+			if label.text.contains(url):
+				failures.append("streamer mode still shows %s in '%s'" % [url, label.name])
+	_sfx().set_hide_room_code(false)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if _join_help_urls_shown_680(screen.join_help()).size() != server.join_urls().size():
+		failures.append("the list did not return with streamer mode off")
+	screen.set_popup("")
+	await _teardown(rig["main"])
+	# Online: no LAN join, no button.
+	var online_rig: Dictionary = await _streamer_rig_369(false, failures)
+	if online_rig.is_empty():
+		return failures
+	var lobby: Object = online_rig["main"].get_node("RoundManager").get("_lobby_screen")
+	lobby.set_popup("join_help") # open when the match goes Online under it
+	online_rig["server"].apply_host_command("kind", "online")
+	await _await_ticks(5)
+	lobby.refresh_lobby.callv(lobby._last_lobby_args)
+	if lobby.join_help_button().visible:
+		failures.append("the button shows in an Online lobby")
+	if lobby.popup_open() == "join_help":
+		failures.append("the popup stayed open after the match went Online")
+	await _key_tap_647(KEY_H)
+	if lobby.popup_open() == "join_help":
+		failures.append("H opened the popup in an Online lobby")
+	await _streamer_close_369(online_rig)
 	_scenario_completed = true
 	return failures

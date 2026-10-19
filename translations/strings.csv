@@ -356,3 +356,12 @@ CAREER_ROUND_WINS,Round wins: %d
 CAREER_KOS,KOs: %d
 CAREER_SELF_KOS,Self-KOs: %d
 CAREER_FAVOURITE,Favourite weapon: %s
+JOIN_HELP_BUTTON,Phones can't join?
+JOIN_HELP_TITLE,Phones can't join?
+JOIN_HELP_FIREWALL,"Firewall: allow Pickfight through when your computer asks (Windows ""Allow access"", macOS incoming connections)."
+JOIN_HELP_ISOLATION,"Guest, hotel or school Wi-Fi often blocks phones from reaching other devices (client isolation): use another network."
+JOIN_HELP_ADAPTER,Wrong network: a VPN or a second adapter can hide the right address. Try another address listed below.
+JOIN_HELP_PHONE_NETWORK,Phone on mobile data or a different Wi-Fi: switch it to the same Wi-Fi as this computer.
+JOIN_HELP_HOTSPOT,Still stuck: start a hotspot on a phone and connect this computer and the other phones to it.
+JOIN_HELP_ADDRESSES,Type one of these into the phone's browser if the QR code fails:
+JOIN_HELP_NO_ADDRESS,No network address found: connect this computer to Wi-Fi or Ethernet.

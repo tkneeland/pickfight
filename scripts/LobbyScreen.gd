@@ -124,6 +124,7 @@ var _countdown_shown: int = 0
 var _mode_cards_by_id: Dictionary = {}
 ## The Stages & Rules button (host only) and the summary line above it (#647).
 var _stages_button: Button
+var _join_help_button: Button # under the join QR, Couch only (#680)
 var _stages_box: VBoxContainer
 var _stages_summary: Label
 var _picked_mode: String = GameModesScript.CLASSIC
@@ -333,6 +334,18 @@ func open_stages_rules() -> bool:
 	_popups.open("stages")
 	return _popups.current() == "stages"
 
+## The Phones can't join? button under the join QR, shown in Couch matches only (#680).
+func join_help_button() -> Button:
+	return _join_help_button
+
+## The Phones can't join? popup's overlay, or null before the lobby was built.
+func join_help_popup() -> Control:
+	return _popups.join_help_overlay() if _popups != null else null
+
+## The Phones can't join? popup's contents (address labels, close button), or null before the lobby was built.
+func join_help():
+	return _popups.join_help_screen() if _popups != null else null
+
 ## The Stages & Rules popup's overlay and screen model, or null before the lobby was built.
 func stages_rules_popup() -> Control:
 	return _popups.stages_overlay() if _popups != null else null
@@ -451,6 +464,11 @@ func _apply_streamer_mode(join_source: Object) -> void:
 	var online: bool = _online_kind(join_source)
 	var solo: bool = online and join_source.has_method("room_closed") and join_source.room_closed()
 	_lobby_url.visible = not online
+	_join_help_button.visible = not online
+	if online and _popups.current() == "join_help":
+		_popups.open("") # the match went Online under the popup: no LAN join to help with
+	var urls: PackedStringArray = join_source.join_urls() if join_source.has_method("join_urls") else PackedStringArray()
+	_popups.set_join_urls(urls, hidden)
 	if online:
 		_lobby_qr.visible = false
 	if online and hidden:
@@ -681,6 +699,9 @@ func _build_left_column() -> Control:
 	_join_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_join_note.visible = false
 	_join_box.add_child(_join_note)
+	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
+	_join_help_button.visible = false # Couch only: Online has no LAN address to fix
+	_join_box.add_child(_join_help_button)
 	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL)
 	mode_title.name = "ModeTitle"
 	left.add_child(mode_title)

@@ -18,6 +18,7 @@ const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const StagesRulesScreenScript := preload("res://scripts/StagesRulesScreen.gd")
+const JoinHelpScreenScript := preload("res://scripts/JoinHelpScreen.gd")
 
 const HELP_WIDTH_PX: float = 920.0
 const LOOK_WIDTH_PX: float = 980.0
@@ -32,6 +33,9 @@ var _look_card: Control
 var _stages: Control
 var _stages_card: Control
 var _stages_screen # StagesRulesScreen.gd, built the first time it opens (#647)
+var _join_help: Control
+var _join_help_card: Control
+var _join_help_screen # JoinHelpScreen.gd (#680)
 var _demo_grid: GridContainer
 var _rule_label: Label
 var _close_button: Button
@@ -92,6 +96,12 @@ func build(parent: Control) -> void:
 	_stages_card = _card(_stages, StagesRulesScreenScript.CARD_WIDTH_PX)
 	_stages_screen = StagesRulesScreenScript.new(_screen)
 
+	# Phones can't join? (#680): the checklist and every join address.
+	_join_help = _overlay("JoinHelpPopup", parent)
+	_join_help_card = _card(_join_help, JoinHelpScreenScript.CARD_WIDTH_PX)
+	_join_help_screen = JoinHelpScreenScript.new(_screen)
+	_join_help_screen.build(_join_help_card, open.bind(""))
+
 ## An overlay: a dim backdrop that closes the popup when clicked, and a centre for the card.
 func _overlay(overlay_name: String, parent: Control) -> Control:
 	var overlay := Control.new()
@@ -141,11 +151,24 @@ func stages_overlay() -> Control:
 func stages_screen():
 	return _stages_screen
 
+## The Phones can't join? overlay (#680), or null before the lobby was built.
+func join_help_overlay() -> Control:
+	return _join_help
+
+## The Phones can't join? contents (address labels, close button).
+func join_help_screen():
+	return _join_help_screen
+
+## Gives the popup the addresses to list and whether streamer mode hides them.
+func set_join_urls(urls: PackedStringArray, hidden: bool) -> void:
+	if _join_help_screen != null:
+		_join_help_screen.set_urls(urls, hidden)
+
 ## The Your look panel, bound to the host PC's seat by HostControls.
 func look_panel() -> Control:
 	return _look_panel
 
-## "help", "look", "stages" or "" for none.
+## "help", "look", "stages", "join_help" or "" for none.
 func current() -> String:
 	return _open
 
@@ -167,7 +190,7 @@ func request_close() -> bool:
 	open("")
 	return true
 
-## Opens popup `which` ("help", "look" or "stages"), closing the other; "" closes
+## Opens popup `which` ("help", "look", "stages" or "join_help"), closing the other; "" closes
 ## any. Stages & Rules is the host's: it stays shut until host controls attach.
 func open(which: String) -> void:
 	if which == _open or _help == null:
@@ -180,6 +203,9 @@ func open(which: String) -> void:
 	_help.visible = which == "help"
 	_look.visible = which == "look"
 	_stages.visible = which == "stages"
+	_join_help.visible = which == "join_help"
+	if which == "join_help":
+		ScreenKitScript.pop_in(_join_help_card)
 	if which == "stages":
 		if not _stages_screen.is_built():
 			_stages_screen.build(_stages_card)
@@ -201,6 +227,8 @@ func _focus_for_pad(which: String) -> void:
 	var target: Control = _close_button if which == "help" else _look_panel.done_button()
 	if which == "stages":
 		target = _stages_screen.focus_target()
+	elif which == "join_help":
+		target = _join_help_screen.close_button()
 	if target != null:
 		target.grab_focus()
 
