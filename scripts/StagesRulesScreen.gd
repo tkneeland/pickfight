@@ -23,7 +23,6 @@ const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 ## Night stages are a per-mode switch beside the round modifiers (#647).
 const NIGHT_ID: String = "night"
-const NIGHT_TITLE: String = "Night stages"
 const CARD_WIDTH_PX: float = 1500.0
 const CARD_HEIGHT_PX: float = 800.0
 const TILE_SIZE: Vector2 = Vector2(152, 122)
@@ -96,14 +95,28 @@ static func modifier_ids() -> PackedStringArray:
 	return ids
 
 static func modifier_title(id: String) -> String:
-	return NIGHT_TITLE if id == NIGHT_ID else RoundModifiersScript.title_of(id)
+	if id == NIGHT_ID:
+		return TranslationServer.translate("SR_NIGHT_STAGES")
+	var title: String = RoundModifiersScript.title_of(id)
+	return _translated("MODIFIER_" + title.to_upper().replace(" ", "_"), title)
 
-static func _count(count: int, noun: String) -> String:
-	return "%d %s%s" % [count, noun, "" if count == 1 else "s"]
+## The translation of `key`, or `fallback` when no row has that key.
+static func _translated(key: String, fallback: String) -> String:
+	var shown: String = TranslationServer.translate(key)
+	return fallback if shown == key else shown
+
+## A stage's on-screen name: its translated name, or the spaced node name.
+static func stage_label(stage_name: String) -> String:
+	return _translated("STAGE_" + stage_name.to_upper(), pretty_name(stage_name))
+
+## A weapon's on-screen name: its translated name, or the spaced id.
+static func weapon_label(weapon_name: String) -> String:
+	return _translated("WEAPON_" + weapon_name.to_upper(), weapon_name.capitalize())
 
 ## "39 stages" for the lobby's status line.
 static func stage_count_text(mode_id: String) -> String:
-	return _count(stages_on(mode_id), "stage")
+	var count: int = stages_on(mode_id)
+	return TranslationServer.translate("SR_STAGE_COUNT_ONE" if count == 1 else "SR_STAGE_COUNT") % count
 
 ## The one-line summary under the lobby's mode cards: "39 stages on · modifiers on".
 static func summary(mode_id: String) -> String:
@@ -116,12 +129,12 @@ static func summary(mode_id: String) -> String:
 		open += 1
 		if host.is_modifier_enabled(mode_id, id):
 			on += 1
-	var mods: String = "modifiers off"
+	var mods: String = TranslationServer.translate("SR_MODS_OFF")
 	if open > 0 and on == open:
-		mods = "modifiers on"
+		mods = TranslationServer.translate("SR_MODS_ON")
 	elif on > 0:
-		mods = "%d of %d modifiers on" % [on, open]
-	return "%s on · %s" % [stage_count_text(mode_id), mods]
+		mods = TranslationServer.translate("SR_MODS_SOME") % [on, open]
+	return TranslationServer.translate("SR_SUMMARY") % [stage_count_text(mode_id), mods]
 
 # --- Building ------------------------------------------------------------------
 
@@ -136,11 +149,11 @@ func build(card: Control) -> void:
 	var head := HBoxContainer.new()
 	head.name = "Head"
 	box.add_child(head)
-	var title: Label = ScreenKitScript.themed_label("Stages & Rules", 40, UiThemeScript.INK_HEADING_LABEL)
+	var title: Label = ScreenKitScript.themed_label(TranslationServer.translate("SR_TITLE"), 40, UiThemeScript.INK_HEADING_LABEL)
 	title.name = "Title"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	_done = _button("Done", UiThemeScript.YELLOW_BUTTON, 26)
+	_done = _button(TranslationServer.translate("SR_DONE"), UiThemeScript.YELLOW_BUTTON, 26)
 	_done.name = "Done"
 	_done.custom_minimum_size = Vector2(150, 52)
 	head.add_child(_done)
@@ -189,14 +202,14 @@ func _build_grid_column() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	column.add_child(row)
-	var label: Label = ScreenKitScript.themed_label("Stages", 26, UiThemeScript.INK_HEADING_LABEL)
+	var label: Label = ScreenKitScript.themed_label(TranslationServer.translate("SR_STAGES"), 26, UiThemeScript.INK_HEADING_LABEL)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
-	_all_on = _button("All on", UiThemeScript.SKY_BUTTON, 20)
+	_all_on = _button(TranslationServer.translate("SR_ALL_ON"), UiThemeScript.SKY_BUTTON, 20)
 	_all_on.name = "AllOn"
 	_all_on.pressed.connect(_set_all.bind(true))
 	row.add_child(_all_on)
-	_all_off = _button("All off", UiThemeScript.PINK_BUTTON, 20)
+	_all_off = _button(TranslationServer.translate("SR_ALL_OFF"), UiThemeScript.PINK_BUTTON, 20)
 	_all_off.name = "AllOff"
 	_all_off.pressed.connect(_set_all.bind(false))
 	row.add_child(_all_off)
@@ -246,7 +259,7 @@ func _build_side_column() -> Control:
 	rules.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rules.add_theme_constant_override("separation", 6)
 	scroll.add_child(rules)
-	rules.add_child(ScreenKitScript.themed_label("Round modifiers", 24, UiThemeScript.INK_HEADING_LABEL))
+	rules.add_child(ScreenKitScript.themed_label(TranslationServer.translate("SR_ROUND_MODIFIERS"), 24, UiThemeScript.INK_HEADING_LABEL))
 	_modifier_note = ScreenKitScript.themed_label("", TEXT_PX, UiThemeScript.INK_BOLD_LABEL)
 	_modifier_note.name = "ModifierNote"
 	_modifier_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -258,11 +271,11 @@ func _build_side_column() -> Control:
 		button.pressed.connect(_on_modifier.bind(id))
 		_mods_box.add_child(button)
 		_mod_buttons[id] = button
-	rules.add_child(ScreenKitScript.themed_label("Weapons (every mode)", 24, UiThemeScript.INK_HEADING_LABEL))
+	rules.add_child(ScreenKitScript.themed_label(TranslationServer.translate("SR_WEAPONS"), 24, UiThemeScript.INK_HEADING_LABEL))
 	_weapons_box = _switch_grid("Weapons")
 	rules.add_child(_weapons_box)
 	for weapon_name: String in HostSettingsScript.known_weapons():
-		var button: Button = _switch(weapon_name.capitalize(), weapon_name)
+		var button: Button = _switch(weapon_label(weapon_name), weapon_name)
 		button.pressed.connect(_on_weapon.bind(weapon_name))
 		_weapons_box.add_child(button)
 		_weapon_buttons[weapon_name] = button
@@ -337,7 +350,7 @@ func select_tab(id: String) -> void:
 func _make_tile(stage_name: String) -> Button:
 	var tile := Button.new()
 	tile.name = stage_name
-	tile.text = pretty_name(stage_name)
+	tile.text = stage_label(stage_name)
 	tile.toggle_mode = true
 	tile.clip_text = true
 	tile.theme_type_variation = UiThemeScript.PICK_BUTTON
@@ -361,7 +374,7 @@ func _texture(stage_name: String) -> Texture2D:
 	return _textures[stage_name] as Texture2D
 
 func _show_stage(stage_name: String) -> void:
-	_preview_name.text = pretty_name(stage_name)
+	_preview_name.text = stage_label(stage_name)
 	_preview_rect.texture = _texture(stage_name) if stage_name != "" else null
 
 ## The stage tile for `stage_name` on the current tab, or null.
@@ -460,9 +473,9 @@ func _sync() -> void:
 		button.set_pressed_no_signal(host.is_modifier_enabled(_tab_id, id))
 		button.disabled = banned
 		button.modulate = DIM if banned or not button.button_pressed else Color.WHITE
-		button.tooltip_text = "Not allowed in %s" % GameModesScript.display_name(_tab_id) if banned else ""
+		button.tooltip_text = TranslationServer.translate("SR_NOT_ALLOWED_IN") % GameModesScript.display_name(_tab_id) if banned else ""
 	_modifier_note.visible = locked
-	_modifier_note.text = "%s plays without modifiers." % GameModesScript.display_name(_tab_id) if locked else ""
+	_modifier_note.text = TranslationServer.translate("SR_NO_MODIFIERS") % GameModesScript.display_name(_tab_id) if locked else ""
 	for weapon_name: String in _weapon_buttons:
 		var weapon: Button = _weapon_buttons[weapon_name]
 		weapon.set_pressed_no_signal(host.is_weapon_enabled(weapon_name))
@@ -475,8 +488,8 @@ func _footer_line() -> String:
 	var empty: Array[String] = empty_tabs()
 	if not empty.is_empty():
 		if empty.has(_tab_id):
-			return "Switch on at least one stage"
-		return "Switch on at least one stage in %s" % GameModesScript.display_name(empty[0])
+			return TranslationServer.translate("SR_FOOTER_ONE_STAGE")
+		return TranslationServer.translate("SR_FOOTER_ONE_STAGE_IN") % GameModesScript.display_name(empty[0])
 	var pool: PackedStringArray = settings().stages_for_mode(_tab_id)
 	var on_names := PackedStringArray()
 	for stage_name: String in pool:
@@ -484,6 +497,6 @@ func _footer_line() -> String:
 			on_names.append(stage_name)
 	if _tab_id == GameModesScript.STOCK:
 		if on_names.size() == 1:
-			return "Stock plays on %s" % pretty_name(on_names[0])
-		return "Stock picks one at random from %d stages" % on_names.size()
-	return "Each round draws from %d of %d stages" % [on_names.size(), pool.size()]
+			return TranslationServer.translate("SR_STOCK_ONE") % stage_label(on_names[0])
+		return TranslationServer.translate("SR_STOCK_RANDOM") % on_names.size()
+	return TranslationServer.translate("SR_DRAWS") % [on_names.size(), pool.size()]

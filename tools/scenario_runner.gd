@@ -553,6 +553,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_panel_language_row_lists_languages_and_switches_live_688",
 	"phone_page_has_every_english_string_in_every_language_688",
 	"ui_fonts_allow_system_fallback_for_cjk_688",
+	"lobby_and_hud_show_no_untranslated_english_693",
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
@@ -2400,6 +2401,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_phone_languages_688()
 		"ui_fonts_allow_system_fallback_for_cjk_688":
 			return _scenario_font_fallback_688()
+		"lobby_and_hud_show_no_untranslated_english_693":
+			return await _scenario_no_english_693()
 		"per_mode_stage_lists_persist_separately_647":
 			return await _scenario_per_mode_stage_lists_persist_separately_647()
 		"stock_with_one_stage_on_always_plays_it_647":
@@ -43614,5 +43617,72 @@ func _scenario_font_fallback_688() -> Array[String]:
 	var ja: PackedStringArray = languages.fallback_font_names("ja")
 	if zh.find("Hiragino Sans GB") > zh.find("Hiragino Sans") or ja.find("Hiragino Sans") > ja.find("Hiragino Sans GB"):
 		failures.append("each language's own system font should lead its fallback chain")
+	_scenario_completed = true
+	return failures
+
+
+# --- Untranslated English sweep (issue #693) ---------------------------------------
+
+## English strings this sweep moved into strings.csv; none may show in Japanese.
+const ENGLISH_DENYLIST_693: Array[String] = [
+	"stages", "stage", "modifiers", "Stages & Rules", "Bot ", "Done", "All on", "All off", "Round modifiers",
+	"Weapons", "Night", "Not allowed", "plays without", "Switch on", "draws from", "picks one", "Staff", "Sword",
+	"Axe", "Dagger", "Boomstick", "Grapple", "Flail", "Boomerang", "Fishing Rod", "Umbrella", "Magnet", "Shield",
+	"Low Gravity", "Heavy", "Big Heads", "Fast Lava", "Slippery", "Tiny", "Roulette", "Meteor", "Bouncy", "Double Damage",
+	"Flatlands", "Pillars", "Highrise", "Furnace", "Gauntlet", "Final Destination", "Battlefield",
+]
+
+func _texts_693(root: Node, into: Dictionary) -> void:
+	for node: Node in root.find_children("*", "Control", true, false) + [root]:
+		var control: Control = node as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		if control is Label or control is BaseButton or control is RichTextLabel:
+			into[str(control.get("text"))] = control.name
+		if control is LineEdit:
+			into[str((control as LineEdit).placeholder_text)] = control.name
+		if control.tooltip_text != "":
+			into[control.tooltip_text] = control.name
+
+func _scenario_no_english_693() -> Array[String]:
+	var failures: Array[String] = []
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.set_locale("ja")
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	server.apply_host_command("bots", 3)
+	await _await_ticks(4)
+	var seen: Dictionary = {}
+	screen.show_title(true)
+	await _await_ticks(2)
+	_texts_693(screen, seen)
+	screen.show_title(false)
+	await _await_ticks(2)
+	_texts_693(screen, seen)
+	for which: String in ["help", "look", "join_help"]:
+		screen.set_popup(which)
+		await _await_ticks(3)
+		_texts_693(screen, seen)
+	screen.set_popup("")
+	if screen.open_stages_rules():
+		var view = screen.stages_rules()
+		for tab: String in view.tab_ids():
+			view.select_tab(tab)
+			await _await_ticks(2)
+			_texts_693(screen, seen)
+	# A round in play: the HUD, the stage title and the kill feed.
+	server.apply_host_command("start", 0)
+	await _await_ticks(240)
+	_texts_693(rig["main"], seen)
+	if OS.get_environment("DUMP693") != "":
+		for t: String in seen:
+			print("TEXT693 ", t.replace("\n", " | "), "   [", seen[t], "]")
+	for t: String in seen:
+		for bad: String in ENGLISH_DENYLIST_693:
+			if t.contains(bad):
+				failures.append("'%s' (%s) still shows English '%s' in Japanese" % [t.left(40), seen[t], bad])
+	await _teardown(rig["main"])
+	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures
