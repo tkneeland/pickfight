@@ -1806,6 +1806,17 @@ func _lobby_text() -> String:
 func slot_name(slot: int) -> String:
 	return _slot_name[slot] if slot >= 0 and slot < _slot_name.size() else ""
 
+## What the host screen shows for a slot's name: the stored name, except a bot's
+## "Bot N" or a gamepad's "Pad N" fallback, which read in the host's language.
+## The stored name stays English, since bots and tests identify slots by it.
+func slot_display_name(slot: int) -> String:
+	var stored: String = slot_name(slot)
+	if is_virtual(slot) and stored.begins_with("Bot ") and stored.substr(4).is_valid_int():
+		return TranslationServer.translate("BOT_NAME") % int(stored.substr(4))
+	if stored.begins_with("Pad ") and stored.substr(4).is_valid_int() and not is_virtual(slot):
+		return TranslationServer.translate("PAD_NAME") % int(stored.substr(4))
+	return stored
+
 ## Code points a nickname may use (issue #164), as inclusive [first, last]
 ## pairs: printable text in every script, punctuation, symbols and emoji. Left
 ## out: control and format characters (zero-width ones, bidi embeddings,
