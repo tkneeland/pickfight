@@ -164,6 +164,11 @@ func set_join_urls(urls: PackedStringArray, hidden: bool) -> void:
 	if _join_help_screen != null:
 		_join_help_screen.set_urls(urls, hidden)
 
+## Redraws the popup's internet-fallback block from `server` (#683).
+func refresh_internet(server: Object) -> void:
+	if _join_help_screen != null:
+		_join_help_screen.refresh_internet(server)
+
 ## The Your look panel, bound to the host PC's seat by HostControls.
 func look_panel() -> Control:
 	return _look_panel

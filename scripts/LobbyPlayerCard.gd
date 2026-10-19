@@ -165,6 +165,8 @@ func apply(info: Dictionary) -> void:
 		suffix = tr("LOBBY_YOU_TAG")
 	elif bool(info.get("host", false)):
 		suffix = tr("LOBBY_HOST_TAG")
+	if bool(info.get("relay", false)):
+		suffix += tr("LOBBY_INTERNET_TAG")
 	_name.text = "%s%s" % [info.get("name", ""), suffix]
 	var colour: Color = info.get("color", Color.WHITE)
 	if colour != _strip_color:
