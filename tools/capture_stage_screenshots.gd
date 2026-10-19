@@ -6,18 +6,22 @@ extends SceneTree
 ## indices labelled and pickup spots drawn as yellow rings. Not part of the
 ## suite -- headless Godot does not render, so run it windowed, by hand:
 ##
-##   godot --path . -s tools/capture_stage_screenshots.gd -- --out=/abs/dir [--stages=Flatlands,Bowl]
+##   godot --path . -s tools/capture_stage_screenshots.gd -- --out=/abs/dir [--stages=Flatlands,Bowl] [--rise]
 ##
 ## Writes <out>/<Stage>.png per stage and quits. A body that died or slid off
 ## its spawn in those 90 ticks shows up as missing or out of place.
 const PlayerScene: PackedScene = preload("res://scenes/Player.tscn")
 const COLOURS: Array[Color] = [Color(0.9,0.2,0.2), Color(0.2,0.45,1), Color(0.2,0.85,0.3), Color(1,0.85,0.1), Color(0.8,0.3,0.9), Color(1,0.55,0.1), Color(0.2,0.9,0.9), Color(1,1,1)]
 var _out: String = ""
+## --rise (#687): start the floor lava rising (no grace) with its surface lifted to
+## a third of the way up the view, so the lava art is in the picture.
+var _rise: bool = false
 ## Default: the rotation, in STAGE_PATHS order.
 var _stages: PackedStringArray = ["Flatlands","Pillars","Ferry","Highrise","Erosion","Islands","Furnace","Gauntlet","Cascade","Slant","Bowl","Springboard","Gale","Carousel","Rockfall","Sinkhole","Bulwark","Pistons","Overpass","Ziggurat"]
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="): _out = arg.trim_prefix("--out=")
+		elif arg == "--rise": _rise = true
 		elif arg.begins_with("--stages="): _stages = arg.trim_prefix("--stages=").split(",")
 	DirAccess.make_dir_recursive_absolute(_out)
 	_run()
@@ -35,6 +39,11 @@ func _run() -> void:
 		cam.zoom = Vector2.ONE * inst.zoom_for_view(view.size)
 		cam.global_position = view.get_center()
 		cam.reset_smoothing()
+		if _rise:
+			var kz: Node = inst.get_node_or_null("KillZone")
+			if kz != null and kz.has_method("start_rising"):
+				kz.position.y += (view.position.y + view.size.y * 0.78) - kz.surface_y()
+				kz.start_rising(0.0, 0.0)
 		var spawns: Array[Vector2] = inst.get_spawn_points()
 		for i in mini(spawns.size(), 8):
 			var p: RigidBody2D = PlayerScene.instantiate()

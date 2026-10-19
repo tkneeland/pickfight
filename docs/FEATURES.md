@@ -42,7 +42,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - #315 added Footbridge (crumbling ledges, moving platform, spikes), Gantry (moving platform, saw, spikes) and Vent (fan, gust, spikes), and sprinkled spikes, a saw and a crumbling ledge into Gauntlet, Islands and Flatlands; shuffled bag rotation (#20, ADR-0011); #376 added four no-frills competitive stages (flagged `competitive`, symmetrical, no hazards or moving parts): Final Destination (flat), Battlefield (3 platforms), Pocket (small) and Colosseum (large, 5+ players)
 - Wide maps with 8 spawn points each (#137, #138)
 - Large stages with a per-stage camera view, dealt at 5+ players (#144); five stages count as large since their `view_size` is 2240 wide (#649): Pitch, Dunes, Cage, Bastion and Stronghold, which in other modes are dealt only at 5+ players, while Soccer and Capture the Flag always use them
-- Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280)
+- Parts: lava/hazard zones, moving platforms, crumbling ledges (#18, #279, #280) Hazard art polish (#687): lava has an animated wavy glowing edge, depth gradient and embers, lava blocks drift glow blobs, spikes have lit teeth and a dark base, saws have hooked teeth and a hub (visual only).
 - Parts: bounce pad, wind zone, rotating platform (#52)
 - Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)

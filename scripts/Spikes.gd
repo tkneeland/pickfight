@@ -32,6 +32,28 @@ func _ready() -> void:
 	_visual.color = DEFAULT_COLOR
 	_visual.polygon = points
 	add_child(_visual)
+	# Readable silhouette (#687): a lit left face on every tooth and a dark base bar.
+	var lit := PackedVector2Array()
+	var faces: Array = []
+	for i in teeth:
+		var x0: float = -half.x + size.x * float(i) / float(teeth)
+		var x1: float = -half.x + size.x * float(i + 1) / float(teeth)
+		var k: int = lit.size()
+		lit.append(Vector2(x0, half.y))
+		lit.append(Vector2((x0 + x1) / 2.0, -half.y))
+		lit.append(Vector2((x0 + x1) / 2.0, half.y))
+		faces.append(PackedInt32Array([k, k + 1, k + 2]))
+	var shine := Polygon2D.new()
+	shine.name = "SpikesShine"
+	shine.color = Color(1, 1, 1, 0.28)
+	shine.polygon = lit
+	shine.polygons = faces
+	_visual.add_child(shine)
+	var base := Polygon2D.new()
+	base.name = "SpikesBase"
+	base.color = Color(0, 0, 0, 0.4)
+	base.polygon = PackedVector2Array([Vector2(-half.x, half.y - 6.0), Vector2(half.x, half.y - 6.0), Vector2(half.x, half.y), Vector2(-half.x, half.y)])
+	_visual.add_child(base)
 
 func set_hazard_color(colour: Color) -> void:
 	if _visual != null:
