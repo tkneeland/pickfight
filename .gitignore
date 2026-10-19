@@ -27,3 +27,6 @@ data_*/
 steam_appid.txt
 # GodotSteam binaries (#428): installed by tools/fetch_godotsteam.sh, never committed
 addons/godotsteam/
+
+# Sentry Godot SDK binaries (#681): installed by tools/fetch_sentry.sh, never committed
+addons/sentry/

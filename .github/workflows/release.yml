@@ -56,6 +56,12 @@ jobs:
       - name: Install GodotSteam (#428)
         run: bash tools/fetch_godotsteam.sh
 
+      - name: Install Sentry Godot SDK (#681)
+        run: bash tools/fetch_sentry.sh
+
+      - name: Stamp the build version (#681)
+        run: perl -pi -e 's|^config/icon=|config/version="$ENV{GITHUB_REF_NAME}"\nconfig/icon=|' project.godot
+
       - name: Import project
         run: '"$GODOT_DIR/godot" --headless --path . --import'
 

@@ -556,6 +556,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_and_hud_show_no_untranslated_english_693",
 	"steam_platform_is_dormant_under_the_runner_428",
 	"steam_platform_autoload_registered_and_loads_without_steam_428",
+	"crash_reporting_never_inits_under_the_runner_681",
+	"crash_reporting_needs_a_dsn_and_every_other_condition_681",
+	"crash_reports_opt_out_persists_681",
+	"crash_reports_settings_row_681",
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
@@ -2413,6 +2417,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_steam_dormant_428()
 		"steam_platform_autoload_registered_and_loads_without_steam_428":
 			return _scenario_steam_autoload_428()
+		"crash_reporting_never_inits_under_the_runner_681":
+			return _scenario_crash_reporting_never_inits_under_the_runner_681()
+		"crash_reporting_needs_a_dsn_and_every_other_condition_681":
+			return _scenario_crash_reporting_needs_a_dsn_and_every_other_condition_681()
+		"crash_reports_opt_out_persists_681":
+			return _scenario_crash_reports_opt_out_persists_681()
+		"crash_reports_settings_row_681":
+			return await _scenario_crash_reports_settings_row_681()
 		"per_mode_stage_lists_persist_separately_647":
 			return await _scenario_per_mode_stage_lists_persist_separately_647()
 		"stock_with_one_stage_on_always_plays_it_647":
@@ -43964,5 +43976,121 @@ func _scenario_steam_autoload_428() -> Array[String]:
 		if fresh.available:
 			failures.append("a fresh wrapper should not be available without Steam")
 		fresh.queue_free()
+	_scenario_completed = true
+	return failures
+# --- Issue #681: opt-out crash reporting --------------------------------------
+const CrashReportingScript681 := preload("res://scripts/CrashReporting.gd")
+## Under the scenario runner the wrapper never inits, whether or not the Sentry
+## addon is installed here: the live autoload reports inactive, and the gate says
+## no for a scripted run with the addon present and with it absent.
+func _scenario_crash_reporting_never_inits_under_the_runner_681() -> Array[String]:
+	var failures: Array[String] = []
+	var live: Node = get_root().get_node_or_null(^"CrashReporting")
+	if live == null:
+		return ["the CrashReporting autoload is missing"]
+	if live.active:
+		failures.append("the autoload reported active under the scenario runner")
+	if not StatsSenderScript372.is_scripted(get_root().get_tree(), PackedStringArray()):
+		failures.append("test setup: the runner is not seen as a scripted run")
+	for addon_present: bool in [true, false]:
+		if CrashReportingScript681.should_init(addon_present, "https://k@o.ingest.sentry.io/1", true, false, false, false):
+			failures.append("a scripted run would init (addon present %s)" % addon_present)
+	_scenario_completed = true
+	return failures
+## The gate is a pure function: an empty or blank DSN means inactive even when
+## every other condition is met, and each other condition alone also blocks it.
+func _scenario_crash_reporting_needs_a_dsn_and_every_other_condition_681() -> Array[String]:
+	var failures: Array[String] = []
+	var dsn: String = "https://k@o.ingest.sentry.io/1"
+	if not CrashReportingScript681.should_init(true, dsn, false, false, false, false):
+		failures.append("all conditions met but the gate said no")
+	for blank: String in ["", "   "]:
+		if CrashReportingScript681.should_init(true, blank, false, false, false, false):
+			failures.append("DSN '%s' did not block init" % blank)
+	if CrashReportingScript681.should_init(false, dsn, false, false, false, false):
+		failures.append("a missing addon did not block init")
+	if CrashReportingScript681.should_init(true, dsn, true, false, false, false):
+		failures.append("a scripted run did not block init")
+	if CrashReportingScript681.should_init(true, dsn, false, true, false, false):
+		failures.append("a headless run did not block init")
+	if CrashReportingScript681.should_init(true, dsn, false, false, true, false):
+		failures.append("an editor run did not block init")
+	if CrashReportingScript681.should_init(true, dsn, false, false, false, true):
+		failures.append("an opt-out did not block init")
+	if CrashReportingScript681.environment_name(true) != "demo" or CrashReportingScript681.environment_name(false) != "release":
+		failures.append("environment is not demo/release")
+	if str(ProjectSettings.get_setting("pickfight/sentry_dsn", "unset")) != "":
+		failures.append("the shipped DSN setting is not empty")
+	_scenario_completed = true
+	return failures
+## Crash reports default on, the choice persists, and an opted-out player is
+## inactive even with everything else in place.
+func _scenario_crash_reports_opt_out_persists_681() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = OS.get_temp_dir().path_join("pf_681_crash_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = HostSettingsScript372.new()
+	fresh.path = path
+	fresh.load_settings()
+	if not fresh.send_crash_reports:
+		failures.append("crash reports should default to on")
+	fresh.set_send_crash_reports(false)
+	var reloaded: RefCounted = HostSettingsScript372.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.send_crash_reports:
+		failures.append("off did not persist across a reload")
+	if CrashReportingScript681.should_init(true, "https://k@o.ingest.sentry.io/1", false, false, false, not reloaded.send_crash_reports):
+		failures.append("an opted-out player would init")
+	reloaded.set_send_crash_reports(true)
+	var again: RefCounted = HostSettingsScript372.new()
+	again.path = path
+	again.load_settings()
+	if not again.send_crash_reports:
+		failures.append("on did not persist across a reload")
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+## The Settings row exists in More options, precedes the stats box (which stays last), writes the
+## host setting and is in the gamepad focus chain.
+func _scenario_crash_reports_settings_row_681() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var was: RefCounted = ui.host
+	var host: RefCounted = HostSettingsScript372.new()
+	host.persist = false
+	ui.host = host
+	ui.refresh()
+	var box: CheckBox = ui.crash_box()
+	if box == null:
+		ui.host = was
+		return ["the Send crash reports box is missing"]
+	if not box.button_pressed:
+		failures.append("the box should start ticked")
+	if box.text.is_empty() or box.text == "SETTINGS_SEND_CRASH_REPORTS":
+		failures.append("the box label is not translated: '%s'" % box.text)
+	if box.get_parent() != ui.stats_box().get_parent() or box.get_index() != ui.stats_box().get_index() - 1:
+		failures.append("the box is not right before the stats box, which stays last")
+	box.button_pressed = false
+	if host.send_crash_reports:
+		failures.append("unticking did not turn off host.send_crash_reports")
+	ui.more_box().button_pressed = true
+	if ui.is_open():
+		ui.toggle_panel()
+	ui.telemetry_notice().visible = false
+	ui.pad_toggle()
+	if box.focus_mode != Control.FOCUS_ALL:
+		failures.append("the box is not focusable with the gamepad")
+	var down: Control = box.get_node_or_null(box.focus_neighbor_bottom)
+	if down != ui.stats_box():
+		failures.append("the box is not chained above the stats box")
+	ui.pad_toggle()
+	ui.more_box().button_pressed = false
+	ui.host = was
+	ui.refresh()
 	_scenario_completed = true
 	return failures
