@@ -1,0 +1,18 @@
+[configuration]
+entry_symbol = "godotsteam_init"
+compatibility_minimum = "4.4"
+
+; Trimmed from GodotSteam GDExtension 4.23.1: macOS (universal), Windows x86_64
+; and Linux x86_64 only. See docs/steam-readiness.md item 6.1.
+[libraries]
+linux.debug.x86_64 = "res://addons/godotsteam/linux64/libgodotsteam.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/godotsteam/linux64/libgodotsteam.linux.template_release.x86_64.so"
+macos.debug = "res://addons/godotsteam/osx/libgodotsteam.macos.template_debug.universal.dylib"
+macos.release = "res://addons/godotsteam/osx/libgodotsteam.macos.template_release.universal.dylib"
+windows.debug.x86_64 = "res://addons/godotsteam/win64/libgodotsteam.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/godotsteam/win64/libgodotsteam.windows.template_release.x86_64.dll"
+
+[dependencies]
+linux.x86_64 = { "res://addons/godotsteam/linux64/libsteam_api.so": "" }
+macos.universal = { "res://addons/godotsteam/osx/libsteam_api.dylib": "" }
+windows.x86_64 = { "res://addons/godotsteam/win64/steam_api64.dll": "" }

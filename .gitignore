@@ -22,3 +22,8 @@ data_*/
 !test-results/
 !test-results/**
 # atlas-v3:gitignore:end
+
+# Steam dev app ID (Spacewar 480); see docs/steam-readiness.md 6.1
+steam_appid.txt
+# GodotSteam binaries (#428): installed by tools/fetch_godotsteam.sh, never committed
+addons/godotsteam/

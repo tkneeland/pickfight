@@ -53,6 +53,9 @@ jobs:
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$dir/"
 
+      - name: Install GodotSteam (#428)
+        run: bash tools/fetch_godotsteam.sh
+
       - name: Import project
         run: '"$GODOT_DIR/godot" --headless --path . --import'
 
