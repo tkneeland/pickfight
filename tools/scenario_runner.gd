@@ -545,6 +545,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_goals_are_the_match_and_each_goal_changes_pitch_646",
 	"soccer_with_one_pitch_on_stays_on_it_646",
 	"per_mode_stage_lists_persist_separately_647",
+	"bot_difficulty_setting_persists_and_host_command_sets_it_682",
+	"bot_difficulty_scales_reaction_easy_slower_hard_faster_682",
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
@@ -2376,6 +2378,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_match_is_one_round_then_the_podium_644()
 		"soccer_goals_are_the_match_and_each_goal_changes_pitch_646":
 			return await _score_match_run(true, SOCCER_PITCH_PATHS, false)
+		"bot_difficulty_setting_persists_and_host_command_sets_it_682":
+			return _scenario_bot_difficulty_setting_682()
+		"bot_difficulty_scales_reaction_easy_slower_hard_faster_682":
+			return _scenario_bot_difficulty_reaction_682()
 		"per_mode_stage_lists_persist_separately_647":
 			return await _scenario_per_mode_stage_lists_persist_separately_647()
 		"stock_with_one_stage_on_always_plays_it_647":
@@ -43309,5 +43315,56 @@ func _scenario_join_help_hidden_online_and_streamer_680() -> Array[String]:
 	if lobby.popup_open() == "join_help":
 		failures.append("H opened the popup in an Online lobby")
 	await _streamer_close_369(online_rig)
+	_scenario_completed = true
+	return failures
+
+# --- Bot difficulty (issue #682) -------------------------------------------------
+## Normal by default, only the three levels accepted, saved and reloaded, and
+## the host command sets it.
+func _scenario_bot_difficulty_setting_682() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://bot_difficulty_682.cfg"
+	DirAccess.remove_absolute(path)
+	var fresh: RefCounted = StockSettingsScript.new()
+	fresh.path = path
+	if fresh.bot_difficulty != "normal":
+		failures.append("default was %s; want normal" % fresh.bot_difficulty)
+	fresh.persist = true
+	if fresh.set_bot_difficulty("impossible") or fresh.bot_difficulty != "normal":
+		failures.append("an unknown level was taken")
+	fresh.set_bot_difficulty("hard")
+	var reloaded: RefCounted = StockSettingsScript.new()
+	reloaded.path = path
+	reloaded.load_settings()
+	if reloaded.bot_difficulty != "hard":
+		failures.append("reloaded %s; want hard" % reloaded.bot_difficulty)
+	DirAccess.remove_absolute(path)
+	var shared: RefCounted = StockSettingsScript.shared()
+	var old: String = shared.bot_difficulty
+	var server: Node = ControllerServerScript.new()
+	if not server.apply_host_command("bot_difficulty", "easy") or shared.bot_difficulty != "easy":
+		failures.append("the bot_difficulty command did not set easy")
+	if server.apply_host_command("bot_difficulty", "nope") or server.apply_host_command("bot_difficulty", 3):
+		failures.append("a bad bot_difficulty was taken")
+	server.free()
+	shared.bot_difficulty = old
+	_scenario_completed = true
+	return failures
+## Hard reacts faster than Normal, Normal faster than Easy, and Normal keeps
+## today's constants (0.15 s aim, 0.22 s swing); Easy throws the aim off, the others do not.
+func _scenario_bot_difficulty_reaction_682() -> Array[String]:
+	var failures: Array[String] = []
+	var times: Dictionary = {}
+	for level: String in ["easy", "normal", "hard"]:
+		var bot: Node = BotScript.new()
+		bot.difficulty = level
+		times[level] = bot.react_sec(0.15)
+		if level == "normal" and (bot.react_sec(0.15) != 0.15 or bot.react_sec(0.22) != 0.22 or bot.skill()["aim_error"] != 0.0 or bot.skill()["pickup"] != 1.0):
+			failures.append("Normal changed today's constants")
+		if level == "easy" and float(bot.skill()["aim_error"]) <= 0.0:
+			failures.append("Easy has no aim error")
+		bot.free()
+	if not (times["hard"] < times["normal"] and times["normal"] < times["easy"]):
+		failures.append("reaction times not hard < normal < easy: %s" % str(times))
 	_scenario_completed = true
 	return failures

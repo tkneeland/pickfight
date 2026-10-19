@@ -83,6 +83,10 @@ var stock_time_limit: int = 480
 const MIN_MODE_TARGET: int = 1
 const MAX_MODE_TARGET: int = 10
 var soccer_goals: int = 3
+## Bot skill (#682), one for every bot in the room: "easy", "normal" (today's
+## bots) or "hard". `Bot.gd` holds the multiplier table.
+const BOT_DIFFICULTIES: Array[String] = ["easy", "normal", "hard"]
+var bot_difficulty: String = "normal"
 var ctf_captures: int = 2
 ## The host PC seat's saved look (#441): {"hat", "eyes", "color"} as
 ## `CosmeticsPicker.clean_pick` cleans it, put on whenever the seat is claimed.
@@ -291,6 +295,13 @@ func set_stock_lives(lives: int) -> void:
 	stock_lives = clampi(lives, STOCK_MIN_LIVES, STOCK_MAX_LIVES)
 	save_settings()
 
+func set_bot_difficulty(level: String) -> bool:
+	if not BOT_DIFFICULTIES.has(level):
+		return false
+	bot_difficulty = level
+	save_settings()
+	return true
+
 func set_soccer_goals(goals: int) -> void:
 	soccer_goals = clampi(goals, MIN_MODE_TARGET, MAX_MODE_TARGET)
 	save_settings()
@@ -409,6 +420,8 @@ func load_settings() -> void:
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
 		soccer_goals = clampi(int(goals), MIN_MODE_TARGET, MAX_MODE_TARGET) if goals is int else 3
+		var skill: Variant = config.get_value(SECTION, "bot_difficulty", "normal")
+		bot_difficulty = skill if skill is String and BOT_DIFFICULTIES.has(skill) else "normal"
 		var captures: Variant = config.get_value(SECTION, "ctf_captures", 2)
 		ctf_captures = clampi(int(captures), MIN_MODE_TARGET, MAX_MODE_TARGET) if captures is int else 2
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
@@ -435,6 +448,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
+	config.set_value(SECTION, "bot_difficulty", bot_difficulty)
 	config.set_value(SECTION, "ctf_captures", ctf_captures)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
 	(load("res://scripts/CosmeticsPicker.gd") as GDScript).write_pick(config, SECTION, cosmetic_pick)

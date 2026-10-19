@@ -24,6 +24,7 @@ const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 const CONTROL_KEYS: Dictionary = {
 	"local": KEY_C, "online": KEY_O, "solo": KEY_S, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
@@ -38,7 +39,7 @@ const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
-const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
+const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "bot_skill", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
 
 var _screen # the LobbyScreen
 var _controls: Dictionary = {}
@@ -182,6 +183,17 @@ func _build_host_panel(parent: Control) -> void:
 	_controls["bots"] = bots_count
 	box.add_child(_stepper_row(ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_BOTS"), 22, UiThemeScript.INK_BOLD_LABEL),
 		_step_button("bots_down", "-"), bots_count, _step_button("bots_up", "+")))
+	var skill: Button = ScreenKitScript.themed_button(_screen.tr("BOT_SKILL_NORMAL"), UiThemeScript.VALUE_BUTTON, "bot_skill")
+	skill.custom_minimum_size = Vector2(110, STEP_BUTTON_PX)
+	skill.pressed.connect(press_control.bind("bot_skill"))
+	_controls["bot_skill"] = skill
+	var skill_row := HBoxContainer.new()
+	skill_row.add_theme_constant_override("separation", 10)
+	var skill_label: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_BOT_SKILL"), 22, UiThemeScript.INK_BOLD_LABEL)
+	skill_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skill_row.add_child(skill_label)
+	skill_row.add_child(skill)
+	box.add_child(skill_row)
 	var teams_row := HBoxContainer.new()
 	teams_row.add_theme_constant_override("separation", 10)
 	var teams_label: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_TEAMS"), 22, UiThemeScript.INK_BOLD_LABEL)
@@ -281,6 +293,11 @@ func press_control(id: String) -> void:
 			# #445: one more bot, back to none after the last free seat.
 			var count: int = server.bot_director.bot_count()
 			server.apply_host_command("bots", count + 1 if count < server.bot_capacity() else 0)
+		"bot_skill":
+			# #682: Easy -> Normal -> Hard -> Easy.
+			var levels: Array[String] = HostSettingsScript.BOT_DIFFICULTIES
+			var next: int = (levels.find(HostSettingsScript.shared().bot_difficulty) + 1) % levels.size()
+			server.apply_host_command("bot_difficulty", levels[next])
 		"bots_down":
 			server.apply_host_command("bots", maxi(0, server.bot_director.bot_count() - 1))
 		"bots_up":
@@ -380,6 +397,7 @@ func refresh() -> void:
 	control_button("mode").text = _screen.tr("LOBBY_ON") if teams_on else _screen.tr("LOBBY_OFF")
 	_set_variation(control_button("mode"), UiThemeScript.SWITCH_BUTTON_ON if teams_on else UiThemeScript.SWITCH_BUTTON)
 	control_button("bots").text = str(server.bot_director.bot_count())
+	control_button("bot_skill").text = _screen.tr("BOT_SKILL_" + str(HostSettingsScript.shared().bot_difficulty).to_upper())
 	var join: Button = control_button("join")
 	join.disabled = not _can_join_online()
 	join.visible = kind == "online"
@@ -478,7 +496,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join_help"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join_help"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]
