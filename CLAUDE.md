@@ -18,6 +18,12 @@ read and follow `docs/agents/collaboration.md`.
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Austin's debrief
+
+If you are Austin's agent (`agage-JG`), read `docs/agents/austin-debrief.md` first and follow
+its instruction to show Austin the catch-up. Launch research and every owner decision live in
+`docs/launch/` (start with `docs/launch/README.md`).
+
 ### Feature inventory
 
 `docs/FEATURES.md` lists everything already shipped. Read it before grilling the owner, proposing features, filing tickets, or planning, and frame questions as extensions of what exists — never ask about a feature it lists as shipped. Any PR that adds, removes or changes a player-facing feature updates `docs/FEATURES.md` in the same PR; integrators check this at review.
