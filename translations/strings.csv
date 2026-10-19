@@ -385,3 +385,39 @@ JOIN_NET_OPEN,"Open: scan this on the phone, or type the link",Offen: Scanne das
 JOIN_NET_ROOM,Room code: %s,Raumcode: %s,Code du salon : %s,Código de sala: %s,Código da sala: %s,房间代码:%s,ルームコード: %s,방 코드: %s,Код комнаты: %s
 JOIN_NET_UNREACHABLE,Could not reach the relay: check this computer's internet,Relay nicht erreichbar: Prüfe die Internetverbindung des Computers,Relais injoignable : vérifie la connexion Internet de l'ordinateur,No se pudo llegar al relay: revisa el internet del equipo,Não foi possível alcançar o relay: confira a internet do computador,无法连接中继:请检查这台电脑的网络,リレーに接続できません: このパソコンのネット接続を確認してください,릴레이에 연결할 수 없어요: 이 컴퓨터의 인터넷을 확인하세요,Не удалось связаться с ретранслятором: проверьте интернет на компьютере
 LOBBY_INTERNET_TAG, (internet), (Internet), (Internet), (internet), (internet), (互联网), (インターネット), (인터넷), (интернет)
+BOT_NAME,Bot %d,Bot %d,Bot %d,Bot %d,Bot %d,机器人 %d,ボット %d,봇 %d,Бот %d
+PAD_NAME,Pad %d,Pad %d,Manette %d,Mando %d,Controle %d,手柄 %d,パッド %d,패드 %d,Геймпад %d
+SR_TITLE,Stages & Rules,Stages & Regeln,Arènes et règles,Escenarios y reglas,Cenários e regras,关卡与规则,ステージとルール,스테이지와 규칙,Арены и правила
+SR_BUTTON,Stages & Rules ▸,Stages & Regeln ▸,Arènes et règles ▸,Escenarios y reglas ▸,Cenários e regras ▸,关卡与规则 ▸,ステージとルール ▸,스테이지와 규칙 ▸,Арены и правила ▸
+SR_DONE,Done,Fertig,Terminé,Listo,Pronto,完成,完了,완료,Готово
+SR_STAGES,Stages,Stages,Arènes,Escenarios,Cenários,关卡,ステージ,스테이지,Арены
+SR_ALL_ON,All on,Alle an,Tout activer,Todos sí,Todos ligados,全开,すべてオン,모두 켜기,Все вкл.
+SR_ALL_OFF,All off,Alle aus,Tout couper,Todos no,Todos desligados,全关,すべてオフ,모두 끄기,Все выкл.
+SR_ROUND_MODIFIERS,Round modifiers,Runden-Modifikatoren,Modificateurs de manche,Modificadores de ronda,Modificadores de rodada,回合变化,ラウンド効果,라운드 변형,Модификаторы раунда
+SR_WEAPONS,Weapons (every mode),Waffen (alle Modi),Armes (tous les modes),Armas (todos los modos),Armas (todos os modos),武器(所有模式),武器(全モード),무기 (모든 모드),Оружие (все режимы)
+SR_NIGHT_STAGES,Night stages,Nacht-Stages,Arènes de nuit,Escenarios nocturnos,Cenários noturnos,夜间关卡,夜ステージ,밤 스테이지,Ночные арены
+SR_NOT_ALLOWED_IN,Not allowed in %s,Nicht erlaubt in %s,Interdit en %s,No permitido en %s,Não permitido em %s,%s 中不可用,%s では使えません,%s에서는 사용 불가,Недоступно в режиме %s
+SR_NO_MODIFIERS,%s plays without modifiers.,%s läuft ohne Modifikatoren.,%s se joue sans modificateurs.,%s se juega sin modificadores.,%s é jogado sem modificadores.,%s 不使用回合变化。,%s は効果なしで遊びます。,%s는 변형 없이 진행돼요.,Режим %s идёт без модификаторов.
+SR_FOOTER_ONE_STAGE,Switch on at least one stage,Schalte mindestens eine Stage an,Active au moins une arène,Activa al menos un escenario,Ligue pelo menos um cenário,至少打开一个关卡,ステージを1つ以上オンにしてね,스테이지를 하나 이상 켜 주세요,Включите хотя бы одну арену
+SR_FOOTER_ONE_STAGE_IN,Switch on at least one stage in %s,Schalte in %s mindestens eine Stage an,Active au moins une arène en %s,Activa al menos un escenario en %s,Ligue pelo menos um cenário em %s,%s 至少要打开一个关卡,%s のステージを1つ以上オンにしてね,%s에서 스테이지를 하나 이상 켜 주세요,Включите хотя бы одну арену в режиме %s
+SR_STOCK_ONE,Stock plays on %s,Stock läuft auf %s,Stock se joue sur %s,Stock se juega en %s,Stock é jogado em %s,命数制只在 %s 进行,ストックは %s で遊びます,스톡은 %s에서 진행돼요,Жизни играются на арене %s
+SR_STOCK_RANDOM,Stock picks one at random from %d stages,Stock wählt zufällig aus %d Stages,Stock en tire une au hasard parmi %d arènes,Stock elige al azar entre %d escenarios,Stock sorteia entre %d cenários,命数制从 %d 个关卡中随机选一个,ストックは %d ステージからランダムに選びます,스톡은 %d개 스테이지 중 무작위로 골라요,Жизни выбирают случайную из %d арен
+SR_DRAWS,Each round draws from %d of %d stages,Jede Runde zieht aus %d von %d Stages,Chaque manche tire parmi %d arènes sur %d,Cada ronda sortea entre %d de %d escenarios,Cada rodada sorteia entre %d de %d cenários,每回合从 %d/%d 个关卡中抽取,ラウンドごとに %d/%d ステージから選びます,라운드마다 %d/%d개 스테이지에서 골라요,Каждый раунд — из %d арен из %d
+SR_STAGE_COUNT_ONE,%d stage,%d Stage,%d arène,%d escenario,%d cenário,%d 个关卡,%d ステージ,스테이지 %d개,%d арена
+SR_STAGE_COUNT,%d stages,%d Stages,%d arènes,%d escenarios,%d cenários,%d 个关卡,%d ステージ,스테이지 %d개,%d арен
+SR_SUMMARY,%s on · %s,%s an · %s,%s actives · %s,%s activos · %s,%s ligados · %s,已开 %s · %s,%s オン · %s,%s 켜짐 · %s,%s вкл. · %s
+SR_MODS_OFF,modifiers off,Modifikatoren aus,modificateurs coupés,modificadores no,modificadores desligados,回合变化关,効果オフ,변형 꺼짐,модификаторы выкл.
+SR_MODS_ON,modifiers on,Modifikatoren an,modificateurs actifs,modificadores sí,modificadores ligados,回合变化开,効果オン,변형 켜짐,модификаторы вкл.
+SR_MODS_SOME,%d of %d modifiers on,%d von %d Modifikatoren an,%d modificateurs sur %d actifs,%d de %d modificadores sí,%d de %d modificadores ligados,回合变化开 %d/%d,効果 %d/%d オン,변형 %d/%d 켜짐,модификаторы: %d из %d вкл.
+WEAPON_STAFF,Staff,Stab,Bâton,Bastón,Cajado,长棍,杖,봉,Посох
+WEAPON_SWORD,Sword,Schwert,Épée,Espada,Espada,剑,剣,검,Меч
+WEAPON_AXE,Axe,Axt,Hache,Hacha,Machado,斧头,斧,도끼,Топор
+WEAPON_DAGGER,Dagger,Dolch,Dague,Daga,Adaga,匕首,短剣,단검,Кинжал
+WEAPON_BOOMSTICK,Boomstick,Knallstab,Fusil à pompe,Escopeta,Boomstick,霰弹枪,ブームスティック,붐스틱,Дробовик
+WEAPON_GRAPPLE,Grapple,Enterhaken,Grappin,Garfio,Gancho,抓钩,グラップル,갈고리,Крюк
+WEAPON_FLAIL,Flail,Morgenstern,Fléau,Mangual,Mangual,链枷,フレイル,도리깨,Цеп
+WEAPON_BOOMERANG,Boomerang,Bumerang,Boomerang,Bumerán,Bumerangue,回旋镖,ブーメラン,부메랑,Бумеранг
+WEAPON_FISHING_ROD,Fishing Rod,Angel,Canne à pêche,Caña de pescar,Vara de pescar,钓竿,釣りざお,낚싯대,Удочка
+WEAPON_UMBRELLA,Umbrella,Regenschirm,Parapluie,Paraguas,Guarda-chuva,雨伞,傘,우산,Зонтик
+WEAPON_MAGNET,Magnet,Magnet,Aimant,Imán,Ímã,磁铁,磁石,자석,Магнит
+WEAPON_SHIELD,Shield,Schild,Bouclier,Escudo,Escudo,盾牌,盾,방패,Щит

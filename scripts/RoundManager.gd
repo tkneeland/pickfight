@@ -1207,7 +1207,8 @@ func _requested_target() -> int:
 ## A slot's display name: the phone's nickname where the roster has one.
 func _slot_name(slot: int) -> String:
 	if _controller_server != null and _controller_server.has_method("slot_name"):
-		var nickname: String = str(_controller_server.slot_name(slot))
+		var shown: String = "slot_display_name" if _controller_server.has_method("slot_display_name") else "slot_name"
+		var nickname: String = str(_controller_server.call(shown, slot))
 		if not nickname.is_empty():
 			return nickname
 	return "P%d" % (slot + 1)

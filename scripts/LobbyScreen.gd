@@ -614,7 +614,7 @@ func build_panels() -> void:
 	_stages_summary.name = "StagesSummary"
 	_stages_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_stages_box.add_child(_stages_summary)
-	_stages_button = ScreenKitScript.themed_button("Stages & Rules \u25B8", UiThemeScript.ACTION_BUTTON, "stages_rules")
+	_stages_button = ScreenKitScript.themed_button(tr("SR_BUTTON"), UiThemeScript.ACTION_BUTTON, "stages_rules")
 	_stages_button.visible = false # the host's: HostControls shows it once attached
 	_stages_box.add_child(_stages_button)
 	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)

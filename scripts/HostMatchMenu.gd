@@ -86,7 +86,7 @@ func refresh() -> void:
 	var key: Array = []
 	for slot: int in srv.claimed_slots():
 		if slot != srv.host_pc_slot():
-			key.append([slot, srv.slot_name(slot)])
+			key.append([slot, srv.slot_display_name(slot)])
 	if key == _rows_key:
 		return
 	_rows_key = key
