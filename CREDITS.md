@@ -239,3 +239,11 @@ which are not MIT: they are redistributed under the Steamworks SDK Access
 Agreement and may only ship with a game distributed through Steam under a
 Steamworks partner account.
 
+
+## Sentry SDK for Godot
+
+Crash reporting uses the **Sentry Godot SDK** 2.3.0
+(https://github.com/getsentry/sentry-godot, `addons/sentry/`), MIT licensed,
+copyright (c) 2024 Sentry; the full notice is `addons/sentry/LICENSE.md`
+(kept in `tools/sentry/LICENSE.md`). It is downloaded by
+`tools/fetch_sentry.sh`, not committed.

@@ -75,6 +75,9 @@ var language: String = LanguagesScript.AUTO
 ## notice has been dismissed or acted on.
 var share_stats: bool = true
 var telemetry_notice_seen: bool = false
+## Crash reports (#681): on by default, opt-out in Settings; read by
+## `CrashReporting` at launch, so a change applies from the next launch.
+var send_crash_reports: bool = true
 ## Stock mode (#354): lives per player (1-10) and the time limit in seconds
 ## (one of STOCK_TIME_LIMITS; 0 is no limit).
 const STOCK_MIN_LIVES: int = 1
@@ -340,6 +343,10 @@ func set_share_stats(on: bool) -> void:
 	share_stats = on
 	save_settings()
 
+func set_send_crash_reports(on: bool) -> void:
+	send_crash_reports = on
+	save_settings()
+
 func mark_telemetry_notice_seen() -> void:
 	telemetry_notice_seen = true
 	save_settings()
@@ -433,6 +440,8 @@ func load_settings() -> void:
 		var share: Variant = config.get_value(SECTION, "share_stats", true)
 		share_stats = share if share is bool else true
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))
+		var crash: Variant = config.get_value(SECTION, "send_crash_reports", true)
+		send_crash_reports = crash if crash is bool else true
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
@@ -464,6 +473,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "disabled_modifiers", disabled_modifiers)
 	config.set_value(SECTION, "share_stats", share_stats)
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
+	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
 	config.set_value(SECTION, "bot_difficulty", bot_difficulty)

@@ -23,12 +23,23 @@ relay_url="wss://pickfight-relay.fly.dev"
 ; shipping builds must change it to the real app ID (docs/steam-readiness.md 1.5).
 steam_app_id=480
 
+; Sentry DSN for crash reports (#681, docs/crash-reporting.md). The owner pastes it from a
+; free Sentry project. A DSN is not a secret (it only lets events in) but keep it out of
+; issues. Empty means crash reporting never starts.
+sentry_dsn=""
+
 [autoload]
 
 GameClock="*res://scripts/GameClock.gd"
 Sfx="*res://scripts/Sfx.gd"
 Music="*res://scripts/Music.gd"
 SteamPlatform="*res://scripts/SteamPlatform.gd"
+CrashReporting="*res://scripts/CrashReporting.gd"
+
+[debug]
+
+; Required by the Sentry SDK for script stack traces in crash reports (#681).
+settings/gdscript/always_track_call_stacks=true
 
 [display]
 
@@ -55,3 +66,10 @@ common/physics_jitter_fix=0.0
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+
+; Sentry SDK auto-init off: scripts/CrashReporting.gd is the only thing that starts it (#681).
+[sentry]
+
+schema_version=5
+options/auto_init=false
+options/debug_printing=false
