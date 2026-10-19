@@ -26,7 +26,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Launch price per region | **Superseded 2026-10-18:** **$9.99 USD** at 1.0, **20% launch-week discount**, Steam recommended regional prices as-is. Soundtrack DLC $4.99 on launch day; no other paid DLC. | owner |
 | Final name / trademark check | "Pickfight" | owner |
 | Early Access vs 1.0 | **Superseded 2026-10-18:** full **1.0**, no Early Access | owner |
-| Publisher entity (individual vs company) | Decided 2026-10-01: the owner as an individual, with a revenue split agreed privately with Austin; drives tax/bank forms and macOS/Windows signing identity | owner |
+| Publisher entity (individual vs company) | **Reopened 2026-10-18:** to decide with Austin (individual, Austin, or an LLC) before the Nov 2026 signup, with the revenue split (#685). The 10-01 answer was the owner as an individual; drives tax/bank forms and macOS/Windows signing identity | owner |
 
 ## Demo contents (#361)
 
