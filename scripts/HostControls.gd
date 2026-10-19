@@ -84,6 +84,9 @@ func attach(server: Object) -> void:
 	stages.pressed.connect(press_control.bind("stages_rules"))
 	_controls["stages_rules"] = stages
 	lobby_right.move_child(_screen._stages_box, lobby_right.get_child_count() - 1)
+	# Phones can't join? (#680): the button under the join QR, in the pad menu chain too.
+	_screen._join_help_button.pressed.connect(press_control.bind("join_help"))
+	_controls["join_help"] = _screen._join_help_button
 	# The way into someone else's room code (Online only), with why it is off when it is.
 	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
 	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
@@ -296,6 +299,9 @@ func press_control(id: String) -> void:
 		"stages_rules":
 			_popup_opener = id
 			_screen.open_stages_rules()
+		"join_help":
+			_popup_opener = id
+			_screen.set_popup("join_help")
 		"how_to_play":
 			_popup_opener = id
 			_screen.set_popup("help")
@@ -445,7 +451,7 @@ func input(event: InputEvent) -> void:
 		return
 	var popup: String = _screen.popup_open()
 	var key := event as InputEventKey
-	if popup == "stages" and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
+	if (popup == "stages" or popup == "join_help") and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		# Esc closes just this screen, never the Settings panel behind it; it stays up with a mode on no stage (#647)
 		if _screen.request_close_popup():
 			_restore_focus_after_popup()
@@ -470,7 +476,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join_help"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]
