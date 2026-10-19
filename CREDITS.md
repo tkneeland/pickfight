@@ -227,3 +227,15 @@ by native speakers. Community proofreaders who correct it will be credited here.
 | 日本語 | (open) |
 | 한국어 | (open) |
 | Русский | (open) |
+
+## GodotSteam and the Steamworks SDK
+
+Steam support uses the **GodotSteam GDExtension** 4.23.1
+(https://godotsteam.com, `addons/godotsteam/`), MIT licensed, copyright (c)
+2015-Current GP Garcia, Chris Ridenour and Contributors; the full notice is
+`addons/godotsteam/license.md`. It bundles Valve's Steamworks SDK
+redistributables (`steam_api64.dll`, `libsteam_api.so`, `libsteam_api.dylib`),
+which are not MIT: they are redistributed under the Steamworks SDK Access
+Agreement and may only ship with a game distributed through Steam under a
+Steamworks partner account.
+

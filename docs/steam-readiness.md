@@ -137,7 +137,7 @@ Choices for Godot 4.6 (**verify** the current GodotSteam release supports 4.6.x 
 Plan:
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
-| 6.1 | Add GodotSteam GDExtension; add `steam_appid.txt` to dev checkouts only (git-ignored); initialise Steam behind a single `SteamPlatform` wrapper so itch/non-Steam builds run when the client or library is absent. Preload by path, never by `class_name` (repo rule) | agent | 1.4 for real AppID; Spacewar 480 for dev | todo |
+| 6.1 | (GodotSteam binaries are not committed: run `bash tools/fetch_godotsteam.sh`, pinned to 4.23.1 + sha256; the release workflow runs it before export.)  Add GodotSteam GDExtension; add `steam_appid.txt` to dev checkouts only (git-ignored); initialise Steam behind a single `SteamPlatform` wrapper so itch/non-Steam builds run when the client or library is absent. Preload by path, never by `class_name` (repo rule) | agent | 1.4 for real AppID; Spacewar 480 for dev | **done** (#428, GodotSteam GDExtension 4.23.1, see 6.1 notes below) |
 | 6.2 | Remote Play Together: the owner wants this tested first. Needs no new code beyond Steam running and the game launched through Steam; mark "Remote Play Together" in the store page features (**verify** the checkbox name). Test: host launches through Steam, invites a friend via the Steam overlay, friend plays with gamepad or mouse (phones do not play online, ADR-0021). Known risk: the phone controller flow needs the LAN web server (ADR-0002); the remote friend has no LAN, so they use Remote Play input (gamepad/mouse) or the relay | owner tests, agent fixes issues | 1.3 (non-Steam shortcut or Spacewar can work for a first test, **verify**), 6.1 | todo |
 | 6.3 | Steam lobbies and friend invites carrying the room code; game traffic stays on our relay, no Steam P2P | agent (agage-JG) | #298, #241, 6.1 | todo (tracked in #298, ready-for-agent) |
 | 6.4 | Steam overlay compatibility check with the Compatibility renderer | owner tests | 6.1 | todo |
@@ -145,6 +145,15 @@ Plan:
 | 6.6 | Steam Cloud: not needed (settings are small, `user://audio.cfg`) | none | none | skip |
 
 Existing online work this builds on: relay with room codes (#238, ADR-0019), host going online and remote seats (#239), snapshots (#251), PC client join by code (#241, agage-JG). Itch and non-Steam builds keep plain room codes.
+
+#### 6.1 notes (done, #428)
+
+- **Version:** GodotSteam GDExtension **4.23.1** (Steamworks 1.65; release notes: "works on any Godot version 4.4 and up", `compatibility_minimum = "4.4"`; verified loading on Godot 4.6.2). The upstream project moved to Codeberg (`codeberg.org/godotsteam/godotsteam`, release `v4.23.1`, asset `godotsteam-4.23.1-gdextension-plugin-4.4.zip.tar.xz`); the GitHub repo is archived and its releases only hold overflow files.
+- **What is checked in** (`addons/godotsteam/`, about 30 MB): the `.gdextension` (trimmed to macOS universal, Windows x86_64, Linux x86_64), debug and release libraries for those three (the editor and headless runs load the debug ones), the Steam API redistributables and `license.md`. Dropped: Android, 32-bit, Linux arm64, per-arch macOS dylibs and the editor updater plugin. To update, replace the folder from a newer release and re-trim the `.gdextension`.
+- **Wrapper:** `scripts/SteamPlatform.gd`, autoload `SteamPlatform`. Reaches Steam only through `Engine.has_singleton("Steam")`, so no `class_name` and no hard dependency. It initialises (`steamInitEx`) only when the singleton exists and the game is not under the scenario runner or `--headless`; any failure logs one line and leaves `available = false`. API: `available`, `app_id`, `persona_name()`, `steam_id()`, `set_achievement(api_name)`, `store_stats()` (the last two are the hooks for #689 and #538, no-ops until Steam is up).
+- **App ID:** project setting `pickfight/steam_app_id` (default 480, Spacewar). Shipping builds must change it (item 1.5).
+- **Testing locally with Spacewar 480:** start the Steam client, then run `echo 480 > steam_appid.txt` in the repo root (git-ignored, never commit it) and launch the game (`godot --path .`). The log shows `SteamPlatform: Steam ready (app 480)`. Without the file or client the log shows `Steam init failed` and the game runs normally.
+- **Exports:** `export_presets.cfg` has no Steam-specific preset, and the GDExtension libraries are packed into every macOS, Windows and Linux export, including the itch builds. That is fine: without the Steam client the init fails with one log line and the game runs. A separate Steam preset is only needed later if we want to keep the Steam libraries out of the itch download, or to ship a different app ID; at that point exclude `addons/godotsteam/*` from the non-Steam presets and add `steam_appid.txt` handling to the Steam one.
 
 ### 7. Steam Deck
 | # | Item | Who | Blocked on | Status |

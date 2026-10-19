@@ -554,6 +554,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"phone_page_has_every_english_string_in_every_language_688",
 	"ui_fonts_allow_system_fallback_for_cjk_688",
 	"lobby_and_hud_show_no_untranslated_english_693",
+	"steam_platform_is_dormant_under_the_runner_428",
+	"steam_platform_autoload_registered_and_loads_without_steam_428",
 	"stock_with_one_stage_on_always_plays_it_647",
 	"stock_with_several_stages_on_picks_one_of_them_647",
 	"soccer_and_ctf_draw_only_their_own_on_stages_647",
@@ -2407,6 +2409,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_font_fallback_688()
 		"lobby_and_hud_show_no_untranslated_english_693":
 			return await _scenario_no_english_693()
+		"steam_platform_is_dormant_under_the_runner_428":
+			return _scenario_steam_dormant_428()
+		"steam_platform_autoload_registered_and_loads_without_steam_428":
+			return _scenario_steam_autoload_428()
 		"per_mode_stage_lists_persist_separately_647":
 			return await _scenario_per_mode_stage_lists_persist_separately_647()
 		"stock_with_one_stage_on_always_plays_it_647":
@@ -43918,5 +43924,45 @@ func _scenario_no_english_693() -> Array[String]:
 				failures.append("'%s' (%s) still shows English '%s' in Japanese" % [t.left(40), seen[t], bad])
 	await _teardown(rig["main"])
 	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+
+## #428: Steam is dormant under the runner. The wrapper is reached through the
+## autoload, the way the game reaches it.
+func _scenario_steam_dormant_428() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	if steam == null:
+		return ["SteamPlatform autoload missing"]
+	if steam.available:
+		failures.append("available should be false under the runner")
+	if steam.set_achievement("ACH_TEST") != false:
+		failures.append("set_achievement should return false when unavailable")
+	if steam.store_stats() != false:
+		failures.append("store_stats should return false when unavailable")
+	if steam.persona_name() != "":
+		failures.append("persona_name should be empty when unavailable, got '%s'" % steam.persona_name())
+	if steam.steam_id() != 0:
+		failures.append("steam_id should be 0 when unavailable")
+	_scenario_completed = true
+	return failures
+
+## #428: the autoload is registered, and the script loads and runs without the
+## Steam singleton (a plain clone has none).
+func _scenario_steam_autoload_428() -> Array[String]:
+	var failures: Array[String] = []
+	if str(ProjectSettings.get_setting("autoload/SteamPlatform", "")) != "*res://scripts/SteamPlatform.gd":
+		failures.append("SteamPlatform autoload not registered in project.godot")
+	if int(ProjectSettings.get_setting("pickfight/steam_app_id", 0)) != 480:
+		failures.append("pickfight/steam_app_id should default to 480")
+	var script: GDScript = load("res://scripts/SteamPlatform.gd")
+	if script == null or not script.can_instantiate():
+		failures.append("SteamPlatform.gd does not load")
+	else:
+		var fresh: Node = script.new()
+		root.add_child(fresh)
+		if fresh.available:
+			failures.append("a fresh wrapper should not be available without Steam")
+		fresh.queue_free()
 	_scenario_completed = true
 	return failures
