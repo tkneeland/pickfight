@@ -47,18 +47,19 @@ func setup_pool(left: float, right: float, top: float, depth: float, edge: Line2
 func setup_tile(size: Vector2) -> void:
 	_pool = false
 	_tile_size = size
-	_fill_seeds(BLOBS)
+	# Salted per block, or a wall of stacked blocks shows the same blobs in lockstep.
+	_fill_seeds(BLOBS, float(get_instance_id() % 997) + 1.0)
 
 func set_glow(colour: Color) -> void:
 	_glow = colour
 
-func _fill_seeds(n: int) -> void:
+func _fill_seeds(n: int, salt: float = 0.0) -> void:
 	_seed.resize(n * 3)
 	for i in n:
 		# Fixed pseudo-random values per index: independent of the gameplay RNG.
-		_seed[i * 3] = fposmod(sin(float(i) * 12.9898) * 43758.5453, 1.0)
-		_seed[i * 3 + 1] = 0.35 + fposmod(sin(float(i) * 78.233) * 24634.6345, 1.0) * 0.65
-		_seed[i * 3 + 2] = fposmod(sin(float(i) * 39.346) * 11813.3197, 1.0)
+		_seed[i * 3] = fposmod(sin(((float(i) + salt * 7.13) * 12.9898)) * 43758.5453, 1.0)
+		_seed[i * 3 + 1] = 0.35 + fposmod(sin(((float(i) + salt * 7.13) * 78.233)) * 24634.6345, 1.0) * 0.65
+		_seed[i * 3 + 2] = fposmod(sin(((float(i) + salt * 7.13) * 39.346)) * 11813.3197, 1.0)
 
 func _wave(x: float) -> float:
 	return sin(x * 0.021 + _time * 2.1) * 3.5 + sin(x * 0.047 - _time * 1.4) * 2.5 + sin(x * 0.113 + _time * 3.3) * 1.2
