@@ -53,6 +53,7 @@ const GameModesScript: GDScript = preload("res://scripts/GameModes.gd")
 
 ## Player.LAYER_WORLD: terrain and bodies. Heads are on their own layer, so
 ## the rays below never see one.
+const HostSettingsScript: GDScript = preload("res://scripts/HostSettings.gd")
 const LAYER_WORLD: int = 1
 ## How often the target is picked again, in seconds. Between picks the bot
 ## keeps what it chose, so it does not dither between two targets.
@@ -363,6 +364,26 @@ var _danger_frame: int = -1
 var _pad_route: bool = false
 var _hooked_for: float = 0.0
 var _aggression: float = 0.0
+## The skill level (#682) this bot plays at; "" follows the room's setting.
+var difficulty: String = ""
+## Per level: `react` scales every think and swing/aim timer (above 1 is
+## slower), `aim_error` is the most radians a vault anchor is thrown off by,
+## `pickup` scales how far past a rival a pickup is still worth the detour.
+## "normal" is the unscaled bot every constant above was tuned for.
+const DIFFICULTY: Dictionary = {
+	"easy": {"react": 1.6, "aim_error": 0.35, "pickup": 0.5},
+	"normal": {"react": 1.0, "aim_error": 0.0, "pickup": 1.0},
+	"hard": {"react": 0.6, "aim_error": 0.0, "pickup": 1.5},
+}
+
+## The multipliers row for this bot's level.
+func skill() -> Dictionary:
+	var level: String = difficulty if DIFFICULTY.has(difficulty) else str(HostSettingsScript.shared().bot_difficulty)
+	return DIFFICULTY.get(level, DIFFICULTY["normal"])
+
+## Seconds a think or swing/aim timer really lasts: `seconds` on Normal.
+func react_sec(seconds: float) -> float:
+	return seconds * float(skill()["react"])
 var _last_head: Vector2 = Vector2.ZERO
 var _unhook_left: float = 0.0
 var _unhook_side: float = 1.0
@@ -409,7 +430,7 @@ func think(delta: float) -> Vector2:
 	_think_left -= delta
 	if _think_left <= 0.0 or (_target != null and not _alive(_target)):
 		_aggression = _aggression_now()
-		_think_left = lerpf(THINK_SEC, THINK_SEC_AGGRESSIVE, _aggression)
+		_think_left = react_sec(lerpf(THINK_SEC, THINK_SEC_AGGRESSIVE, _aggression))
 		_choose_goal()
 	_track_progress(delta)
 	var hook_input: Vector2 = _hook_drive(delta)
@@ -625,7 +646,7 @@ func _choose_goal() -> void:
 	if enemy != null and not shunned and enemy_distance <= _reach() + BODY_RADIUS * lerpf(1.0, ENGAGE_AGGRESSIVE, _aggression) and not lava_close and room_behind:
 		if mode != "attack":
 			_phase = 0
-			_phase_left = SWING_SEC
+			_phase_left = react_sec(SWING_SEC)
 		mode = "attack"
 		_target = enemy
 		goal = enemy.global_position
@@ -644,7 +665,7 @@ func _choose_goal() -> void:
 			goal = enemy.global_position
 		else:
 			goal = me
-	elif pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR):
+	elif pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR * float(skill()["pickup"])):
 		goal = pickup.global_position
 		if pickup != _chasing:
 			_chasing = pickup
@@ -675,7 +696,7 @@ func _choose_goal() -> void:
 			return
 		if was_chopping != wall:
 			_phase = 0
-			_phase_left = SWING_SEC
+			_phase_left = react_sec(SWING_SEC)
 		mode = "attack"
 		_target = wall
 		goal = wall.global_position
@@ -957,7 +978,7 @@ func _swing(delta: float) -> Vector2:
 	_phase_left -= delta
 	if _phase_left <= 0.0:
 		_phase = 1 - _phase
-		_phase_left = SWING_SEC_GENTLE if gentle else lerpf(SWING_SEC, SWING_SEC_AGGRESSIVE, _aggression)
+		_phase_left = react_sec(SWING_SEC_GENTLE if gentle else lerpf(SWING_SEC, SWING_SEC_AGGRESSIVE, _aggression))
 	var angle: float = base + up_side * above if _phase == 0 else base - up_side * below
 	var wanted: float = to_target.length() + STRIKE_REACH_OFFSET
 	# Issue #302: a head pinned against the rival or the floor and pushed on
@@ -1054,10 +1075,10 @@ func _vault(delta: float) -> Vector2:
 	if _phase_left <= 0.0:
 		_phase = 1 - _phase
 		if _phase == 0:
-			_phase_left = lerpf(AIM_SEC, AIM_SEC_AGGRESSIVE, _aggression)
+			_phase_left = react_sec(lerpf(AIM_SEC, AIM_SEC_AGGRESSIVE, _aggression))
 			_pick_anchor()
 		else:
-			_phase_left = lerpf(PUSH_SEC, PUSH_SEC_AGGRESSIVE, _aggression)
+			_phase_left = react_sec(lerpf(PUSH_SEC, PUSH_SEC_AGGRESSIVE, _aggression))
 	if _phase == 0 or _airborne:
 		return _anchor * _anchor_length
 	return _anchor * PICKAXE_PUSH_LENGTH if _holds_pickaxe() else _anchor
@@ -1069,6 +1090,12 @@ func _vault(delta: float) -> Vector2:
 ## pickaxe, the shallow vault covers ground fastest and the steep one lifts
 ## the body highest while still drifting forward.
 func _pick_anchor() -> void:
+	_plan_anchor()
+	var error: float = float(skill()["aim_error"])
+	if error > 0.0:
+		_anchor = _anchor.rotated(rng.randf_range(-error, error)) # a weaker bot plants its head off line (#682)
+
+func _plan_anchor() -> void:
 	var me: Vector2 = player.global_position
 	var side: float = _travel_side()
 	# Height only once near the goal: from far off, cover the ground first.

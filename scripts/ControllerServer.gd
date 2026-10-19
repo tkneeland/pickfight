@@ -2233,6 +2233,10 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 				return false
 			set_bot_count(int(arg))
 			return true
+		"bot_difficulty":
+			if not arg is String or not SOLO_PHASES.has(phase):
+				return false
+			return HostSettingsScript.shared().set_bot_difficulty(arg)
 		"mode":
 			if not (arg is String and (arg == "ffa" or arg == "teams")) or not MODE_PHASES.has(phase):
 				return false
