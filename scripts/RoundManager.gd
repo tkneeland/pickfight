@@ -1440,6 +1440,8 @@ func _publish_lobby_state() -> void:
 		var ping: int = _slot_ping(slot)
 		if ping >= 0:
 			players[-1]["ping"] = ping
+		if _controller_server != null and _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot):
+			players[-1]["relay"] = true # #683: a phone that joined over the internet
 	if _controller_server != null and _controller_server.has_method("pad_tip_pending"):
 		for entry: Dictionary in players:
 			entry["tip"] = _controller_server.pad_tip_pending(int(entry["slot"]))

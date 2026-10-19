@@ -469,6 +469,7 @@ func _apply_streamer_mode(join_source: Object) -> void:
 		_popups.open("") # the match went Online under the popup: no LAN join to help with
 	var urls: PackedStringArray = join_source.join_urls() if join_source.has_method("join_urls") else PackedStringArray()
 	_popups.set_join_urls(urls, hidden)
+	_popups.refresh_internet(join_source)
 	if online:
 		_lobby_qr.visible = false
 	if online and hidden:
