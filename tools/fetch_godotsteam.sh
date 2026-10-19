@@ -17,5 +17,6 @@ for d in osx win64 linux64; do mkdir -p addons/godotsteam/$d; done
 cp "$tmp"/addons/godotsteam/osx/libgodotsteam.macos.template_*.universal.dylib "$tmp"/addons/godotsteam/osx/libsteam_api.dylib addons/godotsteam/osx/
 cp "$tmp"/addons/godotsteam/win64/libgodotsteam.windows.template_*.x86_64.dll "$tmp"/addons/godotsteam/win64/steam_api64.dll addons/godotsteam/win64/
 cp "$tmp"/addons/godotsteam/linux64/libgodotsteam.linux.template_*.x86_64.so "$tmp"/addons/godotsteam/linux64/libsteam_api.so addons/godotsteam/linux64/
-cp tools/godotsteam/godotsteam.gdextension tools/godotsteam/license.md addons/godotsteam/
+cp tools/godotsteam/license.md addons/godotsteam/
+cp tools/godotsteam/godotsteam.gdextension.template addons/godotsteam/godotsteam.gdextension
 echo "GodotSteam $VER installed in addons/godotsteam"
