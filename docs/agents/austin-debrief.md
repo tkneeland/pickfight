@@ -105,4 +105,4 @@ Repo facts that bite:
   - Put every "decide with Austin" item on #685.
   - Report times in ET.
 - **Helper scripts** (ship a PR, Atlas closeout, runner conflict fix) are in `tools/agent-scripts/` as reference copies with the owner's Mac paths. Adapt them before use.
-- **Steam code work** (#298, #538) is parked until after Next Fest by the owner's Oct 3 call. Don't start it without the owner.
+- **Steam code** (#298 invites, #538 names) shipped dormant on Oct 20, unparked by the owner. #703 (Timeline markers) is next. Real-Steam checks need the owner on app 480.
