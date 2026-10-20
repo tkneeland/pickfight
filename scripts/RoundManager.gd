@@ -1141,6 +1141,8 @@ var _countdown_roster: Array[int] = []
 ## built the first time any of them is needed; see `_screen()`.
 var _lobby_screen: CanvasLayer
 var _last_lobby_state: Dictionary = {}
+## What the lobby cards show that "_last_lobby_state" does not: each seat's hat and eyes (#714).
+var _last_lobby_looks: Array = []
 
 ## "lobby", "countdown", "playing", "round_end" (the pause between rounds)
 ## or "victory": what the phones are told.
@@ -1499,16 +1501,30 @@ func _publish_lobby_state() -> void:
 		}
 	state["stages_by_mode"] = _stages_by_mode()
 	state["rules"] = _rules_state()
-	if state == _last_lobby_state:
+	# Hat and eyes are not in "state" (the cards read them from the server), so a pick of
+	# either must still redraw them; the phones are only re-sent a state that changed (#714).
+	var state_changed: bool = state != _last_lobby_state
+	var looks: Array = _lobby_looks(roster)
+	if not state_changed and looks == _last_lobby_looks:
 		return
 	_last_lobby_state = state
-	if _controller_server != null and _controller_server.has_method("set_lobby_state"):
+	_last_lobby_looks = looks
+	if state_changed and _controller_server != null and _controller_server.has_method("set_lobby_state"):
 		_controller_server.set_lobby_state(state)
 	var panels: bool = _lobby_screen != null and _lobby_screen.panels_built()
 	if panels and in_lobby:
 		_lobby_screen.refresh_lobby(state, min_players_to_start, _controller_server)
 	elif panels and _state == State.VICTORY:
 		_refresh_victory()
+
+## Each rostered seat's [slot, hat, eyes], read from the server like the lobby cards do.
+func _lobby_looks(roster: Array[int]) -> Array:
+	var out: Array = []
+	if _controller_server == null or not _controller_server.has_method("slot_hat") or not _controller_server.has_method("slot_eyes"):
+		return out
+	for slot: int in roster:
+		out.append([slot, _controller_server.slot_hat(slot), _controller_server.slot_eyes(slot)])
+	return out
 
 ## The podium: the match winner on the tallest block, then everyone else in
 ## the roster by final score, drawn by the lobby screen with the awards.
