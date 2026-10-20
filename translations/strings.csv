@@ -465,3 +465,6 @@ PLAY_OF_ROUND_CAPTION,Play of the round: %s,Szene der Runde: %s,Meilleur moment 
 STEAM_STATUS_IN_LOBBY,In the lobby,In der Lobby,Dans le salon,En el lobby,No lobby,在大厅中,ロビーにいます,로비에 있음,В лобби
 STEAM_STATUS_IN_MATCH,In a match,In einem Match,Dans un match,En una partida,Em uma partida,比赛中,対戦中,경기 중,В матче
 STEAM_INVITE_BUTTON,Invite Steam friends,Steam-Freunde einladen,Inviter des amis Steam,Invitar amigos de Steam,Convidar amigos da Steam,邀请 Steam 好友,Steamフレンドを招待,Steam 친구 초대,Пригласить друзей из Steam
+STEAM_TL_KO,KO: %s,K.o.: %s,K.O. : %s,KO: %s,KO: %s,击倒：%s,KO：%s,KO: %s,Нокаут: %s
+STEAM_TL_ROUND_WIN,%s wins the round,%s gewinnt die Runde,%s remporte la manche,%s gana la ronda,%s vence a rodada,%s 赢得本回合,%sがラウンド勝利,%s 라운드 승리,Раунд берёт %s
+STEAM_TL_MATCH_WIN,%s wins the match,%s gewinnt das Match,%s remporte le match,%s gana la partida,%s vence a partida,%s 赢得比赛,%sが試合に勝利,%s 경기 승리,Матч берёт %s

@@ -24,7 +24,7 @@ Earlier decisions (Sep–early Oct) are in the ADRs (`docs/adr/`), `docs/steam-r
 - **Platforms:** Windows, macOS, Linux. Aim for Steam Deck Verified. (Oct 18)
 - **Online play:** in launch scope. No public matchmaking at launch; revisit after launch if the numbers justify it (#357). (Oct 18)
 - **Remote Play Together:** off at launch. (Oct 18)
-- **Steam features at launch:** SDK, friend invites, persona names (#428 done dormant; #298, #538 parked until after Next Fest per the owner on Oct 3). 15–20 achievements (#689; the draft list awaits owner approval). (Oct 18)
+- **Steam features at launch:** SDK, friend invites, persona names (#428, #538, #298 shipped dormant; unparked Oct 20). 15–20 achievements (#689; the draft list awaits owner approval). (Oct 18)
 - **Windows code signing:** skip unless it would really bite. (Oct 18)
 - **Crash reports:** opt-out (on by default, with a Settings checkbox). Shipped in #681; the owner pastes the Sentry DSN. (Oct 18)
 

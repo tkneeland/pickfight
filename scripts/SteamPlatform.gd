@@ -178,3 +178,28 @@ func _open_join_screen_if_idle() -> void:
 				pending_join_code = ""
 				return
 	tree.change_scene_to_file.call_deferred(REMOTE_CLIENT_SCENE)
+
+# --- Timeline markers (#703) -----------------------------------------------------
+
+## Steam built-in icon and priority (0-1000) per marker kind.
+const TIMELINE_KINDS := {
+	"ko": {"icon": "steam_combat", "priority": 50},
+	"round_win": {"icon": "steam_crown", "priority": 80},
+	"match_win": {"icon": "steam_achievement", "priority": 100},
+}
+## Steam's "featured" clip suggestion (0 none, 1 standard, 2 featured).
+const TIMELINE_CLIP_FEATURED := 2
+
+## Drop a marker on the player's Steam Timeline (and clip it). `kind` is "ko",
+## "round_win" or "match_win"; anything else is ignored. Does nothing without Steam.
+func add_timeline_event(kind: String, title: String) -> void:
+	if not running() or not TIMELINE_KINDS.has(kind):
+		return
+	calls_for_test.append(["add_timeline_event", kind, title])
+	if not available:
+		return
+	var spec: Dictionary = TIMELINE_KINDS[kind]
+	if _steam.has_method("addInstantaneousTimelineEvent"):
+		_steam.call("addInstantaneousTimelineEvent", title, "", spec["icon"], spec["priority"], 0.0, TIMELINE_CLIP_FEATURED)
+	elif _steam.has_method("addTimelineEvent"):
+		_steam.call("addTimelineEvent", spec["icon"], title, "", spec["priority"], 0.0, 0.0, TIMELINE_CLIP_FEATURED)

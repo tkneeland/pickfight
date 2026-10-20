@@ -583,6 +583,7 @@ func _check_round_end() -> void:
 		_scores[winner_slot] += 1
 		_buzz(winner_slot, "win")
 		round_won.emit(winner_slot)
+		_timeline_703("round_win", tr("STEAM_TL_ROUND_WIN") % _slot_name(winner_slot))
 		var winner_point: Vector2 = _players[winner_slot].global_position
 		_players[winner_slot].leave_round()
 		_update_score_label()
@@ -591,6 +592,7 @@ func _check_round_end() -> void:
 			_match_winner_slot = winner_slot
 			_start_final_ko(winner_point)
 			match_won.emit(winner_slot)
+			_timeline_703("match_win", tr("STEAM_TL_MATCH_WIN") % _slot_name(winner_slot))
 			_achievement_match_won([winner_slot])
 	else:
 		_last_winner_slot = -1
@@ -1948,6 +1950,8 @@ func _check_team_round_end(after_kick: bool) -> void:
 			_buzz(slot, "win")
 		round_won.emit(winners[0] if not winners.is_empty() else -1)
 		team_round_won.emit(winner_team)
+		if not winners.is_empty():
+			_timeline_703("round_win", tr("STEAM_TL_ROUND_WIN") % _slot_name(winners[0]))
 	var team_point: Vector2 = _players[winners[0]].global_position if not winners.is_empty() else Vector2.ZERO
 	for slot: int in alive_slots:
 		if _players[slot].alive:
@@ -1960,6 +1964,8 @@ func _check_team_round_end(after_kick: bool) -> void:
 		_match_winner_team = winner_team
 		_start_final_ko(team_point)
 		team_match_won.emit(winner_team)
+		if not winners.is_empty():
+			_timeline_703("match_win", tr("STEAM_TL_MATCH_WIN") % _slot_name(winners[0]))
 		var team_slots: Array[int] = []
 		for slot: int in _in_round:
 			if team_of(slot) == winner_team:
@@ -2184,6 +2190,7 @@ func _flush_kos() -> void:
 		_log_play_of_round_ko(ko, int(entry[1]))
 		_tally_career_ko(ko["victim"], ko["killer"])
 		_achievement_ko(ko["victim"], ko["killer"], int(entry[1]))
+		_timeline_703("ko", tr("STEAM_TL_KO") % _slot_name(int(ko["victim"])))
 		if feed == null:
 			continue
 		var victim: int = ko["victim"]
@@ -2905,6 +2912,12 @@ func _achievement_round_finished(winners: Array) -> void:
 		"overtime": _tiebreaker != null,
 		"weapons": weapons, "damage": damage, "lives": lives,
 		"stock_lives": int(HostSettingsScript.shared().stock_lives)})
+
+## Steam Timeline marker (#703), through the SteamPlatform autoload by path.
+func _timeline_703(kind: String, title: String) -> void:
+	var steam: Node = get_node_or_null(^"/root/SteamPlatform")
+	if steam != null:
+		steam.add_timeline_event(kind, title)
 
 func _achievement_match_won(winners: Array) -> void:
 	var ach: Node = _achievements()
