@@ -1094,6 +1094,7 @@ func _build_join_panel() -> void:
 	_room_edit.name = "RoomCode"
 	_room_edit.placeholder_text = "ABCD"
 	_room_edit.max_length = CODE_LENGTH
+	_attach_pad_keyboard(_room_edit) # #711
 	_room_edit.text_changed.connect(_on_room_text_changed)
 	_room_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_room_edit)
@@ -1103,6 +1104,7 @@ func _build_join_panel() -> void:
 	_name_edit.placeholder_text = tr("JOIN_NAME_PLACEHOLDER")
 	_name_edit.max_length = NAME_MAX_LENGTH
 	_name_edit.text = player_name
+	_attach_pad_keyboard(_name_edit) # #711
 	_name_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
 	box.add_child(_name_edit)
 	_status_label = _label("", 18, UiThemeScript.VERMILION, UiThemeScript.INK_LABEL)
@@ -1575,3 +1577,10 @@ func _target_label_key(kind: String) -> String:
 		"captures":
 			return "LOBBY_CAPTURES_TO_WIN"
 	return "LOBBY_FIRST_TO"
+
+## #711: Steam's floating gamepad keyboard for a text field, through the autoload
+## by path; a build or test tree without it does nothing.
+func _attach_pad_keyboard(edit: Control) -> void:
+	var steam: Node = get_node_or_null(^"/root/SteamPlatform")
+	if steam != null:
+		steam.call("attach_text_input", edit)
