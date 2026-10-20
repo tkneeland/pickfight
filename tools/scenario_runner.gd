@@ -929,6 +929,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ach_rock_bottom_689",
 	"ach_lava_lamp_689",
 	"ach_tool_belt_689",
+	"name_defaults_to_steam_persona_538",
+	"saved_name_beats_steam_persona_538",
+	"no_steam_name_default_unchanged_538",
+	"overlong_steam_persona_is_capped_538",
 	"ach_arsenal_689",
 	"ach_old_faithful_689",
 	"ach_hat_trick_689",
@@ -3190,6 +3194,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ach_rock_bottom_689()
 		"ach_lava_lamp_689":
 			return await _scenario_ach_lava_lamp_689()
+		"name_defaults_to_steam_persona_538":
+			return await _scenario_name_defaults_to_steam_persona_538()
+		"saved_name_beats_steam_persona_538":
+			return await _scenario_saved_name_beats_steam_persona_538()
+		"no_steam_name_default_unchanged_538":
+			return await _scenario_no_steam_name_default_unchanged_538()
+		"overlong_steam_persona_is_capped_538":
+			return await _scenario_overlong_steam_persona_is_capped_538()
 		"ach_tool_belt_689":
 			return await _scenario_ach_tool_belt_689()
 		"ach_arsenal_689":
@@ -45132,5 +45144,63 @@ func _scenario_play_of_round_caption_translated_704() -> Array[String]:
 		elif caption == english or tr("SETTINGS_PLAY_OF_ROUND") == "Play of the round replay":
 			failures.append("%s still reads English" % locale)
 	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+
+## #538 helper: one PC join screen on a temp settings file, with an optional
+## pre-saved name and a fake Steam persona. Returns the field text.
+func _name_field_538(saved: Variant, persona: String) -> String:
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_remote_client_538_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	if saved != null:
+		var config := ConfigFile.new()
+		config.set_value(RemoteClientScript241.SECTION, "name", str(saved))
+		config.save(temp_path)
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	steam.fake_persona_for_test = persona
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = temp_path
+	client.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(client)
+	await process_frame
+	var shown: String = client._name_edit.text
+	client.queue_free()
+	await process_frame
+	steam.fake_persona_for_test = ""
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	return shown
+
+func _scenario_name_defaults_to_steam_persona_538() -> Array[String]:
+	var failures: Array[String] = []
+	var shown: String = await _name_field_538(null, "Gabe")
+	if shown != "Gabe":
+		failures.append("nothing saved + persona 'Gabe' showed '%s'" % shown)
+	_scenario_completed = true
+	return failures
+
+func _scenario_saved_name_beats_steam_persona_538() -> Array[String]:
+	var failures: Array[String] = []
+	var shown: String = await _name_field_538("Zelda", "Gabe")
+	if shown != "Zelda":
+		failures.append("saved 'Zelda' + persona 'Gabe' showed '%s'" % shown)
+	_scenario_completed = true
+	return failures
+
+func _scenario_no_steam_name_default_unchanged_538() -> Array[String]:
+	var failures: Array[String] = []
+	var shown: String = await _name_field_538(null, "")
+	if shown != "":
+		failures.append("no Steam + nothing saved showed '%s'" % shown)
+	_scenario_completed = true
+	return failures
+
+func _scenario_overlong_steam_persona_is_capped_538() -> Array[String]:
+	var failures: Array[String] = []
+	var shown: String = await _name_field_538(null, "W".repeat(80))
+	var cap: int = RemoteClientScript241.NAME_MAX_LENGTH
+	if shown.length() != cap or shown != "W".repeat(cap):
+		failures.append("80-char persona showed %d chars, wanted %d" % [shown.length(), cap])
 	_scenario_completed = true
 	return failures
