@@ -23,6 +23,25 @@ var app_id: int = 0
 ## Test seam (#538): a non-empty value stands in for the Steam persona name.
 var fake_persona_for_test: String = ""
 
+## Test seam (#298): true makes every invite wrapper act as if Steam were
+## running, recording the call in `calls_for_test` instead of reaching GodotSteam.
+var fake_running_for_test: bool = false
+## Test seam (#298): each wrapper call as `[name, args...]`, in order.
+var calls_for_test: Array = []
+
+## #298: a Steam friend asked to join `code` (valid Online room code). Fired
+## from a runtime Join Game and from `emit_join_for_test`.
+signal join_requested(code: String)
+
+## The connect string key in the launch args and the rich presence payload.
+const CONNECT_FLAG := "+pickfight_room"
+const RemoteClientScript := preload("res://scripts/RemoteClient.gd")
+const REMOTE_CLIENT_SCENE := "res://scenes/RemoteClient.tscn"
+
+## A room code from a launch/connect request that arrived with no join screen
+## to take it; RemoteClient consumes it with `take_pending_join_code()`.
+var pending_join_code: String = ""
+
 var _steam: Object = null
 
 func _ready() -> void:
@@ -42,6 +61,9 @@ func _ready() -> void:
 		return
 	_steam = steam
 	available = true
+	if steam.has_signal("join_game_requested"):
+		steam.connect("join_game_requested", _on_join_game_requested)
+	pending_join_code = parse_connect(" ".join(OS.get_cmdline_args()) + " " + " ".join(OS.get_cmdline_user_args()))
 	print("SteamPlatform: Steam ready (app %d)" % app_id)
 
 func _process(_delta: float) -> void:
@@ -74,3 +96,85 @@ func store_stats() -> bool:
 	if not available:
 		return false
 	return bool(_steam.call("storeStats"))
+
+# --- Friend invites (#298) -------------------------------------------------------
+
+## Whether invite calls reach Steam: it is running, or the test seam says so.
+func running() -> bool:
+	return available or fake_running_for_test
+
+## The valid room code in a connect string ("+pickfight_room ABCD", or a whole
+## command line containing it), else "". Same rules as a typed code: upper-case,
+## the relay's alphabet, full length; anything else is garbage.
+static func parse_connect(text: String) -> String:
+	var tokens: PackedStringArray = text.split(" ", false)
+	var at: int = tokens.find(CONNECT_FLAG)
+	if at < 0 or at + 1 >= tokens.size():
+		return ""
+	var raw: String = tokens[at + 1]
+	var code: String = RemoteClientScript.normalize_code(raw)
+	if code != raw.to_upper() or not RemoteClientScript.code_is_complete(code):
+		return ""
+	return code
+
+## The connect string a friend's Join Game hands back for `code`.
+static func connect_string(code: String) -> String:
+	return "%s %s" % [CONNECT_FLAG, code]
+
+## Show friends a Join Game button for `code` plus a short status line.
+func set_rich_presence(code: String, status: String) -> void:
+	if not running():
+		return
+	calls_for_test.append(["set_rich_presence", code, status])
+	if available:
+		_steam.call("setRichPresence", "connect", connect_string(code))
+		_steam.call("setRichPresence", "status", status)
+
+## Take the Join Game button and status away (the room closed).
+func clear_rich_presence() -> void:
+	if not running():
+		return
+	calls_for_test.append(["clear_rich_presence"])
+	if available:
+		_steam.call("clearRichPresence")
+
+## Open Steam's overlay "invite friends" dialog carrying `code`.
+func open_invite_dialog(code: String) -> void:
+	if not running():
+		return
+	calls_for_test.append(["open_invite_dialog", code])
+	if available:
+		_steam.call("activateGameOverlayInviteDialogConnectString", connect_string(code))
+
+## The launch-arg room code, once; "" when there is none.
+func take_pending_join_code() -> String:
+	var code: String = pending_join_code
+	pending_join_code = ""
+	return code
+
+## Test seam: act as if a friend accepted an invite with `connect`.
+func emit_join_for_test(connect: String) -> void:
+	_on_join_game_requested(0, connect)
+
+func _on_join_game_requested(_friend: int, connect: String) -> void:
+	var code: String = parse_connect(connect)
+	if code.is_empty():
+		return # garbage payload: ignored
+	if get_signal_connection_list("join_requested").is_empty():
+		pending_join_code = code
+		_open_join_screen_if_idle()
+	join_requested.emit(code)
+
+## From the host's own screen, a friend's Join Game opens the PC join screen
+## unless a match with other players is already being hosted.
+func _open_join_screen_if_idle() -> void:
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null or fake_running_for_test:
+		return
+	for node: Node in tree.current_scene.find_children("*", "", true, false):
+		if node.has_method("host_pc_slot") and node.has_method("claimed_slots"):
+			var own: int = 1 if int(node.call("host_pc_slot")) != -1 else 0
+			if (node.call("claimed_slots") as Array).size() > own:
+				pending_join_code = ""
+				return
+	tree.change_scene_to_file.call_deferred(REMOTE_CLIENT_SCENE)

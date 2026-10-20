@@ -1793,6 +1793,7 @@ func set_lobby_state(state: Dictionary) -> void:
 	_lobby_state["t"] = "lobby"
 	if MATCH_PHASES.has(str(_lobby_state.get("phase", ""))) and not MATCH_PHASES.has(was):
 		_match_serial += 1
+	_sync_steam_presence()
 	_send_lobby_to_all()
 	_update_mouse_capture()
 
@@ -2495,6 +2496,7 @@ func online_status() -> String:
 	return "unreachable"
 
 func _on_room_code_changed(_code: String) -> void:
+	_sync_steam_presence()
 	_refresh_join_label()
 	_send_lobby_to_all()
 
@@ -2525,6 +2527,7 @@ func _refresh_join_label() -> void:
 		label.text = "%s\n%s" % [_join_label_base, tr("ONLINE_ROOM") % code]
 
 func _on_link_state_changed(_state: String) -> void:
+	_sync_steam_presence()
 	_refresh_join_label()
 	_send_lobby_to_all()
 
@@ -3172,6 +3175,7 @@ func set_match_kind(kind: String) -> bool:
 			bot_director.counter_seated = true
 	if dropped > 0:
 		_kind_drop = {"kind": target, "count": dropped, "msec": Time.get_ticks_msec()}
+	_sync_steam_presence()
 	_send_lobby_to_all()
 	return true
 
@@ -3362,3 +3366,45 @@ func host_pc_command(cmd: String, slot: int = -1) -> bool:
 func _host_menu_open() -> bool:
 	var menu: Node = get_node_or_null(^"/root/Sfx/SfxSettings")
 	return menu != null and menu.has_method("is_open") and menu.is_open()
+
+# --- Steam friend invites (#298) -------------------------------------------------
+
+var _presence_key: String = "" # "<code>|<status>" last sent to Steam, "" when cleared
+
+func _steam_platform() -> Node:
+	return get_node_or_null(^"/root/SteamPlatform")
+
+## Keeps Steam rich presence in step with the room: only an Online match with
+## an open room has a Join Game button; anything else clears it (ADR-0021).
+func _sync_steam_presence() -> void:
+	var steam: Node = _steam_platform()
+	if steam == null:
+		return
+	var code: String = online_room_code() if _match_kind == KIND_ONLINE and is_online() else ""
+	if code.is_empty():
+		if not _presence_key.is_empty():
+			_presence_key = ""
+			steam.call("clear_rich_presence")
+		return
+	var status: String = tr("STEAM_STATUS_IN_MATCH") if MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) else tr("STEAM_STATUS_IN_LOBBY")
+	var key: String = "%s|%s" % [code, status]
+	if key != _presence_key:
+		_presence_key = key
+		steam.call("set_rich_presence", code, status)
+
+## The host lobby's "Invite Steam friends" button: Steam is running and an
+## Online room is open.
+func can_invite_steam_friends() -> bool:
+	var steam: Node = _steam_platform()
+	return steam != null and bool(steam.call("running")) and _match_kind == KIND_ONLINE and not online_room_code().is_empty()
+
+func invite_steam_friends() -> void:
+	if can_invite_steam_friends():
+		_steam_platform().call("open_invite_dialog", online_room_code())
+
+func _exit_tree() -> void:
+	if not _presence_key.is_empty():
+		_presence_key = ""
+		var steam: Node = _steam_platform()
+		if steam != null:
+			steam.call("clear_rich_presence")

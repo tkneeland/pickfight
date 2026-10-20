@@ -929,6 +929,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ach_rock_bottom_689",
 	"ach_lava_lamp_689",
 	"ach_tool_belt_689",
+	"online_hosting_sets_steam_presence_298",
+	"closing_online_room_clears_steam_presence_298",
+	"no_steam_makes_no_calls_and_hides_invite_298",
+	"invite_button_opens_dialog_with_room_code_298",
+	"launch_arg_joins_with_code_298",
+	"runtime_join_request_joins_298",
+	"malformed_join_code_ignored_298",
+	"couch_hosting_sets_no_steam_presence_298",
 	"name_defaults_to_steam_persona_538",
 	"saved_name_beats_steam_persona_538",
 	"no_steam_name_default_unchanged_538",
@@ -3204,6 +3212,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_overlong_steam_persona_is_capped_538()
 		"ach_tool_belt_689":
 			return await _scenario_ach_tool_belt_689()
+		"online_hosting_sets_steam_presence_298":
+			return await _scenario_online_hosting_sets_steam_presence_298()
+		"closing_online_room_clears_steam_presence_298":
+			return await _scenario_closing_online_room_clears_steam_presence_298()
+		"no_steam_makes_no_calls_and_hides_invite_298":
+			return await _scenario_no_steam_makes_no_calls_and_hides_invite_298()
+		"invite_button_opens_dialog_with_room_code_298":
+			return await _scenario_invite_button_opens_dialog_with_room_code_298()
+		"launch_arg_joins_with_code_298":
+			return await _scenario_launch_arg_joins_with_code_298()
+		"runtime_join_request_joins_298":
+			return await _scenario_runtime_join_request_joins_298()
+		"malformed_join_code_ignored_298":
+			return await _scenario_malformed_join_code_ignored_298()
+		"couch_hosting_sets_no_steam_presence_298":
+			return await _scenario_couch_hosting_sets_no_steam_presence_298()
 		"ach_arsenal_689":
 			return await _scenario_ach_arsenal_689()
 		"ach_old_faithful_689":
@@ -45202,5 +45226,192 @@ func _scenario_overlong_steam_persona_is_capped_538() -> Array[String]:
 	var cap: int = RemoteClientScript241.NAME_MAX_LENGTH
 	if shown.length() != cap or shown != "W".repeat(cap):
 		failures.append("80-char persona showed %d chars, wanted %d" % [shown.length(), cap])
+	_scenario_completed = true
+	return failures
+
+# --- #298: Steam friend invites ---------------------------------------------------
+
+## A host rig on a local relay with SteamPlatform faked running (or not) and
+## the match kind picked. Online waits for the room code.
+func _rig_298(kind: String, steam_running: bool) -> Dictionary:
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.fake_running_for_test = steam_running
+	steam.calls_for_test.clear()
+	var relay: Node = _relay_start()
+	if relay == null:
+		return {}
+	var old: Variant = _relay_setting_239(_relay_port_next)
+	var rig: Dictionary = await _phone_rig_164(3, "Steam298")
+	rig["relay"] = relay
+	rig["old"] = old
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	server.apply_host_command("kind", kind)
+	if kind == "online":
+		await _wait_for_239(func() -> bool: return server.is_online())
+	await process_frame
+	return rig
+
+func _close_298(rig: Dictionary) -> void:
+	rig["server"].go_offline()
+	_relay_stop(rig["relay"], [])
+	ProjectSettings.set_setting("pickfight/relay_url", rig["old"])
+	await _teardown(rig["stage"])
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.fake_running_for_test = false
+	steam.calls_for_test.clear()
+	steam.pending_join_code = ""
+
+func _lobby_screen_298(rig: Dictionary) -> CanvasLayer:
+	var screen: CanvasLayer = LobbyScreenScript435.new()
+	rig["stage"].add_child(screen)
+	screen.build_panels()
+	screen.attach_controls(rig["server"])
+	screen.show_panel("lobby")
+	await process_frame
+	screen.refresh_lobby(_lobby_state_425(1), 2, rig["server"])
+	return screen
+
+func _scenario_online_hosting_sets_steam_presence_298() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rig_298("online", true)
+	if rig.is_empty():
+		return ["no free port for the relay"]
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var code: String = rig["server"].online_room_code()
+	var want: Array = [["set_rich_presence", code, "In the lobby"]]
+	if code.is_empty() or steam.calls_for_test != want:
+		failures.append("lobby presence calls %s, wanted %s" % [steam.calls_for_test, want])
+	if steam.connect_string("ABCD") != "+pickfight_room ABCD":
+		failures.append("connect string '%s'" % steam.connect_string("ABCD"))
+	rig["server"].set_lobby_state({"phase": "playing", "players": []})
+	if steam.calls_for_test.back() != ["set_rich_presence", code, "In a match"]:
+		failures.append("match presence last call %s" % [steam.calls_for_test.back()])
+	await _close_298(rig)
+	_scenario_completed = true
+	return failures
+
+func _scenario_closing_online_room_clears_steam_presence_298() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rig_298("online", true)
+	if rig.is_empty():
+		return ["no free port for the relay"]
+	var steam: Node = get_root().get_node("SteamPlatform")
+	rig["server"].go_offline()
+	await process_frame
+	if steam.calls_for_test.back() != ["clear_rich_presence"]:
+		failures.append("after closing the room the last call was %s" % [steam.calls_for_test.back()])
+	await _close_298(rig)
+	_scenario_completed = true
+	return failures
+
+func _scenario_no_steam_makes_no_calls_and_hides_invite_298() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rig_298("online", false)
+	if rig.is_empty():
+		return ["no free port for the relay"]
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var screen: CanvasLayer = await _lobby_screen_298(rig)
+	if not steam.calls_for_test.is_empty():
+		failures.append("without Steam, calls were made: %s" % [steam.calls_for_test])
+	var button: Button = screen.invite_button()
+	if button == null or button.visible:
+		failures.append("the invite button is shown without Steam")
+	steam.open_invite_dialog("ABCD")
+	steam.set_rich_presence("ABCD", "x")
+	steam.clear_rich_presence()
+	if not steam.calls_for_test.is_empty():
+		failures.append("direct wrapper calls were not no-ops without Steam")
+	await _close_298(rig)
+	_scenario_completed = true
+	return failures
+
+func _scenario_invite_button_opens_dialog_with_room_code_298() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rig_298("online", true)
+	if rig.is_empty():
+		return ["no free port for the relay"]
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var screen: CanvasLayer = await _lobby_screen_298(rig)
+	var button: Button = screen.invite_button()
+	var code: String = rig["server"].online_room_code()
+	if button == null or not button.visible:
+		failures.append("the invite button is hidden in an Online lobby with Steam running")
+	else:
+		button.pressed.emit()
+		if steam.calls_for_test.back() != ["open_invite_dialog", code]:
+			failures.append("pressing invite made %s, wanted the dialog for %s" % [steam.calls_for_test.back(), code])
+	await _close_298(rig)
+	_scenario_completed = true
+	return failures
+
+## One PC join screen with a throwaway settings file; the caller frees it.
+func _join_client_298() -> Node:
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = OS.get_temp_dir().path_join("pickfight_remote_client_298_%d.cfg" % OS.get_process_id())
+	client.relay_url = "ws://127.0.0.1:1"
+	get_root().add_child(client)
+	await process_frame
+	return client
+
+func _free_client_298(client: Node) -> void:
+	var path: String = client.settings_path
+	client.queue_free()
+	await process_frame
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+
+func _scenario_launch_arg_joins_with_code_298() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.pending_join_code = steam.parse_connect("pickfight --fixed-fps 60 +pickfight_room KQXZ")
+	var client: Node = await _join_client_298()
+	if client.room_code != "KQXZ":
+		failures.append("launch arg joined room '%s', wanted KQXZ" % client.room_code)
+	if steam.pending_join_code != "":
+		failures.append("the launch code was not consumed")
+	await _free_client_298(client)
+	_scenario_completed = true
+	return failures
+
+func _scenario_runtime_join_request_joins_298() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var client: Node = await _join_client_298()
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	if client.room_code != "MNPQ":
+		failures.append("a friend's Join Game joined room '%s', wanted MNPQ" % client.room_code)
+	await _free_client_298(client)
+	_scenario_completed = true
+	return failures
+
+func _scenario_malformed_join_code_ignored_298() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var client: Node = await _join_client_298()
+	for bad: String in ["+pickfight_room", "+pickfight_room AB", "+pickfight_room ABCDE", "+pickfight_room AB!D", "+pickfight_room IOIO", "garbage", ""]:
+		steam.emit_join_for_test(bad)
+		if not client.room_code.is_empty():
+			failures.append("'%s' joined room '%s'" % [bad, client.room_code])
+			break
+	if steam.parse_connect("+pickfight_room ABC1") != "":
+		failures.append("a code with a digit was accepted")
+	await _free_client_298(client)
+	_scenario_completed = true
+	return failures
+
+func _scenario_couch_hosting_sets_no_steam_presence_298() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rig_298("local", true)
+	if rig.is_empty():
+		return ["no free port for the relay"]
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var screen: CanvasLayer = await _lobby_screen_298(rig)
+	rig["server"].set_lobby_state({"phase": "playing", "players": []})
+	if not steam.calls_for_test.is_empty():
+		failures.append("a Couch match made Steam calls: %s" % [steam.calls_for_test])
+	if screen.invite_button().visible:
+		failures.append("the invite button is shown in a Couch match")
+	await _close_298(rig)
 	_scenario_completed = true
 	return failures
