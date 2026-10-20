@@ -240,6 +240,9 @@ var _replay: Node
 ## F9 saves the last ~10 s of play as a clip (#329, ADR-0020).
 func _unhandled_input(event: InputEvent) -> void:
 	_victory_click(event)
+	if _play_of_round_skip_event(event):
+		get_viewport().set_input_as_handled()
+		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F9 and _replay != null:
 		_replay.save_and_toast()
@@ -306,7 +309,9 @@ func _process(_delta: float) -> void:
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
 		State.ROUND_END:
+			_tick_play_of_round()
 			if GameClockScript.now_msec() >= _pause_until_msec:
+				_end_play_of_round()
 				# Expire first, then test: a winner whose claim lapsed must not
 				# pass its weapon to whoever claims the freed slot (issue #6 D3).
 				# `_try_start_round()` expires again on the way in; it is idempotent,
@@ -600,6 +605,7 @@ func _check_round_end() -> void:
 	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
+	_start_play_of_round()
 	if lobby_enabled:
 		_publish_lobby_state()
 
@@ -1970,6 +1976,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
+	_start_play_of_round()
 	if lobby_enabled:
 		_publish_lobby_state()
 
@@ -2174,6 +2181,7 @@ func _flush_kos() -> void:
 	var feed: Control = kill_feed()
 	for entry: Array in pending:
 		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1])
+		_log_play_of_round_ko(ko, int(entry[1]))
 		_tally_career_ko(ko["victim"], ko["killer"])
 		_achievement_ko(ko["victim"], ko["killer"], int(entry[1]))
 		if feed == null:
@@ -2189,6 +2197,94 @@ func _flush_kos() -> void:
 			feed.show_banner([tr("BANNER_DOUBLE_KO"), tr("BANNER_TRIPLE_KO")][streak - 2] if streak <= 3 else tr("BANNER_MULTI_KO"), _slot_name(killer), _slot_color(killer))
 		elif ko["first_blood"]:
 			feed.show_banner(tr("BANNER_FIRST_BLOOD"), _slot_name(killer), _slot_color(killer))
+
+# --- Play of the round (#704) ---------------------------------------------------
+#
+# The round's best KO, replayed in slow motion from the F9 buffer inside the
+# round-end pause. It reads `_pause_until_msec` and never writes it: the pause
+# is exactly as long with the feature on or off, a clip longer than what is
+# left is trimmed (`PlayOfRound.select_frames`), and `_end_play_of_round()`
+# runs before the pause's own exit.
+
+const PlayOfRoundScript := preload("res://scripts/PlayOfRound.gd")
+var _play_of_round: CanvasLayer
+## This round's KOs: `{t, killer, victim, hazard, ranged}`, t in game msec.
+var _round_kos: Array = []
+
+func _log_play_of_round_ko(ko: Dictionary, t_msec: int) -> void:
+	var killer: int = ko["killer"]
+	var victim: int = ko["victim"]
+	if killer < 0 or killer == victim or killer >= _players.size() or victim < 0 or victim >= _players.size():
+		return
+	var killer_node: Variant = _players[killer]
+	var victim_node: Variant = _players[victim]
+	if killer_node == null or victim_node == null:
+		return
+	var hazard: Variant = victim_node.get("death_hazard")
+	var far: bool = (killer_node as Node2D).global_position.distance_to((victim_node as Node2D).global_position) > PlayOfRoundScript.RANGED_DISTANCE_PX
+	_round_kos.append({"t": t_msec, "killer": killer, "victim": victim,
+		"hazard": hazard is String and hazard != "", "ranged": far})
+
+func _start_play_of_round() -> void:
+	if _play_of_round != null:
+		_play_of_round.dismiss()
+	if not HostSettingsScript.shared().play_of_round or _replay == null or _replay.frame_count() == 0:
+		return
+	# A match-deciding round has its own slow-motion KO and the podium after it.
+	if _match_winner_slot != -1 or _match_winner_team != -1 or _final_ko_active:
+		return
+	var best: Dictionary = PlayOfRoundScript.best_moment(_round_kos)
+	if best.is_empty():
+		return
+	var now: int = GameClockScript.now_msec()
+	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.frame_count(), now, int(best["t"]), _pause_until_msec - now)
+	if int(pick["count"]) <= 0:
+		return
+	if _play_of_round == null:
+		_play_of_round = PlayOfRoundScript.new()
+		add_child(_play_of_round)
+	# Only a fresh Ready tap skips it.
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+	# Streamer mode (#369) hides only the room code and join links; names stay.
+	_play_of_round.play(_replay.frames_slice(int(pick["start"]), int(pick["count"])),
+		tr("PLAY_OF_ROUND_CAPTION") % _slot_name(int(best["killer"])), _shake_on())
+
+func _shake_on() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx") if is_inside_tree() else null
+	return sfx == null or bool(sfx.get("screen_shake"))
+
+func _end_play_of_round() -> void:
+	if _play_of_round != null:
+		_play_of_round.dismiss()
+
+func play_of_round_panel() -> CanvasLayer:
+	return _play_of_round
+
+## A player's Ready/confirm tap during the clip dismisses it.
+func _tick_play_of_round() -> void:
+	if _play_of_round == null or not _play_of_round.is_playing() or _controller_server == null:
+		return
+	for slot: int in _controller_server.claimed_slots():
+		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			continue
+		var tapped: bool = _controller_server.slot_pressed_ready(slot) if _controller_server.has_method("slot_pressed_ready") else false
+		if tapped:
+			_end_play_of_round()
+			return
+
+## The host's Esc, Enter, Space or any pad button skips the clip.
+func _play_of_round_skip_event(event: InputEvent) -> bool:
+	if _play_of_round == null or not _play_of_round.is_playing():
+		return false
+	var key := event as InputEventKey
+	if key != null:
+		if not key.pressed or key.echo or key.physical_keycode == KEY_F9:
+			return false
+	elif not (event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed):
+		return false
+	_end_play_of_round()
+	return true
 
 func _ko_match_started() -> void:
 	_stats.begin_match()
@@ -2226,6 +2322,8 @@ func mode_won() -> bool:
 
 func _ko_round_started() -> void:
 	_pending_kos.clear()
+	_round_kos.clear()
+	_end_play_of_round()
 	var stale_feed: Control = kill_feed()
 	if stale_feed != null and stale_feed.has_method("clear_banners"):
 		stale_feed.clear_banners() # a late banner must not land in this round (#613)

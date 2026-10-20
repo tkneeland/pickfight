@@ -53,3 +53,14 @@ func send_damage(slot: int, fraction: float) -> void:
 				return
 			break
 	damage_sent.append([slot, fraction])
+
+## Slots whose phone has tapped Ready, for the play-of-the-round skip (#704).
+var ready_taps: Array[int] = []
+var cleared_ready: int = 0
+
+func slot_pressed_ready(slot: int) -> bool:
+	return ready_taps.has(slot)
+
+func clear_ready() -> void:
+	ready_taps.clear()
+	cleared_ready += 1
