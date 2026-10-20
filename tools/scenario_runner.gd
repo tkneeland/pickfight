@@ -937,6 +937,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"runtime_join_request_joins_298",
 	"malformed_join_code_ignored_298",
 	"couch_hosting_sets_no_steam_presence_298",
+	"ko_adds_steam_timeline_event_703",
+	"bot_ko_adds_steam_timeline_event_703",
+	"round_win_adds_steam_timeline_event_703",
+	"match_win_adds_steam_timeline_event_703",
+	"no_steam_records_no_timeline_events_703",
 	"name_defaults_to_steam_persona_538",
 	"saved_name_beats_steam_persona_538",
 	"no_steam_name_default_unchanged_538",
@@ -3228,6 +3233,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_malformed_join_code_ignored_298()
 		"couch_hosting_sets_no_steam_presence_298":
 			return await _scenario_couch_hosting_sets_no_steam_presence_298()
+		"ko_adds_steam_timeline_event_703":
+			return await _scenario_ko_adds_steam_timeline_event_703()
+		"bot_ko_adds_steam_timeline_event_703":
+			return await _scenario_bot_ko_adds_steam_timeline_event_703()
+		"round_win_adds_steam_timeline_event_703":
+			return await _scenario_round_win_adds_steam_timeline_event_703()
+		"match_win_adds_steam_timeline_event_703":
+			return await _scenario_match_win_adds_steam_timeline_event_703()
+		"no_steam_records_no_timeline_events_703":
+			return await _scenario_no_steam_records_no_timeline_events_703()
 		"ach_arsenal_689":
 			return await _scenario_ach_arsenal_689()
 		"ach_old_faithful_689":
@@ -45414,4 +45429,102 @@ func _scenario_couch_hosting_sets_no_steam_presence_298() -> Array[String]:
 		failures.append("the invite button is shown in a Couch match")
 	await _close_298(rig)
 	_scenario_completed = true
+	return failures
+
+# --- Steam Timeline markers (#703) ---------------------------------------------
+
+func _timeline_start_703(running: bool) -> Node:
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.fake_running_for_test = running
+	steam.calls_for_test.clear()
+	return steam
+
+func _timeline_end_703(steam: Node) -> void:
+	steam.fake_running_for_test = false
+	steam.calls_for_test.clear()
+
+func _timeline_kinds_703(steam: Node) -> Array:
+	var kinds: Array = []
+	for call: Array in steam.calls_for_test:
+		if call[0] == "add_timeline_event":
+			kinds.append(call[1])
+	return kinds
+
+func _scenario_ko_adds_steam_timeline_event_703() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(true)
+	var rig: Dictionary = await _ach_rig_689(3)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		_timeline_end_703(steam)
+		return failures
+	rig["players"][1].eliminate()
+	await _await_ticks(6)
+	if steam.calls_for_test.filter(func(c: Array) -> bool: return c[0] == "add_timeline_event" and c[1] == "ko" and c[2] == "KO: P2").size() != 1:
+		failures.append("KO of P2 recorded %s" % [steam.calls_for_test])
+	await _teardown(rig["stage"])
+	_timeline_end_703(steam)
+	return failures
+
+func _scenario_bot_ko_adds_steam_timeline_event_703() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(true)
+	var loop: Dictionary = await _ach_lobby_689(3, [1], "local", 5)
+	if not loop["started"]:
+		await _teardown(loop["stage"])
+		_timeline_end_703(steam)
+		return ["the match with a bot never started"]
+	loop["players"][1].eliminate()
+	await _await_ticks(6)
+	if not _timeline_kinds_703(steam).has("ko"):
+		failures.append("a bot's KO recorded %s" % [steam.calls_for_test])
+	await _teardown(loop["stage"])
+	_timeline_end_703(steam)
+	return failures
+
+func _scenario_round_win_adds_steam_timeline_event_703() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(true)
+	var rig: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		_timeline_end_703(steam)
+		return failures
+	rig["players"][1].eliminate()
+	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("round_win"), 3000)
+	if not steam.calls_for_test.has(["add_timeline_event", "round_win", "P1 wins the round"]):
+		failures.append("round win recorded %s" % [steam.calls_for_test])
+	await _teardown(rig["stage"])
+	_timeline_end_703(steam)
+	return failures
+
+func _scenario_match_win_adds_steam_timeline_event_703() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(true)
+	var loop: Dictionary = await _ach_lobby_689(2, [], "local", 1)
+	if not loop["started"]:
+		await _teardown(loop["stage"])
+		_timeline_end_703(steam)
+		return ["the lobby match never started"]
+	loop["players"][1].eliminate()
+	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("match_win"), 3000)
+	if not steam.calls_for_test.has(["add_timeline_event", "match_win", "P1 wins the match"]):
+		failures.append("match win recorded %s" % [steam.calls_for_test])
+	await _teardown(loop["stage"])
+	_timeline_end_703(steam)
+	return failures
+
+func _scenario_no_steam_records_no_timeline_events_703() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(false)
+	var loop: Dictionary = await _ach_lobby_689(2, [], "local", 1)
+	if not loop["started"]:
+		await _teardown(loop["stage"])
+		return ["the lobby match never started"]
+	loop["players"][1].eliminate()
+	await _await_condition(func() -> bool: return loop["rm"].lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+	if not steam.calls_for_test.is_empty():
+		failures.append("Steam off still recorded %s" % [steam.calls_for_test])
+	await _teardown(loop["stage"])
+	_timeline_end_703(steam)
 	return failures
