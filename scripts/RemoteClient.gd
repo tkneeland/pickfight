@@ -963,14 +963,28 @@ func _load_settings() -> void:
 		return
 	var config := ConfigFile.new()
 	if config.load(settings_path) != OK:
+		player_name = _steam_default_name()
 		return
+	# #538: a name never saved defaults to the Steam persona name; any saved
+	# name (even one that reads empty) is the player's and wins.
+	if not config.has_section_key(SECTION, "name"):
+		player_name = _steam_default_name()
 	# #460: a hand-edited or junk saved name reads as empty; the join falls back to "Player".
-	player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
+	else:
+		player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
 	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)
 	if (sens is float or sens is int) and is_finite(float(sens)):
 		_mouse.sensitivity = clampf(float(sens), 0.1, 5.0)
+
+## #538: the Steam persona name, cleaned and capped like any typed name; ""
+## without Steam.
+func _steam_default_name() -> String:
+	var steam: Node = get_node_or_null(^"/root/SteamPlatform")
+	if steam == null:
+		return ""
+	return ControllerServerScript.clean_name(str(steam.call("persona_name"))).left(NAME_MAX_LENGTH)
 
 func _save_settings() -> void:
 	if settings_path.is_empty():

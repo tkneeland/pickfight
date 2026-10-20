@@ -20,6 +20,9 @@ const DEFAULT_APP_ID := 480
 var available: bool = false
 var app_id: int = 0
 
+## Test seam (#538): a non-empty value stands in for the Steam persona name.
+var fake_persona_for_test: String = ""
+
 var _steam: Object = null
 
 func _ready() -> void:
@@ -47,6 +50,8 @@ func _process(_delta: float) -> void:
 
 ## The player's Steam name, or "" when Steam is not running.
 func persona_name() -> String:
+	if not fake_persona_for_test.is_empty():
+		return fake_persona_for_test
 	if not available:
 		return ""
 	return str(_steam.call("getPersonaName"))
