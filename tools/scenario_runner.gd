@@ -969,6 +969,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ach_remote_pc_seat_is_told_689",
 	"ach_toast_shown_unless_steam_689",
 	"ach_names_translated_and_documented_689",
+	"lobby_card_follows_hat_and_eyes_pick_714",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3292,6 +3293,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ach_toast_shown_unless_steam_689()
 		"ach_names_translated_and_documented_689":
 			return await _scenario_ach_names_translated_and_documented_689()
+		"lobby_card_follows_hat_and_eyes_pick_714":
+			return await _scenario_lobby_card_follows_hat_and_eyes_pick_714()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -45561,4 +45564,34 @@ func _scenario_text_input_711(pad: bool, steam_running: bool) -> Array[String]:
 	steam.pad_input_active = false
 	_timeline_end_703(steam)
 	_scenario_completed = true
+	return failures
+
+## Issue #714: a hat or eyes pick (the Your look popup, a pad, a phone) reaches the
+## seat's lobby card. The lobby state the card is redrawn from carries the colour but
+## not the hat or eyes, so an unchanged state used to skip the redraw and leave the
+## card on its old look.
+func _scenario_lobby_card_follows_hat_and_eyes_pick_714() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.press_control("online")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var host: int = server.host_pc_slot()
+	var card: Control = screen.player_card(host)
+	if card == null:
+		failures.append("no lobby card for the host seat %d" % host)
+		await _kind_close_435(rig)
+		return failures
+	for pick: Array in [["crown", "angry"], ["halo", "sleepy"]]:
+		if not server.set_slot_hat(host, pick[0]) or not server.set_slot_eyes(host, pick[1]):
+			failures.append("the server refused the pick %s" % [pick])
+			continue
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		card = screen.player_card(host)
+		if card == null or card.avatar().hat_id != pick[0] or card.avatar().eyes_id != pick[1]:
+			failures.append("after picking %s the host's lobby card still shows hat '%s', eyes '%s'" % [pick, card.avatar().hat_id if card != null else "no card", card.avatar().eyes_id if card != null else "no card"])
+	await _kind_close_435(rig)
 	return failures
