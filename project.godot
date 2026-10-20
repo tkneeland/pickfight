@@ -34,6 +34,7 @@ GameClock="*res://scripts/GameClock.gd"
 Sfx="*res://scripts/Sfx.gd"
 Music="*res://scripts/Music.gd"
 SteamPlatform="*res://scripts/SteamPlatform.gd"
+Achievements="*res://scripts/Achievements.gd"
 CrashReporting="*res://scripts/CrashReporting.gd"
 
 [debug]

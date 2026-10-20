@@ -71,6 +71,8 @@ func _hurt(body: RigidBody2D) -> void:
 	body.linear_velocity += change
 	for part: RigidBody2D in _weapon_bodies_of(body):
 		part.linear_velocity += change
+	if body.has_method("mark_hazard"):
+		body.mark_hazard("damage")  # achievements (#689)
 	body.take_damage(damage)
 	if body.has_signal("strike_landed"):
 		body.strike_landed.emit(body, damage, body.global_position, not body.alive)

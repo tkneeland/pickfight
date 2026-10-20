@@ -1395,6 +1395,19 @@ func send_career(slot: int, deltas: Dictionary) -> bool:
 	peer.send_text(JSON.stringify({"t": "career", "d": deltas}))
 	return true
 
+## Tell the Online PC client on `slot` it earned achievement `id` (#689): one
+## `{"t":"achievement","id":...}` frame its own `Achievements` unlocks locally.
+## Only a PC client keeps its own Steam achievements: phones, gamepads, the host
+## PC's seat (the host's own autoload took it) and bots get nothing.
+func send_achievement(slot: int, id: String) -> bool:
+	if not slot_has_controller(slot) or _slot_virtual[slot] == 1:
+		return false
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not _is_pc_remote(peer) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return false
+	peer.send_text(JSON.stringify({"t": "achievement", "id": id}))
+	return true
+
 ## The Continue inputs the room's human seats have, for the victory prompt
 ## (#639): "pc" (the host PC's seat or an Online client, both press Space),
 ## "pad" (a gamepad, A) and "phone" (a tap on Continue), in that order, each

@@ -111,6 +111,8 @@ func _strike(victim: Node) -> void:
 	# phantom number on screen and buzz their phone. Nothing dealt, nothing
 	# reported; the knock still lands.
 	var before: Variant = victim.get("damage")
+	if victim.has_method("mark_hazard"):
+		victim.mark_hazard("meteor")  # achievements (#689)
 	victim.take_damage(damage, point)
 	var after: Variant = victim.get("damage")
 	var dealt: float = damage
