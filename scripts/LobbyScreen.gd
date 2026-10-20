@@ -124,6 +124,7 @@ var _countdown_shown: int = 0
 var _mode_cards_by_id: Dictionary = {}
 ## The Stages & Rules button (host only) and the summary line above it (#647).
 var _stages_button: Button
+var _invite_button: Button # under the room code, Online with Steam running (#298)
 var _join_help_button: Button # under the join QR, Couch only (#680)
 var _stages_box: VBoxContainer
 var _stages_summary: Label
@@ -465,6 +466,7 @@ func _apply_streamer_mode(join_source: Object) -> void:
 	var solo: bool = online and join_source.has_method("room_closed") and join_source.room_closed()
 	_lobby_url.visible = not online
 	_join_help_button.visible = not online
+	_invite_button.visible = join_source.has_method("can_invite_steam_friends") and join_source.can_invite_steam_friends()
 	if online and _popups.current() == "join_help":
 		_popups.open("") # the match went Online under the popup: no LAN join to help with
 	var urls: PackedStringArray = join_source.join_urls() if join_source.has_method("join_urls") else PackedStringArray()
@@ -481,6 +483,14 @@ func _apply_streamer_mode(join_source: Object) -> void:
 		_join_note.add_theme_font_size_override("font_size", 22)
 	else:
 		_join_note.add_theme_font_size_override("font_size", 20)
+
+## The "Invite Steam friends" button (#298); null before the screen is built.
+func invite_button() -> Button:
+	return _invite_button
+
+func _on_invite_pressed() -> void:
+	if _server != null and _server.has_method("invite_steam_friends"):
+		_server.invite_steam_friends()
 
 func _on_card_clicked(slot: int) -> void:
 	if _server != null and _server.has_method("host_pc_slot") and slot == _server.host_pc_slot() and _server.host_picker_shown():
@@ -703,6 +713,10 @@ func _build_left_column() -> Control:
 	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
 	_join_help_button.visible = false # Couch only: Online has no LAN address to fix
 	_join_box.add_child(_join_help_button)
+	_invite_button = ScreenKitScript.themed_button(tr("STEAM_INVITE_BUTTON"), UiThemeScript.ACTION_BUTTON, "InviteSteamButton")
+	_invite_button.visible = false
+	_invite_button.pressed.connect(_on_invite_pressed)
+	_join_box.add_child(_invite_button)
 	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL)
 	mode_title.name = "ModeTitle"
 	left.add_child(mode_title)

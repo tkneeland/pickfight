@@ -240,8 +240,28 @@ func _ready() -> void:
 	_build_ui()
 	_show_join_screen()
 	get_viewport().size_changed.connect(_fit_camera)
+	_listen_for_steam_invites()
+
+## #298: a Steam friend's Join Game (launch arg or runtime) goes into the same
+## join as a typed code. SteamPlatform has already validated the code.
+func _listen_for_steam_invites() -> void:
+	var steam: Node = get_node_or_null(^"/root/SteamPlatform")
+	if steam == null:
+		return
+	steam.connect("join_requested", _on_steam_join_requested)
+	var pending: String = str(steam.call("take_pending_join_code"))
+	if not pending.is_empty():
+		_on_steam_join_requested(pending)
+
+func _on_steam_join_requested(code: String) -> void:
+	if _room_edit != null:
+		_room_edit.text = code
+	join(code, _name_edit.text if _name_edit != null else player_name)
 
 func _exit_tree() -> void:
+	var steam: Node = get_node_or_null(^"/root/SteamPlatform")
+	if steam != null and steam.is_connected("join_requested", _on_steam_join_requested):
+		steam.disconnect("join_requested", _on_steam_join_requested)
 	if _socket != null:
 		_socket.close()
 		_socket = null
