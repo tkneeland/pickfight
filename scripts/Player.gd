@@ -55,6 +55,7 @@ const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 ## What a firing weapon shoots (issue #55, ADR-0014). See `_tick_fire()`.
 const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
 const DeathBurstScript := preload("res://scripts/DeathBurst.gd")
+const GameClockScript := preload("res://scripts/GameClock.gd")
 const HatScript := preload("res://scripts/Hat.gd")
 const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 ## The three special weapons (issue #150). See "Special weapons" at the end.
@@ -583,6 +584,33 @@ func take_damage(amount: float, point: Vector2 = Vector2.INF, attacker: Node = n
 		eliminate()
 	return amount
 
+## What happened to this player lately, for the achievements (#689):
+## `RoundManager` reads these when the player is eliminated. A hazard calls
+## `mark_hazard()` just before it deals damage or eliminates, so `eliminate()`
+## can tell a hazard death ("lava", "damage", "rock" or "meteor") from a hit by
+## a player; the fishing rod's hook stamps `note_reeled()` and a ghost's boo
+## `note_booed()` with game time.
+const ACHIEVEMENT_STAMP_NEVER: int = 1000000
+var death_hazard: String = ""
+var last_reeled_by: Node = null
+var last_reeled_msec: int = -ACHIEVEMENT_STAMP_NEVER
+var last_booed_by_slot: int = -1
+var last_booed_msec: int = -ACHIEVEMENT_STAMP_NEVER
+var _hazard_frame: int = -1
+var _hazard_kind: String = ""
+
+func mark_hazard(kind: String) -> void:
+	_hazard_frame = Engine.get_physics_frames()
+	_hazard_kind = kind
+
+func note_reeled(by: Node) -> void:
+	last_reeled_by = by
+	last_reeled_msec = GameClockScript.now_msec()
+
+func note_booed(by_slot: int) -> void:
+	last_booed_by_slot = by_slot
+	last_booed_msec = GameClockScript.now_msec()
+
 ## Eliminate this player, by whatever route. Both routes there -- accumulated
 ## damage and the kill zone -- end here, so there is one description of what
 ## being eliminated does rather than two that can drift apart.
@@ -596,6 +624,7 @@ func eliminate() -> void:
 	if not alive:
 		return
 	deaths += 1
+	death_hazard = _hazard_kind if _hazard_frame == Engine.get_physics_frames() else ""
 	_spawn_death_burst()
 	# Issue #570: shots already fired keep flying and can still land.
 	_go_inert(true)
@@ -665,6 +694,11 @@ func _go_inert(keep_shots: bool = false) -> void:
 func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	alive = true
 	damage = 0.0
+	death_hazard = ""
+	last_reeled_by = null
+	last_reeled_msec = -ACHIEVEMENT_STAMP_NEVER
+	last_booed_by_slot = -1
+	last_booed_msec = -ACHIEVEMENT_STAMP_NEVER
 	input_released = false
 	_pogo_charge = 0.0
 	_pogo_cooldown = 0.0

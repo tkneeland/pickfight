@@ -515,6 +515,8 @@ func _on_host_text(text: String) -> void:
 			_refresh_extras()
 		"career":
 			_on_career(msg)
+		"achievement":
+			_on_achievement(msg)
 		"looks":
 			_on_looks(msg)
 		"ping":
@@ -1281,6 +1283,13 @@ func _is_host() -> bool:
 	return slot >= 0 and int(lobby.get("host", -1)) == slot
 
 ## The host's deltas for this seat (#503): added to the totals and saved.
+## The host says this seat earned an achievement (#689): unlock it on this PC's
+## own Steam account. `unlock()` ignores an id it does not know.
+func _on_achievement(msg: Dictionary) -> void:
+	var achievements: Node = get_node_or_null(^"/root/Achievements")
+	if achievements != null:
+		achievements.unlock(str(msg.get("id", "")))
+
 func _on_career(msg: Dictionary) -> void:
 	career = CareerScript.add(career, msg.get("d"))
 	CareerScript.save_totals(career_path, career)

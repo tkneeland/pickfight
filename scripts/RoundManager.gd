@@ -373,6 +373,12 @@ func _try_start_round() -> void:
 		if _random_weapons and not keeps_weapon:
 			_players[slot].set_weapon_stats(load(weapon_paths[_playtest_weapon_rng.randi() % weapon_paths.size()]))
 	_ko_round_started()
+	var round_ach: Node = _achievements()
+	if round_ach != null:
+		var entering_weapons: Dictionary = {}
+		for slot: int in _in_round:
+			entering_weapons[slot] = _weapon_id_of(slot)
+		round_ach.on_round_started(_in_round, _played_stage_name(), entering_weapons)
 	_abandoned_since_msec = -1
 	# One round only: consumed here whether or not the winner is still rostered.
 	_last_winner_slot = -1
@@ -580,8 +586,11 @@ func _check_round_end() -> void:
 			_match_winner_slot = winner_slot
 			_start_final_ko(winner_point)
 			match_won.emit(winner_slot)
+			_achievement_match_won([winner_slot])
 	else:
 		_last_winner_slot = -1
+	if not abandoned and not after_kick:
+		_achievement_round_finished([_last_winner_slot] if _last_winner_slot != -1 else [])
 	_pickup_director.clear()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
@@ -680,6 +689,9 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 		return
 	var victim_slot: int = _players.find(victim)
 	if victim_slot != -1:
+		var hurt_ach: Node = _achievements()
+		if hurt_ach != null:
+			hurt_ach.on_damage(victim_slot, amount)
 		_buzz(victim_slot, "struck")
 	# A rock reports on the victim's own signal (attacker == victim, #521).
 	if attacker_slot != victim_slot:
@@ -1390,6 +1402,9 @@ func _begin_match() -> void:
 	_set_join_corner_visible(false) # lobby only (#430)
 	_state = State.WAITING
 	_publish_lobby_state()
+	var party: Node = _achievements()
+	if party != null:
+		party.on_match_started(_roster())
 	_try_start_round()
 
 func _tick_lobby() -> void:
@@ -1939,6 +1954,13 @@ func _check_team_round_end(after_kick: bool) -> void:
 		_match_winner_team = winner_team
 		_start_final_ko(team_point)
 		team_match_won.emit(winner_team)
+		var team_slots: Array[int] = []
+		for slot: int in _in_round:
+			if team_of(slot) == winner_team:
+				team_slots.append(slot)
+		_achievement_match_won(team_slots)
+	if standing.size() <= 1 and not after_kick:
+		_achievement_round_finished(winners)
 	_pickup_director.clear()
 	_stop_kill_zone_rise()
 	_end_round_modifier()
@@ -2134,6 +2156,9 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 
 func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 	_stats.record_pickup(slot, weapon_name)
+	var held_ach: Node = _achievements()
+	if held_ach != null:
+		held_ach.on_weapon_held(slot, weapon_name.to_lower().replace(" ", "_"))
 
 func _on_ko_eliminated(slot: int) -> void:
 	# A mode's scripted win eliminates the losers; that is a score, not a KO (#521).
@@ -2150,6 +2175,7 @@ func _flush_kos() -> void:
 	for entry: Array in pending:
 		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1])
 		_tally_career_ko(ko["victim"], ko["killer"])
+		_achievement_ko(ko["victim"], ko["killer"], int(entry[1]))
 		if feed == null:
 			continue
 		var victim: int = ko["victim"]
@@ -2329,6 +2355,10 @@ func _start_game_mode() -> void:
 			push_warning("RoundManager: unknown game mode '%s'" % game_mode)
 		return
 	add_child(_game_mode_node)
+	if _game_mode_node.has_signal("goal_scored"):
+		_game_mode_node.goal_scored.connect(_on_mode_goal_scored)
+	if _game_mode_node.has_signal("flag_captured"):
+		_game_mode_node.flag_captured.connect(_on_mode_flag_captured)
 	_game_mode_node.setup(self)
 	_game_mode_node.start_round(_in_round.duplicate())
 
@@ -2710,3 +2740,85 @@ func _send_career_match() -> void:
 		if won:
 			deltas["match_wins"] = 1
 		_send_career(slot, deltas)
+
+# --- Achievements (#689) -------------------------------------------------------
+#
+# This script only reports plain events to the `Achievements` autoload, which
+# decides what each one earns and who is credited (human seats only, never a
+# bot). Reached by path, as every autoload is.
+
+func _achievements() -> Node:
+	var node: Node = get_node_or_null(^"/root/Achievements")
+	if node != null:
+		node.cs = _controller_server
+	return node
+
+## The id (file name) of the weapon `slot` holds, or "".
+func _weapon_id_of(slot: int) -> String:
+	if slot < 0 or slot >= _players.size() or _players[slot] == null:
+		return ""
+	var stats: Variant = _players[slot].get("weapon_stats")
+	if stats == null or stats.resource_path == "":
+		return ""
+	return stats.resource_path.get_file().get_basename()
+
+## The file name of the stage being played, or "".
+func _played_stage_name() -> String:
+	var index: int = _stage_rotation.stage_index
+	if index < 0 or index >= stage_scenes.size():
+		return ""
+	return stage_scenes[index].resource_path.get_file().get_basename()
+
+## A KO resolved: what killed `victim`, and whether a rod reel or a ghost's boo
+## put them there within the last few seconds.
+func _achievement_ko(victim: int, killer: int, died_msec: int) -> void:
+	var ach: Node = _achievements()
+	if ach == null:
+		return
+	var ctx: Dictionary = {}
+	var node: Variant = _players[victim] if victim >= 0 and victim < _players.size() else null
+	if node != null:
+		var hazard: Variant = node.get("death_hazard")
+		ctx["hazard"] = hazard if hazard is String else ""
+		var reeled_by: Variant = node.get("last_reeled_by")
+		if reeled_by is Node and is_instance_valid(reeled_by):
+			ctx["reeler"] = _players.find(reeled_by)
+			ctx["reel_age_msec"] = died_msec - int(node.get("last_reeled_msec"))
+		var booer: Variant = node.get("last_booed_by_slot")
+		if booer is int:
+			ctx["booer"] = booer
+			ctx["boo_age_msec"] = died_msec - int(node.get("last_booed_msec"))
+	ach.on_ko(victim, killer, ctx)
+
+func _achievement_round_finished(winners: Array) -> void:
+	var ach: Node = _achievements()
+	if ach == null:
+		return
+	var weapons: Dictionary = {}
+	var damage: Dictionary = {}
+	var lives: Dictionary = {}
+	for slot: int in _in_round:
+		weapons[slot] = _weapon_id_of(slot)
+		damage[slot] = float(_players[slot].damage)
+		lives[slot] = lives_of(slot)
+	ach.on_round_finished(_in_round, winners, {
+		"mode": game_mode,
+		"hill": game_mode == GameModesScript.KING_OF_THE_HILL and mode_won(),
+		"overtime": _tiebreaker != null,
+		"weapons": weapons, "damage": damage, "lives": lives,
+		"stock_lives": int(HostSettingsScript.shared().stock_lives)})
+
+func _achievement_match_won(winners: Array) -> void:
+	var ach: Node = _achievements()
+	if ach != null:
+		ach.on_match_won(winners)
+
+func _on_mode_goal_scored(_team: int, scorer: int) -> void:
+	var ach: Node = _achievements()
+	if ach != null:
+		ach.on_goal(scorer)
+
+func _on_mode_flag_captured(_team: int, scorer: int) -> void:
+	var ach: Node = _achievements()
+	if ach != null:
+		ach.on_capture(scorer)

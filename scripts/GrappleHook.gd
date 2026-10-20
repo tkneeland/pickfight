@@ -210,6 +210,8 @@ func _meet(collider: Object, point: Vector2) -> void:
 			if bool(_stats.hook_reels_players) and node is RigidBody2D:
 				shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)
 				if bool(node.get("alive")):
+					if node.has_method("note_reeled"):
+						node.note_reeled(shooter)  # achievements (#689)
 					_reeled = node as RigidBody2D
 					_reel_time = 0.0
 					state = State.REELING

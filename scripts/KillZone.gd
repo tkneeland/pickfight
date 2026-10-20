@@ -198,4 +198,6 @@ func _dress_hazard_tile() -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body.is_in_group("players"):
+		if body.has_method("mark_hazard"):
+			body.mark_hazard("lava")  # achievements (#689)
 		body.eliminate()

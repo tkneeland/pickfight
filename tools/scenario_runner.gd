@@ -916,6 +916,31 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"internet_join_closes_going_online_or_solo_683",
 	"internet_phone_binds_pc_client_refused_683",
 	"internet_phone_page_relay_branch_683",
+	"ach_first_swing_689",
+	"ach_pick_your_fight_689",
+	"ach_rock_bottom_689",
+	"ach_lava_lamp_689",
+	"ach_tool_belt_689",
+	"ach_arsenal_689",
+	"ach_old_faithful_689",
+	"ach_hat_trick_689",
+	"ach_untouchable_689",
+	"ach_back_of_the_net_689",
+	"ach_flag_runner_689",
+	"ach_king_of_the_hill_689",
+	"ach_last_life_689",
+	"ach_overtime_689",
+	"ach_party_of_eight_689",
+	"ach_boo_689",
+	"ach_gone_fishing_689",
+	"ach_world_tour_689",
+	"ach_bots_never_unlock_689",
+	"ach_solo_excludes_untouchable_and_last_life_689",
+	"ach_unlock_is_idempotent_and_calls_steam_689",
+	"ach_persistence_off_in_tests_689",
+	"ach_remote_pc_seat_is_told_689",
+	"ach_toast_shown_unless_steam_689",
+	"ach_names_translated_and_documented_689",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3141,6 +3166,56 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_internet_phone_binds_pc_client_refused_683()
 		"internet_phone_page_relay_branch_683":
 			return await _scenario_internet_phone_page_relay_branch_683()
+		"ach_first_swing_689":
+			return await _scenario_ach_first_swing_689()
+		"ach_pick_your_fight_689":
+			return await _scenario_ach_pick_your_fight_689()
+		"ach_rock_bottom_689":
+			return await _scenario_ach_rock_bottom_689()
+		"ach_lava_lamp_689":
+			return await _scenario_ach_lava_lamp_689()
+		"ach_tool_belt_689":
+			return await _scenario_ach_tool_belt_689()
+		"ach_arsenal_689":
+			return await _scenario_ach_arsenal_689()
+		"ach_old_faithful_689":
+			return await _scenario_ach_old_faithful_689()
+		"ach_hat_trick_689":
+			return await _scenario_ach_hat_trick_689()
+		"ach_untouchable_689":
+			return await _scenario_ach_untouchable_689()
+		"ach_back_of_the_net_689":
+			return await _scenario_ach_back_of_the_net_689()
+		"ach_flag_runner_689":
+			return await _scenario_ach_flag_runner_689()
+		"ach_king_of_the_hill_689":
+			return await _scenario_ach_king_of_the_hill_689()
+		"ach_last_life_689":
+			return await _scenario_ach_last_life_689()
+		"ach_overtime_689":
+			return await _scenario_ach_overtime_689()
+		"ach_party_of_eight_689":
+			return await _scenario_ach_party_of_eight_689()
+		"ach_boo_689":
+			return await _scenario_ach_boo_689()
+		"ach_gone_fishing_689":
+			return await _scenario_ach_gone_fishing_689()
+		"ach_world_tour_689":
+			return await _scenario_ach_world_tour_689()
+		"ach_bots_never_unlock_689":
+			return await _scenario_ach_bots_never_unlock_689()
+		"ach_solo_excludes_untouchable_and_last_life_689":
+			return await _scenario_ach_solo_excludes_untouchable_and_last_life_689()
+		"ach_unlock_is_idempotent_and_calls_steam_689":
+			return await _scenario_ach_unlock_is_idempotent_and_calls_steam_689()
+		"ach_persistence_off_in_tests_689":
+			return await _scenario_ach_persistence_off_in_tests_689()
+		"ach_remote_pc_seat_is_told_689":
+			return await _scenario_ach_remote_pc_seat_is_told_689()
+		"ach_toast_shown_unless_steam_689":
+			return await _scenario_ach_toast_shown_unless_steam_689()
+		"ach_names_translated_and_documented_689":
+			return await _scenario_ach_names_translated_and_documented_689()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -44092,5 +44167,743 @@ func _scenario_crash_reports_settings_row_681() -> Array[String]:
 	ui.more_box().button_pressed = false
 	ui.host = was
 	ui.refresh()
+	_scenario_completed = true
+	return failures
+# --- Steam achievements (#689) -------------------------------------------------
+# Every scenario starts from `Achievements.reset_for_test()` (in memory only, so
+# nothing reaches the owner's file) and drives the real round loop where one
+# exists; the credit rules are driven at the autoload's own event seam.
+const PICKUP_WEAPON_IDS_689: PackedStringArray = [
+	"staff", "sword", "axe", "dagger", "boomstick", "grapple", "flail",
+	"boomerang", "fishing_rod", "umbrella", "magnet", "shield"]
+const ACH_IDS_689: PackedStringArray = [
+	"first_swing", "pick_your_fight", "rock_bottom", "lava_lamp", "tool_belt", "arsenal",
+	"old_faithful", "hat_trick", "untouchable", "back_of_the_net", "flag_runner",
+	"king_of_the_hill", "last_life", "overtime", "party_of_eight", "boo", "gone_fishing",
+	"world_tour"]
+## A roster that can be told Solo / Local / Online and records who was sent an achievement.
+class _AchRoster689 extends "res://tools/stub_lobby_roster.gd":
+	var kind: String = "local"
+	var sent: Array = []
+	func match_kind() -> String:
+		return kind
+	func send_achievement(slot: int, id: String) -> bool:
+		sent.append([slot, id])
+		return true
+## The bits of a controller server the credit rules ask about.
+class _Cs689 extends RefCounted:
+	var bots: Array[int] = []
+	var kind: String = "local"
+	var sent: Array = []
+	func is_virtual(slot: int) -> bool:
+		return bots.has(slot)
+	func match_kind() -> String:
+		return kind
+	func send_achievement(slot: int, id: String) -> bool:
+		sent.append([slot, id])
+		return true
+## A GodotSteam stand-in that records what the platform wrapper asks of it.
+class _SteamStub689 extends RefCounted:
+	var names: Array[String] = []
+	var stored: int = 0
+	func setAchievement(api_name: String) -> bool:
+		names.append(api_name)
+		return true
+	func storeStats() -> bool:
+		stored += 1
+		return true
+	func run_callbacks() -> void:
+		pass
+## What a PC client's relay link would carry to the wire.
+class _Link689 extends Node:
+	var texts: Array[String] = []
+	func send_text_to(_peer: int, text: String) -> void:
+		texts.append(text)
+func _ach_689() -> Node:
+	var ach: Node = get_root().get_node("Achievements")
+	ach.reset_for_test()
+	return ach
+## A round of `count` players on the stub roster, running `mode` ("" is Classic), started.
+func _ach_rig_689(count: int, mode: String = "") -> Dictionary:
+	var rig: Dictionary = _mode_rig(count, mode)
+	var rm: Node = rig["rm"]
+	rm.spawn_protection_sec = 0.0
+	rm.modifier_chance = 0.0
+	rm.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
+	var players: Array[RigidBody2D] = rig["players"]
+	if mode == "":
+		rig["started"] = await _await_condition(func() -> bool:
+			return rm.get("_in_round").size() == count and _count_alive(players) == count, 3000)
+	else:
+		rig["started"] = await _mode_started(rig)
+	await _await_ticks(2)
+	return rig
+func _ach_ko_others_689(rig: Dictionary, winner: int) -> void:
+	var players: Array[RigidBody2D] = rig["players"]
+	for i in players.size():
+		if i != winner:
+			players[i].eliminate()
+## `killer` lands a hit on `victim`, so a KO a moment later is credited to it.
+func _ach_hit_689(killer: RigidBody2D, victim: RigidBody2D) -> void:
+	killer.strike_landed.emit(victim, 10.0, victim.global_position, false)
+## A hazard (the stage's own Hazard part) around `victim`, moved off the shared spawns first.
+func _ach_hazard_689(rig: Dictionary, victim: RigidBody2D, slot: int) -> void:
+	victim.gravity_scale = 0.0
+	victim.linear_velocity = Vector2.ZERO
+	victim.teleport_to(Vector2(2000.0 + 500.0 * slot, -600.0))
+	var hazard: Area2D = (load("res://scenes/parts/Hazard.tscn") as PackedScene).instantiate() as Area2D
+	rig["stage"].add_child(hazard)
+	hazard.global_position = victim.global_position
+func _ach_missing_689(failures: Array[String], rig: Dictionary) -> bool:
+	if rig["started"]:
+		return false
+	failures.append("the round never started")
+	return true
+## A lobby match of `count` seats (bots among them) up to its first round.
+func _ach_lobby_689(count: int, bots: Array[int], kind: String, target: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var container := Node2D.new()
+	container.name = "AchContainer"
+	stage.add_child(container)
+	var players: Array[RigidBody2D] = []
+	var paths: Array[NodePath] = []
+	var spawns: Array[Vector2] = []
+	var roster := _AchRoster689.new()
+	roster.name = "AchRoster"
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "AchP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		players.append(player)
+		paths.append(NodePath("../AchP%d" % i))
+		spawns.append(Vector2(-700.0 + 200.0 * i, -600.0))
+		roster.slots.append(i)
+	roster.kind = kind
+	roster.target = target
+	roster.bot_slots.assign(bots)
+	stage.add_child(roster)
+	var rm := RoundManagerScript.new()
+	rm.name = "AchRM"
+	rm.player_paths = paths
+	rm.stage_scenes = [_make_stub_stage("AchStage", spawns)]
+	rm.arena_container_path = NodePath("../AchContainer")
+	rm.controller_server_path = NodePath("../AchRoster")
+	rm.min_players_to_start = 2
+	rm.round_end_pause_sec = 0.0
+	rm.spawn_protection_sec = 0.0
+	rm.modifier_chance = 0.0
+	rm.match_seed = 7
+	rm.pickup_spawn_interval_sec = PICKUP_LONG_INTERVAL_SEC
+	rm.lobby_enabled = true
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	stage.add_child(rm)
+	var loop: Dictionary = {"stage": stage, "players": players, "roster": roster, "rm": rm}
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	for i in count:
+		roster.ready_slots[i] = true
+	loop["started"] = await _await_condition(func() -> bool: return _count_alive(players) == count, ROUND_LOOP_TIMEOUT_MSEC)
+	await _await_ticks(2)
+	return loop
+func _scenario_ach_first_swing_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	if ach.is_unlocked("first_swing"):
+		failures.append("First Swing was unlocked before any round finished")
+	_ach_ko_others_689(rig, 0)
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("first_swing"), 3000):
+		failures.append("finishing a round did not unlock First Swing")
+	for other: String in ["king_of_the_hill", "overtime", "last_life", "back_of_the_net", "flag_runner", "pick_your_fight"]:
+		if ach.is_unlocked(other):
+			failures.append("a plain Classic round also unlocked %s" % other)
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_pick_your_fight_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var loop: Dictionary = await _ach_lobby_689(2, [], "local", 1)
+	if not loop["started"]:
+		failures.append("the lobby match never started")
+		await _teardown(loop["stage"])
+		return failures
+	if ach.is_unlocked("pick_your_fight"):
+		failures.append("Pick Your Fight was unlocked before anyone won")
+	loop["players"][1].eliminate()
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("pick_your_fight"), 3000):
+		failures.append("winning the match did not unlock Pick Your Fight")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_ach_rock_bottom_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(4)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	players[3].eliminate()
+	await _await_ticks(6)
+	if ach.is_unlocked("rock_bottom"):
+		failures.append("an ordinary KO unlocked Rock Bottom")
+	_ach_hazard_689(rig, players[2], 2)
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("rock_bottom"), 3000):
+		failures.append("a hazard KO did not unlock Rock Bottom")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_lava_lamp_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(4)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	_ach_hit_689(players[0], players[3])
+	players[3].eliminate()
+	await _await_ticks(6)
+	if ach.is_unlocked("lava_lamp"):
+		failures.append("a plain KO unlocked Lava Lamp")
+	_ach_hit_689(players[0], players[1])
+	_ach_hazard_689(rig, players[1], 1)
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("lava_lamp"), 3000):
+		failures.append("knocking a rival into lava did not unlock Lava Lamp")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_tool_belt_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	var player: RigidBody2D = rig["players"][0]
+	var names: Array[String] = ["Staff", "Staff", "Sword", "Axe", "Dagger", "Boomstick", "Grapple"]
+	for weapon: String in names:
+		player.weapon_picked_up.emit(weapon)
+	if ach.is_unlocked("tool_belt"):
+		failures.append("Tool Belt unlocked at %d distinct weapons (the pickaxe and 6 pickups, a repeat not counted)" % int(ach.progress()["weapons_held"]))
+	player.weapon_picked_up.emit("Fishing Rod")
+	if not ach.is_unlocked("tool_belt"):
+		failures.append("Tool Belt did not unlock at 8 distinct weapons (progress %s)" % [ach.progress()])
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_arsenal_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	players[0].set_weapon_stats(load("res://resources/sword.tres"))
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return int(ach.progress()["arsenal"]) == 1, 3000):
+		failures.append("winning a round with the sword did not count toward Arsenal (progress %s)" % [ach.progress()])
+	await _teardown(rig["stage"])
+	for weapon: String in ["pickaxe", "spear", "pogo"]:
+		ach.on_round_finished([0, 1], [0], {"weapons": {0: weapon}, "damage": {0: 5.0}})
+	if int(ach.progress()["arsenal"]) != 1:
+		failures.append("the pickaxe or a retired weapon counted toward Arsenal (progress %s)" % [ach.progress()])
+	for weapon: String in PICKUP_WEAPON_IDS_689:
+		if weapon == "sword":
+			continue
+		if ach.is_unlocked("arsenal"):
+			failures.append("Arsenal unlocked early, with %s still to win with" % weapon)
+			break
+		ach.on_round_finished([0, 1], [0], {"weapons": {0: weapon}, "damage": {0: 5.0}})
+	if not ach.is_unlocked("arsenal"):
+		failures.append("winning with all 12 pickup weapons did not unlock Arsenal (progress %s)" % [ach.progress()])
+	return failures
+func _scenario_ach_old_faithful_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	rig["players"][0].set_weapon_stats(load("res://resources/sword.tres"))
+	rig["players"][1].eliminate()
+	await _await_condition(func() -> bool: return int(ach.progress()["arsenal"]) == 1, 3000)
+	if ach.is_unlocked("old_faithful"):
+		failures.append("winning with a sword unlocked Old Faithful")
+	await _teardown(rig["stage"])
+	var again: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, again):
+		await _teardown(again["stage"])
+		return failures
+	var held: String = (again["players"][0].weapon_stats.resource_path as String).get_file().get_basename()
+	if held != "pickaxe":
+		failures.append("a fresh round starts with '%s', not the pickaxe" % held)
+	again["players"][1].eliminate()
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("old_faithful"), 3000):
+		failures.append("winning with the starting pickaxe did not unlock Old Faithful")
+	await _teardown(again["stage"])
+	return failures
+func _scenario_ach_hat_trick_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(4)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	for victim in [1, 2]:
+		_ach_hit_689(players[0], players[victim])
+		players[victim].eliminate()
+		await _await_ticks(6)
+	if ach.is_unlocked("hat_trick"):
+		failures.append("Hat Trick unlocked after 2 KOs")
+	_ach_hit_689(players[0], players[3])
+	players[3].eliminate()
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("hat_trick"), 3000):
+		failures.append("3 KOs in a round did not unlock Hat Trick")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_untouchable_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var hurt: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, hurt):
+		await _teardown(hurt["stage"])
+		return failures
+	hurt["players"][1].strike_landed.emit(hurt["players"][0], 10.0, Vector2.ZERO, false)
+	hurt["players"][1].eliminate()
+	await _await_condition(func() -> bool: return ach.is_unlocked("first_swing"), 3000)
+	if ach.is_unlocked("untouchable"):
+		failures.append("a winner who took a hit unlocked Untouchable")
+	await _teardown(hurt["stage"])
+	var clean: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, clean):
+		await _teardown(clean["stage"])
+		return failures
+	clean["players"][1].eliminate()
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("untouchable"), 3000):
+		failures.append("winning without a scratch did not unlock Untouchable")
+	await _teardown(clean["stage"])
+	return failures
+func _scenario_ach_back_of_the_net_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _soccer_rig(4)
+	rig["rm"].spawn_protection_sec = 0.0
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var mode: Node = rig["rm"].game_mode_node()
+	mode.goal_pause_sec = 0.1
+	var players: Array[RigidBody2D] = rig["players"]
+	players[1].teleport_to(Vector2(600.0, 240.0))
+	players[2].teleport_to(Vector2(400.0, 240.0))
+	players[3].teleport_to(Vector2(700.0, 240.0))
+	players[0].teleport_to(Vector2(-900.0, 240.0))
+	mode.ball.global_position = players[1].global_position
+	await _await_ticks(2)
+	mode.score_goal(0)
+	if ach.is_unlocked("back_of_the_net"):
+		failures.append("a goal touched last by the other team unlocked Back Of The Net")
+	await _await_msec(400)
+	players[1].teleport_to(Vector2(600.0, 240.0))
+	players[0].teleport_to(Vector2(-300.0, 240.0))
+	mode.ball.global_position = Vector2(-300.0, 240.0)
+	await _await_ticks(2)
+	mode.score_goal(0)
+	if not ach.is_unlocked("back_of_the_net"):
+		failures.append("scoring a Soccer goal did not unlock Back Of The Net")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_flag_runner_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = _ctf_rig(4)
+	rig["rm"].spawn_protection_sec = 0.0
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	mode.capture_pause_sec = 0.0
+	var stage: Node2D = rig["rm"]._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	red.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	if ach.is_unlocked("flag_runner"):
+		failures.append("picking up the flag unlocked Flag Runner")
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	await _await_ticks(3)
+	if not ach.is_unlocked("flag_runner"):
+		failures.append("capturing the flag did not unlock Flag Runner")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_king_of_the_hill_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	rig["players"][1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if ach.is_unlocked("king_of_the_hill"):
+		failures.append("King Of The Hill unlocked before the hill was won")
+	hill.hold_time[1] = 14.9
+	if not await _await_condition(func() -> bool: return rm.score_of(1) == 1, 3000):
+		failures.append("the holder never took the round")
+	if not ach.is_unlocked("king_of_the_hill"):
+		failures.append("winning a King of the Hill round did not unlock it")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_last_life_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var comfy: Dictionary = _stock_rig(2, 2, 480)
+	var mode: Node = await _stock_started(comfy)
+	if mode == null:
+		await _stock_finish(comfy)
+		return ["the Stock round never started"]
+	await _stock_lose_life(comfy["players"][1])
+	comfy["players"][1].eliminate()
+	await _await_condition(func() -> bool: return ach.is_unlocked("first_swing"), 3000)
+	if ach.is_unlocked("last_life"):
+		failures.append("winning Stock with both lives left unlocked Last Life")
+	await _stock_finish(comfy)
+	var edge: Dictionary = _stock_rig(2, 2, 480)
+	mode = await _stock_started(edge)
+	if mode == null:
+		await _stock_finish(edge)
+		return failures + ["the second Stock round never started"]
+	await _stock_lose_life(edge["players"][0])
+	await _stock_lose_life(edge["players"][1])
+	edge["players"][1].eliminate()
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("last_life"), 3000):
+		failures.append("winning Stock on the last life did not unlock Last Life (lives %d)" % edge["rm"].lives_of(0))
+	await _stock_finish(edge)
+	return failures
+func _scenario_ach_overtime_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var spawns: Array[Vector2] = [Vector2(-200, -2000), Vector2(0, -2000), Vector2(200, -2000)]
+	var scenes: Array[PackedScene] = [_make_stub_stage("StubA", spawns), _make_stub_stage("StubB", spawns)]
+	var fixture: Dictionary = _round_flow_fixture(3, [0, 1, 2], scenes)
+	var rm: Node = fixture["round_manager"]
+	var players: Array[RigidBody2D] = fixture["players"]
+	if not await _await_condition(func() -> bool: return _round_live(fixture, [0, 1, 2]), ROUND_LOOP_TIMEOUT_MSEC):
+		await _teardown(fixture["holder"])
+		return ["no round started"]
+	players[2].eliminate()
+	await _await_ticks(2)
+	rm.set_process(false)
+	players[0].eliminate()
+	players[1].eliminate()
+	rm.set_process(true)
+	if not await _await_condition(func() -> bool: return rm.tiebreaker() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the tied players were not brought back for a tiebreaker")
+		await _teardown(fixture["holder"])
+		return failures
+	await _await_ticks(2)
+	if ach.is_unlocked("overtime"):
+		failures.append("Overtime unlocked before the tiebreaker was won")
+	players[1].strike_landed.emit(players[0], 5.0, Vector2.ZERO, false)
+	if not await _await_condition(func() -> bool: return rm.score_of(1) == 1, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the tiebreaker hit did not win the round")
+	if not ach.is_unlocked("overtime"):
+		failures.append("winning a Sudden Death tiebreaker did not unlock Overtime")
+	await _teardown(fixture["holder"])
+	return failures
+func _scenario_ach_party_of_eight_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var seven: Dictionary = await _ach_lobby_689(8, [7], "local", 3)
+	if not seven["started"]:
+		failures.append("the 7 humans and a bot match never started")
+	if ach.is_unlocked("party_of_eight"):
+		failures.append("7 humans and a bot unlocked Party Of Eight")
+	await _teardown(seven["stage"], false)
+	ach.reset_for_test()
+	var eight: Dictionary = await _ach_lobby_689(8, [], "local", 3)
+	if not eight["started"]:
+		failures.append("the 8 human match never started")
+	if not ach.is_unlocked("party_of_eight"):
+		failures.append("a match started with 8 humans did not unlock Party Of Eight")
+	await _teardown(eight["stage"])
+	return failures
+func _scenario_ach_boo_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		await _teardown(loop["stage"])
+		return ["no ghost"]
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	await _boo_660(ghost, players[0], players[1], Vector2(-80.0, 0.0))
+	players[1].last_booed_msec -= 4000  # shoved long ago: outside the 3 s window
+	players[1].eliminate()
+	await _await_ticks(6)
+	if ach.is_unlocked("boo"):
+		failures.append("a death 4 s after the boo unlocked Boo!")
+	await _await_ticks(190)
+	await _boo_660(ghost, players[0], players[2], Vector2(-80.0, 0.0))
+	players[2].eliminate()
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("boo"), 3000):
+		failures.append("a boo followed by a death within 3 s did not unlock Boo!")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_ach_gone_fishing_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var rig: Dictionary = await _ach_rig_689(4)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	players[2].note_reeled(players[0])
+	players[2].last_reeled_msec -= 4000  # reeled long ago: outside the 3 s window
+	_ach_hazard_689(rig, players[2], 2)
+	await _await_ticks(10)
+	if ach.is_unlocked("gone_fishing"):
+		failures.append("a hazard KO 4 s after the reel unlocked Gone Fishing")
+	players[1].note_reeled(players[0])
+	_ach_hazard_689(rig, players[1], 1)
+	if not await _await_condition(func() -> bool: return ach.is_unlocked("gone_fishing"), 3000):
+		failures.append("reeling a rival into a hazard did not unlock Gone Fishing")
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_world_tour_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var settings: RefCounted = HostSettingsScript352.shared()
+	var was_known: PackedStringArray = settings.known_stages
+	var stage_a: PackedScene = _make_stub_stage("AchTourA", [Vector2(-300.0, -600.0), Vector2(0.0, -600.0)])
+	stage_a.take_over_path("res://ach689_tour_a.tscn")
+	var rig: Dictionary = _mode_rig(2, "")
+	rig["rm"].stage_scenes = [stage_a] as Array[PackedScene]
+	settings.known_stages = PackedStringArray(["ach689_tour_a", "ach689_tour_b"])
+	rig["rm"].spawn_protection_sec = 0.0
+	if not await _await_condition(func() -> bool: return rig["rm"].get("_in_round").size() == 2, 3000):
+		failures.append("the round never started")
+	await _await_ticks(2)
+	if not ach.progress()["stages_played"] == 1:
+		failures.append("playing stage A recorded %s stages" % [ach.progress()])
+	if ach.is_unlocked("world_tour"):
+		failures.append("World Tour unlocked with a stage of the rotation unplayed")
+	ach.on_round_started([0, 1], "ach689_tour_b", {})
+	if not ach.is_unlocked("world_tour"):
+		failures.append("playing every stage of the rotation did not unlock World Tour")
+	settings.known_stages = was_known
+	await _teardown(rig["stage"])
+	return failures
+func _scenario_ach_bots_never_unlock_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var loop: Dictionary = await _ach_lobby_689(3, [0], "local", 1)
+	if not loop["started"]:
+		await _teardown(loop["stage"])
+		return ["the match with a bot never started"]
+	loop["players"][1].eliminate()
+	loop["players"][2].eliminate()
+	await _await_condition(func() -> bool: return loop["rm"].lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
+	if not ach.is_unlocked("first_swing"):
+		failures.append("the humans in the round were not credited First Swing, so the events never flowed")
+	for won: String in ["pick_your_fight", "old_faithful", "untouchable"]:
+		if ach.is_unlocked(won):
+			failures.append("a bot's match win unlocked %s" % won)
+	for entry: Array in loop["roster"].sent:
+		if int(entry[0]) == 0:
+			failures.append("the bot seat was sent %s" % entry[1])
+	var cs := _Cs689.new()
+	cs.bots = [4]
+	ach.cs = cs
+	for id: String in ACH_IDS_689:
+		if ach.credit(4, id):
+			failures.append("credit() unlocked %s for a bot" % id)
+	if not cs.sent.is_empty():
+		failures.append("a bot was told it earned something: %s" % [cs.sent])
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_ach_solo_excludes_untouchable_and_last_life_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var cs := _Cs689.new()
+	cs.kind = "solo"
+	ach.cs = cs
+	var info: Dictionary = {"weapons": {0: "pickaxe"}, "damage": {0: 0.0}, "lives": {0: 1}, "mode": "stock", "stock_lives": 3}
+	ach.on_round_finished([0, 1], [0], info)
+	for earned: String in ["first_swing", "old_faithful"]:
+		if not ach.is_unlocked(earned):
+			failures.append("Solo did not count %s" % earned)
+	for excluded: String in ["untouchable", "last_life"]:
+		if ach.is_unlocked(excluded):
+			failures.append("Solo counted %s" % excluded)
+	ach.reset_for_test()
+	cs.kind = "local"
+	ach.cs = cs
+	ach.on_round_finished([0, 1], [0], info)
+	for earned: String in ["first_swing", "old_faithful", "untouchable", "last_life"]:
+		if not ach.is_unlocked(earned):
+			failures.append("Local did not count %s" % earned)
+	_scenario_completed = true
+	return failures
+func _scenario_ach_unlock_is_idempotent_and_calls_steam_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var stub := _SteamStub689.new()
+	steam._steam = stub
+	steam.available = true
+	var heard: Array[String] = []
+	ach.unlocked.connect(func(id: String) -> void: heard.append(id))
+	if not ach.unlock("first_swing"):
+		failures.append("the first unlock returned false")
+	if stub.names != ["ACH_FIRST_SWING"] or stub.stored != 1:
+		failures.append("Steam heard %s and %d stores after one unlock, wanted [ACH_FIRST_SWING] and 1" % [stub.names, stub.stored])
+	if ach.unlock("first_swing"):
+		failures.append("the second unlock returned true")
+	if ach.unlock("not_an_achievement"):
+		failures.append("an unknown id unlocked")
+	if stub.names.size() != 1 or stub.stored != 1 or heard != ["first_swing"]:
+		failures.append("a repeat reached Steam or the listeners: %s, %d stores, heard %s" % [stub.names, stub.stored, heard])
+	steam._steam = null
+	steam.available = false
+	_scenario_completed = true
+	return failures
+func _scenario_ach_persistence_off_in_tests_689() -> Array[String]:
+	var failures: Array[String] = []
+	_ach_689()
+	var tmp: String = "user://ach689_persist.cfg"
+	DirAccess.remove_absolute(tmp)
+	var fresh: Node = preload("res://scripts/Achievements.gd").new()
+	fresh.path = tmp
+	fresh.toast_enabled = false
+	get_root().add_child(fresh)
+	await process_frame
+	if fresh.persist:
+		failures.append("a script main loop left persistence on")
+	fresh.unlock("boo")
+	if FileAccess.file_exists(tmp):
+		failures.append("an unlock wrote the file with persistence off")
+	fresh.persist = true
+	fresh.unlock("hat_trick")
+	if not FileAccess.file_exists(tmp):
+		failures.append("an unlock did not write the file with persistence on (control)")
+	var reload: Node = preload("res://scripts/Achievements.gd").new()
+	reload.path = tmp
+	reload.toast_enabled = false
+	get_root().add_child(reload)
+	await process_frame
+	if reload.is_unlocked("hat_trick"):
+		failures.append("persistence off still loaded the file")
+	reload.load_from_disk()
+	if not reload.is_unlocked("hat_trick"):
+		failures.append("a saved unlock was not loaded back")
+	fresh.queue_free()
+	reload.queue_free()
+	DirAccess.remove_absolute(tmp)
+	_scenario_completed = true
+	return failures
+func _scenario_ach_remote_pc_seat_is_told_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_seat: Variant = fx[2]
+	var host_slot: int = fx[3]
+	var free: Array[int] = []
+	for slot in 3:
+		if slot != host_slot:
+			free.append(slot)
+	var link := _Link689.new()
+	fx[0].add_child(link)
+	var pc: Variant = ControllerServerScript.RemoteSeat.new()
+	pc.peer = 7
+	pc.link = link
+	var phone: Variant = ControllerServerScript.RemoteSeat.new()
+	phone.peer = 8
+	phone.link = link
+	phone.is_phone = true
+	server._slot_peers[free[0]] = pc
+	server._slot_peers[free[1]] = phone
+	ach.cs = server
+	if not ach.credit(free[0], "boo"):
+		failures.append("the PC client's event did not unlock on the host")
+	var frame: Variant = JSON.parse_string(link.texts.back()) if not link.texts.is_empty() else null
+	if not frame is Dictionary or frame.get("t") != "achievement" or frame.get("id") != "boo":
+		failures.append("the PC client was sent %s, wanted an achievement frame for boo" % [link.texts])
+	var sent: int = link.texts.size()
+	ach.credit(free[1], "hat_trick")
+	ach.credit(host_slot, "first_swing")
+	if link.texts.size() != sent:
+		failures.append("a phone or the host PC's own seat was sent an achievement frame")
+	if not ach.is_unlocked("hat_trick") or not ach.is_unlocked("first_swing"):
+		failures.append("the host did not take the phone's and its own seat's achievements")
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	ach.reset_for_test()
+	client._on_host_text(JSON.stringify({"t": "achievement", "id": "gone_fishing"}))
+	client._on_host_text(JSON.stringify({"t": "achievement", "id": "bogus"}))
+	if not ach.is_unlocked("gone_fishing") or ach.unlocked_ids().size() != 1:
+		failures.append("the PC client did not unlock exactly what the host sent: %s" % [ach.unlocked_ids()])
+	client.queue_free()
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+func _scenario_ach_toast_shown_unless_steam_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.set_locale("en")
+	ach.toast_enabled = true
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam._steam = _SteamStub689.new()
+	steam.available = true
+	ach.unlock("boo")
+	await process_frame
+	if ach.toast_text() != "":
+		failures.append("a toast showed while Steam was running: '%s'" % ach.toast_text())
+	steam._steam = null
+	steam.available = false
+	ach.unlock("hat_trick")
+	await process_frame
+	if ach.toast_text() != "Achievement unlocked: Hat Trick":
+		failures.append("the toast read '%s'" % ach.toast_text())
+	ach.reset_for_test()
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+func _scenario_ach_names_translated_and_documented_689() -> Array[String]:
+	var failures: Array[String] = []
+	var ach: Node = _ach_689()
+	var was_locale: String = TranslationServer.get_locale()
+	var doc: String = FileAccess.get_file_as_string("res://docs/steam-achievements.md")
+	if doc == "":
+		failures.append("docs/steam-achievements.md is missing")
+	if ach.IDS.size() != 18:
+		failures.append("%d achievements, wanted 18" % ach.IDS.size())
+	for id: String in ACH_IDS_689:
+		if not ach.IDS.has(id):
+			failures.append("%s is not an achievement id" % id)
+		var api: String = ach.api_name(id)
+		if api != "ACH_" + id.to_upper() or not doc.contains("`%s`" % api):
+			failures.append("%s is not documented as %s" % [id, api])
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		for id: String in ACH_IDS_689:
+			var key: String = "ACH_%s" % id.to_upper()
+			for part: String in ["NAME", "DESC"]:
+				var text: String = ach.display_name(id) if part == "NAME" else ach.description(id)
+				if text == "" or text == "%s_%s" % [key, part]:
+					failures.append("%s_%s has no %s text" % [key, part, locale])
+		if tr("ACH_TOAST") == "ACH_TOAST" or not tr("ACH_TOAST").contains("%s"):
+			failures.append("ACH_TOAST is not translated or lost its %%s in %s" % locale)
+	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures

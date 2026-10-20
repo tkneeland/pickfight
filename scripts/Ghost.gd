@@ -189,6 +189,8 @@ func _boo() -> void:
 	if away == Vector2.ZERO:
 		away = Vector2.UP
 	target.apply_central_impulse(away * BOO_IMPULSE)
+	if target.has_method("note_booed"):
+		target.note_booed(slot)  # achievements (#689)
 	_boo_cooldown = BOO_COOLDOWN_SEC
 	_puff_age = 0.0
 	var sfx: Node = get_node_or_null(^"/root/Sfx")
