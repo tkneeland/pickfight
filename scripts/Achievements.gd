@@ -70,6 +70,7 @@ var _toast_queue: Array[String] = []
 func _ready() -> void:
 	if get_tree() != null and get_tree().get_script() != null:
 		persist = false  # a `-s` run (scenarios) never touches the owner's file
+		toast_enabled = false  # nor puts a toast over a scenario's UI
 	if persist:
 		load_from_disk()
 
