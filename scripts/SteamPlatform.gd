@@ -203,3 +203,56 @@ func add_timeline_event(kind: String, title: String) -> void:
 		_steam.call("addInstantaneousTimelineEvent", title, "", spec["icon"], spec["priority"], 0.0, TIMELINE_CLIP_FEATURED)
 	elif _steam.has_method("addTimelineEvent"):
 		_steam.call("addTimelineEvent", spec["icon"], title, "", spec["priority"], 0.0, 0.0, TIMELINE_CLIP_FEATURED)
+
+# --- Gamepad text input (#711) ---------------------------------------------------
+
+## True while the last input was a gamepad's (same rule as HostControls.pad_active,
+## which decides the captions' glyphs, but fed from the autoload so a screen with
+## no host controls, like the PC join screen, can ask too).
+var pad_input_active: bool = false
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.5):
+		pad_input_active = true
+	elif event is InputEventKey or event is InputEventMouseButton:
+		pad_input_active = false
+
+## Open Steam's floating gamepad keyboard over the screen rect (x, y, w, h), single
+## line. It types into the focused Godot control as key events, so nothing is
+## written back. Falls back to the full-screen keyboard on older GodotSteam, whose
+## result is written back to `_text_target` on dismissal. False without Steam.
+func show_text_input(x: int, y: int, w: int, h: int) -> bool:
+	if not running():
+		return false
+	calls_for_test.append(["show_text_input", x, y, w, h])
+	if not available:
+		return true
+	if _steam.has_method("showFloatingGamepadTextInput"):
+		return bool(_steam.call("showFloatingGamepadTextInput", 0, x, y, w, h))
+	if _steam.has_method("showGamepadTextInput"):
+		if _steam.has_signal("gamepad_text_input_dismissed") and not _steam.is_connected("gamepad_text_input_dismissed", _on_text_dismissed):
+			_steam.connect("gamepad_text_input_dismissed", _on_text_dismissed)
+		return bool(_steam.call("showGamepadTextInput", 0, 0, "", 256, ""))
+	return false
+
+var _text_target: Control = null
+
+func _on_text_dismissed(submitted: bool, _length: int) -> void:
+	if not submitted or _text_target == null or not is_instance_valid(_text_target):
+		return
+	var text: String = str(_steam.call("getEnteredGamepadTextInput"))
+	if _text_target is LineEdit or _text_target is TextEdit:
+		_text_target.text = text
+
+## Make `control` (a LineEdit or TextEdit) raise the gamepad keyboard when it gains
+## focus while a gamepad is the active input. Mouse and keyboard focus do nothing.
+func attach_text_input(control: Control) -> void:
+	control.focus_entered.connect(_on_text_focus.bind(control))
+
+func _on_text_focus(control: Control) -> void:
+	if not pad_input_active or not running():
+		return
+	_text_target = control
+	var scale: Vector2 = control.get_global_transform_with_canvas().get_scale()
+	var at: Vector2 = control.get_screen_position()
+	show_text_input(int(at.x), int(at.y), int(control.size.x * scale.x), int(control.size.y * scale.y))

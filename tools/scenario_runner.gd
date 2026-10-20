@@ -942,6 +942,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_win_adds_steam_timeline_event_703",
 	"match_win_adds_steam_timeline_event_703",
 	"no_steam_records_no_timeline_events_703",
+	"pad_focus_opens_steam_text_input_711",
+	"mouse_focus_opens_no_steam_text_input_711",
+	"no_steam_opens_no_text_input_711",
 	"name_defaults_to_steam_persona_538",
 	"saved_name_beats_steam_persona_538",
 	"no_steam_name_default_unchanged_538",
@@ -3243,6 +3246,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_win_adds_steam_timeline_event_703()
 		"no_steam_records_no_timeline_events_703":
 			return await _scenario_no_steam_records_no_timeline_events_703()
+		"pad_focus_opens_steam_text_input_711":
+			return await _scenario_text_input_711(true, true)
+		"mouse_focus_opens_no_steam_text_input_711":
+			return await _scenario_text_input_711(false, true)
+		"no_steam_opens_no_text_input_711":
+			return await _scenario_text_input_711(true, false)
 		"ach_arsenal_689":
 			return await _scenario_ach_arsenal_689()
 		"ach_old_faithful_689":
@@ -45527,4 +45536,29 @@ func _scenario_no_steam_records_no_timeline_events_703() -> Array[String]:
 		failures.append("Steam off still recorded %s" % [steam.calls_for_test])
 	await _teardown(loop["stage"])
 	_timeline_end_703(steam)
+	return failures
+
+## #711: a LineEdit gaining focus raises Steam's floating keyboard only when Steam is
+## running and the last input was a gamepad's.
+func _scenario_text_input_711(pad: bool, steam_running: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(steam_running)
+	steam.pad_input_active = false
+	var edit := LineEdit.new()
+	edit.size = Vector2(200, 30)
+	get_root().add_child(edit)
+	steam.attach_text_input(edit)
+	var event: InputEvent = InputEventJoypadButton.new() if pad else InputEventMouseButton.new()
+	steam._input(event)
+	edit.grab_focus()
+	var heard: Array = []
+	for call: Array in steam.calls_for_test:
+		heard.append(call[0])
+	var want: Array = ["show_text_input"] if (pad and steam_running) else []
+	if heard != want:
+		failures.append("focus recorded %s, wanted %s" % [heard, want])
+	edit.queue_free()
+	steam.pad_input_active = false
+	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures

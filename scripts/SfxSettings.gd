@@ -431,6 +431,7 @@ func _build_feedback_box(corner: VBoxContainer) -> void:
 	_feedback_edit.placeholder_text = tr("FEEDBACK_PLACEHOLDER")
 	_feedback_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_feedback_edit.custom_minimum_size = Vector2(320.0, 110.0)
+	_attach_pad_keyboard(_feedback_edit) # #711
 	col.add_child(_feedback_edit)
 	_feedback_status = Label.new()
 	_feedback_status.name = "Status"
@@ -708,3 +709,10 @@ func _on_mute_toggled(pressed: bool) -> void:
 func _on_fullscreen_toggled(pressed: bool) -> void:
 	sfx.set_fullscreen(pressed)
 	refresh()
+
+## #711: Steam's floating gamepad keyboard for a text field, through the autoload
+## by path; a build or test tree without it does nothing.
+func _attach_pad_keyboard(edit: Control) -> void:
+	var steam: Node = get_node_or_null(^"/root/SteamPlatform")
+	if steam != null:
+		steam.call("attach_text_input", edit)
