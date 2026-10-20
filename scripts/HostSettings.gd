@@ -78,6 +78,9 @@ var telemetry_notice_seen: bool = false
 ## Crash reports (#681): on by default, opt-out in Settings; read by
 ## `CrashReporting` at launch, so a change applies from the next launch.
 var send_crash_reports: bool = true
+## Play of the round (#704): replay the round's best KO in slow motion inside
+## the round-end pause. On by default.
+var play_of_round: bool = true
 ## Stock mode (#354): lives per player (1-10) and the time limit in seconds
 ## (one of STOCK_TIME_LIMITS; 0 is no limit).
 const STOCK_MIN_LIVES: int = 1
@@ -343,6 +346,10 @@ func set_share_stats(on: bool) -> void:
 	share_stats = on
 	save_settings()
 
+func set_play_of_round(on: bool) -> void:
+	play_of_round = on
+	save_settings()
+
 func set_send_crash_reports(on: bool) -> void:
 	send_crash_reports = on
 	save_settings()
@@ -442,6 +449,8 @@ func load_settings() -> void:
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))
 		var crash: Variant = config.get_value(SECTION, "send_crash_reports", true)
 		send_crash_reports = crash if crash is bool else true
+		var replay_on: Variant = config.get_value(SECTION, "play_of_round", true)
+		play_of_round = replay_on if replay_on is bool else true
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
@@ -474,6 +483,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "share_stats", share_stats)
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
+	config.set_value(SECTION, "play_of_round", play_of_round)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
 	config.set_value(SECTION, "bot_difficulty", bot_difficulty)

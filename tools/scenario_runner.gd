@@ -862,6 +862,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_ball_flies_farther_than_at_mass_one_649",
 	"soccer_ball_lifts_higher_than_before_674",
 	"settings_hygiene_609",
+	"play_of_round_best_moment_scoring_order_704",
+	"play_of_round_trims_to_the_pause_or_plays_nothing_704",
+	"play_of_round_no_ko_plays_nothing_704",
+	"play_of_round_leaves_the_pause_length_alone_704",
+	"play_of_round_skip_input_dismisses_704",
+	"play_of_round_setting_off_never_plays_704",
+	"play_of_round_setting_persists_704",
+	"play_of_round_caption_translated_704",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -3056,6 +3064,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_ball_lifts_higher_than_before_674()
 		"soccer_ball_flies_farther_than_at_mass_one_649":
 			return await _scenario_soccer_ball_flies_farther_than_at_mass_one_649()
+		"play_of_round_best_moment_scoring_order_704": return await _scenario_play_of_round_best_moment_scoring_order_704()
+		"play_of_round_trims_to_the_pause_or_plays_nothing_704": return await _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704()
+		"play_of_round_no_ko_plays_nothing_704": return await _scenario_play_of_round_no_ko_plays_nothing_704()
+		"play_of_round_leaves_the_pause_length_alone_704": return await _scenario_play_of_round_leaves_the_pause_length_alone_704()
+		"play_of_round_skip_input_dismisses_704": return await _scenario_play_of_round_skip_input_dismisses_704()
+		"play_of_round_setting_off_never_plays_704": return await _scenario_play_of_round_setting_off_never_plays_704()
+		"play_of_round_setting_persists_704": return await _scenario_play_of_round_setting_persists_704()
+		"play_of_round_caption_translated_704": return await _scenario_play_of_round_caption_translated_704()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -44904,6 +44920,217 @@ func _scenario_ach_names_translated_and_documented_689() -> Array[String]:
 					failures.append("%s_%s has no %s text" % [key, part, locale])
 		if tr("ACH_TOAST") == "ACH_TOAST" or not tr("ACH_TOAST").contains("%s"):
 			failures.append("ACH_TOAST is not translated or lost its %%s in %s" % locale)
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+
+# --- Play of the round (#704) ---------------------------------------------------
+const PlayOfRoundScript704 := preload("res://scripts/PlayOfRound.gd")
+const HostSettingsScript704 := preload("res://scripts/HostSettings.gd")
+const PLAY_OF_ROUND_PAUSE_SEC_704: float = 3.0
+
+func _ko_704(t: int, killer: int, hazard: bool = false, ranged: bool = false) -> Dictionary:
+	return {"t": t, "killer": killer, "victim": 3, "hazard": hazard, "ranged": ranged}
+
+func _scenario_play_of_round_best_moment_scoring_order_704() -> Array[String]:
+	var failures: Array[String] = []
+	var best: Callable = PlayOfRoundScript704.best_moment
+	if not (best.call([]) as Dictionary).is_empty():
+		failures.append("no KOs still picked a moment")
+	# Plain < ranged < hazard < multi-KO, whatever the order they happened in.
+	var plain: Dictionary = _ko_704(9000, 0)
+	var ranged: Dictionary = _ko_704(1000, 1, false, true)
+	var hazard: Dictionary = _ko_704(2000, 2, true)
+	if best.call([plain, ranged]) != ranged:
+		failures.append("a ranged KO did not beat a later plain one")
+	if best.call([plain, ranged, hazard]) != hazard:
+		failures.append("a hazard KO did not beat ranged and plain KOs")
+	var multi_a: Dictionary = _ko_704(10000, 0)
+	var multi_b: Dictionary = _ko_704(12500, 0)
+	if best.call([hazard, multi_a, multi_b]) != multi_b:
+		failures.append("two KOs by one player within 3 s did not win, ending on the second")
+	# 3.5 s apart is no multi-KO.
+	var slow_b: Dictionary = _ko_704(13500, 0)
+	if best.call([hazard, multi_a, slow_b]) != hazard:
+		failures.append("two KOs 3.5 s apart counted as a multi-KO")
+	# Tie: the latest.
+	if best.call([_ko_704(1000, 1), _ko_704(5000, 2), _ko_704(3000, 0)]) != _ko_704(5000, 2):
+		failures.append("a tie did not go to the latest KO")
+	_scenario_completed = true
+	return failures
+
+func _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704() -> Array[String]:
+	var failures: Array[String] = []
+	var pick: Callable = PlayOfRoundScript704.select_frames
+	# A KO 100 ms ago with 48 frames held and a 10 s pause: the whole 4 s clip.
+	var full: Dictionary = pick.call(120, 20000, 19900, 10000)
+	if int(full["count"]) != 48 or int(full["start"]) + int(full["count"]) - 1 != 119:
+		failures.append("a long pause did not show the whole clip: %s" % full)
+	# A 3 s pause: slow motion (0.5x of 12 fps) must fit with a margin.
+	var trimmed: Dictionary = pick.call(120, 20000, 19900, 3000)
+	var run_sec: float = float(trimmed["count"]) / 6.0
+	if int(trimmed["count"]) == 0 or run_sec > 3.0 - 0.25:
+		failures.append("a 3 s pause was not trimmed to fit: %s runs %.2f s" % [trimmed, run_sec])
+	# Under 1.5 s of clip fits: nothing.
+	if int(pick.call(120, 20000, 19900, 1700)["count"]) != 0:
+		failures.append("a 1.7 s pause still played a clip")
+	if int(pick.call(0, 20000, 19900, 10000)["count"]) != 0:
+		failures.append("an empty buffer played a clip")
+	_scenario_completed = true
+	return failures
+
+func _fake_frames_704(rm: Node, count: int) -> void:
+	for i in count:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(float(i) / float(count), 0.2, 0.4))
+		rm._replay.push_frame(img)
+
+## One two-player round in a real RoundManager: P1 KOs P2 (when `with_ko`), then
+## the round-end pause is watched. Returns the pause length in game msec, whether
+## the play-of-the-round panel showed, and its caption; `during` runs once the
+## panel is up (to skip it).
+func _run_play_of_round_704(with_ko: bool, during: Callable = Callable()) -> Dictionary:
+	var out: Dictionary = {"pause_msec": -1, "played": false, "caption": "", "dismissed_by_during": false}
+	var loop: Dictionary = _new_roster_round(2, PICKUP_LONG_INTERVAL_SEC, PLAY_OF_ROUND_PAUSE_SEC_704, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		await _teardown(loop["stage"])
+		return out
+	_fake_frames_704(rm, 60)
+	if with_ko:
+		players[0].strike_landed.emit(players[1], 10.0, Vector2.ZERO, true)
+	players[1].eliminate()
+	var entered: bool = false
+	var start_msec: int = 0
+	var deadline: int = Time.get_ticks_msec() + 15000
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		var phase: String = rm.lobby_phase()
+		if not entered and phase == "round_end":
+			entered = true
+			start_msec = GameClockScript.now_msec()
+		if entered:
+			var panel: Node = rm.play_of_round_panel()
+			if panel != null and panel.is_playing():
+				if not out["played"]:
+					out["played"] = true
+					out["caption"] = panel.caption_text()
+					if during.is_valid():
+						during.call(rm, loop)
+						await process_frame
+						await process_frame
+						out["dismissed_by_during"] = not panel.is_playing()
+			if phase != "round_end":
+				out["pause_msec"] = GameClockScript.now_msec() - start_msec
+				break
+	await _teardown(loop["stage"])
+	return out
+
+func _scenario_play_of_round_no_ko_plays_nothing_704() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _run_play_of_round_704(false)
+	if run["pause_msec"] < 0:
+		failures.append("the round never ended")
+	if run["played"]:
+		failures.append("a round with no credited KO played a moment")
+	_scenario_completed = true
+	return failures
+
+func _scenario_play_of_round_leaves_the_pause_length_alone_704() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = HostSettingsScript704.shared()
+	var was: bool = host.play_of_round
+	host.play_of_round = false
+	var off: Dictionary = await _run_play_of_round_704(true)
+	host.play_of_round = true
+	var on: Dictionary = await _run_play_of_round_704(true)
+	host.play_of_round = was
+	if off["pause_msec"] < 0 or on["pause_msec"] < 0:
+		failures.append("a round never ended (off %d, on %d)" % [off["pause_msec"], on["pause_msec"]])
+	elif off["played"]:
+		failures.append("the moment played with the setting off")
+	elif not on["played"]:
+		failures.append("the moment never played with the setting on")
+	else:
+		if abs(int(on["pause_msec"]) - int(off["pause_msec"])) > 50:
+			failures.append("the pause was %d ms with the replay and %d ms without" % [on["pause_msec"], off["pause_msec"]])
+		if int(on["pause_msec"]) < int(PLAY_OF_ROUND_PAUSE_SEC_704 * 1000.0) - 50:
+			failures.append("the pause was cut short to %d ms" % on["pause_msec"])
+		if not String(on["caption"]).contains("P1"):
+			failures.append("the caption '%s' does not name the player" % on["caption"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_play_of_round_skip_input_dismisses_704() -> Array[String]:
+	var failures: Array[String] = []
+	var tap: Callable = func(_rm: Node, loop: Dictionary) -> void: loop["roster"].ready_taps.append(0)
+	var by_tap: Dictionary = await _run_play_of_round_704(true, tap)
+	if not by_tap["played"]:
+		failures.append("the moment never played, so a tap could not skip it")
+	elif not by_tap["dismissed_by_during"]:
+		failures.append("a player's Ready tap did not dismiss it")
+	var esc: Callable = func(rm: Node, _loop: Dictionary) -> void:
+		var key := InputEventKey.new()
+		key.pressed = true
+		key.physical_keycode = KEY_ESCAPE
+		rm._unhandled_input(key)
+	var by_key: Dictionary = await _run_play_of_round_704(true, esc)
+	if not by_key["dismissed_by_during"]:
+		failures.append("the host's Esc did not dismiss it")
+	if by_key["pause_msec"] < int(PLAY_OF_ROUND_PAUSE_SEC_704 * 1000.0) - 50 or by_key["pause_msec"] > int(PLAY_OF_ROUND_PAUSE_SEC_704 * 1000.0) + 300:
+		failures.append("skipping changed the pause to %d ms" % by_key["pause_msec"])
+	_scenario_completed = true
+	return failures
+
+func _scenario_play_of_round_setting_off_never_plays_704() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = HostSettingsScript704.shared()
+	var was: bool = host.play_of_round
+	host.play_of_round = false
+	var run: Dictionary = await _run_play_of_round_704(true)
+	host.play_of_round = was
+	if run["pause_msec"] < 0:
+		failures.append("the round never ended")
+	if run["played"]:
+		failures.append("the moment played with Play of the round off")
+	_scenario_completed = true
+	return failures
+
+func _scenario_play_of_round_setting_persists_704() -> Array[String]:
+	var failures: Array[String] = []
+	var tmp: String = OS.get_temp_dir().path_join("pf_704_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if not fresh.play_of_round:
+		failures.append("Play of the round is not on by default")
+	fresh.set_play_of_round(false)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if again.play_of_round:
+		failures.append("switching Play of the round off was not remembered")
+	DirAccess.remove_absolute(tmp)
+	_scenario_completed = true
+	return failures
+
+func _scenario_play_of_round_caption_translated_704() -> Array[String]:
+	var failures: Array[String] = []
+	var was_locale: String = TranslationServer.get_locale()
+	var english: String = ""
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		for key: String in ["PLAY_OF_ROUND_CAPTION", "SETTINGS_PLAY_OF_ROUND"]:
+			var text: String = tr(key)
+			if text == key or text == "":
+				failures.append("%s has no %s text" % [key, locale])
+		var caption: String = tr("PLAY_OF_ROUND_CAPTION")
+		if not caption.contains("%s"):
+			failures.append("the caption lost its %%s in %s" % locale)
+		if locale == "en":
+			english = caption
+		elif caption == english or tr("SETTINGS_PLAY_OF_ROUND") == "Play of the round replay":
+			failures.append("%s still reads English" % locale)
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures

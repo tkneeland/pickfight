@@ -75,6 +75,13 @@ func push_frame(img: Image) -> void:
 func frame_count() -> int:
 	return _frames.size()
 
+## A copy of buffered frames `start` .. `start + count - 1`, oldest first (#704).
+func frames_slice(start: int, count: int) -> Array[Image]:
+	var out: Array[Image] = []
+	for i in range(maxi(start, 0), mini(start + count, _frames.size())):
+		out.append(_frames[i])
+	return out
+
 ## Worst-case bytes held by the ring.
 static func memory_cap_bytes() -> int:
 	return MAX_FRAMES * FRAME_SIZE.x * FRAME_SIZE.y * 3

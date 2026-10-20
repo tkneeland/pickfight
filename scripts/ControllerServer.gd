@@ -1713,6 +1713,11 @@ func kick(slot: int, by_host_pc: bool = false) -> bool:
 func slot_ready(slot: int) -> bool:
 	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or (slot == _host_pc_slot and not _solo_host_must_ready()))
 
+## Whether `slot`'s own Ready tap is in, ignoring bots and the host-PC seat's
+## automatic ready (#704: a tap during the play of the round skips it).
+func slot_pressed_ready(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_ready.size() and _slot_ready[slot] == 1
+
 ## Solo (#505): the host PC seat is the only human, so it readies up itself (Start,
 ## Enter) in the lobby rather than starting the match by existing. Everywhere
 ## else, and in a Solo match once it is running, the seat counts as ready. On the
