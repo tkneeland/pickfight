@@ -52,3 +52,11 @@ Earlier decisions (Sep–early Oct) are in the ADRs (`docs/adr/`), `docs/steam-r
 - Never ask what the code or `docs/FEATURES.md` already answers.
 - Every "talk to Austin" answer goes onto #685 right away.
 - The repo is public: no secrets in commits or issues.
+
+## Oct 20 answers
+- **Achievements:** the 18-item list on #689 is approved as drafted, including who earns them.
+- **Steam code unparked:** build friend invites and lobbies (#298) and Steam names (#538) before the Feb 2027 Playtest, against Valve's test app 480. Steam Timeline markers approved (#703).
+- **Play of the round (#704):** approved, but it must not slow the gameplay loop. It fits inside the existing between-round pause, any player can skip it, and a host setting turns it off.
+- **IGF:** the IGF 2027 deadline (Sep 13 2026) has passed. The fee is $75. Consider IGF 2028, whose window should open around Aug 2027, right after launch.
+- **Playtests:** no scheduled sessions. The owner and Austin run them informally when they can. Online playtests also feed the balance report (#405).
+- **Austin's tickets:** hand them back automatically at his first GitHub activity or when he ticks #702.
