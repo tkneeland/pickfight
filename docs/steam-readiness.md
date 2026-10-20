@@ -54,12 +54,12 @@ The Next Fest demo is the same game with a content slice, chosen by one flag: th
 ### 2. Store page
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
-| 2.1 | Short description, long description, tags, feature list. Draft from `docs/FEATURES.md` | agent drafts, owner approves | name | todo |
+| 2.1 | Short description, long description, tags, feature list. Draft from `docs/FEATURES.md` | agent drafts, owner approves | name | partial (draft in `launch/store-page.md`, needs owner approval, #712) |
 | 2.2 | Capsule and library art (sizes below, all **verify**) | owner or commissioned artist; agent can lay out from `docs/art/` | name, logo | todo |
 | 2.3 | At least 5 screenshots, 1920x1080 (**verify** minimum). Capture with the existing screenshot tools (`tools/`) and playtest footage | agent | none | partial (tools exist, no curated set) |
 | 2.4 | Trailer: cut from playtest footage; the game has an F9 instant replay that saves ~10 s PNG sequences to `user://clips/` (#329, ADR-0020, 256x144, too small for a trailer). Record the trailer with a screen recorder (OBS) at 1080p or higher during playtests instead; use F9 clips only as a reference for moments worth re-capturing | owner (records) | playtest session | todo |
-| 2.5 | System requirements, supported languages (English only), controller support flag (partial/full, see section 6) | agent | 6.x | todo |
-| 2.6 | Legal links: privacy policy URL (the game talks to our relay and files feedback issues, so say so), support contact | owner | none | todo |
+| 2.5 | System requirements, supported languages (English only), controller support flag (partial/full, see section 6) | agent | 6.x | partial (draft in `launch/store-page.md`, needs owner approval, #712) |
+| 2.6 | Legal links: privacy policy URL (the game talks to our relay and files feedback issues, so say so), support contact | owner | none | partial (draft in `launch/privacy-policy.md`, needs owner approval, #712) |
 | 2.7 | Submit store page for Valve review, then set "Coming soon" public | owner | 2.1-2.6, 1.3 | todo |
 
 **Telemetry (for the privacy policy, 2.6; #372).** On by default, with an opt-out toggle in Settings ("Send anonymous match stats") and a one-time first-launch notice on the host screen (#617: nothing is sent until it has been dismissed with "Got it" or "Turn off"). At the end of each match the host sends one record to our relay: per-weapon damage, hits and KOs by human players (bots and the lobby sandbox excluded), the game mode, the stage names, the format (free-for-all or teams), the match length, and the winning weapon. It contains no nickname, player colour, device or Steam identifier, or any other player ID. The relay does not store or log the sender's IP address; it keeps only a salted hash in memory to rate-limit, which is lost on restart, and rounds the stored timestamp to the hour. The data is used only to balance weapons, modes and stages. If anything ever needs an identifier, switch to opt-in. The policy text should say all of this and mention the toggle.
@@ -84,7 +84,7 @@ Art in the repo today is placeholder (`icon.svg`, `docs/art/`); none of the abov
 ### 3. Ratings and compliance
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
-| 3.1 | Steam content survey (mature content questionnaire) and the IARC-based age rating questionnaire for the store (**verify** current form names). Cartoon violence only (ragdoll-ish melee, no blood, no gambling, no in-app purchases, no user-generated content shared beyond the feedback text box) | owner (agent supplies answers) | 1.1 | todo |
+| 3.1 | Steam content survey (mature content questionnaire) and the IARC-based age rating questionnaire for the store (**verify** current form names). Cartoon violence only (ragdoll-ish melee, no blood, no gambling, no in-app purchases, no user-generated content shared beyond the feedback text box) | owner (agent supplies answers) | 1.1 | partial (draft in `launch/content-survey.md`, needs owner approval, #712) |
 | 3.2 | Declare the online features and data the game sends (relay, feedback button #262) in the privacy policy | owner | 2.6 | todo |
 | 3.3 | Tax/export compliance questions in the app wizard | owner | 1.2 | todo |
 
