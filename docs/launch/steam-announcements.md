@@ -128,7 +128,7 @@ Play it your way:
 - **Couch:** scan the QR code with phones, or plug in gamepads.
 - **Online:** friends join from their own computers with a room code, or invite Steam friends from the lobby.
 
-The demo has 6 stages, the pickaxe plus four pickup weapons, and two modes: Classic and King of the Hill. At the end of each match, a card asks you to wishlist the full game.
+TODO (#448, demo content is still open): this line describes the demo build as it ships today. The demo has 6 stages, the pickaxe plus four pickup weapons, and two modes: Classic and King of the Hill. At the end of each match, a card asks you to wishlist the full game.
 
 Release is July 22, 2027, at $9.99. Wishlist: TODO (store page URL). Talk to us in the Discord: TODO (Discord invite).
 
