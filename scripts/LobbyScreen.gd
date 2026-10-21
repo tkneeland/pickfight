@@ -744,13 +744,16 @@ func _build_left_column() -> Control:
 	_join_note.visible = false
 	_join_box.add_child(_join_note)
 	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
+	_join_help_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of widening the column at a large Text size (#751)
 	_join_help_button.visible = false # Couch only: Online has no LAN address to fix
 	_join_box.add_child(_join_help_button)
 	_relay_nudge_button = ScreenKitScript.themed_button(tr("JOIN_NUDGE"), UiThemeScript.ACTION_BUTTON, "RelayNudgeButton")
+	_relay_nudge_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of widening the column at a large Text size (#751)
 	_relay_nudge_button.visible = false # after 30 s with no phone (#727)
 	_relay_nudge_button.pressed.connect(_on_relay_nudge_pressed)
 	_join_box.add_child(_relay_nudge_button)
 	_invite_button = ScreenKitScript.themed_button(tr("STEAM_INVITE_BUTTON"), UiThemeScript.ACTION_BUTTON, "InviteSteamButton")
+	_invite_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of widening the column at a large Text size (#751)
 	_invite_button.visible = false
 	_invite_button.pressed.connect(_on_invite_pressed)
 	_join_box.add_child(_invite_button)

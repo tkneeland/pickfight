@@ -496,3 +496,7 @@ JOIN_NUDGE,Not connecting? Join over the internet,Klappt nicht? Tritt übers Int
 SETTINGS_STICK_DEADZONE,Stick deadzone: %s,Stick-Totzone: %s,Zone morte du stick : %s,Zona muerta del stick: %s,Zona morta do analógico: %s,摇杆死区:%s,スティックのデッドゾーン: %s,스틱 데드존: %s,Мёртвая зона стика: %s
 SETTINGS_RESTORE_DEFAULTS,Restore defaults,Standardwerte wiederherstellen,Rétablir les valeurs par défaut,Restaurar valores predeterminados,Restaurar padrões,恢复默认设置,初期設定に戻す,기본값으로 복원,Сбросить настройки
 RESTORE_CONFIRM_TEXT,Reset every setting to its default?,Alle Einstellungen auf Standard zurücksetzen?,Remettre tous les réglages par défaut ?,¿Restablecer todos los ajustes a sus valores predeterminados?,Redefinir todas as configurações para o padrão?,将所有设置重置为默认值?,すべての設定を初期値に戻しますか?,모든 설정을 기본값으로 되돌릴까요?,Сбросить все настройки к значениям по умолчанию?
+SETTINGS_TEXT_SIZE,Text size: %s,Textgröße: %s,Taille du texte : %s,Tamaño del texto: %s,Tamanho do texto: %s,文字大小:%s,文字サイズ: %s,글자 크기: %s,Размер текста: %s
+TEXT_SIZE_NORMAL,Normal,Normal,Normale,Normal,Normal,正常,標準,보통,Обычный
+TEXT_SIZE_LARGE,Large,Groß,Grande,Grande,Grande,大,大,크게,Большой
+TEXT_SIZE_LARGER,Larger,Größer,Plus grande,Más grande,Maior,更大,特大,더 크게,Крупнее

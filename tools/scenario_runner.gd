@@ -984,6 +984,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"text_size_setting_751",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3335,6 +3336,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"text_size_setting_751":
+			return await _scenario_text_size_setting_751()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46590,6 +46593,84 @@ func _scenario_restore_defaults_750() -> Array[String]:
 	DirAccess.remove_absolute(tmp)
 	host.language = was_language
 	host.send_crash_reports = was_crash
+	if ui.is_open():
+		ui.toggle_panel()
+	_scenario_completed = true
+	return failures
+
+## #751: Settings > More options > Text size (Normal / Large / Larger = 1.0 / 1.2 / 1.4x)
+## scales the theme's font sizes and the code-set font sizes of every screen, leaves
+## the world-space name tags to their own option, round-trips through the settings
+## file, and Restore defaults puts it back.
+func _scenario_text_size_setting_751() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var button: OptionButton = ui.text_size_button()
+	if button == null or button.item_count != 3:
+		return ["Settings has no three-choice Text size picker"]
+	var theme: Theme = ThemeDB.get_project_theme()
+	var base_default: int = theme.default_font_size
+	var base_start: int = theme.get_font_size("font_size", "StartButton")
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 20)
+	var tag := Label.new()
+	tag.add_theme_font_size_override("font_size", 22)
+	tag.set_meta(&"pf_no_text_scale", true)
+	root.add_child(label)
+	root.add_child(tag)
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	button.select(2)
+	button.item_selected.emit(2)
+	if not is_equal_approx(sfx.text_scale, 1.4):
+		failures.append("picking Larger left text_scale at %s, not 1.4" % sfx.text_scale)
+	if theme.default_font_size != roundi(base_default * 1.4):
+		failures.append("the theme's default size is %d at Larger, expected %d" % [theme.default_font_size, roundi(base_default * 1.4)])
+	if theme.get_font_size("font_size", "StartButton") != roundi(base_start * 1.4):
+		failures.append("the Start button variation did not scale (%d)" % theme.get_font_size("font_size", "StartButton"))
+	if label.get_theme_font_size("font_size") != 28:
+		failures.append("a code-set 20 px label is %d at Larger, expected 28" % label.get_theme_font_size("font_size"))
+	if tag.get_theme_font_size("font_size") != 22:
+		failures.append("the world-space name tag was scaled to %d" % tag.get_theme_font_size("font_size"))
+	var late := Label.new()
+	late.add_theme_font_size_override("font_size", 20)
+	root.add_child(late)
+	await _await_ticks(2)
+	if late.get_theme_font_size("font_size") != 28:
+		failures.append("a label added after the change is %d, expected 28" % late.get_theme_font_size("font_size"))
+	# Large, then back to Normal: always exact, never compounded.
+	sfx.set_text_scale(1.2)
+	if label.get_theme_font_size("font_size") != 24 or theme.default_font_size != roundi(base_default * 1.2):
+		failures.append("Large did not scale from the design size (label %d)" % label.get_theme_font_size("font_size"))
+	# It is remembered.
+	var was_persist: bool = sfx.persist_settings
+	var was_path: String = sfx.settings_path
+	var tmp: String = OS.get_temp_dir().path_join("pf_751_%d.cfg" % OS.get_process_id())
+	sfx.persist_settings = true
+	sfx.settings_path = tmp
+	sfx.set_text_scale(1.4)
+	sfx.text_scale = 1.0
+	sfx.load_settings()
+	if not is_equal_approx(sfx.text_scale, 1.4):
+		failures.append("the Text size was not saved: read back %s" % sfx.text_scale)
+	sfx.persist_settings = was_persist
+	sfx.settings_path = was_path
+	DirAccess.remove_absolute(tmp)
+	sfx.restore_defaults()
+	if not is_equal_approx(sfx.text_scale, 1.0) or label.get_theme_font_size("font_size") != 20 or late.get_theme_font_size("font_size") != 20:
+		failures.append("Restore defaults did not return the text to Normal")
+	if theme.default_font_size != base_default or theme.get_font_size("font_size", "StartButton") != base_start:
+		failures.append("the theme did not return to its design sizes")
+	ui.refresh()
+	if button.selected != 0:
+		failures.append("the picker did not show Normal after Restore defaults")
+	label.queue_free()
+	tag.queue_free()
+	late.queue_free()
 	if ui.is_open():
 		ui.toggle_panel()
 	_scenario_completed = true

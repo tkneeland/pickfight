@@ -320,6 +320,11 @@ var reduce_flash: bool = false
 ## are drawn. One of `UI_SCALES`; 1.0 by default.
 const UI_SCALES: Array[float] = [1.0, 1.5, 2.0]
 var ui_scale: float = 1.0
+## Host Text size (#751): how much bigger the UI text is drawn, for couch-distance
+## reading. One of TEXT_SCALES (Normal / Large / Larger); 1.0 by default.
+const TEXT_SCALES: Array[float] = [1.0, 1.2, 1.4]
+const TextScaleScript := preload("res://scripts/TextScale.gd")
+var text_scale: float = 1.0
 ## Streamer mode (#369): when on, the shared screen hides the room code, the
 ## join URL and the join QR ("Code hidden: see host phone"); the host phone's
 ## menu still shows the code. Off by default.
@@ -405,6 +410,8 @@ func _ready() -> void:
 		_apply_sfx_volume()
 	else:
 		load_settings()
+	get_tree().node_added.connect(_on_node_added)
+	apply_text_scale()
 	_hooks = HooksScript.new()
 	_hooks.name = "Hooks"
 	_hooks.sfx = self
@@ -639,6 +646,35 @@ func set_ui_scale(value: float) -> void:
 	ui_scale = _nearest_ui_scale(value)
 	_save_settings()
 
+## Pick the UI text size (#751): snaps to the nearest of TEXT_SCALES, applies it
+## to the theme and every open screen, and remembers it.
+func set_text_scale(value: float) -> void:
+	text_scale = _nearest_text_scale(value)
+	apply_text_scale()
+	_save_settings()
+
+## Put 	ext_scale into effect on the project theme and every control in the tree.
+func apply_text_scale() -> void:
+	TextScaleScript.apply_to_theme(ThemeDB.get_project_theme(), text_scale)
+	if is_inside_tree():
+		TextScaleScript.apply_to_tree(get_tree().root, text_scale)
+
+func _on_node_added(node: Node) -> void:
+	if text_scale != 1.0 and node is Control:
+		# After the screen has set its own sizes.
+		(func() -> void:
+			if is_instance_valid(node):
+				TextScaleScript.apply_to_node(node, text_scale)).call_deferred()
+
+static func _nearest_text_scale(value: float) -> float:
+	var best: float = 1.0
+	if not is_finite(value):
+		return best
+	for option: float in TEXT_SCALES:
+		if absf(option - value) < absf(best - value):
+			best = option
+	return best
+
 static func _nearest_ui_scale(value: float) -> float:
 	var best: float = 1.0
 	if not is_finite(value):
@@ -662,6 +698,8 @@ func restore_defaults() -> void:
 	screen_shake = true
 	reduce_flash = false
 	ui_scale = 1.0
+	text_scale = 1.0
+	apply_text_scale()
 	hide_room_code = false
 	_apply_master()
 	_apply_sfx_volume()
@@ -762,6 +800,7 @@ func load_settings() -> void:
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
 		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
+		text_scale = _nearest_text_scale(_num(config.get_value("display", "text_scale", 1.0), 1.0))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -786,6 +825,7 @@ func _save_settings() -> void:
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)
+	config.set_value("display", "text_scale", text_scale)
 	err = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])

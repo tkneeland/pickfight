@@ -34,6 +34,8 @@ const SETTLE_FRAMES: int = 8
 const MATCH_TIMEOUT_MSEC: int = 40000
 
 var _out: String = ""
+## Text size (#751): "--text=1.4" renders every state at that size (Normal 1.0, Large 1.2, Larger 1.4).
+var _text_scale: float = 1.0
 var _sizes: Array[Vector2i] = [SIZES[0]]
 var _failures: Array[String] = []
 var _saved: int = 0
@@ -46,6 +48,8 @@ func _initialize() -> void:
 			_out = arg.trim_prefix("--out=")
 		elif arg == "--size=all":
 			_sizes = SIZES.duplicate()
+		elif arg.begins_with("--text="):
+			_text_scale = float(arg.trim_prefix("--text="))
 		elif arg.begins_with("--size="):
 			var parts: PackedStringArray = arg.trim_prefix("--size=").split("x")
 			if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
@@ -65,6 +69,7 @@ func _fail_args(message: String) -> void:
 	quit(2)
 
 func _run() -> void:
+	get_root().get_node("Sfx").set_text_scale(_text_scale)
 	_relay = RelayScript.new()
 	get_root().add_child(_relay)
 	if _relay.start(RELAY_PORT) != OK:

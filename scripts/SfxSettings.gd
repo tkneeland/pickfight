@@ -71,6 +71,8 @@ var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _scale_button: OptionButton
+## Text size (#751): Settings > More options.
+var _text_size_button: OptionButton
 ## Stick deadzone (#748): Settings > More options.
 var _deadzone_button: OptionButton
 var _host_match: VBoxContainer
@@ -177,6 +179,11 @@ func _ready() -> void:
 	for option: float in sfx.UI_SCALES:
 		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
+	_text_size_button = OptionButton.new()
+	_text_size_button.name = "TextSize"
+	for option: float in sfx.TEXT_SCALES:
+		_text_size_button.add_item(_text_size_item(option))
+	content.add_child(_text_size_button)
 	_deadzone_button = OptionButton.new()
 	_deadzone_button.name = "StickDeadzone"
 	for option: float in HostSettingsScript.PAD_DEADZONES:
@@ -295,6 +302,7 @@ func _ready() -> void:
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
+	_text_size_button.item_selected.connect(func(index: int) -> void: sfx.set_text_scale(sfx.TEXT_SCALES[index]))
 	_deadzone_button.item_selected.connect(func(index: int) -> void: host.set_pad_deadzone(HostSettingsScript.PAD_DEADZONES[index]))
 	_more.toggled.connect(func(pressed: bool) -> void:
 		_more_area.visible = pressed
@@ -390,6 +398,7 @@ func refresh() -> void:
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
+	_text_size_button.select(maxi(sfx.TEXT_SCALES.find(sfx.text_scale), 0))
 	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_language.select(_language_index(host.language))
@@ -761,6 +770,14 @@ func _build_telemetry_notice() -> void:
 func flash_box() -> CheckBox:
 	return _flash_box
 
+## One Text size choice, e.g. "Text size: Large" (#751).
+func _text_size_item(scale: float) -> String:
+	var names: Array[String] = [tr("TEXT_SIZE_NORMAL"), tr("TEXT_SIZE_LARGE"), tr("TEXT_SIZE_LARGER")]
+	return tr("SETTINGS_TEXT_SIZE") % names[maxi(sfx.TEXT_SCALES.find(scale), 0)]
+
+func text_size_button() -> OptionButton:
+	return _text_size_button
+
 func tag_size_button() -> OptionButton:
 	return _scale_button
 
@@ -845,6 +862,8 @@ func _retranslate() -> void:
 		_resolution.set_item_text(i, tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
 	for i in sfx.UI_SCALES.size():
 		_scale_button.set_item_text(i, tr("SETTINGS_NAME_TAGS") % str(sfx.UI_SCALES[i]))
+	for i in sfx.TEXT_SCALES.size():
+		_text_size_button.set_item_text(i, _text_size_item(sfx.TEXT_SCALES[i]))
 	for i in HostSettingsScript.PAD_DEADZONES.size():
 		_deadzone_button.set_item_text(i, tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % HostSettingsScript.PAD_DEADZONES[i]))
 	_language.set_item_text(0, tr("LANGUAGE_AUTO"))
