@@ -980,6 +980,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pause_on_focus_loss_747",
 	"couch_relay_nudge_727",
 	"steam_timeline_teams_title_745",
+	"stick_deadzone_setting_748",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3323,6 +3324,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_couch_relay_nudge_727()
 		"steam_timeline_teams_title_745":
 			return await _scenario_steam_timeline_teams_title_745()
+		"stick_deadzone_setting_748":
+			return await _scenario_stick_deadzone_setting_748()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46194,4 +46197,88 @@ func _scenario_steam_timeline_teams_title_745() -> Array[String]:
 	roster.teams_on = false
 	await _teardown(loop["stage"])
 	_timeline_end_703(steam)
+	return failures
+## Issue #748: the gamepad stick deadzone is a setting (0.05 to 0.40 in 0.05 steps, default 0.20).
+## HostSettings keeps it (snapped to a step, remembered, a junk value falls back to 0.20); the radial
+## helper takes it, with the old constant as the default; every seated pad reads it; and Settings >
+## More options has a dropdown for it.
+func _scenario_stick_deadzone_setting_748() -> Array[String]:
+	var failures: Array[String] = []
+	var host_script: GDScript = load("res://scripts/HostSettings.gd")
+	var server_script: GDScript = load("res://scripts/ControllerServer.gd")
+	var tmp: String = OS.get_temp_dir().path_join("pf_748_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = host_script.new()
+	fresh.path = tmp
+	if not is_equal_approx(fresh.pad_deadzone, 0.2):
+		failures.append("the stick deadzone defaults to %s, expected 0.2" % fresh.pad_deadzone)
+	var steps: Array = host_script.PAD_DEADZONES
+	if steps.size() != 8 or not is_equal_approx(steps[0], 0.05) or not is_equal_approx(steps[7], 0.4):
+		failures.append("the deadzone steps are %s, expected 0.05 to 0.40 in eight steps" % [steps])
+	fresh.set_pad_deadzone(0.35)
+	var again: RefCounted = host_script.new()
+	again.path = tmp
+	again.load_settings()
+	if not is_equal_approx(again.pad_deadzone, 0.35):
+		failures.append("a stick deadzone of 0.35 was not remembered (reloaded %s)" % again.pad_deadzone)
+	for pair: Array in [[0.33, 0.35], [9.0, 0.4], [-1.0, 0.05], [0.0, 0.05]]:
+		fresh.set_pad_deadzone(pair[0])
+		if not is_equal_approx(fresh.pad_deadzone, pair[1]):
+			failures.append("set_pad_deadzone(%s) gave %s, expected the nearest step %s" % [pair[0], fresh.pad_deadzone, pair[1]])
+	var cfg := ConfigFile.new()
+	cfg.load(tmp)
+	cfg.set_value("host", "pad_deadzone", "junk")
+	cfg.save(tmp)
+	var broken: RefCounted = host_script.new()
+	broken.path = tmp
+	broken.load_settings()
+	if not is_equal_approx(broken.pad_deadzone, 0.2):
+		failures.append("a junk saved deadzone loaded as %s, expected the default 0.2" % broken.pad_deadzone)
+	DirAccess.remove_absolute(tmp)
+	# The radial helper: the old constant is still the default, a given deadzone moves the edge.
+	var raw := Vector2(0.3, 0.0)
+	if server_script.stick_vector(raw) != server_script.stick_vector(raw, 0.2):
+		failures.append("stick_vector with no deadzone differs from one of 0.2")
+	if server_script.stick_vector(raw, 0.4) != Vector2.ZERO:
+		failures.append("a 0.3 stick is inside a 0.4 deadzone but gave %s" % server_script.stick_vector(raw, 0.4))
+	var narrow_vec: Vector2 = server_script.stick_vector(raw, 0.05)
+	if not is_equal_approx(narrow_vec.length(), (0.3 - 0.05) / 0.95):
+		failures.append("a 0.3 stick at deadzone 0.05 gave length %.4f, expected %.4f" % [narrow_vec.length(), (0.3 - 0.05) / 0.95])
+	# A seated pad reads the setting, and Settings changes it.
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var host: RefCounted = host_script.shared()
+	var was: float = host.pad_deadzone
+	var was_persist: bool = host.persist
+	host.persist = false
+	server._test_pad_axes[0] = raw
+	host.pad_deadzone = 0.2
+	var at_default: Vector2 = server._pad_axis(0)
+	host.pad_deadzone = 0.4
+	var at_wide: Vector2 = server._pad_axis(0)
+	host.pad_deadzone = 0.05
+	var at_narrow: Vector2 = server._pad_axis(0)
+	server._test_pad_axes.erase(0)
+	if at_default == Vector2.ZERO:
+		failures.append("a 0.3 stick read as centred at the default deadzone 0.2")
+	if at_wide != Vector2.ZERO:
+		failures.append("a 0.3 stick moved the arm (%s) with the deadzone at 0.4" % at_wide)
+	if at_narrow.length() <= at_default.length():
+		failures.append("a narrower deadzone did not read the 0.3 stick as further out (%s vs %s)" % [at_narrow, at_default])
+	host.pad_deadzone = 0.2
+	var sfx: Node = _sfx()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.refresh()
+	var box: OptionButton = ui.deadzone_button()
+	if box.item_count != 8 or box.selected != 3:
+		failures.append("the Stick deadzone box has %d items with item %d selected, expected 8 with the 0.20 item (3)" % [box.item_count, box.selected])
+	box.item_selected.emit(5)
+	if not is_equal_approx(host.pad_deadzone, 0.3):
+		failures.append("picking the sixth item set the deadzone to %s, expected 0.3" % host.pad_deadzone)
+	ui.refresh()
+	if box.selected != 5:
+		failures.append("Settings did not show the chosen deadzone (item %d)" % box.selected)
+	host.pad_deadzone = was
+	host.persist = was_persist
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
 	return failures

@@ -292,10 +292,10 @@ var _mouse_px_pending: Vector2 = Vector2.ZERO
 func _pad_input() -> void:
 	var stick := Vector2.ZERO
 	if test_pad_stick is Vector2:
-		stick = ControllerServerScript.pad_stick(test_pad_stick, test_pad_left_stick)
+		stick = ControllerServerScript.pad_stick(test_pad_stick, test_pad_left_stick, ControllerServerScript.pad_deadzone())
 	else:
 		for device: int in Input.get_connected_joypads():
-			stick = ControllerServerScript.pad_stick(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)), Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y)))
+			stick = ControllerServerScript.pad_stick(Vector2(Input.get_joy_axis(device, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)), Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y)), ControllerServerScript.pad_deadzone())
 			if stick != Vector2.ZERO:
 				break
 	if stick != Vector2.ZERO:
