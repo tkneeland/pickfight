@@ -1971,7 +1971,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 		round_won.emit(winners[0] if not winners.is_empty() else -1)
 		team_round_won.emit(winner_team)
 		if not winners.is_empty():
-			_timeline_703("round_win", tr("STEAM_TL_ROUND_WIN") % _slot_name(winners[0]))
+			_timeline_703("round_win", tr("STEAM_TL_TEAM_ROUND_WIN") % TeamsScript.team_name(winner_team).capitalize())
 	var team_point: Vector2 = _players[winners[0]].global_position if not winners.is_empty() else Vector2.ZERO
 	for slot: int in alive_slots:
 		if _players[slot].alive:
@@ -1985,7 +1985,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 		_start_final_ko(team_point)
 		team_match_won.emit(winner_team)
 		if not winners.is_empty():
-			_timeline_703("match_win", tr("STEAM_TL_MATCH_WIN") % _slot_name(winners[0]))
+			_timeline_703("match_win", tr("STEAM_TL_TEAM_MATCH_WIN") % TeamsScript.team_name(winner_team).capitalize())
 		var team_slots: Array[int] = []
 		for slot: int in _in_round:
 			if team_of(slot) == winner_team:
