@@ -164,16 +164,16 @@ func build() -> void:
 	footer.theme_type_variation = UiThemeScript.MUTED_HINT_LABEL
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(footer)
-	# Quit (#718): under the cards, one D-pad step down from any of them.
+	# Quit (#718): under the cards, one D-pad step past the last of them (Down already walks Couch, Online, Solo).
 	var quit_button := ScreenKitScript.themed_button(_screen.tr("TITLE_QUIT"), UiThemeScript.ACTION_BUTTON, "Title_quit")
 	quit_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	quit_button.focus_mode = Control.FOCUS_ALL
 	quit_button.pressed.connect(press_title.bind("quit"))
 	box.add_child(quit_button)
 	_title_buttons["quit"] = quit_button
-	for kind: String in TITLE_KINDS:
-		(_title_buttons[kind] as Button).focus_neighbor_bottom = (_title_buttons[kind] as Button).get_path_to(quit_button)
-	quit_button.focus_neighbor_top = quit_button.get_path_to(_title_buttons["local"])
+	var last_card: Button = _title_buttons[TITLE_KINDS[TITLE_KINDS.size() - 1]]
+	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
+	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
 	if _screen.is_inside_tree() and _screen.get_tree().get_script() == null and server.has_method("match_kind") and server.match_kind() == "":
 		show_title(true) # the game, not a `-s` script (see Sfx.is_script_main_loop)
 

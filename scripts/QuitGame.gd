@@ -39,6 +39,8 @@ static func quit_game(tree: SceneTree, server: Object = null) -> void:
 	if quit_action.is_valid():
 		quit_action.call()
 		return
+	if tree.get_script() != null:
+		return # a -s script (the scenario runner) is the main loop: a menu press never quits it
 	var music: Node = tree.root.get_node_or_null(^"Music")
 	if music != null and music.has_method("quit_cleanly"):
 		music.quit_cleanly()

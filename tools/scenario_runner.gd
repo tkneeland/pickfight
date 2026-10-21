@@ -45680,12 +45680,13 @@ func _scenario_quit_title_button_and_key_718() -> Array[String]:
 	if quit == null or not quit.is_visible_in_tree():
 		failures.append("the title screen has no Quit button")
 	else:
-		for kind: String in ["local", "online", "solo"]:
-			var card: Button = screen.title_button(kind)
-			if card.get_node_or_null(card.focus_neighbor_bottom) != quit:
-				failures.append("one D-pad step down from the %s card does not reach Quit" % kind)
-		if quit.get_node_or_null(quit.focus_neighbor_top) != local:
-			failures.append("one D-pad step up from Quit does not reach the Couch card")
+		var solo: Button = screen.title_button("solo")
+		if solo.get_node_or_null(solo.focus_neighbor_bottom) != quit:
+			failures.append("one D-pad step down from Solo does not reach Quit")
+		if quit.get_node_or_null(quit.focus_neighbor_top) != solo:
+			failures.append("one D-pad step up from Quit does not reach Solo")
+		if local.get_node_or_null(local.focus_neighbor_bottom) == quit:
+			failures.append("Couch Down now skips the Online and Solo cards")
 		quit.pressed.emit()
 		if quit_calls.size() != 1:
 			failures.append("pressing Quit on the title quit %d times, expected 1" % quit_calls.size())
@@ -45796,6 +45797,13 @@ func _scenario_quit_game_pc_client_leaves_room_718() -> Array[String]:
 	QuitGameScript718.quit_game(self)
 	if quit_calls.size() != 1:
 		failures.append("with no scene at all, quit_game did not quit")
+	# With no seam at all, a -s script main loop is never quit by a menu press. The real quit would
+	# fire after Music's 0.25 s release, so wait past that: a runner that dies here never prints PASS.
+	QuitGameScript718.quit_action = Callable()
+	QuitGameScript718.quit_game(self)
+	var quit_wait_until: int = Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < quit_wait_until:
+		await process_frame
 	current_scene = was
 	client.queue_free()
 	QuitGameScript718.quit_action = Callable()
