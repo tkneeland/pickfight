@@ -33,6 +33,7 @@ extends CanvasLayer
 const StagesRulesScreenScript := preload("res://scripts/StagesRulesScreen.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
+const RelayNudgeScript := preload("res://scripts/RelayNudge.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
@@ -126,6 +127,8 @@ var _mode_cards_by_id: Dictionary = {}
 var _stages_button: Button
 var _invite_button: Button # under the room code, Online with Steam running (#298)
 var _join_help_button: Button # under the join QR, Couch only (#680)
+var _relay_nudge := RelayNudgeScript.new() # when to show the button below (#727)
+var _relay_nudge_button: Button # Not connecting? Join over the internet (#727)
 var _stages_box: VBoxContainer
 var _stages_summary: Label
 var _picked_mode: String = GameModesScript.CLASSIC
@@ -377,6 +380,8 @@ func popup_open() -> String:
 ## when it opens and freed the moment it closes or the lobby goes (#219), so no
 ## demo body is simulated behind a round or the podium.
 func show_panel(which: String) -> void:
+	if which == "lobby" and not _lobby_panel.visible:
+		_relay_nudge.reset() # a new lobby gets its own 30 s and its own nudge (#727)
 	_lobby_panel.visible = which == "lobby"
 	_victory.victory_panel().visible = which == "victory"
 	if _victory.end_card_panel() != null:
@@ -435,6 +440,7 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		var url: Variant = join_source.get("join_url")
 		_lobby_url.text = str(url) if url != null else ""
 	_apply_streamer_mode(join_source)
+	_update_relay_nudge(join_source)
 
 ## The big countdown number over the lobby, punching in on each tick.
 func _show_countdown(count: int) -> void:
@@ -483,6 +489,33 @@ func _apply_streamer_mode(join_source: Object) -> void:
 		_join_note.add_theme_font_size_override("font_size", 22)
 	else:
 		_join_note.add_theme_font_size_override("font_size", 20)
+
+## Shows the "Not connecting? Join over the internet" button under the Couch QR
+## once the QR has been up 30 s with no phone seated (#727).
+func _update_relay_nudge(join_source: Object) -> void:
+	if _relay_nudge_button == null:
+		return
+	var couch: bool = join_source != null and not _online_kind(join_source)
+	var qr_showing: bool = couch and _lobby_qr.visible and _lobby_panel.visible
+	var phone_seated: bool = couch and join_source.has_method("continue_inputs") and join_source.continue_inputs().has("phone")
+	var internet_on: bool = couch and join_source.has_method("internet_join_on") and join_source.internet_join_on()
+	var due: bool = _relay_nudge.update(Time.get_ticks_msec(), qr_showing, phone_seated, internet_on)
+	_relay_nudge_button.visible = qr_showing and due
+
+## Opens the #683 relay room, as the Phones can't join? popup's button does, and
+## shows that popup so the host sees the QR.
+func _on_relay_nudge_pressed() -> void:
+	if _server == null:
+		return
+	_server.apply_host_command("internet", true)
+	_host.press_control("join_help")
+
+func relay_nudge_button() -> Button:
+	return _relay_nudge_button
+
+## The nudge's timer and latch, for the scenarios.
+func relay_nudge() -> RefCounted:
+	return _relay_nudge
 
 ## The "Invite Steam friends" button (#298); null before the screen is built.
 func invite_button() -> Button:
@@ -713,6 +746,10 @@ func _build_left_column() -> Control:
 	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
 	_join_help_button.visible = false # Couch only: Online has no LAN address to fix
 	_join_box.add_child(_join_help_button)
+	_relay_nudge_button = ScreenKitScript.themed_button(tr("JOIN_NUDGE"), UiThemeScript.ACTION_BUTTON, "RelayNudgeButton")
+	_relay_nudge_button.visible = false # after 30 s with no phone (#727)
+	_relay_nudge_button.pressed.connect(_on_relay_nudge_pressed)
+	_join_box.add_child(_relay_nudge_button)
 	_invite_button = ScreenKitScript.themed_button(tr("STEAM_INVITE_BUTTON"), UiThemeScript.ACTION_BUTTON, "InviteSteamButton")
 	_invite_button.visible = false
 	_invite_button.pressed.connect(_on_invite_pressed)
@@ -771,6 +808,8 @@ func set_pad_menu(on: bool) -> void:
 
 func _process(_delta: float) -> void:
 	_host.process()
+	if not _last_lobby_args.is_empty():
+		_update_relay_nudge(_last_lobby_args[2])
 
 func _input(event: InputEvent) -> void:
 	_host.input(event)
