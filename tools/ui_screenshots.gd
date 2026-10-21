@@ -202,6 +202,10 @@ func _title_and_couch() -> void:
 	settings.host.telemetry_notice_seen = true # the other shots are of a player who has seen it
 	settings.refresh()
 	await _shot("title")
+	var credits: Node = (load("res://scripts/CreditsScreen.gd") as GDScript).open(get_root().get_tree()) # the credits screen (#721)
+	await _frames(3)
+	await _shot("credits")
+	credits.close()
 	settings.host.telemetry_notice_seen = false # the one-time telemetry notice (#617), nothing saved
 	settings.refresh()
 	await _frames(3)

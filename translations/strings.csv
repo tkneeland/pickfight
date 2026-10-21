@@ -476,3 +476,16 @@ QUIT_CONFIRM_TEXT,Quit? This ends the match for everyone,Beenden? Das beendet da
 QUIT_YES,Yes,Ja,Oui,Sí,Sim,是,はい,예,Да
 QUIT_NO,No,Nein,Non,No,Não,否,いいえ,아니요,Нет
 TITLE_QUIT,Quit (Q),Beenden (Q),Quitter (Q),Salir (Q),Sair (Q),退出 (Q),終了 (Q),종료 (Q),Выход (Q)
+CREDITS_BUTTON,Credits,Mitwirkende,Crédits,Créditos,Créditos,制作人员,クレジット,크레딧,Авторы
+CREDITS_TITLE,Credits and licences,Mitwirkende und Lizenzen,Crédits et licences,Créditos y licencias,Créditos e licenças,制作人员名单与许可证,クレジットとライセンス,크레딧 및 라이선스,Авторы и лицензии
+CREDITS_CLOSE_HINT,B or Esc to close,B oder Esc zum Schließen,B ou Échap pour fermer,B o Esc para cerrar,B ou Esc para fechar,按 B 或 Esc 关闭,B か Esc で閉じる,B 또는 Esc로 닫기,B или Esc — закрыть
+CREDITS_STUDIO,A game by SQL Monkey Studios,Ein Spiel von SQL Monkey Studios,Un jeu de SQL Monkey Studios,Un juego de SQL Monkey Studios,Um jogo da SQL Monkey Studios,SQL Monkey Studios 出品,SQL Monkey Studios 制作のゲーム,SQL Monkey Studios 제작 게임,Игра студии SQL Monkey Studios
+CREDITS_MUSIC,Music,Musik,Musique,Música,Música,音乐,音楽,음악,Музыка
+CREDITS_MUSIC_NOTE,Original music by the studio owner plus CC0 tracks from OpenGameArt:,Originalmusik vom Studioinhaber sowie CC0-Stücke von OpenGameArt:,Musique originale du fondateur du studio et morceaux CC0 d'OpenGameArt :,Música original del dueño del estudio y temas CC0 de OpenGameArt:,Música original do dono do estúdio e faixas CC0 do OpenGameArt:,工作室所有者的原创音乐以及来自 OpenGameArt 的 CC0 曲目：,スタジオオーナーのオリジナル曲と OpenGameArt の CC0 曲:,스튜디오 대표의 오리지널 음악과 OpenGameArt의 CC0 트랙:,Оригинальная музыка владельца студии и треки CC0 с OpenGameArt:
+CREDITS_SOUND,Sound effects and voices,Soundeffekte und Stimmen,Effets sonores et voix,Efectos de sonido y voces,Efeitos sonoros e vozes,音效与语音,効果音とボイス,효과음과 음성,Звуки и голоса
+CREDITS_FONTS,Fonts,Schriften,Polices,Fuentes,Fontes,字体,フォント,글꼴,Шрифты
+CREDITS_ENGINE,Built with,Erstellt mit,Créé avec,Creado con,Criado com,使用的技术,使用技術,사용한 기술,Создано с помощью
+CREDITS_TRANSLATIONS,Translations,Übersetzungen,Traductions,Traducciones,Traduções,翻译,翻訳,번역,Переводы
+CREDITS_TRANSLATIONS_NOTE,Machine-translated; thanks to our volunteer proofreaders:,Maschinell übersetzt; Dank an unsere freiwilligen Korrekturleser:,Traduction automatique ; merci à nos relecteurs bénévoles :,Traducción automática; gracias a nuestros revisores voluntarios:,Tradução automática; obrigado aos nossos revisores voluntários:,机器翻译；感谢我们的志愿校对者：,機械翻訳です。ボランティア校正者の皆さんに感謝します:,기계 번역입니다. 자원봉사 교정자분들께 감사드립니다:,Машинный перевод; спасибо нашим добровольным корректорам:
+CREDITS_PROOFREADER_OPEN,volunteer proofreader wanted,Korrekturleser gesucht (freiwillig),relecteur bénévole recherché,se busca revisor voluntario,revisor voluntário procurado,招募志愿校对者,ボランティア校正者募集中,자원봉사 교정자 모집,нужен волонтёр-корректор
+CREDITS_LICENCES,Licences (in English),Lizenzen (auf Englisch),Licences (en anglais),Licencias (en inglés),Licenças (em inglês),许可证（英文）,ライセンス（英語）,라이선스 (영어),Лицензии (на английском)

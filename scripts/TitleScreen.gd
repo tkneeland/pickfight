@@ -19,6 +19,7 @@ const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const QuitGameScript := preload("res://scripts/QuitGame.gd")
+const CreditsScreenScript := preload("res://scripts/CreditsScreen.gd")
 ## The key that quits from the title screen (#718).
 const TITLE_QUIT_KEY: Key = KEY_Q
 
@@ -83,6 +84,9 @@ func input(event: InputEvent) -> void:
 
 ## What picking `kind` on the title screen does: that match kind, then the lobby.
 func press_title(kind: String) -> void:
+	if kind == "credits":
+		CreditsScreenScript.open(_screen.get_tree()) # the credits and licences screen (#721)
+		return
 	if kind == "quit":
 		QuitGameScript.quit_game(_screen.get_tree(), _screen._server) # nobody is seated yet: no confirm (#718)
 		return
@@ -165,15 +169,28 @@ func build() -> void:
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(footer)
 	# Quit (#718): under the cards, one D-pad step past the last of them (Down already walks Couch, Online, Solo).
+	var bottom_row := HBoxContainer.new()
+	bottom_row.name = "BottomRow"
+	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom_row.add_theme_constant_override("separation", 24)
+	box.add_child(bottom_row)
 	var quit_button := ScreenKitScript.themed_button(_screen.tr("TITLE_QUIT"), UiThemeScript.ACTION_BUTTON, "Title_quit")
-	quit_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	quit_button.focus_mode = Control.FOCUS_ALL
 	quit_button.pressed.connect(press_title.bind("quit"))
-	box.add_child(quit_button)
+	bottom_row.add_child(quit_button)
 	_title_buttons["quit"] = quit_button
+	# Credits (#721): beside Quit, one D-pad step right of it.
+	var credits_button := ScreenKitScript.themed_button(_screen.tr("CREDITS_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_credits")
+	credits_button.focus_mode = Control.FOCUS_ALL
+	credits_button.pressed.connect(press_title.bind("credits"))
+	bottom_row.add_child(credits_button)
+	_title_buttons["credits"] = credits_button
+	quit_button.focus_neighbor_right = quit_button.get_path_to(credits_button)
+	credits_button.focus_neighbor_left = credits_button.get_path_to(quit_button)
 	var last_card: Button = _title_buttons[TITLE_KINDS[TITLE_KINDS.size() - 1]]
 	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
 	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
+	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
 	if _screen.is_inside_tree() and _screen.get_tree().get_script() == null and server.has_method("match_kind") and server.match_kind() == "":
 		show_title(true) # the game, not a `-s` script (see Sfx.is_script_main_loop)
 

@@ -976,6 +976,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"quit_title_button_and_key_718",
 	"quit_settings_confirms_only_with_others_718",
 	"quit_game_pc_client_leaves_room_718",
+	"credits_screen_opens_and_closes_721",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3311,6 +3312,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_quit_settings_confirms_only_with_others_718()
 		"quit_game_pc_client_leaves_room_718":
 			return await _scenario_quit_game_pc_client_leaves_room_718()
+		"credits_screen_opens_and_closes_721":
+			return await _scenario_credits_screen_opens_and_closes_721()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -45890,3 +45893,81 @@ func _scenario_quit_game_pc_client_leaves_room_718() -> Array[String]:
 	_scenario_completed = true # nothing here builds a stage for _teardown() to free
 	return failures
 
+## Issue #721: the Credits screen opens from the title screen's Credits button (one D-pad step right of
+## Quit) and from Settings, shows the studio, music, font, engine and translation credits plus the
+## licence texts from THIRD-PARTY.md, and closes with the X, Esc and the gamepad's B (Esc leaves the
+## Settings panel it was opened from open).
+func _scenario_credits_screen_opens_and_closes_721() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	await _await_ticks(2)
+	var credits_button: Button = screen.title_button("credits")
+	var quit: Button = screen.title_button("quit")
+	if credits_button == null or not credits_button.is_visible_in_tree():
+		failures.append("the title screen has no Credits button")
+	else:
+		if quit.get_node_or_null(quit.focus_neighbor_right) != credits_button:
+			failures.append("one D-pad step right of Quit does not reach Credits")
+		if credits_button.get_node_or_null(credits_button.focus_neighbor_left) != quit:
+			failures.append("one D-pad step left of Credits does not reach Quit")
+		credits_button.pressed.emit()
+	await _await_ticks(2)
+	var credits: Node = root.get_node_or_null("CreditsScreen")
+	if credits == null or not credits.is_open():
+		failures.append("pressing Credits did not open the credits screen")
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	var text: String = credits.credits_text()
+	for needle: String in ["SQL Monkey Studios", "Kistol", "Kenney", "Lilita One", "Nunito", "Godot Engine", "GodotSteam", "Sentry",
+			"Deutsch", "日本語", "Permission is hereby granted", "SIL Open Font License"]:
+		if not text.contains(needle):
+			failures.append("the credits screen never says \"%s\"" % needle)
+	if not PadMenuScript368._open.has("credits"):
+		failures.append("an open credits screen did not register as a pad menu")
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.physical_keycode = KEY_ESCAPE
+	credits._input(key)
+	if credits.is_open():
+		failures.append("Esc did not close the credits screen")
+	credits.show_credits()
+	var pad := InputEventJoypadButton.new()
+	pad.pressed = true
+	pad.button_index = JOY_BUTTON_B
+	credits._input(pad)
+	if credits.is_open():
+		failures.append("the gamepad's B did not close the credits screen")
+	credits.show_credits()
+	credits.close_button().pressed.emit()
+	if credits.is_open():
+		failures.append("the X did not close the credits screen")
+	if PadMenuScript368._open.has("credits"):
+		failures.append("a closed credits screen still counts as an open pad menu")
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var settings_credits: Button = ui.credits_button()
+	if settings_credits == null or not settings_credits.is_visible_in_tree():
+		failures.append("Settings has no Credits button")
+	else:
+		settings_credits.pressed.emit()
+		if not credits.is_open():
+			failures.append("Settings' Credits button did not open the credits screen")
+		credits._input(key)
+		if credits.is_open():
+			failures.append("Esc did not close the credits screen opened from Settings")
+		if not ui.is_open():
+			failures.append("Esc that closed the credits screen also closed the Settings panel")
+	if ui.is_open():
+		ui.toggle_panel()
+	credits.queue_free()
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
