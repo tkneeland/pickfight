@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PICKFIGHT: 8 players, no controllers, just scan the QR</title>
+<meta name="description" content="PickFight is a same-room party brawler for up to 8 players. Everyone scans a QR code and fights with their phone. Launching July 22, 2027 on Windows, macOS and Linux.">
+<meta property="og:title" content="PICKFIGHT">
+<meta property="og:description" content="Eight players, one screen, no controllers: scan a QR code and fight with your phone.">
+<meta property="og:image" content="img/02-brawl.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fff7ec;--fg:#241a12;--muted:#6b5a4a;--card:#ffffff;--line:#e6d5bd;--accent:#d9381e;--accent-fg:#fff;}
+@media (prefers-color-scheme:dark){:root{--bg:#17110d;--fg:#f5ebdc;--muted:#bfae98;--card:#241b14;--line:#3b2e23;--accent:#ff5a3c;--accent-fg:#1a0c07;}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 Nunito,system-ui,sans-serif;overflow-x:hidden}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px}
+h1,h2{font-family:Bangers,Impact,sans-serif;font-weight:400;letter-spacing:.04em;margin:0}
+h1{font-size:clamp(3rem,16vw,6.5rem);line-height:1;color:var(--accent)}
+h2{font-size:clamp(1.8rem,7vw,2.6rem);margin-bottom:.5em}
+header{padding:48px 0 24px;text-align:center}
+.hook{font-size:1.25rem;font-weight:700;margin:.6em auto 0;max-width:34ch}
+.meta{color:var(--muted);margin:.6em 0 0}
+.hero{display:block;width:100%;height:auto;border-radius:12px;border:2px solid var(--line);margin:24px 0}
+section{padding:24px 0}
+.grid{display:grid;gap:16px;grid-template-columns:1fr}
+.card{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:16px 18px}
+.card h3{margin:0 0 .3em;font-size:1.1rem}
+.card p{margin:0}
+figure{margin:0}
+figure img{display:block;width:100%;height:auto;border-radius:10px;border:2px solid var(--line)}
+figcaption{color:var(--muted);font-size:.95rem;margin-top:6px}
+.signup{background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:22px 20px;text-align:center}
+.signup form{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+input[type=email]{font:inherit;padding:12px 14px;border-radius:8px;border:2px solid var(--line);background:var(--bg);color:var(--fg);width:100%}
+button,.btn{font:inherit;font-weight:700;padding:12px 18px;border-radius:8px;border:0;background:var(--accent);color:var(--accent-fg);cursor:pointer;text-decoration:none;display:inline-block}
+.small{font-size:.85rem;color:var(--muted);margin:.8em 0 0}
+.cta{text-align:center}
+a{color:var(--accent)}
+.btn{color:var(--accent-fg)}
+footer{padding:32px 0 48px;text-align:center;color:var(--muted);font-size:.9rem;border-top:2px solid var(--line);margin-top:24px}
+@media (min-width:640px){
+ .grid{grid-template-columns:repeat(2,1fr)}
+ .signup form{flex-direction:row}
+ input[type=email]{flex:1}
+ .shots{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+ <h1>PICKFIGHT</h1>
+ <p class="hook">Eight players, one screen, no controllers: scan a QR code and fight with your phone.</p>
+ <p class="meta">Launching July 22, 2027 &middot; Windows, macOS, Linux &middot; by SQL Monkey Studios</p>
+</header>
+
+<img class="hero" src="img/02-brawl.png" alt="Eight players brawling with pickaxes on a shared screen" width="1200" height="675">
+
+<section>
+ <h2>Scan, swing, shove</h2>
+ <p>PickFight is a same-room platform fighter for up to eight players. One computer (or a Steam Deck) runs the shared screen. Everybody else joins by scanning a QR code with the phone already in their pocket. No app to install, no account to make.</p>
+ <p>Your thumb drags the weapon, and the weapon is your arm. Swing it, plant it in a wall, haul yourself up a cliff, and knock your friends into the lava. It is scrappy and a bit clumsy on purpose, and funny to watch.</p>
+</section>
+
+<section class="signup" id="signup">
+ <h2>Get the launch news</h2>
+ <p>One email when the demo goes live, and one on launch day. No spam.</p>
+ <!-- TODO(owner): replace TODO_OWNER_FORM_ID with the Kit form ID (see site/README.md) -->
+ <form action="https://app.kit.com/forms/TODO_OWNER_FORM_ID/subscriptions" method="post">
+  <label for="email" style="position:absolute;left:-9999px">Email address</label>
+  <input id="email" type="email" name="email_address" placeholder="you@example.com" required autocomplete="email">
+  <button type="submit">Sign me up</button>
+ </form>
+ <p class="small">Emails are handled by Kit. Unsubscribe any time.</p>
+</section>
+
+<section>
+ <h2>What you get</h2>
+ <div class="grid">
+  <div class="card"><h3>43 stages</h3><p>Lava, spikes, saws, moving platforms, bounce pads, wind and falling rocks.</p></div>
+  <div class="card"><h3>13 weapons</h3><p>Everyone starts with a pickaxe. Sword, axe, grappling hook, boomerang, fishing rod, magnet and more drop onto the stage.</p></div>
+  <div class="card"><h3>6 game modes</h3><p>Classic, King of the Hill, Sudden Death, Stock, Soccer and Capture the Flag, Free-for-all or Red vs Blue.</p></div>
+  <div class="card"><h3>Play your way</h3><p>Couch with phones and gamepads, Online by room code, or Solo against bots on Easy, Normal or Hard.</p></div>
+  <div class="card"><h3>Made to be welcoming</h3><p>Screen shake off, reduce flashes, bigger name tags, colour-blind-safe colours, and nine interface languages.</p></div>
+  <div class="card"><h3>Your look</h3><p>Hats, eye styles and colours, picked on your phone.</p></div>
+ </div>
+</section>
+
+<section>
+ <h2>See it in action</h2>
+ <div class="shots">
+  <figure><img src="img/03-lobby.png" alt="Couch lobby with a join QR code and eight player cards" loading="lazy" width="1200" height="675"><figcaption>Scan the QR code with your phone and you are in</figcaption></figure>
+  <figure><img src="img/04-teams.png" alt="Red versus Blue teams on the Colosseum stage" loading="lazy" width="1200" height="675"><figcaption>Two teams, four players each</figcaption></figure>
+  <figure><img src="img/08-weapons.png" alt="A different weapon in every player's hand" loading="lazy" width="1200" height="675"><figcaption>A different weapon in every hand, picked up on the stage</figcaption></figure>
+ </div>
+</section>
+
+<section class="cta">
+ <h2>Wishlist on Steam</h2>
+ <!-- TODO(owner): replace the # link with the Steam store page URL once the page is live (#540) -->
+ <p><a class="btn" href="#" aria-disabled="true">Steam page coming soon</a></p>
+</section>
+
+<footer>
+ <p>&copy; SQL Monkey Studios. PickFight launches July 22, 2027.</p>
+ <!-- TODO(owner): add the domain, press contact and social links once they exist -->
+</footer>
+</div>
+</body>
+</html>
