@@ -9,6 +9,7 @@
 - **[trailer-shot-list.md](trailer-shot-list.md):** DRAFT shot list for the 60 to 75 second announce trailer (#728).
 - **[press-kit.md](press-kit.md):** DRAFT press kit fact sheet (#728).
 - **[outreach-emails.md](outreach-emails.md):** DRAFT outreach email templates and Keymailer listing text (#728).
+- **[discord-server.md](discord-server.md):** DRAFT public Discord server plan: channels, roles, rules, welcome text, AutoMod, onboarding and launch checklist (#744).
 - **Open decisions with Austin:** pinned issue #685.
 - **Steam checklist and owners per task:** [../steam-readiness.md](../steam-readiness.md).
 
