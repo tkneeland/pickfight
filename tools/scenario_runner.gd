@@ -979,6 +979,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"credits_screen_opens_and_closes_721",
 	"pause_on_focus_loss_747",
 	"couch_relay_nudge_727",
+	"phone_vibration_switch_749",
 	"steam_timeline_teams_title_745",
 	"stick_deadzone_setting_748",
 ]
@@ -3322,6 +3323,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pause_on_focus_loss_747()
 		"couch_relay_nudge_727":
 			return await _scenario_couch_relay_nudge_727()
+		"phone_vibration_switch_749":
+			return await _scenario_phone_vibration_switch_749()
 		"steam_timeline_teams_title_745":
 			return await _scenario_steam_timeline_teams_title_745()
 		"stick_deadzone_setting_748":
@@ -46151,6 +46154,50 @@ func _scenario_couch_relay_nudge_727() -> Array[String]:
 	screen.set_popup("")
 	await _teardown(rig["main"])
 	_scenario_completed = true
+	return failures
+## Issue #749: the phone page's Vibration switch. It sits in the lobby panel, defaults to on, is read
+## from and saved to localStorage through the page's try/catch helpers, and the page's one
+## navigator.vibrate() call is directly under the vibrationOn guard (off means no call at all; the
+## colour flash still plays). Both labels exist in all nine language tables. Behaviour was also run
+## against the real host in a browser; this keeps the page's structure from regressing.
+func _scenario_phone_vibration_switch_749() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if page.is_empty():
+		failures.append("cannot read %s" % CONTROLLER_PAGE_PATH)
+		_scenario_completed = true
+		return failures
+	var lobby_at: int = page.find('<div id="lobby">')
+	var next_panel_at: int = page.find('<div id="name-prompt">')
+	var button_at: int = page.find('<button id="vibration-btn"')
+	if button_at == -1 or lobby_at == -1 or button_at < lobby_at or button_at > next_panel_at:
+		failures.append("the Vibration button is not in the lobby panel (lobby %d, button %d, next panel %d)" % [lobby_at, button_at, next_panel_at])
+	# Executable lines only: the comments above the buzz table and the switch mention navigator.vibrate() too.
+	var real_calls: int = 0
+	var call_guarded: bool = false
+	var previous_line: String = ""
+	for line: String in page.split("\n"):
+		var stripped: String = line.strip_edges()
+		if stripped.is_empty() or stripped.begins_with("//"):
+			continue
+		if stripped.contains("navigator.vibrate("):
+			real_calls += 1
+			call_guarded = previous_line.contains('if (vibrationOn && typeof navigator.vibrate === "function")')
+		previous_line = stripped
+	if real_calls != 1:
+		failures.append("the page calls navigator.vibrate() in %d places, expected exactly 1 (inside buzz)" % real_calls)
+	elif not call_guarded:
+		failures.append("the one vibrate call is not directly under the vibrationOn guard")
+	if not page.contains('var vibrationOn = stored(VIBRATION_KEY) !== "0";'):
+		failures.append("the switch does not default to on and read its saved choice")
+	if not page.contains('store(VIBRATION_KEY, vibrationOn ? "1" : "0");'):
+		failures.append("toggling the switch does not save the choice")
+	for key: String in ["PHONE_VIBRATION_ON", "PHONE_VIBRATION_OFF"]:
+		var pattern := RegEx.create_from_string('"%s": "([^"]+)"' % key)
+		var hits: Array[RegExMatch] = pattern.search_all(page)
+		if hits.size() != 9:
+			failures.append("%s has %d non-empty entries, expected one per language table (9)" % [key, hits.size()])
+	_scenario_completed = true # nothing here builds a stage for _teardown() to free
 	return failures
 # --- Steam Timeline titles name the winning team in Teams (#745) -----------------
 func _timeline_titles_745(steam: Node, kind: String) -> Array:
