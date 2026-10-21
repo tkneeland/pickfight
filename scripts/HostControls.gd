@@ -39,6 +39,10 @@ const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 const MAIN_SCENE: String = "res://scenes/Main.tscn"
 ## How long Leave lobby stays armed after its first press, when others are seated (#716).
 const LEAVE_CONFIRM_MSEC: int = 5000
+## A step under the other action buttons, like Kick, and inside the Stages & Rules box (whose gap is
+## smaller than the column's): the Online lobby with eight seats leaves the right column no room
+## for one more full-size button at 1600x900 (#716).
+const LEAVE_BUTTON_FONT_SIZE: int = 18
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
@@ -92,8 +96,10 @@ func attach(server: Object) -> void:
 	stages.pressed.connect(press_control.bind("stages_rules"))
 	_controls["stages_rules"] = stages
 	lobby_right.move_child(_screen._stages_box, lobby_right.get_child_count() - 1)
-	# Leave lobby (#716): under Stages & Rules, back to the title screen.
-	lobby_right.add_child(_action_button("leave", _screen.tr("LOBBY_LEAVE"), UiThemeScript.ACTION_BUTTON))
+	# Leave lobby (#716): in the Stages & Rules box, right under its button, back to the title screen.
+	var leave_button: Button = _action_button("leave", _screen.tr("LOBBY_LEAVE"), UiThemeScript.ACTION_BUTTON)
+	leave_button.add_theme_font_size_override("font_size", LEAVE_BUTTON_FONT_SIZE)
+	_screen._stages_box.add_child(leave_button)
 	# Phones can't join? (#680): the button under the join QR, in the pad menu chain too.
 	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
 	_controls["join_help"] = _screen.join_help_button()
