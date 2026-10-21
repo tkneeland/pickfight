@@ -652,6 +652,22 @@ static func _nearest_ui_scale(value: float) -> float:
 func save_settings() -> void:
 	_save_settings()
 
+## Volumes, mute, fullscreen and the comfort options back to their defaults, saved (#750).
+func restore_defaults() -> void:
+	var was_fullscreen: bool = fullscreen
+	master_volume = 1.0
+	muted = false
+	sfx_volume = 1.0
+	fullscreen = false
+	screen_shake = true
+	reduce_flash = false
+	ui_scale = 1.0
+	hide_room_code = false
+	_apply_master()
+	_apply_sfx_volume()
+	if was_fullscreen:
+		_apply_window_mode()
+	_save_settings()
 ## Ask the window to go fullscreen, or back to the project's own window mode
 ## (maximized), and remember the choice.
 func set_fullscreen(value: bool) -> void:
