@@ -970,6 +970,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ach_toast_shown_unless_steam_689",
 	"ach_names_translated_and_documented_689",
 	"lobby_card_follows_hat_and_eyes_pick_714",
+	"lobby_leave_button_716",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3295,6 +3296,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ach_names_translated_and_documented_689()
 		"lobby_card_follows_hat_and_eyes_pick_714":
 			return await _scenario_lobby_card_follows_hat_and_eyes_pick_714()
+		"lobby_leave_button_716":
+			return await _scenario_lobby_leave_button_716()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -45594,4 +45597,62 @@ func _scenario_lobby_card_follows_hat_and_eyes_pick_714() -> Array[String]:
 		if card == null or card.avatar().hat_id != pick[0] or card.avatar().eyes_id != pick[1]:
 			failures.append("after picking %s the host's lobby card still shows hat '%s', eyes '%s'" % [pick, card.avatar().hat_id if card != null else "no card", card.avatar().eyes_id if card != null else "no card"])
 	await _kind_close_435(rig)
+	return failures
+## Issue #716: Leave lobby sits under Stages & Rules and goes back to the title. With only
+## the host and bots seated one press leaves and closes the room; with another human seated
+## the first press only arms it (its caption turns into the confirm), a second leaves, and
+## touching any other control disarms it.
+func _scenario_lobby_leave_button_716() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var left: Array[bool] = []
+	screen.set_leave_action(func() -> void: left.append(true))
+	screen.press_control("online")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var leave: Button = screen.control_button("leave")
+	var stages: Button = screen.control_button("stages_rules")
+	if leave == null or not leave.is_visible_in_tree():
+		failures.append("no Leave lobby button in the lobby")
+		await _kind_close_435(rig)
+		return failures
+	if leave.get_global_rect().position.y < stages.get_global_rect().position.y:
+		failures.append("Leave lobby (y %.0f) sits above Stages & Rules (y %.0f)" % [leave.get_global_rect().position.y, stages.get_global_rect().position.y])
+	server.apply_host_command("bots", 1)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var room_was_open: bool = server.online_requested()
+	screen.press_control("leave")
+	if left.size() != 1:
+		failures.append("alone with a bot, one press did not leave (left %d times)" % left.size())
+	if room_was_open and server.online_requested():
+		failures.append("leaving did not close the Online room")
+	screen.press_control("local")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var phones: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "leave-phone", phones)
+	phones.append(peer)
+	if joined["slot"] < 0:
+		failures.append("the phone never took a seat (closed=%s '%s')" % [joined["closed"], joined["reason"]])
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	screen.press_control("leave")
+	screen.refresh_controls()
+	if left.size() != 1:
+		failures.append("with a phone seated, the first press left without a confirm")
+	if not screen.control_button("leave").text.contains(screen.tr("LOBBY_LEAVE_CONFIRM")):
+		failures.append("the armed button reads '%s', not the confirm" % screen.control_button("leave").text)
+	screen.press_control("bots_up")
+	screen.refresh_controls()
+	if screen.control_button("leave").text != screen.tr("LOBBY_LEAVE"):
+		failures.append("touching another control did not disarm Leave (reads '%s')" % screen.control_button("leave").text)
+	screen.press_control("leave")
+	if left.size() != 1:
+		failures.append("the press after a disarm left instead of arming again")
+	screen.press_control("leave")
+	if left.size() != 2:
+		failures.append("the confirming press did not leave (left %d times)" % left.size())
+	await _kind_close_435(rig, phones)
 	return failures
