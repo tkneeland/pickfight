@@ -92,8 +92,8 @@ Art in the repo today is placeholder (`icon.svg`, `docs/art/`); none of the abov
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
 | 4.1 | Sound effects are Kenney packs, CC0 1.0, credited in `CREDITS.md`; CC0 allows commercial use with no attribution | agent | none | done |
-| 4.2 | Re-audit every asset type before release: `assets/music/` (confirm licence and source is in `CREDITS.md`), the synthesised announcer lines, fonts (Godot default), any art. Anything not CC0/own must have a licence that allows commercial sale | agent | none | partial (SFX documented; confirm music and anything added since) |
-| 4.3 | Godot's MIT licence text and third-party notices must ship with the game (Godot: Project, Export includes them via Help, Copyright info; add a `THIRD-PARTY.md` or in-game credits screen). If GodotSteam is added, include its MIT notice and the Steamworks SDK terms | agent | 5.x | todo |
+| 4.2 | Re-audit every asset type before release: `assets/music/` (confirm licence and source is in `CREDITS.md`), the synthesised announcer lines, fonts (Godot default), any art. Anything not CC0/own must have a licence that allows commercial sale | agent | none | **done** (#721: every file under `assets/` audited: Kenney SFX, nine OpenGameArt CC0 tracks, own synthesised announcer and grunts, OFL fonts, own logo art; `CREDITS.md` now has an Art section) |
+| 4.3 | Godot's MIT licence text and third-party notices must ship with the game (Godot: Project, Export includes them via Help, Copyright info; add a `THIRD-PARTY.md` or in-game credits screen). If GodotSteam is added, include its MIT notice and the Steamworks SDK terms | agent | 5.x | **done** (#721: `THIRD-PARTY.md`, shown on the in-game Credits screen and included in exports) |
 | 4.4 | Trademark/name check, and EULA/terms if wanted | owner | name | todo |
 
 ### 5. Builds, depots and SteamPipe

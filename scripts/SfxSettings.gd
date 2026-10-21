@@ -34,6 +34,7 @@ const LanguagesScript := preload("res://scripts/Languages.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
 const QuitGameScript := preload("res://scripts/QuitGame.gd")
+const CreditsScreenScript := preload("res://scripts/CreditsScreen.gd")
 ## Height of the scrolling window-size and options area.
 const LIST_HEIGHT: float = 130.0
 
@@ -71,6 +72,7 @@ var _hide_code_box: CheckBox
 var _scale_button: OptionButton
 var _host_match: VBoxContainer
 ## Quit game (#718): the button, and the confirm that replaces it while other humans are seated.
+var _credits_button: Button
 var _quit_button: Button
 var _quit_confirm: VBoxContainer
 var _quit_label: Label
@@ -172,6 +174,12 @@ func _ready() -> void:
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
+	# Credits and licences (#721), above Quit.
+	_credits_button = Button.new()
+	_credits_button.name = "Credits"
+	_credits_button.text = tr("CREDITS_BUTTON")
+	_credits_button.focus_mode = Control.FOCUS_NONE
+	rows.add_child(_credits_button)
 	# Quit game (#718), last in the panel.
 	_quit_button = Button.new()
 	_quit_button.name = "QuitGame"
@@ -231,6 +239,7 @@ func _ready() -> void:
 	_mute.toggled.connect(_on_mute_toggled)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
+	_credits_button.pressed.connect(open_credits)
 	_quit_button.pressed.connect(request_quit)
 	_quit_yes.pressed.connect(confirm_quit)
 	_quit_no.pressed.connect(cancel_quit)
@@ -428,6 +437,13 @@ func confirm_quit() -> void:
 func cancel_quit() -> void:
 	_quit_confirm.visible = false
 	_quit_button.visible = true
+
+## The credits and licences screen (#721).
+func open_credits() -> void:
+	CreditsScreenScript.open(get_tree())
+
+func credits_button() -> Button:
+	return _credits_button
 
 func quit_button() -> Button:
 	return _quit_button
@@ -721,6 +737,7 @@ func _retranslate() -> void:
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
 	_filter_box.text = tr("SETTINGS_FILTER_NAMES")
 	_feedback_button.text = tr("SETTINGS_FEEDBACK")
+	_credits_button.text = tr("CREDITS_BUTTON")
 	_quit_button.text = tr("SETTINGS_QUIT_GAME")
 	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
 	_quit_yes.text = tr("QUIT_YES")
