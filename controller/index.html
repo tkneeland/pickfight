@@ -513,7 +513,7 @@
     color: var(--ink);
     background: var(--yellow);
   }
-  #look-btn {
+  #look-btn, #vibration-btn {
     font: inherit;
     font-size: 18px;
     font-weight: 700;
@@ -550,7 +550,7 @@
   #dmgbar { background: rgba(20, 24, 29, 0.55); border-bottom: 1px solid var(--ink); }
 
   /* Every button: cream face, ink outline, hard shadow that the press eats. */
-  #ready-btn, #look-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
+  #ready-btn, #look-btn, #vibration-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
   #host-menu button, #team-row button, #target-row button, #hat-grid button, #eyes-grid button, #color-row button {
     font-family: var(--display);
     font-weight: 400;
@@ -560,7 +560,7 @@
     border-radius: 16px;
     box-shadow: 4px 4px 0 var(--ink);
   }
-  #ready-btn:active, #look-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
+  #ready-btn:active, #look-btn:active, #vibration-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
   #steal:active, #mouse-capture:active, #host-menu button:active, #team-row button:active, #target-row button:active,
   #hat-grid button:active, #eyes-grid button:active, #color-row button:active {
     transform: translate(3px, 3px);
@@ -604,7 +604,7 @@
   #team-row button.on { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink), 4px 4px 0 6px var(--ink); }
   #team-line { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
 
-  #look-btn { font-size: 20px; }
+  #look-btn, #vibration-btn { font-size: 20px; }
   #name-input {
     font-family: var(--display);
     font-weight: 400;
@@ -665,6 +665,7 @@
   </div>
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
+  <button id="vibration-btn" type="button">Vibration: on</button>
 </div>
 <div id="name-prompt">
   <div id="name-prompt-title">Pick your name</div>
@@ -804,6 +805,8 @@
         "PHONE_NO": "No",
         "PHONE_MOUSE_CAPTURE": "Click to capture mouse",
         "PHONE_MOUSE_SENS": "Mouse sensitivity",
+        "PHONE_VIBRATION_ON": "Vibration: on",
+        "PHONE_VIBRATION_OFF": "Vibration: off",
         "PHONE_HINT_DRAG": "Drag to swing",
         "TEAM_LINE": "You're on {0} team",
         "TEAM_LINE_AUTO": " (auto)",
@@ -940,6 +943,8 @@
       "PHONE_NO": "Nein",
       "PHONE_MOUSE_CAPTURE": "Klick, um die Maus zu fangen",
       "PHONE_MOUSE_SENS": "Mausempfindlichkeit",
+      "PHONE_VIBRATION_ON": "Vibration: an",
+      "PHONE_VIBRATION_OFF": "Vibration: aus",
       "PHONE_HINT_DRAG": "Zieh zum Schwingen",
       "TEAM_LINE": "Du bist in Team {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1076,6 +1081,8 @@
       "PHONE_NO": "Non",
       "PHONE_MOUSE_CAPTURE": "Clique pour capturer la souris",
       "PHONE_MOUSE_SENS": "Sensibilité de la souris",
+      "PHONE_VIBRATION_ON": "Vibration : activée",
+      "PHONE_VIBRATION_OFF": "Vibration : désactivée",
       "PHONE_HINT_DRAG": "Glisse pour frapper",
       "TEAM_LINE": "Tu es dans l'équipe {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1212,6 +1219,8 @@
       "PHONE_NO": "No",
       "PHONE_MOUSE_CAPTURE": "Clic para capturar el mouse",
       "PHONE_MOUSE_SENS": "Sensibilidad del mouse",
+      "PHONE_VIBRATION_ON": "Vibración: sí",
+      "PHONE_VIBRATION_OFF": "Vibración: no",
       "PHONE_HINT_DRAG": "Arrastra para golpear",
       "TEAM_LINE": "Estás en el equipo {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1348,6 +1357,8 @@
       "PHONE_NO": "Não",
       "PHONE_MOUSE_CAPTURE": "Clique para capturar o mouse",
       "PHONE_MOUSE_SENS": "Sensibilidade do mouse",
+      "PHONE_VIBRATION_ON": "Vibração: ligada",
+      "PHONE_VIBRATION_OFF": "Vibração: desligada",
       "PHONE_HINT_DRAG": "Arraste para bater",
       "TEAM_LINE": "Você está no time {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1484,6 +1495,8 @@
       "PHONE_NO": "否",
       "PHONE_MOUSE_CAPTURE": "点击以捕获鼠标",
       "PHONE_MOUSE_SENS": "鼠标灵敏度",
+      "PHONE_VIBRATION_ON": "振动:开",
+      "PHONE_VIBRATION_OFF": "振动:关",
       "PHONE_HINT_DRAG": "拖动来挥动",
       "TEAM_LINE": "你在{0}队",
       "TEAM_LINE_AUTO": " (自动)",
@@ -1620,6 +1633,8 @@
       "PHONE_NO": "いいえ",
       "PHONE_MOUSE_CAPTURE": "クリックしてマウスを取り込む",
       "PHONE_MOUSE_SENS": "マウス感度",
+      "PHONE_VIBRATION_ON": "バイブ: オン",
+      "PHONE_VIBRATION_OFF": "バイブ: オフ",
       "PHONE_HINT_DRAG": "ドラッグで振る",
       "TEAM_LINE": "あなたは{0}チーム",
       "TEAM_LINE_AUTO": " (自動)",
@@ -1756,6 +1771,8 @@
       "PHONE_NO": "아니요",
       "PHONE_MOUSE_CAPTURE": "클릭해서 마우스 잡기",
       "PHONE_MOUSE_SENS": "마우스 감도",
+      "PHONE_VIBRATION_ON": "진동: 켜짐",
+      "PHONE_VIBRATION_OFF": "진동: 꺼짐",
       "PHONE_HINT_DRAG": "드래그해서 휘두르기",
       "TEAM_LINE": "당신은 {0}팀이에요",
       "TEAM_LINE_AUTO": " (자동)",
@@ -1892,6 +1909,8 @@
       "PHONE_NO": "Нет",
       "PHONE_MOUSE_CAPTURE": "Нажмите, чтобы захватить мышь",
       "PHONE_MOUSE_SENS": "Чувствительность мыши",
+      "PHONE_VIBRATION_ON": "Вибрация: вкл.",
+      "PHONE_VIBRATION_OFF": "Вибрация: выкл.",
       "PHONE_HINT_DRAG": "Води, чтобы махать",
       "TEAM_LINE": "Вы в команде: {0}",
       "TEAM_LINE_AUTO": " (авто)",
@@ -2101,6 +2120,11 @@
     struck:     { rank: 2, vibrate: 60,            alpha: 0.4,  ms: 220 },
     hit:        { rank: 1, vibrate: 25,            alpha: 0.18, ms: 120 }
   };
+
+  // The Vibration switch in the lobby (issue #749): default on, kept in localStorage. Off means
+  // buzz() makes no navigator.vibrate() call at all; the colour flash still plays.
+  var VIBRATION_KEY = "pickfight-vibration";
+  var vibrationOn = stored(VIBRATION_KEY) !== "0";
 
   // The host replaces the token with its WebSocket port; the same file served
   // raw (GitHub Pages, for a phone joining over the relay, #683) reads 0.
@@ -2673,7 +2697,7 @@
     if (now < buzzUntil && b.rank < buzzRank) { return; }
     buzzRank = b.rank;
     buzzUntil = now + b.ms;
-    if (typeof navigator.vibrate === "function") {
+    if (vibrationOn && typeof navigator.vibrate === "function") {
       try { navigator.vibrate(b.vibrate); } catch (err) { /* flash still plays */ }
     }
     flashEl.style.background = colorOf(slot);
@@ -3039,6 +3063,21 @@
 
   document.getElementById("look-go").addEventListener("click", closeLookPrompt);
   document.getElementById("look-btn").addEventListener("click", openLookPrompt);
+
+  // ---- vibration switch (issue #749) ---------------------------------------------
+  // Hidden where the browser cannot vibrate at all (iOS Safari): the flash is the only buzz there.
+  var vibrationBtn = document.getElementById("vibration-btn");
+  function showVibration() {
+    vibrationBtn.textContent = t(vibrationOn ? "PHONE_VIBRATION_ON" : "PHONE_VIBRATION_OFF");
+    vibrationBtn.setAttribute("aria-pressed", vibrationOn ? "true" : "false");
+  }
+  if (typeof navigator.vibrate !== "function") { vibrationBtn.style.display = "none"; }
+  vibrationBtn.addEventListener("click", function () {
+    vibrationOn = !vibrationOn;
+    store(VIBRATION_KEY, vibrationOn ? "1" : "0");
+    showVibration();
+  });
+  showVibration();
 
   // ---- host controls (issue #149) -------------------------------------------
   // Only the host phone -- the one allowed to set "first to N" -- gets the
