@@ -297,6 +297,9 @@ func set_volume(value: float, save: bool = true) -> void:
 func save_settings() -> void:
 	_save_settings()
 
+## The volume back to `DEFAULT_VOLUME`, saved (#750).
+func restore_defaults() -> void:
+	set_volume(DEFAULT_VOLUME)
 ## Read the volume from `settings_path`. A missing file means the default;
 ## any other load error is reported and also leaves the default.
 func load_settings() -> void:

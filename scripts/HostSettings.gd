@@ -405,6 +405,27 @@ func set_game_mode(id: String) -> void:
 	game_mode = id
 	save_settings()
 
+## Every setting back to its default, saved (#750). Language and the crash-report choice keep
+## their values, as does the first-launch notice's "seen" mark, which is not a setting.
+func restore_defaults() -> void:
+	resolution = Vector2i.ZERO
+	disabled_stages_by_mode = {}
+	stock_stages_on = PackedStringArray()
+	disabled_weapons = PackedStringArray()
+	disabled_modifiers = {}
+	game_mode = ""
+	share_stats = true
+	play_of_round = true
+	pause_on_focus_loss = true
+	pad_deadzone = DEFAULT_PAD_DEADZONE
+	filter_names = true
+	stock_lives = 3
+	stock_time_limit = 480
+	soccer_goals = 3
+	bot_difficulty = "normal"
+	ctf_captures = 2
+	cosmetic_pick = {"hat": "none", "eyes": "round", "color": -1}
+	save_settings()
 func _set_enabled(disabled: PackedStringArray, known: PackedStringArray, item: String, enabled: bool) -> bool:
 	var index: int = disabled.find(item)
 	if enabled:

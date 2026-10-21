@@ -81,6 +81,11 @@ var _quit_confirm: VBoxContainer
 var _quit_label: Label
 var _quit_yes: Button
 var _quit_no: Button
+var _restore_button: Button
+var _restore_confirm: VBoxContainer
+var _restore_label: Label
+var _restore_yes: Button
+var _restore_no: Button
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -183,7 +188,35 @@ func _ready() -> void:
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
-	# Credits and licences (#721), above Quit.
+	# Restore defaults (#750), above Credits: one press asks first, Yes resets.
+	_restore_button = Button.new()
+	_restore_button.name = "RestoreDefaults"
+	_restore_button.text = tr("SETTINGS_RESTORE_DEFAULTS")
+	_restore_button.focus_mode = Control.FOCUS_NONE
+	rows.add_child(_restore_button)
+	_restore_confirm = VBoxContainer.new()
+	_restore_confirm.name = "RestoreConfirm"
+	_restore_confirm.visible = false
+	rows.add_child(_restore_confirm)
+	_restore_label = Label.new()
+	_restore_label.text = tr("RESTORE_CONFIRM_TEXT")
+	_restore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_restore_label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
+	_restore_confirm.add_child(_restore_label)
+	var restore_row := HBoxContainer.new()
+	_restore_confirm.add_child(restore_row)
+	_restore_yes = Button.new()
+	_restore_yes.name = "RestoreYes"
+	_restore_yes.text = tr("QUIT_YES")
+	_restore_yes.focus_mode = Control.FOCUS_NONE
+	_restore_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	restore_row.add_child(_restore_yes)
+	_restore_no = Button.new()
+	_restore_no.name = "RestoreNo"
+	_restore_no.text = tr("QUIT_NO")
+	_restore_no.focus_mode = Control.FOCUS_NONE
+	_restore_no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	restore_row.add_child(_restore_no)	# Credits and licences (#721), above Quit.
 	_credits_button = Button.new()
 	_credits_button.name = "Credits"
 	_credits_button.text = tr("CREDITS_BUTTON")
@@ -253,6 +286,9 @@ func _ready() -> void:
 	_quit_button.pressed.connect(request_quit)
 	_quit_yes.pressed.connect(confirm_quit)
 	_quit_no.pressed.connect(cancel_quit)
+	_restore_button.pressed.connect(request_restore)
+	_restore_yes.pressed.connect(confirm_restore)
+	_restore_no.pressed.connect(cancel_restore)
 	_resolution.item_selected.connect(_on_resolution_selected)
 	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
@@ -303,7 +339,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if PadMenuScript.pressed(event, JOY_BUTTON_B) and _panel.visible:
-		if _quit_confirm.visible:
+		if _restore_confirm.visible:
+			cancel_restore() # B is No (#750)
+		elif _quit_confirm.visible:
 			cancel_quit() # B is No (#718)
 		elif _feedback_box.visible:
 			toggle_feedback()
@@ -320,7 +358,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F11:
 			sfx.toggle_fullscreen()
 		KEY_ESCAPE:
-			if _quit_confirm.visible:
+			if _restore_confirm.visible:
+				cancel_restore() # Esc is No (#750)
+			elif _quit_confirm.visible:
 				cancel_quit() # Esc is No (#718)
 			else:
 				toggle_panel()
@@ -369,6 +409,7 @@ func toggle_panel() -> void:
 		_feedback_box.visible = false
 		cancel_quit()
 		_set_pad_focus(false)
+		cancel_restore()
 	if _panel.visible:
 		refresh()
 	elif _dragging:
@@ -451,6 +492,38 @@ func cancel_quit() -> void:
 	_quit_confirm.visible = false
 	_quit_button.visible = true
 
+## Restore defaults (#750): the first press asks, with No as the default focus.
+func request_restore() -> void:
+	_restore_button.visible = false
+	_restore_confirm.visible = true
+	if PadMenuScript.is_open():
+		_chain_pad_focus()
+		_restore_no.grab_focus()
+
+## Yes: every setting but Language and the crash-report choice goes back to its default.
+func confirm_restore() -> void:
+	cancel_restore()
+	sfx.restore_defaults()
+	if music != null:
+		music.restore_defaults()
+	host.restore_defaults()
+	refresh()
+
+func cancel_restore() -> void:
+	_restore_confirm.visible = false
+	_restore_button.visible = true
+
+func restore_button() -> Button:
+	return _restore_button
+
+func restore_confirm_box() -> Control:
+	return _restore_confirm
+
+func restore_yes_button() -> Button:
+	return _restore_yes
+
+func restore_no_button() -> Button:
+	return _restore_no
 ## The credits and licences screen (#721).
 func open_credits() -> void:
 	CreditsScreenScript.open(get_tree())
@@ -757,7 +830,10 @@ func _retranslate() -> void:
 	_quit_button.text = tr("SETTINGS_QUIT_GAME")
 	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
 	_quit_yes.text = tr("QUIT_YES")
-	_quit_no.text = tr("QUIT_NO")
+	_restore_button.text = tr("SETTINGS_RESTORE_DEFAULTS")
+	_restore_label.text = tr("RESTORE_CONFIRM_TEXT")
+	_restore_yes.text = tr("QUIT_YES")
+	_restore_no.text = tr("QUIT_NO")
 	_feedback_send.text = tr("FEEDBACK_SEND")
 	_feedback_edit.placeholder_text = tr("FEEDBACK_PLACEHOLDER")
 	((_feedback_send.get_parent() as Node).get_child(0) as Label).text = tr("FEEDBACK_TITLE")

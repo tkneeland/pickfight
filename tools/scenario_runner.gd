@@ -983,6 +983,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"steam_timeline_teams_title_745",
 	"team_letters_752",
 	"stick_deadzone_setting_748",
+	"restore_defaults_750",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3332,6 +3333,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_team_letters_752()
 		"stick_deadzone_setting_748":
 			return await _scenario_stick_deadzone_setting_748()
+		"restore_defaults_750":
+			return await _scenario_restore_defaults_750()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46466,4 +46469,128 @@ func _scenario_stick_deadzone_setting_748() -> Array[String]:
 	ui_host.persist = ui_was_persist
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
+	return failures
+## Issue #750: Settings' "Restore defaults" asks first (No and closing the panel cancel), and Yes puts every
+## setting in audio.cfg back to its default except Language and the crash-report choice; the reset is saved.
+func _scenario_restore_defaults_750() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var music: Node = _music()
+	if sfx == null or music == null:
+		return ["the Sfx or Music autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var host: RefCounted = ui.host
+	host.persist = false
+	var was_language: String = host.language
+	var was_crash: bool = host.send_crash_reports
+	sfx.set_master_volume(0.3)
+	sfx.set_sfx_volume(0.4)
+	sfx.set_muted(true)
+	sfx.set_screen_shake(false)
+	sfx.set_reduce_flash(true)
+	sfx.set_hide_room_code(true)
+	sfx.set_ui_scale(2.0)
+	music.set_volume(0.9)
+	host.pad_deadzone = 0.35
+	host.filter_names = false
+	host.play_of_round = false
+	host.pause_on_focus_loss = false
+	host.share_stats = false
+	host.stock_lives = 7
+	host.stock_time_limit = 120
+	host.soccer_goals = 5
+	host.ctf_captures = 4
+	host.bot_difficulty = "hard"
+	host.disabled_weapons = PackedStringArray(["Axe"])
+	host.disabled_stages_by_mode = {"classic": PackedStringArray(["Pitch"])}
+	host.disabled_modifiers = {"classic": PackedStringArray(["low_gravity"])}
+	host.resolution = Vector2i(1280, 720)
+	host.cosmetic_pick = {"hat": "crown", "eyes": "angry", "color": 3}
+	host.language = "de"
+	host.send_crash_reports = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var button: Button = ui.restore_button()
+	if button == null or not button.is_visible_in_tree():
+		failures.append("Settings has no Restore defaults button")
+		host.language = was_language
+		host.send_crash_reports = was_crash
+		return failures
+	button.pressed.emit()
+	if not ui.restore_confirm_box().visible or button.visible:
+		failures.append("the first press did not replace the button with the confirm")
+	if not is_equal_approx(sfx.master_volume, 0.3) or not is_equal_approx(host.pad_deadzone, 0.35):
+		failures.append("the first press reset settings before the confirm")
+	ui.restore_no_button().pressed.emit()
+	if ui.restore_confirm_box().visible or not button.visible or not is_equal_approx(sfx.master_volume, 0.3) or host.stock_lives != 7:
+		failures.append("No did not cancel the reset")
+	button.pressed.emit()
+	ui.toggle_panel()
+	ui.toggle_panel()
+	if ui.restore_confirm_box().visible or not button.visible:
+		failures.append("closing the panel did not cancel the confirm")
+	button.pressed.emit()
+	ui.restore_yes_button().pressed.emit()
+	if ui.restore_confirm_box().visible or not button.visible:
+		failures.append("Yes did not close the confirm")
+	var checks: Dictionary = {
+		"master volume": is_equal_approx(sfx.master_volume, 1.0),
+		"sfx volume": is_equal_approx(sfx.sfx_volume, 1.0),
+		"mute": not sfx.muted,
+		"screen shake": sfx.screen_shake,
+		"reduce flashes": not sfx.reduce_flash,
+		"hide room code": not sfx.hide_room_code,
+		"name tag size": is_equal_approx(sfx.ui_scale, 1.0),
+		"music volume": is_equal_approx(music.volume, music.DEFAULT_VOLUME),
+		"stick deadzone": is_equal_approx(host.pad_deadzone, 0.2),
+		"filter names": host.filter_names,
+		"play of the round": host.play_of_round,
+		"pause on focus loss": host.pause_on_focus_loss,
+		"share stats": host.share_stats,
+		"stock lives": host.stock_lives == 3,
+		"stock time limit": host.stock_time_limit == 480,
+		"soccer goals": host.soccer_goals == 3,
+		"ctf captures": host.ctf_captures == 2,
+		"bot difficulty": host.bot_difficulty == "normal",
+		"weapons": host.disabled_weapons.is_empty(),
+		"stage lists": host.disabled_stages_by_mode.is_empty() and host.stock_stages_on.is_empty(),
+		"rules": host.disabled_modifiers.is_empty(),
+		"window size": host.resolution == Vector2i.ZERO,
+		"look": str(host.cosmetic_pick.get("hat")) == "none" and int(host.cosmetic_pick.get("color")) == -1,
+	}
+	for label: String in checks:
+		if not checks[label]:
+			failures.append("Yes did not restore the default %s" % label)
+	if host.language != "de":
+		failures.append("Restore defaults changed the language (%s)" % host.language)
+	if host.send_crash_reports:
+		failures.append("Restore defaults switched the crash-report choice back on")
+	if not is_equal_approx(ui.volume_slider().value, 1.0) or ui.mute_box().button_pressed:
+		failures.append("the panel did not show the restored volume and mute")
+	if ui.tag_size_button().selected != 0 or ui.deadzone_button().selected != 3 or ui.resolution_button().selected != 0:
+		failures.append("the panel's pickers did not show the restored values")
+	# The reset is saved: a fresh store reading the file sees the defaults, with the kept ones intact.
+	var tmp: String = OS.get_temp_dir().path_join("pf_750_%d.cfg" % OS.get_process_id())
+	var stored: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	stored.path = tmp
+	stored.stock_lives = 9
+	stored.pad_deadzone = 0.4
+	stored.language = "de"
+	stored.send_crash_reports = false
+	stored.save_settings()
+	stored.restore_defaults()
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if again.stock_lives != 3 or not is_equal_approx(again.pad_deadzone, 0.2):
+		failures.append("the restored defaults were not saved (lives %d, deadzone %s)" % [again.stock_lives, again.pad_deadzone])
+	if again.language != "de" or again.send_crash_reports:
+		failures.append("the saved file lost the kept Language or crash-report choice")
+	DirAccess.remove_absolute(tmp)
+	host.language = was_language
+	host.send_crash_reports = was_crash
+	if ui.is_open():
+		ui.toggle_panel()
+	_scenario_completed = true
 	return failures
