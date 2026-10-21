@@ -26,3 +26,9 @@ No domain is bought yet and Pages settings are unchanged.
 
 - Steam store page URL: replace the `#` link on the "Wishlist on Steam" button once the page is live (#540).
 - Domain: buy it and wire it up (section 2); add press contact and social links to the footer.
+
+## 4. Press kit, favicon and social previews (#739)
+
+- `site/press.html` is the press kit page (text from `docs/launch/press-kit.md`, placeholders kept). Full-size screenshots and the logo (SVG and PNG) are in `site/press/`. Both pages share `site/style.css`.
+- Favicon: `site/img/favicon.svg` (the logo's pick "i") with `site/img/favicon-32.png` as fallback.
+- `og:image`, `og:url` and `twitter:image` are absolute URLs on `https://tkneeland.github.io/pickfight/site/`, because Discord, X and Reddit cannot load relative paths. Swap that prefix in `index.html` and `press.html` when the domain exists.
