@@ -162,7 +162,7 @@ O movimento é física, não botão. Sua arma é um braço articulado que se cra
 
 **Um monte de coisa para disputar**
 - 43 cenários que se alternam, cheios de perigos: lava, espinhos, serras, plataformas móveis, beiradas que desmoronam, molas, zonas de vento, ventiladores e pedras caindo.
-- 13 armas: todo mundo começa com o pico, e as outras caem no cenário como itens. Espada, machado, adaga, cajado, escudo, guarda-chuva, boomstick, gancho, mangual, bumerangue, vara de pescar e ímã.
+- 13 armas: todo mundo começa com o picareta, e as outras caem no cenário como itens. Espada, machado, adaga, cajado, escudo, guarda-chuva, boomstick, gancho, mangual, bumerangue, vara de pescar e ímã.
 - 6 modos de jogo: Clássico, Rei da colina, Morte súbita, Stock, Futebol e Capture a bandeira, com Todos contra todos ou times Vermelho contra Azul.
 - De vez em quando, modificadores de rodada: baixa gravidade, dano em dobro, chuva de meteoros, chão escorregadio e mais.
 
@@ -178,7 +178,7 @@ Uma partida é de Sofá ou Online, nunca misturadas. Se o seu Wi-Fi impede os ce
 - Até 8 jogadores em uma tela, entrando por QR code pelo navegador de qualquer celular: sem app e sem controle.
 - Sua arma é o seu braço: arraste para golpear, escalar e se arremessar pelo cenário.
 - 43 cenários com lava, espinhos, serras, plataformas móveis, molas e vento.
-- 13 armas, do pico com que todo mundo começa até o gancho, o bumerangue, a vara de pescar e o ímã.
+- 13 armas, do picareta com que todo mundo começa até o gancho, o bumerangue, a vara de pescar e o ímã.
 - 6 modos: Clássico, Rei da colina, Morte súbita, Stock, Futebol e Capture a bandeira.
 - Sofá, Online por código de sala ou Solo contra bots (Fácil, Normal, Difícil).
 - Controles também funcionam, e o Steam Deck pode ser o anfitrião.
