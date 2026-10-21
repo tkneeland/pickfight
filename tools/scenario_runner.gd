@@ -977,6 +977,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"quit_settings_confirms_only_with_others_718",
 	"quit_game_pc_client_leaves_room_718",
 	"credits_screen_opens_and_closes_721",
+	"pause_on_focus_loss_747",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3314,6 +3315,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_quit_game_pc_client_leaves_room_718()
 		"credits_screen_opens_and_closes_721":
 			return await _scenario_credits_screen_opens_and_closes_721()
+		"pause_on_focus_loss_747":
+			return await _scenario_pause_on_focus_loss_747()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -45970,4 +45973,105 @@ func _scenario_credits_screen_opens_and_closes_721() -> Array[String]:
 	credits.queue_free()
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
+	return failures
+## #747: losing the window's focus pauses a Couch round, regaining it keeps it paused until
+## the first input, Online never pauses, and the setting turns it off.
+func _scenario_pause_on_focus_loss_747() -> Array[String]:
+	var failures: Array[String] = []
+	RoundManagerScript.modifier_rolls_enabled = false
+	var main: Node = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
+	var server: Node = main.get_node("ControllerServer")
+	_set_phone_ports(server)
+	server.controller_timeout_sec = 60.0
+	var rm: Node = main.get_node("RoundManager")
+	rm.rotation_seed = 747
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	rm.kill_zone_grace_sec = 600.0
+	var players: Array[RigidBody2D] = []
+	for i in 2:
+		players.append(server.get_node(server.player_paths[i]) as RigidBody2D)
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		await _join_phone(peer, "focus-%d" % i, joined)
+		joined.append(peer)
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var deadline: int = Time.get_ticks_msec() + ROUND_LOOP_TIMEOUT_MSEC * 2
+	while Time.get_ticks_msec() < deadline and not (players[0].alive and players[1].alive):
+		await _poll_phones(joined, 1)
+	if not (players[0].alive and players[1].alive):
+		failures.append("two ready phones never started a round")
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.pause_on_focus_loss
+	host.persist = false
+	# Setting off: focus loss changes nothing.
+	host.pause_on_focus_loss = false
+	rm.focus_lost()
+	if rm.is_paused():
+		failures.append("focus loss paused the round with the setting off")
+	host.pause_on_focus_loss = true
+	# Online: never.
+	var kind: String = server._match_kind
+	server._match_kind = "online"
+	rm.focus_lost()
+	if rm.is_paused():
+		failures.append("focus loss paused an Online round")
+	server._match_kind = kind
+	# Couch: pauses, banner up.
+	rm.focus_lost()
+	await _poll_phones(joined, 5)
+	if not rm.is_paused() or not rm.is_focus_paused() or not get_root().get_tree().paused:
+		failures.append("focus loss did not pause the Couch round")
+	if rm.pause_label() == null or not rm.pause_label().is_visible_in_tree():
+		failures.append("no PAUSED banner after focus loss")
+	# Focus back alone does not resume; an input before that does not either.
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.keycode = KEY_SPACE
+	rm._focus_resume._input(key)
+	if not rm.is_paused():
+		failures.append("input before the window had focus again resumed the round")
+	rm.focus_regained()
+	if not rm.is_paused():
+		failures.append("regaining focus resumed the round without any input")
+	rm._focus_resume._input(key)
+	if rm.is_paused() or get_root().get_tree().paused:
+		failures.append("the first input after regaining focus did not resume the round")
+	if rm.pause_label() != null and rm.pause_label().is_visible_in_tree():
+		failures.append("PAUSED banner stayed up after resuming")
+	# The host phone's Resume also ends a focus pause.
+	rm.focus_lost()
+	rm._on_host_command("resume", 0)
+	if rm.is_paused() or rm.is_focus_paused():
+		failures.append("the host phone's Resume did not end a focus pause")
+	# A round the host already paused by hand is left alone.
+	rm._on_host_command("pause", 0)
+	rm.focus_lost()
+	if rm.is_focus_paused():
+		failures.append("focus loss took over a pause the host phone made")
+	rm._on_host_command("resume", 0)
+	host.pause_on_focus_loss = was
+	host.persist = true
+	# The setting is remembered and on by default.
+	var tmp: String = OS.get_temp_dir().path_join("pf_747_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if not fresh.pause_on_focus_loss:
+		failures.append("Pause when the window loses focus is not on by default")
+	fresh.set_pause_on_focus_loss(false)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if again.pause_on_focus_loss:
+		failures.append("switching the focus pause off was not remembered")
+	DirAccess.remove_absolute(tmp)
+	await _close_phones(joined)
+	await _teardown(main)
 	return failures

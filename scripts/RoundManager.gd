@@ -1714,6 +1714,9 @@ func _pause_match() -> void:
 
 func _resume_match() -> void:
 	_paused = false
+	_focus_paused = false
+	if _focus_resume != null:
+		_focus_resume.armed = false
 	_set_tree_paused(false)
 	_show_pause_banner(false)
 	_publish_lobby_state()
@@ -1723,6 +1726,7 @@ func _resume_match() -> void:
 func _end_match() -> void:
 	if _paused:
 		_paused = false
+		_focus_paused = false
 		_set_tree_paused(false)
 		_show_pause_banner(false)
 	for player: Variant in _players:
@@ -2155,6 +2159,47 @@ func _abandon_match() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_abandon_match()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		focus_lost()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		focus_regained()
+
+# --- Pause when the window loses focus (#747) ---------------------------------
+#
+# Couch and Solo rounds pause when the host window loses focus, so an alt-tab or a
+# system notification does not cost anyone the round. Online never pauses: the
+# other players are still playing. The round stays paused when the window comes
+# back until the first key, click or gamepad button (FocusResume.gd), or the host
+# phone's Resume. HostSettings.pause_on_focus_loss turns it off.
+
+const FocusResumeScript := preload("res://scripts/FocusResume.gd")
+var _focus_paused: bool = false
+var _focus_resume: Node
+
+## Whether the current pause came from the window losing focus.
+func is_focus_paused() -> bool:
+	return _focus_paused
+
+## Online: the other players are still playing.
+func _is_online_match() -> bool:
+	return _controller_server != null and _controller_server.has_method("match_kind") and _controller_server.match_kind() == "online"
+
+func focus_lost() -> void:
+	if _paused or _is_online_match() or not _in_match():
+		return
+	if not HostSettingsScript.shared().pause_on_focus_loss:
+		return
+	_focus_paused = true
+	if _focus_resume == null:
+		_focus_resume = FocusResumeScript.new()
+		_focus_resume.resume_requested.connect(_resume_match)
+		add_child(_focus_resume)
+	_focus_resume.armed = false
+	_pause_match()
+
+func focus_regained() -> void:
+	if _focus_paused and _focus_resume != null:
+		_focus_resume.armed = true
 
 ## Where the per-match balance tallies are appended (issue #316).
 var balance_log_path: String = "user://balance_stats.jsonl"
