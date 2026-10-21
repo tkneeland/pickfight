@@ -979,6 +979,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"credits_screen_opens_and_closes_721",
 	"pause_on_focus_loss_747",
 	"couch_relay_nudge_727",
+	"steam_timeline_teams_title_745",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3320,6 +3321,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pause_on_focus_loss_747()
 		"couch_relay_nudge_727":
 			return await _scenario_couch_relay_nudge_727()
+		"steam_timeline_teams_title_745":
+			return await _scenario_steam_timeline_teams_title_745()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46145,4 +46148,50 @@ func _scenario_couch_relay_nudge_727() -> Array[String]:
 	screen.set_popup("")
 	await _teardown(rig["main"])
 	_scenario_completed = true
+	return failures
+# --- Steam Timeline titles name the winning team in Teams (#745) -----------------
+func _timeline_titles_745(steam: Node, kind: String) -> Array:
+	var titles: Array = []
+	for call: Array in steam.calls_for_test:
+		if call[0] == "add_timeline_event" and call[1] == kind:
+			titles.append(call[2])
+	return titles
+func _scenario_steam_timeline_teams_title_745() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = _timeline_start_703(true)
+	# Free-for-all keeps naming the winning player.
+	var rig: Dictionary = await _ach_rig_689(2)
+	if _ach_missing_689(failures, rig):
+		await _teardown(rig["stage"])
+		_timeline_end_703(steam)
+		return failures
+	rig["players"][1].eliminate()
+	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("round_win"), 3000)
+	if _timeline_titles_745(steam, "round_win") != ["P1 wins the round"]:
+		failures.append("Free-for-all round win recorded %s" % [steam.calls_for_test])
+	await _teardown(rig["stage"])
+	steam.calls_for_test.clear()
+	# Teams: Red is slot 0, Blue slot 1; two Blue round wins take the match.
+	var loop: Dictionary = _new_team_round_236(2, [0, 1], {})
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("Teams round %d never started" % (round_number + 1))
+			await _teardown(loop["stage"])
+			_timeline_end_703(steam)
+			return failures
+		players[0].eliminate()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("match_win"), ROUND_LOOP_TIMEOUT_MSEC)
+	if _timeline_titles_745(steam, "round_win") != ["Blue team wins the round", "Blue team wins the round"]:
+		failures.append("Teams round wins recorded %s" % [steam.calls_for_test])
+	if _timeline_titles_745(steam, "match_win") != ["Blue team wins the match"]:
+		failures.append("Teams match win recorded %s" % [steam.calls_for_test])
+	roster.teams_on = false
+	await _teardown(loop["stage"])
+	_timeline_end_703(steam)
 	return failures
