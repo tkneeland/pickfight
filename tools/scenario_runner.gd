@@ -971,6 +971,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ach_toast_shown_unless_steam_689",
 	"ach_names_translated_and_documented_689",
 	"lobby_card_follows_hat_and_eyes_pick_714",
+	"lobby_leave_button_716",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3297,6 +3298,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ach_names_translated_and_documented_689()
 		"lobby_card_follows_hat_and_eyes_pick_714":
 			return await _scenario_lobby_card_follows_hat_and_eyes_pick_714()
+		"lobby_leave_button_716":
+			return await _scenario_lobby_leave_button_716()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -43414,7 +43417,6 @@ func _scenario_wedged_head_phases_free_with_input_held() -> Array[String]:
 		await _teardown(stage, false)
 	_scenario_completed = true
 	return failures
-
 # --- Phones can't join? help popup (#680)
 func _join_help_urls_shown_680(view) -> Array[String]:
 	var shown: Array[String] = []
@@ -43532,7 +43534,6 @@ func _scenario_join_help_hidden_online_and_streamer_680() -> Array[String]:
 	await _streamer_close_369(online_rig)
 	_scenario_completed = true
 	return failures
-
 # --- Join over the internet instead (#683, ADR-0025)
 const PAGES_URL_683: String = "https://tkneeland.github.io/pickfight/controller/index.html"
 ## A Couch match on the Main scene with a local relay standing by for the fallback.
@@ -43746,7 +43747,6 @@ func _scenario_internet_phone_page_relay_branch_683() -> Array[String]:
 		failures.append("the raw page would fail on Pages: __WS_PORT__ is a bare identifier")
 	_scenario_completed = true
 	return failures
-
 # --- Bot difficulty (issue #682) -------------------------------------------------
 ## Normal by default, only the three levels accepted, saved and reloaded, and
 ## the host command sets it.
@@ -43797,8 +43797,6 @@ func _scenario_bot_difficulty_reaction_682() -> Array[String]:
 		failures.append("reaction times not hard < normal < easy: %s" % str(times))
 	_scenario_completed = true
 	return failures
-
-
 # --- Languages (issue #688) ------------------------------------------------------
 ## Every language column strings.csv carries: a quick read of the header.
 func _csv_rows_688() -> Array[PackedStringArray]:
@@ -43809,7 +43807,6 @@ func _csv_rows_688() -> Array[PackedStringArray]:
 		if row.size() > 1:
 			rows.append(row)
 	return rows
-
 ## The columns the first pass ships, and every key has text in each of them.
 func _scenario_csv_values_688() -> Array[String]:
 	var failures: Array[String] = []
@@ -43828,7 +43825,6 @@ func _scenario_csv_values_688() -> Array[String]:
 				failures.append("%s has no %s text" % [row[0], header[c]])
 	_scenario_completed = true
 	return failures
-
 ## A translation keeps the English string's %s / %d / %.1f and {name} and
 ## [bbcode] tokens, the same ones in any order.
 func _scenario_csv_placeholders_688() -> Array[String]:
@@ -43845,14 +43841,12 @@ func _scenario_csv_placeholders_688() -> Array[String]:
 				failures.append("%s (%s) has placeholders %s; English has %s" % [row[0], header[c], got, want])
 	_scenario_completed = true
 	return failures
-
 func _tokens_688(token: RegEx, text: String) -> Array[String]:
 	var out: Array[String] = []
 	for m: RegExMatch in token.search_all(text):
 		out.append(m.get_string())
 	out.sort()
 	return out
-
 ## The language setting is Auto by default, refuses an unknown language, saves
 ## and reloads, and setting it moves TranslationServer's locale (the words come
 ## from the shipped German and Brazilian Portuguese columns).
@@ -43892,7 +43886,6 @@ func _scenario_language_setting_688() -> Array[String]:
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures
-
 ## The Settings panel's Language row: Auto then each language in its own name,
 ## choosing one switches the locale and re-words the panel at once.
 func _scenario_language_row_688() -> Array[String]:
@@ -43931,7 +43924,6 @@ func _scenario_language_row_688() -> Array[String]:
 	panel._retranslate()
 	_scenario_completed = true
 	return failures
-
 ## Read off controller/index.html as shipped: every English key is in each
 ## other language table, with the same {0} {1} placeholders.
 func _scenario_phone_languages_688() -> Array[String]:
@@ -43976,7 +43968,6 @@ func _scenario_phone_languages_688() -> Array[String]:
 				failures.append("%s has phone string %s that English lacks" % [lang, k])
 	_scenario_completed = true
 	return failures
-
 ## CJK and Cyrillic text has no glyphs in the bundled Lilita One and Nunito, so
 ## it renders only through the operating system's fonts. Every font the theme
 ## uses (its default font, every font a type or variation sets, and each
@@ -44027,10 +44018,7 @@ func _scenario_font_fallback_688() -> Array[String]:
 		failures.append("each language's own system font should lead its fallback chain")
 	_scenario_completed = true
 	return failures
-
-
 # --- Untranslated English sweep (issue #693) ---------------------------------------
-
 ## English strings this sweep moved into strings.csv; none may show in Japanese.
 const ENGLISH_DENYLIST_693: Array[String] = [
 	"stages", "stage", "modifiers", "Stages & Rules", "Bot ", "Done", "All on", "All off", "Round modifiers",
@@ -44039,7 +44027,6 @@ const ENGLISH_DENYLIST_693: Array[String] = [
 	"Low Gravity", "Heavy", "Big Heads", "Fast Lava", "Slippery", "Tiny", "Roulette", "Meteor", "Bouncy", "Double Damage",
 	"Flatlands", "Pillars", "Highrise", "Furnace", "Gauntlet", "Final Destination", "Battlefield",
 ]
-
 func _texts_693(root: Node, into: Dictionary) -> void:
 	for node: Node in root.find_children("*", "Control", true, false) + [root]:
 		var control: Control = node as Control
@@ -44051,7 +44038,6 @@ func _texts_693(root: Node, into: Dictionary) -> void:
 			into[str((control as LineEdit).placeholder_text)] = control.name
 		if control.tooltip_text != "":
 			into[control.tooltip_text] = control.name
-
 func _scenario_no_english_693() -> Array[String]:
 	var failures: Array[String] = []
 	var was_locale: String = TranslationServer.get_locale()
@@ -44094,7 +44080,6 @@ func _scenario_no_english_693() -> Array[String]:
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures
-
 ## #428: Steam is dormant under the runner. The wrapper is reached through the
 ## autoload, the way the game reaches it.
 func _scenario_steam_dormant_428() -> Array[String]:
@@ -44114,7 +44099,6 @@ func _scenario_steam_dormant_428() -> Array[String]:
 		failures.append("steam_id should be 0 when unavailable")
 	_scenario_completed = true
 	return failures
-
 ## #428: the autoload is registered, and the script loads and runs without the
 ## Steam singleton (a plain clone has none).
 func _scenario_steam_autoload_428() -> Array[String]:
@@ -44988,15 +44972,12 @@ func _scenario_ach_names_translated_and_documented_689() -> Array[String]:
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures
-
 # --- Play of the round (#704) ---------------------------------------------------
 const PlayOfRoundScript704 := preload("res://scripts/PlayOfRound.gd")
 const HostSettingsScript704 := preload("res://scripts/HostSettings.gd")
 const PLAY_OF_ROUND_PAUSE_SEC_704: float = 3.0
-
 func _ko_704(t: int, killer: int, hazard: bool = false, ranged: bool = false) -> Dictionary:
 	return {"t": t, "killer": killer, "victim": 3, "hazard": hazard, "ranged": ranged}
-
 func _scenario_play_of_round_best_moment_scoring_order_704() -> Array[String]:
 	var failures: Array[String] = []
 	var best: Callable = PlayOfRoundScript704.best_moment
@@ -45023,7 +45004,6 @@ func _scenario_play_of_round_best_moment_scoring_order_704() -> Array[String]:
 		failures.append("a tie did not go to the latest KO")
 	_scenario_completed = true
 	return failures
-
 func _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704() -> Array[String]:
 	var failures: Array[String] = []
 	var pick: Callable = PlayOfRoundScript704.select_frames
@@ -45043,13 +45023,11 @@ func _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704() -> Array[
 		failures.append("an empty buffer played a clip")
 	_scenario_completed = true
 	return failures
-
 func _fake_frames_704(rm: Node, count: int) -> void:
 	for i in count:
 		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
 		img.fill(Color(float(i) / float(count), 0.2, 0.4))
 		rm._replay.push_frame(img)
-
 ## One two-player round in a real RoundManager: P1 KOs P2 (when `with_ko`), then
 ## the round-end pause is watched. Returns the pause length in game msec, whether
 ## the play-of-the-round panel showed, and its caption; `during` runs once the
@@ -45091,7 +45069,6 @@ func _run_play_of_round_704(with_ko: bool, during: Callable = Callable()) -> Dic
 				break
 	await _teardown(loop["stage"])
 	return out
-
 func _scenario_play_of_round_no_ko_plays_nothing_704() -> Array[String]:
 	var failures: Array[String] = []
 	var run: Dictionary = await _run_play_of_round_704(false)
@@ -45101,7 +45078,6 @@ func _scenario_play_of_round_no_ko_plays_nothing_704() -> Array[String]:
 		failures.append("a round with no credited KO played a moment")
 	_scenario_completed = true
 	return failures
-
 func _scenario_play_of_round_leaves_the_pause_length_alone_704() -> Array[String]:
 	var failures: Array[String] = []
 	var host: RefCounted = HostSettingsScript704.shared()
@@ -45126,7 +45102,6 @@ func _scenario_play_of_round_leaves_the_pause_length_alone_704() -> Array[String
 			failures.append("the caption '%s' does not name the player" % on["caption"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_play_of_round_skip_input_dismisses_704() -> Array[String]:
 	var failures: Array[String] = []
 	var tap: Callable = func(_rm: Node, loop: Dictionary) -> void: loop["roster"].ready_taps.append(0)
@@ -45147,7 +45122,6 @@ func _scenario_play_of_round_skip_input_dismisses_704() -> Array[String]:
 		failures.append("skipping changed the pause to %d ms" % by_key["pause_msec"])
 	_scenario_completed = true
 	return failures
-
 func _scenario_play_of_round_setting_off_never_plays_704() -> Array[String]:
 	var failures: Array[String] = []
 	var host: RefCounted = HostSettingsScript704.shared()
@@ -45161,7 +45135,6 @@ func _scenario_play_of_round_setting_off_never_plays_704() -> Array[String]:
 		failures.append("the moment played with Play of the round off")
 	_scenario_completed = true
 	return failures
-
 func _scenario_play_of_round_setting_persists_704() -> Array[String]:
 	var failures: Array[String] = []
 	var tmp: String = OS.get_temp_dir().path_join("pf_704_%d.cfg" % OS.get_process_id())
@@ -45178,7 +45151,6 @@ func _scenario_play_of_round_setting_persists_704() -> Array[String]:
 	DirAccess.remove_absolute(tmp)
 	_scenario_completed = true
 	return failures
-
 func _scenario_play_of_round_caption_translated_704() -> Array[String]:
 	var failures: Array[String] = []
 	var was_locale: String = TranslationServer.get_locale()
@@ -45199,7 +45171,6 @@ func _scenario_play_of_round_caption_translated_704() -> Array[String]:
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures
-
 ## #538 helper: one PC join screen on a temp settings file, with an optional
 ## pre-saved name and a fake Steam persona. Returns the field text.
 func _name_field_538(saved: Variant, persona: String) -> String:
@@ -45224,7 +45195,6 @@ func _name_field_538(saved: Variant, persona: String) -> String:
 	if FileAccess.file_exists(temp_path):
 		DirAccess.remove_absolute(temp_path)
 	return shown
-
 func _scenario_name_defaults_to_steam_persona_538() -> Array[String]:
 	var failures: Array[String] = []
 	var shown: String = await _name_field_538(null, "Gabe")
@@ -45232,7 +45202,6 @@ func _scenario_name_defaults_to_steam_persona_538() -> Array[String]:
 		failures.append("nothing saved + persona 'Gabe' showed '%s'" % shown)
 	_scenario_completed = true
 	return failures
-
 func _scenario_saved_name_beats_steam_persona_538() -> Array[String]:
 	var failures: Array[String] = []
 	var shown: String = await _name_field_538("Zelda", "Gabe")
@@ -45240,7 +45209,6 @@ func _scenario_saved_name_beats_steam_persona_538() -> Array[String]:
 		failures.append("saved 'Zelda' + persona 'Gabe' showed '%s'" % shown)
 	_scenario_completed = true
 	return failures
-
 func _scenario_no_steam_name_default_unchanged_538() -> Array[String]:
 	var failures: Array[String] = []
 	var shown: String = await _name_field_538(null, "")
@@ -45248,7 +45216,6 @@ func _scenario_no_steam_name_default_unchanged_538() -> Array[String]:
 		failures.append("no Steam + nothing saved showed '%s'" % shown)
 	_scenario_completed = true
 	return failures
-
 func _scenario_overlong_steam_persona_is_capped_538() -> Array[String]:
 	var failures: Array[String] = []
 	var shown: String = await _name_field_538(null, "W".repeat(80))
@@ -45257,9 +45224,7 @@ func _scenario_overlong_steam_persona_is_capped_538() -> Array[String]:
 		failures.append("80-char persona showed %d chars, wanted %d" % [shown.length(), cap])
 	_scenario_completed = true
 	return failures
-
 # --- #298: Steam friend invites ---------------------------------------------------
-
 ## A host rig on a local relay with SteamPlatform faked running (or not) and
 ## the match kind picked. Online waits for the room code.
 func _rig_298(kind: String, steam_running: bool) -> Dictionary:
@@ -45280,7 +45245,6 @@ func _rig_298(kind: String, steam_running: bool) -> Dictionary:
 		await _wait_for_239(func() -> bool: return server.is_online())
 	await process_frame
 	return rig
-
 func _close_298(rig: Dictionary) -> void:
 	rig["server"].go_offline()
 	_relay_stop(rig["relay"], [])
@@ -45290,7 +45254,6 @@ func _close_298(rig: Dictionary) -> void:
 	steam.fake_running_for_test = false
 	steam.calls_for_test.clear()
 	steam.pending_join_code = ""
-
 func _lobby_screen_298(rig: Dictionary) -> CanvasLayer:
 	var screen: CanvasLayer = LobbyScreenScript435.new()
 	rig["stage"].add_child(screen)
@@ -45300,7 +45263,6 @@ func _lobby_screen_298(rig: Dictionary) -> CanvasLayer:
 	await process_frame
 	screen.refresh_lobby(_lobby_state_425(1), 2, rig["server"])
 	return screen
-
 func _scenario_online_hosting_sets_steam_presence_298() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rig_298("online", true)
@@ -45319,7 +45281,6 @@ func _scenario_online_hosting_sets_steam_presence_298() -> Array[String]:
 	await _close_298(rig)
 	_scenario_completed = true
 	return failures
-
 func _scenario_closing_online_room_clears_steam_presence_298() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rig_298("online", true)
@@ -45333,7 +45294,6 @@ func _scenario_closing_online_room_clears_steam_presence_298() -> Array[String]:
 	await _close_298(rig)
 	_scenario_completed = true
 	return failures
-
 func _scenario_no_steam_makes_no_calls_and_hides_invite_298() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rig_298("online", false)
@@ -45354,7 +45314,6 @@ func _scenario_no_steam_makes_no_calls_and_hides_invite_298() -> Array[String]:
 	await _close_298(rig)
 	_scenario_completed = true
 	return failures
-
 func _scenario_invite_button_opens_dialog_with_room_code_298() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rig_298("online", true)
@@ -45373,7 +45332,6 @@ func _scenario_invite_button_opens_dialog_with_room_code_298() -> Array[String]:
 	await _close_298(rig)
 	_scenario_completed = true
 	return failures
-
 ## One PC join screen with a throwaway settings file; the caller frees it.
 func _join_client_298() -> Node:
 	var client: Node = RemoteClientScene241.instantiate()
@@ -45382,14 +45340,12 @@ func _join_client_298() -> Node:
 	get_root().add_child(client)
 	await process_frame
 	return client
-
 func _free_client_298(client: Node) -> void:
 	var path: String = client.settings_path
 	client.queue_free()
 	await process_frame
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(path)
-
 func _scenario_launch_arg_joins_with_code_298() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = get_root().get_node("SteamPlatform")
@@ -45402,7 +45358,6 @@ func _scenario_launch_arg_joins_with_code_298() -> Array[String]:
 	await _free_client_298(client)
 	_scenario_completed = true
 	return failures
-
 func _scenario_runtime_join_request_joins_298() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = get_root().get_node("SteamPlatform")
@@ -45413,7 +45368,6 @@ func _scenario_runtime_join_request_joins_298() -> Array[String]:
 	await _free_client_298(client)
 	_scenario_completed = true
 	return failures
-
 func _scenario_malformed_join_code_ignored_298() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = get_root().get_node("SteamPlatform")
@@ -45428,7 +45382,6 @@ func _scenario_malformed_join_code_ignored_298() -> Array[String]:
 	await _free_client_298(client)
 	_scenario_completed = true
 	return failures
-
 func _scenario_couch_hosting_sets_no_steam_presence_298() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _rig_298("local", true)
@@ -45444,26 +45397,21 @@ func _scenario_couch_hosting_sets_no_steam_presence_298() -> Array[String]:
 	await _close_298(rig)
 	_scenario_completed = true
 	return failures
-
 # --- Steam Timeline markers (#703) ---------------------------------------------
-
 func _timeline_start_703(running: bool) -> Node:
 	var steam: Node = get_root().get_node("SteamPlatform")
 	steam.fake_running_for_test = running
 	steam.calls_for_test.clear()
 	return steam
-
 func _timeline_end_703(steam: Node) -> void:
 	steam.fake_running_for_test = false
 	steam.calls_for_test.clear()
-
 func _timeline_kinds_703(steam: Node) -> Array:
 	var kinds: Array = []
 	for call: Array in steam.calls_for_test:
 		if call[0] == "add_timeline_event":
 			kinds.append(call[1])
 	return kinds
-
 func _scenario_ko_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
@@ -45479,7 +45427,6 @@ func _scenario_ko_adds_steam_timeline_event_703() -> Array[String]:
 	await _teardown(rig["stage"])
 	_timeline_end_703(steam)
 	return failures
-
 func _scenario_bot_ko_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
@@ -45495,7 +45442,6 @@ func _scenario_bot_ko_adds_steam_timeline_event_703() -> Array[String]:
 	await _teardown(loop["stage"])
 	_timeline_end_703(steam)
 	return failures
-
 func _scenario_round_win_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
@@ -45511,7 +45457,6 @@ func _scenario_round_win_adds_steam_timeline_event_703() -> Array[String]:
 	await _teardown(rig["stage"])
 	_timeline_end_703(steam)
 	return failures
-
 func _scenario_match_win_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
@@ -45527,7 +45472,6 @@ func _scenario_match_win_adds_steam_timeline_event_703() -> Array[String]:
 	await _teardown(loop["stage"])
 	_timeline_end_703(steam)
 	return failures
-
 func _scenario_no_steam_records_no_timeline_events_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(false)
@@ -45542,7 +45486,6 @@ func _scenario_no_steam_records_no_timeline_events_703() -> Array[String]:
 	await _teardown(loop["stage"])
 	_timeline_end_703(steam)
 	return failures
-
 ## #711: a LineEdit gaining focus raises Steam's floating keyboard only when Steam is
 ## running and the last input was a gamepad's.
 func _scenario_text_input_711(pad: bool, steam_running: bool) -> Array[String]:
@@ -45567,7 +45510,6 @@ func _scenario_text_input_711(pad: bool, steam_running: bool) -> Array[String]:
 	_timeline_end_703(steam)
 	_scenario_completed = true
 	return failures
-
 ## Issue #714: a hat or eyes pick (the Your look popup, a pad, a phone) reaches the
 ## seat's lobby card. The lobby state the card is redrawn from carries the colour but
 ## not the hat or eyes, so an unchanged state used to skip the redraw and leave the
@@ -45597,7 +45539,6 @@ func _scenario_lobby_card_follows_hat_and_eyes_pick_714() -> Array[String]:
 			failures.append("after picking %s the host's lobby card still shows hat '%s', eyes '%s'" % [pick, card.avatar().hat_id if card != null else "no card", card.avatar().eyes_id if card != null else "no card"])
 	await _kind_close_435(rig)
 	return failures
-
 ## Issue #732: offensive words in nicknames are masked, innocent names are not,
 ## the host setting gates it and persists, and the phone's name frame is masked.
 func _scenario_name_filter_732() -> Array[String]:
@@ -45682,4 +45623,62 @@ func _scenario_name_filter_732() -> Array[String]:
 			failures.append("SETTINGS_FILTER_NAMES has no %s text" % locale)
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
+	return failures
+## Issue #716: Leave lobby sits under Stages & Rules and goes back to the title. With only
+## the host and bots seated one press leaves and closes the room; with another human seated
+## the first press only arms it (its caption turns into the confirm), a second leaves, and
+## touching any other control disarms it.
+func _scenario_lobby_leave_button_716() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var left: Array[bool] = []
+	screen.set_leave_action(func() -> void: left.append(true))
+	screen.press_control("online")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var leave: Button = screen.control_button("leave")
+	var stages: Button = screen.control_button("stages_rules")
+	if leave == null or not leave.is_visible_in_tree():
+		failures.append("no Leave lobby button in the lobby")
+		await _kind_close_435(rig)
+		return failures
+	if leave.get_global_rect().position.y < stages.get_global_rect().position.y:
+		failures.append("Leave lobby (y %.0f) sits above Stages & Rules (y %.0f)" % [leave.get_global_rect().position.y, stages.get_global_rect().position.y])
+	server.apply_host_command("bots", 1)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var room_was_open: bool = server.online_requested()
+	screen.press_control("leave")
+	if left.size() != 1:
+		failures.append("alone with a bot, one press did not leave (left %d times)" % left.size())
+	if room_was_open and server.online_requested():
+		failures.append("leaving did not close the Online room")
+	screen.press_control("local")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var phones: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "leave-phone", phones)
+	phones.append(peer)
+	if joined["slot"] < 0:
+		failures.append("the phone never took a seat (closed=%s '%s')" % [joined["closed"], joined["reason"]])
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	screen.press_control("leave")
+	screen.refresh_controls()
+	if left.size() != 1:
+		failures.append("with a phone seated, the first press left without a confirm")
+	if not screen.control_button("leave").text.contains(screen.tr("LOBBY_LEAVE_CONFIRM")):
+		failures.append("the armed button reads '%s', not the confirm" % screen.control_button("leave").text)
+	screen.press_control("bots_up")
+	screen.refresh_controls()
+	if screen.control_button("leave").text != screen.tr("LOBBY_LEAVE"):
+		failures.append("touching another control did not disarm Leave (reads '%s')" % screen.control_button("leave").text)
+	screen.press_control("leave")
+	if left.size() != 1:
+		failures.append("the press after a disarm left instead of arming again")
+	screen.press_control("leave")
+	if left.size() != 2:
+		failures.append("the confirming press did not leave (left %d times)" % left.size())
+	await _kind_close_435(rig, phones)
 	return failures

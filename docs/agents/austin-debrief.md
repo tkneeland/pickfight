@@ -72,7 +72,7 @@ The owner moved your tickets to tkneeland while your PC was down (#619, #538, #4
 - **#427:** Steam Deck hardware check, if you have a Deck.
 
 ### 5. Working without the owner's agent
-If tkneeland's Claude isn't running, your Claude may merge its own green PRs. This is the fallback in `docs/agents/collaboration.md`.
+Since Oct 21 your Claude merges its own green PRs, by the steps in `docs/agents/collaboration.md` (merge main in, suite green, `scenarios` check green, merge). Ask tkneeland's Claude only for shared `.tscn` scene changes.
 
 ## For Austin's agent
 

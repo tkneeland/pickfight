@@ -1,7 +1,7 @@
 # Collaboration: two devs working at the same time
 
 Several agents work in parallel on this repo, one per GitHub account:
-`tkneeland` (the integrator), `tommykneeland` (the owner's second agent) and
+`tkneeland` (the integrator: triage and watching main), `tommykneeland` (the owner's second agent) and
 `agage-JG` (Austin). This file is the working agreement every agent follows. It sits alongside
 `issue-tracker.md`, which still owns claim/label/transition mechanics.
 
@@ -55,28 +55,32 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   An unknown argument exits 2.
 - **Never push to or force-push `main`**, and never push to the other dev's
   branch. Force-push only your own branch, after a rebase.
-- **No pause for human review** (owner's decision, 2026-09-24), and **one
-  integrator merges**: tkneeland's Claude. Everyone else, tommykneeland's and
-  Austin's Claude and any subagents included, pushes the branch, opens the PR with the suite
-  green, comments on the issue with the PR URL, and **stops**. The integrator
-  merges PRs one at a time. For each, it rebases onto the current
-  `origin/main`, resolves conflicts, re-runs the full suite, then runs
-  `gh pr merge <n> --merge --delete-branch` once `mergeable` is not
-  `UNKNOWN`. One merger means nobody rebases against a main that is moving
-  under them.
-- **Fallback:** if the integrator is unavailable (for example, out of
-  usage), tommykneeland's or Austin's Claude may merge its own green PRs by
-  the same steps.
-- **Owner's call, 2026-10-03:** while Austin's machine is down, tommykneeland's
-  Claude merges its own green PRs by the same steps, without waiting for the
-  integrator. Tickets reassigned to tommykneeland belong to it: other agents
-  drop any unpushed work on them.
+- **No pause for human review** (owner's decision, 2026-09-24), and **whoever
+  owns the ticket merges its PR** (owner's decision, 2026-10-21; this replaces
+  the single-integrator rule). Merge one PR at a time, by these steps:
+  1. Merge the current `origin/main` into your branch (or rebase your own
+     branch), resolve conflicts, and re-run the full suite locally.
+  2. Push, and wait for the PR's `scenarios` check to pass. Don't merge on red,
+     and don't merge while `mergeable` is `UNKNOWN` or `false`.
+  3. `gh pr merge <n> --merge --delete-branch`.
+  4. If the other dev merged first and your PR now conflicts or its check
+     reruns red, go back to step 1. GitHub refuses a conflicting merge, so this
+     costs time, never broken code.
+- **Ask the integrator first** (tkneeland's Claude, which still triages and
+  watches main) only when your PR changes a `.tscn` scene file another open
+  issue lists under **Touches**: comment on the PR and let tkneeland's Claude
+  merge it. Scenes merge badly.
+- **Main went red after a merge:** whoever merged last fixes it or reverts their
+  merge (`git revert -m 1 <sha>` on a branch, PR, merge) before starting
+  anything else.
+- tkneeland's zero-token auto-merger may also merge any green PR. That is
+  harmless: it uses the same checks.
 
 ## Shared decisions
 
 - New ADRs: take the next free number when you open the PR. If the other dev
   took it first, renumber yours during rebase.
-- Every PR that changes a player-facing feature updates `docs/FEATURES.md`; the integrator checks it before merging.
+- Every PR that changes a player-facing feature updates `docs/FEATURES.md`; the PR's author checks it before merging, and the integrator's watcher flags PRs that touch `scripts/` or `controller/` without it.
 - Anything both agents must know goes in the repo (CLAUDE.md, ADRs,
   `docs/agents/*`), through a PR, never only in one person's Claude memory.
 - Don't reopen settled decisions (ADRs, CLAUDE.md "settled" items) in your

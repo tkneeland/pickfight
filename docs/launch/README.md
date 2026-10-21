@@ -4,11 +4,13 @@
 - **[playbook.md](playbook.md):** the full Indie Steam Launch Playbook. 127 sections with sources, from a week of research (Oct 16–19 2026): store page, trailers, creators, pricing, festivals, Steam features, legal, consoles, case studies and more.
 - **[owner-decisions.md](owner-decisions.md):** every launch decision the owner made, newest wins.
 - **[store-page.md](store-page.md):** DRAFT store page text, tags, languages, controller support and system requirements (#712).
+- **[store-page-l10n.md](store-page-l10n.md):** DRAFT store page text in the 8 shipped languages: short description, About and feature bullets (#740).
 - **[privacy-policy.md](privacy-policy.md):** DRAFT privacy policy (#712).
 - **[content-survey.md](content-survey.md):** DRAFT answers for Steam's content survey and the IARC age rating (#712).
 - **[trailer-shot-list.md](trailer-shot-list.md):** DRAFT shot list for the 60 to 75 second announce trailer (#728).
 - **[press-kit.md](press-kit.md):** DRAFT press kit fact sheet (#728).
 - **[outreach-emails.md](outreach-emails.md):** DRAFT outreach email templates and Keymailer listing text (#728).
+- **[discord-server.md](discord-server.md):** DRAFT public Discord server plan: channels, roles, rules, welcome text, AutoMod, onboarding and launch checklist (#744).
 - **Open decisions with Austin:** pinned issue #685.
 - **Steam checklist and owners per task:** [../steam-readiness.md](../steam-readiness.md).
 
