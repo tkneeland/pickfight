@@ -12,6 +12,8 @@
 - **[press-kit.md](press-kit.md):** DRAFT press kit fact sheet (#728).
 - **[outreach-emails.md](outreach-emails.md):** DRAFT outreach email templates and Keymailer listing text (#728).
 - **[discord-server.md](discord-server.md):** DRAFT public Discord server plan: channels, roles, rules, welcome text, AutoMod, onboarding and launch checklist (#744).
+- **[steam-announcements.md](steam-announcements.md):** DRAFT Steam Events and Announcements copy: Coming Soon post, devlog cadence and 3 devlogs, Next Fest demo post, launch-day post (#757).
+- **[playtest-plan.md](playtest-plan.md):** DRAFT Steam Playtest run sheet for the Couch Co-Op Fest (Feb 2027): Steamworks deadlines, build and export commands, questions, survey, tester contact and go/no-go signals (#760).
 - **Open decisions with Austin:** pinned issue #685.
 - **Steam checklist and owners per task:** [../steam-readiness.md](../steam-readiness.md).
 

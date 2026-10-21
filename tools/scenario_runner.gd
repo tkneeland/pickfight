@@ -973,6 +973,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ach_names_translated_and_documented_689",
 	"lobby_card_follows_hat_and_eyes_pick_714",
 	"lobby_leave_button_716",
+	"quit_title_button_and_key_718",
+	"quit_settings_confirms_only_with_others_718",
+	"quit_game_pc_client_leaves_room_718",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3302,6 +3305,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_card_follows_hat_and_eyes_pick_714()
 		"lobby_leave_button_716":
 			return await _scenario_lobby_leave_button_716()
+		"quit_title_button_and_key_718":
+			return await _scenario_quit_title_button_and_key_718()
+		"quit_settings_confirms_only_with_others_718":
+			return await _scenario_quit_settings_confirms_only_with_others_718()
+		"quit_game_pc_client_leaves_room_718":
+			return await _scenario_quit_game_pc_client_leaves_room_718()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -45731,3 +45740,149 @@ func _scenario_lobby_leave_button_716() -> Array[String]:
 		failures.append("the confirming press did not leave (left %d times)" % left.size())
 	await _kind_close_435(rig, phones)
 	return failures
+## Issue #718: Quit on the title screen, by button and by the Q key, quits at once (nobody is seated
+## yet) and is one D-pad step below the cards. QuitGame's seam records the quit instead of exiting.
+const QuitGameScript718 := preload("res://scripts/QuitGame.gd")
+func _scenario_quit_title_button_and_key_718() -> Array[String]:
+	var failures: Array[String] = []
+	var quit_calls: Array[bool] = []
+	QuitGameScript718.quit_action = func() -> void: quit_calls.append(true)
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	await _await_ticks(2)
+	var quit: Button = screen.title_button("quit")
+	var local: Button = screen.title_button("local")
+	if quit == null or not quit.is_visible_in_tree():
+		failures.append("the title screen has no Quit button")
+	else:
+		var solo: Button = screen.title_button("solo")
+		if solo.get_node_or_null(solo.focus_neighbor_bottom) != quit:
+			failures.append("one D-pad step down from Solo does not reach Quit")
+		if quit.get_node_or_null(quit.focus_neighbor_top) != solo:
+			failures.append("one D-pad step up from Quit does not reach Solo")
+		if local.get_node_or_null(local.focus_neighbor_bottom) == quit:
+			failures.append("Couch Down now skips the Online and Solo cards")
+		quit.pressed.emit()
+		if quit_calls.size() != 1:
+			failures.append("pressing Quit on the title quit %d times, expected 1" % quit_calls.size())
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.physical_keycode = KEY_Q
+	screen._unhandled_key_input(key)
+	if quit_calls.size() != 2:
+		failures.append("the Q key on the title screen did not quit (%d quits)" % quit_calls.size())
+	screen.show_title(false)
+	screen._unhandled_key_input(key)
+	if quit_calls.size() != 2:
+		failures.append("Q quit from the lobby; it is the title screen key only")
+	QuitGameScript718.quit_action = Callable()
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Issue #718: Settings' Quit game quits at once with only the host and bots seated (closing an open
+## Online room first); with another human seated the first press asks, No and closing the panel cancel,
+## and Yes quits.
+func _scenario_quit_settings_confirms_only_with_others_718() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var quit_calls: Array[bool] = []
+	QuitGameScript718.quit_action = func() -> void: quit_calls.append(true)
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		QuitGameScript718.quit_action = Callable()
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var quit: Button = ui.quit_button()
+	if quit == null or not quit.is_visible_in_tree():
+		failures.append("Settings has no Quit game button")
+		QuitGameScript718.quit_action = Callable()
+		await _kind_close_435(rig)
+		return failures
+	screen.press_control("online")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	server.apply_host_command("bots", 1)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var room_was_open: bool = server.online_requested()
+	quit.pressed.emit()
+	if quit_calls.size() != 1:
+		failures.append("alone with a bot, Quit game did not quit at once (%d quits)" % quit_calls.size())
+	if ui.quit_confirm_box().visible:
+		failures.append("alone with a bot, Quit game asked for a confirm")
+	if room_was_open and server.online_requested():
+		failures.append("quitting did not close the Online room")
+	screen.press_control("local")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var phones: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "quit-phone", phones)
+	phones.append(peer)
+	if joined["slot"] < 0:
+		failures.append("the phone never took a seat (closed=%s '%s')" % [joined["closed"], joined["reason"]])
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	quit.pressed.emit()
+	if quit_calls.size() != 1:
+		failures.append("with a phone seated, the first press quit without asking")
+	if not ui.quit_confirm_box().visible or quit.visible:
+		failures.append("with a phone seated, the confirm did not replace the Quit game button")
+	ui.quit_no_button().pressed.emit()
+	if ui.quit_confirm_box().visible or not quit.visible or quit_calls.size() != 1:
+		failures.append("No did not cancel the quit")
+	quit.pressed.emit()
+	ui.toggle_panel()
+	if ui.quit_confirm_box().visible or not quit.visible:
+		failures.append("closing the panel did not cancel the confirm")
+	ui.toggle_panel()
+	quit.pressed.emit()
+	ui.quit_yes_button().pressed.emit()
+	if quit_calls.size() != 2:
+		failures.append("Yes did not quit (%d quits)" % quit_calls.size())
+	QuitGameScript718.quit_action = Callable()
+	if ui.is_open():
+		ui.toggle_panel()
+	await _kind_close_435(rig, phones)
+	return failures
+## Issue #718: with no ControllerServer, the PC client's Quit game has no match to end: it hangs up on its
+## room (leave) and quits, with no confirm.
+func _scenario_quit_game_pc_client_leaves_room_718() -> Array[String]:
+	var failures: Array[String] = []
+	var quit_calls: Array[bool] = []
+	QuitGameScript718.quit_action = func() -> void: quit_calls.append(true)
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends Node\nvar left: int = 0\nfunc leave() -> void:\n	left += 1\nfunc rejoining() -> bool:\n	return false\n"
+	stub_script.reload()
+	var client := Node.new()
+	client.set_script(stub_script)
+	get_root().add_child(client)
+	var was: Node = current_scene
+	current_scene = client
+	QuitGameScript718.quit_game(self)
+	if int(client.get("left")) != 1:
+		failures.append("the PC client did not leave its room before quitting (left %s times)" % client.get("left"))
+	if quit_calls.size() != 1:
+		failures.append("the PC client's Quit game quit %d times, expected 1" % quit_calls.size())
+	current_scene = null
+	quit_calls.clear()
+	QuitGameScript718.quit_game(self)
+	if quit_calls.size() != 1:
+		failures.append("with no scene at all, quit_game did not quit")
+	# With no seam at all, a -s script main loop is never quit by a menu press. The real quit would
+	# fire after Music's 0.25 s release, so wait past that: a runner that dies here never prints PASS.
+	QuitGameScript718.quit_action = Callable()
+	QuitGameScript718.quit_game(self)
+	var quit_wait_until: int = Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < quit_wait_until:
+		await process_frame
+	current_scene = was
+	client.queue_free()
+	QuitGameScript718.quit_action = Callable()
+	_scenario_completed = true # nothing here builds a stage for _teardown() to free
+	return failures
+

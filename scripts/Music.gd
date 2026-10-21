@@ -159,6 +159,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and not get_tree().auto_accept_quit:
 		_quit_cleanly()
 
+var _quitting: bool = false
+
 func _quit_cleanly() -> void:
 	var sfx: Node = get_node_or_null(^"/root/Sfx")
 	if sfx != null:
@@ -169,6 +171,13 @@ func _quit_cleanly() -> void:
 	while Time.get_ticks_msec() < give_up_msec and _telemetry_busy():
 		await get_tree().process_frame
 	get_tree().quit()
+
+## Quits the game cleanly from a menu (#718): the path closing the window takes.
+func quit_cleanly() -> void:
+	if _quitting:
+		return
+	_quitting = true
+	_quit_cleanly()
 
 func _telemetry_busy() -> bool:
 	for sender: Node in get_tree().get_nodes_in_group("telemetry_sender"):

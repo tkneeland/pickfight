@@ -33,6 +33,7 @@ const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const LanguagesScript := preload("res://scripts/Languages.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
+const QuitGameScript := preload("res://scripts/QuitGame.gd")
 ## Height of the scrolling window-size and options area.
 const LIST_HEIGHT: float = 130.0
 
@@ -69,6 +70,12 @@ var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _scale_button: OptionButton
 var _host_match: VBoxContainer
+## Quit game (#718): the button, and the confirm that replaces it while other humans are seated.
+var _quit_button: Button
+var _quit_confirm: VBoxContainer
+var _quit_label: Label
+var _quit_yes: Button
+var _quit_no: Button
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -165,6 +172,35 @@ func _ready() -> void:
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
+	# Quit game (#718), last in the panel.
+	_quit_button = Button.new()
+	_quit_button.name = "QuitGame"
+	_quit_button.text = tr("SETTINGS_QUIT_GAME")
+	_quit_button.focus_mode = Control.FOCUS_NONE
+	rows.add_child(_quit_button)
+	_quit_confirm = VBoxContainer.new()
+	_quit_confirm.name = "QuitConfirm"
+	_quit_confirm.visible = false
+	rows.add_child(_quit_confirm)
+	_quit_label = Label.new()
+	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
+	_quit_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_quit_label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
+	_quit_confirm.add_child(_quit_label)
+	var quit_row := HBoxContainer.new()
+	_quit_confirm.add_child(quit_row)
+	_quit_yes = Button.new()
+	_quit_yes.name = "QuitYes"
+	_quit_yes.text = tr("QUIT_YES")
+	_quit_yes.focus_mode = Control.FOCUS_NONE
+	_quit_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quit_row.add_child(_quit_yes)
+	_quit_no = Button.new()
+	_quit_no.name = "QuitNo"
+	_quit_no.text = tr("QUIT_NO")
+	_quit_no.focus_mode = Control.FOCUS_NONE
+	_quit_no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quit_row.add_child(_quit_no)
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
@@ -195,6 +231,9 @@ func _ready() -> void:
 	_mute.toggled.connect(_on_mute_toggled)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_toggle.pressed.connect(toggle_panel)
+	_quit_button.pressed.connect(request_quit)
+	_quit_yes.pressed.connect(confirm_quit)
+	_quit_no.pressed.connect(cancel_quit)
 	_resolution.item_selected.connect(_on_resolution_selected)
 	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
@@ -244,7 +283,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if PadMenuScript.pressed(event, JOY_BUTTON_B) and _panel.visible:
-		if _feedback_box.visible:
+		if _quit_confirm.visible:
+			cancel_quit() # B is No (#718)
+		elif _feedback_box.visible:
 			toggle_feedback()
 		else:
 			toggle_panel()
@@ -259,7 +300,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F11:
 			sfx.toggle_fullscreen()
 		KEY_ESCAPE:
-			toggle_panel()
+			if _quit_confirm.visible:
+				cancel_quit() # Esc is No (#718)
+			else:
+				toggle_panel()
 		_:
 			return
 	refresh()
@@ -301,6 +345,7 @@ func toggle_panel() -> void:
 	_panel.visible = not _panel.visible
 	if not _panel.visible:
 		_feedback_box.visible = false
+		cancel_quit()
 		_set_pad_focus(false)
 	if _panel.visible:
 		refresh()
@@ -361,6 +406,40 @@ func _chain_pad_focus() -> void:
 			items[i].focus_neighbor_top = items[i].get_path_to(items[i - 1])
 		if i < items.size() - 1:
 			items[i].focus_neighbor_bottom = items[i].get_path_to(items[i + 1])
+
+## Quit game (#718): straight out when nobody but the host and bots is seated (Solo, a lone Online
+## host, a PC client); otherwise the panel asks first, with No as the default focus.
+func request_quit() -> void:
+	var server: Node = _host_match.server() if _host_match != null else null
+	if QuitGameScript.others_seated(server):
+		_quit_button.visible = false
+		_quit_confirm.visible = true
+		if PadMenuScript.is_open():
+			_chain_pad_focus()
+			_quit_no.grab_focus()
+		return
+	QuitGameScript.quit_game(get_tree(), server)
+
+func confirm_quit() -> void:
+	var server: Node = _host_match.server() if _host_match != null else null
+	cancel_quit()
+	QuitGameScript.quit_game(get_tree(), server)
+
+func cancel_quit() -> void:
+	_quit_confirm.visible = false
+	_quit_button.visible = true
+
+func quit_button() -> Button:
+	return _quit_button
+
+func quit_confirm_box() -> Control:
+	return _quit_confirm
+
+func quit_yes_button() -> Button:
+	return _quit_yes
+
+func quit_no_button() -> Button:
+	return _quit_no
 
 func toggle_feedback() -> void:
 	_feedback_box.visible = not _feedback_box.visible
@@ -642,6 +721,10 @@ func _retranslate() -> void:
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
 	_filter_box.text = tr("SETTINGS_FILTER_NAMES")
 	_feedback_button.text = tr("SETTINGS_FEEDBACK")
+	_quit_button.text = tr("SETTINGS_QUIT_GAME")
+	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
+	_quit_yes.text = tr("QUIT_YES")
+	_quit_no.text = tr("QUIT_NO")
 	_feedback_send.text = tr("FEEDBACK_SEND")
 	_feedback_edit.placeholder_text = tr("FEEDBACK_PLACEHOLDER")
 	((_feedback_send.get_parent() as Node).get_child(0) as Label).text = tr("FEEDBACK_TITLE")
