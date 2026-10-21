@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build release exports for macOS (.app) and Windows (.exe) into build/.
-# Usage: tools/export.sh [macos|windows|all]   (default: all)
+# Build release exports for macOS (.app), Windows (.exe) and Linux into build/,
+# or the Next Fest demo (the Demo presets) into build/demo/.
+# Usage: tools/export.sh [macos|windows|linux|all|demo]   (default: all)
 # Needs Godot 4.6.2 on PATH (or GODOT=/path/to/godot) and the 4.6.2 export
 # templates installed (Editor > Manage Export Templates, or the .tpz from
 # https://github.com/godotengine/godot/releases/tag/4.6.2-stable).
@@ -26,9 +27,16 @@ export_one() {
 case "$TARGET" in
 	macos)   export_one "macOS" "build/macos/Pickfight.app" ;;
 	windows) export_one "Windows" "build/windows/Pickfight.exe" ;;
+	linux)   export_one "Linux" "build/linux/pickfight.x86_64" ;;
 	all)
 		export_one "macOS" "build/macos/Pickfight.app"
 		export_one "Windows" "build/windows/Pickfight.exe"
+		export_one "Linux" "build/linux/pickfight.x86_64"
 		;;
-	*) echo "usage: $0 [macos|windows|all]" >&2; exit 2 ;;
+	demo)
+		export_one "Demo macOS" "build/demo/macos/Pickfight Demo.app"
+		export_one "Demo Windows" "build/demo/windows/Pickfight Demo.exe"
+		export_one "Demo Linux" "build/demo/linux/pickfight-demo.x86_64"
+		;;
+	*) echo "usage: $0 [macos|windows|linux|all|demo]" >&2; exit 2 ;;
 esac
