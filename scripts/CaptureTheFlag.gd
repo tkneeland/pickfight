@@ -445,6 +445,9 @@ func _win(team: int) -> void:
 
 # --- Display -------------------------------------------------------------------
 
+const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
+const FLAG_BADGE_PX: float = 24.0
+
 func _build_flags() -> void:
 	_root = Node2D.new()
 	_root.name = "CtfFlags"
@@ -461,6 +464,9 @@ func _build_flags() -> void:
 		cloth.polygon = PackedVector2Array([Vector2(2, -70), Vector2(40, -58), Vector2(2, -44)])
 		cloth.color = FLAG_COLOURS[team]
 		flag.add_child(cloth)
+		var badge: Control = TeamBadgeScript.new(team, FLAG_BADGE_PX) # the letter on the cloth (#752)
+		badge.position = Vector2(8.0, -69.0)
+		flag.add_child(badge)
 		_root.add_child(flag)
 		_flag_nodes[team] = flag
 

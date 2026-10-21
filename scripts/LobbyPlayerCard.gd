@@ -19,6 +19,10 @@ const PreviewScript := preload("res://scripts/CosmeticsPreview.gd")
 const PadPickerCardScript := preload("res://scripts/PadPickerCard.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const TeamsScript := preload("res://scripts/Teams.gd")
+const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
+## The team badge in a Teams match (#752): the team's letter in ink on its colour, top right of the card.
+const TEAM_CHIP_PX: float = 30.0
 
 const BORDER_PX: float = 5.0
 const STRIP_PX: float = 18.0
@@ -40,6 +44,7 @@ var _badge: Button
 var _kick: Button
 var _pill: StringName = &""
 var _strip_color: Color = Color.TRANSPARENT
+var _team_chip: Control
 
 func _init(seat_slot: int = -1) -> void:
 	slot = seat_slot
@@ -70,6 +75,14 @@ func _init(seat_slot: int = -1) -> void:
 	_content.add_theme_constant_override("margin_top", int(BORDER_PX + STRIP_PX) + 6)
 	_content.add_theme_constant_override("margin_bottom", int(BORDER_PX) + 8)
 	add_child(_content)
+	_team_chip = TeamBadgeScript.new(TeamsScript.NONE, TEAM_CHIP_PX)
+	_team_chip.name = "TeamChip"
+	_team_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_team_chip.offset_right = -(BORDER_PX + 8.0)
+	_team_chip.offset_left = _team_chip.offset_right - TEAM_CHIP_PX
+	_team_chip.offset_top = BORDER_PX + STRIP_PX + 6.0
+	_team_chip.offset_bottom = _team_chip.offset_top + TEAM_CHIP_PX
+	add_child(_team_chip)
 	var box := VBoxContainer.new()
 	box.name = "Box"
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -124,6 +137,10 @@ func _gui_input(event: InputEvent) -> void:
 func kick_button() -> Button:
 	return _kick if _kick.visible else null
 
+## The team badge, hidden outside a Teams match (#752).
+func team_chip() -> Control:
+	return _team_chip
+
 ## The READY / not ready / BOT pill.
 func badge() -> Button:
 	return _badge
@@ -177,6 +194,7 @@ func apply(info: Dictionary) -> void:
 		strip_box.corner_radius_top_right = 15
 		_strip.add_theme_stylebox_override("panel", strip_box)
 	_avatar.set_look(colour, str(info.get("hat", "none")), str(info.get("eyes", "round")))
+	_team_chip.set_team(int(info.get("team", TeamsScript.NONE)))
 	var bot: bool = bool(info.get("bot", false))
 	var ready: bool = bool(info.get("ready", false))
 	var pill: StringName = UiThemeScript.PILL_BOT if bot else (UiThemeScript.PILL_ON if ready else UiThemeScript.PILL_OFF)

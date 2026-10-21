@@ -981,6 +981,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"couch_relay_nudge_727",
 	"phone_vibration_switch_749",
 	"steam_timeline_teams_title_745",
+	"team_letters_752",
 	"stick_deadzone_setting_748",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -3327,6 +3328,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_vibration_switch_749()
 		"steam_timeline_teams_title_745":
 			return await _scenario_steam_timeline_teams_title_745()
+		"team_letters_752":
+			return await _scenario_team_letters_752()
 		"stick_deadzone_setting_748":
 			return await _scenario_stick_deadzone_setting_748()
 		_:
@@ -46244,6 +46247,133 @@ func _scenario_steam_timeline_teams_title_745() -> Array[String]:
 	roster.teams_on = false
 	await _teardown(loop["stage"])
 	_timeline_end_703(steam)
+	return failures
+## Issue #752: every team marker also carries the team's letter (the first character of its translated
+## name, in ink on the team colour), so Red and Blue are told apart by more than colour: name tags,
+## the lobby card, Soccer goals, Capture the Flag bases and flags, the scoreboard row. A free-for-all
+## draws none. The podium was checked by screenshot.
+func _scenario_team_letters_752() -> Array[String]:
+	var failures: Array[String] = []
+	var teams_script: GDScript = load("res://scripts/Teams.gd")
+	var badge_script: GDScript = load("res://scripts/TeamBadge.gd")
+	# The letter, in every language the game ships, and never shared by the two teams.
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		var red_name: String = teams_script.team_name(0)
+		var blue_name: String = teams_script.team_name(1)
+		var red: String = teams_script.team_letter(0)
+		var blue: String = teams_script.team_letter(1)
+		if red.is_empty() or blue.is_empty() or red != red_name.left(1).to_upper() or blue != blue_name.left(1).to_upper():
+			failures.append("%s: the letters are '%s' and '%s' for the names '%s' and '%s'" % [locale, red, blue, red_name, blue_name])
+		if red == blue:
+			failures.append("%s: Red and Blue share the letter '%s'" % [locale, red])
+	TranslationServer.set_locale("en")
+	if teams_script.team_letter(0) != "R" or teams_script.team_letter(1) != "B":
+		failures.append("the English letters are '%s' and '%s', expected R and B" % [teams_script.team_letter(0), teams_script.team_letter(1)])
+	if teams_script.team_letter(-1) != "" or teams_script.team_letter(2) != "":
+		failures.append("a team that does not exist has a letter")
+	TranslationServer.set_locale(was_locale)
+	# The badge control.
+	var badge: Control = badge_script.new(0)
+	if not badge.visible or badge.letter() != "R" or badge.team() != 0:
+		failures.append("a Red badge shows '%s' (visible %s)" % [badge.letter(), badge.visible])
+	badge.set_team(1)
+	if not badge.visible or badge.letter() != "B":
+		failures.append("switching the badge to Blue left it showing '%s'" % badge.letter())
+	for none: int in [-1, 2, 9]:
+		badge.set_team(none)
+		if badge.visible or badge.letter() != "":
+			failures.append("the badge for team %d is shown ('%s')" % [none, badge.letter()])
+	badge.free()
+	# The lobby card's chip.
+	var card_script: GDScript = load("res://scripts/LobbyPlayerCard.gd")
+	var card: Control = card_script.new(0)
+	card.apply({"name": "Tester", "color": Color.WHITE, "team": 1})
+	if not card.team_chip().visible or card.team_chip().letter() != "B":
+		failures.append("a Blue card's chip shows '%s' (visible %s)" % [card.team_chip().letter(), card.team_chip().visible])
+	card.apply({"name": "Tester", "color": Color.WHITE, "team": 0})
+	if card.team_chip().letter() != "R":
+		failures.append("a Red card's chip shows '%s'" % card.team_chip().letter())
+	card.apply({"name": "Tester", "color": Color.WHITE})
+	if card.team_chip().visible:
+		failures.append("a card with no team shows a chip")
+	card.free()
+	# Goals and bases carry their team's letter, centred on the goal or base.
+	for path: String in SOCCER_STAGES_402 + CTF_STAGES_403:
+		var stage: Node2D = (load(path) as PackedScene).instantiate()
+		get_root().add_child(stage)
+		var kind: String = "Goal" if SOCCER_STAGES_402.has(path) else "Base"
+		for team: int in [0, 1]:
+			var zone: Control = stage.get_node_or_null("%sBadge%d" % [kind, team]) as Control
+			if zone == null:
+				failures.append("%s has no %s badge for team %d" % [path, kind.to_lower(), team])
+				continue
+			var rect: Rect2 = stage.get_goal_rect(team) if kind == "Goal" else stage.get_base_rect(team)
+			var want: String = "R" if team == 0 else "B"
+			if zone.letter() != want:
+				failures.append("%s: the %s badge for team %d reads '%s', expected %s" % [path, kind.to_lower(), team, zone.letter(), want])
+			if (zone.position + zone.size * 0.5).distance_to(stage.to_local(rect.get_center())) > 1.0:
+				failures.append("%s: the %s badge for team %d is off centre (%s vs %s)" % [path, kind.to_lower(), team, zone.position + zone.size * 0.5, stage.to_local(rect.get_center())])
+		var other: String = "Base" if kind == "Goal" else "Goal"
+		if stage.get_node_or_null("%sBadge0" % other) != null:
+			failures.append("%s carries %s badges as well" % [path, other.to_lower()])
+		stage.free()
+	# A live Teams round: tags, scoreboard rows.
+	var scoreboard: Control = _main_scoreboard()
+	var loop: Dictionary = _new_team_round_236(3, [0, 1, 2], {0: 0, 1: 1, 2: 0}, true, TEAM_ROUND_PAUSE_SEC_236, scoreboard)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true, 2: true}
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the Teams round never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(3)
+	var wanted: Array[String] = ["R", "B", "R"]
+	for slot: int in 3:
+		var tag_badge: Control = rm._name_tags.team_badge(slot)
+		if tag_badge == null or not tag_badge.visible or tag_badge.letter() != wanted[slot]:
+			failures.append("slot %d's name tag badge reads '%s' (visible %s), expected %s" % [slot, tag_badge.letter() if tag_badge != null else "none", tag_badge.visible if tag_badge != null else false, wanted[slot]])
+		elif tag_badge.position.x >= rm.name_tag(slot).position.x:
+			failures.append("slot %d's badge is not left of its name tag" % slot)
+	players[0].eliminate()
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the Teams round did not end")
+	else:
+		var red_row: String = (scoreboard.get_child(0).get_child(2) as Label).text
+		var blue_row: String = (scoreboard.get_child(1).get_child(2) as Label).text
+		if not red_row.begins_with("[R] ") or not blue_row.begins_with("[B] "):
+			failures.append("the scoreboard rows read '%s' and '%s', expected them to start with [R] and [B]" % [red_row, blue_row])
+	await _teardown(loop["stage"], false)
+	# A free-for-all draws no badge at all.
+	var ffa: Dictionary = _new_team_round_236(3, [0, 1], {0: 0, 1: 0}, false, TEAM_ROUND_PAUSE_SEC_236, _main_scoreboard())
+	var ffa_players: Array[RigidBody2D] = ffa["players"]
+	var ffa_rm: Node = ffa["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	ffa["roster"].ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return ffa_players[0].alive and ffa_players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the free-for-all round never started")
+	else:
+		await _await_ticks(3)
+		for slot: int in 2:
+			if ffa_rm._name_tags.team_badge(slot).visible:
+				failures.append("a free-for-all name tag for slot %d shows a team badge" % slot)
+	await _teardown(ffa["stage"], false)
+	# Capture the Flag: each flag's cloth carries its team's letter.
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	for team: int in [0, 1]:
+		var flag_badge: Control = mode.get_node_or_null("CtfFlags/Flag%d/TeamBadge" % team) as Control
+		var want_letter: String = "R" if team == 0 else "B"
+		if flag_badge == null or flag_badge.letter() != want_letter:
+			failures.append("team %d's flag cloth does not carry %s (%s)" % [team, want_letter, flag_badge.letter() if flag_badge != null else "no badge"])
+	await _teardown(rig["stage"])
 	return failures
 ## Issue #748: the gamepad stick deadzone is a setting (0.05 to 0.40 in 0.05 steps, default 0.20).
 ## HostSettings keeps it (snapped to a step, remembered, a junk value falls back to 0.20); the radial
