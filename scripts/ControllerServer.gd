@@ -1183,6 +1183,9 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	_slot_virtual[slot] = 1 if virtual else 0
 	_slot_client_id[slot] = id
 	_slot_name[slot] = nickname
+	# Issue #732: names claimed on join (phone or Online client) go through the filter too.
+	if HostSettingsScript.shared().filter_names:
+		_slot_name[slot] = NameFilterScript.mask(nickname)
 	_slot_ready[slot] = 0
 	_slot_team_pick[slot] = -1
 	_last_claim_serial += 1
