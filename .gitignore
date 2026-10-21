@@ -30,3 +30,7 @@ addons/godotsteam/
 
 # Sentry Godot SDK binaries (#681): installed by tools/fetch_sentry.sh, never committed
 addons/sentry/
+
+# Movie Maker clips (#743)
+*.avi
+override.cfg
