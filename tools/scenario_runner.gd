@@ -871,6 +871,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_setting_persists_704",
 	"play_of_round_caption_translated_704",
 	"name_filter_732",
+	"name_echo_756",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -3096,6 +3097,7 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_setting_persists_704": return await _scenario_play_of_round_setting_persists_704()
 		"play_of_round_caption_translated_704": return await _scenario_play_of_round_caption_translated_704()
 		"name_filter_732": return await _scenario_name_filter_732()
+		"name_echo_756": return await _scenario_name_echo_756()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -45622,6 +45624,53 @@ func _scenario_name_filter_732() -> Array[String]:
 		if tr("SETTINGS_FILTER_NAMES") == "SETTINGS_FILTER_NAMES":
 			failures.append("SETTINGS_FILTER_NAMES has no %s text" % locale)
 	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+## Issue #756: the host sends each phone the name it stored, masked or clean.
+func _scenario_name_echo_756() -> Array[String]:
+	var failures: Array[String] = []
+	var bad: String = Marshalls.base64_to_utf8("ZnVjaw==")
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was_on: bool = settings.filter_names
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "NameEchoP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "NameEchoServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../NameEchoP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "name-echo-0", [] as Array[WebSocketPeer])
+	if joined["slot"] != 0:
+		failures.append("the phone got slot %d" % joined["slot"])
+		await _teardown(stage)
+		return failures
+	var sent: String = bad + " Walrus"
+	for case: Array in [[true, "**** Walrus"], [false, sent]]:
+		settings.filter_names = case[0]
+		peer.send_text(JSON.stringify({"t": "name", "v": sent}))
+		var echoed: String = ""
+		for _i in 20:
+			await process_frame
+			peer.poll()
+			while peer.get_available_packet_count() > 0:
+				var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+				if msg is Dictionary and msg.get("t") == "name":
+					echoed = str(msg.get("v", ""))
+			if echoed != "":
+				break
+		if echoed != case[1]:
+			failures.append("filter %s: phone was echoed '%s', wanted '%s'" % [case[0], echoed, case[1]])
+	settings.filter_names = was_on
+	peer.close(1000, "scenario done")
+	await _teardown(stage)
 	_scenario_completed = true
 	return failures
 ## Issue #716: Leave lobby sits under Stages & Rules and goes back to the title. With only

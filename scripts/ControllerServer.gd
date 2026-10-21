@@ -1186,6 +1186,7 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	# Issue #732: names claimed on join (phone or Online client) go through the filter too.
 	if HostSettingsScript.shared().filter_names:
 		_slot_name[slot] = NameFilterScript.mask(nickname)
+	_send_name_echo(slot)
 	_slot_ready[slot] = 0
 	_slot_team_pick[slot] = -1
 	_last_claim_serial += 1
@@ -1385,6 +1386,19 @@ func send_lives(slot: int, count: int, can_steal: bool) -> void:
 	_lives_sent[slot] = key
 	peer.send_text(JSON.stringify({"t": "lives", "v": count, "steal": can_steal}))
 
+## Issue #756: tell the phone (or Online PC client) on `slot` the name the host
+## stored for it, possibly masked by the name filter: one `{"t":"name","v":<name>}`
+## frame. A no-op for bots, gamepad seats and seats with no open connection.
+func _send_name_echo(slot: int) -> void:
+	if slot < 0 or slot >= _slot_peers.size() or _slot_virtual[slot] == 1:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or peer is PadSeat or not (peer is WebSocketPeer or peer.has_method("send_text")):
+		return
+	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	peer.send_text(JSON.stringify({"t": "name", "v": _slot_name[slot]}))
+
 ## Hand the person on `slot` their lifetime-stat deltas (#503): one
 ## `{"t":"career","d":{...}}` frame that their device adds to its own totals.
 ## Only phones and Online PC clients keep a career: a gamepad seat, the host
@@ -1576,6 +1590,7 @@ func _handle_text(slot: int, text: String) -> void:
 			# Issue #732: the host's "Filter player names" setting.
 			if HostSettingsScript.shared().filter_names:
 				_slot_name[slot] = NameFilterScript.mask(_slot_name[slot])
+			_send_name_echo(slot)
 			if _log_input:
 				print("slot %d name '%s'" % [slot, _slot_name[slot]])
 		"target":

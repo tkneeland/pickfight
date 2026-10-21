@@ -2480,6 +2480,17 @@
     tipEl.classList.remove("show");
   }
 
+  // Issue #756: the host's stored (possibly masked) name for this seat. Shown
+  // and kept, never sent back, so there is no loop.
+  function showStoredName(v) {
+    var name = cleanName(v);
+    if (!name || name === myName) { return; }
+    myName = name;
+    try { localStorage.setItem(NAME_KEY, name); } catch (err) { /* this load only */ }
+    nameEl.textContent = name;
+    if (!promptEl.classList.contains("show")) { nameInput.value = name; }
+  }
+
   function commitName() {
     var name = cleanName(nameInput.value) || myName;
     myName = name;
@@ -3467,6 +3478,7 @@
           else { maybeShowTip(); }
         }
         else if (msg.t === "looks") { showLooks(msg); }
+        else if (msg.t === "name") { showStoredName(msg.v); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
