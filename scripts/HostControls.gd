@@ -103,6 +103,7 @@ func attach(server: Object) -> void:
 	# Phones can't join? (#680): the button under the join QR, in the pad menu chain too.
 	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
 	_controls["join_help"] = _screen.join_help_button()
+	_controls["relay_nudge"] = _screen.relay_nudge_button() # #727, beside it in the pad chain
 	# The way into someone else's room code (Online only), with why it is off when it is.
 	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
 	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
@@ -539,7 +540,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["join_help"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]

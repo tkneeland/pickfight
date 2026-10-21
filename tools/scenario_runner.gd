@@ -978,6 +978,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"quit_game_pc_client_leaves_room_718",
 	"credits_screen_opens_and_closes_721",
 	"pause_on_focus_loss_747",
+	"couch_relay_nudge_727",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3317,6 +3318,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_credits_screen_opens_and_closes_721()
 		"pause_on_focus_loss_747":
 			return await _scenario_pause_on_focus_loss_747()
+		"couch_relay_nudge_727":
+			return await _scenario_couch_relay_nudge_727()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46074,4 +46077,72 @@ func _scenario_pause_on_focus_loss_747() -> Array[String]:
 	DirAccess.remove_absolute(tmp)
 	await _close_phones(joined)
 	await _teardown(main)
+	return failures
+# --- Couch lobby: nudge toward internet join when no phone connects (#727)
+const RelayNudgeScript727 := preload("res://scripts/RelayNudge.gd")
+func _scenario_couch_relay_nudge_727() -> Array[String]:
+	var failures: Array[String] = []
+	# The timing and latch, on their own.
+	var logic: RefCounted = RelayNudgeScript727.new()
+	if logic.update(0, true, false, false) or logic.update(29999, true, false, false):
+		failures.append("the nudge showed before the 30 s were up")
+	if not logic.update(30000, true, false, false):
+		failures.append("the nudge was not due at 30 s")
+	logic.update(31000, true, true, false)
+	if logic.update(90000, true, false, false):
+		failures.append("the nudge came back after a phone sat")
+	logic.reset()
+	logic.update(0, true, false, false)
+	if logic.update(40000, false, false, false) or logic.update(41000, true, false, false):
+		failures.append("hiding the QR did not restart the 30 s")
+	# The lobby.
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	server.apply_host_command("kind", "local")
+	await _await_ticks(3)
+	var button: Button = screen.relay_nudge_button()
+	if button == null:
+		failures.append("the lobby has no relay nudge button")
+		await _teardown(rig["main"])
+		return failures
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if button.visible:
+		failures.append("the nudge shows the moment the lobby opens")
+	if button.text != "Not connecting? Join over the internet":
+		failures.append("the nudge reads '%s'" % button.text)
+	screen.relay_nudge().expire(Time.get_ticks_msec())
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if not button.visible:
+		failures.append("the nudge is not shown after 30 s with no phone")
+	# Streamer mode hides it with the QR.
+	_sfx().set_hide_room_code(true)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if button.visible:
+		failures.append("the nudge shows while the room code is hidden")
+	_sfx().set_hide_room_code(false)
+	screen.relay_nudge().reset()
+	screen.relay_nudge().expire(Time.get_ticks_msec())
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if not button.visible:
+		failures.append("the nudge did not return after streamer mode went off")
+	# Pressing it opens the relay room and the popup, and the nudge goes for good.
+	if server.internet_join_on():
+		failures.append("internet join was on before the press")
+	button.pressed.emit()
+	if not server.internet_join_on():
+		failures.append("pressing the nudge did not open the internet join")
+	if screen.popup_open() != "join_help":
+		failures.append("pressing the nudge did not show the join popup (open: '%s')" % screen.popup_open())
+	await _await_ticks(3)
+	if button.visible:
+		failures.append("the nudge stays up with internet join open")
+	server.close_internet_join()
+	await _await_ticks(3)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	if button.visible:
+		failures.append("the nudge came back after internet join closed")
+	screen.set_popup("")
+	await _teardown(rig["main"])
+	_scenario_completed = true
 	return failures
