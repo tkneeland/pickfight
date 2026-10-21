@@ -71,6 +71,8 @@ var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _scale_button: OptionButton
+## Stick deadzone (#748): Settings > More options.
+var _deadzone_button: OptionButton
 var _host_match: VBoxContainer
 ## Quit game (#718): the button, and the confirm that replaces it while other humans are seated.
 var _credits_button: Button
@@ -170,6 +172,11 @@ func _ready() -> void:
 	for option: float in sfx.UI_SCALES:
 		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
+	_deadzone_button = OptionButton.new()
+	_deadzone_button.name = "StickDeadzone"
+	for option: float in HostSettingsScript.PAD_DEADZONES:
+		_deadzone_button.add_item(tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % option))
+	content.add_child(_deadzone_button)
 	_replay_box = _add_box(content, "PlayOfRound", tr("SETTINGS_PLAY_OF_ROUND"))
 	_focus_box = _add_box(content, "PauseOnFocusLoss", tr("SETTINGS_PAUSE_ON_FOCUS_LOSS"))
 	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
@@ -252,6 +259,7 @@ func _ready() -> void:
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
+	_deadzone_button.item_selected.connect(func(index: int) -> void: host.set_pad_deadzone(HostSettingsScript.PAD_DEADZONES[index]))
 	_more.toggled.connect(func(pressed: bool) -> void:
 		_more_area.visible = pressed
 		if PadMenuScript.is_open():
@@ -342,6 +350,7 @@ func refresh() -> void:
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
+	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_language.select(_language_index(host.language))
 	_host_match.refresh()
@@ -682,6 +691,9 @@ func flash_box() -> CheckBox:
 func tag_size_button() -> OptionButton:
 	return _scale_button
 
+func deadzone_button() -> OptionButton:
+	return _deadzone_button
+
 func resolution_button() -> OptionButton:
 	return _resolution
 
@@ -757,6 +769,8 @@ func _retranslate() -> void:
 		_resolution.set_item_text(i, tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
 	for i in sfx.UI_SCALES.size():
 		_scale_button.set_item_text(i, tr("SETTINGS_NAME_TAGS") % str(sfx.UI_SCALES[i]))
+	for i in HostSettingsScript.PAD_DEADZONES.size():
+		_deadzone_button.set_item_text(i, tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % HostSettingsScript.PAD_DEADZONES[i]))
 	_language.set_item_text(0, tr("LANGUAGE_AUTO"))
 	refresh()
 

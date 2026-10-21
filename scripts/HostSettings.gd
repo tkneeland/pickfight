@@ -83,6 +83,11 @@ var send_crash_reports: bool = true
 var play_of_round: bool = true
 ## Couch and Solo pause a round when the game window loses focus (#747). Online never does.
 var pause_on_focus_loss: bool = true
+## Gamepad stick deadzone (#748): the radial deadzone every seated pad's stick uses, one of
+## PAD_DEADZONES. 0.20 is what the game always used.
+const PAD_DEADZONES: Array[float] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40]
+const DEFAULT_PAD_DEADZONE: float = 0.2
+var pad_deadzone: float = DEFAULT_PAD_DEADZONE
 
 ## Issue #732: mask offensive words in player names (NameFilter.gd).
 var filter_names: bool = true
@@ -355,6 +360,21 @@ func set_pause_on_focus_loss(on: bool) -> void:
 	pause_on_focus_loss = on
 	save_settings()
 
+## The PAD_DEADZONES step nearest `value`: a value off the list, or from a hand-edited file, snaps to it.
+static func snap_pad_deadzone(value: float) -> float:
+	var best: float = DEFAULT_PAD_DEADZONE
+	var best_gap: float = INF
+	for step: float in PAD_DEADZONES:
+		var gap: float = absf(step - value)
+		if gap < best_gap:
+			best = step
+			best_gap = gap
+	return best
+
+func set_pad_deadzone(value: float) -> void:
+	pad_deadzone = snap_pad_deadzone(value)
+	save_settings()
+
 func set_play_of_round(on: bool) -> void:
 	play_of_round = on
 	save_settings()
@@ -466,6 +486,8 @@ func load_settings() -> void:
 		play_of_round = replay_on if replay_on is bool else true
 		var focus_on: Variant = config.get_value(SECTION, "pause_on_focus_loss", true)
 		pause_on_focus_loss = focus_on if focus_on is bool else true
+		var deadzone: Variant = config.get_value(SECTION, "pad_deadzone", DEFAULT_PAD_DEADZONE)
+		pad_deadzone = snap_pad_deadzone(float(deadzone)) if deadzone is float or deadzone is int else DEFAULT_PAD_DEADZONE
 		var filter_on: Variant = config.get_value(SECTION, "filter_names", true)
 		filter_names = filter_on if filter_on is bool else true
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
@@ -502,6 +524,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
 	config.set_value(SECTION, "play_of_round", play_of_round)
 	config.set_value(SECTION, "pause_on_focus_loss", pause_on_focus_loss)
+	config.set_value(SECTION, "pad_deadzone", pad_deadzone)
 	config.set_value(SECTION, "filter_names", filter_names)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)

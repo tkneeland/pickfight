@@ -2706,6 +2706,7 @@ func _update_mouse_capture() -> void:
 
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const PAD_ID_PREFIX: String = "pad-"
+## The default radial deadzone; Settings > More options > Stick deadzone changes it (#748).
 const PAD_DEADZONE: float = 0.2
 ## device -> PadSeat for every pad whose seat is bound.
 var _pad_seats: Dictionary = {}
@@ -2724,20 +2725,24 @@ func _pad_axis(device: int) -> Vector2:
 		left = _test_pad_left_axes[device]
 	if pad_picker_shown(pad_slot(device)):
 		left = Vector2.ZERO # the left stick drives the picker there, not the arm (#611)
-	return pad_stick(raw, left)
+	return pad_stick(raw, left, pad_deadzone())
 
 ## #600: the right stick swings the arm; a lone Joy-Con reports its one stick as
 ## the left, so the left takes over only while the right reads idle.
-static func pad_stick(right: Vector2, left: Vector2) -> Vector2:
-	var v: Vector2 = stick_vector(right)
-	return v if v != Vector2.ZERO else stick_vector(left)
+static func pad_stick(right: Vector2, left: Vector2, deadzone: float = PAD_DEADZONE) -> Vector2:
+	var v: Vector2 = stick_vector(right, deadzone)
+	return v if v != Vector2.ZERO else stick_vector(left, deadzone)
 
 ## A raw right stick as that vector; the PC client's gamepad uses it too (#435).
-static func stick_vector(raw: Vector2) -> Vector2:
+static func stick_vector(raw: Vector2, deadzone: float = PAD_DEADZONE) -> Vector2:
 	var mag: float = raw.length()
-	if mag <= PAD_DEADZONE:
+	if mag <= deadzone:
 		return Vector2.ZERO
-	return raw.normalized() * minf((mag - PAD_DEADZONE) / (1.0 - PAD_DEADZONE), 1.0)
+	return raw.normalized() * minf((mag - deadzone) / (1.0 - deadzone), 1.0)
+
+## The deadzone the host chose in Settings (#748), for every seated pad and the PC client's gamepad.
+static func pad_deadzone() -> float:
+	return HostSettingsScript.shared().pad_deadzone
 
 ## The slot gamepad `device` holds right now, or -1.
 func pad_slot(device: int) -> int:
