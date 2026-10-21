@@ -21606,6 +21606,10 @@ func _scenario_axe_wins_clash_against_every_weapon() -> Array[String]:
 	for path: String in WEAPON_RESOURCE_PATHS:
 		if path == AXE_PATH:
 			continue
+		# The spear and pogo are retired from rotation (#642, #655): nobody
+		# can be handed one, so the axe never meets them in a real clash.
+		if PickupWeaponsScript.RETIRED_PATHS.has(path):
+			continue
 		var weapon: String = path.get_file().get_basename()
 		var other: WeaponStatsType = load(path)
 		if other == null:
