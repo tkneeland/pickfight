@@ -752,6 +752,10 @@ func press_control(id: String) -> void:
 func refresh_controls() -> void:
 	_host.refresh()
 
+## Swaps what Leave lobby does to go back to the title screen (#716), for the scenarios.
+func set_leave_action(action: Callable) -> void:
+	_host.leave_to_title = action
+
 func host_picker() -> Control:
 	return _host.host_picker()
 

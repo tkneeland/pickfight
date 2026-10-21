@@ -36,6 +36,9 @@ const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_F
 const ROOM_CODE_FONT_SIZE: int = 96
 const STEP_BUTTON_PX: float = 44.0
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
+const MAIN_SCENE: String = "res://scenes/Main.tscn"
+## How long Leave lobby stays armed after its first press, when others are seated (#716).
+const LEAVE_CONFIRM_MSEC: int = 5000
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
@@ -59,6 +62,10 @@ var _target_number: int = 5
 var _start_ready: bool = false
 var _kind_cells: Dictionary = {} # "local" / "online" / "solo" -> Button
 var _focus_signature: String = ""
+## What Leave lobby calls to go back to the title screen; a scenario swaps it for a recorder
+## so the runner is not carried off to a new scene. Unset: reload the main scene (#716).
+var leave_to_title: Callable = Callable()
+var _leave_armed_until_msec: int = 0
 
 var _pad_active: bool = false
 var _pad_menu_open: bool = false
@@ -85,6 +92,8 @@ func attach(server: Object) -> void:
 	stages.pressed.connect(press_control.bind("stages_rules"))
 	_controls["stages_rules"] = stages
 	lobby_right.move_child(_screen._stages_box, lobby_right.get_child_count() - 1)
+	# Leave lobby (#716): under Stages & Rules, back to the title screen.
+	lobby_right.add_child(_action_button("leave", _screen.tr("LOBBY_LEAVE"), UiThemeScript.ACTION_BUTTON))
 	# Phones can't join? (#680): the button under the join QR, in the pad menu chain too.
 	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
 	_controls["join_help"] = _screen.join_help_button()
@@ -279,6 +288,8 @@ func press_control(id: String) -> void:
 	var server: Object = _screen._server
 	if server == null:
 		return
+	if id != "leave":
+		_disarm_leave()
 	match id:
 		"local", "online", "solo":
 			# #435: Couch, Online or Solo. Online opens the room; Solo stays off the relay (#522).
@@ -321,6 +332,13 @@ func press_control(id: String) -> void:
 		"how_to_play":
 			_popup_opener = id
 			_screen.set_popup("help")
+		"leave":
+			# #716: straight out when nobody but the host and bots is seated; otherwise the first
+			# press arms the button and a second one inside LEAVE_CONFIRM_MSEC leaves.
+			if _can_join_online() or Time.get_ticks_msec() < _leave_armed_until_msec:
+				_leave_lobby(server)
+				return
+			_leave_armed_until_msec = Time.get_ticks_msec() + LEAVE_CONFIRM_MSEC
 		"join":
 			# Issue #241: leave this host's lobby for the PC client's join
 			# screen. Online only (#547), and only while nobody but the host's
@@ -332,6 +350,25 @@ func press_control(id: String) -> void:
 				_screen.get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE)
 				return
 	refresh()
+
+## Whether Leave lobby is waiting for its confirming press.
+func leave_armed() -> bool:
+	return Time.get_ticks_msec() < _leave_armed_until_msec
+
+func _disarm_leave() -> void:
+	_leave_armed_until_msec = 0
+
+## Closes the room (remote seats are told the host left) and goes back to the title screen.
+func _leave_lobby(server: Object) -> void:
+	_disarm_leave()
+	if server.has_method("online_requested") and server.online_requested():
+		server.apply_host_command("online", false)
+	if server.has_method("go_offline"):
+		server.go_offline() # also the relay fallback a Couch match may have open (#683)
+	if leave_to_title.is_valid():
+		leave_to_title.call()
+	else:
+		_screen.get_tree().change_scene_to_file(MAIN_SCENE)
 
 ## The match kind as the switch reads it: "local" until the host picks one.
 func _kind_of(server: Object) -> String:
@@ -398,6 +435,9 @@ func refresh() -> void:
 	var join: Button = control_button("join")
 	join.disabled = not _can_join_online()
 	join.visible = kind == "online"
+	var leave: Button = control_button("leave")
+	leave.text = _screen.tr("LOBBY_LEAVE_CONFIRM") if leave_armed() else _screen.tr("LOBBY_LEAVE")
+	_set_variation(leave, UiThemeScript.SWITCH_BUTTON_ON if leave_armed() else UiThemeScript.ACTION_BUTTON)
 	_sync_host_picker()
 	_join_blocked.visible = join.visible and join.disabled
 	var start: Button = control_button("start")
@@ -493,7 +533,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["join_help"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["join_help"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]
