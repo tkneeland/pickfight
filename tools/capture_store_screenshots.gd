@@ -134,6 +134,11 @@ func _title_and_lobby() -> void:
 		screen.press_title("local")
 		await _seats(rig, 8)
 		await _frames(30)
+		# A generic home-network address, never the capturing machine's own.
+		var sample_url: String = "http://192.168.1.20:8080/"
+		screen.get("_lobby_url").text = sample_url
+		screen.get("_lobby_qr").texture = rig["server"].call("_generate_qr_texture", sample_url)
+		await _frames(2)
 		await _shot("03-lobby")
 	await _free_main(rig)
 

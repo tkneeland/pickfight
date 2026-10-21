@@ -6,13 +6,12 @@ Nine 1920x1080 PNGs of the real game (issue #723, `docs/steam-readiness.md` item
 perl -e 'alarm 180; exec @ARGV' godot --path . -s tools/capture_store_screenshots.gd -- --out=$PWD/docs/launch/screenshots
 ```
 
-Add `--only=title,brawl,...` to redo some. Bot fights are live, so the exact poses differ per run; re-run and look before committing. The lobby shot shows the host's LAN address under the QR code.
+- `03-lobby.png` (the lobby with QR) is not in the set yet: the capture script now shows a sample address (`http://192.168.1.20:8080/`) instead of the machine's own, but the regenerated shot needs an unlocked screen. Run `godot --path . -s tools/capture_store_screenshots.gd -- --out=$PWD/docs/launch/screenshots --only=lobby` while logged in at the Mac.
 
 | File | What it shows | Suggested caption |
 |---|---|---|
 | `01-title.png` | Title screen with the Couch, Online and Solo choices | Pick how you play: one couch, online, or solo against bots |
 | `02-brawl.png` | Eight players brawling in the Bowl, pickaxes swinging | Eight players, one screen, one very pointy pickaxe |
-| `03-lobby.png` | Couch lobby: join QR code, eight seated player cards, mode list | Scan the QR code with your phone and you are in |
 | `04-teams.png` | Red vs Blue Teams match on the Colosseum | Two teams, four players each |
 | `05-soccer.png` | Soccer mode: ball, goals and score banner | Soccer, with pickaxes |
 | `06-capture-the-flag.png` | Capture the Flag: both bases, flags and the score banner | Steal their flag, defend yours |
