@@ -46311,21 +46311,29 @@ func _scenario_stick_deadzone_setting_748() -> Array[String]:
 		failures.append("a 0.3 stick moved the arm (%s) with the deadzone at 0.4" % at_wide)
 	if at_narrow.length() <= at_default.length():
 		failures.append("a narrower deadzone did not read the 0.3 stick as further out (%s vs %s)" % [at_narrow, at_default])
-	host.pad_deadzone = 0.2
+	host.pad_deadzone = was
 	var sfx: Node = _sfx()
 	var ui: CanvasLayer = sfx.build_settings_ui()
+	# The panel keeps the settings object it was built with, which an earlier scenario may have since
+	# replaced as the shared one, so it is driven and read through its own.
+	var ui_host: RefCounted = ui.host
+	var ui_was: float = ui_host.pad_deadzone
+	var ui_was_persist: bool = ui_host.persist
+	ui_host.persist = false
+	ui_host.pad_deadzone = 0.2
 	ui.refresh()
 	var box: OptionButton = ui.deadzone_button()
 	if box.item_count != 8 or box.selected != 3:
 		failures.append("the Stick deadzone box has %d items with item %d selected, expected 8 with the 0.20 item (3)" % [box.item_count, box.selected])
 	box.item_selected.emit(5)
-	if not is_equal_approx(host.pad_deadzone, 0.3):
-		failures.append("picking the sixth item set the deadzone to %s, expected 0.3" % host.pad_deadzone)
+	if not is_equal_approx(ui_host.pad_deadzone, 0.3):
+		failures.append("picking the sixth item set the deadzone to %s, expected 0.3" % ui_host.pad_deadzone)
 	ui.refresh()
 	if box.selected != 5:
 		failures.append("Settings did not show the chosen deadzone (item %d)" % box.selected)
-	host.pad_deadzone = was
 	host.persist = was_persist
+	ui_host.pad_deadzone = ui_was
+	ui_host.persist = ui_was_persist
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
