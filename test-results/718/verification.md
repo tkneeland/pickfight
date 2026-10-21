@@ -19,8 +19,7 @@ Windows 11, Godot 4.6.2. Branch `feat/issue-718-quit-game`, based on `origin/mai
 | Real quit, no seam (throwaway probe, not committed; run before the script-loop guard was added): real `Main` scene, Solo, real Quit game | the process exited by itself with code 0 about 2.6 s after the press |
 | Runner parse check | no output (pass) |
 | Fresh-clone boot check of the final commit (no `.godot/`) | no output (pass) |
-| Full suite | **911 passed, 3 failed, 914 total** (run on the final merged head, after merging origin/main at 1f7f8a6 with tkneeland's #732, whose 
-ame_filter_732 also passes) |
+| Full suite | **911 passed, 3 failed, 914 total** (the final merged head, after merging `origin/main` at `1f7f8a6` with tkneeland's #732, whose `name_filter_732` also passes) |
 
 The 3 failures are the same ones that fail identically on untouched `origin/main` on this machine and pass on Linux CI; not from this change:
 
