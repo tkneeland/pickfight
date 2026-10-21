@@ -870,6 +870,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_setting_off_never_plays_704",
 	"play_of_round_setting_persists_704",
 	"play_of_round_caption_translated_704",
+	"name_filter_732",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -3093,6 +3094,7 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_setting_off_never_plays_704": return await _scenario_play_of_round_setting_off_never_plays_704()
 		"play_of_round_setting_persists_704": return await _scenario_play_of_round_setting_persists_704()
 		"play_of_round_caption_translated_704": return await _scenario_play_of_round_caption_translated_704()
+		"name_filter_732": return await _scenario_name_filter_732()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -45594,4 +45596,90 @@ func _scenario_lobby_card_follows_hat_and_eyes_pick_714() -> Array[String]:
 		if card == null or card.avatar().hat_id != pick[0] or card.avatar().eyes_id != pick[1]:
 			failures.append("after picking %s the host's lobby card still shows hat '%s', eyes '%s'" % [pick, card.avatar().hat_id if card != null else "no card", card.avatar().eyes_id if card != null else "no card"])
 	await _kind_close_435(rig)
+	return failures
+
+## Issue #732: offensive words in nicknames are masked, innocent names are not,
+## the host setting gates it and persists, and the phone's name frame is masked.
+func _scenario_name_filter_732() -> Array[String]:
+	var failures: Array[String] = []
+	var filter: GDScript = load("res://scripts/NameFilter.gd") as GDScript
+	var bad: String = Marshalls.base64_to_utf8("ZnVjaw==")
+	var bad2: String = Marshalls.base64_to_utf8("c2hpdA==")
+	var cases: Array = [
+		[bad, "****"],
+		[bad.to_upper(), "****"],
+		["Big " + bad + " Man", "Big **** Man"],
+		[bad2.replace("s", "$").replace("i", "1"), "****"],
+		[bad.replace("u", "uuu"), "******"],
+		[bad2.replace("i", "1"), "****"],
+		["Scunthorpe", "Scunthorpe"],
+		["Cassandra", "Cassandra"],
+		["Dickens", "Dickens"],
+		["Alice", "Alice"],
+		["Grasshopper", "Grasshopper"],
+		["", ""],
+	]
+	for c: Array in cases:
+		var got: String = filter.mask(c[0])
+		if got != c[1]:
+			failures.append("mask('%s') gave '%s', wanted '%s'" % [c[0], got, c[1]])
+	if filter.is_offensive("Scunthorpe") or not filter.is_offensive(bad):
+		failures.append("is_offensive disagrees with mask")
+	# Through the phone's name frame, with the setting on and off.
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was_on: bool = settings.filter_names
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "NameFilterP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "NameFilterServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../NameFilterP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "name-filter-0", [] as Array[WebSocketPeer])
+	if joined["slot"] != 0:
+		failures.append("the phone got slot %d" % joined["slot"])
+		await _teardown(stage)
+		return failures
+	settings.filter_names = true
+	peer.send_text(JSON.stringify({"t": "name", "v": bad + " Walrus"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if server.slot_name(0) != "**** Walrus":
+		failures.append("the name frame was not masked: '%s'" % server.slot_name(0))
+	settings.filter_names = false
+	peer.send_text(JSON.stringify({"t": "name", "v": bad + " Walrus"}))
+	await _poll_phones([peer] as Array[WebSocketPeer], 10)
+	if server.slot_name(0) != bad + " Walrus":
+		failures.append("the name was masked with the setting off: '%s'" % server.slot_name(0))
+	settings.filter_names = was_on
+	peer.close(1000, "scenario done")
+	await _teardown(stage)
+	# Persistence, default on.
+	var tmp: String = OS.get_temp_dir().path_join("pf_732_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if not fresh.filter_names:
+		failures.append("the name filter is not on by default")
+	fresh.set_filter_names(false)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if again.filter_names:
+		failures.append("switching the name filter off was not remembered")
+	DirAccess.remove_absolute(tmp)
+	# Translated in every shipped locale.
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		if tr("SETTINGS_FILTER_NAMES") == "SETTINGS_FILTER_NAMES":
+			failures.append("SETTINGS_FILTER_NAMES has no %s text" % locale)
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
 	return failures

@@ -152,6 +152,7 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 const HatScript := preload("res://scripts/Hat.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const NameFilterScript := preload("res://scripts/NameFilter.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 ## The eye styles a phone may pick (issue #297), by path (CLAUDE.md).
 const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
@@ -1569,6 +1570,9 @@ func _handle_text(slot: int, text: String) -> void:
 			if not nickname is String:
 				return
 			_slot_name[slot] = clean_name(nickname)
+			# Issue #732: the host's "Filter player names" setting.
+			if HostSettingsScript.shared().filter_names:
+				_slot_name[slot] = NameFilterScript.mask(_slot_name[slot])
 			if _log_input:
 				print("slot %d name '%s'" % [slot, _slot_name[slot]])
 		"target":

@@ -61,6 +61,7 @@ var _flash_box: CheckBox
 var _stats_box: CheckBox
 var _crash_box: CheckBox
 var _replay_box: CheckBox
+var _filter_box: CheckBox
 var _notice: PanelContainer
 var _notice_label: Label
 var _notice_off: Button
@@ -160,6 +161,7 @@ func _ready() -> void:
 		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
 	_replay_box = _add_box(content, "PlayOfRound", tr("SETTINGS_PLAY_OF_ROUND"))
+	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
@@ -182,6 +184,7 @@ func _ready() -> void:
 	refresh()
 	_stats_box.toggled.connect(func(pressed: bool) -> void: host.set_share_stats(pressed))
 	_replay_box.toggled.connect(func(pressed: bool) -> void: host.set_play_of_round(pressed))
+	_filter_box.toggled.connect(func(pressed: bool) -> void: host.set_filter_names(pressed))
 	_crash_box.toggled.connect(func(pressed: bool) -> void: host.set_send_crash_reports(pressed))
 	_slider.value_changed.connect(_on_volume_changed)
 	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
@@ -278,6 +281,7 @@ func refresh() -> void:
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_crash_box.set_pressed_no_signal(host.send_crash_reports)
 	_replay_box.set_pressed_no_signal(host.play_of_round)
+	_filter_box.set_pressed_no_signal(host.filter_names)
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
@@ -636,6 +640,7 @@ func _retranslate() -> void:
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
+	_filter_box.text = tr("SETTINGS_FILTER_NAMES")
 	_feedback_button.text = tr("SETTINGS_FEEDBACK")
 	_feedback_send.text = tr("FEEDBACK_SEND")
 	_feedback_edit.placeholder_text = tr("FEEDBACK_PLACEHOLDER")
