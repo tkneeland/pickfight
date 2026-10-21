@@ -172,7 +172,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/work" \
             -v "$HOME/steam-config:/root/Steam/config" \
-            steamcmd/steamcmd:latest \
+            steamcmd/steamcmd@sha256:287aca1c8792a720c6857aabdc3690c1a66acf979fe0d91d85befe1582877078 \
             +login "$STEAM_USERNAME" \
             +run_app_build /work/steam/out/app_build.vdf \
             +quit

@@ -41,5 +41,6 @@ steps 3 to 5.
 - Export presets carry the Windows company and product and the macOS bundle id.
   The version is stamped into `project.godot` from the tag by the `export` job;
   it is not copied into the Windows file version (needs a four-part number).
-- The `steamcmd/steamcmd:latest` image is not pinned by digest; pin it if
-  reproducible uploads matter.
+- The steamcmd image is pinned by digest (the `latest` tag as of 2026-10-21).
+  To update it: `curl -s https://hub.docker.com/v2/repositories/steamcmd/steamcmd/tags/latest | jq -r .digest`
+  and replace the digest in `release.yml`.
