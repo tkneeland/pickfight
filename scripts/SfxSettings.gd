@@ -63,6 +63,7 @@ var _flash_box: CheckBox
 var _stats_box: CheckBox
 var _crash_box: CheckBox
 var _replay_box: CheckBox
+var _focus_box: CheckBox
 var _filter_box: CheckBox
 var _notice: PanelContainer
 var _notice_label: Label
@@ -170,6 +171,7 @@ func _ready() -> void:
 		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
 	_replay_box = _add_box(content, "PlayOfRound", tr("SETTINGS_PLAY_OF_ROUND"))
+	_focus_box = _add_box(content, "PauseOnFocusLoss", tr("SETTINGS_PAUSE_ON_FOCUS_LOSS"))
 	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
@@ -228,6 +230,7 @@ func _ready() -> void:
 	refresh()
 	_stats_box.toggled.connect(func(pressed: bool) -> void: host.set_share_stats(pressed))
 	_replay_box.toggled.connect(func(pressed: bool) -> void: host.set_play_of_round(pressed))
+	_focus_box.toggled.connect(func(pressed: bool) -> void: host.set_pause_on_focus_loss(pressed))
 	_filter_box.toggled.connect(func(pressed: bool) -> void: host.set_filter_names(pressed))
 	_crash_box.toggled.connect(func(pressed: bool) -> void: host.set_send_crash_reports(pressed))
 	_slider.value_changed.connect(_on_volume_changed)
@@ -334,6 +337,7 @@ func refresh() -> void:
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_crash_box.set_pressed_no_signal(host.send_crash_reports)
 	_replay_box.set_pressed_no_signal(host.play_of_round)
+	_focus_box.set_pressed_no_signal(host.pause_on_focus_loss)
 	_filter_box.set_pressed_no_signal(host.filter_names)
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)

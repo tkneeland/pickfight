@@ -81,6 +81,8 @@ var send_crash_reports: bool = true
 ## Play of the round (#704): replay the round's best KO in slow motion inside
 ## the round-end pause. On by default.
 var play_of_round: bool = true
+## Couch and Solo pause a round when the game window loses focus (#747). Online never does.
+var pause_on_focus_loss: bool = true
 
 ## Issue #732: mask offensive words in player names (NameFilter.gd).
 var filter_names: bool = true
@@ -349,6 +351,10 @@ func set_share_stats(on: bool) -> void:
 	share_stats = on
 	save_settings()
 
+func set_pause_on_focus_loss(on: bool) -> void:
+	pause_on_focus_loss = on
+	save_settings()
+
 func set_play_of_round(on: bool) -> void:
 	play_of_round = on
 	save_settings()
@@ -458,6 +464,8 @@ func load_settings() -> void:
 		send_crash_reports = crash if crash is bool else true
 		var replay_on: Variant = config.get_value(SECTION, "play_of_round", true)
 		play_of_round = replay_on if replay_on is bool else true
+		var focus_on: Variant = config.get_value(SECTION, "pause_on_focus_loss", true)
+		pause_on_focus_loss = focus_on if focus_on is bool else true
 		var filter_on: Variant = config.get_value(SECTION, "filter_names", true)
 		filter_names = filter_on if filter_on is bool else true
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
@@ -493,6 +501,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
 	config.set_value(SECTION, "play_of_round", play_of_round)
+	config.set_value(SECTION, "pause_on_focus_loss", pause_on_focus_loss)
 	config.set_value(SECTION, "filter_names", filter_names)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
