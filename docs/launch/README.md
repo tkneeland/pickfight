@@ -8,6 +8,7 @@
 - **[privacy-policy.md](privacy-policy.md):** DRAFT privacy policy (#712).
 - **[content-survey.md](content-survey.md):** DRAFT answers for Steam's content survey and the IARC age rating (#712).
 - **[trailer-shot-list.md](trailer-shot-list.md):** DRAFT shot list for the 60 to 75 second announce trailer (#728).
+- **[clips.md](clips.md):** how to record full-resolution gameplay clips for the trailer and social with `tools/capture_clips.sh` (#743).
 - **[press-kit.md](press-kit.md):** DRAFT press kit fact sheet (#728).
 - **[outreach-emails.md](outreach-emails.md):** DRAFT outreach email templates and Keymailer listing text (#728).
 - **[discord-server.md](discord-server.md):** DRAFT public Discord server plan: channels, roles, rules, welcome text, AutoMod, onboarding and launch checklist (#744).
