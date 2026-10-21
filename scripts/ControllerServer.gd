@@ -152,6 +152,7 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 const HatScript := preload("res://scripts/Hat.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const NameFilterScript := preload("res://scripts/NameFilter.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 ## The eye styles a phone may pick (issue #297), by path (CLAUDE.md).
 const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
@@ -1182,6 +1183,9 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	_slot_virtual[slot] = 1 if virtual else 0
 	_slot_client_id[slot] = id
 	_slot_name[slot] = nickname
+	# Issue #732: names claimed on join (phone or Online client) go through the filter too.
+	if HostSettingsScript.shared().filter_names:
+		_slot_name[slot] = NameFilterScript.mask(nickname)
 	_slot_ready[slot] = 0
 	_slot_team_pick[slot] = -1
 	_last_claim_serial += 1
@@ -1569,6 +1573,9 @@ func _handle_text(slot: int, text: String) -> void:
 			if not nickname is String:
 				return
 			_slot_name[slot] = clean_name(nickname)
+			# Issue #732: the host's "Filter player names" setting.
+			if HostSettingsScript.shared().filter_names:
+				_slot_name[slot] = NameFilterScript.mask(_slot_name[slot])
 			if _log_input:
 				print("slot %d name '%s'" % [slot, _slot_name[slot]])
 		"target":
