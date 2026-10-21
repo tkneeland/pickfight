@@ -56,7 +56,7 @@ The Next Fest demo is the same game with a content slice, chosen by one flag: th
 |---|---|---|---|---|
 | 2.1 | Short description, long description, tags, feature list. Draft from `docs/FEATURES.md` | agent drafts, owner approves | name | partial (draft in `launch/store-page.md`, needs owner approval, #712) |
 | 2.2 | Capsule and library art (sizes below, all **verify**) | owner or commissioned artist; agent can lay out from `docs/art/` | name, logo | todo |
-| 2.3 | At least 5 screenshots, 1920x1080 (**verify** minimum). Capture with the existing screenshot tools (`tools/`) and playtest footage | agent | none | partial (tools exist, no curated set) |
+| 2.3 | At least 5 screenshots, 1920x1080 (**verify** minimum). Capture with the existing screenshot tools (`tools/`) and playtest footage | agent | none | done (9 shots in `launch/screenshots/`, regenerate with `tools/capture_store_screenshots.gd`, #723) |
 | 2.4 | Trailer: cut from playtest footage; the game has an F9 instant replay that saves ~10 s PNG sequences to `user://clips/` (#329, ADR-0020, 256x144, too small for a trailer). Record the trailer with a screen recorder (OBS) at 1080p or higher during playtests instead; use F9 clips only as a reference for moments worth re-capturing | owner (records) | playtest session | todo |
 | 2.5 | System requirements, supported languages (English only), controller support flag (partial/full, see section 6) | agent | 6.x | partial (draft in `launch/store-page.md`, needs owner approval, #712) |
 | 2.6 | Legal links: privacy policy URL (the game talks to our relay and files feedback issues, so say so), support contact | owner | none | partial (draft in `launch/privacy-policy.md`, needs owner approval, #712) |
