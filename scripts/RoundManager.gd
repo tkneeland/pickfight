@@ -2013,7 +2013,7 @@ func _team_scoreboard_entry(slot: int, score_label: Label, name_label: Label) ->
 	if score_label != null:
 		score_label.text = str(team_score(team))
 	if name_label != null:
-		name_label.text = "%s  %s" % [_slot_name(slot), TeamsScript.team_name(team)]
+		name_label.text = "[%s] %s  %s" % [TeamsScript.team_letter(team), _slot_name(slot), TeamsScript.team_name(team)]
 		name_label.add_theme_color_override("font_color", TeamsScript.team_color(team))
 
 ## The podium's order in a Teams match: the winning team first, then Red

@@ -25,6 +25,11 @@ static func team_name(team: int) -> String:
 static func team_color(team: int) -> Color:
 	return COLORS[team] if team >= 0 and team < COUNT else Color.WHITE
 
+## The team's letter, for markers that must not rest on colour alone (#752): the first character of its
+## translated name ("R" for Red in English), or "" for no team.
+static func team_letter(team: int) -> String:
+	return team_name(team).left(1).to_upper()
+
 ## Who goes on which team, as slot -> team, for every slot in `roster`:
 ## 1. a slot `keep` already has on a team stays there (a match under way);
 ## 2. then every pick in `picks` (slot -> RED or BLUE) is honoured;

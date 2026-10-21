@@ -9,6 +9,9 @@ extends RefCounted
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
+const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
+## A team player's badge over their podium name (#752).
+const TEAM_BADGE_PX: float = 34.0
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
@@ -165,6 +168,10 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 			# A fixed column that a long name wraps inside rather than widens.
 			name_label.custom_minimum_size.x = PODIUM_CROWDED_COLUMN_PX
 			name_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		if not teams.is_empty() and int(teams.get(slot, TeamsScript.NONE)) != TeamsScript.NONE:
+			var badge: Control = TeamBadgeScript.new(int(teams[slot]), TEAM_BADGE_PX)
+			badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			column.add_child(badge)
 		column.add_child(name_label)
 		var block := Panel.new()
 		block.add_theme_stylebox_override("panel", _podium_block_style(_slot_color.call(slot)))

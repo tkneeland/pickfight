@@ -7,6 +7,9 @@ extends Node2D
 const StageBackgroundType := preload("res://scripts/StageBackground.gd")
 const PaletteScript := preload("res://scripts/Palette.gd")
 const NightLightingType := preload("res://scripts/NightLighting.gd")
+const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
+## Soccer goals and Capture the Flag bases carry their team's letter (#752).
+const ZONE_BADGE_PX: float = 56.0
 
 ## This stage's index in the rotation, set by RoundManager before the stage
 ## enters the tree; it picks the palette mood (#255). -1 means Daylight.
@@ -75,6 +78,7 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 var night: bool = false
 
 func _ready() -> void:
+	_mark_team_zones()
 	if get_node_or_null(BACKGROUND_NODE_NAME) != null:
 		return
 	var background: Node2D = StageBackgroundType.new()
@@ -101,6 +105,25 @@ func _ready() -> void:
 		for spawn in get_spawn_points():
 			lamp_points.append(spawn + Vector2(0.0, -220.0))
 		lighting.setup(lamp_points)
+
+## A team badge (the letter in ink on the team's colour) centred on each Soccer goal and each Capture the
+## Flag base this stage has, so the sides are told apart by more than colour (#752).
+func _mark_team_zones() -> void:
+	var zones: Array = []
+	if has_goals():
+		for team: int in [0, 1]:
+			zones.append(["GoalBadge%d" % team, team, get_goal_rect(team)])
+	if has_bases():
+		for team: int in [0, 1]:
+			zones.append(["BaseBadge%d" % team, team, get_base_rect(team)])
+	for zone: Array in zones:
+		if get_node_or_null(str(zone[0])) != null:
+			continue
+		var badge: Control = TeamBadgeScript.new(int(zone[1]), ZONE_BADGE_PX)
+		badge.name = str(zone[0])
+		badge.z_index = 5
+		badge.position = to_local((zone[2] as Rect2).get_center()) - Vector2(ZONE_BADGE_PX, ZONE_BADGE_PX) * 0.5
+		add_child(badge)
 
 ## Recolours every static platform or stage-body visual: the Polygon2Ds under
 ## a plain StaticBody2D (no script, so breakables, ledges and pads keep their

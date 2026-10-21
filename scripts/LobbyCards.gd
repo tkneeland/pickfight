@@ -119,6 +119,7 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 			var team: int = int(entry.get("team", -1))
 			var text: String = _screen.tr("LOBBY_TEAM_TAG") % TeamsScript.team_name(team)
 			info["team_text"] = text + (" " + _screen.tr("LOBBY_AUTO") if int(entry.get("pick", team)) == TeamsScript.NONE else "")
+			info["team"] = team
 		seat_card.apply(info)
 		if server != null and server.has_method("pad_claim") and server.pad_claim(slot):
 			seat_card.add_picker(server)

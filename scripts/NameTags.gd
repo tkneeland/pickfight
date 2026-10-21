@@ -35,6 +35,11 @@ const TeamsScript := preload("res://scripts/Teams.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 ## Issue #236: [centre, team] per team ring drawn this frame.
 var _rings: Array = []
+## Issue #752: a team badge (the team's letter in ink on its colour) left of each team player's tag.
+const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
+const TEAM_BADGE_PX: float = 26.0
+const TEAM_BADGE_GAP: float = 4.0
+var _team_badges: Array[Control] = []
 
 ## RoundManager's `_players`, one entry (or null) per slot.
 var _players: Array = []
@@ -59,6 +64,10 @@ func _init(players: Array = [], slot_name: Callable = Callable(), slot_color: Ca
 func name_tag(slot: int) -> Label:
 	return _name_tags[slot] if slot >= 0 and slot < _name_tags.size() else null
 
+## A slot's team badge (#752), or null before `build()`.
+func team_badge(slot: int) -> Control:
+	return _team_badges[slot] if slot >= 0 and slot < _team_badges.size() else null
+
 ## One hidden label per player slot. Called once, right after this node is
 ## added under RoundManager.
 func build() -> void:
@@ -74,6 +83,10 @@ func build() -> void:
 		tag.visible = false
 		add_child(tag)
 		_name_tags.append(tag)
+		var badge: Control = TeamBadgeScript.new(TeamsScript.NONE, TEAM_BADGE_PX)
+		badge.name = "TeamBadge%d" % slot
+		add_child(badge)
+		_team_badges.append(badge)
 
 ## Shows, names, colours and places every living player's tag for this frame.
 func tick() -> void:
@@ -97,7 +110,9 @@ func tick() -> void:
 		var tag: Label = _name_tags[slot]
 		var shown: bool = player != null and player.alive and player.visible
 		tag.visible = shown
+		var badge: Control = _team_badges[slot]
 		if not shown:
+			badge.set_team(TeamsScript.NONE)
 			continue
 		var text: String = _slot_name.call(slot)
 		if tag.text != text:
@@ -107,6 +122,7 @@ func tick() -> void:
 		if tag.get_theme_color("font_color") != colour:
 			tag.add_theme_color_override("font_color", colour)
 		_mark_team(tag, player)
+		badge.set_team(team_of(player))
 		var rise: float = NAME_TAG_RISE
 		if player.has_method("hat_top"):
 			rise = maxf(rise, player.hat_top() + NAME_TAG_HAT_GAP)
@@ -129,6 +145,9 @@ func tick() -> void:
 					moved = true
 		tag.position = rect.position
 		placed.append(rect)
+		var team_badge: Control = _team_badges[slot]
+		team_badge.scale = Vector2(tag_scale, tag_scale)
+		team_badge.position = rect.position + Vector2(-(TEAM_BADGE_PX + TEAM_BADGE_GAP) * tag_scale, (rect.size.y - TEAM_BADGE_PX * tag_scale) * 0.5)
 		var count: int = int(lives_of.call(slot)) if lives_of.is_valid() else -1
 		if count > 0:
 			var below: float = rect.position.y + rect.size.y + (PIP_RADIUS + 2.0) * tag_scale
