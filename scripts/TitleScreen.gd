@@ -18,6 +18,9 @@ extends RefCounted
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const QuitGameScript := preload("res://scripts/QuitGame.gd")
+## The key that quits from the title screen (#718).
+const TITLE_QUIT_KEY: Key = KEY_Q
 
 const TITLE_KINDS: Array[String] = ["local", "online", "solo"]
 const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S}
@@ -80,6 +83,9 @@ func input(event: InputEvent) -> void:
 
 ## What picking `kind` on the title screen does: that match kind, then the lobby.
 func press_title(kind: String) -> void:
+	if kind == "quit":
+		QuitGameScript.quit_game(_screen.get_tree(), _screen._server) # nobody is seated yet: no confirm (#718)
+		return
 	var server: Object = _screen._server
 	if server == null or not TITLE_KINDS.has(kind):
 		return
@@ -158,6 +164,16 @@ func build() -> void:
 	footer.theme_type_variation = UiThemeScript.MUTED_HINT_LABEL
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(footer)
+	# Quit (#718): under the cards, one D-pad step down from any of them.
+	var quit_button := ScreenKitScript.themed_button(_screen.tr("TITLE_QUIT"), UiThemeScript.ACTION_BUTTON, "Title_quit")
+	quit_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	quit_button.focus_mode = Control.FOCUS_ALL
+	quit_button.pressed.connect(press_title.bind("quit"))
+	box.add_child(quit_button)
+	_title_buttons["quit"] = quit_button
+	for kind: String in TITLE_KINDS:
+		(_title_buttons[kind] as Button).focus_neighbor_bottom = (_title_buttons[kind] as Button).get_path_to(quit_button)
+	quit_button.focus_neighbor_top = quit_button.get_path_to(_title_buttons["local"])
 	if _screen.is_inside_tree() and _screen.get_tree().get_script() == null and server.has_method("match_kind") and server.match_kind() == "":
 		show_title(true) # the game, not a `-s` script (see Sfx.is_script_main_loop)
 

@@ -470,3 +470,8 @@ STEAM_TL_ROUND_WIN,%s wins the round,%s gewinnt die Runde,%s remporte la manche,
 STEAM_TL_MATCH_WIN,%s wins the match,%s gewinnt das Match,%s remporte le match,%s gana la partida,%s vence a partida,%s 赢得比赛,%sが試合に勝利,%s 경기 승리,Матч берёт %s
 LOBBY_LEAVE,Leave lobby,Lobby verlassen,Quitter le lobby,Salir del lobby,Sair do lobby,离开大厅,ロビーを出る,로비 나가기,Выйти из лобби
 LOBBY_LEAVE_CONFIRM,Sure? This ends it for all,Sicher? Beendet es für alle,Sûr ? Ça termine pour tous,¿Seguro? Termina para todos,Certeza? Encerra para todos,确定?所有人都会结束,本当に? 全員終了します,확실해요? 모두 끝나요,Точно? Игра закончится для всех
+SETTINGS_QUIT_GAME,Quit game,Spiel beenden,Quitter le jeu,Salir del juego,Sair do jogo,退出游戏,ゲームを終了,게임 종료,Выйти из игры
+QUIT_CONFIRM_TEXT,Quit? This ends the match for everyone,Beenden? Das beendet das Match für alle,Quitter ? Ça termine le match pour tous,¿Salir? Termina la partida para todos,Sair? Encerra a partida para todos,退出?所有人的对局都会结束,終了する? 全員のマッチが終わります,종료할까요? 모두의 대전이 끝나요,Выйти? Матч закончится для всех
+QUIT_YES,Yes,Ja,Oui,Sí,Sim,是,はい,예,Да
+QUIT_NO,No,Nein,Non,No,Não,否,いいえ,아니요,Нет
+TITLE_QUIT,Quit (Q),Beenden (Q),Quitter (Q),Salir (Q),Sair (Q),退出 (Q),終了 (Q),종료 (Q),Выход (Q)
