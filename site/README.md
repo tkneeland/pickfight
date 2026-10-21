@@ -10,7 +10,7 @@ The decision on #729 is Kit as the mailing provider.
 
 1. Create a free Kit account at kit.com and a new **Form** (Grow > Landing Pages & Forms > Form, inline).
 2. Open the form's embed settings and copy its numeric ID (it appears in the form URL and embed code, as in `https://app.kit.com/forms/1234567/subscriptions`).
-3. In `site/index.html`, replace `TODO_OWNER_FORM_ID` in the `<form action=...>` with that ID. The input is already named `email_address`, which Kit expects.
+3. Done (Oct 21): the form "Newsletter site", ID 10077144, is wired into `site/index.html`.
 4. Submit a test address and confirm it appears in Kit. Set Kit's confirmation page or double opt-in as you prefer.
 
 ## 2. Domain and hosting
@@ -24,6 +24,5 @@ No domain is bought yet and Pages settings are unchanged.
 
 ## 3. TODO(owner) list
 
-- `TODO_OWNER_FORM_ID`: the Kit form ID (see section 1).
 - Steam store page URL: replace the `#` link on the "Wishlist on Steam" button once the page is live (#540).
 - Domain: buy it and wire it up (section 2); add press contact and social links to the footer.

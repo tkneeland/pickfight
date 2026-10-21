@@ -8,52 +8,59 @@
 <meta property="og:title" content="PICKFIGHT">
 <meta property="og:description" content="Eight players, one screen, no controllers: scan a QR code and fight with your phone.">
 <meta property="og:image" content="img/02-brawl.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#fff7ec;--fg:#241a12;--muted:#6b5a4a;--card:#ffffff;--line:#e6d5bd;--accent:#d9381e;--accent-fg:#fff;}
-@media (prefers-color-scheme:dark){:root{--bg:#17110d;--fg:#f5ebdc;--muted:#bfae98;--card:#241b14;--line:#3b2e23;--accent:#ff5a3c;--accent-fg:#1a0c07;}}
+@font-face{font-family:"Lilita One";src:url(fonts/LilitaOne-Regular.ttf);font-display:swap}
+@font-face{font-family:Nunito;src:url(fonts/Nunito-Variable.ttf);font-weight:200 1000;font-display:swap}
+:root{--ink:#14181D;--cream:#FBF6EA;--yellow:#F5E24A;--sky:#56B4E9;--orange:#E69F00;--green:#009E73;--pink:#CC79A7;--blue:#3E8ED0;--navy:#272c4a;}
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 Nunito,system-ui,sans-serif;overflow-x:hidden}
+html{-webkit-text-size-adjust:100%;background:var(--navy);color-scheme:dark}
+body{margin:0;color:var(--cream);font:17px/1.55 Nunito,system-ui,sans-serif;overflow-x:hidden;
+ background:repeating-linear-gradient(45deg,#272c4a 0,#272c4a 22px,#2b3152 22px,#2b3152 44px)}
 .wrap{max-width:960px;margin:0 auto;padding:0 20px}
-h1,h2{font-family:Bangers,Impact,sans-serif;font-weight:400;letter-spacing:.04em;margin:0}
-h1{font-size:clamp(3rem,16vw,6.5rem);line-height:1;color:var(--accent)}
-h2{font-size:clamp(1.8rem,7vw,2.6rem);margin-bottom:.5em}
-header{padding:48px 0 24px;text-align:center}
-.hook{font-size:1.25rem;font-weight:700;margin:.6em auto 0;max-width:34ch}
-.meta{color:var(--muted);margin:.6em 0 0}
-.hero{display:block;width:100%;height:auto;border-radius:12px;border:2px solid var(--line);margin:24px 0}
+h1,h2,h3{font-family:"Lilita One",Impact,sans-serif;font-weight:400;margin:0}
+h1{line-height:0}
+.logo{display:block;width:100%;max-width:760px;height:auto;margin:0 auto}
+h2{font-size:clamp(1.8rem,7vw,2.6rem);margin-bottom:.5em;text-align:center}
+header{padding:40px 0 16px;text-align:center}
+.hook{font-family:"Lilita One",sans-serif;font-size:clamp(1.3rem,4.5vw,1.8rem);margin:.9em auto 0;max-width:30ch;line-height:1.25}
+.meta{color:#c3c8e0;font-weight:700;margin:.6em 0 0}
+.hero{display:block;width:100%;height:auto;border-radius:16px;border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);margin:28px 0 32px}
 section{padding:24px 0}
-.grid{display:grid;gap:16px;grid-template-columns:1fr}
-.card{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:16px 18px}
-.card h3{margin:0 0 .3em;font-size:1.1rem}
+section>p{max-width:68ch;margin-left:auto;margin-right:auto}
+.grid{display:grid;gap:24px;grid-template-columns:1fr}
+.card{background:var(--orange);color:var(--ink);border:4px solid var(--ink);border-radius:16px;padding:16px 20px 20px;box-shadow:8px 8px 0 var(--ink);font-weight:700}
+.card:nth-child(6n+2){background:var(--sky)}
+.card:nth-child(6n+3){background:var(--green)}
+.card:nth-child(6n+4){background:var(--pink)}
+.card:nth-child(6n+5){background:var(--yellow)}
+.card:nth-child(6n+6){background:var(--blue)}
+.card h3{margin:0 0 .25em;font-size:1.7rem}
 .card p{margin:0}
 figure{margin:0}
-figure img{display:block;width:100%;height:auto;border-radius:10px;border:2px solid var(--line)}
-figcaption{color:var(--muted);font-size:.95rem;margin-top:6px}
-.signup{background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:22px 20px;text-align:center}
-.signup form{display:flex;flex-direction:column;gap:10px;margin-top:14px}
-input[type=email]{font:inherit;padding:12px 14px;border-radius:8px;border:2px solid var(--line);background:var(--bg);color:var(--fg);width:100%}
-button,.btn{font:inherit;font-weight:700;padding:12px 18px;border-radius:8px;border:0;background:var(--accent);color:var(--accent-fg);cursor:pointer;text-decoration:none;display:inline-block}
-.small{font-size:.85rem;color:var(--muted);margin:.8em 0 0}
+figure img{display:block;width:100%;height:auto;border-radius:16px;border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink)}
+figcaption{color:#c3c8e0;font-weight:700;font-size:.95rem;margin-top:14px;text-align:center}
+.signup{background:var(--cream);color:var(--ink);border:4px solid var(--ink);border-radius:16px;box-shadow:8px 8px 0 var(--ink);padding:24px 20px;text-align:center;margin:16px 0;font-weight:700}
+.signup form{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+input[type=email]{font:inherit;font-weight:700;padding:12px 14px;border-radius:12px;border:4px solid var(--ink);background:#fff;color:var(--ink);width:100%}
+button,.btn{font-family:"Lilita One",sans-serif;font-size:1.25rem;padding:10px 22px;border-radius:12px;border:4px solid var(--ink);background:var(--yellow);color:var(--ink);box-shadow:5px 5px 0 var(--ink);cursor:pointer;text-decoration:none;display:inline-block;transition:transform .05s,box-shadow .05s}
+button:hover,.btn:hover{background:#fbed7a}
+button:active,.btn:active{transform:translate(4px,4px);box-shadow:1px 1px 0 var(--ink)}
+.small{font-size:.85rem;opacity:.75;margin:.8em 0 0}
 .cta{text-align:center}
-a{color:var(--accent)}
-.btn{color:var(--accent-fg)}
-footer{padding:32px 0 48px;text-align:center;color:var(--muted);font-size:.9rem;border-top:2px solid var(--line);margin-top:24px}
+a{color:var(--yellow)}
+footer{padding:32px 0 48px;text-align:center;color:#c3c8e0;font-weight:700;font-size:.9rem;margin-top:24px}
 @media (min-width:640px){
  .grid{grid-template-columns:repeat(2,1fr)}
  .signup form{flex-direction:row}
  input[type=email]{flex:1}
- .shots{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+ .shots{display:grid;grid-template-columns:repeat(2,1fr);gap:28px}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
 <header>
- <h1>PICKFIGHT</h1>
+ <h1><img class="logo" src="img/logo.svg" alt="PickFight" width="1600" height="400"></h1>
  <p class="hook">Eight players, one screen, no controllers: scan a QR code and fight with your phone.</p>
  <p class="meta">Launching July 22, 2027 &middot; Windows, macOS, Linux &middot; by SQL Monkey Studios</p>
 </header>
@@ -69,8 +76,7 @@ footer{padding:32px 0 48px;text-align:center;color:var(--muted);font-size:.9rem;
 <section class="signup" id="signup">
  <h2>Get the launch news</h2>
  <p>One email when the demo goes live, and one on launch day. No spam.</p>
- <!-- TODO(owner): replace TODO_OWNER_FORM_ID with the Kit form ID (see site/README.md) -->
- <form action="https://app.kit.com/forms/TODO_OWNER_FORM_ID/subscriptions" method="post">
+ <form action="https://app.kit.com/forms/10077144/subscriptions" method="post">
   <label for="email" style="position:absolute;left:-9999px">Email address</label>
   <input id="email" type="email" name="email_address" placeholder="you@example.com" required autocomplete="email">
   <button type="submit">Sign me up</button>
