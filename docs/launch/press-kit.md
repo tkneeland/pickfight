@@ -75,7 +75,6 @@ Nine 1920x1080 PNGs in `docs/launch/screenshots/`. The folder README lists how t
 | `08-weapons.png` | A different weapon in every hand | A different weapon in every hand, picked up on the stage |
 | `09-podium.png` | Victory podium for eight players | Winner, podium, rematch |
 
-Note: the folder README captions `08-weapons.png` as "Fifteen weapons". The rotation has 13 weapons, so the caption above is used here.
 
 ## Assets to add before release
 
