@@ -1,0 +1,11 @@
+"DepotBuild"
+{
+	"DepotID" "${STEAM_DEPOT_}"
+	"ContentRoot" "${STEAM_CONTENT_ROOT}/macos mac"
+	"FileMapping"
+	{
+		"LocalPath" "*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+}

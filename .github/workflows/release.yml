@@ -99,3 +99,81 @@ jobs:
           /tmp/butler/butler push dist/pickfight-windows.zip "$ITCH_TARGET:windows" --userversion "$version"
           /tmp/butler/butler push dist/pickfight-mac.zip "$ITCH_TARGET:mac" --userversion "$version"
           /tmp/butler/butler push dist/pickfight-linux.zip "$ITCH_TARGET:linux" --userversion "$version"
+
+  steam:
+    # Uploads the export to Steam's non-default `beta` branch (#722). Never sets a
+    # build live; promote by hand in Steamworks. Skips when secrets/vars are unset.
+    needs: export
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload to Steam (beta branch)
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
+          STEAM_DEPOT_WIN: ${{ vars.STEAM_DEPOT_WIN }}
+          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC }}
+          STEAM_DEPOT_LINUX: ${{ vars.STEAM_DEPOT_LINUX }}
+        run: |
+          for v in STEAM_USERNAME STEAM_CONFIG_VDF STEAM_APP_ID STEAM_DEPOT_WIN STEAM_DEPOT_MAC STEAM_DEPOT_LINUX; do
+            if [ -z "${!v}" ]; then
+              echo "$v is not set; skipping Steam upload."
+              echo "SKIP_STEAM=1" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "STEAM_READY=1" >> "$GITHUB_ENV"
+
+      - name: Download export artifacts
+        if: env.STEAM_READY == '1'
+        uses: actions/download-artifact@v4
+        with:
+          name: pickfight-builds
+          path: dist
+
+      - name: Prepare depot content and build files
+        if: env.STEAM_READY == '1'
+        env:
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
+          STEAM_DEPOT_WIN: ${{ vars.STEAM_DEPOT_WIN }}
+          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC }}
+          STEAM_DEPOT_LINUX: ${{ vars.STEAM_DEPOT_LINUX }}
+        run: |
+          set -euo pipefail
+          root="$PWD/steam/content"
+          mkdir -p "$root/windows" "$root/macos" "$root/linux" steam/out steam/logs
+          unzip -q dist/pickfight-windows.zip -d "$root/windows"
+          unzip -q dist/pickfight-mac.zip -d "$root/macos"
+          unzip -q dist/pickfight-linux.zip -d "$root/linux"
+          # The macOS export is itself a zip holding the .app bundle.
+          unzip -q "$root/macos/Pickfight.zip" -d "$root/macos"
+          rm "$root/macos/Pickfight.zip"
+          chmod +x "$root/linux/pickfight.x86_64"
+          export STEAM_CONTENT_ROOT=/work/steam/content
+          export STEAM_BUILD_OUTPUT=/work/steam/logs
+          export STEAM_BUILD_DESC="${GITHUB_REF_NAME}"
+          export STEAM_SET_LIVE=beta
+          for t in steam/*.vdf.template; do
+            envsubst < "$t" > "steam/out/$(basename "${t%.template}")"
+          done
+
+      - name: Run steamcmd
+        if: env.STEAM_READY == '1'
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/steam-config"
+          echo "$STEAM_CONFIG_VDF" | base64 -d > "$HOME/steam-config/config.vdf"
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v "$HOME/steam-config:/root/Steam/config" \
+            steamcmd/steamcmd:latest \
+            +login "$STEAM_USERNAME" \
+            +run_app_build /work/steam/out/app_build.vdf \
+            +quit
+          rm -f "$HOME/steam-config/config.vdf"
