@@ -17,5 +17,5 @@ perl -e 'alarm 180; exec @ARGV' godot --path . -s tools/capture_store_screenshot
 | `05-soccer.png` | Soccer mode: ball, goals and score banner | Soccer, with pickaxes |
 | `06-capture-the-flag.png` | Capture the Flag: both bases, flags and the score banner | Steal their flag, defend yours |
 | `07-hazard-stage.png` | Furnace stage with lava walls, a kill feed and a fight in the middle | The floor is lava, and so are the walls |
-| `08-weapons.png` | A different weapon in every hand: sword, fishing rod, spear and more | Fifteen weapons, picked up on the stage |
+| `08-weapons.png` | A different weapon in every hand: sword, fishing rod, spear and more | Thirteen weapons in rotation, picked up on the stage |
 | `09-podium.png` | Victory podium for eight players with the match awards | Winner, podium, rematch |

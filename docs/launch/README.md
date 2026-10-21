@@ -6,6 +6,9 @@
 - **[store-page.md](store-page.md):** DRAFT store page text, tags, languages, controller support and system requirements (#712).
 - **[privacy-policy.md](privacy-policy.md):** DRAFT privacy policy (#712).
 - **[content-survey.md](content-survey.md):** DRAFT answers for Steam's content survey and the IARC age rating (#712).
+- **[trailer-shot-list.md](trailer-shot-list.md):** DRAFT shot list for the 60 to 75 second announce trailer (#728).
+- **[press-kit.md](press-kit.md):** DRAFT press kit fact sheet (#728).
+- **[outreach-emails.md](outreach-emails.md):** DRAFT outreach email templates and Keymailer listing text (#728).
 - **Open decisions with Austin:** pinned issue #685.
 - **Steam checklist and owners per task:** [../steam-readiness.md](../steam-readiness.md).
 
