@@ -667,6 +667,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
 	"deck_text_is_legible_at_1280x800",
+	"paused_banner_hint_follows_active_input_810",
+	"paused_banner_hint_hidden_when_not_paused_810",
 	"deck_lobby_join_qr_and_url_fit_the_deck_screen",
 	"deck_gamepad_reaches_every_lobby_control",
 	"deck_gamepad_operates_the_settings_panel",
@@ -2720,6 +2722,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_character_polish_weapon_head_has_ink_outline()
 		"deck_text_is_legible_at_1280x800":
 			return await _scenario_deck_text_is_legible_at_1280x800()
+		"paused_banner_hint_follows_active_input_810":
+			return await _scenario_paused_banner_hint_follows_active_input_810()
+		"paused_banner_hint_hidden_when_not_paused_810":
+			return await _scenario_paused_banner_hint_hidden_when_not_paused_810()
 		"deck_lobby_join_qr_and_url_fit_the_deck_screen":
 			return await _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen()
 		"deck_gamepad_reaches_every_lobby_control":
@@ -47108,3 +47114,47 @@ func _run_autosave_795(switch_on: bool) -> Dictionary:
 	await _teardown(loop["stage"])
 	Engine.time_scale = scale_was
 	return out
+
+
+func _scenario_paused_banner_hint_follows_active_input_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var host: Object = screen._host
+	host._pad_active = true
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.visible:
+		failures.append("no resume hint under the PAUSED banner")
+		await _teardown(rig["main"])
+		return failures
+	if hint.text != screen.tr("PAUSED_HINT_PAD") or hint.text == "PAUSED_HINT_PAD":
+		failures.append("pad active: hint reads '%s'" % hint.text)
+	if hint.get_theme_font_size("font_size") < 16:
+		failures.append("hint is below 16 design px")
+	screen.show_pause_banner(false)
+	host._pad_active = false
+	screen.show_pause_banner(true)
+	if hint.text != screen.tr("PAUSED_HINT_KEYS") or hint.text == "PAUSED_HINT_KEYS":
+		failures.append("keyboard active: hint reads '%s'" % hint.text)
+	if screen.tr("PAUSED_HINT_KEYS") == screen.tr("PAUSED_HINT_PAD"):
+		failures.append("pad and keyboard hints are the same text")
+	screen.show_pause_banner(false)
+	await _teardown(rig["main"])
+	return failures
+
+func _scenario_paused_banner_hint_hidden_when_not_paused_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if screen._cards.pause_hint_label() != null:
+		failures.append("a hint exists before any pause")
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.is_visible_in_tree():
+		failures.append("hint not shown while paused")
+	screen.show_pause_banner(false)
+	if hint != null and hint.is_visible_in_tree():
+		failures.append("hint stayed up after resume")
+	await _teardown(rig["main"])
+	return failures

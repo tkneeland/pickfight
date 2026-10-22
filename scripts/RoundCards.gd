@@ -8,6 +8,10 @@ extends RefCounted
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
+## The resume hint under PAUSED (#810): design px, never under the Deck's 16.
+const PAUSE_HINT_FONT_SIZE: int = 32
+const PAUSE_HINT_OFFSET_Y: float = 90.0
+
 var _screen: CanvasLayer
 
 var _title_layer: CanvasLayer
@@ -17,6 +21,7 @@ var _title_tween: Tween
 
 var _pause_layer: CanvasLayer
 var _pause_label: Label
+var _pause_hint: Label
 
 func _init(screen: CanvasLayer) -> void:
 	_screen = screen
@@ -32,6 +37,11 @@ func stage_title_rule_label() -> Label:
 ## The PAUSED banner, or null before the first pause.
 func pause_label() -> Label:
 	return _pause_label
+
+## The line under the PAUSED banner saying how to resume (#810), or null before
+## the first pause.
+func pause_hint_label() -> Label:
+	return _pause_hint
 
 # --- Stage title card (issue #120) -------------------------------------------
 #
@@ -100,5 +110,20 @@ func show_pause_banner(on: bool) -> void:
 		_pause_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_pause_layer.add_child(_pause_label)
+		_pause_hint = ScreenKitScript.ink_label("", PAUSE_HINT_FONT_SIZE, UiThemeScript.CREAM, 6)
+		_pause_hint.name = "PauseHint"
+		_pause_hint.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		_pause_hint.anchor_left = 0.0
+		_pause_hint.anchor_right = 1.0
+		_pause_hint.anchor_top = 0.5
+		_pause_hint.anchor_bottom = 0.5
+		_pause_hint.offset_left = 0.0
+		_pause_hint.offset_right = 0.0
+		_pause_hint.offset_top = PAUSE_HINT_OFFSET_Y
+		_pause_hint.offset_bottom = PAUSE_HINT_OFFSET_Y + PAUSE_HINT_FONT_SIZE * 1.6
+		_pause_layer.add_child(_pause_hint)
 	_pause_layer.visible = on
 	_pause_label.visible = on
+	_pause_hint.visible = on
+	if on:
+		_pause_hint.text = _screen.tr("PAUSED_HINT_PAD" if _screen.pad_active() else "PAUSED_HINT_KEYS")
