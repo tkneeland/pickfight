@@ -175,6 +175,7 @@ func _ready() -> void:
 	_language.name = "Language"
 	_fill_language_items()
 	content.add_child(_language)
+	_refresh_language_popup_font() # its CJK names draw in any locale (#849)
 	_resolution = OptionButton.new()
 	_resolution.name = "Resolution"
 	for size: Vector2i in HostSettingsScript.RESOLUTIONS:
@@ -879,6 +880,10 @@ func _language_index(setting: String) -> int:
 func language_button() -> OptionButton:
 	return _language
 
+## Rebuilt when the language changes so it follows the live chain (#849).
+func _refresh_language_popup_font() -> void:
+	_language.get_popup().add_theme_font_override("font", LanguagesScript.picker_font(_language.get_theme_font("font"), TranslationServer.get_locale()))
+
 func _on_language_selected(index: int) -> void:
 	var setting: String = LanguagesScript.AUTO if index <= 0 else str(LanguagesScript.OPTIONS[index - 1]["code"])
 	host.set_language(setting)
@@ -931,6 +936,7 @@ func _retranslate() -> void:
 	for i in HostSettingsScript.FRAME_CAPS.size():
 		_fps_button.set_item_text(i, _frame_cap_text(HostSettingsScript.FRAME_CAPS[i]))
 	_language.set_item_text(0, tr("LANGUAGE_AUTO"))
+	_refresh_language_popup_font()
 	refresh()
 
 func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlider:
