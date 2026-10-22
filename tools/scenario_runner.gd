@@ -47610,7 +47610,7 @@ func _scenario_phone_swing_reach_slider_817() -> Array[String]:
 func _scenario_phone_swing_reach_label_817() -> Array[String]:
 	var failures: Array[String] = []
 	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
-	var pattern := RegEx.create_from_string('"PHONE_SWING_REACH": "([^"]+)"')
+	var pattern := RegEx.create_from_string('"PHONE_SWING_REACH": "([^#"][^"]*)"')
 	var hits: Array[RegExMatch] = pattern.search_all(page)
 	if hits.size() != 9:
 		failures.append("PHONE_SWING_REACH has %d non-empty entries, expected one per language table (9)" % hits.size())
