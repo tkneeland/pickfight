@@ -34,6 +34,8 @@ log() { echo "$(date -u +%FT%TZ) $*" >> "$PF_STATE/reserve.log"; }
 [ "$(cat "$PF_STATE/pf-at-mode" 2>/dev/null || echo AT)" = MT ] && exit 0
 SESSION=pf-at-$PF_ACCOUNT
 if [ "$DRY" = 0 ]; then
+  # no status line here or in the headless session: refresh the usage snapshot and #432 beacon from the usage endpoint
+  bash "$PF_DIR/pf-usage.sh" || log "usage refresh failed (see beacon.log)"
   # the automerger is cheap and should outlive reboots too
   screen -ls 2>/dev/null | grep -q "\.pf-automerge-$PF_ACCOUNT[[:space:]]" ||
     screen -dmS "pf-automerge-$PF_ACCOUNT" bash -c "PF_ACCOUNT=$PF_ACCOUNT bash $(printf '%q' "$ROOT/tools/agents/windows/pf-supervise.sh") automerge"
@@ -66,7 +68,7 @@ done
 snap_age=$(( now - $(pf_mtime "$PF_STATE/usage-snapshot.json" || echo 0) ))
 take_new=$needed; [ $((100 - $(pf_weekly_used))) -le "$MIN_WEEKLY_REMAINING_FOR_TICKETS" ] && take_new=0
 run_any=1; pf_budget_ok || { run_any=0; take_new=0; }
-[ "$snap_age" -gt 21600 ] && log "own usage snapshot is $((snap_age / 3600))h old (headless sessions don't refresh it)"
+[ "$snap_age" -gt 1800 ] && log "own usage snapshot is $((snap_age / 60)) min old (pf-usage.sh failing?)"
 
 remote=$(git -C "$ROOT" ls-remote --heads origin) || { log "ls-remote failed"; exit 0; }
 # "<branch> <sha>" lines, remote heads then local ones (local catches committed-but-unpushed work)
