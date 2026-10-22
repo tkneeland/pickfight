@@ -1067,6 +1067,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"copy_code_refresh_after_lobby_closed_863",
 	"site_social_preview_images_match_declared_size_864",
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
+	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
+	"controller_page_has_surprise_me_button_with_existing_messages_865",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3574,6 +3576,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_site_social_preview_images_match_declared_size_864()
 		"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864":
 			return _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864()
+		"surprise_me_random_pick_is_clean_free_and_repeatable_865":
+			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
+		"controller_page_has_surprise_me_button_with_existing_messages_865":
+			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -50649,5 +50655,117 @@ func _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_misma
 		failures.append("a synthetic JPEG header read as %s, wanted [581, 291]" % [_image_size_864(jpg)])
 	if not _image_size_864(PackedByteArray([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])).is_empty():
 		failures.append("a GIF header read as a PNG or JPEG")
+	_scenario_completed = true
+	return failures
+
+const CosmeticsPickerScript865 := preload("res://scripts/CosmeticsPicker.gd")
+
+## #865: CosmeticsPicker.random_pick is a clean pick, never wears a colour another
+## seat holds, and is repeatable for a seed.
+func _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865() -> Array[String]:
+	var picker: Script = CosmeticsPickerScript865
+	var failures: Array[String] = []
+	var names: Array[String] = []
+	for entry: Dictionary in picker.get_script_method_list():
+		names.append(str(entry["name"]))
+	if not names.has("random_pick"):
+		failures.append("CosmeticsPicker has no random_pick")
+		_scenario_completed = true
+		return failures
+	var hats_seen: Dictionary = {}
+	var eyes_seen: Dictionary = {}
+	var colors_seen: Dictionary = {}
+	for seed_value in range(300):
+		var setup := RandomNumberGenerator.new()
+		setup.seed = seed_value * 7919 + 13
+		var palette_size: int = 1 + setup.randi() % 12
+		var own_slot: int = setup.randi() % 8
+		var looks: Array = []
+		var taken: Array[int] = []
+		for slot in range(8):
+			var color: int = -1 if setup.randf() < 0.3 else setup.randi() % palette_size
+			looks.append({"slot": slot, "color": color, "hat": "none", "eyes": "round"})
+			if slot != own_slot and color >= 0:
+				taken.append(color)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value
+		var pick: Dictionary = picker.call("random_pick", looks, own_slot, rng, palette_size)
+		if CosmeticsPickerScript865.clean_pick(pick) != pick or pick.size() != 3:
+			failures.append("seed %d: the pick %s does not pass clean_pick" % [seed_value, pick])
+			continue
+		var picked: int = int(pick["color"])
+		var free_count: int = 0
+		for index in range(palette_size):
+			if not taken.has(index):
+				free_count += 1
+		if taken.has(picked):
+			failures.append("seed %d: colour %d is held by another seat (taken %s)" % [seed_value, picked, taken])
+		if picked >= palette_size or (picked < 0 and free_count > 0) or (picked >= 0 and free_count == 0):
+			failures.append("seed %d: colour %d does not fit palette %d with %d free" % [seed_value, picked, palette_size, free_count])
+		var again := RandomNumberGenerator.new()
+		again.seed = seed_value
+		if picker.call("random_pick", looks, own_slot, again, palette_size) != pick:
+			failures.append("seed %d: the same seed gave a different pick" % seed_value)
+		hats_seen[pick["hat"]] = true
+		eyes_seen[pick["eyes"]] = true
+		colors_seen[picked] = true
+	if hats_seen.size() < 4 or eyes_seen.size() < 3 or colors_seen.size() < 4:
+		failures.append("300 seeds gave too little variety: %d hats, %d eyes, %d colours" % [hats_seen.size(), eyes_seen.size(), colors_seen.size()])
+	# Only the seat's own colour is free: it is the one drawn. Every colour held: automatic.
+	var own_only: Array = [{"slot": 0, "color": 2, "hat": "none", "eyes": "round"}, {"slot": 1, "color": 0, "hat": "none", "eyes": "round"}, {"slot": 2, "color": 1, "hat": "none", "eyes": "round"}]
+	var rng2 := RandomNumberGenerator.new()
+	rng2.seed = 5
+	var only: Dictionary = picker.call("random_pick", own_only, 0, rng2, 3)
+	if int(only["color"]) != 2:
+		failures.append("with only its own colour free the pick took colour %s, wanted 2" % [only["color"]])
+	var all_taken: Array = [{"slot": 1, "color": 0}, {"slot": 2, "color": 1}]
+	var none_free: Dictionary = picker.call("random_pick", all_taken, 0, rng2, 2)
+	if int(none_free["color"]) != -1:
+		failures.append("with every colour held the pick took colour %s, wanted -1" % [none_free["color"]])
+	var no_palette: Dictionary = picker.call("random_pick", [], 0, rng2)
+	if int(no_palette["color"]) != -1:
+		failures.append("with no palette the colour was %s, wanted -1" % [no_palette["color"]])
+	_scenario_completed = true
+	return failures
+
+## #865: the phone page has the Surprise me button in its lobby panel, labelled in
+## all nine languages, and its handler sends only the existing hat, eyes and color
+## frames; the page still loads nothing from the internet (#798).
+func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865() -> Array[String]:
+	var failures: Array[String] = []
+	var text: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var lobby_start: int = text.find("<div id=\"lobby\"")
+	var lobby_end: int = text.find("<div id=\"name-prompt\"")
+	var button_at: int = text.find("<button id=\"surprise-btn\"")
+	var look_at: int = text.find("<button id=\"look-btn\"")
+	if button_at < 0 or lobby_start < 0 or button_at < lobby_start or button_at > lobby_end:
+		failures.append("the Surprise me button is not in the lobby panel")
+	elif look_at < 0 or button_at - look_at > 200 or button_at < look_at:
+		failures.append("the Surprise me button does not sit right after Hat & colour")
+	var key_count: int = text.count("\"PHONE_SURPRISE_ME\":")
+	if key_count != 10:
+		failures.append("PHONE_SURPRISE_ME is in %d places, wanted 10 (nine language tables and MARKUP_TEXT)" % key_count)
+	if not text.contains("\"PHONE_SURPRISE_ME\": \"#surprise-btn\""):
+		failures.append("the button is not in MARKUP_TEXT, so it would stay English")
+	var start: int = text.find("function surpriseMe()")
+	var end: int = text.find("document.getElementById(\"look-go\")", start)
+	if start < 0 or end < start:
+		failures.append("no surpriseMe handler found")
+	else:
+		var body: String = text.substr(start, end - start)
+		var types: Dictionary = {}
+		var matcher := RegEx.new()
+		matcher.compile("\\bt:\\s*\"([a-z_]+)\"")
+		for found in matcher.search_all(body):
+			types[found.get_string(1)] = true
+		for kind: String in types:
+			if not ["hat", "eyes", "color"].has(kind):
+				failures.append("surpriseMe sends a '%s' message, not an existing pick message" % kind)
+		for kind: String in ["hat", "eyes", "color"]:
+			if not types.has(kind):
+				failures.append("surpriseMe never sends a '%s' message" % kind)
+		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
+			failures.append("the button is not wired to surpriseMe")
+	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
 	_scenario_completed = true
 	return failures
