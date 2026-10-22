@@ -1015,13 +1015,19 @@ func _end_round_modifier() -> void:
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
-	# Always: a Sudden Death in a round with no modifier sent a title too.
-	_send_modifier_chip("")
+	# Whatever put the chip up -- a modifier, or a Sudden Death in a round
+	# without one -- it comes down; a round that never showed one sends nothing.
+	if _modifier_chip_up:
+		_send_modifier_chip("")
 	if _modifier_label != null:
 		_modifier_label.visible = false
 
+## Whether the phones are showing a modifier chip.
+var _modifier_chip_up: bool = false
+
 ## Issue #908: the phones' modifier chip follows the banner's title.
 func _send_modifier_chip(title: String) -> void:
+	_modifier_chip_up = title != ""
 	if _controller_server != null and _controller_server.has_method("send_modifier"):
 		_controller_server.send_modifier(title)
 
