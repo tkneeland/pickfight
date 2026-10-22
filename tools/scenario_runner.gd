@@ -507,6 +507,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"night_roll_respects_forced_and_disabled",
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"untouchable_award_832",
+	"haymaker_award_861",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -2445,6 +2446,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
 		"untouchable_award_832":
 			return await _scenario_untouchable_award_832()
+		"haymaker_award_861":
+			return await _scenario_haymaker_award_861()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -15321,7 +15324,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 4 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 5 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15393,8 +15396,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 4:
-		failures.append("the victory screen shows %s awards, expected 4" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 5:
+		failures.append("the victory screen shows %s awards, expected 5" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -29316,6 +29319,43 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
+func _scenario_haymaker_award_861() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2], 0)
+	stats.record_hit(0, 1, 30.0, 10)
+	stats.record_hit(1, 2, 55.0, 20)
+	stats.record_hit(2, 0, 90.0, 30)
+	stats.record_hit(-1, 0, 200.0, 40)
+	stats.record_hit(2, 2, 200.0, 50)
+	var found: Array = stats.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Haymaker")
+	if found.size() != 1 or found[0]["slot"] != 2 or found[0]["detail"] != "90 damage in one hit":
+		failures.append("expected Haymaker for slot 2 with 90 damage in one hit, got %s" % [found])
+	var weak: RefCounted = MatchStatsScript.new()
+	weak.begin_match()
+	weak.record_hit(0, 1, 39.0, 10)
+	if not weak.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Haymaker").is_empty():
+		failures.append("Haymaker given for a best hit under 40")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	tied.record_hit(0, 1, 70.0, 10)
+	tied.record_hit(1, 0, 70.0, 20)
+	if not tied.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Haymaker").is_empty():
+		failures.append("Haymaker given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	hazard.record_hit(-1, 0, 100.0, 10)
+	hazard.record_hit(1, 1, 100.0, 20)
+	if not hazard.best_hit.is_empty():
+		failures.append("hazard or self damage counted: %s" % [hazard.best_hit])
+	stats.begin_match()
+	if not stats.best_hit.is_empty():
+		failures.append("begin_match left best hits behind")
+	_scenario_completed = true
+	return failures
+
 ## Issue #832: Untouchable goes to the lowest damage taker who dealt damage.
 func _scenario_untouchable_award_832() -> Array[String]:
 	var failures: Array[String] = []
@@ -29392,8 +29432,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 5:
-		failures.append("expected 5 award cards (3 core + Magpie + Untouchable), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 6:
+		failures.append("expected 6 award cards (3 core + Magpie + Untouchable + Haymaker), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
