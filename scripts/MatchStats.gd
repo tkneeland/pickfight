@@ -33,6 +33,7 @@ const AIRTIME_MIN_MSEC: int = 1000
 const COLLECTOR: String = "COLLECTOR"
 const HAYMAKER: String = "HAYMAKER"
 const STREAKER: String = "STREAKER"
+const COMBO: String = "COMBO"
 
 ## The shortest unbroken KO run that earns Streaker (#890).
 const STREAKER_MIN: int = 3
@@ -60,6 +61,8 @@ var best_hit: Dictionary = {}
 ## slot -> credited KOs since their last death / their longest such run this match (#890).
 var ko_run: Dictionary = {}
 var best_ko_run: Dictionary = {}
+## slot -> longest multi-KO chain inside MULTI_KO_WINDOW_MSEC this match (#921).
+var best_multi_ko: Dictionary = {}
 ## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
 ## this match. Bots and self-hits are left out. Written once per match by
 ## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
@@ -117,6 +120,7 @@ func begin_match() -> void:
 	best_hit.clear()
 	ko_run.clear()
 	best_ko_run.clear()
+	best_multi_ko.clear()
 	weapon_damage.clear()
 	weapon_hits.clear()
 	weapon_kos.clear()
@@ -163,7 +167,7 @@ func resume_round(slot: int, now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, best_multi_ko, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	_last_killer.erase(slot)
@@ -247,6 +251,7 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	var run: Array = _streak.get(killer, [-MULTI_KO_WINDOW_MSEC - 1, 0])
 	var streak: int = int(run[1]) + 1 if now_msec - int(run[0]) <= MULTI_KO_WINDOW_MSEC else 1
 	_streak[killer] = [now_msec, streak]
+	best_multi_ko[killer] = maxi(int(best_multi_ko.get(killer, 0)), streak)
 	result["streak"] = streak
 	result["first_blood"] = total_kos == 1
 	result["revenge"] = int(_last_killer.get(killer, -1)) == victim
@@ -357,7 +362,28 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var hot: int = _streaker(slots)
 	if hot != -1:
 		out.append(_award(STREAKER, TranslationServer.translate("AWARD_STREAKER"), hot, TranslationServer.translate("DETAIL_STREAK") % int(best_ko_run[hot])))
+	var burst: int = _combo(slots)
+	if burst != -1:
+		out.append(_award(COMBO, TranslationServer.translate("AWARD_COMBO"), burst, TranslationServer.translate("DETAIL_COMBO") % int(best_multi_ko[burst])))
 	return out
+
+## "Combo" (#921): the longest multi-KO chain inside the 3 s window, given
+## only when it is at least 2 and strictly beats every other fighter's.
+func _combo(slots: Array) -> int:
+	var top: int = 0
+	var who: int = -1
+	var tied: bool = false
+	for slot: int in slots:
+		var chain: int = int(best_multi_ko.get(slot, 0))
+		if chain > top:
+			top = chain
+			who = slot
+			tied = false
+		elif chain == top and chain > 0:
+			tied = true
+	if who == -1 or tied or top < 2:
+		return -1
+	return who
 
 ## "Streaker" (#890): the longest run of credited KOs without being KO'd,
 ## given only when it is at least STREAKER_MIN and strictly beats every other.
