@@ -2688,6 +2688,8 @@ func _start_final_ko(fallback_point: Vector2) -> void:
 func _tick_final_ko() -> void:
 	if _final_ko_active and GameClockScript.now_msec() >= _final_ko_end_msec:
 		_end_final_ko()
+		if _replay != null:
+			_replay.autosave_match_clip() # #795
 
 ## Puts the time scale, the camera and the flash back. Safe to call any time.
 func _end_final_ko() -> void:

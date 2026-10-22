@@ -4,6 +4,10 @@
 
 Every clip is eight seats on Hard bots (the host seat idles), daylight, no round modifier, the HUD as in game. Clips are **never committed** (`*.avi` is gitignored; one is 50 to 100 MB for 10 seconds).
 
+## Automatic match-winning KO clip (#795)
+
+You do not have to catch the final KO with F9. When a match ends on a credited KO the host saves the replay buffer by itself, once the slow motion finishes: the same PNG sequence plus `clip.gif` in `user://clips/` (newest 20 kept), and the victory screen shows a small "Clip saved" line. It is the same 256x144, 12 fps buffer as F9, so use it to find the moment, then re-shoot at full resolution with `tools/capture_clips.sh` if it goes in the trailer. Turn it off in Settings > More options > "Auto-save match clips" (on by default).
+
 ## Run it
 
 ```
