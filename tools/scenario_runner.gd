@@ -1028,6 +1028,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"text_size_auto_fit_751",
 	"launch_copy_counts_match_the_game_797",
 	"launch_copy_count_check_catches_a_wrong_count_797",
+	"controller_page_loads_nothing_from_the_internet_798",
+	"controller_offline_check_catches_a_cdn_reference_798",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3457,6 +3459,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_launch_copy_counts_match_the_game_797()
 		"launch_copy_count_check_catches_a_wrong_count_797":
 			return _scenario_launch_copy_count_check_catches_a_wrong_count_797()
+		"controller_page_loads_nothing_from_the_internet_798":
+			return _scenario_controller_page_loads_nothing_from_the_internet_798()
+		"controller_offline_check_catches_a_cdn_reference_798":
+			return _scenario_controller_offline_check_catches_a_cdn_reference_798()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48650,5 +48656,91 @@ func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[Stri
 	for noun: String in ["stages", "weapons", "languages"]:
 		if not flagged_text.contains(" " + noun + ", the game has"):
 			failures.append("site/index.html was not flagged for a stale %s count against the mutated game" % noun)
+	_scenario_completed = true
+	return failures
+
+func _controller_offline_problems_798(label: String, text: String) -> Array[String]:
+	# Static check: names every line of an HTML page that LOADS something from a literal remote host.
+	# A remote host is http(s)/ws(s) or protocol-relative ("//host"). Plain <a href> links are navigation, allowed.
+	var q: String = "[\\x22\\x27\\x60]"
+	var remote: String = "(?:(?:https?|wss?):)?//[A-Za-z0-9\\[]"
+	var rules: Array[Array] = [
+		["a <script>/<link>/<img>/<iframe>/media tag", "(?is)<(?:script|link|img|iframe|frame|source|video|audio|embed|object|input|image|use)\\b[^>]*?\\b(?:src|href|data|poster|srcset|xlink:href)\\s*=\\s*" + q + "?\\s*" + remote],
+		["a CSS url()", "(?i)url\\(\\s*" + q + "?\\s*" + remote],
+		["an @import", "(?i)@import\\s+(?:url\\(\\s*)?" + q + "?\\s*" + remote],
+		["a fetch/WebSocket/EventSource/importScripts/import() call", "(?i)\\b(?:fetch|WebSocket|EventSource|importScripts|import)\\s*\\(\\s*" + q + "\\s*" + remote],
+		["an XMLHttpRequest open()", "(?i)\\.open\\(\\s*" + q + "[A-Za-z]+" + q + "\\s*,\\s*" + q + "\\s*" + remote],
+		["an import statement", "(?i)\\bimport\\b[^;\\n]*?\\bfrom\\s*" + q + "\\s*" + remote],
+		["a bare import", "(?im)^\\s*import\\s*" + q + "\\s*" + remote],
+		["a .src assignment", "(?i)\\.src\\s*=\\s*" + q + "\\s*" + remote],
+	]
+	var found: Array[String] = []
+	var seen: Dictionary = {}
+	for rule: Array in rules:
+		var re: RegEx = RegEx.new()
+		if re.compile(str(rule[1])) != OK:
+			found.append("%s: the %s pattern does not compile" % [label, rule[0]])
+			continue
+		for m: RegExMatch in re.search_all(text):
+			var line_no: int = text.substr(0, m.get_start()).count("\n") + 1
+			var key: String = str(line_no)
+			if seen.has(key):
+				continue
+			seen[key] = true
+			found.append("%s:%d: loads %s from the internet" % [label, line_no, rule[0]])
+	return found
+
+func _scenario_controller_page_loads_nothing_from_the_internet_798() -> Array[String]:
+	var failures: Array[String] = []
+	var text: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if text.length() < 1000 or not text.contains("<script>"):
+		failures.append("controller/index.html did not read as the controller page (%d chars)" % text.length())
+		_scenario_completed = true
+		return failures
+	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+
+func _scenario_controller_offline_check_catches_a_cdn_reference_798() -> Array[String]:
+	var failures: Array[String] = []
+	var allowed: String = "\n".join([
+		"<a href=\"https://store.steampowered.com/app/1\">Steam</a>",
+		"<a href=\"https://discord.gg/abc\" target=\"_blank\">Discord</a>",
+		"@font-face { src: url(/fonts/Nunito-Latin.woff2) format(\"woff2\"); }",
+		"var sock = new WebSocket(\"ws://\" + window.location.hostname + \":\" + WS_PORT);",
+		"// see https://example.com/docs for the protocol",
+		"<img src=\"data:image/png;base64,AAAA\">",
+	])
+	var found: Array[String] = _controller_offline_problems_798("fixture.html", allowed)
+	if found.size() != 0:
+		failures.append("tappable links, local assets and comments were flagged: %s" % [found])
+	var bad: Array[String] = [
+		"<script src=\"https://cdn.example.com/lib.js\"></script>",
+		"<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Nunito\">",
+		"<img src=\"//cdn.example.com/a.png\">",
+		"body { background: url(\"https://cdn.example.com/bg.png\"); }",
+		"@import \"https://cdn.example.com/x.css\";",
+		"@import url(https://cdn.example.com/x.css);",
+		"fetch('https://analytics.example.com/hit');",
+		"new WebSocket(\"wss://relay.example.com/room\");",
+		"x.open(\"GET\", \"http://example.com/a\");",
+		"import(\"https://cdn.example.com/m.js\");",
+		"import { a } from \"https://cdn.example.com/m.js\";",
+		"img.src = \"https://cdn.example.com/a.png\";",
+		"<script\n  async\n  src=\"https://cdn.example.com/a.js\"></script>",
+	]
+	for snippet: String in bad:
+		var fixture: String = "<p>ok</p>\n<a href=\"https://discord.gg/abc\">link</a>\n" + snippet + "\n"
+		found = _controller_offline_problems_798("fixture.html", fixture)
+		# A tag split over lines is flagged where the tag opens (line 3).
+		if found.size() != 1:
+			failures.append("'%s' gave %d problems, wanted 1: %s" % [snippet.replace("\n", " "), found.size(), found])
+		elif not found[0].begins_with("fixture.html:3:"):
+			failures.append("'%s' was flagged on the wrong line: %s" % [snippet.replace("\n", " "), found[0]])
+	# The real page with a CDN script tag added at the top must be flagged on line 1.
+	var real: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	found = _controller_offline_problems_798("controller/index.html", "<script src=\"https://cdn.example.com/lib.js\"></script>\n" + real)
+	if found.size() != 1 or not found[0].begins_with("controller/index.html:1:"):
+		failures.append("the real page with a CDN script prepended was not flagged on line 1: %s" % [found])
 	_scenario_completed = true
 	return failures
