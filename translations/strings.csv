@@ -4,12 +4,15 @@ AWARD_CATEGORY_AIRBORNE,AIRBORNE,LUFTIG,EN L'AIR,AÉREO,NO AR,腾空,空中,공�
 AWARD_CATEGORY_CLUMSY,CLUMSY,TOLPATSCH,MALADROIT,TORPE,DESAJEITADO,笨手笨脚,ドジ,덤벙,НЕУКЛЮЖИЙ
 AWARD_CATEGORY_COLLECTOR,COLLECTOR,SAMMLER,COLLECTIONNEUR,COLECCIONISTA,COLECIONADOR,收集,コレクター,수집,КОЛЛЕКЦИОНЕР
 AWARD_CATEGORY_COMBAT,COMBAT,KAMPF,COMBAT,COMBATE,COMBATE,战斗,バトル,전투,БОЙ
+AWARD_CATEGORY_HAYMAKER,HAYMAKER,HAMMERSCHLAG,UPPERCUT,PUÑETAZO,PANCADA,重拳,強打,강타,ХУК
+AWARD_CATEGORY_STREAKER,STREAK,SERIE,SÉRIE,RACHA,SEQUÊNCIA,连杀,連勝,연속,СЕРИЯ
 AWARD_CATEGORY_SURVIVOR,SURVIVOR,ÜBERLEBER,SURVIVANT,SOBREVIVIENTE,SOBREVIVENTE,生存,サバイバー,생존,ВЫЖИВШИЙ
 AWARD_HARD_TO_KILL,Hard to Kill,Nicht totzukriegen,Dur à cuire,Duro de matar,Duro na queda,打不死,不死身,불사신,Живучий
 AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesado,重拳出击,強打者,강타자,Тяжёлая рука
 AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar,滞空最久,最長滞空,최장 체공,Дольше всех в полёте
 AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega,喜鹊,カササギ,까치,Сорока
 AWARD_HAYMAKER,Haymaker,Hammerschlag,Uppercut,Puñetazo,Pancada,重拳出击,強烈な一撃,강타,Хук
+AWARD_STREAKER,Streaker,Serienkiller,En série,Racha,Sequência,连杀王,連勝王,연속 킬,Серийник
 AWARD_UNTOUCHABLE,Untouchable,Unantastbar,Intouchable,Intocable,Intocável,滑不留手,無傷の男,무적의 몸,Неуловимый
 AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada,人肉沙包,サンドバッグ,샌드백,Груша для битья
 AWARD_TOP_BRAWLER,Top Brawler,Top-Raufbold,Roi de la baston,Mejor peleador,Rei da briga,最强斗士,最強ファイター,최고의 싸움꾼,Лучший боец
@@ -51,6 +54,7 @@ TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 
 DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_HAYMAKER,%d damage in one hit,%d Schaden in einem Treffer,%d de dégâts en un coup,%d de daño de un golpe,%d de dano em um golpe,一击造成 %d 伤害,一撃で %d ダメージ,한 방에 피해 %d,%d урона одним ударом
+DETAIL_STREAK,%d in a row,%d am Stück,%d d'affilée,%d seguidos,%d seguidos,连续 %d 次,%d連続,%d연속,%d подряд
 DETAIL_DAMAGE,%d damage,%d Schaden,%d de dégâts,%d de daño,%d de dano,伤害 %d,ダメージ %d,피해 %d,Урон: %d
 DETAIL_DAMAGE_TAKEN,%d damage taken,%d Schaden kassiert,%d de dégâts subis,%d de daño recibido,%d de dano sofrido,承受伤害 %d,被ダメージ %d,받은 피해 %d,Получено урона: %d
 DETAIL_KO_MANY,%d KOs,%d KOs,%d KO,%d KO,%d KOs,%d 次击倒,%d KO,%d KO,Нокауты: %d
@@ -190,6 +194,7 @@ SETTINGS_FULLSCREEN,Full (F11),Voll (F11),Plein (F11),Completa (F11),Cheia (F11)
 SETTINGS_KILL_FEED,Kill feed,Kill-Feed,Fil des KO,Registro de KO,Registro de KOs,击杀信息,キルフィード,킬 피드,Лента убийств
 SETTINGS_DAMAGE_NUMBERS,Damage numbers,Schadenszahlen,Nombres de dégâts,Números de daño,Números de dano,伤害数字,ダメージ数字,피해 숫자,Числа урона
 SETTINGS_MATCH_POINT_PLATE,Match point plate,Matchpunkt-Anzeige,Bandeau balle de match,Cartel de punto de partido,Aviso de ponto de partida,赛点提示,マッチポイント表示,매치 포인트 표시,Табличка матчбола
+SETTINGS_PICKUP_CALLOUTS,Pickup callouts,Aufnahme-Hinweise,Annonces de ramassage,Avisos de recogida,Avisos de coleta,拾取提示,取得表示,획득 알림,Подсказки подбора
 SETTINGS_HIDE_ROOM_CODE,Hide room code,Raumcode verstecken,Masquer le code du salon,Ocultar código de sala,Ocultar código da sala,隐藏房间码,ルームコードを隠す,방 코드 숨기기,Скрыть код комнаты
 SETTINGS_MASTER_VOLUME,Master volume,Gesamtlautstärke,Volume général,Volumen general,Volume geral,主音量,マスター音量,마스터 볼륨,Общая громкость
 SETTINGS_MORE_OPTIONS,More options,Mehr Optionen,Plus d'options,Más opciones,Mais opções,更多选项,その他のオプション,더 많은 옵션,Ещё настройки

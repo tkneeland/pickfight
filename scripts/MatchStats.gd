@@ -32,6 +32,10 @@ const AIRBORNE: String = "AIRBORNE"
 const AIRTIME_MIN_MSEC: int = 1000
 const COLLECTOR: String = "COLLECTOR"
 const HAYMAKER: String = "HAYMAKER"
+const STREAKER: String = "STREAKER"
+
+## The shortest unbroken KO run that earns Streaker (#890).
+const STREAKER_MIN: int = 3
 
 ## The smallest best hit that earns Haymaker (#861): the hit-stop threshold.
 const HAYMAKER_MIN: float = 40.0
@@ -53,6 +57,9 @@ var damage_dealt: Dictionary = {}
 var damage_taken: Dictionary = {}
 ## slot -> largest single hit dealt this match (#861).
 var best_hit: Dictionary = {}
+## slot -> credited KOs since their last death / their longest such run this match (#890).
+var ko_run: Dictionary = {}
+var best_ko_run: Dictionary = {}
 ## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
 ## this match. Bots and self-hits are left out. Written once per match by
 ## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
@@ -108,6 +115,8 @@ func begin_match() -> void:
 	damage_dealt.clear()
 	damage_taken.clear()
 	best_hit.clear()
+	ko_run.clear()
+	best_ko_run.clear()
 	weapon_damage.clear()
 	weapon_hits.clear()
 	weapon_kos.clear()
@@ -154,7 +163,7 @@ func resume_round(slot: int, now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	_last_killer.erase(slot)
@@ -215,6 +224,7 @@ func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon
 ## row, 1 for a lone KO), "first_blood" (the match's first credited KO)}.
 func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	_add(deaths, victim, 1)
+	ko_run.erase(victim)
 	_air_since.erase(victim)
 	if _alive_since.has(victim):
 		_add(survival_msec, victim, now_msec - int(_alive_since[victim]))
@@ -229,6 +239,8 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 		_add(self_kos, victim, 1)
 		return result
 	_add(kos, killer, 1)
+	_add(ko_run, killer, 1)
+	best_ko_run[killer] = maxi(int(best_ko_run.get(killer, 0)), int(ko_run[killer]))
 	if str(hit.get("weapon", "")) != "":
 		_add(weapon_kos, str(hit["weapon"]), 1)
 	total_kos += 1
@@ -342,7 +354,28 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var big: int = _haymaker(slots)
 	if big != -1:
 		out.append(_award(HAYMAKER, TranslationServer.translate("AWARD_HAYMAKER"), big, TranslationServer.translate("DETAIL_HAYMAKER") % roundi(float(best_hit[big]))))
+	var hot: int = _streaker(slots)
+	if hot != -1:
+		out.append(_award(STREAKER, TranslationServer.translate("AWARD_STREAKER"), hot, TranslationServer.translate("DETAIL_STREAK") % int(best_ko_run[hot])))
 	return out
+
+## "Streaker" (#890): the longest run of credited KOs without being KO'd,
+## given only when it is at least STREAKER_MIN and strictly beats every other.
+func _streaker(slots: Array) -> int:
+	var top: int = 0
+	var who: int = -1
+	var tied: bool = false
+	for slot: int in slots:
+		var run: int = int(best_ko_run.get(slot, 0))
+		if run > top:
+			top = run
+			who = slot
+			tied = false
+		elif run == top and run > 0:
+			tied = true
+	if who == -1 or tied or top < STREAKER_MIN:
+		return -1
+	return who
 
 ## "Haymaker" (#861): the player with the single hardest hit, given only when
 ## it is at least HAYMAKER_MIN and strictly beats every other player's best.

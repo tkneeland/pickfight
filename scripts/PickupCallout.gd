@@ -27,6 +27,10 @@ var text: String = ""
 static func show_for(fighter_body: Node2D, weapon_id: String, parent: Node) -> Node2D:
 	if weapon_id == SPAWN_WEAPON or not fighter_body.get("alive") or parent == null:
 		return null
+	# Settings > Pickup callouts (#882); on when there is no Sfx autoload.
+	var sfx: Node = fighter_body.get_node_or_null("/root/Sfx")
+	if sfx != null and not bool(sfx.get("pickup_callouts")):
+		return null
 	for old: Node in fighter_body.get_tree().get_nodes_in_group(GROUP):
 		if old.get("fighter") == fighter_body:
 			old.remove_from_group(GROUP)

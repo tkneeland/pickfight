@@ -28,6 +28,18 @@ signal callout(sound: StringName)
 ## A goal was scored by `team`; `scorer` is the player slot credited, or -1.
 signal goal_scored(team: int, scorer: int)
 
+## The ball took a hard strike or bounce at `point`; `strength` is 0..1 by how
+## hard. `SfxHooks.gd` plays `ball_thump` from it (#899).
+signal ball_thump(point: Vector2, strength: float)
+
+## A sudden velocity change over this many px/s in one tick is an impact (a
+## strike or a bounce); gravity and rolling change it far less.
+const THUMP_MIN_DELTA_V: float = 260.0
+## The velocity change that sounds at full strength.
+const THUMP_FULL_DELTA_V: float = 1400.0
+## At most one thump per this many seconds.
+const THUMP_GAP_SEC: float = 0.15
+
 ## How long a knocked-out player waits before coming back (#648). Longer than
 ## Stock's 1.5 s (Capture the Flag waits 4 s too); tune it here.
 const RESPAWN_SEC: float = 4.0
@@ -63,6 +75,8 @@ var _active: bool = false
 var _finished: bool = false
 var _pause_left: float = 0.0
 var _last_touch: int = -1
+var _prev_velocity: Vector2 = Vector2.ZERO
+var _thump_cool: float = 0.0
 var _hud: CanvasLayer
 var _score_label: Label
 var _goal_label: Label
@@ -224,6 +238,7 @@ func _place_ball() -> void:
 	ball.angular_velocity = 0.0
 	ball.rotation = 0.0
 	ball.reset_physics_interpolation()
+	_prev_velocity = Vector2.ZERO
 	_last_touch = -1
 
 ## Everyone back to their own half. A player who is down stays down: their
@@ -275,14 +290,27 @@ func _physics_process(delta: float) -> void:
 		return
 	if _pause_left > 0.0:
 		_pause_left -= delta
+		_prev_velocity = Vector2.ZERO
 		if _pause_left <= 0.0:
 			_kick_off()
 		return
 	if ball.linear_velocity.length() > BALL_MAX_SPEED:
 		ball.linear_velocity = ball.linear_velocity.normalized() * BALL_MAX_SPEED
+	_check_thump(delta)
 	_track_touch()
 	_check_goals()
 	_check_out_of_play()
+
+## Emits `ball_thump` when the ball's velocity jumped this tick (a strike or a
+## bounce), at most once per `THUMP_GAP_SEC`; a roll stays silent.
+func _check_thump(delta: float) -> void:
+	_thump_cool = maxf(0.0, _thump_cool - delta)
+	var jump: float = (ball.linear_velocity - _prev_velocity).length()
+	_prev_velocity = ball.linear_velocity
+	if jump < THUMP_MIN_DELTA_V or _thump_cool > 0.0:
+		return
+	_thump_cool = THUMP_GAP_SEC
+	ball_thump.emit(ball.global_position, clampf(jump / THUMP_FULL_DELTA_V, 0.1, 1.0))
 
 func _track_touch() -> void:
 	for slot: int in _watched.keys():

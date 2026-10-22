@@ -162,6 +162,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
+	"mud_patch_slows_player",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -516,6 +517,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"untouchable_award_832",
 	"haymaker_award_861",
+	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -881,6 +883,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
 	"soccer_ball_flies_farther_than_at_mass_one_649",
 	"soccer_ball_lifts_higher_than_before_674",
+	"sfx_soccer_ball_thump_on_hard_impacts_only",
 	"settings_hygiene_609",
 	"play_of_round_best_moment_scoring_order_704",
 	"play_of_round_trims_to_the_pause_or_plays_nothing_704",
@@ -1015,6 +1018,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
 	"match_point_plate_switch_off_shows_none",
+	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -1774,6 +1778,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
 			return await _scenario_speed_strip_boosts_run_distance()
+		"mud_patch_slows_player":
+			return await _scenario_mud_patch_slows_player()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -2482,6 +2488,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_untouchable_award_832()
 		"haymaker_award_861":
 			return await _scenario_haymaker_award_861()
+		"victory_streaker_award_needs_three_unbroken_kos":
+			return await _scenario_victory_streaker_award_needs_three_unbroken_kos()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -3204,6 +3212,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_soccer_and_ctf_stages_are_bigger_649()
 		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
 			return await _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649()
+		"sfx_soccer_ball_thump_on_hard_impacts_only":
+			return await _scenario_sfx_soccer_ball_thump_on_hard_impacts_only()
 		"soccer_ball_lifts_higher_than_before_674":
 			return await _scenario_soccer_ball_lifts_higher_than_before_674()
 		"soccer_ball_flies_farther_than_at_mass_one_649":
@@ -3466,6 +3476,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_damage_numbers_switch_873()
 		"match_point_plate_switch_off_shows_none":
 			return await _scenario_match_point_plate_switch_off_shows_none()
+		"pickup_callout_switch_off_spawns_none":
+			return await _scenario_pickup_callout_switch_off_spawns_none()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -10942,6 +10954,109 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
 	await _teardown(stage)
 	return failures
+## Mud patch (#880): a body is pushed along a strip of mud (or plain ground)
+## by a steady force, standing in for running, and the fastest it gets is
+## returned. The weapon is held straight up so only the body touches the strip.
+const MudPatchScene: PackedScene = preload("res://scenes/parts/MudPatch.tscn")
+const MUD_SIZE: Vector2 = Vector2(1600, 10)
+const MUD_SETTLE_TICKS: int = 60
+const MUD_RUN_FORCE: float = 2400.0
+const MUD_RUN_TICKS: int = 120
+## Mud has to hold the run to at most this share of the flat-floor speed.
+const MUD_MAX_RATIO: float = 0.55
+## Speed has to be back to this share of the flat-floor speed 0.3 s after leaving.
+const MUD_RECOVER_RATIO: float = 0.8
+func _mud_ground(stage: Node2D, size: Vector2, at: Vector2, mud: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if mud:
+		ground = MudPatchScene.instantiate() as StaticBody2D
+		ground.size = size
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = at
+	stage.add_child(ground)
+	return ground
+func _mud_run(on_mud: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_mud_ground(stage, MUD_SIZE, PART_POSITION, on_mud)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-700, -MUD_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	for _tick in MUD_SETTLE_TICKS:
+		await physics_frame
+	var top: float = 0.0
+	for _tick in MUD_RUN_TICKS:
+		player.apply_central_force(Vector2(MUD_RUN_FORCE, 0))
+		await physics_frame
+		top = maxf(top, player.linear_velocity.x)
+	await _teardown(stage, false)
+	return top
+func _mud_coast(on_mud: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_mud_ground(stage, MUD_SIZE, PART_POSITION, on_mud)
+	var flier: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-700, -300))
+	flier.set_input_vector(Vector2.UP)
+	await physics_frame
+	flier.gravity_scale = 0.0
+	flier.linear_velocity = Vector2(300, 0)
+	var speed: float = 0.0
+	for _tick in 6:
+		await physics_frame
+		speed = flier.linear_velocity.x
+	await _teardown(stage, false)
+	return speed
+## Running on mud tops out well below the flat-floor pace, a body in the air
+## above the strip keeps its horizontal speed, and speed returns after
+## stepping off.
+func _scenario_mud_patch_slows_player() -> Array[String]:
+	var failures: Array[String] = []
+	var on_mud: float = await _mud_run(true)
+	var on_ground: float = await _mud_run(false)
+	print("      top speed %.1f px/s on mud, %.1f px/s on plain ground" % [on_mud, on_ground])
+	if on_ground < 50.0:
+		failures.append("the control run barely moved (%.1f px/s)" % on_ground)
+	elif on_mud > on_ground * MUD_MAX_RATIO:
+		failures.append("ran at %.1f px/s on mud vs %.1f on ground, expected at most %.0f%%" % [on_mud, on_ground, MUD_MAX_RATIO * 100.0])
+	# Airborne: well above the strip, no ground contact, so it must coast as
+	# far as the same flight over plain ground.
+	var flown_mud: float = await _mud_coast(true)
+	var flown_plain: float = await _mud_coast(false)
+	print("      coasted at %.1f px/s over mud, %.1f px/s over plain ground" % [flown_mud, flown_plain])
+	if absf(flown_mud - flown_plain) > 1.0:
+		failures.append("airborne body at %.1f px/s over mud vs %.1f over ground" % [flown_mud, flown_plain])
+	var stage: Node2D
+	# Step off: a short mud strip with ground beside it, run along both.
+	stage = _new_empty_stage()
+	var mud: StaticBody2D = _mud_ground(stage, Vector2(300, 10), PART_POSITION + Vector2(-500, 0), true)
+	_mud_ground(stage, Vector2(1400, 10), PART_POSITION + Vector2(350, 0), false)
+	var runner: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-600, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	runner.set_input_vector(Vector2.UP)
+	for _tick in MUD_SETTLE_TICKS:
+		await physics_frame
+	var was_bogged: bool = false
+	var left_tick: int = -1
+	for tick in 400:
+		runner.apply_central_force(Vector2(MUD_RUN_FORCE, 0))
+		await physics_frame
+		if mud.is_bogging(runner):
+			was_bogged = true
+		elif was_bogged and left_tick < 0:
+			left_tick = tick
+		if left_tick >= 0 and tick >= left_tick + 18:
+			break
+	if not was_bogged or left_tick < 0:
+		failures.append("the runner was never bogged or never left the mud (bogged=%s)" % was_bogged)
+	elif runner.linear_velocity.x < on_ground * MUD_RECOVER_RATIO:
+		# The flat-floor top speed is a ceiling reached over 2 s; 0.3 s after
+		# leaving, the runner need only be clearly above the mud pace.
+		if runner.linear_velocity.x <= on_mud * 1.3:
+			failures.append("speed %.1f px/s 0.3 s after leaving the mud, still near the mud pace %.1f" % [runner.linear_velocity.x, on_mud])
+	await _teardown(stage)
+	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
 ## dropped from, and shows it did (the flash). The weapon is held straight
 ## up the whole time, so only the body ever touches the pad.
@@ -15649,7 +15764,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 5 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 6 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15721,8 +15836,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 5:
-		failures.append("the victory screen shows %s awards, expected 5" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 6:
+		failures.append("the victory screen shows %s awards, expected 6" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -29699,6 +29814,57 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #890: Streaker goes to the longest unbroken KO run, at least 3, no ties.
+func _scenario_victory_streaker_award_needs_three_unbroken_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Streaker")
+	var ko := func(stats: RefCounted, killer: int, victim: int, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	for i: int in 3:
+		ko.call(stats, 0, 1 + i, 100 + i * 10)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 in a row":
+		failures.append("expected Streaker for slot 0 with 3 in a row, got %s" % [found])
+	var reset: RefCounted = MatchStatsScript.new()
+	reset.begin_match()
+	ko.call(reset, 0, 1, 10)
+	ko.call(reset, 0, 2, 20)
+	ko.call(reset, 3, 0, 30)
+	ko.call(reset, 0, 1, 40)
+	if not find.call(reset).is_empty():
+		failures.append("a death did not reset the run: %s" % [reset.best_ko_run])
+	var two: RefCounted = MatchStatsScript.new()
+	two.begin_match()
+	ko.call(two, 0, 1, 10)
+	ko.call(two, 0, 2, 20)
+	if not find.call(two).is_empty():
+		failures.append("Streaker given for a best under 3")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for i: int in 3:
+		ko.call(tied, 0, 2, 10 + i * 10)
+		ko.call(tied, 1, 3, 15 + i * 10)
+	if not find.call(tied).is_empty():
+		failures.append("Streaker given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	ko.call(hazard, 0, 1, 10)
+	hazard.record_elimination(2, 20)
+	hazard.record_elimination(3, 30)
+	ko.call(hazard, 0, 2, 40)
+	if not find.call(hazard).is_empty() or int(hazard.best_ko_run.get(0, 0)) != 2:
+		failures.append("hazard or self KOs extended a run: %s" % [hazard.best_ko_run])
+	stats.begin_match()
+	if not stats.best_ko_run.is_empty() or not stats.ko_run.is_empty():
+		failures.append("begin_match left KO runs behind")
+	_scenario_completed = true
+	return failures
+
 ## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
 func _scenario_haymaker_award_861() -> Array[String]:
 	var failures: Array[String] = []
@@ -29812,8 +29978,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 6:
-		failures.append("expected 6 award cards (3 core + Magpie + Untouchable + Haymaker), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 7:
+		failures.append("expected 7 award cards (3 core + Magpie + Untouchable + Haymaker + Streaker), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
@@ -43187,6 +43353,47 @@ func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array
 	return failures
 ## Issue #674: the same upward strike lifts the ball at least 1.5x higher than
 ## at the old mass 0.35 and full gravity.
+## Issue #899: a strike over the threshold plays `ball_thump` once at the ball,
+## a slow roll plays nothing, and two impacts within 0.15 s play one.
+func _scenario_sfx_soccer_ball_thump_on_hard_impacts_only() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"ball_thump"):
+		return ["ball_thump is not in the sound table"]
+	var rig: Dictionary = _soccer_rig(2)
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var ball: RigidBody2D = rig["rm"].game_mode_node().ball
+	ball.global_position = Vector2(-300.0, -150.0)
+	ball.linear_velocity = Vector2.ZERO
+	await _await_ticks(20)
+	sfx.start_recording()
+	ball.linear_velocity = Vector2(30.0, 0.0)
+	await _await_ticks(6)
+	if _sfx_count(sfx, "ball_thump") != 0:
+		failures.append("a slow roll played ball_thump")
+	ball.linear_velocity = Vector2(900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 1:
+		failures.append("a hard strike played ball_thump %d times, expected 1" % _sfx_count(sfx, "ball_thump"))
+	else:
+		var hit: Dictionary = _sfx_last(sfx, "ball_thump")
+		if hit.get("position") == null or Vector2(hit["position"]).distance_to(ball.global_position) > 200.0:
+			failures.append("ball_thump did not play at the ball: %s" % [hit.get("position")])
+	# A second strike 2 ticks later (0.03 s) falls inside the 0.15 s gap.
+	ball.linear_velocity = Vector2(-900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 1:
+		failures.append("two impacts within 0.15 s played %d thumps, expected 1" % _sfx_count(sfx, "ball_thump"))
+	await _await_ticks(15)
+	ball.linear_velocity = Vector2(900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 2:
+		failures.append("a strike after the gap played %d thumps in all, expected 2" % _sfx_count(sfx, "ball_thump"))
+	sfx.stop_recording()
+	await _teardown(rig["stage"])
+	return failures
 func _scenario_soccer_ball_lifts_higher_than_before_674() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = _soccer_rig(2)
@@ -48918,6 +49125,53 @@ func _scenario_damage_numbers_switch_873() -> Array[String]:
 		if not sfx.damage_numbers:
 			failures.append("Restore defaults did not put Damage numbers back on")
 	sfx.damage_numbers = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #882: Settings > Pickup callouts gates PickupCallout; saved; reset by Restore defaults.
+func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.pickup_callouts, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_pickup_callouts(false)
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("with Pickup callouts off, a grab made a callout")
+	sfx.set_pickup_callouts(true)
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("with Pickup callouts on, %d callouts, expected 1" % _callouts_818(loop).size())
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_pickup_callouts_882_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_pickup_callouts(false)
+	sfx.pickup_callouts = true
+	sfx.load_settings()
+	if sfx.pickup_callouts:
+		failures.append("Pickup callouts off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.pickup_callouts_box()
+	if box == null:
+		failures.append("Settings has no Pickup callouts box")
+	else:
+		box.button_pressed = false
+		if sfx.pickup_callouts:
+			failures.append("unticking the Pickup callouts box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.pickup_callouts:
+			failures.append("Restore defaults did not put Pickup callouts back on")
+	sfx.pickup_callouts = was["flag"]
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
