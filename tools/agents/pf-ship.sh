@@ -35,5 +35,6 @@ if gh pr view $n --json labels -q '.labels[].name' | grep -qx conflict-risk && !
 sleep 20; i=0; until s=$(gh pr checks $n 2>&1); ! echo "$s" | grep -qE "pending|no checks"; do i=$((i+1)); [ $i -gt 60 ] && { echo "CI TIMEOUT $n (conflict?)"; exit 1; }; sleep 30; done
 if gh pr checks $n 2>&1 | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI FAILED $n"; gh pr checks $n | grep -E "[[:space:]]fail[[:space:]]"; exit 1; fi
 echo "$s" | grep -v pass
+if gh pr view $n --json labels -q '.labels[].name' | grep -qx review-blocked; then echo "REVIEW-BLOCKED $n: a confirmed reviewer finding must be fixed first. Not merging."; exit 1; fi
 gh pr merge $n --merge --delete-branch 2>&1 | tail -1; st=$(gh pr view $n --json state -q .state); echo "$n $st"; [ "$st" = MERGED ] || { echo "MERGE FAILED $n"; exit 1; }
 cd $R && git pull -q; [ -n "${INSTALL_SCRIPT:-}" ] && [ -f "$INSTALL_SCRIPT" ] && bash "$INSTALL_SCRIPT" 2>&1 | tail -1; exit 0
