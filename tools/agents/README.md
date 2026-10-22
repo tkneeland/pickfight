@@ -19,6 +19,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-msg.sh init|send <TYPE> <text>|claim <n>|release <n>|listen|claimed <n>|heartbeat`: private ntfy channel between accounts, a doorbell only (verify on GitHub). Setup: run `pf-msg.sh init` on one machine, share the printed topic out of band (never commit it), and on the other machine write the same `PF_MSG_TOPIC=<topic>` line into its `$PF_STATE/pf-msg.conf` (optional `PF_MSG_SERVER`, default `https://ntfy.sh`). `listen` fills `msg-inbox.log` and writes CLAIM/ASK/FIRE lines to `msg-wake.txt`, which `pf-triage-watch.sh` turns into a `MSG <TYPE> ...` wake within 10 s. Keep it alive with `windows/pf-supervise.sh msg` (macOS: `screen -dmS pf-msg bash tools/agents/windows/pf-supervise.sh msg`).
 - `pf-msg-leakcheck.sh [dir]`: exit 1 (`TOPIC LEAK: <files>`) when the channel topic is in tracked files, the staged diff or commits not yet on main; `pf-ship.sh` runs it before every push.
 - `pf-scenario-merge.sh [file...]`: during `git merge origin/main`, resolves conflicts in append-only `tools/scenario_runner.gd` / `docs/FEATURES.md` by re-inserting this branch's added blocks into main's copy; exit 1 = resolve by hand.
+- `pf-squash-onto-main.sh "<msg>"`: when the secret-scrub hook blocks a resolved merge commit over main's own lines, turns the staged merge into one commit on top of main (branch changes only); then `git push --force-with-lease`.
 
 ## Platform support
 
@@ -27,6 +28,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 | All `pf-*.sh` scripts, `statusline-usage.sh` | yes | yes | yes (GNU tools, same path as Git Bash) |
 | Long-lived watchers | `screen` | `windows/pf-start.ps1` (hidden processes, no `screen`) | `screen`/`tmux` |
 | `pf-scenario-merge.sh` | yes | needs `python3` installed | yes |
+| `pf-squash-onto-main.sh` | yes | yes | yes |
 | Desktop banner on a conflicting PR | yes (`osascript`) | no | no |
 
 `pf-env.sh` carries the portable helpers (`pf_mtime`, `pf_iso_to_epoch`, `pf_epoch_fmt`, `pf_notify`), picks GNU or BSD
