@@ -68,7 +68,7 @@ done
 snap_age=$(( now - $(pf_mtime "$PF_STATE/usage-snapshot.json" || echo 0) ))
 take_new=$needed; [ $((100 - $(pf_weekly_used))) -le "$MIN_WEEKLY_REMAINING_FOR_TICKETS" ] && take_new=0
 run_any=1; pf_budget_ok || { run_any=0; take_new=0; }
-[ "$snap_age" -gt 1800 ] && log "own usage snapshot is $((snap_age / 60)) min old (pf-usage.sh failing?)"
+[ "$DRY" = 0 ] && [ "$snap_age" -gt 1800 ] && log "own usage snapshot is $((snap_age / 60)) min old (pf-usage.sh failing?)"
 
 remote=$(git -C "$ROOT" ls-remote --heads origin) || { log "ls-remote failed"; exit 0; }
 # "<branch> <sha>" lines, remote heads then local ones (local catches committed-but-unpushed work)
