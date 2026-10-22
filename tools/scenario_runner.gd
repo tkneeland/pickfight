@@ -991,6 +991,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"offscreen_fighter_gets_edge_arrow_779",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
+	"translations_have_no_blank_or_mismatched_cells_794",
+	"translation_cell_check_flags_bad_fixture_794",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3118,6 +3120,8 @@ func _run_scenario(name: String) -> Array[String]:
 		"name_echo_756": return await _scenario_name_echo_756()
 		"phone_reduce_flashes_follows_host_setting_776": return await _scenario_phone_reduce_flashes_776()
 		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
+		"translations_have_no_blank_or_mismatched_cells_794": return await _scenario_translations_have_no_blank_or_mismatched_cells_794()
+		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -46943,6 +46947,91 @@ func _scenario_phone_weak_connection_777() -> Array[String]:
 			failures.append("controller page lacks '%s'" % needle)
 	peer.close(1000, "scenario done")
 	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## Issue #794: every non-English cell is filled, keeps English's %s / %d / %f
+## placeholders in the same order, and keeps English's line-break count.
+## Returns one line per problem, naming the key and the locale.
+func _csv_cell_problems(rows: Array) -> Array[String]:
+	var problems: Array[String] = []
+	if rows.is_empty():
+		problems.append("strings.csv has no header row")
+		return problems
+	var header: PackedStringArray = rows[0]
+	var placeholder := RegEx.new()
+	placeholder.compile("%[sdf]")
+	for index: int in range(1, rows.size()):
+		var row: PackedStringArray = rows[index]
+		if row.size() < 2 or row[0].is_empty():
+			continue
+		var key: String = row[0]
+		var english: String = row[1]
+		var english_marks: Array[String] = _csv_marks(placeholder, english)
+		for column: int in range(2, header.size()):
+			var locale: String = header[column]
+			var cell: String = row[column] if column < row.size() else ""
+			if cell.strip_edges().is_empty():
+				problems.append("%s %s: blank cell" % [key, locale])
+				continue
+			var marks: Array[String] = _csv_marks(placeholder, cell)
+			if marks != english_marks:
+				problems.append("%s %s: placeholders %s, English has %s" % [key, locale, marks, english_marks])
+			if cell.count("\n") != english.count("\n"):
+				problems.append("%s %s: %d line breaks, English has %d" % [key, locale, cell.count("\n"), english.count("\n")])
+	return problems
+
+func _csv_marks(placeholder: RegEx, text: String) -> Array[String]:
+	var marks: Array[String] = []
+	for found: RegExMatch in placeholder.search_all(text):
+		marks.append(found.get_string())
+	return marks
+
+## Every row of a csv file as a PackedStringArray, the header included.
+func _csv_rows(path: String) -> Array:
+	var rows: Array = []
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return rows
+	while not file.eof_reached():
+		var row: PackedStringArray = file.get_csv_line()
+		if not (row.size() == 1 and row[0].is_empty()):
+			rows.append(row)
+	return rows
+
+func _scenario_translations_have_no_blank_or_mismatched_cells_794() -> Array[String]:
+	var failures: Array[String] = []
+	var rows: Array = _csv_rows("res://translations/strings.csv")
+	if rows.size() < 100:
+		failures.append("only %d csv rows read, the check is not reading strings.csv" % rows.size())
+	elif rows[0].size() != 10:
+		failures.append("header has %d columns, wanted keys + en + nine locales" % rows[0].size())
+	failures.append_array(_csv_cell_problems(rows))
+	_scenario_completed = true
+	return failures
+
+## The check must fail on a bad row, not just pass on the real file: one
+## fixture row per fault (blank cell, dropped placeholder, swapped order,
+## lost line break), plus a good row that must stay quiet.
+func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
+	var failures: Array[String] = []
+	var fixture: Array = [
+		PackedStringArray(["keys", "en", "de", "fr"]),
+		PackedStringArray(["GOOD", "Score %d", "Punkte %d", "Score %d"]),
+		PackedStringArray(["BLANK", "Ready", "", "Prêt"]),
+		PackedStringArray(["DROPPED", "Hit %s for %d", "Treffer %s", "Touché %s pour %d"]),
+		PackedStringArray(["SWAPPED", "%s beats %d", "%d schlägt %s", "%s bat %d"]),
+		PackedStringArray(["LINES", "Line one\nLine two", "Zeile eins Zeile zwei", "Ligne un\nligne deux"]),
+	]
+	var problems: Array[String] = _csv_cell_problems(fixture)
+	var joined: String = "\n".join(PackedStringArray(problems))
+	if problems.size() != 4:
+		failures.append("fixture gave %d problems, wanted 4: %s" % [problems.size(), joined])
+	for expected: String in ["BLANK de", "DROPPED de", "SWAPPED de", "LINES de"]:
+		if not joined.contains(expected):
+			failures.append("no problem named for '%s' in: %s" % [expected, joined])
+	if joined.contains("GOOD"):
+		failures.append("the good fixture row was flagged: %s" % joined)
 	_scenario_completed = true
 	return failures
 
