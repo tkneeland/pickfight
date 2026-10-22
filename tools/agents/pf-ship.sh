@@ -9,7 +9,7 @@ cd "$W" || exit 1
 git fetch -q
 if ! git merge -q origin/main >/dev/null 2>&1; then
   u=$(git diff --name-only --diff-filter=U)
-  for cf in $u; do case $cf in tools/scenario_runner.gd) [ -x "$FIXER" ] || { echo "CONFLICT $i: $cf needs a human merge (no FIX_RUNNER)"; exit 2; }; "$FIXER" >/dev/null;; scripts/PickupWeapons.gd|scripts/Sfx.gd|docs/FEATURES.md|CREDITS.md) sed -i '' -e '/^<<<<<<< /d' -e '/^=======$/d' -e '/^>>>>>>> /d' $cf;; translations/strings.en.translation) git checkout -q --theirs $cf; godot --headless --path . --import >/dev/null 2>&1;; *) echo "CONFLICT $i: $cf needs a human merge"; exit 2;; esac; done
+  for cf in $u; do case $cf in tools/scenario_runner.gd) [ -x "$FIXER" ] || { echo "CONFLICT $i: $cf needs a human merge (no FIX_RUNNER)"; exit 2; }; "$FIXER" >/dev/null;; scripts/PickupWeapons.gd|scripts/Sfx.gd|docs/FEATURES.md|CREDITS.md) sed -i.bak -e '/^<<<<<<< /d' -e '/^=======$/d' -e '/^>>>>>>> /d' $cf; rm -f "$cf.bak";; translations/strings.en.translation) git checkout -q --theirs $cf; godot --headless --path . --import >/dev/null 2>&1;; *) echo "CONFLICT $i: $cf needs a human merge"; exit 2;; esac; done
   if godot --headless --path . --check-only -s tools/scenario_runner.gd 2>&1 | grep -qE "SCRIPT ERROR|Parse Error"; then echo "CONFLICT $i: parse error after auto-resolve"; exit 2; fi
   if [ "$(grep -c "^		_:$" tools/scenario_runner.gd)" != "1" ]; then echo "CONFLICT $i: runner default arm misplaced"; exit 2; fi
   git add -A && git commit -qm "merge: main into #$i" || exit 2
@@ -17,8 +17,8 @@ fi
 git push -qu origin HEAD 2>&1 | grep -v remote
 S=$(jq -r '.rate_limits' "$PF_STATE/usage-snapshot.json")
 p5=$(echo "$S" | jq -r .five_hour.used_percentage); p7=$(echo "$S" | jq -r .seven_day.used_percentage)
-r5=$(date -r "$(echo "$S" | jq -r .five_hour.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
-r7=$(date -r "$(echo "$S" | jq -r .seven_day.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
+r5=$(pf_epoch_fmt "$(echo "$S" | jq -r .five_hour.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
+r7=$(pf_epoch_fmt "$(echo "$S" | jq -r .seven_day.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 rate=${PF_RATE:-unknown}; week=${PF_WEEK:-unknown}
 pr=$(gh pr create --title "$t" --body "Closes #$i.
 

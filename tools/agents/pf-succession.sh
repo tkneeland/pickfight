@@ -6,7 +6,7 @@
 # With --post, the stand-in itself posts "[TRIAGEMASTER] <handle> until <reset ISO>" on #432 when it takes over.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 now=$(date +%s)
-iso2e() { date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || echo 0; }
+iso2e() { pf_iso_to_epoch "$1" || echo 0; }
 comments=$(gh api "repos/$REPO/issues/432/comments?per_page=100" 2>/dev/null) || { pf_triagemaster; exit 0; }
 beacon() {  # sets b_age b_used b_reset for handle $1
   local body; body=$(echo "$comments" | jq -r --arg h "$1" '[.[]|select(.user.login==$h and (.body|test("usage @")))]|last|.body // empty')
@@ -26,7 +26,7 @@ if [ "$b_age" -lt 21600 ] && [ -n "$b_used" ] && [ "$b_used" -ge "$HANDOFF_WEEKL
 fi
 prev=$(cat "$PF_STATE/pf-triagemaster" 2>/dev/null)
 echo "$holder" > "$PF_STATE/pf-triagemaster"
-if [ "$holder" != "$prev" ] && [ "$holder" != "$first" ] && [ "$holder" = "$PF_ACCOUNT" ] && [ "${1:-}" = "--post" ]; then
+if [ "$holder" != "$prev" ] && [ "$holder" != "$first" ] && [ "$holder" = "$PF_ACCOUNT" ] && [ "${1:-}" = "--post" ] && [ -z "${PF_DRY_RUN:-}" ]; then
   gh issue comment 432 -R "$REPO" --body "[TRIAGEMASTER] $holder until $reset0" >/dev/null 2>&1
 fi
 echo "$holder"
