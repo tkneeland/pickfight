@@ -113,6 +113,8 @@ signal steal_requested(slot: int)
 
 ## The close reason a kicked phone is shown, and refused with if it comes back.
 const KICKED_REASON: String = "removed by the host"
+## Issue #775: the close reason for a phone that asked to leave. The controller page matches it.
+const LEFT_REASON: String = "left the game"
 ## Commands the host phone may send besides "kick".
 const HOST_COMMANDS: PackedStringArray = ["pause", "resume", "end"]
 ## The close reason (code 4002) an older socket gets when the same phone
@@ -1641,6 +1643,8 @@ func _handle_text(slot: int, text: String) -> void:
 				var body: Dictionary = msg.duplicate()
 				body.erase("t")
 				apply_host_command(str(msg.get("t")), body)
+		"leave":
+			leave(slot)
 		"pong":
 			_on_pong(slot, msg)
 		"team":
@@ -1729,6 +1733,25 @@ func kick(slot: int, by_host_pc: bool = false) -> bool:
 	_broadcast_looks()
 	if _log_input:
 		print("slot %d kicked by the host" % slot)
+	return true
+
+## Issue #775: a phone asked to leave. Like `kick()` the seat is freed at once, but
+## the phone's id is not refused and not remembered for the rejoin grace, so it
+## can come back by QR and take a fresh seat. Never the host PC's seat, or a bot's.
+func leave(slot: int) -> bool:
+	if slot < 0 or slot >= _slot_claimed.size() or _slot_claimed[slot] != 1:
+		return false
+	if slot == _host_pc_slot or is_virtual(slot):
+		return false
+	var peer: Variant = _slot_peers[slot]
+	if peer != null:
+		peer.close(4002, LEFT_REASON)
+		_unbind(slot)
+	_slot_client_id[slot] = "" # no id: _remember_leaver skips it
+	_release_claim(slot)
+	_broadcast_looks()
+	if _log_input:
+		print("slot %d left the game" % slot)
 	return true
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).

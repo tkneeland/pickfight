@@ -985,6 +985,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
 	"offscreen_fighter_gets_edge_arrow_779",
+	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -3339,6 +3340,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_restore_defaults_750()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
+		"phone_leave_button_frees_seat_775":
+			return await _scenario_phone_leave_button_frees_seat_775()
 		"frame_rate_cap_and_vsync_persist_and_apply_774":
 			return await _scenario_frame_rate_cap_and_vsync_persist_and_apply_774()
 		_:
@@ -46684,7 +46687,59 @@ func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
 		failures.append("a KO'd fighter kept an edge arrow")
 	await _teardown(loop["stage"])
 	return failures
-
+## Issue #775: the controller page's Leave game button sends {"t":"leave"}; the host
+## frees the seat at once (lobby or mid-round), hangs up with the "left the game"
+## reason, credits nobody, and a rejoin by the same id takes a fresh seat.
+func _scenario_phone_leave_button_frees_seat_775() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	for needle: String in ["id=\"leave-btn\"", "sendText({ t: \"leave\" })", "var LEFT_REASON = \"left the game\";", "PHONE_LEAVE_CONFIRM"]:
+		if not page.contains(needle):
+			failures.append("the controller page lacks %s" % needle)
+	var built: Dictionary = await _bot_main_with_phones(3, "leave-775")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	# In the lobby: phone 3 leaves.
+	joined[2].send_text(JSON.stringify({"t": "leave"}))
+	await _poll_phones(joined, 15)
+	if server.claimed_slots().has(2):
+		failures.append("slot 2 is still claimed after it left in the lobby")
+	if joined[2].get_ready_state() != WebSocketPeer.STATE_CLOSED or joined[2].get_close_reason() != "left the game":
+		failures.append("the leaving phone was not hung up on with the left reason ('%s')" % joined[2].get_close_reason())
+	# Rejoin with the same id: a fresh seat, not refused as a kicked id.
+	var again := WebSocketPeer.new()
+	var back: Dictionary = await _join_phone(again, "leave-775-2", joined)
+	if back["slot"] < 0:
+		failures.append("rejoining after leaving got no seat (closed %s '%s')" % [back["closed"], back["reason"]])
+	else:
+		joined[2] = again
+	# Mid-round: phone 2 leaves; the round carries on and nobody is scored.
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "playing", BOT_START_MSEC):
+		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
+	else:
+		joined[1].send_text(JSON.stringify({"t": "leave"}))
+		await _poll_phones(joined, 15)
+		if server.claimed_slots().has(1):
+			failures.append("slot 1 is still claimed after it left mid-round")
+		if rm.lobby_phase() != "playing":
+			failures.append("one of three leaving ended the round (phase '%s')" % rm.lobby_phase())
+		if rm.score_of(0) != 0 or rm.score_of(2) != 0 or not wins.is_empty():
+			failures.append("leaving credited someone: scores %d %d, wins %s" % [rm.score_of(0), rm.score_of(2), wins])
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
 ## Issue #774: Settings > More options has a Frame rate (Unlimited / 60 / 30) and a VSync row. Defaults are
 ## today's behaviour (unlimited, VSync on); both are remembered, applied to Engine.max_fps and the window,
 ## driven from the panel, and put back by Restore defaults.
