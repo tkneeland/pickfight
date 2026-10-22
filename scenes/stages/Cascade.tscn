@@ -1,8 +1,9 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Conveyor.tscn" id="conveyor"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_top"]
 size = Vector2(260, 24)
@@ -197,3 +198,9 @@ position = Vector2(300, 344)
 [node name="PickupSpawn2" type="Marker2D" parent="."]
 position = Vector2(-330, -60)
 
+
+; Conveyor (issue #848): a belt sunk flush into the lower floor (top y=380, so it adds no height under Platform3) between the left balcony's drop line and the stair drops, clear of every spawn drop line. It carries a fighter left, toward the open left end of the floor (the ring-out edge), so running back against it toward the middle pickups is the choice.
+[node name="FloorConveyor" parent="." instance=ExtResource("conveyor")]
+position = Vector2(-305, 386)
+size = Vector2(300, 12)
+belt_speed = -150.0
