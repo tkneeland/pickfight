@@ -616,6 +616,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"pickup_shows_weapon_name_callout_818",
+	"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818",
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
@@ -1604,6 +1606,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_no_single_strike_kills()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
+		"pickup_shows_weapon_name_callout_818":
+			return await _scenario_pickup_shows_weapon_name_callout_818()
+		"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818":
+			return await _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818()
 		"pickups_arrive_on_interval_and_cap":
 			return await _scenario_pickups_arrive_on_interval_and_cap()
 		"pickup_weapon_is_random_never_pickaxe":
@@ -47571,4 +47577,57 @@ func _scenario_couch_host_phone_present_keeps_match_menu_hidden_811() -> Array[S
 	await _close_phones(joined)
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
+	return failures
+
+## Issue #818: a pickup of `weapon_path` dropped on `player`'s body.
+func _grab_818(loop: Dictionary, player: Node2D, weapon_path: String) -> void:
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(load(weapon_path))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = player.global_position
+	await _await_ticks(3)
+func _callouts_818(loop: Dictionary) -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in get_root().get_tree().get_nodes_in_group("pickup_callouts"):
+		if not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+func _scenario_pickup_shows_weapon_name_callout_818() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	var found: Array[Node] = _callouts_818(loop)
+	if found.size() != 1:
+		failures.append("%d callouts after one grab, expected 1" % found.size())
+	else:
+		var want: String = TranslationServer.translate("WEAPON_FISHING_ROD")
+		if found[0].text != want:
+			failures.append("callout says '%s', expected '%s'" % [found[0].text, want])
+		if found[0].fighter != players[1]:
+			failures.append("callout belongs to the wrong fighter")
+	await _await_ticks(90)
+	if not _callouts_818(loop).is_empty():
+		failures.append("callout still alive 1.5 s after the grab")
+	# A KO'd fighter's ghost grab gets none.
+	await _grab_818(loop, players[0], "res://resources/axe.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("a KO'd fighter got a callout")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/sword.tres")
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	var found: Array[Node] = _callouts_818(loop)
+	if found.size() != 1:
+		failures.append("%d callouts for one fighter after two grabs, expected 1" % found.size())
+	elif found[0].text != TranslationServer.translate("WEAPON_AXE"):
+		failures.append("the newer grab did not replace the older label ('%s')" % found[0].text)
+	await _grab_818(loop, players[2], "res://resources/pickaxe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("a pickaxe pickup got a callout")
+	await _teardown(loop["stage"])
 	return failures
