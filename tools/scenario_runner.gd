@@ -1003,6 +1003,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"doc_path_check_catches_a_missing_file_803",
 	"every_scene_loads_and_instantiates_802",
 	"scene_check_catches_a_dead_resource_path_802",
+	"couch_pad_only_host_can_end_match_811",
+	"couch_host_phone_present_keeps_match_menu_hidden_811",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3382,6 +3384,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_demo_title_wishlist_button_shown_only_in_demo_793()
 		"demo_wishlist_button_opens_store_link_793":
 			return await _scenario_demo_wishlist_button_opens_store_link_793()
+		"couch_pad_only_host_can_end_match_811":
+			return await _scenario_couch_pad_only_host_can_end_match_811()
+		"couch_host_phone_present_keeps_match_menu_hidden_811":
+			return await _scenario_couch_host_phone_present_keeps_match_menu_hidden_811()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -47465,4 +47471,104 @@ func _scenario_stage_rotation_data_check_catches_a_typo_801() -> Array[String]:
 		if not bad.contains(expected):
 			failures.append("no problem containing '%s' in: %s" % [expected, bad])
 	_scenario_completed = true
+	return failures
+## Issue #811: in a Couch match with no host phone (a Steam Deck or a pad-only
+## PC) the Settings menu (View on the pad) leads with Pause/Resume and End
+## match, in the pad's focus chain, and A on End match returns to the lobby.
+func _scenario_couch_pad_only_host_can_end_match_811() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm.rotation_seed = 811
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	if ui.is_open():
+		ui.toggle_panel()
+	ui.host.mark_telemetry_notice_seen()
+	for device: int in [0, 5]:
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		await _pad_tap_430(device, JOY_BUTTON_START)
+	var started := func() -> bool: return rm.lobby_phase() == "playing"
+	if not await _await_condition(started, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("two pads never started a round (phase '%s')" % rm.lobby_phase())
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	if server.host_slot() != -1 or server.pc_runs_room() or not server.host_pc_has_match_controls():
+		failures.append("expected a Couch match with no host phone (host slot %d, runs room %s)" % [server.host_slot(), server.pc_runs_room()])
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	menu.refresh()
+	if not ui.is_open() or not menu.visible:
+		failures.append("View mid-match did not open a menu with the match controls (open %s, shown %s)" % [ui.is_open(), menu.visible])
+	else:
+		var seen: Dictionary = _focus_reach_368(ui.volume_slider())
+		for id in ["Pause", "End"]:
+			if not seen.has(id):
+				failures.append("the D-pad never focused '%s' (saw %s)" % [id, seen.keys()])
+		menu.end_button().grab_focus()
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		await _await_ticks(3)
+		if rm.lobby_phase() == "playing" or rm.lobby_phase() == "round_end":
+			failures.append("A on End match did not end the match (phase '%s')" % rm.lobby_phase())
+		menu.refresh()
+		if menu.visible:
+			failures.append("the match controls still show back in the lobby")
+	if ui.is_open():
+		await _pad_tap_368(0, JOY_BUTTON_B)
+	paused = false
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Issue #811: with a host phone connected the Couch Esc menu does not grow
+## the match rows (the phone's menu stays the control).
+func _scenario_couch_host_phone_present_keeps_match_menu_hidden_811() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm.rotation_seed = 811
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "issue-811-host", joined)
+	joined.append(peer)
+	if result["slot"] == -1:
+		failures.append("the host phone got no slot")
+		await _close_phones(joined)
+		await _teardown(rig["main"])
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var started := func() -> bool:
+		peer.poll()
+		return rm.lobby_phase() == "playing"
+	if not await _await_condition(started, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+	else:
+		if not ui.is_open():
+			ui.toggle_panel()
+		menu.refresh()
+		if server.host_slot() == -1 or server.host_pc_has_match_controls():
+			failures.append("a host phone is seated but the PC claims the match controls")
+		if menu.visible:
+			failures.append("the match rows show in the Esc menu while a host phone is connected")
+		if ui.is_open():
+			ui.toggle_panel()
+	paused = false
+	await _close_phones(joined)
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
 	return failures
