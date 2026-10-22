@@ -995,6 +995,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 	"translations_have_no_blank_or_mismatched_cells_794",
 	"translation_cell_check_flags_bad_fixture_794",
+	"doc_paths_point_at_real_files_803",
+	"doc_path_check_catches_a_missing_file_803",
 	"every_scene_loads_and_instantiates_802",
 	"scene_check_catches_a_dead_resource_path_802",
 ]
@@ -3130,6 +3132,8 @@ func _run_scenario(name: String) -> Array[String]:
 		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
 		"translations_have_no_blank_or_mismatched_cells_794": return await _scenario_translations_have_no_blank_or_mismatched_cells_794()
 		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
+		"doc_paths_point_at_real_files_803": return await _scenario_doc_paths_point_at_real_files_803()
+		"doc_path_check_catches_a_missing_file_803": return await _scenario_doc_path_check_catches_a_missing_file_803()
 		"every_scene_loads_and_instantiates_802": return await _scenario_every_scene_loads_and_instantiates_802()
 		"scene_check_catches_a_dead_resource_path_802": return await _scenario_scene_check_catches_a_dead_resource_path_802()
 		"settings_hygiene_609":
@@ -47200,5 +47204,56 @@ func _scenario_scene_check_catches_a_dead_resource_path_802() -> Array[String]:
 		failures.append("dead path not flagged: %s" % [dead])
 	if _dead_ext_resource_paths_802(good).size() != 0:
 		failures.append("a live path was flagged")
+	_scenario_completed = true
+	return failures
+
+## Repo paths that docs may name although they are gitignored or generated
+## on purpose (a clone will not have them).
+const DOC_PATH_ALLOWLIST_803: PackedStringArray = ["build/", "export/", "docs/launch/"]
+
+## Every backticked repo path in `text` that does not exist, as
+## "<label>:<line>: <path>". Globs and <placeholder> paths are skipped.
+func _doc_missing_paths_803(label: String, text: String) -> Array[String]:
+	var problems: Array[String] = []
+	var rx := RegEx.new()
+	rx.compile("`((?:scripts|scenes|tools|docs|controller|site)/[^`\\s]*)`")
+	var lines: PackedStringArray = text.split("\n")
+	for i: int in lines.size():
+		for m: RegExMatch in rx.search_all(lines[i]):
+			var p: String = m.get_string(1)
+			if p.contains("*") or p.contains("<") or p.contains("{") or p.contains("$"):
+				continue
+			p = p.split("#")[0].rstrip(".,;:)")
+			if p.contains("("):
+				p = p.split("(")[0]
+			var skip := false
+			for a: String in DOC_PATH_ALLOWLIST_803:
+				if p.begins_with(a):
+					skip = true
+			if skip or p.is_empty():
+				continue
+			if not FileAccess.file_exists("res://" + p) and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://" + p)):
+				problems.append("%s:%d: %s" % [label, i + 1, p])
+	return problems
+
+func _scenario_doc_paths_point_at_real_files_803() -> Array[String]:
+	var failures: Array[String] = []
+	var files: Array[String] = ["res://docs/FEATURES.md"]
+	for dir: String in ["res://docs/agents", "res://docs/adr", "res://docs"]:
+		for f: String in DirAccess.get_files_at(dir):
+			var ok: bool = f.ends_with(".md") and (dir != "res://docs" or f.begins_with("steam-"))
+			if ok:
+				files.append(dir + "/" + f)
+	for path: String in files:
+		failures.append_array(_doc_missing_paths_803(path.trim_prefix("res://"), FileAccess.get_file_as_string(path)))
+	_scenario_completed = true
+	return failures
+
+func _scenario_doc_path_check_catches_a_missing_file_803() -> Array[String]:
+	var failures: Array[String] = []
+	var doc: String = "ok `scripts/Player.gd`\nbad `scripts/NoSuchThing.gd` here\nglob `scripts/*.gd` `tools/<name>.sh`"
+	var problems: Array[String] = _doc_missing_paths_803("fixture.md", doc)
+	if problems.size() != 1 or not problems[0].contains("fixture.md:2: scripts/NoSuchThing.gd"):
+		failures.append("fixture gave %s, wanted only line 2's missing path" % [problems])
 	_scenario_completed = true
 	return failures
