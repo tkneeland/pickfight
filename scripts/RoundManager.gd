@@ -1015,8 +1015,14 @@ func _end_round_modifier() -> void:
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
+		_send_modifier_chip("")
 	if _modifier_label != null:
 		_modifier_label.visible = false
+
+## Issue #908: the phones' modifier chip follows the banner's title.
+func _send_modifier_chip(title: String) -> void:
+	if _controller_server != null and _controller_server.has_method("send_modifier"):
+		_controller_server.send_modifier(title)
 
 func _roll_modifier() -> String:
 	if forced_modifier != "":
@@ -1057,6 +1063,7 @@ func _announce_modifier(title: String) -> void:
 	_modifier_label.visible = true
 	_modifier_timer.start(maxf(modifier_announce_sec, 0.01))
 	modifier_announced.emit(title)
+	_send_modifier_chip(_modifier_label.text)
 
 ## Big, outlined, centred across the upper part of the screen, on its own
 ## canvas layer above the HUD.

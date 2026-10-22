@@ -40,6 +40,12 @@ var damage_sent: Array = []
 ## Every `send_hill()` call as `[slot, seconds, target]` (King of the Hill, #662).
 var hill_sent: Array = []
 
+## Every `send_modifier()` call (#908).
+var modifier_sent: Array = []
+
+func send_modifier(title: String) -> void:
+	modifier_sent.append(title)
+
 func send_hill(slot: int, seconds: int, target: int) -> void:
 	hill_sent.append([slot, seconds, target])
 
