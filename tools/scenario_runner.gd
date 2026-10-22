@@ -517,6 +517,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"untouchable_award_832",
 	"haymaker_award_861",
+	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -2485,6 +2486,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_untouchable_award_832()
 		"haymaker_award_861":
 			return await _scenario_haymaker_award_861()
+		"victory_streaker_award_needs_three_unbroken_kos":
+			return await _scenario_victory_streaker_award_needs_three_unbroken_kos()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -15755,7 +15758,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 5 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 6 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15827,8 +15830,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 5:
-		failures.append("the victory screen shows %s awards, expected 5" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 6:
+		failures.append("the victory screen shows %s awards, expected 6" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -29805,6 +29808,57 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #890: Streaker goes to the longest unbroken KO run, at least 3, no ties.
+func _scenario_victory_streaker_award_needs_three_unbroken_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Streaker")
+	var ko := func(stats: RefCounted, killer: int, victim: int, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	for i: int in 3:
+		ko.call(stats, 0, 1 + i, 100 + i * 10)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 in a row":
+		failures.append("expected Streaker for slot 0 with 3 in a row, got %s" % [found])
+	var reset: RefCounted = MatchStatsScript.new()
+	reset.begin_match()
+	ko.call(reset, 0, 1, 10)
+	ko.call(reset, 0, 2, 20)
+	ko.call(reset, 3, 0, 30)
+	ko.call(reset, 0, 1, 40)
+	if not find.call(reset).is_empty():
+		failures.append("a death did not reset the run: %s" % [reset.best_ko_run])
+	var two: RefCounted = MatchStatsScript.new()
+	two.begin_match()
+	ko.call(two, 0, 1, 10)
+	ko.call(two, 0, 2, 20)
+	if not find.call(two).is_empty():
+		failures.append("Streaker given for a best under 3")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for i: int in 3:
+		ko.call(tied, 0, 2, 10 + i * 10)
+		ko.call(tied, 1, 3, 15 + i * 10)
+	if not find.call(tied).is_empty():
+		failures.append("Streaker given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	ko.call(hazard, 0, 1, 10)
+	hazard.record_elimination(2, 20)
+	hazard.record_elimination(3, 30)
+	ko.call(hazard, 0, 2, 40)
+	if not find.call(hazard).is_empty() or int(hazard.best_ko_run.get(0, 0)) != 2:
+		failures.append("hazard or self KOs extended a run: %s" % [hazard.best_ko_run])
+	stats.begin_match()
+	if not stats.best_ko_run.is_empty() or not stats.ko_run.is_empty():
+		failures.append("begin_match left KO runs behind")
+	_scenario_completed = true
+	return failures
+
 ## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
 func _scenario_haymaker_award_861() -> Array[String]:
 	var failures: Array[String] = []
@@ -29918,8 +29972,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 6:
-		failures.append("expected 6 award cards (3 core + Magpie + Untouchable + Haymaker), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 7:
+		failures.append("expected 7 award cards (3 core + Magpie + Untouchable + Haymaker + Streaker), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
