@@ -42,10 +42,12 @@ Export commands (from `tools/export.sh`; needs Godot 4.6.2 and its export templa
 ```
 tools/export.sh macos     # build/macos/Pickfight.app
 tools/export.sh windows   # build/windows/Pickfight.exe
-tools/export.sh all       # both of the above (the default)
+tools/export.sh linux     # build/linux/pickfight.x86_64
+tools/export.sh all       # macos, windows and linux (the default)
+tools/export.sh demo      # Next Fest demo, all three OSes: build/demo/macos/Pickfight Demo.app, build/demo/windows/Pickfight Demo.exe, build/demo/linux/pickfight-demo.x86_64
 ```
 
-- `tools/export.sh` has no Linux or demo target today. The Linux preset exists in `export_presets.cfg`. `docs/FEATURES.md` mentions `tools/export.sh demo`, which the script does not accept. TODO: decide whether to add the target or build Linux another way, and fix whichever is wrong. This sheet ships the Windows and macOS builds until then.
+- The Playtest ships the full game build: `macos`, `windows` and `linux` (or `all`). `demo` is the limited Next Fest build and is not what Playtest testers get.
 - Steam upload: a pushed `v*` tag uploads to the Steam `beta` branch through the `steam` job, and a human promotes it in Steamworks (`docs/steam-upload.md`). It needs the one-time setup in that file first.
 - Before the tag, run the fresh-clone script check from `CLAUDE.md` (no `class_name` references) on the release commit (`docs/steam-readiness.md`, item 9.1).
 - Crash reports need the Sentry SDK (`tools/fetch_sentry.sh`) and a DSN in the `pickfight/sentry_dsn` project setting in the release build. The owner pastes the DSN (owner-decisions.md; `docs/crash-reporting.md`). Check with `--crash-test` before tagging.
