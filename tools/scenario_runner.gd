@@ -986,6 +986,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"match_win_ko_autosaves_clip_795",
+	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
@@ -3346,6 +3348,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"match_win_ko_autosaves_clip_795":
+			return await _scenario_match_win_ko_autosaves_clip_795()
+		"autosave_clip_switch_off_saves_nothing_795":
+			return await _scenario_autosave_clip_switch_off_saves_nothing_795()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
 		"phone_leave_button_frees_seat_775":
@@ -47028,3 +47034,77 @@ func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
 		failures.append("the good fixture row was flagged: %s" % joined)
 	_scenario_completed = true
 	return failures
+
+## Issue #795: the match-winning KO saves the replay buffer once its slow motion ends, and the victory screen says so.
+func _scenario_match_win_ko_autosaves_clip_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(true)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] < 1:
+		failures.append("no clip frames were saved after the match-winning KO")
+	if not run["label"]:
+		failures.append("the victory screen showed no Clip saved line")
+	if run["saved_early"]:
+		failures.append("the clip was saved before the slow-mo ended")
+	_scenario_completed = true
+	return failures
+
+## Issue #795: with Auto-save match clips off nothing is written and no line shows.
+func _scenario_autosave_clip_switch_off_saves_nothing_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(false)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] != 0:
+		failures.append("the switch was off but %d frames were saved" % run["pngs"])
+	if run["label"]:
+		failures.append("the switch was off but the victory screen showed Clip saved")
+	_scenario_completed = true
+	return failures
+
+func _run_autosave_795(switch_on: bool) -> Dictionary:
+	var out: Dictionary = {"failures": [] as Array[String], "pngs": 0, "label": false, "saved_early": false}
+	var failures: Array[String] = out["failures"]
+	var host: RefCounted = HostSettingsScript704.shared()
+	var was: bool = host.auto_save_clips
+	var scale_was: float = Engine.time_scale
+	host.auto_save_clips = switch_on
+	var scratch: String = "user://pf_795_%d_%s" % [OS.get_process_id(), "on" if switch_on else "off"]
+	var loop: Dictionary = _new_lobby_round(2, 2.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var replay: Node = rm._replay
+	replay.clips_dir = scratch
+	replay.encode_gif = false
+	for i in 4:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.1 * i, 0.5, 0.5))
+		replay.push_frame(img)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			break
+		players[1].eliminate()
+		await _await_ticks(3)
+	if rm.final_ko_active() and not String(replay.autosaved_dir).is_empty():
+		out["saved_early"] = true
+	await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the victory screen never followed the slow-mo")
+	var label: Node = rm.victory_panel().find_child("ClipSaved", true, false) if rm.victory_panel() != null else null
+	out["label"] = label != null and (label as Control).visible
+	var da := DirAccess.open(ProjectSettings.globalize_path(scratch))
+	if da != null:
+		for d: String in da.get_directories():
+			var sub := DirAccess.open(ProjectSettings.globalize_path(scratch).path_join(d))
+			for f: String in sub.get_files():
+				if f.ends_with(".png"):
+					out["pngs"] += 1
+				sub.remove(f)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch).path_join(d))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+	replay.autosaved_dir = ""
+	host.auto_save_clips = was
+	await _teardown(loop["stage"])
+	Engine.time_scale = scale_was
+	return out
