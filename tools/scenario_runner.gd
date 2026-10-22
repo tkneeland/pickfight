@@ -1022,6 +1022,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
 	"match_point_plate_switch_off_shows_none",
+	"juice_hit_pause_switch_off_never_pauses",
 	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
@@ -3488,6 +3489,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_damage_numbers_switch_873()
 		"match_point_plate_switch_off_shows_none":
 			return await _scenario_match_point_plate_switch_off_shows_none()
+		"juice_hit_pause_switch_off_never_pauses":
+			return await _scenario_juice_hit_pause_switch_off_never_pauses()
 		"pickup_callout_switch_off_spawns_none":
 			return await _scenario_pickup_callout_switch_off_spawns_none()
 		"restore_defaults_750":
@@ -49414,6 +49417,61 @@ func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
 		if not sfx.match_point_plate:
 			failures.append("Restore defaults did not put Match point plate back on")
 	sfx.match_point_plate = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #916: Settings > Hit pause off never pauses the tree on a heavy hit; on freezes 3 ticks; saved; reset.
+func _scenario_juice_hit_pause_switch_off_never_pauses() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.hit_pause, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(2)
+	sfx.set_hit_pause(false)
+	emitter.strike_landed.emit(emitter, 90.0, Vector2.ZERO, false)
+	for i in 8:
+		if get_root().get_tree().paused or juice.is_frozen():
+			failures.append("the tree paused on tick %d with Hit pause off" % i)
+			break
+		await get_root().get_tree().physics_frame
+	sfx.set_hit_pause(true)
+	emitter.strike_landed.emit(emitter, 90.0, Vector2.ZERO, false)
+	if not get_root().get_tree().paused or not juice.is_frozen():
+		failures.append("a 90-damage strike did not freeze with Hit pause on")
+	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
+	if get_root().get_tree().paused:
+		failures.append("the freeze did not lift")
+	await _teardown(stage)
+	var path: String = OS.get_temp_dir().path_join("pickfight_hit_pause_916_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_hit_pause(false)
+	sfx.hit_pause = true
+	sfx.load_settings()
+	if sfx.hit_pause:
+		failures.append("Hit pause off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.hit_pause_box()
+	if box == null:
+		failures.append("Settings has no Hit pause box")
+	else:
+		box.button_pressed = false
+		if sfx.hit_pause:
+			failures.append("unticking the Hit pause box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.hit_pause:
+			failures.append("Restore defaults did not put Hit pause back on")
+	sfx.hit_pause = was["flag"]
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
