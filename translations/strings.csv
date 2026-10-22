@@ -496,3 +496,6 @@ JOIN_NUDGE,Not connecting? Join over the internet,Klappt nicht? Tritt übers Int
 SETTINGS_STICK_DEADZONE,Stick deadzone: %s,Stick-Totzone: %s,Zone morte du stick : %s,Zona muerta del stick: %s,Zona morta do analógico: %s,摇杆死区:%s,スティックのデッドゾーン: %s,스틱 데드존: %s,Мёртвая зона стика: %s
 SETTINGS_RESTORE_DEFAULTS,Restore defaults,Standardwerte wiederherstellen,Rétablir les valeurs par défaut,Restaurar valores predeterminados,Restaurar padrões,恢复默认设置,初期設定に戻す,기본값으로 복원,Сбросить настройки
 RESTORE_CONFIRM_TEXT,Reset every setting to its default?,Alle Einstellungen auf Standard zurücksetzen?,Remettre tous les réglages par défaut ?,¿Restablecer todos los ajustes a sus valores predeterminados?,Redefinir todas as configurações para o padrão?,将所有设置重置为默认值?,すべての設定を初期値に戻しますか?,모든 설정을 기본값으로 되돌릴까요?,Сбросить все настройки к значениям по умолчанию?
+SETTINGS_FRAME_RATE,Frame rate: %s,Bildrate: %s,Fréquence d'images : %s,Velocidad de fotogramas: %s,Taxa de quadros: %s,帧率:%s,フレームレート: %s,프레임 속도: %s,Частота кадров: %s
+SETTINGS_FRAME_RATE_UNLIMITED,Unlimited,Unbegrenzt,Illimitée,Ilimitada,Ilimitada,不限,無制限,제한 없음,Без ограничения
+SETTINGS_VSYNC,VSync,VSync,VSync,VSync,VSync,垂直同步,VSync,수직 동기화,VSync

@@ -24,12 +24,14 @@ ready() {  # open ready-for-agent issues as "number:assignee" (assignee may be e
     --json number,assignees --jq '.[]|"\(.number):\(.assignees|map(.login)|join(","))"'
 }
 base=$(latest)
+case "$base" in null*) base="null 1970-01-01T00:00:00Z";; esac
 first=1
 while true; do
   [ $first -eq 1 ] || sleep 300
   first=0
   now_s=$(date +%s)
   now=$(latest) || continue
+  case "$now" in null*) now=$base;; esac   # no peer event in the last 50: nothing new
   if [ -n "$now" ] && [ "$(echo "$now" | cut -d" " -f2)" \> "$(echo "$base" | cut -d" " -f2)" ]; then
     echo "PEER ACTIVITY: $now"; exit 0
   fi
