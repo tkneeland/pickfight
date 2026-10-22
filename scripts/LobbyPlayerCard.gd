@@ -195,6 +195,7 @@ func apply(info: Dictionary) -> void:
 		_strip.add_theme_stylebox_override("panel", strip_box)
 	_avatar.set_look(colour, str(info.get("hat", "none")), str(info.get("eyes", "round")))
 	_team_chip.set_team(int(info.get("team", TeamsScript.NONE)))
+	_team_chip.set_number(int(info.get("number", 0)), colour)  # #809
 	var bot: bool = bool(info.get("bot", false))
 	var ready: bool = bool(info.get("ready", false))
 	var pill: StringName = UiThemeScript.PILL_BOT if bot else (UiThemeScript.PILL_ON if ready else UiThemeScript.PILL_OFF)
