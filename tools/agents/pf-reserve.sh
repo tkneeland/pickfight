@@ -22,6 +22,7 @@ if [ "${1:-}" = --install ]; then
   <key>EnvironmentVariables</key><dict><key>PF_ACCOUNT</key><string>$PF_ACCOUNT</string><key>HOME</key><string>$HOME</string></dict>
   <key>StartInterval</key><integer>600</integer>
   <key>RunAtLoad</key><true/>
+  <key>AbandonProcessGroup</key><true/>
   <key>StandardOutPath</key><string>$PF_STATE/reserve.log</string>
   <key>StandardErrorPath</key><string>$PF_STATE/reserve.log</string>
 </dict></plist>
@@ -120,4 +121,6 @@ echo "$now $sig" > "$PF_STATE/reserve-last-launch"
 pf=$PF_STATE/at-session-prompt.txt
 sed -e "s/{{ACCOUNT}}/$PF_ACCOUNT/g" -e "s/{{TICKETS}}/${work[*]}/g" "$PF_DIR/pf-reserve-prompt.md" > "$pf"
 log "starting $SESSION for #${work[*]} (needed=$needed)"
-screen -dmS "$SESSION" bash -lc "export PF_ACCOUNT=$PF_ACCOUNT; cd $(printf '%q' "$ROOT") && claude -p --dangerously-skip-permissions < $(printf '%q' "$pf") >> $(printf '%q' "$PF_STATE/at-session.log") 2>&1"
+# absolute claude path and plain bash -c: a login shell resets PATH and loses ~/.local/bin
+cl=$(command -v claude) || { log "claude not on PATH"; exit 0; }
+screen -dmS "$SESSION" bash -c "export PF_ACCOUNT=$PF_ACCOUNT PATH=$(printf '%q' "$PATH"); cd $(printf '%q' "$ROOT") && $(printf '%q' "$cl") -p --dangerously-skip-permissions < $(printf '%q' "$pf") >> $(printf '%q' "$PF_STATE/at-session.log") 2>&1"

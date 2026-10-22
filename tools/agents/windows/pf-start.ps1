@@ -4,7 +4,7 @@
 .PARAMETER Account
   GitHub handle (PF_ACCOUNT). Default: agage-JG.
 .PARAMETER Only
-  triage, automerge, beacon, or both (default: all three).
+  triage, automerge, beacon, msg, or both (default: all four).
 .NOTES
   State, pid files and logs live in %USERPROFILE%\.claude\pf\<Account> (tkneeland: %USERPROFILE%\.claude), the same
   folder pf-env.sh calls PF_STATE. Safe to re-run: a watcher that is already running is left alone.
@@ -12,7 +12,7 @@
 #>
 param(
   [string]$Account = "agage-JG",
-  [ValidateSet("both", "triage", "automerge", "beacon")][string]$Only = "both"
+  [ValidateSet("both", "triage", "automerge", "beacon", "msg")][string]$Only = "both"
 )
 $ErrorActionPreference = "Stop"
 
@@ -32,7 +32,7 @@ $stateDir = if ($Account -eq "tkneeland") { Join-Path $env:USERPROFILE ".claude"
 New-Item -ItemType Directory -Force $stateDir | Out-Null
 $env:PF_ACCOUNT = $Account
 
-foreach ($kind in @("triage", "automerge", "beacon")) {
+foreach ($kind in @("triage", "automerge", "beacon", "msg")) {
   if ($Only -ne "both" -and $Only -ne $kind) { continue }
   $pidFile = Join-Path $stateDir "$kind.pid"
   if (Test-Path $pidFile) {

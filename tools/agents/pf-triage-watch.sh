@@ -8,8 +8,11 @@
 #   IDLE_SLOTS <n>/<min>  hourly: fewer active work packages than the mode's minimum (day DAY_MIN_AGENTS,
 #                      night the low end of NIGHT_PREFERRED_AGENTS); skipped when the weekly budget says stop
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
+#   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
 . "$(dirname "$0")/pf-env.sh" || exit 1
 SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
+# first run: a wake file older than this watcher counts as handled
+[ -f "$PF_STATE/.msg-wake-handled" ] || pf_mtime "$PF_STATE/msg-wake.txt" > "$PF_STATE/.msg-wake-handled" 2>/dev/null
 META_TICKETS=${META_TICKETS:-"702 720 619"}   # meta tickets that never count as a peer's dev queue
 while true; do
   issues=$(gh api "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null)
@@ -60,5 +63,14 @@ while true; do
       done
     fi
   fi
-  sleep 600
+  # idle 10 min in short ticks so a channel message (pf-msg.sh listen -> msg-wake.txt) wakes us within PF_TICK seconds
+  tick=0
+  while [ "$tick" -lt 60 ]; do
+    sleep "${PF_TICK:-10}"; tick=$((tick+1))
+    # new = wake file modified since the last one handled (so an identical repeat message still wakes)
+    wm=$(pf_mtime "$PF_STATE/msg-wake.txt")
+    if [ -n "$wm" ] && [ -s "$PF_STATE/msg-wake.txt" ] && [ "$wm" != "$(cat "$PF_STATE/.msg-wake-handled" 2>/dev/null)" ]; then
+      echo "$wm" > "$PF_STATE/.msg-wake-handled"; head -n 1 "$PF_STATE/msg-wake.txt"; exit 0
+    fi
+  done
 done

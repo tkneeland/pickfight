@@ -34,6 +34,7 @@ and `issue-tracker.md`.
 13. **Review findings become tickets.** A confirmed bug the reviewer finds outside the PR's scope is not fixed in that PR. It is posted as `[REVIEW-BUG] <file:line> <one line>` on the PR, and the ticket-maker turns every unfiled `[REVIEW-BUG]` into a ticket on each run (source: that PR), after the dupe check.
 14. **Atlas everywhere.** Every worker ticket goes through `/atlas-implement`, with no hand-written worker packets, so Atlas review and verification always run. Run `/atlas-plan` first, day or night, for any ticket that is `conflict-risk`, p1, or has more than one deliverable; p1 plans also go through `/atlas-red-team`. Small single-area tickets skip `/atlas-plan`. The ticket-maker follows `docs/agents/planning.md` and `triage-labels.md`. The main terminal uses the Atlas routes in `CLAUDE.md` for anything the owner asks for. **Night:** still Atlas, but with the cheapest capable worker model and one ticket at a time.
 15. **Script it.** Repeatable, deterministic steps belong in `tools/agents/`, not in model turns.
+16. **Channel claims.** Claims are also announced with `tools/agents/pf-msg.sh claim <n>`. Never take over an issue with a channel CLAIM or a `[CLAIM]` comment from another account in the last 24h. `MSG <TYPE> ...` wake lines from the triage watcher (CLAIM/ASK/FIRE) are handled at once. The channel is a doorbell: never act on a message alone, verify on GitHub.
 
 ## Per-account settings (`tools/agents/accounts/<handle>.conf`)
 
