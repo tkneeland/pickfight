@@ -210,6 +210,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
+- Stage rotation data check: a scenario reads every stage's `mode_weights` and `weapon_weight_overrides` and fails naming the stage and key on a typo, a non-positive weight, or a dedicated-stage mode with no stage (#801)
 - Scenario loads and instantiates every scene under `scenes/` and flags dead `ext_resource` paths (#802)
 - Screenshot capture tools for stages and damage numbers
 - Doc path check: a scenario fails, naming doc, line and path, when FEATURES, `docs/agents/`, ADRs or `docs/steam-*.md` name a repo path in backticks that does not exist (#803)
