@@ -4,7 +4,7 @@
 #>
 param([string]$Account = "agage-JG")
 $stateDir = if ($Account -eq "tkneeland") { Join-Path $env:USERPROFILE ".claude" } else { Join-Path $env:USERPROFILE ".claude\pf\$Account" }
-foreach ($kind in @("triage", "automerge")) {
+foreach ($kind in @("triage", "automerge", "beacon")) {
   $pidFile = Join-Path $stateDir "$kind.pid"
   if (-not (Test-Path $pidFile)) { Write-Host "$kind : no pid file"; continue }
   $id = [int](Get-Content $pidFile)
@@ -19,5 +19,5 @@ foreach ($kind in @("triage", "automerge")) {
 # msys forks are not always children in the Windows process tree, so taskkill /T can miss a running watcher:
 # sweep any leftover AT watcher or supervisor started from this checkout's scripts (all accounts on this machine).
 Get-CimInstance Win32_Process -Filter "Name='bash.exe'" |
-  Where-Object { $_.CommandLine -match 'pf-(supervise|triage-watch|automerge)\.sh' } |
+  Where-Object { $_.CommandLine -match 'pf-(supervise|triage-watch|automerge|beacon)\.sh' } |
   ForEach-Object { & taskkill.exe /PID $_.ProcessId /T /F | Out-Null; Write-Host "swept leftover watcher (pid $($_.ProcessId))" }
