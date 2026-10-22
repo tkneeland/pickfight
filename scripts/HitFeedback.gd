@@ -114,12 +114,17 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 		add_child(marker)
 	elif not _zero_allowed(attacker, victim):
 		return
-	if show_damage_numbers:
+	if show_damage_numbers and _settings_allow_numbers():
 		var font_size: int = _number_font(amount)
 		var number: DamageNumber = _free_numbers.pop_back() if not _free_numbers.is_empty() else DamageNumber.new()
 		number.done = _retire
 		number.setup(point, amount, font_size, world_scale, _settings_for(amount, font_size))
 		add_child(number)
+
+## Settings > "Damage numbers" (#873); on when there is no Sfx autoload.
+func _settings_allow_numbers() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx == null or bool(sfx.get("damage_numbers"))
 
 ## A marker or number has finished: out of the tree and back in the pool.
 ## Called deferred, never from inside the node's own `_process`.
