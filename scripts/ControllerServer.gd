@@ -1190,7 +1190,6 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	if HostSettingsScript.shared().filter_names:
 		_slot_name[slot] = NameFilterScript.mask(nickname)
 	_send_name_echo(slot)
-	_send_reduce_flash(slot)
 	_slot_ready[slot] = 0
 	_slot_team_pick[slot] = -1
 	_last_claim_serial += 1
@@ -1275,6 +1274,8 @@ func _attach(slot: int, peer: Variant) -> void:
 	_players[slot].flick_launch_enabled = peer is not LocalSeat and not _is_pc_remote(peer)
 	_note_remote_attach(slot, peer)
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
+	if _reduce_flash_on(): # off is the page's default, so a join sends nothing then
+		_send_reduce_flash(slot)
 	if not _lobby_state.is_empty():
 		peer.send_text(_lobby_text())
 	peer.send_text(JSON.stringify(looks_message()))
@@ -1426,7 +1427,10 @@ func _sync_reduce_flash() -> void:
 	var now: int = 1 if _reduce_flash_on() else 0
 	if now == _reduce_flash_sent:
 		return
+	var first: bool = _reduce_flash_sent < 0
 	_reduce_flash_sent = now
+	if first and now == 0:
+		return # nothing to tell: phones start with it off
 	for slot in _slot_peers.size():
 		_send_reduce_flash(slot)
 

@@ -46832,28 +46832,42 @@ func _scenario_phone_reduce_flashes_776() -> Array[String]:
 	await _await_ticks(5)
 	_phone_ws_port = server.ws_port
 	var peer := WebSocketPeer.new()
-	var joined: Dictionary = await _join_phone(peer, "reduce-flash-0", [] as Array[WebSocketPeer])
-	if joined["slot"] != 0:
-		failures.append("the phone got slot %d" % joined["slot"])
-		sfx.reduce_flash = was_on
-		await _teardown(stage)
-		return failures
+	peer.connect_to_url("ws://127.0.0.1:%d" % _phone_ws_port)
 	var seen: Array = []
-	for want: bool in [true, false, true]:
-		if seen.is_empty() or seen.back() != want:
-			if not seen.is_empty():
-				sfx.reduce_flash = want
-			for _i in 30:
-				await process_frame
-				peer.poll()
-				while peer.get_available_packet_count() > 0:
-					var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
-					if msg is Dictionary and msg.get("t") == "flash":
-						seen.append(msg.get("v") == true)
-				if not seen.is_empty() and seen.back() == want:
-					break
-		if seen.is_empty() or seen.back() != want:
-			failures.append("phone was not told reduce flashes = %s (got %s)" % [want, seen])
+	var slot: int = -1
+	var sent_id: bool = false
+	for _i in 120:
+		await process_frame
+		peer.poll()
+		if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent_id:
+			peer.send_text(JSON.stringify({"id": "reduce-flash-0"}))
+			sent_id = true
+		while peer.get_available_packet_count() > 0:
+			var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+			if msg is Dictionary and msg.get("t") == "flash":
+				seen.append(msg.get("v") == true)
+			elif msg is Dictionary and msg.has("slot"):
+				slot = int(msg["slot"])
+		if slot >= 0 and not seen.is_empty():
+			break
+	if slot != 0 or seen != [true]:
+		failures.append("on join: slot %d, flash frames %s; wanted slot 0 and [true]" % [slot, seen])
+	for want: bool in [false, true]:
+		sfx.reduce_flash = want
+		var before: int = seen.size()
+		for _i in 30:
+			await process_frame
+			peer.poll()
+			while peer.get_available_packet_count() > 0:
+				var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+				if msg is Dictionary and msg.get("t") == "flash":
+					seen.append(msg.get("v") == true)
+			if seen.size() > before:
+				break
+		if seen.size() != before + 1 or seen.back() != want:
+			failures.append("after setting %s the phone was sent %s" % [want, seen])
 	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
 	for needle: String in ["prefers-reduced-motion", "calmcue", "body.calm"]:
 		if not page.contains(needle):
