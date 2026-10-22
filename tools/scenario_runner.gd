@@ -157,6 +157,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"world_stopped_head_blocks_arriving_head",
 	"conveyor_carries_player",
 	"conveyor_flatlands_spawns_clear",
+	"conveyor_two_more_stages",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
@@ -1759,6 +1760,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_conveyor_carries_player()
 		"conveyor_flatlands_spawns_clear":
 			return await _scenario_conveyor_flatlands_spawns_clear()
+		"conveyor_two_more_stages":
+			return await _scenario_conveyor_two_more_stages()
 		"ice_patch_slides_player_and_restores":
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
@@ -10691,6 +10694,47 @@ func _scenario_conveyor_flatlands_spawns_clear() -> Array[String]:
 			if absf(spawn.position.x - belt.position.x) <= belt.size.x / 2.0 + PLAYER_RADIUS:
 				failures.append("Spawn%d at x=%.0f is over the belt" % [i, spawn.position.x])
 	await _teardown(stage)
+	return failures
+## Mesa and Cascade (#848) each carry a conveyor: it has a belt speed within
+## 100..180 px/s, no spawn drop line and no floor-level pickup spot lies over
+## it, and a player standing on it drifts the way it carries. Reuses #842's
+## drift thresholds.
+func _scenario_conveyor_two_more_stages() -> Array[String]:
+	var failures: Array[String] = []
+	for stage_name in ["Mesa", "Cascade"]:
+		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var belt: StaticBody2D = stage.get_node_or_null("FloorConveyor") as StaticBody2D
+		if belt == null:
+			failures.append("%s has no FloorConveyor" % stage_name)
+			await _teardown(stage, false)
+			continue
+		var speed_abs: float = absf(belt.belt_speed)
+		if speed_abs < 100.0 or speed_abs > 180.0:
+			failures.append("%s belt speed %.0f is outside 100..180" % [stage_name, belt.belt_speed])
+		var half: float = belt.size.x / 2.0
+		for i in 8:
+			var spawn: Node2D = stage.get_node("Spawn%d" % i) as Node2D
+			if absf(spawn.position.x - belt.position.x) <= half + PLAYER_RADIUS:
+				failures.append("%s Spawn%d at x=%.0f is over the belt" % [stage_name, i, spawn.position.x])
+		for child in stage.get_children():
+			if String(child.name).begins_with("PickupSpawn"):
+				var pickup: Node2D = child as Node2D
+				if absf(pickup.position.x - belt.position.x) <= half and absf(pickup.position.y - belt.position.y) < 80.0:
+					failures.append("%s %s at x=%.0f sits on the belt" % [stage_name, pickup.name, pickup.position.x])
+		var player: RigidBody2D = _spawn_player(stage, belt.position + Vector2(0, -belt.size.y / 2.0 - PLAYER_RADIUS - 4.0))
+		player.set_input_vector(Vector2.ZERO)
+		for _tick in CONVEYOR_SETTLE_TICKS:
+			await physics_frame
+		var start_x: float = player.global_position.x
+		for _tick in CONVEYOR_WATCH_TICKS:
+			await physics_frame
+		var drift: float = (player.global_position.x - start_x) * signf(belt.belt_speed)
+		print("      %s belt carried a player %.1f px" % [stage_name, drift])
+		if drift < CONVEYOR_MIN_DRIFT:
+			failures.append("%s belt carried a standing player %.1f px its way, expected at least %.1f" % [stage_name, drift, CONVEYOR_MIN_DRIFT])
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Ice patch (#860): a body is dropped onto a strip of ice (or plain ground),
 ## settles, is shot along it at ICE_PUSH_SPEED with no input held, and the
