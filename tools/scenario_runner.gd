@@ -1034,6 +1034,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_link_check_catches_a_missing_file_and_a_missing_alt_799",
 	"idle_fighter_gets_drag_hint_after_six_seconds_826",
 	"idle_hint_skips_bots_ghosts_and_later_rounds_826",
+	"online_lobby_copy_code_button_863",
+	"copy_code_button_hidden_couch_solo_streamer_863",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3475,6 +3477,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826()
 		"idle_hint_skips_bots_ghosts_and_later_rounds_826":
 			return await _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826()
+		"online_lobby_copy_code_button_863":
+			return await _scenario_online_lobby_copy_code_button_863()
+		"copy_code_button_hidden_couch_solo_streamer_863":
+			return await _scenario_copy_code_button_hidden_couch_solo_streamer_863()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48965,4 +48971,88 @@ func _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826() -> Array[Strin
 	if not hint.has_hint(4):
 		failures.append("slot 4 got no hint in round 1 of a new match")
 	await _teardown(fx["stage"])
+	return failures
+## Issue #863: Online lobby Copy code button copies the room code (clipboard seam), reads Copied, then reverts.
+func _scenario_online_lobby_copy_code_button_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var copied: Array[String] = []
+	screen._host.clipboard_setter = func(text: String) -> void: copied.append(text)
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var button: Button = screen.control_button("copy_code")
+	if button == null or not button.is_visible_in_tree():
+		failures.append("the Online lobby shows no Copy code button")
+		await _kind_close_435(rig)
+		return failures
+	if button.get_global_rect().position.y < screen._host.room_label().get_global_rect().end.y - 1.0:
+		failures.append("Copy code sits above the room code")
+	var code: String = server.online_room_code()
+	screen.press_control("copy_code")
+	if copied != [code]:
+		failures.append("pressing Copy code wrote %s to the clipboard, expected [%s]" % [copied, code])
+	if button.text != screen.tr("LOBBY_COPIED"):
+		failures.append("after a press the button reads '%s', not Copied" % button.text)
+	var until_msec: int = Time.get_ticks_msec() + 1700 # the label runs on wall-clock msec
+	while Time.get_ticks_msec() < until_msec:
+		await process_frame
+	screen.refresh_controls()
+	if button.text == screen.tr("LOBBY_COPIED") or button.text == "":
+		failures.append("the button still reads '%s' after the 1.5 s" % button.text)
+	copied.clear()
+	var keys: Dictionary = screen._host.CONTROL_KEYS
+	if keys.get("copy_code") != KEY_K:
+		failures.append("Copy code is not on the K key")
+	for id: String in keys:
+		if id != "copy_code" and keys[id] == keys["copy_code"]:
+			failures.append("the K key is also bound to %s" % id)
+	await _kind_close_435(rig)
+	return failures
+## Issue #863: no Copy code button in Couch, in Solo, or with Hide room code on; K does nothing there.
+func _scenario_copy_code_button_hidden_couch_solo_streamer_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var copied: Array[String] = []
+	screen._host.clipboard_setter = func(text: String) -> void: copied.append(text)
+	var button: Button = screen.control_button("copy_code")
+	if button == null:
+		failures.append("no copy_code control exists")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows in the Couch lobby")
+	screen.press_control("copy_code")
+	screen.press_control("solo")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows in the Solo lobby")
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if not button.is_visible_in_tree():
+		failures.append("Copy code is missing in Online before streamer mode")
+	_sfx().set_hide_room_code(true)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows with Hide room code on")
+	screen.press_control("copy_code")
+	_sfx().set_hide_room_code(false)
+	if not copied.is_empty():
+		failures.append("a hidden Copy code still wrote %s to the clipboard" % [copied])
+	await _kind_close_435(rig)
 	return failures
