@@ -90,11 +90,17 @@ func _process(delta: float) -> void:
 		return
 	update_targets()
 	var step: float = delta / FADE_SEC
+	var redraw: bool = false
 	for slot in _alpha.size():
+		var was: float = _alpha[slot]
 		_alpha[slot] = move_toward(_alpha[slot], 1.0 if _wanted[slot] else 0.0, step)
 		_badges[slot].modulate.a = _alpha[slot]
 		_numbers[slot].modulate.a = _alpha[slot]
-	_canvas.queue_redraw()
+		if _alpha[slot] > 0.0 or _alpha[slot] != was:
+			redraw = true
+	# With every arrow faded out (and none fading this frame) there is nothing to draw.
+	if redraw:
+		_canvas.queue_redraw()
 
 ## Works out who is off screen right now and where their arrow goes. Public so a scenario can
 ## read the result without waiting out a frame.

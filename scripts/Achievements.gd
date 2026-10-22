@@ -181,8 +181,9 @@ func on_round_started(in_round: Array, stage_name: String, weapons: Dictionary) 
 		on_weapon_held(slot, str(weapons.get(slot, "")))
 	if stage_name == "":
 		return
-	_stages_played[stage_name] = true
-	_save()
+	if not _stages_played.has(stage_name):
+		_stages_played[stage_name] = true
+		_save()
 	var rotation: PackedStringArray = HostSettingsScript.shared().known_stages
 	if rotation.is_empty():
 		return
@@ -239,8 +240,9 @@ func on_round_finished(in_round: Array, winners: Array, info: Dictionary) -> voi
 		if weapon == PICKAXE:
 			credit(slot, "old_faithful")
 		if _pickup_weapon_ids().has(weapon):
-			_arsenal[weapon] = true
-			_save()
+			if not _arsenal.has(weapon):
+				_arsenal[weapon] = true
+				_save()
 			if _arsenal_complete():
 				credit(slot, "arsenal")
 		if not _hurt.has(slot) and float(damage.get(slot, 0.0)) <= 0.0:
