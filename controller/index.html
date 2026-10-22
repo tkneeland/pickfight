@@ -513,7 +513,7 @@
     color: var(--ink);
     background: var(--yellow);
   }
-  #look-btn, #vibration-btn {
+  #look-btn, #vibration-btn, #leave-btn {
     font: inherit;
     font-size: 18px;
     font-weight: 700;
@@ -550,7 +550,7 @@
   #dmgbar { background: rgba(20, 24, 29, 0.55); border-bottom: 1px solid var(--ink); }
 
   /* Every button: cream face, ink outline, hard shadow that the press eats. */
-  #ready-btn, #look-btn, #vibration-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
+  #ready-btn, #look-btn, #vibration-btn, #leave-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
   #host-menu button, #team-row button, #target-row button, #hat-grid button, #eyes-grid button, #color-row button {
     font-family: var(--display);
     font-weight: 400;
@@ -560,7 +560,7 @@
     border-radius: 16px;
     box-shadow: 4px 4px 0 var(--ink);
   }
-  #ready-btn:active, #look-btn:active, #vibration-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
+  #ready-btn:active, #look-btn:active, #vibration-btn:active, #leave-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
   #steal:active, #mouse-capture:active, #host-menu button:active, #team-row button:active, #target-row button:active,
   #hat-grid button:active, #eyes-grid button:active, #color-row button:active {
     transform: translate(3px, 3px);
@@ -604,7 +604,7 @@
   #team-row button.on { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink), 4px 4px 0 6px var(--ink); }
   #team-line { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
 
-  #look-btn, #vibration-btn { font-size: 20px; }
+  #look-btn, #vibration-btn, #leave-btn { font-size: 20px; }
   #name-input {
     font-family: var(--display);
     font-weight: 400;
@@ -666,6 +666,7 @@
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
   <button id="vibration-btn" type="button">Vibration: on</button>
+  <button id="leave-btn" type="button">Leave game</button>
 </div>
 <div id="name-prompt">
   <div id="name-prompt-title">Pick your name</div>
@@ -807,6 +808,8 @@
         "PHONE_MOUSE_SENS": "Mouse sensitivity",
         "PHONE_VIBRATION_ON": "Vibration: on",
         "PHONE_VIBRATION_OFF": "Vibration: off",
+        "PHONE_LEAVE": "Leave game",
+        "PHONE_LEAVE_CONFIRM": "Tap again to leave",
         "PHONE_HINT_DRAG": "Drag to swing",
         "TEAM_LINE": "You're on {0} team",
         "TEAM_LINE_AUTO": " (auto)",
@@ -875,6 +878,8 @@
         "STATUS_CONNECTING": "connecting",
         "STATUS_CONNECTED": "connected",
         "STATUS_KICKED": "Removed by the host",
+        "STATE_LEFT": "You left the game. Tap here to join again.",
+        "STATUS_LEFT": "You left the game",
         "STATUS_REPLACED": "Opened somewhere else",
         "STATUS_RETRYING": "{0} — retrying",
         "STATUS_RECONNECTING": "reconnecting",
@@ -945,6 +950,8 @@
       "PHONE_MOUSE_SENS": "Mausempfindlichkeit",
       "PHONE_VIBRATION_ON": "Vibration: an",
       "PHONE_VIBRATION_OFF": "Vibration: aus",
+      "PHONE_LEAVE": "Spiel verlassen",
+      "PHONE_LEAVE_CONFIRM": "Nochmal tippen zum Verlassen",
       "PHONE_HINT_DRAG": "Zieh zum Schwingen",
       "TEAM_LINE": "Du bist in Team {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1013,6 +1020,8 @@
       "STATUS_CONNECTING": "verbinde",
       "STATUS_CONNECTED": "verbunden",
       "STATUS_KICKED": "Vom Host entfernt",
+      "STATE_LEFT": "Du hast das Spiel verlassen. Tippe hier, um wieder beizutreten.",
+      "STATUS_LEFT": "Spiel verlassen",
       "STATUS_REPLACED": "Woanders geöffnet",
       "STATUS_RETRYING": "{0} — neuer Versuch",
       "STATUS_RECONNECTING": "verbinde neu",
@@ -1083,6 +1092,8 @@
       "PHONE_MOUSE_SENS": "Sensibilité de la souris",
       "PHONE_VIBRATION_ON": "Vibration : activée",
       "PHONE_VIBRATION_OFF": "Vibration : désactivée",
+      "PHONE_LEAVE": "Quitter la partie",
+      "PHONE_LEAVE_CONFIRM": "Touche encore pour quitter",
       "PHONE_HINT_DRAG": "Glisse pour frapper",
       "TEAM_LINE": "Tu es dans l'équipe {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1151,6 +1162,8 @@
       "STATUS_CONNECTING": "connexion",
       "STATUS_CONNECTED": "connecté",
       "STATUS_KICKED": "Retiré par l'hôte",
+      "STATE_LEFT": "Tu as quitté la partie. Touche ici pour rejoindre à nouveau.",
+      "STATUS_LEFT": "Partie quittée",
       "STATUS_REPLACED": "Ouvert ailleurs",
       "STATUS_RETRYING": "{0} — nouvel essai",
       "STATUS_RECONNECTING": "reconnexion",
@@ -1221,6 +1234,8 @@
       "PHONE_MOUSE_SENS": "Sensibilidad del mouse",
       "PHONE_VIBRATION_ON": "Vibración: sí",
       "PHONE_VIBRATION_OFF": "Vibración: no",
+      "PHONE_LEAVE": "Salir del juego",
+      "PHONE_LEAVE_CONFIRM": "Toca otra vez para salir",
       "PHONE_HINT_DRAG": "Arrastra para golpear",
       "TEAM_LINE": "Estás en el equipo {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1289,6 +1304,8 @@
       "STATUS_CONNECTING": "conectando",
       "STATUS_CONNECTED": "conectado",
       "STATUS_KICKED": "Expulsado por el anfitrión",
+      "STATE_LEFT": "Saliste del juego. Toca aquí para volver a unirte.",
+      "STATUS_LEFT": "Saliste del juego",
       "STATUS_REPLACED": "Abierto en otro lugar",
       "STATUS_RETRYING": "{0} — reintentando",
       "STATUS_RECONNECTING": "reconectando",
@@ -1359,6 +1376,8 @@
       "PHONE_MOUSE_SENS": "Sensibilidade do mouse",
       "PHONE_VIBRATION_ON": "Vibração: ligada",
       "PHONE_VIBRATION_OFF": "Vibração: desligada",
+      "PHONE_LEAVE": "Sair do jogo",
+      "PHONE_LEAVE_CONFIRM": "Toque de novo para sair",
       "PHONE_HINT_DRAG": "Arraste para bater",
       "TEAM_LINE": "Você está no time {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1427,6 +1446,8 @@
       "STATUS_CONNECTING": "conectando",
       "STATUS_CONNECTED": "conectado",
       "STATUS_KICKED": "Removido pelo anfitrião",
+      "STATE_LEFT": "Você saiu do jogo. Toque aqui para entrar de novo.",
+      "STATUS_LEFT": "Você saiu do jogo",
       "STATUS_REPLACED": "Aberto em outro lugar",
       "STATUS_RETRYING": "{0} — tentando de novo",
       "STATUS_RECONNECTING": "reconectando",
@@ -1497,6 +1518,8 @@
       "PHONE_MOUSE_SENS": "鼠标灵敏度",
       "PHONE_VIBRATION_ON": "振动:开",
       "PHONE_VIBRATION_OFF": "振动:关",
+      "PHONE_LEAVE": "离开游戏",
+      "PHONE_LEAVE_CONFIRM": "再点一次离开",
       "PHONE_HINT_DRAG": "拖动来挥动",
       "TEAM_LINE": "你在{0}队",
       "TEAM_LINE_AUTO": " (自动)",
@@ -1565,6 +1588,8 @@
       "STATUS_CONNECTING": "连接中",
       "STATUS_CONNECTED": "已连接",
       "STATUS_KICKED": "被房主移出",
+      "STATE_LEFT": "你已离开游戏。点这里重新加入。",
+      "STATUS_LEFT": "已离开游戏",
       "STATUS_REPLACED": "在别处被打开",
       "STATUS_RETRYING": "{0} — 重试中",
       "STATUS_RECONNECTING": "重新连接中",
@@ -1635,6 +1660,8 @@
       "PHONE_MOUSE_SENS": "マウス感度",
       "PHONE_VIBRATION_ON": "バイブ: オン",
       "PHONE_VIBRATION_OFF": "バイブ: オフ",
+      "PHONE_LEAVE": "ゲームを抜ける",
+      "PHONE_LEAVE_CONFIRM": "もう一度タップで抜ける",
       "PHONE_HINT_DRAG": "ドラッグで振る",
       "TEAM_LINE": "あなたは{0}チーム",
       "TEAM_LINE_AUTO": " (自動)",
@@ -1703,6 +1730,8 @@
       "STATUS_CONNECTING": "接続中",
       "STATUS_CONNECTED": "接続済み",
       "STATUS_KICKED": "ホストに外されました",
+      "STATE_LEFT": "ゲームを抜けました。ここをタップで再参加。",
+      "STATUS_LEFT": "ゲームを抜けました",
       "STATUS_REPLACED": "別の場所で開かれました",
       "STATUS_RETRYING": "{0} — 再試行中",
       "STATUS_RECONNECTING": "再接続中",
@@ -1773,6 +1802,8 @@
       "PHONE_MOUSE_SENS": "마우스 감도",
       "PHONE_VIBRATION_ON": "진동: 켜짐",
       "PHONE_VIBRATION_OFF": "진동: 꺼짐",
+      "PHONE_LEAVE": "게임 나가기",
+      "PHONE_LEAVE_CONFIRM": "한 번 더 누르면 나가요",
       "PHONE_HINT_DRAG": "드래그해서 휘두르기",
       "TEAM_LINE": "당신은 {0}팀이에요",
       "TEAM_LINE_AUTO": " (자동)",
@@ -1841,6 +1872,8 @@
       "STATUS_CONNECTING": "연결 중",
       "STATUS_CONNECTED": "연결됨",
       "STATUS_KICKED": "호스트가 내보냄",
+      "STATE_LEFT": "게임에서 나갔어요. 여기를 눌러 다시 참가하세요.",
+      "STATUS_LEFT": "게임에서 나갔어요",
       "STATUS_REPLACED": "다른 곳에서 열림",
       "STATUS_RETRYING": "{0} — 다시 시도 중",
       "STATUS_RECONNECTING": "다시 연결 중",
@@ -1911,6 +1944,8 @@
       "PHONE_MOUSE_SENS": "Чувствительность мыши",
       "PHONE_VIBRATION_ON": "Вибрация: вкл.",
       "PHONE_VIBRATION_OFF": "Вибрация: выкл.",
+      "PHONE_LEAVE": "Выйти из игры",
+      "PHONE_LEAVE_CONFIRM": "Нажмите ещё раз, чтобы выйти",
       "PHONE_HINT_DRAG": "Води, чтобы махать",
       "TEAM_LINE": "Вы в команде: {0}",
       "TEAM_LINE_AUTO": " (авто)",
@@ -1979,6 +2014,8 @@
       "STATUS_CONNECTING": "подключение",
       "STATUS_CONNECTED": "подключено",
       "STATUS_KICKED": "Убран хозяином",
+      "STATE_LEFT": "Вы вышли из игры. Нажмите здесь, чтобы вернуться.",
+      "STATUS_LEFT": "Вы вышли из игры",
       "STATUS_REPLACED": "Открыто в другом месте",
       "STATUS_RETRYING": "{0} — повторная попытка",
       "STATUS_RECONNECTING": "переподключение",
@@ -2047,6 +2084,7 @@
       "PHONE_TEAM_AUTO": "#team-auto",
       "PHONE_READY": "#ready-btn",
       "PHONE_HAT_AND_COLOUR": "#look-btn",
+      "PHONE_LEAVE": "#leave-btn",
       "PHONE_PICK_NAME": "#name-prompt-title",
       "PHONE_NAME_INFO": "#name-prompt-info",
       "PHONE_SHUFFLE": "#name-shuffle",
@@ -2549,6 +2587,8 @@
   // a reload (issue #164): it stops reconnecting too, or two tabs would keep
   // taking the slot off each other.
   var replacedOut = false;
+  // Set once this phone left on purpose (issue #775): it stops reconnecting until its player taps the state text.
+  var leftOut = false;
   // Set once the host refused this phone for the match kind (close code 4003, #509).
   var refusedOut = false;
   var stateTimer = null;
@@ -2557,7 +2597,9 @@
   var closeReason = "";
   function showState() {
     var text = "";
-    if (kickedOut) {
+    if (leftOut) {
+      text = t("STATE_LEFT");
+    } else if (kickedOut) {
       text = t("STATE_KICKED");
     } else if (replacedOut) {
       text = t("STATE_REPLACED");
@@ -2584,6 +2626,7 @@
       }
     }
     stateEl.textContent = text;
+    stateEl.style.pointerEvents = leftOut ? "auto" : "";
     nameEl.classList.toggle("locked", inPlay());
     showCareer();
     // Issue #194: no "Drag to swing" on a phone that has no player to swing.
@@ -3079,6 +3122,32 @@
   });
   showVibration();
 
+  // ---- leave game (issue #775) ---------------------------------------------------
+  // Two taps: the first arms the button for a few seconds, the second tells the host to free the seat.
+  var leaveBtn = document.getElementById("leave-btn");
+  var leaveArmed = false;
+  var leaveTimer = null;
+  function showLeave() { leaveBtn.textContent = t(leaveArmed ? "PHONE_LEAVE_CONFIRM" : "PHONE_LEAVE"); }
+  leaveBtn.addEventListener("click", function () {
+    if (!leaveArmed) {
+      leaveArmed = true;
+      showLeave();
+      leaveTimer = setTimeout(function () { leaveArmed = false; showLeave(); }, 4000);
+      return;
+    }
+    clearTimeout(leaveTimer);
+    leaveArmed = false;
+    showLeave();
+    sendText({ t: "leave" });
+  });
+  stateEl.addEventListener("click", function () {
+    if (!leftOut) { return; }
+    leftOut = false;
+    showState();
+    connect();
+  });
+  showLeave();
+
   // ---- host controls (issue #149) -------------------------------------------
   // Only the host phone -- the one allowed to set "first to N" -- gets the
   // gear; the host decides, and ignores the same requests from anyone else.
@@ -3458,6 +3527,8 @@
 
   // Must match ControllerServer.KICKED_REASON: a kicked phone stops retrying.
   var KICKED_REASON = "removed by the host";
+  // Must match ControllerServer.LEFT_REASON (#775): this phone asked to leave.
+  var LEFT_REASON = "left the game";
   // Must match ControllerServer.REPLACED_REASON (issue #164): this phone's id
   // connected again elsewhere, which now holds the slot. No retry either.
   var REPLACED_REASON = "opened somewhere else";
@@ -3556,6 +3627,7 @@
       var relayError = !!(relayNote && relayNote.relayError);
       relayJoined = false;
       var kicked = reason === KICKED_REASON;
+      var left = reason === LEFT_REASON;
       var replaced = reason === REPLACED_REASON;
       var refused = code === REFUSED_CODE;
       closeReason = kicked || replaced ? "" : reason;
@@ -3570,6 +3642,7 @@
       // Forget any drag that was in progress: the host has already zeroed this
       // player, and on reconnect the first frame should be "not touching".
       release();
+      if (left) { leftOut = true; closeReason = ""; setStatus(t("STATUS_LEFT")); showState(); return; }
       if (kicked) { kickedOut = true; showState(); return; }
       if (replaced) { replacedOut = true; showState(); return; }
       if (refused) { refusedOut = true; showState(); setTimeout(connect, REFUSED_RETRY_MS); return; }
