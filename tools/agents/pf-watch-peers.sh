@@ -6,7 +6,7 @@
 #   UNOWNED        a ready-for-agent ticket has no assignee: claim it.
 # One watcher per account per machine: a second window exits at once instead of racing.
 . "$(dirname "$0")/pf-env.sh" || exit 1
-LOCK=/tmp/pickfight-watch-peers-$PF_ACCOUNT.lock
+LOCK=${TMPDIR:-/tmp}/pickfight-watch-peers-$PF_ACCOUNT.lock
 IDLE_HOURS=8
 PEERS=${WATCH_PEERS:-agage-JG}
 if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK")" 2>/dev/null; then
@@ -39,7 +39,7 @@ while true; do
   unowned=$(echo "$list" | grep -E ':$' | cut -d: -f1 | tr '\n' ' ')
   if [ -n "${unowned// }" ]; then echo "UNOWNED: #${unowned% }"; exit 0; fi
   last=$(echo "$now" | awk '{print $2}')
-  last_s=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null || echo "$now_s")
+  last_s=$(pf_iso_to_epoch "$last" || echo "$now_s")
   theirs=$(echo "$list" | grep -E ":($(echo $PEERS | tr ' ' '|'))" | cut -d: -f1 | tr '\n' ' ')
   # Once per idle stretch: a STALE already reported for this last-activity time is not reported again.
   STALE_MARK="$PF_STATE/pickfight-stale-reported"

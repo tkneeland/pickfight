@@ -2,3 +2,7 @@
 .githooks/** text eol=lf
 .claude/hooks/** text eol=lf
 # atlas-v3:gitattributes:end
+# AT mode scripts and confs are sourced by bash: CRLF breaks them (#820)
+tools/agents/**/*.sh text eol=lf
+tools/agents/accounts/*.conf text eol=lf
+tools/agents/windows/*.ps1 text eol=lf
