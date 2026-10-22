@@ -4,6 +4,7 @@
 #   PEER ACTIVITY  a peer did anything new in the repo.
 #   STALE          a peer has been idle IDLE_HOURS+ while ready-for-agent tickets sit assigned to them: take them over.
 #   UNOWNED        a ready-for-agent ticket has no assignee: claim it.
+# UNOWNED/STALE tickets with a recent CLAIM from another account (channel or [CLAIM] comment) are skipped.
 # One watcher per account per machine: a second window exits at once instead of racing.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 LOCK=${TMPDIR:-/tmp}/pickfight-watch-peers-$PF_ACCOUNT.lock
@@ -23,6 +24,16 @@ ready() {  # open ready-for-agent issues as "number:assignee" (assignee may be e
   gh issue list --repo $REPO --state open --label ready-for-agent --limit 100 \
     --json number,assignees --jq '.[]|"\(.number):\(.assignees|map(.login)|join(","))"'
 }
+# 0 when another account claimed issue $1 in the last 24h: a channel CLAIM (pf-msg.sh) or a "[CLAIM]" issue comment
+claimed_elsewhere() {
+  bash "$PF_DIR/pf-msg.sh" claimed "$1" 2>/dev/null && return 0
+  cutoff=$(( $(date -u +%s) - 86400 ))
+  for ts in $(gh api "repos/$REPO/issues/$1/comments" --jq ".[] | select((.body|startswith(\"[CLAIM]\")) and .user.login!=\"$PF_ACCOUNT\") | .created_at" 2>/dev/null); do
+    [ "$(pf_iso_to_epoch "$ts" || echo 0)" -ge "$cutoff" ] && return 0
+  done
+  return 1
+}
+filter_claimed() { out=""; for n in $1; do claimed_elsewhere "$n" || out="$out$n "; done; echo "$out"; }
 base=$(latest)
 case "$base" in null*) base="null 1970-01-01T00:00:00Z";; esac
 first=1
@@ -37,10 +48,12 @@ while true; do
   fi
   list=$(ready) || continue
   unowned=$(echo "$list" | grep -E ':$' | cut -d: -f1 | tr '\n' ' ')
+  unowned=$(filter_claimed "$unowned")
   if [ -n "${unowned// }" ]; then echo "UNOWNED: #${unowned% }"; exit 0; fi
   last=$(echo "$now" | awk '{print $2}')
   last_s=$(pf_iso_to_epoch "$last" || echo "$now_s")
   theirs=$(echo "$list" | grep -E ":($(echo $PEERS | tr ' ' '|'))" | cut -d: -f1 | tr '\n' ' ')
+  theirs=$(filter_claimed "$theirs")
   # Once per idle stretch: a STALE already reported for this last-activity time is not reported again.
   STALE_MARK="$PF_STATE/pickfight-stale-reported"
   if [ -n "${theirs// }" ] && [ $(( now_s - last_s )) -ge $(( IDLE_HOURS * 3600 )) ] \

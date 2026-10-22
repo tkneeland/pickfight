@@ -1033,6 +1033,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_offline_check_catches_a_cdn_reference_798",
 	"site_pages_have_no_dead_links_or_bare_images_799",
 	"site_link_check_catches_a_missing_file_and_a_missing_alt_799",
+	"idle_fighter_gets_drag_hint_after_six_seconds_826",
+	"idle_hint_skips_bots_ghosts_and_later_rounds_826",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3472,6 +3474,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_site_pages_have_no_dead_links_or_bare_images_799()
 		"site_link_check_catches_a_missing_file_and_a_missing_alt_799":
 			return _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799()
+		"idle_fighter_gets_drag_hint_after_six_seconds_826":
+			return await _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826()
+		"idle_hint_skips_bots_ghosts_and_later_rounds_826":
+			return await _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48908,4 +48914,111 @@ func _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799() ->
 	if found.size() != 4 or not found[0].begins_with("site/index.html:1:"):
 		failures.append("the real page with a bare broken image prepended gave %d problems, wanted 4 on line 1: %s" % [found.size(), found])
 	_scenario_completed = true
+	return failures
+
+## Fixture for the #826 idle-hint scenarios: `count` players under a bare NameTags
+## (no RoundManager parent, so the scenario feeds the hint its own round state).
+func _idle_hint_fixture(count: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array = []
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "HintP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.visible = true
+		player.alive = true
+		players.append(player)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	return {"stage": stage, "players": players, "hint": tags.idle_hint()}
+
+## Steps `frames` physics frames, ticking the hint each one with `ctx`.
+func _idle_hint_run(hint: Node2D, ctx: Dictionary, frames: int) -> void:
+	for _i in frames:
+		await physics_frame
+		hint.tick(ctx)
+
+func _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Dictionary = _idle_hint_fixture(3)
+	var players: Array = fx["players"]
+	var hint: Node2D = fx["hint"]
+	var ctx: Dictionary = {"active": true, "round_id": 1, "reset": true, "scale": 1.0,
+		"is_pad": func(slot: int) -> bool: return slot == 2,
+		"anchor": func(slot: int) -> Vector2: return Vector2(100.0 + 150.0 * slot, 240.0)}
+	hint.tick(ctx)
+	ctx["reset"] = false
+	await _idle_hint_run(hint, ctx, 180)
+	players[1].input_vector = Vector2(1.0, 0.0) # slot 1 moves at 3 s
+	await _idle_hint_run(hint, ctx, 174) # 5.9 s in
+	for slot in 3:
+		if hint.has_hint(slot):
+			failures.append("slot %d has a hint at 5.9 s" % slot)
+	await _idle_hint_run(hint, ctx, 24) # 6.3 s in
+	if not hint.has_hint(0) or hint.hint_text(0) != tr("HINT_DRAG_TO_SWING"):
+		failures.append("idle slot 0 has no 'Drag to swing' plate at 6.3 s (text '%s')" % hint.hint_text(0))
+	if hint.has_hint(1):
+		failures.append("slot 1 moved at 3 s but has a hint")
+	if not hint.has_hint(2) or hint.hint_text(2) != tr("HINT_RIGHT_STICK"):
+		failures.append("idle gamepad slot 2 lacks the right-stick plate (text '%s')" % hint.hint_text(2))
+	if tr("HINT_DRAG_TO_SWING") == "HINT_DRAG_TO_SWING" or tr("HINT_RIGHT_STICK") == "HINT_RIGHT_STICK":
+		failures.append("hint strings are untranslated keys")
+	var plate: Node = hint.get_node_or_null("Plate0")
+	if plate == null or plate.get("size").y < 16.0:
+		failures.append("plate missing or its text is under 16 design px")
+	await _idle_hint_run(hint, ctx, 30)
+	players[0].input_vector = Vector2(0.0, 1.0)
+	await _idle_hint_run(hint, ctx, 30) # 0.5 s: faded and freed
+	if hint.has_hint(0) or hint.get_node_or_null("Plate0") != null:
+		failures.append("slot 0's plate was not freed after its first input")
+	players[0].input_vector = Vector2.ZERO
+	await _idle_hint_run(hint, ctx, 480)
+	if hint.has_hint(0):
+		failures.append("slot 0's hint came back in the same match")
+	await _teardown(fx["stage"])
+	return failures
+
+func _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Dictionary = _idle_hint_fixture(5)
+	var players: Array = fx["players"]
+	var hint: Node2D = fx["hint"]
+	var ctx: Dictionary = {"active": true, "round_id": 1, "reset": true, "scale": 1.0,
+		"is_bot": func(slot: int) -> bool: return slot == 0,
+		"anchor": func(slot: int) -> Vector2: return Vector2(100.0 + 150.0 * slot, 240.0)}
+	hint.tick(ctx)
+	ctx["reset"] = false
+	players[1].alive = false # a ghost
+	players[3].input_vector = Vector2(1.0, 0.0)
+	await _idle_hint_run(hint, ctx, 420) # 7 s
+	for slot in [0, 1, 3]:
+		if hint.has_hint(slot):
+			failures.append("slot %d (bot, ghost, mover) got a hint" % slot)
+	if not hint.has_hint(2):
+		failures.append("idle human slot 2 got no hint in round 1")
+	ctx["active"] = false # the round ends: the plate fades out
+	await _idle_hint_run(hint, ctx, 30)
+	if hint.has_hint(2) or hint.get_node_or_null("Plate2") != null:
+		failures.append("slot 2's plate outlived the round")
+	ctx["active"] = true # round 2: nobody is hinted
+	ctx["round_id"] = 2
+	await _idle_hint_run(hint, ctx, 420)
+	for slot in 5:
+		if hint.has_hint(slot):
+			failures.append("slot %d got a hint in round 2" % slot)
+	ctx["active"] = false # back to the lobby, then a new match
+	ctx["reset"] = true
+	hint.tick(ctx)
+	ctx["reset"] = false
+	ctx["active"] = true
+	ctx["round_id"] = 3
+	await _idle_hint_run(hint, ctx, 380)
+	if not hint.has_hint(4):
+		failures.append("slot 4 got no hint in round 1 of a new match")
+	await _teardown(fx["stage"])
 	return failures

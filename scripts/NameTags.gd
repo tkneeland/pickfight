@@ -38,6 +38,9 @@ var _rings: Array = []
 ## Issue #752: a team badge (the team's letter in ink on its colour) left of each team player's tag.
 const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const IdleHintScript := preload("res://scripts/IdleHint.gd")
+## Issue #826: the first-round "Drag to swing" hint, built with the tags.
+var _idle_hint: Node2D
 const TEAM_BADGE_PX: float = 26.0
 const TEAM_BADGE_GAP: float = 4.0
 var _team_badges: Array[Control] = []
@@ -89,6 +92,8 @@ func build() -> void:
 		badge.name = "TeamBadge%d" % slot
 		add_child(badge)
 		_team_badges.append(badge)
+	_idle_hint = IdleHintScript.new(_players, _slot_color)
+	add_child(_idle_hint)
 
 ## Shows, names, colours and places every living player's tag for this frame.
 func tick() -> void:
@@ -157,6 +162,7 @@ func tick() -> void:
 		if count > 0:
 			var below: float = rect.position.y + rect.size.y + (PIP_RADIUS + 2.0) * tag_scale
 			_pips.append([slot, Vector2(rect.position.x + rect.size.x * 0.5, below), count, tag_scale])
+	_tick_idle_hint(tag_scale)
 	if had_rings or not _rings.is_empty() or not _pips.is_empty():
 		queue_redraw()
 
@@ -175,6 +181,36 @@ func _mark_team(tag: Label, player: Node2D) -> void:
 		tag.add_theme_constant_override("outline_size", TEAM_OUTLINE_SIZE if team != TeamsScript.NONE else 6)
 	if team != TeamsScript.NONE:
 		_rings.append([player.global_position, team])
+
+## Feeds the idle hint (#826) the round loop's state, read off the RoundManager
+## parent when there is one; a bare NameTags (the scenario fixtures) never hints.
+func _tick_idle_hint(tag_scale: float) -> void:
+	if _idle_hint == null:
+		return
+	var rm: Node = get_parent()
+	var ctx: Dictionary = {"scale": tag_scale}
+	if rm != null and rm.get("_state") != null and rm.get("_round_number") != null:
+		var state: int = int(rm.get("_state"))
+		ctx["active"] = state == 1 # RoundManager.State.ROUND_ACTIVE
+		ctx["reset"] = state == 3 # RoundManager.State.LOBBY
+		ctx["round_id"] = int(rm.get("_round_number"))
+		ctx["is_bot"] = func(slot: int) -> bool: return bool(rm.call("_is_bot_slot", slot))
+		var server: Variant = rm.get("_controller_server")
+		ctx["is_pad"] = func(slot: int) -> bool:
+			if server == null or not is_instance_valid(server) or not (server as Object).has_method("pad_slot"):
+				return false
+			for device: int in Input.get_connected_joypads():
+				if int(server.pad_slot(device)) == slot:
+					return true
+			return false
+		ctx["anchor"] = func(slot: int) -> Vector2:
+			var tag: Label = _name_tags[slot]
+			return tag.position + Vector2(tag.get_minimum_size().x * 0.5 * tag_scale, 0.0)
+	_idle_hint.tick(ctx)
+
+## The idle hint node (#826), for the scenarios.
+func idle_hint() -> Node2D:
+	return _idle_hint
 
 ## Issue #236: the team rings noted this frame, for the scenarios.
 func team_rings() -> Array:

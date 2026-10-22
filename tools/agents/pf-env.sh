@@ -36,7 +36,10 @@ export TZ REPO
 if [ -z "${REPO_PATH:-}" ]; then REPO_PATH=$(dirname "$(git -C "$PF_DIR" rev-parse --path-format=absolute --git-common-dir)"); fi
 ROOT=$REPO_PATH
 # per-account local state: tkneeland keeps ~/.claude; others get their own subdir so accounts sharing a Mac do not collide
-if [ "$PF_ACCOUNT" = tkneeland ]; then PF_STATE=$HOME/.claude; else PF_STATE=$HOME/.claude/pf/$PF_ACCOUNT; fi
+# PF_STATE_DIR in the environment (tests, fixtures) wins over the computed dir. A distinct name, because
+# PF_STATE itself is exported and would otherwise leak from one account's script into another's.
+if [ -n "${PF_STATE_DIR:-}" ]; then PF_STATE=$PF_STATE_DIR
+elif [ "$PF_ACCOUNT" = tkneeland ]; then PF_STATE=$HOME/.claude; else PF_STATE=$HOME/.claude/pf/$PF_ACCOUNT; fi
 mkdir -p "$PF_STATE"; export PF_STATE ROOT
 
 pf_handles() { for f in "$PF_DIR"/accounts/*.conf; do b=$(basename "$f" .conf); case $b in _*) ;; *) echo "$b";; esac; done; }

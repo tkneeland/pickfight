@@ -510,6 +510,8 @@ VICTORY_CLIP_SAVED,Clip saved,Clip gespeichert,Clip enregistré,Clip guardado,Cl
 PAUSED_HINT_PAD,Start to resume · View for menu,Start zum Fortsetzen · View für Menü,Start pour reprendre · View pour le menu,Start para continuar · View para el menú,Start para continuar · View para o menu,按 Start 继续 · 按 View 打开菜单,Start で再開 · View でメニュー,Start로 계속 · View로 메뉴,Start — продолжить · View — меню
 PAUSED_HINT_KEYS,Any key to resume · Esc for menu,Beliebige Taste zum Fortsetzen · Esc für Menü,Une touche pour reprendre · Échap pour le menu,Cualquier tecla para continuar · Esc para el menú,Qualquer tecla para continuar · Esc para o menu,按任意键继续 · 按 Esc 打开菜单,任意のキーで再開 · Esc でメニュー,아무 키나 눌러 계속 · Esc로 메뉴,Любая клавиша — продолжить · Esc — меню
 SETTINGS_VOICE,Voice,Stimmen,Voix,Voces,Vozes,语音,ボイス,음성,Голоса
+HINT_DRAG_TO_SWING,Drag to swing,Ziehen zum Schwingen,Glisse pour frapper,Arrastra para golpear,Arraste para golpear,拖动来挥击,ドラッグでスイング,드래그해서 휘두르기,Тяни и бей
+HINT_RIGHT_STICK,Move the right stick,Rechten Stick bewegen,Bouge le stick droit,Mueve el stick derecho,Mova o analógico direito,移动右摇杆,右スティックを動かそう,오른쪽 스틱을 움직이세요,Двигай правым стиком
 MATCH_POINT,MATCH POINT: %s,MATCHBALL: %s,BALLE DE MATCH : %s,PUNTO DE PARTIDO: %s,MATCH POINT: %s,赛点：%s,マッチポイント：%s,매치 포인트: %s,МАТЧБОЛ: %s
 PHONE_SWING_REACH,Swing reach,Schwungreichweite,Portée du swing,Alcance del golpe,Alcance do golpe,挥动范围,スイング距離,스윙 범위,Радиус замаха
 SETTINGS_TEXT_SIZE,Text size: %s,Textgröße: %s,Taille du texte : %s,Tamaño del texto: %s,Tamanho do texto: %s,文字大小:%s,文字サイズ: %s,글자 크기: %s,Размер текста: %s
