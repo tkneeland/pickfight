@@ -161,6 +161,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Mode callouts (#370): the announcer says "King of the Hill!", "Hot Potato!", "Sudden Death!" and "Stock!" and "Soccer!" as those rounds start, "Goal!" on every Soccer goal, "Hill taken!" when a different player or team takes the hill, "Last life!" in Stock at one life, "Stolen!" on a stolen life and "Overtime!" at a Stock tie, "Sudden Death!" when its rocks start and a draw call at the 60 s backstop (#556).
 
 ## Visual look and juice
+- Edge arrows (#779): a living fighter knocked outside the camera view, above the top of the screen or beyond a side, gets a small arrow in their colour pinned just inside the screen edge pointing at them, with the team letter beside it in Teams; it fades in and out over 0.15 s, works with the large-stage camera zoom, skips KO'd players and ghosts, and is never drawn in the lobby how-to-play demos
 - Landing dust, head motion trails, clash sparks (#116, #196)
 - Death burst, hit feedback (#33, #168)
 - Flat parallax stage dressing: clouds or stars plus far and mid silhouettes, mood-coloured, per-stage layouts, no collision (#257, `scripts/StageBackground.gd`)

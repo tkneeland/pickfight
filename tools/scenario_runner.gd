@@ -984,6 +984,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"offscreen_fighter_gets_edge_arrow_779",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3335,6 +3336,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"offscreen_fighter_gets_edge_arrow_779":
+			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46593,4 +46596,76 @@ func _scenario_restore_defaults_750() -> Array[String]:
 	if ui.is_open():
 		ui.toggle_panel()
 	_scenario_completed = true
+	return failures
+
+
+## Issue #779: a living fighter outside the camera view gets an edge arrow in their colour, pinned
+## inside the screen and pointing at them; it fades out once they are back in frame or KO'd.
+func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(5, 1.0, _main_scoreboard())
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	var arrows: CanvasLayer = rm.offscreen_indicators()
+	if arrows == null:
+		failures.append("RoundManager built no edge arrows")
+		await _teardown(loop["stage"])
+		return failures
+	var size: Vector2 = get_root().get_visible_rect().size
+	var in_frame := Vector2(size.x * 0.5, size.y * 0.5)
+	var above := Vector2(size.x * 0.25, -2000.0)
+	# Park both in frame (teleport each tick: the stub stage has no floor to stand on).
+	for i in 20:
+		players[0].teleport_to(in_frame)
+		players[1].teleport_to(in_frame + Vector2(100.0, 0.0))
+		await _await_ticks(1)
+	if arrows.arrow_visible(0) or arrows.arrow_visible(1):
+		failures.append("an arrow showed for a fighter who is in frame")
+	# Hold P1 well above the view; P2 stays in frame.
+	for i in 20:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if not arrows.arrow_visible(0) or arrows.arrow_alpha(0) < 0.99:
+		failures.append("no full arrow for the fighter above the view (alpha %.2f)" % arrows.arrow_alpha(0))
+	else:
+		var tip: Vector2 = arrows.arrow_tip(0)
+		if tip.y > 60.0 or tip.y < 0.0 or tip.x < 0.0 or tip.x > size.x:
+			failures.append("the arrow tip %s is not pinned inside the top edge" % [tip])
+	if arrows.arrow_visible(1):
+		failures.append("the in-frame fighter got an arrow")
+	# Back in frame: it fades out.
+	players[0].teleport_to(in_frame)
+	players[1].teleport_to(in_frame + Vector2(100.0, 0.0))
+	await _await_ticks(3)
+	if not arrows.arrow_visible(0):
+		failures.append("the arrow vanished instantly instead of fading")
+	for i in 20:
+		players[0].teleport_to(in_frame)
+		players[1].teleport_to(in_frame + Vector2(100.0, 0.0))
+		await _await_ticks(1)
+	if arrows.arrow_visible(0):
+		failures.append("the arrow stayed after the fighter came back in frame")
+	# Off screen again, then KO'd: no arrow for a fighter who is out.
+	for i in 20:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if not arrows.arrow_visible(0):
+		failures.append("the arrow did not return when the fighter left the view again")
+	players[0].eliminate()
+	for i in 25:
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if arrows.arrow_visible(0):
+		failures.append("a KO'd fighter kept an edge arrow")
+	await _teardown(loop["stage"])
 	return failures

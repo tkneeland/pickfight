@@ -164,6 +164,7 @@ const StageRotationScript := preload("res://scripts/StageRotation.gd")
 const StatsSenderScript := preload("res://scripts/StatsSender.gd")
 const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const NameTagsScript := preload("res://scripts/NameTags.gd")
+const OffscreenIndicatorsScript := preload("res://scripts/OffscreenIndicators.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
 ## Teams mode's rules (issue #236, ADR-0018).
 const TeamsScript := preload("res://scripts/Teams.gd")
@@ -1641,6 +1642,16 @@ func _tick_name_tags() -> void:
 		add_child(_name_tags)
 		_name_tags.build()
 	_name_tags.tick()
+	if _offscreen_indicators == null:
+		_offscreen_indicators = OffscreenIndicatorsScript.new(_players, _slot_color)
+		add_child(_offscreen_indicators)
+		_offscreen_indicators.build()
+
+## Edge arrows for fighters off screen (#779), or null before the first frame.
+var _offscreen_indicators: CanvasLayer
+
+func offscreen_indicators() -> CanvasLayer:
+	return _offscreen_indicators
 
 # --- Host phone controls and how to play (issue #149) --------------------------
 #
