@@ -1014,6 +1014,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
+	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -3463,6 +3464,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kill_feed_switch_833()
 		"damage_numbers_switch_873":
 			return await _scenario_damage_numbers_switch_873()
+		"pickup_callout_switch_off_spawns_none":
+			return await _scenario_pickup_callout_switch_off_spawns_none()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -48915,6 +48918,53 @@ func _scenario_damage_numbers_switch_873() -> Array[String]:
 		if not sfx.damage_numbers:
 			failures.append("Restore defaults did not put Damage numbers back on")
 	sfx.damage_numbers = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #882: Settings > Pickup callouts gates PickupCallout; saved; reset by Restore defaults.
+func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.pickup_callouts, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_pickup_callouts(false)
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("with Pickup callouts off, a grab made a callout")
+	sfx.set_pickup_callouts(true)
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("with Pickup callouts on, %d callouts, expected 1" % _callouts_818(loop).size())
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_pickup_callouts_882_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_pickup_callouts(false)
+	sfx.pickup_callouts = true
+	sfx.load_settings()
+	if sfx.pickup_callouts:
+		failures.append("Pickup callouts off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.pickup_callouts_box()
+	if box == null:
+		failures.append("Settings has no Pickup callouts box")
+	else:
+		box.button_pressed = false
+		if sfx.pickup_callouts:
+			failures.append("unticking the Pickup callouts box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.pickup_callouts:
+			failures.append("Restore defaults did not put Pickup callouts back on")
+	sfx.pickup_callouts = was["flag"]
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
