@@ -3,6 +3,7 @@ AWARD_BUTTERFINGERS,Butterfingers,Butterfinger,Doigts de beurre,Manos de mantequ
 AWARD_CATEGORY_AIRBORNE,AIRBORNE,LUFTIG,EN L'AIR,AÉREO,NO AR,腾空,空中,공중,ВОЗДУХ
 AWARD_CATEGORY_CLUMSY,CLUMSY,TOLPATSCH,MALADROIT,TORPE,DESAJEITADO,笨手笨脚,ドジ,덤벙,НЕУКЛЮЖИЙ
 AWARD_CATEGORY_COLLECTOR,COLLECTOR,SAMMLER,COLLECTIONNEUR,COLECCIONISTA,COLECIONADOR,收集,コレクター,수집,КОЛЛЕКЦИОНЕР
+AWARD_CATEGORY_COMBO,COMBO,KOMBO,COMBO,COMBO,COMBO,连击,コンボ,콤보,КОМБО
 AWARD_CATEGORY_COMBAT,COMBAT,KAMPF,COMBAT,COMBATE,COMBATE,战斗,バトル,전투,БОЙ
 AWARD_CATEGORY_HAYMAKER,HAYMAKER,HAMMERSCHLAG,UPPERCUT,PUÑETAZO,PANCADA,重拳,強打,강타,ХУК
 AWARD_CATEGORY_STREAKER,STREAK,SERIE,SÉRIE,RACHA,SEQUÊNCIA,连杀,連勝,연속,СЕРИЯ
@@ -12,6 +13,7 @@ AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesad
 AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar,滞空最久,最長滞空,최장 체공,Дольше всех в полёте
 AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega,喜鹊,カササギ,까치,Сорока
 AWARD_HAYMAKER,Haymaker,Hammerschlag,Uppercut,Puñetazo,Pancada,重拳出击,強烈な一撃,강타,Хук
+AWARD_COMBO,Combo,Kombo,Combo,Combo,Combo,连击,コンボ,콤보,Комбо
 AWARD_STREAKER,Streaker,Serienkiller,En série,Racha,Sequência,连杀王,連勝王,연속 킬,Серийник
 AWARD_UNTOUCHABLE,Untouchable,Unantastbar,Intouchable,Intocable,Intocável,滑不留手,無傷の男,무적의 몸,Неуловимый
 AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada,人肉沙包,サンドバッグ,샌드백,Груша для битья
@@ -54,6 +56,7 @@ TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 
 DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_HAYMAKER,%d damage in one hit,%d Schaden in einem Treffer,%d de dégâts en un coup,%d de daño de un golpe,%d de dano em um golpe,一击造成 %d 伤害,一撃で %d ダメージ,한 방에 피해 %d,%d урона одним ударом
+DETAIL_COMBO,%d KOs in 3s,%d KOs in 3 s,%d KO en 3 s,%d KO en 3 s,%d KOs em 3 s,3 秒内 %d 次击倒,3秒で%d KO,3초 내 %d KO,%d KO за 3 с
 DETAIL_STREAK,%d in a row,%d am Stück,%d d'affilée,%d seguidos,%d seguidos,连续 %d 次,%d連続,%d연속,%d подряд
 DETAIL_DAMAGE,%d damage,%d Schaden,%d de dégâts,%d de daño,%d de dano,伤害 %d,ダメージ %d,피해 %d,Урон: %d
 DETAIL_DAMAGE_TAKEN,%d damage taken,%d Schaden kassiert,%d de dégâts subis,%d de daño recibido,%d de dano sofrido,承受伤害 %d,被ダメージ %d,받은 피해 %d,Получено урона: %d

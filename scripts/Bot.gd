@@ -444,6 +444,9 @@ func think(delta: float) -> Vector2:
 	var hook_input: Vector2 = _hook_drive(delta)
 	if hook_input != Vector2.INF:
 		return hook_input
+	var canopy: Vector2 = _umbrella_drive()
+	if canopy != Vector2.INF:
+		return canopy
 	if mode == "attack" and _alive(_target):
 		_hooked_for = 0.0
 		var brake: Vector2 = _brake()
@@ -1048,6 +1051,31 @@ func _hold_in_air() -> Vector2:
 		return Vector2.ZERO
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
+
+## Issue #915: a bot holding the umbrella, airborne with no ground in the
+## AIRBORNE_GAP ray and falling faster than the open canopy allows, aims the
+## head up (canopy open) and leans it towards its goal so it drifts that way.
+## Vector2.INF when it has no say: any other weapon, on the ground, or not
+## falling that fast.
+const CANOPY_FALL_FROM: float = 60.0
+var _canopy_up: bool = false
+func _umbrella_drive() -> Vector2:
+	var stats: Variant = player.get("weapon_stats")
+	if not (stats is Resource) or (stats as Resource).get("special") != &"umbrella":
+		return Vector2.INF
+	# Latched: once the canopy is up it stays up until the fall ends, so the
+	# bot's own swing does not close it as the speed drops under the cap.
+	var vy: float = player.linear_velocity.y
+	if vy <= (0.0 if _canopy_up else CANOPY_FALL_FROM):
+		_canopy_up = false
+		return Vector2.INF
+	var me: Vector2 = player.global_position
+	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
+		_canopy_up = false
+		return Vector2.INF
+	_canopy_up = true
+	var lean: float = clampf((goal.x - me.x) / 400.0, -0.6, 0.6)
+	return Vector2(lean, -1.0).normalized()
 
 # --- Moving --------------------------------------------------------------------
 
