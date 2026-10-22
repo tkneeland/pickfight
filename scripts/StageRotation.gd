@@ -74,9 +74,10 @@ var pinned: int = -1
 func resolve_stock_pin() -> int:
 	var options: Array[int] = []
 	var all: Array[int] = []
+	var stock_pool: PackedStringArray = settings.stages_for_mode(GameModesScript.STOCK)
 	for i in scenes.size():
 		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
-		if settings.stages_for_mode(GameModesScript.STOCK).has(stage_name):
+		if stock_pool.has(stage_name):
 			all.append(i)
 			if settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name):
 				options.append(i)
@@ -92,9 +93,10 @@ func resolve_stock_pin() -> int:
 func picker_rows() -> Array:
 	var comp: Array = []
 	var rest: Array = []
+	var stock_pool: PackedStringArray = settings.stages_for_mode(GameModesScript.STOCK)
 	for i in scenes.size():
 		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
-		if not settings.stages_for_mode(GameModesScript.STOCK).has(stage_name):
+		if not stock_pool.has(stage_name):
 			continue
 		var is_comp: bool = StageScript.competitive_of(scenes[i])
 		var on: bool = settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name)
