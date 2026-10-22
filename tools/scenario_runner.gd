@@ -162,6 +162,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
+	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
 	"mud_patch_slows_player",
@@ -1780,6 +1781,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_summit_spawns_clear()
 		"ice_patch_two_more_stages_spawns_clear":
 			return await _scenario_ice_patch_two_more_stages_spawns_clear()
+		"mud_patch_overpass_spawns_clear":
+			return await _scenario_mud_patch_overpass_spawns_clear()
 		"ice_patch_restores_when_stage_freed":
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
@@ -10952,6 +10955,39 @@ func _scenario_ice_patch_two_more_stages_spawns_clear() -> Array[String]:
 				if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
 					failures.append("%s %s at x=%.0f is over the ice" % [stage_name, child.name, marker.position.x])
 		await _teardown(stage)
+	return failures
+## Overpass (#910) carries exactly one mud patch on its street; no spawn,
+## pickup spot, hill spot, bounce pad or drain edge sits on or within 40 px of it.
+func _scenario_mud_patch_overpass_spawns_clear() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = (load("res://scenes/stages/Overpass.tscn") as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	var muds: Array[Node] = []
+	for child: Node in stage.get_children():
+		if child.get_script() != null and str(child.get_script().resource_path).ends_with("MudPatch.gd"):
+			muds.append(child)
+	if muds.size() != 1:
+		failures.append("Overpass has %d MudPatch, want 1" % muds.size())
+	else:
+		var mud: StaticBody2D = muds[0] as StaticBody2D
+		var half_x: float = mud.size.x / 2.0 + 40.0
+		for child: Node in stage.get_children():
+			var is_marker: bool = child is Marker2D and (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn") or child.name.begins_with("HillSpot"))
+			var is_pad: bool = child.name.begins_with("Pad")
+			if not (is_marker or is_pad):
+				continue
+			var node: Node2D = child as Node2D
+			var reach: float = half_x
+			if is_pad:
+				reach += (child.get("size") as Vector2).x / 2.0
+			if node.position.y < mud.position.y - 120.0:
+				continue
+			if absf(node.position.x - mud.position.x) <= reach:
+				failures.append("%s at x=%.0f is on or near the mud" % [child.name, node.position.x])
+		var kz: Node2D = stage.get_node_or_null("KillZone") as Node2D
+		if kz != null and absf(kz.position.y - mud.position.y) <= 40.0:
+			failures.append("drain within 40 px of the mud")
+	await _teardown(stage)
 	return failures
 ## Friction is put back when the stage goes away with a body still on the ice
 ## (round end), so nothing leaks into the next round.
