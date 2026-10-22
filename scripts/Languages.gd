@@ -120,6 +120,21 @@ static func apply_fonts(code: String) -> void:
 			font.allow_system_fallback = true
 			font.fallbacks = chain
 
+## A font for the Language picker, which shows 简体中文, 日本語 and 한국어 in
+## every locale (including the ones whose chain is empty): `base` with all three
+## bundled subsets as fallbacks, Japanese first so 日本語 is drawn in one style.
+## Only the picker uses it, so other text keeps its line height.
+static func picker_font(base: Font) -> FontVariation:
+	var font := FontVariation.new()
+	font.base_font = base
+	var chain: Array[Font] = []
+	for code: String in ["ja", "zh_CN", "ko"]:
+		var subset: FontFile = load(CJK_SUBSETS[code])
+		if subset != null:
+			chain.append(subset)
+	font.fallbacks = chain
+	return font
+
 ## Sets the live locale from `setting`. Returns the locale it chose.
 static func apply(setting: String) -> String:
 	var code: String = resolve(setting, OS.get_locale())

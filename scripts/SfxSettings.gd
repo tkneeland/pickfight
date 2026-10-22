@@ -174,6 +174,9 @@ func _ready() -> void:
 	_language.name = "Language"
 	_fill_language_items()
 	content.add_child(_language)
+	var picker_font: FontVariation = LanguagesScript.picker_font(_language.get_theme_font("font"))
+	_language.add_theme_font_override("font", picker_font) # its CJK names draw in any locale (#849)
+	_language.get_popup().add_theme_font_override("font", picker_font)
 	_resolution = OptionButton.new()
 	_resolution.name = "Resolution"
 	for size: Vector2i in HostSettingsScript.RESOLUTIONS:

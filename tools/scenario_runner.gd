@@ -1031,6 +1031,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"cjk_subsets_cover_every_translated_character_849",
 	"cjk_subset_check_reports_an_uncovered_character_849",
 	"cjk_fallback_chain_starts_with_bundled_subset_849",
+	"language_picker_draws_cjk_names_in_every_locale_849",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3466,6 +3467,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_cjk_subset_check_reports_an_uncovered_character_849()
 		"cjk_fallback_chain_starts_with_bundled_subset_849":
 			return _scenario_cjk_fallback_chain_starts_with_bundled_subset_849()
+		"language_picker_draws_cjk_names_in_every_locale_849":
+			return _scenario_language_picker_draws_cjk_names_in_every_locale_849()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48688,8 +48691,8 @@ func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
 			out.append("%s: %s" % [code, missing])
 	return out
 
-## The zh_CN, ja and ko columns of strings.csv, as {code: Array of
-## [translated, english] pairs}.
+## The zh_CN, ja and ko columns of strings.csv plus each language's own name
+## in the Language picker, as {code: Array of [translated, english] pairs}.
 func _cjk_translated_strings_849() -> Dictionary:
 	var texts: Dictionary = {"zh_CN": [], "ja": [], "ko": []}
 	var f := FileAccess.open("res://translations/strings.csv", FileAccess.READ)
@@ -48701,6 +48704,9 @@ func _cjk_translated_strings_849() -> Dictionary:
 			var col: int = header.find(code)
 			if col >= 0 and col < row.size():
 				(texts[code] as Array).append([row[col], row[en] if en < row.size() else ""])
+	for option: Dictionary in (load("res://scripts/Languages.gd") as GDScript).OPTIONS:
+		if texts.has(option["code"]):
+			(texts[option["code"]] as Array).append([str(option["name"]), ""])
 	return texts
 
 func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[String]:
@@ -48722,9 +48728,17 @@ func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[Strin
 	if total > 1536 * 1024:
 		failures.append("the CJK subsets total %d bytes, over 1.5 MB" % total)
 	# Exports must still carry art/fonts/.
-	for line: String in FileAccess.get_file_as_string("res://export_presets.cfg").split("\n"):
-		if line.begins_with("exclude_filter=") and line.contains("art"):
-			failures.append("an export preset excludes art/: %s" % line)
+	var presets: String = FileAccess.get_file_as_string("res://export_presets.cfg")
+	if not presets.contains("export_filter=\"all_resources\""):
+		failures.append("export_presets.cfg no longer exports all resources")
+	for line: String in presets.split("\n"):
+		if not line.begins_with("exclude_filter="):
+			continue
+		for pattern: String in line.trim_prefix("exclude_filter=").trim_prefix("\"").trim_suffix("\"").split(","):
+			for code: String in languages.CJK_SUBSETS:
+				var path: String = (languages.CJK_SUBSETS[code] as String).trim_prefix("res://")
+				if not pattern.strip_edges().is_empty() and path.match(pattern.strip_edges()):
+					failures.append("export filter '%s' excludes %s" % [pattern.strip_edges(), path])
 	_scenario_completed = true
 	return failures
 
@@ -48763,7 +48777,9 @@ func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[Stri
 			for i: int in range(1, file.fallbacks.size()):
 				if not (file.fallbacks[i] is SystemFont):
 					failures.append("%s for %s: entry %d after the subset is not a system font" % [file.resource_path.get_file(), code, i])
-	for code: String in ["en", "de", "fr", "es", "pt_BR", "ru"]:
+	for code: String in languages.codes():
+		if languages.CJK_SUBSETS.has(code):
+			continue
 		languages.apply_fonts(code)
 		for file: FontFile in files:
 			if not file.fallbacks.is_empty():
@@ -48772,5 +48788,33 @@ func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[Stri
 				failures.append("%s for %s: line height %f, was %f" % [file.resource_path.get_file(), code, file.get_height(32), heights[file]])
 	for file: FontFile in files:
 		file.fallbacks = was[file] # later scenarios measure text with these fonts
+	_scenario_completed = true
+	return failures
+
+## The Language picker shows 简体中文, 日本語 and 한국어 in every locale, including
+## the ones whose UI fonts have no CJK chain, so its own font falls back to all
+## three bundled subsets and each name has a glyph for every character.
+func _scenario_language_picker_draws_cjk_names_in_every_locale_849() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var panel: CanvasLayer = sfx.build_settings_ui()
+	var row: OptionButton = panel.language_button()
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	for target: Variant in [row, row.get_popup()]: # a PopupMenu is a Window, not a Control
+		var font: Font = target.get_theme_font("font")
+		var chain: Array[Font] = [font]
+		chain.append_array(font.fallbacks)
+		for code: String in languages.CJK_SUBSETS:
+			if not chain.any(func(f: Font) -> bool: return f.resource_path == languages.CJK_SUBSETS[code]):
+				failures.append("%s font has no %s subset in its chain" % [target.get_class(), code])
+		for option: Dictionary in languages.OPTIONS:
+			var name: String = option["name"]
+			for i: int in name.length():
+				var c: int = name.unicode_at(i)
+				if c > 0x20 and not chain.any(func(f: Font) -> bool: return f.has_char(c)):
+					failures.append("%s font cannot draw '%s' in %s" % [target.get_class(), char(c), name])
+	panel.queue_free()
 	_scenario_completed = true
 	return failures
