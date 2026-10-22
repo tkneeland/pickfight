@@ -38,3 +38,17 @@ Line 1 is the model, 5-hour and 7-day usage with reset times, and the mode. Line
 5. Use `pf-ship.sh <issue> "<title>" "<body>"` to ship and `pf-dupe-check.sh` before any ticket request.
 6. If you share a Mac with another account, always set `PF_ACCOUNT` explicitly; state is kept per handle under `~/.claude/pf/<handle>/`.
 7. Tell your human it is on, and how to say "MT mode".
+
+### On Windows (Git Bash)
+
+Same steps, with these swaps (details: `tools/agents/windows/README.md`):
+
+- Step 2, the `statusLine` setting in `%USERPROFILE%\.claude\settings.json` (the path is your main checkout):
+  ```json
+  "statusLine": {
+    "type": "command",
+    "command": "\"C:/Program Files/Git/bin/bash.exe\" -c \"PF_ACCOUNT=<handle> bash /c/Users/<you>/code/pickfight/tools/agents/statusline-usage.sh\""
+  }
+  ```
+- Step 4, no `screen`: `powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-start.ps1 -Account <handle>` starts both watchers as hidden processes. `pf-status.ps1` shows whether they run and the last wake line (exit code 10 means a wake line needs you; `-Ack` clears it), and `pf-stop.ps1` stops them. `windows/README.md` has the optional Task Scheduler entry.
+- Git Bash ignores IANA `TZ` names; `pf-env.sh` maps the common US zones itself (other zones: a POSIX string in your conf).

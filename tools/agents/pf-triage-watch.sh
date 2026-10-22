@@ -37,7 +37,7 @@ while true; do
   for peer in ${WATCH_PEERS:-agage-JG}; do
     grep -qx "beacon-$peer" "$SEEN" && continue
     t=$(gh api "repos/$REPO/issues/432/comments" --jq ".[] | select(.user.login==\"$peer\") | .body" 2>/dev/null | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | head -1)
-    if [ -n "$t" ] && [ $(( $(date +%s) - $(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$t" +%s 2>/dev/null || echo 0) )) -lt 21600 ]; then
+    if [ -n "$t" ] && [ $(( $(date +%s) - $(pf_iso_to_epoch "$t" || echo 0) )) -lt 21600 ]; then
       echo "beacon-$peer" >> "$SEEN"; echo "PEER_BEACON $peer fresh at $t"; exit 0
     fi
   done
