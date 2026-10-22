@@ -37,6 +37,7 @@ const UiThemeScript := preload("res://scripts/UiTheme.gd")
 var _rings: Array = []
 ## Issue #752: a team badge (the team's letter in ink on its colour) left of each team player's tag.
 const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const TEAM_BADGE_PX: float = 26.0
 const TEAM_BADGE_GAP: float = 4.0
 var _team_badges: Array[Control] = []
@@ -102,6 +103,7 @@ func tick() -> void:
 	var sfx: Node = get_node_or_null("/root/Sfx")
 	if sfx != null:
 		tag_scale *= float(sfx.get("ui_scale"))
+	var numbers: bool = HostSettingsScript.shared().player_numbers  # #809
 	var had_rings: bool = not _rings.is_empty() or not _pips.is_empty()
 	_rings.clear()
 	_pips.clear()
@@ -113,6 +115,7 @@ func tick() -> void:
 		var badge: Control = _team_badges[slot]
 		if not shown:
 			badge.set_team(TeamsScript.NONE)
+			badge.set_number(0)
 			continue
 		var text: String = _slot_name.call(slot)
 		if tag.text != text:
@@ -123,6 +126,7 @@ func tick() -> void:
 			tag.add_theme_color_override("font_color", colour)
 		_mark_team(tag, player)
 		badge.set_team(team_of(player))
+		badge.set_number(slot + 1 if numbers else 0, colour)
 		var rise: float = NAME_TAG_RISE
 		if player.has_method("hat_top"):
 			rise = maxf(rise, player.hat_top() + NAME_TAG_HAT_GAP)

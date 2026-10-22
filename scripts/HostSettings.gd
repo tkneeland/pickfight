@@ -98,6 +98,8 @@ var vsync: bool = true
 
 ## Issue #732: mask offensive words in player names (NameFilter.gd).
 var filter_names: bool = true
+## Colour-blind option (#809): a seat number badge on name tags and lobby cards.
+var player_numbers: bool = false
 ## Stock mode (#354): lives per player (1-10) and the time limit in seconds
 ## (one of STOCK_TIME_LIMITS; 0 is no limit).
 const STOCK_MIN_LIVES: int = 1
@@ -407,6 +409,10 @@ func set_auto_save_clips(on: bool) -> void:
 	auto_save_clips = on
 	save_settings()
 
+func set_player_numbers(on: bool) -> void:
+	player_numbers = on
+	save_settings()
+
 func set_filter_names(on: bool) -> void:
 	filter_names = on
 	save_settings()
@@ -451,6 +457,7 @@ func restore_defaults() -> void:
 	vsync = true
 	apply_display()
 	filter_names = true
+	player_numbers = false
 	stock_lives = 3
 	stock_time_limit = 480
 	soccer_goals = 3
@@ -549,6 +556,8 @@ func load_settings() -> void:
 		vsync = vsync_on if vsync_on is bool else true
 		var filter_on: Variant = config.get_value(SECTION, "filter_names", true)
 		filter_names = filter_on if filter_on is bool else true
+		var numbers_on: Variant = config.get_value(SECTION, "player_numbers", false)
+		player_numbers = numbers_on if numbers_on is bool else false
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
@@ -588,6 +597,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "frame_cap", frame_cap)
 	config.set_value(SECTION, "vsync", vsync)
 	config.set_value(SECTION, "filter_names", filter_names)
+	config.set_value(SECTION, "player_numbers", player_numbers)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
 	config.set_value(SECTION, "bot_difficulty", bot_difficulty)

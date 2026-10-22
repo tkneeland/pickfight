@@ -14,6 +14,9 @@ const BORDER_PX: int = 3
 const CORNER_PX: int = 7
 
 var _team: int = TeamsScript.NONE
+## Player numbers (#809): a seat number (1 to 8) in ink on the player's colour, 0 for none. A team wins.
+var _number: int = 0
+var _number_color: Color = Color.WHITE
 
 func _init(team: int = TeamsScript.NONE, side_px: float = DEFAULT_PX) -> void:
 	name = "TeamBadge"
@@ -25,21 +28,33 @@ func _init(team: int = TeamsScript.NONE, side_px: float = DEFAULT_PX) -> void:
 ## Shows the badge for `team` (0 or 1), or hides it for any other value.
 func set_team(team: int) -> void:
 	_team = team if team >= 0 and team < TeamsScript.COUNT else TeamsScript.NONE
-	visible = _team != TeamsScript.NONE
+	visible = _team != TeamsScript.NONE or _number > 0
 	queue_redraw()
+
+## Player numbers (#809): shows seat `number` (1 to 8) on `color` when there is no team; 0 hides it.
+func set_number(number: int, color: Color = Color.WHITE) -> void:
+	_number = number if number > 0 else 0
+	_number_color = color
+	visible = _team != TeamsScript.NONE or _number > 0
+	queue_redraw()
+
+func number() -> int:
+	return _number
 
 func team() -> int:
 	return _team
 
 ## The letter shown, "" for no team.
 func letter() -> String:
+	if _team == TeamsScript.NONE:
+		return str(_number) if _number > 0 else ""
 	return TeamsScript.team_letter(_team)
 
 func _draw() -> void:
-	if _team == TeamsScript.NONE:
+	if _team == TeamsScript.NONE and _number <= 0:
 		return
 	var box := StyleBoxFlat.new()
-	box.bg_color = TeamsScript.team_color(_team)
+	box.bg_color = TeamsScript.team_color(_team) if _team != TeamsScript.NONE else _number_color
 	box.border_color = UiThemeScript.INK
 	box.set_border_width_all(BORDER_PX)
 	box.set_corner_radius_all(CORNER_PX)
