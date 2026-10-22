@@ -32088,7 +32088,7 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 		# sideways reading, and no input.
 		player.gravity_scale = 0.0
 		player.set_input_vector(Vector2.ZERO)
-		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -2500.0)
+		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -900.0)
 		player.teleport_to(start)
 		player.linear_velocity = Vector2.ZERO
 		var best: float = 0.0
