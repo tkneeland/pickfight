@@ -8,13 +8,7 @@
 now=$(date +%s)
 iso2e() { pf_iso_to_epoch "$1" || echo 0; }
 comments=$(gh api "repos/$REPO/issues/432/comments?per_page=100" 2>/dev/null) || { pf_triagemaster; exit 0; }
-beacon() {  # sets b_age b_used b_reset for handle $1
-  local body; body=$(echo "$comments" | jq -r --arg h "$1" '[.[]|select(.user.login==$h and (.body|test("usage @")))]|last|.body // empty')
-  local ts; ts=$(echo "$body" | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | head -1)
-  b_age=999999; [ -n "$ts" ] && b_age=$(( now - $(iso2e "$ts") ))
-  b_used=$(echo "$body" | sed -n 's/^7d: \([0-9.]*\)%.*/\1/p' | head -1); b_used=${b_used%.*}
-  b_reset=$(echo "$body" | sed -n 's/^7d:.*resets \([0-9TZ:-]*\)).*/\1/p' | head -1)
-}
+beacon() { pf_beacon "$1" "$comments"; }  # sets b_age b_used b_reset for handle $1 (pf-env.sh)
 order=$(for h in $(pf_handles); do r=$(sed -n 's/^SUCCESSION_RANK=\([0-9]*\).*/\1/p' "$PF_DIR/accounts/$h.conf"); echo "$r $h"; done | sort -n | awk '{print $2}')
 first=$(echo "$order" | head -1)
 beacon "$first"; holder=$first; reset0=$b_reset

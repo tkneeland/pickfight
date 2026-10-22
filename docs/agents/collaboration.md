@@ -129,7 +129,10 @@ Both owners want maximum throughput. Every agent working this repo should:
 - **Assign by weekly headroom, not by ticket count.** Headroom is 100 minus the
   7-day %. Split new tickets in proportion to headroom across every agent with a
   fresh beacon. For example, at 85% and 51% headroom, about 60/40 to the
-  first. Recompute on every triage.
+  first. Recompute on every triage. Reserve accounts (`RESERVE=1`, tommykneeland)
+  are left out of the split while every regular dev can work normally
+  ([autotriage.md](autotriage.md) rule 5); `pf-reserve.sh` hands back any that
+  reach them anyway.
 - **The 5-hour window only decides timing, not ownership.** At 90% or more,
   that dev's agent still gets the ticket, but starts it after the 5-hour reset.
   Don't hand it to the other dev just for that.
