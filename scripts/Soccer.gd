@@ -313,6 +313,8 @@ func _check_thump(delta: float) -> void:
 	ball_thump.emit(ball.global_position, clampf(jump / THUMP_FULL_DELTA_V, 0.1, 1.0))
 
 func _track_touch() -> void:
+	var nearest: float = TOUCH_RADIUS
+	var toucher: int = -1
 	for slot: int in _watched.keys():
 		var player: Node2D = _watched[slot]
 		if not is_instance_valid(player) or not bool(player.alive):
@@ -320,8 +322,11 @@ func _track_touch() -> void:
 		var near: float = ball.global_position.distance_to(player.global_position)
 		if player.has_method("weapon_head_position"):
 			near = minf(near, ball.global_position.distance_to(player.weapon_head_position()))
-		if near <= TOUCH_RADIUS:
-			_last_touch = slot
+		if near <= nearest:
+			nearest = near
+			toucher = slot
+	if toucher != -1:
+		_last_touch = toucher # the nearest player in reach, not the last listed
 
 func _check_goals() -> void:
 	for defender: int in [0, 1]:
