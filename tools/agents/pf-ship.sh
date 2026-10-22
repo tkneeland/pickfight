@@ -5,6 +5,8 @@
 . "$(dirname "$0")/pf-env.sh" || exit 1
 i=$1; t=$2; b=$3; R=$ROOT; W=$R/.claude/worktrees/$i/pickfight
 FIXER=${FIX_RUNNER:-$HOME/.claude/pf-fix-runner.sh}   # optional helper that repairs tools/scenario_runner.gd conflicts
+# Agent worktrees (.claude/worktrees/agent-*) work too: fall back to the current checkout when its branch names the issue.
+[ -d "$W" ] || { c=$(git rev-parse --show-toplevel 2>/dev/null) && git -C "$c" branch --show-current | grep -q "issue-$i-" && W=$c; }
 cd "$W" || exit 1
 git fetch -q
 if ! git merge -q origin/main >/dev/null 2>&1; then
