@@ -194,6 +194,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"charge_sweep_pair_stays_in_play",
 	"pad_launch_keeps_head_ahead_of_body",
 	"sfx_stage_parts_sound",
+	"sfx_hazard_hit_plays_once_per_hit",
 	"arm_draws_over_identity_outline",
 	"axe_swing_deals_damage",
 	"sfx_mix_victory_quieter_rest_louder",
@@ -1832,6 +1833,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pad_launch_keeps_head_ahead_of_body()
 		"sfx_stage_parts_sound":
 			return await _scenario_sfx_stage_parts_sound()
+		"sfx_hazard_hit_plays_once_per_hit":
+			return await _scenario_sfx_hazard_hit_plays_once_per_hit()
 		"arm_draws_over_identity_outline":
 			return await _scenario_arm_draws_over_identity_outline()
 		"axe_swing_deals_damage":
@@ -12687,6 +12690,41 @@ func _head_anchor_reach_along_circles(player: RigidBody2D, circles: Array[Dictio
 ## the wall's break sounds once, not again for a hit during its break flash.
 ## The parts' own event functions are driven directly, so this checks the
 ## wiring, not the parts' timing, which their own scenarios already hold.
+## Issue #874: spikes and saws play `hazard_hit` once per landed hit; the
+## cooldown suppresses repeats and spawn protection makes no sound.
+func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"hazard_hit"):
+		return ["hazard_hit is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var made: Array = _hazard_spikes_with_player(stage, 0.0)
+	var spikes: Area2D = made[0]
+	var player: RigidBody2D = made[1]
+	player.global_position = PART_POSITION
+	sfx.start_recording()
+	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
+	for tick in ticks_held:
+		player.global_position = PART_POSITION
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	var played: int = _sfx_count(sfx, "hazard_hit")
+	if spikes.hit_count() != 1 or played != 1:
+		failures.append("one contact: %d hits, hazard_hit played %d times, expected 1 and 1" % [spikes.hit_count(), played])
+	# Spawn protection: the touch is blocked, so there is no sound.
+	player.set("spawn_protected", true)
+	var before: int = _sfx_count(sfx, "hazard_hit")
+	for tick in int(spikes.hit_cooldown_sec * 60.0) + 10:
+		player.global_position = PART_POSITION
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if _sfx_count(sfx, "hazard_hit") != before:
+		failures.append("hazard_hit played for a spawn-protected player")
+	sfx.stop_recording()
+	await _teardown(stage)
+	return failures
 func _scenario_sfx_stage_parts_sound() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()

@@ -51,7 +51,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Parts: bounce pad, wind zone, rotating platform (#52); conveyor belt, a floor strip with a signed `belt_speed` that carries a standing player along it while running with or against it adds to or fights the belt, weapon heads untouched, chevrons scroll in the belt direction; one sits on Flatlands' floor (#842); ice patch, a floor strip that drops a standing player's body to the Slippery floor modifier's low friction and restores it on leaving or at round end, heads untouched; one sits on Summit's floor (#860)
 - Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
-- Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282)
+- Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282); a landed hit plays its own `hazard_hit` sound once per hit, none when blocked by spawn protection (#874)
 - Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
 
 ## Match flow and scoring
