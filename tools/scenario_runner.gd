@@ -993,6 +993,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"offscreen_fighter_gets_edge_arrow_779",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
+	"demo_title_wishlist_button_shown_only_in_demo_793",
+	"demo_wishlist_button_opens_store_link_793",
 	"translations_have_no_blank_or_mismatched_cells_794",
 	"translation_cell_check_flags_bad_fixture_794",
 	"doc_paths_point_at_real_files_803",
@@ -3372,6 +3374,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_phone_leave_button_frees_seat_775()
 		"frame_rate_cap_and_vsync_persist_and_apply_774":
 			return await _scenario_frame_rate_cap_and_vsync_persist_and_apply_774()
+		"demo_title_wishlist_button_shown_only_in_demo_793":
+			return await _scenario_demo_title_wishlist_button_shown_only_in_demo_793()
+		"demo_wishlist_button_opens_store_link_793":
+			return await _scenario_demo_wishlist_button_opens_store_link_793()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46957,6 +46963,127 @@ func _scenario_phone_weak_connection_777() -> Array[String]:
 	peer.close(1000, "scenario done")
 	await _teardown(stage)
 	_scenario_completed = true
+	return failures
+
+## Issue #793: the Wishlist on Steam button is in the demo build only, and only once the base game's
+## app ID is filled in. Full game, or demo with the ID unset: no button on the title screen or the end
+## card. Demo with an ID: both have it, the title's sits one D-pad step right of Credits and the end
+## card's button takes the focus when the card shows.
+func _scenario_demo_title_wishlist_button_shown_only_in_demo_793() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [["full game, ID set", 0, 12345, false], ["demo, ID unset", 1, 0, false], ["demo, ID set", 1, 12345, true]]
+	for entry: Array in cases:
+		DemoBuildScript361.forced = int(entry[1])
+		DemoBuildScript361.store_app_id_for_test = int(entry[2])
+		var expect: bool = bool(entry[3])
+		var rig: Dictionary = await _deck_rig_368()
+		var screen: CanvasLayer = rig["screen"]
+		screen.show_title(true)
+		await _await_ticks(2)
+		var title_button: Button = screen.title_button("wishlist")
+		var card: Control = screen.end_card_panel()
+		var card_button: Button = card.find_child("EndCard_wishlist", true, false) as Button if card != null else null
+		if (title_button != null) != expect:
+			failures.append("%s: title Wishlist button present = %s, wanted %s" % [entry[0], title_button != null, expect])
+		if (card_button != null) != expect:
+			failures.append("%s: end card Wishlist button present = %s, wanted %s" % [entry[0], card_button != null, expect])
+		if expect and title_button != null and card_button != null:
+			var credits: Button = screen.title_button("credits")
+			if not title_button.is_visible_in_tree():
+				failures.append("the title Wishlist button is not visible")
+			if credits.get_node_or_null(credits.focus_neighbor_right) != title_button \
+					or title_button.get_node_or_null(title_button.focus_neighbor_left) != credits:
+				failures.append("one D-pad step right of Credits does not reach Wishlist (and back)")
+			if title_button.get_node_or_null(title_button.focus_neighbor_top) == null:
+				failures.append("the title Wishlist button has no D-pad way back up to the cards")
+			if card_button.is_visible_in_tree():
+				failures.append("the end card's Wishlist button shows before the end card does")
+			screen.show_panel("end_card")
+			await _await_ticks(2)
+			if not card_button.is_visible_in_tree() or not card_button.has_focus():
+				failures.append("the end card's Wishlist button is not shown and focused with the card")
+			screen.show_panel("")
+			await _await_ticks(2)
+			if screen.title_visible() or title_button.is_visible_in_tree():
+				failures.append("the Wishlist button stays on screen outside the lobby (during a round)")
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+	DemoBuildScript361.forced = -1
+	DemoBuildScript361.store_app_id_for_test = -1
+	return failures
+
+## Issue #793: the button opens the base game's store page. With Steam running that is the overlay
+## (`open_store_page` recorded on the seam, the browser untouched); without it, the store URL goes to
+## `OS.shell_open` (stubbed here, so no browser opens). The mouse button, key W and the end card's
+## button and key all reach it; the full game and an unset ID open nothing.
+func _scenario_demo_wishlist_button_opens_store_link_793() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	if steam == null:
+		return ["SteamPlatform autoload missing"]
+	var opened: Array[String] = []
+	steam.shell_open_for_test = func(url: String) -> void: opened.append(url)
+	steam.calls_for_test = []
+	DemoBuildScript361.forced = 1
+	DemoBuildScript361.store_app_id_for_test = 12345
+	var url: String = "https://store.steampowered.com/app/12345"
+	if DemoBuildScript361.store_url() != url:
+		failures.append("the store URL is %s" % DemoBuildScript361.store_url())
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	await _await_ticks(2)
+	var title_button: Button = screen.title_button("wishlist")
+	if title_button == null:
+		failures.append("no title Wishlist button")
+		DemoBuildScript361.forced = -1
+		DemoBuildScript361.store_app_id_for_test = -1
+		steam.shell_open_for_test = Callable()
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	title_button.pressed.emit()
+	if opened != [url]:
+		failures.append("the title button opened %s, wanted [%s]" % [opened, url])
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.physical_keycode = KEY_W
+	screen._unhandled_key_input(key)
+	if opened != [url, url]:
+		failures.append("key W on the title opened %s" % [opened])
+	screen.show_title(false)
+	screen.show_panel("end_card")
+	await _await_ticks(2)
+	var card_button: Button = screen.end_card_panel().find_child("EndCard_wishlist", true, false) as Button
+	card_button.pressed.emit()
+	if opened.size() != 3:
+		failures.append("the end card button opened %s" % [opened])
+	screen._unhandled_key_input(key)
+	if opened.size() != 4:
+		failures.append("key W on the end card opened %s" % [opened])
+	steam.fake_running_for_test = true
+	steam.calls_for_test = []
+	card_button.pressed.emit()
+	if steam.calls_for_test != [["open_store_page", 12345]] or opened.size() != 4:
+		failures.append("with Steam running: calls %s, browser opens %d (wanted the overlay call and no browser)" % [steam.calls_for_test, opened.size()])
+	steam.fake_running_for_test = false
+	steam.calls_for_test = []
+	DemoBuildScript361.store_app_id_for_test = 0
+	DemoBuildScript361.open_wishlist(self)
+	DemoBuildScript361.store_app_id_for_test = 12345
+	DemoBuildScript361.forced = 0
+	DemoBuildScript361.open_wishlist(self)
+	steam.fake_running_for_test = true
+	DemoBuildScript361.open_wishlist(self)
+	steam.fake_running_for_test = false
+	if opened.size() != 4 or not steam.calls_for_test.is_empty():
+		failures.append("an unset ID or the full game opened a store page: %s" % [opened])
+	DemoBuildScript361.forced = -1
+	DemoBuildScript361.store_app_id_for_test = -1
+	steam.shell_open_for_test = Callable()
+	steam.calls_for_test = []
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
 	return failures
 ## Issue #794: every non-English cell is filled, keeps English's %s / %d / %f
 ## placeholders in the same order, and keeps English's line-break count.

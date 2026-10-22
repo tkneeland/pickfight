@@ -20,6 +20,9 @@ const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const QuitGameScript := preload("res://scripts/QuitGame.gd")
 const CreditsScreenScript := preload("res://scripts/CreditsScreen.gd")
+const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+## The key that opens the store page from the demo build's title screen (#793).
+const TITLE_WISHLIST_KEY: Key = KEY_W
 ## The key that quits from the title screen (#718).
 const TITLE_QUIT_KEY: Key = KEY_Q
 
@@ -84,6 +87,9 @@ func input(event: InputEvent) -> void:
 
 ## What picking `kind` on the title screen does: that match kind, then the lobby.
 func press_title(kind: String) -> void:
+	if kind == "wishlist":
+		DemoBuildScript.open_wishlist(_screen.get_tree()) # the demo's Wishlist on Steam button (#793)
+		return
 	if kind == "credits":
 		CreditsScreenScript.open(_screen.get_tree()) # the credits and licences screen (#721)
 		return
@@ -191,6 +197,16 @@ func build() -> void:
 	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
 	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
 	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
+	# Wishlist on Steam (#793): demo build only, and only once the store page exists; beside Credits.
+	if DemoBuildScript.wishlist_available():
+		var wishlist_button := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_wishlist")
+		wishlist_button.focus_mode = Control.FOCUS_ALL
+		wishlist_button.pressed.connect(press_title.bind("wishlist"))
+		bottom_row.add_child(wishlist_button)
+		_title_buttons["wishlist"] = wishlist_button
+		credits_button.focus_neighbor_right = credits_button.get_path_to(wishlist_button)
+		wishlist_button.focus_neighbor_left = wishlist_button.get_path_to(credits_button)
+		wishlist_button.focus_neighbor_top = wishlist_button.get_path_to(last_card)
 	if _screen.is_inside_tree() and _screen.get_tree().get_script() == null and server.has_method("match_kind") and server.match_kind() == "":
 		show_title(true) # the game, not a `-s` script (see Sfx.is_script_main_loop)
 
