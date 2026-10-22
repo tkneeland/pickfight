@@ -9,4 +9,5 @@ Finish these tickets assigned to {{ACCOUNT}}, then exit: {{TICKETS}}. Pick up no
 - Ship with `bash tools/agents/pf-ship.sh <n> "<title>" "<body>"`. Never merge a conflict-risk PR: comment and leave it for the triagemaster.
 - If you are blocked on an owner decision, comment on the issue, swap its `ready-for-agent` label for `needs-info`, and move on. Don't use Discord.
 - If the AT tooling itself misleads you, file it on tkneeland/claude-autotriage after a duplicate search.
+- A new worktree has no import cache: run `godot --headless --path . --import` in it once before any scenario run, or resource-loading scenarios fail spuriously.
 - Be token-thrifty: read file slices, and run locally only the scenarios you touch; CI runs the full suite.
