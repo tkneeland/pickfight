@@ -14,6 +14,7 @@ if ! git merge -q origin/main >/dev/null 2>&1; then
   if [ "$(grep -c "^		_:$" tools/scenario_runner.gd)" != "1" ]; then echo "CONFLICT $i: runner default arm misplaced"; exit 2; fi
   git add -A && git commit -qm "merge: main into #$i" || exit 2
 fi
+bash "$PF_DIR/pf-cjk-refresh.sh" "$W" || { echo "ABORT $i: CJK subset refresh failed"; exit 1; }
 bash "$PF_DIR/pf-msg-leakcheck.sh" "$W" || { echo "ABORT $i: channel topic would be pushed"; exit 1; }
 git push -qu origin HEAD 2>&1 | grep -v remote
 S=$(jq -r '.rate_limits' "$PF_STATE/usage-snapshot.json")
