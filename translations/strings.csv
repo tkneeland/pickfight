@@ -499,3 +499,5 @@ RESTORE_CONFIRM_TEXT,Reset every setting to its default?,Alle Einstellungen auf 
 SETTINGS_FRAME_RATE,Frame rate: %s,Bildrate: %s,Fréquence d'images : %s,Velocidad de fotogramas: %s,Taxa de quadros: %s,帧率:%s,フレームレート: %s,프레임 속도: %s,Частота кадров: %s
 SETTINGS_FRAME_RATE_UNLIMITED,Unlimited,Unbegrenzt,Illimitée,Ilimitada,Ilimitada,不限,無制限,제한 없음,Без ограничения
 SETTINGS_VSYNC,VSync,VSync,VSync,VSync,VSync,垂直同步,VSync,수직 동기화,VSync
+SETTINGS_AUTO_SAVE_CLIPS,Auto-save match clips,Match-Clips automatisch speichern,Enregistrer auto les clips de match,Guardar clips de partida automáticamente,Salvar clipes de partida automaticamente,自动保存比赛片段,試合クリップを自動保存,경기 클립 자동 저장,Автосохранение клипов матча
+VICTORY_CLIP_SAVED,Clip saved,Clip gespeichert,Clip enregistré,Clip guardado,Clipe salvo,片段已保存,クリップを保存しました,클립 저장됨,Клип сохранён

@@ -81,6 +81,8 @@ var send_crash_reports: bool = true
 ## Play of the round (#704): replay the round's best KO in slow motion inside
 ## the round-end pause. On by default.
 var play_of_round: bool = true
+## Auto-save the replay buffer after the match-winning KO (#795).
+var auto_save_clips: bool = true
 ## Couch and Solo pause a round when the game window loses focus (#747). Online never does.
 var pause_on_focus_loss: bool = true
 ## Gamepad stick deadzone (#748): the radial deadzone every seated pad's stick uses, one of
@@ -401,6 +403,10 @@ func set_play_of_round(on: bool) -> void:
 	play_of_round = on
 	save_settings()
 
+func set_auto_save_clips(on: bool) -> void:
+	auto_save_clips = on
+	save_settings()
+
 func set_filter_names(on: bool) -> void:
 	filter_names = on
 	save_settings()
@@ -438,6 +444,7 @@ func restore_defaults() -> void:
 	game_mode = ""
 	share_stats = true
 	play_of_round = true
+	auto_save_clips = true
 	pause_on_focus_loss = true
 	pad_deadzone = DEFAULT_PAD_DEADZONE
 	frame_cap = 0
@@ -530,6 +537,8 @@ func load_settings() -> void:
 		send_crash_reports = crash if crash is bool else true
 		var replay_on: Variant = config.get_value(SECTION, "play_of_round", true)
 		play_of_round = replay_on if replay_on is bool else true
+		var autosave_on: Variant = config.get_value(SECTION, "auto_save_clips", true)
+		auto_save_clips = autosave_on if autosave_on is bool else true
 		var focus_on: Variant = config.get_value(SECTION, "pause_on_focus_loss", true)
 		pause_on_focus_loss = focus_on if focus_on is bool else true
 		var deadzone: Variant = config.get_value(SECTION, "pad_deadzone", DEFAULT_PAD_DEADZONE)
@@ -573,6 +582,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
 	config.set_value(SECTION, "play_of_round", play_of_round)
+	config.set_value(SECTION, "auto_save_clips", auto_save_clips)
 	config.set_value(SECTION, "pause_on_focus_loss", pause_on_focus_loss)
 	config.set_value(SECTION, "pad_deadzone", pad_deadzone)
 	config.set_value(SECTION, "frame_cap", frame_cap)
