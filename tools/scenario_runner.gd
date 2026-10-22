@@ -161,6 +161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
+	"speed_strip_boosts_run_distance",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -1770,6 +1771,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_summit_spawns_clear()
 		"ice_patch_restores_when_stage_freed":
 			return await _scenario_ice_patch_restores_when_stage_freed()
+		"speed_strip_boosts_run_distance":
+			return await _scenario_speed_strip_boosts_run_distance()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -10862,6 +10865,79 @@ func _scenario_ice_patch_restores_when_stage_freed() -> Array[String]:
 	if player.physics_material_override != before:
 		failures.append("the ice material leaked after the stage was freed mid-contact")
 	await _teardown(holder)
+	return failures
+## Speed strip (#891): a body is pushed along a strip (or plain ground) by a
+## steady force, standing in for running, and the ground it covers in a fixed
+## time is returned. The weapon is held straight up so only the body touches.
+const SpeedStripScene: PackedScene = preload("res://scenes/parts/SpeedStrip.tscn")
+const SPEED_SIZE: Vector2 = Vector2(2400, 8)
+const SPEED_SETTLE_TICKS: int = 60
+const SPEED_RUN_FORCE: float = 2400.0
+const SPEED_RUN_TICKS: int = 150
+## The strip has to cover at least this multiple of the plain-floor distance.
+const SPEED_MIN_RATIO: float = 1.2
+func _speed_ground(stage: Node2D, size: Vector2, at: Vector2, strip: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if strip:
+		ground = SpeedStripScene.instantiate() as StaticBody2D
+		ground.size = size
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = at
+	stage.add_child(ground)
+	return ground
+func _speed_run(on_strip: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_speed_ground(stage, SPEED_SIZE, PART_POSITION, on_strip)
+	var start: Vector2 = PART_POSITION + Vector2(-1100, -SPEED_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0)
+	var player: RigidBody2D = _spawn_player(stage, start)
+	player.set_input_vector(Vector2.UP)
+	for _tick in SPEED_SETTLE_TICKS:
+		await physics_frame
+	var from_x: float = player.global_position.x
+	for _tick in SPEED_RUN_TICKS:
+		player.apply_central_force(Vector2(SPEED_RUN_FORCE, 0))
+		await physics_frame
+	var covered: float = player.global_position.x - from_x
+	await _teardown(stage, false)
+	return covered
+## Running on the strip covers clearly more ground in the same time than on
+## plain ground, and the boost stops after stepping off.
+func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
+	var failures: Array[String] = []
+	var on_strip: float = await _speed_run(true)
+	var on_ground: float = await _speed_run(false)
+	print("      covered %.1f px on the strip, %.1f px on plain ground" % [on_strip, on_ground])
+	if on_ground < 50.0:
+		failures.append("the control run barely moved (%.1f px)" % on_ground)
+	elif on_strip < on_ground * SPEED_MIN_RATIO:
+		failures.append("covered %.1f px on the strip vs %.1f on ground, expected at least %.2fx" % [on_strip, on_ground, SPEED_MIN_RATIO])
+	# Step off: a short strip with plain ground beside it.
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = _speed_ground(stage, Vector2(300, 8), PART_POSITION + Vector2(-500, 0), true)
+	_speed_ground(stage, Vector2(1400, 8), PART_POSITION + Vector2(350, 0), false)
+	var runner: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-600, -8.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	runner.set_input_vector(Vector2.UP)
+	for _tick in SPEED_SETTLE_TICKS:
+		await physics_frame
+	var was_boosted: bool = false
+	var left: bool = false
+	for _tick in 400:
+		runner.apply_central_force(Vector2(SPEED_RUN_FORCE, 0))
+		await physics_frame
+		if strip.is_boosting(runner):
+			was_boosted = true
+		elif was_boosted:
+			left = true
+			break
+	if not was_boosted or not left:
+		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
+	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
 ## dropped from, and shows it did (the flash). The weapon is held straight
