@@ -999,6 +999,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"player_numbers_setting_persists_and_restores_809",
 	"voice_volume_scales_announcer_and_grunts_only_824",
 	"voice_slider_reset_by_restore_defaults_824",
+	"kill_feed_switch_833",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -3401,6 +3402,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_volume_scales_announcer_and_grunts_only_824()
 		"voice_slider_reset_by_restore_defaults_824":
 			return await _scenario_voice_slider_reset_by_restore_defaults_824()
+		"kill_feed_switch_833":
+			return await _scenario_kill_feed_switch_833()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -46756,6 +46759,7 @@ func _scenario_restore_defaults_750() -> Array[String]:
 	sfx.set_sfx_volume(0.4)
 	sfx.set_muted(true)
 	sfx.set_screen_shake(false)
+	sfx.set_kill_feed(false)
 	sfx.set_reduce_flash(true)
 	sfx.set_hide_room_code(true)
 	sfx.set_ui_scale(2.0)
@@ -46808,6 +46812,7 @@ func _scenario_restore_defaults_750() -> Array[String]:
 		"sfx volume": is_equal_approx(sfx.sfx_volume, 1.0),
 		"mute": not sfx.muted,
 		"screen shake": sfx.screen_shake,
+		"kill feed": sfx.kill_feed,
 		"reduce flashes": not sfx.reduce_flash,
 		"hide room code": not sfx.hide_room_code,
 		"name tag size": is_equal_approx(sfx.ui_scale, 1.0),
@@ -48096,6 +48101,73 @@ func _scenario_voice_volume_scales_announcer_and_grunts_only_824() -> Array[Stri
 	sfx.persist_settings = false
 	if FileAccess.file_exists(temp_path):
 		DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+## Issue #833: Settings > More options "Kill feed" switch. Off: push_ko() adds no
+## ticker entry but show_banner() still queues a banner; on: unchanged. The flag
+## round-trips through a temp settings file, Restore defaults sets it on again,
+## and the box sits in the pad-focus chain like its neighbours.
+func _scenario_kill_feed_switch_833() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"feed": sfx.kill_feed, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	var feed: Control = KillFeedScript.new()
+	get_root().add_child(feed)
+	await _await_ticks(2)
+	sfx.persist_settings = false
+	sfx.set_kill_feed(true)
+	feed.push_ko("Alice", Color.RED, "Bob", Color.BLUE)
+	if feed.entries().size() != 1:
+		failures.append("with Kill feed on, push_ko left %d entries, expected 1" % feed.entries().size())
+	sfx.set_kill_feed(false)
+	feed.push_ko("Alice", Color.RED, "Bob", Color.BLUE)
+	if feed.entries().size() != 1:
+		failures.append("with Kill feed off, push_ko still added an entry (%d)" % feed.entries().size())
+	feed.clear()
+	feed.push_ko("", Color.RED, "Bob", Color.BLUE)
+	if not feed.entries().is_empty():
+		failures.append("with Kill feed off, a self-KO still reached the ticker")
+	feed.show_banner("FIRST BLOOD", "Alice", Color.RED)
+	if feed.banner_log.size() != 1:
+		failures.append("with Kill feed off, show_banner did not queue the banner")
+	# Persistence, on a temp file only.
+	var path: String = OS.get_temp_dir().path_join("pickfight_kill_feed_833_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_kill_feed(false)
+	sfx.kill_feed = true
+	sfx.load_settings()
+	if sfx.kill_feed:
+		failures.append("Kill feed off was not remembered in the settings file")
+	sfx.set_kill_feed(true)
+	sfx.kill_feed = false
+	sfx.load_settings()
+	if not sfx.kill_feed:
+		failures.append("Kill feed on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	# The panel box and Restore defaults.
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.kill_feed_box()
+	if box == null:
+		failures.append("Settings has no Kill feed box")
+	else:
+		box.button_pressed = false
+		if sfx.kill_feed:
+			failures.append("unticking the Kill feed box did not turn the flag off")
+		if box.get_parent() != ui.shake_box().get_parent():
+			failures.append("the Kill feed box is not in the same list as its neighbours (pad focus chain)")
+		sfx.restore_defaults()
+		if not sfx.kill_feed:
+			failures.append("Restore defaults did not put Kill feed back on")
+	feed.queue_free()
+	sfx.kill_feed = was["feed"]
+	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
 func _scenario_voice_slider_reset_by_restore_defaults_824() -> Array[String]:
