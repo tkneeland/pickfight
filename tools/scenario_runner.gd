@@ -1051,6 +1051,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"idle_hint_skips_bots_ghosts_and_later_rounds_826",
 	"online_lobby_copy_code_button_863",
 	"copy_code_button_hidden_couch_solo_streamer_863",
+	"copy_code_refresh_after_lobby_closed_863",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3526,6 +3527,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_lobby_copy_code_button_863()
 		"copy_code_button_hidden_couch_solo_streamer_863":
 			return await _scenario_copy_code_button_hidden_couch_solo_streamer_863()
+		"copy_code_refresh_after_lobby_closed_863":
+			return await _scenario_copy_code_refresh_after_lobby_closed_863()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -49746,4 +49749,29 @@ func _scenario_copy_code_button_hidden_couch_solo_streamer_863() -> Array[String
 	if not copied.is_empty():
 		failures.append("a hidden Copy code still wrote %s to the clipboard" % [copied])
 	await _kind_close_435(rig)
+	return failures
+
+## Issue #863 review fix: the Copied timer fires refresh() on the controls after the lobby scene was left;
+## refresh() must not read the freed screen (an invalid-access script error in the log before the guard).
+func _scenario_copy_code_refresh_after_lobby_closed_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var host: RefCounted = screen._host
+	host.clipboard_setter = func(_text: String) -> void: pass
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	screen.press_control("copy_code")
+	await _kind_close_435(rig)
+	var until_msec: int = Time.get_ticks_msec() + 1700 # past the 1.5 s Copied timer
+	while Time.get_ticks_msec() < until_msec:
+		await process_frame
+	host.refresh()
 	return failures
