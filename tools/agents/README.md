@@ -1,7 +1,7 @@
 # tools/agents
 
 Account-agnostic helpers for AT mode (rules: `docs/agents/autotriage.md`). Every script sources `pf-env.sh`, which
-picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `accounts/<handle>.conf`. macOS (BSD `date`/`stat`) only.
+picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `accounts/<handle>.conf`. macOS, Linux and Windows (Git Bash); see the support matrix below.
 
 - `accounts/<handle>.conf`: per-account settings (role, timezone, night hours, thresholds); `accounts/_shared.conf` holds shared thresholds.
 - `pf-env.sh`: sourced by all; resolves the account, conf, `PF_STATE` dir and helpers (`pf_budget_ok`, `pf_daynight`, `pf_is_triagemaster`).
@@ -17,3 +17,18 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-succession.sh`: computes the current triagemaster from the #432 beacons and writes it to `$PF_STATE/pf-triagemaster`.
 - `pf-dupe-check.sh "<keywords>"`: run before filing a ticket; exit 1 means something plausible already exists.
 - `pf-scenario-merge.sh [file...]`: during `git merge origin/main`, resolves conflicts in append-only `tools/scenario_runner.gd` / `docs/FEATURES.md` by re-inserting this branch's added blocks into main's copy; exit 1 = resolve by hand.
+
+## Platform support
+
+| | macOS | Windows 11 (Git Bash) | Linux |
+|---|---|---|---|
+| All `pf-*.sh` scripts, `statusline-usage.sh` | yes | yes | yes (GNU tools, same path as Git Bash) |
+| Long-lived watchers | `screen` | `windows/pf-start.ps1` (hidden processes, no `screen`) | `screen`/`tmux` |
+| `pf-scenario-merge.sh` | yes | needs `python3` installed | yes |
+| Desktop banner on a conflicting PR | yes (`osascript`) | no | no |
+
+`pf-env.sh` carries the portable helpers (`pf_mtime`, `pf_iso_to_epoch`, `pf_epoch_fmt`, `pf_notify`), picks GNU or BSD
+`date`/`stat` at load time, maps IANA `TZ` names Git Bash cannot read, and strips the CRLF Windows `jq.exe` emits. Use them
+instead of `stat -f`, `date -j` or `date -r` in any new script. `PF_DRY_RUN=1` stops `statusline-usage.sh` and
+`pf-succession.sh --post` from writing to GitHub. Windows setup, Task Scheduler and the status line:
+[`windows/README.md`](windows/README.md).
