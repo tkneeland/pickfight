@@ -17,6 +17,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-succession.sh`: computes the current triagemaster from the #432 beacons and writes it to `$PF_STATE/pf-triagemaster`.
 - `pf-dupe-check.sh "<keywords>"`: run before filing a ticket; exit 1 means something plausible already exists.
 - `pf-scenario-merge.sh [file...]`: during `git merge origin/main`, resolves conflicts in append-only `tools/scenario_runner.gd` / `docs/FEATURES.md` by re-inserting this branch's added blocks into main's copy; exit 1 = resolve by hand.
+- `pf-squash-onto-main.sh "<msg>"`: when the secret-scrub hook blocks a resolved merge commit over main's own lines, turns the staged merge into one commit on top of main (branch changes only); then `git push --force-with-lease`.
 
 ## Platform support
 
@@ -25,6 +26,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 | All `pf-*.sh` scripts, `statusline-usage.sh` | yes | yes | yes (GNU tools, same path as Git Bash) |
 | Long-lived watchers | `screen` | `windows/pf-start.ps1` (hidden processes, no `screen`) | `screen`/`tmux` |
 | `pf-scenario-merge.sh` | yes | needs `python3` installed | yes |
+| `pf-squash-onto-main.sh` | yes | yes | yes |
 | Desktop banner on a conflicting PR | yes (`osascript`) | no | no |
 
 `pf-env.sh` carries the portable helpers (`pf_mtime`, `pf_iso_to_epoch`, `pf_epoch_fmt`, `pf_notify`), picks GNU or BSD
