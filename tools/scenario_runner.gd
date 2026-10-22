@@ -1016,6 +1016,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_point_plate_shows_for_leader_one_win_short_825",
 	"match_point_plate_stacks_for_two_leaders_and_skips_stock_825",
 	"match_point_in_teams_names_the_team_825",
+	"match_point_skipped_when_target_is_1_829",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3421,6 +3422,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_point_plate_stacks_for_two_leaders_and_skips_stock_825()
 		"match_point_in_teams_names_the_team_825":
 			return await _scenario_match_point_in_teams_names_the_team_825()
+		"match_point_skipped_when_target_is_1_829":
+			return await _scenario_match_point_skipped_when_target_is_1_829()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -47993,4 +47996,23 @@ func _scenario_match_point_in_teams_names_the_team_825() -> Array[String]:
 			elif plate.lines[0]["text"] != TranslationServer.translate("TEAM_RED"):
 				failures.append("plate names '%s', expected the team '%s'" % [plate.lines[0]["text"], TranslationServer.translate("TEAM_RED")])
 	await _teardown(loop["stage"])
+	return failures
+## Issue #829: a match target of 1 (Soccer, Capture the Flag) means no plate.
+func _scenario_match_point_skipped_when_target_is_1_829() -> Array[String]:
+	var failures: Array[String] = []
+	var script: GDScript = load("res://scripts/MatchPointPlate.gd") as GDScript
+	for mode: String in ["soccer", "capture_the_flag"]:
+		var loop: Dictionary = await _start_match_point_825(1, [0, 1], false, mode)
+		var rm: Node = loop["round_manager"]
+		if not loop["started"]:
+			failures.append("the %s match never started" % mode)
+		else:
+			await _await_ticks(30)
+			if rm.match_target() != 1:
+				failures.append("%s target is %d, expected 1" % [mode, rm.match_target()])
+			if not script.leaders(rm).is_empty():
+				failures.append("%s: leaders() named someone on match point at target 1" % mode)
+			if not _match_point_plates_825().is_empty():
+				failures.append("%s showed a plate at target 1" % mode)
+		await _teardown(loop["stage"])
 	return failures

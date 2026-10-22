@@ -43,7 +43,9 @@ static func leaders(rm: Node) -> Array[Dictionary]:
 	if not bool(rm.get("lobby_enabled")) or not MODES.has(str(rm.get("game_mode"))):
 		return out
 	var want: int = int(rm.match_target()) - 1
-	if want < 0:
+	# A target of 1 (Soccer, Capture the Flag) puts everyone on match point
+	# from round 1, so the plate would say nothing (#829).
+	if want < 1:
 		return out
 	if rm.team_mode():
 		for team: int in TeamsScript.COUNT:
