@@ -58,9 +58,9 @@ pf_daynight() {
 # pf_beacon <handle> <#432 comments JSON>: sets b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) from the handle's own
 # latest beacon comment. Percent values are floored; empty when the beacon shows "?". Resets are ISO strings.
 pf_beacon() {
-  local body ts; body=$(echo "$2" | jq -r --arg h "$1" '[.[]|select(.user.login==$h and (.body|test("usage @")))]|last|.body // empty')
+  local body ts e; body=$(echo "$2" | jq -r --arg h "$1" '[.[]|select(.user.login==$h and (.body|startswith("\($h) usage @")))]|last|.body // empty')
   ts=$(echo "$body" | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | head -1)
-  b_age=999999; [ -n "$ts" ] && b_age=$(( $(date +%s) - $(pf_iso_to_epoch "$ts") ))
+  b_age=999999; [ -n "$ts" ] && e=$(pf_iso_to_epoch "$ts") && b_age=$(( $(date +%s) - e ))
   b_p5=$(echo "$body" | sed -n 's/^5h: \([0-9.]*\)%.*/\1/p' | head -1); b_p5=${b_p5%.*}
   b_r5=$(echo "$body" | sed -n 's/^5h:.*resets \([0-9TZ:-]*\)).*/\1/p' | head -1)
   b_used=$(echo "$body" | sed -n 's/^7d: \([0-9.]*\)%.*/\1/p' | head -1); b_used=${b_used%.*}

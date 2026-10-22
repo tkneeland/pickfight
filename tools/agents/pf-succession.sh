@@ -7,7 +7,8 @@
 . "$(dirname "$0")/pf-env.sh" || exit 1
 now=$(date +%s)
 iso2e() { pf_iso_to_epoch "$1" || echo 0; }
-comments=$(gh api "repos/$REPO/issues/432/comments?per_page=100" 2>/dev/null) || { pf_triagemaster; exit 0; }
+comments=$(gh api "repos/$REPO/issues/432/comments?per_page=100" --paginate 2>/dev/null) || { pf_triagemaster; exit 0; }
+comments=$(echo "$comments" | jq -s add) || { pf_triagemaster; exit 0; }
 beacon() { pf_beacon "$1" "$comments"; }  # sets b_age b_used b_reset for handle $1 (pf-env.sh)
 order=$(for h in $(pf_handles); do r=$(sed -n 's/^SUCCESSION_RANK=\([0-9]*\).*/\1/p' "$PF_DIR/accounts/$h.conf"); echo "$r $h"; done | sort -n | awk '{print $2}')
 first=$(echo "$order" | head -1)
