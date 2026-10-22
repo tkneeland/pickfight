@@ -197,6 +197,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pad_launch_keeps_head_ahead_of_body",
 	"sfx_stage_parts_sound",
 	"sfx_hazard_hit_plays_once_per_hit",
+	"sfx_pickup_grab_plays_once_per_grab",
 	"arm_draws_over_identity_outline",
 	"axe_swing_deals_damage",
 	"sfx_mix_victory_quieter_rest_louder",
@@ -1844,6 +1845,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_sfx_stage_parts_sound()
 		"sfx_hazard_hit_plays_once_per_hit":
 			return await _scenario_sfx_hazard_hit_plays_once_per_hit()
+		"sfx_pickup_grab_plays_once_per_grab":
+			return await _scenario_sfx_pickup_grab_plays_once_per_grab()
 		"arm_draws_over_identity_outline":
 			return await _scenario_arm_draws_over_identity_outline()
 		"axe_swing_deals_damage":
@@ -12819,6 +12822,37 @@ func _head_anchor_reach_along_circles(player: RigidBody2D, circles: Array[Dictio
 ## the wall's break sounds once, not again for a hit during its break flash.
 ## The parts' own event functions are driven directly, so this checks the
 ## wiring, not the parts' timing, which their own scenarios already hold.
+## Issue #898: a body touching a pickup plays `pickup_grab` once; a dead
+## player's touch is refused and plays nothing.
+func _scenario_sfx_pickup_grab_plays_once_per_grab() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"pickup_grab"):
+		return ["pickup_grab is not in the sound table"]
+	var stage: Node2D = _new_stage()
+	var dead: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(300.0, 0.0))
+	await _await_ticks(5)
+	var dead_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(0.0, 60.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	var live_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(300.0, 60.0), _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH))
+	dead.eliminate()
+	await _await_ticks(2)
+	sfx.start_recording()
+	dead.teleport_to(dead_pickup.global_position)
+	live.teleport_to(live_pickup.global_position)
+	await _await_ticks(SETTLE_TICKS)
+	var played: int = _sfx_count(sfx, "pickup_grab")
+	if played != 1:
+		failures.append("one grab played pickup_grab %d times, expected 1" % played)
+	else:
+		var last: Dictionary = _sfx_last(sfx, "pickup_grab")
+		if last.has("position") and (last["position"] as Vector2).distance_to(live.global_position) > 150.0:
+			failures.append("pickup_grab did not play at the grabber")
+	sfx.stop_recording()
+	await _teardown(stage)
+	return failures
 ## Issue #874: spikes and saws play `hazard_hit` once per landed hit; the
 ## cooldown suppresses repeats and spawn protection makes no sound.
 func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:

@@ -109,6 +109,8 @@ func _on_node_added(node: Node) -> void:
 func _watch_player(player: Node) -> void:
 	player.connect("strike_landed", _on_strike_landed.bind(player))
 	player.connect("eliminated", _on_eliminated.bind(player))
+	if player.has_signal("weapon_picked_up"):
+		player.connect("weapon_picked_up", _on_weapon_picked_up.bind(player))
 	if player.has_signal("body_entered"):
 		player.connect("body_entered", _on_player_touched.bind(player))
 	_players.append(player)
@@ -126,6 +128,11 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 	# The victim's grunt (#290); a lethal blow gets the KO grunt instead.
 	if not lethal:
 		_grunt(&"grunt_hit_", victim, point, GRUNT_HIT_COOLDOWN_FRAMES)
+
+## A body grabbed a pickup (#898): the pickup itself refuses dead players and
+## claimed pickups before it emits, so every emission is a real grab.
+func _on_weapon_picked_up(_weapon_name: String, player: Node) -> void:
+	sfx.play(&"pickup_grab", player.global_position, 1.0)
 
 func _on_eliminated(player: Node) -> void:
 	sfx.play(&"eliminated", player.global_position, 1.0)

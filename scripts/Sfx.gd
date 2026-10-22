@@ -199,6 +199,9 @@ const SOUNDS: Dictionary = {
 	"wall_break": {"files": [
 		"kenney_impact/impactPlate_heavy_000.ogg",
 		"kenney_impact/impactPlate_heavy_001.ogg"], "db": 2.0},
+	# Grabbing a pickup (#898): a short quiet blip at the grabber.
+	"pickup_grab": {"files": [
+		"kenney_interface/maximize_006.ogg"], "db": -9.0, "overlap": 2, "max_sec": 0.4},
 	# --- Round and UI -------------------------------------------------------
 	"countdown": {"files": [
 		"kenney_interface/tick_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},
