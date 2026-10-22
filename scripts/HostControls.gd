@@ -440,6 +440,8 @@ func _can_join_online() -> bool:
 ## Redraws the controls' captions from the server: the link state and the
 ## room code beside the toggle, and why Join is off when it is.
 func refresh() -> void:
+	if not is_instance_valid(_screen):
+		return
 	var server: Object = _screen._server
 	if server == null:
 		return

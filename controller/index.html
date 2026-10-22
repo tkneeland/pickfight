@@ -212,6 +212,23 @@
     pointer-events: none;
   }
   #hill.show { display: block; }
+  /* Round modifier chip (#908): the active modifier's title under the damage bar. */
+  #modchip {
+    position: fixed;
+    z-index: 3;
+    top: 34px;
+    left: 10px;
+    display: none;
+    max-width: 60vw;
+    color: #ffffff;
+    background: rgba(20, 24, 29, 0.7);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font: 700 16px sans-serif;
+    pointer-events: none;
+  }
+  #modchip.show { display: block; }
   /* Weak connection (#777): a small non-blocking chip in the top-right corner,
      clear of the drag area and the hill / lives readouts on the left. */
   #weak-chip {
@@ -667,6 +684,7 @@
 <div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="lives"></div>
 <div id="hill"></div>
+<div id="modchip"></div>
 <div id="weak-chip">Weak connection</div>
 <button id="steal" type="button">Steal a life</button>
 <div id="hud">
@@ -2793,6 +2811,14 @@
     hillEl.textContent = "Hill " + n + " / " + (typeof msg.win === "number" ? msg.win : 15) + " s";
   }
 
+  // Round modifier chip (issue #908): {t:"mod", v:<title>}; "" hides it. The host sends the translated title.
+  var modChipEl = document.getElementById("modchip");
+  function showModifier(msg) {
+    var title = typeof msg.v === "string" ? msg.v.slice(0, 40) : "";
+    modChipEl.textContent = title;
+    modChipEl.classList.toggle("show", title !== "");
+  }
+
   // Issue #776: calm mode = the host's Reduce flashes or the browser's prefers-reduced-motion.
   var hostReduceFlash = false;
   var motionQuery = null;
@@ -3695,6 +3721,7 @@
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "hill") { showHill(msg); }
+        else if (msg.t === "mod") { showModifier(msg); }
         else if (msg.t === "ping") { sendText({ t: "pong", n: msg.n }); }
         else if (msg.t === "weak") { document.getElementById("weak-chip").classList.toggle("show", msg.v === true); }
         else if (msg.t === "career") { addCareer(msg.d); }
