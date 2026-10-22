@@ -2841,6 +2841,8 @@
     else if (relayJoined) { xmit(KIND_TEXT, new TextEncoder().encode(JSON.stringify(obj))); }
   }
   var relayJoined = false;
+  // Tell the host this page answers its pings (#777).
+  function announceLag() { sendText({ t: "lag" }); }
 
   function slotName(n) {
     if (lobby) {
@@ -3640,7 +3642,7 @@
           refusedOut = false;
           setSlot(msg.slot);
           sendName();
-          sendText({ t: "lag" }); // tell the host this page answers its pings (#777)
+          announceLag();
           sendLook();
           if (!nameChosen()) { openNamePrompt(); }
           else if (!lookChosen()) { openLookPrompt(); }
