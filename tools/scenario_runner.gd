@@ -303,6 +303,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_ball_does_not_tunnel_thin_platform",
 	"flail_ball_does_not_clip_head",
 	"boomerang_hits_on_the_way_out_and_back",
+	"boomerang_catch_feedback_862",
+	"boomerang_catch_feedback_reduce_flashes_862",
 	"boomerang_turns_at_terrain_and_ghosts_home",
 	"new_weapons_are_pickups_only",
 	"bots_wield_new_weapons",
@@ -2039,6 +2041,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomerang_hits_on_the_way_out_and_back()
 		"boomerang_turns_at_terrain_and_ghosts_home":
 			return await _scenario_boomerang_turns_at_terrain_and_ghosts_home()
+		"boomerang_catch_feedback_862":
+			return await _scenario_boomerang_catch_feedback(false)
+		"boomerang_catch_feedback_reduce_flashes_862":
+			return await _scenario_boomerang_catch_feedback(true)
 		"new_weapons_are_pickups_only":
 			return await _scenario_new_weapons_are_pickups_only()
 		"bots_wield_new_weapons":
@@ -20542,7 +20548,7 @@ func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
 		if not is_instance_valid(boomerang):
 			break
 		furthest = maxf(furthest, boomerang.global_position.x - thrower.global_position.x)
-		caught = boomerang.caught
+		caught = boomerang.was_caught
 		var hits_before: int = strikes.size()
 		var leg: int = boomerang.leg
 		await physics_frame
@@ -20566,6 +20572,61 @@ func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
 		failures.append("the caught boomerang was not drawn back in hand")
 	if thrower.special_ready():
 		failures.append("the boomerang could be thrown again the tick it was caught, with no cooldown")
+	await _teardown(stage)
+	return failures
+## Issue #862: catching the boomerang emits `caught` once, asks for the catch
+## sound once (never on an impact) and throws a white spark burst, unless
+## Reduce flashes is on, which keeps the sound and skips the burst.
+func _scenario_boomerang_catch_feedback(reduce_flash: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var was_reduced: bool = bool(sfx.get("reduce_flash"))
+	sfx.set("reduce_flash", reduce_flash)
+	var juice: Node2D = _juice(stage)
+	var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(thrower, BOOMERANG_PATH)
+	_brace(thrower)
+	sfx.start_recording()
+	await _flick(thrower, Vector2.RIGHT)
+	var boomerang: Node2D = thrower.launched_boomerang()
+	if boomerang == null:
+		sfx.stop_recording()
+		sfx.set("reduce_flash", was_reduced)
+		await _teardown(stage)
+		return ["a flick did not throw the boomerang"]
+	var catches: Array = []
+	boomerang.caught.connect(func(point: Vector2) -> void: catches.append(point))
+	# An impact (as a shield turning it makes) is not a catch.
+	boomerang.impacted.emit(null, boomerang.global_position)
+	var bursts: int = 0
+	for i in 240:
+		if not is_instance_valid(boomerang):
+			break
+		await physics_frame
+	await _await_ticks(1)
+	bursts = juice.active_particle_count(JuiceScript.Kind.CATCH)
+	await _await_ticks(20)
+	sfx.stop_recording()
+	var asked: int = _sfx_count(sfx, "catch_boomerang")
+	print("      caught emitted %d, sound asked %d, burst %d (reduce flashes %s)" % [catches.size(), asked, bursts, reduce_flash])
+	if catches.size() != 1:
+		failures.append("`caught` fired %d times, expected exactly once" % catches.size())
+	elif (catches[0] as Vector2).distance_to(thrower.global_position) > 60.0:
+		failures.append("`caught` reported a point %.0f px from the thrower's hand" % (catches[0] as Vector2).distance_to(thrower.global_position))
+	if asked != 1:
+		failures.append("the catch sound was requested %d times, expected once (not on impact)" % asked)
+	if not thrower.special_loaded():
+		failures.append("the thrower did not have the boomerang back")
+	if reduce_flash and bursts != 0:
+		failures.append("Reduce flashes on, but %d catch sparks were spawned" % bursts)
+	if not reduce_flash and bursts <= 0:
+		failures.append("no spark burst was spawned at the catch")
+	sfx.set("reduce_flash", was_reduced)
 	await _teardown(stage)
 	return failures
 ## Terrain on the way out turns the boomerang round where it meets it;

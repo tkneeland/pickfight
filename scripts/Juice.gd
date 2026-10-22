@@ -32,7 +32,7 @@ extends Node2D
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 
-enum Kind { DUST, SPARK }
+enum Kind { DUST, SPARK, CATCH }
 
 ## --- Particles (dust and sparks share one pool) ---
 const MAX_PARTICLES: int = 96
@@ -66,6 +66,11 @@ const SPARK_SPEED_MIN: float = 220.0
 const SPARK_SPEED_MAX: float = 620.0
 const SPARK_GRAVITY: float = 900.0
 const SPARK_LENGTH: float = 10.0
+## The white burst where a boomerang is caught (#862).
+const CATCH_SPARKS: int = 6
+const CATCH_SPEED_MIN: float = 120.0
+const CATCH_SPEED_MAX: float = 220.0
+const CATCH_LIFETIME: float = 0.25
 const SPARK_HOT: Color = Color(1.0, 0.97, 0.75, 1.0)
 const SPARK_COOL: Color = Color(1.0, 0.55, 0.12, 1.0)
 const HEAD_COOLDOWN_FRAMES: int = 5
@@ -254,6 +259,9 @@ func _on_node_added(node: Node) -> void:
 		# shake or freeze in flight ends with it (a stage change).
 		node.connect("round_started", _reset_effects)
 		node.connect("round_won", func(_slot: int) -> void: _reset_effects())
+	elif node.has_signal("impacted") and node.has_signal("caught"):
+		# A thrown boomerang (#862): a white spark burst where it is caught.
+		node.connect("caught", _on_boomerang_caught)
 	elif node.has_signal("struck_world") and node.has_signal("clashed"):
 		# A head that left the tree and came back is re-watched, and is
 		# already connected.
@@ -467,6 +475,17 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 		var vel := Vector2.RIGHT.rotated(angle) * _rng.randf_range(SPARK_SPEED_MIN, SPARK_SPEED_MAX) * (0.7 + 0.5 * strength)
 		_emit(Kind.SPARK, point, vel, SPARK_LIFETIME * _rng.randf_range(0.7, 1.15))
 
+## A boomerang caught in the thrower's hand (#862): a small white burst. With
+## "Reduce flashes" on the burst is skipped (the sound still plays).
+func _on_boomerang_caught(point: Vector2) -> void:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx != null and bool(sfx.get("reduce_flash")):
+		return
+	for i in CATCH_SPARKS:
+		var angle: float = TAU * float(i) / float(CATCH_SPARKS) + _rng.randf_range(-0.3, 0.3)
+		var vel := Vector2.RIGHT.rotated(angle) * _rng.randf_range(CATCH_SPEED_MIN, CATCH_SPEED_MAX)
+		_emit(Kind.CATCH, point, vel, CATCH_LIFETIME * _rng.randf_range(0.8, 1.1))
+
 ## Strike landed: apply screen shake and hit-stop based on damage.
 func _on_strike_landed(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
 	if _shake_enabled() and amount >= SHAKE_DAMAGE_MIN:
@@ -587,6 +606,10 @@ func _draw() -> void:
 			c.a = 1.0 - t * t
 			var tail: Vector2 = _p_vel[i].normalized() * SPARK_LENGTH * (1.0 - 0.6 * t)
 			draw_line(_p_pos[i] - tail, _p_pos[i], c, 2.5, true)
+		elif _p_kind[i] == Kind.CATCH:
+			var w := Color(1.0, 1.0, 1.0, 1.0 - t * t)
+			var tail: Vector2 = _p_vel[i].normalized() * 7.0 * (1.0 - 0.6 * t)
+			draw_line(_p_pos[i] - tail, _p_pos[i], w, 2.0, true)
 		else:
 			var c: Color = DUST_COLOR
 			c.a *= (1.0 - t) * (1.0 - t)

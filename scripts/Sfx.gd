@@ -137,6 +137,10 @@ const SOUNDS: Dictionary = {
 	"fire_boomerang": {"files": [
 		"kenney_scifi/forceField_000.ogg",
 		"kenney_scifi/forceField_001.ogg"], "db": -8.0, "overlap": 4, "max_sec": 0.4},
+	# The boomerang caught back in the hand (#862): a bright pluck, a pitched
+	# variant of an existing file.
+	"catch_boomerang": {"files": [
+		"kenney_interface/confirmation_002.ogg"], "db": -6.0, "overlap": 4, "max_sec": 0.4},
 	"bullet_impact": {"files": [
 		"kenney_impact/impactTin_medium_000.ogg",
 		"kenney_impact/impactTin_medium_001.ogg"], "db": -4.0},
