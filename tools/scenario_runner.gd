@@ -158,6 +158,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"conveyor_carries_player",
 	"conveyor_flatlands_spawns_clear",
 	"conveyor_two_more_stages",
+	"teleporter_moves_player_to_twin",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
@@ -1769,6 +1770,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_conveyor_flatlands_spawns_clear()
 		"conveyor_two_more_stages":
 			return await _scenario_conveyor_two_more_stages()
+		"teleporter_moves_player_to_twin":
+			return await _scenario_teleporter_moves_player_to_twin()
 		"ice_patch_slides_player_and_restores":
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
@@ -10645,6 +10648,74 @@ func _new_empty_stage() -> Node2D:
 	var stage := Node2D.new()
 	get_root().add_child(stage)
 	return stage
+## Teleporter (#881): a falling player entering portal A appears within 8 px
+## of B keeping its velocity, is ignored for 1 s on re-entry at either end,
+## and a dead player does not travel.
+const TeleporterScene: PackedScene = preload("res://scenes/parts/Teleporter.tscn")
+const TELEPORTER_A: Vector2 = Vector2(0, 400)
+const TELEPORTER_B: Vector2 = Vector2(900, 200)
+const TELEPORTER_SNAP: float = 8.0
+func _teleporter_pair(stage: Node2D) -> Array[Node2D]:
+	var a: Node2D = TeleporterScene.instantiate() as Node2D
+	var b: Node2D = TeleporterScene.instantiate() as Node2D
+	a.position = TELEPORTER_A
+	b.position = TELEPORTER_B
+	stage.add_child(a)
+	stage.add_child(b)
+	a.twin = a.get_path_to(b)
+	b.twin = b.get_path_to(a)
+	return [a, b]
+func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	_teleporter_pair(stage)
+	var player: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
+	player.linear_velocity = Vector2(120, 0)
+	var arrived: bool = false
+	var prev_v: Vector2 = player.linear_velocity
+	for _tick in 30:
+		await physics_frame
+		if player.global_position.x > 400.0:
+			arrived = true
+			break
+		prev_v = player.linear_velocity
+	if not arrived:
+		failures.append("player never left portal A")
+	else:
+		var gap: float = player.global_position.distance_to(TELEPORTER_B)
+		if gap > TELEPORTER_SNAP:
+			failures.append("player landed %.1f px from portal B, expected within %.1f" % [gap, TELEPORTER_SNAP])
+		if absf(player.linear_velocity.x - prev_v.x) > 5.0:
+			failures.append("velocity x went from %.1f to %.1f across the portal" % [prev_v.x, player.linear_velocity.x])
+		# Put the body back on A each tick: ignored for 1 s, then sent again.
+		var ticks_ignored: int = 0
+		var sent_again: bool = false
+		for tick in 120:
+			player.global_position = TELEPORTER_A
+			player.linear_velocity = Vector2.ZERO
+			await physics_frame
+			if player.global_position.x > 400.0:
+				sent_again = true
+				ticks_ignored = tick
+				break
+		if not sent_again:
+			failures.append("portal never accepted the player again after the cooldown")
+		elif ticks_ignored < 50 or ticks_ignored > 75:
+			failures.append("re-entry accepted after %d ticks, expected about 60 (1 s)" % ticks_ignored)
+	await _teardown(stage, false)
+	# A dead player stays put.
+	stage = _new_empty_stage()
+	_teleporter_pair(stage)
+	var ghost: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
+	ghost.alive = false
+	for _tick in 20:
+		ghost.global_position = TELEPORTER_A
+		ghost.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if ghost.global_position.distance_to(TELEPORTER_A) > 40.0:
+		failures.append("a dead player was teleported")
+	await _teardown(stage)
+	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
 ## them settle, then returns how far they travelled along x in 90 ticks. The
 ## weapon is held straight up so only the body touches the belt.
