@@ -2276,6 +2276,8 @@ func _flush_kos() -> void:
 			feed.show_banner([tr("BANNER_DOUBLE_KO"), tr("BANNER_TRIPLE_KO")][streak - 2] if streak <= 3 else tr("BANNER_MULTI_KO"), _slot_name(killer), _slot_color(killer))
 		elif ko["first_blood"]:
 			feed.show_banner(tr("BANNER_FIRST_BLOOD"), _slot_name(killer), _slot_color(killer))
+		elif ko["revenge"]:
+			feed.show_banner(tr("BANNER_REVENGE"), _slot_name(killer), _slot_color(killer))
 
 # --- Play of the round (#704) ---------------------------------------------------
 #

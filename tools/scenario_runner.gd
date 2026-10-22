@@ -231,6 +231,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_how_to_play_on_host_screen_only",
 	"controller_page_host_menu_is_guarded",
 	"match_stats_ko_credit_and_awards",
+	"match_stats_revenge",
 	"kill_feed_credits_hits_and_awards_at_match_end",
 	"kill_feed_and_awards_fit_eight_long_names",
 	"every_stage_has_eight_safe_spawns",
@@ -1876,6 +1877,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_controller_page_host_menu_is_guarded()
 		"match_stats_ko_credit_and_awards":
 			return await _scenario_match_stats_ko_credit_and_awards()
+		"match_stats_revenge":
+			return await _scenario_match_stats_revenge()
 		"kill_feed_credits_hits_and_awards_at_match_end":
 			return await _scenario_kill_feed_credits_hits_and_awards_at_match_end()
 		"kill_feed_and_awards_fit_eight_long_names":
@@ -15015,6 +15018,55 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("the page's kick reason does not match ControllerServer.KICKED_REASON")
 	_scenario_completed = true
 	return failures
+## REVENGE! (#834): the KO of whoever last KO'd you this round is a revenge KO;
+## the first KO, a repeat of the same victim, a self-KO and a different victim
+## are not; a revenge KO followed by a second KO is a double (the banner branch
+## picks the streak first); a new round clears it.
+func _scenario_match_stats_revenge() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	stats.record_hit(0, 1, 20.0, 1000)
+	var a: Dictionary = stats.record_elimination(1, 1100)
+	stats.record_hit(2, 3, 20.0, 1200)
+	var other: Dictionary = stats.record_elimination(3, 1300)
+	stats.record_hit(1, 0, 20.0, 1400)
+	var b: Dictionary = stats.record_elimination(0, 1500)
+	if a["revenge"] or other["revenge"] or not b["revenge"]:
+		failures.append("A KOs B, C KOs D, B KOs A: revenge %s %s %s, expected false false true" % [a["revenge"], other["revenge"], b["revenge"]])
+	stats.record_hit(1, 0, 20.0, 1600)
+	var again: Dictionary = stats.record_elimination(0, 1700)
+	if again["revenge"]:
+		failures.append("a repeat KO of the same victim counted as revenge")
+	stats.record_hit(0, 2, 20.0, 1800)
+	var later: Dictionary = stats.record_elimination(2, 1900)
+	if later["revenge"]:
+		failures.append("a KO of a victim who never KO'd the killer counted as revenge")
+	stats.record_hit(2, 2, 20.0, 2000)
+	var own: Dictionary = stats.record_elimination(2, 2100)
+	if own["revenge"] or own["killer"] != -1:
+		failures.append("a self-KO counted as revenge: %s" % [own])
+	stats.begin_round([0, 1], 5000)
+	stats.record_hit(0, 1, 20.0, 5100)
+	stats.record_elimination(1, 5200)
+	stats.begin_round([0, 1], 6000)
+	stats.record_hit(1, 0, 20.0, 6100)
+	var cleared: Dictionary = stats.record_elimination(0, 6200)
+	if cleared["revenge"]:
+		failures.append("revenge carried over into a new round")
+	stats.begin_round([0, 1, 2], 10000)
+	stats.record_hit(1, 0, 20.0, 10100)
+	stats.record_elimination(0, 10200)
+	stats.record_hit(0, 1, 20.0, 10300)
+	var d1: Dictionary = stats.record_elimination(1, 10400)
+	stats.record_hit(0, 2, 20.0, 10500)
+	var d2: Dictionary = stats.record_elimination(2, 10600)
+	if not d1["revenge"] or d2["streak"] != 2:
+		failures.append("revenge then a second KO: %s, %s, expected revenge and then a streak of 2" % [d1, d2])
+	_scenario_completed = true
+	return failures
+
 # --- Kill feed, KO credit and match awards (issue #148) -------------------------
 const MatchStatsScript := preload("res://scripts/MatchStats.gd")
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
