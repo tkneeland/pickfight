@@ -1069,6 +1069,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net",
+	"network_client_cannot_claim_a_reserved_id_review_net",
+	"drain_stops_at_a_leave_frame_review_net",
+	"online_to_solo_tells_dropped_seats_why_review_net",
+	"taken_over_slot_drops_weak_link_state_review_net",
+	"pad_rumble_log_is_capped_review_net",
+	"structure_changed_on_new_entity_and_hud_change_review_net",
+	"controller_page_review_fixes_review_net",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3580,6 +3588,22 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net":
+			return await _scenario_relay_phone_seat_is_buzzed_pc_remote_is_not_review_net()
+		"network_client_cannot_claim_a_reserved_id_review_net":
+			return await _scenario_network_client_cannot_claim_a_reserved_id_review_net()
+		"drain_stops_at_a_leave_frame_review_net":
+			return await _scenario_drain_stops_at_a_leave_frame_review_net()
+		"online_to_solo_tells_dropped_seats_why_review_net":
+			return await _scenario_online_to_solo_tells_dropped_seats_why_review_net()
+		"taken_over_slot_drops_weak_link_state_review_net":
+			return await _scenario_taken_over_slot_drops_weak_link_state_review_net()
+		"pad_rumble_log_is_capped_review_net":
+			return await _scenario_pad_rumble_log_is_capped_review_net()
+		"structure_changed_on_new_entity_and_hud_change_review_net":
+			return _scenario_structure_changed_on_new_entity_and_hud_change_review_net()
+		"controller_page_review_fixes_review_net":
+			return _scenario_controller_page_review_fixes_review_net()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -50767,5 +50791,280 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+## Review fixes (net server): a fake network controller -- a socket the
+## harness feeds and reads -- and a relay link that records what it sends.
+class _NetPeerReviewNet extends RefCounted:
+	var open: bool = true
+	var inbox: Array = [] # [is_text, PackedByteArray]
+	var texts: Array[String] = []
+	var close_reason: String = ""
+	var _last_text: bool = false
+	func poll() -> void:
+		pass
+	func get_ready_state() -> int:
+		return WebSocketPeer.STATE_OPEN if open else WebSocketPeer.STATE_CLOSED
+	func get_available_packet_count() -> int:
+		return inbox.size()
+	func get_packet() -> PackedByteArray:
+		var item: Array = inbox.pop_front()
+		_last_text = item[0]
+		return item[1]
+	func was_string_packet() -> bool:
+		return _last_text
+	func send_text(text: String) -> void:
+		texts.append(text)
+	func close(_code: int = 1000, reason: String = "") -> void:
+		if open:
+			close_reason = reason
+			open = false
+	func push_text(text: String) -> void:
+		inbox.append([true, text.to_utf8_buffer()])
+class _LinkReviewNet extends Node:
+	var sent: Array = [] # [peer, text]
+	func send_text_to(peer: int, text: String) -> void:
+		sent.append([peer, text])
+	func drop_peer(_peer: int) -> void:
+		pass
+	func texts_to(peer: int) -> Array[String]:
+		var out: Array[String] = []
+		for item: Array in sent:
+			if int(item[0]) == peer:
+				out.append(str(item[1]))
+		return out
+func _remote_seat_review_net(link: Node, peer: int, phone: bool) -> Variant:
+	var seat: Variant = ControllerServerScript.RemoteSeat.new()
+	seat.peer = peer
+	seat.link = link
+	seat.is_phone = phone
+	return seat
+## Fix 1: a phone over the Couch relay fallback (#683) feels hit buzzes like a
+## LAN phone; a PC remote client and the host PC's own seat are sent none.
+func _scenario_relay_phone_seat_is_buzzed_pc_remote_is_not_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_seat: Variant = fx[2]
+	var host_slot: int = fx[3]
+	var free: Array[int] = []
+	for slot in 3:
+		if slot != host_slot:
+			free.append(slot)
+	var link := _LinkReviewNet.new()
+	fx[0].add_child(link)
+	server._slot_peers[free[0]] = _remote_seat_review_net(link, 7, false)
+	server._slot_peers[free[1]] = _remote_seat_review_net(link, 8, true)
+	server.send_buzz(free[1], "hit")
+	var to_phone: Array[String] = link.texts_to(8)
+	var buzzed: bool = false
+	for text: String in to_phone:
+		var msg: Variant = JSON.parse_string(text)
+		if msg is Dictionary and msg.get("t") == "buzz" and msg.get("kind") == "hit":
+			buzzed = true
+	if not buzzed:
+		failures.append("the relay phone got no buzz frame (sent %s)" % [to_phone])
+	server.send_buzz(free[0], "hit")
+	if not link.texts_to(7).is_empty():
+		failures.append("the PC remote client was sent %s" % [link.texts_to(7)])
+	host_seat.last_text = ""
+	server.send_buzz(host_slot, "hit")
+	if host_seat.last_text != "":
+		failures.append("the host PC's own seat was sent '%s'" % host_seat.last_text)
+	server._slot_peers[free[0]] = null
+	server._slot_peers[free[1]] = null
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 2: a network client sending the host PC's id or a pad's id gets a fresh
+## seat under a made-up id instead of taking the reserved seat over.
+func _scenario_network_client_cannot_claim_a_reserved_id_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_seat: Variant = fx[2]
+	var host_slot: int = fx[3]
+	if host_slot < 0:
+		failures.append("the host PC seat was not granted a slot")
+		fx[0].queue_free()
+		_scenario_completed = true
+		return failures
+	var spoof := _NetPeerReviewNet.new()
+	server._bind_with_id(spoof, ControllerServerScript.HOST_PC_ID)
+	if server._slot_peers[host_slot] != host_seat or not host_seat.open:
+		failures.append("a client sending '%s' took the host PC's seat over" % ControllerServerScript.HOST_PC_ID)
+	var spoof_slot: int = server._slot_peers.find(spoof)
+	if spoof_slot == -1 or spoof_slot == host_slot:
+		failures.append("the spoofing client was not given a fresh seat (slot %d)" % spoof_slot)
+	elif server._slot_client_id[spoof_slot] == ControllerServerScript.HOST_PC_ID:
+		failures.append("the spoofing client's claim carries the host PC's id")
+	var pad := _NetPeerReviewNet.new()
+	server._bind_with_id(pad, ControllerServerScript.PAD_ID_PREFIX + "0")
+	var pad_slot: int = server._slot_peers.find(pad)
+	if pad_slot == -1:
+		failures.append("a client sending a pad id got no seat")
+	elif str(server._slot_client_id[pad_slot]).begins_with(ControllerServerScript.PAD_ID_PREFIX):
+		failures.append("a network client's claim is labelled as a pad: '%s'" % server._slot_client_id[pad_slot])
+	for peer: Variant in [spoof, pad]:
+		var slot: int = server._slot_peers.find(peer)
+		if slot != -1:
+			server._unbind(slot)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 3: once a "leave" frame lets the slot go, the frames queued behind it in
+## the same drain are not applied to the released slot.
+func _scenario_drain_stops_at_a_leave_frame_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var peer := _NetPeerReviewNet.new()
+	server._bind_with_id(peer, "drain-review-net")
+	var slot: int = server._slot_peers.find(peer)
+	if slot == -1:
+		failures.append("the fake phone got no seat")
+	else:
+		peer.push_text(JSON.stringify({"t": "leave"}))
+		peer.push_text(JSON.stringify({"t": "name", "v": "Ghost"}))
+		server._drain(slot, peer)
+		if server._slot_claimed[slot] != 0 or server._slot_peers[slot] != null:
+			failures.append("the leave frame did not release slot %d" % slot)
+		if str(server._slot_name[slot]) != "":
+			failures.append("a frame after the leave renamed the released slot to '%s'" % server._slot_name[slot])
+		if peer.close_reason != ControllerServerScript.LEFT_REASON:
+			failures.append("the phone was closed with '%s'" % peer.close_reason)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 4: going from Online to Solo tells a dropped PC client the room closed
+## and a dropped phone it is a Solo match, as a refused join would be told.
+func _scenario_online_to_solo_tells_dropped_seats_why_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var link := _LinkReviewNet.new()
+	fx[0].add_child(link)
+	var pc: Variant = _remote_seat_review_net(link, 21, false)
+	var phone: Variant = _remote_seat_review_net(link, 22, true)
+	server._bind_with_id(pc, "pc-review-net")
+	server._bind_with_id(phone, "phone-review-net")
+	if server._slot_peers.find(pc) == -1 or server._slot_peers.find(phone) == -1:
+		failures.append("the remote seats were not bound: %s" % [server._slot_peers])
+	else:
+		server._match_kind = ControllerServerScript.KIND_ONLINE
+		server.set_match_kind(ControllerServerScript.KIND_SOLO)
+		var want: Dictionary = {21: ControllerServerScript.ROOM_CLOSED_REASON, 22: ControllerServerScript.SOLO_MATCH_REASON}
+		for peer_id: int in want:
+			var reason: String = ""
+			for text: String in link.texts_to(peer_id):
+				var msg: Variant = JSON.parse_string(text)
+				if msg is Dictionary and msg.get("t") == "closed":
+					reason = str(msg.get("reason", ""))
+			if reason != want[peer_id]:
+				failures.append("relay peer %d was told '%s', expected '%s'" % [peer_id, reason, want[peer_id]])
+	server.bot_director.remove_bots()
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 5: a socket that takes a slot over does not inherit the old one's weak
+## link state (#777): the old page answered pings, the new one may not.
+func _scenario_taken_over_slot_drops_weak_link_state_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var old := _NetPeerReviewNet.new()
+	server._bind_with_id(old, "weak-review-net")
+	var slot: int = server._slot_peers.find(old)
+	if slot == -1:
+		failures.append("the fake phone got no seat")
+	else:
+		server._weak_link_in[slot] = true
+		server._weak_link[slot] = {"n": 3, "sent": 0, "answered": false, "over_since": 1, "weak": true}
+		var fresh := _NetPeerReviewNet.new()
+		server._bind_with_id(fresh, "weak-review-net")
+		if server._slot_peers[slot] != fresh:
+			failures.append("the same id did not take slot %d over" % slot)
+		if server._weak_link_in.has(slot) or server._weak_link.has(slot):
+			failures.append("the new socket inherited the old weak link state: %s / %s" % [server._weak_link_in, server._weak_link])
+		server._unbind(slot)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 6: the diagnostic rumble log keeps only the newest MAX_PAD_RUMBLES.
+func _scenario_pad_rumble_log_is_capped_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	server.pad_rumbles.clear()
+	for i in 100:
+		server._rumble_pad(3, "hit")
+	server._rumble_pad(3, "win")
+	if server.pad_rumbles.size() > 64:
+		failures.append("the rumble log grew to %d entries" % server.pad_rumbles.size())
+	if server.pad_rumbles.is_empty() or server.pad_rumbles.back().get("kind") != "win":
+		failures.append("the newest rumble is not the last entry")
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 9: a delta only moves what the client already has and carries no HUD
+## text, so a new body, projectile, pickup, flail or hook, or a changed kill
+## feed, banner or modifier list forces a full snapshot.
+func _scenario_structure_changed_on_new_entity_and_hud_change_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var base: Dictionary = {"round_phase": 1, "stage_id": 0,
+		"players": [{"player_id": 0}], "projectiles": [{"projectile_id": 1}], "pickups": [{"pickup_id": 2}],
+		"flail": {}, "grapple": {}, "kill_feed": [{"text": "A knocked out B"}],
+		"announcer_text": "", "modifiers": []}
+	if SnapshotCaptureScript251.structure_changed(base.duplicate(true), base):
+		failures.append("an unchanged world counted as a structure change")
+	var moved: Dictionary = base.duplicate(true)
+	moved["players"] = [{"player_id": 0, "x": 5}]
+	if SnapshotCaptureScript251.structure_changed(moved, base):
+		failures.append("a moved player counted as a structure change")
+	var cases: Dictionary = {
+		"players": [{"player_id": 0}, {"player_id": 1}],
+		"projectiles": [{"projectile_id": 1}, {"projectile_id": 9}],
+		"pickups": [{"pickup_id": 2}, {"pickup_id": 3}],
+		"flail": {"flail_id": 0},
+		"grapple": {"grapple_id": 0},
+		"kill_feed": [{"text": "A knocked out B"}, {"text": "C knocked out A"}],
+		"announcer_text": "Low gravity",
+		"modifiers": [{"modifier_id": 1, "name": "low_gravity"}],
+	}
+	for key: String in cases:
+		var world: Dictionary = base.duplicate(true)
+		world[key] = cases[key]
+		if not SnapshotCaptureScript251.structure_changed(world, base):
+			failures.append("a change to '%s' did not force a full snapshot" % key)
+	_scenario_completed = true
+	return failures
+## Fixes 11-15 on the phone page: IME-safe Enter, the rules labels translated,
+## a throwing WebSocket constructor handled, the drag re-measured on a new
+## radius and names cut by code point; still a single offline file (#798).
+func _scenario_controller_page_review_fixes_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	if not page.contains("ev.key === \"Enter\" && !ev.isComposing && ev.keyCode !== 229"):
+		failures.append("the name prompt's Enter does not skip an IME composition")
+	for pair: Array in [["RULES_OPEN", "menu-rules-open"], ["RULES_MODIFIERS", "rules-mod-heading"], ["RULES_WEAPONS", "rules-weapon-heading"]]:
+		if not page.contains("\"%s\": \"#%s\"" % pair):
+			failures.append("%s is not in MARKUP_TEXT" % pair[0])
+		if not page.contains("id=\"%s\"" % pair[1]):
+			failures.append("no element #%s" % pair[1])
+	var at: int = page.find("new WebSocket(")
+	var try_at: int = page.rfind("try {", at)
+	if at < 0 or try_at < 0 or at - try_at > 80 or page.find("} catch (err) {", at) - at > 200:
+		failures.append("the WebSocket constructor is not wrapped in try/catch")
+	if page.count("dragRadiusPx = computeDragRadius();\n    recompute();") < 2:
+		failures.append("resize() and setReach() do not recompute the drag")
+	if not page.contains("Array.from(name).slice(0, MAX_NAME_LENGTH)"):
+		failures.append("cleanName does not cut by code point")
+	failures.append_array(_controller_offline_problems_798("controller/index.html", page))
 	_scenario_completed = true
 	return failures

@@ -1045,6 +1045,8 @@ func _process_websocket() -> void:
 		var state: int = peer.get_ready_state()
 		if state == WebSocketPeer.STATE_OPEN:
 			_drain(slot, peer)
+			if _slot_peers[slot] != peer:
+				continue # a text frame in the drain unbound the slot
 			var silent_for: int = now - _slot_last_packet_msec[slot]
 			if silent_for > (int(remote_timeout_sec * 1000.0) if peer is RemoteSeat else timeout_msec):
 				# The decisive case: the phone screen-locked or left Wi-Fi
@@ -1081,6 +1083,9 @@ static func _parse_json(text: String) -> Variant:
 		return null
 	return json.data
 
+## The prefix of an id the host makes up for a client that sent none.
+const GENERATED_ID_PREFIX: String = "host-assigned-"
+
 ## Bind a newly-identified controller (ADR-0007). An id that matches a claimed
 ## slot takes that exact slot back -- this is the whole reconnect path. If the
 ## slot's old socket is still open (the phone dropped and came back before the
@@ -1091,9 +1096,11 @@ static func _parse_json(text: String) -> Variant:
 ## up if the client sent none (issue #164), so it can still be told apart and
 ## banned. Refuses the connection once every slot is claimed.
 func _bind_with_id(peer: Variant, id: String) -> void:
+	if not peer is LocalSeat and (id == HOST_PC_ID or id.begins_with(PAD_ID_PREFIX) or id.begins_with(GENERATED_ID_PREFIX)):
+		id = "" # a network client may not claim a reserved id: the host PC's, a pad's or a made-up one
 	if id.is_empty():
 		_last_generated_id += 1
-		id = "host-assigned-%d-%d" % [_last_generated_id, randi()]
+		id = GENERATED_ID_PREFIX + "%d-%d" % [_last_generated_id, randi()]
 	if _refused_by_match_kind(peer):
 		return # #435: a phone in an Online match, a remote seat in a Couch one
 	if _kicked_ids.has(id):
@@ -1301,6 +1308,8 @@ func _unbind(slot: int) -> void:
 	_slot_was_alive[slot] = 0
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
+	_weak_link.erase(slot) # a socket that takes the slot over starts its own (#777)
+	_weak_link_in.erase(slot)
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
@@ -1331,7 +1340,10 @@ func send_buzz(slot: int, kind: String) -> void:
 	if peer is PadSeat and peer.open:
 		_rumble_pad(peer.device, kind)
 		return
-	if peer == null or not peer is WebSocketPeer or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	# A LAN phone or a phone over the Couch relay fallback (#683); never the
+	# host PC's own seat, a closed pad or a PC remote client.
+	if peer == null or peer is LocalSeat or _is_pc_remote(peer) \
+			or not (peer is WebSocketPeer or peer is RemoteSeat) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
 	if _log_input:
@@ -1545,6 +1557,8 @@ func _drain(slot: int, peer: Variant) -> void:
 			# counts against the slot's budget.
 			if _take_text_budget(slot) and pkt.size() <= MAX_TEXT_FRAME_BYTES:
 				_handle_text(slot, pkt.get_string_from_utf8())
+				if _slot_peers[slot] != peer:
+					return # that frame let the slot go ("leave", a kick): the rest is not its
 			continue
 		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE and pkt.size() != ACTION_PACKET_SIZE \
 				and pkt.size() != MOUSE_PACKET_SIZE:
@@ -2867,10 +2881,11 @@ func _push_pad_sticks() -> void:
 		if gated:
 			_smoothers[slot].push(Vector2.ZERO)
 			continue
-		if _pad_axis(device) != Vector2.ZERO:
+		var axis: Vector2 = _pad_axis(device)
+		if axis != Vector2.ZERO:
 			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
-		_smoothers[slot].push(_pad_axis(device))
+		_smoothers[slot].push(axis)
 
 ## Issue #430: the host's controller, whose Start pauses and resumes a match.
 ## Joypad 0: the Steam Deck's own built-in controls (docs/steam-deck-readiness.md
@@ -2971,8 +2986,10 @@ var _pad_guids: Dictionary = {} # claim id -> GUID of the pad that holds it
 var _test_pad_guids: Dictionary = {}
 ## Claim ids whose pad has already been told "right stick swings".
 var _pad_tip_done: Dictionary = {}
-## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios).
+## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios),
+## the newest MAX_PAD_RUMBLES only, so a long session does not grow it forever.
 var pad_rumbles: Array = []
+const MAX_PAD_RUMBLES: int = 64
 
 func _pad_guid(device: int) -> String:
 	if _test_pad_guids.has(device):
@@ -3042,6 +3059,8 @@ func _rumble_pad(device: int, kind: String) -> void:
 			seconds = 0.1
 	Input.start_joy_vibration(device, weak, strong, seconds)
 	pad_rumbles.append({"device": device, "kind": kind})
+	while pad_rumbles.size() > MAX_PAD_RUMBLES:
+		pad_rumbles.pop_front()
 
 # --- Snapshot stream to remote seats (issue #251) ----------------------------
 
@@ -3330,11 +3349,12 @@ func set_match_kind(kind: String) -> bool:
 	if room_closed() and kind != KIND_SOLO:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
-	var dropped: int = _drop_seats_for(target) if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
+	var dropped: int = _drop_seats_for(target, SOLO_MATCH_REASON if kind == KIND_SOLO else "") if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
 	if kind == KIND_SOLO and _match_kind == KIND_ONLINE:
 		# Solo refuses phones and remote seats alike (#552): drop the live ones and
 		# the held claims (#459), which would otherwise eat bot capacity.
-		dropped += _drop_seats_for(KIND_LOCAL) + _drop_seats_for(KIND_ONLINE)
+		# Told as `_refused_by_match_kind()` would tell them in Solo.
+		dropped += _drop_seats_for(KIND_ONLINE, SOLO_MATCH_REASON) + _drop_seats_for(KIND_LOCAL, ROOM_CLOSED_REASON)
 	_match_kind = kind
 	if kind != KIND_LOCAL:
 		_close_internet_join() # #683: the fallback is a Couch thing; its seats went above
@@ -3399,9 +3419,12 @@ func _refused_by_match_kind(peer: Variant) -> bool:
 
 ## Drops every seat the `target` kind refuses, and every held claim that is not a
 ## gamepad's: phones going Online, remote seats going Couch. Returns how many.
-func _drop_seats_for(target: String) -> int:
+## `why` overrides the reason the dropped seats are told.
+func _drop_seats_for(target: String, why: String = "") -> int:
 	var dropped: int = 0
 	var reason: String = ONLINE_MATCH_REASON if target == KIND_ONLINE else COUCH_MATCH_REASON
+	if not why.is_empty():
+		reason = why
 	for slot in _slot_peers.size():
 		if _slot_claimed[slot] != 1 or _slot_virtual[slot] == 1:
 			continue
