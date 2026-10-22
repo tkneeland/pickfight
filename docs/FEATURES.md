@@ -100,6 +100,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Host phone controls: pause, end, kick, settings (#149, #216, #231)
 - Stages & Rules on the host phone (#647): a "Stages & Rules ▸" button under the mode picker, with a one-line summary ("N stages on · modifiers on"), opens a full-screen page with a tab per mode (Classic, King of the Hill, Sudden Death, Stock, Soccer, Capture the Flag): that mode's stages as name tiles (tap toggles; All on / All off; no preview images on phones), its round-modifier switches (plus Night Stages; locked ones, all of Stock's, show off), the global Weapons switches, and a footer ("Each round draws from N of M stages", "Stock plays on X", "Stock picks one at random from N stages", or "Switch on at least one stage" with Done disabled). Edits send `stage_mode_toggle`, `stage_mode_all`, `modifier_toggle` and `weapon_toggle` (host phone only, lobby / countdown / victory); the lobby state's `rules` carries the switches. Other phones see only the summary line in the lobby, no button
 - Host gamepad pause (#430): Start on the host's controller (joypad 0: the Steam Deck's built-in controls, or a PC host's first pad) pauses and resumes a match like the host phone's Pause; any other pad's Start does nothing mid-round and still joins and readies in the lobby
+- PAUSED banner resume hint (#810): under PAUSED a one-line hint follows the active input (the lobby captions' pad test): "Start to resume · View for menu" with a gamepad, "Any key to resume · Esc for menu" otherwise; shown whenever the match is paused, gone on resume; translated in every locale, 32 design px
 - Pause when the window loses focus (#747): in a Couch or Solo match, alt-tabbing away or a system notification stealing focus pauses the round with the PAUSED banner and the phones' "Paused by the host" line; when the window is back it stays paused until the first key, click or gamepad button (or the host phone's Resume). Online matches never pause. Settings > More options "Pause when the window loses focus", on by default
 - Phone reconnect, message validation, refused-phone state (#164, #193, #194)
 
@@ -209,6 +210,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
+- Scenario loads and instantiates every scene under `scenes/` and flags dead `ext_resource` paths (#802)
 - Screenshot capture tools for stages and damage numbers
 - Doc path check: a scenario fails, naming doc, line and path, when FEATURES, `docs/agents/`, ADRs or `docs/steam-*.md` name a repo path in backticks that does not exist (#803)
 - Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence plus an animated `clip.gif` (pure-GDScript encoder, worker thread, loops, 12 fps) in `user://clips/` with a toast showing the path (#329, ADR-0020, #502); only the newest 20 clips are kept, older ones are deleted on save (#609)
