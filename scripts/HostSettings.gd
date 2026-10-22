@@ -16,8 +16,8 @@ extends RefCounted
 ## use, loading the file first so their sections are kept. Preloaded by path,
 ## never by `class_name` (CLAUDE.md).
 ##
-## A voice volume slider (#290, per-player voice grunts) is not built; when
-## that lands its value belongs in `SfxSettings`' audio rows, saved by `Sfx`.
+## The voice volume slider (#824, announcer and grunts) lives in `SfxSettings`'
+## audio rows and is saved by `Sfx`, not here.
 
 const SfxScript := preload("res://scripts/Sfx.gd")
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")

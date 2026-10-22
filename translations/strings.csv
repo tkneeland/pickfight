@@ -13,6 +13,7 @@ AWARD_UNTOUCHABLE,Untouchable,Unantastbar,Intouchable,Intocable,Intocável,滑�
 AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada,人肉沙包,サンドバッグ,샌드백,Груша для битья
 AWARD_TOP_BRAWLER,Top Brawler,Top-Raufbold,Roi de la baston,Mejor peleador,Rei da briga,最强斗士,最強ファイター,최고의 싸움꾼,Лучший боец
 BANNER_DOUBLE_KO,DOUBLE KO!,DOPPEL-KO!,DOUBLE KO !,¡DOBLE KO!,DOUBLE KO!,双杀!,ダブルKO!,더블 KO!,ДВОЙНОЙ НОКАУТ!
+BANNER_REVENGE,REVENGE!,RACHE!,VENGEANCE !,¡VENGANZA!,VINGANÇA!,复仇!,リベンジ!,복수!,МЕСТЬ!
 BANNER_FIRST_BLOOD,FIRST BLOOD,ERSTES BLUT,PREMIER SANG,PRIMERA SANGRE,PRIMEIRO SANGUE,第一滴血,ファーストブラッド,퍼스트 블러드,ПЕРВАЯ КРОВЬ
 BANNER_LAST_ONE_STANDING,LAST ONE STANDING,LETZTER ÜBERLEBENDER,DERNIER DEBOUT,ÚLTIMO EN PIE,ÚLTIMO DE PÉ,最后的幸存者,最後の生き残り,마지막 생존자,ПОСЛЕДНИЙ НА НОГАХ
 BANNER_MULTI_KO,MULTI KO!,MULTI-KO!,MULTI KO !,¡MULTI KO!,MULTI KO!,多杀!,マルチKO!,멀티 KO!,МУЛЬТИ-НОКАУТ!
@@ -506,5 +507,6 @@ SETTINGS_AUTO_SAVE_CLIPS,Auto-save match clips,Match-Clips automatisch speichern
 VICTORY_CLIP_SAVED,Clip saved,Clip gespeichert,Clip enregistré,Clip guardado,Clipe salvo,片段已保存,クリップを保存しました,클립 저장됨,Клип сохранён
 PAUSED_HINT_PAD,Start to resume · View for menu,Start zum Fortsetzen · View für Menü,Start pour reprendre · View pour le menu,Start para continuar · View para el menú,Start para continuar · View para o menu,按 Start 继续 · 按 View 打开菜单,Start で再開 · View でメニュー,Start로 계속 · View로 메뉴,Start — продолжить · View — меню
 PAUSED_HINT_KEYS,Any key to resume · Esc for menu,Beliebige Taste zum Fortsetzen · Esc für Menü,Une touche pour reprendre · Échap pour le menu,Cualquier tecla para continuar · Esc para el menú,Qualquer tecla para continuar · Esc para o menu,按任意键继续 · 按 Esc 打开菜单,任意のキーで再開 · Esc でメニュー,아무 키나 눌러 계속 · Esc로 메뉴,Любая клавиша — продолжить · Esc — меню
+SETTINGS_VOICE,Voice,Stimmen,Voix,Voces,Vozes,语音,ボイス,음성,Голоса
 MATCH_POINT,MATCH POINT: %s,MATCHBALL: %s,BALLE DE MATCH : %s,PUNTO DE PARTIDO: %s,MATCH POINT: %s,赛点：%s,マッチポイント：%s,매치 포인트: %s,МАТЧБОЛ: %s
 PHONE_SWING_REACH,Swing reach,Schwungreichweite,Portée du swing,Alcance del golpe,Alcance do golpe,挥动范围,スイング距離,스윙 범위,Радиус замаха
