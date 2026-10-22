@@ -16,8 +16,8 @@ extends RefCounted
 ## use, loading the file first so their sections are kept. Preloaded by path,
 ## never by `class_name` (CLAUDE.md).
 ##
-## A voice volume slider (#290, per-player voice grunts) is not built; when
-## that lands its value belongs in `SfxSettings`' audio rows, saved by `Sfx`.
+## The voice volume slider (#824, announcer and grunts) lives in `SfxSettings`'
+## audio rows and is saved by `Sfx`, not here.
 
 const SfxScript := preload("res://scripts/Sfx.gd")
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
@@ -81,6 +81,8 @@ var send_crash_reports: bool = true
 ## Play of the round (#704): replay the round's best KO in slow motion inside
 ## the round-end pause. On by default.
 var play_of_round: bool = true
+## Auto-save the replay buffer after the match-winning KO (#795).
+var auto_save_clips: bool = true
 ## Couch and Solo pause a round when the game window loses focus (#747). Online never does.
 var pause_on_focus_loss: bool = true
 ## Gamepad stick deadzone (#748): the radial deadzone every seated pad's stick uses, one of
@@ -88,9 +90,16 @@ var pause_on_focus_loss: bool = true
 const PAD_DEADZONES: Array[float] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40]
 const DEFAULT_PAD_DEADZONE: float = 0.2
 var pad_deadzone: float = DEFAULT_PAD_DEADZONE
+## Frame-rate cap (#774): `Engine.max_fps`, one of FRAME_CAPS (0 is unlimited, what the game always
+## did), and VSync on or off (on is the engine default). Both apply at boot and on change.
+const FRAME_CAPS: Array[int] = [0, 60, 30]
+var frame_cap: int = 0
+var vsync: bool = true
 
 ## Issue #732: mask offensive words in player names (NameFilter.gd).
 var filter_names: bool = true
+## Colour-blind option (#809): a seat number badge on name tags and lobby cards.
+var player_numbers: bool = false
 ## Stock mode (#354): lives per player (1-10) and the time limit in seconds
 ## (one of STOCK_TIME_LIMITS; 0 is no limit).
 const STOCK_MIN_LIVES: int = 1
@@ -127,6 +136,7 @@ static func shared() -> RefCounted:
 		else:
 			_shared.load_settings()
 			LanguagesScript.apply(_shared.language)
+			_shared.apply_display()
 	return _shared
 
 static func name_of(resource_path: String) -> String:
@@ -375,8 +385,32 @@ func set_pad_deadzone(value: float) -> void:
 	pad_deadzone = snap_pad_deadzone(value)
 	save_settings()
 
+## Pushes the frame-rate cap and VSync to the engine and the window.
+func apply_display() -> void:
+	Engine.max_fps = frame_cap
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
+
+## A value off FRAME_CAPS falls back to unlimited.
+func set_frame_cap(value: int) -> void:
+	frame_cap = value if FRAME_CAPS.has(value) else 0
+	apply_display()
+	save_settings()
+
+func set_vsync(on: bool) -> void:
+	vsync = on
+	apply_display()
+	save_settings()
+
 func set_play_of_round(on: bool) -> void:
 	play_of_round = on
+	save_settings()
+
+func set_auto_save_clips(on: bool) -> void:
+	auto_save_clips = on
+	save_settings()
+
+func set_player_numbers(on: bool) -> void:
+	player_numbers = on
 	save_settings()
 
 func set_filter_names(on: bool) -> void:
@@ -416,9 +450,14 @@ func restore_defaults() -> void:
 	game_mode = ""
 	share_stats = true
 	play_of_round = true
+	auto_save_clips = true
 	pause_on_focus_loss = true
 	pad_deadzone = DEFAULT_PAD_DEADZONE
+	frame_cap = 0
+	vsync = true
+	apply_display()
 	filter_names = true
+	player_numbers = false
 	stock_lives = 3
 	stock_time_limit = 480
 	soccer_goals = 3
@@ -505,12 +544,20 @@ func load_settings() -> void:
 		send_crash_reports = crash if crash is bool else true
 		var replay_on: Variant = config.get_value(SECTION, "play_of_round", true)
 		play_of_round = replay_on if replay_on is bool else true
+		var autosave_on: Variant = config.get_value(SECTION, "auto_save_clips", true)
+		auto_save_clips = autosave_on if autosave_on is bool else true
 		var focus_on: Variant = config.get_value(SECTION, "pause_on_focus_loss", true)
 		pause_on_focus_loss = focus_on if focus_on is bool else true
 		var deadzone: Variant = config.get_value(SECTION, "pad_deadzone", DEFAULT_PAD_DEADZONE)
 		pad_deadzone = snap_pad_deadzone(float(deadzone)) if deadzone is float or deadzone is int else DEFAULT_PAD_DEADZONE
+		var cap: Variant = config.get_value(SECTION, "frame_cap", 0)
+		frame_cap = int(cap) if cap is int and FRAME_CAPS.has(int(cap)) else 0
+		var vsync_on: Variant = config.get_value(SECTION, "vsync", true)
+		vsync = vsync_on if vsync_on is bool else true
 		var filter_on: Variant = config.get_value(SECTION, "filter_names", true)
 		filter_names = filter_on if filter_on is bool else true
+		var numbers_on: Variant = config.get_value(SECTION, "player_numbers", false)
+		player_numbers = numbers_on if numbers_on is bool else false
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
 		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
@@ -544,9 +591,13 @@ func save_settings() -> void:
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
 	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
 	config.set_value(SECTION, "play_of_round", play_of_round)
+	config.set_value(SECTION, "auto_save_clips", auto_save_clips)
 	config.set_value(SECTION, "pause_on_focus_loss", pause_on_focus_loss)
 	config.set_value(SECTION, "pad_deadzone", pad_deadzone)
+	config.set_value(SECTION, "frame_cap", frame_cap)
+	config.set_value(SECTION, "vsync", vsync)
 	config.set_value(SECTION, "filter_names", filter_names)
+	config.set_value(SECTION, "player_numbers", player_numbers)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
 	config.set_value(SECTION, "bot_difficulty", bot_difficulty)

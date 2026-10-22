@@ -9,9 +9,11 @@ AWARD_HARD_TO_KILL,Hard to Kill,Nicht totzukriegen,Dur à cuire,Duro de matar,Du
 AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesado,重拳出击,強打者,강타자,Тяжёлая рука
 AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar,滞空最久,最長滞空,최장 체공,Дольше всех в полёте
 AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega,喜鹊,カササギ,까치,Сорока
+AWARD_UNTOUCHABLE,Untouchable,Unantastbar,Intouchable,Intocable,Intocável,滑不留手,無傷の男,무적의 몸,Неуловимый
 AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada,人肉沙包,サンドバッグ,샌드백,Груша для битья
 AWARD_TOP_BRAWLER,Top Brawler,Top-Raufbold,Roi de la baston,Mejor peleador,Rei da briga,最强斗士,最強ファイター,최고의 싸움꾼,Лучший боец
 BANNER_DOUBLE_KO,DOUBLE KO!,DOPPEL-KO!,DOUBLE KO !,¡DOBLE KO!,DOUBLE KO!,双杀!,ダブルKO!,더블 KO!,ДВОЙНОЙ НОКАУТ!
+BANNER_REVENGE,REVENGE!,RACHE!,VENGEANCE !,¡VENGANZA!,VINGANÇA!,复仇!,リベンジ!,복수!,МЕСТЬ!
 BANNER_FIRST_BLOOD,FIRST BLOOD,ERSTES BLUT,PREMIER SANG,PRIMERA SANGRE,PRIMEIRO SANGUE,第一滴血,ファーストブラッド,퍼스트 블러드,ПЕРВАЯ КРОВЬ
 BANNER_LAST_ONE_STANDING,LAST ONE STANDING,LETZTER ÜBERLEBENDER,DERNIER DEBOUT,ÚLTIMO EN PIE,ÚLTIMO DE PÉ,最后的幸存者,最後の生き残り,마지막 생존자,ПОСЛЕДНИЙ НА НОГАХ
 BANNER_MULTI_KO,MULTI KO!,MULTI-KO!,MULTI KO !,¡MULTI KO!,MULTI KO!,多杀!,マルチKO!,멀티 KO!,МУЛЬТИ-НОКАУТ!
@@ -182,6 +184,7 @@ SCORE_TEAM,%s: %d,%s: %d,%s : %d,%s: %d,%s: %d,%s:%d,%s: %d,%s: %d,%s: %d
 SETTINGS,Settings,Einstellungen,Réglages,Ajustes,Ajustes,设置,設定,설정,Настройки
 SETTINGS_FEEDBACK,Feedback,Feedback,Avis,Comentarios,Feedback,反馈,フィードバック,피드백,Отзыв
 SETTINGS_FULLSCREEN,Full (F11),Voll (F11),Plein (F11),Completa (F11),Cheia (F11),全屏 (F11),フルスクリーン (F11),전체 화면 (F11),Во весь экран (F11)
+SETTINGS_KILL_FEED,Kill feed,Kill-Feed,Fil des KO,Registro de KO,Registro de KOs,击杀信息,キルフィード,킬 피드,Лента убийств
 SETTINGS_HIDE_ROOM_CODE,Hide room code,Raumcode verstecken,Masquer le code du salon,Ocultar código de sala,Ocultar código da sala,隐藏房间码,ルームコードを隠す,방 코드 숨기기,Скрыть код комнаты
 SETTINGS_MASTER_VOLUME,Master volume,Gesamtlautstärke,Volume général,Volumen general,Volume geral,主音量,マスター音量,마스터 볼륨,Общая громкость
 SETTINGS_MORE_OPTIONS,More options,Mehr Optionen,Plus d'options,Más opciones,Mais opções,更多选项,その他のオプション,더 많은 옵션,Ещё настройки
@@ -462,6 +465,7 @@ ACH_WORLD_TOUR_NAME,World Tour,Weltreise,Tour du monde,Gira mundial,Volta ao mun
 ACH_WORLD_TOUR_DESC,Play every stage in the rotation,Spiele jede Bühne der Rotation,Joue chaque terrain de la rotation,Juega cada escenario de la rotación,Jogue cada fase da rotação,玩遍轮换中的每个关卡,ローテーションのすべてのステージを遊ぶ,로테이션의 모든 스테이지를 플레이하세요,Сыграйте на каждой арене из ротации
 SETTINGS_PLAY_OF_ROUND,Play of the round replay,Szene der Runde zeigen,Rediffuser le meilleur moment,Repetir la mejor jugada,Repetir o melhor momento,回合精彩回放,ラウンドのベストプレー再生,라운드 하이라이트 재생,Повтор лучшего момента раунда
 SETTINGS_FILTER_NAMES,Filter player names,Spielernamen filtern,Filtrer les noms des joueurs,Filtrar nombres de jugadores,Filtrar nomes dos jogadores,过滤玩家名称,プレイヤー名をフィルター,플레이어 이름 필터,Фильтровать имена игроков
+SETTINGS_PLAYER_NUMBERS,Player numbers,Spielernummern,Numéros des joueurs,Números de jugador,Números dos jogadores,玩家编号,プレイヤー番号,플레이어 번호,Номера игроков
 PLAY_OF_ROUND_CAPTION,Play of the round: %s,Szene der Runde: %s,Meilleur moment de la manche : %s,Jugada de la ronda: %s,Melhor momento da rodada: %s,回合精彩时刻:%s,ラウンドのベストプレー:%s,라운드 하이라이트: %s,Лучший момент раунда: %s
 STEAM_STATUS_IN_LOBBY,In the lobby,In der Lobby,Dans le salon,En el lobby,No lobby,在大厅中,ロビーにいます,로비에 있음,В лобби
 STEAM_STATUS_IN_MATCH,In a match,In einem Match,Dans un match,En una partida,Em uma partida,比赛中,対戦中,경기 중,В матче
@@ -496,6 +500,17 @@ JOIN_NUDGE,Not connecting? Join over the internet,Klappt nicht? Tritt übers Int
 SETTINGS_STICK_DEADZONE,Stick deadzone: %s,Stick-Totzone: %s,Zone morte du stick : %s,Zona muerta del stick: %s,Zona morta do analógico: %s,摇杆死区:%s,スティックのデッドゾーン: %s,스틱 데드존: %s,Мёртвая зона стика: %s
 SETTINGS_RESTORE_DEFAULTS,Restore defaults,Standardwerte wiederherstellen,Rétablir les valeurs par défaut,Restaurar valores predeterminados,Restaurar padrões,恢复默认设置,初期設定に戻す,기본값으로 복원,Сбросить настройки
 RESTORE_CONFIRM_TEXT,Reset every setting to its default?,Alle Einstellungen auf Standard zurücksetzen?,Remettre tous les réglages par défaut ?,¿Restablecer todos los ajustes a sus valores predeterminados?,Redefinir todas as configurações para o padrão?,将所有设置重置为默认值?,すべての設定を初期値に戻しますか?,모든 설정을 기본값으로 되돌릴까요?,Сбросить все настройки к значениям по умолчанию?
+SETTINGS_FRAME_RATE,Frame rate: %s,Bildrate: %s,Fréquence d'images : %s,Velocidad de fotogramas: %s,Taxa de quadros: %s,帧率:%s,フレームレート: %s,프레임 속도: %s,Частота кадров: %s
+SETTINGS_FRAME_RATE_UNLIMITED,Unlimited,Unbegrenzt,Illimitée,Ilimitada,Ilimitada,不限,無制限,제한 없음,Без ограничения
+SETTINGS_VSYNC,VSync,VSync,VSync,VSync,VSync,垂直同步,VSync,수직 동기화,VSync
+WISHLIST_BUTTON,Wishlist on Steam (W),Auf Steam wunschlisten (W),Ajouter à la liste de souhaits Steam (W),Añadir a deseados en Steam (W),Adicionar à lista de desejos da Steam (W),加入 Steam 愿望单 (W),Steam のウィッシュリストに追加 (W),Steam 위시리스트에 추가 (W),Добавить в желаемое Steam (W)
+SETTINGS_AUTO_SAVE_CLIPS,Auto-save match clips,Match-Clips automatisch speichern,Enregistrer auto les clips de match,Guardar clips de partida automáticamente,Salvar clipes de partida automaticamente,自动保存比赛片段,試合クリップを自動保存,경기 클립 자동 저장,Автосохранение клипов матча
+VICTORY_CLIP_SAVED,Clip saved,Clip gespeichert,Clip enregistré,Clip guardado,Clipe salvo,片段已保存,クリップを保存しました,클립 저장됨,Клип сохранён
+PAUSED_HINT_PAD,Start to resume · View for menu,Start zum Fortsetzen · View für Menü,Start pour reprendre · View pour le menu,Start para continuar · View para el menú,Start para continuar · View para o menu,按 Start 继续 · 按 View 打开菜单,Start で再開 · View でメニュー,Start로 계속 · View로 메뉴,Start — продолжить · View — меню
+PAUSED_HINT_KEYS,Any key to resume · Esc for menu,Beliebige Taste zum Fortsetzen · Esc für Menü,Une touche pour reprendre · Échap pour le menu,Cualquier tecla para continuar · Esc para el menú,Qualquer tecla para continuar · Esc para o menu,按任意键继续 · 按 Esc 打开菜单,任意のキーで再開 · Esc でメニュー,아무 키나 눌러 계속 · Esc로 메뉴,Любая клавиша — продолжить · Esc — меню
+SETTINGS_VOICE,Voice,Stimmen,Voix,Voces,Vozes,语音,ボイス,음성,Голоса
+MATCH_POINT,MATCH POINT: %s,MATCHBALL: %s,BALLE DE MATCH : %s,PUNTO DE PARTIDO: %s,MATCH POINT: %s,赛点：%s,マッチポイント：%s,매치 포인트: %s,МАТЧБОЛ: %s
+PHONE_SWING_REACH,Swing reach,Schwungreichweite,Portée du swing,Alcance del golpe,Alcance do golpe,挥动范围,スイング距離,스윙 범위,Радиус замаха
 SETTINGS_TEXT_SIZE,Text size: %s,Textgröße: %s,Taille du texte : %s,Tamaño del texto: %s,Tamanho do texto: %s,文字大小:%s,文字サイズ: %s,글자 크기: %s,Размер текста: %s
 TEXT_SIZE_NORMAL,Normal,Normal,Normale,Normal,Normal,正常,標準,보통,Обычный
 TEXT_SIZE_LARGE,Large,Groß,Grande,Grande,Grande,大,大,크게,Большой

@@ -18,6 +18,7 @@ extends Area2D
 ## Player.LAYER_WORLD, repeated rather than read off Player so this script
 ## does not have to preload it.
 const LAYER_WORLD: int = 1
+const PickupCalloutScript := preload("res://scripts/PickupCallout.gd")
 ## Drawn size of the weapon's head art relative to the head it actually is.
 ## Visual only: what the player then holds is the weapon at its real size.
 const ART_SCALE: float = 1.0
@@ -260,4 +261,5 @@ func _on_body_entered(body: Node) -> void:
 	body.set_weapon_stats(weapon_stats)
 	if body.has_signal("weapon_picked_up"):
 		body.weapon_picked_up.emit(weapon_stats.resource_path.get_file().get_basename().capitalize())
+	PickupCalloutScript.show_for(body, weapon_stats.resource_path.get_file().get_basename(), get_parent()) # #818
 	queue_free()

@@ -41,6 +41,9 @@ const AnnouncerScript := preload("res://scripts/Announcer.gd")
 const SettingsScript := preload("res://scripts/SfxSettings.gd")
 
 const BUS_NAME: StringName = &"SFX"
+## The announcer lines and player grunts (`"voice": true` sounds) play on this
+## bus, which sends into `SFX`, so the Voice slider (#824) scales only them.
+const VOICE_BUS_NAME: StringName = &"Voice"
 const SETTINGS_PATH: String = "user://audio.cfg"
 const DIR: String = "res://assets/sfx/"
 
@@ -304,6 +307,9 @@ var muted: bool = false
 ## The SFX bus's own volume, 0..1, under the master (#118). Set through
 ## `set_sfx_volume()`.
 var sfx_volume: float = 1.0
+## The Voice bus's own volume, 0..1, under SFX (#824). Set through
+## `set_voice_volume()`.
+var voice_volume: float = 1.0
 ## Whether the host window is fullscreen (#118). Set through
 ## `set_fullscreen()`, which asks `DisplayServer` for the window mode, and
 ## brought back in line with the real window by `sync_fullscreen()` when the
@@ -313,6 +319,9 @@ var fullscreen: bool = false
 ## Whether `Juice` shakes the camera on a heavy hit or a kill (#256). On by
 ## default; set through `set_screen_shake()` and remembered with the rest.
 var screen_shake: bool = true
+## Whether the KO ticker (`KillFeed`, #833) lists KOs. On by default; the centre
+## banners show either way. Set through `set_kill_feed()`.
+var kill_feed: bool = true
 ## Comfort option (#317): when on, the white/bright flashes (elimination burst,
 ## bounce pad, breaking wall) are not drawn. Off by default.
 var reduce_flash: bool = false
@@ -408,6 +417,7 @@ func _ready() -> void:
 		settings_path = headless_settings_path()
 		_apply_master()
 		_apply_sfx_volume()
+		_apply_voice_volume()
 	else:
 		load_settings()
 	get_tree().node_added.connect(_on_node_added)
@@ -626,9 +636,30 @@ func set_sfx_volume(value: float, save: bool = true) -> void:
 	if save:
 		_save_settings()
 
+func set_voice_volume(value: float, save: bool = true) -> void:
+	voice_volume = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0
+	_apply_voice_volume()
+	if save:
+		_save_settings()
+
+## The gain, 0..1, the mix gives sound `sound` from the volume sliders: SFX for
+## all of them, times Voice for a `"voice": true` one (#824). Master and mute
+## are left out. Public so the scenarios can check the bus mix.
+func mix_gain_for(sound: StringName) -> float:
+	var spec: Dictionary = SOUNDS.get(String(sound), {})
+	var gain: float = db_to_linear(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(BUS_NAME)))
+	if bool(spec.get("voice", false)):
+		gain *= db_to_linear(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(VOICE_BUS_NAME)))
+	return gain
+
 ## Turn the camera shake (#256) on or off, and remember the choice.
 func set_screen_shake(value: bool) -> void:
 	screen_shake = value
+	_save_settings()
+
+## Turn the KO ticker (#833) on or off, and remember the choice.
+func set_kill_feed(value: bool) -> void:
+	kill_feed = value
 	_save_settings()
 
 ## Turn the bright flashes (#317) off or on, and remember the choice.
@@ -694,8 +725,10 @@ func restore_defaults() -> void:
 	master_volume = 1.0
 	muted = false
 	sfx_volume = 1.0
+	voice_volume = 1.0
 	fullscreen = false
 	screen_shake = true
+	kill_feed = true
 	reduce_flash = false
 	ui_scale = 1.0
 	text_scale = 1.0
@@ -703,6 +736,7 @@ func restore_defaults() -> void:
 	hide_room_code = false
 	_apply_master()
 	_apply_sfx_volume()
+	_apply_voice_volume()
 	if was_fullscreen:
 		_apply_window_mode()
 	_save_settings()
@@ -758,6 +792,12 @@ func _apply_sfx_volume() -> void:
 	if index != -1:
 		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(sfx_volume, 0.0001)))
 
+func _apply_voice_volume() -> void:
+	var index: int = AudioServer.get_bus_index(VOICE_BUS_NAME)
+	if index != -1:
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(voice_volume, 0.0001)))
+		AudioServer.set_bus_mute(index, voice_volume <= 0.0)
+
 func _apply_window_mode() -> void:
 	var mode: int = DisplayServer.WINDOW_MODE_FULLSCREEN
 	if not fullscreen:
@@ -795,8 +835,10 @@ func load_settings() -> void:
 		master_volume = clampf(_num(config.get_value("audio", "master_volume", 1.0), 1.0), 0.0, 1.0)
 		muted = _flag(config.get_value("audio", "muted", false), false)
 		sfx_volume = clampf(_num(config.get_value("audio", "sfx_volume", 1.0), 1.0), 0.0, 1.0)
+		voice_volume = clampf(_num(config.get_value("audio", "voice_volume", 1.0), 1.0), 0.0, 1.0)
 		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
 		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
+		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
 		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
@@ -805,6 +847,7 @@ func load_settings() -> void:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
 	_apply_sfx_volume()
+	_apply_voice_volume()
 
 ## Load, change and save, so `Music`'s section of the same file is kept. Only a
 ## missing file starts from an empty config: a file that exists but will not
@@ -820,8 +863,10 @@ func _save_settings() -> void:
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("audio", "muted", muted)
 	config.set_value("audio", "sfx_volume", sfx_volume)
+	config.set_value("audio", "voice_volume", voice_volume)
 	config.set_value("display", "fullscreen", fullscreen)
 	config.set_value("display", "screen_shake", screen_shake)
+	config.set_value("display", "kill_feed", kill_feed)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)
@@ -943,12 +988,16 @@ static func _decode_to_pcm(source: AudioStream, rate: int) -> AudioStreamWAV:
 	return AudioStreamWAV.load_from_buffer(wav, PCM_OPTIONS)
 
 func _ensure_bus() -> void:
-	if AudioServer.get_bus_index(BUS_NAME) != -1:
-		return
-	AudioServer.add_bus()
-	var index: int = AudioServer.bus_count - 1
-	AudioServer.set_bus_name(index, BUS_NAME)
-	AudioServer.set_bus_send(index, &"Master")
+	if AudioServer.get_bus_index(BUS_NAME) == -1:
+		AudioServer.add_bus()
+		var index: int = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(index, BUS_NAME)
+		AudioServer.set_bus_send(index, &"Master")
+	if AudioServer.get_bus_index(VOICE_BUS_NAME) == -1:
+		AudioServer.add_bus()
+		var voice_index: int = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(voice_index, VOICE_BUS_NAME)
+		AudioServer.set_bus_send(voice_index, BUS_NAME)
 
 func _pick_stream(key: String) -> AudioStream:
 	if not _streams_decoded:
@@ -1013,7 +1062,7 @@ func _claim_voice(key: String, positional: bool) -> Node:
 		if not voice.playing and (voice is AudioStreamPlayer2D) == positional:
 			return voice
 	if pool.size() < overlap_cap(key):
-		var fresh: Node = _new_voice(positional)
+		var fresh: Node = _new_voice(positional, bool(SOUNDS.get(key, {}).get("voice", false)))
 		pool.append(fresh)
 		return fresh
 	var oldest: Node = pool[0]
@@ -1026,11 +1075,11 @@ func _claim_voice(key: String, positional: bool) -> Node:
 		# keeping the pool at its size.
 		var index: int = pool.find(oldest)
 		oldest.queue_free()
-		pool[index] = _new_voice(positional)
+		pool[index] = _new_voice(positional, bool(SOUNDS.get(key, {}).get("voice", false)))
 		return pool[index]
 	return oldest
 
-func _new_voice(positional: bool) -> Node:
+func _new_voice(positional: bool, on_voice_bus: bool = false) -> Node:
 	var voice: Node
 	if positional:
 		var placed := AudioStreamPlayer2D.new()
@@ -1039,7 +1088,7 @@ func _new_voice(positional: bool) -> Node:
 		voice = placed
 	else:
 		voice = AudioStreamPlayer.new()
-	voice.bus = BUS_NAME
+	voice.bus = VOICE_BUS_NAME if on_voice_bus else BUS_NAME
 	add_child(voice)
 	return voice
 

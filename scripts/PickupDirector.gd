@@ -18,6 +18,7 @@ extends Node
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const WeaponThemesScript := preload("res://scripts/WeaponThemes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const PickupSpawnRingScript := preload("res://scripts/PickupSpawnRing.gd")
 
 ## Which pickup weapons the host switched off (#294); a scenario hands in its own.
 var settings: RefCounted = HostSettingsScript.shared()
@@ -37,6 +38,11 @@ const PICKUP_OCCUPIED_RADIUS: float = 60.0
 ## body width plus the largest pickup's trigger, with room to spare, so a
 ## player standing on their spawn cannot touch a pickup.
 const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
+## A new pickup pops in (#816): scales up from this to 1x over `POP_SEC` with
+## a small overshoot, under an expanding ring. Motion only; it stays
+## collectable from the first frame.
+const POP_START_SCALE: float = 0.2
+const POP_SEC: float = 0.3
 
 ## The RoundManager this directs pickups for.
 var _rm: Node
@@ -156,6 +162,17 @@ func _spawn_pickup() -> void:
 	# Placed after entering the tree: a spawn, not motion (issue #108).
 	pickup.reset_physics_interpolation()
 	_pickups.append(pickup)
+	_pop_in(pickup, parent, spot)
+
+## The spawn cue (#816): the pickup scales up with an overshoot and a one-shot
+## ring expands from its spot. Added here so Pickup.gd is untouched.
+func _pop_in(pickup: Node2D, parent: Node, spot: Vector2) -> void:
+	pickup.scale = Vector2.ONE * POP_START_SCALE
+	var tween: Tween = pickup.create_tween()
+	tween.tween_property(pickup, "scale", Vector2.ONE, POP_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var ring: Node2D = PickupSpawnRingScript.new()
+	parent.add_child(ring)
+	ring.global_position = spot
 
 ## `offered` without the weapons the host switched off (#294). Left whole if
 ## that would leave nothing, which the settings do not allow anyway.

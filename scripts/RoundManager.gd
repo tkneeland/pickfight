@@ -164,6 +164,7 @@ const StageRotationScript := preload("res://scripts/StageRotation.gd")
 const StatsSenderScript := preload("res://scripts/StatsSender.gd")
 const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const NameTagsScript := preload("res://scripts/NameTags.gd")
+const OffscreenIndicatorsScript := preload("res://scripts/OffscreenIndicators.gd")
 const LobbyScreenScript := preload("res://scripts/LobbyScreen.gd")
 ## Teams mode's rules (issue #236, ADR-0018).
 const TeamsScript := preload("res://scripts/Teams.gd")
@@ -1641,6 +1642,16 @@ func _tick_name_tags() -> void:
 		add_child(_name_tags)
 		_name_tags.build()
 	_name_tags.tick()
+	if _offscreen_indicators == null:
+		_offscreen_indicators = OffscreenIndicatorsScript.new(_players, _slot_color)
+		add_child(_offscreen_indicators)
+		_offscreen_indicators.build()
+
+## Edge arrows for fighters off screen (#779), or null before the first frame.
+var _offscreen_indicators: CanvasLayer
+
+func offscreen_indicators() -> CanvasLayer:
+	return _offscreen_indicators
 
 # --- Host phone controls and how to play (issue #149) --------------------------
 #
@@ -2265,6 +2276,8 @@ func _flush_kos() -> void:
 			feed.show_banner([tr("BANNER_DOUBLE_KO"), tr("BANNER_TRIPLE_KO")][streak - 2] if streak <= 3 else tr("BANNER_MULTI_KO"), _slot_name(killer), _slot_color(killer))
 		elif ko["first_blood"]:
 			feed.show_banner(tr("BANNER_FIRST_BLOOD"), _slot_name(killer), _slot_color(killer))
+		elif ko["revenge"]:
+			feed.show_banner(tr("BANNER_REVENGE"), _slot_name(killer), _slot_color(killer))
 
 # --- Play of the round (#704) ---------------------------------------------------
 #
@@ -2677,6 +2690,8 @@ func _start_final_ko(fallback_point: Vector2) -> void:
 func _tick_final_ko() -> void:
 	if _final_ko_active and GameClockScript.now_msec() >= _final_ko_end_msec:
 		_end_final_ko()
+		if _replay != null:
+			_replay.autosave_match_clip() # #795
 
 ## Puts the time scale, the camera and the flash back. Safe to call any time.
 func _end_final_ko() -> void:

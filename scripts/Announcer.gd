@@ -21,6 +21,8 @@ extends Node
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+## The MATCH POINT plate (#825), shown as each round starts.
+const MatchPointPlateScript := preload("res://scripts/MatchPointPlate.gd")
 
 ## A second elimination this soon after the first makes one "Double KO!".
 ## It is also how long "KO!" waits before it is said.
@@ -159,6 +161,8 @@ func _on_round_started() -> void:
 			at = i
 			break
 	_queue.insert(at, {"sound": &"announce_fight", "at": GameClockScript.now_msec()})
+	if _round_manager != null and is_instance_valid(_round_manager):
+		MatchPointPlateScript.show_for(_round_manager)
 
 ## Whether `sound` is one of the modifier names.
 func modifier_line_is(sound: StringName) -> bool:

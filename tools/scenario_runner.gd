@@ -231,6 +231,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_how_to_play_on_host_screen_only",
 	"controller_page_host_menu_is_guarded",
 	"match_stats_ko_credit_and_awards",
+	"match_stats_revenge",
 	"kill_feed_credits_hits_and_awards_at_match_end",
 	"kill_feed_and_awards_fit_eight_long_names",
 	"every_stage_has_eight_safe_spawns",
@@ -503,8 +504,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"night_lamps_steady_with_reduce_flash",
 	"night_roll_respects_forced_and_disabled",
 	"match_stats_rows_favourite_weapon_and_magpie",
+	"untouchable_award_832",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
+	"pickup_pops_in_when_spawned_816",
+	"pickup_spawn_rules_unchanged_by_pop_816",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
@@ -616,6 +620,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"pickup_shows_weapon_name_callout_818",
+	"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818",
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
@@ -667,6 +673,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
 	"deck_text_is_legible_at_1280x800",
+	"paused_banner_hint_follows_active_input_810",
+	"paused_banner_hint_hidden_when_not_paused_810",
 	"deck_lobby_join_qr_and_url_fit_the_deck_screen",
 	"deck_gamepad_reaches_every_lobby_control",
 	"deck_gamepad_operates_the_settings_panel",
@@ -872,6 +880,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_caption_translated_704",
 	"name_filter_732",
 	"name_echo_756",
+	"phone_reduce_flashes_follows_host_setting_776",
+	"phone_weak_connection_chip_shows_and_clears_777",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -980,10 +990,38 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pause_on_focus_loss_747",
 	"couch_relay_nudge_727",
 	"phone_vibration_switch_749",
+	"phone_swing_reach_slider_scales_drag_radius_817",
+	"phone_swing_reach_label_translated_817",
 	"steam_timeline_teams_title_745",
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"player_numbers_badge_on_name_tags_809",
+	"player_numbers_setting_persists_and_restores_809",
+	"voice_volume_scales_announcer_and_grunts_only_824",
+	"voice_slider_reset_by_restore_defaults_824",
+	"kill_feed_switch_833",
+	"match_win_ko_autosaves_clip_795",
+	"autosave_clip_switch_off_saves_nothing_795",
+	"offscreen_fighter_gets_edge_arrow_779",
+	"phone_leave_button_frees_seat_775",
+	"frame_rate_cap_and_vsync_persist_and_apply_774",
+	"demo_title_wishlist_button_shown_only_in_demo_793",
+	"demo_wishlist_button_opens_store_link_793",
+	"translations_have_no_blank_or_mismatched_cells_794",
+	"translation_cell_check_flags_bad_fixture_794",
+	"stage_rotation_data_has_only_real_keys_801",
+	"stage_rotation_data_check_catches_a_typo_801",
+	"doc_paths_point_at_real_files_803",
+	"doc_path_check_catches_a_missing_file_803",
+	"every_scene_loads_and_instantiates_802",
+	"scene_check_catches_a_dead_resource_path_802",
+	"couch_pad_only_host_can_end_match_811",
+	"couch_host_phone_present_keeps_match_menu_hidden_811",
+	"match_point_plate_shows_for_leader_one_win_short_825",
+	"match_point_plate_stacks_for_two_leaders_and_skips_stock_825",
+	"match_point_in_teams_names_the_team_825",
+	"match_point_skipped_when_target_is_1_829",
 	"text_size_setting_751",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -1584,6 +1622,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_no_single_strike_kills()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
+		"pickup_shows_weapon_name_callout_818":
+			return await _scenario_pickup_shows_weapon_name_callout_818()
+		"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818":
+			return await _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818()
 		"pickups_arrive_on_interval_and_cap":
 			return await _scenario_pickups_arrive_on_interval_and_cap()
 		"pickup_weapon_is_random_never_pickaxe":
@@ -1840,6 +1882,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_controller_page_host_menu_is_guarded()
 		"match_stats_ko_credit_and_awards":
 			return await _scenario_match_stats_ko_credit_and_awards()
+		"match_stats_revenge":
+			return await _scenario_match_stats_revenge()
 		"kill_feed_credits_hits_and_awards_at_match_end":
 			return await _scenario_kill_feed_credits_hits_and_awards_at_match_end()
 		"kill_feed_and_awards_fit_eight_long_names":
@@ -2384,10 +2428,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_night_roll_respects_forced_and_disabled()
 		"match_stats_rows_favourite_weapon_and_magpie":
 			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
+		"untouchable_award_832":
+			return await _scenario_untouchable_award_832()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
 			return await _scenario_pickups_skip_occupied_spots()
+		"pickup_pops_in_when_spawned_816":
+			return await _scenario_pickup_pops_in_when_spawned_816()
+		"pickup_spawn_rules_unchanged_by_pop_816":
+			return await _scenario_pickup_spawn_rules_unchanged_by_pop_816()
 		"replay_buffer_bounded_and_saves_clip":
 			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
@@ -2712,6 +2762,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_character_polish_weapon_head_has_ink_outline()
 		"deck_text_is_legible_at_1280x800":
 			return await _scenario_deck_text_is_legible_at_1280x800()
+		"paused_banner_hint_follows_active_input_810":
+			return await _scenario_paused_banner_hint_follows_active_input_810()
+		"paused_banner_hint_hidden_when_not_paused_810":
+			return await _scenario_paused_banner_hint_hidden_when_not_paused_810()
 		"deck_lobby_join_qr_and_url_fit_the_deck_screen":
 			return await _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen()
 		"deck_gamepad_reaches_every_lobby_control":
@@ -3110,6 +3164,16 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_caption_translated_704": return await _scenario_play_of_round_caption_translated_704()
 		"name_filter_732": return await _scenario_name_filter_732()
 		"name_echo_756": return await _scenario_name_echo_756()
+		"phone_reduce_flashes_follows_host_setting_776": return await _scenario_phone_reduce_flashes_776()
+		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
+		"translations_have_no_blank_or_mismatched_cells_794": return await _scenario_translations_have_no_blank_or_mismatched_cells_794()
+		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
+		"stage_rotation_data_has_only_real_keys_801": return await _scenario_stage_rotation_data_has_only_real_keys_801()
+		"stage_rotation_data_check_catches_a_typo_801": return await _scenario_stage_rotation_data_check_catches_a_typo_801()
+		"doc_paths_point_at_real_files_803": return await _scenario_doc_paths_point_at_real_files_803()
+		"doc_path_check_catches_a_missing_file_803": return await _scenario_doc_path_check_catches_a_missing_file_803()
+		"every_scene_loads_and_instantiates_802": return await _scenario_every_scene_loads_and_instantiates_802()
+		"scene_check_catches_a_dead_resource_path_802": return await _scenario_scene_check_catches_a_dead_resource_path_802()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -3328,14 +3392,54 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_couch_relay_nudge_727()
 		"phone_vibration_switch_749":
 			return await _scenario_phone_vibration_switch_749()
+		"phone_swing_reach_slider_scales_drag_radius_817":
+			return await _scenario_phone_swing_reach_slider_817()
+		"phone_swing_reach_label_translated_817":
+			return await _scenario_phone_swing_reach_label_817()
 		"steam_timeline_teams_title_745":
 			return await _scenario_steam_timeline_teams_title_745()
 		"team_letters_752":
 			return await _scenario_team_letters_752()
 		"stick_deadzone_setting_748":
 			return await _scenario_stick_deadzone_setting_748()
+		"voice_volume_scales_announcer_and_grunts_only_824":
+			return await _scenario_voice_volume_scales_announcer_and_grunts_only_824()
+		"voice_slider_reset_by_restore_defaults_824":
+			return await _scenario_voice_slider_reset_by_restore_defaults_824()
+		"kill_feed_switch_833":
+			return await _scenario_kill_feed_switch_833()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"player_numbers_badge_on_name_tags_809":
+			return await _scenario_player_numbers_badge_on_name_tags_809()
+		"player_numbers_setting_persists_and_restores_809":
+			return await _scenario_player_numbers_setting_persists_and_restores_809()
+		"match_win_ko_autosaves_clip_795":
+			return await _scenario_match_win_ko_autosaves_clip_795()
+		"autosave_clip_switch_off_saves_nothing_795":
+			return await _scenario_autosave_clip_switch_off_saves_nothing_795()
+		"offscreen_fighter_gets_edge_arrow_779":
+			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
+		"phone_leave_button_frees_seat_775":
+			return await _scenario_phone_leave_button_frees_seat_775()
+		"frame_rate_cap_and_vsync_persist_and_apply_774":
+			return await _scenario_frame_rate_cap_and_vsync_persist_and_apply_774()
+		"demo_title_wishlist_button_shown_only_in_demo_793":
+			return await _scenario_demo_title_wishlist_button_shown_only_in_demo_793()
+		"demo_wishlist_button_opens_store_link_793":
+			return await _scenario_demo_wishlist_button_opens_store_link_793()
+		"couch_pad_only_host_can_end_match_811":
+			return await _scenario_couch_pad_only_host_can_end_match_811()
+		"couch_host_phone_present_keeps_match_menu_hidden_811":
+			return await _scenario_couch_host_phone_present_keeps_match_menu_hidden_811()
+		"match_point_plate_shows_for_leader_one_win_short_825":
+			return await _scenario_match_point_plate_shows_for_leader_one_win_short_825()
+		"match_point_plate_stacks_for_two_leaders_and_skips_stock_825":
+			return await _scenario_match_point_plate_stacks_for_two_leaders_and_skips_stock_825()
+		"match_point_in_teams_names_the_team_825":
+			return await _scenario_match_point_in_teams_names_the_team_825()
+		"match_point_skipped_when_target_is_1_829":
+			return await _scenario_match_point_skipped_when_target_is_1_829()
 		"text_size_setting_751":
 			return await _scenario_text_size_setting_751()
 		_:
@@ -11919,8 +12023,8 @@ func _scenario_sfx_volume_slider_and_mute() -> Array[String]:
 		failures.append("unticking Mute left the Master bus muted")
 	sfx.play(&"round_start")
 	for voice: Node in sfx.get_children():
-		if (voice is AudioStreamPlayer or voice is AudioStreamPlayer2D) and voice.bus != &"SFX":
-			failures.append("a sound played on the %s bus, not SFX" % voice.bus)
+		if (voice is AudioStreamPlayer or voice is AudioStreamPlayer2D) and voice.bus != &"SFX" and voice.bus != &"Voice":
+			failures.append("a sound played on the %s bus, not SFX or Voice (#824)" % voice.bus)
 			break
 	sfx.stop_all()
 	sfx.set_master_volume(was_volume)
@@ -14929,6 +15033,55 @@ func _scenario_controller_page_host_menu_is_guarded() -> Array[String]:
 		failures.append("the page's kick reason does not match ControllerServer.KICKED_REASON")
 	_scenario_completed = true
 	return failures
+## REVENGE! (#834): the KO of whoever last KO'd you this round is a revenge KO;
+## the first KO, a repeat of the same victim, a self-KO and a different victim
+## are not; a revenge KO followed by a second KO is a double (the banner branch
+## picks the streak first); a new round clears it.
+func _scenario_match_stats_revenge() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	stats.record_hit(0, 1, 20.0, 1000)
+	var a: Dictionary = stats.record_elimination(1, 1100)
+	stats.record_hit(2, 3, 20.0, 1200)
+	var other: Dictionary = stats.record_elimination(3, 1300)
+	stats.record_hit(1, 0, 20.0, 1400)
+	var b: Dictionary = stats.record_elimination(0, 1500)
+	if a["revenge"] or other["revenge"] or not b["revenge"]:
+		failures.append("A KOs B, C KOs D, B KOs A: revenge %s %s %s, expected false false true" % [a["revenge"], other["revenge"], b["revenge"]])
+	stats.record_hit(1, 0, 20.0, 1600)
+	var again: Dictionary = stats.record_elimination(0, 1700)
+	if again["revenge"]:
+		failures.append("a repeat KO of the same victim counted as revenge")
+	stats.record_hit(0, 2, 20.0, 1800)
+	var later: Dictionary = stats.record_elimination(2, 1900)
+	if later["revenge"]:
+		failures.append("a KO of a victim who never KO'd the killer counted as revenge")
+	stats.record_hit(2, 2, 20.0, 2000)
+	var own: Dictionary = stats.record_elimination(2, 2100)
+	if own["revenge"] or own["killer"] != -1:
+		failures.append("a self-KO counted as revenge: %s" % [own])
+	stats.begin_round([0, 1], 5000)
+	stats.record_hit(0, 1, 20.0, 5100)
+	stats.record_elimination(1, 5200)
+	stats.begin_round([0, 1], 6000)
+	stats.record_hit(1, 0, 20.0, 6100)
+	var cleared: Dictionary = stats.record_elimination(0, 6200)
+	if cleared["revenge"]:
+		failures.append("revenge carried over into a new round")
+	stats.begin_round([0, 1, 2], 10000)
+	stats.record_hit(1, 0, 20.0, 10100)
+	stats.record_elimination(0, 10200)
+	stats.record_hit(0, 1, 20.0, 10300)
+	var d1: Dictionary = stats.record_elimination(1, 10400)
+	stats.record_hit(0, 2, 20.0, 10500)
+	var d2: Dictionary = stats.record_elimination(2, 10600)
+	if not d1["revenge"] or d2["streak"] != 2:
+		failures.append("revenge then a second KO: %s, %s, expected revenge and then a streak of 2" % [d1, d2])
+	_scenario_completed = true
+	return failures
+
 # --- Kill feed, KO credit and match awards (issue #148) -------------------------
 const MatchStatsScript := preload("res://scripts/MatchStats.gd")
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
@@ -15064,7 +15217,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 3 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 4 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15136,8 +15289,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 3:
-		failures.append("the victory screen shows %s awards, expected 3" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 4:
+		failures.append("the victory screen shows %s awards, expected 4" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -16431,6 +16584,18 @@ func _scenario_round_modifier_meteor_shower_hits_and_undoes() -> Array[String]:
 		var victim: RigidBody2D = players[0]
 		if victim.spawn_protected:
 			extra.append("P0 is still spawn-protected %.1f s in" % METEOR_WATCH_SEC)
+		# The shower is still running, and one of its random meteors landing on
+		# P0 first (knocking them off the spot, or in flight when the test drop
+		# lands) made this part flaky (#782). Stop the spawner and clear what it
+		# dropped, so the one measured meteor is the only one in play.
+		for child: Node in round_manager.get_children():
+			if child is Timer and child.name.begins_with("RoundModifierTimer"):
+				(child as Timer).stop()
+		for stray: Variant in modifier.live_meteors():
+			if is_instance_valid(stray):
+				(stray as Node).queue_free()
+		await physics_frame
+		await physics_frame
 		var damage_before: float = victim.damage
 		var meteor: Node2D = modifier.spawn_meteor_at(victim.global_position + Vector2(0.0, -METEOR_TEST_DROP), Vector2(0.0, METEOR_TEST_SPEED))
 		# The meteor frees itself the tick it hits, so the hit is heard on the
@@ -29037,7 +29202,7 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 	elif rows[0]["self_kos"] != 1 or rows[0]["weapon"] != "":
 		failures.append("slot 2 row %s, expected 1 self-KO and no weapon" % [rows[0]])
 	var extra: Array[Dictionary] = stats.extra_awards([0, 1, 2])
-	if extra.size() != 1 or extra[0]["title"] != "Magpie" or extra[0]["slot"] != 0 or extra[0]["detail"] != "3 pickups":
+	if extra.size() != 2 or extra[0]["title"] != "Magpie" or extra[0]["slot"] != 0 or extra[0]["detail"] != "3 pickups":
 		failures.append("extra awards %s, expected Magpie for slot 0 with 3 pickups" % [extra])
 	stats.forget_slot(0)
 	if stats.favourite_weapon(0) != "" or stats.pickups.has(0):
@@ -29047,6 +29212,43 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #832: Untouchable goes to the lowest damage taker who dealt damage.
+func _scenario_untouchable_award_832() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	stats.record_hit(0, 1, 10.0, 100)
+	stats.record_hit(1, 2, 20.0, 110)
+	stats.record_hit(2, 3, 30.0, 120)
+	stats.record_hit(3, 1, 5.0, 130)
+	var found: Array = stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "0 damage taken":
+		failures.append("expected Untouchable for slot 0 with 0 damage taken, got %s" % [found])
+	var two: Array = stats.extra_awards([0, 1]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if not two.is_empty():
+		failures.append("Untouchable given with 2 players")
+	var idle: RefCounted = MatchStatsScript.new()
+	idle.begin_match()
+	idle.begin_round([0, 1, 2], 0)
+	idle.record_hit(1, 2, 20.0, 100)
+	idle.record_hit(2, 1, 10.0, 110)
+	var none: Array = idle.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if not none.is_empty():
+		failures.append("Untouchable given to a player who dealt 0 damage: %s" % [none])
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	tied.tie_seed = 7
+	tied.begin_round([0, 1, 2], 0)
+	tied.record_hit(0, 2, 10.0, 100)
+	tied.record_hit(1, 2, 10.0, 110)
+	var first: Array = tied.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	var again: Array = tied.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if first.size() != 1 or first != again or first[0]["slot"] not in [0, 1]:
+		failures.append("seeded tie not stable or wrong: %s vs %s" % [first, again])
+	_scenario_completed = true
+	return failures
+
 ## Issue #325: the victory screen's stats table lists every player and, with
 ## eight long names, still fits the screen together with the podium and awards.
 func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
@@ -29086,8 +29288,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 4:
-		failures.append("expected 4 award cards (3 core + Magpie), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 5:
+		failures.append("expected 5 award cards (3 core + Magpie + Untouchable), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
@@ -33217,8 +33419,12 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	for voice: Node in sfx.get_children():
 		if voice is AudioStreamPlayer2D:
 			voices += 1
-			if voice.bus != &"SFX":
-				failures.append("a grunt played on the %s bus, not SFX" % voice.bus)
+			if voice.bus != &"SFX" and voice.bus != &"Voice":
+				failures.append("a sound played on the %s bus, not SFX or Voice (#824)" % voice.bus)
+	for grunt_key: String in ["grunt_hit_0", "grunt_ko_5"]:
+		for grunt: Node in sfx._voices.get(grunt_key, []):
+			if grunt.bus != &"Voice":
+				failures.append("%s played on the %s bus, not Voice (#824)" % [grunt_key, grunt.bus])
 	if voices == 0:
 		failures.append("no placed player node was made for the grunts")
 	sfx.set_muted(true)
@@ -45916,7 +46122,6 @@ func _scenario_quit_game_pc_client_leaves_room_718() -> Array[String]:
 	QuitGameScript718.quit_action = Callable()
 	_scenario_completed = true # nothing here builds a stage for _teardown() to free
 	return failures
-
 ## Issue #721: the Credits screen opens from the title screen's Credits button (one D-pad step right of
 ## Quit) and from Settings, shows the studio, music, font, engine and translation credits plus the
 ## licence texts from THIRD-PARTY.md, and closes with the X, Esc and the gamepad's B (Esc leaves the
@@ -46473,6 +46678,113 @@ func _scenario_stick_deadzone_setting_748() -> Array[String]:
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
+## Issue #809: with Player numbers on, each living fighter's name tag carries its seat number (1 to 8)
+## as a badge; off draws none; a team player keeps the team letter; a ghost gets none; the lobby card
+## shows the number too.
+func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.player_numbers
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array = []
+	for i in 8:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "NumP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.visible = true
+		player.alive = true
+		players.append(player)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	host.player_numbers = true
+	tags.tick()
+	for slot in 8:
+		var badge: Control = tags.team_badge(slot)
+		if not badge.visible or badge.letter() != str(slot + 1):
+			failures.append("slot %d's badge reads '%s' (visible %s), expected %d" % [slot, badge.letter(), badge.visible, slot + 1])
+		elif badge.position.x >= tags.name_tag(slot).position.x:
+			failures.append("slot %d's number badge is not left of its name tag" % slot)
+	players[3].alive = false
+	tags.tick()
+	if tags.team_badge(3).visible:
+		failures.append("a ghost kept its number badge")
+	players[3].alive = true
+	players[1].team = 1
+	tags.tick()
+	if tags.team_badge(1).letter() != "B":
+		failures.append("a team player's badge reads '%s', expected the team letter B" % tags.team_badge(1).letter())
+	if tags.team_badge(2).letter() != "3":
+		failures.append("a free-for-all player beside a team player reads '%s', expected 3" % tags.team_badge(2).letter())
+	players[1].team = -1
+	host.player_numbers = false
+	tags.tick()
+	for slot in 8:
+		if tags.team_badge(slot).visible:
+			failures.append("slot %d shows a badge with Player numbers off" % slot)
+	# The lobby card.
+	var card: Control = (load("res://scripts/LobbyPlayerCard.gd") as GDScript).new(0)
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5})
+	if not card.team_chip().visible or card.team_chip().letter() != "5":
+		failures.append("a numbered card's chip reads '%s' (visible %s)" % [card.team_chip().letter(), card.team_chip().visible])
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5, "team": 0})
+	if card.team_chip().letter() != "R":
+		failures.append("a team card's chip reads '%s', expected R" % card.team_chip().letter())
+	card.apply({"name": "Tester", "color": Color.WHITE})
+	if card.team_chip().visible:
+		failures.append("an unnumbered card shows a chip")
+	card.free()
+	host.player_numbers = was
+	await _teardown(stage)
+	return failures
+## Issue #809: Player numbers is off by default, saved, put back by Restore defaults, has a switch in
+## Settings, and its label is translated in every shipped locale.
+func _scenario_player_numbers_setting_persists_and_restores_809() -> Array[String]:
+	var failures: Array[String] = []
+	var tmp: String = OS.get_temp_dir().path_join("pf_809_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if fresh.player_numbers:
+		failures.append("Player numbers is not off by default")
+	fresh.set_player_numbers(true)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if not again.player_numbers:
+		failures.append("switching Player numbers on was not remembered")
+	again.restore_defaults()
+	if again.player_numbers:
+		failures.append("Restore defaults left Player numbers on")
+	var last: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	last.path = tmp
+	last.load_settings()
+	if last.player_numbers:
+		failures.append("the restored default was not saved")
+	DirAccess.remove_absolute(tmp)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		ui.host.persist = false
+		var was: bool = ui.host.player_numbers
+		if ui.numbers_box() == null:
+			failures.append("Settings has no Player numbers switch")
+		else:
+			ui.numbers_box().button_pressed = true
+			if not ui.host.player_numbers:
+				failures.append("the Player numbers switch did not set the option")
+			ui.host.player_numbers = was
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		if tr("SETTINGS_PLAYER_NUMBERS") == "SETTINGS_PLAYER_NUMBERS":
+			failures.append("SETTINGS_PLAYER_NUMBERS has no %s text" % locale)
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
 ## Issue #750: Settings' "Restore defaults" asks first (No and closing the panel cancel), and Yes puts every
 ## setting in audio.cfg back to its default except Language and the crash-report choice; the reset is saved.
 func _scenario_restore_defaults_750() -> Array[String]:
@@ -46490,6 +46802,7 @@ func _scenario_restore_defaults_750() -> Array[String]:
 	sfx.set_sfx_volume(0.4)
 	sfx.set_muted(true)
 	sfx.set_screen_shake(false)
+	sfx.set_kill_feed(false)
 	sfx.set_reduce_flash(true)
 	sfx.set_hide_room_code(true)
 	sfx.set_ui_scale(2.0)
@@ -46542,6 +46855,7 @@ func _scenario_restore_defaults_750() -> Array[String]:
 		"sfx volume": is_equal_approx(sfx.sfx_volume, 1.0),
 		"mute": not sfx.muted,
 		"screen shake": sfx.screen_shake,
+		"kill feed": sfx.kill_feed,
 		"reduce flashes": not sfx.reduce_flash,
 		"hide room code": not sfx.hide_room_code,
 		"name tag size": is_equal_approx(sfx.ui_scale, 1.0),
@@ -46596,6 +46910,1350 @@ func _scenario_restore_defaults_750() -> Array[String]:
 	if ui.is_open():
 		ui.toggle_panel()
 	_scenario_completed = true
+	return failures
+## Issue #779: a living fighter outside the camera view gets an edge arrow in their colour, pinned
+## inside the screen and pointing at them; it fades out once they are back in frame or KO'd.
+func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(5, 1.0, _main_scoreboard())
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	var arrows: CanvasLayer = rm.offscreen_indicators()
+	if arrows == null:
+		failures.append("RoundManager built no edge arrows")
+		await _teardown(loop["stage"])
+		return failures
+	var size: Vector2 = get_root().get_visible_rect().size
+	var in_frame := Vector2(size.x * 0.5, size.y * 0.5)
+	var above := Vector2(size.x * 0.25, -2000.0)
+	# Park both in frame (teleport each tick: the stub stage has no floor to stand on).
+	for i in 20:
+		players[0].teleport_to(in_frame)
+		players[1].teleport_to(in_frame + Vector2(100.0, 0.0))
+		await _await_ticks(1)
+	if arrows.arrow_visible(0) or arrows.arrow_visible(1):
+		failures.append("an arrow showed for a fighter who is in frame")
+	# Hold P1 well above the view; P2 stays in frame.
+	for i in 20:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if not arrows.arrow_visible(0) or arrows.arrow_alpha(0) < 0.99:
+		failures.append("no full arrow for the fighter above the view (alpha %.2f)" % arrows.arrow_alpha(0))
+	else:
+		var tip: Vector2 = arrows.arrow_tip(0)
+		if tip.y > 60.0 or tip.y < 0.0 or tip.x < 0.0 or tip.x > size.x:
+			failures.append("the arrow tip %s is not pinned inside the top edge" % [tip])
+	if arrows.arrow_visible(1):
+		failures.append("the in-frame fighter got an arrow")
+	# Back in frame: it fades out.
+	players[0].teleport_to(in_frame)
+	players[1].teleport_to(in_frame + Vector2(100.0, 0.0))
+	await _await_ticks(3)
+	if not arrows.arrow_visible(0):
+		failures.append("the arrow vanished instantly instead of fading")
+	for i in 20:
+		players[0].teleport_to(in_frame)
+		players[1].teleport_to(in_frame + Vector2(100.0, 0.0))
+		await _await_ticks(1)
+	if arrows.arrow_visible(0):
+		failures.append("the arrow stayed after the fighter came back in frame")
+	# Off screen again, then KO'd: no arrow for a fighter who is out.
+	for i in 20:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if not arrows.arrow_visible(0):
+		failures.append("the arrow did not return when the fighter left the view again")
+	players[0].eliminate()
+	for i in 25:
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if arrows.arrow_visible(0):
+		failures.append("a KO'd fighter kept an edge arrow")
+	await _teardown(loop["stage"])
+	return failures
+## Issue #775: the controller page's Leave game button sends {"t":"leave"}; the host
+## frees the seat at once (lobby or mid-round), hangs up with the "left the game"
+## reason, credits nobody, and a rejoin by the same id takes a fresh seat.
+func _scenario_phone_leave_button_frees_seat_775() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	for needle: String in ["id=\"leave-btn\"", "sendText({ t: \"leave\" })", "var LEFT_REASON = \"left the game\";", "PHONE_LEAVE_CONFIRM"]:
+		if not page.contains(needle):
+			failures.append("the controller page lacks %s" % needle)
+	var built: Dictionary = await _bot_main_with_phones(3, "leave-775")
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var joined: Array[WebSocketPeer] = built["joined"]
+	if joined.is_empty():
+		failures.append(built["bad_join"])
+		await _teardown(main)
+		_scenario_completed = true
+		return failures
+	# In the lobby: phone 3 leaves.
+	joined[2].send_text(JSON.stringify({"t": "leave"}))
+	await _poll_phones(joined, 15)
+	if server.claimed_slots().has(2):
+		failures.append("slot 2 is still claimed after it left in the lobby")
+	if joined[2].get_ready_state() != WebSocketPeer.STATE_CLOSED or joined[2].get_close_reason() != "left the game":
+		failures.append("the leaving phone was not hung up on with the left reason ('%s')" % joined[2].get_close_reason())
+	# Rejoin with the same id: a fresh seat, not refused as a kicked id.
+	var again := WebSocketPeer.new()
+	var back: Dictionary = await _join_phone(again, "leave-775-2", joined)
+	if back["slot"] < 0:
+		failures.append("rejoining after leaving got no seat (closed %s '%s')" % [back["closed"], back["reason"]])
+	else:
+		joined[2] = again
+	# Mid-round: phone 2 leaves; the round carries on and nobody is scored.
+	for peer: WebSocketPeer in joined:
+		peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() == "playing", BOT_START_MSEC):
+		failures.append("three ready phones never started a round (phase '%s')" % rm.lobby_phase())
+	else:
+		joined[1].send_text(JSON.stringify({"t": "leave"}))
+		await _poll_phones(joined, 15)
+		if server.claimed_slots().has(1):
+			failures.append("slot 1 is still claimed after it left mid-round")
+		if rm.lobby_phase() != "playing":
+			failures.append("one of three leaving ended the round (phase '%s')" % rm.lobby_phase())
+		if rm.score_of(0) != 0 or rm.score_of(2) != 0 or not wins.is_empty():
+			failures.append("leaving credited someone: scores %d %d, wins %s" % [rm.score_of(0), rm.score_of(2), wins])
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+## Issue #774: Settings > More options has a Frame rate (Unlimited / 60 / 30) and a VSync row. Defaults are
+## today's behaviour (unlimited, VSync on); both are remembered, applied to Engine.max_fps and the window,
+## driven from the panel, and put back by Restore defaults.
+func _scenario_frame_rate_cap_and_vsync_persist_and_apply_774() -> Array[String]:
+	var failures: Array[String] = []
+	var host_script: GDScript = load("res://scripts/HostSettings.gd")
+	var was_fps: int = Engine.max_fps
+	var was_vsync: DisplayServer.VSyncMode = DisplayServer.window_get_vsync_mode()
+	var tmp: String = OS.get_temp_dir().path_join("pf_774_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = host_script.new()
+	fresh.path = tmp
+	if fresh.frame_cap != 0 or not fresh.vsync:
+		failures.append("defaults are cap %d, vsync %s; expected unlimited (0) with VSync on" % [fresh.frame_cap, fresh.vsync])
+	fresh.set_frame_cap(30)
+	fresh.set_vsync(false)
+	if Engine.max_fps != 30:
+		failures.append("set_frame_cap(30) left Engine.max_fps at %d" % Engine.max_fps)
+	if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED and DisplayServer.get_name() != "headless":
+		failures.append("set_vsync(false) did not turn VSync off")
+	var again: RefCounted = host_script.new()
+	again.path = tmp
+	again.load_settings()
+	if again.frame_cap != 30 or again.vsync:
+		failures.append("cap 30 / VSync off were not remembered (reloaded %d, %s)" % [again.frame_cap, again.vsync])
+	fresh.set_frame_cap(45)
+	if fresh.frame_cap != 0 or Engine.max_fps != 0:
+		failures.append("a cap off the list gave %d, expected unlimited" % fresh.frame_cap)
+	var cfg := ConfigFile.new()
+	cfg.load(tmp)
+	cfg.set_value("host", "frame_cap", "junk")
+	cfg.set_value("host", "vsync", 3)
+	cfg.save(tmp)
+	var broken: RefCounted = host_script.new()
+	broken.path = tmp
+	broken.load_settings()
+	if broken.frame_cap != 0 or not broken.vsync:
+		failures.append("junk saved values loaded as cap %d, vsync %s; expected the defaults" % [broken.frame_cap, broken.vsync])
+	DirAccess.remove_absolute(tmp)
+	var sfx: Node = _sfx()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var ui_host: RefCounted = ui.host
+	var ui_was_persist: bool = ui_host.persist
+	ui_host.persist = false
+	ui_host.frame_cap = 0
+	ui_host.vsync = true
+	ui.refresh()
+	var box: OptionButton = ui.frame_rate_button()
+	var sync: CheckBox = ui.vsync_box()
+	if box.item_count != 3 or box.selected != 0 or not sync.button_pressed:
+		failures.append("Settings shows %d frame-rate items, item %d, VSync %s; expected 3, item 0, on" % [box.item_count, box.selected, sync.button_pressed])
+	box.item_selected.emit(1)
+	if ui_host.frame_cap != 60 or Engine.max_fps != 60:
+		failures.append("picking the second item set the cap to %d (max_fps %d), expected 60" % [ui_host.frame_cap, Engine.max_fps])
+	sync.toggled.emit(false)
+	if ui_host.vsync:
+		failures.append("unticking VSync left it on")
+	ui.refresh()
+	if box.selected != 1 or sync.button_pressed:
+		failures.append("Settings did not show the chosen cap and VSync (item %d, VSync %s)" % [box.selected, sync.button_pressed])
+	ui_host.restore_defaults()
+	if ui_host.frame_cap != 0 or not ui_host.vsync or Engine.max_fps != 0:
+		failures.append("Restore defaults left cap %d, vsync %s, max_fps %d" % [ui_host.frame_cap, ui_host.vsync, Engine.max_fps])
+	ui_host.persist = ui_was_persist
+	Engine.max_fps = was_fps
+	DisplayServer.window_set_vsync_mode(was_vsync)
+	_scenario_completed = true
+	return failures
+## Issue #776: the host sends its Reduce flashes setting to a phone on join and on every
+## change, and the phone page has the calm-cue hooks that honour it and prefers-reduced-motion.
+func _scenario_phone_reduce_flashes_776() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was_on: bool = bool(sfx.get("reduce_flash"))
+	sfx.reduce_flash = true
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "ReduceFlashP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "ReduceFlashServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../ReduceFlashP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	peer.connect_to_url("ws://127.0.0.1:%d" % _phone_ws_port)
+	var seen: Array = []
+	var slot: int = -1
+	var sent_id: bool = false
+	for _i in 120:
+		await process_frame
+		peer.poll()
+		if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent_id:
+			peer.send_text(JSON.stringify({"id": "reduce-flash-0"}))
+			sent_id = true
+		while peer.get_available_packet_count() > 0:
+			var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+			if msg is Dictionary and msg.get("t") == "flash":
+				seen.append(msg.get("v") == true)
+			elif msg is Dictionary and msg.has("slot"):
+				slot = int(msg["slot"])
+		if slot >= 0 and not seen.is_empty():
+			break
+	if slot != 0 or seen != [true]:
+		failures.append("on join: slot %d, flash frames %s; wanted slot 0 and [true]" % [slot, seen])
+	for want: bool in [false, true]:
+		sfx.reduce_flash = want
+		var before: int = seen.size()
+		for _i in 30:
+			await process_frame
+			peer.poll()
+			while peer.get_available_packet_count() > 0:
+				var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+				if msg is Dictionary and msg.get("t") == "flash":
+					seen.append(msg.get("v") == true)
+			if seen.size() > before:
+				break
+		if seen.size() != before + 1 or seen.back() != want:
+			failures.append("after setting %s the phone was sent %s" % [want, seen])
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	for needle: String in ["prefers-reduced-motion", "calmcue", "body.calm"]:
+		if not page.contains(needle):
+			failures.append("controller page lacks '%s'" % needle)
+	sfx.reduce_flash = was_on
+	peer.close(1000, "scenario done")
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+func _scenario_phone_weak_connection_777() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "WeakP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "WeakServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../WeakP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	server.ping_interval_msec = 400
+	server.weak_hold_msec = 300
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	peer.connect_to_url("ws://127.0.0.1:%d" % _phone_ws_port)
+	var sent_id: bool = false
+	var weak_frames: Array = []
+	var pings: Array = [] # [n, msec it arrived]
+	var delay_msec: int = 260 # slow link first
+	var phase_start: int = Time.get_ticks_msec()
+	var recovered: bool = false
+	while Time.get_ticks_msec() - phase_start < 8000:
+		await process_frame
+		peer.poll()
+		if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent_id:
+			peer.send_text(JSON.stringify({"id": "weak-0"}))
+			peer.send_text(JSON.stringify({"t": "lag"}))
+			sent_id = true
+		while peer.get_available_packet_count() > 0:
+			var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+			if msg is Dictionary and msg.get("t") == "ping":
+				pings.append([int(msg["n"]), Time.get_ticks_msec()])
+			elif msg is Dictionary and msg.get("t") == "weak":
+				weak_frames.append(msg.get("v") == true)
+		while not pings.is_empty() and Time.get_ticks_msec() - int(pings[0][1]) >= delay_msec:
+			peer.send_text(JSON.stringify({"t": "pong", "n": pings[0][0]}))
+			pings.pop_front()
+		if weak_frames == [true] and not recovered:
+			recovered = true
+			delay_msec = 0 # link recovers
+		if weak_frames == [true, false]:
+			break
+	if weak_frames != [true, false]:
+		failures.append("weak frames %s; wanted [true, false] (slow link shows, recovered link clears)" % [weak_frames])
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	for needle: String in ["weak-chip", "PHONE_WEAK_CONNECTION", "msg.t === \"weak\""]:
+		if not page.contains(needle):
+			failures.append("controller page lacks '%s'" % needle)
+	peer.close(1000, "scenario done")
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #793: the Wishlist on Steam button is in the demo build only, and only once the base game's
+## app ID is filled in. Full game, or demo with the ID unset: no button on the title screen or the end
+## card. Demo with an ID: both have it, the title's sits one D-pad step right of Credits and the end
+## card's button takes the focus when the card shows.
+func _scenario_demo_title_wishlist_button_shown_only_in_demo_793() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [["full game, ID set", 0, 12345, false], ["demo, ID unset", 1, 0, false], ["demo, ID set", 1, 12345, true]]
+	for entry: Array in cases:
+		DemoBuildScript361.forced = int(entry[1])
+		DemoBuildScript361.store_app_id_for_test = int(entry[2])
+		var expect: bool = bool(entry[3])
+		var rig: Dictionary = await _deck_rig_368()
+		var screen: CanvasLayer = rig["screen"]
+		screen.show_title(true)
+		await _await_ticks(2)
+		var title_button: Button = screen.title_button("wishlist")
+		var card: Control = screen.end_card_panel()
+		var card_button: Button = card.find_child("EndCard_wishlist", true, false) as Button if card != null else null
+		if (title_button != null) != expect:
+			failures.append("%s: title Wishlist button present = %s, wanted %s" % [entry[0], title_button != null, expect])
+		if (card_button != null) != expect:
+			failures.append("%s: end card Wishlist button present = %s, wanted %s" % [entry[0], card_button != null, expect])
+		if expect and title_button != null and card_button != null:
+			var credits: Button = screen.title_button("credits")
+			if not title_button.is_visible_in_tree():
+				failures.append("the title Wishlist button is not visible")
+			if credits.get_node_or_null(credits.focus_neighbor_right) != title_button \
+					or title_button.get_node_or_null(title_button.focus_neighbor_left) != credits:
+				failures.append("one D-pad step right of Credits does not reach Wishlist (and back)")
+			if title_button.get_node_or_null(title_button.focus_neighbor_top) == null:
+				failures.append("the title Wishlist button has no D-pad way back up to the cards")
+			if card_button.is_visible_in_tree():
+				failures.append("the end card's Wishlist button shows before the end card does")
+			screen.show_panel("end_card")
+			await _await_ticks(2)
+			if not card_button.is_visible_in_tree() or not card_button.has_focus():
+				failures.append("the end card's Wishlist button is not shown and focused with the card")
+			screen.show_panel("")
+			await _await_ticks(2)
+			if screen.title_visible() or title_button.is_visible_in_tree():
+				failures.append("the Wishlist button stays on screen outside the lobby (during a round)")
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+	DemoBuildScript361.forced = -1
+	DemoBuildScript361.store_app_id_for_test = -1
+	return failures
+## Issue #793: the button opens the base game's store page. With Steam running that is the overlay
+## (`open_store_page` recorded on the seam, the browser untouched); without it, the store URL goes to
+## `OS.shell_open` (stubbed here, so no browser opens). The mouse button, key W and the end card's
+## button and key all reach it; the full game and an unset ID open nothing.
+func _scenario_demo_wishlist_button_opens_store_link_793() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	if steam == null:
+		return ["SteamPlatform autoload missing"]
+	var opened: Array[String] = []
+	steam.shell_open_for_test = func(url: String) -> void: opened.append(url)
+	steam.calls_for_test = []
+	DemoBuildScript361.forced = 1
+	DemoBuildScript361.store_app_id_for_test = 12345
+	var url: String = "https://store.steampowered.com/app/12345"
+	if DemoBuildScript361.store_url() != url:
+		failures.append("the store URL is %s" % DemoBuildScript361.store_url())
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	await _await_ticks(2)
+	var title_button: Button = screen.title_button("wishlist")
+	if title_button == null:
+		failures.append("no title Wishlist button")
+		DemoBuildScript361.forced = -1
+		DemoBuildScript361.store_app_id_for_test = -1
+		steam.shell_open_for_test = Callable()
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	title_button.pressed.emit()
+	if opened != [url]:
+		failures.append("the title button opened %s, wanted [%s]" % [opened, url])
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.physical_keycode = KEY_W
+	screen._unhandled_key_input(key)
+	if opened != [url, url]:
+		failures.append("key W on the title opened %s" % [opened])
+	screen.show_title(false)
+	screen.show_panel("end_card")
+	await _await_ticks(2)
+	var card_button: Button = screen.end_card_panel().find_child("EndCard_wishlist", true, false) as Button
+	card_button.pressed.emit()
+	if opened.size() != 3:
+		failures.append("the end card button opened %s" % [opened])
+	screen._unhandled_key_input(key)
+	if opened.size() != 4:
+		failures.append("key W on the end card opened %s" % [opened])
+	steam.fake_running_for_test = true
+	steam.calls_for_test = []
+	card_button.pressed.emit()
+	if steam.calls_for_test != [["open_store_page", 12345]] or opened.size() != 4:
+		failures.append("with Steam running: calls %s, browser opens %d (wanted the overlay call and no browser)" % [steam.calls_for_test, opened.size()])
+	steam.fake_running_for_test = false
+	steam.calls_for_test = []
+	DemoBuildScript361.store_app_id_for_test = 0
+	DemoBuildScript361.open_wishlist(self)
+	DemoBuildScript361.store_app_id_for_test = 12345
+	DemoBuildScript361.forced = 0
+	DemoBuildScript361.open_wishlist(self)
+	steam.fake_running_for_test = true
+	DemoBuildScript361.open_wishlist(self)
+	steam.fake_running_for_test = false
+	if opened.size() != 4 or not steam.calls_for_test.is_empty():
+		failures.append("an unset ID or the full game opened a store page: %s" % [opened])
+	DemoBuildScript361.forced = -1
+	DemoBuildScript361.store_app_id_for_test = -1
+	steam.shell_open_for_test = Callable()
+	steam.calls_for_test = []
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Issue #794: every non-English cell is filled, keeps English's %s / %d / %f
+## placeholders in the same order, and keeps English's line-break count.
+## Returns one line per problem, naming the key and the locale.
+func _csv_cell_problems(rows: Array) -> Array[String]:
+	var problems: Array[String] = []
+	if rows.is_empty():
+		problems.append("strings.csv has no header row")
+		return problems
+	var header: PackedStringArray = rows[0]
+	var placeholder := RegEx.new()
+	placeholder.compile("%[sdf]")
+	for index: int in range(1, rows.size()):
+		var row: PackedStringArray = rows[index]
+		if row.size() < 2 or row[0].is_empty():
+			continue
+		var key: String = row[0]
+		var english: String = row[1]
+		var english_marks: Array[String] = _csv_marks(placeholder, english)
+		for column: int in range(2, header.size()):
+			var locale: String = header[column]
+			var cell: String = row[column] if column < row.size() else ""
+			if cell.strip_edges().is_empty():
+				problems.append("%s %s: blank cell" % [key, locale])
+				continue
+			var marks: Array[String] = _csv_marks(placeholder, cell)
+			if marks != english_marks:
+				problems.append("%s %s: placeholders %s, English has %s" % [key, locale, marks, english_marks])
+			if cell.count("\n") != english.count("\n"):
+				problems.append("%s %s: %d line breaks, English has %d" % [key, locale, cell.count("\n"), english.count("\n")])
+	return problems
+func _csv_marks(placeholder: RegEx, text: String) -> Array[String]:
+	var marks: Array[String] = []
+	for found: RegExMatch in placeholder.search_all(text):
+		marks.append(found.get_string())
+	return marks
+## Every row of a csv file as a PackedStringArray, the header included.
+func _csv_rows(path: String) -> Array:
+	var rows: Array = []
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return rows
+	while not file.eof_reached():
+		var row: PackedStringArray = file.get_csv_line()
+		if not (row.size() == 1 and row[0].is_empty()):
+			rows.append(row)
+	return rows
+func _scenario_translations_have_no_blank_or_mismatched_cells_794() -> Array[String]:
+	var failures: Array[String] = []
+	var rows: Array = _csv_rows("res://translations/strings.csv")
+	if rows.size() < 100:
+		failures.append("only %d csv rows read, the check is not reading strings.csv" % rows.size())
+	elif rows[0].size() != 10:
+		failures.append("header has %d columns, wanted keys + en + nine locales" % rows[0].size())
+	failures.append_array(_csv_cell_problems(rows))
+	_scenario_completed = true
+	return failures
+## The check must fail on a bad row, not just pass on the real file: one
+## fixture row per fault (blank cell, dropped placeholder, swapped order,
+## lost line break), plus a good row that must stay quiet.
+func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
+	var failures: Array[String] = []
+	var fixture: Array = [
+		PackedStringArray(["keys", "en", "de", "fr"]),
+		PackedStringArray(["GOOD", "Score %d", "Punkte %d", "Score %d"]),
+		PackedStringArray(["BLANK", "Ready", "", "Prêt"]),
+		PackedStringArray(["DROPPED", "Hit %s for %d", "Treffer %s", "Touché %s pour %d"]),
+		PackedStringArray(["SWAPPED", "%s beats %d", "%d schlägt %s", "%s bat %d"]),
+		PackedStringArray(["LINES", "Line one\nLine two", "Zeile eins Zeile zwei", "Ligne un\nligne deux"]),
+	]
+	var problems: Array[String] = _csv_cell_problems(fixture)
+	var joined: String = "\n".join(PackedStringArray(problems))
+	if problems.size() != 4:
+		failures.append("fixture gave %d problems, wanted 4: %s" % [problems.size(), joined])
+	for expected: String in ["BLANK de", "DROPPED de", "SWAPPED de", "LINES de"]:
+		if not joined.contains(expected):
+			failures.append("no problem named for '%s' in: %s" % [expected, joined])
+	if joined.contains("GOOD"):
+		failures.append("the good fixture row was flagged: %s" % joined)
+	_scenario_completed = true
+	return failures
+## Issue #795: the match-winning KO saves the replay buffer once its slow motion ends, and the victory screen says so.
+func _scenario_match_win_ko_autosaves_clip_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(true)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] < 1:
+		failures.append("no clip frames were saved after the match-winning KO")
+	if not run["label"]:
+		failures.append("the victory screen showed no Clip saved line")
+	if run["saved_early"]:
+		failures.append("the clip was saved before the slow-mo ended")
+	_scenario_completed = true
+	return failures
+## Issue #795: with Auto-save match clips off nothing is written and no line shows.
+func _scenario_autosave_clip_switch_off_saves_nothing_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(false)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] != 0:
+		failures.append("the switch was off but %d frames were saved" % run["pngs"])
+	if run["label"]:
+		failures.append("the switch was off but the victory screen showed Clip saved")
+	_scenario_completed = true
+	return failures
+func _run_autosave_795(switch_on: bool) -> Dictionary:
+	var out: Dictionary = {"failures": [] as Array[String], "pngs": 0, "label": false, "saved_early": false}
+	var failures: Array[String] = out["failures"]
+	var host: RefCounted = HostSettingsScript704.shared()
+	var was: bool = host.auto_save_clips
+	var scale_was: float = Engine.time_scale
+	host.auto_save_clips = switch_on
+	var scratch: String = "user://pf_795_%d_%s" % [OS.get_process_id(), "on" if switch_on else "off"]
+	var loop: Dictionary = _new_lobby_round(2, 2.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var replay: Node = rm._replay
+	replay.clips_dir = scratch
+	replay.encode_gif = false
+	for i in 4:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.1 * i, 0.5, 0.5))
+		replay.push_frame(img)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			break
+		players[1].eliminate()
+		await _await_ticks(3)
+	if rm.final_ko_active() and not String(replay.autosaved_dir).is_empty():
+		out["saved_early"] = true
+	await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the victory screen never followed the slow-mo")
+	var label: Node = rm.victory_panel().find_child("ClipSaved", true, false) if rm.victory_panel() != null else null
+	out["label"] = label != null and (label as Control).visible
+	var da := DirAccess.open(ProjectSettings.globalize_path(scratch))
+	if da != null:
+		for d: String in da.get_directories():
+			var sub := DirAccess.open(ProjectSettings.globalize_path(scratch).path_join(d))
+			for f: String in sub.get_files():
+				if f.ends_with(".png"):
+					out["pngs"] += 1
+				sub.remove(f)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch).path_join(d))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+	replay.autosaved_dir = ""
+	host.auto_save_clips = was
+	await _teardown(loop["stage"])
+	Engine.time_scale = scale_was
+	return out
+func _scenario_paused_banner_hint_follows_active_input_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var host: Object = screen._host
+	host._pad_active = true
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.visible:
+		failures.append("no resume hint under the PAUSED banner")
+		await _teardown(rig["main"])
+		return failures
+	if hint.text != screen.tr("PAUSED_HINT_PAD") or hint.text == "PAUSED_HINT_PAD":
+		failures.append("pad active: hint reads '%s'" % hint.text)
+	if hint.get_theme_font_size("font_size") < 16:
+		failures.append("hint is below 16 design px")
+	screen.show_pause_banner(false)
+	host._pad_active = false
+	screen.show_pause_banner(true)
+	if hint.text != screen.tr("PAUSED_HINT_KEYS") or hint.text == "PAUSED_HINT_KEYS":
+		failures.append("keyboard active: hint reads '%s'" % hint.text)
+	if screen.tr("PAUSED_HINT_KEYS") == screen.tr("PAUSED_HINT_PAD"):
+		failures.append("pad and keyboard hints are the same text")
+	screen.show_pause_banner(false)
+	await _teardown(rig["main"])
+	return failures
+func _scenario_paused_banner_hint_hidden_when_not_paused_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if screen._cards.pause_hint_label() != null:
+		failures.append("a hint exists before any pause")
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.is_visible_in_tree():
+		failures.append("hint not shown while paused")
+	screen.show_pause_banner(false)
+	if hint != null and hint.is_visible_in_tree():
+		failures.append("hint stayed up after resume")
+	await _teardown(rig["main"])
+	return failures
+## Scenes that cannot instantiate headless on purpose (#802). Empty today;
+## add "res://scenes/X.tscn": "reason" here rather than skipping silently.
+const SCENE_INSTANTIATE_ALLOWLIST: Dictionary = {}
+## Every .tscn path under dir, recursively.
+func _scene_paths_802(dir: String) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for f: String in DirAccess.get_files_at(dir):
+		if f.ends_with(".tscn"):
+			out.append(dir.path_join(f))
+	for d: String in DirAccess.get_directories_at(dir):
+		out.append_array(_scene_paths_802(dir.path_join(d)))
+	return out
+## ext_resource paths in scene text that do not exist (source file check, so
+## it does not depend on the .godot/imported cache).
+func _dead_ext_resource_paths_802(text: String) -> PackedStringArray:
+	var dead: PackedStringArray = PackedStringArray()
+	var re: RegEx = RegEx.new()
+	re.compile("\\[ext_resource[^\\]]*?path=\"([^\"]+)\"")
+	for m: RegExMatch in re.search_all(text):
+		var path: String = m.get_string(1)
+		if not FileAccess.file_exists(path) and not ResourceLoader.exists(path):
+			dead.append(path)
+	return dead
+func _scenario_every_scene_loads_and_instantiates_802() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: PackedStringArray = _scene_paths_802("res://scenes")
+	if scenes.size() < 50:
+		failures.append("only %d scenes found under res://scenes" % scenes.size())
+	for path: String in scenes:
+		if SCENE_INSTANTIATE_ALLOWLIST.has(path):
+			continue
+		var text: String = FileAccess.get_file_as_string(path)
+		for dead: String in _dead_ext_resource_paths_802(text):
+			failures.append("%s: dead ext_resource path %s" % [path, dead])
+		var packed: Resource = ResourceLoader.load(path)
+		if not (packed is PackedScene):
+			failures.append("%s: load returned %s" % [path, packed])
+			continue
+		var inst: Node = (packed as PackedScene).instantiate()
+		if inst == null:
+			failures.append("%s: instantiate returned null" % path)
+			continue
+		inst.free()
+	_scenario_completed = true
+	return failures
+func _scenario_scene_check_catches_a_dead_resource_path_802() -> Array[String]:
+	var failures: Array[String] = []
+	var bad: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/NoSuchScript802.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var good: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/Player.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var dead: PackedStringArray = _dead_ext_resource_paths_802(bad)
+	if dead.size() != 1 or dead[0] != "res://scripts/NoSuchScript802.gd":
+		failures.append("dead path not flagged: %s" % [dead])
+	if _dead_ext_resource_paths_802(good).size() != 0:
+		failures.append("a live path was flagged")
+	_scenario_completed = true
+	return failures
+## Repo paths that docs may name although they are gitignored or generated
+## on purpose (a clone will not have them).
+const DOC_PATH_ALLOWLIST_803: PackedStringArray = ["build/", "export/", "docs/launch/"]
+## Every backticked repo path in `text` that does not exist, as
+## "<label>:<line>: <path>". Globs and <placeholder> paths are skipped.
+func _doc_missing_paths_803(label: String, text: String) -> Array[String]:
+	var problems: Array[String] = []
+	var rx := RegEx.new()
+	rx.compile("`((?:scripts|scenes|tools|docs|controller|site)/[^`\\s]*)`")
+	var lines: PackedStringArray = text.split("\n")
+	for i: int in lines.size():
+		for m: RegExMatch in rx.search_all(lines[i]):
+			var p: String = m.get_string(1)
+			if p.contains("*") or p.contains("<") or p.contains("{") or p.contains("$"):
+				continue
+			p = p.split("#")[0].rstrip(".,;:)")
+			if p.contains("("):
+				p = p.split("(")[0]
+			var skip := false
+			for a: String in DOC_PATH_ALLOWLIST_803:
+				if p.begins_with(a):
+					skip = true
+			if skip or p.is_empty():
+				continue
+			if not FileAccess.file_exists("res://" + p) and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://" + p)):
+				problems.append("%s:%d: %s" % [label, i + 1, p])
+	return problems
+func _scenario_doc_paths_point_at_real_files_803() -> Array[String]:
+	var failures: Array[String] = []
+	var files: Array[String] = ["res://docs/FEATURES.md"]
+	for dir: String in ["res://docs/agents", "res://docs/adr", "res://docs"]:
+		for f: String in DirAccess.get_files_at(dir):
+			var ok: bool = f.ends_with(".md") and (dir != "res://docs" or f.begins_with("steam-"))
+			if ok:
+				files.append(dir + "/" + f)
+	for path: String in files:
+		failures.append_array(_doc_missing_paths_803(path.trim_prefix("res://"), FileAccess.get_file_as_string(path)))
+	_scenario_completed = true
+	return failures
+func _scenario_doc_path_check_catches_a_missing_file_803() -> Array[String]:
+	var failures: Array[String] = []
+	var doc: String = "ok `scripts/Player.gd`\nbad `scripts/NoSuchThing.gd` here\nglob `scripts/*.gd` `tools/<name>.sh`"
+	var problems: Array[String] = _doc_missing_paths_803("fixture.md", doc)
+	if problems.size() != 1 or not problems[0].contains("fixture.md:2: scripts/NoSuchThing.gd"):
+		failures.append("fixture gave %s, wanted only line 2's missing path" % [problems])
+	_scenario_completed = true
+	return failures
+## Problems in one stage's hand-typed rotation data, each naming the stage and
+## the bad key. `data` holds "mode_weights" and optionally
+## "weapon_weight_overrides" as dictionaries (#801).
+func _stage_data_problems(stage_name: String, data: Dictionary) -> Array[String]:
+	var problems: Array[String] = []
+	var modes_script := preload("res://scripts/GameModes.gd")
+	var weapon_ids: PackedStringArray = []
+	for path: String in preload("res://scripts/PickupWeapons.gd").WEAPON_PATHS:
+		weapon_ids.append(path.get_file().get_basename())
+	var weights: Dictionary = data.get("mode_weights", {})
+	for key: Variant in weights:
+		if not (key is String and (key == "_other" or modes_script.IDS.has(key))):
+			problems.append("%s: mode_weights key '%s' is not a mode id or _other" % [stage_name, key])
+		var w: Variant = weights[key]
+		if not ((w is float or w is int) and float(w) > 0.0):
+			problems.append("%s: mode_weights '%s' weight %s is not a number above zero" % [stage_name, key, w])
+	var overrides: Dictionary = data.get("weapon_weight_overrides", {})
+	for key: Variant in overrides:
+		if not (key is String and weapon_ids.has(key)):
+			problems.append("%s: weapon_weight_overrides key '%s' is not a pickup weapon id" % [stage_name, key])
+	return problems
+## The stage .tscn's `mode_weights` / `weapon_weight_overrides` lines as data.
+func _stage_data_from_tscn(path: String) -> Dictionary:
+	var data: Dictionary = {}
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return data
+	for line: String in file.get_as_text().split("\n"):
+		for prop: String in ["mode_weights", "weapon_weight_overrides"]:
+			if line.begins_with(prop + " = "):
+				data[prop] = str_to_var(line.substr(prop.length() + 3).strip_edges())
+	return data
+func _scenario_stage_rotation_data_has_only_real_keys_801() -> Array[String]:
+	var failures: Array[String] = []
+	var modes_script := preload("res://scripts/GameModes.gd")
+	var covered: Dictionary = {}
+	var count: int = 0
+	var dir: DirAccess = DirAccess.open("res://scenes/stages")
+	if dir == null:
+		failures.append("cannot open res://scenes/stages")
+		_scenario_completed = true
+		return failures
+	for file_name: String in dir.get_files():
+		if not file_name.ends_with(".tscn"):
+			continue
+		count += 1
+		var data: Dictionary = _stage_data_from_tscn("res://scenes/stages/" + file_name)
+		for prop: String in ["mode_weights", "weapon_weight_overrides"]:
+			if data.has(prop) and not (data[prop] is Dictionary):
+				failures.append("%s: %s is not a dictionary" % [file_name, prop])
+				data.erase(prop)
+		failures.append_array(_stage_data_problems(file_name, data))
+		for key: Variant in data.get("mode_weights", {}):
+			covered[key] = true
+	if count < 40:
+		failures.append("only %d stages found, the check is not reading scenes/stages" % count)
+	for mode_id: String in [modes_script.CAPTURE_THE_FLAG, modes_script.SOCCER, modes_script.KING_OF_THE_HILL, modes_script.HOT_POTATO]:
+		if not covered.has(mode_id):
+			failures.append("no stage has a mode_weights entry for '%s'" % mode_id)
+	_scenario_completed = true
+	return failures
+func _scenario_stage_rotation_data_check_catches_a_typo_801() -> Array[String]:
+	var failures: Array[String] = []
+	var good: Array[String] = _stage_data_problems("Good", {"mode_weights": {"soccer": 4.0, "_other": 0.3}, "weapon_weight_overrides": {"boomstick": 3}})
+	if not good.is_empty():
+		failures.append("a good stage was flagged: %s" % str(good))
+	var bad: String = "\n".join(PackedStringArray(_stage_data_problems("Bad", {
+		"mode_weights": {"capture_the_flag ": 4.0, "soccer": 0.0},
+		"weapon_weight_overrides": {"boomstik": 3}})))
+	for expected: String in ["Bad: mode_weights key 'capture_the_flag '", "Bad: mode_weights 'soccer' weight", "Bad: weapon_weight_overrides key 'boomstik'"]:
+		if not bad.contains(expected):
+			failures.append("no problem containing '%s' in: %s" % [expected, bad])
+	_scenario_completed = true
+	return failures
+## Issue #811: in a Couch match with no host phone (a Steam Deck or a pad-only
+## PC) the Settings menu (View on the pad) leads with Pause/Resume and End
+## match, in the pad's focus chain, and A on End match returns to the lobby.
+func _scenario_couch_pad_only_host_can_end_match_811() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm.rotation_seed = 811
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	if ui.is_open():
+		ui.toggle_panel()
+	ui.host.mark_telemetry_notice_seen()
+	for device: int in [0, 5]:
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		await _pad_tap_430(device, JOY_BUTTON_START)
+	var started := func() -> bool: return rm.lobby_phase() == "playing"
+	if not await _await_condition(started, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("two pads never started a round (phase '%s')" % rm.lobby_phase())
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	if server.host_slot() != -1 or server.pc_runs_room() or not server.host_pc_has_match_controls():
+		failures.append("expected a Couch match with no host phone (host slot %d, runs room %s)" % [server.host_slot(), server.pc_runs_room()])
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	menu.refresh()
+	if not ui.is_open() or not menu.visible:
+		failures.append("View mid-match did not open a menu with the match controls (open %s, shown %s)" % [ui.is_open(), menu.visible])
+	else:
+		var seen: Dictionary = _focus_reach_368(ui.volume_slider())
+		for id in ["Pause", "End"]:
+			if not seen.has(id):
+				failures.append("the D-pad never focused '%s' (saw %s)" % [id, seen.keys()])
+		menu.end_button().grab_focus()
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		await _await_ticks(3)
+		if rm.lobby_phase() == "playing" or rm.lobby_phase() == "round_end":
+			failures.append("A on End match did not end the match (phase '%s')" % rm.lobby_phase())
+		menu.refresh()
+		if menu.visible:
+			failures.append("the match controls still show back in the lobby")
+	if ui.is_open():
+		await _pad_tap_368(0, JOY_BUTTON_B)
+	paused = false
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Issue #811: with a host phone connected the Couch Esc menu does not grow
+## the match rows (the phone's menu stays the control).
+func _scenario_couch_host_phone_present_keeps_match_menu_hidden_811() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm.rotation_seed = 811
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "issue-811-host", joined)
+	joined.append(peer)
+	if result["slot"] == -1:
+		failures.append("the host phone got no slot")
+		await _close_phones(joined)
+		await _teardown(rig["main"])
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var started := func() -> bool:
+		peer.poll()
+		return rm.lobby_phase() == "playing"
+	if not await _await_condition(started, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+	else:
+		if not ui.is_open():
+			ui.toggle_panel()
+		menu.refresh()
+		if server.host_slot() == -1 or server.host_pc_has_match_controls():
+			failures.append("a host phone is seated but the PC claims the match controls")
+		if menu.visible:
+			failures.append("the match rows show in the Esc menu while a host phone is connected")
+		if ui.is_open():
+			ui.toggle_panel()
+	paused = false
+	await _close_phones(joined)
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Issue #818: a pickup of `weapon_path` dropped on `player`'s body.
+func _grab_818(loop: Dictionary, player: Node2D, weapon_path: String) -> void:
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(load(weapon_path))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = player.global_position
+	await _await_ticks(3)
+func _callouts_818(loop: Dictionary) -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in get_root().get_tree().get_nodes_in_group("pickup_callouts"):
+		if not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+func _scenario_pickup_shows_weapon_name_callout_818() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	var found: Array[Node] = _callouts_818(loop)
+	if found.size() != 1:
+		failures.append("%d callouts after one grab, expected 1" % found.size())
+	else:
+		var want: String = TranslationServer.translate("WEAPON_FISHING_ROD")
+		if found[0].text != want:
+			failures.append("callout says '%s', expected '%s'" % [found[0].text, want])
+		if found[0].fighter != players[1]:
+			failures.append("callout belongs to the wrong fighter")
+	await _await_ticks(90)
+	if not _callouts_818(loop).is_empty():
+		failures.append("callout still alive 1.5 s after the grab")
+	# A KO'd fighter's ghost grab gets none.
+	await _grab_818(loop, players[0], "res://resources/axe.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("a KO'd fighter got a callout")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/sword.tres")
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	var found: Array[Node] = _callouts_818(loop)
+	if found.size() != 1:
+		failures.append("%d callouts for one fighter after two grabs, expected 1" % found.size())
+	elif found[0].text != TranslationServer.translate("WEAPON_AXE"):
+		failures.append("the newer grab did not replace the older label ('%s')" % found[0].text)
+	await _grab_818(loop, players[2], "res://resources/pickaxe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("a pickaxe pickup got a callout")
+	await _teardown(loop["stage"])
+	return failures
+## Issue #816: a freshly spawned pickup starts small, is full size within 0.5 s,
+## and the one-shot spawn ring frees itself.
+func _scenario_pickup_pops_in_when_spawned_816() -> Array[String]:
+	var failures: Array[String] = []
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("PopStage", spawns, PackedVector2Array([Vector2(300, -40)])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var director: Node = rm._pickup_director
+	director._spawn_pickup()
+	var pickups: Array[Node2D] = director._live_pickups()
+	if pickups.size() != 1:
+		failures.append("expected one pickup, got %d" % pickups.size())
+	else:
+		var pickup: Node2D = pickups[0]
+		if pickup.scale.x >= 0.5:
+			failures.append("pickup spawned at scale %.2f, expected under 0.5" % pickup.scale.x)
+		var ring: Node = stage.get_node_or_null("PickupSpawnRing")
+		if ring == null:
+			failures.append("no spawn ring appeared")
+		for i in 40:
+			await process_frame
+			await create_timer(0.0).timeout
+		var waited: float = 0.0
+		while waited < 0.5:
+			await create_timer(0.05).timeout
+			waited += 0.05
+		if absf(pickup.scale.x - 1.0) > 0.02:
+			failures.append("pickup is at scale %.2f after 0.5 s, expected 1.0" % pickup.scale.x)
+		while waited < 0.8:
+			await create_timer(0.05).timeout
+			waited += 0.05
+		if stage.get_node_or_null("PickupSpawnRing") != null:
+			failures.append("the spawn ring did not free itself")
+	rm.free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #816: the pop leaves spot choice, the cap and the occupied-spot rule alone.
+func _scenario_pickup_spawn_rules_unchanged_by_pop_816() -> Array[String]:
+	var failures: Array[String] = []
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("PopRulesStage", spawns, PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var player := Node2D.new()
+	get_root().add_child(player)
+	player.global_position = spot_a + Vector2(10, 0)
+	rm._players = [player]
+	var director: Node = rm._pickup_director
+	director._spawn_pickup()
+	var pickups: Array[Node2D] = director._live_pickups()
+	if pickups.size() != 1 or pickups[0].global_position.distance_to(spot_b) > 1.0:
+		failures.append("the pickup did not land on the unoccupied spot")
+	for i in 10:
+		director._spawn_pickup()
+	if director._live_pickups().size() > director.cap():
+		failures.append("pickups exceeded the cap of %d" % director.cap())
+	rm.free()
+	player.queue_free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #817: the phone page's Swing reach slider, read off controller/index.html as shipped.
+func _scenario_phone_swing_reach_slider_817() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if page.is_empty():
+		failures.append("cannot read %s" % CONTROLLER_PAGE_PATH)
+		_scenario_completed = true
+		return failures
+	var lobby_at: int = page.find('<div id="lobby">')
+	var next_panel_at: int = page.find('<div id="name-prompt">')
+	var slider_at: int = page.find('<input id="reach" type="range" min="0.6" max="1.6" step="0.05" value="1">')
+	if slider_at == -1 or lobby_at == -1 or slider_at < lobby_at or slider_at > next_panel_at:
+		failures.append("the Swing reach slider (0.6-1.6, step 0.05, default 1) is not in the lobby panel")
+	if not page.contains('var REACH_KEY = "pickfight-reach";'):
+		failures.append("the reach storage key is not pickfight-reach")
+	if not page.contains("var radius = DRAG_RADIUS_FRACTION * edge * reachScale;"):
+		failures.append("computeDragRadius does not multiply by the reach")
+	if not page.contains("var reachScale = 1;"):
+		failures.append("the reach does not default to 1.0")
+	if not page.contains("setReach(stored(REACH_KEY));") or not page.contains("store(REACH_KEY, String(reachScale));"):
+		failures.append("the reach is not read from and saved to the try/catch storage helpers")
+	if not page.contains("if (!isFinite(v) || v <= 0) { v = 1; }"):
+		failures.append("a zero or garbage stored reach does not fall back to 1.0")
+	if not page.contains("radius < MIN_DRAG_RADIUS_PX) { return MIN_DRAG_RADIUS_PX; }"):
+		failures.append("the MIN_DRAG_RADIUS_PX floor is gone")
+	_scenario_completed = true
+	return failures
+func _scenario_phone_swing_reach_label_817() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var pattern := RegEx.create_from_string('"PHONE_SWING_REACH": "([^#"][^"]*)"')
+	var hits: Array[RegExMatch] = pattern.search_all(page)
+	if hits.size() != 9:
+		failures.append("PHONE_SWING_REACH has %d non-empty entries, expected one per language table (9)" % hits.size())
+	_scenario_completed = true
+	return failures
+## Issue #825: MATCH POINT plates. The plate layers alive right now.
+func _match_point_plates_825() -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in get_root().get_tree().get_nodes_in_group("match_point_plates"):
+		if not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+## Starts a lobby match (first to `target`) with `slots` readied and returns the
+## loop once round 1 is on. Round 1 never shows a plate while the target is above 1.
+func _start_match_point_825(target: int, slots: Array, teams: bool = false, mode: String = "") -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(target)
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var typed_slots: Array[int] = []
+	typed_slots.assign(slots)
+	roster.slots = typed_slots
+	roster.teams_on = teams
+	if teams:
+		roster.team_picks = {0: 0, 1: 1}
+	rm.game_mode = mode
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var ready: Dictionary = {}
+	for slot: int in slots:
+		ready[slot] = true
+	roster.ready_slots = ready
+	var players: Array[RigidBody2D] = loop["players"]
+	loop["started"] = await _await_condition(func() -> bool: return players[slots[0]].alive and players[slots[1]].alive, ROUND_LOOP_TIMEOUT_MSEC)
+	return loop
+func _scenario_match_point_plate_shows_for_leader_one_win_short_825() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(3, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the match never started")
+	else:
+		await _await_ticks(10)
+		if not _match_point_plates_825().is_empty():
+			failures.append("a plate showed in round 1 of a first-to-3 match")
+		rm._scores[0] = 1
+		players[1].eliminate() # slot 0 wins the round: 2 of 3
+		if not await _await_condition(func() -> bool: return not _match_point_plates_825().is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no plate at the start of the round after slot 0 reached 2 of 3")
+		else:
+			var plates: Array[Node] = _match_point_plates_825()
+			var want: String = TranslationServer.translate("MATCH_POINT") % rm._slot_name(0)
+			if plates.size() != 1 or plates[0].lines.size() != 1:
+				failures.append("expected one plate with one line, got %d" % plates.size())
+			elif TranslationServer.translate("MATCH_POINT") % plates[0].lines[0]["text"] != want:
+				failures.append("plate says '%s', expected '%s'" % [plates[0].lines[0]["text"], want])
+			var tag: Label = rm.name_tag(0)
+			if tag == null or tag.get_node_or_null("MatchPointDot") == null:
+				failures.append("the leader's name tag has no gold dot")
+			await _await_ticks(210) # 3.5 s
+			if not _match_point_plates_825().is_empty():
+				failures.append("the plate was still up 3.5 s after the round started")
+			if tag != null and tag.get_node_or_null("MatchPointDot") == null:
+				failures.append("the dot went with the plate, before the round ended")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_match_point_plate_stacks_for_two_leaders_and_skips_stock_825() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(2, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the match never started")
+	else:
+		rm._scores[1] = 1
+		players[1].eliminate() # slot 0 wins: both on 1 of 2
+		if not await _await_condition(func() -> bool: return not _match_point_plates_825().is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no plate with two fighters on match point")
+		else:
+			var plates: Array[Node] = _match_point_plates_825()
+			if plates[0].lines.size() != 2:
+				failures.append("%d stacked plates, expected 2" % plates[0].lines.size())
+			elif plates[0].get_node("Plates").get_child_count() != 2:
+				failures.append("the plate layer drew %d plates, expected 2" % plates[0].get_node("Plates").get_child_count())
+		# Not in the endless session: lobby off means no scoring target.
+		var shown: Array[Dictionary] = (load("res://scripts/MatchPointPlate.gd") as GDScript).leaders(rm)
+		rm.lobby_enabled = false
+		if not (load("res://scripts/MatchPointPlate.gd") as GDScript).leaders(rm).is_empty():
+			failures.append("a plate was due with no scoring target (lobby off)")
+		rm.lobby_enabled = true
+		if shown.size() != 2:
+			failures.append("leaders() found %d, expected 2" % shown.size())
+	await _teardown(loop["stage"])
+	var stock: Dictionary = await _start_match_point_825(2, [0, 1], false, "stock")
+	if stock["started"]:
+		await _await_ticks(30)
+		if not _match_point_plates_825().is_empty():
+			failures.append("Stock (a single round, target 1) showed a plate")
+	else:
+		failures.append("the Stock match never started")
+	await _teardown(stock["stage"])
+	return failures
+func _scenario_match_point_in_teams_names_the_team_825() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(2, [0, 1, 2], true)
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the Teams match never started")
+	else:
+		players[1].eliminate() # Blue's only fighter: Red takes the round, 1 of 2
+		if not await _await_condition(func() -> bool: return not _match_point_plates_825().is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no plate when Red reached 1 of 2")
+		else:
+			var plate: Node = _match_point_plates_825()[0]
+			if plate.lines.size() != 1:
+				failures.append("%d lines, expected only Red's" % plate.lines.size())
+			elif plate.lines[0]["text"] != TranslationServer.translate("TEAM_RED"):
+				failures.append("plate names '%s', expected the team '%s'" % [plate.lines[0]["text"], TranslationServer.translate("TEAM_RED")])
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_voice_volume_scales_announcer_and_grunts_only_824() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_voice_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	sfx.settings_path = temp_path
+	sfx.persist_settings = true
+	sfx.set_sfx_volume(0.8)
+	sfx.set_voice_volume(1.0)
+	var hit_name: StringName = &"hit_pickaxe"
+	var hit: float = sfx.mix_gain_for(hit_name)
+	var voices: Array[StringName] = [&"announce_fight", &"announce_ko", &"grunt_hit_0", &"grunt_ko_3"]
+	var full: Dictionary = {}
+	for v: StringName in voices:
+		full[v] = sfx.mix_gain_for(v)
+		if not is_equal_approx(full[v], 0.8):
+			failures.append("%s at voice 100%% mixes at %.3f, not the SFX level 0.8" % [v, full[v]])
+	sfx.set_voice_volume(0.0)
+	for v: StringName in voices:
+		if sfx.mix_gain_for(v) > 0.001:
+			failures.append("%s is still audible (%.4f) at voice 0" % [v, sfx.mix_gain_for(v)])
+	if not is_equal_approx(sfx.mix_gain_for(hit_name), hit) or hit < 0.79:
+		failures.append("a weapon-hit sound changed with the voice slider (%.3f -> %.3f)" % [hit, sfx.mix_gain_for(hit_name)])
+	sfx.set_voice_volume(0.5)
+	if not is_equal_approx(sfx.mix_gain_for(&"announce_fight"), 0.4):
+		failures.append("voice 0.5 mixes the announcer at %.3f, not 0.4" % sfx.mix_gain_for(&"announce_fight"))
+	sfx.set_sfx_volume(0.0)
+	if sfx.mix_gain_for(hit_name) > 0.001:
+		failures.append("SFX at 0 left a hit audible")
+	sfx.set_sfx_volume(1.0)
+	sfx.set_voice_volume(0.35)
+	var saved := ConfigFile.new()
+	if saved.load(temp_path) != OK or not is_equal_approx(float(saved.get_value("audio", "voice_volume", -1.0)), 0.35):
+		failures.append("voice volume was not saved to the audio file")
+	sfx.voice_volume = 1.0
+	sfx.load_settings()
+	if not is_equal_approx(sfx.voice_volume, 0.35):
+		failures.append("voice volume did not reload (%.2f)" % sfx.voice_volume)
+	# The slider sits under SFX in the panel and drives the setting.
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var rows: Node = ui.voice_slider().get_parent().get_parent()
+	if ui.voice_slider().get_parent().get_index() != ui.sfx_slider().get_parent().get_index() + 1:
+		failures.append("the Voice slider is not directly under SFX")
+	ui.voice_slider().value = 0.6
+	if not is_equal_approx(sfx.voice_volume, 0.6):
+		failures.append("moving the Voice slider did not set the volume")
+	if rows == null:
+		failures.append("the Voice slider has no row")
+	sfx.set_voice_volume(1.0, false)
+	sfx.set_sfx_volume(1.0, false)
+	sfx.persist_settings = false
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+## Issue #833: Settings > More options "Kill feed" switch. Off: push_ko() adds no
+## ticker entry but show_banner() still queues a banner; on: unchanged. The flag
+## round-trips through a temp settings file, Restore defaults sets it on again,
+## and the box sits in the pad-focus chain like its neighbours.
+func _scenario_kill_feed_switch_833() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"feed": sfx.kill_feed, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	var feed: Control = KillFeedScript.new()
+	get_root().add_child(feed)
+	await _await_ticks(2)
+	sfx.persist_settings = false
+	sfx.set_kill_feed(true)
+	feed.push_ko("Alice", Color.RED, "Bob", Color.BLUE)
+	if feed.entries().size() != 1:
+		failures.append("with Kill feed on, push_ko left %d entries, expected 1" % feed.entries().size())
+	sfx.set_kill_feed(false)
+	feed.push_ko("Alice", Color.RED, "Bob", Color.BLUE)
+	if feed.entries().size() != 1:
+		failures.append("with Kill feed off, push_ko still added an entry (%d)" % feed.entries().size())
+	feed.clear()
+	feed.push_ko("", Color.RED, "Bob", Color.BLUE)
+	if not feed.entries().is_empty():
+		failures.append("with Kill feed off, a self-KO still reached the ticker")
+	feed.show_banner("FIRST BLOOD", "Alice", Color.RED)
+	if feed.banner_log.size() != 1:
+		failures.append("with Kill feed off, show_banner did not queue the banner")
+	# Persistence, on a temp file only.
+	var path: String = OS.get_temp_dir().path_join("pickfight_kill_feed_833_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_kill_feed(false)
+	sfx.kill_feed = true
+	sfx.load_settings()
+	if sfx.kill_feed:
+		failures.append("Kill feed off was not remembered in the settings file")
+	sfx.set_kill_feed(true)
+	sfx.kill_feed = false
+	sfx.load_settings()
+	if not sfx.kill_feed:
+		failures.append("Kill feed on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	# The panel box and Restore defaults.
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.kill_feed_box()
+	if box == null:
+		failures.append("Settings has no Kill feed box")
+	else:
+		box.button_pressed = false
+		if sfx.kill_feed:
+			failures.append("unticking the Kill feed box did not turn the flag off")
+		if box.get_parent() != ui.shake_box().get_parent():
+			failures.append("the Kill feed box is not in the same list as its neighbours (pad focus chain)")
+		sfx.restore_defaults()
+		if not sfx.kill_feed:
+			failures.append("Restore defaults did not put Kill feed back on")
+	feed.queue_free()
+	sfx.kill_feed = was["feed"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+func _scenario_voice_slider_reset_by_restore_defaults_824() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	sfx.set_voice_volume(0.2, false)
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	if not is_equal_approx(ui.voice_slider().value, 0.2):
+		failures.append("the Voice slider shows %.2f, not 0.2" % ui.voice_slider().value)
+	ui.restore_button().pressed.emit()
+	ui.restore_yes_button().pressed.emit()
+	if not is_equal_approx(sfx.voice_volume, 1.0):
+		failures.append("Restore defaults left voice volume at %.2f" % sfx.voice_volume)
+	if not is_equal_approx(sfx.mix_gain_for(&"announce_fight"), 1.0):
+		failures.append("Restore defaults left the announcer quiet")
+	if not is_equal_approx(ui.voice_slider().value, 1.0):
+		failures.append("the Voice slider shows %.2f after Restore defaults" % ui.voice_slider().value)
+	_scenario_completed = true
+	return failures
+## Issue #829: a match target of 1 (Soccer, Capture the Flag) means no plate.
+func _scenario_match_point_skipped_when_target_is_1_829() -> Array[String]:
+	var failures: Array[String] = []
+	var script: GDScript = load("res://scripts/MatchPointPlate.gd") as GDScript
+	for mode: String in ["soccer", "capture_the_flag"]:
+		var loop: Dictionary = await _start_match_point_825(1, [0, 1], false, mode)
+		var rm: Node = loop["round_manager"]
+		if not loop["started"]:
+			failures.append("the %s match never started" % mode)
+		else:
+			await _await_ticks(30)
+			if rm.match_target() != 1:
+				failures.append("%s target is %d, expected 1" % [mode, rm.match_target()])
+			if not script.leaders(rm).is_empty():
+				failures.append("%s: leaders() named someone on match point at target 1" % mode)
+			if not _match_point_plates_825().is_empty():
+				failures.append("%s showed a plate at target 1" % mode)
+		await _teardown(loop["stage"])
 	return failures
 
 ## #751: Settings > More options > Text size (Normal / Large / Larger = 1.0 / 1.2 / 1.4x)

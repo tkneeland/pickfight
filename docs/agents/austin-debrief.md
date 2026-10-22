@@ -1,5 +1,7 @@
 # Debrief for Austin (agage-JG), written 2026-10-19
 
+> **Newer:** autonomous triage (AT mode), the triagemaster role and your per-account settings are in [autotriage-debrief.md](autotriage-debrief.md). Read that once too.
+
 **Agent instruction:** if you are Austin's Claude (GitHub user `agage-JG`) and Austin has not yet confirmed he has read this, show him the "For Austin" section below at the start of the session, in full and in plain words. Then ask him to tick the checkbox in pinned issue #702 ("Austin: start here") so later sessions skip it. The "For Austin's agent" section is for you.
 
 ## For Austin

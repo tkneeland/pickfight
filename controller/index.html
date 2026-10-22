@@ -138,6 +138,7 @@
     color: var(--ink);
     background: var(--yellow);
   }
+  #reach-row { font-size: 16px; display: flex; align-items: center; gap: 10px; }
   #mouse-sens-row { font-size: 14px; opacity: 0.85; display: flex; align-items: center; gap: 10px; }
   #hint {
     position: fixed;
@@ -211,6 +212,22 @@
     pointer-events: none;
   }
   #hill.show { display: block; }
+  /* Weak connection (#777): a small non-blocking chip in the top-right corner,
+     clear of the drag area and the hill / lives readouts on the left. */
+  #weak-chip {
+    position: fixed;
+    z-index: 3;
+    top: 8px;
+    right: 10px;
+    display: none;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: rgba(255, 140, 0, 0.9);
+    color: #1a1a1a;
+    font: 700 14px sans-serif;
+    pointer-events: none;
+  }
+  #weak-chip.show { display: block; }
   #steal {
     position: fixed;
     z-index: 4;
@@ -478,6 +495,17 @@
   #tip.show { display: flex; }
   #tip-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
   #tip-art { width: min(70vw, 280px); height: auto; }
+  /* Reduce flashes (issue #776): the host's setting or prefers-reduced-motion stops
+     the looping tip animation; the buzz wash becomes a steady border (see buzz()). */
+  body.calm #tip-pick, body.calm #tip-finger { animation: none; }
+  #calmcue {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 8px var(--calm, #fff);
+  }
   #tip-pick { transform-origin: 140px 130px; animation: tip-swing 2.4s ease-in-out infinite; }
   #tip-finger { animation: tip-drag 2.4s ease-in-out infinite; }
   @keyframes tip-swing {
@@ -513,7 +541,7 @@
     color: var(--ink);
     background: var(--yellow);
   }
-  #look-btn, #vibration-btn {
+  #look-btn, #vibration-btn, #leave-btn {
     font: inherit;
     font-size: 18px;
     font-weight: 700;
@@ -550,7 +578,7 @@
   #dmgbar { background: rgba(20, 24, 29, 0.55); border-bottom: 1px solid var(--ink); }
 
   /* Every button: cream face, ink outline, hard shadow that the press eats. */
-  #ready-btn, #look-btn, #vibration-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
+  #ready-btn, #look-btn, #vibration-btn, #leave-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
   #host-menu button, #team-row button, #target-row button, #hat-grid button, #eyes-grid button, #color-row button {
     font-family: var(--display);
     font-weight: 400;
@@ -560,7 +588,7 @@
     border-radius: 16px;
     box-shadow: 4px 4px 0 var(--ink);
   }
-  #ready-btn:active, #look-btn:active, #vibration-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
+  #ready-btn:active, #look-btn:active, #vibration-btn:active, #leave-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
   #steal:active, #mouse-capture:active, #host-menu button:active, #team-row button:active, #target-row button:active,
   #hat-grid button:active, #eyes-grid button:active, #color-row button:active {
     transform: translate(3px, 3px);
@@ -604,7 +632,7 @@
   #team-row button.on { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink), 4px 4px 0 6px var(--ink); }
   #team-line { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
 
-  #look-btn, #vibration-btn { font-size: 20px; }
+  #look-btn, #vibration-btn, #leave-btn { font-size: 20px; }
   #name-input {
     font-family: var(--display);
     font-weight: 400;
@@ -635,9 +663,11 @@
 <body>
 <canvas id="pad"></canvas>
 <div id="flash"></div>
+<div id="calmcue"></div>
 <div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="lives"></div>
 <div id="hill"></div>
+<div id="weak-chip">Weak connection</div>
 <button id="steal" type="button">Steal a life</button>
 <div id="hud">
   <div id="who">
@@ -666,6 +696,11 @@
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
   <button id="vibration-btn" type="button">Vibration: on</button>
+  <label id="reach-row" for="reach">Swing reach
+    <input id="reach" type="range" min="0.6" max="1.6" step="0.05" value="1">
+    <span id="reach-value">1.00x</span>
+  </label>
+  <button id="leave-btn" type="button">Leave game</button>
 </div>
 <div id="name-prompt">
   <div id="name-prompt-title">Pick your name</div>
@@ -805,8 +840,12 @@
         "PHONE_NO": "No",
         "PHONE_MOUSE_CAPTURE": "Click to capture mouse",
         "PHONE_MOUSE_SENS": "Mouse sensitivity",
+        "PHONE_SWING_REACH": "Swing reach",
         "PHONE_VIBRATION_ON": "Vibration: on",
         "PHONE_VIBRATION_OFF": "Vibration: off",
+        "PHONE_LEAVE": "Leave game",
+        "PHONE_LEAVE_CONFIRM": "Tap again to leave",
+        "PHONE_WEAK_CONNECTION": "Weak connection",
         "PHONE_HINT_DRAG": "Drag to swing",
         "TEAM_LINE": "You're on {0} team",
         "TEAM_LINE_AUTO": " (auto)",
@@ -875,6 +914,8 @@
         "STATUS_CONNECTING": "connecting",
         "STATUS_CONNECTED": "connected",
         "STATUS_KICKED": "Removed by the host",
+        "STATE_LEFT": "You left the game. Tap here to join again.",
+        "STATUS_LEFT": "You left the game",
         "STATUS_REPLACED": "Opened somewhere else",
         "STATUS_RETRYING": "{0} — retrying",
         "STATUS_RECONNECTING": "reconnecting",
@@ -943,8 +984,12 @@
       "PHONE_NO": "Nein",
       "PHONE_MOUSE_CAPTURE": "Klick, um die Maus zu fangen",
       "PHONE_MOUSE_SENS": "Mausempfindlichkeit",
+      "PHONE_SWING_REACH": "Schwungreichweite",
       "PHONE_VIBRATION_ON": "Vibration: an",
       "PHONE_VIBRATION_OFF": "Vibration: aus",
+      "PHONE_LEAVE": "Spiel verlassen",
+      "PHONE_LEAVE_CONFIRM": "Nochmal tippen zum Verlassen",
+      "PHONE_WEAK_CONNECTION": "Schwache Verbindung",
       "PHONE_HINT_DRAG": "Zieh zum Schwingen",
       "TEAM_LINE": "Du bist in Team {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1013,6 +1058,8 @@
       "STATUS_CONNECTING": "verbinde",
       "STATUS_CONNECTED": "verbunden",
       "STATUS_KICKED": "Vom Host entfernt",
+      "STATE_LEFT": "Du hast das Spiel verlassen. Tippe hier, um wieder beizutreten.",
+      "STATUS_LEFT": "Spiel verlassen",
       "STATUS_REPLACED": "Woanders geöffnet",
       "STATUS_RETRYING": "{0} — neuer Versuch",
       "STATUS_RECONNECTING": "verbinde neu",
@@ -1081,8 +1128,12 @@
       "PHONE_NO": "Non",
       "PHONE_MOUSE_CAPTURE": "Clique pour capturer la souris",
       "PHONE_MOUSE_SENS": "Sensibilité de la souris",
+      "PHONE_SWING_REACH": "Portée du swing",
       "PHONE_VIBRATION_ON": "Vibration : activée",
       "PHONE_VIBRATION_OFF": "Vibration : désactivée",
+      "PHONE_LEAVE": "Quitter la partie",
+      "PHONE_LEAVE_CONFIRM": "Touche encore pour quitter",
+      "PHONE_WEAK_CONNECTION": "Connexion faible",
       "PHONE_HINT_DRAG": "Glisse pour frapper",
       "TEAM_LINE": "Tu es dans l'équipe {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1151,6 +1202,8 @@
       "STATUS_CONNECTING": "connexion",
       "STATUS_CONNECTED": "connecté",
       "STATUS_KICKED": "Retiré par l'hôte",
+      "STATE_LEFT": "Tu as quitté la partie. Touche ici pour rejoindre à nouveau.",
+      "STATUS_LEFT": "Partie quittée",
       "STATUS_REPLACED": "Ouvert ailleurs",
       "STATUS_RETRYING": "{0} — nouvel essai",
       "STATUS_RECONNECTING": "reconnexion",
@@ -1219,8 +1272,12 @@
       "PHONE_NO": "No",
       "PHONE_MOUSE_CAPTURE": "Clic para capturar el mouse",
       "PHONE_MOUSE_SENS": "Sensibilidad del mouse",
+      "PHONE_SWING_REACH": "Alcance del golpe",
       "PHONE_VIBRATION_ON": "Vibración: sí",
       "PHONE_VIBRATION_OFF": "Vibración: no",
+      "PHONE_LEAVE": "Salir del juego",
+      "PHONE_LEAVE_CONFIRM": "Toca otra vez para salir",
+      "PHONE_WEAK_CONNECTION": "Conexión débil",
       "PHONE_HINT_DRAG": "Arrastra para golpear",
       "TEAM_LINE": "Estás en el equipo {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1289,6 +1346,8 @@
       "STATUS_CONNECTING": "conectando",
       "STATUS_CONNECTED": "conectado",
       "STATUS_KICKED": "Expulsado por el anfitrión",
+      "STATE_LEFT": "Saliste del juego. Toca aquí para volver a unirte.",
+      "STATUS_LEFT": "Saliste del juego",
       "STATUS_REPLACED": "Abierto en otro lugar",
       "STATUS_RETRYING": "{0} — reintentando",
       "STATUS_RECONNECTING": "reconectando",
@@ -1357,8 +1416,12 @@
       "PHONE_NO": "Não",
       "PHONE_MOUSE_CAPTURE": "Clique para capturar o mouse",
       "PHONE_MOUSE_SENS": "Sensibilidade do mouse",
+      "PHONE_SWING_REACH": "Alcance do golpe",
       "PHONE_VIBRATION_ON": "Vibração: ligada",
       "PHONE_VIBRATION_OFF": "Vibração: desligada",
+      "PHONE_LEAVE": "Sair do jogo",
+      "PHONE_LEAVE_CONFIRM": "Toque de novo para sair",
+      "PHONE_WEAK_CONNECTION": "Conexão fraca",
       "PHONE_HINT_DRAG": "Arraste para bater",
       "TEAM_LINE": "Você está no time {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1427,6 +1490,8 @@
       "STATUS_CONNECTING": "conectando",
       "STATUS_CONNECTED": "conectado",
       "STATUS_KICKED": "Removido pelo anfitrião",
+      "STATE_LEFT": "Você saiu do jogo. Toque aqui para entrar de novo.",
+      "STATUS_LEFT": "Você saiu do jogo",
       "STATUS_REPLACED": "Aberto em outro lugar",
       "STATUS_RETRYING": "{0} — tentando de novo",
       "STATUS_RECONNECTING": "reconectando",
@@ -1495,8 +1560,12 @@
       "PHONE_NO": "否",
       "PHONE_MOUSE_CAPTURE": "点击以捕获鼠标",
       "PHONE_MOUSE_SENS": "鼠标灵敏度",
+      "PHONE_SWING_REACH": "挥动范围",
       "PHONE_VIBRATION_ON": "振动:开",
       "PHONE_VIBRATION_OFF": "振动:关",
+      "PHONE_LEAVE": "离开游戏",
+      "PHONE_LEAVE_CONFIRM": "再点一次离开",
+      "PHONE_WEAK_CONNECTION": "连接较弱",
       "PHONE_HINT_DRAG": "拖动来挥动",
       "TEAM_LINE": "你在{0}队",
       "TEAM_LINE_AUTO": " (自动)",
@@ -1565,6 +1634,8 @@
       "STATUS_CONNECTING": "连接中",
       "STATUS_CONNECTED": "已连接",
       "STATUS_KICKED": "被房主移出",
+      "STATE_LEFT": "你已离开游戏。点这里重新加入。",
+      "STATUS_LEFT": "已离开游戏",
       "STATUS_REPLACED": "在别处被打开",
       "STATUS_RETRYING": "{0} — 重试中",
       "STATUS_RECONNECTING": "重新连接中",
@@ -1633,8 +1704,12 @@
       "PHONE_NO": "いいえ",
       "PHONE_MOUSE_CAPTURE": "クリックしてマウスを取り込む",
       "PHONE_MOUSE_SENS": "マウス感度",
+      "PHONE_SWING_REACH": "スイング距離",
       "PHONE_VIBRATION_ON": "バイブ: オン",
       "PHONE_VIBRATION_OFF": "バイブ: オフ",
+      "PHONE_LEAVE": "ゲームを抜ける",
+      "PHONE_LEAVE_CONFIRM": "もう一度タップで抜ける",
+      "PHONE_WEAK_CONNECTION": "接続が不安定",
       "PHONE_HINT_DRAG": "ドラッグで振る",
       "TEAM_LINE": "あなたは{0}チーム",
       "TEAM_LINE_AUTO": " (自動)",
@@ -1703,6 +1778,8 @@
       "STATUS_CONNECTING": "接続中",
       "STATUS_CONNECTED": "接続済み",
       "STATUS_KICKED": "ホストに外されました",
+      "STATE_LEFT": "ゲームを抜けました。ここをタップで再参加。",
+      "STATUS_LEFT": "ゲームを抜けました",
       "STATUS_REPLACED": "別の場所で開かれました",
       "STATUS_RETRYING": "{0} — 再試行中",
       "STATUS_RECONNECTING": "再接続中",
@@ -1771,8 +1848,12 @@
       "PHONE_NO": "아니요",
       "PHONE_MOUSE_CAPTURE": "클릭해서 마우스 잡기",
       "PHONE_MOUSE_SENS": "마우스 감도",
+      "PHONE_SWING_REACH": "스윙 범위",
       "PHONE_VIBRATION_ON": "진동: 켜짐",
       "PHONE_VIBRATION_OFF": "진동: 꺼짐",
+      "PHONE_LEAVE": "게임 나가기",
+      "PHONE_LEAVE_CONFIRM": "한 번 더 누르면 나가요",
+      "PHONE_WEAK_CONNECTION": "연결 약함",
       "PHONE_HINT_DRAG": "드래그해서 휘두르기",
       "TEAM_LINE": "당신은 {0}팀이에요",
       "TEAM_LINE_AUTO": " (자동)",
@@ -1841,6 +1922,8 @@
       "STATUS_CONNECTING": "연결 중",
       "STATUS_CONNECTED": "연결됨",
       "STATUS_KICKED": "호스트가 내보냄",
+      "STATE_LEFT": "게임에서 나갔어요. 여기를 눌러 다시 참가하세요.",
+      "STATUS_LEFT": "게임에서 나갔어요",
       "STATUS_REPLACED": "다른 곳에서 열림",
       "STATUS_RETRYING": "{0} — 다시 시도 중",
       "STATUS_RECONNECTING": "다시 연결 중",
@@ -1909,8 +1992,12 @@
       "PHONE_NO": "Нет",
       "PHONE_MOUSE_CAPTURE": "Нажмите, чтобы захватить мышь",
       "PHONE_MOUSE_SENS": "Чувствительность мыши",
+      "PHONE_SWING_REACH": "Радиус замаха",
       "PHONE_VIBRATION_ON": "Вибрация: вкл.",
       "PHONE_VIBRATION_OFF": "Вибрация: выкл.",
+      "PHONE_LEAVE": "Выйти из игры",
+      "PHONE_LEAVE_CONFIRM": "Нажмите ещё раз, чтобы выйти",
+      "PHONE_WEAK_CONNECTION": "Слабое соединение",
       "PHONE_HINT_DRAG": "Води, чтобы махать",
       "TEAM_LINE": "Вы в команде: {0}",
       "TEAM_LINE_AUTO": " (авто)",
@@ -1979,6 +2066,8 @@
       "STATUS_CONNECTING": "подключение",
       "STATUS_CONNECTED": "подключено",
       "STATUS_KICKED": "Убран хозяином",
+      "STATE_LEFT": "Вы вышли из игры. Нажмите здесь, чтобы вернуться.",
+      "STATUS_LEFT": "Вы вышли из игры",
       "STATUS_REPLACED": "Открыто в другом месте",
       "STATUS_RETRYING": "{0} — повторная попытка",
       "STATUS_RECONNECTING": "переподключение",
@@ -2047,6 +2136,8 @@
       "PHONE_TEAM_AUTO": "#team-auto",
       "PHONE_READY": "#ready-btn",
       "PHONE_HAT_AND_COLOUR": "#look-btn",
+      "PHONE_LEAVE": "#leave-btn",
+      "PHONE_WEAK_CONNECTION": "#weak-chip",
       "PHONE_PICK_NAME": "#name-prompt-title",
       "PHONE_NAME_INFO": "#name-prompt-info",
       "PHONE_SHUFFLE": "#name-shuffle",
@@ -2074,6 +2165,7 @@
       "PHONE_NO": "#confirm-no",
       "PHONE_MOUSE_CAPTURE": "#mouse-capture",
       "PHONE_MOUSE_SENS": "#mouse-sens-row",
+      "PHONE_SWING_REACH": "#reach-row",
       "PHONE_HINT_DRAG": "#hint"
   };
   (function () {
@@ -2110,6 +2202,11 @@
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
   // on the wire is poison for the host's rigid body.
   var MIN_DRAG_RADIUS_PX = 1;
+  // Swing reach (#817): a per-phone multiplier on the drag radius, 0.6x-1.6x, 1.0x by default.
+  // A smaller reach means a shorter thumb drag for a full swing; the wire vector stays the unit disc.
+  var REACH_KEY = "pickfight-reach";
+  var REACH_MIN = 0.6, REACH_MAX = 1.6;
+  var reachScale = 1;
   // Buzzes the host sends (issue #34, ADR-0013), strongest first. `vibrate` is
   // a navigator.vibrate() pattern; `alpha` and `ms` are the flash's peak
   // opacity and fade length. The flash plays everywhere, not just where
@@ -2219,6 +2316,7 @@
   var nameEl = document.getElementById("name");
   var stateEl = document.getElementById("state");
   var flashEl = document.getElementById("flash");
+  var calmEl = document.getElementById("calmcue");
   // The buzz still playing, so a weaker one arriving on its heels (the
   // `struck` right behind an `eliminated`, a `hit` right behind a `struck`)
   // does not cut it short -- vibrate() cancels whatever pattern was running.
@@ -2227,7 +2325,7 @@
   // ---- geometry -----------------------------------------------------------
   function computeDragRadius() {
     var edge = Math.min(window.innerWidth, window.innerHeight);
-    var radius = DRAG_RADIUS_FRACTION * edge;
+    var radius = DRAG_RADIUS_FRACTION * edge * reachScale;
     // A hidden/zero-sized viewport (background tab, some in-app browsers)
     // reports 0 here, which would divide the drag by zero.
     if (!isFinite(radius) || radius < MIN_DRAG_RADIUS_PX) { return MIN_DRAG_RADIUS_PX; }
@@ -2549,6 +2647,8 @@
   // a reload (issue #164): it stops reconnecting too, or two tabs would keep
   // taking the slot off each other.
   var replacedOut = false;
+  // Set once this phone left on purpose (issue #775): it stops reconnecting until its player taps the state text.
+  var leftOut = false;
   // Set once the host refused this phone for the match kind (close code 4003, #509).
   var refusedOut = false;
   var stateTimer = null;
@@ -2557,7 +2657,9 @@
   var closeReason = "";
   function showState() {
     var text = "";
-    if (kickedOut) {
+    if (leftOut) {
+      text = t("STATE_LEFT");
+    } else if (kickedOut) {
       text = t("STATE_KICKED");
     } else if (replacedOut) {
       text = t("STATE_REPLACED");
@@ -2584,6 +2686,7 @@
       }
     }
     stateEl.textContent = text;
+    stateEl.style.pointerEvents = leftOut ? "auto" : "";
     nameEl.classList.toggle("locked", inPlay());
     showCareer();
     // Issue #194: no "Drag to swing" on a phone that has no player to swing.
@@ -2690,6 +2793,16 @@
     hillEl.textContent = "Hill " + n + " / " + (typeof msg.win === "number" ? msg.win : 15) + " s";
   }
 
+  // Issue #776: calm mode = the host's Reduce flashes or the browser's prefers-reduced-motion.
+  var hostReduceFlash = false;
+  var motionQuery = null;
+  try { motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)"); } catch (err) { /* none */ }
+  function calmMode() { return hostReduceFlash || !!(motionQuery && motionQuery.matches); }
+  function applyCalm() { document.body.classList.toggle("calm", calmMode()); }
+  if (motionQuery && motionQuery.addEventListener) { motionQuery.addEventListener("change", applyCalm); }
+  applyCalm();
+  var calmTimer = 0;
+
   function buzz(kind) {
     var b = BUZZ[kind];
     if (!b || slot < 0) { return; }
@@ -2699,6 +2812,14 @@
     buzzUntil = now + b.ms;
     if (vibrationOn && typeof navigator.vibrate === "function") {
       try { navigator.vibrate(b.vibrate); } catch (err) { /* flash still plays */ }
+    }
+    if (calmMode()) {
+      // A steady border in the slot's colour for the buzz's length: no fade, no full-screen wash.
+      calmEl.style.setProperty("--calm", colorOf(slot));
+      calmEl.style.opacity = "1";
+      clearTimeout(calmTimer);
+      calmTimer = setTimeout(function () { calmEl.style.opacity = "0"; }, b.ms);
+      return;
     }
     flashEl.style.background = colorOf(slot);
     flashEl.style.transition = "none";
@@ -2740,6 +2861,8 @@
     else if (relayJoined) { xmit(KIND_TEXT, new TextEncoder().encode(JSON.stringify(obj))); }
   }
   var relayJoined = false;
+  // Tell the host this page answers its pings (#777).
+  function announceLag() { sendText({ t: "lag" }); }
 
   function slotName(n) {
     if (lobby) {
@@ -3078,6 +3201,52 @@
     showVibration();
   });
   showVibration();
+
+  // ---- swing reach slider (issue #817) -------------------------------------------
+  // Touch phones only: a fine pointer has the mouse sensitivity row instead.
+  var reachEl = document.getElementById("reach");
+  var reachValueEl = document.getElementById("reach-value");
+  function setReach(v) {
+    v = parseFloat(v);
+    if (!isFinite(v) || v <= 0) { v = 1; }
+    v = Math.min(REACH_MAX, Math.max(REACH_MIN, v));
+    reachScale = v;
+    reachEl.value = String(v);
+    reachValueEl.textContent = v.toFixed(2) + "x";
+    dragRadiusPx = computeDragRadius();
+  }
+  if (finePointer) { document.getElementById("reach-row").style.display = "none"; }
+  setReach(stored(REACH_KEY));
+  reachEl.addEventListener("input", function () {
+    setReach(reachEl.value);
+    store(REACH_KEY, String(reachScale));
+  });
+
+  // ---- leave game (issue #775) ---------------------------------------------------
+  // Two taps: the first arms the button for a few seconds, the second tells the host to free the seat.
+  var leaveBtn = document.getElementById("leave-btn");
+  var leaveArmed = false;
+  var leaveTimer = null;
+  function showLeave() { leaveBtn.textContent = t(leaveArmed ? "PHONE_LEAVE_CONFIRM" : "PHONE_LEAVE"); }
+  leaveBtn.addEventListener("click", function () {
+    if (!leaveArmed) {
+      leaveArmed = true;
+      showLeave();
+      leaveTimer = setTimeout(function () { leaveArmed = false; showLeave(); }, 4000);
+      return;
+    }
+    clearTimeout(leaveTimer);
+    leaveArmed = false;
+    showLeave();
+    sendText({ t: "leave" });
+  });
+  stateEl.addEventListener("click", function () {
+    if (!leftOut) { return; }
+    leftOut = false;
+    showState();
+    connect();
+  });
+  showLeave();
 
   // ---- host controls (issue #149) -------------------------------------------
   // Only the host phone -- the one allowed to set "first to N" -- gets the
@@ -3458,6 +3627,8 @@
 
   // Must match ControllerServer.KICKED_REASON: a kicked phone stops retrying.
   var KICKED_REASON = "removed by the host";
+  // Must match ControllerServer.LEFT_REASON (#775): this phone asked to leave.
+  var LEFT_REASON = "left the game";
   // Must match ControllerServer.REPLACED_REASON (issue #164): this phone's id
   // connected again elsewhere, which now holds the slot. No retry either.
   var REPLACED_REASON = "opened somewhere else";
@@ -3511,6 +3682,7 @@
           refusedOut = false;
           setSlot(msg.slot);
           sendName();
+          announceLag();
           sendLook();
           if (!nameChosen()) { openNamePrompt(); }
           else if (!lookChosen()) { openLookPrompt(); }
@@ -3518,10 +3690,13 @@
         }
         else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "name") { showStoredName(msg.v); }
+        else if (msg.t === "flash") { hostReduceFlash = msg.v === true; applyCalm(); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "hill") { showHill(msg); }
+        else if (msg.t === "ping") { sendText({ t: "pong", n: msg.n }); }
+        else if (msg.t === "weak") { document.getElementById("weak-chip").classList.toggle("show", msg.v === true); }
         else if (msg.t === "career") { addCareer(msg.d); }
         else if (msg.t === "lobby") { showLobby(msg); }
         else if (msg.t === "closed" && RELAY) { relayNote = { code: Number(msg.code) || 0, reason: String(msg.reason || "") }; }
@@ -3556,6 +3731,7 @@
       var relayError = !!(relayNote && relayNote.relayError);
       relayJoined = false;
       var kicked = reason === KICKED_REASON;
+      var left = reason === LEFT_REASON;
       var replaced = reason === REPLACED_REASON;
       var refused = code === REFUSED_CODE;
       closeReason = kicked || replaced ? "" : reason;
@@ -3570,6 +3746,7 @@
       // Forget any drag that was in progress: the host has already zeroed this
       // player, and on reconnect the first frame should be "not touching".
       release();
+      if (left) { leftOut = true; closeReason = ""; setStatus(t("STATUS_LEFT")); showState(); return; }
       if (kicked) { kickedOut = true; showState(); return; }
       if (replaced) { replacedOut = true; showState(); return; }
       if (refused) { refusedOut = true; showState(); setTimeout(connect, REFUSED_RETRY_MS); return; }

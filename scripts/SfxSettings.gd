@@ -4,14 +4,13 @@ extends CanvasLayer
 ## A small "Settings" button in the bottom-right corner opens a panel with
 ## these controls:
 ##
-## - master, SFX and music volume sliders;
+## - master, SFX, voice and music volume sliders (voice is the announcer and
+##   the fighters' grunts, under SFX, #824);
 ## - a mute box;
 ## - a fullscreen box;
 ## - a window size for windowed mode, and the comfort and streamer options.
 ##   (The stage, weapon and round-modifier switches live on the lobby's
 ##   Stages & Rules screen since #647.)
-##
-## A voice volume slider (#290) goes in the audio rows above, beside music.
 ##
 ## Keys: `Esc` opens and closes the panel, `M` toggles mute and `F11` toggles
 ## fullscreen.
@@ -53,16 +52,19 @@ var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
 var _sfx_slider: HSlider
+var _voice_slider: HSlider
 var _music_slider: HSlider
 var _mute: CheckBox
 var _fullscreen: CheckBox
 var _shake_box: CheckBox
 var _flash_box: CheckBox
+var _numbers_box: CheckBox
 ## Anonymous match stats (issue #372): the Settings toggle and the one-time
 ## first-launch notice with its two buttons.
 var _stats_box: CheckBox
 var _crash_box: CheckBox
 var _replay_box: CheckBox
+var _autosave_box: CheckBox
 var _focus_box: CheckBox
 var _filter_box: CheckBox
 var _notice: PanelContainer
@@ -70,11 +72,15 @@ var _notice_label: Label
 var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
+var _kill_feed_box: CheckBox
 var _scale_button: OptionButton
 ## Text size (#751): Settings > More options.
 var _text_size_button: OptionButton
 ## Stick deadzone (#748): Settings > More options.
 var _deadzone_button: OptionButton
+## Frame-rate cap and VSync (#774): Settings > More options.
+var _fps_button: OptionButton
+var _vsync_box: CheckBox
 var _host_match: VBoxContainer
 ## Quit game (#718): the button, and the confirm that replaces it while other humans are seated.
 var _credits_button: Button
@@ -135,6 +141,7 @@ func _ready() -> void:
 	rows.add_child(_host_match)
 	_slider = _add_slider(rows, "Volume", tr("SETTINGS_MASTER_VOLUME"))
 	_sfx_slider = _add_slider(rows, "SfxVolume", tr("SETTINGS_SFX"))
+	_voice_slider = _add_slider(rows, "VoiceVolume", tr("SETTINGS_VOICE"))
 	_music_slider = _add_slider(rows, "MusicVolume", tr("SETTINGS_MUSIC"))
 	if music == null:
 		_music_slider.get_parent().visible = false
@@ -174,6 +181,7 @@ func _ready() -> void:
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
+	_kill_feed_box = _add_box(content, "KillFeed", tr("SETTINGS_KILL_FEED"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
 	for option: float in sfx.UI_SCALES:
@@ -189,9 +197,17 @@ func _ready() -> void:
 	for option: float in HostSettingsScript.PAD_DEADZONES:
 		_deadzone_button.add_item(tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % option))
 	content.add_child(_deadzone_button)
+	_fps_button = OptionButton.new()
+	_fps_button.name = "FrameRate"
+	for option: int in HostSettingsScript.FRAME_CAPS:
+		_fps_button.add_item(_frame_cap_text(option))
+	content.add_child(_fps_button)
+	_vsync_box = _add_box(content, "VSync", tr("SETTINGS_VSYNC"))
 	_replay_box = _add_box(content, "PlayOfRound", tr("SETTINGS_PLAY_OF_ROUND"))
+	_autosave_box = _add_box(content, "AutoSaveClips", tr("SETTINGS_AUTO_SAVE_CLIPS"))
 	_focus_box = _add_box(content, "PauseOnFocusLoss", tr("SETTINGS_PAUSE_ON_FOCUS_LOSS"))
 	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
+	_numbers_box = _add_box(content, "PlayerNumbers", tr("SETTINGS_PLAYER_NUMBERS"))
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
@@ -277,13 +293,16 @@ func _ready() -> void:
 	refresh()
 	_stats_box.toggled.connect(func(pressed: bool) -> void: host.set_share_stats(pressed))
 	_replay_box.toggled.connect(func(pressed: bool) -> void: host.set_play_of_round(pressed))
+	_autosave_box.toggled.connect(func(pressed: bool) -> void: host.set_auto_save_clips(pressed))
 	_focus_box.toggled.connect(func(pressed: bool) -> void: host.set_pause_on_focus_loss(pressed))
 	_filter_box.toggled.connect(func(pressed: bool) -> void: host.set_filter_names(pressed))
+	_numbers_box.toggled.connect(func(pressed: bool) -> void: host.set_player_numbers(pressed))
 	_crash_box.toggled.connect(func(pressed: bool) -> void: host.set_send_crash_reports(pressed))
 	_slider.value_changed.connect(_on_volume_changed)
 	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
+	_voice_slider.value_changed.connect(_on_voice_volume_changed)
 	_music_slider.value_changed.connect(_on_music_volume_changed)
-	for slider: HSlider in [_slider, _sfx_slider, _music_slider]:
+	for slider: HSlider in [_slider, _sfx_slider, _voice_slider, _music_slider]:
 		slider.drag_started.connect(_on_drag_started)
 		slider.drag_ended.connect(_on_drag_ended)
 	_mute.toggled.connect(_on_mute_toggled)
@@ -300,10 +319,13 @@ func _ready() -> void:
 	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
+	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
 	_text_size_button.item_selected.connect(func(index: int) -> void: sfx.set_text_scale(sfx.TEXT_SCALES[index]))
 	_deadzone_button.item_selected.connect(func(index: int) -> void: host.set_pad_deadzone(HostSettingsScript.PAD_DEADZONES[index]))
+	_fps_button.item_selected.connect(func(index: int) -> void: host.set_frame_cap(HostSettingsScript.FRAME_CAPS[index]))
+	_vsync_box.toggled.connect(func(pressed: bool) -> void: host.set_vsync(pressed))
 	_more.toggled.connect(func(pressed: bool) -> void:
 		_more_area.visible = pressed
 		if PadMenuScript.is_open():
@@ -383,6 +405,7 @@ func refresh() -> void:
 	sfx.sync_fullscreen()
 	_slider.set_value_no_signal(sfx.master_volume)
 	_sfx_slider.set_value_no_signal(sfx.sfx_volume)
+	_voice_slider.set_value_no_signal(sfx.voice_volume)
 	if music != null:
 		_music_slider.set_value_no_signal(music.volume)
 	_mute.set_pressed_no_signal(sfx.muted)
@@ -392,14 +415,19 @@ func refresh() -> void:
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_crash_box.set_pressed_no_signal(host.send_crash_reports)
+	_numbers_box.set_pressed_no_signal(host.player_numbers)
 	_replay_box.set_pressed_no_signal(host.play_of_round)
+	_autosave_box.set_pressed_no_signal(host.auto_save_clips)
 	_focus_box.set_pressed_no_signal(host.pause_on_focus_loss)
 	_filter_box.set_pressed_no_signal(host.filter_names)
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
+	_kill_feed_box.set_pressed_no_signal(sfx.kill_feed)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_text_size_button.select(maxi(sfx.TEXT_SCALES.find(sfx.text_scale), 0))
 	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
+	_fps_button.select(maxi(HostSettingsScript.FRAME_CAPS.find(host.frame_cap), 0))
+	_vsync_box.set_pressed_no_signal(host.vsync)
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_language.select(_language_index(host.language))
 	_host_match.refresh()
@@ -648,6 +676,9 @@ func volume_slider() -> HSlider:
 func sfx_slider() -> HSlider:
 	return _sfx_slider
 
+func voice_slider() -> HSlider:
+	return _voice_slider
+
 func music_slider() -> HSlider:
 	return _music_slider
 
@@ -661,6 +692,9 @@ func fullscreen_box() -> CheckBox:
 ## so the lobby's how-to-play column keeps its room above the panel.
 func more_box() -> CheckBox:
 	return _more
+
+func kill_feed_box() -> CheckBox:
+	return _kill_feed_box
 
 func shake_box() -> CheckBox:
 	return _shake_box
@@ -767,6 +801,9 @@ func _build_telemetry_notice() -> void:
 		if not _panel.visible:
 			_set_pad_focus(false))
 
+func numbers_box() -> CheckBox:
+	return _numbers_box
+
 func flash_box() -> CheckBox:
 	return _flash_box
 
@@ -780,6 +817,15 @@ func text_size_button() -> OptionButton:
 
 func tag_size_button() -> OptionButton:
 	return _scale_button
+
+func frame_rate_button() -> OptionButton:
+	return _fps_button
+
+func vsync_box() -> CheckBox:
+	return _vsync_box
+
+func _frame_cap_text(cap: int) -> String:
+	return tr("SETTINGS_FRAME_RATE") % (tr("SETTINGS_FRAME_RATE_UNLIMITED") if cap == 0 else str(cap))
 
 func deadzone_button() -> OptionButton:
 	return _deadzone_button
@@ -829,18 +875,21 @@ func _on_language_selected(index: int) -> void:
 ## Re-words the panel in the language just chosen. The controls were given
 ## `tr()`'d text when built, which Godot does not redo on a locale change.
 func _retranslate() -> void:
-	for slider: HSlider in [_slider, _sfx_slider, _music_slider]:
+	for slider: HSlider in [_slider, _sfx_slider, _voice_slider, _music_slider]:
 		var title := slider.get_parent().get_child(0) as Label
-		title.text = tr({_slider: "SETTINGS_MASTER_VOLUME", _sfx_slider: "SETTINGS_SFX", _music_slider: "SETTINGS_MUSIC"}[slider])
+		title.text = tr({_slider: "SETTINGS_MASTER_VOLUME", _sfx_slider: "SETTINGS_SFX", _voice_slider: "SETTINGS_VOICE", _music_slider: "SETTINGS_MUSIC"}[slider])
 	_mute.text = tr("SETTINGS_MUTE")
 	_fullscreen.text = tr("SETTINGS_FULLSCREEN")
 	_more.text = tr("SETTINGS_MORE_OPTIONS")
 	_shake_box.text = tr("SETTINGS_SCREEN_SHAKE")
 	_flash_box.text = tr("SETTINGS_REDUCE_FLASHES")
+	_numbers_box.text = tr("SETTINGS_PLAYER_NUMBERS")
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
+	_kill_feed_box.text = tr("SETTINGS_KILL_FEED")
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
+	_autosave_box.text = tr("SETTINGS_AUTO_SAVE_CLIPS")
 	_filter_box.text = tr("SETTINGS_FILTER_NAMES")
 	_feedback_button.text = tr("SETTINGS_FEEDBACK")
 	_credits_button.text = tr("CREDITS_BUTTON")
@@ -866,6 +915,8 @@ func _retranslate() -> void:
 		_text_size_button.set_item_text(i, _text_size_item(sfx.TEXT_SCALES[i]))
 	for i in HostSettingsScript.PAD_DEADZONES.size():
 		_deadzone_button.set_item_text(i, tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % HostSettingsScript.PAD_DEADZONES[i]))
+	for i in HostSettingsScript.FRAME_CAPS.size():
+		_fps_button.set_item_text(i, _frame_cap_text(HostSettingsScript.FRAME_CAPS[i]))
 	_language.set_item_text(0, tr("LANGUAGE_AUTO"))
 	refresh()
 
@@ -900,6 +951,10 @@ func _on_volume_changed(value: float) -> void:
 
 func _on_sfx_volume_changed(value: float) -> void:
 	sfx.set_sfx_volume(value, not _dragging)
+	refresh()
+
+func _on_voice_volume_changed(value: float) -> void:
+	sfx.set_voice_volume(value, not _dragging)
 	refresh()
 
 func _on_music_volume_changed(value: float) -> void:

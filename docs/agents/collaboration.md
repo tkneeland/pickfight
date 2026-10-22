@@ -1,7 +1,7 @@
 # Collaboration: two devs working at the same time
 
 Several agents work in parallel on this repo, one per GitHub account:
-`tkneeland` (the integrator: triage and watching main), `tommykneeland` (the owner's second agent) and
+`tkneeland` (the **triagemaster**: triage, conflict-risk tickets and watching main; the role passes down `SUCCESSION_RANK` when its weekly use hits 85%, see [autotriage.md](autotriage.md)), `tommykneeland` (the owner's second agent) and
 `agage-JG` (Austin). This file is the working agreement every agent follows. It sits alongside
 `issue-tracker.md`, which still owns claim/label/transition mechanics.
 
@@ -23,8 +23,9 @@ Several agents work in parallel on this repo, one per GitHub account:
    - keep the edit minimal and local (add, don't restructure or reformat);
    - never move, rename, or reorder existing code or nodes in it;
    - post a one-line comment on your issue: `Touching <file>: <what>`.
-3. `.tscn` scene files merge badly. Don't both change the same scene in
-   parallel. Where you can, add new scenes instead of editing shared ones.
+3. `.tscn` scene files merge badly. Where you can, add new scenes instead of
+   editing shared ones; an edit to an existing one is conflict-risk (see
+   [autotriage.md](autotriage.md), rule 6).
 
 Current hot shared files: `scripts/RoundManager.gd`, `scenes/Main.tscn`,
 `tools/scenario_runner.gd` (append new scenarios at the end of the list and
@@ -66,10 +67,10 @@ the dispatcher; don't reorder), `CONTEXT.md`.
   4. If the other dev merged first and your PR now conflicts or its check
      reruns red, go back to step 1. GitHub refuses a conflicting merge, so this
      costs time, never broken code.
-- **Ask the integrator first** (tkneeland's Claude, which still triages and
-  watches main) only when your PR changes a `.tscn` scene file another open
-  issue lists under **Touches**: comment on the PR and let tkneeland's Claude
-  merge it. Scenes merge badly.
+- **Conflict-risk PRs** (a ticket labelled `conflict-risk`, rules in
+  [autotriage.md](autotriage.md)) are merged only by the **triagemaster**:
+  `tkneeland`'s Claude, or the next `SUCCESSION_RANK` account while it stands in
+  at 85% weekly use. Comment on the PR and let the triagemaster merge it.
 - **Main went red after a merge:** whoever merged last fixes it or reverts their
   merge (`git revert -m 1 <sha>` on a branch, PR, merge) before starting
   anything else.

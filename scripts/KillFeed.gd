@@ -102,9 +102,12 @@ func _process(delta: float) -> void:
 	if not _banner.visible and not _banner_queue.is_empty():
 		_show_next_banner()
 
-## A KO on the ticker: "killer KO victim", or "victim self-KO" when
+## A KO on the ticker (nothing with Settings > "Kill feed" off, #833): "killer KO victim", or "victim self-KO" when
 ## `killer_name` is empty.
 func push_ko(killer_name: String, killer_color: Color, victim_name: String, victim_color: Color) -> void:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	if sfx != null and not bool(sfx.get("kill_feed")):
+		return
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiThemeScript.plate(PLATE_FILL, 12, 1, true, 8))
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
