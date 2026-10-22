@@ -14,6 +14,7 @@ const FRAME_SIZE := Vector2i(256, 144)
 const CLIPS_DIR := "user://clips"
 const TOAST_SEC: float = 3.0
 
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const GifWriterType := preload("res://scripts/GifWriter.gd")
 ## 12 fps in hundredths of a second (8 cs, a GIF delay unit).
 const GIF_DELAY_CS: int = 8
@@ -30,10 +31,14 @@ var _toast_timer: Timer
 var clips_dir: String = CLIPS_DIR
 ## F9 also encodes clip.gif; scenarios that only count PNGs turn it off.
 var encode_gif: bool = true
+## The folder the last match-end auto-save wrote, or "" (#795); the victory
+## screen shows its "Clip saved" line while this is set.
+var autosaved_dir: String = ""
 var _gif_thread: Thread
 var _gif_dir: String = ""
 
 func _ready() -> void:
+	add_to_group("replay_buffer")
 	var layer := CanvasLayer.new()
 	layer.layer = 15
 	add_child(layer)
@@ -171,6 +176,17 @@ func save_and_toast() -> String:
 	_toast.visible = true
 	_toast_timer.start(TOAST_SEC)
 	return dir
+
+## The match-winning KO is over: save the buffer like F9 (#795), unless the
+## host turned it off or nothing is buffered. Quiet: the victory screen says so.
+func autosave_match_clip() -> String:
+	autosaved_dir = ""
+	if not HostSettingsScript.shared().auto_save_clips or _frames.is_empty():
+		return ""
+	autosaved_dir = save_clip()
+	if not autosaved_dir.is_empty() and encode_gif:
+		start_gif(autosaved_dir)
+	return autosaved_dir
 
 func toast_text() -> String:
 	return _toast.text if _toast != null and _toast.visible else ""

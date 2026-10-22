@@ -32,6 +32,7 @@ var _podium: HBoxContainer
 var _victory_logo: TextureRect
 var _end_card_panel: Control
 var _continue_prompt_label: Label
+var _clip_saved_label: Label
 
 func _init(screen: CanvasLayer, slot_name: Callable, slot_color: Callable) -> void:
 	_screen = screen
@@ -84,6 +85,13 @@ func build() -> void:
 	stack.add_child(_podium)
 	_continue_prompt_label = _continue_prompt()
 	stack.add_child(_continue_prompt_label)
+	# A corner line, outside the stack so it never costs podium height (#795).
+	_clip_saved_label = ScreenKitScript.ink_label(_screen.tr("VICTORY_CLIP_SAVED"), 24, UiThemeScript.CREAM, 2)
+	_clip_saved_label.name = "ClipSaved"
+	_clip_saved_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_clip_saved_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+	_clip_saved_label.visible = false
+	_victory_panel.add_child(_clip_saved_label)
 	_build_end_card()
 
 ## "Tap Continue": ink Lilita text on a cream pill (the theme's cream panel).
@@ -160,6 +168,7 @@ func _focus_wishlist(wishlist: Button) -> void:
 func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awards: Array[Dictionary],
 		winner_team: int = -1, teams: Dictionary = {}, team_scores: PackedInt32Array = PackedInt32Array(),
 		stat_rows: Array[Dictionary] = []) -> void:
+	_refresh_clip_saved()
 	for child: Node in _podium.get_children():
 		child.queue_free()
 	# Five to eight on the podium (issue #138) take narrower columns and smaller
@@ -236,6 +245,14 @@ func _refresh_stat_table(stat_rows: Array[Dictionary]) -> void:
 	stack.add_child(table)
 	var prompt_at: int = stack.get_child_count() - 2
 	stack.move_child(table, prompt_at)
+
+## Shows the "Clip saved" line when the match-end auto-save wrote one (#795).
+func _refresh_clip_saved() -> void:
+	var replay: Node = _screen.get_tree().get_first_node_in_group("replay_buffer") if _screen.is_inside_tree() else null
+	_clip_saved_label.visible = replay != null and not String(replay.get("autosaved_dir")).is_empty()
+
+func clip_saved_label() -> Label:
+	return _clip_saved_label
 
 func _refresh_awards(awards: Array[Dictionary]) -> void:
 	var stack: Node = _podium.get_parent()

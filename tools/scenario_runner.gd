@@ -986,6 +986,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"match_win_ko_autosaves_clip_795",
+	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
@@ -993,6 +995,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"demo_wishlist_button_opens_store_link_793",
 	"translations_have_no_blank_or_mismatched_cells_794",
 	"translation_cell_check_flags_bad_fixture_794",
+	"every_scene_loads_and_instantiates_802",
+	"scene_check_catches_a_dead_resource_path_802",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3122,6 +3126,8 @@ func _run_scenario(name: String) -> Array[String]:
 		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
 		"translations_have_no_blank_or_mismatched_cells_794": return await _scenario_translations_have_no_blank_or_mismatched_cells_794()
 		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
+		"every_scene_loads_and_instantiates_802": return await _scenario_every_scene_loads_and_instantiates_802()
+		"scene_check_catches_a_dead_resource_path_802": return await _scenario_scene_check_catches_a_dead_resource_path_802()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -3348,6 +3354,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"match_win_ko_autosaves_clip_795":
+			return await _scenario_match_win_ko_autosaves_clip_795()
+		"autosave_clip_switch_off_saves_nothing_795":
+			return await _scenario_autosave_clip_switch_off_saves_nothing_795()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
 		"phone_leave_button_frees_seat_775":
@@ -47152,5 +47162,141 @@ func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
 			failures.append("no problem named for '%s' in: %s" % [expected, joined])
 	if joined.contains("GOOD"):
 		failures.append("the good fixture row was flagged: %s" % joined)
+	_scenario_completed = true
+	return failures
+
+## Issue #795: the match-winning KO saves the replay buffer once its slow motion ends, and the victory screen says so.
+func _scenario_match_win_ko_autosaves_clip_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(true)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] < 1:
+		failures.append("no clip frames were saved after the match-winning KO")
+	if not run["label"]:
+		failures.append("the victory screen showed no Clip saved line")
+	if run["saved_early"]:
+		failures.append("the clip was saved before the slow-mo ended")
+	_scenario_completed = true
+	return failures
+
+## Issue #795: with Auto-save match clips off nothing is written and no line shows.
+func _scenario_autosave_clip_switch_off_saves_nothing_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(false)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] != 0:
+		failures.append("the switch was off but %d frames were saved" % run["pngs"])
+	if run["label"]:
+		failures.append("the switch was off but the victory screen showed Clip saved")
+	_scenario_completed = true
+	return failures
+
+func _run_autosave_795(switch_on: bool) -> Dictionary:
+	var out: Dictionary = {"failures": [] as Array[String], "pngs": 0, "label": false, "saved_early": false}
+	var failures: Array[String] = out["failures"]
+	var host: RefCounted = HostSettingsScript704.shared()
+	var was: bool = host.auto_save_clips
+	var scale_was: float = Engine.time_scale
+	host.auto_save_clips = switch_on
+	var scratch: String = "user://pf_795_%d_%s" % [OS.get_process_id(), "on" if switch_on else "off"]
+	var loop: Dictionary = _new_lobby_round(2, 2.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var replay: Node = rm._replay
+	replay.clips_dir = scratch
+	replay.encode_gif = false
+	for i in 4:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.1 * i, 0.5, 0.5))
+		replay.push_frame(img)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			break
+		players[1].eliminate()
+		await _await_ticks(3)
+	if rm.final_ko_active() and not String(replay.autosaved_dir).is_empty():
+		out["saved_early"] = true
+	await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the victory screen never followed the slow-mo")
+	var label: Node = rm.victory_panel().find_child("ClipSaved", true, false) if rm.victory_panel() != null else null
+	out["label"] = label != null and (label as Control).visible
+	var da := DirAccess.open(ProjectSettings.globalize_path(scratch))
+	if da != null:
+		for d: String in da.get_directories():
+			var sub := DirAccess.open(ProjectSettings.globalize_path(scratch).path_join(d))
+			for f: String in sub.get_files():
+				if f.ends_with(".png"):
+					out["pngs"] += 1
+				sub.remove(f)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch).path_join(d))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+	replay.autosaved_dir = ""
+	host.auto_save_clips = was
+	await _teardown(loop["stage"])
+	Engine.time_scale = scale_was
+	return out
+
+
+## Scenes that cannot instantiate headless on purpose (#802). Empty today;
+## add "res://scenes/X.tscn": "reason" here rather than skipping silently.
+const SCENE_INSTANTIATE_ALLOWLIST: Dictionary = {}
+
+## Every .tscn path under dir, recursively.
+func _scene_paths_802(dir: String) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for f: String in DirAccess.get_files_at(dir):
+		if f.ends_with(".tscn"):
+			out.append(dir.path_join(f))
+	for d: String in DirAccess.get_directories_at(dir):
+		out.append_array(_scene_paths_802(dir.path_join(d)))
+	return out
+
+## ext_resource paths in scene text that do not exist (source file check, so
+## it does not depend on the .godot/imported cache).
+func _dead_ext_resource_paths_802(text: String) -> PackedStringArray:
+	var dead: PackedStringArray = PackedStringArray()
+	var re: RegEx = RegEx.new()
+	re.compile("\\[ext_resource[^\\]]*?path=\"([^\"]+)\"")
+	for m: RegExMatch in re.search_all(text):
+		var path: String = m.get_string(1)
+		if not FileAccess.file_exists(path) and not ResourceLoader.exists(path):
+			dead.append(path)
+	return dead
+
+func _scenario_every_scene_loads_and_instantiates_802() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: PackedStringArray = _scene_paths_802("res://scenes")
+	if scenes.size() < 50:
+		failures.append("only %d scenes found under res://scenes" % scenes.size())
+	for path: String in scenes:
+		if SCENE_INSTANTIATE_ALLOWLIST.has(path):
+			continue
+		var text: String = FileAccess.get_file_as_string(path)
+		for dead: String in _dead_ext_resource_paths_802(text):
+			failures.append("%s: dead ext_resource path %s" % [path, dead])
+		var packed: Resource = ResourceLoader.load(path)
+		if not (packed is PackedScene):
+			failures.append("%s: load returned %s" % [path, packed])
+			continue
+		var inst: Node = (packed as PackedScene).instantiate()
+		if inst == null:
+			failures.append("%s: instantiate returned null" % path)
+			continue
+		inst.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_scene_check_catches_a_dead_resource_path_802() -> Array[String]:
+	var failures: Array[String] = []
+	var bad: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/NoSuchScript802.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var good: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/Player.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var dead: PackedStringArray = _dead_ext_resource_paths_802(bad)
+	if dead.size() != 1 or dead[0] != "res://scripts/NoSuchScript802.gd":
+		failures.append("dead path not flagged: %s" % [dead])
+	if _dead_ext_resource_paths_802(good).size() != 0:
+		failures.append("a live path was flagged")
 	_scenario_completed = true
 	return failures

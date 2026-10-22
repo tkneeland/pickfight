@@ -500,3 +500,5 @@ SETTINGS_FRAME_RATE,Frame rate: %s,Bildrate: %s,Fréquence d'images : %s,Velocid
 SETTINGS_FRAME_RATE_UNLIMITED,Unlimited,Unbegrenzt,Illimitée,Ilimitada,Ilimitada,不限,無制限,제한 없음,Без ограничения
 SETTINGS_VSYNC,VSync,VSync,VSync,VSync,VSync,垂直同步,VSync,수직 동기화,VSync
 WISHLIST_BUTTON,Wishlist on Steam (W),Auf Steam wunschlisten (W),Ajouter à la liste de souhaits Steam (W),Añadir a deseados en Steam (W),Adicionar à lista de desejos da Steam (W),加入 Steam 愿望单 (W),Steam のウィッシュリストに追加 (W),Steam 위시리스트에 추가 (W),Добавить в желаемое Steam (W)
+SETTINGS_AUTO_SAVE_CLIPS,Auto-save match clips,Match-Clips automatisch speichern,Enregistrer auto les clips de match,Guardar clips de partida automáticamente,Salvar clipes de partida automaticamente,自动保存比赛片段,試合クリップを自動保存,경기 클립 자동 저장,Автосохранение клипов матча
+VICTORY_CLIP_SAVED,Clip saved,Clip gespeichert,Clip enregistré,Clip guardado,Clipe salvo,片段已保存,クリップを保存しました,클립 저장됨,Клип сохранён
