@@ -209,6 +209,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
+- Scenario loads and instantiates every scene under `scenes/` and flags dead `ext_resource` paths (#802)
 - Screenshot capture tools for stages and damage numbers
 - Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence plus an animated `clip.gif` (pure-GDScript encoder, worker thread, loops, 12 fps) in `user://clips/` with a toast showing the path (#329, ADR-0020, #502); only the newest 20 clips are kept, older ones are deleted on save (#609)
 - Auto-saved match clip (#795): when a match ends on a credited KO, the host saves the replay buffer like F9 (PNG sequence plus `clip.gif`, same `user://clips/` folder, newest 20 kept) as soon as the final-KO slow motion finishes, and the victory screen shows a small "Clip saved" line bottom right. A "Auto-save match clips" checkbox in Settings > More options turns it off (on by default, persists, Restore defaults turns it back on); nothing is saved when no frames are buffered
