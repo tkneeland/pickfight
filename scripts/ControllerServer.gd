@@ -593,6 +593,8 @@ func _ready() -> void:
 	_lives_sent.fill("")
 	_hill_sent.resize(_players.size())
 	_hill_sent.fill(-2)
+	_modifier_sent.resize(_players.size())
+	_modifier_sent.fill("")
 	_slot_claimed.resize(_players.size())
 	_slot_client_id.resize(_players.size())
 	_slot_ready.resize(_players.size())
@@ -1262,6 +1264,9 @@ func _attach(slot: int, peer: Variant) -> void:
 	_lives_sent[slot] = ""
 	if slot < _hill_sent.size():
 		_hill_sent[slot] = -2
+	_modifier_sent[slot] = ""
+	if _modifier_title != "":
+		send_modifier(_modifier_title)  # a phone that joins or reconnects mid-round gets the chip
 	_damage_sent[slot] = -1  # a newly bound page has no bar yet: the next call sends it
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
 	_last_weapon[slot] = Vector2(NAN, NAN)
@@ -1391,6 +1396,24 @@ func send_lives(slot: int, count: int, can_steal: bool) -> void:
 		return
 	_lives_sent[slot] = key
 	peer.send_text(JSON.stringify({"t": "lives", "v": count, "steal": can_steal}))
+
+var _modifier_sent: Array[String] = []
+var _modifier_title: String = ""
+
+## Round modifier chip (#908): tell every phone seat the active modifier's
+## (already translated) title as one `{"t":"mod","v":<title>}` frame; "" clears
+## it at round end. Sent per seat only when it changed; bots, gamepad seats and
+## closed connections are skipped.
+func send_modifier(title: String) -> void:
+	_modifier_title = title
+	for slot: int in _slot_peers.size():
+		if slot >= _modifier_sent.size() or _modifier_sent[slot] == title or not slot_has_controller(slot):
+			continue
+		var peer: Variant = _slot_peers[slot]
+		if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		_modifier_sent[slot] = title
+		peer.send_text(JSON.stringify({"t": "mod", "v": title}))
 
 ## Issue #756: tell the phone (or Online PC client) on `slot` the name the host
 ## stored for it, possibly masked by the name filter: one `{"t":"name","v":<name>}`

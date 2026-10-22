@@ -880,6 +880,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_teams_time_out_and_win_without_eliminations_662",
 	"koth_hill_state_colour_ring_clock_and_holds_row_662",
 	"koth_phone_receives_its_own_hold_662",
+	"phone_modifier_chip_frame_sent_and_cleared",
 	"soccer_and_ctf_stages_are_bigger_649",
 	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
 	"soccer_ball_flies_farther_than_at_mass_one_649",
@@ -3211,6 +3212,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_state_colour_ring_clock_and_holds_row_662()
 		"koth_phone_receives_its_own_hold_662":
 			return await _scenario_koth_phone_receives_its_own_hold_662()
+		"phone_modifier_chip_frame_sent_and_cleared":
+			return await _scenario_phone_modifier_chip_frame_sent_and_cleared()
 		"soccer_and_ctf_stages_are_bigger_649":
 			return _scenario_soccer_and_ctf_stages_are_bigger_649()
 		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
@@ -44326,6 +44329,54 @@ func _scenario_koth_phone_receives_its_own_hold_662() -> Array[String]:
 	if told.size() != 3 or int(told[1]) != -1:
 		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [told])
 	await _teardown(rig["stage"])
+	return failures
+## Issue #908: the round modifier's banner title reaches every phone seat as one
+## `mod` frame (a repeat is a no-op), an empty frame clears it at round end, and
+## the controller page draws and hides the chip from it.
+func _scenario_phone_modifier_chip_frame_sent_and_cleared() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var seat: Variant = fx[2]
+	seat.last_text = ""
+	server.send_modifier("Low Gravity")
+	var msg: Variant = JSON.parse_string(seat.last_text)
+	if not msg is Dictionary or msg.get("t") != "mod" or msg.get("v") != "Low Gravity":
+		failures.append("expected a mod frame for Low Gravity, got '%s'" % seat.last_text)
+	seat.last_text = ""
+	server.send_modifier("Low Gravity")
+	if seat.last_text != "":
+		failures.append("the same title was sent again: '%s'" % seat.last_text)
+	server.send_modifier("")
+	var cleared: Variant = JSON.parse_string(seat.last_text)
+	if not cleared is Dictionary or cleared.get("t") != "mod" or cleared.get("v") != "":
+		failures.append("expected an empty mod frame at round end, got '%s'" % seat.last_text)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	# The round loop: one title per modifier round, an empty one at its end, none without a modifier.
+	for forced: String in ["low_gravity", ""]:
+		var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+		rig["rm"].forced_modifier = forced
+		rig["rm"].modifier_rolls_enabled = forced != ""
+		var roster_sent: Array = rig["roster"].modifier_sent
+		await _await_condition(func() -> bool: return rig["players"][0].alive and not roster_sent.is_empty(), 1500)
+		await _await_ticks(20)
+		if not rig["players"][0].alive:
+			failures.append("the round never started (modifier '%s')" % forced)
+		else:
+			var sent: Array = rig["roster"].modifier_sent
+			if forced != "" and (sent.size() != 1 or sent[0] == ""):
+				failures.append("a modifier round sent %s, want one title" % [sent])
+			if forced == "" and not sent.is_empty():
+				failures.append("a round with no modifier sent %s" % [sent])
+			rig["rm"]._end_round_modifier()
+			if forced != "" and (sent.size() != 2 or sent[1] != ""):
+				failures.append("round end sent %s, want a trailing empty title" % [sent])
+		await _teardown(rig["stage"])
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	if not page.contains('id="modchip"') or not page.contains('msg.t === "mod"'):
+		failures.append("the controller page has no modifier chip handler")
+	_scenario_completed = true
 	return failures
 # --- Issue #667: a steady circle swing propels the player with the swing -----
 ## Revolutions per trial, ticks per revolution (a slow and a quick thumb), and
