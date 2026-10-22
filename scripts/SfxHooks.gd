@@ -195,6 +195,8 @@ func _watch_projectile(bullet: Node) -> void:
 	# The shot sounds once the bullet is placed, which `_ready` does.
 	bullet.ready.connect(_on_projectile_fired.bind(bullet), CONNECT_ONE_SHOT)
 	bullet.connect("impacted", _on_projectile_impacted)
+	if bullet.has_signal("caught"):
+		bullet.connect("caught", _on_projectile_caught)
 
 func _on_projectile_fired(bullet: Node) -> void:
 	var sound: String = "fire_%s" % _sound_set(bullet.get("shooter"))
@@ -204,6 +206,10 @@ func _on_projectile_fired(bullet: Node) -> void:
 
 func _on_projectile_impacted(_collider: Object, point: Vector2) -> void:
 	sfx.play(&"bullet_impact", point, 1.0)
+
+## A boomerang back in the thrower's hand (#862).
+func _on_projectile_caught(point: Vector2) -> void:
+	sfx.play(&"catch_boomerang", point, 1.0)
 
 # --- Lava -------------------------------------------------------------------
 

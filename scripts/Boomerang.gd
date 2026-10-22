@@ -54,6 +54,10 @@ const OUTLINE_COLOR: Color = Color(0.0, 0.0, 0.0, 0.8)
 ## It met `collider` at `point`: a sound hook (ADR-0016); gameplay ignores it.
 signal impacted(collider: Object, point: Vector2)
 
+## It was caught back into the thrower's hand at `point` (#862): a sound and
+## spark hook; gameplay ignores it.
+signal caught(point: Vector2)
+
 var shooter: RigidBody2D
 var leg: Leg = Leg.OUT
 var velocity: Vector2 = Vector2.ZERO
@@ -61,7 +65,7 @@ var velocity: Vector2 = Vector2.ZERO
 var ghost: bool = false
 var age: float = 0.0
 ## Whether it ended in the thrower's hands (rather than with them leaving play).
-var caught: bool = false
+var was_caught: bool = false
 ## Players hit on each leg, by instance id.
 var hits_out: Dictionary = {}
 var hits_back: Dictionary = {}
@@ -135,7 +139,12 @@ func _turn_back() -> void:
 	leg = Leg.BACK
 
 func _catch() -> void:
-	caught = true
+	if was_caught:
+		return
+	was_caught = true
+	# Issue #862: a sound and spark hook; gameplay ignores it. Emitted once,
+	# at the thrower's hand, before the node frees itself.
+	caught.emit(shooter.global_position if is_instance_valid(shooter) else global_position)
 	queue_free()
 
 func _move(motion: Vector2) -> void:

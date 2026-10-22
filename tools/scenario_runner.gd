@@ -303,6 +303,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_ball_does_not_tunnel_thin_platform",
 	"flail_ball_does_not_clip_head",
 	"boomerang_hits_on_the_way_out_and_back",
+	"boomerang_catch_feedback_862",
+	"boomerang_catch_feedback_reduce_flashes_862",
 	"boomerang_turns_at_terrain_and_ghosts_home",
 	"new_weapons_are_pickups_only",
 	"bots_wield_new_weapons",
@@ -598,6 +600,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"competitive_stages_are_left_right_symmetric",
 	"competitive_stages_have_no_hazards_or_moving_parts",
 	"round_modifier_gale_pushes_players_and_undoes",
+	"round_modifier_pickup_rush_spawns_more_and_undoes",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
 	"demo_build_only_slice_weapons_spawn",
@@ -2041,6 +2044,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomerang_hits_on_the_way_out_and_back()
 		"boomerang_turns_at_terrain_and_ghosts_home":
 			return await _scenario_boomerang_turns_at_terrain_and_ghosts_home()
+		"boomerang_catch_feedback_862":
+			return await _scenario_boomerang_catch_feedback(false)
+		"boomerang_catch_feedback_reduce_flashes_862":
+			return await _scenario_boomerang_catch_feedback(true)
 		"new_weapons_are_pickups_only":
 			return await _scenario_new_weapons_are_pickups_only()
 		"bots_wield_new_weapons":
@@ -2629,6 +2636,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
 		"round_modifier_gale_pushes_players_and_undoes":
 			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
+		"round_modifier_pickup_rush_spawns_more_and_undoes":
+			return await _scenario_round_modifier_pickup_rush_spawns_more_and_undoes()
 		"demo_build_flag_defines_the_slice":
 			return await _scenario_demo_build_flag_defines_the_slice()
 		"demo_build_rotation_only_slice_stages":
@@ -9543,6 +9552,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
 	"gale": "Gale",
+	"pickup_rush": "Pickup Rush",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -20548,7 +20558,7 @@ func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
 		if not is_instance_valid(boomerang):
 			break
 		furthest = maxf(furthest, boomerang.global_position.x - thrower.global_position.x)
-		caught = boomerang.caught
+		caught = boomerang.was_caught
 		var hits_before: int = strikes.size()
 		var leg: int = boomerang.leg
 		await physics_frame
@@ -20572,6 +20582,61 @@ func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
 		failures.append("the caught boomerang was not drawn back in hand")
 	if thrower.special_ready():
 		failures.append("the boomerang could be thrown again the tick it was caught, with no cooldown")
+	await _teardown(stage)
+	return failures
+## Issue #862: catching the boomerang emits `caught` once, asks for the catch
+## sound once (never on an impact) and throws a white spark burst, unless
+## Reduce flashes is on, which keeps the sound and skips the burst.
+func _scenario_boomerang_catch_feedback(reduce_flash: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var was_reduced: bool = bool(sfx.get("reduce_flash"))
+	sfx.set("reduce_flash", reduce_flash)
+	var juice: Node2D = _juice(stage)
+	var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(thrower, BOOMERANG_PATH)
+	_brace(thrower)
+	sfx.start_recording()
+	await _flick(thrower, Vector2.RIGHT)
+	var boomerang: Node2D = thrower.launched_boomerang()
+	if boomerang == null:
+		sfx.stop_recording()
+		sfx.set("reduce_flash", was_reduced)
+		await _teardown(stage)
+		return ["a flick did not throw the boomerang"]
+	var catches: Array = []
+	boomerang.caught.connect(func(point: Vector2) -> void: catches.append(point))
+	# An impact (as a shield turning it makes) is not a catch.
+	boomerang.impacted.emit(null, boomerang.global_position)
+	var bursts: int = 0
+	for i in 240:
+		if not is_instance_valid(boomerang):
+			break
+		await physics_frame
+	await _await_ticks(1)
+	bursts = juice.active_particle_count(JuiceScript.Kind.CATCH)
+	await _await_ticks(20)
+	sfx.stop_recording()
+	var asked: int = _sfx_count(sfx, "catch_boomerang")
+	print("      caught emitted %d, sound asked %d, burst %d (reduce flashes %s)" % [catches.size(), asked, bursts, reduce_flash])
+	if catches.size() != 1:
+		failures.append("`caught` fired %d times, expected exactly once" % catches.size())
+	elif (catches[0] as Vector2).distance_to(thrower.global_position) > 60.0:
+		failures.append("`caught` reported a point %.0f px from the thrower's hand" % (catches[0] as Vector2).distance_to(thrower.global_position))
+	if asked != 1:
+		failures.append("the catch sound was requested %d times, expected once (not on impact)" % asked)
+	if not thrower.special_loaded():
+		failures.append("the thrower did not have the boomerang back")
+	if reduce_flash and bursts != 0:
+		failures.append("Reduce flashes on, but %d catch sparks were spawned" % bursts)
+	if not reduce_flash and bursts <= 0:
+		failures.append("no spark burst was spawned at the catch")
+	sfx.set("reduce_flash", was_reduced)
 	await _teardown(stage)
 	return failures
 ## Terrain on the way out turns the boomerang round where it meets it;
@@ -31316,6 +31381,58 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
 		if values[1] < GALE_MIN_SPEED:
 			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
+	await _teardown(loop["stage"])
+	return failures
+# --- Pickup rush round modifier (#841) -----------------------------------------
+## Ticks each stretch is watched for: 5 s at 60 Hz, against a 1 s interval.
+const PICKUP_RUSH_WATCH_TICKS: int = 300
+## Pickups the rushed stretch must beat the plain one by: halving the interval
+## over 5 s should add about 5.
+const PICKUP_RUSH_MIN_EXTRA: int = 3
+## Spots for the stretch: more than either run can fill, all far from the falling players.
+func _pickup_rush_points() -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in 24:
+		points.append(Vector2(-1500.0 + 130.0 * i, -2000.0 - 100.0 * (i % 3)))
+	return points
+## Pickup rush: over the same fixed stretch the modifier spawns clearly more
+## pickups than none, and the interval is back to normal after undo.
+func _scenario_round_modifier_pickup_rush_spawns_more_and_undoes() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(1.0, 50, _pickup_rush_points())
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+	var director: Node = round_manager._pickup_director
+	var plain_interval: float = director.interval_sec()
+	director.start()
+	await _await_ticks(PICKUP_RUSH_WATCH_TICKS)
+	var plain: int = director._live_pickups().size()
+	var modifier: RefCounted = RoundModifiersType.create("pickup_rush")
+	if modifier == null or RoundModifiersType.title_of("pickup_rush") != "Pickup Rush":
+		failures.append("pickup_rush is not a round modifier named 'Pickup Rush'")
+		await _teardown(loop["stage"])
+		return failures
+	modifier.apply(round_manager, players, loop["stage"])
+	var rushed_interval: float = director.interval_sec()
+	director.start()
+	await _await_ticks(PICKUP_RUSH_WATCH_TICKS)
+	var rushed: int = director._live_pickups().size()
+	modifier.undo()
+	var after_interval: float = director.interval_sec()
+	print("      pickup_rush: plain %d pickups, rushed %d; interval %.2f -> %.2f -> %.2f" % [
+		plain, rushed, plain_interval, rushed_interval, after_interval])
+	if plain < 1:
+		failures.append("a plain stretch spawned no pickups")
+	if rushed < plain + PICKUP_RUSH_MIN_EXTRA:
+		failures.append("pickup rush spawned %d pickups against %d plain, expected at least %d more" % [rushed, plain, PICKUP_RUSH_MIN_EXTRA])
+	if not is_equal_approx(rushed_interval, plain_interval * RoundModifiersType.PICKUP_RUSH_INTERVAL_SCALE):
+		failures.append("pickup rush interval %.3f, expected %.3f" % [rushed_interval, plain_interval * RoundModifiersType.PICKUP_RUSH_INTERVAL_SCALE])
+	if not is_equal_approx(after_interval, plain_interval):
+		failures.append("the interval is %.3f after undo, %.3f before" % [after_interval, plain_interval])
 	await _teardown(loop["stage"])
 	return failures
 # --- Issue #361: the Steam Next Fest demo build ----------------------------
