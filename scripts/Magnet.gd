@@ -38,6 +38,9 @@ var _range: float = 0.0
 ## Signed: positive pulls toward the wielder, negative pushes away.
 var _force: float = 0.0
 var _mask: int = FALLBACK_LAYER_WORLD | FALLBACK_LAYER_HEAD
+## The field's shape query, built on the first tick that needs it.
+var _query: PhysicsShapeQueryParameters2D = null
+var _circle: CircleShape2D = null
 
 func setup(from_wielder: RigidBody2D, stats: Resource) -> void:
 	wielder = from_wielder
@@ -63,10 +66,14 @@ func _physics_process(delta: float) -> void:
 	_apply_field(delta)
 
 func _apply_field(delta: float) -> void:
-	var query := PhysicsShapeQueryParameters2D.new()
-	var circle := CircleShape2D.new()
-	circle.radius = _range
-	query.shape = circle
+	# Made once and reused every tick; the radius and the rest are set each call.
+	if _query == null:
+		_query = PhysicsShapeQueryParameters2D.new()
+		_circle = CircleShape2D.new()
+		_query.shape = _circle
+	var query: PhysicsShapeQueryParameters2D = _query
+	_circle.radius = _range
+	query.shape = _circle
 	query.transform = Transform2D(0.0, wielder.global_position)
 	query.collision_mask = _mask
 	query.collide_with_areas = false

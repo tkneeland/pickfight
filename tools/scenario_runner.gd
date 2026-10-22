@@ -1071,6 +1071,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"stage_check_and_join_urls_cached_review_perf",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3586,6 +3587,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"stage_check_and_join_urls_cached_review_perf":
+			return await _scenario_stage_check_and_join_urls_cached_review_perf()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -50862,5 +50865,43 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+## Review perf: the O(1) stage check agrees with the stage list it stands in for,
+## and the lobby, refreshed every frame, keeps the join-help address labels
+## instead of rebuilding them while nothing changed.
+func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	var names := PackedStringArray(["Pitch", "Dunes", "Cage", "Bastion", "Stronghold", "Flatlands", "Mesa", "Islands"])
+	names.append_array(HostSettingsScript352.shared().known_stages)
+	settings.known_stages = names
+	var probes: PackedStringArray = names.duplicate()
+	probes.append("NotAStage")
+	var modes: Array[String] = ["", "classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag", "hot_potato"]
+	for mode_id: String in modes:
+		var listed: PackedStringArray = settings.stages_for_mode(mode_id)
+		for stage_name: String in probes:
+			if settings._mode_has_stage(mode_id, stage_name) != listed.has(stage_name):
+				failures.append("mode '%s', stage %s: the quick check says %s, the list %s" % [mode_id, stage_name, settings._mode_has_stage(mode_id, stage_name), listed.has(stage_name)])
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.join_help_button().pressed.emit()
+	if screen.popup_open() != "join_help":
+		failures.append("the join help popup did not open")
+	await _await_ticks(2)
+	var before: Array[Label] = screen.join_help().url_labels().duplicate()
+	await _await_ticks(5)
+	var after: Array[Label] = screen.join_help().url_labels()
+	print("      address labels: %d before, %d after 5 frames" % [before.size(), after.size()])
+	if after.size() != before.size():
+		failures.append("the address list changed size with nothing changed (%d -> %d)" % [before.size(), after.size()])
+	else:
+		for i in after.size():
+			if not is_same(before[i], after[i]) or not is_instance_valid(after[i]) or not after[i].is_inside_tree():
+				failures.append("address label %d was rebuilt with nothing changed" % i)
+				break
+	screen.set_popup("")
+	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures

@@ -186,6 +186,17 @@ func stages_for_mode(mode_id: String) -> PackedStringArray:
 			out.append(stage_name)
 	return out
 
+## Whether `stages_for_mode(mode_id)` holds `stage_name`, without building the list.
+func _mode_has_stage(mode_id: String, stage_name: String) -> bool:
+	if not known_stages.has(stage_name):
+		return false
+	var key: String = mode_key(mode_id)
+	if key == "soccer":
+		return SOCCER_STAGES.has(stage_name)
+	if key == "capture_the_flag":
+		return CTF_STAGES.has(stage_name)
+	return not (SOCCER_STAGES.has(stage_name) or CTF_STAGES.has(stage_name))
+
 func _stock_on_list() -> PackedStringArray:
 	var pool := stages_for_mode("stock")
 	var on := PackedStringArray()
@@ -200,7 +211,7 @@ func _stock_on_list() -> PackedStringArray:
 	return on if not on.is_empty() else pool
 
 func is_stage_enabled_for(mode_id: String, stage_name: String) -> bool:
-	if not DemoBuildScript.stage_in_slice(stage_name) or not stages_for_mode(mode_id).has(stage_name):
+	if not DemoBuildScript.stage_in_slice(stage_name) or not _mode_has_stage(mode_id, stage_name):
 		return false
 	var key: String = mode_key(mode_id)
 	if key == "stock":
