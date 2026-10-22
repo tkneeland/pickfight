@@ -986,6 +986,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"player_numbers_badge_on_name_tags_809",
+	"player_numbers_setting_persists_and_restores_809",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -3348,6 +3350,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"player_numbers_badge_on_name_tags_809":
+			return await _scenario_player_numbers_badge_on_name_tags_809()
+		"player_numbers_setting_persists_and_restores_809":
+			return await _scenario_player_numbers_setting_persists_and_restores_809()
 		"match_win_ko_autosaves_clip_795":
 			return await _scenario_match_win_ko_autosaves_clip_795()
 		"autosave_clip_switch_off_saves_nothing_795":
@@ -47108,3 +47114,114 @@ func _run_autosave_795(switch_on: bool) -> Dictionary:
 	await _teardown(loop["stage"])
 	Engine.time_scale = scale_was
 	return out
+
+
+## Issue #809: with Player numbers on, each living fighter's name tag carries its seat number (1 to 8)
+## as a badge; off draws none; a team player keeps the team letter; a ghost gets none; the lobby card
+## shows the number too.
+func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.player_numbers
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array = []
+	for i in 8:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "NumP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.visible = true
+		player.alive = true
+		players.append(player)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	host.player_numbers = true
+	tags.tick()
+	print('DBG809 ', players[0].alive, players[0].visible, tags.name_tag(0).visible, host.player_numbers, tags.team_badge(0).number())
+	for slot in 8:
+		var badge: Control = tags.team_badge(slot)
+		if not badge.visible or badge.letter() != str(slot + 1):
+			failures.append("slot %d's badge reads '%s' (visible %s), expected %d" % [slot, badge.letter(), badge.visible, slot + 1])
+		elif badge.position.x >= tags.name_tag(slot).position.x:
+			failures.append("slot %d's number badge is not left of its name tag" % slot)
+	players[3].alive = false
+	tags.tick()
+	if tags.team_badge(3).visible:
+		failures.append("a ghost kept its number badge")
+	players[3].alive = true
+	players[1].team = 1
+	tags.tick()
+	if tags.team_badge(1).letter() != "B":
+		failures.append("a team player's badge reads '%s', expected the team letter B" % tags.team_badge(1).letter())
+	if tags.team_badge(2).letter() != "3":
+		failures.append("a free-for-all player beside a team player reads '%s', expected 3" % tags.team_badge(2).letter())
+	players[1].team = -1
+	host.player_numbers = false
+	tags.tick()
+	for slot in 8:
+		if tags.team_badge(slot).visible:
+			failures.append("slot %d shows a badge with Player numbers off" % slot)
+	# The lobby card.
+	var card: Control = (load("res://scripts/LobbyPlayerCard.gd") as GDScript).new(0)
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5})
+	if not card.team_chip().visible or card.team_chip().letter() != "5":
+		failures.append("a numbered card's chip reads '%s' (visible %s)" % [card.team_chip().letter(), card.team_chip().visible])
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5, "team": 0})
+	if card.team_chip().letter() != "R":
+		failures.append("a team card's chip reads '%s', expected R" % card.team_chip().letter())
+	card.apply({"name": "Tester", "color": Color.WHITE})
+	if card.team_chip().visible:
+		failures.append("an unnumbered card shows a chip")
+	card.free()
+	host.player_numbers = was
+	await _teardown(stage)
+	return failures
+
+## Issue #809: Player numbers is off by default, saved, put back by Restore defaults, has a switch in
+## Settings, and its label is translated in every shipped locale.
+func _scenario_player_numbers_setting_persists_and_restores_809() -> Array[String]:
+	var failures: Array[String] = []
+	var tmp: String = OS.get_temp_dir().path_join("pf_809_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if fresh.player_numbers:
+		failures.append("Player numbers is not off by default")
+	fresh.set_player_numbers(true)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if not again.player_numbers:
+		failures.append("switching Player numbers on was not remembered")
+	again.restore_defaults()
+	if again.player_numbers:
+		failures.append("Restore defaults left Player numbers on")
+	var last: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	last.path = tmp
+	last.load_settings()
+	if last.player_numbers:
+		failures.append("the restored default was not saved")
+	DirAccess.remove_absolute(tmp)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		ui.host.persist = false
+		var was: bool = ui.host.player_numbers
+		if ui.numbers_box() == null:
+			failures.append("Settings has no Player numbers switch")
+		else:
+			ui.numbers_box().button_pressed = true
+			if not ui.host.player_numbers:
+				failures.append("the Player numbers switch did not set the option")
+			ui.host.player_numbers = was
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		if tr("SETTINGS_PLAYER_NUMBERS") == "SETTINGS_PLAYER_NUMBERS":
+			failures.append("SETTINGS_PLAYER_NUMBERS has no %s text" % locale)
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
