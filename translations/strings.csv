@@ -521,3 +521,6 @@ SETTINGS_TEXT_SIZE,Text size: %s,Textgröße: %s,Taille du texte : %s,Tamaño de
 TEXT_SIZE_NORMAL,Normal,Normal,Normale,Normal,Normal,正常,標準,보통,Обычный
 TEXT_SIZE_LARGE,Large,Groß,Grande,Grande,Grande,大,大,크게,Большой
 TEXT_SIZE_LARGER,Larger,Größer,Plus grande,Más grande,Maior,更大,特大,더 크게,Крупнее
+LOBBY_COPY_CODE,Copy code (K),Code kopieren (K),Copier le code (K),Copiar código (K),Copiar código (K),复制代码 (K),コードをコピー (K),코드 복사 (K),Копировать код (K)
+LOBBY_COPY_CODE_PAD,Copy code,Code kopieren,Copier le code,Copiar código,Copiar código,复制代码,コードをコピー,코드 복사,Копировать код
+LOBBY_COPIED,Copied,Kopiert,Copié,Copiado,Copiado,已复制,コピーしました,복사됨,Скопировано
