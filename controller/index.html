@@ -2190,6 +2190,9 @@
       "RULES_ALL_ON": "#rules-all-on",
       "RULES_ALL_OFF": "#rules-all-off",
       "RULES_DONE": "#rules-done",
+      "RULES_OPEN": "#menu-rules-open",
+      "RULES_MODIFIERS": "#rules-mod-heading",
+      "RULES_WEAPONS": "#rules-weapon-heading",
       "PHONE_YES": "#confirm-yes",
       "PHONE_NO": "#confirm-no",
       "PHONE_MOUSE_CAPTURE": "#mouse-capture",
@@ -2308,8 +2311,10 @@
   // and paragraph separators go. The host has the last word
   // (ControllerServer.clean_name, issue #164); this only keeps the prompt honest.
   function cleanName(raw) {
-    return String(raw || "").replace(/[\u0000-\u001f\u007f-\u00a0\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
-      .trim().slice(0, MAX_NAME_LENGTH).trim();
+    var name = String(raw || "").replace(/[\u0000-\u001f\u007f-\u00a0\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
+      .trim();
+    // By code point, as the host counts, never splitting an emoji's surrogate pair.
+    return Array.from(name).slice(0, MAX_NAME_LENGTH).join("").trim();
   }
   function randomName() {
     for (;;) {
@@ -2367,6 +2372,7 @@
     canvas.height = Math.round(window.innerHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     dragRadiusPx = computeDragRadius();
+    recompute(); // a drag in progress is measured against the new radius
   }
   window.addEventListener("resize", resize);
   window.addEventListener("orientationchange", resize);
@@ -2662,7 +2668,8 @@
     nameInput.value = randomName();
   });
   nameInput.addEventListener("keydown", function (ev) {
-    if (ev.key === "Enter") { commitName(); }
+    // Not the Enter that confirms an IME composition (CJK keyboards).
+    if (ev.key === "Enter" && !ev.isComposing && ev.keyCode !== 229) { commitName(); }
   });
   nameEl.addEventListener("click", openNamePrompt);
 
@@ -3284,6 +3291,7 @@
     reachEl.value = String(v);
     reachValueEl.textContent = v.toFixed(2) + "x";
     dragRadiusPx = computeDragRadius();
+    recompute();
   }
   if (finePointer) { document.getElementById("reach-row").style.display = "none"; }
   setReach(stored(REACH_KEY));
@@ -3715,7 +3723,16 @@
     if (RELAY && !RELAY.ok) { setStatus(t("PHONE_RELAY_BAD_URL")); return; }
     // Every handler checks it still belongs to the current socket: a late
     // event from an old one must not undo the new one's state.
-    var sock = new WebSocket(RELAY ? RELAY.url : "ws://" + window.location.hostname + ":" + WS_PORT);
+    var sock;
+    try {
+      sock = new WebSocket(RELAY ? RELAY.url : "ws://" + window.location.hostname + ":" + WS_PORT);
+    } catch (err) {
+      // A blocked or malformed URL (an insecure ws:// from an https page) throws
+      // here: no close event follows, so say so and try again later.
+      setStatus(t("STATUS_RETRYING", String((err && err.message) || err)));
+      setTimeout(connect, REFUSED_RETRY_MS);
+      return;
+    }
     ws = sock;
     sock.binaryType = "arraybuffer";
     relayJoined = false;

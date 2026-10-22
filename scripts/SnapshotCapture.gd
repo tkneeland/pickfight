@@ -108,8 +108,9 @@ static func delta(world: Dictionary, previous: Dictionary) -> Dictionary:
 		entities.append({"type": 0x0A, "id": 0, "height": world.get("kill_zone_height", 0)})
 	return {"is_full_snapshot": false, "delta_entities": entities}
 
-## Whether `world` lost a body, projectile, pickup, flail or hook that
-## `previous` had, or changed round phase or stage: things a delta cannot say.
+## Whether `world` lost or gained a body, projectile, pickup, flail or hook
+## against `previous`, changed round phase or stage, or changed its kill feed,
+## banner or modifiers: things a delta cannot say.
 static func structure_changed(world: Dictionary, previous: Dictionary) -> bool:
 	if previous.is_empty():
 		return true
@@ -117,11 +118,19 @@ static func structure_changed(world: Dictionary, previous: Dictionary) -> bool:
 		return true
 	for pair: Array in [["players", "player_id"], ["projectiles", "projectile_id"], ["pickups", "pickup_id"]]:
 		var now: Dictionary = _by_key(world.get(pair[0], []), pair[1])
-		for id: Variant in _by_key(previous.get(pair[0], []), pair[1]):
+		var before: Dictionary = _by_key(previous.get(pair[0], []), pair[1])
+		for id: Variant in before:
 			if not now.has(id):
 				return true
+		for id: Variant in now:
+			if not before.has(id):
+				return true # a delta only moves what the client already has
 	for key: String in ["flail", "grapple"]:
-		if world.get(key, {}).is_empty() and not previous.get(key, {}).is_empty():
+		if world.get(key, {}).is_empty() != previous.get(key, {}).is_empty():
+			return true
+	# A delta carries none of these.
+	for key: String in ["kill_feed", "announcer_text", "modifiers"]:
+		if world.get(key) != previous.get(key):
 			return true
 	return false
 
