@@ -46750,4 +46750,5 @@ func _scenario_frame_rate_cap_and_vsync_persist_and_apply_774() -> Array[String]
 	ui_host.persist = ui_was_persist
 	Engine.max_fps = was_fps
 	DisplayServer.window_set_vsync_mode(was_vsync)
+	_scenario_completed = true
 	return failures
