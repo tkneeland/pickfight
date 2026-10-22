@@ -162,6 +162,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
+	"mud_patch_slows_player",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -1773,6 +1774,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
 			return await _scenario_speed_strip_boosts_run_distance()
+		"mud_patch_slows_player":
+			return await _scenario_mud_patch_slows_player()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -10937,6 +10940,109 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 			break
 	if not was_boosted or not left:
 		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
+	await _teardown(stage)
+	return failures
+## Mud patch (#880): a body is pushed along a strip of mud (or plain ground)
+## by a steady force, standing in for running, and the fastest it gets is
+## returned. The weapon is held straight up so only the body touches the strip.
+const MudPatchScene: PackedScene = preload("res://scenes/parts/MudPatch.tscn")
+const MUD_SIZE: Vector2 = Vector2(1600, 10)
+const MUD_SETTLE_TICKS: int = 60
+const MUD_RUN_FORCE: float = 2400.0
+const MUD_RUN_TICKS: int = 120
+## Mud has to hold the run to at most this share of the flat-floor speed.
+const MUD_MAX_RATIO: float = 0.55
+## Speed has to be back to this share of the flat-floor speed 0.3 s after leaving.
+const MUD_RECOVER_RATIO: float = 0.8
+func _mud_ground(stage: Node2D, size: Vector2, at: Vector2, mud: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if mud:
+		ground = MudPatchScene.instantiate() as StaticBody2D
+		ground.size = size
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = at
+	stage.add_child(ground)
+	return ground
+func _mud_run(on_mud: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_mud_ground(stage, MUD_SIZE, PART_POSITION, on_mud)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-700, -MUD_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	for _tick in MUD_SETTLE_TICKS:
+		await physics_frame
+	var top: float = 0.0
+	for _tick in MUD_RUN_TICKS:
+		player.apply_central_force(Vector2(MUD_RUN_FORCE, 0))
+		await physics_frame
+		top = maxf(top, player.linear_velocity.x)
+	await _teardown(stage, false)
+	return top
+func _mud_coast(on_mud: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_mud_ground(stage, MUD_SIZE, PART_POSITION, on_mud)
+	var flier: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-700, -300))
+	flier.set_input_vector(Vector2.UP)
+	await physics_frame
+	flier.gravity_scale = 0.0
+	flier.linear_velocity = Vector2(300, 0)
+	var speed: float = 0.0
+	for _tick in 6:
+		await physics_frame
+		speed = flier.linear_velocity.x
+	await _teardown(stage, false)
+	return speed
+## Running on mud tops out well below the flat-floor pace, a body in the air
+## above the strip keeps its horizontal speed, and speed returns after
+## stepping off.
+func _scenario_mud_patch_slows_player() -> Array[String]:
+	var failures: Array[String] = []
+	var on_mud: float = await _mud_run(true)
+	var on_ground: float = await _mud_run(false)
+	print("      top speed %.1f px/s on mud, %.1f px/s on plain ground" % [on_mud, on_ground])
+	if on_ground < 50.0:
+		failures.append("the control run barely moved (%.1f px/s)" % on_ground)
+	elif on_mud > on_ground * MUD_MAX_RATIO:
+		failures.append("ran at %.1f px/s on mud vs %.1f on ground, expected at most %.0f%%" % [on_mud, on_ground, MUD_MAX_RATIO * 100.0])
+	# Airborne: well above the strip, no ground contact, so it must coast as
+	# far as the same flight over plain ground.
+	var flown_mud: float = await _mud_coast(true)
+	var flown_plain: float = await _mud_coast(false)
+	print("      coasted at %.1f px/s over mud, %.1f px/s over plain ground" % [flown_mud, flown_plain])
+	if absf(flown_mud - flown_plain) > 1.0:
+		failures.append("airborne body at %.1f px/s over mud vs %.1f over ground" % [flown_mud, flown_plain])
+	var stage: Node2D
+	# Step off: a short mud strip with ground beside it, run along both.
+	stage = _new_empty_stage()
+	var mud: StaticBody2D = _mud_ground(stage, Vector2(300, 10), PART_POSITION + Vector2(-500, 0), true)
+	_mud_ground(stage, Vector2(1400, 10), PART_POSITION + Vector2(350, 0), false)
+	var runner: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-600, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	runner.set_input_vector(Vector2.UP)
+	for _tick in MUD_SETTLE_TICKS:
+		await physics_frame
+	var was_bogged: bool = false
+	var left_tick: int = -1
+	for tick in 400:
+		runner.apply_central_force(Vector2(MUD_RUN_FORCE, 0))
+		await physics_frame
+		if mud.is_bogging(runner):
+			was_bogged = true
+		elif was_bogged and left_tick < 0:
+			left_tick = tick
+		if left_tick >= 0 and tick >= left_tick + 18:
+			break
+	if not was_bogged or left_tick < 0:
+		failures.append("the runner was never bogged or never left the mud (bogged=%s)" % was_bogged)
+	elif runner.linear_velocity.x < on_ground * MUD_RECOVER_RATIO:
+		# The flat-floor top speed is a ceiling reached over 2 s; 0.3 s after
+		# leaving, the runner need only be clearly above the mud pace.
+		if runner.linear_velocity.x <= on_mud * 1.3:
+			failures.append("speed %.1f px/s 0.3 s after leaving the mud, still near the mud pace %.1f" % [runner.linear_velocity.x, on_mud])
 	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
