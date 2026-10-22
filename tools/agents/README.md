@@ -37,4 +37,5 @@ instead of `stat -f`, `date -j` or `date -r` in any new script. `PF_STATE_DIR=<d
 `pf-succession.sh --post` from writing to GitHub. Windows setup, Task Scheduler and the status line:
 [`windows/README.md`](windows/README.md).
 - `pf-reserve.sh`: reserve-account supervisor (`RESERVE=1`), one pass every 10 min under launchd (`--install`; `--dry` prints the decision). Hands unstarted tickets back while every regular dev can work, and starts a headless AT session (prompt: `pf-reserve-prompt.md`) only when this account is needed or has in-flight tickets. Zero tokens while idle.
+- `pf-usage.sh`: zero-token usage refresh for sessions with no status line: reads 5h/7d utilization from the Claude Code usage endpoint with the local login, updates `usage-snapshot.json` and the #432 beacon. Run by `pf-reserve.sh` every pass.
 - `pf-beacon.sh`: writes this account's #432 usage beacon once (finds the comment if the id file is missing; errors to `beacon.log`).
