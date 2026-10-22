@@ -1,9 +1,10 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Conveyor.tscn" id="conveyor"]
 
 [sub_resource type="RectangleShape2D" id="R_160x24"]
 size = Vector2(160, 24)
@@ -142,3 +143,9 @@ position = Vector2(600, 30)
 
 [node name="PickupSpawn3" type="Marker2D" parent="."]
 position = Vector2(-480, 330)
+
+; Conveyor (issue #848): a belt on the floor between the two lifts, clear of both and of every spawn drop line. It carries a fighter left, past the left lift toward the floor pickup at PickupSpawn3 (-480, 330), so grabbing it is easy and running back against the belt is the choice.
+[node name="FloorConveyor" parent="." instance=ExtResource("conveyor")]
+position = Vector2(-50, 374)
+size = Vector2(300, 12)
+belt_speed = -150.0
