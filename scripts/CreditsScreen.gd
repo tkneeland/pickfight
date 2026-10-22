@@ -105,7 +105,7 @@ func _build_body(body: VBoxContainer) -> void:
 	_line(body, "Announcer: synthesised with Piper TTS (voice en_US-john-medium, public-domain LibriVox speech), CC0 1.0")
 	_line(body, "Player grunts: synthesised for this game, CC0 1.0")
 	_heading(body, "CREDITS_FONTS")
-	_line(body, "Lilita One and Nunito, SIL Open Font License 1.1")
+	_line(body, "Lilita One, Nunito and Noto Sans SC, JP and KR, SIL Open Font License 1.1")
 	_heading(body, "CREDITS_ENGINE")
 	_line(body, "Godot Engine, MIT licence (Copyright (c) 2014-present Godot Engine contributors; Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur)")
 	_line(body, "GodotSteam (GP Garcia, Chris Ridenour and contributors), MIT; Steamworks SDK (Valve)")
