@@ -44,6 +44,10 @@ const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
 const POP_START_SCALE: float = 0.2
 const POP_SEC: float = 0.3
 
+## Multiplies the spawn interval (round modifier Pickup rush, #841); 1.0 is as
+## authored. A modifier sets it for a round and puts it back on undo.
+var interval_scale: float = 1.0
+
 ## The RoundManager this directs pickups for.
 var _rm: Node
 var _pickups: Array[Node2D] = []
@@ -93,13 +97,14 @@ func cap() -> int:
 	return maxi(_rm.max_pickups, roster - 1)
 
 ## Seconds until the next pickup: `pickup_spawn_interval_sec`, shortened by
-## `crowded_interval_scale` from `crowded_roster` players up (#152).
+## `crowded_interval_scale` from `crowded_roster` players up (#152), times
+## `interval_scale`.
 func interval_sec() -> float:
 	var server: Variant = _rm._controller_server
 	var roster: int = server.claimed_slots().size() if server != null else 0
 	if roster >= _rm.crowded_roster:
-		return _rm.pickup_spawn_interval_sec * _rm.crowded_interval_scale
-	return _rm.pickup_spawn_interval_sec
+		return _rm.pickup_spawn_interval_sec * _rm.crowded_interval_scale * interval_scale
+	return _rm.pickup_spawn_interval_sec * interval_scale
 
 ## Frees every pickup at or below the floor kill zone's surface (#200). A
 ## pickup is an Area2D, which the zone never eliminates, so without this one

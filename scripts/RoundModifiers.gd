@@ -44,6 +44,7 @@ const METEOR_SHOWER: String = "meteor_shower"
 const BOUNCY: String = "bouncy"
 const DOUBLE_DAMAGE: String = "double_damage"
 const GALE: String = "gale"
+const PICKUP_RUSH: String = "pickup_rush"
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const FallingRockScript := preload("res://scripts/FallingRock.gd")
@@ -53,7 +54,7 @@ const StageGustScene: PackedScene = preload("res://scenes/parts/StageGust.tscn")
 ## Every modifier a round can roll, in a fixed order so a seeded roll picks
 ## the same one every run.
 const IDS: PackedStringArray = [LOW_GRAVITY, HEAVY_WEAPONS, BIG_HEADS, FAST_LAVA, SLIPPERY_FLOOR,
-	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE, GALE]
+	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE, GALE, PICKUP_RUSH]
 
 ## Low gravity: players and their weapons fall at this fraction of their
 ## usual gravity. Half, not less: a swing still has to come back down onto
@@ -159,6 +160,11 @@ const GALE_VIEW_MARGIN_SCALE: float = 1.5
 const GALE_FALLBACK_SIZE: Vector2 = Vector2(4000.0, 3000.0)
 const GALE_NODE_NAME: String = "GaleGust"
 
+## Pickup rush (issue #841): the pickup spawn interval is multiplied by this
+## for the round, through `PickupDirector.interval_scale`, so weapon pickups
+## arrive twice as often. The cap on pickups at once is untouched.
+const PICKUP_RUSH_INTERVAL_SCALE: float = 0.5
+
 ## The on-screen name of modifier `id`, or "" for an unknown id. Every title
 ## is in Title Case (issue #162), set by "Double Damage", the one the owner
 ## named exactly. `Announcer.modifier_line` lower-cases a title and joins its
@@ -188,6 +194,8 @@ static func title_of(id: String) -> String:
 			return "Double Damage"
 		GALE:
 			return "Gale"
+		PICKUP_RUSH:
+			return "Pickup Rush"
 	return ""
 
 ## A fresh, unapplied modifier for `id`, or null for an unknown id.
@@ -216,6 +224,8 @@ static func create(id: String) -> RoundModifier:
 			modifier = DoubleDamage.new()
 		GALE:
 			modifier = Gale.new()
+		PICKUP_RUSH:
+			modifier = PickupRush.new()
 	if modifier != null:
 		modifier.id = id
 		modifier.title = title_of(id)
@@ -704,3 +714,24 @@ class Gale extends RoundModifier:
 	## The round's gust node, or null: a scenario seam.
 	func gust() -> Node2D:
 		return _gust
+
+
+class PickupRush extends RoundModifier:
+	var _saved_scale: float = 1.0
+	var _director: Node = null
+
+	func _apply() -> void:
+		_director = null
+		if _round == null:
+			return
+		var director: Variant = _round.get("_pickup_director")
+		if director == null or not is_instance_valid(director):
+			return
+		_director = director
+		_saved_scale = _director.interval_scale
+		_director.interval_scale = _saved_scale * PICKUP_RUSH_INTERVAL_SCALE
+
+	func _undo() -> void:
+		if _director != null and is_instance_valid(_director):
+			_director.interval_scale = _saved_scale
+		_director = null
