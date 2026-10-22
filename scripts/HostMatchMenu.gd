@@ -4,7 +4,8 @@ extends VBoxContainer
 ## has no host phone (ADR-0021), so the settings panel (`SfxSettings.gd`) leads
 ## with what the host phone's menu gives mid-match: Pause/Resume, End match and
 ## a Kick on each player's row. It shows only while the host PC runs the room
-## and a match is in play or paused (`ControllerServer.pc_runs_room()` and
+## and a match is in play or paused (`ControllerServer.host_pc_has_match_controls()`:
+## the host PC runs the room, or a Couch match has no host phone (#811), and
 ## `host_pc_match_live()`); otherwise it is hidden and takes no room.
 ##
 ## Display and buttons only: each button calls
@@ -79,7 +80,7 @@ func _process(_delta: float) -> void:
 func refresh() -> void:
 	_refreshed_msec = Time.get_ticks_msec()
 	var srv: Node = server()
-	visible = srv != null and srv.pc_runs_room() and srv.host_pc_match_live()
+	visible = srv != null and srv.host_pc_has_match_controls() and srv.host_pc_match_live()
 	if not visible:
 		return
 	_pause.text = tr("JOIN_RESUME_MATCH") if srv.host_pc_paused() else tr("JOIN_PAUSE_MATCH")
