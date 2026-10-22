@@ -505,6 +505,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
+	"pickup_pops_in_when_spawned_816",
+	"pickup_spawn_rules_unchanged_by_pop_816",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
@@ -2416,6 +2418,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
 			return await _scenario_pickups_skip_occupied_spots()
+		"pickup_pops_in_when_spawned_816":
+			return await _scenario_pickup_pops_in_when_spawned_816()
+		"pickup_spawn_rules_unchanged_by_pop_816":
+			return await _scenario_pickup_spawn_rules_unchanged_by_pop_816()
 		"replay_buffer_bounded_and_saves_clip":
 			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
@@ -47747,4 +47753,75 @@ func _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818() 
 	if _callouts_818(loop).size() != 1:
 		failures.append("a pickaxe pickup got a callout")
 	await _teardown(loop["stage"])
+	return failures
+
+## Issue #816: a freshly spawned pickup starts small, is full size within 0.5 s,
+## and the one-shot spawn ring frees itself.
+func _scenario_pickup_pops_in_when_spawned_816() -> Array[String]:
+	var failures: Array[String] = []
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("PopStage", spawns, PackedVector2Array([Vector2(300, -40)])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var director: Node = rm._pickup_director
+	director._spawn_pickup()
+	var pickups: Array[Node2D] = director._live_pickups()
+	if pickups.size() != 1:
+		failures.append("expected one pickup, got %d" % pickups.size())
+	else:
+		var pickup: Node2D = pickups[0]
+		if pickup.scale.x >= 0.5:
+			failures.append("pickup spawned at scale %.2f, expected under 0.5" % pickup.scale.x)
+		var ring: Node = stage.get_node_or_null("PickupSpawnRing")
+		if ring == null:
+			failures.append("no spawn ring appeared")
+		for i in 40:
+			await process_frame
+			await create_timer(0.0).timeout
+		var waited: float = 0.0
+		while waited < 0.5:
+			await create_timer(0.05).timeout
+			waited += 0.05
+		if absf(pickup.scale.x - 1.0) > 0.02:
+			failures.append("pickup is at scale %.2f after 0.5 s, expected 1.0" % pickup.scale.x)
+		while waited < 0.8:
+			await create_timer(0.05).timeout
+			waited += 0.05
+		if stage.get_node_or_null("PickupSpawnRing") != null:
+			failures.append("the spawn ring did not free itself")
+	rm.free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+## Issue #816: the pop leaves spot choice, the cap and the occupied-spot rule alone.
+func _scenario_pickup_spawn_rules_unchanged_by_pop_816() -> Array[String]:
+	var failures: Array[String] = []
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("PopRulesStage", spawns, PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var player := Node2D.new()
+	get_root().add_child(player)
+	player.global_position = spot_a + Vector2(10, 0)
+	rm._players = [player]
+	var director: Node = rm._pickup_director
+	director._spawn_pickup()
+	var pickups: Array[Node2D] = director._live_pickups()
+	if pickups.size() != 1 or pickups[0].global_position.distance_to(spot_b) > 1.0:
+		failures.append("the pickup did not land on the unoccupied spot")
+	for i in 10:
+		director._spawn_pickup()
+	if director._live_pickups().size() > director.cap():
+		failures.append("pickups exceeded the cap of %d" % director.cap())
+	rm.free()
+	player.queue_free()
+	await _teardown(stage)
+	_scenario_completed = true
 	return failures
