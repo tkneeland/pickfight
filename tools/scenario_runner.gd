@@ -1012,6 +1012,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
+	"edge_arrow_seat_numbers_875",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 	"demo_title_wishlist_button_shown_only_in_demo_793",
@@ -3453,6 +3454,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_autosave_clip_switch_off_saves_nothing_795()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
+		"edge_arrow_seat_numbers_875":
+			return await _scenario_edge_arrow_seat_numbers_875()
 		"phone_leave_button_frees_seat_775":
 			return await _scenario_phone_leave_button_frees_seat_775()
 		"frame_rate_cap_and_vsync_persist_and_apply_774":
@@ -47330,6 +47333,76 @@ func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
 		await _await_ticks(1)
 	if arrows.arrow_visible(0):
 		failures.append("a KO'd fighter kept an edge arrow")
+	await _teardown(loop["stage"])
+	return failures
+## Issue #875: with Player numbers on, an edge arrow also shows its fighter's seat number (after the
+## team letter in Teams), inside the screen; off, no number.
+func _scenario_edge_arrow_seat_numbers_875() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.player_numbers
+	var loop: Dictionary = _new_lobby_round(5, 1.0, _main_scoreboard())
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		host.player_numbers = was
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	var arrows: CanvasLayer = rm.offscreen_indicators()
+	if arrows == null:
+		failures.append("RoundManager built no edge arrows")
+		host.player_numbers = was
+		await _teardown(loop["stage"])
+		return failures
+	var size: Vector2 = get_root().get_visible_rect().size
+	var in_frame := Vector2(size.x * 0.5, size.y * 0.5)
+	var above := Vector2(size.x * 0.25, -2000.0)
+	host.player_numbers = false
+	for i in 20:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if not arrows.arrow_visible(0):
+		failures.append("no arrow for the fighter above the view")
+	if arrows.arrow_number(0) != 0:
+		failures.append("the arrow shows number %d with Player numbers off" % arrows.arrow_number(0))
+	host.player_numbers = true
+	for i in 6:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if arrows.arrow_number(0) != 1:
+		failures.append("slot 0's arrow reads %d, expected its name-tag number 1" % arrows.arrow_number(0))
+	var badge: Control = arrows.get_node("Arrows/NumberBadge0")
+	var box := Rect2(Vector2.ZERO, size)
+	if not box.encloses(Rect2(badge.position, badge.size)):
+		failures.append("the number badge %s is not inside the screen" % [Rect2(badge.position, badge.size)])
+	if badge.size.y * 0.62 < 16.0:
+		failures.append("the number text falls under the 16 px floor")
+	if arrows.arrow_number(1) != 0:
+		failures.append("an in-frame fighter got an arrow number")
+	# Teams: the letter stays, the number follows it.
+	players[0].team = 1
+	for i in 6:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if arrows.arrow_letter(0) != "B":
+		failures.append("the Teams arrow letter reads '%s', expected B" % arrows.arrow_letter(0))
+	if arrows.arrow_number(0) != 1:
+		failures.append("the Teams arrow number reads %d, expected 1" % arrows.arrow_number(0))
+	var team_badge: Control = arrows.get_node("Arrows/TeamBadge0")
+	if not box.encloses(Rect2(badge.position, badge.size)):
+		failures.append("the Teams number badge is not inside the screen")
+	if badge.position.distance_to(arrows.arrow_tip(0)) <= team_badge.position.distance_to(arrows.arrow_tip(0)):
+		failures.append("the number is not after the team letter")
+	players[0].team = -1
+	host.player_numbers = was
 	await _teardown(loop["stage"])
 	return failures
 ## Issue #775: the controller page's Leave game button sends {"t":"leave"}; the host
