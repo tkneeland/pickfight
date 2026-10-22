@@ -2,7 +2,7 @@
 
 Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends channel.
 
-**Legend.** Who: `owner` = needs the owner's identity, money or a decision; `agent` = an agent can do it in the repo. Status is read from the repo as of 2026-10-22: `done`, `todo`, `partial`.
+**Legend.** Who: `owner` = needs the owner's identity, money or a decision; `agent` = an agent can do it in the repo. Status is read from the repo as of 2026-10-22: `done`, `todo`, `partial`, `skip` (not needed for launch).
 
 **Verification caveat.** This was written without web access. Every external number (fees, waiting periods, image sizes) is from memory and marked **verify**; check it against the Steamworks docs (partner.steamgames.com/doc) before spending money or producing art.
 
@@ -11,7 +11,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Decision | Value |
 |---|---|
 | Price | $9.99 (owner, 2026-10-18) |
-| Name | Title text "PickFight" (owner, 2026-10-18; all-caps logo, `docs/launch/owner-decisions.md`); the 2026-10-01 note said "Pickfight", and the repo and Steam search still use that spelling. 2026-10-01 search found no Steam title named Pickfight or Pick Fight; nearest is "Pickup n' Fight" on itch (free, small). Re-check at name lock. |
+| Name | Title text "PickFight" (owner, 2026-10-18; all-caps logo, `docs/launch/owner-decisions.md`); the 2026-10-01 note said "Pickfight", the rest of this repo still writes "Pickfight" (a spelling cleanup, not an open decision). 2026-10-01 search found no Steam title named Pickfight or Pick Fight; nearest is "Pickup n' Fight" on itch (free, small). Re-check at name lock. |
 | Language | **Superseded 2026-10-18:** English plus 8 languages (zh-Hans, ru, es-419, pt-BR, de, fr, ja, ko), shipped in #688; Claude translates, volunteers proofread, no paid agency (`docs/launch/owner-decisions.md`). The 2026-10-01 "English only" answer is void. |
 | Playing without a phone | Gamepad (right stick = arm, relative vector) in either match kind; in an Online or Solo match the host-PC mouse seat is claimed by itself (#435: no "Play on this PC" toggle); no shared keyboard |
 | Online | Keep Fly relay and room codes for itch; Steam builds add Steam lobbies and friend invites over the same relay (#298) |
@@ -54,12 +54,12 @@ The Next Fest demo is the same game with a content slice, chosen by one flag: th
 ### 2. Store page
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
-| 2.1 | Short description, long description, tags, feature list. Draft from `docs/FEATURES.md` | agent drafts, owner approves | name | partial (draft in `launch/store-page.md`, needs owner approval, #712) |
-| 2.2 | Capsule and library art (sizes below, all **verify**) | owner or commissioned artist; agent can lay out from `docs/art/` | name, logo | partial (logo and six capsule exports in `art/logo/capsules/`; page background, library logo and icons missing; final-art budget open, #685) |
-| 2.3 | At least 5 screenshots, 1920x1080 (**verify** minimum). Capture with the existing screenshot tools (`tools/`) and playtest footage | agent | none | done (9 shots in `launch/screenshots/`, regenerate with `tools/capture_store_screenshots.gd`, #723) |
-| 2.4 | Trailer: cut from playtest footage; the game has an F9 instant replay that saves ~10 s PNG sequences to `user://clips/` (#329, ADR-0020, 256x144, too small for a trailer). Record the trailer with a screen recorder (OBS) at 1080p or higher during playtests instead; use F9 clips only as a reference for moments worth re-capturing | owner (records) | playtest session | todo |
-| 2.5 | System requirements, supported languages (English plus 8, #688), controller support flag (partial/full, see section 6) | agent | 6.x | partial (draft in `launch/store-page.md`, needs owner approval, #712) |
-| 2.6 | Legal links: privacy policy URL (the game talks to our relay and files feedback issues, so say so), support contact | owner | none | partial (draft in `launch/privacy-policy.md`, needs owner approval, #712) |
+| 2.1 | Short description, long description, tags, feature list. Draft from `docs/FEATURES.md` | agent drafts, owner approves | name | partial (draft in `docs/launch/store-page.md`, needs owner approval, #712) |
+| 2.2 | Capsule and library art (sizes below, all **verify**) | owner or commissioned artist; agent can lay out from `docs/art/` | art budget (#685) | partial (logo and six capsule exports in `art/logo/capsules/`; page background and icons missing) |
+| 2.3 | At least 5 screenshots, 1920x1080 (**verify** minimum). Capture with the existing screenshot tools (`tools/`) and playtest footage | agent | none | done (9 shots in `docs/launch/screenshots/`, regenerate with `tools/capture_store_screenshots.gd`, #723) |
+| 2.4 | Trailer: cut from playtest footage; the game has an F9 instant replay that saves ~10 s PNG sequences to `user://clips/` (#329, ADR-0020, 256x144, too small for a trailer). Record the trailer with a screen recorder (OBS) at 1080p or higher during playtests instead; use F9 clips only as a reference for moments worth re-capturing | owner (edits) | none | todo (owner edits it from Claude's shot list, `docs/launch/trailer-shot-list.md`, #728; Next Fest trailer due May 3 2027) |
+| 2.5 | System requirements, supported languages (English plus 8, #688), controller support flag (partial/full, see section 6) | agent | 6.x | partial (draft in `docs/launch/store-page.md`, needs owner approval, #712) |
+| 2.6 | Legal links: privacy policy URL (the game talks to our relay and files feedback issues, so say so), support contact | owner | none | partial (draft in `docs/launch/privacy-policy.md`, needs owner approval, #712) |
 | 2.7 | Submit store page for Valve review, then set "Coming soon" public | owner | 2.1-2.6, 1.3 | todo |
 
 **Telemetry (for the privacy policy, 2.6; #372).** On by default, with an opt-out toggle in Settings ("Send anonymous match stats") and a one-time first-launch notice on the host screen (#617: nothing is sent until it has been dismissed with "Got it" or "Turn off"). At the end of each match the host sends one record to our relay: per-weapon damage, hits and KOs by human players (bots and the lobby sandbox excluded), the game mode, the stage names, the format (free-for-all or teams), the match length, and the winning weapon. It contains no nickname, player colour, device or Steam identifier, or any other player ID. The relay does not store or log the sender's IP address; it keeps only a salted hash in memory to rate-limit, which is lost on restart, and rounds the stored timestamp to the hour. The data is used only to balance weapons, modes and stages. If anything ever needs an identifier, switch to opt-in. The policy text should say all of this and mention the toggle.
@@ -79,13 +79,13 @@ Capsule sizes to **verify** against the current Steamworks "Store graphical asse
 | Library logo | up to 1280 x 720, transparent PNG |
 | Client icon / community icon | 256 x 256 / 184 x 184 (**verify**) |
 
-Art in the repo today: the PICKFIGHT logo (`art/logo/logo.svg`, `logo_1024.png`) and six capsule exports in `art/logo/capsules/` (header 920x430, small 462x174, main 1232x706, vertical 748x896, library 600x900, library hero 3840x1240; the first four are 2x the sizes above). Not yet in the repo: page background, library logo (transparent PNG), client and community icons. The owner's budget decision on capsule art and logo is still open with Austin (#685), so item 2.2 stays `partial`. Status: partial.
+Art in the repo today: the logo (`art/logo/logo.svg`, and `art/logo/logo_1024.png`, 1024x256 with transparency, which fits the library logo bound; **verify** before using it as one) and six capsule exports in `art/logo/capsules/` (header 920x430, small 462x174, main 1232x706, vertical 748x896, library 600x900, library hero 3840x1240; the first four are 2x the sizes above). Not yet in the repo: page background, client and community icons. The owner's budget decision on capsule art and logo is still open with Austin (#685), so item 2.2 stays `partial`. Status: partial.
 
 ### 3. Ratings and compliance
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
-| 3.1 | Steam content survey (mature content questionnaire) and the IARC-based age rating questionnaire for the store (**verify** current form names). Cartoon violence only (ragdoll-ish melee, no blood, no gambling, no in-app purchases, no user-generated content shared beyond the feedback text box) | owner (agent supplies answers) | 1.1 | partial (draft in `launch/content-survey.md`, needs owner approval, #712) |
-| 3.2 | Declare the online features and data the game sends (relay, feedback button #262) in the privacy policy | owner | 2.6 | todo |
+| 3.1 | Steam content survey (mature content questionnaire) and the IARC-based age rating questionnaire for the store (**verify** current form names). Cartoon violence only (ragdoll-ish melee, no blood, no gambling, no in-app purchases, no user-generated content shared beyond the feedback text box) | owner (agent supplies answers) | 1.1 | partial (draft in `docs/launch/content-survey.md`, needs owner approval, #712) |
+| 3.2 | Declare the online features and data the game sends (relay, feedback button #262, opt-out crash reports #681) in the privacy policy | owner | 2.6 | partial (draft in `docs/launch/privacy-policy.md`, needs owner approval, #712) |
 | 3.3 | Tax/export compliance questions in the app wizard | owner | 1.2 | todo |
 
 ### 4. Legal and credits
@@ -110,7 +110,7 @@ Add a Steam step:
 | 5.4 | Create a dedicated Steam builder account with only "Edit App Metadata"/"Publish App Changes" and "Upload builds" rights | owner | 1.1 | todo |
 | 5.5 | Steam Guard on the builder account: CI cannot answer a prompt. Use the config.vdf / ssfn approach the chosen action documents (**verify**) | owner | 5.4 | todo |
 | 5.6 | Export-preset tweaks for Steam: Windows `application/*` metadata (company, product, version), macOS bundle id and min OS, Linux x86_64 only | agent | none | done (#722; version stays on the project setting, not the preset) |
-| 5.7 | Windows code signing (optional, reduces SmartScreen friction; Steam does not require it). Owner decision 2026-10-18: skip unless it would really bite | owner | cost decision | todo (skipped by default) |
+| 5.7 | Windows code signing (optional, reduces SmartScreen friction; Steam does not require it). Owner decision 2026-10-18: skip unless it would really bite | owner | cost decision | skip (owner, 2026-10-18) |
 | 5.8 | macOS signing and notarization: owner decided "at Steam launch". Needs an Apple Developer Program membership (**verify** $99/yr), a Developer ID certificate, notarytool credentials; fill `codesign/identity`, `codesign/apple_team_id` and `notarization/*` in `export_presets.cfg`, and run on a macOS runner (signing from ubuntu is not practical, **verify**) | owner (accounts) then agent (workflow) | Apple membership | todo |
 | 5.9 | Steam review of the build (Valve checks the build before release, **verify** duration, usually a few days): submit well before the target date | owner | 5.3 | todo |
 
@@ -138,10 +138,10 @@ Plan:
 | # | Item | Who | Blocked on | Status |
 |---|---|---|---|---|
 | 6.1 | (GodotSteam binaries are not committed: run `bash tools/fetch_godotsteam.sh`, pinned to 4.23.1 + sha256; the release workflow runs it before export.)  Add GodotSteam GDExtension; add `steam_appid.txt` to dev checkouts only (git-ignored); initialise Steam behind a single `SteamPlatform` wrapper so itch/non-Steam builds run when the client or library is absent. Preload by path, never by `class_name` (repo rule) | agent | 1.4 for real AppID; Spacewar 480 for dev | **done** (#428, GodotSteam GDExtension 4.23.1, see 6.1 notes below) |
-| 6.2 | Remote Play Together: **off at launch** (owner, 2026-10-18; supersedes the earlier "test first" plan). Do not tick the store-page feature; no test needed for launch. If it is revisited, the old notes apply: host launches through Steam, friend plays with gamepad or mouse (phones do not play online, ADR-0021) | owner | none | skipped for launch (owner decision) |
+| 6.2 | Remote Play Together: **off at launch** (owner, 2026-10-18; supersedes the earlier "test first" plan). Do not tick the store-page feature; no test needed for launch. If it is revisited, the old notes apply: host launches through Steam, friend plays with gamepad or mouse (phones do not play online, ADR-0021) | owner | none | skip (off at launch, owner, 2026-10-18) |
 | 6.3 | Steam lobbies and friend invites carrying the room code; game traffic stays on our relay, no Steam P2P | agent (agage-JG) | #298, #241, 6.1 | done (#298) |
 | 6.4 | Steam overlay compatibility check with the Compatibility renderer | owner tests | 6.1 | todo |
-| 6.5 | Achievements: the 18-item list on #689 (owner-approved 2026-10-20), wired through `SteamPlatform`. Defining them in Steamworks needs the real app | agent (code), owner (Steamworks) | 6.1, 1.3 | code done (#689, `scripts/Achievements.gd`); Steamworks definitions todo |
+| 6.5 | Achievements: the 18-item list on #689 (owner-approved 2026-10-20), wired through `SteamPlatform`. Defining them in Steamworks needs the real app; enter them from `docs/steam-achievements.md` | agent (code), owner (Steamworks) | 6.1, 1.3 | partial (code done, #689, `scripts/Achievements.gd`; Steamworks definitions todo) |
 | 6.6 | Steam Cloud: not needed (settings are small, `user://audio.cfg`) | none | none | skip |
 
 Existing online work this builds on: relay with room codes (#238, ADR-0019), host going online and remote seats (#239), snapshots (#251), PC client join by code (#241, agage-JG). Itch and non-Steam builds keep plain room codes.
@@ -165,7 +165,7 @@ Existing online work this builds on: relay with room codes (#238, ADR-0019), hos
 | 7.5 | Deck Verified submission | owner | 7.2, 7.3, store page live | todo |
 
 ### 8. Localization
-Done (#688, #367): all text is translatable and ships in English plus 8 languages (zh-Hans, ru, es-419, pt-BR, de, fr, ja, ko), machine-translated with volunteer proofreading credited in-game (`CREDITS.md`). Owner-decided AI disclosure on Steam: the AI-assisted translations only (`docs/launch/owner-decisions.md`). Still to do: the store page text in each language (`docs/launch/store-page-l10n.md`).
+All in-game text is translatable (#367) and ships in English plus the 8 languages in the decisions table (#688). The translations are machine-made and not yet proofread: volunteer proofreaders get credited in-game, and every language in the `CREDITS.md` Translations table is still open. Store page text in all 8 languages is drafted in `docs/launch/store-page-l10n.md` (#740), needing owner approval and proofreading. AI disclosure on Steam: the AI-assisted translations only (owner, `docs/launch/owner-decisions.md`). Status: partial.
 
 ### 9. Release gates (owner)
 | # | Item | Who | Status |
@@ -178,14 +178,13 @@ Done (#688, #367): all text is translatable and ships in English plus 8 language
 ## Top owner actions, in order
 1. Decide publisher entity, then create the Steamworks account and finish tax/bank forms (1.1, 1.2).
 2. Pay the $100 app fee (1.3) and send the AppID/depot IDs.
-3. Finish store art (page background, library logo, icons; budget with Austin, #685) and produce the trailer (2.2, 2.4); run the trademark clearance search and lock the name. Remote Play Together is off at launch (6.2).
-4. Test Steam overlay compatibility (6.4).
-5. Release date is set (Thu Jul 22 2027); work back from it for the Steam Playtest, Next Fest and review lead times (verify them).
+3. Submit the store page for review (2.7) so the Coming Soon page is live by mid-December 2026, and register the Steam Playtest by about Dec 28 2026 (`docs/launch/owner-decisions.md`).
+4. Finish store art (page background, icons; budget with Austin, #685), run the trademark clearance search (4.4) and lock the name. Remote Play Together is off at launch (6.2).
+5. Edit the trailer from the shot list by May 3 2027 (2.4), and test Steam overlay compatibility (6.4).
 6. Create the builder account and add secrets (5.4, 5.5); later Apple membership for notarization (5.8).
 
 ## Needs owner confirmation
-- **Price.** `owner-decisions.md` records $9.99, but adds that the owner wanted to confirm it with Austin (#685). Left as decided above until #685 says otherwise.
-- **Name spelling.** Owner decisions say title text "PickFight"; the repo, site and some docs still write "Pickfight" (the logo is all caps). Confirm the canonical spelling at name lock.
+- **Publisher entity.** `docs/launch/owner-decisions.md` describes the studio as SQL Monkey Studios (the owner and Austin, no LLC) but also says the Steamworks signup entity is reopened with Austin (#685); the table above still lists an LLC as an option. Confirm with Austin before the Nov 2026 signup.
 
 ## Out of scope
 Nintendo Switch is #268, after Steam. Keep the input layer seat-based and avoid platform-specific code outside the seat and export layers.
