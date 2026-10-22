@@ -681,6 +681,7 @@ func _process(delta: float) -> void:
 	_process_websocket()
 	_process_remote()
 	_ping_remote_seats()
+	_weak_link_tick()
 	_check_host_pc_seat()
 	_lapse_remote_holds()
 	_stream_snapshots(delta)
@@ -1680,6 +1681,8 @@ func _handle_text(slot: int, text: String) -> void:
 			leave(slot)
 		"pong":
 			_on_pong(slot, msg)
+		"lag":
+			_weak_link_in[slot] = true # this phone answers pings (#777)
 		"team":
 			var team: Variant = msg.get("v")
 			var phase: String = str(_lobby_state.get("phase", "lobby"))
@@ -3144,10 +3147,78 @@ func _ping_remote_seats() -> void:
 		seat.send_text(JSON.stringify({"t": "ping", "n": seat.ping_n}))
 
 func _on_pong(slot: int, msg: Dictionary) -> void:
+	if _weak_link_pong(slot, msg):
+		return
 	var seat: Variant = _slot_peers[slot] if slot >= 0 and slot < _slot_peers.size() else null
 	if not seat is RemoteSeat or not _is_number(msg.get("n")) or not seat.ping_sent.has(int(msg["n"])):
 		return
 	seat.rtt_msec = maxi(0, Time.get_ticks_msec() - int(seat.ping_sent[int(msg["n"])]))
+
+# --- Weak-connection chip (issue #777) ---------------------------------------
+#
+# A phone that sent {"t":"lag"} is pinged with {"t":"ping","n":N} and echoes {"t":"pong","n":N}.
+# A round trip above WEAK_ON_MSEC for weak_hold_msec sends {"t":"weak","v":true};
+# one below WEAK_OFF_MSEC sends {"t":"weak","v":false}. The phone only shows or
+# hides a chip: no kick, no change to input, bots and gamepad seats get nothing.
+
+const WEAK_ON_MSEC: int = 200
+const WEAK_OFF_MSEC: int = 120
+var weak_hold_msec: int = 3000
+var _weak_link: Dictionary = {} # slot -> {n, sent, answered, over_since, weak}
+var _weak_link_in: Dictionary = {} # slot -> true once the phone sent {"t":"lag"}
+
+func _weak_link_target(slot: int) -> bool:
+	if _slot_virtual[slot] == 1:
+		return false
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or peer is PadSeat or _is_pc_remote(peer):
+		return false
+	return (peer is WebSocketPeer or peer.has_method("send_text")) and peer.get_ready_state() == WebSocketPeer.STATE_OPEN
+
+func _weak_link_tick() -> void:
+	var now: int = Time.get_ticks_msec()
+	for slot in _slot_peers.size():
+		if not _weak_link_target(slot):
+			_weak_link.erase(slot)
+			_weak_link_in.erase(slot)
+			continue
+		if not _weak_link_in.has(slot):
+			continue
+		var st: Dictionary = _weak_link.get(slot, {"n": 0, "sent": 0, "answered": true, "over_since": 0, "weak": false})
+		if st.n != 0 and now - st.sent < ping_interval_msec:
+			continue
+		if not st.answered:
+			_weak_link_sample(slot, st, now - st.sent, now)
+		st.n += 1
+		st.sent = now
+		st.answered = false
+		_weak_link[slot] = st
+		_slot_peers[slot].send_text(JSON.stringify({"t": "ping", "n": st.n}))
+
+func _weak_link_pong(slot: int, msg: Dictionary) -> bool:
+	var st: Variant = _weak_link.get(slot)
+	if st == null or not _is_number(msg.get("n")) or int(msg["n"]) != st.n:
+		return false
+	if not st.answered:
+		st.answered = true
+		var now: int = Time.get_ticks_msec()
+		_weak_link_sample(slot, st, now - st.sent, now)
+	return true
+
+func _weak_link_sample(slot: int, st: Dictionary, rtt: int, now: int) -> void:
+	var weak: bool = st.weak
+	if rtt > WEAK_ON_MSEC:
+		if st.over_since == 0:
+			st.over_since = maxi(1, now)
+		elif now - st.over_since >= weak_hold_msec:
+			weak = true
+	else:
+		st.over_since = 0
+		if rtt < WEAK_OFF_MSEC:
+			weak = false
+	if weak != st.weak:
+		st.weak = weak
+		_slot_peers[slot].send_text(JSON.stringify({"t": "weak", "v": weak}))
 
 ## The last round trip to the remote seat in `slot`, in ms; -1 for a phone,
 ## the host PC, a bot, or a seat that has not answered a ping yet.
