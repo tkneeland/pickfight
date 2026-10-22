@@ -73,6 +73,9 @@ var _hide_code_box: CheckBox
 var _scale_button: OptionButton
 ## Stick deadzone (#748): Settings > More options.
 var _deadzone_button: OptionButton
+## Frame-rate cap and VSync (#774): Settings > More options.
+var _fps_button: OptionButton
+var _vsync_box: CheckBox
 var _host_match: VBoxContainer
 ## Quit game (#718): the button, and the confirm that replaces it while other humans are seated.
 var _credits_button: Button
@@ -182,6 +185,12 @@ func _ready() -> void:
 	for option: float in HostSettingsScript.PAD_DEADZONES:
 		_deadzone_button.add_item(tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % option))
 	content.add_child(_deadzone_button)
+	_fps_button = OptionButton.new()
+	_fps_button.name = "FrameRate"
+	for option: int in HostSettingsScript.FRAME_CAPS:
+		_fps_button.add_item(_frame_cap_text(option))
+	content.add_child(_fps_button)
+	_vsync_box = _add_box(content, "VSync", tr("SETTINGS_VSYNC"))
 	_replay_box = _add_box(content, "PlayOfRound", tr("SETTINGS_PLAY_OF_ROUND"))
 	_focus_box = _add_box(content, "PauseOnFocusLoss", tr("SETTINGS_PAUSE_ON_FOCUS_LOSS"))
 	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
@@ -296,6 +305,8 @@ func _ready() -> void:
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
 	_deadzone_button.item_selected.connect(func(index: int) -> void: host.set_pad_deadzone(HostSettingsScript.PAD_DEADZONES[index]))
+	_fps_button.item_selected.connect(func(index: int) -> void: host.set_frame_cap(HostSettingsScript.FRAME_CAPS[index]))
+	_vsync_box.toggled.connect(func(pressed: bool) -> void: host.set_vsync(pressed))
 	_more.toggled.connect(func(pressed: bool) -> void:
 		_more_area.visible = pressed
 		if PadMenuScript.is_open():
@@ -391,6 +402,8 @@ func refresh() -> void:
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
+	_fps_button.select(maxi(HostSettingsScript.FRAME_CAPS.find(host.frame_cap), 0))
+	_vsync_box.set_pressed_no_signal(host.vsync)
 	_resolution.select(maxi(HostSettingsScript.RESOLUTIONS.find(host.resolution), 0))
 	_language.select(_language_index(host.language))
 	_host_match.refresh()
@@ -764,6 +777,15 @@ func flash_box() -> CheckBox:
 func tag_size_button() -> OptionButton:
 	return _scale_button
 
+func frame_rate_button() -> OptionButton:
+	return _fps_button
+
+func vsync_box() -> CheckBox:
+	return _vsync_box
+
+func _frame_cap_text(cap: int) -> String:
+	return tr("SETTINGS_FRAME_RATE") % (tr("SETTINGS_FRAME_RATE_UNLIMITED") if cap == 0 else str(cap))
+
 func deadzone_button() -> OptionButton:
 	return _deadzone_button
 
@@ -847,6 +869,8 @@ func _retranslate() -> void:
 		_scale_button.set_item_text(i, tr("SETTINGS_NAME_TAGS") % str(sfx.UI_SCALES[i]))
 	for i in HostSettingsScript.PAD_DEADZONES.size():
 		_deadzone_button.set_item_text(i, tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % HostSettingsScript.PAD_DEADZONES[i]))
+	for i in HostSettingsScript.FRAME_CAPS.size():
+		_fps_button.set_item_text(i, _frame_cap_text(HostSettingsScript.FRAME_CAPS[i]))
 	_language.set_item_text(0, tr("LANGUAGE_AUTO"))
 	refresh()
 

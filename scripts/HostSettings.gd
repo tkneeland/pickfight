@@ -88,6 +88,11 @@ var pause_on_focus_loss: bool = true
 const PAD_DEADZONES: Array[float] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40]
 const DEFAULT_PAD_DEADZONE: float = 0.2
 var pad_deadzone: float = DEFAULT_PAD_DEADZONE
+## Frame-rate cap (#774): `Engine.max_fps`, one of FRAME_CAPS (0 is unlimited, what the game always
+## did), and VSync on or off (on is the engine default). Both apply at boot and on change.
+const FRAME_CAPS: Array[int] = [0, 60, 30]
+var frame_cap: int = 0
+var vsync: bool = true
 
 ## Issue #732: mask offensive words in player names (NameFilter.gd).
 var filter_names: bool = true
@@ -127,6 +132,7 @@ static func shared() -> RefCounted:
 		else:
 			_shared.load_settings()
 			LanguagesScript.apply(_shared.language)
+			_shared.apply_display()
 	return _shared
 
 static func name_of(resource_path: String) -> String:
@@ -375,6 +381,22 @@ func set_pad_deadzone(value: float) -> void:
 	pad_deadzone = snap_pad_deadzone(value)
 	save_settings()
 
+## Pushes the frame-rate cap and VSync to the engine and the window.
+func apply_display() -> void:
+	Engine.max_fps = frame_cap
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
+
+## A value off FRAME_CAPS falls back to unlimited.
+func set_frame_cap(value: int) -> void:
+	frame_cap = value if FRAME_CAPS.has(value) else 0
+	apply_display()
+	save_settings()
+
+func set_vsync(on: bool) -> void:
+	vsync = on
+	apply_display()
+	save_settings()
+
 func set_play_of_round(on: bool) -> void:
 	play_of_round = on
 	save_settings()
@@ -418,6 +440,9 @@ func restore_defaults() -> void:
 	play_of_round = true
 	pause_on_focus_loss = true
 	pad_deadzone = DEFAULT_PAD_DEADZONE
+	frame_cap = 0
+	vsync = true
+	apply_display()
 	filter_names = true
 	stock_lives = 3
 	stock_time_limit = 480
@@ -509,6 +534,10 @@ func load_settings() -> void:
 		pause_on_focus_loss = focus_on if focus_on is bool else true
 		var deadzone: Variant = config.get_value(SECTION, "pad_deadzone", DEFAULT_PAD_DEADZONE)
 		pad_deadzone = snap_pad_deadzone(float(deadzone)) if deadzone is float or deadzone is int else DEFAULT_PAD_DEADZONE
+		var cap: Variant = config.get_value(SECTION, "frame_cap", 0)
+		frame_cap = int(cap) if cap is int and FRAME_CAPS.has(int(cap)) else 0
+		var vsync_on: Variant = config.get_value(SECTION, "vsync", true)
+		vsync = vsync_on if vsync_on is bool else true
 		var filter_on: Variant = config.get_value(SECTION, "filter_names", true)
 		filter_names = filter_on if filter_on is bool else true
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
@@ -546,6 +575,8 @@ func save_settings() -> void:
 	config.set_value(SECTION, "play_of_round", play_of_round)
 	config.set_value(SECTION, "pause_on_focus_loss", pause_on_focus_loss)
 	config.set_value(SECTION, "pad_deadzone", pad_deadzone)
+	config.set_value(SECTION, "frame_cap", frame_cap)
+	config.set_value(SECTION, "vsync", vsync)
 	config.set_value(SECTION, "filter_names", filter_names)
 	config.set_value(SECTION, "stock_lives", stock_lives)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)

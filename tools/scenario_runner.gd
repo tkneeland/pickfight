@@ -985,6 +985,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
 	"offscreen_fighter_gets_edge_arrow_779",
+	"frame_rate_cap_and_vsync_persist_and_apply_774",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3338,6 +3339,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_restore_defaults_750()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
+		"frame_rate_cap_and_vsync_persist_and_apply_774":
+			return await _scenario_frame_rate_cap_and_vsync_persist_and_apply_774()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46680,4 +46683,72 @@ func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
 	if arrows.arrow_visible(0):
 		failures.append("a KO'd fighter kept an edge arrow")
 	await _teardown(loop["stage"])
+	return failures
+
+## Issue #774: Settings > More options has a Frame rate (Unlimited / 60 / 30) and a VSync row. Defaults are
+## today's behaviour (unlimited, VSync on); both are remembered, applied to Engine.max_fps and the window,
+## driven from the panel, and put back by Restore defaults.
+func _scenario_frame_rate_cap_and_vsync_persist_and_apply_774() -> Array[String]:
+	var failures: Array[String] = []
+	var host_script: GDScript = load("res://scripts/HostSettings.gd")
+	var was_fps: int = Engine.max_fps
+	var was_vsync: DisplayServer.VSyncMode = DisplayServer.window_get_vsync_mode()
+	var tmp: String = OS.get_temp_dir().path_join("pf_774_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = host_script.new()
+	fresh.path = tmp
+	if fresh.frame_cap != 0 or not fresh.vsync:
+		failures.append("defaults are cap %d, vsync %s; expected unlimited (0) with VSync on" % [fresh.frame_cap, fresh.vsync])
+	fresh.set_frame_cap(30)
+	fresh.set_vsync(false)
+	if Engine.max_fps != 30:
+		failures.append("set_frame_cap(30) left Engine.max_fps at %d" % Engine.max_fps)
+	if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED and DisplayServer.get_name() != "headless":
+		failures.append("set_vsync(false) did not turn VSync off")
+	var again: RefCounted = host_script.new()
+	again.path = tmp
+	again.load_settings()
+	if again.frame_cap != 30 or again.vsync:
+		failures.append("cap 30 / VSync off were not remembered (reloaded %d, %s)" % [again.frame_cap, again.vsync])
+	fresh.set_frame_cap(45)
+	if fresh.frame_cap != 0 or Engine.max_fps != 0:
+		failures.append("a cap off the list gave %d, expected unlimited" % fresh.frame_cap)
+	var cfg := ConfigFile.new()
+	cfg.load(tmp)
+	cfg.set_value("host", "frame_cap", "junk")
+	cfg.set_value("host", "vsync", 3)
+	cfg.save(tmp)
+	var broken: RefCounted = host_script.new()
+	broken.path = tmp
+	broken.load_settings()
+	if broken.frame_cap != 0 or not broken.vsync:
+		failures.append("junk saved values loaded as cap %d, vsync %s; expected the defaults" % [broken.frame_cap, broken.vsync])
+	DirAccess.remove_absolute(tmp)
+	var sfx: Node = _sfx()
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var ui_host: RefCounted = ui.host
+	var ui_was_persist: bool = ui_host.persist
+	ui_host.persist = false
+	ui_host.frame_cap = 0
+	ui_host.vsync = true
+	ui.refresh()
+	var box: OptionButton = ui.frame_rate_button()
+	var sync: CheckBox = ui.vsync_box()
+	if box.item_count != 3 or box.selected != 0 or not sync.button_pressed:
+		failures.append("Settings shows %d frame-rate items, item %d, VSync %s; expected 3, item 0, on" % [box.item_count, box.selected, sync.button_pressed])
+	box.item_selected.emit(1)
+	if ui_host.frame_cap != 60 or Engine.max_fps != 60:
+		failures.append("picking the second item set the cap to %d (max_fps %d), expected 60" % [ui_host.frame_cap, Engine.max_fps])
+	sync.toggled.emit(false)
+	if ui_host.vsync:
+		failures.append("unticking VSync left it on")
+	ui.refresh()
+	if box.selected != 1 or sync.button_pressed:
+		failures.append("Settings did not show the chosen cap and VSync (item %d, VSync %s)" % [box.selected, sync.button_pressed])
+	ui_host.restore_defaults()
+	if ui_host.frame_cap != 0 or not ui_host.vsync or Engine.max_fps != 0:
+		failures.append("Restore defaults left cap %d, vsync %s, max_fps %d" % [ui_host.frame_cap, ui_host.vsync, Engine.max_fps])
+	ui_host.persist = ui_was_persist
+	Engine.max_fps = was_fps
+	DisplayServer.window_set_vsync_mode(was_vsync)
+	_scenario_completed = true
 	return failures
