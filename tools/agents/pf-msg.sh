@@ -15,7 +15,9 @@ WAKE=$PF_STATE/msg-wake.txt
 now() { echo "${PF_NOW:-$(date -u +%s)}"; }
 load_conf() {
   PF_MSG_TOPIC=""; PF_MSG_SERVER=""
-  [ -f "$CONF" ] && . "$CONF"
+  # read the conf without sourcing it, tolerating CRLF (Windows editors) and quotes
+  [ -f "$CONF" ] && { PF_MSG_TOPIC=$(sed -n 's/^PF_MSG_TOPIC=//p' "$CONF" | tr -d '\r"'"'"' ' | head -n 1)
+    PF_MSG_SERVER=$(sed -n 's/^PF_MSG_SERVER=//p' "$CONF" | tr -d '\r"'"'"' ' | head -n 1); }
   PF_MSG_SERVER=${PF_MSG_SERVER:-https://ntfy.sh}
   [ -n "$PF_MSG_TOPIC" ]
 }
@@ -31,7 +33,7 @@ cmd=${1:-}; [ $# -gt 0 ] && shift
 case $cmd in
   init)
     if [ ! -f "$CONF" ]; then
-      echo "PF_MSG_TOPIC=pf-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$CONF"
+      (umask 077; echo "PF_MSG_TOPIC=pf-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$CONF")
     fi
     load_conf
     echo "topic: $PF_MSG_TOPIC"
@@ -39,8 +41,9 @@ case $cmd in
   send)
     [ $# -ge 2 ] || { echo "usage: pf-msg.sh send <TYPE> <text...>" >&2; exit 2; }
     send "$@"; exit $?;;
-  claim) send CLAIM "$1"; exit $?;;
-  release) send RELEASE "$1"; exit $?;;
+  claim|release)   # issue number only: "#793" -> 793
+    n=${1#\#}; case $n in ''|*[!0-9]*) echo "usage: pf-msg.sh $cmd <issue number>" >&2; exit 2;; esac
+    if [ "$cmd" = claim ]; then send CLAIM "$n"; else send RELEASE "$n"; fi; exit $?;;
   listen)
     load_conf || { echo "pf-msg: no topic configured; run: bash $PF_DIR/pf-msg.sh init" >&2; exit 3; }
     delay=5
@@ -50,7 +53,7 @@ case $cmd in
       curl -sN -m 0 "$PF_MSG_SERVER/$PF_MSG_TOPIC/json?since=$since" 2>/dev/null | {
         n=0
         while IFS= read -r line; do
-          rec=$(printf '%s' "$line" | jq -r 'select(.event=="message") | "\(.id)\t\(.time)\t\(.message|gsub("[\n\r]";" "))"' 2>/dev/null) || continue
+          rec=$(printf '%s' "$line" | jq -r 'select(.event=="message") | "\(.id)\t\(.time)\t\(.message|gsub("[[:cntrl:]]";" ")|.[0:300])"' 2>/dev/null) || continue
           [ -n "$rec" ] || continue
           IFS=$'\t' read -r id t msg <<EOT
 $rec
@@ -71,7 +74,7 @@ EOT
       sleep "$delay"; delay=$((delay*2)); [ "$delay" -gt 60 ] && delay=60
     done;;
   claimed)
-    n=${1:?usage: pf-msg.sh claimed <n>}
+    n=${1:?usage: pf-msg.sh claimed <n>}; n=${n#\#}
     [ -f "$INBOX" ] || exit 1
     awk -F'|' -v now="$(now)" -v n="$n" -v me="$PF_ACCOUNT" '
       { split($4, w, " "); if (w[1] != n || $2 == me) next

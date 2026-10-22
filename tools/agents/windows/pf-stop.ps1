@@ -21,3 +21,7 @@ foreach ($kind in @("triage", "automerge", "beacon", "msg")) {
 Get-CimInstance Win32_Process -Filter "Name='bash.exe'" |
   Where-Object { $_.CommandLine -match 'pf-(supervise|triage-watch|automerge|beacon|msg)\.sh' } |
   ForEach-Object { & taskkill.exe /PID $_.ProcessId /T /F | Out-Null; Write-Host "swept leftover watcher (pid $($_.ProcessId))" }
+# the channel listener's curl.exe is a native process outside the msys process group: sweep its stream too
+Get-CimInstance Win32_Process -Filter "Name='curl.exe'" |
+  Where-Object { $_.CommandLine -match '/json\?since=' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host "swept channel listener curl (pid $($_.ProcessId))" }
