@@ -15,6 +15,8 @@
 
 **What your Claude does on its own:** starts workers on tickets assigned to you, ships and merges your PRs, keeps your usage beacon on issue #432 current, and shows the status line. **What it won't do:** file tickets itself (unless `AUTO_FILE=1`), or merge a `conflict-risk` PR. Those are for the triagemaster, which is `tkneeland` or, when that account is low on weekly budget, the next account in rank (it posts `[TRIAGEMASTER] ...` on #432).
 
+**Quality gates.** Every ticket is built through Atlas (`/atlas-implement`, with `/atlas-plan` first for risky or p1 tickets). Before any PR merges, including yours, a reviewer agent checks it against repo standards, the ticket, and for correctness bugs. A confirmed bug or spec miss blocks the merge until your Claude fixes it. Style notes are advisory. Bugs it spots elsewhere become new tickets automatically.
+
 **Requesting tickets.** Ask the owner or the triagemaster, or comment on #432 with what you need. Before asking, your Claude runs `tools/agents/pf-dupe-check.sh "<keywords>"` so you do not request something that exists.
 
 **Switching modes.** Tell your Claude "MT mode" to make it act only when asked, or "AT mode" to switch back (it writes `AT` or `MT` to `~/.claude/pf/<handle>/pf-at-mode`). "Day mode for 3 hours" overrides night.
