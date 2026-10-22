@@ -6,6 +6,8 @@
 #   pf-supervise.sh automerge  runs pf-automerge.sh and restarts it if it dies.
 #   pf-supervise.sh beacon     runs pf-beacon.sh every 15 min. On Windows the status line's background beacon
 #                              job can die with the status line process, so this keeps #432 current.
+#   pf-supervise.sh msg        keeps `pf-msg.sh listen` alive (private ntfy channel) and runs `pf-msg.sh heartbeat` every 60 s.
+#                              macOS: screen -dmS pf-msg bash tools/agents/windows/pf-supervise.sh msg
 # Needs PF_ACCOUNT in the environment (windows/pf-start.ps1 sets it). Output goes to $PF_STATE/*.log.
 . "$(dirname "$0")/../pf-env.sh" || exit 1
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -36,5 +38,20 @@ case $KIND in
       if bash "$PF_DIR/pf-beacon.sh"; then status ok; else status failed "see beacon.log"; fi
       sleep 900
     done;;
-  *) echo "usage: pf-supervise.sh triage|automerge|beacon" >&2; exit 2;;
+  msg)
+    lp=""
+    # the listener runs in its own process group (set -m) so stopping it also stops its curl | reader pipeline
+    stop_listener() { [ -n "$lp" ] && kill -- -"$lp" 2>/dev/null; kill "$lp" 2>/dev/null; }
+    trap 'stop_listener; exit 0' INT TERM
+    trap stop_listener EXIT
+    while true; do
+      if [ -z "$lp" ] || ! kill -0 "$lp" 2>/dev/null; then
+        [ -n "$lp" ] && kill -- -"$lp" 2>/dev/null   # sweep a half-dead pipeline before restarting
+        set -m; bash "$PF_DIR/pf-msg.sh" listen >> "$PF_STATE/msg-listen.log" 2>&1 & lp=$!; set +m
+      fi
+      bash "$PF_DIR/pf-msg.sh" heartbeat >> "$PF_STATE/msg-heartbeat.log" 2>&1 || true
+      status running "listener pid $lp"
+      sleep 60 & wait $!   # interruptible, so a stop signal is handled at once
+    done;;
+  *) echo "usage: pf-supervise.sh triage|automerge|beacon|msg" >&2; exit 2;;
 esac
