@@ -28,12 +28,17 @@ const MAIN_SCENE: PackedScene = preload("res://scenes/Main.tscn")
 const CLIENT_SCENE: PackedScene = preload("res://scenes/RemoteClient.tscn")
 const RelayScript := preload("res://relay/Relay.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
+const TextScaleScript := preload("res://scripts/TextScale.gd")
 const SIZES: Array[Vector2i] = [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]
 const RELAY_PORT: int = 39601
 const SETTLE_FRAMES: int = 8
+## Extra frames at a large Text size, for the auto-fit to settle (#751).
+const FIT_FRAMES: int = 45
 const MATCH_TIMEOUT_MSEC: int = 40000
 
 var _out: String = ""
+## Text size (#751): "--text=1.4" renders every state at that size (Normal 1.0, Large 1.2, Larger 1.4).
+var _text_scale: float = 1.0
 var _sizes: Array[Vector2i] = [SIZES[0]]
 var _failures: Array[String] = []
 var _saved: int = 0
@@ -46,6 +51,8 @@ func _initialize() -> void:
 			_out = arg.trim_prefix("--out=")
 		elif arg == "--size=all":
 			_sizes = SIZES.duplicate()
+		elif arg.begins_with("--text="):
+			_text_scale = float(arg.trim_prefix("--text="))
 		elif arg.begins_with("--size="):
 			var parts: PackedStringArray = arg.trim_prefix("--size=").split("x")
 			if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
@@ -65,6 +72,7 @@ func _fail_args(message: String) -> void:
 	quit(2)
 
 func _run() -> void:
+	get_root().get_node("Sfx").set_text_scale(_text_scale)
 	_relay = RelayScript.new()
 	get_root().add_child(_relay)
 	if _relay.start(RELAY_PORT) != OK:
@@ -106,7 +114,19 @@ func _frames(n: int) -> void:
 ## a flat colour.
 func _shot(state: String, crop: Rect2 = Rect2()) -> void:
 	await _frames(SETTLE_FRAMES)
+	if _text_scale > 1.0:
+		await _frames(FIT_FRAMES) # auto-fit steps a screen down a frame at a time (#751)
 	var image: Image = get_root().get_texture().get_image()
+	if _text_scale > 1.0:
+		var sfx: Node = get_root().get_node("Sfx")
+		var fits: Array[String] = []
+		for root: Control in sfx.fit_roots():
+			if root.is_visible_in_tree():
+				fits.append("%s %.1f%s" % [root.name, sfx.fit_factor(root), "" if root.theme == null else " (smaller theme)"])
+				var stuck: String = TextScaleScript.first_overflow(root, get_root().get_visible_rect().size)
+				if not stuck.is_empty():
+					fits.append("(still over: %s)" % stuck)
+		print("ui_screenshots: %s fit: %s" % [state, ", ".join(fits)])
 	var want: Vector2i = _sizes_dir_size()
 	if image.get_size() != want:
 		image.resize(want.x, want.y)

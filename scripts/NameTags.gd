@@ -78,6 +78,7 @@ func build() -> void:
 		tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tag.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
 		tag.add_theme_font_size_override("font_size", 22)
+		tag.set_meta(&"pf_no_text_scale", true) # world-space: the Name tags option sizes it (#751)
 		tag.add_theme_color_override("font_color", _slot_color.call(slot))
 		tag.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0)) # black, not ink: the tags sit over any stage
 		tag.add_theme_constant_override("outline_size", 6)

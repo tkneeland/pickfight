@@ -511,3 +511,7 @@ PAUSED_HINT_KEYS,Any key to resume · Esc for menu,Beliebige Taste zum Fortsetze
 SETTINGS_VOICE,Voice,Stimmen,Voix,Voces,Vozes,语音,ボイス,음성,Голоса
 MATCH_POINT,MATCH POINT: %s,MATCHBALL: %s,BALLE DE MATCH : %s,PUNTO DE PARTIDO: %s,MATCH POINT: %s,赛点：%s,マッチポイント：%s,매치 포인트: %s,МАТЧБОЛ: %s
 PHONE_SWING_REACH,Swing reach,Schwungreichweite,Portée du swing,Alcance del golpe,Alcance do golpe,挥动范围,スイング距離,스윙 범위,Радиус замаха
+SETTINGS_TEXT_SIZE,Text size: %s,Textgröße: %s,Taille du texte : %s,Tamaño del texto: %s,Tamanho do texto: %s,文字大小:%s,文字サイズ: %s,글자 크기: %s,Размер текста: %s
+TEXT_SIZE_NORMAL,Normal,Normal,Normale,Normal,Normal,正常,標準,보통,Обычный
+TEXT_SIZE_LARGE,Large,Groß,Grande,Grande,Grande,大,大,크게,Большой
+TEXT_SIZE_LARGER,Larger,Größer,Plus grande,Más grande,Maior,更大,特大,더 크게,Крупнее

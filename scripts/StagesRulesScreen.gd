@@ -296,7 +296,7 @@ func _switch(text: String, node_name: String) -> Button:
 	button.name = node_name
 	button.text = text
 	button.toggle_mode = true
-	button.clip_text = true
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # a long name wraps instead of being cut off at a large Text size (#751)
 	button.theme_type_variation = UiThemeScript.PICK_BUTTON
 	button.focus_mode = Control.FOCUS_ALL
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -352,7 +352,7 @@ func _make_tile(stage_name: String) -> Button:
 	tile.name = stage_name
 	tile.text = stage_label(stage_name)
 	tile.toggle_mode = true
-	tile.clip_text = true
+	tile.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # a long name wraps instead of being cut off at a large Text size (#751)
 	tile.theme_type_variation = UiThemeScript.PICK_BUTTON
 	tile.focus_mode = Control.FOCUS_ALL
 	tile.custom_minimum_size = TILE_SIZE

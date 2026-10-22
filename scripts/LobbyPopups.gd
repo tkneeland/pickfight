@@ -19,6 +19,7 @@ const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const StagesRulesScreenScript := preload("res://scripts/StagesRulesScreen.gd")
 const JoinHelpScreenScript := preload("res://scripts/JoinHelpScreen.gd")
+const TextScaleScript := preload("res://scripts/TextScale.gd")
 
 const HELP_WIDTH_PX: float = 920.0
 const LOOK_WIDTH_PX: float = 980.0
@@ -109,6 +110,7 @@ func _overlay(overlay_name: String, parent: Control) -> Control:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.visible = false
+	overlay.set_meta(TextScaleScript.META_ROOT, true) # auto-fits its own text size (#751)
 	var dim := ColorRect.new()
 	dim.name = "Dim"
 	dim.color = DIM_COLOR

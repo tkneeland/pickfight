@@ -33,6 +33,7 @@ const LanguagesScript := preload("res://scripts/Languages.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
 const QuitGameScript := preload("res://scripts/QuitGame.gd")
+const TextScaleScript := preload("res://scripts/TextScale.gd")
 const CreditsScreenScript := preload("res://scripts/CreditsScreen.gd")
 ## Height of the scrolling window-size and options area.
 const LIST_HEIGHT: float = 130.0
@@ -74,6 +75,8 @@ var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _kill_feed_box: CheckBox
 var _scale_button: OptionButton
+## Text size (#751): Settings > More options.
+var _text_size_button: OptionButton
 ## Stick deadzone (#748): Settings > More options.
 var _deadzone_button: OptionButton
 ## Frame-rate cap and VSync (#774): Settings > More options.
@@ -185,6 +188,11 @@ func _ready() -> void:
 	for option: float in sfx.UI_SCALES:
 		_scale_button.add_item(tr("SETTINGS_NAME_TAGS") % str(option))
 	content.add_child(_scale_button)
+	_text_size_button = OptionButton.new()
+	_text_size_button.name = "TextSize"
+	for option: float in sfx.TEXT_SCALES:
+		_text_size_button.add_item(_text_size_item(option))
+	content.add_child(_text_size_button)
 	_deadzone_button = OptionButton.new()
 	_deadzone_button.name = "StickDeadzone"
 	for option: float in HostSettingsScript.PAD_DEADZONES:
@@ -280,6 +288,10 @@ func _ready() -> void:
 	_toggle.name = "Toggle"
 	_toggle.focus_mode = Control.FOCUS_NONE
 	_toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
+	if TextScaleScript.design_default_size() > 0:
+		# The corner button keeps its design size at every Text size: it sits over the lobby's bottom-right line (#751).
+		_toggle.add_theme_font_size_override("font_size", TextScaleScript.design_default_size())
+		_toggle.set_meta(TextScaleScript.META_SKIP, true)
 	corner.add_child(_toggle)
 
 	_build_telemetry_notice()
@@ -315,6 +327,7 @@ func _ready() -> void:
 	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
+	_text_size_button.item_selected.connect(func(index: int) -> void: sfx.set_text_scale(sfx.TEXT_SCALES[index]))
 	_deadzone_button.item_selected.connect(func(index: int) -> void: host.set_pad_deadzone(HostSettingsScript.PAD_DEADZONES[index]))
 	_fps_button.item_selected.connect(func(index: int) -> void: host.set_frame_cap(HostSettingsScript.FRAME_CAPS[index]))
 	_vsync_box.toggled.connect(func(pressed: bool) -> void: host.set_vsync(pressed))
@@ -416,6 +429,7 @@ func refresh() -> void:
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_kill_feed_box.set_pressed_no_signal(sfx.kill_feed)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
+	_text_size_button.select(maxi(sfx.TEXT_SCALES.find(sfx.text_scale), 0))
 	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
 	_fps_button.select(maxi(HostSettingsScript.FRAME_CAPS.find(host.frame_cap), 0))
 	_vsync_box.set_pressed_no_signal(host.vsync)
@@ -798,6 +812,14 @@ func numbers_box() -> CheckBox:
 func flash_box() -> CheckBox:
 	return _flash_box
 
+## One Text size choice, e.g. "Text size: Large" (#751).
+func _text_size_item(scale: float) -> String:
+	var names: Array[String] = [tr("TEXT_SIZE_NORMAL"), tr("TEXT_SIZE_LARGE"), tr("TEXT_SIZE_LARGER")]
+	return tr("SETTINGS_TEXT_SIZE") % names[maxi(sfx.TEXT_SCALES.find(scale), 0)]
+
+func text_size_button() -> OptionButton:
+	return _text_size_button
+
 func tag_size_button() -> OptionButton:
 	return _scale_button
 
@@ -894,6 +916,8 @@ func _retranslate() -> void:
 		_resolution.set_item_text(i, tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
 	for i in sfx.UI_SCALES.size():
 		_scale_button.set_item_text(i, tr("SETTINGS_NAME_TAGS") % str(sfx.UI_SCALES[i]))
+	for i in sfx.TEXT_SCALES.size():
+		_text_size_button.set_item_text(i, _text_size_item(sfx.TEXT_SCALES[i]))
 	for i in HostSettingsScript.PAD_DEADZONES.size():
 		_deadzone_button.set_item_text(i, tr("SETTINGS_STICK_DEADZONE") % ("%.2f" % HostSettingsScript.PAD_DEADZONES[i]))
 	for i in HostSettingsScript.FRAME_CAPS.size():
