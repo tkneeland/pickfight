@@ -179,6 +179,29 @@ func _open_join_screen_if_idle() -> void:
 				return
 	tree.change_scene_to_file.call_deferred(REMOTE_CLIENT_SCENE)
 
+# --- Store page (#793) -----------------------------------------------------------
+
+## Test seam (#793): when valid, stands in for `OS.shell_open` and receives the URL.
+var shell_open_for_test: Callable = Callable()
+
+## Open the store page for `store_app_id` (the base game's Steam app ID): in the Steam
+## overlay when Steam runs, else in the system browser at `url`. Does nothing for an
+## unset app ID (0 or less).
+func open_store_page(store_app_id: int, url: String) -> void:
+	if store_app_id <= 0:
+		return
+	if running():
+		calls_for_test.append(["open_store_page", store_app_id])
+		if available:
+			_steam.call("activateGameOverlayToStore", store_app_id, 0) # 0: STORE_FLAG_NONE
+		return
+	if url.is_empty():
+		return
+	if shell_open_for_test.is_valid():
+		shell_open_for_test.call(url)
+	else:
+		OS.shell_open(url)
+
 # --- Timeline markers (#703) -----------------------------------------------------
 
 ## Steam built-in icon and priority (0-1000) per marker kind.

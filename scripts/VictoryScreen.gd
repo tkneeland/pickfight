@@ -138,6 +138,18 @@ func _build_end_card() -> void:
 	var text: Label = ScreenKitScript.ink_label(DemoBuildScript.end_card_text(), 64, UiThemeScript.YELLOW, 12)
 	text.name = "EndCardText"
 	box.add_child(text)
+	# Wishlist on Steam (#793): a button once the store page exists; focused when the card shows, so A presses it.
+	if DemoBuildScript.wishlist_available():
+		var wishlist := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "EndCard_wishlist")
+		wishlist.focus_mode = Control.FOCUS_ALL
+		wishlist.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		wishlist.pressed.connect(func() -> void: DemoBuildScript.open_wishlist(_screen.get_tree()))
+		box.add_child(wishlist)
+		_end_card_panel.visibility_changed.connect(_focus_wishlist.bind(wishlist))
+
+func _focus_wishlist(wishlist: Button) -> void:
+	if _end_card_panel.visible and wishlist.is_inside_tree():
+		wishlist.grab_focus()
 
 ## The podium: `slots` already in podium order (the match winner first, then
 ## by final score), each with its score from `scores`, then `awards` under it.

@@ -499,3 +499,4 @@ RESTORE_CONFIRM_TEXT,Reset every setting to its default?,Alle Einstellungen auf 
 SETTINGS_FRAME_RATE,Frame rate: %s,Bildrate: %s,Fréquence d'images : %s,Velocidad de fotogramas: %s,Taxa de quadros: %s,帧率:%s,フレームレート: %s,프레임 속도: %s,Частота кадров: %s
 SETTINGS_FRAME_RATE_UNLIMITED,Unlimited,Unbegrenzt,Illimitée,Ilimitada,Ilimitada,不限,無制限,제한 없음,Без ограничения
 SETTINGS_VSYNC,VSync,VSync,VSync,VSync,VSync,垂直同步,VSync,수직 동기화,VSync
+WISHLIST_BUTTON,Wishlist on Steam (W),Auf Steam wunschlisten (W),Ajouter à la liste de souhaits Steam (W),Añadir a deseados en Steam (W),Adicionar à lista de desejos da Steam (W),加入 Steam 愿望单 (W),Steam のウィッシュリストに追加 (W),Steam 위시리스트에 추가 (W),Добавить в желаемое Steam (W)
