@@ -3490,6 +3490,12 @@ func pc_runs_room() -> bool:
 		return _match_kind == KIND_ONLINE or _match_kind == KIND_SOLO
 	return _online_requested
 
+## Whether the host screen's Esc menu carries the match controls (#811): the
+## host PC runs the room, or a Couch match has no host phone, so a Deck or a
+## pad-only PC can still end it from the pad.
+func host_pc_has_match_controls() -> bool:
+	return pc_runs_room() or host_slot() == -1
+
 ## Whether a match is in play or paused: what Pause and End match act on.
 func host_pc_match_live() -> bool:
 	return MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) or host_pc_paused()

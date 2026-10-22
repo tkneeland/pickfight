@@ -1005,6 +1005,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"doc_path_check_catches_a_missing_file_803",
 	"every_scene_loads_and_instantiates_802",
 	"scene_check_catches_a_dead_resource_path_802",
+	"couch_pad_only_host_can_end_match_811",
+	"couch_host_phone_present_keeps_match_menu_hidden_811",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3388,6 +3390,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_demo_title_wishlist_button_shown_only_in_demo_793()
 		"demo_wishlist_button_opens_store_link_793":
 			return await _scenario_demo_wishlist_button_opens_store_link_793()
+		"couch_pad_only_host_can_end_match_811":
+			return await _scenario_couch_pad_only_host_can_end_match_811()
+		"couch_host_phone_present_keeps_match_menu_hidden_811":
+			return await _scenario_couch_host_phone_present_keeps_match_menu_hidden_811()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -46534,6 +46540,117 @@ func _scenario_stick_deadzone_setting_748() -> Array[String]:
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
+
+
+## Issue #809: with Player numbers on, each living fighter's name tag carries its seat number (1 to 8)
+## as a badge; off draws none; a team player keeps the team letter; a ghost gets none; the lobby card
+## shows the number too.
+func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.player_numbers
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array = []
+	for i in 8:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "NumP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.visible = true
+		player.alive = true
+		players.append(player)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	host.player_numbers = true
+	tags.tick()
+	for slot in 8:
+		var badge: Control = tags.team_badge(slot)
+		if not badge.visible or badge.letter() != str(slot + 1):
+			failures.append("slot %d's badge reads '%s' (visible %s), expected %d" % [slot, badge.letter(), badge.visible, slot + 1])
+		elif badge.position.x >= tags.name_tag(slot).position.x:
+			failures.append("slot %d's number badge is not left of its name tag" % slot)
+	players[3].alive = false
+	tags.tick()
+	if tags.team_badge(3).visible:
+		failures.append("a ghost kept its number badge")
+	players[3].alive = true
+	players[1].team = 1
+	tags.tick()
+	if tags.team_badge(1).letter() != "B":
+		failures.append("a team player's badge reads '%s', expected the team letter B" % tags.team_badge(1).letter())
+	if tags.team_badge(2).letter() != "3":
+		failures.append("a free-for-all player beside a team player reads '%s', expected 3" % tags.team_badge(2).letter())
+	players[1].team = -1
+	host.player_numbers = false
+	tags.tick()
+	for slot in 8:
+		if tags.team_badge(slot).visible:
+			failures.append("slot %d shows a badge with Player numbers off" % slot)
+	# The lobby card.
+	var card: Control = (load("res://scripts/LobbyPlayerCard.gd") as GDScript).new(0)
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5})
+	if not card.team_chip().visible or card.team_chip().letter() != "5":
+		failures.append("a numbered card's chip reads '%s' (visible %s)" % [card.team_chip().letter(), card.team_chip().visible])
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5, "team": 0})
+	if card.team_chip().letter() != "R":
+		failures.append("a team card's chip reads '%s', expected R" % card.team_chip().letter())
+	card.apply({"name": "Tester", "color": Color.WHITE})
+	if card.team_chip().visible:
+		failures.append("an unnumbered card shows a chip")
+	card.free()
+	host.player_numbers = was
+	await _teardown(stage)
+	return failures
+
+## Issue #809: Player numbers is off by default, saved, put back by Restore defaults, has a switch in
+## Settings, and its label is translated in every shipped locale.
+func _scenario_player_numbers_setting_persists_and_restores_809() -> Array[String]:
+	var failures: Array[String] = []
+	var tmp: String = OS.get_temp_dir().path_join("pf_809_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if fresh.player_numbers:
+		failures.append("Player numbers is not off by default")
+	fresh.set_player_numbers(true)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if not again.player_numbers:
+		failures.append("switching Player numbers on was not remembered")
+	again.restore_defaults()
+	if again.player_numbers:
+		failures.append("Restore defaults left Player numbers on")
+	var last: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	last.path = tmp
+	last.load_settings()
+	if last.player_numbers:
+		failures.append("the restored default was not saved")
+	DirAccess.remove_absolute(tmp)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		ui.host.persist = false
+		var was: bool = ui.host.player_numbers
+		if ui.numbers_box() == null:
+			failures.append("Settings has no Player numbers switch")
+		else:
+			ui.numbers_box().button_pressed = true
+			if not ui.host.player_numbers:
+				failures.append("the Player numbers switch did not set the option")
+			ui.host.player_numbers = was
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		if tr("SETTINGS_PLAYER_NUMBERS") == "SETTINGS_PLAYER_NUMBERS":
+			failures.append("SETTINGS_PLAYER_NUMBERS has no %s text" % locale)
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+
 ## Issue #750: Settings' "Restore defaults" asks first (No and closing the panel cancel), and Yes puts every
 ## setting in audio.cfg back to its default except Language and the crash-report choice; the reset is saved.
 func _scenario_restore_defaults_750() -> Array[String]:
@@ -47472,115 +47589,103 @@ func _scenario_stage_rotation_data_check_catches_a_typo_801() -> Array[String]:
 			failures.append("no problem containing '%s' in: %s" % [expected, bad])
 	_scenario_completed = true
 	return failures
-
-
-
-
-## Issue #809: with Player numbers on, each living fighter's name tag carries its seat number (1 to 8)
-## as a badge; off draws none; a team player keeps the team letter; a ghost gets none; the lobby card
-## shows the number too.
-func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
+## Issue #811: in a Couch match with no host phone (a Steam Deck or a pad-only
+## PC) the Settings menu (View on the pad) leads with Pause/Resume and End
+## match, in the pad's focus chain, and A on End match returns to the lobby.
+func _scenario_couch_pad_only_host_can_end_match_811() -> Array[String]:
 	var failures: Array[String] = []
-	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
-	var was: bool = host.player_numbers
-	var stage := Node2D.new()
-	get_root().add_child(stage)
-	var players: Array = []
-	for i in 8:
-		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
-		player.name = "NumP%d" % i
-		player.start_in_round = false
-		stage.add_child(player)
-		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
-		player.visible = true
-		player.alive = true
-		players.append(player)
-	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
-		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
-	stage.add_child(tags)
-	tags.build()
-	host.player_numbers = true
-	tags.tick()
-	for slot in 8:
-		var badge: Control = tags.team_badge(slot)
-		if not badge.visible or badge.letter() != str(slot + 1):
-			failures.append("slot %d's badge reads '%s' (visible %s), expected %d" % [slot, badge.letter(), badge.visible, slot + 1])
-		elif badge.position.x >= tags.name_tag(slot).position.x:
-			failures.append("slot %d's number badge is not left of its name tag" % slot)
-	players[3].alive = false
-	tags.tick()
-	if tags.team_badge(3).visible:
-		failures.append("a ghost kept its number badge")
-	players[3].alive = true
-	players[1].team = 1
-	tags.tick()
-	if tags.team_badge(1).letter() != "B":
-		failures.append("a team player's badge reads '%s', expected the team letter B" % tags.team_badge(1).letter())
-	if tags.team_badge(2).letter() != "3":
-		failures.append("a free-for-all player beside a team player reads '%s', expected 3" % tags.team_badge(2).letter())
-	players[1].team = -1
-	host.player_numbers = false
-	tags.tick()
-	for slot in 8:
-		if tags.team_badge(slot).visible:
-			failures.append("slot %d shows a badge with Player numbers off" % slot)
-	# The lobby card.
-	var card: Control = (load("res://scripts/LobbyPlayerCard.gd") as GDScript).new(0)
-	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5})
-	if not card.team_chip().visible or card.team_chip().letter() != "5":
-		failures.append("a numbered card's chip reads '%s' (visible %s)" % [card.team_chip().letter(), card.team_chip().visible])
-	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5, "team": 0})
-	if card.team_chip().letter() != "R":
-		failures.append("a team card's chip reads '%s', expected R" % card.team_chip().letter())
-	card.apply({"name": "Tester", "color": Color.WHITE})
-	if card.team_chip().visible:
-		failures.append("an unnumbered card shows a chip")
-	card.free()
-	host.player_numbers = was
-	await _teardown(stage)
-	return failures
-
-## Issue #809: Player numbers is off by default, saved, put back by Restore defaults, has a switch in
-## Settings, and its label is translated in every shipped locale.
-func _scenario_player_numbers_setting_persists_and_restores_809() -> Array[String]:
-	var failures: Array[String] = []
-	var tmp: String = OS.get_temp_dir().path_join("pf_809_%d.cfg" % OS.get_process_id())
-	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
-	fresh.path = tmp
-	if fresh.player_numbers:
-		failures.append("Player numbers is not off by default")
-	fresh.set_player_numbers(true)
-	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
-	again.path = tmp
-	again.load_settings()
-	if not again.player_numbers:
-		failures.append("switching Player numbers on was not remembered")
-	again.restore_defaults()
-	if again.player_numbers:
-		failures.append("Restore defaults left Player numbers on")
-	var last: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
-	last.path = tmp
-	last.load_settings()
-	if last.player_numbers:
-		failures.append("the restored default was not saved")
-	DirAccess.remove_absolute(tmp)
 	var sfx: Node = _sfx()
-	if sfx != null:
-		var ui: CanvasLayer = sfx.build_settings_ui()
-		ui.host.persist = false
-		var was: bool = ui.host.player_numbers
-		if ui.numbers_box() == null:
-			failures.append("Settings has no Player numbers switch")
-		else:
-			ui.numbers_box().button_pressed = true
-			if not ui.host.player_numbers:
-				failures.append("the Player numbers switch did not set the option")
-			ui.host.player_numbers = was
-	var was_locale: String = TranslationServer.get_locale()
-	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
-		TranslationServer.set_locale(locale)
-		if tr("SETTINGS_PLAYER_NUMBERS") == "SETTINGS_PLAYER_NUMBERS":
-			failures.append("SETTINGS_PLAYER_NUMBERS has no %s text" % locale)
-	TranslationServer.set_locale(was_locale)
-	_scenario_completed = true
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm.rotation_seed = 811
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	if ui.is_open():
+		ui.toggle_panel()
+	ui.host.mark_telemetry_notice_seen()
+	for device: int in [0, 5]:
+		await _pad_tap_430(device, JOY_BUTTON_START)
+		await _pad_tap_430(device, JOY_BUTTON_START)
+	var started := func() -> bool: return rm.lobby_phase() == "playing"
+	if not await _await_condition(started, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("two pads never started a round (phase '%s')" % rm.lobby_phase())
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	if server.host_slot() != -1 or server.pc_runs_room() or not server.host_pc_has_match_controls():
+		failures.append("expected a Couch match with no host phone (host slot %d, runs room %s)" % [server.host_slot(), server.pc_runs_room()])
+	await _pad_tap_368(0, JOY_BUTTON_BACK)
+	menu.refresh()
+	if not ui.is_open() or not menu.visible:
+		failures.append("View mid-match did not open a menu with the match controls (open %s, shown %s)" % [ui.is_open(), menu.visible])
+	else:
+		var seen: Dictionary = _focus_reach_368(ui.volume_slider())
+		for id in ["Pause", "End"]:
+			if not seen.has(id):
+				failures.append("the D-pad never focused '%s' (saw %s)" % [id, seen.keys()])
+		menu.end_button().grab_focus()
+		await _pad_tap_368(0, JOY_BUTTON_A)
+		await _await_ticks(3)
+		if rm.lobby_phase() == "playing" or rm.lobby_phase() == "round_end":
+			failures.append("A on End match did not end the match (phase '%s')" % rm.lobby_phase())
+		menu.refresh()
+		if menu.visible:
+			failures.append("the match controls still show back in the lobby")
+	if ui.is_open():
+		await _pad_tap_368(0, JOY_BUTTON_B)
+	paused = false
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
+## Issue #811: with a host phone connected the Couch Esc menu does not grow
+## the match rows (the phone's menu stays the control).
+func _scenario_couch_host_phone_present_keeps_match_menu_hidden_811() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var rig: Dictionary = await _deck_rig_368()
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm.rotation_seed = 811
+	rm.lobby_countdown_sec = LOBBY_COUNTDOWN_SEC
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var menu: VBoxContainer = ui.host_match_menu()
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	var peer := WebSocketPeer.new()
+	var result: Dictionary = await _join_phone(peer, "issue-811-host", joined)
+	joined.append(peer)
+	if result["slot"] == -1:
+		failures.append("the host phone got no slot")
+		await _close_phones(joined)
+		await _teardown(rig["main"])
+		return failures
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	await _pad_tap_430(0, JOY_BUTTON_START)
+	peer.send_text(JSON.stringify({"t": "ready", "v": true}))
+	var started := func() -> bool:
+		peer.poll()
+		return rm.lobby_phase() == "playing"
+	if not await _await_condition(started, ROUND_LOOP_TIMEOUT_MSEC * 2):
+		failures.append("the round never started (phase '%s')" % rm.lobby_phase())
+	else:
+		if not ui.is_open():
+			ui.toggle_panel()
+		menu.refresh()
+		if server.host_slot() == -1 or server.host_pc_has_match_controls():
+			failures.append("a host phone is seated but the PC claims the match controls")
+		if menu.visible:
+			failures.append("the match rows show in the Esc menu while a host phone is connected")
+		if ui.is_open():
+			ui.toggle_panel()
+	paused = false
+	await _close_phones(joined)
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
 	return failures
