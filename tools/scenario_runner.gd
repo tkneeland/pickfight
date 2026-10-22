@@ -48160,7 +48160,7 @@ func _scenario_kill_feed_switch_833() -> Array[String]:
 		box.button_pressed = false
 		if sfx.kill_feed:
 			failures.append("unticking the Kill feed box did not turn the flag off")
-		if not box.is_in_group("_none") and box.get_parent() != ui.shake_box().get_parent():
+		if box.get_parent() != ui.shake_box().get_parent():
 			failures.append("the Kill feed box is not in the same list as its neighbours (pad focus chain)")
 		sfx.restore_defaults()
 		if not sfx.kill_feed:
