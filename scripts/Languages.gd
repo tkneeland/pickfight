@@ -99,14 +99,13 @@ static func fallback_font_names(code: String) -> PackedStringArray:
 		out.append_array(names)
 	return out
 
-## Points the bundled fonts' fallbacks at the bundled CJK subset and the system
-## fonts for `code`.
-static func apply_fonts(code: String) -> void:
+## The fallback chain for `code`: its bundled CJK subset (if any), then the
+## installed system fonts from `fallback_font_names`. Empty for non-CJK codes.
+static func fallback_chain(code: String) -> Array[Font]:
 	var chain: Array[Font] = []
-	if CJK_SUBSETS.has(code):
-		var subset: FontFile = load(CJK_SUBSETS[code])
-		if subset != null:
-			chain.append(subset)
+	var subset: FontFile = _cjk_subset(code)
+	if subset != null:
+		chain.append(subset)
 	var installed: PackedStringArray = OS.get_system_fonts()
 	for font_name: String in fallback_font_names(code):
 		if not installed.has(font_name):
@@ -114,23 +113,34 @@ static func apply_fonts(code: String) -> void:
 		var system := SystemFont.new()
 		system.font_names = PackedStringArray([font_name])
 		chain.append(system)
+	return chain
+
+static func _cjk_subset(code: String) -> FontFile:
+	return load(CJK_SUBSETS[code]) if CJK_SUBSETS.has(code) else null
+
+## Points the bundled fonts' fallbacks at the bundled CJK subset and the system
+## fonts for `code`.
+static func apply_fonts(code: String) -> void:
+	var chain: Array[Font] = fallback_chain(code)
 	for path: String in BUNDLED_FONTS:
 		var font: FontFile = load(path)
 		if font != null:
 			font.allow_system_fallback = true
 			font.fallbacks = chain
 
-## A font for the Language picker, which shows 简体中文, 日本語 and 한국어 in
-## every locale (including the ones whose chain is empty): `base` with all three
-## bundled subsets as fallbacks, Japanese first so 日本語 is drawn in one style.
-## Only the picker uses it, so other text keeps its line height.
-static func picker_font(base: Font) -> FontVariation:
+## A font for the Language picker's popup, which lists 简体中文, 日本語 and 한국어
+## in every locale: `base` with the current language's chain (`code`), then the
+## other bundled subsets, Japanese first so 日本語 is drawn in one style. A
+## FontVariation's own fallbacks replace its base's, hence the full chain here.
+## Only the popup uses it (the closed row shows the current language's own name,
+## which its chain already covers), so other text keeps its line height.
+static func picker_font(base: Font, code: String) -> FontVariation:
 	var font := FontVariation.new()
 	font.base_font = base
-	var chain: Array[Font] = []
-	for code: String in ["ja", "zh_CN", "ko"]:
-		var subset: FontFile = load(CJK_SUBSETS[code])
-		if subset != null:
+	var chain: Array[Font] = fallback_chain(code)
+	for other: String in ["ja", "zh_CN", "ko"]:
+		var subset: FontFile = _cjk_subset(other)
+		if subset != null and not chain.has(subset):
 			chain.append(subset)
 	font.fallbacks = chain
 	return font

@@ -48677,11 +48677,14 @@ func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[Stri
 	_scenario_completed = true
 	return failures
 # --- Bundled CJK font subsets (issue #849) -------------------------------------------
+## Characters no bundled font has in any language (the ▸ in "Stages & Rules ▸"),
+## so the coverage check leaves them to the system fonts. Named one by one so a
+## new symbol in a CJK string still fails the check.
+const CJK_UNCOVERED_EXEMPT_849: String = "▸"
+
 ## One line per language listing the characters of `texts[code]` (an Array of
-## [translated, english] pairs) that the language's bundled subset has no glyph
-## for. Control characters are skipped, and so are characters the English string
-## also uses (such as the ▸ in "Stages & Rules ▸"): those draw the same way in
-## every language, so they are not the CJK subset's job.
+## strings) that the language's bundled subset has no glyph for. Control
+## characters and CJK_UNCOVERED_EXEMPT_849 are skipped.
 func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
 	var languages: GDScript = load("res://scripts/Languages.gd")
 	var out: Array[String] = []
@@ -48691,11 +48694,10 @@ func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
 			out.append("%s: subset %s did not load" % [code, languages.CJK_SUBSETS[code]])
 			continue
 		var missing: String = ""
-		for pair: Array in texts[code]:
-			var text: String = pair[0]
+		for text: String in texts[code]:
 			for i: int in text.length():
 				var c: int = text.unicode_at(i)
-				if c < 0x20 or missing.contains(char(c)) or (pair[1] as String).contains(char(c)):
+				if c < 0x20 or missing.contains(char(c)) or CJK_UNCOVERED_EXEMPT_849.contains(char(c)):
 					continue
 				if not font.has_char(c):
 					missing += char(c)
@@ -48703,22 +48705,26 @@ func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
 			out.append("%s: %s" % [code, missing])
 	return out
 
-## The zh_CN, ja and ko columns of strings.csv plus each language's own name
-## in the Language picker, as {code: Array of [translated, english] pairs}.
+## The strings.csv column of every CJK_SUBSETS language plus that language's
+## own name in the Language picker, as {code: Array of strings}.
 func _cjk_translated_strings_849() -> Dictionary:
-	var texts: Dictionary = {"zh_CN": [], "ja": [], "ko": []}
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var texts: Dictionary = {}
+	for code: String in languages.CJK_SUBSETS:
+		texts[code] = []
 	var f := FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	if f == null:
+		return texts # the caller's size check fails loudly
 	var header: PackedStringArray = f.get_csv_line()
-	var en: int = header.find("en")
 	while not f.eof_reached():
 		var row: PackedStringArray = f.get_csv_line()
 		for code: String in texts:
 			var col: int = header.find(code)
 			if col >= 0 and col < row.size():
-				(texts[code] as Array).append([row[col], row[en] if en < row.size() else ""])
-	for option: Dictionary in (load("res://scripts/Languages.gd") as GDScript).OPTIONS:
+				(texts[code] as Array).append(row[col])
+	for option: Dictionary in languages.OPTIONS:
 		if texts.has(option["code"]):
-			(texts[option["code"]] as Array).append([str(option["name"]), ""])
+			(texts[option["code"]] as Array).append(str(option["name"]))
 	return texts
 
 func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[String]:
@@ -48757,13 +48763,14 @@ func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[Strin
 func _scenario_cjk_subset_check_reports_an_uncovered_character_849() -> Array[String]:
 	var failures: Array[String] = []
 	# 龘 (U+9F98) is in no translated string, so no subset carries it; the other
-	# characters are from real strings, and the ▸ the English also uses is exempt.
-	var found: Array[String] = _cjk_missing_chars_849({"zh_CN": [["手滑王龘", "Butterfingers"]], "ja": [["うっかり屋 ▸", "Stages ▸"]], "ko": [["공중龘", "AIRBORNE"]]})
+	# characters are from real strings, and ▸ is on the exempt list.
+	var found: Array[String] = _cjk_missing_chars_849({"zh_CN": ["手滑王龘"], "ja": ["うっかり屋 ▸"], "ko": ["공중龘"]})
 	if found.size() != 2 or found[0] != "zh_CN: 龘" or found[1] != "ko: 龘":
 		failures.append("wanted [\"zh_CN: 龘\", \"ko: 龘\"], got %s" % [found])
-	found = _cjk_missing_chars_849({"ja": [["▸", "Stages"]]})
-	if found.size() != 1 or found[0] != "ja: ▸":
-		failures.append("a symbol the English does not use must still be reported, got %s" % [found])
+	# ♞ (U+265E) is a symbol in no subset and not exempt, so it is reported.
+	found = _cjk_missing_chars_849({"ja": ["♞"]})
+	if found.size() != 1 or found[0] != "ja: ♞":
+		failures.append("a symbol off the exempt list must still be reported, got %s" % [found])
 	_scenario_completed = true
 	return failures
 
@@ -48771,16 +48778,16 @@ func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[Stri
 	var failures: Array[String] = []
 	var languages: GDScript = load("res://scripts/Languages.gd")
 	var files: Array[FontFile] = []
-	var was: Dictionary = {}
+	var saved_fallbacks: Dictionary = {}
 	for path: String in languages.BUNDLED_FONTS:
 		var file: FontFile = load(path)
 		files.append(file)
-		was[file] = file.fallbacks.duplicate()
+		saved_fallbacks[file] = file.fallbacks.duplicate()
 	var heights: Dictionary = {}
 	for file: FontFile in files:
 		file.fallbacks = []
 		heights[file] = file.get_height(32)
-	for code: String in ["zh_CN", "ja", "ko"]:
+	for code: String in languages.CJK_SUBSETS:
 		languages.apply_fonts(code)
 		for file: FontFile in files:
 			var first: Font = null if file.fallbacks.is_empty() else file.fallbacks[0]
@@ -48799,35 +48806,46 @@ func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[Stri
 			if not is_equal_approx(file.get_height(32), heights[file]):
 				failures.append("%s for %s: line height %f, was %f" % [file.resource_path.get_file(), code, file.get_height(32), heights[file]])
 	for file: FontFile in files:
-		file.fallbacks = was[file] # later scenarios measure text with these fonts
+		file.fallbacks = saved_fallbacks[file] # later scenarios measure text with these fonts
 	_scenario_completed = true
 	return failures
 
-## The Language picker shows 简体中文, 日本語 and 한국어 in every locale, including
-## the ones whose UI fonts have no CJK chain, so its own font falls back to all
-## three bundled subsets and each name has a glyph for every character.
+## The Language picker's popup lists 简体中文, 日本語 and 한국어 in every locale,
+## including the ones whose UI fonts have no CJK chain, so its font keeps the
+## locale's own chain first and then falls back to all three bundled subsets.
+## The closed row keeps the theme font (and its line height).
 func _scenario_language_picker_draws_cjk_names_in_every_locale_849() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
 	if sfx == null:
 		return ["the Sfx autoload is missing"]
-	var panel: CanvasLayer = sfx.build_settings_ui()
+	var panel: CanvasLayer = sfx.build_settings_ui() # shared with later scenarios: not freed
 	var row: OptionButton = panel.language_button()
 	var languages: GDScript = load("res://scripts/Languages.gd")
-	for target: Variant in [row, row.get_popup()]: # a PopupMenu is a Window, not a Control
-		var font: Font = target.get_theme_font("font")
+	if row.has_theme_font_override("font"):
+		failures.append("the closed Language row overrides its font, so its line height changes")
+	var popup_font: Font = row.get_popup().get_theme_font("font")
+	if not (popup_font is FontVariation):
+		failures.append("the Language popup has no picker font, got %s" % popup_font)
+	var base: Font = row.get_theme_font("font")
+	for code: String in languages.codes():
+		var font: FontVariation = languages.picker_font(base, code)
 		var chain: Array[Font] = [font]
 		chain.append_array(font.fallbacks)
-		for code: String in languages.CJK_SUBSETS:
-			if not chain.any(func(f: Font) -> bool: return f.resource_path == languages.CJK_SUBSETS[code]):
-				failures.append("%s font has no %s subset in its chain" % [target.get_class(), code])
+		var own: Array[Font] = languages.fallback_chain(code)
+		for i: int in own.size():
+			if i + 1 >= chain.size() or chain[i + 1].resource_path != own[i].resource_path:
+				failures.append("%s picker chain does not start with the locale's own chain" % code)
+				break
+		for subset_code: String in languages.CJK_SUBSETS:
+			if not chain.any(func(f: Font) -> bool: return f.resource_path == languages.CJK_SUBSETS[subset_code]):
+				failures.append("%s picker font has no %s subset in its chain" % [code, subset_code])
 		for option: Dictionary in languages.OPTIONS:
 			var name: String = option["name"]
 			for i: int in name.length():
 				var c: int = name.unicode_at(i)
 				if c > 0x20 and not chain.any(func(f: Font) -> bool: return f.has_char(c)):
-					failures.append("%s font cannot draw '%s' in %s" % [target.get_class(), char(c), name])
-	panel.queue_free()
+					failures.append("%s picker font cannot draw '%s' in %s" % [code, char(c), name])
 	_scenario_completed = true
 	return failures
 
