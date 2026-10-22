@@ -249,7 +249,7 @@ func _add_mode_card(id: String, card_name: String, rule: String) -> Label:
 	card.add_child(box)
 	var title: Label = ScreenKitScript.themed_label(card_name, 22, UiThemeScript.INK_HEADING_LABEL)
 	title.name = "Name"
-	title.clip_text = true
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of cutting a long name off at a large Text size (#751)
 	box.add_child(title)
 	var rule_label: Label = ScreenKitScript.themed_label(rule, DECK_MIN_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL)
 	rule_label.name = "Rule"

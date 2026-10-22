@@ -33,6 +33,7 @@ const LanguagesScript := preload("res://scripts/Languages.gd")
 const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const HostMatchMenuScript := preload("res://scripts/HostMatchMenu.gd")
 const QuitGameScript := preload("res://scripts/QuitGame.gd")
+const TextScaleScript := preload("res://scripts/TextScale.gd")
 const CreditsScreenScript := preload("res://scripts/CreditsScreen.gd")
 ## Height of the scrolling window-size and options area.
 const LIST_HEIGHT: float = 130.0
@@ -287,6 +288,10 @@ func _ready() -> void:
 	_toggle.name = "Toggle"
 	_toggle.focus_mode = Control.FOCUS_NONE
 	_toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
+	if TextScaleScript.design_default_size() > 0:
+		# The corner button keeps its design size at every Text size: it sits over the lobby's bottom-right line (#751).
+		_toggle.add_theme_font_size_override("font_size", TextScaleScript.design_default_size())
+		_toggle.set_meta(TextScaleScript.META_SKIP, true)
 	corner.add_child(_toggle)
 
 	_build_telemetry_notice()

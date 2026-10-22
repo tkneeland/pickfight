@@ -1,0 +1,49 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+SteamPlatform: GodotSteam not present, Steam off
+Controller page: http://172.19.6.46:51645/
+FAIL  text_size_auto_fit_751
+      - the tight screen still overflows after the fit: /root/@CanvasLayer@2/TightScreen751/@HBoxContainer@3 [P: (0.0, 100.0), S: (2030.0, 77.0)] leaves (1600.0, 900.0)
+      - the tight screen runs at 1.40, expected a step down from 1.4 to between 1.0 and 1.3
+      - 1600x900 title at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1600x900 title at 1.4: TitlePanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/TitlePanel/@MarginContainer@69 [P: (0.0, 0.0), S: (1600.0, 961.0)] leaves (1600.0, 900.0)
+      - 1600x900 lobby at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1600x900 help at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1600x900 help at 1.4: HowToPlayPopup does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/HowToPlayPopup/Center [P: (0.0, 0.0), S: (1600.0, 956.0)] leaves (1600.0, 900.0)
+      - 1600x900 stages at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1600x900 title at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1600x900 lobby at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1600x900 help at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1600x900 stages at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1920x1080 title at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1920x1080 title at 1.4: TitlePanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/TitlePanel/@MarginContainer@69 [P: (0.0, 0.0), S: (1600.0, 961.0)] leaves (1600.0, 900.0)
+      - 1920x1080 lobby at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1920x1080 help at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1920x1080 help at 1.4: HowToPlayPopup does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/HowToPlayPopup/Center [P: (0.0, 0.0), S: (1600.0, 956.0)] leaves (1600.0, 900.0)
+      - 1920x1080 stages at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1920x1080 title at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1920x1080 lobby at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1920x1080 help at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1920x1080 stages at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1280x800 title at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1280x800 title at 1.4: TitlePanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/TitlePanel/@MarginContainer@69 [P: (0.0, 0.0), S: (1600.0, 961.0)] leaves (1600.0, 900.0)
+      - 1280x800 lobby at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1280x800 help at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1280x800 help at 1.4: HowToPlayPopup does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/HowToPlayPopup/Center [P: (0.0, 0.0), S: (1600.0, 956.0)] leaves (1600.0, 900.0)
+      - 1280x800 stages at 1.4: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 1103.0)] leaves (1600.0, 900.0)
+      - 1280x800 title at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1280x800 lobby at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1280x800 help at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - 1280x800 stages at 1.2: LobbyPanel does not fit: /root/Main/RoundManager/LobbyLayer/LobbyPanel/Page [P: (0.0, 0.0), S: (1600.0, 930.0)] leaves (1600.0, 900.0)
+      - How to play never stepped down from Larger (1.4): the auto-fit did not engage
+---
+0 passed, 1 failed, 1 total
+WARNING: 40 RIDs of type "CanvasItem" were leaked.
+   at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2692)
+ERROR: 53 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 53 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2641)
+ERROR: 3 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)

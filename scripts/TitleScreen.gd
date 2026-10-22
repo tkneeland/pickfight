@@ -21,6 +21,7 @@ const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const QuitGameScript := preload("res://scripts/QuitGame.gd")
 const CreditsScreenScript := preload("res://scripts/CreditsScreen.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+const TextScaleScript := preload("res://scripts/TextScale.gd")
 ## The key that opens the store page from the demo build's title screen (#793).
 const TITLE_WISHLIST_KEY: Key = KEY_W
 ## The key that quits from the title screen (#718).
@@ -130,6 +131,7 @@ func build() -> void:
 	_title_panel.name = "TitlePanel"
 	_title_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_title_panel.visible = false
+	_title_panel.set_meta(TextScaleScript.META_ROOT, true) # auto-fits its own text size (#751)
 	lobby_panel.add_child(_title_panel)
 	# Opaque ground, so the lobby never shows through (#546).
 	_title_panel.add_child(ScreenKitScript.striped_background())
@@ -241,6 +243,9 @@ func _build_card(kind: String, name_key: String, hint_key: String) -> Button:
 	inner.add_theme_constant_override("margin_top", 24)
 	inner.add_theme_constant_override("margin_bottom", 24)
 	button.add_child(inner)
+	# The card grows with its text (a larger Text size, a longer translation) instead of cutting it off (#751).
+	inner.minimum_size_changed.connect(func() -> void:
+		button.custom_minimum_size.y = maxf(TITLE_CARD_HEIGHT, inner.get_combined_minimum_size().y))
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_theme_constant_override("separation", 8)

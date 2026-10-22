@@ -1023,6 +1023,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_point_in_teams_names_the_team_825",
 	"match_point_skipped_when_target_is_1_829",
 	"text_size_setting_751",
+	"text_size_auto_fit_751",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3442,6 +3443,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_point_skipped_when_target_is_1_829()
 		"text_size_setting_751":
 			return await _scenario_text_size_setting_751()
+		"text_size_auto_fit_751":
+			return await _scenario_text_size_auto_fit_751()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48332,4 +48335,132 @@ func _scenario_text_size_setting_751() -> Array[String]:
 	if ui.is_open():
 		ui.toggle_panel()
 	_scenario_completed = true
+	return failures
+
+## #751 auto-fit: at Large and Larger every screen steps its own text down until nothing sticks
+## out of its parent or gets cut off, and is honoured wherever there is room. Checked on a
+## synthetic screen (too wide at the chosen size, a roomy one, and back to Normal) and on the
+## real title, lobby, How to play and Stages & Rules at 1600x900, 1920x1080 and 1280x800.
+func _scenario_text_size_auto_fit_751() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var fit_script: GDScript = load("res://scripts/TextScale.gd")
+	failures.append_array(await _text_fit_synthetic_751(sfx, fit_script))
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	var original: Vector2i = get_root().size
+	var worst: Dictionary = {}
+	for resolution: Vector2i in [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]:
+		get_root().size = resolution
+		for chosen: float in [1.4, 1.2]:
+			sfx.set_text_scale(chosen)
+			for state: String in ["title", "lobby", "help", "stages"]:
+				screen.set_popup("")
+				screen.show_title(state == "title")
+				if state != "title":
+					screen.show_panel("lobby")
+					screen.refresh_lobby(_lobby_state_425(8), 2, server)
+				if state == "help" or state == "stages":
+					screen.set_popup("help" if state == "help" else "stages")
+				await _text_fit_settle_751(sfx)
+				var label: String = "%dx%d %s at %.1f" % [resolution.x, resolution.y, state, chosen]
+				var seen: int = 0
+				for root: Control in sfx.fit_roots():
+					if not root.is_visible_in_tree():
+						continue
+					seen += 1
+					var why: String = fit_script.first_overflow(root, get_root().get_visible_rect().size)
+					if not why.is_empty():
+						failures.append("%s: %s does not fit: %s" % [label, root.name, why])
+					var factor: float = sfx.fit_factor(root)
+					if factor < 1.0 - 0.001 or factor > chosen + 0.001:
+						failures.append("%s: %s runs at %.2f, outside Normal..%.1f" % [label, root.name, factor, chosen])
+					if state == "title" and root.name == "TitlePanel" and factor < minf(chosen, 1.2) - 0.001:
+						failures.append("%s: the title screen has room but runs at %.2f, under %.1f" % [label, factor, minf(chosen, 1.2)])
+					if state == "help" and root.name == "HowToPlayPopup" and chosen == 1.4:
+						worst["help"] = factor
+				if seen == 0:
+					failures.append("%s: no screen was being fitted" % label)
+	if not worst.has("help") or float(worst["help"]) >= 1.4 - 0.001:
+		failures.append("How to play never stepped down from Larger (%s): the auto-fit did not engage" % [worst.get("help")])
+	sfx.set_text_scale(1.0)
+	await _text_fit_settle_751(sfx)
+	for root: Control in sfx.fit_roots():
+		if absf(sfx.fit_factor(root) - 1.0) > 0.001:
+			failures.append("%s did not return to Normal (factor %.2f)" % [root.name, sfx.fit_factor(root)])
+	get_root().size = original
+	await _teardown(rig["main"])
+	return failures
+
+## Waits until no visible screen has changed its fit factor for a while.
+func _text_fit_settle_751(sfx: Node) -> void:
+	var last: Dictionary = {}
+	var calm: int = 0
+	for _i in 200:
+		await _await_ticks(1)
+		var now: Dictionary = {}
+		for root: Control in sfx.fit_roots():
+			now[root.get_instance_id()] = "%.2f %s" % [sfx.fit_factor(root), root.is_visible_in_tree()]
+		calm = calm + 1 if now == last else 0
+		last = now
+		if calm >= 25:
+			return
+
+## A screen too wide at the chosen size steps down to fit; a roomy one is honoured; Normal restores both.
+func _text_fit_synthetic_751(sfx: Node, fit_script: GDScript) -> Array[String]:
+	var failures: Array[String] = []
+	sfx.set_text_scale(1.0)
+	var layer := CanvasLayer.new()
+	get_root().add_child(layer)
+	var tight := Control.new()
+	tight.name = "TightScreen751"
+	tight.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(tight)
+	var row := HBoxContainer.new()
+	row.position = Vector2(0, 100)
+	tight.add_child(row)
+	var roomy := Control.new()
+	roomy.name = "RoomyScreen751"
+	roomy.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(roomy)
+	var lone := Label.new()
+	lone.text = "Roomy"
+	lone.add_theme_font_size_override("font_size", 40)
+	lone.position = Vector2(50, 300)
+	roomy.add_child(lone)
+	var width: float = float(get_root().get_visible_rect().size.x)
+	while row.get_combined_minimum_size().x < width * 0.84:
+		var word := Label.new()
+		word.text = "Pickfight "
+		word.add_theme_font_size_override("font_size", 40)
+		row.add_child(word)
+		await _await_ticks(1)
+	await _await_ticks(3)
+	if fit_script.overflows(tight, get_root().get_visible_rect().size):
+		failures.append("the synthetic screen already overflows at Normal: %s" % fit_script.first_overflow(tight, get_root().get_visible_rect().size))
+	sfx.set_text_scale(1.4)
+	if not fit_script.overflows(tight, get_root().get_visible_rect().size):
+		await _await_ticks(2)
+	if not fit_script.overflows(tight, get_root().get_visible_rect().size):
+		failures.append("the synthetic screen does not overflow at Larger before the fit runs; the test is not testing anything")
+	await _text_fit_settle_751(sfx)
+	var factor: float = sfx.fit_factor(tight)
+	if fit_script.overflows(tight, get_root().get_visible_rect().size):
+		failures.append("the tight screen still overflows after the fit: %s" % fit_script.first_overflow(tight, get_root().get_visible_rect().size))
+	if factor >= 1.4 - 0.001 or factor < 1.0 - 0.001:
+		failures.append("the tight screen runs at %.2f, expected a step down from 1.4 to between 1.0 and 1.3" % factor)
+	var first_word: Label = row.get_child(0) as Label
+	if first_word.get_theme_font_size("font_size") != roundi(40.0 * factor):
+		failures.append("a label on the tight screen is %d px, expected %d at factor %.2f" % [first_word.get_theme_font_size("font_size"), roundi(40.0 * factor), factor])
+	if absf(sfx.fit_factor(roomy) - 1.4) > 0.001 or lone.get_theme_font_size("font_size") != 56:
+		failures.append("the roomy screen is at %.2f with a %d px label, expected 1.4 and 56" % [sfx.fit_factor(roomy), lone.get_theme_font_size("font_size")])
+	sfx.set_text_scale(1.0)
+	await _text_fit_settle_751(sfx)
+	if absf(sfx.fit_factor(tight) - 1.0) > 0.001 or tight.theme != null or first_word.get_theme_font_size("font_size") != 40:
+		failures.append("Normal did not restore the tight screen (factor %.2f, label %d px)" % [sfx.fit_factor(tight), first_word.get_theme_font_size("font_size")])
+	layer.queue_free()
+	await _await_ticks(2)
 	return failures

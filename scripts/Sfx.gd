@@ -334,6 +334,9 @@ var ui_scale: float = 1.0
 const TEXT_SCALES: Array[float] = [1.0, 1.2, 1.4]
 const TextScaleScript := preload("res://scripts/TextScale.gd")
 var text_scale: float = 1.0
+const TextFitScript := preload("res://scripts/TextFit.gd")
+## Auto-fit (#751): each screen steps its text down until it fits; ticked from _process.
+var _fit: RefCounted = TextFitScript.new()
 ## Streamer mode (#369): when on, the shared screen hides the room code, the
 ## join URL and the join QR ("Code hidden: see host phone"); the host phone's
 ## menu still shows the code. Off by default.
@@ -684,13 +687,33 @@ func set_text_scale(value: float) -> void:
 	apply_text_scale()
 	_save_settings()
 
-## Put 	ext_scale into effect on the project theme and every control in the tree.
+## Put text_scale into effect on the project theme and every control in the tree.
 func apply_text_scale() -> void:
 	TextScaleScript.apply_to_theme(ThemeDB.get_project_theme(), text_scale)
+	_fit.retarget(text_scale)
 	if is_inside_tree():
 		TextScaleScript.apply_to_tree(get_tree().root, text_scale)
 
+## Auto-fit: step the screens whose text does not fit down from the chosen size (#751).
+func _process(delta: float) -> void:
+	if text_scale > 1.0:
+		_fit.tick(delta, text_scale, get_viewport().get_visible_rect().size)
+
+## A new language may fit larger text: let every screen look for room again (#751).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED:
+		_fit.reset_blocks()
+
+## The factor `node` is drawn at now: its screen or popup's fit, else the chosen size.
+func fit_factor(node: Control) -> float:
+	return TextScaleScript.effective_factor(node, text_scale)
+
+func fit_roots() -> Array[Control]:
+	return _fit.tracked()
+
 func _on_node_added(node: Node) -> void:
+	if node is Control and TextScaleScript.is_fit_root(node):
+		_fit.register(node as Control, text_scale)
 	if text_scale != 1.0 and node is Control:
 		# After the screen has set its own sizes.
 		(func() -> void:

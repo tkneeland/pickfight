@@ -1,0 +1,23 @@
+ui_screenshots: title fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), TitlePanel 1.2 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: credits fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), TitlePanel 1.2 (smaller theme), Arrows 1.2, Corner 1.2, Root 1.2
+ui_screenshots: telemetry_notice fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), TitlePanel 1.2 (smaller theme), Arrows 1.2, Corner 1.2, TelemetryNotice 1.2
+ui_screenshots: lobby_couch_0 fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: how_to_play fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), HowToPlayPopup 1.2 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: stages_rules fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), StagesRulesPopup 1.2 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: stages_rules_stock fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), StagesRulesPopup 1.2 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: stages_rules_some_off fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), StagesRulesPopup 1.2 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: stages_rules_soccer fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), StagesRulesPopup 1.2 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: lobby_couch_3_pad fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: lobby_couch_8 fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: settings fit: ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2, Corner 1.2
+ui_screenshots: lobby_online_0 fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2
+ui_screenshots: your_look fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), YourLookPopup 1.2 (smaller theme), Arrows 1.2
+ui_screenshots: lobby_online_3 fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2
+ui_screenshots: lobby_online_8 fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2
+ui_screenshots: lobby_solo_0 fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2
+ui_screenshots: lobby_solo_3 fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2
+ui_screenshots: lobby_solo_8 fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, LobbyPanel 1.1 (smaller theme), Arrows 1.2
+ui_screenshots: hud_8_players fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, Arrows 1.2
+ui_screenshots: esc_menu fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, Arrows 1.2
+ui_screenshots: victory_8_players fit: Corner 1.2, ScoreLabel 1.2, KillFeed 1.2, @Label@404 1.2, VictoryPanel 1.0 (smaller theme), Arrows 1.2
+ui_screenshots: pc_join_screen fit: Corner 1.2, JoinScreen 1.2
