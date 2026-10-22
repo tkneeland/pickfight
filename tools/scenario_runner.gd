@@ -1069,6 +1069,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"pickup_drop_falls_through_players_to_terrain_review_gp",
+	"sudden_death_chip_cleared_without_modifier_review_gp",
+	"round_start_clears_stale_round_flags_review_gp",
+	"end_match_disarms_focus_resume_review_gp",
+	"night_glows_removed_with_stage_review_gp",
+	"replay_capture_keeps_twelve_fps_review_gp",
+	"ctf_carried_flag_follows_carrier_in_capture_pause_review_gp",
+	"soccer_last_touch_is_nearest_player_review_gp",
+	"bot_death_and_stage_read_reset_brain_review_gp",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3580,6 +3589,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"pickup_drop_falls_through_players_to_terrain_review_gp":
+			return await _scenario_pickup_drop_falls_through_players_to_terrain_review_gp()
+		"sudden_death_chip_cleared_without_modifier_review_gp":
+			return await _scenario_sudden_death_chip_cleared_without_modifier_review_gp()
+		"round_start_clears_stale_round_flags_review_gp":
+			return await _scenario_round_start_clears_stale_round_flags_review_gp()
+		"end_match_disarms_focus_resume_review_gp":
+			return await _scenario_end_match_disarms_focus_resume_review_gp()
+		"night_glows_removed_with_stage_review_gp":
+			return await _scenario_night_glows_removed_with_stage_review_gp()
+		"replay_capture_keeps_twelve_fps_review_gp":
+			return await _scenario_replay_capture_keeps_twelve_fps_review_gp()
+		"ctf_carried_flag_follows_carrier_in_capture_pause_review_gp":
+			return await _scenario_ctf_carried_flag_follows_carrier_in_capture_pause_review_gp()
+		"soccer_last_touch_is_nearest_player_review_gp":
+			return await _scenario_soccer_last_touch_is_nearest_player_review_gp()
+		"bot_death_and_stage_read_reset_brain_review_gp":
+			return await _scenario_bot_death_and_stage_read_reset_brain_review_gp()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -50768,4 +50795,246 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
 	_scenario_completed = true
+	return failures
+# --- Review fixes: gameplay (review_gp) -----------------------------------------
+const NightLightingScript_review_gp := preload("res://scripts/NightLighting.gd")
+const ReplayBufferScript_review_gp := preload("res://scripts/ReplayBuffer.gd")
+const SoccerScript_review_gp := preload("res://scripts/Soccer.gd")
+## A pickup a ghost drops onto a player's head falls past the body to the
+## terrain below: the ray that finds its landing ignores every player body.
+func _scenario_pickup_drop_falls_through_players_to_terrain_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	_add_bar(stage, Vector2(0.0, 300.0), Vector2(800.0, 20.0))
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 200.0))
+	await _await_ticks(60)
+	var pickup: Node2D = _place_pickup(stage, player.global_position + Vector2(0.0, -300.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	# No weapon, so touching the body does not collect it: only where it lands is measured.
+	pickup.weapon_stats = null
+	pickup.drop()
+	await _await_condition(func() -> bool: return not is_instance_valid(pickup) or not pickup.is_falling(), 3000)
+	if not is_instance_valid(pickup):
+		failures.append("the dropped pickup was freed instead of landing")
+	elif pickup.is_falling():
+		failures.append("the dropped pickup never landed")
+	elif pickup.global_position.y < player.global_position.y:
+		failures.append("the pickup came to rest at y %.1f on the player's body (centre y %.1f), not on the floor below" % [
+			pickup.global_position.y, player.global_position.y])
+	await _teardown(stage)
+	return failures
+## A Sudden Death in a round with no modifier sends its chip title to the
+## phones; the round's end clears it like any modifier's.
+func _scenario_sudden_death_chip_cleared_without_modifier_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	rm.forced_modifier = ""
+	rm.modifier_rolls_enabled = false
+	if not await _await_condition(func() -> bool: return int(rm._round_number) >= 1, 3000):
+		await _teardown(rig["stage"])
+		return ["the round never started"]
+	await _await_ticks(5)
+	var sent: Array = rig["roster"].modifier_sent
+	var tied: Array[int] = [0, 1]
+	if not rm._start_tiebreaker(tied):
+		failures.append("the tiebreaker did not start")
+	elif sent.is_empty() or str(sent[-1]) == "":
+		failures.append("Sudden Death sent no chip title: %s" % [sent])
+	rm._end_round_modifier()
+	if sent.is_empty() or str(sent[-1]) != "":
+		failures.append("round end left the phones' chip at %s, want it cleared" % [sent])
+	await _teardown(rig["stage"])
+	return failures
+## Flags a round leaves behind (a lethal hit's point, a kick, a mode's win)
+## are cleared when the next round starts, so none of them decides it.
+func _scenario_round_start_clears_stale_round_flags_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	rm.modifier_rolls_enabled = false
+	if not await _await_condition(func() -> bool: return int(rm._round_number) >= 1, 3000):
+		await _teardown(rig["stage"])
+		return ["the round never started"]
+	await _await_ticks(5)
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return not players[0].alive, 3000):
+		await _teardown(rig["stage"])
+		return ["the round did not end when one player was left"]
+	rm._has_lethal_point = true
+	rm._kicked_this_round_check = true
+	rm._mode_win_slot = 1
+	rm._mode_win_team = 0
+	rm._try_start_round()
+	if rm._has_lethal_point:
+		failures.append("a lethal hit's point from the last round survived into the new one")
+	if rm._kicked_this_round_check:
+		failures.append("a kick from the last round survived into the new one")
+	if int(rm._mode_win_slot) != -1 or int(rm._mode_win_team) != -1:
+		failures.append("a mode win from the last round survived into the new one (%s, %s)" % [rm._mode_win_slot, rm._mode_win_team])
+	await _teardown(rig["stage"])
+	return failures
+## Ending the match from a focus pause unpauses through the one resume path,
+## so the focus-resume watcher is disarmed rather than left waiting in the lobby.
+func _scenario_end_match_disarms_focus_resume_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	loop["roster"].ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, 3000):
+		await _teardown(loop["stage"])
+		return ["two ready players never started a round"]
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.pause_on_focus_loss
+	var persisted: bool = host.persist
+	host.persist = false
+	host.pause_on_focus_loss = true
+	rm.focus_lost()
+	rm.focus_regained()
+	if not rm.is_focus_paused():
+		failures.append("focus loss did not pause the round")
+	rm._on_host_command("end", 0)
+	if rm.is_paused() or paused:
+		failures.append("ending the match left the game paused")
+	if rm._focus_resume != null and rm._focus_resume.armed:
+		failures.append("ending the match left the focus-resume watcher armed")
+	host.pause_on_focus_loss = was
+	host.persist = persisted
+	paused = false
+	await _teardown(loop["stage"])
+	return failures
+## A night stage's glows on players go with the stage, and a player out of
+## the round has no weapon-head glow floating where it was.
+func _scenario_night_glows_removed_with_stage_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(holder, Vector2(0.0, -2000.0))
+	var night_stage := Node2D.new()
+	get_root().add_child(night_stage)
+	var night: Node2D = NightLightingScript_review_gp.new()
+	night_stage.add_child(night)
+	var lamps: Array[Vector2] = []
+	night.setup(lamps)
+	await _await_ticks(3)
+	if player.get_node_or_null("NightGlow") == null:
+		failures.append("the night never lit the player")
+	var head: PointLight2D = night.head_glows.get(player.get_instance_id())
+	player.leave_round()
+	await _await_ticks(2)
+	if head == null or head.visible:
+		failures.append("the weapon-head glow still shows for a player out of the round")
+	night_stage.queue_free()
+	await _await_ticks(3)
+	if player.get_node_or_null("NightGlow") != null:
+		failures.append("the player kept its night glow after the night stage left")
+	await _teardown(holder)
+	return failures
+## Instant replay captures 12 frames a second on a host running at 50 fps:
+## the time past each capture carries over instead of being dropped.
+func _scenario_replay_capture_keeps_twelve_fps_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var buffer: Node = ReplayBufferScript_review_gp.new()
+	var captures: int = 0
+	for i in 500:
+		if buffer.capture_due(0.02):
+			captures += 1
+	if captures < 119 or captures > 121:
+		failures.append("10 s at 50 fps captured %d frames, want 120" % captures)
+	var img := Image.create(512, 288, false, Image.FORMAT_RGBA8)
+	buffer.push_frame(img)
+	var kept: Array[Image] = buffer.frames_slice(0, 1)
+	if kept.size() != 1 or kept[0].get_size() != Vector2i(256, 144) or kept[0].get_format() != Image.FORMAT_RGB8:
+		failures.append("a pushed frame was not shrunk to 256x144 RGB8")
+	if img.get_size() != Vector2i(512, 288) or img.get_format() != Image.FORMAT_RGBA8:
+		failures.append("push_frame changed the caller's image")
+	buffer.free()
+	_scenario_completed = true
+	return failures
+## During the pause after a capture short of the target, a flag still carried
+## by the other side stays on its carrier's back.
+func _scenario_ctf_carried_flag_follows_carrier_in_capture_pause_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	mode.captures_to_win = 3
+	mode.capture_pause_sec = 5.0
+	mode.take_flag(1, 0)
+	mode.take_flag(0, 1)
+	mode.capture(0, 0)
+	if not mode._pausing:
+		failures.append("no pause after a capture short of the target")
+	players[1].teleport_to(Vector2(-250.0, 100.0))
+	await _await_ticks(5)
+	var flag: Node2D = mode._flag_nodes.get(0)
+	if int(mode.carrier[0]) != 1:
+		failures.append("Blue's carrier lost Red's flag in the pause")
+	elif flag == null or flag.global_position.distance_to(players[1].global_position + Vector2(0.0, 20.0)) > 30.0:
+		failures.append("Red's flag is at %s, not on its carrier at %s" % [flag.global_position if flag != null else null, players[1].global_position])
+	await _teardown(rig["stage"])
+	return failures
+## The player the ball last touched is the nearest one in reach, not the last
+## of them in the roster.
+func _scenario_soccer_last_touch_is_nearest_player_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = _new_empty_stage()
+	var stub := GDScript.new()
+	stub.source_code = "extends Node2D\nvar alive: bool = true\n"
+	stub.reload()
+	var ball := RigidBody2D.new()
+	ball.freeze = true
+	holder.add_child(ball)
+	ball.global_position = Vector2.ZERO
+	var near := Node2D.new()
+	near.set_script(stub)
+	holder.add_child(near)
+	near.global_position = Vector2(10.0, 0.0)
+	var far := Node2D.new()
+	far.set_script(stub)
+	holder.add_child(far)
+	far.global_position = Vector2(40.0, 0.0)
+	var soccer: Node = SoccerScript_review_gp.new()
+	soccer.ball = ball
+	soccer._watched = {0: near, 1: far}
+	soccer._track_touch()
+	if int(soccer._last_touch) != 0:
+		failures.append("the last touch went to slot %s, want the nearest player, slot 0" % soccer._last_touch)
+	soccer.free()
+	await _teardown(holder)
+	return failures
+## A bot that dies forgets its hook, wiggle, flight and pickup chase, and a
+## fresh stage read drops shuns and ignored pickups that have run out.
+func _scenario_bot_death_and_stage_read_reset_brain_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	await _await_ticks(30)
+	bot._unhook_left = 1.0
+	bot._wiggle_left = 1.0
+	bot._hooked_for = 1.0
+	bot._hook_phase = 1
+	bot._flee_side = 1.0
+	bot._holdoff_since = 3.0
+	bot._chasing = stage
+	player.leave_round()
+	bot.think(1.0 / 60.0)
+	if bot._unhook_left != 0.0 or bot._wiggle_left != 0.0 or bot._hooked_for != 0.0:
+		failures.append("death kept unhook %s / wiggle %s / hooked %s" % [bot._unhook_left, bot._wiggle_left, bot._hooked_for])
+	if int(bot._hook_phase) != 0 or bot._flee_side != 0.0 or bot._holdoff_since != -1.0 or bot._chasing != null:
+		failures.append("death kept hook phase %s / flee side %s / holdoff %s / chase %s" % [bot._hook_phase, bot._flee_side, bot._holdoff_since, bot._chasing])
+	bot._clock = 10.0
+	bot._shunned = {111: 5.0, 222: 20.0}
+	bot._ignored_pickups = {333: 10.0, 444: 11.0}
+	bot._read_stage()
+	if bot._shunned.keys() != [222]:
+		failures.append("after a stage read the shunned ids are %s, want [222]" % [bot._shunned.keys()])
+	if bot._ignored_pickups.keys() != [444]:
+		failures.append("after a stage read the ignored pickups are %s, want [444]" % [bot._ignored_pickups.keys()])
+	await _teardown(stage)
 	return failures
