@@ -462,6 +462,7 @@ ACH_WORLD_TOUR_NAME,World Tour,Weltreise,Tour du monde,Gira mundial,Volta ao mun
 ACH_WORLD_TOUR_DESC,Play every stage in the rotation,Spiele jede Bühne der Rotation,Joue chaque terrain de la rotation,Juega cada escenario de la rotación,Jogue cada fase da rotação,玩遍轮换中的每个关卡,ローテーションのすべてのステージを遊ぶ,로테이션의 모든 스테이지를 플레이하세요,Сыграйте на каждой арене из ротации
 SETTINGS_PLAY_OF_ROUND,Play of the round replay,Szene der Runde zeigen,Rediffuser le meilleur moment,Repetir la mejor jugada,Repetir o melhor momento,回合精彩回放,ラウンドのベストプレー再生,라운드 하이라이트 재생,Повтор лучшего момента раунда
 SETTINGS_FILTER_NAMES,Filter player names,Spielernamen filtern,Filtrer les noms des joueurs,Filtrar nombres de jugadores,Filtrar nomes dos jogadores,过滤玩家名称,プレイヤー名をフィルター,플레이어 이름 필터,Фильтровать имена игроков
+SETTINGS_PLAYER_NUMBERS,Player numbers,Spielernummern,Numéros des joueurs,Números de jugador,Números dos jogadores,玩家编号,プレイヤー番号,플레이어 번호,Номера игроков
 PLAY_OF_ROUND_CAPTION,Play of the round: %s,Szene der Runde: %s,Meilleur moment de la manche : %s,Jugada de la ronda: %s,Melhor momento da rodada: %s,回合精彩时刻:%s,ラウンドのベストプレー:%s,라운드 하이라이트: %s,Лучший момент раунда: %s
 STEAM_STATUS_IN_LOBBY,In the lobby,In der Lobby,Dans le salon,En el lobby,No lobby,在大厅中,ロビーにいます,로비에 있음,В лобби
 STEAM_STATUS_IN_MATCH,In a match,In einem Match,Dans un match,En una partida,Em uma partida,比赛中,対戦中,경기 중,В матче

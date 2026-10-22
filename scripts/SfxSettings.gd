@@ -58,6 +58,7 @@ var _mute: CheckBox
 var _fullscreen: CheckBox
 var _shake_box: CheckBox
 var _flash_box: CheckBox
+var _numbers_box: CheckBox
 ## Anonymous match stats (issue #372): the Settings toggle and the one-time
 ## first-launch notice with its two buttons.
 var _stats_box: CheckBox
@@ -196,6 +197,7 @@ func _ready() -> void:
 	_autosave_box = _add_box(content, "AutoSaveClips", tr("SETTINGS_AUTO_SAVE_CLIPS"))
 	_focus_box = _add_box(content, "PauseOnFocusLoss", tr("SETTINGS_PAUSE_ON_FOCUS_LOSS"))
 	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
+	_numbers_box = _add_box(content, "PlayerNumbers", tr("SETTINGS_PLAYER_NUMBERS"))
 	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
@@ -284,6 +286,7 @@ func _ready() -> void:
 	_autosave_box.toggled.connect(func(pressed: bool) -> void: host.set_auto_save_clips(pressed))
 	_focus_box.toggled.connect(func(pressed: bool) -> void: host.set_pause_on_focus_loss(pressed))
 	_filter_box.toggled.connect(func(pressed: bool) -> void: host.set_filter_names(pressed))
+	_numbers_box.toggled.connect(func(pressed: bool) -> void: host.set_player_numbers(pressed))
 	_crash_box.toggled.connect(func(pressed: bool) -> void: host.set_send_crash_reports(pressed))
 	_slider.value_changed.connect(_on_volume_changed)
 	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
@@ -398,6 +401,7 @@ func refresh() -> void:
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_crash_box.set_pressed_no_signal(host.send_crash_reports)
+	_numbers_box.set_pressed_no_signal(host.player_numbers)
 	_replay_box.set_pressed_no_signal(host.play_of_round)
 	_autosave_box.set_pressed_no_signal(host.auto_save_clips)
 	_focus_box.set_pressed_no_signal(host.pause_on_focus_loss)
@@ -775,6 +779,9 @@ func _build_telemetry_notice() -> void:
 		if not _panel.visible:
 			_set_pad_focus(false))
 
+func numbers_box() -> CheckBox:
+	return _numbers_box
+
 func flash_box() -> CheckBox:
 	return _flash_box
 
@@ -846,6 +853,7 @@ func _retranslate() -> void:
 	_more.text = tr("SETTINGS_MORE_OPTIONS")
 	_shake_box.text = tr("SETTINGS_SCREEN_SHAKE")
 	_flash_box.text = tr("SETTINGS_REDUCE_FLASHES")
+	_numbers_box.text = tr("SETTINGS_PLAYER_NUMBERS")
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")

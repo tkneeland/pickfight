@@ -616,6 +616,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"pickup_shows_weapon_name_callout_818",
+	"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818",
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
@@ -990,6 +992,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"player_numbers_badge_on_name_tags_809",
+	"player_numbers_setting_persists_and_restores_809",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -1606,6 +1610,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_no_single_strike_kills()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
+		"pickup_shows_weapon_name_callout_818":
+			return await _scenario_pickup_shows_weapon_name_callout_818()
+		"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818":
+			return await _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818()
 		"pickups_arrive_on_interval_and_cap":
 			return await _scenario_pickups_arrive_on_interval_and_cap()
 		"pickup_weapon_is_random_never_pickaxe":
@@ -3376,6 +3384,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"player_numbers_badge_on_name_tags_809":
+			return await _scenario_player_numbers_badge_on_name_tags_809()
+		"player_numbers_setting_persists_and_restores_809":
+			return await _scenario_player_numbers_setting_persists_and_restores_809()
 		"match_win_ko_autosaves_clip_795":
 			return await _scenario_match_win_ko_autosaves_clip_795()
 		"autosave_clip_switch_off_saves_nothing_795":
@@ -46540,6 +46552,117 @@ func _scenario_stick_deadzone_setting_748() -> Array[String]:
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
 	return failures
+
+
+## Issue #809: with Player numbers on, each living fighter's name tag carries its seat number (1 to 8)
+## as a badge; off draws none; a team player keeps the team letter; a ghost gets none; the lobby card
+## shows the number too.
+func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.player_numbers
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array = []
+	for i in 8:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "NumP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.visible = true
+		player.alive = true
+		players.append(player)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	host.player_numbers = true
+	tags.tick()
+	for slot in 8:
+		var badge: Control = tags.team_badge(slot)
+		if not badge.visible or badge.letter() != str(slot + 1):
+			failures.append("slot %d's badge reads '%s' (visible %s), expected %d" % [slot, badge.letter(), badge.visible, slot + 1])
+		elif badge.position.x >= tags.name_tag(slot).position.x:
+			failures.append("slot %d's number badge is not left of its name tag" % slot)
+	players[3].alive = false
+	tags.tick()
+	if tags.team_badge(3).visible:
+		failures.append("a ghost kept its number badge")
+	players[3].alive = true
+	players[1].team = 1
+	tags.tick()
+	if tags.team_badge(1).letter() != "B":
+		failures.append("a team player's badge reads '%s', expected the team letter B" % tags.team_badge(1).letter())
+	if tags.team_badge(2).letter() != "3":
+		failures.append("a free-for-all player beside a team player reads '%s', expected 3" % tags.team_badge(2).letter())
+	players[1].team = -1
+	host.player_numbers = false
+	tags.tick()
+	for slot in 8:
+		if tags.team_badge(slot).visible:
+			failures.append("slot %d shows a badge with Player numbers off" % slot)
+	# The lobby card.
+	var card: Control = (load("res://scripts/LobbyPlayerCard.gd") as GDScript).new(0)
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5})
+	if not card.team_chip().visible or card.team_chip().letter() != "5":
+		failures.append("a numbered card's chip reads '%s' (visible %s)" % [card.team_chip().letter(), card.team_chip().visible])
+	card.apply({"name": "Tester", "color": Color.WHITE, "number": 5, "team": 0})
+	if card.team_chip().letter() != "R":
+		failures.append("a team card's chip reads '%s', expected R" % card.team_chip().letter())
+	card.apply({"name": "Tester", "color": Color.WHITE})
+	if card.team_chip().visible:
+		failures.append("an unnumbered card shows a chip")
+	card.free()
+	host.player_numbers = was
+	await _teardown(stage)
+	return failures
+
+## Issue #809: Player numbers is off by default, saved, put back by Restore defaults, has a switch in
+## Settings, and its label is translated in every shipped locale.
+func _scenario_player_numbers_setting_persists_and_restores_809() -> Array[String]:
+	var failures: Array[String] = []
+	var tmp: String = OS.get_temp_dir().path_join("pf_809_%d.cfg" % OS.get_process_id())
+	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	fresh.path = tmp
+	if fresh.player_numbers:
+		failures.append("Player numbers is not off by default")
+	fresh.set_player_numbers(true)
+	var again: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	again.path = tmp
+	again.load_settings()
+	if not again.player_numbers:
+		failures.append("switching Player numbers on was not remembered")
+	again.restore_defaults()
+	if again.player_numbers:
+		failures.append("Restore defaults left Player numbers on")
+	var last: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	last.path = tmp
+	last.load_settings()
+	if last.player_numbers:
+		failures.append("the restored default was not saved")
+	DirAccess.remove_absolute(tmp)
+	var sfx: Node = _sfx()
+	if sfx != null:
+		var ui: CanvasLayer = sfx.build_settings_ui()
+		ui.host.persist = false
+		var was: bool = ui.host.player_numbers
+		if ui.numbers_box() == null:
+			failures.append("Settings has no Player numbers switch")
+		else:
+			ui.numbers_box().button_pressed = true
+			if not ui.host.player_numbers:
+				failures.append("the Player numbers switch did not set the option")
+			ui.host.player_numbers = was
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		if tr("SETTINGS_PLAYER_NUMBERS") == "SETTINGS_PLAYER_NUMBERS":
+			failures.append("SETTINGS_PLAYER_NUMBERS has no %s text" % locale)
+	TranslationServer.set_locale(was_locale)
+	_scenario_completed = true
+	return failures
+
 ## Issue #750: Settings' "Restore defaults" asks first (No and closing the panel cancel), and Yes puts every
 ## setting in audio.cfg back to its default except Language and the crash-report choice; the reset is saved.
 func _scenario_restore_defaults_750() -> Array[String]:
@@ -47577,6 +47700,59 @@ func _scenario_couch_host_phone_present_keeps_match_menu_hidden_811() -> Array[S
 	await _close_phones(joined)
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
+	return failures
+
+## Issue #818: a pickup of `weapon_path` dropped on `player`'s body.
+func _grab_818(loop: Dictionary, player: Node2D, weapon_path: String) -> void:
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(load(weapon_path))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = player.global_position
+	await _await_ticks(3)
+func _callouts_818(loop: Dictionary) -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in get_root().get_tree().get_nodes_in_group("pickup_callouts"):
+		if not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+func _scenario_pickup_shows_weapon_name_callout_818() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	var found: Array[Node] = _callouts_818(loop)
+	if found.size() != 1:
+		failures.append("%d callouts after one grab, expected 1" % found.size())
+	else:
+		var want: String = TranslationServer.translate("WEAPON_FISHING_ROD")
+		if found[0].text != want:
+			failures.append("callout says '%s', expected '%s'" % [found[0].text, want])
+		if found[0].fighter != players[1]:
+			failures.append("callout belongs to the wrong fighter")
+	await _await_ticks(90)
+	if not _callouts_818(loop).is_empty():
+		failures.append("callout still alive 1.5 s after the grab")
+	# A KO'd fighter's ghost grab gets none.
+	await _grab_818(loop, players[0], "res://resources/axe.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("a KO'd fighter got a callout")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/sword.tres")
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	var found: Array[Node] = _callouts_818(loop)
+	if found.size() != 1:
+		failures.append("%d callouts for one fighter after two grabs, expected 1" % found.size())
+	elif found[0].text != TranslationServer.translate("WEAPON_AXE"):
+		failures.append("the newer grab did not replace the older label ('%s')" % found[0].text)
+	await _grab_818(loop, players[2], "res://resources/pickaxe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("a pickaxe pickup got a callout")
+	await _teardown(loop["stage"])
 	return failures
 
 ## Issue #817: the phone page's Swing reach slider, read off controller/index.html as shipped.

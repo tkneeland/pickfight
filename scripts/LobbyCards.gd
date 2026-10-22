@@ -13,6 +13,7 @@ const LobbyEmptySeatScript := preload("res://scripts/LobbyEmptySeat.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 const SEATS: int = 8
 const COLUMNS: int = 4
@@ -115,6 +116,8 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 			"clickable": own, "badge_clickable": solo_host_ready, "kickable": can_kick and slot != host_pc,
 			"dim": not bool(entry["ready"]) and not is_bot,
 		}
+		if HostSettingsScript.shared().player_numbers:
+			info["number"] = slot + 1
 		if teams:
 			var team: int = int(entry.get("team", -1))
 			var text: String = _screen.tr("LOBBY_TEAM_TAG") % TeamsScript.team_name(team)
