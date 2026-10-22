@@ -76,6 +76,7 @@ var _hide_code_box: CheckBox
 var _kill_feed_box: CheckBox
 var _damage_numbers_box: CheckBox
 var _match_point_plate_box: CheckBox
+var _hit_pause_box: CheckBox
 var _pickup_callouts_box: CheckBox
 var _scale_button: OptionButton
 ## Text size (#751): Settings > More options.
@@ -184,6 +185,7 @@ func _ready() -> void:
 		_resolution.add_item(tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
 	content.add_child(_resolution)
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
+	_hit_pause_box = _add_box(content, "HitPause", tr("SETTINGS_HIT_PAUSE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_kill_feed_box = _add_box(content, "KillFeed", tr("SETTINGS_KILL_FEED"))
@@ -330,6 +332,7 @@ func _ready() -> void:
 	_resolution.item_selected.connect(_on_resolution_selected)
 	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
+	_hit_pause_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hit_pause(pressed))
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
 	_damage_numbers_box.toggled.connect(func(pressed: bool) -> void: sfx.set_damage_numbers(pressed))
@@ -427,6 +430,7 @@ func refresh() -> void:
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
 	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
+	_hit_pause_box.set_pressed_no_signal(sfx.hit_pause)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_crash_box.set_pressed_no_signal(host.send_crash_reports)
@@ -719,6 +723,10 @@ func damage_numbers_box() -> CheckBox:
 
 func match_point_plate_box() -> CheckBox:
 	return _match_point_plate_box
+
+func hit_pause_box() -> CheckBox:
+	return _hit_pause_box
+
 func pickup_callouts_box() -> CheckBox:
 	return _pickup_callouts_box
 
@@ -912,6 +920,7 @@ func _retranslate() -> void:
 	_fullscreen.text = tr("SETTINGS_FULLSCREEN")
 	_more.text = tr("SETTINGS_MORE_OPTIONS")
 	_shake_box.text = tr("SETTINGS_SCREEN_SHAKE")
+	_hit_pause_box.text = tr("SETTINGS_HIT_PAUSE")
 	_flash_box.text = tr("SETTINGS_REDUCE_FLASHES")
 	_numbers_box.text = tr("SETTINGS_PLAYER_NUMBERS")
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")

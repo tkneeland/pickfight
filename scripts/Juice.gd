@@ -491,7 +491,7 @@ func _on_strike_landed(_victim: Node, amount: float, _point: Vector2, _lethal: b
 	if _shake_enabled() and amount >= SHAKE_DAMAGE_MIN:
 		var strength: float = clampf((amount - SHAKE_DAMAGE_MIN) / (SHAKE_DAMAGE_MAX - SHAKE_DAMAGE_MIN), 0.0, 1.0)
 		_apply_shake(SHAKE_INTENSITY_MAX * strength, SHAKE_DURATION)
-	if amount >= HITSTOP_DAMAGE_MIN:
+	if amount >= HITSTOP_DAMAGE_MIN and _hit_pause_enabled():
 		_apply_hitstop(HITSTOP_FRAMES)
 
 ## Player eliminated: apply strong screen shake.
@@ -505,6 +505,12 @@ func _on_player_eliminated(_player: Node) -> void:
 func _shake_enabled() -> bool:
 	var sfx: Node = get_node_or_null("/root/Sfx")
 	return sfx == null or bool(sfx.get("screen_shake"))
+
+## The saved "Hit pause" setting (`Sfx.hit_pause`, #916). On when there is no
+## `Sfx` autoload to ask. Off, no strike or KO freezes the tree.
+func _hit_pause_enabled() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx == null or bool(sfx.get("hit_pause"))
 
 ## Apply screen shake effect. A new shake never shortens or weakens one still
 ## running; it keeps the longer of the two, with that one's own duration.

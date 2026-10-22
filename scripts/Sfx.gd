@@ -343,6 +343,9 @@ var damage_numbers: bool = true
 ## Whether the "MATCH POINT: name" plate (#825) shows at round start (#892). On by
 ## default; the gold dots and all scoring are unaffected. Set through `set_match_point_plate()`.
 var match_point_plate: bool = true
+## Whether `Juice` freezes the game for 3 ticks on a heavy strike (#916). On by
+## default; shake and slow-motion are unaffected. Set through `set_hit_pause()`.
+var hit_pause: bool = true
 ## Whether `PickupCallout` (#818) names a grabbed weapon over the fighter (#882).
 ## On by default; pickups and the Magpie stat are unaffected.
 var pickup_callouts: bool = true
@@ -694,6 +697,11 @@ func set_match_point_plate(value: bool) -> void:
 	match_point_plate = value
 	_save_settings()
 
+## Turn the hit-stop freeze (#916) on or off, and remember the choice.
+func set_hit_pause(value: bool) -> void:
+	hit_pause = value
+	_save_settings()
+
 ## Turn the weapon-name pickup callouts (#882) on or off, and remember the choice.
 func set_pickup_callouts(value: bool) -> void:
 	pickup_callouts = value
@@ -793,6 +801,7 @@ func restore_defaults() -> void:
 	kill_feed = true
 	damage_numbers = true
 	match_point_plate = true
+	hit_pause = true
 	pickup_callouts = true
 	reduce_flash = false
 	ui_scale = 1.0
@@ -906,6 +915,7 @@ func load_settings() -> void:
 		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
 		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
 		match_point_plate = _flag(config.get_value("display", "match_point_plate", true), true)
+		hit_pause = _flag(config.get_value("display", "hit_pause", true), true)
 		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
@@ -937,6 +947,7 @@ func _save_settings() -> void:
 	config.set_value("display", "kill_feed", kill_feed)
 	config.set_value("display", "damage_numbers", damage_numbers)
 	config.set_value("display", "match_point_plate", match_point_plate)
+	config.set_value("display", "hit_pause", hit_pause)
 	config.set_value("display", "pickup_callouts", pickup_callouts)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)

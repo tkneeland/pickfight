@@ -203,6 +203,7 @@ SETTINGS_MUTE,Mute (M),Stumm (M),Muet (M),Silenciar (M),Mudo (M),静音 (M),ミ�
 SETTINGS_MUTED,Settings (muted),Einstellungen (stumm),Réglages (muet),Ajustes (silencio),Ajustes (mudo),设置(已静音),設定(ミュート中),설정 (음소거 중),Настройки (звук выключен)
 SETTINGS_NAME_TAGS,Name tags: %sx,Namensschilder: %sx,Pseudos : %sx,Nombres: %sx,Nomes: %sx,名牌:%sx,ネームタグ: %sx,이름표: %sx,Имена: %sx
 SETTINGS_REDUCE_FLASHES,Reduce flashes,Weniger Blitze,Moins d'éclairs,Menos destellos,Menos clarões,减少闪光,点滅を減らす,번쩍임 줄이기,Меньше вспышек
+SETTINGS_HIT_PAUSE,Hit pause,Treffer-Pause,Pause sur coup,Pausa al golpear,Pausa no golpe,命中停顿,ヒットストップ,타격 정지,Пауза при ударе
 SETTINGS_SCREEN_SHAKE,Screen shake,Bildschirmwackeln,Tremblement d'écran,Temblor de pantalla,Tremor de tela,屏幕震动,画面揺れ,화면 흔들림,Тряска экрана
 SETTINGS_SFX,Sound effects,Soundeffekte,Effets sonores,Efectos de sonido,Efeitos sonoros,音效,効果音,효과음,Звуковые эффекты
 SETTINGS_STAGES_LIST,Stages (untick to skip),Stages (abwählen zum Überspringen),Arènes (décoche pour passer),Escenarios (desmarca para omitir),Cenários (desmarque para pular),关卡(取消勾选即跳过),ステージ(チェックを外すとスキップ),스테이지 (체크 해제하면 건너뜀),"Арены (снимите галочку, чтобы пропустить)"
