@@ -951,6 +951,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"career_remote_client_keeps_totals_and_validates_503",
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
+	"bot_opens_umbrella_while_falling",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -3360,6 +3361,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_rod_casts_and_reels_rival_632()
 		"bot_grapple_zips_to_rival_out_of_reach_632":
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
+		"bot_opens_umbrella_while_falling":
+			return await _scenario_bot_opens_umbrella_while_falling()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -32085,7 +32088,7 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 		# sideways reading, and no input.
 		player.gravity_scale = 0.0
 		player.set_input_vector(Vector2.ZERO)
-		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -900.0)
+		var start: Vector2 = instance.get_view_rect().get_center() + Vector2(0.0, -2500.0)
 		player.teleport_to(start)
 		player.linear_velocity = Vector2.ZERO
 		var best: float = 0.0
@@ -43360,6 +43363,43 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 		failures.append("the bot never closed to 150 px")
 	elif walk["close_at"] >= 0 and zip["close_at"] >= walk["close_at"]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
+	_scenario_completed = true
+	return failures
+## Issue #915: a lone bot dropped from height. Returns whether the canopy was
+## ever open and the fastest fall speed seen.
+func _bot_drop_915(weapon_path: String) -> Dictionary:
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, weapon_path)
+	player.global_position = DEEP_PARK_POSITION
+	player.linear_velocity = Vector2.ZERO
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"open": false, "fastest": 0.0}
+	for t in 200:
+		await physics_frame
+		out["open"] = out["open"] or player.canopy_open()
+		if t >= 90: # after the head has had time to swing overhead
+			out["fastest"] = maxf(out["fastest"], player.linear_velocity.y)
+	await _teardown(stage, false)
+	return out
+## A bot holding the umbrella opens the canopy in a long fall and lands slower
+## than a bot holding the pickaxe dropped the same way.
+func _scenario_bot_opens_umbrella_while_falling() -> Array[String]:
+	var failures: Array[String] = []
+	var umbrella: Dictionary = await _bot_drop_915(UMBRELLA_PATH)
+	var pickaxe: Dictionary = await _bot_drop_915(PICKAXE_STARTER_PATH)
+	print("      bot_opens_umbrella_while_falling: open=%s umbrella_fastest=%.0f pickaxe_fastest=%.0f" % [umbrella["open"], umbrella["fastest"], pickaxe["fastest"]])
+	if not umbrella["open"]:
+		failures.append("the bot never opened the canopy while falling")
+	if pickaxe["open"]:
+		failures.append("a bot with the pickaxe reported an open canopy")
+	if umbrella["fastest"] > pickaxe["fastest"] * 0.6:
+		failures.append("the umbrella bot fell at %.0f px/s, not clearly slower than the pickaxe bot's %.0f" % [umbrella["fastest"], pickaxe["fastest"]])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
