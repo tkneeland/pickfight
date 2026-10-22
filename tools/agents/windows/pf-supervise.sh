@@ -4,6 +4,8 @@
 #                              $PF_STATE/triage-wake.txt (latest, with a UTC time), appends it to triage-wake.log,
 #                              updates triage-status.json, waits 5 min (so an unhandled MYTICKET does not spin), restarts it.
 #   pf-supervise.sh automerge  runs pf-automerge.sh and restarts it if it dies.
+#   pf-supervise.sh beacon     runs pf-beacon.sh every 15 min. On Windows the status line's background beacon
+#                              job can die with the status line process, so this keeps #432 current.
 # Needs PF_ACCOUNT in the environment (windows/pf-start.ps1 sets it). Output goes to $PF_STATE/*.log.
 . "$(dirname "$0")/../pf-env.sh" || exit 1
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -29,5 +31,10 @@ case $KIND in
       bash "$PF_DIR/pf-automerge.sh" >> "$PF_STATE/automerge.log" 2>&1
       status exited; sleep 60
     done;;
-  *) echo "usage: pf-supervise.sh triage|automerge" >&2; exit 2;;
+  beacon)
+    while true; do
+      if bash "$PF_DIR/pf-beacon.sh"; then status ok; else status failed "see beacon.log"; fi
+      sleep 900
+    done;;
+  *) echo "usage: pf-supervise.sh triage|automerge|beacon" >&2; exit 2;;
 esac
