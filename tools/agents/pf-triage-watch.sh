@@ -47,6 +47,10 @@ while true; do
     date +%s > "$PF_STATE/.pf-slots-last"
     if [ "$(pf_daynight)" = day ]; then min=$DAY_MIN_AGENTS; else min=${NIGHT_PREFERRED_AGENTS%%-*}; fi
     active=$(ls "$ROOT"/.claude/atlas-state/*.json 2>/dev/null | wc -l | tr -d ' ')
+    # plus tickets of mine in flight outside Atlas: open, assigned to me, a branch exists
+    for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | .number'); do
+      git -C "$ROOT" branch -a --list "*issue-$n-*" | grep -q . && active=$((active+1))
+    done
     if pf_budget_ok && [ "$active" -lt "$min" ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
     if pf_is_triagemaster && pf_budget_ok; then
       # peers' queues: dev tickets assigned to a peer (meta tickets excluded)
