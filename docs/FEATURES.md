@@ -36,6 +36,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Magnet: pulls or pushes nearby players and their weapon heads (#274)
 - Weapons spawn as on-stage pickups; body touch swaps (#14, ADR-0009); pickups scale with player count (#152); never spawn on a spot a living player is standing on, another free spot is used instead (#333)
 - Pickups pop in when they spawn (#816): scale up from 0.2x to 1x over 0.3 s with a small overshoot, under a one-shot gold ring that expands and fades over 0.5 s; motion only, so no Reduce flashes switch; collectable from the first frame
+- Pickup callout (#818): a fighter who grabs a pickup gets the weapon's translated name floating up 40 px from above their head over 1.2 s, in their colour on an ink plate, above the name tags; one per fighter (a new grab replaces it), none for ghosts or the pickaxe
 - Per-stage weapon themes: pickup odds are weighted by the parts on the stage (wind zones favour the umbrella, tall layouts the grapple, bounce pads or flat floors the pogo); weighted not exclusive, every enabled weapon can still appear, pickaxe never; optional `weapon_weight_overrides` on a stage; seeded (#310)
 
 ## Stages and stage parts
