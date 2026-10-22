@@ -88,6 +88,8 @@ var tie_seed: int = -1
 var _last_hit: Dictionary = {}
 ## killer slot -> [msec of their last KO, run length].
 var _streak: Dictionary = {}
+## victim slot -> the slot that last KO'd them this round, for "revenge" (#834).
+var _last_killer: Dictionary = {}
 ## Slots still alive in the current round -> msec they entered it.
 var _alive_since: Dictionary = {}
 ## Slot -> msec its current airborne stretch began.
@@ -114,6 +116,7 @@ func begin_match() -> void:
 	total_kos = 0
 	_last_hit.clear()
 	_streak.clear()
+	_last_killer.clear()
 	_alive_since.clear()
 	_air_since.clear()
 	longest_air_msec.clear()
@@ -122,6 +125,7 @@ func begin_round(slots: Array, now_msec: int) -> void:
 	_air_since.clear()
 	_last_hit.clear()
 	_streak.clear()
+	_last_killer.clear()
 	_alive_since.clear()
 	for slot: int in slots:
 		_alive_since[slot] = now_msec
@@ -146,6 +150,10 @@ func forget_slot(slot: int) -> void:
 	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
+	_last_killer.erase(slot)
+	for victim: int in _last_killer.keys():
+		if int(_last_killer[victim]) == slot:
+			_last_killer.erase(victim)
 	slot_weapon_hits.erase(slot)
 	for victim: int in _last_hit.keys():
 		if int(_last_hit[victim]["attacker"]) == slot:
@@ -208,7 +216,7 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	if not hit.is_empty() and now_msec - int(hit["msec"]) <= KO_CREDIT_WINDOW_MSEC:
 		killer = int(hit["attacker"])
 	_last_hit.erase(victim)
-	var result: Dictionary = {"victim": victim, "killer": killer, "streak": 0, "first_blood": false}
+	var result: Dictionary = {"victim": victim, "killer": killer, "streak": 0, "first_blood": false, "revenge": false}
 	if killer == -1:
 		_add(self_kos, victim, 1)
 		return result
@@ -221,6 +229,10 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 	_streak[killer] = [now_msec, streak]
 	result["streak"] = streak
 	result["first_blood"] = total_kos == 1
+	result["revenge"] = int(_last_killer.get(killer, -1)) == victim
+	if result["revenge"]:
+		_last_killer.erase(killer)
+	_last_killer[victim] = killer
 	return result
 
 ## `slot` picked up weapon `weapon` (a name such as "Hammer") off the stage.
