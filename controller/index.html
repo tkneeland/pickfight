@@ -478,6 +478,17 @@
   #tip.show { display: flex; }
   #tip-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
   #tip-art { width: min(70vw, 280px); height: auto; }
+  /* Reduce flashes (issue #776): the host's setting or prefers-reduced-motion stops
+     the looping tip animation; the buzz wash becomes a steady border (see buzz()). */
+  body.calm #tip-pick, body.calm #tip-finger { animation: none; }
+  #calmcue {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 8px var(--calm, #fff);
+  }
   #tip-pick { transform-origin: 140px 130px; animation: tip-swing 2.4s ease-in-out infinite; }
   #tip-finger { animation: tip-drag 2.4s ease-in-out infinite; }
   @keyframes tip-swing {
@@ -635,6 +646,7 @@
 <body>
 <canvas id="pad"></canvas>
 <div id="flash"></div>
+<div id="calmcue"></div>
 <div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="lives"></div>
 <div id="hill"></div>
@@ -2257,6 +2269,7 @@
   var nameEl = document.getElementById("name");
   var stateEl = document.getElementById("state");
   var flashEl = document.getElementById("flash");
+  var calmEl = document.getElementById("calmcue");
   // The buzz still playing, so a weaker one arriving on its heels (the
   // `struck` right behind an `eliminated`, a `hit` right behind a `struck`)
   // does not cut it short -- vibrate() cancels whatever pattern was running.
@@ -2733,6 +2746,16 @@
     hillEl.textContent = "Hill " + n + " / " + (typeof msg.win === "number" ? msg.win : 15) + " s";
   }
 
+  // Issue #776: calm mode = the host's Reduce flashes or the browser's prefers-reduced-motion.
+  var hostReduceFlash = false;
+  var motionQuery = null;
+  try { motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)"); } catch (err) { /* none */ }
+  function calmMode() { return hostReduceFlash || !!(motionQuery && motionQuery.matches); }
+  function applyCalm() { document.body.classList.toggle("calm", calmMode()); }
+  if (motionQuery && motionQuery.addEventListener) { motionQuery.addEventListener("change", applyCalm); }
+  applyCalm();
+  var calmTimer = 0;
+
   function buzz(kind) {
     var b = BUZZ[kind];
     if (!b || slot < 0) { return; }
@@ -2742,6 +2765,14 @@
     buzzUntil = now + b.ms;
     if (vibrationOn && typeof navigator.vibrate === "function") {
       try { navigator.vibrate(b.vibrate); } catch (err) { /* flash still plays */ }
+    }
+    if (calmMode()) {
+      // A steady border in the slot's colour for the buzz's length: no fade, no full-screen wash.
+      calmEl.style.setProperty("--calm", colorOf(slot));
+      calmEl.style.opacity = "1";
+      clearTimeout(calmTimer);
+      calmTimer = setTimeout(function () { calmEl.style.opacity = "0"; }, b.ms);
+      return;
     }
     flashEl.style.background = colorOf(slot);
     flashEl.style.transition = "none";
@@ -3589,6 +3620,7 @@
         }
         else if (msg.t === "looks") { showLooks(msg); }
         else if (msg.t === "name") { showStoredName(msg.v); }
+        else if (msg.t === "flash") { hostReduceFlash = msg.v === true; applyCalm(); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }

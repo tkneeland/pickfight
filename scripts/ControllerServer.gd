@@ -675,6 +675,7 @@ func _ready() -> void:
 	_join_label_base = label.text if label != null else ""
 
 func _process(delta: float) -> void:
+	_sync_reduce_flash()
 	_sync_room_code_hidden()
 	_process_http()
 	_process_websocket()
@@ -1189,6 +1190,7 @@ func _fresh_claim(slot: int, id: String, nickname: String, virtual: bool = false
 	if HostSettingsScript.shared().filter_names:
 		_slot_name[slot] = NameFilterScript.mask(nickname)
 	_send_name_echo(slot)
+	_send_reduce_flash(slot)
 	_slot_ready[slot] = 0
 	_slot_team_pick[slot] = -1
 	_last_claim_serial += 1
@@ -1400,6 +1402,33 @@ func _send_name_echo(slot: int) -> void:
 	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "name", "v": _slot_name[slot]}))
+
+## Issue #776: the host's "Reduce flashes" setting (#317) as one
+## `{"t":"flash","v":<bool>}` frame, sent to a phone on join and to every seat
+## when the setting changes, so the phone can drop its own full-screen flashes.
+var _reduce_flash_sent: int = -1
+
+func _reduce_flash_on() -> bool:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	return sfx != null and bool(sfx.get("reduce_flash"))
+
+func _send_reduce_flash(slot: int) -> void:
+	if slot < 0 or slot >= _slot_peers.size() or _slot_virtual[slot] == 1:
+		return
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or peer is PadSeat or not (peer is WebSocketPeer or peer.has_method("send_text")):
+		return
+	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	peer.send_text(JSON.stringify({"t": "flash", "v": _reduce_flash_on()}))
+
+func _sync_reduce_flash() -> void:
+	var now: int = 1 if _reduce_flash_on() else 0
+	if now == _reduce_flash_sent:
+		return
+	_reduce_flash_sent = now
+	for slot in _slot_peers.size():
+		_send_reduce_flash(slot)
 
 ## Hand the person on `slot` their lifetime-stat deltas (#503): one
 ## `{"t":"career","d":{...}}` frame that their device adds to its own totals.

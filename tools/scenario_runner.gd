@@ -872,6 +872,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_caption_translated_704",
 	"name_filter_732",
 	"name_echo_756",
+	"phone_reduce_flashes_follows_host_setting_776",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -3112,6 +3113,7 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_caption_translated_704": return await _scenario_play_of_round_caption_translated_704()
 		"name_filter_732": return await _scenario_name_filter_732()
 		"name_echo_756": return await _scenario_name_echo_756()
+		"phone_reduce_flashes_follows_host_setting_776": return await _scenario_phone_reduce_flashes_776()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -46805,5 +46807,59 @@ func _scenario_frame_rate_cap_and_vsync_persist_and_apply_774() -> Array[String]
 	ui_host.persist = ui_was_persist
 	Engine.max_fps = was_fps
 	DisplayServer.window_set_vsync_mode(was_vsync)
+	_scenario_completed = true
+	return failures
+
+## Issue #776: the host sends its Reduce flashes setting to a phone on join and on every
+## change, and the phone page has the calm-cue hooks that honour it and prefers-reduced-motion.
+func _scenario_phone_reduce_flashes_776() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was_on: bool = bool(sfx.get("reduce_flash"))
+	sfx.reduce_flash = true
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "ReduceFlashP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "ReduceFlashServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../ReduceFlashP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	var joined: Dictionary = await _join_phone(peer, "reduce-flash-0", [] as Array[WebSocketPeer])
+	if joined["slot"] != 0:
+		failures.append("the phone got slot %d" % joined["slot"])
+		sfx.reduce_flash = was_on
+		await _teardown(stage)
+		return failures
+	var seen: Array = []
+	for want: bool in [true, false, true]:
+		if seen.is_empty() or seen.back() != want:
+			if not seen.is_empty():
+				sfx.reduce_flash = want
+			for _i in 30:
+				await process_frame
+				peer.poll()
+				while peer.get_available_packet_count() > 0:
+					var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+					if msg is Dictionary and msg.get("t") == "flash":
+						seen.append(msg.get("v") == true)
+				if not seen.is_empty() and seen.back() == want:
+					break
+		if seen.is_empty() or seen.back() != want:
+			failures.append("phone was not told reduce flashes = %s (got %s)" % [want, seen])
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	for needle: String in ["prefers-reduced-motion", "calmcue", "body.calm"]:
+		if not page.contains(needle):
+			failures.append("controller page lacks '%s'" % needle)
+	sfx.reduce_flash = was_on
+	peer.close(1000, "scenario done")
+	await _teardown(stage)
 	_scenario_completed = true
 	return failures
