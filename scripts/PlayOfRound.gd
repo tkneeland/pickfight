@@ -28,7 +28,11 @@ signal finished
 
 var _rect: TextureRect
 var _caption: Label
-var _textures: Array[Texture2D] = []
+## The clip's frames, and the one texture they are shown through: uploading a
+## texture per frame up front cost dozens of GPU uploads in one frame.
+var _frames: Array[Image] = []
+var _texture: ImageTexture = null
+var _shown: int = -1
 var _elapsed: float = 0.0
 var _playing: bool = false
 
@@ -127,11 +131,12 @@ func caption_text() -> String:
 func play(frames: Array, caption: String, punch: bool) -> void:
 	if frames.is_empty():
 		return
-	_textures.clear()
+	_frames.clear()
 	for img: Image in frames:
-		_textures.append(ImageTexture.create_from_image(img))
+		_frames.append(img)
 	_caption.text = caption
-	_rect.texture = _textures[0]
+	_shown = -1
+	_show_frame(0)
 	_elapsed = 0.0
 	_playing = true
 	visible = true
@@ -148,16 +153,31 @@ func dismiss() -> void:
 		return
 	_playing = false
 	visible = false
-	_textures.clear()
+	_frames.clear()
+	_shown = -1
 	_rect.texture = null
 	finished.emit()
+
+## Shows `_frames[index]`, uploading it into the one texture only when the
+## index changes (a new texture when the size or format differs).
+func _show_frame(index: int) -> void:
+	if index == _shown:
+		return
+	_shown = index
+	var img: Image = _frames[index]
+	if _texture != null and _texture.get_size() == Vector2(img.get_size()) \
+			and _texture.get_format() == img.get_format() and not img.has_mipmaps():
+		_texture.update(img)
+	else:
+		_texture = ImageTexture.create_from_image(img)
+	_rect.texture = _texture
 
 func _process(delta: float) -> void:
 	if not _playing:
 		return
 	_elapsed += delta
 	var index: int = int(_elapsed * CAPTURE_FPS * SLOW_FACTOR)
-	if index >= _textures.size():
+	if index >= _frames.size():
 		dismiss()
 		return
-	_rect.texture = _textures[index]
+	_show_frame(index)
