@@ -155,6 +155,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_chance_zero_disables",
 	"boomstick_own_head_never_blocks",
 	"world_stopped_head_blocks_arriving_head",
+	"conveyor_carries_player",
+	"conveyor_flatlands_spawns_clear",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -1731,6 +1733,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomstick_own_head_never_blocks()
 		"world_stopped_head_blocks_arriving_head":
 			return await _scenario_world_stopped_head_blocks_arriving_head()
+		"conveyor_carries_player":
+			return await _scenario_conveyor_carries_player()
+		"conveyor_flatlands_spawns_clear":
+			return await _scenario_conveyor_flatlands_spawns_clear()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -10548,6 +10554,77 @@ func _new_empty_stage() -> Node2D:
 	var stage := Node2D.new()
 	get_root().add_child(stage)
 	return stage
+## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
+## them settle, then returns how far they travelled along x in 90 ticks. The
+## weapon is held straight up so only the body touches the belt.
+const ConveyorScene: PackedScene = preload("res://scenes/parts/Conveyor.tscn")
+const CONVEYOR_SPEED: float = 140.0
+const CONVEYOR_SIZE: Vector2 = Vector2(400, 12)
+const CONVEYOR_SETTLE_TICKS: int = 60
+const CONVEYOR_WATCH_TICKS: int = 90
+## Least drift over the watch window that counts as carried: a quarter of
+## what the belt speed alone would cover.
+const CONVEYOR_MIN_DRIFT: float = CONVEYOR_SPEED * CONVEYOR_WATCH_TICKS / 60.0 / 4.0
+## Most drift on plain ground, which is float noise.
+const CONVEYOR_MAX_IDLE_DRIFT: float = 5.0
+func _conveyor_drift(speed: float, on_belt: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	if on_belt:
+		var belt: StaticBody2D = ConveyorScene.instantiate() as StaticBody2D
+		belt.belt_speed = speed
+		belt.size = CONVEYOR_SIZE
+		belt.position = PART_POSITION
+		stage.add_child(belt)
+	else:
+		var ground := StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = CONVEYOR_SIZE
+		shape.shape = rect
+		ground.add_child(shape)
+		ground.position = PART_POSITION
+		stage.add_child(ground)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -CONVEYOR_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	for _tick in CONVEYOR_SETTLE_TICKS:
+		await physics_frame
+	var start_x: float = player.global_position.x
+	for _tick in CONVEYOR_WATCH_TICKS:
+		await physics_frame
+	var drift: float = player.global_position.x - start_x
+	await _teardown(stage, false)
+	return drift
+## A conveyor carries a resting player in its direction, plain ground does
+## not, and reversing the belt reverses the drift.
+func _scenario_conveyor_carries_player() -> Array[String]:
+	var failures: Array[String] = []
+	var forward: float = await _conveyor_drift(CONVEYOR_SPEED, true)
+	var idle: float = await _conveyor_drift(CONVEYOR_SPEED, false)
+	var backward: float = await _conveyor_drift(-CONVEYOR_SPEED, true)
+	print("      drift forward %.1f px, plain ground %.1f px, reversed %.1f px" % [forward, idle, backward])
+	if forward < CONVEYOR_MIN_DRIFT:
+		failures.append("a player on the belt drifted %.1f px along it, expected at least %.1f" % [forward, CONVEYOR_MIN_DRIFT])
+	if absf(idle) > CONVEYOR_MAX_IDLE_DRIFT:
+		failures.append("a player off the belt drifted %.1f px, expected under %.1f" % [idle, CONVEYOR_MAX_IDLE_DRIFT])
+	if backward > -CONVEYOR_MIN_DRIFT:
+		failures.append("reversing the belt drifted the player %.1f px, expected at most %.1f" % [backward, -CONVEYOR_MIN_DRIFT])
+	_scenario_completed = true
+	return failures
+## Flatlands (#842) carries a conveyor on its floor, and no spawn sits over it.
+func _scenario_conveyor_flatlands_spawns_clear() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = (load("res://scenes/stages/Flatlands.tscn") as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	var belt: StaticBody2D = stage.get_node_or_null("FloorConveyor") as StaticBody2D
+	if belt == null:
+		failures.append("Flatlands has no FloorConveyor")
+	else:
+		for i in 8:
+			var spawn: Node2D = stage.get_node("Spawn%d" % i) as Node2D
+			if absf(spawn.position.x - belt.position.x) <= belt.size.x / 2.0 + PLAYER_RADIUS:
+				failures.append("Spawn%d at x=%.0f is over the belt" % [i, spawn.position.x])
+	await _teardown(stage)
+	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
 ## dropped from, and shows it did (the flash). The weapon is held straight
 ## up the whole time, so only the body ever touches the pad.
