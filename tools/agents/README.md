@@ -32,4 +32,5 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 instead of `stat -f`, `date -j` or `date -r` in any new script. `PF_DRY_RUN=1` stops `statusline-usage.sh` and
 `pf-succession.sh --post` from writing to GitHub. Windows setup, Task Scheduler and the status line:
 [`windows/README.md`](windows/README.md).
+- `pf-reserve.sh`: reserve-account supervisor (`RESERVE=1`), one pass every 10 min under launchd (`--install`; `--dry` prints the decision). Hands unstarted tickets back while every regular dev can work, and starts a headless AT session (prompt: `pf-reserve-prompt.md`) only when this account is needed or has in-flight tickets. Zero tokens while idle.
 - `pf-beacon.sh`: writes this account's #432 usage beacon once (finds the comment if the id file is missing; errors to `beacon.log`).

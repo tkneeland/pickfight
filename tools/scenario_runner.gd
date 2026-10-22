@@ -1032,6 +1032,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"cjk_subset_check_reports_an_uncovered_character_849",
 	"cjk_fallback_chain_starts_with_bundled_subset_849",
 	"language_picker_draws_cjk_names_in_every_locale_849",
+	"controller_page_loads_nothing_from_the_internet_798",
+	"controller_offline_check_catches_a_cdn_reference_798",
+	"site_pages_have_no_dead_links_or_bare_images_799",
+	"site_link_check_catches_a_missing_file_and_a_missing_alt_799",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3469,6 +3473,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_cjk_fallback_chain_starts_with_bundled_subset_849()
 		"language_picker_draws_cjk_names_in_every_locale_849":
 			return _scenario_language_picker_draws_cjk_names_in_every_locale_849()
+		"controller_page_loads_nothing_from_the_internet_798":
+			return _scenario_controller_page_loads_nothing_from_the_internet_798()
+		"controller_offline_check_catches_a_cdn_reference_798":
+			return _scenario_controller_offline_check_catches_a_cdn_reference_798()
+		"site_pages_have_no_dead_links_or_bare_images_799":
+			return _scenario_site_pages_have_no_dead_links_or_bare_images_799()
+		"site_link_check_catches_a_missing_file_and_a_missing_alt_799":
+			return _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48816,5 +48828,194 @@ func _scenario_language_picker_draws_cjk_names_in_every_locale_849() -> Array[St
 				if c > 0x20 and not chain.any(func(f: Font) -> bool: return f.has_char(c)):
 					failures.append("%s font cannot draw '%s' in %s" % [target.get_class(), char(c), name])
 	panel.queue_free()
+	_scenario_completed = true
+	return failures
+
+func _controller_offline_problems_798(label: String, text: String) -> Array[String]:
+	# Static check: names every line of an HTML page that LOADS something from a literal remote host.
+	# A remote host is http(s)/ws(s) or protocol-relative ("//host"). Plain <a href> links are navigation, allowed.
+	var q: String = "[\\x22\\x27\\x60]"
+	var remote: String = "(?:(?:https?|wss?):)?//[A-Za-z0-9\\[]"
+	var rules: Array[Array] = [
+		["a <script>/<link>/<img>/<iframe>/media tag", "(?is)<(?:script|link|img|iframe|frame|source|video|audio|embed|object|input|image|use)\\b[^>]*?\\b(?:src|href|data|poster|srcset|xlink:href)\\s*=\\s*" + q + "?\\s*" + remote],
+		["a CSS url()", "(?i)url\\(\\s*" + q + "?\\s*" + remote],
+		["an @import", "(?i)@import\\s+(?:url\\(\\s*)?" + q + "?\\s*" + remote],
+		["a fetch/WebSocket/EventSource/importScripts/import() call", "(?i)\\b(?:fetch|WebSocket|EventSource|importScripts|import)\\s*\\(\\s*" + q + "\\s*" + remote],
+		["an XMLHttpRequest open()", "(?i)\\.open\\(\\s*" + q + "[A-Za-z]+" + q + "\\s*,\\s*" + q + "\\s*" + remote],
+		["an import statement", "(?i)\\bimport\\b[^;\\n]*?\\bfrom\\s*" + q + "\\s*" + remote],
+		["a bare import", "(?im)^\\s*import\\s*" + q + "\\s*" + remote],
+		["a .src assignment", "(?i)\\.src\\s*=\\s*" + q + "\\s*" + remote],
+	]
+	var found: Array[String] = []
+	var seen: Dictionary = {}
+	for rule: Array in rules:
+		var re: RegEx = RegEx.new()
+		if re.compile(str(rule[1])) != OK:
+			found.append("%s: the %s pattern does not compile" % [label, rule[0]])
+			continue
+		for m: RegExMatch in re.search_all(text):
+			var line_no: int = text.substr(0, m.get_start()).count("\n") + 1
+			var key: String = str(line_no)
+			if seen.has(key):
+				continue
+			seen[key] = true
+			found.append("%s:%d: loads %s from the internet" % [label, line_no, rule[0]])
+	return found
+
+func _scenario_controller_page_loads_nothing_from_the_internet_798() -> Array[String]:
+	var failures: Array[String] = []
+	var text: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if text.length() < 1000 or not text.contains("<script>"):
+		failures.append("controller/index.html did not read as the controller page (%d chars)" % text.length())
+		_scenario_completed = true
+		return failures
+	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+
+func _scenario_controller_offline_check_catches_a_cdn_reference_798() -> Array[String]:
+	var failures: Array[String] = []
+	var allowed: String = "\n".join([
+		"<a href=\"https://store.steampowered.com/app/1\">Steam</a>",
+		"<a href=\"https://discord.gg/abc\" target=\"_blank\">Discord</a>",
+		"@font-face { src: url(/fonts/Nunito-Latin.woff2) format(\"woff2\"); }",
+		"var sock = new WebSocket(\"ws://\" + window.location.hostname + \":\" + WS_PORT);",
+		"// see https://example.com/docs for the protocol",
+		"<img src=\"data:image/png;base64,AAAA\">",
+	])
+	var found: Array[String] = _controller_offline_problems_798("fixture.html", allowed)
+	if found.size() != 0:
+		failures.append("tappable links, local assets and comments were flagged: %s" % [found])
+	var bad: Array[String] = [
+		"<script src=\"https://cdn.example.com/lib.js\"></script>",
+		"<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Nunito\">",
+		"<img src=\"//cdn.example.com/a.png\">",
+		"body { background: url(\"https://cdn.example.com/bg.png\"); }",
+		"@import \"https://cdn.example.com/x.css\";",
+		"@import url(https://cdn.example.com/x.css);",
+		"fetch('https://analytics.example.com/hit');",
+		"new WebSocket(\"wss://relay.example.com/room\");",
+		"x.open(\"GET\", \"http://example.com/a\");",
+		"import(\"https://cdn.example.com/m.js\");",
+		"import { a } from \"https://cdn.example.com/m.js\";",
+		"img.src = \"https://cdn.example.com/a.png\";",
+		"<script\n  async\n  src=\"https://cdn.example.com/a.js\"></script>",
+	]
+	for snippet: String in bad:
+		var fixture: String = "<p>ok</p>\n<a href=\"https://discord.gg/abc\">link</a>\n" + snippet + "\n"
+		found = _controller_offline_problems_798("fixture.html", fixture)
+		# A tag split over lines is flagged where the tag opens (line 3).
+		if found.size() != 1:
+			failures.append("'%s' gave %d problems, wanted 1: %s" % [snippet.replace("\n", " "), found.size(), found])
+		elif not found[0].begins_with("fixture.html:3:"):
+			failures.append("'%s' was flagged on the wrong line: %s" % [snippet.replace("\n", " "), found[0]])
+	# The real page with a CDN script tag added at the top must be flagged on line 1.
+	var real: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	found = _controller_offline_problems_798("controller/index.html", "<script src=\"https://cdn.example.com/lib.js\"></script>\n" + real)
+	if found.size() != 1 or not found[0].begins_with("controller/index.html:1:"):
+		failures.append("the real page with a CDN script prepended was not flagged on line 1: %s" % [found])
+	_scenario_completed = true
+	return failures
+func _site_page_problems_799(label: String, text: String, page_dir: String) -> Array[String]:
+	# Static check of one site page: every relative src/href must resolve to a file under site/ (a "#id" must match an
+	# id on the page), and every <img> needs an alt and a width and height. HTML comments are ignored. Names file:line.
+	var found: Array[String] = []
+	var comments: RegEx = RegEx.new()
+	comments.compile("(?s)<!--.*?-->")
+	var clean: String = text
+	var spans: Array[RegExMatch] = comments.search_all(text)
+	spans.reverse()
+	for c: RegExMatch in spans:
+		clean = clean.substr(0, c.get_start()) + "\n".repeat(c.get_string().count("\n")) + clean.substr(c.get_end())
+	var ids: Dictionary = {}
+	var id_re: RegEx = RegEx.new()
+	id_re.compile("(?i)(?<![\\w-])id\\s*=\\s*[\\x22\\x27]([^\\x22\\x27]*)[\\x22\\x27]")
+	for m: RegExMatch in id_re.search_all(clean):
+		ids[m.get_string(1)] = true
+	var tag_re: RegEx = RegEx.new()
+	tag_re.compile("(?is)<(img|a|link|script|source|video|audio|iframe|embed)\\b[^>]*>")
+	var attr_re: RegEx = RegEx.new()
+	attr_re.compile("(?is)(?<![\\w-])(src|href)\\s*=\\s*(?:\\x22([^\\x22]*)\\x22|\\x27([^\\x27]*)\\x27)")
+	var scheme_re: RegEx = RegEx.new()
+	scheme_re.compile("^(?:[A-Za-z][A-Za-z0-9+.-]*:|//)")
+	for t: RegExMatch in tag_re.search_all(clean):
+		var tag: String = t.get_string()
+		var tag_name: String = t.get_string(1).to_lower()
+		var line_no: int = clean.substr(0, t.get_start()).count("\n") + 1
+		for a: RegExMatch in attr_re.search_all(tag):
+			var attr: String = a.get_string(1).to_lower()
+			var value: String = (a.get_string(2) if a.get_string(2) != "" else a.get_string(3)).strip_edges()
+			if value == "":
+				found.append("%s:%d: <%s> has an empty %s" % [label, line_no, tag_name, attr])
+				continue
+			if value == "#" or scheme_re.search(value) != null:
+				continue
+			if value.begins_with("#"):
+				if not ids.has(value.substr(1)):
+					found.append("%s:%d: <%s %s=\"%s\"> matches no id on the page" % [label, line_no, tag_name, attr, value])
+				continue
+			var path: String = value.split("#")[0].split("?")[0]
+			if path == "":
+				continue
+			var target: String = page_dir.path_join(path)
+			if not FileAccess.file_exists(target) and not DirAccess.dir_exists_absolute(target):
+				found.append("%s:%d: <%s %s=\"%s\"> points at a file that does not exist" % [label, line_no, tag_name, attr, value])
+		if tag_name == "img":
+			for need: String in ["alt", "width", "height"]:
+				var need_re: RegEx = RegEx.new()
+				need_re.compile("(?i)(?<![\\w-])" + need + "\\s*=")
+				if need_re.search(tag) == null:
+					found.append("%s:%d: <img> has no %s attribute" % [label, line_no, need])
+	return found
+
+func _scenario_site_pages_have_no_dead_links_or_bare_images_799() -> Array[String]:
+	var failures: Array[String] = []
+	for page: String in ["index.html", "press.html"]:
+		var text: String = FileAccess.get_file_as_string("res://site/" + page)
+		if text.length() < 1000 or not text.contains("<img"):
+			failures.append("site/%s did not read as a site page (%d chars)" % [page, text.length()])
+			continue
+		failures.append_array(_site_page_problems_799("site/" + page, text, "res://site"))
+	_scenario_completed = true
+	return failures
+
+func _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799() -> Array[String]:
+	var failures: Array[String] = []
+	var good: String = "\n".join([
+		"<!-- <img src=\"img/commented-out.png\"> -->",
+		"<link rel=\"stylesheet\" href=\"style.css\">",
+		"<a href=\"press.html\">Press</a> <a href=\"press.html#top\">Press top</a> <a href=\"#\">soon</a>",
+		"<a href=\"https://example.com/x\">out</a> <a href=\"mailto:a@b.c\">mail</a>",
+		"<h2 id=\"signup\">Sign up</h2> <a href=\"#signup\">jump</a>",
+		"<img src=\"img/logo.svg\" alt=\"\" width=\"10\" height=\"10\">",
+		"<img src=\"img/02-brawl.png\" alt=\"x\" loading=\"lazy\" width=\"1200\" height=\"675\">",
+	])
+	var found: Array[String] = _site_page_problems_799("fixture.html", good, "res://site")
+	if found.size() != 0:
+		failures.append("a clean snippet was flagged: %s" % [found])
+	# Each bad snippet sits on line 2 and must produce exactly one problem naming that line and the attribute.
+	var bad: Array = [
+		["<img src=\"img/does-not-exist.png\" alt=\"x\" width=\"1\" height=\"1\">", "src=\"img/does-not-exist.png\""],
+		["<img src=\"img/logo.svg\" width=\"1\" height=\"1\">", "no alt"],
+		["<img src=\"img/logo.svg\" alt=\"x\" height=\"1\">", "no width"],
+		["<img src=\"img/logo.svg\" alt=\"x\" width=\"1\">", "no height"],
+		["<a href=\"prss.html\">typo</a>", "href=\"prss.html\""],
+		["<link rel=\"stylesheet\" href=\"nope.css\">", "href=\"nope.css\""],
+		["<a href=\"#nowhere\">jump</a>", "href=\"#nowhere\""],
+		["<a href=\"press/missing.zip\" download>zip</a>", "href=\"press/missing.zip\""],
+		["<img\n src=\"img/logo.svg\"\n width=\"1\" height=\"1\">", "no alt"],
+	]
+	for case: Array in bad:
+		var fixture: String = "<p>ok</p>\n" + str(case[0]) + "\n"
+		found = _site_page_problems_799("fixture.html", fixture, "res://site")
+		if found.size() != 1:
+			failures.append("'%s' gave %d problems, wanted 1: %s" % [str(case[0]).replace("\n", " "), found.size(), found])
+		elif not found[0].begins_with("fixture.html:2:") or not found[0].contains(str(case[1])):
+			failures.append("'%s' was flagged wrongly: %s" % [str(case[0]).replace("\n", " "), found[0]])
+	# The real home page with a broken image added on line 1 must be flagged on line 1.
+	var real: String = FileAccess.get_file_as_string("res://site/index.html")
+	found = _site_page_problems_799("site/index.html", "<img src=\"img/gone.png\">\n" + real, "res://site")
+	if found.size() != 4 or not found[0].begins_with("site/index.html:1:"):
+		failures.append("the real page with a bare broken image prepended gave %d problems, wanted 4 on line 1: %s" % [found.size(), found])
 	_scenario_completed = true
 	return failures
