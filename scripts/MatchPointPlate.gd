@@ -58,6 +58,11 @@ static func leaders(rm: Node) -> Array[Dictionary]:
 			out.append({"text": str(rm._slot_name(slot)), "color": rm._slot_color(slot), "slot": slot})
 	return out
 
+## Settings > "Match point plate" (#892); on when there is no Sfx autoload.
+static func _setting_on() -> bool:
+	var sfx: Node = (Engine.get_main_loop() as SceneTree).root.get_node_or_null("Sfx")
+	return sfx == null or bool(sfx.get("match_point_plate"))
+
 ## Shows the plates and dots for the round `rm` has just started. Returns the
 ## plate layer, or null when nobody is on match point.
 static func show_for(rm: Node) -> Node:
@@ -69,10 +74,13 @@ static func show_for(rm: Node) -> Node:
 		old.queue_free()
 	for old_dot: Node in rm.get_tree().get_nodes_in_group(DOT_GROUP):
 		old_dot.queue_free()
-	var layer: CanvasLayer = (load("res://scripts/MatchPointPlate.gd") as GDScript).new() as CanvasLayer
-	for entry: Dictionary in found.slice(0, MAX_PLATES):
-		layer.lines.append(entry)
-	rm.add_child(layer)
+	# Settings > "Match point plate" (#892): off shows no plate; the dots stay.
+	var layer: CanvasLayer = null
+	if _setting_on():
+		layer = (load("res://scripts/MatchPointPlate.gd") as GDScript).new() as CanvasLayer
+		for entry: Dictionary in found.slice(0, MAX_PLATES):
+			layer.lines.append(entry)
+		rm.add_child(layer)
 	var round_number: int = int(rm.get("_round_number"))
 	for entry: Dictionary in found:
 		var tag: Label = rm.name_tag(int(entry["slot"])) if int(entry["slot"]) >= 0 else null
