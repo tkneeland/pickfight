@@ -1,7 +1,8 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="spin"]
+[ext_resource type="PackedScene" path="res://scenes/parts/SpeedStrip.tscn" id="speed"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
 
@@ -52,6 +53,11 @@ shape = SubResource("RectangleShape2D_1400x40")
 [node name="FloorVisual" type="Polygon2D" parent="Floor"]
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-700, -20, 700, -20, 700, 20, -700, 20)
+
+; Speed strip (issue #891): a fast lane flush into the middle of the long floor, clear of every spawn drop line (spawns sit on the decks at the ends).
+[node name="FloorSpeedStrip" parent="." instance=ExtResource("speed")]
+position = Vector2(0, 396)
+size = Vector2(420, 8)
 
 ; Decks at the ends: spawns and the ring-out edge.
 [node name="DeckLeft" type="StaticBody2D" parent="."]
