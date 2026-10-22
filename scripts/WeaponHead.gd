@@ -603,6 +603,15 @@ func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVec
 		return {}
 	if not is_inside_tree():
 		return {}
+	# No circle moved: the loop below would skip every one and find nothing,
+	# so skip the head and physics lookups too.
+	var any_moved: bool = false
+	for i in sweep_shapes.size():
+		if not from_offsets[i].is_equal_approx(to_offsets[i]):
+			any_moved = true
+			break
+	if not any_moved:
+		return {}
 	var anchor: Vector2 = PhysicsServer2D.body_get_state(
 		get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM).origin
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
