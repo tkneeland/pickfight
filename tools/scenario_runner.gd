@@ -1064,6 +1064,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_lobby_copy_code_button_863",
 	"copy_code_button_hidden_couch_solo_streamer_863",
 	"copy_code_refresh_after_lobby_closed_863",
+	"site_social_preview_images_match_declared_size_864",
+	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3565,6 +3567,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_copy_code_button_hidden_couch_solo_streamer_863()
 		"copy_code_refresh_after_lobby_closed_863":
 			return await _scenario_copy_code_refresh_after_lobby_closed_863()
+		"site_social_preview_images_match_declared_size_864":
+			return _scenario_site_social_preview_images_match_declared_size_864()
+		"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864":
+			return _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -50434,4 +50440,156 @@ func _scenario_copy_code_refresh_after_lobby_closed_863() -> Array[String]:
 	while Time.get_ticks_msec() < until_msec:
 		await process_frame
 	host.refresh()
+	return failures
+
+## Pixel size [w, h] of a PNG or JPEG from its bytes, or [] when the bytes are neither (#864).
+func _image_size_864(b: PackedByteArray) -> Array:
+	if b.size() >= 24 and b[0] == 0x89 and b[1] == 0x50 and b[2] == 0x4E and b[3] == 0x47:
+		var pw: int = (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]
+		var ph: int = (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]
+		return [pw, ph]
+	if b.size() >= 4 and b[0] == 0xFF and b[1] == 0xD8:
+		var i: int = 2
+		while i + 9 < b.size():
+			if b[i] != 0xFF:
+				i += 1
+				continue
+			var marker: int = b[i + 1]
+			if marker == 0xFF:
+				i += 1
+				continue
+			if marker == 0xD8 or marker == 0x01 or (marker >= 0xD0 and marker <= 0xD7):
+				i += 2
+				continue
+			var seg_len: int = (b[i + 2] << 8) | b[i + 3]
+			# SOF0..SOF15 carry the frame size, except DHT (C4), JPG (C8) and DAC (CC).
+			if marker >= 0xC0 and marker <= 0xCF and marker != 0xC4 and marker != 0xC8 and marker != 0xCC:
+				return [(b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]]
+			i += 2 + seg_len
+	return []
+
+## Static check of one site page's social-preview meta tags (#864): og:title/og:description present, og:image and
+## twitter:image equal, the image resolves onto a site/ file by path suffix, is a PNG or JPEG, and its real pixel size
+## equals og:image:width/height. `root` is the folder the "site/..." suffix is resolved against. Names file:line.
+func _social_preview_problems_864(label: String, text: String, root: String) -> Array[String]:
+	var found: Array[String] = []
+	var comments: RegEx = RegEx.new()
+	comments.compile("(?s)<!--.*?-->")
+	var clean: String = text
+	var spans: Array[RegExMatch] = comments.search_all(text)
+	spans.reverse()
+	for c: RegExMatch in spans:
+		clean = clean.substr(0, c.get_start()) + "\n".repeat(c.get_string().count("\n")) + clean.substr(c.get_end())
+	var meta_re: RegEx = RegEx.new()
+	meta_re.compile("(?is)<meta\\b[^>]*>")
+	var key_re: RegEx = RegEx.new()
+	key_re.compile("(?is)(?<![\\w-])(?:property|name)\\s*=\\s*(?:\\x22([^\\x22]*)\\x22|\\x27([^\\x27]*)\\x27)")
+	var content_re: RegEx = RegEx.new()
+	content_re.compile("(?is)(?<![\\w-])content\\s*=\\s*(?:\\x22([^\\x22]*)\\x22|\\x27([^\\x27]*)\\x27)")
+	var metas: Dictionary = {}
+	for m: RegExMatch in meta_re.search_all(clean):
+		var tag: String = m.get_string()
+		var k: RegExMatch = key_re.search(tag)
+		var v: RegExMatch = content_re.search(tag)
+		if k == null or v == null:
+			continue
+		var key: String = (k.get_string(1) if k.get_string(1) != "" else k.get_string(2)).strip_edges().to_lower()
+		var value: String = (v.get_string(1) if v.get_string(1) != "" else v.get_string(2)).strip_edges()
+		if not metas.has(key):
+			metas[key] = [value, clean.substr(0, m.get_start()).count("\n") + 1]
+	for need: String in ["og:title", "og:description", "og:image", "twitter:image", "og:image:width", "og:image:height"]:
+		if not metas.has(need) or str(metas[need][0]) == "":
+			found.append("%s: <meta %s> is missing or empty" % [label, need])
+	if metas.has("og:image") and metas.has("twitter:image") and str(metas["og:image"][0]) != str(metas["twitter:image"][0]):
+		found.append("%s:%d: twitter:image \"%s\" differs from og:image \"%s\"" % [label, metas["twitter:image"][1], metas["twitter:image"][0], metas["og:image"][0]])
+	if not metas.has("og:image") or str(metas["og:image"][0]) == "":
+		return found
+	var url: String = str(metas["og:image"][0])
+	var line_no: int = int(metas["og:image"][1])
+	var url_path: String = url.split("#")[0].split("?")[0]
+	var at: int = url_path.rfind("/site/")
+	if at < 0:
+		found.append("%s:%d: og:image \"%s\" has no /site/ path to map onto a file" % [label, line_no, url])
+		return found
+	var rel: String = url_path.substr(at + 1)
+	var target: String = root.path_join(rel)
+	if not FileAccess.file_exists(target):
+		found.append("%s:%d: og:image \"%s\" maps to %s, which does not exist" % [label, line_no, url, rel])
+		return found
+	var size: Array = _image_size_864(FileAccess.get_file_as_bytes(target))
+	if size.is_empty():
+		found.append("%s:%d: og:image file %s is not a PNG or JPEG" % [label, line_no, rel])
+		return found
+	for pair: Array in [["og:image:width", 0, "width"], ["og:image:height", 1, "height"]]:
+		var tag_name: String = str(pair[0])
+		if not metas.has(tag_name):
+			continue
+		var declared: String = str(metas[tag_name][0])
+		if not declared.is_valid_int() or int(declared) != int(size[int(pair[1])]):
+			found.append("%s:%d: %s declares %s but %s is really %d px %s" % [label, int(metas[tag_name][1]), tag_name, declared, rel, int(size[int(pair[1])]), str(pair[2])])
+	return found
+
+func _scenario_site_social_preview_images_match_declared_size_864() -> Array[String]:
+	var failures: Array[String] = []
+	for page: String in ["index.html", "press.html"]:
+		var text: String = FileAccess.get_file_as_string("res://site/" + page)
+		if text.length() < 1000 or not text.contains("og:image"):
+			failures.append("site/%s did not read as a site page with social meta (%d chars)" % [page, text.length()])
+			continue
+		failures.append_array(_social_preview_problems_864("site/" + page, text, "res://"))
+	_scenario_completed = true
+	return failures
+
+func _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864() -> Array[String]:
+	var failures: Array[String] = []
+	var base: String = "https://example.github.io/pickfight/site/img/"
+	var make: Callable = func(og_img: String, tw_img: String, w: String, h: String, title: bool) -> String:
+		var lines: Array[String] = ["<head>", "<title>x</title>"]
+		if title:
+			lines.append("<meta property=\"og:title\" content=\"T\">")
+		lines.append_array([
+			"<meta property=\"og:description\" content=\"D\">",
+			"<meta property=\"og:image\" content=\"%s\">" % og_img,
+			"<meta property=\"og:image:width\" content=\"%s\">" % w,
+			"<meta property=\"og:image:height\" content=\"%s\">" % h,
+			"<meta name=\"twitter:image\" content=\"%s\">" % tw_img,
+			"</head>"])
+		return "\n".join(lines)
+	var good_url: String = base + "02-brawl.png"
+	var found: Array[String] = _social_preview_problems_864("fixture.html", make.call(good_url, good_url, "1200", "675", true), "res://")
+	if found.size() != 0:
+		failures.append("a clean fixture was flagged: %s" % [found])
+	# [html, expected substring, expected problem count]
+	var cases: Array = [
+		[make.call(base + "gone.png", base + "gone.png", "1200", "675", true), "does not exist", 1],
+		[make.call(good_url, good_url, "1200", "630", true), "og:image:height declares 630 but site/img/02-brawl.png is really 675 px height", 1],
+		[make.call(good_url, good_url, "1280", "675", true), "og:image:width declares 1280", 1],
+		[make.call(good_url, good_url, "wide", "675", true), "og:image:width declares wide", 1],
+		[make.call(base + "logo.svg", base + "logo.svg", "1200", "675", true), "is not a PNG or JPEG", 1],
+		[make.call(good_url, base + "03-lobby.png", "1200", "675", true), "differs from og:image", 1],
+		[make.call(good_url, good_url, "1200", "675", false), "og:title", 1],
+		[make.call("https://example.com/elsewhere.png", "https://example.com/elsewhere.png", "1200", "675", true), "no /site/ path", 1],
+	]
+	for case: Array in cases:
+		found = _social_preview_problems_864("fixture.html", str(case[0]), "res://")
+		if found.size() != int(case[2]):
+			failures.append("case '%s' gave %d problems, wanted %d: %s" % [str(case[1]), found.size(), int(case[2]), found])
+		elif not found[0].begins_with("fixture.html:") or not found[0].contains(str(case[1])):
+			failures.append("case '%s' was flagged wrongly: %s" % [str(case[1]), found[0]])
+	# The og:image problem names the line of the tag (line 5 in the fixture: head, title, og:title, og:description, og:image).
+	found = _social_preview_problems_864("fixture.html", make.call(base + "gone.png", base + "gone.png", "1200", "675", true), "res://")
+	if found.size() != 1 or not found[0].begins_with("fixture.html:5:"):
+		failures.append("a missing image was not flagged on its meta line: %s" % [found])
+	# The real home page with its og:image pointed at a missing file must be flagged.
+	var real: String = FileAccess.get_file_as_string("res://site/index.html")
+	found = _social_preview_problems_864("site/index.html", real.replace("site/img/02-brawl.png", "site/img/renamed.png"), "res://")
+	if found.size() < 1:
+		failures.append("the real page with a renamed og:image was not flagged")
+	# JPEG header parsing: SOI, an APP0 segment, then SOF0 with height 0x0123 and width 0x0245.
+	var jpg: PackedByteArray = PackedByteArray([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x01, 0x23, 0x02, 0x45, 0x01, 0x01, 0x11, 0x00])
+	if _image_size_864(jpg) != [0x0245, 0x0123]:
+		failures.append("a synthetic JPEG header read as %s, wanted [581, 291]" % [_image_size_864(jpg)])
+	if not _image_size_864(PackedByteArray([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])).is_empty():
+		failures.append("a GIF header read as a PNG or JPEG")
+	_scenario_completed = true
 	return failures
