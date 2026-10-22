@@ -390,6 +390,9 @@ func _try_start_round() -> void:
 	_last_winner_slot = -1
 	_team_keep_weapon.clear()
 	_survivor_slot = -1
+	_kicked_this_round_check = false
+	_mode_win_slot = -1
+	_mode_win_team = -1
 	_survivor_team = -1
 	_tie_frame = -1
 	_tie_slots.clear()
@@ -599,13 +602,10 @@ func _check_round_end() -> void:
 		_last_winner_slot = -1
 	if not abandoned and not after_kick:
 		_achievement_round_finished([_last_winner_slot] if _last_winner_slot != -1 else [])
-	_pickup_director.clear()
-	_stop_kill_zone_rise()
-	_end_round_modifier()
+	_wind_down_round()
 	_send_career_round([_last_winner_slot] if _last_winner_slot != -1 else [])
 	_ko_round_ended(_last_winner_slot)
 	_show_scoreboard()
-	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	_start_play_of_round()
@@ -1015,7 +1015,8 @@ func _end_round_modifier() -> void:
 	if _modifier != null:
 		_modifier.undo()
 		_modifier = null
-		_send_modifier_chip("")
+	# Always: a Sudden Death in a round with no modifier sent a title too.
+	_send_modifier_chip("")
 	if _modifier_label != null:
 		_modifier_label.visible = false
 
@@ -1743,16 +1744,12 @@ func _resume_match() -> void:
 ## with no winner and the room goes back to the lobby.
 func _end_match() -> void:
 	if _paused:
-		_paused = false
-		_focus_paused = false
-		_set_tree_paused(false)
-		_show_pause_banner(false)
+		_resume_match()
 	for player: Variant in _players:
 		if player != null and player.alive:
 			player.leave_round()
-	_pickup_director.clear()
-	_stop_kill_zone_rise()
-	_end_round_modifier()
+	_wind_down_round()
+	_end_play_of_round()
 	_end_spawn_protection()
 	_last_winner_slot = -1
 	_team_keep_weapon.clear()
@@ -2011,13 +2008,10 @@ func _check_team_round_end(after_kick: bool) -> void:
 		_achievement_match_won(team_slots)
 	if standing.size() <= 1 and not after_kick:
 		_achievement_round_finished(winners)
-	_pickup_director.clear()
-	_stop_kill_zone_rise()
-	_end_round_modifier()
+	_wind_down_round()
 	_send_career_round(winners)
 	_ko_round_ended(-1)
 	_show_scoreboard()
-	_clear_all_shots()
 	_state = State.ROUND_END
 	_pause_until_msec = GameClockScript.now_msec() + int(round_end_pause_sec * 1000.0)
 	_start_play_of_round()
@@ -2409,6 +2403,7 @@ func mode_won() -> bool:
 	return _game_mode_node != null and _game_mode_node.has_method("is_won") and _game_mode_node.is_won()
 
 func _ko_round_started() -> void:
+	_has_lethal_point = false # a lethal hit's point belongs to its own round
 	_pending_kos.clear()
 	_round_kos.clear()
 	_end_play_of_round()
@@ -2772,6 +2767,14 @@ func _clear_ghosts() -> void:
 		if is_instance_valid(ghost):
 			(ghost as Node).queue_free()
 	_ghosts.clear()
+
+## What every way out of a round puts away: its pickups, the rising kill zone,
+## its modifier (and mode and tiebreaker), and every shot still in flight.
+func _wind_down_round() -> void:
+	_pickup_director.clear()
+	_stop_kill_zone_rise()
+	_end_round_modifier()
+	_clear_all_shots()
 
 ## Issue #570: shots outlive an eliminated shooter, but never the round.
 func _clear_all_shots() -> void:
