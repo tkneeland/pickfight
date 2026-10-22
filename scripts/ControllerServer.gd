@@ -1096,8 +1096,8 @@ const GENERATED_ID_PREFIX: String = "host-assigned-"
 ## up if the client sent none (issue #164), so it can still be told apart and
 ## banned. Refuses the connection once every slot is claimed.
 func _bind_with_id(peer: Variant, id: String) -> void:
-	if not peer is LocalSeat and (id == HOST_PC_ID or id.begins_with(PAD_ID_PREFIX) or id.begins_with(GENERATED_ID_PREFIX)):
-		id = "" # a network client may not claim a reserved id: the host PC's, a pad's or a made-up one
+	if not peer is LocalSeat and (id == HOST_PC_ID or id.begins_with(PAD_ID_PREFIX)):
+		id = "" # a network client may not claim a reserved id: the host PC's or a pad's (a made-up host-assigned id stays valid, a kick sticks to it)
 	if id.is_empty():
 		_last_generated_id += 1
 		id = GENERATED_ID_PREFIX + "%d-%d" % [_last_generated_id, randi()]
