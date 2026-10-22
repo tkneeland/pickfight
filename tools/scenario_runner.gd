@@ -51164,6 +51164,7 @@ func _scenario_controller_page_review_fixes_review_net() -> Array[String]:
 	if not page.contains("Array.from(name).slice(0, MAX_NAME_LENGTH)"):
 		failures.append("cleanName does not cut by code point")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", page))
+	_scenario_completed = true
 	return failures
 ## Review perf: the O(1) stage check agrees with the stage list it stands in for,
 ## and the lobby, refreshed every frame, keeps the join-help address labels
