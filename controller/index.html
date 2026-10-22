@@ -211,6 +211,22 @@
     pointer-events: none;
   }
   #hill.show { display: block; }
+  /* Weak connection (#777): a small non-blocking chip in the top-right corner,
+     clear of the drag area and the hill / lives readouts on the left. */
+  #weak-chip {
+    position: fixed;
+    z-index: 3;
+    top: 8px;
+    right: 10px;
+    display: none;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: rgba(255, 140, 0, 0.9);
+    color: #1a1a1a;
+    font: 700 14px sans-serif;
+    pointer-events: none;
+  }
+  #weak-chip.show { display: block; }
   #steal {
     position: fixed;
     z-index: 4;
@@ -650,6 +666,7 @@
 <div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="lives"></div>
 <div id="hill"></div>
+<div id="weak-chip">Weak connection</div>
 <button id="steal" type="button">Steal a life</button>
 <div id="hud">
   <div id="who">
@@ -822,6 +839,7 @@
         "PHONE_VIBRATION_OFF": "Vibration: off",
         "PHONE_LEAVE": "Leave game",
         "PHONE_LEAVE_CONFIRM": "Tap again to leave",
+        "PHONE_WEAK_CONNECTION": "Weak connection",
         "PHONE_HINT_DRAG": "Drag to swing",
         "TEAM_LINE": "You're on {0} team",
         "TEAM_LINE_AUTO": " (auto)",
@@ -964,6 +982,7 @@
       "PHONE_VIBRATION_OFF": "Vibration: aus",
       "PHONE_LEAVE": "Spiel verlassen",
       "PHONE_LEAVE_CONFIRM": "Nochmal tippen zum Verlassen",
+      "PHONE_WEAK_CONNECTION": "Schwache Verbindung",
       "PHONE_HINT_DRAG": "Zieh zum Schwingen",
       "TEAM_LINE": "Du bist in Team {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1106,6 +1125,7 @@
       "PHONE_VIBRATION_OFF": "Vibration : désactivée",
       "PHONE_LEAVE": "Quitter la partie",
       "PHONE_LEAVE_CONFIRM": "Touche encore pour quitter",
+      "PHONE_WEAK_CONNECTION": "Connexion faible",
       "PHONE_HINT_DRAG": "Glisse pour frapper",
       "TEAM_LINE": "Tu es dans l'équipe {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1248,6 +1268,7 @@
       "PHONE_VIBRATION_OFF": "Vibración: no",
       "PHONE_LEAVE": "Salir del juego",
       "PHONE_LEAVE_CONFIRM": "Toca otra vez para salir",
+      "PHONE_WEAK_CONNECTION": "Conexión débil",
       "PHONE_HINT_DRAG": "Arrastra para golpear",
       "TEAM_LINE": "Estás en el equipo {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1390,6 +1411,7 @@
       "PHONE_VIBRATION_OFF": "Vibração: desligada",
       "PHONE_LEAVE": "Sair do jogo",
       "PHONE_LEAVE_CONFIRM": "Toque de novo para sair",
+      "PHONE_WEAK_CONNECTION": "Conexão fraca",
       "PHONE_HINT_DRAG": "Arraste para bater",
       "TEAM_LINE": "Você está no time {0}",
       "TEAM_LINE_AUTO": " (auto)",
@@ -1532,6 +1554,7 @@
       "PHONE_VIBRATION_OFF": "振动:关",
       "PHONE_LEAVE": "离开游戏",
       "PHONE_LEAVE_CONFIRM": "再点一次离开",
+      "PHONE_WEAK_CONNECTION": "连接较弱",
       "PHONE_HINT_DRAG": "拖动来挥动",
       "TEAM_LINE": "你在{0}队",
       "TEAM_LINE_AUTO": " (自动)",
@@ -1674,6 +1697,7 @@
       "PHONE_VIBRATION_OFF": "バイブ: オフ",
       "PHONE_LEAVE": "ゲームを抜ける",
       "PHONE_LEAVE_CONFIRM": "もう一度タップで抜ける",
+      "PHONE_WEAK_CONNECTION": "接続が不安定",
       "PHONE_HINT_DRAG": "ドラッグで振る",
       "TEAM_LINE": "あなたは{0}チーム",
       "TEAM_LINE_AUTO": " (自動)",
@@ -1816,6 +1840,7 @@
       "PHONE_VIBRATION_OFF": "진동: 꺼짐",
       "PHONE_LEAVE": "게임 나가기",
       "PHONE_LEAVE_CONFIRM": "한 번 더 누르면 나가요",
+      "PHONE_WEAK_CONNECTION": "연결 약함",
       "PHONE_HINT_DRAG": "드래그해서 휘두르기",
       "TEAM_LINE": "당신은 {0}팀이에요",
       "TEAM_LINE_AUTO": " (자동)",
@@ -1958,6 +1983,7 @@
       "PHONE_VIBRATION_OFF": "Вибрация: выкл.",
       "PHONE_LEAVE": "Выйти из игры",
       "PHONE_LEAVE_CONFIRM": "Нажмите ещё раз, чтобы выйти",
+      "PHONE_WEAK_CONNECTION": "Слабое соединение",
       "PHONE_HINT_DRAG": "Води, чтобы махать",
       "TEAM_LINE": "Вы в команде: {0}",
       "TEAM_LINE_AUTO": " (авто)",
@@ -2097,6 +2123,7 @@
       "PHONE_READY": "#ready-btn",
       "PHONE_HAT_AND_COLOUR": "#look-btn",
       "PHONE_LEAVE": "#leave-btn",
+      "PHONE_WEAK_CONNECTION": "#weak-chip",
       "PHONE_PICK_NAME": "#name-prompt-title",
       "PHONE_NAME_INFO": "#name-prompt-info",
       "PHONE_SHUFFLE": "#name-shuffle",
@@ -2814,6 +2841,8 @@
     else if (relayJoined) { xmit(KIND_TEXT, new TextEncoder().encode(JSON.stringify(obj))); }
   }
   var relayJoined = false;
+  // Tell the host this page answers its pings (#777).
+  function announceLag() { sendText({ t: "lag" }); }
 
   function slotName(n) {
     if (lobby) {
@@ -3613,6 +3642,7 @@
           refusedOut = false;
           setSlot(msg.slot);
           sendName();
+          announceLag();
           sendLook();
           if (!nameChosen()) { openNamePrompt(); }
           else if (!lookChosen()) { openLookPrompt(); }
@@ -3625,6 +3655,8 @@
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "hill") { showHill(msg); }
+        else if (msg.t === "ping") { sendText({ t: "pong", n: msg.n }); }
+        else if (msg.t === "weak") { document.getElementById("weak-chip").classList.toggle("show", msg.v === true); }
         else if (msg.t === "career") { addCareer(msg.d); }
         else if (msg.t === "lobby") { showLobby(msg); }
         else if (msg.t === "closed" && RELAY) { relayNote = { code: Number(msg.code) || 0, reason: String(msg.reason || "") }; }

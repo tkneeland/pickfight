@@ -873,6 +873,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"name_filter_732",
 	"name_echo_756",
 	"phone_reduce_flashes_follows_host_setting_776",
+	"phone_weak_connection_chip_shows_and_clears_777",
 	"bot_holds_hill_and_flag_without_hopping_607",
 	"bot_first_thinks_are_staggered_607",
 	"bot_keeps_stage_read_across_respawns_607",
@@ -3114,6 +3115,7 @@ func _run_scenario(name: String) -> Array[String]:
 		"name_filter_732": return await _scenario_name_filter_732()
 		"name_echo_756": return await _scenario_name_echo_756()
 		"phone_reduce_flashes_follows_host_setting_776": return await _scenario_phone_reduce_flashes_776()
+		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -46873,6 +46875,66 @@ func _scenario_phone_reduce_flashes_776() -> Array[String]:
 		if not page.contains(needle):
 			failures.append("controller page lacks '%s'" % needle)
 	sfx.reduce_flash = was_on
+	peer.close(1000, "scenario done")
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+func _scenario_phone_weak_connection_777() -> Array[String]:
+	var failures: Array[String] = []
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+	player.name = "WeakP0"
+	player.start_in_round = false
+	stage.add_child(player)
+	var server: Node = ControllerServerScript.new()
+	server.name = "WeakServer"
+	_set_phone_ports(server)
+	server.player_paths = [NodePath("../WeakP0")] as Array[NodePath]
+	server.controller_timeout_sec = 60.0
+	server.ping_interval_msec = 400
+	server.weak_hold_msec = 300
+	stage.add_child(server)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var peer := WebSocketPeer.new()
+	peer.connect_to_url("ws://127.0.0.1:%d" % _phone_ws_port)
+	var sent_id: bool = false
+	var weak_frames: Array = []
+	var pings: Array = [] # [n, msec it arrived]
+	var delay_msec: int = 260 # slow link first
+	var phase_start: int = Time.get_ticks_msec()
+	var recovered: bool = false
+	while Time.get_ticks_msec() - phase_start < 8000:
+		await process_frame
+		peer.poll()
+		if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+			continue
+		if not sent_id:
+			peer.send_text(JSON.stringify({"id": "weak-0"}))
+			peer.send_text(JSON.stringify({"t": "lag"}))
+			sent_id = true
+		while peer.get_available_packet_count() > 0:
+			var msg: Variant = JSON.parse_string(peer.get_packet().get_string_from_utf8())
+			if msg is Dictionary and msg.get("t") == "ping":
+				pings.append([int(msg["n"]), Time.get_ticks_msec()])
+			elif msg is Dictionary and msg.get("t") == "weak":
+				weak_frames.append(msg.get("v") == true)
+		while not pings.is_empty() and Time.get_ticks_msec() - int(pings[0][1]) >= delay_msec:
+			peer.send_text(JSON.stringify({"t": "pong", "n": pings[0][0]}))
+			pings.pop_front()
+		if weak_frames == [true] and not recovered:
+			recovered = true
+			delay_msec = 0 # link recovers
+		if weak_frames == [true, false]:
+			break
+	if weak_frames != [true, false]:
+		failures.append("weak frames %s; wanted [true, false] (slow link shows, recovered link clears)" % [weak_frames])
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	for needle: String in ["weak-chip", "PHONE_WEAK_CONNECTION", "msg.t === \"weak\""]:
+		if not page.contains(needle):
+			failures.append("controller page lacks '%s'" % needle)
 	peer.close(1000, "scenario done")
 	await _teardown(stage)
 	_scenario_completed = true
