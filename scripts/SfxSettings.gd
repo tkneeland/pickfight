@@ -197,8 +197,8 @@ func _ready() -> void:
 	_autosave_box = _add_box(content, "AutoSaveClips", tr("SETTINGS_AUTO_SAVE_CLIPS"))
 	_focus_box = _add_box(content, "PauseOnFocusLoss", tr("SETTINGS_PAUSE_ON_FOCUS_LOSS"))
 	_filter_box = _add_box(content, "FilterNames", tr("SETTINGS_FILTER_NAMES"))
-	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	_numbers_box = _add_box(content, "PlayerNumbers", tr("SETTINGS_PLAYER_NUMBERS"))
+	_crash_box = _add_box(content, "SendCrashReports", tr("SETTINGS_SEND_CRASH_REPORTS"))
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	# Restore defaults (#750), above Credits: one press asks first, Yes resets.
