@@ -4,14 +4,13 @@ extends CanvasLayer
 ## A small "Settings" button in the bottom-right corner opens a panel with
 ## these controls:
 ##
-## - master, SFX and music volume sliders;
+## - master, SFX, voice and music volume sliders (voice is the announcer and
+##   the fighters' grunts, under SFX, #824);
 ## - a mute box;
 ## - a fullscreen box;
 ## - a window size for windowed mode, and the comfort and streamer options.
 ##   (The stage, weapon and round-modifier switches live on the lobby's
 ##   Stages & Rules screen since #647.)
-##
-## A voice volume slider (#290) goes in the audio rows above, beside music.
 ##
 ## Keys: `Esc` opens and closes the panel, `M` toggles mute and `F11` toggles
 ## fullscreen.
@@ -53,6 +52,7 @@ var _toggle: Button
 var _panel: PanelContainer
 var _slider: HSlider
 var _sfx_slider: HSlider
+var _voice_slider: HSlider
 var _music_slider: HSlider
 var _mute: CheckBox
 var _fullscreen: CheckBox
@@ -138,6 +138,7 @@ func _ready() -> void:
 	rows.add_child(_host_match)
 	_slider = _add_slider(rows, "Volume", tr("SETTINGS_MASTER_VOLUME"))
 	_sfx_slider = _add_slider(rows, "SfxVolume", tr("SETTINGS_SFX"))
+	_voice_slider = _add_slider(rows, "VoiceVolume", tr("SETTINGS_VOICE"))
 	_music_slider = _add_slider(rows, "MusicVolume", tr("SETTINGS_MUSIC"))
 	if music == null:
 		_music_slider.get_parent().visible = false
@@ -290,8 +291,9 @@ func _ready() -> void:
 	_crash_box.toggled.connect(func(pressed: bool) -> void: host.set_send_crash_reports(pressed))
 	_slider.value_changed.connect(_on_volume_changed)
 	_sfx_slider.value_changed.connect(_on_sfx_volume_changed)
+	_voice_slider.value_changed.connect(_on_voice_volume_changed)
 	_music_slider.value_changed.connect(_on_music_volume_changed)
-	for slider: HSlider in [_slider, _sfx_slider, _music_slider]:
+	for slider: HSlider in [_slider, _sfx_slider, _voice_slider, _music_slider]:
 		slider.drag_started.connect(_on_drag_started)
 		slider.drag_ended.connect(_on_drag_ended)
 	_mute.toggled.connect(_on_mute_toggled)
@@ -392,6 +394,7 @@ func refresh() -> void:
 	sfx.sync_fullscreen()
 	_slider.set_value_no_signal(sfx.master_volume)
 	_sfx_slider.set_value_no_signal(sfx.sfx_volume)
+	_voice_slider.set_value_no_signal(sfx.voice_volume)
 	if music != null:
 		_music_slider.set_value_no_signal(music.volume)
 	_mute.set_pressed_no_signal(sfx.muted)
@@ -660,6 +663,9 @@ func volume_slider() -> HSlider:
 func sfx_slider() -> HSlider:
 	return _sfx_slider
 
+func voice_slider() -> HSlider:
+	return _voice_slider
+
 func music_slider() -> HSlider:
 	return _music_slider
 
@@ -845,9 +851,9 @@ func _on_language_selected(index: int) -> void:
 ## Re-words the panel in the language just chosen. The controls were given
 ## `tr()`'d text when built, which Godot does not redo on a locale change.
 func _retranslate() -> void:
-	for slider: HSlider in [_slider, _sfx_slider, _music_slider]:
+	for slider: HSlider in [_slider, _sfx_slider, _voice_slider, _music_slider]:
 		var title := slider.get_parent().get_child(0) as Label
-		title.text = tr({_slider: "SETTINGS_MASTER_VOLUME", _sfx_slider: "SETTINGS_SFX", _music_slider: "SETTINGS_MUSIC"}[slider])
+		title.text = tr({_slider: "SETTINGS_MASTER_VOLUME", _sfx_slider: "SETTINGS_SFX", _voice_slider: "SETTINGS_VOICE", _music_slider: "SETTINGS_MUSIC"}[slider])
 	_mute.text = tr("SETTINGS_MUTE")
 	_fullscreen.text = tr("SETTINGS_FULLSCREEN")
 	_more.text = tr("SETTINGS_MORE_OPTIONS")
@@ -918,6 +924,10 @@ func _on_volume_changed(value: float) -> void:
 
 func _on_sfx_volume_changed(value: float) -> void:
 	sfx.set_sfx_volume(value, not _dragging)
+	refresh()
+
+func _on_voice_volume_changed(value: float) -> void:
+	sfx.set_voice_volume(value, not _dragging)
 	refresh()
 
 func _on_music_volume_changed(value: float) -> void:

@@ -994,6 +994,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"restore_defaults_750",
 	"player_numbers_badge_on_name_tags_809",
 	"player_numbers_setting_persists_and_restores_809",
+	"voice_volume_scales_announcer_and_grunts_only_824",
+	"voice_slider_reset_by_restore_defaults_824",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -3382,6 +3384,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_team_letters_752()
 		"stick_deadzone_setting_748":
 			return await _scenario_stick_deadzone_setting_748()
+		"voice_volume_scales_announcer_and_grunts_only_824":
+			return await _scenario_voice_volume_scales_announcer_and_grunts_only_824()
+		"voice_slider_reset_by_restore_defaults_824":
+			return await _scenario_voice_slider_reset_by_restore_defaults_824()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -33297,8 +33303,8 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	for voice: Node in sfx.get_children():
 		if voice is AudioStreamPlayer2D:
 			voices += 1
-			if voice.bus != &"SFX":
-				failures.append("a grunt played on the %s bus, not SFX" % voice.bus)
+			if voice.bus != &"Voice":
+				failures.append("a grunt played on the %s bus, not Voice (#824)" % voice.bus)
 	if voices == 0:
 		failures.append("no placed player node was made for the grunts")
 	sfx.set_muted(true)
@@ -47823,5 +47829,89 @@ func _scenario_pickup_spawn_rules_unchanged_by_pop_816() -> Array[String]:
 	rm.free()
 	player.queue_free()
 	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+
+func _scenario_voice_volume_scales_announcer_and_grunts_only_824() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var temp_path: String = OS.get_temp_dir().path_join("pickfight_voice_%d.cfg" % OS.get_process_id())
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	sfx.settings_path = temp_path
+	sfx.persist_settings = true
+	sfx.set_sfx_volume(0.8)
+	sfx.set_voice_volume(1.0)
+	var hit_name: StringName = &"hit_pickaxe"
+	var hit: float = sfx.mix_gain_for(hit_name)
+	var voices: Array[StringName] = [&"announce_fight", &"announce_ko", &"grunt_hit_0", &"grunt_ko_3"]
+	var full: Dictionary = {}
+	for v: StringName in voices:
+		full[v] = sfx.mix_gain_for(v)
+		if not is_equal_approx(full[v], 0.8):
+			failures.append("%s at voice 100%% mixes at %.3f, not the SFX level 0.8" % [v, full[v]])
+	sfx.set_voice_volume(0.0)
+	for v: StringName in voices:
+		if sfx.mix_gain_for(v) > 0.001:
+			failures.append("%s is still audible (%.4f) at voice 0" % [v, sfx.mix_gain_for(v)])
+	if not is_equal_approx(sfx.mix_gain_for(hit_name), hit) or hit < 0.79:
+		failures.append("a weapon-hit sound changed with the voice slider (%.3f -> %.3f)" % [hit, sfx.mix_gain_for(hit_name)])
+	sfx.set_voice_volume(0.5)
+	if not is_equal_approx(sfx.mix_gain_for(&"announce_fight"), 0.4):
+		failures.append("voice 0.5 mixes the announcer at %.3f, not 0.4" % sfx.mix_gain_for(&"announce_fight"))
+	sfx.set_sfx_volume(0.0)
+	if sfx.mix_gain_for(hit_name) > 0.001:
+		failures.append("SFX at 0 left a hit audible")
+	sfx.set_sfx_volume(1.0)
+	sfx.set_voice_volume(0.35)
+	var saved := ConfigFile.new()
+	if saved.load(temp_path) != OK or not is_equal_approx(float(saved.get_value("audio", "voice_volume", -1.0)), 0.35):
+		failures.append("voice volume was not saved to the audio file")
+	sfx.voice_volume = 1.0
+	sfx.load_settings()
+	if not is_equal_approx(sfx.voice_volume, 0.35):
+		failures.append("voice volume did not reload (%.2f)" % sfx.voice_volume)
+	# The slider sits under SFX in the panel and drives the setting.
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var rows: Node = ui.voice_slider().get_parent().get_parent()
+	if ui.voice_slider().get_parent().get_index() != ui.sfx_slider().get_parent().get_index() + 1:
+		failures.append("the Voice slider is not directly under SFX")
+	ui.voice_slider().value = 0.6
+	if not is_equal_approx(sfx.voice_volume, 0.6):
+		failures.append("moving the Voice slider did not set the volume")
+	if rows == null:
+		failures.append("the Voice slider has no row")
+	sfx.set_voice_volume(1.0, false)
+	sfx.set_sfx_volume(1.0, false)
+	sfx.persist_settings = false
+	if FileAccess.file_exists(temp_path):
+		DirAccess.remove_absolute(temp_path)
+	_scenario_completed = true
+	return failures
+
+func _scenario_voice_slider_reset_by_restore_defaults_824() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	sfx.set_voice_volume(0.2, false)
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	if not is_equal_approx(ui.voice_slider().value, 0.2):
+		failures.append("the Voice slider shows %.2f, not 0.2" % ui.voice_slider().value)
+	ui.restore_button().pressed.emit()
+	ui.restore_yes_button().pressed.emit()
+	if not is_equal_approx(sfx.voice_volume, 1.0):
+		failures.append("Restore defaults left voice volume at %.2f" % sfx.voice_volume)
+	if not is_equal_approx(sfx.mix_gain_for(&"announce_fight"), 1.0):
+		failures.append("Restore defaults left the announcer quiet")
+	if not is_equal_approx(ui.voice_slider().value, 1.0):
+		failures.append("the Voice slider shows %.2f after Restore defaults" % ui.voice_slider().value)
 	_scenario_completed = true
 	return failures
