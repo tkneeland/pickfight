@@ -11,6 +11,7 @@ Several agents work in parallel on this repo, one per GitHub account:
   `gh issue edit <n> --add-assignee @me`.
 - **Never start, edit, or comment-as-owner on an issue assigned to someone
   else.** If there's no unassigned work in your lane, stop and tell your human.
+- Posting a `[CLAIM]` comment on an issue is followed by `tools/agents/pf-msg.sh claim <n>`, which tells the other account's agent over the private channel; never take over an issue with a `[CLAIM]` from another account in the last 24h.
 - Every issue body has a **Touches** section listing the files it expects to
   change. When you're planning, fill it in accurately. It is how the other
   dev's agent sees collisions coming.

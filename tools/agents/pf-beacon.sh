@@ -22,3 +22,5 @@ else
   id=$(gh api "repos/$REPO/issues/432/comments" -f body="$body" -q .id 2>>"$PF_STATE/beacon.log") || { log "POST failed"; exit 1; }
   echo "$id" > "$idf"
 fi
+# best effort: also tell the private channel (doorbell for the other machine); never fails the beacon
+bash "$PF_DIR/pf-msg.sh" send USAGE "$(jq -r '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate)"' "$snap")" >/dev/null 2>&1 || true
