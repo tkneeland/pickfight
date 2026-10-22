@@ -133,6 +133,9 @@ var _puppet_holder: Node2D
 var _ui: CanvasLayer
 var _join_panel: Control
 var _room_edit: LineEdit
+var _paste_button: Button
+## The clipboard read, a seam so the scenarios never touch the real clipboard (#906).
+var clipboard_getter: Callable = func() -> String: return DisplayServer.clipboard_get()
 var _name_edit: LineEdit
 var _status_label: Label
 var _join_button: Button
@@ -171,6 +174,24 @@ static func normalize_code(text: String) -> String:
 		if CODE_LETTERS.contains(ch) and out.length() < CODE_LENGTH:
 			out += ch
 	return out
+
+## #906: the room code inside pasted `text` ("" when there is none). Takes the
+## first whole word that is exactly CODE_LENGTH letters of the relay alphabet
+## (any case, so "Join with code: abcd" works); failing that, a short text whose
+## spaces or dashes only split the code ("ab cd") collapses to it.
+static func code_from_text(text: String) -> String:
+	var word: String = ""
+	for ch: String in text.to_upper() + " ":
+		if ch >= "A" and ch <= "Z":
+			word += ch
+			continue
+		if word.length() == CODE_LENGTH and normalize_code(word) == word:
+			return word
+		word = ""
+	var squeezed: String = text.strip_edges().replace(" ", "").replace("-", "").to_upper()
+	if code_is_complete(squeezed):
+		return squeezed
+	return ""
 
 static func code_is_complete(text: String) -> bool:
 	return text.length() == CODE_LENGTH and normalize_code(text) == text
@@ -1097,7 +1118,16 @@ func _build_join_panel() -> void:
 	_attach_pad_keyboard(_room_edit) # #711
 	_room_edit.text_changed.connect(_on_room_text_changed)
 	_room_edit.text_submitted.connect(func(_t: String) -> void: _on_join_pressed())
-	box.add_child(_room_edit)
+	_room_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var room_row := HBoxContainer.new()
+	room_row.add_theme_constant_override("separation", 10)
+	box.add_child(room_row)
+	room_row.add_child(_room_edit)
+	_paste_button = Button.new() # #906: fills the field from the clipboard; joins nothing
+	_paste_button.name = "Paste"
+	_paste_button.text = tr("JOIN_PASTE")
+	_paste_button.pressed.connect(_on_paste_pressed)
+	room_row.add_child(_paste_button)
 	box.add_child(_label(tr("JOIN_YOUR_NAME"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
@@ -1136,6 +1166,17 @@ func _on_room_text_changed(text: String) -> void:
 	if cleaned != text:
 		_room_edit.text = cleaned
 		_room_edit.caret_column = cleaned.length()
+
+## #906: Paste fills the room field with the code on the clipboard; with none
+## the field stays as it is and the status line says so.
+func _on_paste_pressed() -> void:
+	var code: String = code_from_text(str(clipboard_getter.call()))
+	if code.is_empty():
+		_set_status(tr("JOIN_NO_CODE_ON_CLIPBOARD"))
+		return
+	_room_edit.text = code
+	_room_edit.caret_column = code.length()
+	_set_status("")
 
 func _on_join_pressed() -> void:
 	join(_room_edit.text, _name_edit.text)
@@ -1288,6 +1329,7 @@ func _set_status(text: String) -> void:
 	if _join_button != null:
 		_join_button.disabled = busy
 		_room_edit.editable = not busy
+		_paste_button.disabled = busy
 		_name_edit.editable = not busy
 
 func _show_join_screen() -> void:

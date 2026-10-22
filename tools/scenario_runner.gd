@@ -1069,6 +1069,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"join_screen_paste_fills_room_code_906",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3580,6 +3581,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"join_screen_paste_fills_room_code_906":
+			return await _scenario_join_screen_paste_fills_room_code_906()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -50767,5 +50770,67 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+## Issue #906: the PC join screen's Paste button fills the room field from the clipboard (getter seam, never the real one).
+func _scenario_join_screen_paste_fills_room_code_906() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await _await_ticks(4)
+	var paste: Button = client.find_child("Paste", true, false) as Button
+	if paste == null or not client.has_method("_on_paste_pressed") or not ("clipboard_getter" in client):
+		failures.append("the join screen has no Paste button with a clipboard_getter seam")
+		client.queue_free()
+		await _await_ticks(2)
+		_scenario_completed = true
+		return failures
+	var room: LineEdit = client.find_child("RoomCode", true, false) as LineEdit
+	var clip: Array[String] = [""]
+	client.clipboard_getter = func() -> String: return clip[0]
+	if not paste.is_visible_in_tree() or paste.disabled:
+		failures.append("Paste is not shown and enabled on the join screen")
+	if paste.focus_mode != Control.FOCUS_ALL:
+		failures.append("Paste is not in the gamepad focus chain (focus_mode %d)" % paste.focus_mode)
+	elif room.find_valid_focus_neighbor(SIDE_RIGHT) != paste:
+		failures.append("the focus chain does not lead from the room field to Paste")
+	if paste.text != client.tr("JOIN_PASTE") or paste.text == "JOIN_PASTE":
+		failures.append("Paste reads '%s', not a translated label" % paste.text)
+	if paste.get_global_rect().position.x < room.get_global_rect().end.x - 1.0:
+		failures.append("Paste is not beside the room field")
+	var cases: Array = [
+		["abcd", "ABCD"],
+		["Join with code: wxyz", "WXYZ"],
+		["  qrst\n", "QRST"],
+		["Come over, code kLmN, bring friends", "KLMN"],
+		["ab cd", "ABCD"],
+		["AB-CD", "ABCD"],
+	]
+	for pair: Array in cases:
+		room.text = ""
+		client.status_text = ""
+		clip[0] = pair[0]
+		paste.pressed.emit()
+		if room.text != pair[1]:
+			failures.append("pasting '%s' filled the room field with '%s', expected %s" % [pair[0], room.text, pair[1]])
+	# No usable code: the field is untouched and the status line says why.
+	for junk: String in ["", "hello", "i o i o", "abc", "12345678", "ABCDE"]:
+		room.text = "WXYZ"
+		client.status_text = ""
+		clip[0] = junk
+		paste.pressed.emit()
+		if room.text != "WXYZ":
+			failures.append("pasting '%s' changed the room field to '%s'" % [junk, room.text])
+		if client.status_text != client.tr("JOIN_NO_CODE_ON_CLIPBOARD") or client.status_text == "JOIN_NO_CODE_ON_CLIPBOARD":
+			failures.append("pasting '%s' left the status line '%s'" % [junk, client.status_text])
+	# It joins nothing by itself.
+	room.text = ""
+	clip[0] = "abcd"
+	paste.pressed.emit()
+	if client.state != RcState241.JOIN:
+		failures.append("Paste started a join (state %s)" % client.state)
+	client.queue_free()
+	await _await_ticks(2)
 	_scenario_completed = true
 	return failures
