@@ -984,6 +984,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pause_on_focus_loss_747",
 	"couch_relay_nudge_727",
 	"phone_vibration_switch_749",
+	"phone_swing_reach_slider_scales_drag_radius_817",
+	"phone_swing_reach_label_translated_817",
 	"steam_timeline_teams_title_745",
 	"team_letters_752",
 	"stick_deadzone_setting_748",
@@ -3362,6 +3364,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_couch_relay_nudge_727()
 		"phone_vibration_switch_749":
 			return await _scenario_phone_vibration_switch_749()
+		"phone_swing_reach_slider_scales_drag_radius_817":
+			return await _scenario_phone_swing_reach_slider_817()
+		"phone_swing_reach_label_translated_817":
+			return await _scenario_phone_swing_reach_label_817()
 		"steam_timeline_teams_title_745":
 			return await _scenario_steam_timeline_teams_title_745()
 		"team_letters_752":
@@ -47571,4 +47577,42 @@ func _scenario_couch_host_phone_present_keeps_match_menu_hidden_811() -> Array[S
 	await _close_phones(joined)
 	PadMenuScript368.reset()
 	await _teardown(rig["main"])
+	return failures
+
+## Issue #817: the phone page's Swing reach slider, read off controller/index.html as shipped.
+func _scenario_phone_swing_reach_slider_817() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	if page.is_empty():
+		failures.append("cannot read %s" % CONTROLLER_PAGE_PATH)
+		_scenario_completed = true
+		return failures
+	var lobby_at: int = page.find('<div id="lobby">')
+	var next_panel_at: int = page.find('<div id="name-prompt">')
+	var slider_at: int = page.find('<input id="reach" type="range" min="0.6" max="1.6" step="0.05" value="1">')
+	if slider_at == -1 or lobby_at == -1 or slider_at < lobby_at or slider_at > next_panel_at:
+		failures.append("the Swing reach slider (0.6-1.6, step 0.05, default 1) is not in the lobby panel")
+	if not page.contains('var REACH_KEY = "pickfight-reach";'):
+		failures.append("the reach storage key is not pickfight-reach")
+	if not page.contains("var radius = DRAG_RADIUS_FRACTION * edge * reachScale;"):
+		failures.append("computeDragRadius does not multiply by the reach")
+	if not page.contains("var reachScale = 1;"):
+		failures.append("the reach does not default to 1.0")
+	if not page.contains("setReach(stored(REACH_KEY));") or not page.contains("store(REACH_KEY, String(reachScale));"):
+		failures.append("the reach is not read from and saved to the try/catch storage helpers")
+	if not page.contains("if (!isFinite(v) || v <= 0) { v = 1; }"):
+		failures.append("a zero or garbage stored reach does not fall back to 1.0")
+	if not page.contains("radius < MIN_DRAG_RADIUS_PX) { return MIN_DRAG_RADIUS_PX; }"):
+		failures.append("the MIN_DRAG_RADIUS_PX floor is gone")
+	_scenario_completed = true
+	return failures
+
+func _scenario_phone_swing_reach_label_817() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var pattern := RegEx.create_from_string('"PHONE_SWING_REACH": "([^"]+)"')
+	var hits: Array[RegExMatch] = pattern.search_all(page)
+	if hits.size() != 9:
+		failures.append("PHONE_SWING_REACH has %d non-empty entries, expected one per language table (9)" % hits.size())
+	_scenario_completed = true
 	return failures

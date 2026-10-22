@@ -138,6 +138,7 @@
     color: var(--ink);
     background: var(--yellow);
   }
+  #reach-row { font-size: 16px; display: flex; align-items: center; gap: 10px; }
   #mouse-sens-row { font-size: 14px; opacity: 0.85; display: flex; align-items: center; gap: 10px; }
   #hint {
     position: fixed;
@@ -695,6 +696,10 @@
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
   <button id="vibration-btn" type="button">Vibration: on</button>
+  <label id="reach-row" for="reach">Swing reach
+    <input id="reach" type="range" min="0.6" max="1.6" step="0.05" value="1">
+    <span id="reach-value">1.00x</span>
+  </label>
   <button id="leave-btn" type="button">Leave game</button>
 </div>
 <div id="name-prompt">
@@ -835,6 +840,7 @@
         "PHONE_NO": "No",
         "PHONE_MOUSE_CAPTURE": "Click to capture mouse",
         "PHONE_MOUSE_SENS": "Mouse sensitivity",
+        "PHONE_SWING_REACH": "Swing reach",
         "PHONE_VIBRATION_ON": "Vibration: on",
         "PHONE_VIBRATION_OFF": "Vibration: off",
         "PHONE_LEAVE": "Leave game",
@@ -978,6 +984,7 @@
       "PHONE_NO": "Nein",
       "PHONE_MOUSE_CAPTURE": "Klick, um die Maus zu fangen",
       "PHONE_MOUSE_SENS": "Mausempfindlichkeit",
+      "PHONE_SWING_REACH": "Schwungreichweite",
       "PHONE_VIBRATION_ON": "Vibration: an",
       "PHONE_VIBRATION_OFF": "Vibration: aus",
       "PHONE_LEAVE": "Spiel verlassen",
@@ -1121,6 +1128,7 @@
       "PHONE_NO": "Non",
       "PHONE_MOUSE_CAPTURE": "Clique pour capturer la souris",
       "PHONE_MOUSE_SENS": "Sensibilité de la souris",
+      "PHONE_SWING_REACH": "Portée du swing",
       "PHONE_VIBRATION_ON": "Vibration : activée",
       "PHONE_VIBRATION_OFF": "Vibration : désactivée",
       "PHONE_LEAVE": "Quitter la partie",
@@ -1264,6 +1272,7 @@
       "PHONE_NO": "No",
       "PHONE_MOUSE_CAPTURE": "Clic para capturar el mouse",
       "PHONE_MOUSE_SENS": "Sensibilidad del mouse",
+      "PHONE_SWING_REACH": "Alcance del golpe",
       "PHONE_VIBRATION_ON": "Vibración: sí",
       "PHONE_VIBRATION_OFF": "Vibración: no",
       "PHONE_LEAVE": "Salir del juego",
@@ -1407,6 +1416,7 @@
       "PHONE_NO": "Não",
       "PHONE_MOUSE_CAPTURE": "Clique para capturar o mouse",
       "PHONE_MOUSE_SENS": "Sensibilidade do mouse",
+      "PHONE_SWING_REACH": "Alcance do golpe",
       "PHONE_VIBRATION_ON": "Vibração: ligada",
       "PHONE_VIBRATION_OFF": "Vibração: desligada",
       "PHONE_LEAVE": "Sair do jogo",
@@ -1550,6 +1560,7 @@
       "PHONE_NO": "否",
       "PHONE_MOUSE_CAPTURE": "点击以捕获鼠标",
       "PHONE_MOUSE_SENS": "鼠标灵敏度",
+      "PHONE_SWING_REACH": "挥动范围",
       "PHONE_VIBRATION_ON": "振动:开",
       "PHONE_VIBRATION_OFF": "振动:关",
       "PHONE_LEAVE": "离开游戏",
@@ -1693,6 +1704,7 @@
       "PHONE_NO": "いいえ",
       "PHONE_MOUSE_CAPTURE": "クリックしてマウスを取り込む",
       "PHONE_MOUSE_SENS": "マウス感度",
+      "PHONE_SWING_REACH": "スイング距離",
       "PHONE_VIBRATION_ON": "バイブ: オン",
       "PHONE_VIBRATION_OFF": "バイブ: オフ",
       "PHONE_LEAVE": "ゲームを抜ける",
@@ -1836,6 +1848,7 @@
       "PHONE_NO": "아니요",
       "PHONE_MOUSE_CAPTURE": "클릭해서 마우스 잡기",
       "PHONE_MOUSE_SENS": "마우스 감도",
+      "PHONE_SWING_REACH": "스윙 범위",
       "PHONE_VIBRATION_ON": "진동: 켜짐",
       "PHONE_VIBRATION_OFF": "진동: 꺼짐",
       "PHONE_LEAVE": "게임 나가기",
@@ -1979,6 +1992,7 @@
       "PHONE_NO": "Нет",
       "PHONE_MOUSE_CAPTURE": "Нажмите, чтобы захватить мышь",
       "PHONE_MOUSE_SENS": "Чувствительность мыши",
+      "PHONE_SWING_REACH": "Радиус замаха",
       "PHONE_VIBRATION_ON": "Вибрация: вкл.",
       "PHONE_VIBRATION_OFF": "Вибрация: выкл.",
       "PHONE_LEAVE": "Выйти из игры",
@@ -2151,6 +2165,7 @@
       "PHONE_NO": "#confirm-no",
       "PHONE_MOUSE_CAPTURE": "#mouse-capture",
       "PHONE_MOUSE_SENS": "#mouse-sens-row",
+      "PHONE_SWING_REACH": "#reach-row",
       "PHONE_HINT_DRAG": "#hint"
   };
   (function () {
@@ -2187,6 +2202,11 @@
   // unit-disc clamp passes NaN through (NaN > 1 is false), and a NaN vector
   // on the wire is poison for the host's rigid body.
   var MIN_DRAG_RADIUS_PX = 1;
+  // Swing reach (#817): a per-phone multiplier on the drag radius, 0.6x-1.6x, 1.0x by default.
+  // A smaller reach means a shorter thumb drag for a full swing; the wire vector stays the unit disc.
+  var REACH_KEY = "pickfight-reach";
+  var REACH_MIN = 0.6, REACH_MAX = 1.6;
+  var reachScale = 1;
   // Buzzes the host sends (issue #34, ADR-0013), strongest first. `vibrate` is
   // a navigator.vibrate() pattern; `alpha` and `ms` are the flash's peak
   // opacity and fade length. The flash plays everywhere, not just where
@@ -2305,7 +2325,7 @@
   // ---- geometry -----------------------------------------------------------
   function computeDragRadius() {
     var edge = Math.min(window.innerWidth, window.innerHeight);
-    var radius = DRAG_RADIUS_FRACTION * edge;
+    var radius = DRAG_RADIUS_FRACTION * edge * reachScale;
     // A hidden/zero-sized viewport (background tab, some in-app browsers)
     // reports 0 here, which would divide the drag by zero.
     if (!isFinite(radius) || radius < MIN_DRAG_RADIUS_PX) { return MIN_DRAG_RADIUS_PX; }
@@ -3181,6 +3201,26 @@
     showVibration();
   });
   showVibration();
+
+  // ---- swing reach slider (issue #817) -------------------------------------------
+  // Touch phones only: a fine pointer has the mouse sensitivity row instead.
+  var reachEl = document.getElementById("reach");
+  var reachValueEl = document.getElementById("reach-value");
+  function setReach(v) {
+    v = parseFloat(v);
+    if (!isFinite(v) || v <= 0) { v = 1; }
+    v = Math.min(REACH_MAX, Math.max(REACH_MIN, v));
+    reachScale = v;
+    reachEl.value = String(v);
+    reachValueEl.textContent = v.toFixed(2) + "x";
+    dragRadiusPx = computeDragRadius();
+  }
+  if (finePointer) { document.getElementById("reach-row").style.display = "none"; }
+  setReach(stored(REACH_KEY));
+  reachEl.addEventListener("input", function () {
+    setReach(reachEl.value);
+    store(REACH_KEY, String(reachScale));
+  });
 
   // ---- leave game (issue #775) ---------------------------------------------------
   // Two taps: the first arms the button for a few seconds, the second tells the host to free the seat.
