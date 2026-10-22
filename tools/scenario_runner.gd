@@ -504,6 +504,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"night_lamps_steady_with_reduce_flash",
 	"night_roll_respects_forced_and_disabled",
 	"match_stats_rows_favourite_weapon_and_magpie",
+	"untouchable_award_832",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -2426,6 +2427,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_night_roll_respects_forced_and_disabled()
 		"match_stats_rows_favourite_weapon_and_magpie":
 			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
+		"untouchable_award_832":
+			return await _scenario_untouchable_award_832()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -15211,7 +15214,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 3 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 4 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15283,8 +15286,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 3:
-		failures.append("the victory screen shows %s awards, expected 3" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 4:
+		failures.append("the victory screen shows %s awards, expected 4" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -29196,7 +29199,7 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 	elif rows[0]["self_kos"] != 1 or rows[0]["weapon"] != "":
 		failures.append("slot 2 row %s, expected 1 self-KO and no weapon" % [rows[0]])
 	var extra: Array[Dictionary] = stats.extra_awards([0, 1, 2])
-	if extra.size() != 1 or extra[0]["title"] != "Magpie" or extra[0]["slot"] != 0 or extra[0]["detail"] != "3 pickups":
+	if extra.size() != 2 or extra[0]["title"] != "Magpie" or extra[0]["slot"] != 0 or extra[0]["detail"] != "3 pickups":
 		failures.append("extra awards %s, expected Magpie for slot 0 with 3 pickups" % [extra])
 	stats.forget_slot(0)
 	if stats.favourite_weapon(0) != "" or stats.pickups.has(0):
@@ -29206,6 +29209,43 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #832: Untouchable goes to the lowest damage taker who dealt damage.
+func _scenario_untouchable_award_832() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	stats.record_hit(0, 1, 10.0, 100)
+	stats.record_hit(1, 2, 20.0, 110)
+	stats.record_hit(2, 3, 30.0, 120)
+	stats.record_hit(3, 1, 5.0, 130)
+	var found: Array = stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "0 damage taken":
+		failures.append("expected Untouchable for slot 0 with 0 damage taken, got %s" % [found])
+	var two: Array = stats.extra_awards([0, 1]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if not two.is_empty():
+		failures.append("Untouchable given with 2 players")
+	var idle: RefCounted = MatchStatsScript.new()
+	idle.begin_match()
+	idle.begin_round([0, 1, 2], 0)
+	idle.record_hit(1, 2, 20.0, 100)
+	idle.record_hit(2, 1, 10.0, 110)
+	var none: Array = idle.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if not none.is_empty():
+		failures.append("Untouchable given to a player who dealt 0 damage: %s" % [none])
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	tied.tie_seed = 7
+	tied.begin_round([0, 1, 2], 0)
+	tied.record_hit(0, 2, 10.0, 100)
+	tied.record_hit(1, 2, 10.0, 110)
+	var first: Array = tied.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	var again: Array = tied.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Untouchable")
+	if first.size() != 1 or first != again or first[0]["slot"] not in [0, 1]:
+		failures.append("seeded tie not stable or wrong: %s vs %s" % [first, again])
+	_scenario_completed = true
+	return failures
+
 ## Issue #325: the victory screen's stats table lists every player and, with
 ## eight long names, still fits the screen together with the podium and awards.
 func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
@@ -29245,8 +29285,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 4:
-		failures.append("expected 4 award cards (3 core + Magpie), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 5:
+		failures.append("expected 5 award cards (3 core + Magpie + Untouchable), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
