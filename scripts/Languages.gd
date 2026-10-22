@@ -66,10 +66,19 @@ static func resolve(setting: String, os_locale: String) -> String:
 ## bundled font gets an explicit chain of system fonts, the current language's
 ## first (the same Han character is drawn differently in zh and ja). macOS's
 ## PingFang SC cannot be loaded by name (FreeType errors), so it is left out.
+## Ahead of the system fonts sits the language's own bundled Noto Sans subset
+## (built by tools/subset_cjk_font.py from strings.csv, #849), so a machine with
+## no CJK system font still draws every translated string; the system chain stays
+## after it for player names typed on phones, which can hold any character.
 const BUNDLED_FONTS: PackedStringArray = [
 	"res://art/fonts/LilitaOne-Regular.ttf",
 	"res://art/fonts/Nunito-Variable.ttf",
 ]
+const CJK_SUBSETS: Dictionary = {
+	"zh_CN": "res://art/fonts/NotoSansSC-Subset.ttf",
+	"ja": "res://art/fonts/NotoSansJP-Subset.ttf",
+	"ko": "res://art/fonts/NotoSansKR-Subset.ttf",
+}
 const FALLBACK_NAMES_ZH: PackedStringArray = ["Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "Heiti SC", "Arial Unicode MS"]
 const FALLBACK_NAMES_JA: PackedStringArray = ["Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", "TakaoPGothic"]
 const FALLBACK_NAMES_KO: PackedStringArray = ["Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "NanumGothic"]
@@ -90,9 +99,14 @@ static func fallback_font_names(code: String) -> PackedStringArray:
 		out.append_array(names)
 	return out
 
-## Points the bundled fonts' fallbacks at the system fonts for `code`.
+## Points the bundled fonts' fallbacks at the bundled CJK subset and the system
+## fonts for `code`.
 static func apply_fonts(code: String) -> void:
 	var chain: Array[Font] = []
+	if CJK_SUBSETS.has(code):
+		var subset: FontFile = load(CJK_SUBSETS[code])
+		if subset != null:
+			chain.append(subset)
 	var installed: PackedStringArray = OS.get_system_fonts()
 	for font_name: String in fallback_font_names(code):
 		if not installed.has(font_name):

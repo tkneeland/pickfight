@@ -1028,6 +1028,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"text_size_auto_fit_751",
 	"launch_copy_counts_match_the_game_797",
 	"launch_copy_count_check_catches_a_wrong_count_797",
+	"cjk_subsets_cover_every_translated_character_849",
+	"cjk_subset_check_reports_an_uncovered_character_849",
+	"cjk_fallback_chain_starts_with_bundled_subset_849",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3457,6 +3460,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_launch_copy_counts_match_the_game_797()
 		"launch_copy_count_check_catches_a_wrong_count_797":
 			return _scenario_launch_copy_count_check_catches_a_wrong_count_797()
+		"cjk_subsets_cover_every_translated_character_849":
+			return _scenario_cjk_subsets_cover_every_translated_character_849()
+		"cjk_subset_check_reports_an_uncovered_character_849":
+			return _scenario_cjk_subset_check_reports_an_uncovered_character_849()
+		"cjk_fallback_chain_starts_with_bundled_subset_849":
+			return _scenario_cjk_fallback_chain_starts_with_bundled_subset_849()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48650,5 +48659,118 @@ func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[Stri
 	for noun: String in ["stages", "weapons", "languages"]:
 		if not flagged_text.contains(" " + noun + ", the game has"):
 			failures.append("site/index.html was not flagged for a stale %s count against the mutated game" % noun)
+	_scenario_completed = true
+	return failures
+# --- Bundled CJK font subsets (issue #849) -------------------------------------------
+## One line per language listing the characters of `texts[code]` (an Array of
+## [translated, english] pairs) that the language's bundled subset has no glyph
+## for. Control characters are skipped, and so are characters the English string
+## also uses (such as the ▸ in "Stages & Rules ▸"): those draw the same way in
+## every language, so they are not the CJK subset's job.
+func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var out: Array[String] = []
+	for code: String in texts:
+		var font: FontFile = load(languages.CJK_SUBSETS[code])
+		if font == null:
+			out.append("%s: subset %s did not load" % [code, languages.CJK_SUBSETS[code]])
+			continue
+		var missing: String = ""
+		for pair: Array in texts[code]:
+			var text: String = pair[0]
+			for i: int in text.length():
+				var c: int = text.unicode_at(i)
+				if c < 0x20 or missing.contains(char(c)) or (pair[1] as String).contains(char(c)):
+					continue
+				if not font.has_char(c):
+					missing += char(c)
+		if not missing.is_empty():
+			out.append("%s: %s" % [code, missing])
+	return out
+
+## The zh_CN, ja and ko columns of strings.csv, as {code: Array of
+## [translated, english] pairs}.
+func _cjk_translated_strings_849() -> Dictionary:
+	var texts: Dictionary = {"zh_CN": [], "ja": [], "ko": []}
+	var f := FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	var header: PackedStringArray = f.get_csv_line()
+	var en: int = header.find("en")
+	while not f.eof_reached():
+		var row: PackedStringArray = f.get_csv_line()
+		for code: String in texts:
+			var col: int = header.find(code)
+			if col >= 0 and col < row.size():
+				(texts[code] as Array).append([row[col], row[en] if en < row.size() else ""])
+	return texts
+
+func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[String]:
+	var failures: Array[String] = []
+	var texts: Dictionary = _cjk_translated_strings_849()
+	for code: String in texts:
+		if (texts[code] as Array).size() < 100:
+			failures.append("only %d %s strings read from strings.csv" % [(texts[code] as Array).size(), code])
+	for line: String in _cjk_missing_chars_849(texts):
+		failures.append("subset lacks glyphs (re-run tools/subset_cjk_font.py) -- " + line)
+	# Weight budget: each subset under 600 KB, all three under 1.5 MB.
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var total: int = 0
+	for code: String in languages.CJK_SUBSETS:
+		var size: int = FileAccess.get_file_as_bytes(languages.CJK_SUBSETS[code]).size()
+		total += size
+		if size == 0 or size > 600 * 1024:
+			failures.append("%s is %d bytes, wanted 1 to 600 KB" % [languages.CJK_SUBSETS[code], size])
+	if total > 1536 * 1024:
+		failures.append("the CJK subsets total %d bytes, over 1.5 MB" % total)
+	# Exports must still carry art/fonts/.
+	for line: String in FileAccess.get_file_as_string("res://export_presets.cfg").split("\n"):
+		if line.begins_with("exclude_filter=") and line.contains("art"):
+			failures.append("an export preset excludes art/: %s" % line)
+	_scenario_completed = true
+	return failures
+
+func _scenario_cjk_subset_check_reports_an_uncovered_character_849() -> Array[String]:
+	var failures: Array[String] = []
+	# 龘 (U+9F98) is in no translated string, so no subset carries it; the other
+	# characters are from real strings, and the ▸ the English also uses is exempt.
+	var found: Array[String] = _cjk_missing_chars_849({"zh_CN": [["手滑王龘", "Butterfingers"]], "ja": [["うっかり屋 ▸", "Stages ▸"]], "ko": [["공중龘", "AIRBORNE"]]})
+	if found.size() != 2 or found[0] != "zh_CN: 龘" or found[1] != "ko: 龘":
+		failures.append("wanted [\"zh_CN: 龘\", \"ko: 龘\"], got %s" % [found])
+	found = _cjk_missing_chars_849({"ja": [["▸", "Stages"]]})
+	if found.size() != 1 or found[0] != "ja: ▸":
+		failures.append("a symbol the English does not use must still be reported, got %s" % [found])
+	_scenario_completed = true
+	return failures
+
+func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[String]:
+	var failures: Array[String] = []
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var files: Array[FontFile] = []
+	var was: Dictionary = {}
+	for path: String in languages.BUNDLED_FONTS:
+		var file: FontFile = load(path)
+		files.append(file)
+		was[file] = file.fallbacks.duplicate()
+	var heights: Dictionary = {}
+	for file: FontFile in files:
+		file.fallbacks = []
+		heights[file] = file.get_height(32)
+	for code: String in ["zh_CN", "ja", "ko"]:
+		languages.apply_fonts(code)
+		for file: FontFile in files:
+			var first: Font = null if file.fallbacks.is_empty() else file.fallbacks[0]
+			if not (first is FontFile) or first.resource_path != languages.CJK_SUBSETS[code]:
+				failures.append("%s for %s: chain starts with %s, wanted %s" % [file.resource_path.get_file(), code, first, languages.CJK_SUBSETS[code]])
+			for i: int in range(1, file.fallbacks.size()):
+				if not (file.fallbacks[i] is SystemFont):
+					failures.append("%s for %s: entry %d after the subset is not a system font" % [file.resource_path.get_file(), code, i])
+	for code: String in ["en", "de", "fr", "es", "pt_BR", "ru"]:
+		languages.apply_fonts(code)
+		for file: FontFile in files:
+			if not file.fallbacks.is_empty():
+				failures.append("%s for %s gained a fallback chain" % [file.resource_path.get_file(), code])
+			if not is_equal_approx(file.get_height(32), heights[file]):
+				failures.append("%s for %s: line height %f, was %f" % [file.resource_path.get_file(), code, file.get_height(32), heights[file]])
+	for file: FontFile in files:
+		file.fallbacks = was[file] # later scenarios measure text with these fonts
 	_scenario_completed = true
 	return failures
