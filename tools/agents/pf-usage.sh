@@ -19,7 +19,7 @@ rl=$(echo "$u" | jq -c 'def w: {used_percentage: (if .utilization then (.utiliza
     resets_at: (try (.resets_at | sub("\\.[0-9]+"; "") | sub("[+-]00:00$"; "Z") | fromdateiso8601) catch null)};
   {five_hour: (.five_hour | w), seven_day: (.seven_day | w)}') || { log "pf-usage: unexpected response"; exit 1; }
 snap=$PF_STATE/usage-snapshot.json
-old=$(jq -c . "$snap" 2>/dev/null) || old='{}'
+old=$(jq -c . "$snap" 2>/dev/null); [ -n "$old" ] || old='{}'
 prev=$(echo "$old" | jq -c '.rate_limits // {}')
 echo "$old" | jq --argjson rl "$rl" '.rate_limits = $rl' > "$snap.tmp" && mv "$snap.tmp" "$snap" ||
   { rm -f "$snap.tmp"; log "pf-usage: snapshot write failed"; exit 1; }
