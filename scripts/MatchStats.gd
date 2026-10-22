@@ -316,7 +316,32 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	if best != -1:
 		var n: int = int(pickups[best])
 		out.append(_award(COLLECTOR, TranslationServer.translate("AWARD_MAGPIE"), best, (TranslationServer.translate("DETAIL_PICKUP_ONE") if n == 1 else TranslationServer.translate("DETAIL_PICKUP_MANY")) % n))
+	var untouched: int = _untouchable(slots)
+	if untouched != -1:
+		out.append(_award(SURVIVOR, TranslationServer.translate("AWARD_UNTOUCHABLE"), untouched, TranslationServer.translate("DETAIL_DAMAGE_TAKEN") % roundi(float(damage_taken.get(untouched, 0)))))
 	return out
+
+## "Untouchable" (#832): the lowest damage taker among at least three players,
+## given only when somebody took more than they did and only to a player who
+## dealt damage; a tie for lowest is broken by the match seed.
+func _untouchable(slots: Array) -> int:
+	if slots.size() < 3:
+		return -1
+	var low: float = INF
+	var high: float = 0.0
+	for slot: int in slots:
+		var taken: float = float(damage_taken.get(slot, 0))
+		low = minf(low, taken)
+		high = maxf(high, taken)
+	if low >= high:
+		return -1
+	var candidates: Array = []
+	var score: Dictionary = {}
+	for slot: int in slots:
+		if float(damage_taken.get(slot, 0)) == low and float(damage_dealt.get(slot, 0)) > 0.0:
+			candidates.append(slot)
+			score[slot] = 1
+	return _leader(candidates, score, damage_dealt, false)
 
 ## Up to three awards, one per category, each
 ## {"category", "title", "slot", "detail"}. `slots` are the players eligible
