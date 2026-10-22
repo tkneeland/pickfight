@@ -33,12 +33,13 @@ log() { echo "$(date -u +%FT%TZ) $*" >> "$PF_STATE/reserve.log"; }
 [ "$(cat "$PF_STATE/pf-at-mode" 2>/dev/null || echo AT)" = MT ] && exit 0
 SESSION=pf-at-$PF_ACCOUNT
 if [ "$DRY" = 0 ]; then
-  screen -ls 2>/dev/null | grep -q "\.$SESSION[[:space:]]" && exit 0   # a session is already working
-  git -C "$ROOT" pull -q --ff-only 2>/dev/null
   # the automerger is cheap and should outlive reboots too
   screen -ls 2>/dev/null | grep -q "\.pf-automerge-$PF_ACCOUNT[[:space:]]" ||
     screen -dmS "pf-automerge-$PF_ACCOUNT" bash -c "PF_ACCOUNT=$PF_ACCOUNT bash $(printf '%q' "$ROOT/tools/agents/windows/pf-supervise.sh") automerge"
+  screen -ls 2>/dev/null | grep -q "\.$SESSION[[:space:]]" && exit 0   # a session is already working
+  git -C "$ROOT" pull -q --ff-only 2>/dev/null
 fi
+git -C "$ROOT" fetch -q origin 2>/dev/null
 
 now=$(date +%s)
 raw=$(gh api "repos/$REPO/issues/432/comments?per_page=100" --paginate 2>/dev/null) || { log "beacon read failed"; exit 0; }
@@ -71,19 +72,27 @@ remote=$(git -C "$ROOT" ls-remote --heads origin) || { log "ls-remote failed"; e
 heads=$(echo "$remote" | awk '{sub("refs/heads/", "", $2); print $2, substr($1, 1, 12)}'
   git -C "$ROOT" for-each-ref --format='%(refname:short) %(objectname:short=12)' refs/heads)
 issues=$(gh issue list --repo "$REPO" --assignee "$PF_ACCOUNT" --label ready-for-agent --state open -L 200 --json number,labels) || { log "issue list failed"; exit 0; }
-prs=$(gh pr list --repo "$REPO" --state open -L 200 --json headRefName,labels,mergeable,statusCheckRollup) || { log "pr list failed"; exit 0; }
-inflight=(); ready=(); waiting=(); sig=""
+prs=$(gh pr list --repo "$REPO" --state open -L 200 --json headRefName,labels,mergeable,isDraft,statusCheckRollup) || { log "pr list failed"; exit 0; }
+week_ago=$((now - 7 * 86400))
+inflight=(); ready=(); waiting=()
 while read -r n cr; do
   [ -n "$n" ] || continue
-  mine=$(echo "$heads" | awk -v k="issue-$n-" 'index($1, k)')
+  # live work: an issue-<n>- branch (anchored) with commits not on main, last committed within a week (older = abandoned)
+  mine=""
+  while read -r b sha; do
+    [ -n "$b" ] || continue
+    git -C "$ROOT" cat-file -e "$sha^{commit}" 2>/dev/null || { mine=1; break; }   # unknown object: assume live
+    [ "$(git -C "$ROOT" rev-list --count "origin/main..$sha" 2>/dev/null || echo 1)" -gt 0 ] || continue
+    [ "$(git -C "$ROOT" log -1 --format=%ct "$sha" 2>/dev/null || echo "$now")" -ge "$week_ago" ] && { mine=1; break; }
+  done < <(echo "$heads" | awk -v re="(^|/)issue-$n-" '$1 ~ re')
   if [ -n "$mine" ]; then
-    # an open PR (on any of the issue's branches) that is not conflicting, not review-blocked and not failing CI is
-    # waiting on CI, the automerger or the triagemaster: no session for it
-    pr=$(echo "$prs" | jq -r --arg k "issue-$n-" '[.[] | select(.headRefName | contains($k))
+    # an open, non-draft PR (on any of the issue's branches) that is not conflicting, not review-blocked and not failing
+    # CI is waiting on CI, the automerger or the triagemaster: no session for it
+    pr=$(echo "$prs" | jq -r --arg re "(^|/)issue-$n-" '[.[] | select(.headRefName | test($re)) | select(.isDraft | not)
       | select(.mergeable != "CONFLICTING" and (any(.labels[]; .name == "review-blocked") | not)
-        and (any(.statusCheckRollup[]?; (.conclusion // "") | test("FAILURE|CANCELLED|TIMED_OUT")) | not))] | length')
+        and (any(.statusCheckRollup[]?; (.conclusion // .state // "") | test("FAILURE|ERROR|CANCELLED|TIMED_OUT|ACTION_REQUIRED")) | not))] | length')
     [ "$pr" -gt 0 ] && { waiting+=("$n"); continue; }
-    inflight+=("$n"); sig+="$n:$(echo "$mine" | awk '{printf "%s,", $2}') "
+    inflight+=("$n")
   elif [ "$cr" = true ] && [ "$take_new" = 0 ]; then waiting+=("$n")   # rule 6: only the triagemaster reassigns these
   else ready+=("$n"); fi
 done < <(echo "$issues" | jq -r '.[] | "\(.number) \(any(.labels[]; .name == "conflict-risk"))"')
@@ -100,8 +109,9 @@ fi
 [ "$take_new" = 1 ] || ready=()
 [ "$run_any" = 1 ] || exit 0
 work=("${inflight[@]}" "${ready[@]}"); [ ${#work[@]} -gt 0 ] || exit 0
-sig+="ready:${ready[*]}"
-# relaunch only when something changed since the last session (a push, a new ticket), or 6h passed
+# relaunch only when the ticket set changed since the last session, or 6h passed; a session that leaves the same
+# tickets in flight (blocked, waiting on a human) is not restarted every pass
+sig="${work[*]}"
 last=$(cat "$PF_STATE/reserve-last-launch" 2>/dev/null); lt=${last%% *}; ls=${last#* }
 [ "$ls" = "$sig" ] && [ $((now - ${lt:-0})) -lt 21600 ] && exit 0
 [ $((now - ${lt:-0})) -lt 1800 ] && exit 0

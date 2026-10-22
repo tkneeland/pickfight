@@ -132,8 +132,8 @@ Both owners want maximum throughput. Every agent working this repo should:
   first. Recompute on every triage. Reserve accounts (`RESERVE=1`, tommykneeland)
   are left out of the split while every regular dev can work normally
   ([autotriage.md](autotriage.md) rule 5); `pf-reserve.sh` hands back any that
-  reach them anyway, and also hands back a reserve's tickets when its own weekly
-  remaining is at or below `MIN_WEEKLY_REMAINING_FOR_TICKETS`.
+  reach them anyway, and also hands a reserve's tickets to an able dev when its
+  own weekly remaining is at or below `MIN_WEEKLY_REMAINING_FOR_TICKETS`.
 - **The 5-hour window only decides timing, not ownership.** At 90% or more,
   that dev's agent still gets the ticket, but starts it after the 5-hour reset.
   Don't hand it to the other dev just for that.
