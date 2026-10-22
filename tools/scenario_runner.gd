@@ -598,6 +598,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"competitive_stages_are_left_right_symmetric",
 	"competitive_stages_have_no_hazards_or_moving_parts",
 	"round_modifier_gale_pushes_players_and_undoes",
+	"round_modifier_pickup_rush_spawns_more_and_undoes",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
 	"demo_build_only_slice_weapons_spawn",
@@ -2625,6 +2626,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
 		"round_modifier_gale_pushes_players_and_undoes":
 			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
+		"round_modifier_pickup_rush_spawns_more_and_undoes":
+			return await _scenario_round_modifier_pickup_rush_spawns_more_and_undoes()
 		"demo_build_flag_defines_the_slice":
 			return await _scenario_demo_build_flag_defines_the_slice()
 		"demo_build_rotation_only_slice_stages":
@@ -9531,6 +9534,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
 	"gale": "Gale",
+	"pickup_rush": "Pickup Rush",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -31304,6 +31308,58 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
 		if values[1] < GALE_MIN_SPEED:
 			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
+	await _teardown(loop["stage"])
+	return failures
+# --- Pickup rush round modifier (#841) -----------------------------------------
+## Ticks each stretch is watched for: 5 s at 60 Hz, against a 1 s interval.
+const PICKUP_RUSH_WATCH_TICKS: int = 300
+## Pickups the rushed stretch must beat the plain one by: halving the interval
+## over 5 s should add about 5.
+const PICKUP_RUSH_MIN_EXTRA: int = 3
+## Spots for the stretch: more than either run can fill, all far from the falling players.
+func _pickup_rush_points() -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in 24:
+		points.append(Vector2(-1500.0 + 130.0 * i, -2000.0 - 100.0 * (i % 3)))
+	return points
+## Pickup rush: over the same fixed stretch the modifier spawns clearly more
+## pickups than none, and the interval is back to normal after undo.
+func _scenario_round_modifier_pickup_rush_spawns_more_and_undoes() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(1.0, 50, _pickup_rush_points())
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+	var director: Node = round_manager._pickup_director
+	var plain_interval: float = director.interval_sec()
+	director.start()
+	await _await_ticks(PICKUP_RUSH_WATCH_TICKS)
+	var plain: int = director._live_pickups().size()
+	var modifier: RefCounted = RoundModifiersType.create("pickup_rush")
+	if modifier == null or RoundModifiersType.title_of("pickup_rush") != "Pickup Rush":
+		failures.append("pickup_rush is not a round modifier named 'Pickup Rush'")
+		await _teardown(loop["stage"])
+		return failures
+	modifier.apply(round_manager, players, loop["stage"])
+	var rushed_interval: float = director.interval_sec()
+	director.start()
+	await _await_ticks(PICKUP_RUSH_WATCH_TICKS)
+	var rushed: int = director._live_pickups().size()
+	modifier.undo()
+	var after_interval: float = director.interval_sec()
+	print("      pickup_rush: plain %d pickups, rushed %d; interval %.2f -> %.2f -> %.2f" % [
+		plain, rushed, plain_interval, rushed_interval, after_interval])
+	if plain < 1:
+		failures.append("a plain stretch spawned no pickups")
+	if rushed < plain + PICKUP_RUSH_MIN_EXTRA:
+		failures.append("pickup rush spawned %d pickups against %d plain, expected at least %d more" % [rushed, plain, PICKUP_RUSH_MIN_EXTRA])
+	if not is_equal_approx(rushed_interval, plain_interval * RoundModifiersType.PICKUP_RUSH_INTERVAL_SCALE):
+		failures.append("pickup rush interval %.3f, expected %.3f" % [rushed_interval, plain_interval * RoundModifiersType.PICKUP_RUSH_INTERVAL_SCALE])
+	if not is_equal_approx(after_interval, plain_interval):
+		failures.append("the interval is %.3f after undo, %.3f before" % [after_interval, plain_interval])
 	await _teardown(loop["stage"])
 	return failures
 # --- Issue #361: the Steam Next Fest demo build ----------------------------

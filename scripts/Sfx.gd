@@ -242,6 +242,8 @@ const SOUNDS: Dictionary = {
 	"announce_hill_taken": {"files": ["announcer/hill_taken.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	# No recorded voice clip for Gale yet: the wind-up sound stands in (#312).
 	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
+	# No recorded voice clip for Pickup Rush yet (#841): a UI chime stands in.
+	"announce_pickup_rush": {"files": ["kenney_interface/confirmation_002.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
 	# --- Player voice grunts (#290): one voice per slot, placeholder synthesis ---
 	# Kept well under the weapon sounds (their `db` is about 0, these -15/-13),
 	# and placed on the fighter. `voice` keeps each slot's pitch fixed, so a slot
