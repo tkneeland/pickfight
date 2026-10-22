@@ -161,6 +161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"teleporter_moves_player_to_twin",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
+	"ice_patch_two_more_stages_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
 	"mud_patch_slows_player",
@@ -1777,6 +1778,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
 			return await _scenario_ice_patch_summit_spawns_clear()
+		"ice_patch_two_more_stages_spawns_clear":
+			return await _scenario_ice_patch_two_more_stages_spawns_clear()
 		"ice_patch_restores_when_stage_freed":
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
@@ -10926,6 +10929,29 @@ func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
 			if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
 				failures.append("%s at x=%.0f is over the ice" % [child.name, marker.position.x])
 	await _teardown(stage)
+	return failures
+## Relay and Roundabout (#900) each carry one ice patch on their floor; no
+## spawn, pickup or hill spot on the floor lies over it. Spots up on a
+## platform (more than 120 px above the ice) sit over it only in x.
+func _scenario_ice_patch_two_more_stages_spawns_clear() -> Array[String]:
+	var failures: Array[String] = []
+	for stage_name: String in ["Relay", "Roundabout"]:
+		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var ice: StaticBody2D = stage.get_node_or_null("FloorIce") as StaticBody2D
+		if ice == null:
+			failures.append("%s has no FloorIce" % stage_name)
+		else:
+			var half_x: float = ice.size.x / 2.0
+			for child: Node in stage.get_children():
+				if not (child is Marker2D) or not (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn") or child.name.begins_with("HillSpot")):
+					continue
+				var marker: Node2D = child as Node2D
+				if marker.position.y < ice.position.y - 120.0:
+					continue
+				if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
+					failures.append("%s %s at x=%.0f is over the ice" % [stage_name, child.name, marker.position.x])
+		await _teardown(stage)
 	return failures
 ## Friction is put back when the stage goes away with a body still on the ice
 ## (round end), so nothing leaks into the next round.
