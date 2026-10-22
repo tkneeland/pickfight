@@ -115,10 +115,13 @@ func _physics_process(delta: float) -> void:
 	_fall_speed += DROP_GRAVITY * delta
 	var from: Vector2 = global_position
 	var to: Vector2 = from + Vector2(0.0, _fall_speed * delta)
-	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD)
-	for body: Node in get_tree().get_nodes_in_group("players"): # bodies share the world layer; land on terrain only
+	# Bodies share the world layer; land on terrain only. Built up front:
+	# `query.exclude` hands back a copy, so appending to it would be lost.
+	var bodies: Array[RID] = []
+	for body: Node in get_tree().get_nodes_in_group("players"):
 		if body is CollisionObject2D:
-			query.exclude.append((body as CollisionObject2D).get_rid())
+			bodies.append((body as CollisionObject2D).get_rid())
+	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD, bodies)
 	var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty():
 		global_position = (hit["position"] as Vector2) - Vector2(0.0, DROP_REST_CLEARANCE)
