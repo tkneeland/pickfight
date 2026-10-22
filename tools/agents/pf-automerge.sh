@@ -18,6 +18,7 @@ while true; do
       continue
     fi
     [ "$m" = "MERGEABLE" ] || continue
+    gh pr view $P --repo $REPO --json labels --jq '.labels[].name' | grep -qx review-blocked && continue   # rule 12: confirmed reviewer finding
     if gh pr view $P --repo $REPO --json labels --jq '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then continue; fi
     states=$(gh pr checks $P --repo $REPO --json state --jq '.[].state' 2>/dev/null)
     [ -n "$states" ] || continue
