@@ -185,6 +185,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Visual look and juice
 - Edge arrows (#779): a living fighter knocked outside the camera view, above the top of the screen or beyond a side, gets a small arrow in their colour pinned just inside the screen edge pointing at them, with the team letter beside it in Teams; it fades in and out over 0.15 s, works with the large-stage camera zoom, skips KO'd players and ghosts, and is never drawn in the lobby how-to-play demos With Player numbers on (#809) the arrow also shows its fighter's seat number in a badge beside it, after the team letter in Teams (#875).
+- Round-win ring (#909): when one fighter (or a Teams side, at its first survivor) wins a round, two rings in their colour expand and fade from their position over 0.8 s, radius 20 to 140 px; motion only, none for a draw, an abandoned round or the match-winning round (`scripts/RoundWinRing.gd`)
 - Landing dust, head motion trails, clash sparks (#116, #196)
 - Hit-stop (#256): a strike of 40 or more damage (axe, spear, dagger and sword at speed; never the pickaxe) freezes the whole game for 3 physics ticks
 - Screen shake scales with strike damage (none under 20, full at 90) and kicks harder on an elimination (#256); the off switch is under Settings > More options

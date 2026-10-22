@@ -23,6 +23,7 @@ extends Node
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 ## The MATCH POINT plate (#825), shown as each round starts.
 const MatchPointPlateScript := preload("res://scripts/MatchPointPlate.gd")
+const RoundWinRingScript := preload("res://scripts/RoundWinRing.gd")
 
 ## A second elimination this soon after the first makes one "Double KO!".
 ## It is also how long "KO!" waits before it is said.
@@ -184,7 +185,8 @@ func _on_eliminated() -> void:
 		_ko_due_msec = GameClockScript.now_msec() + int(DOUBLE_KO_WINDOW_SEC * 1000.0)
 	_pending_kos += 1
 
-func _on_round_won(_slot: int, round_manager: Node) -> void:
+func _on_round_won(slot: int, round_manager: Node) -> void:
+	RoundWinRingScript.spawn_for(round_manager, slot) # #909
 	if not bool(round_manager.get("lobby_enabled")):
 		say(&"announce_winner")
 

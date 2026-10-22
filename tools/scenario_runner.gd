@@ -133,6 +133,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_four_spawns_settle_together",
 	"pickup_cap_scales_with_roster",
 	"round_win_buzzes_only_winner",
+	"round_win_ring_spawns_for_winner_only",
 	"damaging_strike_buzzes_victim_and_attacker",
 	"zero_damage_strike_buzzes_no_one",
 	"elimination_buzzes_eliminated_player",
@@ -1723,6 +1724,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_cap_scales_with_roster()
 		"round_win_buzzes_only_winner":
 			return await _scenario_round_win_buzzes_only_winner()
+		"round_win_ring_spawns_for_winner_only":
+			return await _scenario_round_win_ring_spawns_for_winner_only()
 		"damaging_strike_buzzes_victim_and_attacker":
 			return await _scenario_damaging_strike_buzzes_victim_and_attacker()
 		"zero_damage_strike_buzzes_no_one":
@@ -8967,6 +8970,55 @@ func _buzzed_slots(buzzes: Array, kind: String) -> Array[int]:
 		if b[1] == kind:
 			slots.append(int(b[0]))
 	return slots
+## Issue #909: a round won by one fighter spawns one ring in their colour at
+## their position, freed within 1 s; the match-winning round spawns none.
+func _round_win_rings_909(stage: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in stage.get_children():
+		if node.name.begins_with("RoundWinRing") and not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+func _scenario_round_win_ring_spawns_for_winner_only() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(3, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var stage: Node = loop["stage"]
+	if not loop["started"]:
+		failures.append("the match never started")
+		await _teardown(stage)
+		return failures
+	await _await_ticks(10)
+	if not _round_win_rings_909(stage).is_empty():
+		failures.append("a ring existed before any round was won")
+	var winner_at: Vector2 = players[0].global_position
+	players[1].eliminate() # slot 0 wins round 1 of a first-to-3
+	if not await _await_condition(func() -> bool: return not _round_win_rings_909(stage).is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("no ring after slot 0 won a round")
+	else:
+		var rings: Array[Node] = _round_win_rings_909(stage)
+		if rings.size() != 1:
+			failures.append("expected one ring, got %d" % rings.size())
+		else:
+			if not rings[0].color.is_equal_approx(rm._slot_color(0)):
+				failures.append("the ring is not in the winner's colour")
+			if rings[0].global_position.distance_to(winner_at) > 200.0:
+				failures.append("the ring is not at the winner's position")
+		await _await_ticks(66) # 1.1 s
+		if not _round_win_rings_909(stage).is_empty():
+			failures.append("the ring was still up after 1 s")
+	# Wait for the next round, then let slot 0 take the match.
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 2 never started")
+	else:
+		await _await_ticks(10)
+		rm._scores[0] = 2
+		players[1].eliminate() # slot 0 reaches 3 of 3: the match
+		await _await_ticks(30)
+		if not _round_win_rings_909(stage).is_empty():
+			failures.append("a ring spawned for the match-winning round")
+	await _teardown(stage)
+	return failures
 ## Issue #34: the round winner's phone, and only theirs, gets `win`. The two
 ## losers get `eliminated`; the winner, put through leave_round() when the
 ## round ends, does not. Three players, winner in the middle slot, so a buzz
