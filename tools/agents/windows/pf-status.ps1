@@ -7,7 +7,7 @@
 #>
 param([string]$Account = "agage-JG", [switch]$Ack)
 $stateDir = if ($Account -eq "tkneeland") { Join-Path $env:USERPROFILE ".claude" } else { Join-Path $env:USERPROFILE ".claude\pf\$Account" }
-foreach ($kind in @("triage", "automerge")) {
+foreach ($kind in @("triage", "automerge", "beacon")) {
   $pidFile = Join-Path $stateDir "$kind.pid"
   $state = "stopped"
   if (Test-Path $pidFile) {

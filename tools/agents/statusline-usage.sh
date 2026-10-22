@@ -19,8 +19,5 @@ if [ -z "${PF_DRY_RUN:-}" ] && { [ ! -f $c ] || [ $(( $(date +%s) - $(pf_mtime $
 stamp=$PF_STATE/.beacon-stamp
 if [ -z "${PF_DRY_RUN:-}" ] && { [ ! -f "$stamp" ] || [ $(( $(date +%s) - $(pf_mtime "$stamp") )) -ge 900 ]; }; then
   touch "$stamp"
-  ( body=$(jq -r --arg a "$PF_ACCOUNT" '"\($a) usage @ \(now|todate)\n5h: \(.rate_limits.five_hour.used_percentage // "?")% (resets \(.rate_limits.five_hour.resets_at // 0|todate))\n7d: \(.rate_limits.seven_day.used_percentage // "?")% (resets \(.rate_limits.seven_day.resets_at // 0|todate))"' "$PF_STATE/usage-snapshot.json")
-    id=$(cat "$PF_STATE/.beacon-comment-id" 2>/dev/null)
-    if [ -n "$id" ]; then gh api -X PATCH repos/$REPO/issues/comments/$id -f body="$body" >/dev/null 2>&1
-    else gh api repos/$REPO/issues/432/comments -f body="$body" -q .id > "$PF_STATE/.beacon-comment-id" 2>/dev/null; fi ) >/dev/null 2>&1 &
+  (bash "$PF_DIR/pf-beacon.sh" >/dev/null 2>&1 &)
 fi

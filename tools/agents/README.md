@@ -32,3 +32,4 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 instead of `stat -f`, `date -j` or `date -r` in any new script. `PF_DRY_RUN=1` stops `statusline-usage.sh` and
 `pf-succession.sh --post` from writing to GitHub. Windows setup, Task Scheduler and the status line:
 [`windows/README.md`](windows/README.md).
+- `pf-beacon.sh`: writes this account's #432 usage beacon once (finds the comment if the id file is missing; errors to `beacon.log`).
