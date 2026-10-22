@@ -334,6 +334,9 @@ var kill_feed: bool = true
 ## Whether `HitFeedback` draws the floating damage numbers (#873). On by default;
 ## hit sparks and shake are unaffected. Set through `set_damage_numbers()`.
 var damage_numbers: bool = true
+## Whether `PickupCallout` (#818) names a grabbed weapon over the fighter (#882).
+## On by default; pickups and the Magpie stat are unaffected.
+var pickup_callouts: bool = true
 ## Comfort option (#317): when on, the white/bright flashes (elimination burst,
 ## bounce pad, breaking wall) are not drawn. Off by default.
 var reduce_flash: bool = false
@@ -677,6 +680,11 @@ func set_damage_numbers(value: bool) -> void:
 	damage_numbers = value
 	_save_settings()
 
+## Turn the weapon-name pickup callouts (#882) on or off, and remember the choice.
+func set_pickup_callouts(value: bool) -> void:
+	pickup_callouts = value
+	_save_settings()
+
 ## Turn the KO ticker (#833) on or off, and remember the choice.
 func set_kill_feed(value: bool) -> void:
 	kill_feed = value
@@ -770,6 +778,7 @@ func restore_defaults() -> void:
 	screen_shake = true
 	kill_feed = true
 	damage_numbers = true
+	pickup_callouts = true
 	reduce_flash = false
 	ui_scale = 1.0
 	text_scale = 1.0
@@ -881,6 +890,7 @@ func load_settings() -> void:
 		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
 		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
 		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
+		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
 		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
@@ -910,6 +920,7 @@ func _save_settings() -> void:
 	config.set_value("display", "screen_shake", screen_shake)
 	config.set_value("display", "kill_feed", kill_feed)
 	config.set_value("display", "damage_numbers", damage_numbers)
+	config.set_value("display", "pickup_callouts", pickup_callouts)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)

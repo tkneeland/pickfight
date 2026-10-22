@@ -161,6 +161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
+	"speed_strip_boosts_run_distance",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -1014,6 +1015,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
+	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -1050,6 +1052,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_link_check_catches_a_missing_file_and_a_missing_alt_799",
 	"idle_fighter_gets_drag_hint_after_six_seconds_826",
 	"idle_hint_skips_bots_ghosts_and_later_rounds_826",
+	"online_lobby_copy_code_button_863",
+	"copy_code_button_hidden_couch_solo_streamer_863",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1769,6 +1773,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_summit_spawns_clear()
 		"ice_patch_restores_when_stage_freed":
 			return await _scenario_ice_patch_restores_when_stage_freed()
+		"speed_strip_boosts_run_distance":
+			return await _scenario_speed_strip_boosts_run_distance()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -3461,6 +3467,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kill_feed_switch_833()
 		"damage_numbers_switch_873":
 			return await _scenario_damage_numbers_switch_873()
+		"pickup_callout_switch_off_spawns_none":
+			return await _scenario_pickup_callout_switch_off_spawns_none()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -3523,6 +3531,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826()
 		"idle_hint_skips_bots_ghosts_and_later_rounds_826":
 			return await _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826()
+		"online_lobby_copy_code_button_863":
+			return await _scenario_online_lobby_copy_code_button_863()
+		"copy_code_button_hidden_couch_solo_streamer_863":
+			return await _scenario_copy_code_button_hidden_couch_solo_streamer_863()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -10859,6 +10871,79 @@ func _scenario_ice_patch_restores_when_stage_freed() -> Array[String]:
 	if player.physics_material_override != before:
 		failures.append("the ice material leaked after the stage was freed mid-contact")
 	await _teardown(holder)
+	return failures
+## Speed strip (#891): a body is pushed along a strip (or plain ground) by a
+## steady force, standing in for running, and the ground it covers in a fixed
+## time is returned. The weapon is held straight up so only the body touches.
+const SpeedStripScene: PackedScene = preload("res://scenes/parts/SpeedStrip.tscn")
+const SPEED_SIZE: Vector2 = Vector2(2400, 8)
+const SPEED_SETTLE_TICKS: int = 60
+const SPEED_RUN_FORCE: float = 2400.0
+const SPEED_RUN_TICKS: int = 150
+## The strip has to cover at least this multiple of the plain-floor distance.
+const SPEED_MIN_RATIO: float = 1.2
+func _speed_ground(stage: Node2D, size: Vector2, at: Vector2, strip: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if strip:
+		ground = SpeedStripScene.instantiate() as StaticBody2D
+		ground.size = size
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = at
+	stage.add_child(ground)
+	return ground
+func _speed_run(on_strip: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_speed_ground(stage, SPEED_SIZE, PART_POSITION, on_strip)
+	var start: Vector2 = PART_POSITION + Vector2(-1100, -SPEED_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0)
+	var player: RigidBody2D = _spawn_player(stage, start)
+	player.set_input_vector(Vector2.UP)
+	for _tick in SPEED_SETTLE_TICKS:
+		await physics_frame
+	var from_x: float = player.global_position.x
+	for _tick in SPEED_RUN_TICKS:
+		player.apply_central_force(Vector2(SPEED_RUN_FORCE, 0))
+		await physics_frame
+	var covered: float = player.global_position.x - from_x
+	await _teardown(stage, false)
+	return covered
+## Running on the strip covers clearly more ground in the same time than on
+## plain ground, and the boost stops after stepping off.
+func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
+	var failures: Array[String] = []
+	var on_strip: float = await _speed_run(true)
+	var on_ground: float = await _speed_run(false)
+	print("      covered %.1f px on the strip, %.1f px on plain ground" % [on_strip, on_ground])
+	if on_ground < 50.0:
+		failures.append("the control run barely moved (%.1f px)" % on_ground)
+	elif on_strip < on_ground * SPEED_MIN_RATIO:
+		failures.append("covered %.1f px on the strip vs %.1f on ground, expected at least %.2fx" % [on_strip, on_ground, SPEED_MIN_RATIO])
+	# Step off: a short strip with plain ground beside it.
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = _speed_ground(stage, Vector2(300, 8), PART_POSITION + Vector2(-500, 0), true)
+	_speed_ground(stage, Vector2(1400, 8), PART_POSITION + Vector2(350, 0), false)
+	var runner: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-600, -8.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	runner.set_input_vector(Vector2.UP)
+	for _tick in SPEED_SETTLE_TICKS:
+		await physics_frame
+	var was_boosted: bool = false
+	var left: bool = false
+	for _tick in 400:
+		runner.apply_central_force(Vector2(SPEED_RUN_FORCE, 0))
+		await physics_frame
+		if strip.is_boosting(runner):
+			was_boosted = true
+		elif was_boosted:
+			left = true
+			break
+	if not was_boosted or not left:
+		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
+	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
 ## dropped from, and shows it did (the flash). The weapon is held straight
@@ -48890,6 +48975,53 @@ func _scenario_damage_numbers_switch_873() -> Array[String]:
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
+## Issue #882: Settings > Pickup callouts gates PickupCallout; saved; reset by Restore defaults.
+func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.pickup_callouts, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_pickup_callouts(false)
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("with Pickup callouts off, a grab made a callout")
+	sfx.set_pickup_callouts(true)
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("with Pickup callouts on, %d callouts, expected 1" % _callouts_818(loop).size())
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_pickup_callouts_882_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_pickup_callouts(false)
+	sfx.pickup_callouts = true
+	sfx.load_settings()
+	if sfx.pickup_callouts:
+		failures.append("Pickup callouts off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.pickup_callouts_box()
+	if box == null:
+		failures.append("Settings has no Pickup callouts box")
+	else:
+		box.button_pressed = false
+		if sfx.pickup_callouts:
+			failures.append("unticking the Pickup callouts box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.pickup_callouts:
+			failures.append("Restore defaults did not put Pickup callouts back on")
+	sfx.pickup_callouts = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
 func _scenario_voice_slider_reset_by_restore_defaults_824() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -49710,4 +49842,88 @@ func _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826() -> Array[Strin
 	if not hint.has_hint(4):
 		failures.append("slot 4 got no hint in round 1 of a new match")
 	await _teardown(fx["stage"])
+	return failures
+## Issue #863: Online lobby Copy code button copies the room code (clipboard seam), reads Copied, then reverts.
+func _scenario_online_lobby_copy_code_button_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var copied: Array[String] = []
+	screen._host.clipboard_setter = func(text: String) -> void: copied.append(text)
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var button: Button = screen.control_button("copy_code")
+	if button == null or not button.is_visible_in_tree():
+		failures.append("the Online lobby shows no Copy code button")
+		await _kind_close_435(rig)
+		return failures
+	if button.get_global_rect().position.y < screen._host.room_label().get_global_rect().end.y - 1.0:
+		failures.append("Copy code sits above the room code")
+	var code: String = server.online_room_code()
+	screen.press_control("copy_code")
+	if copied != [code]:
+		failures.append("pressing Copy code wrote %s to the clipboard, expected [%s]" % [copied, code])
+	if button.text != screen.tr("LOBBY_COPIED"):
+		failures.append("after a press the button reads '%s', not Copied" % button.text)
+	var until_msec: int = Time.get_ticks_msec() + 1700 # the label runs on wall-clock msec
+	while Time.get_ticks_msec() < until_msec:
+		await process_frame
+	screen.refresh_controls()
+	if button.text == screen.tr("LOBBY_COPIED") or button.text == "":
+		failures.append("the button still reads '%s' after the 1.5 s" % button.text)
+	copied.clear()
+	var keys: Dictionary = screen._host.CONTROL_KEYS
+	if keys.get("copy_code") != KEY_K:
+		failures.append("Copy code is not on the K key")
+	for id: String in keys:
+		if id != "copy_code" and keys[id] == keys["copy_code"]:
+			failures.append("the K key is also bound to %s" % id)
+	await _kind_close_435(rig)
+	return failures
+## Issue #863: no Copy code button in Couch, in Solo, or with Hide room code on; K does nothing there.
+func _scenario_copy_code_button_hidden_couch_solo_streamer_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var copied: Array[String] = []
+	screen._host.clipboard_setter = func(text: String) -> void: copied.append(text)
+	var button: Button = screen.control_button("copy_code")
+	if button == null:
+		failures.append("no copy_code control exists")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows in the Couch lobby")
+	screen.press_control("copy_code")
+	screen.press_control("solo")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows in the Solo lobby")
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if not button.is_visible_in_tree():
+		failures.append("Copy code is missing in Online before streamer mode")
+	_sfx().set_hide_room_code(true)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows with Hide room code on")
+	screen.press_control("copy_code")
+	_sfx().set_hide_room_code(false)
+	if not copied.is_empty():
+		failures.append("a hidden Copy code still wrote %s to the clipboard" % [copied])
+	await _kind_close_435(rig)
 	return failures
