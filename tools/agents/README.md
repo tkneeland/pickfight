@@ -16,3 +16,4 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-status-refresh.sh`: background cache for status-line lines 2+; run by `statusline-usage.sh`.
 - `pf-succession.sh`: computes the current triagemaster from the #432 beacons and writes it to `$PF_STATE/pf-triagemaster`.
 - `pf-dupe-check.sh "<keywords>"`: run before filing a ticket; exit 1 means something plausible already exists.
+- `pf-scenario-merge.sh [file...]`: during `git merge origin/main`, resolves conflicts in append-only `tools/scenario_runner.gd` / `docs/FEATURES.md` by re-inserting this branch's added blocks into main's copy; exit 1 = resolve by hand.
