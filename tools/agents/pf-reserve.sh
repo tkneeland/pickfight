@@ -116,7 +116,8 @@ last=$(cat "$PF_STATE/reserve-last-launch" 2>/dev/null); lt=${last%% *}; ls=${la
 [ "$ls" = "$sig" ] && [ $((now - ${lt:-0})) -lt 21600 ] && exit 0
 [ $((now - ${lt:-0})) -lt 1800 ] && exit 0
 echo "$now $sig" > "$PF_STATE/reserve-last-launch"
-prompt=$(sed -e "s/{{ACCOUNT}}/$PF_ACCOUNT/g" -e "s/{{TICKETS}}/${work[*]}/g" "$PF_DIR/pf-reserve-prompt.md")
+# the prompt goes in through a file on stdin: inlined into the bash -lc string, its backticks ran as commands
+pf=$PF_STATE/at-session-prompt.txt
+sed -e "s/{{ACCOUNT}}/$PF_ACCOUNT/g" -e "s/{{TICKETS}}/${work[*]}/g" "$PF_DIR/pf-reserve-prompt.md" > "$pf"
 log "starting $SESSION for #${work[*]} (needed=$needed)"
-printf -v q '%q' "$prompt"
-screen -dmS "$SESSION" bash -lc "export PF_ACCOUNT=$PF_ACCOUNT; cd $(printf '%q' "$ROOT") && claude -p $q --dangerously-skip-permissions >> $(printf '%q' "$PF_STATE/at-session.log") 2>&1"
+screen -dmS "$SESSION" bash -lc "export PF_ACCOUNT=$PF_ACCOUNT; cd $(printf '%q' "$ROOT") && claude -p --dangerously-skip-permissions < $(printf '%q' "$pf") >> $(printf '%q' "$PF_STATE/at-session.log") 2>&1"
