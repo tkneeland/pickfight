@@ -209,6 +209,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 ## Dev tooling
 - Headless scenario runner and suite (`tools/scenario_runner.gd`, `tools/list_scenarios.sh`) with shared-state resets and parallel-safe ports (#73, #179)
 - CI runs the scenario suite on every PR, `--fixed-fps 60` (#186, #195)
+- Scenario loads and instantiates every scene under `scenes/` and flags dead `ext_resource` paths (#802)
 - Screenshot capture tools for stages and damage numbers
 - Instant replay: F9 saves the last ~10 s (12 fps, 256x144, ~13 MB ring) as a PNG sequence plus an animated `clip.gif` (pure-GDScript encoder, worker thread, loops, 12 fps) in `user://clips/` with a toast showing the path (#329, ADR-0020, #502); only the newest 20 clips are kept, older ones are deleted on save (#609)
 - Local balance log: at each match end the host appends one JSON line to `user://balance_stats.jsonl` (Godot's user data folder) with damage and hits per weapon by real players; bots and the lobby sandbox excluded, never networked (#316); a match that ends without a winner after 1+ rounds adds a line with `"completed": false` and `"rounds_played"` (#643)
