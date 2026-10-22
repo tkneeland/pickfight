@@ -173,6 +173,9 @@ const SOUNDS: Dictionary = {
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
+	"ball_thump": {"files": [
+		"kenney_impact/impactSoft_heavy_000.ogg",
+		"kenney_impact/impactSoft_heavy_001.ogg"], "db": -3.0, "max_sec": 0.5},
 	"wind_tell": {"files": [
 		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -12.0, "overlap": 2, "max_sec": 1.0},
 	"wind_gust": {"files": [

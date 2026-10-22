@@ -94,6 +94,8 @@ func _on_node_added(node: Node) -> void:
 		_watch_projectile(node)
 	elif node.has_signal("hazard_hit"):
 		node.connect("hazard_hit", _on_hazard_hit)
+	elif node.has_signal("ball_thump"):
+		node.connect("ball_thump", _on_ball_thump)
 	elif node.has_signal("rise_countdown"):
 		_watch_kill_zone(node)
 	elif node.has_signal("round_started"):
@@ -219,6 +221,13 @@ func _on_projectile_caught(point: Vector2) -> void:
 ## per-player cooldown and spawn protection already gate the signal).
 func _on_hazard_hit(point: Vector2) -> void:
 	sfx.play(&"hazard_hit", point, 1.0)
+
+# --- Soccer ball (#899) -------------------------------------------------------
+
+## The soccer ball took a hard strike or bounce; `Soccer.gd` gates the signal
+## by speed and spacing, and `strength` is already 0..1.
+func _on_ball_thump(point: Vector2, strength: float) -> void:
+	sfx.play(&"ball_thump", point, strength)
 
 # --- Lava -------------------------------------------------------------------
 
