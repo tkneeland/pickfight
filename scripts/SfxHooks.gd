@@ -92,6 +92,8 @@ func _on_node_added(node: Node) -> void:
 		_watch_head(node)
 	elif node.has_signal("impacted") and node.has_method("setup"):
 		_watch_projectile(node)
+	elif node.has_signal("hazard_hit"):
+		node.connect("hazard_hit", _on_hazard_hit)
 	elif node.has_signal("rise_countdown"):
 		_watch_kill_zone(node)
 	elif node.has_signal("round_started"):
@@ -210,6 +212,13 @@ func _on_projectile_impacted(_collider: Object, point: Vector2) -> void:
 ## A boomerang back in the thrower's hand (#862).
 func _on_projectile_caught(point: Vector2) -> void:
 	sfx.play(&"catch_boomerang", point, 1.0)
+
+# --- Damage hazards (#874) --------------------------------------------------
+
+## Spikes or a saw hurt a player: one sound per landed hit (the part's own
+## per-player cooldown and spawn protection already gate the signal).
+func _on_hazard_hit(point: Vector2) -> void:
+	sfx.play(&"hazard_hit", point, 1.0)
 
 # --- Lava -------------------------------------------------------------------
 

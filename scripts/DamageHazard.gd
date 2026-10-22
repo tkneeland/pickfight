@@ -19,6 +19,10 @@ extends Area2D
 ## may override `knockback_direction()`. Never referenced by `class_name`
 ## (CLAUDE.md): subclasses extend this script by path.
 
+## A touch landed (not blocked by spawn protection): where the victim was.
+## `SfxHooks.gd` plays the `hazard_hit` sound from it (#874).
+signal hazard_hit(point: Vector2)
+
 ## Damage dealt per touch. `Player.DEATH_DAMAGE` is 100, so 40 is a big chunk.
 @export var damage: float = 40.0
 ## Speed, in px/s, the player is thrown away from the hazard at.
@@ -74,6 +78,7 @@ func _hurt(body: RigidBody2D) -> void:
 	if body.has_method("mark_hazard"):
 		body.mark_hazard("damage")  # achievements (#689)
 	body.take_damage(damage)
+	hazard_hit.emit(body.global_position)
 	if body.has_signal("strike_landed"):
 		body.strike_landed.emit(body, damage, body.global_position, not body.alive)
 
