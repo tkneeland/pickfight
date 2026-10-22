@@ -12,7 +12,7 @@ The owner's rule (Oct 20): no scheduled sessions. The owner and Austin run playt
 | Early Dec 2026 | Public Discord server open; domain and one-page site with mailing-list signup. | owner-decisions.md |
 | Mid-Dec 2026 | "Coming Soon" store page live (#540). | owner-decisions.md |
 | About Dec 28 2026 | Register the Playtest. | owner-decisions.md |
-| Before Feb 2027 | Steam friend invites (#298) and Steam names (#538) built and tested against Valve's test app 480. | owner-decisions.md |
+| Before Feb 2027 | Steam friend invites (#298) and Steam names (#538) are built (FEATURES.md); test them against Valve's test app 480. | owner-decisions.md |
 | Feb 8 to 15 2027 | Couch Co-Op Fest. The playbook gives these dates; the owner decision says only "Feb 2027". TODO: confirm on Steam's event page. | playbook.md, owner-decisions.md |
 | Feb to Mar 2027 | Pitch publishers with the Playtest build. | owner-decisions.md |
 | Jun 14 to 21 2027 | Next Fest (demo). Playtest runs first so the one-time demo launch is not spent early. | owner-decisions.md, playbook.md |
@@ -44,10 +44,13 @@ tools/export.sh macos     # build/macos/Pickfight.app
 tools/export.sh windows   # build/windows/Pickfight.exe
 tools/export.sh linux     # build/linux/pickfight.x86_64
 tools/export.sh all       # macos, windows and linux (the default)
-tools/export.sh demo      # Next Fest demo, all three OSes: build/demo/macos/Pickfight Demo.app, build/demo/windows/Pickfight Demo.exe, build/demo/linux/pickfight-demo.x86_64
+tools/export.sh demo      # Next Fest demo, all three OSes:
+                          #   build/demo/macos/Pickfight Demo.app
+                          #   build/demo/windows/Pickfight Demo.exe
+                          #   build/demo/linux/pickfight-demo.x86_64
 ```
 
-- The proposed Playtest build above is the full game: `macos`, `windows` and `linux` (or `all`). `demo` is the limited Next Fest build, not the Playtest build.
+- The full game is `macos`, `windows` and `linux` (or `all`); `demo` is the Next Fest build. These commands are for local builds. The build that reaches Steam is exported by CI from the tag (`.github/workflows/release.yml`), not by this script.
 - Steam upload: a pushed `v*` tag uploads to the Steam `beta` branch through the `steam` job, and a human promotes it in Steamworks (`docs/steam-upload.md`). It needs the one-time setup in that file first.
 - Before the tag, run the fresh-clone script check from `CLAUDE.md` (no `class_name` references) on the release commit (`docs/steam-readiness.md`, item 9.1).
 - Crash reports need the Sentry SDK (`tools/fetch_sentry.sh`) and a DSN in the `pickfight/sentry_dsn` project setting in the release build. The owner pastes the DSN (owner-decisions.md; `docs/crash-reporting.md`). Check with `--crash-test` before tagging.
@@ -102,7 +105,7 @@ Triage follows the repo's labels (`docs/agents/triage-labels.md`). Feedback from
 
 Fix before the Feb 2027 playtest opens (go or no-go for release of the build):
 
-- [ ] A fresh install starts and a match finishes on Windows and macOS.
+- [ ] A fresh install starts and a match finishes on Windows, macOS and Linux.
 - [ ] Crash reports reach Sentry from a release build (`--crash-test`), and telemetry reaches the relay.
 - [ ] An Online room can be joined by room code and by Steam friend invite.
 - [ ] The Discord server, the signup link and the survey form are live.
