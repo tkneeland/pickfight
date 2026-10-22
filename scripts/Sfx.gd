@@ -319,6 +319,9 @@ var fullscreen: bool = false
 ## Whether `Juice` shakes the camera on a heavy hit or a kill (#256). On by
 ## default; set through `set_screen_shake()` and remembered with the rest.
 var screen_shake: bool = true
+## Whether the KO ticker (`KillFeed`, #833) lists KOs. On by default; the centre
+## banners show either way. Set through `set_kill_feed()`.
+var kill_feed: bool = true
 ## Comfort option (#317): when on, the white/bright flashes (elimination burst,
 ## bounce pad, breaking wall) are not drawn. Off by default.
 var reduce_flash: bool = false
@@ -647,6 +650,11 @@ func set_screen_shake(value: bool) -> void:
 	screen_shake = value
 	_save_settings()
 
+## Turn the KO ticker (#833) on or off, and remember the choice.
+func set_kill_feed(value: bool) -> void:
+	kill_feed = value
+	_save_settings()
+
 ## Turn the bright flashes (#317) off or on, and remember the choice.
 func set_reduce_flash(value: bool) -> void:
 	reduce_flash = value
@@ -684,6 +692,7 @@ func restore_defaults() -> void:
 	voice_volume = 1.0
 	fullscreen = false
 	screen_shake = true
+	kill_feed = true
 	reduce_flash = false
 	ui_scale = 1.0
 	hide_room_code = false
@@ -791,6 +800,7 @@ func load_settings() -> void:
 		voice_volume = clampf(_num(config.get_value("audio", "voice_volume", 1.0), 1.0), 0.0, 1.0)
 		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
 		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
+		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
 		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
@@ -817,6 +827,7 @@ func _save_settings() -> void:
 	config.set_value("audio", "voice_volume", voice_volume)
 	config.set_value("display", "fullscreen", fullscreen)
 	config.set_value("display", "screen_shake", screen_shake)
+	config.set_value("display", "kill_feed", kill_feed)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)

@@ -72,6 +72,7 @@ var _notice_label: Label
 var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
+var _kill_feed_box: CheckBox
 var _scale_button: OptionButton
 ## Stick deadzone (#748): Settings > More options.
 var _deadzone_button: OptionButton
@@ -178,6 +179,7 @@ func _ready() -> void:
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
+	_kill_feed_box = _add_box(content, "KillFeed", tr("SETTINGS_KILL_FEED"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
 	for option: float in sfx.UI_SCALES:
@@ -310,6 +312,7 @@ func _ready() -> void:
 	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
+	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
 	_deadzone_button.item_selected.connect(func(index: int) -> void: host.set_pad_deadzone(HostSettingsScript.PAD_DEADZONES[index]))
@@ -411,6 +414,7 @@ func refresh() -> void:
 	_filter_box.set_pressed_no_signal(host.filter_names)
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
+	_kill_feed_box.set_pressed_no_signal(sfx.kill_feed)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
 	_fps_button.select(maxi(HostSettingsScript.FRAME_CAPS.find(host.frame_cap), 0))
@@ -680,6 +684,9 @@ func fullscreen_box() -> CheckBox:
 func more_box() -> CheckBox:
 	return _more
 
+func kill_feed_box() -> CheckBox:
+	return _kill_feed_box
+
 func shake_box() -> CheckBox:
 	return _shake_box
 
@@ -861,6 +868,7 @@ func _retranslate() -> void:
 	_flash_box.text = tr("SETTINGS_REDUCE_FLASHES")
 	_numbers_box.text = tr("SETTINGS_PLAYER_NUMBERS")
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
+	_kill_feed_box.text = tr("SETTINGS_KILL_FEED")
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
