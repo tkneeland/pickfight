@@ -328,6 +328,9 @@ var screen_shake: bool = true
 ## Whether the KO ticker (`KillFeed`, #833) lists KOs. On by default; the centre
 ## banners show either way. Set through `set_kill_feed()`.
 var kill_feed: bool = true
+## Whether `HitFeedback` draws the floating damage numbers (#873). On by default;
+## hit sparks and shake are unaffected. Set through `set_damage_numbers()`.
+var damage_numbers: bool = true
 ## Comfort option (#317): when on, the white/bright flashes (elimination burst,
 ## bounce pad, breaking wall) are not drawn. Off by default.
 var reduce_flash: bool = false
@@ -666,6 +669,11 @@ func set_screen_shake(value: bool) -> void:
 	screen_shake = value
 	_save_settings()
 
+## Turn the floating damage numbers (#873) on or off, and remember the choice.
+func set_damage_numbers(value: bool) -> void:
+	damage_numbers = value
+	_save_settings()
+
 ## Turn the KO ticker (#833) on or off, and remember the choice.
 func set_kill_feed(value: bool) -> void:
 	kill_feed = value
@@ -758,6 +766,7 @@ func restore_defaults() -> void:
 	fullscreen = false
 	screen_shake = true
 	kill_feed = true
+	damage_numbers = true
 	reduce_flash = false
 	ui_scale = 1.0
 	text_scale = 1.0
@@ -868,6 +877,7 @@ func load_settings() -> void:
 		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
 		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
 		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
+		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
 		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
@@ -896,6 +906,7 @@ func _save_settings() -> void:
 	config.set_value("display", "fullscreen", fullscreen)
 	config.set_value("display", "screen_shake", screen_shake)
 	config.set_value("display", "kill_feed", kill_feed)
+	config.set_value("display", "damage_numbers", damage_numbers)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)

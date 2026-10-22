@@ -1010,6 +1010,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_volume_scales_announcer_and_grunts_only_824",
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
+	"damage_numbers_switch_873",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -3444,6 +3445,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_slider_reset_by_restore_defaults_824()
 		"kill_feed_switch_833":
 			return await _scenario_kill_feed_switch_833()
+		"damage_numbers_switch_873":
+			return await _scenario_damage_numbers_switch_873()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -48601,6 +48604,68 @@ func _scenario_kill_feed_switch_833() -> Array[String]:
 			failures.append("Restore defaults did not put Kill feed back on")
 	feed.queue_free()
 	sfx.kill_feed = was["feed"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #873: Settings > Damage numbers feeds HitFeedback; saved; reset by Restore defaults.
+func _scenario_damage_numbers_switch_873() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.damage_numbers, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	if not sfx.damage_numbers:
+		sfx.set_damage_numbers(true)
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+	sfx.set_damage_numbers(false)
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	await physics_frame
+	if not log["numbers"].is_empty():
+		failures.append("with Damage numbers off, %d were drawn" % log["numbers"].size())
+	if log["markers"].size() != 1:
+		failures.append("with Damage numbers off the hitmarker count is %d, not 1" % log["markers"].size())
+	sfx.set_damage_numbers(true)
+	await _await_ticks(HitFeedbackType.ZERO_COOLDOWN_FRAMES)
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	await physics_frame
+	if log["numbers"].size() != 1:
+		failures.append("with Damage numbers on, %d were drawn, not 1" % log["numbers"].size())
+	await _teardown(stage)
+	var path: String = OS.get_temp_dir().path_join("pickfight_damage_numbers_873_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_damage_numbers(false)
+	sfx.damage_numbers = true
+	sfx.load_settings()
+	if sfx.damage_numbers:
+		failures.append("Damage numbers off was not remembered in the settings file")
+	sfx.set_damage_numbers(true)
+	sfx.damage_numbers = false
+	sfx.load_settings()
+	if not sfx.damage_numbers:
+		failures.append("Damage numbers on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.damage_numbers_box()
+	if box == null:
+		failures.append("Settings has no Damage numbers box")
+	else:
+		box.button_pressed = false
+		if sfx.damage_numbers:
+			failures.append("unticking the Damage numbers box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.damage_numbers:
+			failures.append("Restore defaults did not put Damage numbers back on")
+	sfx.damage_numbers = was["flag"]
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
