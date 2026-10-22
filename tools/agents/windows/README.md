@@ -20,6 +20,7 @@ powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-stop.ps1   -Acc
 - `pf-supervise.sh beacon` runs `pf-beacon.sh` every 15 min to keep your #432 usage beacon current. The status
   line's own background beacon job can die with the status line process on Windows; failures go to `beacon.log`.
   The status line must still run, because it saves `usage-snapshot.json`, which the beacon reads.
+- `pf-supervise.sh msg` keeps `pf-msg.sh listen` alive and runs `pf-msg.sh heartbeat` every 60 s (HELLO to the private channel, wake line when a peer goes silent). It needs `pf-msg.conf` in the state folder (`pf-msg.sh init`, then share the topic out of band). `-Only msg` starts just this one; macOS: `screen -dmS pf-msg bash tools/agents/windows/pf-supervise.sh msg`.
 - `pf-stop.ps1` kills the supervisors and sweeps any leftover `pf-*.sh` watcher process on the machine.
 
 ## Start at logon (Task Scheduler), optional

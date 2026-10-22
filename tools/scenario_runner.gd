@@ -303,6 +303,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_ball_does_not_tunnel_thin_platform",
 	"flail_ball_does_not_clip_head",
 	"boomerang_hits_on_the_way_out_and_back",
+	"boomerang_catch_feedback_862",
+	"boomerang_catch_feedback_reduce_flashes_862",
 	"boomerang_turns_at_terrain_and_ghosts_home",
 	"new_weapons_are_pickups_only",
 	"bots_wield_new_weapons",
@@ -598,6 +600,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"competitive_stages_are_left_right_symmetric",
 	"competitive_stages_have_no_hazards_or_moving_parts",
 	"round_modifier_gale_pushes_players_and_undoes",
+	"round_modifier_pickup_rush_spawns_more_and_undoes",
 	"demo_build_flag_defines_the_slice",
 	"demo_build_rotation_only_slice_stages",
 	"demo_build_only_slice_weapons_spawn",
@@ -1036,6 +1039,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_offline_check_catches_a_cdn_reference_798",
 	"site_pages_have_no_dead_links_or_bare_images_799",
 	"site_link_check_catches_a_missing_file_and_a_missing_alt_799",
+	"idle_fighter_gets_drag_hint_after_six_seconds_826",
+	"idle_hint_skips_bots_ghosts_and_later_rounds_826",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2041,6 +2046,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomerang_hits_on_the_way_out_and_back()
 		"boomerang_turns_at_terrain_and_ghosts_home":
 			return await _scenario_boomerang_turns_at_terrain_and_ghosts_home()
+		"boomerang_catch_feedback_862":
+			return await _scenario_boomerang_catch_feedback(false)
+		"boomerang_catch_feedback_reduce_flashes_862":
+			return await _scenario_boomerang_catch_feedback(true)
 		"new_weapons_are_pickups_only":
 			return await _scenario_new_weapons_are_pickups_only()
 		"bots_wield_new_weapons":
@@ -2629,6 +2638,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_competitive_stages_have_no_hazards_or_moving_parts()
 		"round_modifier_gale_pushes_players_and_undoes":
 			return await _scenario_round_modifier_gale_pushes_players_and_undoes()
+		"round_modifier_pickup_rush_spawns_more_and_undoes":
+			return await _scenario_round_modifier_pickup_rush_spawns_more_and_undoes()
 		"demo_build_flag_defines_the_slice":
 			return await _scenario_demo_build_flag_defines_the_slice()
 		"demo_build_rotation_only_slice_stages":
@@ -3481,6 +3492,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_site_pages_have_no_dead_links_or_bare_images_799()
 		"site_link_check_catches_a_missing_file_and_a_missing_alt_799":
 			return _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799()
+		"idle_fighter_gets_drag_hint_after_six_seconds_826":
+			return await _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826()
+		"idle_hint_skips_bots_ghosts_and_later_rounds_826":
+			return await _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -9543,6 +9558,7 @@ const MODIFIER_TITLES: Dictionary = {
 	"bouncy": "Bouncy",
 	"double_damage": "Double Damage",
 	"gale": "Gale",
+	"pickup_rush": "Pickup Rush",
 }
 ## Low gravity is half gravity. Speed picked up falling from rest in clear air
 ## over a third of a second is proportional to gravity (linear damping is
@@ -20548,7 +20564,7 @@ func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
 		if not is_instance_valid(boomerang):
 			break
 		furthest = maxf(furthest, boomerang.global_position.x - thrower.global_position.x)
-		caught = boomerang.caught
+		caught = boomerang.was_caught
 		var hits_before: int = strikes.size()
 		var leg: int = boomerang.leg
 		await physics_frame
@@ -20572,6 +20588,61 @@ func _scenario_boomerang_hits_on_the_way_out_and_back() -> Array[String]:
 		failures.append("the caught boomerang was not drawn back in hand")
 	if thrower.special_ready():
 		failures.append("the boomerang could be thrown again the tick it was caught, with no cooldown")
+	await _teardown(stage)
+	return failures
+## Issue #862: catching the boomerang emits `caught` once, asks for the catch
+## sound once (never on an impact) and throws a white spark burst, unless
+## Reduce flashes is on, which keeps the sound and skips the burst.
+func _scenario_boomerang_catch_feedback(reduce_flash: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var sfx: Node = _sfx()
+	if sfx == null:
+		await _teardown(stage)
+		return ["the Sfx autoload is missing"]
+	var was_reduced: bool = bool(sfx.get("reduce_flash"))
+	sfx.set("reduce_flash", reduce_flash)
+	var juice: Node2D = _juice(stage)
+	var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(thrower, BOOMERANG_PATH)
+	_brace(thrower)
+	sfx.start_recording()
+	await _flick(thrower, Vector2.RIGHT)
+	var boomerang: Node2D = thrower.launched_boomerang()
+	if boomerang == null:
+		sfx.stop_recording()
+		sfx.set("reduce_flash", was_reduced)
+		await _teardown(stage)
+		return ["a flick did not throw the boomerang"]
+	var catches: Array = []
+	boomerang.caught.connect(func(point: Vector2) -> void: catches.append(point))
+	# An impact (as a shield turning it makes) is not a catch.
+	boomerang.impacted.emit(null, boomerang.global_position)
+	var bursts: int = 0
+	for i in 240:
+		if not is_instance_valid(boomerang):
+			break
+		await physics_frame
+	await _await_ticks(1)
+	bursts = juice.active_particle_count(JuiceScript.Kind.CATCH)
+	await _await_ticks(20)
+	sfx.stop_recording()
+	var asked: int = _sfx_count(sfx, "catch_boomerang")
+	print("      caught emitted %d, sound asked %d, burst %d (reduce flashes %s)" % [catches.size(), asked, bursts, reduce_flash])
+	if catches.size() != 1:
+		failures.append("`caught` fired %d times, expected exactly once" % catches.size())
+	elif (catches[0] as Vector2).distance_to(thrower.global_position) > 60.0:
+		failures.append("`caught` reported a point %.0f px from the thrower's hand" % (catches[0] as Vector2).distance_to(thrower.global_position))
+	if asked != 1:
+		failures.append("the catch sound was requested %d times, expected once (not on impact)" % asked)
+	if not thrower.special_loaded():
+		failures.append("the thrower did not have the boomerang back")
+	if reduce_flash and bursts != 0:
+		failures.append("Reduce flashes on, but %d catch sparks were spawned" % bursts)
+	if not reduce_flash and bursts <= 0:
+		failures.append("no spark burst was spawned at the catch")
+	sfx.set("reduce_flash", was_reduced)
 	await _teardown(stage)
 	return failures
 ## Terrain on the way out turns the boomerang round where it meets it;
@@ -31316,6 +31387,58 @@ func _scenario_round_modifier_gale_pushes_players_and_undoes() -> Array[String]:
 			failures.append("a plain round pushed a free body sideways (%.1f, %.1f px/s)" % [values[0], values[2]])
 		if values[1] < GALE_MIN_SPEED:
 			failures.append("gale: the gust pushed a free body along its direction to only %.1f px/s, expected at least %.0f" % [values[1], GALE_MIN_SPEED])
+	await _teardown(loop["stage"])
+	return failures
+# --- Pickup rush round modifier (#841) -----------------------------------------
+## Ticks each stretch is watched for: 5 s at 60 Hz, against a 1 s interval.
+const PICKUP_RUSH_WATCH_TICKS: int = 300
+## Pickups the rushed stretch must beat the plain one by: halving the interval
+## over 5 s should add about 5.
+const PICKUP_RUSH_MIN_EXTRA: int = 3
+## Spots for the stretch: more than either run can fill, all far from the falling players.
+func _pickup_rush_points() -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in 24:
+		points.append(Vector2(-1500.0 + 130.0 * i, -2000.0 - 100.0 * (i % 3)))
+	return points
+## Pickup rush: over the same fixed stretch the modifier spawns clearly more
+## pickups than none, and the interval is back to normal after undo.
+func _scenario_round_modifier_pickup_rush_spawns_more_and_undoes() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_pickup_round(1.0, 50, _pickup_rush_points())
+	var players: Array[RigidBody2D] = loop["players"]
+	var round_manager: Node = loop["round_manager"]
+	if not await _await_pickup_round_start(players):
+		failures.append("round never started with two claimed slots")
+		await _teardown(loop["stage"])
+		return failures
+	var director: Node = round_manager._pickup_director
+	var plain_interval: float = director.interval_sec()
+	director.start()
+	await _await_ticks(PICKUP_RUSH_WATCH_TICKS)
+	var plain: int = director._live_pickups().size()
+	var modifier: RefCounted = RoundModifiersType.create("pickup_rush")
+	if modifier == null or RoundModifiersType.title_of("pickup_rush") != "Pickup Rush":
+		failures.append("pickup_rush is not a round modifier named 'Pickup Rush'")
+		await _teardown(loop["stage"])
+		return failures
+	modifier.apply(round_manager, players, loop["stage"])
+	var rushed_interval: float = director.interval_sec()
+	director.start()
+	await _await_ticks(PICKUP_RUSH_WATCH_TICKS)
+	var rushed: int = director._live_pickups().size()
+	modifier.undo()
+	var after_interval: float = director.interval_sec()
+	print("      pickup_rush: plain %d pickups, rushed %d; interval %.2f -> %.2f -> %.2f" % [
+		plain, rushed, plain_interval, rushed_interval, after_interval])
+	if plain < 1:
+		failures.append("a plain stretch spawned no pickups")
+	if rushed < plain + PICKUP_RUSH_MIN_EXTRA:
+		failures.append("pickup rush spawned %d pickups against %d plain, expected at least %d more" % [rushed, plain, PICKUP_RUSH_MIN_EXTRA])
+	if not is_equal_approx(rushed_interval, plain_interval * RoundModifiersType.PICKUP_RUSH_INTERVAL_SCALE):
+		failures.append("pickup rush interval %.3f, expected %.3f" % [rushed_interval, plain_interval * RoundModifiersType.PICKUP_RUSH_INTERVAL_SCALE])
+	if not is_equal_approx(after_interval, plain_interval):
+		failures.append("the interval is %.3f after undo, %.3f before" % [after_interval, plain_interval])
 	await _teardown(loop["stage"])
 	return failures
 # --- Issue #361: the Steam Next Fest demo build ----------------------------
@@ -49036,4 +49159,111 @@ func _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799() ->
 	if found.size() != 4 or not found[0].begins_with("site/index.html:1:"):
 		failures.append("the real page with a bare broken image prepended gave %d problems, wanted 4 on line 1: %s" % [found.size(), found])
 	_scenario_completed = true
+	return failures
+
+## Fixture for the #826 idle-hint scenarios: `count` players under a bare NameTags
+## (no RoundManager parent, so the scenario feeds the hint its own round state).
+func _idle_hint_fixture(count: int) -> Dictionary:
+	var stage := Node2D.new()
+	get_root().add_child(stage)
+	var players: Array = []
+	for i in count:
+		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
+		player.name = "HintP%d" % i
+		player.start_in_round = false
+		stage.add_child(player)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.visible = true
+		player.alive = true
+		players.append(player)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new(players,
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	return {"stage": stage, "players": players, "hint": tags.idle_hint()}
+
+## Steps `frames` physics frames, ticking the hint each one with `ctx`.
+func _idle_hint_run(hint: Node2D, ctx: Dictionary, frames: int) -> void:
+	for _i in frames:
+		await physics_frame
+		hint.tick(ctx)
+
+func _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Dictionary = _idle_hint_fixture(3)
+	var players: Array = fx["players"]
+	var hint: Node2D = fx["hint"]
+	var ctx: Dictionary = {"active": true, "round_id": 1, "reset": true, "scale": 1.0,
+		"is_pad": func(slot: int) -> bool: return slot == 2,
+		"anchor": func(slot: int) -> Vector2: return Vector2(100.0 + 150.0 * slot, 240.0)}
+	hint.tick(ctx)
+	ctx["reset"] = false
+	await _idle_hint_run(hint, ctx, 180)
+	players[1].input_vector = Vector2(1.0, 0.0) # slot 1 moves at 3 s
+	await _idle_hint_run(hint, ctx, 174) # 5.9 s in
+	for slot in 3:
+		if hint.has_hint(slot):
+			failures.append("slot %d has a hint at 5.9 s" % slot)
+	await _idle_hint_run(hint, ctx, 24) # 6.3 s in
+	if not hint.has_hint(0) or hint.hint_text(0) != tr("HINT_DRAG_TO_SWING"):
+		failures.append("idle slot 0 has no 'Drag to swing' plate at 6.3 s (text '%s')" % hint.hint_text(0))
+	if hint.has_hint(1):
+		failures.append("slot 1 moved at 3 s but has a hint")
+	if not hint.has_hint(2) or hint.hint_text(2) != tr("HINT_RIGHT_STICK"):
+		failures.append("idle gamepad slot 2 lacks the right-stick plate (text '%s')" % hint.hint_text(2))
+	if tr("HINT_DRAG_TO_SWING") == "HINT_DRAG_TO_SWING" or tr("HINT_RIGHT_STICK") == "HINT_RIGHT_STICK":
+		failures.append("hint strings are untranslated keys")
+	var plate: Node = hint.get_node_or_null("Plate0")
+	if plate == null or plate.get("size").y < 16.0:
+		failures.append("plate missing or its text is under 16 design px")
+	await _idle_hint_run(hint, ctx, 30)
+	players[0].input_vector = Vector2(0.0, 1.0)
+	await _idle_hint_run(hint, ctx, 30) # 0.5 s: faded and freed
+	if hint.has_hint(0) or hint.get_node_or_null("Plate0") != null:
+		failures.append("slot 0's plate was not freed after its first input")
+	players[0].input_vector = Vector2.ZERO
+	await _idle_hint_run(hint, ctx, 480)
+	if hint.has_hint(0):
+		failures.append("slot 0's hint came back in the same match")
+	await _teardown(fx["stage"])
+	return failures
+
+func _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Dictionary = _idle_hint_fixture(5)
+	var players: Array = fx["players"]
+	var hint: Node2D = fx["hint"]
+	var ctx: Dictionary = {"active": true, "round_id": 1, "reset": true, "scale": 1.0,
+		"is_bot": func(slot: int) -> bool: return slot == 0,
+		"anchor": func(slot: int) -> Vector2: return Vector2(100.0 + 150.0 * slot, 240.0)}
+	hint.tick(ctx)
+	ctx["reset"] = false
+	players[1].alive = false # a ghost
+	players[3].input_vector = Vector2(1.0, 0.0)
+	await _idle_hint_run(hint, ctx, 420) # 7 s
+	for slot in [0, 1, 3]:
+		if hint.has_hint(slot):
+			failures.append("slot %d (bot, ghost, mover) got a hint" % slot)
+	if not hint.has_hint(2):
+		failures.append("idle human slot 2 got no hint in round 1")
+	ctx["active"] = false # the round ends: the plate fades out
+	await _idle_hint_run(hint, ctx, 30)
+	if hint.has_hint(2) or hint.get_node_or_null("Plate2") != null:
+		failures.append("slot 2's plate outlived the round")
+	ctx["active"] = true # round 2: nobody is hinted
+	ctx["round_id"] = 2
+	await _idle_hint_run(hint, ctx, 420)
+	for slot in 5:
+		if hint.has_hint(slot):
+			failures.append("slot %d got a hint in round 2" % slot)
+	ctx["active"] = false # back to the lobby, then a new match
+	ctx["reset"] = true
+	hint.tick(ctx)
+	ctx["reset"] = false
+	ctx["active"] = true
+	ctx["round_id"] = 3
+	await _idle_hint_run(hint, ctx, 380)
+	if not hint.has_hint(4):
+		failures.append("slot 4 got no hint in round 1 of a new match")
+	await _teardown(fx["stage"])
 	return failures
