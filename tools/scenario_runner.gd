@@ -993,6 +993,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 	"translations_have_no_blank_or_mismatched_cells_794",
 	"translation_cell_check_flags_bad_fixture_794",
+	"every_scene_loads_and_instantiates_802",
+	"scene_check_catches_a_dead_resource_path_802",
 	"couch_pad_only_host_can_end_match_811",
 	"couch_host_phone_present_keeps_match_menu_hidden_811",
 ]
@@ -3124,6 +3126,8 @@ func _run_scenario(name: String) -> Array[String]:
 		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
 		"translations_have_no_blank_or_mismatched_cells_794": return await _scenario_translations_have_no_blank_or_mismatched_cells_794()
 		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
+		"every_scene_loads_and_instantiates_802": return await _scenario_every_scene_loads_and_instantiates_802()
+		"scene_check_catches_a_dead_resource_path_802": return await _scenario_scene_check_catches_a_dead_resource_path_802()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -47114,6 +47118,68 @@ func _run_autosave_795(switch_on: bool) -> Dictionary:
 	await _teardown(loop["stage"])
 	Engine.time_scale = scale_was
 	return out
+
+
+## Scenes that cannot instantiate headless on purpose (#802). Empty today;
+## add "res://scenes/X.tscn": "reason" here rather than skipping silently.
+const SCENE_INSTANTIATE_ALLOWLIST: Dictionary = {}
+
+## Every .tscn path under dir, recursively.
+func _scene_paths_802(dir: String) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for f: String in DirAccess.get_files_at(dir):
+		if f.ends_with(".tscn"):
+			out.append(dir.path_join(f))
+	for d: String in DirAccess.get_directories_at(dir):
+		out.append_array(_scene_paths_802(dir.path_join(d)))
+	return out
+
+## ext_resource paths in scene text that do not exist (source file check, so
+## it does not depend on the .godot/imported cache).
+func _dead_ext_resource_paths_802(text: String) -> PackedStringArray:
+	var dead: PackedStringArray = PackedStringArray()
+	var re: RegEx = RegEx.new()
+	re.compile("\\[ext_resource[^\\]]*?path=\"([^\"]+)\"")
+	for m: RegExMatch in re.search_all(text):
+		var path: String = m.get_string(1)
+		if not FileAccess.file_exists(path) and not ResourceLoader.exists(path):
+			dead.append(path)
+	return dead
+
+func _scenario_every_scene_loads_and_instantiates_802() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: PackedStringArray = _scene_paths_802("res://scenes")
+	if scenes.size() < 50:
+		failures.append("only %d scenes found under res://scenes" % scenes.size())
+	for path: String in scenes:
+		if SCENE_INSTANTIATE_ALLOWLIST.has(path):
+			continue
+		var text: String = FileAccess.get_file_as_string(path)
+		for dead: String in _dead_ext_resource_paths_802(text):
+			failures.append("%s: dead ext_resource path %s" % [path, dead])
+		var packed: Resource = ResourceLoader.load(path)
+		if not (packed is PackedScene):
+			failures.append("%s: load returned %s" % [path, packed])
+			continue
+		var inst: Node = (packed as PackedScene).instantiate()
+		if inst == null:
+			failures.append("%s: instantiate returned null" % path)
+			continue
+		inst.free()
+	_scenario_completed = true
+	return failures
+
+func _scenario_scene_check_catches_a_dead_resource_path_802() -> Array[String]:
+	var failures: Array[String] = []
+	var bad: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/NoSuchScript802.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var good: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/Player.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var dead: PackedStringArray = _dead_ext_resource_paths_802(bad)
+	if dead.size() != 1 or dead[0] != "res://scripts/NoSuchScript802.gd":
+		failures.append("dead path not flagged: %s" % [dead])
+	if _dead_ext_resource_paths_802(good).size() != 0:
+		failures.append("a live path was flagged")
+	_scenario_completed = true
+	return failures
 ## Issue #811: in a Couch match with no host phone (a Steam Deck or a pad-only
 ## PC) the Settings menu (View on the pad) leads with Pause/Resume and End
 ## match, in the pad's focus chain, and A on End match returns to the lobby.
