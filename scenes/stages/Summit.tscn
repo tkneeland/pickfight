@@ -1,7 +1,8 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
+[ext_resource type="PackedScene" path="res://scenes/parts/IcePatch.tscn" id="ice"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
 
@@ -99,6 +100,11 @@ size = Vector2(100, 16)
 [node name="PadRight" parent="." instance=ExtResource("pad")]
 position = Vector2(200, 372)
 size = Vector2(100, 16)
+
+; Ice patch (issue #860): a slick strip on the left floor between the bounce pad and Spawn6, clear of every spawn drop line and pickup spot.
+[node name="FloorIce" parent="." instance=ExtResource("ice")]
+position = Vector2(-340, 384)
+size = Vector2(140, 8)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-700, 320)

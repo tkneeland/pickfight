@@ -157,6 +157,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"world_stopped_head_blocks_arriving_head",
 	"conveyor_carries_player",
 	"conveyor_flatlands_spawns_clear",
+	"ice_patch_slides_player_and_restores",
+	"ice_patch_summit_spawns_clear",
+	"ice_patch_restores_when_stage_freed",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -1748,6 +1751,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_conveyor_carries_player()
 		"conveyor_flatlands_spawns_clear":
 			return await _scenario_conveyor_flatlands_spawns_clear()
+		"ice_patch_slides_player_and_restores":
+			return await _scenario_ice_patch_slides_player_and_restores()
+		"ice_patch_summit_spawns_clear":
+			return await _scenario_ice_patch_summit_spawns_clear()
+		"ice_patch_restores_when_stage_freed":
+			return await _scenario_ice_patch_restores_when_stage_freed()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -10658,6 +10667,127 @@ func _scenario_conveyor_flatlands_spawns_clear() -> Array[String]:
 			if absf(spawn.position.x - belt.position.x) <= belt.size.x / 2.0 + PLAYER_RADIUS:
 				failures.append("Spawn%d at x=%.0f is over the belt" % [i, spawn.position.x])
 	await _teardown(stage)
+	return failures
+## Ice patch (#860): a body is dropped onto a strip of ice (or plain ground),
+## settles, is shot along it at ICE_PUSH_SPEED with no input held, and the
+## distance it slides in ICE_SLIDE_TICKS is returned. The weapon is held
+## straight up so only the body touches the strip.
+const IcePatchScene: PackedScene = preload("res://scenes/parts/IcePatch.tscn")
+const ICE_SIZE: Vector2 = Vector2(1200, 8)
+const ICE_SETTLE_TICKS: int = 60
+const ICE_PUSH_SPEED: float = 300.0
+const ICE_SLIDE_TICKS: int = 60
+## Ice has to carry the body at least this many times as far as plain ground.
+const ICE_MIN_SLIDE_RATIO: float = 1.5
+func _ice_ground(stage: Node2D, on_ice: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if on_ice:
+		ground = IcePatchScene.instantiate() as StaticBody2D
+		ground.size = ICE_SIZE
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = ICE_SIZE
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = PART_POSITION
+	stage.add_child(ground)
+	return ground
+func _ice_slide(on_ice: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_ice_ground(stage, on_ice)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-400, -ICE_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	for _tick in ICE_SETTLE_TICKS:
+		await physics_frame
+	var start_x: float = player.global_position.x
+	player.linear_velocity = Vector2(ICE_PUSH_SPEED, 0)
+	for _tick in ICE_SLIDE_TICKS:
+		await physics_frame
+	var slid: float = player.global_position.x - start_x
+	await _teardown(stage, false)
+	return slid
+## A body slides further on ice than on plain ground once input stops, and
+## gets its own material back after stepping off the strip.
+func _scenario_ice_patch_slides_player_and_restores() -> Array[String]:
+	var failures: Array[String] = []
+	var on_ice: float = await _ice_slide(true)
+	var on_ground: float = await _ice_slide(false)
+	print("      slid %.1f px on ice, %.1f px on plain ground" % [on_ice, on_ground])
+	if on_ice < on_ground * ICE_MIN_SLIDE_RATIO:
+		failures.append("slid %.1f px on ice vs %.1f on ground, expected at least %.1fx" % [on_ice, on_ground, ICE_MIN_SLIDE_RATIO])
+	# Step off: a short strip with ground beside it, the player shoved off its end.
+	var stage: Node2D = _new_empty_stage()
+	var ice: StaticBody2D = IcePatchScene.instantiate() as StaticBody2D
+	ice.size = Vector2(100, 8)
+	ice.position = PART_POSITION
+	stage.add_child(ice)
+	var ground := StaticBody2D.new()
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(1000, 8)
+	shape.shape = rect
+	ground.add_child(shape)
+	ground.position = PART_POSITION + Vector2(550, 0)
+	stage.add_child(ground)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -8.0 - PLAYER_RADIUS))
+	player.set_input_vector(Vector2.UP)
+	var before: PhysicsMaterial = player.physics_material_override
+	for _tick in ICE_SETTLE_TICKS:
+		await physics_frame
+	if not ice.is_icing(player) or player.physics_material_override == before:
+		failures.append("a player resting on the ice did not get the ice material")
+	player.linear_velocity = Vector2(ICE_PUSH_SPEED, 0)
+	for _tick in ICE_SLIDE_TICKS * 2:
+		await physics_frame
+	if ice.is_icing(player) or player.physics_material_override != before:
+		failures.append("the player's material was not restored after leaving the ice")
+	await _teardown(stage)
+	return failures
+## Summit (#860) carries an ice patch on its floor; no spawn or pickup spot
+## lies over it.
+func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = (load("res://scenes/stages/Summit.tscn") as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	var ice: StaticBody2D = stage.get_node_or_null("FloorIce") as StaticBody2D
+	if ice == null:
+		failures.append("Summit has no FloorIce")
+	else:
+		var half_x: float = ice.size.x / 2.0
+		for child: Node in stage.get_children():
+			if not (child is Marker2D) or not (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn")):
+				continue
+			var marker: Node2D = child as Node2D
+			if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
+				failures.append("%s at x=%.0f is over the ice" % [child.name, marker.position.x])
+	await _teardown(stage)
+	return failures
+## Friction is put back when the stage goes away with a body still on the ice
+## (round end), so nothing leaks into the next round.
+func _scenario_ice_patch_restores_when_stage_freed() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var ice: StaticBody2D = IcePatchScene.instantiate() as StaticBody2D
+	ice.size = ICE_SIZE
+	ice.position = PART_POSITION
+	stage.add_child(ice)
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var player: RigidBody2D = _spawn_player(holder, PART_POSITION + Vector2(0, -ICE_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var before: PhysicsMaterial = player.physics_material_override
+	for _tick in ICE_SETTLE_TICKS:
+		await physics_frame
+	if not ice.is_icing(player):
+		failures.append("the player never got the ice material")
+	stage.queue_free()
+	await physics_frame
+	await physics_frame
+	if player.physics_material_override != before:
+		failures.append("the ice material leaked after the stage was freed mid-contact")
+	await _teardown(holder)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
 ## dropped from, and shows it did (the flash). The weapon is held straight
