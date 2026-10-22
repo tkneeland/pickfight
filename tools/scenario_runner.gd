@@ -883,6 +883,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
 	"soccer_ball_flies_farther_than_at_mass_one_649",
 	"soccer_ball_lifts_higher_than_before_674",
+	"sfx_soccer_ball_thump_on_hard_impacts_only",
 	"settings_hygiene_609",
 	"play_of_round_best_moment_scoring_order_704",
 	"play_of_round_trims_to_the_pause_or_plays_nothing_704",
@@ -3210,6 +3211,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_soccer_and_ctf_stages_are_bigger_649()
 		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
 			return await _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649()
+		"sfx_soccer_ball_thump_on_hard_impacts_only":
+			return await _scenario_sfx_soccer_ball_thump_on_hard_impacts_only()
 		"soccer_ball_lifts_higher_than_before_674":
 			return await _scenario_soccer_ball_lifts_higher_than_before_674()
 		"soccer_ball_flies_farther_than_at_mass_one_649":
@@ -43347,6 +43350,47 @@ func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array
 	return failures
 ## Issue #674: the same upward strike lifts the ball at least 1.5x higher than
 ## at the old mass 0.35 and full gravity.
+## Issue #899: a strike over the threshold plays `ball_thump` once at the ball,
+## a slow roll plays nothing, and two impacts within 0.15 s play one.
+func _scenario_sfx_soccer_ball_thump_on_hard_impacts_only() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"ball_thump"):
+		return ["ball_thump is not in the sound table"]
+	var rig: Dictionary = _soccer_rig(2)
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var ball: RigidBody2D = rig["rm"].game_mode_node().ball
+	ball.global_position = Vector2(-300.0, -150.0)
+	ball.linear_velocity = Vector2.ZERO
+	await _await_ticks(20)
+	sfx.start_recording()
+	ball.linear_velocity = Vector2(30.0, 0.0)
+	await _await_ticks(6)
+	if _sfx_count(sfx, "ball_thump") != 0:
+		failures.append("a slow roll played ball_thump")
+	ball.linear_velocity = Vector2(900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 1:
+		failures.append("a hard strike played ball_thump %d times, expected 1" % _sfx_count(sfx, "ball_thump"))
+	else:
+		var hit: Dictionary = _sfx_last(sfx, "ball_thump")
+		if hit.get("position") == null or Vector2(hit["position"]).distance_to(ball.global_position) > 200.0:
+			failures.append("ball_thump did not play at the ball: %s" % [hit.get("position")])
+	# A second strike 2 ticks later (0.03 s) falls inside the 0.15 s gap.
+	ball.linear_velocity = Vector2(-900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 1:
+		failures.append("two impacts within 0.15 s played %d thumps, expected 1" % _sfx_count(sfx, "ball_thump"))
+	await _await_ticks(15)
+	ball.linear_velocity = Vector2(900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 2:
+		failures.append("a strike after the gap played %d thumps in all, expected 2" % _sfx_count(sfx, "ball_thump"))
+	sfx.stop_recording()
+	await _teardown(rig["stage"])
+	return failures
 func _scenario_soccer_ball_lifts_higher_than_before_674() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = _soccer_rig(2)
