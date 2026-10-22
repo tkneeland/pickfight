@@ -33321,8 +33321,12 @@ func _scenario_voice_grunts_respect_mute_and_settings_isolation() -> Array[Strin
 	for voice: Node in sfx.get_children():
 		if voice is AudioStreamPlayer2D:
 			voices += 1
-			if voice.bus != &"Voice":
-				failures.append("a grunt played on the %s bus, not Voice (#824)" % voice.bus)
+			if voice.bus != &"SFX" and voice.bus != &"Voice":
+				failures.append("a sound played on the %s bus, not SFX or Voice (#824)" % voice.bus)
+	for grunt_key: String in ["grunt_hit_0", "grunt_ko_5"]:
+		for grunt: Node in sfx._voices.get(grunt_key, []):
+			if grunt.bus != &"Voice":
+				failures.append("%s played on the %s bus, not Voice (#824)" % [grunt_key, grunt.bus])
 	if voices == 0:
 		failures.append("no placed player node was made for the grunts")
 	sfx.set_muted(true)
