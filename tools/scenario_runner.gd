@@ -667,6 +667,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
 	"deck_text_is_legible_at_1280x800",
+	"paused_banner_hint_follows_active_input_810",
+	"paused_banner_hint_hidden_when_not_paused_810",
 	"deck_lobby_join_qr_and_url_fit_the_deck_screen",
 	"deck_gamepad_reaches_every_lobby_control",
 	"deck_gamepad_operates_the_settings_panel",
@@ -986,13 +988,21 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"team_letters_752",
 	"stick_deadzone_setting_748",
 	"restore_defaults_750",
+	"match_win_ko_autosaves_clip_795",
+	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
+	"demo_title_wishlist_button_shown_only_in_demo_793",
+	"demo_wishlist_button_opens_store_link_793",
 	"translations_have_no_blank_or_mismatched_cells_794",
 	"translation_cell_check_flags_bad_fixture_794",
 	"stage_rotation_data_has_only_real_keys_801",
 	"stage_rotation_data_check_catches_a_typo_801",
+	"doc_paths_point_at_real_files_803",
+	"doc_path_check_catches_a_missing_file_803",
+	"every_scene_loads_and_instantiates_802",
+	"scene_check_catches_a_dead_resource_path_802",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2720,6 +2730,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_character_polish_weapon_head_has_ink_outline()
 		"deck_text_is_legible_at_1280x800":
 			return await _scenario_deck_text_is_legible_at_1280x800()
+		"paused_banner_hint_follows_active_input_810":
+			return await _scenario_paused_banner_hint_follows_active_input_810()
+		"paused_banner_hint_hidden_when_not_paused_810":
+			return await _scenario_paused_banner_hint_hidden_when_not_paused_810()
 		"deck_lobby_join_qr_and_url_fit_the_deck_screen":
 			return await _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen()
 		"deck_gamepad_reaches_every_lobby_control":
@@ -3124,6 +3138,10 @@ func _run_scenario(name: String) -> Array[String]:
 		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
 		"stage_rotation_data_has_only_real_keys_801": return await _scenario_stage_rotation_data_has_only_real_keys_801()
 		"stage_rotation_data_check_catches_a_typo_801": return await _scenario_stage_rotation_data_check_catches_a_typo_801()
+		"doc_paths_point_at_real_files_803": return await _scenario_doc_paths_point_at_real_files_803()
+		"doc_path_check_catches_a_missing_file_803": return await _scenario_doc_path_check_catches_a_missing_file_803()
+		"every_scene_loads_and_instantiates_802": return await _scenario_every_scene_loads_and_instantiates_802()
+		"scene_check_catches_a_dead_resource_path_802": return await _scenario_scene_check_catches_a_dead_resource_path_802()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -3350,12 +3368,20 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stick_deadzone_setting_748()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
+		"match_win_ko_autosaves_clip_795":
+			return await _scenario_match_win_ko_autosaves_clip_795()
+		"autosave_clip_switch_off_saves_nothing_795":
+			return await _scenario_autosave_clip_switch_off_saves_nothing_795()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
 		"phone_leave_button_frees_seat_775":
 			return await _scenario_phone_leave_button_frees_seat_775()
 		"frame_rate_cap_and_vsync_persist_and_apply_774":
 			return await _scenario_frame_rate_cap_and_vsync_persist_and_apply_774()
+		"demo_title_wishlist_button_shown_only_in_demo_793":
+			return await _scenario_demo_title_wishlist_button_shown_only_in_demo_793()
+		"demo_wishlist_button_opens_store_link_793":
+			return await _scenario_demo_wishlist_button_opens_store_link_793()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -45946,7 +45972,6 @@ func _scenario_quit_game_pc_client_leaves_room_718() -> Array[String]:
 	QuitGameScript718.quit_action = Callable()
 	_scenario_completed = true # nothing here builds a stage for _teardown() to free
 	return failures
-
 ## Issue #721: the Credits screen opens from the title screen's Credits button (one D-pad step right of
 ## Quit) and from Settings, shows the studio, music, font, engine and translation credits plus the
 ## licence texts from THIRD-PARTY.md, and closes with the X, Esc and the gamepad's B (Esc leaves the
@@ -46627,8 +46652,6 @@ func _scenario_restore_defaults_750() -> Array[String]:
 		ui.toggle_panel()
 	_scenario_completed = true
 	return failures
-
-
 ## Issue #779: a living fighter outside the camera view gets an edge arrow in their colour, pinned
 ## inside the screen and pointing at them; it fades out once they are back in frame or KO'd.
 func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
@@ -46819,7 +46842,6 @@ func _scenario_frame_rate_cap_and_vsync_persist_and_apply_774() -> Array[String]
 	DisplayServer.window_set_vsync_mode(was_vsync)
 	_scenario_completed = true
 	return failures
-
 ## Issue #776: the host sends its Reduce flashes setting to a phone on join and on every
 ## change, and the phone page has the calm-cue hooks that honour it and prefers-reduced-motion.
 func _scenario_phone_reduce_flashes_776() -> Array[String]:
@@ -46887,7 +46909,6 @@ func _scenario_phone_reduce_flashes_776() -> Array[String]:
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
-
 func _scenario_phone_weak_connection_777() -> Array[String]:
 	var failures: Array[String] = []
 	var stage := Node2D.new()
@@ -46948,6 +46969,126 @@ func _scenario_phone_weak_connection_777() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
+## Issue #793: the Wishlist on Steam button is in the demo build only, and only once the base game's
+## app ID is filled in. Full game, or demo with the ID unset: no button on the title screen or the end
+## card. Demo with an ID: both have it, the title's sits one D-pad step right of Credits and the end
+## card's button takes the focus when the card shows.
+func _scenario_demo_title_wishlist_button_shown_only_in_demo_793() -> Array[String]:
+	var failures: Array[String] = []
+	var cases: Array = [["full game, ID set", 0, 12345, false], ["demo, ID unset", 1, 0, false], ["demo, ID set", 1, 12345, true]]
+	for entry: Array in cases:
+		DemoBuildScript361.forced = int(entry[1])
+		DemoBuildScript361.store_app_id_for_test = int(entry[2])
+		var expect: bool = bool(entry[3])
+		var rig: Dictionary = await _deck_rig_368()
+		var screen: CanvasLayer = rig["screen"]
+		screen.show_title(true)
+		await _await_ticks(2)
+		var title_button: Button = screen.title_button("wishlist")
+		var card: Control = screen.end_card_panel()
+		var card_button: Button = card.find_child("EndCard_wishlist", true, false) as Button if card != null else null
+		if (title_button != null) != expect:
+			failures.append("%s: title Wishlist button present = %s, wanted %s" % [entry[0], title_button != null, expect])
+		if (card_button != null) != expect:
+			failures.append("%s: end card Wishlist button present = %s, wanted %s" % [entry[0], card_button != null, expect])
+		if expect and title_button != null and card_button != null:
+			var credits: Button = screen.title_button("credits")
+			if not title_button.is_visible_in_tree():
+				failures.append("the title Wishlist button is not visible")
+			if credits.get_node_or_null(credits.focus_neighbor_right) != title_button \
+					or title_button.get_node_or_null(title_button.focus_neighbor_left) != credits:
+				failures.append("one D-pad step right of Credits does not reach Wishlist (and back)")
+			if title_button.get_node_or_null(title_button.focus_neighbor_top) == null:
+				failures.append("the title Wishlist button has no D-pad way back up to the cards")
+			if card_button.is_visible_in_tree():
+				failures.append("the end card's Wishlist button shows before the end card does")
+			screen.show_panel("end_card")
+			await _await_ticks(2)
+			if not card_button.is_visible_in_tree() or not card_button.has_focus():
+				failures.append("the end card's Wishlist button is not shown and focused with the card")
+			screen.show_panel("")
+			await _await_ticks(2)
+			if screen.title_visible() or title_button.is_visible_in_tree():
+				failures.append("the Wishlist button stays on screen outside the lobby (during a round)")
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+	DemoBuildScript361.forced = -1
+	DemoBuildScript361.store_app_id_for_test = -1
+	return failures
+
+## Issue #793: the button opens the base game's store page. With Steam running that is the overlay
+## (`open_store_page` recorded on the seam, the browser untouched); without it, the store URL goes to
+## `OS.shell_open` (stubbed here, so no browser opens). The mouse button, key W and the end card's
+## button and key all reach it; the full game and an unset ID open nothing.
+func _scenario_demo_wishlist_button_opens_store_link_793() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	if steam == null:
+		return ["SteamPlatform autoload missing"]
+	var opened: Array[String] = []
+	steam.shell_open_for_test = func(url: String) -> void: opened.append(url)
+	steam.calls_for_test = []
+	DemoBuildScript361.forced = 1
+	DemoBuildScript361.store_app_id_for_test = 12345
+	var url: String = "https://store.steampowered.com/app/12345"
+	if DemoBuildScript361.store_url() != url:
+		failures.append("the store URL is %s" % DemoBuildScript361.store_url())
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	await _await_ticks(2)
+	var title_button: Button = screen.title_button("wishlist")
+	if title_button == null:
+		failures.append("no title Wishlist button")
+		DemoBuildScript361.forced = -1
+		DemoBuildScript361.store_app_id_for_test = -1
+		steam.shell_open_for_test = Callable()
+		PadMenuScript368.reset()
+		await _teardown(rig["main"])
+		return failures
+	title_button.pressed.emit()
+	if opened != [url]:
+		failures.append("the title button opened %s, wanted [%s]" % [opened, url])
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.physical_keycode = KEY_W
+	screen._unhandled_key_input(key)
+	if opened != [url, url]:
+		failures.append("key W on the title opened %s" % [opened])
+	screen.show_title(false)
+	screen.show_panel("end_card")
+	await _await_ticks(2)
+	var card_button: Button = screen.end_card_panel().find_child("EndCard_wishlist", true, false) as Button
+	card_button.pressed.emit()
+	if opened.size() != 3:
+		failures.append("the end card button opened %s" % [opened])
+	screen._unhandled_key_input(key)
+	if opened.size() != 4:
+		failures.append("key W on the end card opened %s" % [opened])
+	steam.fake_running_for_test = true
+	steam.calls_for_test = []
+	card_button.pressed.emit()
+	if steam.calls_for_test != [["open_store_page", 12345]] or opened.size() != 4:
+		failures.append("with Steam running: calls %s, browser opens %d (wanted the overlay call and no browser)" % [steam.calls_for_test, opened.size()])
+	steam.fake_running_for_test = false
+	steam.calls_for_test = []
+	DemoBuildScript361.store_app_id_for_test = 0
+	DemoBuildScript361.open_wishlist(self)
+	DemoBuildScript361.store_app_id_for_test = 12345
+	DemoBuildScript361.forced = 0
+	DemoBuildScript361.open_wishlist(self)
+	steam.fake_running_for_test = true
+	DemoBuildScript361.open_wishlist(self)
+	steam.fake_running_for_test = false
+	if opened.size() != 4 or not steam.calls_for_test.is_empty():
+		failures.append("an unset ID or the full game opened a store page: %s" % [opened])
+	DemoBuildScript361.forced = -1
+	DemoBuildScript361.store_app_id_for_test = -1
+	steam.shell_open_for_test = Callable()
+	steam.calls_for_test = []
+	PadMenuScript368.reset()
+	await _teardown(rig["main"])
+	return failures
 ## Issue #794: every non-English cell is filled, keeps English's %s / %d / %f
 ## placeholders in the same order, and keeps English's line-break count.
 ## Returns one line per problem, naming the key and the locale.
@@ -46978,13 +47119,11 @@ func _csv_cell_problems(rows: Array) -> Array[String]:
 			if cell.count("\n") != english.count("\n"):
 				problems.append("%s %s: %d line breaks, English has %d" % [key, locale, cell.count("\n"), english.count("\n")])
 	return problems
-
 func _csv_marks(placeholder: RegEx, text: String) -> Array[String]:
 	var marks: Array[String] = []
 	for found: RegExMatch in placeholder.search_all(text):
 		marks.append(found.get_string())
 	return marks
-
 ## Every row of a csv file as a PackedStringArray, the header included.
 func _csv_rows(path: String) -> Array:
 	var rows: Array = []
@@ -46996,7 +47135,6 @@ func _csv_rows(path: String) -> Array:
 		if not (row.size() == 1 and row[0].is_empty()):
 			rows.append(row)
 	return rows
-
 func _scenario_translations_have_no_blank_or_mismatched_cells_794() -> Array[String]:
 	var failures: Array[String] = []
 	var rows: Array = _csv_rows("res://translations/strings.csv")
@@ -47007,7 +47145,6 @@ func _scenario_translations_have_no_blank_or_mismatched_cells_794() -> Array[Str
 	failures.append_array(_csv_cell_problems(rows))
 	_scenario_completed = true
 	return failures
-
 ## The check must fail on a bad row, not just pass on the real file: one
 ## fixture row per fault (blank cell, dropped placeholder, swapped order,
 ## lost line break), plus a good row that must stay quiet.
@@ -47030,6 +47167,225 @@ func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
 			failures.append("no problem named for '%s' in: %s" % [expected, joined])
 	if joined.contains("GOOD"):
 		failures.append("the good fixture row was flagged: %s" % joined)
+	_scenario_completed = true
+	return failures
+## Issue #795: the match-winning KO saves the replay buffer once its slow motion ends, and the victory screen says so.
+func _scenario_match_win_ko_autosaves_clip_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(true)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] < 1:
+		failures.append("no clip frames were saved after the match-winning KO")
+	if not run["label"]:
+		failures.append("the victory screen showed no Clip saved line")
+	if run["saved_early"]:
+		failures.append("the clip was saved before the slow-mo ended")
+	_scenario_completed = true
+	return failures
+## Issue #795: with Auto-save match clips off nothing is written and no line shows.
+func _scenario_autosave_clip_switch_off_saves_nothing_795() -> Array[String]:
+	var run: Dictionary = await _run_autosave_795(false)
+	var failures: Array[String] = run["failures"]
+	if run["pngs"] != 0:
+		failures.append("the switch was off but %d frames were saved" % run["pngs"])
+	if run["label"]:
+		failures.append("the switch was off but the victory screen showed Clip saved")
+	_scenario_completed = true
+	return failures
+func _run_autosave_795(switch_on: bool) -> Dictionary:
+	var out: Dictionary = {"failures": [] as Array[String], "pngs": 0, "label": false, "saved_early": false}
+	var failures: Array[String] = out["failures"]
+	var host: RefCounted = HostSettingsScript704.shared()
+	var was: bool = host.auto_save_clips
+	var scale_was: float = Engine.time_scale
+	host.auto_save_clips = switch_on
+	var scratch: String = "user://pf_795_%d_%s" % [OS.get_process_id(), "on" if switch_on else "off"]
+	var loop: Dictionary = _new_lobby_round(2, 2.0)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var replay: Node = rm._replay
+	replay.clips_dir = scratch
+	replay.encode_gif = false
+	for i in 4:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.1 * i, 0.5, 0.5))
+		replay.push_frame(img)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			break
+		players[1].eliminate()
+		await _await_ticks(3)
+	if rm.final_ko_active() and not String(replay.autosaved_dir).is_empty():
+		out["saved_early"] = true
+	await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC)
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the victory screen never followed the slow-mo")
+	var label: Node = rm.victory_panel().find_child("ClipSaved", true, false) if rm.victory_panel() != null else null
+	out["label"] = label != null and (label as Control).visible
+	var da := DirAccess.open(ProjectSettings.globalize_path(scratch))
+	if da != null:
+		for d: String in da.get_directories():
+			var sub := DirAccess.open(ProjectSettings.globalize_path(scratch).path_join(d))
+			for f: String in sub.get_files():
+				if f.ends_with(".png"):
+					out["pngs"] += 1
+				sub.remove(f)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch).path_join(d))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+	replay.autosaved_dir = ""
+	host.auto_save_clips = was
+	await _teardown(loop["stage"])
+	Engine.time_scale = scale_was
+	return out
+func _scenario_paused_banner_hint_follows_active_input_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var host: Object = screen._host
+	host._pad_active = true
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.visible:
+		failures.append("no resume hint under the PAUSED banner")
+		await _teardown(rig["main"])
+		return failures
+	if hint.text != screen.tr("PAUSED_HINT_PAD") or hint.text == "PAUSED_HINT_PAD":
+		failures.append("pad active: hint reads '%s'" % hint.text)
+	if hint.get_theme_font_size("font_size") < 16:
+		failures.append("hint is below 16 design px")
+	screen.show_pause_banner(false)
+	host._pad_active = false
+	screen.show_pause_banner(true)
+	if hint.text != screen.tr("PAUSED_HINT_KEYS") or hint.text == "PAUSED_HINT_KEYS":
+		failures.append("keyboard active: hint reads '%s'" % hint.text)
+	if screen.tr("PAUSED_HINT_KEYS") == screen.tr("PAUSED_HINT_PAD"):
+		failures.append("pad and keyboard hints are the same text")
+	screen.show_pause_banner(false)
+	await _teardown(rig["main"])
+	return failures
+func _scenario_paused_banner_hint_hidden_when_not_paused_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if screen._cards.pause_hint_label() != null:
+		failures.append("a hint exists before any pause")
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.is_visible_in_tree():
+		failures.append("hint not shown while paused")
+	screen.show_pause_banner(false)
+	if hint != null and hint.is_visible_in_tree():
+		failures.append("hint stayed up after resume")
+	await _teardown(rig["main"])
+	return failures
+## Scenes that cannot instantiate headless on purpose (#802). Empty today;
+## add "res://scenes/X.tscn": "reason" here rather than skipping silently.
+const SCENE_INSTANTIATE_ALLOWLIST: Dictionary = {}
+## Every .tscn path under dir, recursively.
+func _scene_paths_802(dir: String) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for f: String in DirAccess.get_files_at(dir):
+		if f.ends_with(".tscn"):
+			out.append(dir.path_join(f))
+	for d: String in DirAccess.get_directories_at(dir):
+		out.append_array(_scene_paths_802(dir.path_join(d)))
+	return out
+## ext_resource paths in scene text that do not exist (source file check, so
+## it does not depend on the .godot/imported cache).
+func _dead_ext_resource_paths_802(text: String) -> PackedStringArray:
+	var dead: PackedStringArray = PackedStringArray()
+	var re: RegEx = RegEx.new()
+	re.compile("\\[ext_resource[^\\]]*?path=\"([^\"]+)\"")
+	for m: RegExMatch in re.search_all(text):
+		var path: String = m.get_string(1)
+		if not FileAccess.file_exists(path) and not ResourceLoader.exists(path):
+			dead.append(path)
+	return dead
+func _scenario_every_scene_loads_and_instantiates_802() -> Array[String]:
+	var failures: Array[String] = []
+	var scenes: PackedStringArray = _scene_paths_802("res://scenes")
+	if scenes.size() < 50:
+		failures.append("only %d scenes found under res://scenes" % scenes.size())
+	for path: String in scenes:
+		if SCENE_INSTANTIATE_ALLOWLIST.has(path):
+			continue
+		var text: String = FileAccess.get_file_as_string(path)
+		for dead: String in _dead_ext_resource_paths_802(text):
+			failures.append("%s: dead ext_resource path %s" % [path, dead])
+		var packed: Resource = ResourceLoader.load(path)
+		if not (packed is PackedScene):
+			failures.append("%s: load returned %s" % [path, packed])
+			continue
+		var inst: Node = (packed as PackedScene).instantiate()
+		if inst == null:
+			failures.append("%s: instantiate returned null" % path)
+			continue
+		inst.free()
+	_scenario_completed = true
+	return failures
+func _scenario_scene_check_catches_a_dead_resource_path_802() -> Array[String]:
+	var failures: Array[String] = []
+	var bad: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/NoSuchScript802.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var good: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/Player.gd" id="1"]\n[node name="X" type="Node"]\n'
+	var dead: PackedStringArray = _dead_ext_resource_paths_802(bad)
+	if dead.size() != 1 or dead[0] != "res://scripts/NoSuchScript802.gd":
+		failures.append("dead path not flagged: %s" % [dead])
+	if _dead_ext_resource_paths_802(good).size() != 0:
+		failures.append("a live path was flagged")
+	_scenario_completed = true
+	return failures
+
+## Repo paths that docs may name although they are gitignored or generated
+## on purpose (a clone will not have them).
+const DOC_PATH_ALLOWLIST_803: PackedStringArray = ["build/", "export/", "docs/launch/"]
+
+## Every backticked repo path in `text` that does not exist, as
+## "<label>:<line>: <path>". Globs and <placeholder> paths are skipped.
+func _doc_missing_paths_803(label: String, text: String) -> Array[String]:
+	var problems: Array[String] = []
+	var rx := RegEx.new()
+	rx.compile("`((?:scripts|scenes|tools|docs|controller|site)/[^`\\s]*)`")
+	var lines: PackedStringArray = text.split("\n")
+	for i: int in lines.size():
+		for m: RegExMatch in rx.search_all(lines[i]):
+			var p: String = m.get_string(1)
+			if p.contains("*") or p.contains("<") or p.contains("{") or p.contains("$"):
+				continue
+			p = p.split("#")[0].rstrip(".,;:)")
+			if p.contains("("):
+				p = p.split("(")[0]
+			var skip := false
+			for a: String in DOC_PATH_ALLOWLIST_803:
+				if p.begins_with(a):
+					skip = true
+			if skip or p.is_empty():
+				continue
+			if not FileAccess.file_exists("res://" + p) and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://" + p)):
+				problems.append("%s:%d: %s" % [label, i + 1, p])
+	return problems
+
+func _scenario_doc_paths_point_at_real_files_803() -> Array[String]:
+	var failures: Array[String] = []
+	var files: Array[String] = ["res://docs/FEATURES.md"]
+	for dir: String in ["res://docs/agents", "res://docs/adr", "res://docs"]:
+		for f: String in DirAccess.get_files_at(dir):
+			var ok: bool = f.ends_with(".md") and (dir != "res://docs" or f.begins_with("steam-"))
+			if ok:
+				files.append(dir + "/" + f)
+	for path: String in files:
+		failures.append_array(_doc_missing_paths_803(path.trim_prefix("res://"), FileAccess.get_file_as_string(path)))
+	_scenario_completed = true
+	return failures
+
+func _scenario_doc_path_check_catches_a_missing_file_803() -> Array[String]:
+	var failures: Array[String] = []
+	var doc: String = "ok `scripts/Player.gd`\nbad `scripts/NoSuchThing.gd` here\nglob `scripts/*.gd` `tools/<name>.sh`"
+	var problems: Array[String] = _doc_missing_paths_803("fixture.md", doc)
+	if problems.size() != 1 or not problems[0].contains("fixture.md:2: scripts/NoSuchThing.gd"):
+		failures.append("fixture gave %s, wanted only line 2's missing path" % [problems])
 	_scenario_completed = true
 	return failures
 

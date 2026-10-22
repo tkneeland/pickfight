@@ -645,6 +645,13 @@ func exit_tree() -> void:
 func unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	var lobby_panel: Control = _screen._lobby_panel
+	if key != null and key.pressed and not key.echo and key.physical_keycode == TitleScreenScript.TITLE_WISHLIST_KEY:
+		var card: Control = _screen.end_card_panel() # the demo's end card has the same Wishlist on Steam key (#793)
+		var wishlist: Button = card.find_child("EndCard_wishlist", true, false) as Button if card != null and card.visible else null
+		if wishlist != null:
+			wishlist.pressed.emit()
+			_screen.get_viewport().set_input_as_handled()
+			return
 	if _screen._server == null or key == null or not key.pressed or key.echo or lobby_panel == null or not lobby_panel.visible:
 		return
 	if _screen.popup_open() != "":
@@ -656,6 +663,9 @@ func unhandled_key_input(event: InputEvent) -> void:
 				_screen.get_viewport().set_input_as_handled()
 		if key.physical_keycode == TitleScreenScript.TITLE_QUIT_KEY:
 			_screen.press_title("quit")
+			_screen.get_viewport().set_input_as_handled()
+		if key.physical_keycode == TitleScreenScript.TITLE_WISHLIST_KEY and _screen.title_button("wishlist") != null:
+			_screen.press_title("wishlist")
 			_screen.get_viewport().set_input_as_handled()
 		return
 	for id: String in CONTROL_KEYS:
