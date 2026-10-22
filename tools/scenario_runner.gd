@@ -523,6 +523,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"untouchable_award_832",
 	"haymaker_award_861",
 	"victory_streaker_award_needs_three_unbroken_kos",
+	"victory_combo_award_needs_two_kos_inside_three_seconds",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -951,6 +952,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"career_remote_client_keeps_totals_and_validates_503",
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
+	"bot_opens_umbrella_while_falling",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -2520,6 +2522,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_haymaker_award_861()
 		"victory_streaker_award_needs_three_unbroken_kos":
 			return await _scenario_victory_streaker_award_needs_three_unbroken_kos()
+		"victory_combo_award_needs_two_kos_inside_three_seconds":
+			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -3368,6 +3372,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_rod_casts_and_reels_rival_632()
 		"bot_grapple_zips_to_rival_out_of_reach_632":
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
+		"bot_opens_umbrella_while_falling":
+			return await _scenario_bot_opens_umbrella_while_falling()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -16028,7 +16034,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 6 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 7 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -16100,8 +16106,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 6:
-		failures.append("the victory screen shows %s awards, expected 6" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 7:
+		failures.append("the victory screen shows %s awards, expected 7" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -30129,6 +30135,58 @@ func _scenario_victory_streaker_award_needs_three_unbroken_kos() -> Array[String
 	_scenario_completed = true
 	return failures
 
+## Issue #921: Combo goes to the longest multi-KO chain inside 3 s, at least 2, no ties.
+func _scenario_victory_combo_award_needs_two_kos_inside_three_seconds() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Combo")
+	var ko := func(stats: RefCounted, killer: int, victim: int, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	ko.call(stats, 0, 1, 1000)
+	ko.call(stats, 0, 2, 3500)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "2 KOs in 3s":
+		failures.append("expected Combo for slot 0 with 2 KOs in 3s, got %s" % [found])
+	var slow: RefCounted = MatchStatsScript.new()
+	slow.begin_match()
+	ko.call(slow, 0, 1, 1000)
+	ko.call(slow, 0, 2, 4100)
+	if not find.call(slow).is_empty():
+		failures.append("Combo given for KOs 3.1 s apart")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	ko.call(tied, 0, 2, 1000)
+	ko.call(tied, 0, 3, 1500)
+	ko.call(tied, 1, 2, 1000)
+	ko.call(tied, 1, 3, 1500)
+	if not find.call(tied).is_empty():
+		failures.append("Combo given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	ko.call(hazard, 0, 1, 1000)
+	hazard.record_elimination(2, 1500)
+	hazard.record_elimination(0, 1800)
+	if not find.call(hazard).is_empty():
+		failures.append("hazard or self KO built a Combo: %s" % [hazard.best_multi_ko])
+	var triple: RefCounted = MatchStatsScript.new()
+	triple.begin_match()
+	for i: int in 3:
+		ko.call(triple, 0, 1 + i, 1000 + i * 500)
+	ko.call(triple, 1, 2, 9000)
+	ko.call(triple, 1, 3, 9500)
+	found = find.call(triple)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 KOs in 3s":
+		failures.append("expected the triple to win Combo, got %s" % [found])
+	stats.begin_match()
+	if not stats.best_multi_ko.is_empty():
+		failures.append("begin_match left multi-KOs behind")
+	stats.forget_slot(0)
+	_scenario_completed = true
+	return failures
+
 ## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
 func _scenario_haymaker_award_861() -> Array[String]:
 	var failures: Array[String] = []
@@ -30242,8 +30300,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 7:
-		failures.append("expected 7 award cards (3 core + Magpie + Untouchable + Haymaker + Streaker), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 8:
+		failures.append("expected 8 award cards (3 core + Magpie + Untouchable + Haymaker + Streaker + Combo), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
@@ -43384,6 +43442,43 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 		failures.append("the bot never closed to 150 px")
 	elif walk["close_at"] >= 0 and zip["close_at"] >= walk["close_at"]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
+	_scenario_completed = true
+	return failures
+## Issue #915: a lone bot dropped from height. Returns whether the canopy was
+## ever open and the fastest fall speed seen.
+func _bot_drop_915(weapon_path: String) -> Dictionary:
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, weapon_path)
+	player.global_position = DEEP_PARK_POSITION
+	player.linear_velocity = Vector2.ZERO
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"open": false, "fastest": 0.0}
+	for t in 200:
+		await physics_frame
+		out["open"] = out["open"] or player.canopy_open()
+		if t >= 90: # after the head has had time to swing overhead
+			out["fastest"] = maxf(out["fastest"], player.linear_velocity.y)
+	await _teardown(stage, false)
+	return out
+## A bot holding the umbrella opens the canopy in a long fall and lands slower
+## than a bot holding the pickaxe dropped the same way.
+func _scenario_bot_opens_umbrella_while_falling() -> Array[String]:
+	var failures: Array[String] = []
+	var umbrella: Dictionary = await _bot_drop_915(UMBRELLA_PATH)
+	var pickaxe: Dictionary = await _bot_drop_915(PICKAXE_STARTER_PATH)
+	print("      bot_opens_umbrella_while_falling: open=%s umbrella_fastest=%.0f pickaxe_fastest=%.0f" % [umbrella["open"], umbrella["fastest"], pickaxe["fastest"]])
+	if not umbrella["open"]:
+		failures.append("the bot never opened the canopy while falling")
+	if pickaxe["open"]:
+		failures.append("a bot with the pickaxe reported an open canopy")
+	if umbrella["fastest"] > pickaxe["fastest"] * 0.6:
+		failures.append("the umbrella bot fell at %.0f px/s, not clearly slower than the pickaxe bot's %.0f" % [umbrella["fastest"], pickaxe["fastest"]])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
