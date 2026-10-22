@@ -667,6 +667,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
 	"deck_text_is_legible_at_1280x800",
+	"paused_banner_hint_follows_active_input_810",
+	"paused_banner_hint_hidden_when_not_paused_810",
 	"deck_lobby_join_qr_and_url_fit_the_deck_screen",
 	"deck_gamepad_reaches_every_lobby_control",
 	"deck_gamepad_operates_the_settings_panel",
@@ -2724,6 +2726,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_character_polish_weapon_head_has_ink_outline()
 		"deck_text_is_legible_at_1280x800":
 			return await _scenario_deck_text_is_legible_at_1280x800()
+		"paused_banner_hint_follows_active_input_810":
+			return await _scenario_paused_banner_hint_follows_active_input_810()
+		"paused_banner_hint_hidden_when_not_paused_810":
+			return await _scenario_paused_banner_hint_hidden_when_not_paused_810()
 		"deck_lobby_join_qr_and_url_fit_the_deck_screen":
 			return await _scenario_deck_lobby_join_qr_and_url_fit_the_deck_screen()
 		"deck_gamepad_reaches_every_lobby_control":
@@ -45958,7 +45964,6 @@ func _scenario_quit_game_pc_client_leaves_room_718() -> Array[String]:
 	QuitGameScript718.quit_action = Callable()
 	_scenario_completed = true # nothing here builds a stage for _teardown() to free
 	return failures
-
 ## Issue #721: the Credits screen opens from the title screen's Credits button (one D-pad step right of
 ## Quit) and from Settings, shows the studio, music, font, engine and translation credits plus the
 ## licence texts from THIRD-PARTY.md, and closes with the X, Esc and the gamepad's B (Esc leaves the
@@ -46639,8 +46644,6 @@ func _scenario_restore_defaults_750() -> Array[String]:
 		ui.toggle_panel()
 	_scenario_completed = true
 	return failures
-
-
 ## Issue #779: a living fighter outside the camera view gets an edge arrow in their colour, pinned
 ## inside the screen and pointing at them; it fades out once they are back in frame or KO'd.
 func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
@@ -46831,7 +46834,6 @@ func _scenario_frame_rate_cap_and_vsync_persist_and_apply_774() -> Array[String]
 	DisplayServer.window_set_vsync_mode(was_vsync)
 	_scenario_completed = true
 	return failures
-
 ## Issue #776: the host sends its Reduce flashes setting to a phone on join and on every
 ## change, and the phone page has the calm-cue hooks that honour it and prefers-reduced-motion.
 func _scenario_phone_reduce_flashes_776() -> Array[String]:
@@ -46899,7 +46901,6 @@ func _scenario_phone_reduce_flashes_776() -> Array[String]:
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
-
 func _scenario_phone_weak_connection_777() -> Array[String]:
 	var failures: Array[String] = []
 	var stage := Node2D.new()
@@ -47110,13 +47111,11 @@ func _csv_cell_problems(rows: Array) -> Array[String]:
 			if cell.count("\n") != english.count("\n"):
 				problems.append("%s %s: %d line breaks, English has %d" % [key, locale, cell.count("\n"), english.count("\n")])
 	return problems
-
 func _csv_marks(placeholder: RegEx, text: String) -> Array[String]:
 	var marks: Array[String] = []
 	for found: RegExMatch in placeholder.search_all(text):
 		marks.append(found.get_string())
 	return marks
-
 ## Every row of a csv file as a PackedStringArray, the header included.
 func _csv_rows(path: String) -> Array:
 	var rows: Array = []
@@ -47128,7 +47127,6 @@ func _csv_rows(path: String) -> Array:
 		if not (row.size() == 1 and row[0].is_empty()):
 			rows.append(row)
 	return rows
-
 func _scenario_translations_have_no_blank_or_mismatched_cells_794() -> Array[String]:
 	var failures: Array[String] = []
 	var rows: Array = _csv_rows("res://translations/strings.csv")
@@ -47139,7 +47137,6 @@ func _scenario_translations_have_no_blank_or_mismatched_cells_794() -> Array[Str
 	failures.append_array(_csv_cell_problems(rows))
 	_scenario_completed = true
 	return failures
-
 ## The check must fail on a bad row, not just pass on the real file: one
 ## fixture row per fault (blank cell, dropped placeholder, swapped order,
 ## lost line break), plus a good row that must stay quiet.
@@ -47164,7 +47161,6 @@ func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
 		failures.append("the good fixture row was flagged: %s" % joined)
 	_scenario_completed = true
 	return failures
-
 ## Issue #795: the match-winning KO saves the replay buffer once its slow motion ends, and the victory screen says so.
 func _scenario_match_win_ko_autosaves_clip_795() -> Array[String]:
 	var run: Dictionary = await _run_autosave_795(true)
@@ -47177,7 +47173,6 @@ func _scenario_match_win_ko_autosaves_clip_795() -> Array[String]:
 		failures.append("the clip was saved before the slow-mo ended")
 	_scenario_completed = true
 	return failures
-
 ## Issue #795: with Auto-save match clips off nothing is written and no line shows.
 func _scenario_autosave_clip_switch_off_saves_nothing_795() -> Array[String]:
 	var run: Dictionary = await _run_autosave_795(false)
@@ -47188,7 +47183,6 @@ func _scenario_autosave_clip_switch_off_saves_nothing_795() -> Array[String]:
 		failures.append("the switch was off but the victory screen showed Clip saved")
 	_scenario_completed = true
 	return failures
-
 func _run_autosave_795(switch_on: bool) -> Dictionary:
 	var out: Dictionary = {"failures": [] as Array[String], "pngs": 0, "label": false, "saved_early": false}
 	var failures: Array[String] = out["failures"]
@@ -47238,12 +47232,50 @@ func _run_autosave_795(switch_on: bool) -> Dictionary:
 	await _teardown(loop["stage"])
 	Engine.time_scale = scale_was
 	return out
-
-
+func _scenario_paused_banner_hint_follows_active_input_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var host: Object = screen._host
+	host._pad_active = true
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.visible:
+		failures.append("no resume hint under the PAUSED banner")
+		await _teardown(rig["main"])
+		return failures
+	if hint.text != screen.tr("PAUSED_HINT_PAD") or hint.text == "PAUSED_HINT_PAD":
+		failures.append("pad active: hint reads '%s'" % hint.text)
+	if hint.get_theme_font_size("font_size") < 16:
+		failures.append("hint is below 16 design px")
+	screen.show_pause_banner(false)
+	host._pad_active = false
+	screen.show_pause_banner(true)
+	if hint.text != screen.tr("PAUSED_HINT_KEYS") or hint.text == "PAUSED_HINT_KEYS":
+		failures.append("keyboard active: hint reads '%s'" % hint.text)
+	if screen.tr("PAUSED_HINT_KEYS") == screen.tr("PAUSED_HINT_PAD"):
+		failures.append("pad and keyboard hints are the same text")
+	screen.show_pause_banner(false)
+	await _teardown(rig["main"])
+	return failures
+func _scenario_paused_banner_hint_hidden_when_not_paused_810() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	if screen._cards.pause_hint_label() != null:
+		failures.append("a hint exists before any pause")
+	screen.show_pause_banner(true)
+	var hint: Label = screen._cards.pause_hint_label()
+	if hint == null or not hint.is_visible_in_tree():
+		failures.append("hint not shown while paused")
+	screen.show_pause_banner(false)
+	if hint != null and hint.is_visible_in_tree():
+		failures.append("hint stayed up after resume")
+	await _teardown(rig["main"])
+	return failures
 ## Scenes that cannot instantiate headless on purpose (#802). Empty today;
 ## add "res://scenes/X.tscn": "reason" here rather than skipping silently.
 const SCENE_INSTANTIATE_ALLOWLIST: Dictionary = {}
-
 ## Every .tscn path under dir, recursively.
 func _scene_paths_802(dir: String) -> PackedStringArray:
 	var out: PackedStringArray = PackedStringArray()
@@ -47253,7 +47285,6 @@ func _scene_paths_802(dir: String) -> PackedStringArray:
 	for d: String in DirAccess.get_directories_at(dir):
 		out.append_array(_scene_paths_802(dir.path_join(d)))
 	return out
-
 ## ext_resource paths in scene text that do not exist (source file check, so
 ## it does not depend on the .godot/imported cache).
 func _dead_ext_resource_paths_802(text: String) -> PackedStringArray:
@@ -47265,7 +47296,6 @@ func _dead_ext_resource_paths_802(text: String) -> PackedStringArray:
 		if not FileAccess.file_exists(path) and not ResourceLoader.exists(path):
 			dead.append(path)
 	return dead
-
 func _scenario_every_scene_loads_and_instantiates_802() -> Array[String]:
 	var failures: Array[String] = []
 	var scenes: PackedStringArray = _scene_paths_802("res://scenes")
@@ -47288,7 +47318,6 @@ func _scenario_every_scene_loads_and_instantiates_802() -> Array[String]:
 		inst.free()
 	_scenario_completed = true
 	return failures
-
 func _scenario_scene_check_catches_a_dead_resource_path_802() -> Array[String]:
 	var failures: Array[String] = []
 	var bad: String = '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://scripts/NoSuchScript802.gd" id="1"]\n[node name="X" type="Node"]\n'
