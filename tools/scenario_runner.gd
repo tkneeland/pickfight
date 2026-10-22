@@ -991,6 +991,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 	"translations_have_no_blank_or_mismatched_cells_794",
 	"translation_cell_check_flags_bad_fixture_794",
+	"stage_rotation_data_has_only_real_keys_801",
+	"stage_rotation_data_check_catches_a_typo_801",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3120,6 +3122,8 @@ func _run_scenario(name: String) -> Array[String]:
 		"phone_weak_connection_chip_shows_and_clears_777": return await _scenario_phone_weak_connection_777()
 		"translations_have_no_blank_or_mismatched_cells_794": return await _scenario_translations_have_no_blank_or_mismatched_cells_794()
 		"translation_cell_check_flags_bad_fixture_794": return await _scenario_translation_cell_check_flags_bad_fixture_794()
+		"stage_rotation_data_has_only_real_keys_801": return await _scenario_stage_rotation_data_has_only_real_keys_801()
+		"stage_rotation_data_check_catches_a_typo_801": return await _scenario_stage_rotation_data_check_catches_a_typo_801()
 		"settings_hygiene_609":
 			return _scenario_settings_hygiene_609()
 		"bot_holds_hill_and_flag_without_hopping_607":
@@ -47026,5 +47030,83 @@ func _scenario_translation_cell_check_flags_bad_fixture_794() -> Array[String]:
 			failures.append("no problem named for '%s' in: %s" % [expected, joined])
 	if joined.contains("GOOD"):
 		failures.append("the good fixture row was flagged: %s" % joined)
+	_scenario_completed = true
+	return failures
+
+## Problems in one stage's hand-typed rotation data, each naming the stage and
+## the bad key. `data` holds "mode_weights" and optionally
+## "weapon_weight_overrides" as dictionaries (#801).
+func _stage_data_problems(stage_name: String, data: Dictionary) -> Array[String]:
+	var problems: Array[String] = []
+	var modes_script := preload("res://scripts/GameModes.gd")
+	var weapon_ids: PackedStringArray = []
+	for path: String in preload("res://scripts/PickupWeapons.gd").WEAPON_PATHS:
+		weapon_ids.append(path.get_file().get_basename())
+	var weights: Dictionary = data.get("mode_weights", {})
+	for key: Variant in weights:
+		if not (key is String and (key == "_other" or modes_script.IDS.has(key))):
+			problems.append("%s: mode_weights key '%s' is not a mode id or _other" % [stage_name, key])
+		var w: Variant = weights[key]
+		if not ((w is float or w is int) and float(w) > 0.0):
+			problems.append("%s: mode_weights '%s' weight %s is not a number above zero" % [stage_name, key, w])
+	var overrides: Dictionary = data.get("weapon_weight_overrides", {})
+	for key: Variant in overrides:
+		if not (key is String and weapon_ids.has(key)):
+			problems.append("%s: weapon_weight_overrides key '%s' is not a pickup weapon id" % [stage_name, key])
+	return problems
+
+## The stage .tscn's `mode_weights` / `weapon_weight_overrides` lines as data.
+func _stage_data_from_tscn(path: String) -> Dictionary:
+	var data: Dictionary = {}
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return data
+	for line: String in file.get_as_text().split("\n"):
+		for prop: String in ["mode_weights", "weapon_weight_overrides"]:
+			if line.begins_with(prop + " = "):
+				data[prop] = str_to_var(line.substr(prop.length() + 3).strip_edges())
+	return data
+
+func _scenario_stage_rotation_data_has_only_real_keys_801() -> Array[String]:
+	var failures: Array[String] = []
+	var modes_script := preload("res://scripts/GameModes.gd")
+	var covered: Dictionary = {}
+	var count: int = 0
+	var dir: DirAccess = DirAccess.open("res://scenes/stages")
+	if dir == null:
+		failures.append("cannot open res://scenes/stages")
+		_scenario_completed = true
+		return failures
+	for file_name: String in dir.get_files():
+		if not file_name.ends_with(".tscn"):
+			continue
+		count += 1
+		var data: Dictionary = _stage_data_from_tscn("res://scenes/stages/" + file_name)
+		for prop: String in ["mode_weights", "weapon_weight_overrides"]:
+			if data.has(prop) and not (data[prop] is Dictionary):
+				failures.append("%s: %s is not a dictionary" % [file_name, prop])
+				data.erase(prop)
+		failures.append_array(_stage_data_problems(file_name, data))
+		for key: Variant in data.get("mode_weights", {}):
+			covered[key] = true
+	if count < 40:
+		failures.append("only %d stages found, the check is not reading scenes/stages" % count)
+	for mode_id: String in [modes_script.CAPTURE_THE_FLAG, modes_script.SOCCER, modes_script.KING_OF_THE_HILL, modes_script.HOT_POTATO]:
+		if not covered.has(mode_id):
+			failures.append("no stage has a mode_weights entry for '%s'" % mode_id)
+	_scenario_completed = true
+	return failures
+
+func _scenario_stage_rotation_data_check_catches_a_typo_801() -> Array[String]:
+	var failures: Array[String] = []
+	var good: Array[String] = _stage_data_problems("Good", {"mode_weights": {"soccer": 4.0, "_other": 0.3}, "weapon_weight_overrides": {"boomstick": 3}})
+	if not good.is_empty():
+		failures.append("a good stage was flagged: %s" % str(good))
+	var bad: String = "\n".join(PackedStringArray(_stage_data_problems("Bad", {
+		"mode_weights": {"capture_the_flag ": 4.0, "soccer": 0.0},
+		"weapon_weight_overrides": {"boomstik": 3}})))
+	for expected: String in ["Bad: mode_weights key 'capture_the_flag '", "Bad: mode_weights 'soccer' weight", "Bad: weapon_weight_overrides key 'boomstik'"]:
+		if not bad.contains(expected):
+			failures.append("no problem containing '%s' in: %s" % [expected, bad])
 	_scenario_completed = true
 	return failures
