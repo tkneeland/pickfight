@@ -16431,6 +16431,18 @@ func _scenario_round_modifier_meteor_shower_hits_and_undoes() -> Array[String]:
 		var victim: RigidBody2D = players[0]
 		if victim.spawn_protected:
 			extra.append("P0 is still spawn-protected %.1f s in" % METEOR_WATCH_SEC)
+		# The shower is still running, and one of its random meteors landing on
+		# P0 first (knocking them off the spot, or in flight when the test drop
+		# lands) made this part flaky (#782). Stop the spawner and clear what it
+		# dropped, so the one measured meteor is the only one in play.
+		for child: Node in round_manager.get_children():
+			if child is Timer and child.name.begins_with("RoundModifierTimer"):
+				(child as Timer).stop()
+		for stray: Variant in modifier.live_meteors():
+			if is_instance_valid(stray):
+				(stray as Node).queue_free()
+		await physics_frame
+		await physics_frame
 		var damage_before: float = victim.damage
 		var meteor: Node2D = modifier.spawn_meteor_at(victim.global_position + Vector2(0.0, -METEOR_TEST_DROP), Vector2(0.0, METEOR_TEST_SPEED))
 		# The meteor frees itself the tick it hits, so the hit is heard on the
