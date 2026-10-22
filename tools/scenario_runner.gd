@@ -1026,6 +1026,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_point_skipped_when_target_is_1_829",
 	"text_size_setting_751",
 	"text_size_auto_fit_751",
+	"launch_copy_counts_match_the_game_797",
+	"launch_copy_count_check_catches_a_wrong_count_797",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3451,6 +3453,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_text_size_setting_751()
 		"text_size_auto_fit_751":
 			return await _scenario_text_size_auto_fit_751()
+		"launch_copy_counts_match_the_game_797":
+			return _scenario_launch_copy_counts_match_the_game_797()
+		"launch_copy_count_check_catches_a_wrong_count_797":
+			return _scenario_launch_copy_count_check_catches_a_wrong_count_797()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -48540,4 +48546,109 @@ func _text_fit_synthetic_751(sfx: Node, fit_script: GDScript) -> Array[String]:
 		failures.append("Normal did not restore the tight screen (factor %.2f, label %d px)" % [sfx.fit_factor(tight), first_word.get_theme_font_size("font_size")])
 	layer.queue_free()
 	await _await_ticks(2)
+	return failures
+## The numbers the launch copy quotes, counted from the game (#797): the stage
+## .tscn files (cross-checked against Main's rotation), the pickaxe plus the
+## pickup roster minus the retired weapons, the language list and the player
+## palette. Each is a list of the counts a doc may quote: languages also allow
+## "everything but English" for the translated store text.
+func _launch_game_counts_797() -> Dictionary:
+	var stage_files: int = 0
+	for file_name: String in DirAccess.get_files_at("res://scenes/stages"):
+		if file_name.ends_with(".tscn"):
+			stage_files += 1
+	var weapons_script := preload("res://scripts/PickupWeapons.gd")
+	var weapons: int = 1 + weapons_script.WEAPON_PATHS.size() - weapons_script.RETIRED_PATHS.size()
+	var languages: int = preload("res://scripts/Languages.gd").codes().size()
+	var players: int = preload("res://scripts/Palette.gd").PLAYERS.size()
+	return {"stages": stage_files, "weapons": weapons, "languages": languages, "players": players}
+
+## Problems in one launch doc: every `<number> <noun>` pair naming stages,
+## weapons, languages or players (digits or English number words, in any of
+## the store page's languages) whose number is not in `allowed[noun]`. Each
+## problem names the file, the line, the stale number and the real one.
+func _launch_copy_problems_797(label: String, text: String, allowed: Dictionary) -> Array[String]:
+	var problems: Array[String] = []
+	var words: Dictionary = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "twenty": 20}
+	var nouns: Dictionary = {
+		"stages": "stage|\\p{Han}{0,3}关卡|арен|escenario|cenário|arène",
+		"weapons": "weapon|\\p{Han}{0,3}武器|оруж|arma|arme|waffe",
+		"languages": "language|\\p{Han}{0,3}语言|言語|언어|язык|idioma|sprache|langue",
+		"players": "player(?!s? each)|人|игрок|jugador|jogador|spieler|joueur|persona|pessoa",
+	}
+	var lines: PackedStringArray = text.split("\n")
+	for noun: String in nouns:
+		var regex := RegEx.new()
+		regex.compile("(?i)(?<![\\p{L}\\d\"=])(\\d+|" + "|".join(words.keys()) + ")(?![\\p{L}\\d])[\\s个种]*(?:[^\\s\\d,.:;()]+\\s+){0,2}?(?:" + nouns[noun] + ")")
+		for i: int in lines.size():
+			for found: RegExMatch in regex.search_all(lines[i]):
+				var quoted_text: String = found.get_string(1).to_lower()
+				var quoted: int = int(words[quoted_text]) if words.has(quoted_text) else int(quoted_text)
+				if not (allowed[noun] as Array).has(quoted):
+					problems.append("%s:%d: quotes %d %s, the game has %s" % [label, i + 1, quoted, noun, allowed[noun]])
+	return problems
+
+func _launch_copy_files_797() -> Dictionary:
+	return {
+		"site/index.html": "res://site/index.html",
+		"docs/launch/store-page.md": "res://docs/launch/store-page.md",
+		"docs/launch/store-page-l10n.md": "res://docs/launch/store-page-l10n.md",
+	}
+
+func _launch_allowed_counts_797(label: String, counts: Dictionary) -> Dictionary:
+	var languages: Array = [counts["languages"]]
+	if label.ends_with("store-page-l10n.md"):
+		languages.append(int(counts["languages"]) - 1)  # "the 8 shipped languages": every language but English
+	return {"stages": [counts["stages"]], "weapons": [counts["weapons"]], "languages": languages, "players": [counts["players"]]}
+
+func _scenario_launch_copy_counts_match_the_game_797() -> Array[String]:
+	var failures: Array[String] = []
+	var counts: Dictionary = _launch_game_counts_797()
+	var rotation: Array = RegEx.create_from_string("stage_scenes = \\[([^\\]]*)\\]").search(FileAccess.get_file_as_string("res://scenes/Main.tscn")).get_string(1).split("ExtResource")
+	if rotation.size() - 1 != int(counts["stages"]):
+		failures.append("scenes/stages holds %d .tscn files but Main's stage_scenes rotation lists %d" % [counts["stages"], rotation.size() - 1])
+	var files: Dictionary = _launch_copy_files_797()
+	for label: String in files:
+		var text: String = FileAccess.get_file_as_string(files[label])
+		if text.is_empty():
+			failures.append("%s is missing or empty" % label)
+			continue
+		failures.append_array(_launch_copy_problems_797(label, text, _launch_allowed_counts_797(label, counts)))
+	var l10n_sections: int = 0
+	for line: String in FileAccess.get_file_as_string(files["docs/launch/store-page-l10n.md"]).split("\n"):
+		if line.begins_with("## "):
+			l10n_sections += 1
+	if l10n_sections != int(counts["languages"]) - 1:
+		failures.append("store-page-l10n.md has %d translated sections, the game has %d languages besides English" % [l10n_sections, int(counts["languages"]) - 1])
+	_scenario_completed = true
+	return failures
+
+func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[String]:
+	var failures: Array[String] = []
+	var counts: Dictionary = _launch_game_counts_797()
+	var allowed: Dictionary = _launch_allowed_counts_797("fixture.md", counts)
+	var good: String = "%d stages, %d weapons, %s languages, up to %s players\nnine languages" % [counts["stages"], counts["weapons"], counts["languages"], counts["players"]]
+	var found: Array[String] = _launch_copy_problems_797("fixture.md", good, allowed)
+	if found.size() != 0:
+		failures.append("a fixture quoting the real counts was flagged: %s" % [found])
+	var stale: String = "ok\n%d rotating stages\n%d weapons\nTen languages\nfor up to %d players" % [int(counts["stages"]) + 1, int(counts["weapons"]) - 1, int(counts["players"]) + 1]
+	found = _launch_copy_problems_797("fixture.md", stale, allowed)
+	var wanted: Array[String] = ["fixture.md:2: quotes %d stages" % (int(counts["stages"]) + 1), "fixture.md:3: quotes %d weapons" % (int(counts["weapons"]) - 1), "fixture.md:4: quotes 10 languages", "fixture.md:5: quotes %d players" % (int(counts["players"]) + 1)]
+	if found.size() != wanted.size():
+		failures.append("the stale fixture gave %d problems, wanted 4: %s" % [found.size(), found])
+	else:
+		for i: int in wanted.size():
+			if not found[i].contains(wanted[i]) and not found.any(func(p: String) -> bool: return p.contains(wanted[i])):
+				failures.append("no problem named '%s' in %s" % [wanted[i], found])
+	# The real pages checked against a game that grew a stage and a weapon: each must flag.
+	var mutated: Dictionary = counts.duplicate()
+	mutated["stages"] = int(counts["stages"]) + 1
+	mutated["weapons"] = int(counts["weapons"]) + 1
+	mutated["languages"] = int(counts["languages"]) + 1
+	var flagged: Array[String] = _launch_copy_problems_797("site/index.html", FileAccess.get_file_as_string("res://site/index.html"), _launch_allowed_counts_797("site/index.html", mutated))
+	var flagged_text: String = "\n".join(flagged)
+	for noun: String in ["stages", "weapons", "languages"]:
+		if not flagged_text.contains(" " + noun + ", the game has"):
+			failures.append("site/index.html was not flagged for a stale %s count against the mutated game" % noun)
+	_scenario_completed = true
 	return failures
