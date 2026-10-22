@@ -1019,6 +1019,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
+	"match_point_plate_switch_off_shows_none",
 	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
@@ -3479,6 +3480,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kill_feed_switch_833()
 		"damage_numbers_switch_873":
 			return await _scenario_damage_numbers_switch_873()
+		"match_point_plate_switch_off_shows_none":
+			return await _scenario_match_point_plate_switch_off_shows_none()
 		"pickup_callout_switch_off_spawns_none":
 			return await _scenario_pickup_callout_switch_off_spawns_none()
 		"restore_defaults_750":
@@ -49266,6 +49269,63 @@ func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
 		if not sfx.pickup_callouts:
 			failures.append("Restore defaults did not put Pickup callouts back on")
 	sfx.pickup_callouts = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #892: Settings > Match point plate off shows no plate (dots stay); saved; reset by Restore defaults.
+func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.match_point_plate, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_match_point_plate(false)
+	var loop: Dictionary = await _start_match_point_825(3, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the match never started")
+	else:
+		rm._scores[0] = 1
+		players[1].eliminate()
+		var tag: Label = rm.name_tag(0)
+		var dotted: Callable = func() -> bool: return tag != null and tag.get_node_or_null("MatchPointDot") != null
+		if not await _await_condition(dotted, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no gold dot at match point with the plate switched off")
+		if not _match_point_plates_825().is_empty():
+			failures.append("a plate showed with Match point plate off")
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_match_point_plate_892_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_match_point_plate(false)
+	sfx.match_point_plate = true
+	sfx.load_settings()
+	if sfx.match_point_plate:
+		failures.append("Match point plate off was not remembered in the settings file")
+	sfx.set_match_point_plate(true)
+	sfx.match_point_plate = false
+	sfx.load_settings()
+	if not sfx.match_point_plate:
+		failures.append("Match point plate on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.match_point_plate_box()
+	if box == null:
+		failures.append("Settings has no Match point plate box")
+	else:
+		box.button_pressed = false
+		if sfx.match_point_plate:
+			failures.append("unticking the Match point plate box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.match_point_plate:
+			failures.append("Restore defaults did not put Match point plate back on")
+	sfx.match_point_plate = was["flag"]
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures

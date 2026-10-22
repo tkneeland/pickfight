@@ -75,6 +75,7 @@ var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _kill_feed_box: CheckBox
 var _damage_numbers_box: CheckBox
+var _match_point_plate_box: CheckBox
 var _pickup_callouts_box: CheckBox
 var _scale_button: OptionButton
 ## Text size (#751): Settings > More options.
@@ -187,6 +188,7 @@ func _ready() -> void:
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_kill_feed_box = _add_box(content, "KillFeed", tr("SETTINGS_KILL_FEED"))
 	_damage_numbers_box = _add_box(content, "DamageNumbers", tr("SETTINGS_DAMAGE_NUMBERS"))
+	_match_point_plate_box = _add_box(content, "MatchPointPlate", tr("SETTINGS_MATCH_POINT_PLATE"))
 	_pickup_callouts_box = _add_box(content, "PickupCallouts", tr("SETTINGS_PICKUP_CALLOUTS"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
@@ -331,6 +333,7 @@ func _ready() -> void:
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
 	_damage_numbers_box.toggled.connect(func(pressed: bool) -> void: sfx.set_damage_numbers(pressed))
+	_match_point_plate_box.toggled.connect(func(pressed: bool) -> void: sfx.set_match_point_plate(pressed))
 	_pickup_callouts_box.toggled.connect(func(pressed: bool) -> void: sfx.set_pickup_callouts(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
@@ -436,6 +439,7 @@ func refresh() -> void:
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_kill_feed_box.set_pressed_no_signal(sfx.kill_feed)
 	_damage_numbers_box.set_pressed_no_signal(sfx.damage_numbers)
+	_match_point_plate_box.set_pressed_no_signal(sfx.match_point_plate)
 	_pickup_callouts_box.set_pressed_no_signal(sfx.pickup_callouts)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_text_size_button.select(maxi(sfx.TEXT_SCALES.find(sfx.text_scale), 0))
@@ -713,6 +717,8 @@ func kill_feed_box() -> CheckBox:
 func damage_numbers_box() -> CheckBox:
 	return _damage_numbers_box
 
+func match_point_plate_box() -> CheckBox:
+	return _match_point_plate_box
 func pickup_callouts_box() -> CheckBox:
 	return _pickup_callouts_box
 
@@ -911,6 +917,7 @@ func _retranslate() -> void:
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
 	_kill_feed_box.text = tr("SETTINGS_KILL_FEED")
 	_damage_numbers_box.text = tr("SETTINGS_DAMAGE_NUMBERS")
+	_match_point_plate_box.text = tr("SETTINGS_MATCH_POINT_PLATE")
 	_pickup_callouts_box.text = tr("SETTINGS_PICKUP_CALLOUTS")
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")
