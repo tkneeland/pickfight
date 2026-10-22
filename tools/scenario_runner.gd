@@ -1011,6 +1011,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"scene_check_catches_a_dead_resource_path_802",
 	"couch_pad_only_host_can_end_match_811",
 	"couch_host_phone_present_keeps_match_menu_hidden_811",
+	"match_point_plate_shows_for_leader_one_win_short_825",
+	"match_point_plate_stacks_for_two_leaders_and_skips_stock_825",
+	"match_point_in_teams_names_the_team_825",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3406,6 +3409,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_couch_pad_only_host_can_end_match_811()
 		"couch_host_phone_present_keeps_match_menu_hidden_811":
 			return await _scenario_couch_host_phone_present_keeps_match_menu_hidden_811()
+		"match_point_plate_shows_for_leader_one_win_short_825":
+			return await _scenario_match_point_plate_shows_for_leader_one_win_short_825()
+		"match_point_plate_stacks_for_two_leaders_and_skips_stock_825":
+			return await _scenario_match_point_plate_stacks_for_two_leaders_and_skips_stock_825()
+		"match_point_in_teams_names_the_team_825":
+			return await _scenario_match_point_in_teams_names_the_team_825()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -8499,7 +8508,9 @@ func _new_roster_round(count: int, interval_sec: float, pause_sec: float,
 		slots.append(i)
 	var roster := StubRosterScript.new()
 	roster.name = "RosterRoster"
-	roster.slots = slots
+	var typed_slots: Array[int] = []
+	typed_slots.assign(slots)
+	roster.slots = typed_slots
 	stage.add_child(roster)
 	if scoreboard != null:
 		scoreboard.name = "RosterScoreboard"
@@ -23085,7 +23096,9 @@ func _new_team_round_236(target: int, slots: Array[int], picks: Dictionary, team
 	RoundManagerScript.modifier_rolls_enabled = false
 	var loop: Dictionary = _new_lobby_round(target, pause_sec, scoreboard)
 	var roster: Node = loop["roster"]
-	roster.slots = slots
+	var typed_slots: Array[int] = []
+	typed_slots.assign(slots)
+	roster.slots = typed_slots
 	roster.teams_on = teams_on
 	roster.team_picks = picks
 	var label := Label.new()
@@ -47824,4 +47837,120 @@ func _scenario_pickup_spawn_rules_unchanged_by_pop_816() -> Array[String]:
 	player.queue_free()
 	await _teardown(stage)
 	_scenario_completed = true
+	return failures
+
+## Issue #825: MATCH POINT plates. The plate layers alive right now.
+func _match_point_plates_825() -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in get_root().get_tree().get_nodes_in_group("match_point_plates"):
+		if not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+## Starts a lobby match (first to `target`) with `slots` readied and returns the
+## loop once round 1 is on. Round 1 never shows a plate while the target is above 1.
+func _start_match_point_825(target: int, slots: Array, teams: bool = false, mode: String = "") -> Dictionary:
+	var loop: Dictionary = _new_lobby_round(target)
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var typed_slots: Array[int] = []
+	typed_slots.assign(slots)
+	roster.slots = typed_slots
+	roster.teams_on = teams
+	if teams:
+		roster.team_picks = {0: 0, 1: 1}
+	rm.game_mode = mode
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var ready: Dictionary = {}
+	for slot: int in slots:
+		ready[slot] = true
+	roster.ready_slots = ready
+	var players: Array[RigidBody2D] = loop["players"]
+	loop["started"] = await _await_condition(func() -> bool: return players[slots[0]].alive and players[slots[1]].alive, ROUND_LOOP_TIMEOUT_MSEC)
+	return loop
+func _scenario_match_point_plate_shows_for_leader_one_win_short_825() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(3, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the match never started")
+	else:
+		await _await_ticks(10)
+		if not _match_point_plates_825().is_empty():
+			failures.append("a plate showed in round 1 of a first-to-3 match")
+		rm._scores[0] = 1
+		players[1].eliminate() # slot 0 wins the round: 2 of 3
+		if not await _await_condition(func() -> bool: return not _match_point_plates_825().is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no plate at the start of the round after slot 0 reached 2 of 3")
+		else:
+			var plates: Array[Node] = _match_point_plates_825()
+			var want: String = TranslationServer.translate("MATCH_POINT") % rm._slot_name(0)
+			if plates.size() != 1 or plates[0].lines.size() != 1:
+				failures.append("expected one plate with one line, got %d" % plates.size())
+			elif TranslationServer.translate("MATCH_POINT") % plates[0].lines[0]["text"] != want:
+				failures.append("plate says '%s', expected '%s'" % [plates[0].lines[0]["text"], want])
+			var tag: Label = rm.name_tag(0)
+			if tag == null or tag.get_node_or_null("MatchPointDot") == null:
+				failures.append("the leader's name tag has no gold dot")
+			await _await_ticks(210) # 3.5 s
+			if not _match_point_plates_825().is_empty():
+				failures.append("the plate was still up 3.5 s after the round started")
+			if tag != null and tag.get_node_or_null("MatchPointDot") == null:
+				failures.append("the dot went with the plate, before the round ended")
+	await _teardown(loop["stage"])
+	return failures
+func _scenario_match_point_plate_stacks_for_two_leaders_and_skips_stock_825() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(2, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the match never started")
+	else:
+		rm._scores[1] = 1
+		players[1].eliminate() # slot 0 wins: both on 1 of 2
+		if not await _await_condition(func() -> bool: return not _match_point_plates_825().is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no plate with two fighters on match point")
+		else:
+			var plates: Array[Node] = _match_point_plates_825()
+			if plates[0].lines.size() != 2:
+				failures.append("%d stacked plates, expected 2" % plates[0].lines.size())
+			elif plates[0].get_node("Plates").get_child_count() != 2:
+				failures.append("the plate layer drew %d plates, expected 2" % plates[0].get_node("Plates").get_child_count())
+		# Not in the endless session: lobby off means no scoring target.
+		var shown: Array[Dictionary] = (load("res://scripts/MatchPointPlate.gd") as GDScript).leaders(rm)
+		rm.lobby_enabled = false
+		if not (load("res://scripts/MatchPointPlate.gd") as GDScript).leaders(rm).is_empty():
+			failures.append("a plate was due with no scoring target (lobby off)")
+		rm.lobby_enabled = true
+		if shown.size() != 2:
+			failures.append("leaders() found %d, expected 2" % shown.size())
+	await _teardown(loop["stage"])
+	var stock: Dictionary = await _start_match_point_825(2, [0, 1], false, "stock")
+	if stock["started"]:
+		await _await_ticks(30)
+		if not _match_point_plates_825().is_empty():
+			failures.append("Stock (a single round, target 1) showed a plate")
+	else:
+		failures.append("the Stock match never started")
+	await _teardown(stock["stage"])
+	return failures
+func _scenario_match_point_in_teams_names_the_team_825() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(2, [0, 1, 2], true)
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the Teams match never started")
+	else:
+		players[1].eliminate() # Blue's only fighter: Red takes the round, 1 of 2
+		if not await _await_condition(func() -> bool: return not _match_point_plates_825().is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no plate when Red reached 1 of 2")
+		else:
+			var plate: Node = _match_point_plates_825()[0]
+			if plate.lines.size() != 1:
+				failures.append("%d lines, expected only Red's" % plate.lines.size())
+			elif plate.lines[0]["text"] != TranslationServer.translate("TEAM_RED"):
+				failures.append("plate names '%s', expected the team '%s'" % [plate.lines[0]["text"], TranslationServer.translate("TEAM_RED")])
+	await _teardown(loop["stage"])
 	return failures
