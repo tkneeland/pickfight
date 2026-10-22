@@ -31,6 +31,10 @@ const AIRBORNE: String = "AIRBORNE"
 ## The shortest airtime that earns the award (issue #337).
 const AIRTIME_MIN_MSEC: int = 1000
 const COLLECTOR: String = "COLLECTOR"
+const HAYMAKER: String = "HAYMAKER"
+
+## The smallest best hit that earns Haymaker (#861): the hit-stop threshold.
+const HAYMAKER_MIN: float = 40.0
 ## Mode-specific award categories (issue #355), each given only in its mode.
 const HILL: String = "HILL"
 const TAGGER: String = "TAGGER"
@@ -47,6 +51,8 @@ var self_kos: Dictionary = {}
 var deaths: Dictionary = {}
 var damage_dealt: Dictionary = {}
 var damage_taken: Dictionary = {}
+## slot -> largest single hit dealt this match (#861).
+var best_hit: Dictionary = {}
 ## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
 ## this match. Bots and self-hits are left out. Written once per match by
 ## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
@@ -101,6 +107,7 @@ func begin_match() -> void:
 	deaths.clear()
 	damage_dealt.clear()
 	damage_taken.clear()
+	best_hit.clear()
 	weapon_damage.clear()
 	weapon_hits.clear()
 	weapon_kos.clear()
@@ -147,7 +154,7 @@ func resume_round(slot: int, now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	_last_killer.erase(slot)
@@ -201,6 +208,7 @@ func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon
 			slot_weapon_hits[attacker] = by_weapon
 		_add(damage_dealt, attacker, amount)
 		_add(damage_taken, victim, amount)
+		best_hit[attacker] = maxf(float(best_hit.get(attacker, 0.0)), amount)
 
 ## Records `victim`'s elimination at `now_msec` and returns what happened:
 ## {"victim", "killer" (-1 for a self-KO), "streak" (the killer's KOs in a
@@ -331,7 +339,28 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var untouched: int = _untouchable(slots)
 	if untouched != -1:
 		out.append(_award(SURVIVOR, TranslationServer.translate("AWARD_UNTOUCHABLE"), untouched, TranslationServer.translate("DETAIL_DAMAGE_TAKEN") % roundi(float(damage_taken.get(untouched, 0)))))
+	var big: int = _haymaker(slots)
+	if big != -1:
+		out.append(_award(HAYMAKER, TranslationServer.translate("AWARD_HAYMAKER"), big, TranslationServer.translate("DETAIL_HAYMAKER") % roundi(float(best_hit[big]))))
 	return out
+
+## "Haymaker" (#861): the player with the single hardest hit, given only when
+## it is at least HAYMAKER_MIN and strictly beats every other player's best.
+func _haymaker(slots: Array) -> int:
+	var top: float = 0.0
+	var who: int = -1
+	var tied: bool = false
+	for slot: int in slots:
+		var hit: float = float(best_hit.get(slot, 0.0))
+		if hit > top:
+			top = hit
+			who = slot
+			tied = false
+		elif hit == top and hit > 0.0:
+			tied = true
+	if who == -1 or tied or top < HAYMAKER_MIN:
+		return -1
+	return who
 
 ## "Untouchable" (#832): the lowest damage taker among at least three players,
 ## given only when somebody took more than they did and only to a player who

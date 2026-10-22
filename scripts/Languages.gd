@@ -66,10 +66,19 @@ static func resolve(setting: String, os_locale: String) -> String:
 ## bundled font gets an explicit chain of system fonts, the current language's
 ## first (the same Han character is drawn differently in zh and ja). macOS's
 ## PingFang SC cannot be loaded by name (FreeType errors), so it is left out.
+## Ahead of the system fonts sits the language's own bundled Noto Sans subset
+## (built by tools/subset_cjk_font.py from strings.csv, #849), so a machine with
+## no CJK system font still draws every translated string; the system chain stays
+## after it for player names typed on phones, which can hold any character.
 const BUNDLED_FONTS: PackedStringArray = [
 	"res://art/fonts/LilitaOne-Regular.ttf",
 	"res://art/fonts/Nunito-Variable.ttf",
 ]
+const CJK_SUBSETS: Dictionary = {
+	"zh_CN": "res://art/fonts/NotoSansSC-Subset.ttf",
+	"ja": "res://art/fonts/NotoSansJP-Subset.ttf",
+	"ko": "res://art/fonts/NotoSansKR-Subset.ttf",
+}
 const FALLBACK_NAMES_ZH: PackedStringArray = ["Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "Heiti SC", "Arial Unicode MS"]
 const FALLBACK_NAMES_JA: PackedStringArray = ["Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", "TakaoPGothic"]
 const FALLBACK_NAMES_KO: PackedStringArray = ["Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "NanumGothic"]
@@ -90,9 +99,13 @@ static func fallback_font_names(code: String) -> PackedStringArray:
 		out.append_array(names)
 	return out
 
-## Points the bundled fonts' fallbacks at the system fonts for `code`.
-static func apply_fonts(code: String) -> void:
+## The fallback chain for `code`: its bundled CJK subset (if any), then the
+## installed system fonts from `fallback_font_names`. Empty for non-CJK codes.
+static func fallback_chain(code: String) -> Array[Font]:
 	var chain: Array[Font] = []
+	var subset: FontFile = _cjk_subset(code)
+	if subset != null:
+		chain.append(subset)
 	var installed: PackedStringArray = OS.get_system_fonts()
 	for font_name: String in fallback_font_names(code):
 		if not installed.has(font_name):
@@ -100,11 +113,37 @@ static func apply_fonts(code: String) -> void:
 		var system := SystemFont.new()
 		system.font_names = PackedStringArray([font_name])
 		chain.append(system)
+	return chain
+
+static func _cjk_subset(code: String) -> FontFile:
+	return load(CJK_SUBSETS[code]) if CJK_SUBSETS.has(code) else null
+
+## Points the bundled fonts' fallbacks at the bundled CJK subset and the system
+## fonts for `code`.
+static func apply_fonts(code: String) -> void:
+	var chain: Array[Font] = fallback_chain(code)
 	for path: String in BUNDLED_FONTS:
 		var font: FontFile = load(path)
 		if font != null:
 			font.allow_system_fallback = true
 			font.fallbacks = chain
+
+## A font for the Language picker's popup, which lists 简体中文, 日本語 and 한국어
+## in every locale: `base` with the current language's chain (`code`), then the
+## other bundled subsets, Japanese first so 日本語 is drawn in one style. A
+## FontVariation's own fallbacks replace its base's, hence the full chain here.
+## Only the popup uses it (the closed row shows the current language's own name,
+## which its chain already covers), so other text keeps its line height.
+static func picker_font(base: Font, code: String) -> FontVariation:
+	var font := FontVariation.new()
+	font.base_font = base
+	var chain: Array[Font] = fallback_chain(code)
+	for other: String in ["ja", "zh_CN", "ko"]:
+		var subset: FontFile = _cjk_subset(other)
+		if subset != null and not chain.has(subset):
+			chain.append(subset)
+	font.fallbacks = chain
+	return font
 
 ## Sets the live locale from `setting`. Returns the locale it chose.
 static func apply(setting: String) -> String:

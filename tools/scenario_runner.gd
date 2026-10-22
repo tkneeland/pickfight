@@ -195,6 +195,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"charge_sweep_pair_stays_in_play",
 	"pad_launch_keeps_head_ahead_of_body",
 	"sfx_stage_parts_sound",
+	"sfx_hazard_hit_plays_once_per_hit",
 	"arm_draws_over_identity_outline",
 	"axe_swing_deals_damage",
 	"sfx_mix_victory_quieter_rest_louder",
@@ -513,6 +514,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"night_roll_respects_forced_and_disabled",
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"untouchable_award_832",
+	"haymaker_award_861",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -1013,6 +1015,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
+	"edge_arrow_seat_numbers_875",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 	"demo_title_wishlist_button_shown_only_in_demo_793",
@@ -1035,6 +1038,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"text_size_auto_fit_751",
 	"launch_copy_counts_match_the_game_797",
 	"launch_copy_count_check_catches_a_wrong_count_797",
+	"cjk_subsets_cover_every_translated_character_849",
+	"cjk_subset_check_reports_an_uncovered_character_849",
+	"cjk_fallback_chain_starts_with_bundled_subset_849",
+	"language_picker_draws_cjk_names_in_every_locale_849",
 	"controller_page_loads_nothing_from_the_internet_798",
 	"controller_offline_check_catches_a_cdn_reference_798",
 	"site_pages_have_no_dead_links_or_bare_images_799",
@@ -1828,6 +1835,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pad_launch_keeps_head_ahead_of_body()
 		"sfx_stage_parts_sound":
 			return await _scenario_sfx_stage_parts_sound()
+		"sfx_hazard_hit_plays_once_per_hit":
+			return await _scenario_sfx_hazard_hit_plays_once_per_hit()
 		"arm_draws_over_identity_outline":
 			return await _scenario_arm_draws_over_identity_outline()
 		"axe_swing_deals_damage":
@@ -2464,6 +2473,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_stats_rows_favourite_weapon_and_magpie()
 		"untouchable_award_832":
 			return await _scenario_untouchable_award_832()
+		"haymaker_award_861":
+			return await _scenario_haymaker_award_861()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -3456,6 +3467,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_autosave_clip_switch_off_saves_nothing_795()
 		"offscreen_fighter_gets_edge_arrow_779":
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
+		"edge_arrow_seat_numbers_875":
+			return await _scenario_edge_arrow_seat_numbers_875()
 		"phone_leave_button_frees_seat_775":
 			return await _scenario_phone_leave_button_frees_seat_775()
 		"frame_rate_cap_and_vsync_persist_and_apply_774":
@@ -3484,6 +3497,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_launch_copy_counts_match_the_game_797()
 		"launch_copy_count_check_catches_a_wrong_count_797":
 			return _scenario_launch_copy_count_check_catches_a_wrong_count_797()
+		"cjk_subsets_cover_every_translated_character_849":
+			return _scenario_cjk_subsets_cover_every_translated_character_849()
+		"cjk_subset_check_reports_an_uncovered_character_849":
+			return _scenario_cjk_subset_check_reports_an_uncovered_character_849()
+		"cjk_fallback_chain_starts_with_bundled_subset_849":
+			return _scenario_cjk_fallback_chain_starts_with_bundled_subset_849()
+		"language_picker_draws_cjk_names_in_every_locale_849":
+			return _scenario_language_picker_draws_cjk_names_in_every_locale_849()
 		"controller_page_loads_nothing_from_the_internet_798":
 			return _scenario_controller_page_loads_nothing_from_the_internet_798()
 		"controller_offline_check_catches_a_cdn_reference_798":
@@ -12710,6 +12731,41 @@ func _head_anchor_reach_along_circles(player: RigidBody2D, circles: Array[Dictio
 ## the wall's break sounds once, not again for a hit during its break flash.
 ## The parts' own event functions are driven directly, so this checks the
 ## wiring, not the parts' timing, which their own scenarios already hold.
+## Issue #874: spikes and saws play `hazard_hit` once per landed hit; the
+## cooldown suppresses repeats and spawn protection makes no sound.
+func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"hazard_hit"):
+		return ["hazard_hit is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var made: Array = _hazard_spikes_with_player(stage, 0.0)
+	var spikes: Area2D = made[0]
+	var player: RigidBody2D = made[1]
+	player.global_position = PART_POSITION
+	sfx.start_recording()
+	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
+	for tick in ticks_held:
+		player.global_position = PART_POSITION
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	var played: int = _sfx_count(sfx, "hazard_hit")
+	if spikes.hit_count() != 1 or played != 1:
+		failures.append("one contact: %d hits, hazard_hit played %d times, expected 1 and 1" % [spikes.hit_count(), played])
+	# Spawn protection: the touch is blocked, so there is no sound.
+	player.set("spawn_protected", true)
+	var before: int = _sfx_count(sfx, "hazard_hit")
+	for tick in int(spikes.hit_cooldown_sec * 60.0) + 10:
+		player.global_position = PART_POSITION
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if _sfx_count(sfx, "hazard_hit") != before:
+		failures.append("hazard_hit played for a spawn-protected player")
+	sfx.stop_recording()
+	await _teardown(stage)
+	return failures
 func _scenario_sfx_stage_parts_sound() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -15505,7 +15561,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 4 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 5 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15577,8 +15633,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 4:
-		failures.append("the victory screen shows %s awards, expected 4" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 5:
+		failures.append("the victory screen shows %s awards, expected 5" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -29555,6 +29611,43 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
+func _scenario_haymaker_award_861() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2], 0)
+	stats.record_hit(0, 1, 30.0, 10)
+	stats.record_hit(1, 2, 55.0, 20)
+	stats.record_hit(2, 0, 90.0, 30)
+	stats.record_hit(-1, 0, 200.0, 40)
+	stats.record_hit(2, 2, 200.0, 50)
+	var found: Array = stats.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Haymaker")
+	if found.size() != 1 or found[0]["slot"] != 2 or found[0]["detail"] != "90 damage in one hit":
+		failures.append("expected Haymaker for slot 2 with 90 damage in one hit, got %s" % [found])
+	var weak: RefCounted = MatchStatsScript.new()
+	weak.begin_match()
+	weak.record_hit(0, 1, 39.0, 10)
+	if not weak.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Haymaker").is_empty():
+		failures.append("Haymaker given for a best hit under 40")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	tied.record_hit(0, 1, 70.0, 10)
+	tied.record_hit(1, 0, 70.0, 20)
+	if not tied.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Haymaker").is_empty():
+		failures.append("Haymaker given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	hazard.record_hit(-1, 0, 100.0, 10)
+	hazard.record_hit(1, 1, 100.0, 20)
+	if not hazard.best_hit.is_empty():
+		failures.append("hazard or self damage counted: %s" % [hazard.best_hit])
+	stats.begin_match()
+	if not stats.best_hit.is_empty():
+		failures.append("begin_match left best hits behind")
+	_scenario_completed = true
+	return failures
+
 ## Issue #832: Untouchable goes to the lowest damage taker who dealt damage.
 func _scenario_untouchable_award_832() -> Array[String]:
 	var failures: Array[String] = []
@@ -29631,8 +29724,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 5:
-		failures.append("expected 5 award cards (3 core + Magpie + Untouchable), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 6:
+		failures.append("expected 6 award cards (3 core + Magpie + Untouchable + Haymaker), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
@@ -47376,6 +47469,76 @@ func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
 		failures.append("a KO'd fighter kept an edge arrow")
 	await _teardown(loop["stage"])
 	return failures
+## Issue #875: with Player numbers on, an edge arrow also shows its fighter's seat number (after the
+## team letter in Teams), inside the screen; off, no number.
+func _scenario_edge_arrow_seat_numbers_875() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.player_numbers
+	var loop: Dictionary = _new_lobby_round(5, 1.0, _main_scoreboard())
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+		host.player_numbers = was
+		await _teardown(loop["stage"])
+		return failures
+	await _await_ticks(2)
+	var arrows: CanvasLayer = rm.offscreen_indicators()
+	if arrows == null:
+		failures.append("RoundManager built no edge arrows")
+		host.player_numbers = was
+		await _teardown(loop["stage"])
+		return failures
+	var size: Vector2 = get_root().get_visible_rect().size
+	var in_frame := Vector2(size.x * 0.5, size.y * 0.5)
+	var above := Vector2(size.x * 0.25, -2000.0)
+	host.player_numbers = false
+	for i in 20:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if not arrows.arrow_visible(0):
+		failures.append("no arrow for the fighter above the view")
+	if arrows.arrow_number(0) != 0:
+		failures.append("the arrow shows number %d with Player numbers off" % arrows.arrow_number(0))
+	host.player_numbers = true
+	for i in 6:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if arrows.arrow_number(0) != 1:
+		failures.append("slot 0's arrow reads %d, expected its name-tag number 1" % arrows.arrow_number(0))
+	var badge: Control = arrows.get_node("Arrows/NumberBadge0")
+	var box := Rect2(Vector2.ZERO, size)
+	if not box.encloses(Rect2(badge.position, badge.size)):
+		failures.append("the number badge %s is not inside the screen" % [Rect2(badge.position, badge.size)])
+	if badge.size.y * 0.62 < 16.0:
+		failures.append("the number text falls under the 16 px floor")
+	if arrows.arrow_number(1) != 0:
+		failures.append("an in-frame fighter got an arrow number")
+	# Teams: the letter stays, the number follows it.
+	players[0].team = 1
+	for i in 6:
+		players[0].teleport_to(above)
+		players[1].teleport_to(in_frame)
+		await _await_ticks(1)
+	if arrows.arrow_letter(0) != "B":
+		failures.append("the Teams arrow letter reads '%s', expected B" % arrows.arrow_letter(0))
+	if arrows.arrow_number(0) != 1:
+		failures.append("the Teams arrow number reads %d, expected 1" % arrows.arrow_number(0))
+	var team_badge: Control = arrows.get_node("Arrows/TeamBadge0")
+	if not box.encloses(Rect2(badge.position, badge.size)):
+		failures.append("the Teams number badge is not inside the screen")
+	if badge.position.distance_to(arrows.arrow_tip(0)) <= team_badge.position.distance_to(arrows.arrow_tip(0)):
+		failures.append("the number is not after the team letter")
+	players[0].team = -1
+	host.player_numbers = was
+	await _teardown(loop["stage"])
+	return failures
 ## Issue #775: the controller page's Leave game button sends {"t":"leave"}; the host
 ## frees the seat at once (lobby or mid-round), hangs up with the "left the game"
 ## reason, credits nobody, and a rejoin by the same id takes a fresh seat.
@@ -48959,6 +49122,178 @@ func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[Stri
 	for noun: String in ["stages", "weapons", "languages"]:
 		if not flagged_text.contains(" " + noun + ", the game has"):
 			failures.append("site/index.html was not flagged for a stale %s count against the mutated game" % noun)
+	_scenario_completed = true
+	return failures
+# --- Bundled CJK font subsets (issue #849) -------------------------------------------
+## Characters no bundled font has in any language (the ▸ in "Stages & Rules ▸"),
+## so the coverage check leaves them to the system fonts. Named one by one so a
+## new symbol in a CJK string still fails the check.
+const CJK_UNCOVERED_EXEMPT_849: String = "▸"
+
+## One line per language listing the characters of `texts[code]` (an Array of
+## strings) that the language's bundled subset has no glyph for. Control
+## characters and CJK_UNCOVERED_EXEMPT_849 are skipped.
+func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var out: Array[String] = []
+	for code: String in texts:
+		var font: FontFile = load(languages.CJK_SUBSETS[code])
+		if font == null:
+			out.append("%s: subset %s did not load" % [code, languages.CJK_SUBSETS[code]])
+			continue
+		var missing: String = ""
+		for text: String in texts[code]:
+			for i: int in text.length():
+				var c: int = text.unicode_at(i)
+				if c < 0x20 or missing.contains(char(c)) or CJK_UNCOVERED_EXEMPT_849.contains(char(c)):
+					continue
+				if not font.has_char(c):
+					missing += char(c)
+		if not missing.is_empty():
+			out.append("%s: %s" % [code, missing])
+	return out
+
+## The strings.csv column of every CJK_SUBSETS language plus that language's
+## own name in the Language picker, as {code: Array of strings}.
+func _cjk_translated_strings_849() -> Dictionary:
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var texts: Dictionary = {}
+	for code: String in languages.CJK_SUBSETS:
+		texts[code] = []
+	var f := FileAccess.open("res://translations/strings.csv", FileAccess.READ)
+	if f == null:
+		return texts # the caller's size check fails loudly
+	var header: PackedStringArray = f.get_csv_line()
+	while not f.eof_reached():
+		var row: PackedStringArray = f.get_csv_line()
+		for code: String in texts:
+			var col: int = header.find(code)
+			if col >= 0 and col < row.size():
+				(texts[code] as Array).append(row[col])
+	for option: Dictionary in languages.OPTIONS:
+		if texts.has(option["code"]):
+			(texts[option["code"]] as Array).append(str(option["name"]))
+	return texts
+
+func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[String]:
+	var failures: Array[String] = []
+	var texts: Dictionary = _cjk_translated_strings_849()
+	for code: String in texts:
+		if (texts[code] as Array).size() < 100:
+			failures.append("only %d %s strings read from strings.csv" % [(texts[code] as Array).size(), code])
+	for line: String in _cjk_missing_chars_849(texts):
+		failures.append("subset lacks glyphs (re-run tools/subset_cjk_font.py) -- " + line)
+	# Weight budget: each subset under 600 KB, all three under 1.5 MB.
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var total: int = 0
+	for code: String in languages.CJK_SUBSETS:
+		var size: int = FileAccess.get_file_as_bytes(languages.CJK_SUBSETS[code]).size()
+		total += size
+		if size == 0 or size > 600 * 1024:
+			failures.append("%s is %d bytes, wanted 1 to 600 KB" % [languages.CJK_SUBSETS[code], size])
+	if total > 1536 * 1024:
+		failures.append("the CJK subsets total %d bytes, over 1.5 MB" % total)
+	# Exports must still carry art/fonts/.
+	var presets: String = FileAccess.get_file_as_string("res://export_presets.cfg")
+	if not presets.contains("export_filter=\"all_resources\""):
+		failures.append("export_presets.cfg no longer exports all resources")
+	for line: String in presets.split("\n"):
+		if not line.begins_with("exclude_filter="):
+			continue
+		for pattern: String in line.trim_prefix("exclude_filter=").trim_prefix("\"").trim_suffix("\"").split(","):
+			for code: String in languages.CJK_SUBSETS:
+				var path: String = (languages.CJK_SUBSETS[code] as String).trim_prefix("res://")
+				if not pattern.strip_edges().is_empty() and path.match(pattern.strip_edges()):
+					failures.append("export filter '%s' excludes %s" % [pattern.strip_edges(), path])
+	_scenario_completed = true
+	return failures
+
+func _scenario_cjk_subset_check_reports_an_uncovered_character_849() -> Array[String]:
+	var failures: Array[String] = []
+	# 龘 (U+9F98) is in no translated string, so no subset carries it; the other
+	# characters are from real strings, and ▸ is on the exempt list.
+	var found: Array[String] = _cjk_missing_chars_849({"zh_CN": ["手滑王龘"], "ja": ["うっかり屋 ▸"], "ko": ["공중龘"]})
+	if found.size() != 2 or found[0] != "zh_CN: 龘" or found[1] != "ko: 龘":
+		failures.append("wanted [\"zh_CN: 龘\", \"ko: 龘\"], got %s" % [found])
+	# ♞ (U+265E) is a symbol in no subset and not exempt, so it is reported.
+	found = _cjk_missing_chars_849({"ja": ["♞"]})
+	if found.size() != 1 or found[0] != "ja: ♞":
+		failures.append("a symbol off the exempt list must still be reported, got %s" % [found])
+	_scenario_completed = true
+	return failures
+
+func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[String]:
+	var failures: Array[String] = []
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	var files: Array[FontFile] = []
+	var saved_fallbacks: Dictionary = {}
+	for path: String in languages.BUNDLED_FONTS:
+		var file: FontFile = load(path)
+		files.append(file)
+		saved_fallbacks[file] = file.fallbacks.duplicate()
+	var heights: Dictionary = {}
+	for file: FontFile in files:
+		file.fallbacks = []
+		heights[file] = file.get_height(32)
+	for code: String in languages.CJK_SUBSETS:
+		languages.apply_fonts(code)
+		for file: FontFile in files:
+			var first: Font = null if file.fallbacks.is_empty() else file.fallbacks[0]
+			if not (first is FontFile) or first.resource_path != languages.CJK_SUBSETS[code]:
+				failures.append("%s for %s: chain starts with %s, wanted %s" % [file.resource_path.get_file(), code, first, languages.CJK_SUBSETS[code]])
+			for i: int in range(1, file.fallbacks.size()):
+				if not (file.fallbacks[i] is SystemFont):
+					failures.append("%s for %s: entry %d after the subset is not a system font" % [file.resource_path.get_file(), code, i])
+	for code: String in languages.codes():
+		if languages.CJK_SUBSETS.has(code):
+			continue
+		languages.apply_fonts(code)
+		for file: FontFile in files:
+			if not file.fallbacks.is_empty():
+				failures.append("%s for %s gained a fallback chain" % [file.resource_path.get_file(), code])
+			if not is_equal_approx(file.get_height(32), heights[file]):
+				failures.append("%s for %s: line height %f, was %f" % [file.resource_path.get_file(), code, file.get_height(32), heights[file]])
+	for file: FontFile in files:
+		file.fallbacks = saved_fallbacks[file] # later scenarios measure text with these fonts
+	_scenario_completed = true
+	return failures
+
+## The Language picker's popup lists 简体中文, 日本語 and 한국어 in every locale,
+## including the ones whose UI fonts have no CJK chain, so its font keeps the
+## locale's own chain first and then falls back to all three bundled subsets.
+## The closed row keeps the theme font (and its line height).
+func _scenario_language_picker_draws_cjk_names_in_every_locale_849() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var panel: CanvasLayer = sfx.build_settings_ui() # shared with later scenarios: not freed
+	var row: OptionButton = panel.language_button()
+	var languages: GDScript = load("res://scripts/Languages.gd")
+	if row.has_theme_font_override("font"):
+		failures.append("the closed Language row overrides its font, so its line height changes")
+	var popup_font: Font = row.get_popup().get_theme_font("font")
+	if not (popup_font is FontVariation):
+		failures.append("the Language popup has no picker font, got %s" % popup_font)
+	var base: Font = row.get_theme_font("font")
+	for code: String in languages.codes():
+		var font: FontVariation = languages.picker_font(base, code)
+		var chain: Array[Font] = [font]
+		chain.append_array(font.fallbacks)
+		var own: Array[Font] = languages.fallback_chain(code)
+		for i: int in own.size():
+			if i + 1 >= chain.size() or chain[i + 1].resource_path != own[i].resource_path:
+				failures.append("%s picker chain does not start with the locale's own chain" % code)
+				break
+		for subset_code: String in languages.CJK_SUBSETS:
+			if not chain.any(func(f: Font) -> bool: return f.resource_path == languages.CJK_SUBSETS[subset_code]):
+				failures.append("%s picker font has no %s subset in its chain" % [code, subset_code])
+		for option: Dictionary in languages.OPTIONS:
+			var name: String = option["name"]
+			for i: int in name.length():
+				var c: int = name.unicode_at(i)
+				if c > 0x20 and not chain.any(func(f: Font) -> bool: return f.has_char(c)):
+					failures.append("%s picker font cannot draw '%s' in %s" % [code, char(c), name])
 	_scenario_completed = true
 	return failures
 
