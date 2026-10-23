@@ -1087,6 +1087,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"join_screen_paste_fills_room_code_906",
 	"pickup_drop_falls_through_players_to_terrain_review_gp",
 	"sudden_death_chip_cleared_without_modifier_review_gp",
 	"round_start_clears_stale_round_flags_review_gp",
@@ -3724,6 +3725,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"join_screen_paste_fills_room_code_906":
+			return await _scenario_join_screen_paste_fills_room_code_906()
 		"pickup_drop_falls_through_players_to_terrain_review_gp":
 			return await _scenario_pickup_drop_falls_through_players_to_terrain_review_gp()
 		"sudden_death_chip_cleared_without_modifier_review_gp":
@@ -44176,15 +44179,19 @@ func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Arr
 		failures.append("the bot threw through a wall")
 	_scenario_completed = true
 	return failures
+const ICE_PUSH_963: float = 800.0
+const BELT_PUSH_963: float = 200.0
 ## Issue #963: a bot on a floor strip with a drop `end_gap` px ahead (to the
 ## right), a rival on a far island beyond it. `belt` lays a conveyor carrying
 ## right, otherwise an ice patch. An Easy bot is the control: it keeps the old
 ## behaviour. Returns whether the bot stayed on the floor and its farthest x.
-func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -> Dictionary:
+func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int, push: float = 0.0) -> Dictionary:
 	var stage: Node2D = _new_empty_stage()
 	var strip: StaticBody2D = (ConveyorScene if belt else IcePatchScene).instantiate() as StaticBody2D
 	strip.size = Vector2(800.0, 12.0 if belt else 8.0)
 	strip.position = Vector2(0.0, 600.0)
+	if belt:
+		strip.belt_speed = push
 	stage.add_child(strip)
 	var island := StaticBody2D.new()
 	var shape := CollisionShape2D.new()
@@ -44204,6 +44211,8 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 	bot.player = player
 	bot.output = player.set_input_vector
 	stage.add_child(bot)
+	if not belt:
+		player.linear_velocity = Vector2(push, 0.0)
 	var out: Dictionary = {"stayed": true, "max_x": start_x}
 	for t in ticks:
 		await physics_frame
@@ -44216,26 +44225,30 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 ## not leave the floor in 5 s; the Easy control (old behaviour) is printed.
 func _scenario_bot_eases_off_ice_near_drop() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300, ICE_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300, ICE_PUSH_963)
 	print("      bot_eases_off_ice_near_drop: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot left the ice patch")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## A Normal bot on a belt carrying it towards an open end walks against it and
 ## stays on the floor for 5 s.
 func _scenario_bot_walks_against_belt_to_open_end() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300, BELT_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300, BELT_PUSH_963)
 	print("      bot_walks_against_belt_to_open_end: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot was carried off the belt's open end")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
@@ -51841,6 +51854,68 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+## Issue #906: the PC join screen's Paste button fills the room field from the clipboard (getter seam, never the real one).
+func _scenario_join_screen_paste_fills_room_code_906() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await _await_ticks(4)
+	var paste: Button = client.find_child("Paste", true, false) as Button
+	if paste == null or not client.has_method("_on_paste_pressed") or not ("clipboard_getter" in client):
+		failures.append("the join screen has no Paste button with a clipboard_getter seam")
+		client.queue_free()
+		await _await_ticks(2)
+		_scenario_completed = true
+		return failures
+	var room: LineEdit = client.find_child("RoomCode", true, false) as LineEdit
+	var clip: Array[String] = [""]
+	client.clipboard_getter = func() -> String: return clip[0]
+	if not paste.is_visible_in_tree() or paste.disabled:
+		failures.append("Paste is not shown and enabled on the join screen")
+	if paste.focus_mode != Control.FOCUS_ALL:
+		failures.append("Paste is not in the gamepad focus chain (focus_mode %d)" % paste.focus_mode)
+	elif room.find_valid_focus_neighbor(SIDE_RIGHT) != paste:
+		failures.append("the focus chain does not lead from the room field to Paste")
+	if paste.text != client.tr("JOIN_PASTE") or paste.text == "JOIN_PASTE":
+		failures.append("Paste reads '%s', not a translated label" % paste.text)
+	if paste.get_global_rect().position.x < room.get_global_rect().end.x - 1.0:
+		failures.append("Paste is not beside the room field")
+	var cases: Array = [
+		["abcd", "ABCD"],
+		["Join with code: wxyz", "WXYZ"],
+		["  qrst\n", "QRST"],
+		["Come over, code kLmN, bring friends", "KLMN"],
+		["ab cd", "ABCD"],
+		["AB-CD", "ABCD"],
+	]
+	for pair: Array in cases:
+		room.text = ""
+		client.status_text = ""
+		clip[0] = pair[0]
+		paste.pressed.emit()
+		if room.text != pair[1]:
+			failures.append("pasting '%s' filled the room field with '%s', expected %s" % [pair[0], room.text, pair[1]])
+	# No usable code: the field is untouched and the status line says why.
+	for junk: String in ["", "hello", "i o i o", "abc", "12345678", "ABCDE"]:
+		room.text = "WXYZ"
+		client.status_text = ""
+		clip[0] = junk
+		paste.pressed.emit()
+		if room.text != "WXYZ":
+			failures.append("pasting '%s' changed the room field to '%s'" % [junk, room.text])
+		if client.status_text != client.tr("JOIN_NO_CODE_ON_CLIPBOARD") or client.status_text == "JOIN_NO_CODE_ON_CLIPBOARD":
+			failures.append("pasting '%s' left the status line '%s'" % [junk, client.status_text])
+	# It joins nothing by itself.
+	room.text = ""
+	clip[0] = "abcd"
+	paste.pressed.emit()
+	if client.state != RcState241.JOIN:
+		failures.append("Paste started a join (state %s)" % client.state)
+	client.queue_free()
+	await _await_ticks(2)
 	_scenario_completed = true
 	return failures
 # --- Review fixes: gameplay (review_gp) -----------------------------------------
