@@ -858,6 +858,8 @@ func _nearest_pickup() -> Node2D:
 			continue
 		if float(_ignored_pickups.get(pickup.get_instance_id(), -1.0)) > _clock:
 			continue
+		if _same_weapon_as_held(pickup):
+			continue # a weapon it already holds gains nothing (#1007)
 		var at: Vector2 = (pickup as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
 		if d < best_distance and _footing(at) == FOOT_SOLID and _footing(at + Vector2(EDGE_KEEP, 0.0)) == FOOT_SOLID \
@@ -865,6 +867,15 @@ func _nearest_pickup() -> Node2D:
 			best_distance = d
 			best = pickup
 	return best
+
+## Issue #1007: true when the pickup carries the weapon the bot already holds.
+func _same_weapon_as_held(pickup: Node) -> bool:
+	var held: Variant = player.get("weapon_stats")
+	var offered: Variant = pickup.get("weapon_stats")
+	if not (held is Resource) or not (offered is Resource):
+		return false
+	var path: String = (held as Resource).resource_path
+	return path != "" and path == (offered as Resource).resource_path
 
 func _alive(node: Variant) -> bool:
 	if node == null or not is_instance_valid(node):
