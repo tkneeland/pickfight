@@ -17,7 +17,7 @@ if [ "$(pf_daynight)" = day ]; then min=$DAY_MIN_AGENTS; else min=$NIGHT_PREFERR
 agents=""; n=0
 for b in $(git -C $R worktree list --porcelain | awk '/^branch /{sub("refs/heads/","",$2);print $2}' | grep -E "issue-[0-9]+"); do
   i=$(echo "$b" | sed -E 's/.*issue-([0-9]+).*/\1/')
-  t=$(echo "$iss" | jq -r ".[]|select(.number==$i and .pull_request==null)|.title" | cut -c1-60)
+  t=$(echo "$iss" | jq -r ".[]|select(.number==$i and .pull_request==null)|.title")
   [ -z "$t" ] && continue   # issue closed: stale worktree, not a running agent
   n=$((n+1)); agents+=$'\n'"  #$i $t"
 done

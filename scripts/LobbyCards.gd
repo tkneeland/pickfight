@@ -36,11 +36,9 @@ func build(parent: Control) -> void:
 	head.add_theme_constant_override("separation", 16)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(head)
-	var title: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_PLAYERS"), 40, UiThemeScript.HEADING_LABEL)
-	title.name = "PlayersTitle"
+	var title: Label = ScreenKitScript.themed_label(_screen.tr("LOBBY_PLAYERS"), 40, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "PlayersTitle")
 	head.add_child(title)
-	_count_label = ScreenKitScript.themed_label("", 22, UiThemeScript.MUTED_LABEL)
-	_count_label.name = "PlayerCount"
+	_count_label = ScreenKitScript.themed_label("", 22, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "PlayerCount")
 	_count_label.size_flags_vertical = Control.SIZE_SHRINK_END
 	head.add_child(_count_label)
 	_grid = GridContainer.new()

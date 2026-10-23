@@ -170,6 +170,8 @@ const SOUNDS: Dictionary = {
 	"bounce_launch": {"files": [
 		"kenney_scifi/forceField_000.ogg",
 		"kenney_scifi/forceField_001.ogg"], "db": -4.0, "max_sec": 0.6},
+	"teleport": {"files": [
+		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -6.0, "max_sec": 0.6},
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
@@ -340,9 +342,15 @@ var kill_feed: bool = true
 ## Whether `HitFeedback` draws the floating damage numbers (#873). On by default;
 ## hit sparks and shake are unaffected. Set through `set_damage_numbers()`.
 var damage_numbers: bool = true
+## Whether `OffscreenIndicators` pins edge arrows for fighters off camera (#779, #940). On by
+## default; scoring, camera and KO logic are unaffected. Set through `set_edge_arrows()`.
+var edge_arrows: bool = true
 ## Whether the "MATCH POINT: name" plate (#825) shows at round start (#892). On by
 ## default; the gold dots and all scoring are unaffected. Set through `set_match_point_plate()`.
 var match_point_plate: bool = true
+## Whether `RoundCards` sweeps the stage title card (#120) at round start (#942). On by
+## default; the countdown, banners and plates are unaffected. Set through `set_stage_title_card()`.
+var stage_title_card: bool = true
 ## Whether `Juice` freezes the game for 3 ticks on a heavy strike (#916). On by
 ## default; shake and slow-motion are unaffected. Set through `set_hit_pause()`.
 var hit_pause: bool = true
@@ -692,9 +700,19 @@ func set_damage_numbers(value: bool) -> void:
 	damage_numbers = value
 	_save_settings()
 
+## Turn the edge arrows (#940) on or off, and remember the choice.
+func set_edge_arrows(value: bool) -> void:
+	edge_arrows = value
+	_save_settings()
+
 ## Turn the MATCH POINT plate (#892) on or off, and remember the choice.
 func set_match_point_plate(value: bool) -> void:
 	match_point_plate = value
+	_save_settings()
+
+## Turn the stage title card (#942) on or off, and remember the choice.
+func set_stage_title_card(value: bool) -> void:
+	stage_title_card = value
 	_save_settings()
 
 ## Turn the hit-stop freeze (#916) on or off, and remember the choice.
@@ -800,7 +818,9 @@ func restore_defaults() -> void:
 	screen_shake = true
 	kill_feed = true
 	damage_numbers = true
+	edge_arrows = true
 	match_point_plate = true
+	stage_title_card = true
 	hit_pause = true
 	pickup_callouts = true
 	reduce_flash = false
@@ -914,7 +934,9 @@ func load_settings() -> void:
 		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
 		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
 		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
+		edge_arrows = _flag(config.get_value("display", "edge_arrows", true), true)
 		match_point_plate = _flag(config.get_value("display", "match_point_plate", true), true)
+		stage_title_card = _flag(config.get_value("display", "stage_title_card", true), true)
 		hit_pause = _flag(config.get_value("display", "hit_pause", true), true)
 		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
@@ -946,7 +968,9 @@ func _save_settings() -> void:
 	config.set_value("display", "screen_shake", screen_shake)
 	config.set_value("display", "kill_feed", kill_feed)
 	config.set_value("display", "damage_numbers", damage_numbers)
+	config.set_value("display", "edge_arrows", edge_arrows)
 	config.set_value("display", "match_point_plate", match_point_plate)
+	config.set_value("display", "stage_title_card", stage_title_card)
 	config.set_value("display", "hit_pause", hit_pause)
 	config.set_value("display", "pickup_callouts", pickup_callouts)
 	config.set_value("display", "reduce_flash", reduce_flash)
