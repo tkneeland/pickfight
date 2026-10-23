@@ -317,7 +317,7 @@ func _strike(victim: Node) -> void:
 	# Only what the hit actually took off is reported (issue #162): a
 	# spawn-protected player takes nothing, and a report of the full damage
 	# would put a phantom number on screen and buzz their phone. The shove
-	# still lands on anyone left standing.
+	# lands on anyone left standing who is not protected (#991).
 	PartKitScript.hazard_strike(victim, damage, point, "rock", side, SHOVE_LIFT, shove_speed)
 
 func _shatter() -> void:

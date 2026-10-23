@@ -57,6 +57,8 @@ func setup(from: Vector2, flight_velocity: Vector2, hit_damage: float, knock: fl
 
 func _ready() -> void:
 	z_index = 5
+	# So a bot can find the live meteors without knowing the stage (#985).
+	add_to_group(&"meteors")
 	var circle := CircleShape2D.new()
 	circle.radius = radius
 	_query = PhysicsShapeQueryParameters2D.new()
@@ -115,7 +117,8 @@ func _strike(victim: Node) -> void:
 	if side == 0.0:
 		side = signf(velocity.x) if velocity.x != 0.0 else 1.0
 	# Only what the hit actually took off is reported (issue #162), as for a
-	# falling rock; the knock still lands on anyone left standing.
+	# falling rock; the knock lands on anyone left standing who is not
+	# protected (#991).
 	PartKitScript.hazard_strike(victim, damage, point, "meteor", side, KNOCK_LIFT, knock_speed)
 
 func _impact() -> void:

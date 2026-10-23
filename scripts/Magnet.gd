@@ -32,6 +32,9 @@ const MIN_DISTANCE: float = 8.0
 ## Most colliders one field query reports. Stage terrain on the world layer
 ## inside the field counts toward it as well as players and heads.
 const MAX_RESULTS: int = 32
+## Least time between two pull sounds while the field keeps affecting someone
+## (#978). The first sound plays on the tick the field starts affecting a body.
+const SOUND_INTERVAL_SEC: float = 1.5
 
 var wielder: RigidBody2D
 var _range: float = 0.0
@@ -44,6 +47,8 @@ var _circle: CircleShape2D = null
 ## The line-of-sight ray, built once and reused for every body each tick.
 var _ray: PhysicsRayQueryParameters2D = null
 var _world_mask: int = FALLBACK_LAYER_WORLD
+## Seconds until the pull sound may play again; counts down every tick.
+var _sound_cooldown: float = 0.0
 
 func setup(from_wielder: RigidBody2D, stats: Resource) -> void:
 	wielder = from_wielder
@@ -67,9 +72,15 @@ func _physics_process(delta: float) -> void:
 		return
 	if not is_instance_valid(wielder) or not bool(wielder.get("alive")):
 		return
-	_apply_field(delta)
+	_sound_cooldown = maxf(0.0, _sound_cooldown - delta)
+	if _apply_field(delta) and _sound_cooldown <= 0.0:
+		_sound_cooldown = SOUND_INTERVAL_SEC
+		var sfx: Node = get_node_or_null(^"/root/Sfx")
+		if sfx != null:
+			sfx.play(&"magnet_pull", wielder.global_position, 1.0)
 
-func _apply_field(delta: float) -> void:
+## True when the field moved at least one body this tick.
+func _apply_field(delta: float) -> bool:
 	# Made once and reused every tick; the radius and the rest are set each call.
 	if _query == null:
 		_query = PhysicsShapeQueryParameters2D.new()
@@ -91,6 +102,7 @@ func _apply_field(delta: float) -> void:
 		_ray.collision_mask = _world_mask
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var seen: Dictionary = {}
+	var affected: bool = false
 	for result: Dictionary in space.intersect_shape(query, MAX_RESULTS):
 		var body: RigidBody2D = result["collider"] as RigidBody2D
 		if body == null or not is_instance_valid(body) or seen.has(body.get_instance_id()):
@@ -106,6 +118,8 @@ func _apply_field(delta: float) -> void:
 			continue
 		var strength: float = _force * (1.0 - distance / _range)
 		body.apply_central_impulse(to_wielder / distance * strength * delta)
+		affected = true
+	return affected
 
 ## A player's body or a weapon head, and not a dead player's.
 func _is_movable(body: RigidBody2D) -> bool:

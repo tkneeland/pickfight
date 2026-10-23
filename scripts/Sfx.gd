@@ -122,6 +122,10 @@ const SOUNDS: Dictionary = {
 	"hit_shield": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": 0.0},
+	# A shield face stopping a shot (issue #969): short metal ring, once per block.
+	"shield_block": {"files": [
+		"kenney_impact/impactMetal_medium_000.ogg",
+		"kenney_impact/impactMetal_medium_001.ogg"], "db": -3.0, "max_sec": 0.5},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",
@@ -172,6 +176,17 @@ const SOUNDS: Dictionary = {
 		"kenney_scifi/forceField_001.ogg"], "db": -4.0, "max_sec": 0.6},
 	"teleport": {"files": [
 		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -6.0, "max_sec": 0.6},
+	"mud_squelch": {"files": [
+		"kenney_impact/impactSoft_medium_000.ogg",
+		"kenney_impact/impactSoft_medium_001.ogg"], "db": -6.0, "max_sec": 0.4},
+	"ice_skid": {"files": [
+		"kenney_impact/impactMetal_light_000.ogg",
+		"kenney_impact/impactMetal_light_001.ogg"], "db": -8.0, "max_sec": 0.4},
+	"hook_latch": {"files": [
+		"kenney_impact/impactMetal_light_002.ogg",
+		"kenney_impact/impactMetal_light_001.ogg"], "db": -6.0, "max_sec": 0.35},
+	"magnet_pull": {"files": [
+		"kenney_scifi/forceField_000.ogg"], "db": -6.0, "max_sec": 0.6},
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
@@ -207,6 +222,9 @@ const SOUNDS: Dictionary = {
 	# Grabbing a pickup (#898): a short quiet blip at the grabber.
 	"pickup_grab": {"files": [
 		"kenney_interface/maximize_006.ogg"], "db": -9.0, "overlap": 2, "max_sec": 0.4},
+	# A pickup appearing (#998): a soft short pluck where it pops in.
+	"pickup_spawn": {"files": [
+		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.35},
 	# --- Round and UI -------------------------------------------------------
 	"countdown": {"files": [
 		"kenney_interface/tick_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},

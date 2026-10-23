@@ -74,6 +74,11 @@ repository keeps its own base SHA, branch, verification result, and pull request
   `rm -rf /tmp/pf-fresh && git clone -q . /tmp/pf-fresh && godot --headless --path /tmp/pf-fresh --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"`.
   **Any output means the check failed**, whatever the exit code. The exit code
   is 0 either way (#21).
+- **Online joiners see exactly what the host sees** (owner rule, 2026-10-23, #930/#976).
+  Any PR that adds or changes something visible during a match (art, effects,
+  callouts, screens) makes it identical on the Online client (`RemoteClient.gd`,
+  `RemotePuppet.gd`) in the same PR. Share the host's drawing code; never keep a
+  second copy. A known difference is a bug, not a follow-up.
 - Input scheme is **settled**: relative vector input from phone browsers, per [ADR-0003](docs/adr/0003-relative-vector-input.md). The former open question (gamepad-per-player vs keyboard-only) is void — it assumed a shared screen and shared input devices, and [ADR-0001](docs/adr/0001-same-room-host-rendered-multiplayer.md) removed both assumptions. Do not reopen it as though it were live.
 
 ## Atlas repository workflow

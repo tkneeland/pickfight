@@ -101,7 +101,7 @@ static func reduce_flash(from: Node) -> bool:
 ## `kind` for the achievements (#689), the damage goes through `take_damage()`,
 ## and what it actually took off goes out on the victim's own `strike_landed`
 ## (issue #162: a spawn-protected player takes nothing, and nothing dealt is
-## nothing reported). A victim still standing is then shoved at `speed` along
+## nothing reported). A victim still standing and not spawn-protected is then shoved at `speed` along
 ## (`side`, -`lift`) normalised. Returns the damage dealt.
 static func hazard_strike(victim: Node, amount: float, point: Vector2, kind: String, side: float, lift: float,
 		speed: float) -> float:
@@ -115,8 +115,8 @@ static func hazard_strike(victim: Node, amount: float, point: Vector2, kind: Str
 		dealt = float(after) - float(before)
 	if dealt > 0.0 and victim.has_signal("strike_landed"):
 		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
-	if not victim.alive:
-		return dealt
+	if not victim.alive or victim.get("spawn_protected") == true:
+		return dealt  # a protected fighter is not shoved either (#991)
 	var body := victim as RigidBody2D
 	if body != null:
 		body.apply_central_impulse(Vector2(side, -lift).normalized() * speed * body.mass)

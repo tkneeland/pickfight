@@ -177,6 +177,11 @@ func _pop_in(pickup: Node2D, parent: Node, spot: Vector2) -> void:
 	var ring: Node2D = PickupSpawnRingScript.new()
 	parent.add_child(ring)
 	ring.global_position = spot
+	# Issue #998: a soft cue at the spot; online clients hear it through the
+	# generic Sfx snapshot trailer.
+	var sfx: Node = pickup.get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(&"pickup_spawn", spot, 1.0)
 
 ## `offered` without the weapons the host switched off (#294). Left whole if
 ## that would leave nothing, which the settings do not allow anyway.
