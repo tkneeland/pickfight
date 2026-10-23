@@ -1121,6 +1121,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
 	"event_cooldown_keeps_out_of_tree_players_refactor_audio",
+	"expanding_rings_share_base_and_free_refactor_audio",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3792,6 +3793,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
 		"event_cooldown_keeps_out_of_tree_players_refactor_audio":
 			return await _scenario_event_cooldown_keeps_out_of_tree_players_refactor_audio()
+		"expanding_rings_share_base_and_free_refactor_audio":
+			return await _scenario_expanding_rings_share_base_and_free_refactor_audio()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -53125,5 +53128,38 @@ func _scenario_event_cooldown_keeps_out_of_tree_players_refactor_audio() -> Arra
 	if not tracker.players.is_empty():
 		failures.append("a freed player was kept in tracking")
 	floor_node.free()
+	_scenario_completed = true
+	return failures
+## Refactor (audio/juice): the pickup spawn ring and the round-win rings are
+## both ExpandingRing.gd, keep their own look, and free themselves once their
+## lifetime is up; PlayOfRound reads ReplayBuffer's capture rate.
+func _scenario_expanding_rings_share_base_and_free_refactor_audio() -> Array[String]:
+	var failures: Array[String] = []
+	var pickup_script: GDScript = preload("res://scripts/PickupSpawnRing.gd")
+	var win_script: GDScript = preload("res://scripts/RoundWinRing.gd")
+	var pickup: Node2D = pickup_script.new()
+	var win: Node2D = win_script.new()
+	for ring: Node2D in [pickup, win]:
+		if not (ring.get_script() as Script).get_base_script().resource_path.ends_with("ExpandingRing.gd"):
+			failures.append("%s does not extend ExpandingRing.gd" % ring.name)
+	if not is_equal_approx(float(pickup.get("lifetime_sec")), 0.5) or int(pickup.get("ring_count")) != 1:
+		failures.append("the pickup ring lost its 0.5 s single-ring look")
+	if not is_equal_approx(float(win.get("lifetime_sec")), 0.8) or int(win.get("ring_count")) != 2:
+		failures.append("the round-win ring lost its 0.8 s two-ring look")
+	if pickup.get("color") != Color(1.0, 0.85, 0.3, 1.0):
+		failures.append("the pickup ring is no longer gold")
+	root.add_child(pickup)
+	root.add_child(win)
+	var ok: bool = await _await_condition(func() -> bool:
+		return not is_instance_valid(pickup) and not is_instance_valid(win), 3000)
+	if not ok:
+		failures.append("a ring did not free itself after its lifetime")
+		for ring: Variant in [pickup, win]:
+			if is_instance_valid(ring):
+				(ring as Node).free()
+	var play_of_round: GDScript = preload("res://scripts/PlayOfRound.gd")
+	var replay: GDScript = preload("res://scripts/ReplayBuffer.gd")
+	if int(play_of_round.get_script_constant_map()["CAPTURE_FPS"]) != int(replay.get_script_constant_map()["CAPTURE_FPS"]):
+		failures.append("PlayOfRound's CAPTURE_FPS no longer matches ReplayBuffer's")
 	_scenario_completed = true
 	return failures

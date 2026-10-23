@@ -1,8 +1,8 @@
-extends Node2D
+extends "res://scripts/ExpandingRing.gd"
 
 ## A one-shot pair of rings in the winner's colour that expand and fade where a
 ## round was won (#909), so the host sees who took the point without reading
-## the banner. Modelled on PickupSpawnRing.gd. Motion only, no flash, so Reduce
+## the banner. Drawn by ExpandingRing.gd, as PickupSpawnRing.gd is. Motion only, no flash, so Reduce
 ## flashes does not apply. Frees itself when done.
 
 const LIFETIME_SEC: float = 0.8
@@ -12,12 +12,16 @@ const RING_WIDTH: float = 5.0
 ## The second ring trails the first by this share of the lifetime.
 const SECOND_DELAY: float = 0.25
 
-var color: Color = Color.WHITE
-var _age: float = 0.0
-
 func _init() -> void:
 	name = "RoundWinRing"
 	z_index = -1
+	lifetime_sec = LIFETIME_SEC
+	start_radius = START_RADIUS
+	end_radius = END_RADIUS
+	ring_width = RING_WIDTH
+	ring_count = 2
+	ring_delay = SECOND_DELAY
+	segments = 64
 
 ## Spawns a ring at `slot`'s fighter, unless the round has no single winner or
 ## this round wins the match (the KO slow-motion and podium cover that, #328).
@@ -47,20 +51,3 @@ static func spawn_for(round_manager: Node, slot: int) -> Node2D:
 	parent.add_child(ring)
 	ring.global_position = player.global_position
 	return ring
-
-func _process(delta: float) -> void:
-	_age += delta
-	if _age >= LIFETIME_SEC:
-		queue_free()
-		return
-	queue_redraw()
-
-func _draw() -> void:
-	for i in 2:
-		var t: float = clampf((_age - float(i) * SECOND_DELAY * LIFETIME_SEC) / (LIFETIME_SEC * (1.0 - SECOND_DELAY)), 0.0, 1.0)
-		if t <= 0.0 or t >= 1.0:
-			continue
-		var eased: float = 1.0 - (1.0 - t) * (1.0 - t)
-		var c := color
-		c.a = 1.0 - t
-		draw_arc(Vector2.ZERO, lerpf(START_RADIUS, END_RADIUS, eased), 0.0, TAU, 64, c, RING_WIDTH, true)

@@ -167,18 +167,19 @@ func _follow_view(delta: float) -> void:
 	var offset: Vector2 = centre - stage_origin
 	var wrap: float = VIEW_SIZE.x + 2.0 * MARGIN
 	for i in _layers.size():
-		# In the backdrop's own (scaled) units, so a camera move shifts each
-		# layer by the same share of the screen on a large stage as on a
-		# normal one.
-		var shift: Vector2 = -offset * _parallax[i] / _scale
-		if _drift[i] != 0.0:
-			shift.x += fposmod(_time * _drift[i], wrap) - wrap
-		_layers[i].position = shift
+		_layers[i].position = _shift(offset, _parallax[i], _drift[i], wrap)
 	for i in _dress_layers.size():
-		var dress_shift: Vector2 = -offset * DRESS_PARALLAX[i] / _scale
-		if _dress_drift[i] != 0.0:
-			dress_shift.x += fposmod(_time * _dress_drift[i], wrap) - wrap
-		_dress_layers[i].position = dress_shift
+		_dress_layers[i].position = _shift(offset, DRESS_PARALLAX[i], _dress_drift[i], wrap)
+
+## Where a layer sits for a view `offset` from the stage's origin: moved by its
+## `parallax` share, plus its `drift` scrolling round a `wrap`-wide loop. In
+## the backdrop's own (scaled) units, so a camera move shifts each layer by the
+## same share of the screen on a large stage as on a normal one.
+func _shift(offset: Vector2, parallax: float, drift: float, wrap: float) -> Vector2:
+	var shift: Vector2 = -offset * parallax / _scale
+	if drift != 0.0:
+		shift.x += fposmod(_time * drift, wrap) - wrap
+	return shift
 
 func _build() -> void:
 	var rng := RandomNumberGenerator.new()
