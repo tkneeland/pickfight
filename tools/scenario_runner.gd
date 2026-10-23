@@ -161,6 +161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"conveyor_two_more_stages",
 	"teleporter_moves_player_to_twin",
 	"teleporter_plays_own_sound",
+	"stage_teleporters_pair_up",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
@@ -1878,6 +1879,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_teleporter_moves_player_to_twin()
 		"teleporter_plays_own_sound":
 			return await _scenario_teleporter_plays_own_sound()
+		"stage_teleporters_pair_up":
+			return await _scenario_stage_teleporters_pair_up()
 		"ice_patch_slides_player_and_restores":
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
@@ -11051,6 +11054,36 @@ func _scenario_teleporter_plays_own_sound() -> Array[String]:
 		failures.append("teleport played for a fighter in the re-entry window")
 	sfx.stop_recording()
 	await _teardown(stage)
+	return failures
+## Stage teleporters (#960): on every stage each Teleporter's twin resolves to
+## a Teleporter whose twin is the first; Islands and Highrise carry one pair
+## each, and no end sits on a spawn or pickup spot.
+func _scenario_stage_teleporters_pair_up() -> Array[String]:
+	var failures: Array[String] = []
+	for f: String in DirAccess.get_files_at("res://scenes/stages"):
+		if not f.ends_with(".tscn"):
+			continue
+		var stage_name: String = f.get_basename()
+		var stage: Node2D = (load("res://scenes/stages/%s" % f) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var ends: Array[Node] = []
+		for child: Node in stage.get_children():
+			if child.get_script() != null and str(child.get_script().resource_path).ends_with("Teleporter.gd"):
+				ends.append(child)
+		for end: Node in ends:
+			var other: Node = end.get_node_or_null(end.get("twin"))
+			if other == null or other == end:
+				failures.append("%s %s has no twin" % [stage_name, end.name])
+			elif other.get_script() != end.get_script() or other.get_node_or_null(other.get("twin")) != end:
+				failures.append("%s %s twin does not point back" % [stage_name, end.name])
+			for marker: Node in stage.get_children():
+				if marker is Marker2D and (marker.name.begins_with("Spawn") or marker.name.begins_with("PickupSpawn")):
+					if (marker as Node2D).position.distance_to((end as Node2D).position) < 50.0:
+						failures.append("%s %s is within 50 px of %s" % [stage_name, end.name, marker.name])
+		if stage_name in ["Islands", "Highrise"] and ends.size() != 2:
+			failures.append("%s has %d teleporters, want 2" % [stage_name, ends.size()])
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
 ## them settle, then returns how far they travelled along x in 90 ticks. The
