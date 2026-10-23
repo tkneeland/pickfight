@@ -52138,5 +52138,8 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	if toggle != null and not ui.toggle_hit(point):
 		failures.append("the Settings toggle stayed unclickable after the credits closed")
 	PadMenuScript368.reset()
+	credits.queue_free() # CreditsScreen is built once and kept under the root; this scenario built it
+	ui.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures
