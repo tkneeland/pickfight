@@ -941,6 +941,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
 	"grapple_hit_on_player_anchors_and_thrower_zips_to_them",
+	"hook_latch_plays_once_per_latch",
 	"grapple_anchored_player_feels_no_force_from_the_rope",
 	"grapple_release_lets_go_of_an_anchored_player",
 	"grapple_lets_go_when_either_player_is_knocked_out",
@@ -3459,6 +3460,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
 			return await _scenario_pogo_chained_hops_keep_their_height()
+		"hook_latch_plays_once_per_latch":
+			return await _scenario_hook_latch_plays_once_per_latch()
 		"grapple_hit_on_player_anchors_and_thrower_zips_to_them":
 			return await _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them()
 		"grapple_anchored_player_feels_no_force_from_the_rope":
@@ -43833,6 +43836,98 @@ func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array
 	if absf(victim.damage - 8.0) > 0.01:
 		failures.append("the hit dealt %.1f, not 8" % victim.damage)
 	await _teardown(z["stage"])
+	_scenario_completed = true
+	return failures
+## Issue #1001: a hook latching plays one `hook_latch` at the hook; a miss and
+## a shield-turned hook play none. The wall, player-anchor and rod-catch
+## counts are the control: they are 0 without the sound.
+func _hook_latch_wall(sfx: Node) -> int:
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	sfx.start_recording()
+	await _flick(player, Vector2.UP)
+	var hook: Node2D = player.launched_hook()
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	await _await_ticks(60)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	var last: Dictionary = _sfx_last(sfx, "hook_latch")
+	if n == 1 and not (last["position"] is Vector2):
+		n = -1
+	await _teardown(stage)
+	return n
+func _hook_latch_player(sfx: Node, path: String) -> int:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	await _await_ticks(2)
+	await _equip(shooter, path)
+	_brace(shooter)
+	victim.freeze = true
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	victim.freeze = false
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	await _await_ticks(60)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	return n
+func _hook_latch_miss(sfx: Node) -> int:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	await _await_ticks(240)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	return n
+func _scenario_hook_latch_plays_once_per_latch() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"hook_latch"):
+		return ["hook_latch is not in the sound table"]
+	var wall: int = await _hook_latch_wall(sfx)
+	var anchor: int = await _hook_latch_player(sfx, GRAPPLE_PATH)
+	var rod: int = await _hook_latch_player(sfx, FISHING_ROD_PATH)
+	var miss: int = await _hook_latch_miss(sfx)
+	var shielded: int = 0
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	await _await_ticks(2)
+	await _equip(holder, SHIELD_PATH)
+	await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	_brace(holder)
+	_aim(holder, PI)
+	await _await_ticks(SETTLE_TICKS)
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	await _await_ticks(240)
+	sfx.stop_recording()
+	shielded = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	print("      hook_latch: wall %d, anchor %d, rod %d, miss %d, shielded %d" % [wall, anchor, rod, miss, shielded])
+	if wall != 1:
+		failures.append("a grapple hooking a wall played hook_latch %d times, want 1 (-1 = not positional)" % wall)
+	if anchor != 1:
+		failures.append("a grapple anchoring to a player played hook_latch %d times, want 1" % anchor)
+	if rod != 1:
+		failures.append("a fishing rod catching a player played hook_latch %d times, want 1" % rod)
+	if miss != 0:
+		failures.append("a missed hook played hook_latch %d times" % miss)
+	if shielded != 0:
+		failures.append("a hook turned back by a shield played hook_latch %d times" % shielded)
 	_scenario_completed = true
 	return failures
 func _scenario_grapple_anchored_player_feels_no_force_from_the_rope() -> Array[String]:
