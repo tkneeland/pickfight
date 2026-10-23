@@ -50041,7 +50041,7 @@ func _scenario_stage_title_card_switch_off_shows_none() -> Array[String]:
 	cards.show_stage_title("Test", 1.0, "rule")
 	if cards.stage_title_label() == null or not cards.stage_title_label().visible:
 		failures.append("with Stage title card on no card was shown")
-	layer.queue_free()
+	layer.free()
 	var path: String = OS.get_temp_dir().path_join("pickfight_stage_title_942_%d.cfg" % OS.get_process_id())
 	sfx.settings_path = path
 	sfx.persist_settings = true
@@ -50422,7 +50422,7 @@ func _text_fit_synthetic_751(sfx: Node, fit_script: GDScript) -> Array[String]:
 	await _text_fit_settle_751(sfx)
 	if absf(sfx.fit_factor(tight) - 1.0) > 0.001 or tight.theme != null or first_word.get_theme_font_size("font_size") != 40:
 		failures.append("Normal did not restore the tight screen (factor %.2f, label %d px)" % [sfx.fit_factor(tight), first_word.get_theme_font_size("font_size")])
-	layer.queue_free()
+	layer.free()
 	await _await_ticks(2)
 	return failures
 ## The numbers the launch copy quotes, counted from the game (#797): the stage
@@ -52085,7 +52085,7 @@ func _scenario_victory_keeps_same_podium_and_resets_title_colour_review_ui() -> 
 	victory.refresh(slots, scores, -1, awards)
 	if victory.victory_title().get_theme_color("font_color") != preload("res://scripts/UiTheme.gd").YELLOW:
 		failures.append("a match with no winner kept the last winner's title colour %s" % victory.victory_title().get_theme_color("font_color"))
-	layer.queue_free()
+	layer.free()
 	await process_frame
 	_scenario_completed = true
 	return failures
