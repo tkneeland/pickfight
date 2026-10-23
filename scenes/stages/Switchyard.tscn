@@ -1,23 +1,12 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="spin"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
 [ext_resource type="PackedScene" path="res://scenes/parts/SpeedStrip.tscn" id="speed"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_850x40"]
-size = Vector2(850, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_360x24"]
-size = Vector2(360, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_340x24"]
-size = Vector2(340, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Switchyard (issue #373, a large Hot Potato stage for five to eight players):
 ; two yards either side of a 500 px gap. Each yard is a floor with a raised
@@ -41,57 +30,27 @@ view_size = Vector2(2240, 1260)
 mode_weights = {"hot_potato": 4.0, "_other": 0.3}
 
 ; The two yards. Spawns sit on their outer ends.
-[node name="YardLeft" type="StaticBody2D" parent="."]
+[node name="YardLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-675, 400)
+size = Vector2(850, 40)
 
-[node name="YardLeftShape" type="CollisionShape2D" parent="YardLeft"]
-shape = SubResource("RectangleShape2D_850x40")
-
-[node name="YardLeftVisual" type="Polygon2D" parent="YardLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-425, -20, 425, -20, 425, 20, -425, 20)
-
-[node name="YardRight" type="StaticBody2D" parent="."]
+[node name="YardRight" parent="." instance=ExtResource("platform")]
 position = Vector2(675, 400)
-
-[node name="YardRightShape" type="CollisionShape2D" parent="YardRight"]
-shape = SubResource("RectangleShape2D_850x40")
-
-[node name="YardRightVisual" type="Polygon2D" parent="YardRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-425, -20, 425, -20, 425, 20, -425, 20)
+size = Vector2(850, 40)
 
 ; Raised platforms over each yard's inner end, 270 px above the floor.
-[node name="RaisedLeft" type="StaticBody2D" parent="."]
+[node name="RaisedLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-580, 122)
+size = Vector2(360, 24)
 
-[node name="RaisedLeftShape" type="CollisionShape2D" parent="RaisedLeft"]
-shape = SubResource("RectangleShape2D_360x24")
-
-[node name="RaisedLeftVisual" type="Polygon2D" parent="RaisedLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-180, -12, 180, -12, 180, 12, -180, 12)
-
-[node name="RaisedRight" type="StaticBody2D" parent="."]
+[node name="RaisedRight" parent="." instance=ExtResource("platform")]
 position = Vector2(580, 122)
-
-[node name="RaisedRightShape" type="CollisionShape2D" parent="RaisedRight"]
-shape = SubResource("RectangleShape2D_360x24")
-
-[node name="RaisedRightVisual" type="Polygon2D" parent="RaisedRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-180, -12, 180, -12, 180, 12, -180, 12)
+size = Vector2(360, 24)
 
 ; The bridge across the top, 160 above the raised platforms.
-[node name="Bridge" type="StaticBody2D" parent="."]
+[node name="Bridge" parent="." instance=ExtResource("platform")]
 position = Vector2(0, -38)
-
-[node name="BridgeShape" type="CollisionShape2D" parent="Bridge"]
-shape = SubResource("RectangleShape2D_340x24")
-
-[node name="BridgeVisual" type="Polygon2D" parent="Bridge"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-170, -12, 170, -12, 170, 12, -170, 12)
+size = Vector2(340, 24)
 
 ; The pads: up beside the raised platform, with the bridge in reach on the way down.
 [node name="PadLeft" parent="." instance=ExtResource("pad")]
@@ -140,12 +99,8 @@ position = Vector2(-840, 320)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(840, 320)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("kz")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spots: over the bridge, on each raised platform and by the spinner.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

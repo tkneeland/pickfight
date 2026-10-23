@@ -1161,6 +1161,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
 	"lobby_kick_needs_second_press",
+	"join_screen_remembers_last_room_code",
+	"stage_platform_geometry_unchanged_refactor_platforms",
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
 ]
@@ -3914,6 +3916,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
 		"lobby_kick_needs_second_press":
 			return await _scenario_lobby_kick_needs_second_press()
+		"join_screen_remembers_last_room_code":
+			return await _scenario_join_screen_remembers_last_room_code()
+		"stage_platform_geometry_unchanged_refactor_platforms":
+			return await _scenario_stage_platform_geometry_unchanged_refactor_platforms()
 		"ice_patches_overlapping_keep_grip_off_refactor_modes":
 			return await _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes()
 		"controller_page_review_fixes_refactor_phone":
@@ -54279,6 +54285,228 @@ func _scenario_lobby_kick_needs_second_press() -> Array[String]:
 	await _rc_close_241(rig)
 	return failures
 
+## Issue #907: the PC join screen remembers the last room it got a seat in and offers it as a one-tap "Last room: CODE" button; a dead room (bad_room, host_left) is forgotten.
+func _scenario_join_screen_remembers_last_room_code() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://scenario_last_room_907.cfg"
+	DirAccess.remove_absolute(path)
+	var first: Node = RemoteClientScript241.new()
+	first.settings_path = path
+	first.career_path = ""
+	get_root().add_child(first)
+	await _await_ticks(4)
+	var button: Button = first.find_child("LastRoom", true, false) as Button
+	if button == null or not ("last_room_code" in first):
+		failures.append("the join screen has no LastRoom button / last_room_code")
+		first.queue_free()
+		await _await_ticks(2)
+		DirAccess.remove_absolute(path)
+		_scenario_completed = true
+		return failures
+	if button.visible:
+		failures.append("LastRoom is shown before any room was ever joined")
+	# A seat is granted in WXYZ: remembered, saved, and offered on the join screen afterwards.
+	first.room_code = "WXYZ"
+	first.state = RcState241.CONNECTING
+	first._on_host_text("{\"slot\":2}")
+	if first.last_room_code != "WXYZ":
+		failures.append("the welcome did not remember the room (last_room_code '%s')" % first.last_room_code)
+	first.leave()
+	await _await_ticks(2)
+	var want: String = first.tr("JOIN_LAST_ROOM") % "WXYZ"
+	if not button.is_visible_in_tree():
+		failures.append("LastRoom is not shown on the join screen after leaving a room")
+	if button.text != want or want.begins_with("JOIN_LAST_ROOM"):
+		failures.append("LastRoom reads '%s', wanted the translated '%s'" % [button.text, want])
+	var room: LineEdit = first.find_child("RoomCode", true, false) as LineEdit
+	room.text = ""
+	button.pressed.emit()
+	if room.text != "WXYZ":
+		failures.append("pressing LastRoom filled the field with '%s'" % room.text)
+	if first.state != RcState241.JOIN:
+		failures.append("LastRoom started a join (state %s)" % first.state)
+	first.queue_free()
+	await _await_ticks(2)
+	# A fresh client reads it back from the file.
+	var second: Node = RemoteClientScript241.new()
+	second.settings_path = path
+	second.career_path = ""
+	get_root().add_child(second)
+	await _await_ticks(4)
+	var button2: Button = second.find_child("LastRoom", true, false) as Button
+	if second.last_room_code != "WXYZ" or button2 == null or not button2.is_visible_in_tree():
+		failures.append("a new client did not offer the saved room (last_room_code '%s')" % second.last_room_code)
+	# The relay says the room does not exist: forgotten, and gone from the screen and the file.
+	second.room_code = "WXYZ"
+	second._on_relay_text("{\"t\":\"error\",\"reason\":\"bad_room\"}")
+	await _await_ticks(2)
+	if second.last_room_code != "" or (button2 != null and button2.visible):
+		failures.append("bad_room did not clear the remembered room")
+	# The host leaving a room that was joined clears it too.
+	second.room_code = "ABCD"
+	second.state = RcState241.CONNECTING
+	second._on_host_text("{\"slot\":1}")
+	if second.last_room_code != "ABCD":
+		failures.append("the second welcome did not remember ABCD")
+	second._on_host_text("{\"t\":\"error\",\"reason\":\"host_left\"}")
+	await _await_ticks(2)
+	if second.last_room_code != "" or (button2 != null and button2.visible):
+		failures.append("host_left did not clear the remembered room")
+	second.queue_free()
+	await _await_ticks(2)
+	var third: Node = RemoteClientScript241.new()
+	third.settings_path = path
+	third.career_path = ""
+	get_root().add_child(third)
+	await _await_ticks(4)
+	if third.last_room_code != "":
+		failures.append("a cleared room came back from the file ('%s')" % third.last_room_code)
+	third.queue_free()
+	await _await_ticks(2)
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+# --- Stage platform parts (refactor_platforms) -----------------------------------
+## The table every stage's static terrain must still match, one line per
+## fact: recorded from the stages before their plain platforms and floor kill
+## zones became `scenes/parts/Platform.tscn` and `scenes/parts/KillFloor.tscn`
+## instances, so that migration is provably lossless.
+const STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS: String = "res://tools/stage_platform_geometry.txt"
+## Where the scenario writes the table it measured, to diff against or to copy
+## over the committed one after a deliberate geometry change.
+const STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS: String = "user://stage_platform_geometry_actual.txt"
+## Every stage's static bodies and its KillZone, as authored (instanced, not in
+## the tree): global transform, layers, z, every collision shape (size, one-way)
+## and polygon (points, colour) under them; then, in the tree, the colour each
+## of those polygons takes from the stage mood. Compared line for line with
+## the committed table. A stage newer than the table is measured but not
+## compared; a stage in the table that no longer loads fails.
+func _scenario_stage_platform_geometry_unchanged_refactor_platforms() -> Array[String]:
+	var failures: Array[String] = []
+	var expected: Dictionary = {}
+	for raw: String in FileAccess.get_file_as_string(STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS).split("\n", false):
+		var line: String = raw.strip_edges(false, true)
+		if line.is_empty() or line.begins_with("#"):
+			continue
+		var stage_name: String = line.get_slice("|", 0)
+		# Packed arrays are values: append to a copy and store it back.
+		var stage_lines: PackedStringArray = expected.get(stage_name, PackedStringArray())
+		stage_lines.append(line)
+		expected[stage_name] = stage_lines
+	if expected.size() < 40:
+		failures.append("geometry table %s covers %d stages, wants 40+" % [STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS, expected.size()])
+	var stages: PackedStringArray = []
+	for file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if file.ends_with(".tscn"):
+			stages.append(file.get_basename())
+	stages.sort()
+	var measured: PackedStringArray = []
+	for stage_name: String in stages:
+		var lines: PackedStringArray = await _stage_geometry_lines_refactor_platforms(stage_name)
+		measured.append_array(lines)
+		if not expected.has(stage_name):
+			continue
+		var want: PackedStringArray = expected[stage_name]
+		if lines == want:
+			continue
+		var shown: int = 0
+		for i in maxi(lines.size(), want.size()):
+			var got_line: String = lines[i] if i < lines.size() else "<nothing>"
+			var want_line: String = want[i] if i < want.size() else "<nothing>"
+			if got_line != want_line:
+				failures.append("%s line %d: got %s, wanted %s" % [stage_name, i, got_line, want_line])
+				shown += 1
+				if shown >= 3:
+					break
+	for stage_name: String in expected:
+		if not stages.has(stage_name):
+			failures.append("%s is in the geometry table but not in scenes/stages" % stage_name)
+	var out := FileAccess.open(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS, FileAccess.WRITE)
+	if out != null:
+		out.store_string("\n".join(measured) + "\n")
+		out.close()
+	if not failures.is_empty():
+		failures.append("measured table written to %s" % ProjectSettings.globalize_path(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS))
+	_scenario_completed = true
+	return failures
+
+func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	var instance: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate()
+	var nodes: Array[Node] = instance.find_children("*", "StaticBody2D", true, false)
+	var kill_zone: Node = instance.get_node_or_null("KillZone")
+	if kill_zone != null:
+		nodes.append(kill_zone)
+	for node: Node in nodes:
+		var path: String = _geometry_path_refactor_platforms(instance, node)
+		var body: CollisionObject2D = node as CollisionObject2D
+		var head: String = "%s|%s|%s|%s|%s|layer=%d|mask=%d|z=%d|zrel=%s|visible=%s" % [stage_name,
+				"body" if node is StaticBody2D else "kill", path, node.get_class(),
+				var_to_str(_geometry_xform_refactor_platforms(instance, body)),
+				body.collision_layer, body.collision_mask, body.z_index, body.z_as_relative, body.visible]
+		if node is StaticBody2D:
+			var static_body: StaticBody2D = node
+			head += "|material=%s|vel=%s|spin=%s" % [static_body.physics_material_override != null,
+					var_to_str(static_body.constant_linear_velocity), static_body.constant_angular_velocity]
+		else:
+			var script: Script = node.get_script()
+			head += "|script=%s" % (script.resource_path if script != null else "")
+			for prop: Dictionary in node.get_property_list():
+				if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE and int(prop["usage"]) & PROPERTY_USAGE_STORAGE:
+					head += "|%s=%s" % [prop["name"], var_to_str(node.get(prop["name"]))]
+		out.append(head)
+		for child: Node in node.get_children():
+			if child is CollisionShape2D:
+				var shape_node: CollisionShape2D = child
+				var shape: Shape2D = shape_node.shape
+				out.append("%s|shape|%s/%s|%s|%s|%s|oneway=%s|disabled=%s" % [stage_name, path, _geometry_name_refactor_platforms(child),
+						var_to_str(shape_node.transform), shape.get_class() if shape != null else "null",
+						var_to_str(shape.get("size")) if shape != null else "", shape_node.one_way_collision,
+						shape_node.disabled])
+			elif child is Polygon2D:
+				var poly: Polygon2D = child
+				out.append("%s|poly|%s/%s|%s|%s|%s|z=%d|visible=%s|texture=%s|offset=%s" % [stage_name, path,
+						_geometry_name_refactor_platforms(child), var_to_str(poly.transform), var_to_str(poly.polygon), var_to_str(poly.color),
+						poly.z_index, poly.visible, poly.texture != null, var_to_str(poly.offset)])
+			else:
+				out.append("%s|child|%s/%s|%s" % [stage_name, path, _geometry_name_refactor_platforms(child), child.get_class()])
+	# In the tree under a fixed mood: what colour the stage paints each of them.
+	instance.set("stage_index", 0)
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	holder.add_child(instance)
+	for node: Node in instance.find_children("*", "StaticBody2D", true, false):
+		for child: Node in node.get_children():
+			if child is Polygon2D:
+				out.append("%s|tinted|%s/%s|%s" % [stage_name, _geometry_path_refactor_platforms(instance, node),
+						_geometry_name_refactor_platforms(child), var_to_str((child as Polygon2D).color)])
+	holder.queue_free()
+	await process_frame
+	return out
+
+func _geometry_path_refactor_platforms(root: Node, node: Node) -> String:
+	var parts: PackedStringArray = []
+	var at: Node = node
+	while at != null and at != root:
+		parts.insert(0, _geometry_name_refactor_platforms(at))
+		at = at.get_parent()
+	return "/".join(parts)
+
+func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D:
+	var xform: Transform2D = Transform2D.IDENTITY
+	var at: Node = node
+	while at != null and at != root:
+		if at is Node2D:
+			xform = (at as Node2D).transform * xform
+		at = at.get_parent()
+	return xform
+
+## A node's name with the counter of an auto-generated one (`@Polygon2D@354`,
+## given to children a part builds without naming) dropped: that number
+## depends on how many nodes the process has made, not on the stage.
+func _geometry_name_refactor_platforms(node: Node) -> String:
+	var auto := RegEx.create_from_string("^@(\\w+)@\\d+$")
+	return auto.sub(String(node.name), "@$1@")
 ## Two overlapping ice patches (refactor of IcePatch): a player standing where
 ## both overlap is held on the ice by both, and taking either patch away
 ## leaves the grip off while the other is still underfoot; only with both gone
