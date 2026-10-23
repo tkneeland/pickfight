@@ -92,8 +92,7 @@ func _init() -> void:
 	_preview = PreviewScript.new()
 	_preview.custom_minimum_size = PREVIEW_SIZE
 	_preview_frame.add_child(_preview)
-	_preview_note = ScreenKitScript.themed_label(tr("PICKER_LIVE_NOTE"), 17, UiThemeScript.HINT_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_preview_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_preview_note = ScreenKitScript.themed_label(tr("PICKER_LIVE_NOTE"), 17, UiThemeScript.HINT_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "", TextServer.AUTOWRAP_WORD_SMART)
 	_preview_note.visible = false
 	left.add_child(_preview_note)
 	var right := VBoxContainer.new()
@@ -146,9 +145,8 @@ func _init() -> void:
 	_done_row.alignment = BoxContainer.ALIGNMENT_END
 	_done_row.visible = false
 	right.add_child(_done_row)
-	var done: Button = ScreenKitScript.themed_button(tr("PICKER_DONE"), UiThemeScript.YELLOW_BUTTON, "Done")
+	var done: Button = ScreenKitScript.themed_button(tr("PICKER_DONE"), UiThemeScript.YELLOW_BUTTON, "Done", true)
 	done.add_theme_font_size_override("font_size", 30)
-	done.focus_mode = Control.FOCUS_ALL
 	done.pressed.connect(func() -> void: done_pressed.emit())
 	_done_row.add_child(done)
 	_apply_layout()
@@ -180,6 +178,9 @@ func _apply_layout() -> void:
 	_done_row.visible = _popup_layout
 	_title.add_theme_font_size_override("font_size", 44 if _popup_layout else TITLE_SIZE)
 	_title.theme_type_variation = UiThemeScript.INK_HEADING_LABEL if _popup_layout else UiThemeScript.HEADING_LABEL
+	# The popup is the host's, where a gamepad (Steam Deck) must reach every pick, not only Done.
+	for button: Button in _hat_buttons.values() + _eyes_buttons.values():
+		button.focus_mode = Control.FOCUS_ALL if _popup_layout else Control.FOCUS_NONE
 	for heading: Label in _headings:
 		heading.add_theme_font_size_override("font_size", 26 if _popup_layout else FONT_SIZE)
 		heading.theme_type_variation = UiThemeScript.INK_HEADING_LABEL if _popup_layout else UiThemeScript.HEADING_LABEL
@@ -329,7 +330,7 @@ func _build_colors() -> void:
 		var button := Button.new()
 		button.name = "Color_%d" % i
 		button.toggle_mode = true
-		button.focus_mode = Control.FOCUS_NONE
+		button.focus_mode = Control.FOCUS_ALL if _popup_layout else Control.FOCUS_NONE
 		button.custom_minimum_size = Vector2(0, POPUP_SWATCH_HEIGHT) if _popup_layout else SWATCH_SIZE
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL if _popup_layout else Control.SIZE_FILL
 		var colour: Color = Color.html(str(palette[i])) if not str(palette[i]).is_empty() else Color(0.2, 0.2, 0.2)
@@ -337,14 +338,32 @@ func _build_colors() -> void:
 		var picked_style := UiThemeScript.box(colour, 12, 6, Vector2(0, 0), Vector4(0, 0, 0, 0))
 		picked_style.shadow_color = Color.WHITE
 		picked_style.shadow_size = 5
-		for state: String in ["normal", "hover", "disabled", "focus"]:
+		for state: String in ["normal", "hover", "disabled"]:
 			button.add_theme_stylebox_override(state, fill)
+		button.add_theme_stylebox_override("focus", _swatch_focus_box())
 		button.add_theme_stylebox_override("pressed", picked_style)
 		button.add_theme_stylebox_override("hover_pressed", picked_style)
 		button.pressed.connect(pick_color.bind(i))
 		_color_grid.add_child(button)
 		_color_buttons.append(button)
 	_refresh()
+
+## A swatch's gamepad focus: a yellow outline drawn over the colour, which stays visible.
+static func _swatch_focus_box() -> StyleBoxFlat:
+	var outline := StyleBoxFlat.new()
+	outline.draw_center = false
+	outline.set_border_width_all(4)
+	outline.border_color = UiThemeScript.YELLOW
+	outline.set_corner_radius_all(14)
+	outline.set_expand_margin_all(3)
+	return outline
+
+## Where a gamepad's focus lands when the Your look popup opens: the picked hat, else Done.
+func focus_target() -> Control:
+	var hat: Button = hat_button(str(_own.get("hat", PickerScript.HatScript.NONE)))
+	if hat != null and hat.focus_mode != Control.FOCUS_NONE and hat.is_visible_in_tree():
+		return hat
+	return done_button()
 
 func _grid(columns: int) -> GridContainer:
 	var grid := GridContainer.new()

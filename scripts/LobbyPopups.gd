@@ -56,18 +56,7 @@ func build(parent: Control) -> void:
 	box.name = "HowToPlay"
 	box.add_theme_constant_override("separation", 16)
 	_help_card.add_child(box)
-	var head := HBoxContainer.new()
-	head.name = "Head"
-	box.add_child(head)
-	var title: Label = ScreenKitScript.themed_label(_screen.tr("HOW_TO_PLAY_TITLE"), 46, UiThemeScript.INK_HEADING_LABEL)
-	title.name = "Title"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title)
-	_close_button = ScreenKitScript.themed_button("X", UiThemeScript.YELLOW_BUTTON, "Close")
-	_close_button.custom_minimum_size = Vector2(56, 56)
-	_close_button.focus_mode = Control.FOCUS_ALL
-	_close_button.pressed.connect(open.bind(""))
-	head.add_child(_close_button)
+	_close_button = ScreenKitScript.popup_head(box, _screen.tr("HOW_TO_PLAY_TITLE"), 46, open.bind("")).get_node("Close") as Button
 	_demo_grid = GridContainer.new()
 	_demo_grid.name = "Demos"
 	_demo_grid.columns = 2
@@ -78,9 +67,7 @@ func build(parent: Control) -> void:
 	rule_box.name = "RuleBox"
 	rule_box.theme_type_variation = UiThemeScript.RULE_BOX
 	box.add_child(rule_box)
-	_rule_label = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL)
-	_rule_label.name = "Rule"
-	_rule_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_rule_label = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "Rule", TextServer.AUTOWRAP_WORD_SMART)
 	rule_box.add_child(_rule_label)
 
 	_look = _overlay("YourLookPopup", parent)
@@ -231,7 +218,7 @@ func open(which: String) -> void:
 func _focus_for_pad(which: String) -> void:
 	if not _screen.pad_menu_open() or which == "":
 		return
-	var target: Control = _close_button if which == "help" else _look_panel.done_button()
+	var target: Control = _close_button if which == "help" else _look_panel.focus_target()
 	if which == "stages":
 		target = _stages_screen.focus_target()
 	elif which == "join_help":

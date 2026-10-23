@@ -77,9 +77,8 @@ func _ready() -> void:
 	hint.theme_type_variation = UiThemeScript.MUTED_HINT_LABEL
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(hint)
-	_close_button = ScreenKitScript.themed_button("X", UiThemeScript.YELLOW_BUTTON, "Close")
+	_close_button = ScreenKitScript.themed_button("X", UiThemeScript.YELLOW_BUTTON, "Close", true)
 	_close_button.custom_minimum_size = Vector2(56, 56)
-	_close_button.focus_mode = Control.FOCUS_ALL
 	_close_button.pressed.connect(close)
 	head.add_child(_close_button)
 	_scroll = ScrollContainer.new()
@@ -127,8 +126,7 @@ func _heading(body: VBoxContainer, key: String) -> void:
 	_text.append(label.text)
 
 func _line(body: VBoxContainer, text: String, font_size: int = 22) -> void:
-	var label := ScreenKitScript.themed_label(text, font_size, UiThemeScript.BOLD_LABEL)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var label := ScreenKitScript.themed_label(text, font_size, UiThemeScript.BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "", TextServer.AUTOWRAP_WORD_SMART)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(label)
 	_text.append(text)

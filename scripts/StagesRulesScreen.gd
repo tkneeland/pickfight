@@ -146,40 +146,20 @@ func build(card: Control) -> void:
 	box.name = "StagesRules"
 	box.add_theme_constant_override("separation", 10)
 	card.add_child(box)
-	var head := HBoxContainer.new()
-	head.name = "Head"
-	box.add_child(head)
-	var title: Label = ScreenKitScript.themed_label(TranslationServer.translate("SR_TITLE"), 40, UiThemeScript.INK_HEADING_LABEL)
-	title.name = "Title"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title)
+	var head: HBoxContainer = ScreenKitScript.popup_head(box, TranslationServer.translate("SR_TITLE"), 40)
 	_done = _button(TranslationServer.translate("SR_DONE"), UiThemeScript.YELLOW_BUTTON, 26)
 	_done.name = "Done"
 	_done.custom_minimum_size = Vector2(150, 52)
 	head.add_child(_done)
-	var frame := PanelContainer.new()
-	frame.name = "Tabs"
-	frame.theme_type_variation = UiThemeScript.SWITCH_FRAME
-	frame.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
-	frame.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	box.add_child(frame)
-	var cells := HBoxContainer.new()
-	cells.add_theme_constant_override("separation", 0)
-	frame.add_child(cells)
 	_tab_ids = mode_ids()
-	for i in _tab_ids.size():
+	var frame: PanelContainer = ScreenKitScript.segmented_switch(box, "Tabs", _tab_ids.size(), func(i: int) -> Button:
 		var id: String = _tab_ids[i]
-		if i > 0:
-			var rule := ColorRect.new()
-			rule.color = UiThemeScript.INK
-			rule.custom_minimum_size = Vector2(4, 0)
-			rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			cells.add_child(rule)
 		var tab: Button = _button(GameModesScript.display_name(id), UiThemeScript.SEG_BUTTON, 22)
 		tab.name = "Tab_" + (id if id != "" else "classic")
 		tab.pressed.connect(select_tab.bind(id))
-		cells.add_child(tab)
 		_tabs[id] = tab
+		return tab)
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_first_tab = _tabs[_tab_ids[0]]
 	var body := HBoxContainer.new()
 	body.name = "Body"
@@ -188,8 +168,7 @@ func build(card: Control) -> void:
 	box.add_child(body)
 	body.add_child(_build_grid_column())
 	body.add_child(_build_side_column())
-	_footer = ScreenKitScript.themed_label("", 24, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_footer.name = "Footer"
+	_footer = ScreenKitScript.themed_label("", 24, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Footer")
 	box.add_child(_footer)
 	_done.pressed.connect(func() -> void: _screen.request_close_popup())
 	_built = true
@@ -246,8 +225,7 @@ func _build_side_column() -> Control:
 	_preview_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_preview_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shot_box.add_child(_preview_rect)
-	_preview_name = ScreenKitScript.themed_label("", 28, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_preview_name.name = "PreviewName"
+	_preview_name = ScreenKitScript.themed_label("", 28, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "PreviewName")
 	shot_box.add_child(_preview_name)
 	var scroll := ScrollContainer.new()
 	scroll.name = "RulesScroll"
@@ -260,9 +238,7 @@ func _build_side_column() -> Control:
 	rules.add_theme_constant_override("separation", 6)
 	scroll.add_child(rules)
 	rules.add_child(ScreenKitScript.themed_label(TranslationServer.translate("SR_ROUND_MODIFIERS"), 24, UiThemeScript.INK_HEADING_LABEL))
-	_modifier_note = ScreenKitScript.themed_label("", TEXT_PX, UiThemeScript.INK_BOLD_LABEL)
-	_modifier_note.name = "ModifierNote"
-	_modifier_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_modifier_note = ScreenKitScript.themed_label("", TEXT_PX, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "ModifierNote", TextServer.AUTOWRAP_WORD_SMART)
 	rules.add_child(_modifier_note)
 	_mods_box = _switch_grid("Modifiers")
 	rules.add_child(_mods_box)
@@ -304,8 +280,7 @@ func _switch(text: String, node_name: String) -> Button:
 	return button
 
 func _button(text: String, variation: StringName, font_size: int) -> Button:
-	var button: Button = ScreenKitScript.themed_button(text, variation)
-	button.focus_mode = Control.FOCUS_ALL
+	var button: Button = ScreenKitScript.themed_button(text, variation, "", true)
 	button.add_theme_font_size_override("font_size", font_size)
 	return button
 
