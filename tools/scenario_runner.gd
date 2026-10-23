@@ -228,6 +228,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spots_skip_player_spawns",
 	"every_stage_has_pickup_spot_clear_of_spawns",
 	"spawn_protection_blocks_damage_then_expires",
+	"bullet_does_not_knock_spawn_protected",
+	"boomerang_does_not_knock_spawn_protected",
 	"meteor_does_not_knock_spawn_protected",
 	"rock_does_not_shove_spawn_protected",
 	"roster_heads_do_not_clip_platform_in_play",
@@ -659,6 +661,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"pickup_of_held_weapon_is_left_on_stage",
 	"pickup_shows_weapon_name_callout_818",
 	"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818",
 	"announcer_calls_each_mode_at_round_start",
@@ -1111,6 +1114,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"replay_capture_keeps_twelve_fps_review_gp",
 	"ctf_carried_flag_follows_carrier_in_capture_pause_review_gp",
 	"soccer_last_touch_is_nearest_player_review_gp",
+	"bot_skips_pickup_of_held_weapon",
 	"bot_death_and_stage_read_reset_brain_review_gp",
 	"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net",
 	"network_client_cannot_claim_a_reserved_id_review_net",
@@ -1793,6 +1797,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_no_single_strike_kills()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
+		"pickup_of_held_weapon_is_left_on_stage":
+			return await _scenario_pickup_of_held_weapon_is_left_on_stage()
 		"pickup_shows_weapon_name_callout_818":
 			return await _scenario_pickup_shows_weapon_name_callout_818()
 		"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818":
@@ -2047,6 +2053,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
 		"spawn_protection_blocks_damage_then_expires":
 			return await _scenario_spawn_protection_blocks_damage_then_expires()
+		"bullet_does_not_knock_spawn_protected":
+			return await _scenario_bullet_does_not_knock_spawn_protected()
+		"boomerang_does_not_knock_spawn_protected":
+			return await _scenario_boomerang_does_not_knock_spawn_protected()
 		"meteor_does_not_knock_spawn_protected":
 			return await _scenario_meteor_does_not_knock_spawn_protected()
 		"rock_does_not_shove_spawn_protected":
@@ -3789,6 +3799,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_carried_flag_follows_carrier_in_capture_pause_review_gp()
 		"soccer_last_touch_is_nearest_player_review_gp":
 			return await _scenario_soccer_last_touch_is_nearest_player_review_gp()
+		"bot_skips_pickup_of_held_weapon":
+			return await _scenario_bot_skips_pickup_of_held_weapon()
 		"bot_death_and_stage_read_reset_brain_review_gp":
 			return await _scenario_bot_death_and_stage_read_reset_brain_review_gp()
 		"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net":
@@ -9806,6 +9818,92 @@ func _scenario_boomstick_bullet_damages_and_shoves() -> Array[String]:
 	if shove < BOOMSTICK_SHOVE_MIN:
 		failures.append("the victim was shoved %.1f px along the shot, under a body width (%.0f px)" % [shove, BOOMSTICK_SHOVE_MIN])
 	await _teardown(stage)
+	return failures
+## #1004: a boomstick bullet neither hurts nor knocks a spawn-protected fighter,
+## yet is still spent. The unprotected control is both hurt and knocked.
+func _scenario_bullet_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var shoves: Array[float] = []
+	var damages: Array[float] = []
+	var left: Array[int] = []
+	for protected_flag: bool in [true, false]:
+		var stage: Node2D = _new_stage()
+		var centre: Vector2 = DEEP_PARK_POSITION
+		var shooter: RigidBody2D = _spawn_player(stage, centre)
+		var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		_brace(shooter)
+		_aim(shooter, 0.0)
+		var hold := func() -> void:
+			victim.spawn_protected = protected_flag
+			victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+		if shot["bullet"] == null:
+			failures.append("the boomstick never fired")
+			await _teardown(stage)
+			return failures
+		var start_x: float = victim.global_position.x
+		await _await_ticks(BOOMSTICK_SHOVE_TICKS * 2)
+		shoves.append(victim.global_position.x - start_x)
+		damages.append(victim.damage)
+		left.append(_projectiles_of(shooter).size())
+		await _teardown(stage)
+	print("      bullet: protected shove %.1f dmg %.1f; unprotected shove %.1f dmg %.1f" % [shoves[0], damages[0], shoves[1], damages[1]])
+	if damages[1] <= 0.0 or shoves[1] < BOOMSTICK_SHOVE_MIN:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, shove %.1f)" % [damages[1], shoves[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a bullet" % damages[0])
+	if absf(shoves[0]) > 4.0:
+		failures.append("the protected fighter was knocked %.1f px by a bullet" % shoves[0])
+	if left[0] != 0:
+		failures.append("the bullet was not consumed by the protected fighter")
+	return failures
+## #1004: the same for a boomerang, which also hits the protected fighter only
+## once per leg.
+func _scenario_boomerang_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var peaks: Array[float] = []
+	var damages: Array[float] = []
+	var counts: Array[int] = []
+	for protected_flag: bool in [true, false]:
+		var stage: Node2D = _new_stage()
+		var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, -20))
+		await _await_ticks(2)
+		await _equip(thrower, BOOMERANG_PATH)
+		_brace(thrower)
+		victim.gravity_scale = 0.0
+		victim.linear_velocity = Vector2.ZERO
+		victim.spawn_protected = protected_flag
+		var strikes: Array = []
+		_record_strikes(thrower, strikes)
+		await _flick(thrower, Vector2.RIGHT)
+		var boomerang: Node2D = thrower.launched_boomerang()
+		if boomerang == null:
+			failures.append("a flick did not throw the boomerang")
+			await _teardown(stage)
+			return failures
+		var peak: float = 0.0
+		var start: Vector2 = victim.global_position
+		for _i in 240:
+			if not is_instance_valid(boomerang):
+				break
+			await physics_frame
+			peak = maxf(peak, absf(victim.global_position.x - start.x))
+		peaks.append(peak)
+		damages.append(victim.damage)
+		counts.append(strikes.size())
+		await _teardown(stage)
+	print("      boomerang: protected moved %.1f dmg %.1f; unprotected moved %.1f dmg %.1f" % [peaks[0], damages[0], peaks[1], damages[1]])
+	if damages[1] <= 0.0 or peaks[1] < 4.0:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, moved %.1f)" % [damages[1], peaks[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a boomerang" % damages[0])
+	if peaks[0] > 1.0:
+		failures.append("the protected fighter was moved %.1f px by a boomerang" % peaks[0])
+	if counts[0] > 2:
+		failures.append("the boomerang hit the protected fighter %d times, at most once per leg (2)" % counts[0])
 	return failures
 ## Issue #55: a bullet disappears on terrain -- even terrain thinner than one
 ## tick of its flight, which only a swept bullet can see -- and nobody behind
@@ -50649,6 +50747,52 @@ func _callouts_818(loop: Dictionary) -> Array[Node]:
 		if not node.is_queued_for_deletion():
 			found.append(node)
 	return found
+## Issue #1006: touching a pickup of the weapon already held leaves it on the
+## stage (no claim, callout, signal); another weapon, or the same one after a
+## switch, takes it as before.
+func _scenario_pickup_of_held_weapon_is_left_on_stage() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	var fighter: RigidBody2D = players[1]
+	fighter.set_weapon_stats(load("res://resources/boomstick.tres"))
+	await _await_ticks(3)
+	var picks: Array = [0]
+	fighter.weapon_picked_up.connect(func(_n: String) -> void: picks[0] += 1)
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(load("res://resources/boomstick.tres"))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = fighter.global_position
+	await _await_ticks(5)
+	if not is_instance_valid(pickup) or pickup.is_queued_for_deletion() or pickup._claimed:
+		failures.append("pickup of the held weapon was consumed")
+	elif not pickup.is_in_group("pickups"):
+		failures.append("pickup left the pickups group")
+	if picks[0] != 0:
+		failures.append("weapon_picked_up fired %d times for a held weapon" % picks[0])
+	if not _callouts_818(loop).is_empty():
+		failures.append("a callout appeared for a held weapon")
+	# After the fighter switches, the same pickup can be claimed.
+	if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+		fighter.set_weapon_stats(load("res://resources/pickaxe.tres"))
+		await _await_ticks(3)
+		pickup._on_body_entered(fighter)
+		await _await_ticks(3)
+		if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+			pickup.queue_free()
+		if picks[0] != 1:
+			failures.append("pickup not claimable after the fighter switched weapons")
+	# A different weapon is taken as today.
+	var other: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	other.set_weapon(load("res://resources/axe.tres"))
+	loop["stage"].add_child(other)
+	other.global_position = players[2].global_position
+	await _await_ticks(5)
+	if is_instance_valid(other) and not other.is_queued_for_deletion():
+		failures.append("a different-weapon pickup was not taken")
+		other.queue_free()
+	await _teardown(loop["stage"])
+	return failures
 func _scenario_pickup_shows_weapon_name_callout_818() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = await _ghost_round()
@@ -52816,6 +52960,38 @@ func _scenario_soccer_last_touch_is_nearest_player_review_gp() -> Array[String]:
 		failures.append("the last touch went to slot %s, want the nearest player, slot 0" % soccer._last_touch)
 	soccer.free()
 	await _teardown(holder)
+	return failures
+## Issue #1007: a bot holding the sword passes over a sword pickup for the
+## staff one, and with only the sword pickup around it targets nothing; a bot
+## holding the pickaxe (the control) still takes the nearer sword pickup.
+func _scenario_bot_skips_pickup_of_held_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	await _await_ticks(30)
+	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
+	var sword_pickup: Area2D = scene.instantiate() as Area2D
+	sword_pickup.set_weapon(load("res://resources/sword.tres"))
+	stage.add_child(sword_pickup)
+	sword_pickup.global_position = Vector2(-250, 250)
+	var staff_pickup: Area2D = scene.instantiate() as Area2D
+	staff_pickup.set_weapon(load("res://resources/staff.tres"))
+	stage.add_child(staff_pickup)
+	staff_pickup.global_position = Vector2(250, 250)
+	await _await_ticks(2)
+	if bot._nearest_pickup() != sword_pickup:
+		failures.append("control: a pickaxe bot should take the nearer sword pickup, got %s" % bot._nearest_pickup())
+	player.set_weapon_stats(load("res://resources/sword.tres"))
+	await _await_ticks(2)
+	if bot._nearest_pickup() != staff_pickup:
+		failures.append("a sword bot targets %s, want the staff pickup" % bot._nearest_pickup())
+	staff_pickup.queue_free()
+	await _await_ticks(2)
+	if bot._nearest_pickup() != null:
+		failures.append("a sword bot with only a sword pickup targets %s, want none" % bot._nearest_pickup())
+	await _teardown(stage)
 	return failures
 ## A bot that dies forgets its hook, wiggle, flight and pickup chase, and a
 ## fresh stage read drops shuns and ignored pickups that have run out.
