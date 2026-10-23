@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
@@ -6,9 +6,6 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="4"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
-size = Vector2(320, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_core"]
 size = Vector2(320, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
@@ -68,7 +65,7 @@ polygon = PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)
 position = Vector2(0, 340)
 
 [node name="CoreShape" type="CollisionShape2D" parent="Core"]
-shape = SubResource("RectangleShape2D_core")
+shape = SubResource("RectangleShape2D_bank")
 
 [node name="CoreVisual" type="Polygon2D" parent="Core"]
 color = Color(0.35, 0.35, 0.4, 1)

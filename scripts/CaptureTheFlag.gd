@@ -19,7 +19,7 @@ extends Node
 ## referenced by `class_name` (CLAUDE.md).
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
-const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const ModeKitScript := preload("res://scripts/ModeKit.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
@@ -85,6 +85,9 @@ var _root: Node2D
 var _flag_nodes: Dictionary = {}
 var _hud: CanvasLayer
 var _score_label: Label
+## The base rectangles `base_rect()` read last, and from which stage.
+var _bases_key: Array = [-1]
+var _base_rects: Array[Rect2] = [Rect2(), Rect2()]
 
 func setup(manager: Node) -> void:
 	round_manager = manager
@@ -104,19 +107,12 @@ func start_round(slots: Array[int]) -> void:
 	_finished = false
 	_pause_left = 0.0
 	_pausing = false
+	_bases_key = [-1]
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.team_of = team_of
 	_respawner.centre_x = func() -> float: return (home_position(0).x + home_position(1).x) * 0.5
-	for slot: int in slots:
-		if slot < 0 or slot >= round_manager._players.size():
-			continue
-		var player: Variant = round_manager._players[slot]
-		if player == null or not is_instance_valid(player) or not player.has_signal("eliminated"):
-			continue
-		var handler: Callable = _on_eliminated.bind(slot)
-		_watched[slot] = player
-		_handlers[slot] = handler
-		player.eliminated.connect(handler)
+	ModeKitScript.watch(round_manager, slots, &"eliminated", func(slot: int) -> Callable: return _on_eliminated.bind(slot),
+			_watched, _handlers)
 	_build_flags()
 	_build_hud()
 	for team: int in [0, 1]:
@@ -129,16 +125,7 @@ func start_round(slots: Array[int]) -> void:
 
 func end_round() -> void:
 	_active = false
-	for slot: int in _handlers.keys():
-		var player: Variant = _watched.get(slot)
-		var handler: Callable = _handlers[slot]
-		if player != null and is_instance_valid(player):
-			if player.eliminated.is_connected(handler):
-				player.eliminated.disconnect(handler)
-			player.spawn_protected = false
-			player.modulate.a = 1.0
-	_handlers.clear()
-	_watched.clear()
+	ModeKitScript.unwatch(_watched, _handlers, &"eliminated")
 	_damage_seen.clear()
 	_lockout.clear()
 	if _respawner != null:
@@ -163,19 +150,17 @@ func connected_count() -> int:
 ## Whether `slot` was knocked out and is waiting to come back; the round
 ## manager counts such a player as still standing (as in Stock).
 func is_pending(slot: int) -> bool:
-	return _respawner != null and _respawner.is_pending(slot)
+	return ModeKitScript.is_pending(_respawner, slot)
 
 ## The host kicked `slot` (#593, as Stock #521): it does not come back, and a
 ## pending respawn must not keep it standing while the other team is handed the round.
 func cancel_respawn(slot: int) -> void:
-	if _respawner != null:
-		_respawner.cancel(slot)
+	ModeKitScript.cancel_respawn(_respawner, slot)
 
 ## `slot`'s team: its Teams team, or by slot parity outside a Teams match (a
 ## scenario seam).
 func team_of(slot: int) -> int:
-	var team: int = int(round_manager.team_of(slot)) if round_manager != null and round_manager.team_mode() else -1
-	return team if team >= 0 else slot % 2
+	return ModeKitScript.team_of(round_manager, slot)
 
 ## The flag `slot` carries (the team whose flag it is), or -1.
 func carried_flag_of(slot: int) -> int:
@@ -193,14 +178,19 @@ func home_position(team: int) -> Vector2:
 	return Vector2.ZERO
 
 ## The rectangle of `team`'s base, where a carrier of the enemy flag scores.
+## Read off the stage once per stage, not every tick (the bots and the capture
+## check ask each tick): a new hall after a capture is read afresh.
 func base_rect(team: int) -> Rect2:
 	var stage: Node = _stage()
-	if stage != null and stage.has_method("get_base_rect"):
-		return stage.get_base_rect(team)
-	return Rect2()
+	var key: Array = ModeKitScript.stage_key(stage)
+	if key != _bases_key:
+		_bases_key = key
+		for each: int in [0, 1]:
+			_base_rects[each] = stage.get_base_rect(each) if stage != null and stage.has_method("get_base_rect") else Rect2()
+	return _base_rects[team]
 
 func _stage() -> Node:
-	return round_manager._current_stage if round_manager != null else null
+	return ModeKitScript.stage(round_manager)
 
 # --- Play ----------------------------------------------------------------------
 
@@ -364,6 +354,7 @@ func capture(team: int, slot: int) -> void:
 ## flags home, everyone back on their own side.
 func _next_hall() -> void:
 	round_manager.change_stage_mid_round()
+	_bases_key = [-1]
 	_damage_seen.clear()
 	_lockout.clear()
 	state = {0: HOME, 1: HOME}
@@ -398,32 +389,7 @@ func _ground_below(from: Vector2) -> Vector2:
 ## nearest the stage's own spawn points on that side. A player who is down
 ## stays down: their respawn is already counting.
 func _place_players() -> void:
-	var centre_x: float = (home_position(0).x + home_position(1).x) * 0.5
-	var by_team: Dictionary = {0: [], 1: []}
-	var slots: Array = _watched.keys()
-	slots.sort()
-	for slot: int in slots:
-		by_team[team_of(slot)].append(slot)
-	var points: Array[Vector2] = round_manager._stage_spawn_points
-	for team: int in by_team.keys():
-		var mine: Array[Vector2] = []
-		for point: Vector2 in points:
-			if (point.x < centre_x) == (team == 0):
-				mine.append(point)
-		mine.sort_custom(func(a: Vector2, b: Vector2) -> bool:
-			return a.x < b.x if team == 0 else a.x > b.x)
-		var index: int = 0
-		for slot: int in by_team[team]:
-			var player: Node2D = _watched[slot]
-			if not is_instance_valid(player) or not bool(player.alive):
-				index += 1
-				continue
-			var spot: Vector2 = Vector2(centre_x + (-300.0 if team == 0 else 300.0), 0.0)
-			if not mine.is_empty():
-				var lap: int = index / mine.size()
-				spot = mine[index % mine.size()] + Vector2(48.0, -24.0) * float(lap)
-			player.start_round(spot, true)
-			index += 1
+	ModeKitScript.place_teams(round_manager, _watched, team_of, (home_position(0).x + home_position(1).x) * 0.5)
 
 ## Whether a capture has won the round, so the eliminations after it are no KOs (#521).
 func is_won() -> bool:
@@ -433,16 +399,7 @@ func is_won() -> bool:
 ## manager's last-team-standing rule scores it.
 func _win(team: int) -> void:
 	_finished = true
-	var slots: Array = _watched.keys()
-	slots.sort()
-	for slot: int in slots:
-		if team_of(slot) == team:
-			continue
-		_respawner.cancel(slot)
-		var player: Node2D = _watched[slot]
-		if is_instance_valid(player) and bool(player.alive):
-			player.eliminate()
-		round_manager._record_survivor(slot)
+	ModeKitScript.eliminate_other_team(round_manager, _watched, _respawner, team_of, team)
 
 # --- Display -------------------------------------------------------------------
 
@@ -489,18 +446,13 @@ func _refresh_flags() -> void:
 func _build_hud() -> void:
 	_hud = CanvasLayer.new()
 	_hud.name = "CtfHud"
-	_score_label = Label.new()
-	_score_label.name = "CtfScore"
-	_score_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
-	_score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ScreenKitScript.style_hud_pill(_score_label)
+	_score_label = ModeKitScript.hud_pill("CtfScore", 12)
 	_hud.add_child(_score_label)
 	add_child(_hud)
 
 ## "1 - 0": Red's captures, then Blue's.
 func score_text() -> String:
-	return "%d - %d" % [int(scores[0]), int(scores[1])]
+	return ModeKitScript.score_text(scores)
 
 func _update_hud() -> void:
 	if _score_label != null:
