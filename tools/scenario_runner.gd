@@ -1140,6 +1140,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"join_screen_remembers_last_room_code",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3849,6 +3850,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"join_screen_remembers_last_room_code":
+			return await _scenario_join_screen_remembers_last_room_code()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -54011,5 +54014,86 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	credits.queue_free()
 	await process_frame
 	PadMenuScript368.reset()
+	_scenario_completed = true
+	return failures
+## Issue #907: the PC join screen remembers the last room it got a seat in and offers it as a one-tap "Last room: CODE" button; a dead room (bad_room, host_left) is forgotten.
+func _scenario_join_screen_remembers_last_room_code() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://scenario_last_room_907.cfg"
+	DirAccess.remove_absolute(path)
+	var first: Node = RemoteClientScript241.new()
+	first.settings_path = path
+	first.career_path = ""
+	get_root().add_child(first)
+	await _await_ticks(4)
+	var button: Button = first.find_child("LastRoom", true, false) as Button
+	if button == null or not ("last_room_code" in first):
+		failures.append("the join screen has no LastRoom button / last_room_code")
+		first.queue_free()
+		await _await_ticks(2)
+		DirAccess.remove_absolute(path)
+		_scenario_completed = true
+		return failures
+	if button.visible:
+		failures.append("LastRoom is shown before any room was ever joined")
+	# A seat is granted in WXYZ: remembered, saved, and offered on the join screen afterwards.
+	first.room_code = "WXYZ"
+	first.state = RcState241.CONNECTING
+	first._on_host_text("{\"slot\":2}")
+	if first.last_room_code != "WXYZ":
+		failures.append("the welcome did not remember the room (last_room_code '%s')" % first.last_room_code)
+	first.leave()
+	await _await_ticks(2)
+	var want: String = first.tr("JOIN_LAST_ROOM") % "WXYZ"
+	if not button.is_visible_in_tree():
+		failures.append("LastRoom is not shown on the join screen after leaving a room")
+	if button.text != want or want.begins_with("JOIN_LAST_ROOM"):
+		failures.append("LastRoom reads '%s', wanted the translated '%s'" % [button.text, want])
+	var room: LineEdit = first.find_child("RoomCode", true, false) as LineEdit
+	room.text = ""
+	button.pressed.emit()
+	if room.text != "WXYZ":
+		failures.append("pressing LastRoom filled the field with '%s'" % room.text)
+	if first.state != RcState241.JOIN:
+		failures.append("LastRoom started a join (state %s)" % first.state)
+	first.queue_free()
+	await _await_ticks(2)
+	# A fresh client reads it back from the file.
+	var second: Node = RemoteClientScript241.new()
+	second.settings_path = path
+	second.career_path = ""
+	get_root().add_child(second)
+	await _await_ticks(4)
+	var button2: Button = second.find_child("LastRoom", true, false) as Button
+	if second.last_room_code != "WXYZ" or button2 == null or not button2.is_visible_in_tree():
+		failures.append("a new client did not offer the saved room (last_room_code '%s')" % second.last_room_code)
+	# The relay says the room does not exist: forgotten, and gone from the screen and the file.
+	second.room_code = "WXYZ"
+	second._on_relay_text("{\"t\":\"error\",\"reason\":\"bad_room\"}")
+	await _await_ticks(2)
+	if second.last_room_code != "" or (button2 != null and button2.visible):
+		failures.append("bad_room did not clear the remembered room")
+	# The host leaving a room that was joined clears it too.
+	second.room_code = "ABCD"
+	second.state = RcState241.CONNECTING
+	second._on_host_text("{\"slot\":1}")
+	if second.last_room_code != "ABCD":
+		failures.append("the second welcome did not remember ABCD")
+	second._on_host_text("{\"t\":\"error\",\"reason\":\"host_left\"}")
+	await _await_ticks(2)
+	if second.last_room_code != "" or (button2 != null and button2.visible):
+		failures.append("host_left did not clear the remembered room")
+	second.queue_free()
+	await _await_ticks(2)
+	var third: Node = RemoteClientScript241.new()
+	third.settings_path = path
+	third.career_path = ""
+	get_root().add_child(third)
+	await _await_ticks(4)
+	if third.last_room_code != "":
+		failures.append("a cleared room came back from the file ('%s')" % third.last_room_code)
+	third.queue_free()
+	await _await_ticks(2)
+	DirAccess.remove_absolute(path)
 	_scenario_completed = true
 	return failures
