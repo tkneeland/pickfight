@@ -8,7 +8,7 @@ Game terms come from the shipped locale file `translations/strings.csv`, so the 
 
 Terms missing from `strings.csv` (translated freely here, check them when proofreading): "pickaxe" as a weapon name (the game only says "pick", so the pick wording from `HOW_TO_PLAY_LINE_1` is reused), the hazard names lava / spikes / saws / bounce pads / wind, "QR code", "Steam Deck" and "achievements".
 
-Counts are the same as in store-page.md (43 stages, 13 weapons, 6 modes, 18 achievements). Recount before submitting.
+Counts are the same as in store-page.md (44 stages, 13 weapons, 6 modes, 18 achievements). Recount before submitting.
 
 Short descriptions must stay under 300 characters (Steam's limit); a script counts them (see the verification command in #740).
 
@@ -18,7 +18,7 @@ Short descriptions must stay under 300 characters (Steam's limit); a script coun
 
 ### Short description
 
-PickFight 是一款最多 8 人的同屏派对乱斗游戏,不需要手柄:扫一下二维码,用手机就能加入,挥舞镐子、剑或抓钩,在 43 个关卡里大打出手。可以同屏、联机输入房间码,或单人对战电脑。
+PickFight 是一款最多 8 人的同屏派对乱斗游戏,不需要手柄:扫一下二维码,用手机就能加入,挥舞镐子、剑或抓钩,在 44 个关卡里大打出手。可以同屏、联机输入房间码,或单人对战电脑。
 
 ### About
 
@@ -29,7 +29,7 @@ PickFight 是一款最多 8 人的同屏平台格斗游戏。一台电脑(或 St
 移动靠物理,不靠按键。你的武器是一条会咬住地面的关节手臂,所以攀爬、摆荡、飞跃缺口,其实都是同一个拖动动作。它故意有点笨拙、有点混乱,看起来特别好笑。
 
 **一大堆东西等你来抢**
-- 43 个轮换关卡,布满各种机关:岩浆、尖刺、电锯、移动平台、会塌的边缘、弹跳板、风区、风扇、落石。
+- 44 个轮换关卡,布满各种机关:岩浆、尖刺、电锯、移动平台、会塌的边缘、弹跳板、风区、风扇、落石。
 - 13 种武器:人人开局都有镐子,其余武器会作为道具掉落在场上:剑、斧头、匕首、长棍、盾牌、雨伞、霰弹枪、抓钩、链枷、回旋镖、钓竿、磁铁。
 - 6 种游戏模式:经典、山丘之王、一击必杀、命数制、足球和夺旗,可选混战或红队对蓝队。
 - 时不时出现的回合变数:低重力、双倍伤害、流星雨、地面打滑等等。
@@ -45,7 +45,7 @@ PickFight 是一款最多 8 人的同屏平台格斗游戏。一台电脑(或 St
 
 - 最多 8 人共享一块屏幕,任何手机浏览器扫二维码即可加入:不用装 App,不用手柄。
 - 武器就是你的手臂:拖动来挥舞、攀爬,把自己甩出去。
-- 43 个关卡,有岩浆、尖刺、电锯、移动平台、弹跳板和风。
+- 44 个关卡,有岩浆、尖刺、电锯、移动平台、弹跳板和风。
 - 13 种武器,从人人开局都有的镐子,到抓钩、回旋镖、钓竿和磁铁。
 - 6 种模式:经典、山丘之王、一击必杀、命数制、足球、夺旗。
 - 同屏、输入房间码联机,或单人对战电脑(简单、普通、困难)。
@@ -62,7 +62,7 @@ PickFight 是一款最多 8 人的同屏平台格斗游戏。一台电脑(或 St
 
 ### Short description
 
-PickFight — party-файтинг на одном экране для 8 игроков. Контроллеры не нужны: каждый сканирует QR-код и дерётся со своего телефона, размахивая киркой, мечом или крюком на 43 аренах. Играйте на одном экране, онлайн по коду комнаты или в одиночку против ботов.
+PickFight — party-файтинг на одном экране для 8 игроков. Контроллеры не нужны: каждый сканирует QR-код и дерётся со своего телефона, размахивая киркой, мечом или крюком на 44 аренах. Играйте на одном экране, онлайн по коду комнаты или в одиночку против ботов.
 
 ### About
 
@@ -73,7 +73,7 @@ PickFight — платформенный файтинг для компании 
 Движение здесь — это физика, а не кнопки. Оружие — шарнирная рука, которая вгрызается в землю, так что карабкаться, раскачиваться и перелетать пропасти можно одним и тем же движением. Всё немного неуклюже, и так задумано, а смотреть на это ужасно смешно.
 
 **Целая куча всего, за что стоит подраться**
-- 43 арены, которые сменяют друг друга и полны опасностей: лава, шипы, пилы, движущиеся платформы, крошащиеся уступы, батуты, зоны ветра, вентиляторы, падающие камни.
+- 44 арены, которые сменяют друг друга и полны опасностей: лава, шипы, пилы, движущиеся платформы, крошащиеся уступы, батуты, зоны ветра, вентиляторы, падающие камни.
 - 13 видов оружия: у всех в начале кирка, а остальное падает на арену в виде бонусов. Меч, топор, кинжал, посох, щит, зонтик, дробовик, крюк, цеп, бумеранг, удочка, магнит.
 - 6 режимов: «Классика», «Царь горы», «Один удар», «Жизни», «Футбол» и «Захват флага», в формате «Каждый за себя» или «Красные против Синих».
 - Время от времени случаются модификаторы раунда: низкая гравитация, двойной урон, метеоритный дождь, скользкий пол и другие.
@@ -89,7 +89,7 @@ PickFight — платформенный файтинг для компании 
 
 - До 8 игроков на одном экране, вход по QR-коду с любого телефона: без приложения и без контроллеров.
 - Оружие — ваша рука: тяните, чтобы махать, карабкаться и взлетать.
-- 43 арены с лавой, шипами, пилами, движущимися платформами, батутами и ветром.
+- 44 арены с лавой, шипами, пилами, движущимися платформами, батутами и ветром.
 - 13 видов оружия, от кирки, с которой начинают все, до крюка, бумеранга, удочки и магнита.
 - 6 режимов: «Классика», «Царь горы», «Один удар», «Жизни», «Футбол», «Захват флага».
 - На одном экране, онлайн по коду комнаты или в одиночку против ботов («Лёгкий», «Обычный», «Сложный»).
@@ -106,7 +106,7 @@ PickFight — платформенный файтинг для компании 
 
 ### Short description
 
-PickFight es un juego de peleas para hasta 8 personas en la misma sala. No hacen falta controles: todos escanean un QR y pelean con su celular, con pico, espada o garfio, en 43 escenarios. Juega en el sofá, en línea con un código de sala o en solitario contra bots.
+PickFight es un juego de peleas para hasta 8 personas en la misma sala. No hacen falta controles: todos escanean un QR y pelean con su celular, con pico, espada o garfio, en 44 escenarios. Juega en el sofá, en línea con un código de sala o en solitario contra bots.
 
 ### About
 
@@ -117,7 +117,7 @@ PickFight es un juego de plataformas y peleas para hasta ocho personas en la mis
 El movimiento es pura física, no botones. Tu arma es un brazo articulado que se clava en el suelo, así que trepar, columpiarte y lanzarte sobre los huecos son un mismo arrastre. Es torpe a propósito, un poco caótico, y muy divertido de ver.
 
 **Un montón de cosas por las que pelear**
-- 43 escenarios rotativos llenos de peligros: lava, pinchos, sierras, plataformas móviles, bordes que se desmoronan, trampolines, zonas de viento, ventiladores y rocas que caen.
+- 44 escenarios rotativos llenos de peligros: lava, pinchos, sierras, plataformas móviles, bordes que se desmoronan, trampolines, zonas de viento, ventiladores y rocas que caen.
 - 13 armas: todos empiezan con el pico, y las demás caen al escenario como objetos. Espada, hacha, daga, bastón, escudo, paraguas, escopeta, garfio, mangual, bumerán, caña de pescar e imán.
 - 6 modos de juego: Clásico, Rey de la colina, Muerte súbita, Stock, Fútbol y Captura la bandera, con Todos contra todos o equipos Rojo contra Azul.
 - De vez en cuando, modificadores de ronda: poca gravedad, daño doble, lluvia de meteoros, piso resbaloso y más.
@@ -133,7 +133,7 @@ Una partida es de Sofá o En línea, nunca mezcladas. Si tu Wi-Fi no deja que lo
 
 - Hasta 8 jugadores en una pantalla, que se unen con un QR desde el navegador de cualquier celular: sin app y sin controles.
 - Tu arma es tu brazo: arrastra para golpear, trepar y lanzarte por los aires.
-- 43 escenarios con lava, pinchos, sierras, plataformas móviles, trampolines y viento.
+- 44 escenarios con lava, pinchos, sierras, plataformas móviles, trampolines y viento.
 - 13 armas, desde el pico con el que empieza todo el mundo hasta el garfio, el bumerán, la caña de pescar y el imán.
 - 6 modos: Clásico, Rey de la colina, Muerte súbita, Stock, Fútbol y Captura la bandera.
 - Sofá, En línea con código de sala o Solo contra bots (Fácil, Normal, Difícil).
@@ -150,7 +150,7 @@ Una partida es de Sofá o En línea, nunca mezcladas. Si tu Wi-Fi no deja que lo
 
 ### Short description
 
-PickFight é um jogo de luta para até 8 pessoas na mesma sala. Não precisa de controle: todo mundo escaneia um QR code e luta pelo celular, com picareta, espada ou gancho, em 43 cenários. Jogue no sofá, online com um código de sala ou sozinho contra bots.
+PickFight é um jogo de luta para até 8 pessoas na mesma sala. Não precisa de controle: todo mundo escaneia um QR code e luta pelo celular, com picareta, espada ou gancho, em 44 cenários. Jogue no sofá, online com um código de sala ou sozinho contra bots.
 
 ### About
 
@@ -161,7 +161,7 @@ PickFight é um jogo de plataforma e luta para até oito pessoas na mesma sala. 
 O movimento é física, não botão. Sua arma é um braço articulado que se crava no chão, então escalar, se balançar e se lançar por cima de buracos são o mesmo arrastar. É desajeitado de propósito, meio bagunçado e muito engraçado de assistir.
 
 **Um monte de coisa para disputar**
-- 43 cenários que se alternam, cheios de perigos: lava, espinhos, serras, plataformas móveis, beiradas que desmoronam, molas, zonas de vento, ventiladores e pedras caindo.
+- 44 cenários que se alternam, cheios de perigos: lava, espinhos, serras, plataformas móveis, beiradas que desmoronam, molas, zonas de vento, ventiladores e pedras caindo.
 - 13 armas: todo mundo começa com o picareta, e as outras caem no cenário como itens. Espada, machado, adaga, cajado, escudo, guarda-chuva, boomstick, gancho, mangual, bumerangue, vara de pescar e ímã.
 - 6 modos de jogo: Clássico, Rei da colina, Morte súbita, Stock, Futebol e Capture a bandeira, com Todos contra todos ou times Vermelho contra Azul.
 - De vez em quando, modificadores de rodada: baixa gravidade, dano em dobro, chuva de meteoros, chão escorregadio e mais.
@@ -177,7 +177,7 @@ Uma partida é de Sofá ou Online, nunca misturadas. Se o seu Wi-Fi impede os ce
 
 - Até 8 jogadores em uma tela, entrando por QR code pelo navegador de qualquer celular: sem app e sem controle.
 - Sua arma é o seu braço: arraste para golpear, escalar e se arremessar pelo cenário.
-- 43 cenários com lava, espinhos, serras, plataformas móveis, molas e vento.
+- 44 cenários com lava, espinhos, serras, plataformas móveis, molas e vento.
 - 13 armas, do picareta com que todo mundo começa até o gancho, o bumerangue, a vara de pescar e o ímã.
 - 6 modos: Clássico, Rei da colina, Morte súbita, Stock, Futebol e Capture a bandeira.
 - Sofá, Online por código de sala ou Solo contra bots (Fácil, Normal, Difícil).
@@ -194,7 +194,7 @@ Uma partida é de Sofá ou Online, nunca misturadas. Se o seu Wi-Fi impede os ce
 
 ### Short description
 
-PickFight ist ein Party-Prügler für bis zu 8 Spieler im selben Raum. Ohne Controller: Alle scannen einen QR-Code und kämpfen mit dem Handy, mit Spitzhacke, Schwert oder Enterhaken auf 43 Stages. Spiel auf dem Sofa (Couch), Online per Raumcode oder Solo gegen Bots.
+PickFight ist ein Party-Prügler für bis zu 8 Spieler im selben Raum. Ohne Controller: Alle scannen einen QR-Code und kämpfen mit dem Handy, mit Spitzhacke, Schwert oder Enterhaken auf 44 Stages. Spiel auf dem Sofa (Couch), Online per Raumcode oder Solo gegen Bots.
 
 ### About
 
@@ -205,7 +205,7 @@ PickFight ist ein Plattform-Fighter für bis zu acht Spieler im selben Raum. Ein
 Bewegung ist Physik, keine Tastenhämmerei. Deine Waffe ist ein Gelenkarm, der sich im Boden festbeißt. Klettern, Schwingen und Hechten über Abgründe sind also dieselbe Wischbewegung. Das Ganze ist absichtlich ein bisschen wacklig und herrlich komisch anzusehen.
 
 **Jede Menge, worum man sich streiten kann**
-- 43 wechselnde Stages voller Gefahren: Lava, Stacheln, Sägen, bewegliche Plattformen, bröckelnde Kanten, Sprungfedern, Windzonen, Ventilatoren und herabstürzende Felsen.
+- 44 wechselnde Stages voller Gefahren: Lava, Stacheln, Sägen, bewegliche Plattformen, bröckelnde Kanten, Sprungfedern, Windzonen, Ventilatoren und herabstürzende Felsen.
 - 13 Waffen: Alle starten mit der Spitzhacke, der Rest fällt als Pickup auf die Stage. Schwert, Axt, Dolch, Stab, Schild, Regenschirm, Knallstab, Enterhaken, Morgenstern, Bumerang, Angel und Magnet.
 - 6 Spielmodi: Klassisch, König des Hügels, Sudden Death, Stock, Fußball und Capture the Flag, wahlweise Jeder gegen jeden oder Team Rot gegen Blau.
 - Ab und zu Rundenmodifikatoren: wenig Schwerkraft, doppelter Schaden, Meteoritenschauer, glatter Boden und mehr.
@@ -221,7 +221,7 @@ Ein Match ist entweder Couch oder Online, nie gemischt. Wenn dein WLAN verhinder
 
 - Bis zu 8 Spieler an einem Bildschirm, Beitritt per QR-Code im Browser jedes Handys: keine App, keine Controller.
 - Deine Waffe ist dein Arm: Zieh, um zu schwingen, zu klettern und dich durch die Gegend zu schleudern.
-- 43 Stages mit Lava, Stacheln, Sägen, beweglichen Plattformen, Sprungfedern und Wind.
+- 44 Stages mit Lava, Stacheln, Sägen, beweglichen Plattformen, Sprungfedern und Wind.
 - 13 Waffen, von der Spitzhacke, mit der alle starten, bis zu Enterhaken, Bumerang, Angel und Magnet.
 - 6 Modi: Klassisch, König des Hügels, Sudden Death, Stock, Fußball, Capture the Flag.
 - Couch, Online per Raumcode oder Solo gegen Bots (Leicht, Normal, Schwer).
@@ -238,7 +238,7 @@ Ein Match ist entweder Couch oder Online, nie gemischt. Wenn dein WLAN verhinder
 
 ### Short description
 
-PickFight est un jeu de baston de soirée pour jusqu'à 8 joueurs dans la même pièce. Pas de manettes : chacun scanne un QR code et se bat avec son téléphone, à coups de pic, d'épée ou de grappin, sur 43 arènes. Jouez en Canapé, En ligne avec un code de salon, ou Solo contre des bots.
+PickFight est un jeu de baston de soirée pour jusqu'à 8 joueurs dans la même pièce. Pas de manettes : chacun scanne un QR code et se bat avec son téléphone, à coups de pic, d'épée ou de grappin, sur 44 arènes. Jouez en Canapé, En ligne avec un code de salon, ou Solo contre des bots.
 
 ### About
 
@@ -249,7 +249,7 @@ PickFight est un jeu de combat de plateforme pour jusqu'à huit joueurs dans la 
 Le mouvement, c'est de la physique, pas des boutons. Ton arme est un bras articulé qui mord dans le sol : grimper, se balancer et se jeter par-dessus le vide, c'est le même geste. C'est brouillon, un peu maladroit exprès, et très drôle à regarder.
 
 **Plein de choses à se disputer**
-- 43 arènes en rotation, bourrées de dangers : lave, pointes, scies, plateformes mobiles, rebords qui s'effondrent, tremplins, zones de vent, ventilateurs et chutes de rochers.
+- 44 arènes en rotation, bourrées de dangers : lave, pointes, scies, plateformes mobiles, rebords qui s'effondrent, tremplins, zones de vent, ventilateurs et chutes de rochers.
 - 13 armes : tout le monde commence avec le pic, et les autres tombent sur l'arène sous forme de bonus. Épée, hache, dague, bâton, bouclier, parapluie, fusil à pompe, grappin, fléau, boomerang, canne à pêche et aimant.
 - 6 modes de jeu : Classique, Roi de la colline, Mort subite, Stock, Football et Capture du drapeau, en Chacun pour soi ou en équipes Rouge contre Bleu.
 - De temps en temps, des modificateurs de manche : faible gravité, dégâts doublés, pluie de météores, sol glissant et bien d'autres.
@@ -265,7 +265,7 @@ Une partie est en Canapé ou En ligne, jamais les deux à la fois. Si ton Wi-Fi 
 
 - Jusqu'à 8 joueurs sur un écran, connectés par QR code depuis le navigateur de n'importe quel téléphone : pas d'appli, pas de manettes.
 - Ton arme, c'est ton bras : fais glisser pour frapper, grimper et te catapulter.
-- 43 arènes avec lave, pointes, scies, plateformes mobiles, tremplins et vent.
+- 44 arènes avec lave, pointes, scies, plateformes mobiles, tremplins et vent.
 - 13 armes, du pic avec lequel tout le monde commence jusqu'au grappin, au boomerang, à la canne à pêche et à l'aimant.
 - 6 modes : Classique, Roi de la colline, Mort subite, Stock, Football, Capture du drapeau.
 - Canapé, En ligne par code de salon, ou Solo contre des bots (Facile, Normal, Difficile).
