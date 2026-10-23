@@ -146,6 +146,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_in_pickup_pool",
 	"boomstick_bullet_never_hits_shooter",
 	"boomstick_stops_when_shooter_leaves_play",
+	"boomstick_charge_ring_tracks_fire_clock",
 	"roster_heads_do_not_tunnel_thin_platform",
 	"round_modifier_low_gravity_applies_and_undoes",
 	"round_modifier_heavy_weapons_applies_and_undoes",
@@ -1861,6 +1862,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_boomstick_bullet_never_hits_shooter()
 		"boomstick_stops_when_shooter_leaves_play":
 			return await _scenario_boomstick_stops_when_shooter_leaves_play()
+		"boomstick_charge_ring_tracks_fire_clock":
+			return await _scenario_boomstick_charge_ring_tracks_fire_clock()
 		"roster_heads_do_not_tunnel_thin_platform":
 			return await _scenario_roster_heads_do_not_tunnel_thin_platform()
 		"round_modifier_low_gravity_applies_and_undoes":
@@ -9624,6 +9627,70 @@ func _scenario_boomstick_fires_on_interval() -> Array[String]:
 		failures.append("the pickaxe fired: a weapon without an interval must never shoot")
 	await _teardown(stage)
 	return failures
+## Issue #965: the ring over a boomstick holder fills with the fire clock, is
+## absent for other weapons and KO'd fighters, and flashes at the shot unless
+## Reduce flashes is on.
+func _scenario_boomstick_charge_ring_tracks_fire_clock() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var other: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2.LEFT * 300.0)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(holder)
+	_brace(other)
+	_aim(holder, -PI * 0.5)
+	_aim(other, -PI * 0.5)
+	var tags: Node2D = (load("res://scripts/NameTags.gd") as GDScript).new([holder, other],
+		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
+	stage.add_child(tags)
+	tags.build()
+	var ring: Node2D = tags.boomstick_ring()
+	var sfx: Node = get_root().get_node_or_null("Sfx")
+	if sfx != null:
+		sfx.set_reduce_flash(false)
+	var interval: int = _boomstick_interval_ticks()
+	holder.set_weapon_stats(load(BOOMSTICK_PATH))
+	await _await_ticks(interval / 2)
+	tags.tick()
+	if not ring.has_ring(0):
+		failures.append("no ring over the boomstick holder")
+	elif absf(ring.ring_fill(0) - 0.5) > 0.1:
+		failures.append("ring fill %.2f at about half the interval, wanted about 0.5" % ring.ring_fill(0))
+	if ring.has_ring(1):
+		failures.append("a ring over a pickaxe holder")
+	var flashed: bool = false
+	for _i in interval:
+		await _await_ticks(1)
+		tags.tick()
+		flashed = flashed or ring.is_flashing(0)
+	if not flashed:
+		failures.append("no white flash as the shot fired")
+	# Reduce flashes: the fill still shows, no flash.
+	if sfx != null:
+		sfx.set_reduce_flash(true)
+		flashed = false
+		for _i in interval + 30:
+			await _await_ticks(1)
+			tags.tick()
+			flashed = flashed or ring.is_flashing(0)
+		if flashed:
+			failures.append("flashed at the shot with Reduce flashes on")
+		if not ring.has_ring(0):
+			failures.append("ring hidden with Reduce flashes on")
+		sfx.set_reduce_flash(false)
+	holder.alive = false
+	tags.tick()
+	if ring.has_ring(0):
+		failures.append("ring still up over a KO'd holder")
+	holder.alive = true
+	holder.set_weapon_stats(load("res://resources/pickaxe.tres"))
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	tags.tick()
+	if ring.has_ring(0):
+		failures.append("ring still up after swapping to the pickaxe")
+	await _teardown(stage)
+	return failures
+
 ## Issue #55: a bullet that hits a player deals 35, shoves them along its line
 ## of flight, and is gone. The hit is reported as the shooter's
 ## `strike_landed`, the one seam the hitmarker (#33) and the phones' buzz (#34)
