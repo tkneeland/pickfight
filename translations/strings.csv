@@ -90,6 +90,7 @@ HOST_JOIN_BLOCKED,Off while players are in your lobby,"Aus, solange Spieler in d
 HOST_JOIN_ONLINE,Join someone's game (J),Spiel beitreten (J),Rejoindre une partie (J),Unirse a una partida (J),Entrar no jogo de alguém (J),加入别人的游戏 (J),他の人のゲームに参加 (J),다른 사람 게임에 참가 (J),Зайти в чужую игру (J)
 HOST_JOIN_ONLINE_PAD,Join someone's game,Spiel beitreten,Rejoindre une partie,Unirse a una partida,Entrar no jogo de alguém,加入别人的游戏,他の人のゲームに参加,다른 사람 게임에 참가,Зайти в чужую игру
 HOST_KICK,Kick,Rauswerfen,Virer,Expulsar,Expulsar,踢出,キック,내보내기,Выгнать
+HOST_KICK_CONFIRM,Tap again to kick,Nochmal tippen zum Rauswerfen,Touche encore pour virer,Toca otra vez para expulsar,Toque de novo para expulsar,再点一次以踢出,もう一度押すとキック,한 번 더 누르면 내보내기,Нажми ещё раз, чтобы выгнать
 HOST_MODE,Mode (T),Modus (T),Mode (T),Modo (T),Modo (T),模式 (T),モード (T),모드 (T),Режим (T)
 HOST_MODE_STATE,Mode (T): %s,Modus (T): %s,Mode (T) : %s,Modo (T): %s,Modo (T): %s,模式 (T): %s,モード (T): %s,모드 (T): %s,Режим (T): %s
 HOST_BOTS_STATE,Bots (B): %d,Bots (B): %d,Bots (B) : %d,Bots (B): %d,Bots (B): %d,电脑 (B): %d,ボット (B): %d,봇 (B): %d,Боты (B): %d
