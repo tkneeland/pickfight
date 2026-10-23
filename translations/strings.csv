@@ -547,3 +547,5 @@ LOBBY_COPY_CODE_PAD,Copy code,Code kopieren,Copier le code,Copiar código,Copiar
 LOBBY_COPIED,Copied,Kopiert,Copié,Copiado,Copiado,已复制,コピーしました,복사됨,Скопировано
 JOIN_PASTE,Paste,Einfügen,Coller,Pegar,Colar,使用复制码,ペースト,가져오기,Вставить
 JOIN_NO_CODE_ON_CLIPBOARD,No room code on the clipboard,Kein Raumcode in der Zwischenablage,Aucun code de salle dans le presse-papiers,No hay ningún código de sala en el portapapeles,Nenhum código de sala na área de transferência,复制的内容里没有房间码,クリップボードにルームコードがありません,클립보드에 방 코드가 없습니다,В буфере обмена нет кода комнаты
+JOIN_LAST_ROOM,Last room: %s,Letzter Raum: %s,Dernière salle : %s,Última sala: %s,Última sala: %s,上次的房间：%s,前回のルーム: %s,지난 방: %s,Прошлая комната: %s
+JOIN_CODE_HINT,"Room codes use letters only, never I or O","Raumcodes bestehen nur aus Buchstaben, nie aus I oder O","Les codes de salle n'utilisent que des lettres, jamais I ni O",Los códigos de sala solo usan letras: nunca I ni O,Códigos de sala usam só letras: nunca I nem O,房间码不含 I 和 O，也没有数字,ルームコードは文字のみで、I と O は使いません,방 코드에는 I와 O와 숫자가 없습니다,"В коде комнаты только буквы, без I и O"

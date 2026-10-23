@@ -1164,6 +1164,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"expanding_rings_share_base_and_free_refactor_audio",
 	"hit_feedback_and_music_quit_guard_refactor_audio",
 	"night_glow_rehung_after_other_night_exits_refactor_audio",
+	"join_screen_remembers_last_room_code",
+	"join_screen_hints_when_a_code_letter_is_dropped",
 	"stage_platform_geometry_unchanged_refactor_platforms",
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
@@ -3924,6 +3926,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hit_feedback_and_music_quit_guard_refactor_audio()
 		"night_glow_rehung_after_other_night_exits_refactor_audio":
 			return await _scenario_night_glow_rehung_after_other_night_exits_refactor_audio()
+		"join_screen_remembers_last_room_code":
+			return await _scenario_join_screen_remembers_last_room_code()
+		"join_screen_hints_when_a_code_letter_is_dropped":
+			return await _scenario_join_screen_hints_when_a_code_letter_is_dropped()
 		"stage_platform_geometry_unchanged_refactor_platforms":
 			return await _scenario_stage_platform_geometry_unchanged_refactor_platforms()
 		"ice_patches_overlapping_keep_grip_off_refactor_modes":
@@ -54410,6 +54416,152 @@ func _scenario_night_glow_rehung_after_other_night_exits_refactor_audio() -> Arr
 	if player.get_node_or_null("NightGlow") != null or late.get_node_or_null("NightGlow") != null:
 		failures.append("a player kept its night glow after the last night stage left")
 	await _teardown(holder)
+	return failures
+## Issue #907: the PC join screen remembers the last room it got a seat in and offers it as a one-tap "Last room: CODE" button; a dead room (bad_room, host_left) is forgotten.
+func _scenario_join_screen_remembers_last_room_code() -> Array[String]:
+	var failures: Array[String] = []
+	var path: String = "user://scenario_last_room_907.cfg"
+	DirAccess.remove_absolute(path)
+	var first: Node = RemoteClientScript241.new()
+	first.settings_path = path
+	first.career_path = ""
+	get_root().add_child(first)
+	await _await_ticks(4)
+	var button: Button = first.find_child("LastRoom", true, false) as Button
+	if button == null or not ("last_room_code" in first):
+		failures.append("the join screen has no LastRoom button / last_room_code")
+		first.queue_free()
+		await _await_ticks(2)
+		DirAccess.remove_absolute(path)
+		_scenario_completed = true
+		return failures
+	if button.visible:
+		failures.append("LastRoom is shown before any room was ever joined")
+	# A seat is granted in WXYZ: remembered, saved, and offered on the join screen afterwards.
+	first.room_code = "WXYZ"
+	first.state = RcState241.CONNECTING
+	first._on_host_text("{\"slot\":2}")
+	if first.last_room_code != "WXYZ":
+		failures.append("the welcome did not remember the room (last_room_code '%s')" % first.last_room_code)
+	first.leave()
+	await _await_ticks(2)
+	var want: String = first.tr("JOIN_LAST_ROOM") % "WXYZ"
+	if not button.is_visible_in_tree():
+		failures.append("LastRoom is not shown on the join screen after leaving a room")
+	if button.text != want or want.begins_with("JOIN_LAST_ROOM"):
+		failures.append("LastRoom reads '%s', wanted the translated '%s'" % [button.text, want])
+	var room: LineEdit = first.find_child("RoomCode", true, false) as LineEdit
+	room.text = ""
+	button.pressed.emit()
+	if room.text != "WXYZ":
+		failures.append("pressing LastRoom filled the field with '%s'" % room.text)
+	if first.state != RcState241.JOIN:
+		failures.append("LastRoom started a join (state %s)" % first.state)
+	first.queue_free()
+	await _await_ticks(2)
+	# A fresh client reads it back from the file.
+	var second: Node = RemoteClientScript241.new()
+	second.settings_path = path
+	second.career_path = ""
+	get_root().add_child(second)
+	await _await_ticks(4)
+	var button2: Button = second.find_child("LastRoom", true, false) as Button
+	if second.last_room_code != "WXYZ" or button2 == null or not button2.is_visible_in_tree():
+		failures.append("a new client did not offer the saved room (last_room_code '%s')" % second.last_room_code)
+	# The relay says the room does not exist: forgotten, and gone from the screen and the file.
+	second.room_code = "WXYZ"
+	second._on_relay_text("{\"t\":\"error\",\"reason\":\"bad_room\"}")
+	await _await_ticks(2)
+	if second.last_room_code != "" or (button2 != null and button2.visible):
+		failures.append("bad_room did not clear the remembered room")
+	# The host leaving a room that was joined clears it too.
+	second.room_code = "ABCD"
+	second.state = RcState241.CONNECTING
+	second._on_host_text("{\"slot\":1}")
+	if second.last_room_code != "ABCD":
+		failures.append("the second welcome did not remember ABCD")
+	second._on_host_text("{\"t\":\"error\",\"reason\":\"host_left\"}")
+	await _await_ticks(2)
+	if second.last_room_code != "" or (button2 != null and button2.visible):
+		failures.append("host_left did not clear the remembered room")
+	second.queue_free()
+	await _await_ticks(2)
+	var third: Node = RemoteClientScript241.new()
+	third.settings_path = path
+	third.career_path = ""
+	get_root().add_child(third)
+	await _await_ticks(4)
+	if third.last_room_code != "":
+		failures.append("a cleared room came back from the file ('%s')" % third.last_room_code)
+	third.queue_free()
+	await _await_ticks(2)
+	DirAccess.remove_absolute(path)
+	_scenario_completed = true
+	return failures
+## Issue #922: the PC join screen's room field says why a typed character vanished (I, O, digits, punctuation) without changing what it keeps.
+func _scenario_join_screen_hints_when_a_code_letter_is_dropped() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await _await_ticks(4)
+	var hint: Label = client.find_child("CodeHint", true, false) as Label
+	var room: LineEdit = client.find_child("RoomCode", true, false) as LineEdit
+	if hint == null or room == null:
+		failures.append("the join screen has no CodeHint label under the room field")
+		client.queue_free()
+		await _await_ticks(2)
+		_scenario_completed = true
+		return failures
+	if hint.visible:
+		failures.append("the hint is shown before anything was typed")
+	var want_text: String = client.tr("JOIN_CODE_HINT")
+	if hint.text != want_text or want_text == "JOIN_CODE_HINT":
+		failures.append("the hint reads '%s', not the translated JOIN_CODE_HINT" % hint.text)
+	if room.get_global_rect().end.y > hint.get_global_rect().position.y + 1.0 and hint.visible:
+		failures.append("the hint is not under the room field")
+	# [typed text, whether a hint shows]. The kept text is always what normalize_code gives.
+	var cases: Array = [
+		["O", true], ["I", true], ["0", true], ["1", true], ["o", true], ["AB!", true], ["AI", true],
+		["ABCD", false], ["abcd", false], ["AB-CD", false], ["AB CD", false], ["ab-", false], ["", false],
+	]
+	for pair: Array in cases:
+		var typed: String = pair[0]
+		room.text = typed
+		room.text_changed.emit(typed)
+		var kept: String = client.normalize_code(typed)
+		if room.text != kept:
+			failures.append("typing '%s' left the field '%s', expected '%s'" % [typed, room.text, kept])
+		if hint.visible != pair[1]:
+			failures.append("typing '%s': hint visible is %s, expected %s" % [typed, hint.visible, pair[1]])
+	# It clears as soon as the field is edited again.
+	room.text = "O"
+	room.text_changed.emit("O")
+	room.text = "A"
+	room.text_changed.emit("A")
+	if hint.visible:
+		failures.append("the hint stayed after the field was edited to 'A'")
+	# ... and when a join starts (no real network: an empty relay URL fails at once).
+	room.text = "O"
+	room.text_changed.emit("O")
+	client.relay_url = ""
+	room.text = "ABCD"
+	client.join("ABCD", "Tester")
+	if hint.visible:
+		failures.append("the hint stayed after a join started")
+	# Paste and the pure rule.
+	room.text = "O"
+	room.text_changed.emit("O")
+	client.clipboard_getter = func() -> String: return "abcd"
+	(client.find_child("Paste", true, false) as Button).pressed.emit()
+	if hint.visible:
+		failures.append("the hint stayed after Paste filled the field")
+	if client.normalize_code("O0I1ab-c d") != "ABCD":
+		failures.append("normalize_code changed: 'O0I1ab-c d' gives '%s'" % client.normalize_code("O0I1ab-c d"))
+	client.queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
 	return failures
 # --- Stage platform parts (refactor_platforms) -----------------------------------
 ## The table every stage's static terrain must still match, one line per

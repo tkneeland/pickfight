@@ -85,6 +85,8 @@ var protocol_version: int = ControllerServerScript.PROTOCOL_VERSION
 ## A scenario sets it to try the other build against the same host.
 var demo_build: bool = DemoBuildScript.is_active()
 var room_code: String = ""
+## #907: the last room this client got a seat in ("" when none, or once it was found dead).
+var last_room_code: String = ""
 var slot: int = -1
 var peer_id: int = 0
 var menu_open: bool = false
@@ -140,6 +142,8 @@ var _ui: CanvasLayer
 var _join_panel: Control
 var _room_edit: LineEdit
 var _paste_button: Button
+var _last_room_button: Button
+var _code_hint: Label
 ## The clipboard read, a seam so the scenarios never touch the real clipboard (#906).
 var clipboard_getter: Callable = func() -> String: return DisplayServer.clipboard_get()
 var _name_edit: LineEdit
@@ -183,6 +187,17 @@ static func normalize_code(text: String) -> String:
 		if CODE_LETTERS.contains(ch) and out.length() < CODE_LENGTH:
 			out += ch
 	return out
+
+## #922: whether typing `text` into the room field dropped a character the
+## player meant as part of the code (I, O, a digit, punctuation). Case, spaces
+## and dashes are fine, and so is running past CODE_LENGTH letters.
+static func code_text_drops_a_letter(text: String) -> bool:
+	for ch: String in text.to_upper():
+		if ch == " " or ch == "-":
+			continue
+		if not CODE_LETTERS.contains(ch):
+			return true
+	return false
 
 ## #906: the room code inside pasted `text` ("" when there is none). Takes the
 ## first whole word that is exactly CODE_LENGTH letters of the relay alphabet
@@ -465,6 +480,7 @@ func _action_edge(id: int, pressed: bool) -> void:
 func join(code: String, display_name: String) -> bool:
 	if state != State.JOIN:
 		return false
+	_code_hint.visible = false # #922
 	code = normalize_code(code)
 	if not code_is_complete(code):
 		_set_status(tr("JOIN_ENTER_CODE") % CODE_LENGTH)
@@ -556,6 +572,7 @@ func _on_relay_text(text: String) -> void:
 			_set_status(tr("JOIN_WAITING_HOST") % room_code)
 			_send_json({"id": client_id, "proto": protocol_version, "demo": demo_build})
 		"error":
+			_forget_dead_room(str(msg.get("reason", "")))
 			_return_to_join(reason_text(str(msg.get("reason", "unknown"))), str(msg.get("reason", "")) == "version")
 
 ## A binary frame: `[kind][payload]`.
@@ -576,6 +593,7 @@ func _on_host_text(text: String) -> void:
 	if msg.has("slot") and msg.get("slot") is float and state == State.CONNECTING:
 		slot = int(msg["slot"])
 		_rejoin_until_msec = 0
+		_remember_room(room_code) # #907
 		_set_state(State.PLAYING)
 		_send_json({"t": "name", "v": player_name})
 		for pick: Dictionary in CosmeticsPickerScript.pick_messages(saved_pick):
@@ -607,6 +625,7 @@ func _on_host_text(text: String) -> void:
 				_keep_rejoining(Time.get_ticks_msec() + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
 		"error":
 			var reason: String = str(msg.get("reason", "unknown"))
+			_forget_dead_room(reason)
 			_return_to_join(reason_text(reason), reason == "version")
 
 static func _parse_object(text: String) -> Dictionary:
@@ -1085,6 +1104,8 @@ func _load_settings() -> void:
 		player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
 	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
+	var last: String = normalize_code(str(config.get_value(SECTION, "last_room", "")))
+	last_room_code = last if code_is_complete(last) else ""
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)
 	if (sens is float or sens is int) and is_finite(float(sens)):
 		_mouse.sensitivity = clampf(float(sens), 0.1, 5.0)
@@ -1104,6 +1125,7 @@ func _save_settings() -> void:
 	config.load(settings_path)
 	config.set_value(SECTION, "name", player_name)
 	config.set_value(SECTION, "id", client_id)
+	config.set_value(SECTION, "last_room", last_room_code)
 	config.set_value(SECTION, "sensitivity", _mouse.sensitivity)
 	CosmeticsPickerScript.write_pick(config, SECTION, saved_pick)
 	config.save(settings_path)
@@ -1233,6 +1255,15 @@ func _build_join_panel() -> void:
 	_paste_button.text = tr("JOIN_PASTE")
 	_paste_button.pressed.connect(_on_paste_pressed)
 	room_row.add_child(_paste_button)
+	_last_room_button = Button.new() # #907: one tap puts the last joined room's code in the field; joins nothing
+	_last_room_button.name = "LastRoom"
+	_last_room_button.pressed.connect(_on_last_room_pressed)
+	box.add_child(_last_room_button)
+	_code_hint = _label(tr("JOIN_CODE_HINT"), 16, UiThemeScript.VERMILION, UiThemeScript.INK_LABEL) # #922
+	_code_hint.name = "CodeHint"
+	_code_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_code_hint.visible = false
+	box.add_child(_code_hint)
 	box.add_child(_label(tr("JOIN_YOUR_NAME"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
@@ -1267,6 +1298,7 @@ func _build_join_panel() -> void:
 	box.add_child(_update_link)
 
 func _on_room_text_changed(text: String) -> void:
+	_code_hint.visible = code_text_drops_a_letter(text) # #922: say why a typed letter did not stay; any edit re-decides
 	var cleaned: String = normalize_code(text)
 	if cleaned != text:
 		_room_edit.text = cleaned
@@ -1281,6 +1313,37 @@ func _on_paste_pressed() -> void:
 		return
 	_room_edit.text = code
 	_room_edit.caret_column = code.length()
+	_code_hint.visible = false
+	_set_status("")
+
+## #907: a seat was granted in `code`: keep it for next time.
+func _remember_room(code: String) -> void:
+	if not code_is_complete(code) or code == last_room_code:
+		return
+	last_room_code = code
+	_save_settings()
+	_refresh_last_room()
+
+## #907: the relay or host said the room is gone ("bad_room", "host_left"): a
+## remembered code for it is stale, so forget it.
+func _forget_dead_room(reason: String) -> void:
+	if (reason == "bad_room" or reason == "host_left") and not last_room_code.is_empty() and last_room_code == room_code:
+		last_room_code = ""
+		_save_settings()
+		_refresh_last_room()
+
+func _refresh_last_room() -> void:
+	if _last_room_button == null:
+		return
+	_last_room_button.visible = not last_room_code.is_empty()
+	_last_room_button.text = tr("JOIN_LAST_ROOM") % last_room_code
+
+func _on_last_room_pressed() -> void:
+	if last_room_code.is_empty():
+		return
+	_room_edit.text = last_room_code
+	_room_edit.caret_column = last_room_code.length()
+	_code_hint.visible = false
 	_set_status("")
 
 func _on_join_pressed() -> void:
@@ -1432,6 +1495,7 @@ func _set_status(text: String) -> void:
 		_join_button.disabled = busy
 		_room_edit.editable = not busy
 		_paste_button.disabled = busy
+		_last_room_button.disabled = busy
 		_name_edit.editable = not busy
 
 func _show_join_screen() -> void:
@@ -1440,6 +1504,7 @@ func _show_join_screen() -> void:
 	_lobby_panel.visible = false
 	_menu_panel.visible = false
 	_update_link.visible = false
+	_refresh_last_room()
 	if _name_edit.text.is_empty():
 		_name_edit.text = player_name
 
